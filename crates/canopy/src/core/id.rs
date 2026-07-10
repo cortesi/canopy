@@ -1,4 +1,8 @@
-use std::marker::PhantomData;
+use std::{
+    fmt::{self, Debug},
+    hash::{Hash, Hasher},
+    marker::PhantomData,
+};
 
 use slotmap::new_key_type;
 
@@ -8,7 +12,6 @@ new_key_type! {
 }
 
 /// Type-safe wrapper around a node identifier tied to a widget type.
-#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct TypedId<T> {
     /// Untyped node identifier.
     id: NodeId,
@@ -17,8 +20,8 @@ pub struct TypedId<T> {
 }
 
 impl<T> TypedId<T> {
-    /// Wrap an untyped node identifier.
-    pub fn new(id: NodeId) -> Self {
+    /// Wrap an identifier that has already been checked against the node arena.
+    pub(crate) fn new(id: NodeId) -> Self {
         Self {
             id,
             _marker: PhantomData,
@@ -33,6 +36,26 @@ impl<T> Clone for TypedId<T> {
 }
 
 impl<T> Copy for TypedId<T> {}
+
+impl<T> Debug for TypedId<T> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.debug_tuple("TypedId").field(&self.id).finish()
+    }
+}
+
+impl<T> PartialEq for TypedId<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl<T> Eq for TypedId<T> {}
+
+impl<T> Hash for TypedId<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+    }
+}
 
 impl<T> From<TypedId<T>> for NodeId {
     fn from(value: TypedId<T>) -> Self {

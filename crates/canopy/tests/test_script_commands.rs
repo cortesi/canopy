@@ -282,6 +282,36 @@ mod tests {
     }
 
     #[test]
+    fn failing_on_start_hook_releases_drained_and_newly_queued_hooks() -> Result<()> {
+        let mut harness = Harness::builder(ScriptTarget::new()).size(10, 1).build()?;
+        harness
+            .canopy
+            .eval_script("canopy.on_start(function() script_target.set(1) end)")?;
+        harness.canopy.eval_script(
+            r#"
+            canopy.on_start(function()
+                canopy.on_start(function() script_target.set(4) end)
+                error("hook failed")
+            end)
+        "#,
+        )?;
+        harness
+            .canopy
+            .eval_script("canopy.on_start(function() script_target.set(3) end)")?;
+
+        harness.render().expect_err("second hook should fail");
+        harness.with_root_widget::<ScriptTarget, _>(|target| {
+            assert_eq!(target.value, 1);
+        });
+
+        harness.render()?;
+        harness.with_root_widget::<ScriptTarget, _>(|target| {
+            assert_eq!(target.value, 1);
+        });
+        Ok(())
+    }
+
+    #[test]
     fn recursive_command_arg_declarations_terminate() {
         use canopy::commands::{CommandType, DeclRegistry, decl};
 

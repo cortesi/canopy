@@ -25,6 +25,112 @@ use crate::{
 
 static POLL_COUNT: AtomicUsize = AtomicUsize::new(0);
 
+fn canopy_with_binding_order(inputs: [char; 2]) -> Result<Canopy> {
+    let mut canopy = Canopy::new();
+    for input in inputs {
+        canopy.bind_input_mode("", inputmap::InputSpec::Key(input.into()), "", "next")?;
+    }
+    Ok(canopy)
+}
+
+#[test]
+fn help_and_diagnostics_use_canonical_binding_order() -> Result<()> {
+    let forward = canopy_with_binding_order(['a', 'b'])?;
+    let reverse = canopy_with_binding_order(['b', 'a'])?;
+    let help_inputs = |canopy: &Canopy| {
+        canopy
+            .help_snapshot()
+            .bindings
+            .iter()
+            .map(|binding| binding.input.to_string())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(help_inputs(&forward), ["a", "b"]);
+    assert_eq!(help_inputs(&reverse), ["a", "b"]);
+
+    for canopy in [&forward, &reverse] {
+        let diagnostics = canopy.diagnostic_dump(canopy.root_id());
+        let a = diagnostics.find(" mode=\"\" a ").expect("a binding");
+        let b = diagnostics.find(" mode=\"\" b ").expect("b binding");
+        assert!(a < b);
+    }
+    Ok(())
+}
+
+#[test]
+fn pending_script_finalization_failure_is_atomic_and_retryable() -> Result<()> {
+    let mut canopy = Canopy::new();
+    assert_eq!(canopy.script_api_state(), ScriptApiState::Open);
+    assert!(canopy.script_api().is_err());
+    let host = canopy.script_host.clone();
+    let first = host.compile("return 1")?;
+    let second = host.compile("return 2")?;
+    host.inject_finalize_failure(script::FinalizeStep::PendingScript(1));
+
+    canopy
+        .finalize_api()
+        .expect_err("pending script load should fail");
+    assert_eq!(canopy.script_api_state(), ScriptApiState::Open);
+    assert!(canopy.script_api().is_err());
+
+    canopy.finalize_api()?;
+    assert_eq!(canopy.script_api_state(), ScriptApiState::Ready);
+    let root = canopy.root_id();
+    assert_eq!(
+        host.execute_value(&mut canopy, root, first)?,
+        commands::ArgValue::Int(1)
+    );
+    assert_eq!(
+        host.execute_value(&mut canopy, root, second)?,
+        commands::ArgValue::Int(2)
+    );
+    Ok(())
+}
+
+#[test]
+fn every_finalization_checkpoint_is_atomic_and_retryable() -> Result<()> {
+    let steps = [
+        script::FinalizeStep::SurfacePrepared,
+        script::FinalizeStep::DeclarationsValidated,
+        script::FinalizeStep::DefaultBindingsCompiled,
+        script::FinalizeStep::StartupScriptsCompiled,
+        script::FinalizeStep::RuntimeBuilt,
+        script::FinalizeStep::PendingScript(1),
+        script::FinalizeStep::BeforePublish,
+    ];
+
+    for step in steps {
+        let mut canopy = Canopy::new();
+        canopy.register_default_bindings("fault_owner", "canopy.log('default')")?;
+        canopy.register_startup_script("fault_startup", "function setup() end")?;
+        let host = canopy.script_host.clone();
+        let first = host.compile("return 1")?;
+        let second = host.compile("return 2")?;
+        host.inject_finalize_failure(step);
+
+        canopy
+            .finalize_api()
+            .expect_err(&format!("{step:?} should fail"));
+        assert_eq!(canopy.script_api_state(), ScriptApiState::Open, "{step:?}");
+        assert!(canopy.script_api().is_err(), "{step:?}");
+        assert_eq!(host.script_ids().len(), 2, "{step:?}");
+
+        canopy.finalize_api()?;
+        assert_eq!(canopy.script_api_state(), ScriptApiState::Ready, "{step:?}");
+        assert_eq!(host.script_ids().len(), 4, "{step:?}");
+        let root = canopy.root_id();
+        assert_eq!(
+            host.execute_value(&mut canopy, root, first)?,
+            commands::ArgValue::Int(1)
+        );
+        assert_eq!(
+            host.execute_value(&mut canopy, root, second)?,
+            commands::ArgValue::Int(2)
+        );
+    }
+    Ok(())
+}
+
 pub struct PollWidget;
 
 #[derive_commands]
@@ -88,7 +194,7 @@ impl Widget for CaptureWidget {
         if let Event::Mouse(mouse_event) = event {
             match mouse_event.action {
                 mouse::Action::Down if mouse_event.button == mouse::Button::Left => {
-                    ctx.capture_mouse();
+                    ctx.capture_mouse()?;
                     return Ok(EventOutcome::Handle);
                 }
                 mouse::Action::Drag if mouse_event.button == mouse::Button::Left => {
@@ -96,7 +202,7 @@ impl Widget for CaptureWidget {
                     return Ok(EventOutcome::Handle);
                 }
                 mouse::Action::Up if mouse_event.button == mouse::Button::Left => {
-                    ctx.release_mouse();
+                    ctx.release_mouse()?;
                     return Ok(EventOutcome::Handle);
                 }
                 _ => {}
@@ -242,6 +348,24 @@ fn mouse_capture_routes_drag_outside() -> Result<()> {
 }
 
 #[test]
+fn mouse_routing_clears_a_stale_internal_capture() -> Result<()> {
+    let mut canopy = Canopy::new();
+    let stale = canopy.core.create_detached(CaptureWidget::new());
+    canopy.core.remove_subtree(stale)?;
+    canopy.core.mouse_capture = Some(stale);
+
+    let event = mouse::MouseEvent {
+        action: mouse::Action::Moved,
+        button: mouse::Button::None,
+        modifiers: key::Empty,
+        location: Point::zero(),
+    };
+    canopy.event(Event::Mouse(event))?;
+    assert_eq!(canopy.core.mouse_capture, None);
+    Ok(())
+}
+
+#[test]
 fn set_widget_resets_initialization() -> Result<()> {
     POLL_COUNT.store(0, Ordering::SeqCst);
     let mut canopy = Canopy::new();
@@ -284,7 +408,7 @@ fn tbindings() -> Result<()> {
             c.script_host.compile(r#"r.c_root()"#)?,
         )?;
 
-        c.core.set_focus(tree.a_a);
+        c.core.set_focus(tree.a_a)?;
         c.key('a')?;
         let s = get_state();
         assert_eq!(s.path, vec!["ba_la@key->ignore", "ba_la.c_leaf()"]);
@@ -295,19 +419,19 @@ fn tbindings() -> Result<()> {
         assert_eq!(s.path, vec!["ba_la@key->ignore", "r.c_root()"]);
 
         reset_state();
-        c.core.set_focus(tree.a);
+        c.core.set_focus(tree.a)?;
         c.key('a')?;
         let s = get_state();
         assert_eq!(s.path, vec!["ba@key->ignore", "ba_la.c_leaf()"]);
 
         reset_state();
-        c.core.set_focus(tree.a_a);
+        c.core.set_focus(tree.a_a)?;
         c.key('x')?;
         let s = get_state();
         assert_eq!(s.path, vec!["ba_la@key->ignore", "r.c_root()"]);
 
         reset_state();
-        c.core.set_focus(tree.root);
+        c.core.set_focus(tree.root)?;
         c.key('x')?;
         let s = get_state();
         assert_eq!(s.path, vec!["r@key->ignore"]);
@@ -337,7 +461,7 @@ fn input_mode_binding_target_switches_modes() -> Result<()> {
 #[test]
 fn route_trace_records_unhandled_key_pipeline() -> Result<()> {
     run_ttree(|c, _, tree| {
-        c.core.set_focus(tree.a_a);
+        c.core.set_focus(tree.a_a)?;
         c.key('z')?;
         let phases = c
             .route_trace()
@@ -373,7 +497,7 @@ fn register_default_bindings_is_idempotent_for_identical_scripts() -> Result<()>
 #[test]
 fn tkey() -> Result<()> {
     run_ttree(|c, _, tree| {
-        c.core.set_focus(tree.root);
+        c.core.set_focus(tree.root)?;
         set_outcome::<R>(&mut c.core, tree.root, EventOutcome::Handle);
         c.key('a')?;
         let s = get_state();
@@ -382,7 +506,7 @@ fn tkey() -> Result<()> {
     })?;
 
     run_ttree(|c, _, tree| {
-        c.core.set_focus(tree.a_a);
+        c.core.set_focus(tree.a_a)?;
         set_outcome::<BaLa>(&mut c.core, tree.a_a, EventOutcome::Handle);
         c.key('a')?;
         let s = get_state();
@@ -391,7 +515,7 @@ fn tkey() -> Result<()> {
     })?;
 
     run_ttree(|c, _, tree| {
-        c.core.set_focus(tree.a_a);
+        c.core.set_focus(tree.a_a)?;
         set_outcome::<Ba>(&mut c.core, tree.a, EventOutcome::Handle);
         c.key('a')?;
         let s = get_state();
@@ -400,7 +524,7 @@ fn tkey() -> Result<()> {
     })?;
 
     run_ttree(|c, _, tree| {
-        c.core.set_focus(tree.a_a);
+        c.core.set_focus(tree.a_a)?;
         set_outcome::<R>(&mut c.core, tree.root, EventOutcome::Handle);
         c.key('a')?;
         let s = get_state();
@@ -412,7 +536,7 @@ fn tkey() -> Result<()> {
     })?;
 
     run_ttree(|c, _, tree| {
-        c.core.set_focus(tree.a);
+        c.core.set_focus(tree.a)?;
         set_outcome::<Ba>(&mut c.core, tree.a, EventOutcome::Handle);
         c.key('a')?;
         let s = get_state();
@@ -421,7 +545,7 @@ fn tkey() -> Result<()> {
     })?;
 
     run_ttree(|c, _, tree| {
-        c.core.set_focus(tree.a);
+        c.core.set_focus(tree.a)?;
         set_outcome::<R>(&mut c.core, tree.root, EventOutcome::Handle);
         c.key('a')?;
         let s = get_state();
@@ -441,7 +565,7 @@ fn tkey() -> Result<()> {
     })?;
 
     run_ttree(|c, _, tree| {
-        c.core.set_focus(tree.a_b);
+        c.core.set_focus(tree.a_b)?;
         set_outcome::<Ba>(&mut c.core, tree.a, EventOutcome::Ignore);
         set_outcome::<R>(&mut c.core, tree.root, EventOutcome::Handle);
         c.key('a')?;
@@ -454,7 +578,7 @@ fn tkey() -> Result<()> {
     })?;
 
     run_ttree(|c, _, tree| {
-        c.core.set_focus(tree.a_a);
+        c.core.set_focus(tree.a_a)?;
         set_outcome::<BaLa>(&mut c.core, tree.a_a, EventOutcome::Handle);
         c.key('a')?;
         let s = get_state();
@@ -463,7 +587,7 @@ fn tkey() -> Result<()> {
     })?;
 
     run_ttree(|c, _, tree| {
-        c.core.set_focus(tree.a_b);
+        c.core.set_focus(tree.a_b)?;
         set_outcome::<Ba>(&mut c.core, tree.a, EventOutcome::Handle);
         c.key('a')?;
         let s = get_state();
@@ -472,7 +596,7 @@ fn tkey() -> Result<()> {
     })?;
 
     run_ttree(|c, _, tree| {
-        c.core.set_focus(tree.a_b);
+        c.core.set_focus(tree.a_b)?;
         set_outcome::<BaLb>(&mut c.core, tree.a_b, EventOutcome::Handle);
         c.key('a')?;
         let s = get_state();
@@ -481,7 +605,7 @@ fn tkey() -> Result<()> {
     })?;
 
     run_ttree(|c, _, tree| {
-        c.core.set_focus(tree.a_b);
+        c.core.set_focus(tree.a_b)?;
         set_outcome::<BaLb>(&mut c.core, tree.a_b, EventOutcome::Handle);
         set_outcome::<Ba>(&mut c.core, tree.a, EventOutcome::Handle);
         c.key('a')?;
@@ -496,7 +620,7 @@ fn tkey() -> Result<()> {
 #[test]
 fn tmouse() -> Result<()> {
     run_ttree(|c, mut tr, tree| {
-        c.core.set_focus(tree.root);
+        c.core.set_focus(tree.root)?;
         set_outcome::<R>(&mut c.core, tree.root, EventOutcome::Handle);
         tr.render(c)?;
         let evt = make_mouse_event(&c.core, tree.a_a);
@@ -584,15 +708,15 @@ fn trender() -> Result<()> {
         tr.render(c)?;
         assert!(tr.buf_empty());
 
-        c.core.set_focus(tree.a_a);
+        c.core.set_focus(tree.a_a)?;
         tr.render(c)?;
         assert!(tr.buf_empty());
 
-        c.core.focus_next(c.core.root);
+        c.core.focus_next(c.core.root)?;
         tr.render(c)?;
         assert!(tr.buf_empty());
 
-        c.core.focus_prev(c.core.root);
+        c.core.focus_prev(c.core.root)?;
         tr.render(c)?;
         assert!(tr.buf_empty());
 
@@ -609,11 +733,11 @@ fn trender() -> Result<()> {
 fn focus_path() -> Result<()> {
     run_ttree(|c, _, _tree| {
         assert_eq!(c.core.focus_path(c.core.root), Path::empty());
-        c.core.focus_next(c.core.root);
+        c.core.focus_next(c.core.root)?;
         assert_eq!(c.core.focus_path(c.core.root), Path::new(&["r"]));
-        c.core.focus_next(c.core.root);
+        c.core.focus_next(c.core.root)?;
         assert_eq!(c.core.focus_path(c.core.root), Path::new(&["r", "ba"]));
-        c.core.focus_next(c.core.root);
+        c.core.focus_next(c.core.root)?;
         assert_eq!(
             c.core.focus_path(c.core.root),
             Path::new(&["r", "ba", "ba_la"])
@@ -627,25 +751,25 @@ fn focus_path() -> Result<()> {
 fn focus_next() -> Result<()> {
     run_ttree(|c, _, tree| {
         assert!(!c.core.is_focused(tree.root));
-        c.core.focus_next(c.core.root);
+        c.core.focus_next(c.core.root)?;
         assert!(c.core.is_focused(tree.root));
 
-        c.core.focus_next(c.core.root);
+        c.core.focus_next(c.core.root)?;
         assert!(c.core.is_focused(tree.a));
 
-        c.core.focus_next(c.core.root);
+        c.core.focus_next(c.core.root)?;
         assert!(c.core.is_focused(tree.a_a));
-        c.core.focus_next(c.core.root);
+        c.core.focus_next(c.core.root)?;
         assert!(c.core.is_focused(tree.a_b));
-        c.core.focus_next(c.core.root);
+        c.core.focus_next(c.core.root)?;
         assert!(c.core.is_focused(tree.b));
 
-        c.core.focus_next(c.core.root);
+        c.core.focus_next(c.core.root)?;
         assert!(c.core.is_focused(tree.b_a));
-        c.core.focus_next(c.core.root);
+        c.core.focus_next(c.core.root)?;
         assert!(c.core.is_focused(tree.b_b));
 
-        c.core.focus_next(c.core.root);
+        c.core.focus_next(c.core.root)?;
         assert!(c.core.is_focused(tree.root));
         Ok(())
     })?;
@@ -656,17 +780,17 @@ fn focus_next() -> Result<()> {
 fn focus_prev() -> Result<()> {
     run_ttree(|c, _, tree| {
         assert!(!c.core.is_focused(tree.root));
-        c.core.focus_prev(c.core.root);
+        c.core.focus_prev(c.core.root)?;
         assert!(c.core.is_focused(tree.b_b));
 
-        c.core.focus_prev(c.core.root);
+        c.core.focus_prev(c.core.root)?;
         assert!(c.core.is_focused(tree.b_a));
 
-        c.core.focus_prev(c.core.root);
+        c.core.focus_prev(c.core.root)?;
         assert!(c.core.is_focused(tree.b));
 
-        c.core.set_focus(tree.root);
-        c.core.focus_prev(c.core.root);
+        c.core.set_focus(tree.root)?;
+        c.core.focus_prev(c.core.root)?;
         assert!(c.core.is_focused(tree.b_b));
 
         Ok(())
@@ -678,16 +802,16 @@ fn focus_prev() -> Result<()> {
 fn tshift_right() -> Result<()> {
     run_ttree(|c, mut tr, tree| {
         tr.render(c)?;
-        c.core.set_focus(tree.a_a);
-        c.core.focus_dir(c.core.root, Direction::Right);
+        c.core.set_focus(tree.a_a)?;
+        c.core.focus_dir(c.core.root, Direction::Right)?;
         assert!(c.core.is_focused(tree.b_a));
-        c.core.focus_dir(c.core.root, Direction::Right);
+        c.core.focus_dir(c.core.root, Direction::Right)?;
         assert!(c.core.is_focused(tree.b_a));
 
-        c.core.set_focus(tree.a_b);
-        c.core.focus_dir(c.core.root, Direction::Right);
+        c.core.set_focus(tree.a_b)?;
+        c.core.focus_dir(c.core.root, Direction::Right)?;
         assert!(c.core.is_focused(tree.b_b));
-        c.core.focus_dir(c.core.root, Direction::Right);
+        c.core.focus_dir(c.core.root, Direction::Right)?;
         assert!(c.core.is_focused(tree.b_b));
         Ok(())
     })?;
@@ -703,7 +827,7 @@ fn tfoci() -> Result<()> {
         assert!(!c.core.is_on_focus_path(tree.root));
         assert!(!c.core.is_on_focus_path(tree.a));
 
-        c.core.set_focus(tree.a_a);
+        c.core.set_focus(tree.a_a)?;
         assert!(c.core.is_on_focus_path(tree.root));
         assert!(c.core.is_on_focus_path(tree.a));
         assert!(!c.core.is_on_focus_path(tree.b));
@@ -712,13 +836,13 @@ fn tfoci() -> Result<()> {
             Path::new(&["r", "ba", "ba_la"])
         );
 
-        c.core.set_focus(tree.a);
+        c.core.set_focus(tree.a)?;
         assert_eq!(c.core.focus_path(c.core.root), Path::new(&["r", "ba"]));
 
-        c.core.set_focus(tree.root);
+        c.core.set_focus(tree.root)?;
         assert_eq!(c.core.focus_path(c.core.root), Path::new(&["r"]));
 
-        c.core.set_focus(tree.b_a);
+        c.core.set_focus(tree.b_a)?;
         assert_eq!(
             c.core.focus_path(c.core.root),
             Path::new(&["r", "bb", "bb_la"])
@@ -771,7 +895,7 @@ fn tkey_no_render() -> Result<()> {
     canopy.core.replace_subtree(canopy.core.root, N)?;
 
     canopy.set_root_size(Size::new(10, 1))?;
-    canopy.core.set_focus(canopy.core.root);
+    canopy.core.set_focus(canopy.core.root)?;
     canopy.render(&mut tr)?;
     assert!(!tr.buf_empty());
     let prev_buf = canopy.termbuf.clone().expect("missing termbuf");

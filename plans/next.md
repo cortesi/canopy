@@ -51,76 +51,76 @@ journal guarantees rollback only for core-owned state; fallible hooks must make 
 repeatable or compensating. Nested hook edits join the active journal, and structural edits are
 rejected while rollback is in progress.
 
-1. [ ] Add a reusable structural fault-injection harness.
+1. [x] Add a reusable structural fault-injection harness.
 
    Record topology, keyed edges, mount state, focus, capture, helper indexes, and hook order before
    and after an edit. Support failures from `pre_remove`, `on_mount`, and nested context operations
    so every public tree mutation can share the same core-state rollback assertions.
 
-2. [ ] Replace the mount-only transaction with an explicit tree-edit journal.
+2. [x] Replace the mount-only transaction with an explicit tree-edit journal.
 
    Journal every core-owned field a structural edit may change, including global focus and capture
    state. Make nested edits join the journal, reject structural edits during rollback, and unwind
    in deterministic reverse order without unmounting a node whose mount did not complete.
 
-3. [ ] Route every topology-changing operation through the transaction boundary.
+3. [x] Route every topology-changing operation through the transaction boundary.
 
    Cover `attach`, `detach`, `set_children`, `remove_subtree`, `replace_subtree`, and both child-add
    paths. Preflight IDs, cycles, duplicate keys, and borrowed widget slots. Run fallible
    `pre_remove` vetoes in a deterministic phase under the selected lifecycle contract before
    publishing topology or deleting arena entries.
 
-4. [ ] Give widget replacement a complete lifecycle contract.
+4. [x] Give widget replacement a complete lifecycle contract.
 
    When replacing an attached widget, run the old widget's removal lifecycle exactly once and
    mount the new widget exactly once. Specify failure behavior for the old hook, the new hook, and
    reentrant edits, and test both replacement variants with and without descendants.
 
-5. [ ] Make `KeyedChildren::try_reconcile` plan first and commit once.
+5. [x] Make `KeyedChildren::try_reconcile` plan first and commit once.
 
    Validate duplicate and stale keys, create and update candidates, then atomically apply removal,
    visibility, order, and helper-map changes in deterministic order. Prune externally removed IDs,
    including retained `RemovePolicy::Hide` keys, and preserve prior state on every error.
 
-6. [ ] Pass the structural stage gate.
+6. [x] Pass the structural stage gate.
 
    Run invariant checks after successful and failed operations, exercise every injected failure
    point, and run the full unit, property, widget, and smoke suites before review.
 
 ## 2. Stage Two: Remove dead wrappers and make identity valid by construction
 
-7. [ ] Delete zero-consumer capability and focus-generation surfaces.
+7. [x] Delete zero-consumer capability and focus-generation surfaces.
 
    Remove the six blanket capability traits, `node_focus_path_changed`, `last_focus_path`,
    `focus_changed`, `current_focus_gen`, and `Core::focus_generation`. Keep the heavily used
    `Context` convenience methods until the later API stage, after primitive semantics settle.
 
-8. [ ] Prevent callers from forging `TypedId<T>` values.
+8. [x] Prevent callers from forging `TypedId<T>` values.
 
    Make its raw constructor crate-private and expose only checked conversions that verify the
    node exists and stores `T`. Audit all public APIs returning typed IDs and add stale-generation,
    wrong-type, and removed-node tests. Apply the same validation to Luau `NodeHandle` arguments so
    a retained script handle returns a structured script error after node removal.
 
-9. [ ] Replace unchecked focus assignment with one checked state transition.
+9. [x] Replace unchecked focus assignment with one checked state transition.
 
    Accept only attached, existing nodes and return a structured result that distinguishes
    unchanged, changed, and rejected requests. Use the same transition for clearing and recovery,
    and replace panicking slotmap indexing in focus-path queries with checked traversal.
 
-10. [ ] Apply the same checked transition model to mouse capture.
+10. [x] Apply the same checked transition model to mouse capture.
 
    Require the requesting widget to be attached, clear capture during detach or removal through
    the central transition, and prevent event routing from observing a stale ID. Cover capture
    changes made inside callbacks and failed structural transactions.
 
-11. [ ] Replace silent boolean mutations with explicit outcomes where absence matters.
+11. [x] Replace silent boolean mutations with explicit outcomes where absence matters.
 
    In particular, make visibility and related node-targeted mutations distinguish a missing node
    from an unchanged value. Propagate typed errors through `Context` instead of allowing helper
    state to diverge silently.
 
-12. [ ] Pass the identity stage gate.
+12. [x] Pass the identity stage gate.
 
    Add a reference-model state machine that mixes attach, detach, remove, replace, focus, capture,
    visibility, Rust IDs, and script-held `NodeHandle`s. Assert the model and
@@ -128,33 +128,33 @@ rejected while rollback is in progress.
 
 ## 3. Stage Three: Make registries and script startup transactional
 
-13. [ ] Make command registration an atomic, conflict-aware batch operation.
+13. [x] Make command registration an atomic, conflict-aware batch operation.
 
    Preflight every ID and specification before insertion. Treat an identical full batch as
    idempotent, reject conflicting definitions, and guarantee that an error leaves `CommandSet`
    unchanged. Inject a mid-batch conflict, then retry the identical batch and require success
    without residue or duplicates.
 
-14. [ ] Make input-map changes validate before mutation.
+14. [x] Make input-map changes validate before mutation.
 
    Compile path matchers and validate targets before removing an existing binding. Release both
    replaced and newly compiled Luau function handles on every error path. Use checked allocation
    for `BindingId`, script IDs, and closure IDs, and preserve the old binding on replacement error.
 
-15. [ ] Give registries one deterministic ordering contract.
+15. [x] Give registries one deterministic ordering contract.
 
    Stabilize `InputMode::bindings`, command availability, help snapshots, and diagnostic dumps by
    using ordered storage or explicit canonical sorting. Preserve outputs that already sort, and
    test the four unstable results across different insertion orders.
 
-16. [ ] Turn script API finalization into a prepare-and-publish state machine.
+16. [x] Turn script API finalization into a prepare-and-publish state machine.
 
    Build the module source, definitions, runtime surface, declaration checks, default bindings,
    and startup scripts in temporary state. Stage `LuauHost::finalize`'s pending-script roots and
    the module source too; publish no runtime handle or source before `Ready`. A retry must discard
    only staged handles and preserve the pre-finalization script identities.
 
-17. [ ] Remove the pre-finalization panic from `script_api()`.
+17. [x] Remove the pre-finalization panic from `script_api()`.
 
    Return `Result` or `Option` from the accessor, expose the finalization state where useful, and
    update downstream callers. Test access before setup, after success, after each injected failure,
@@ -164,14 +164,14 @@ Startup is fail-stop. Record success per script so retries skip completed script
 clean up only registrations owned by the failed script; preserve bindings and hooks installed by
 earlier startup scripts or unrelated evaluations.
 
-18. [ ] Make startup execution and hook cleanup failure-safe.
+18. [x] Make startup execution and hook cleanup failure-safe.
 
    Enforce fail-stop execution, prevent successful scripts from being silently rerun, and release
    every drained function handle even when one hook fails. Scope cleanup to the failed script,
    preserve a deterministic error, and test unrelated bindings, callback side effects, queued
    hooks, and retry behavior.
 
-19. [ ] Pass the registry and script stage gate.
+19. [x] Pass the registry and script stage gate.
 
    Add table-driven fault injection for every finalization step and batch boundary, including a
    failure inside `LuauHost::finalize`'s pending-script loop. Run declaration conformance,

@@ -84,6 +84,14 @@ pub enum Error {
         /// Actual widget type name.
         actual: String,
     },
+    /// A live node stores a different widget type than requested.
+    #[error("node {node:?} does not store {expected}")]
+    NodeTypeMismatch {
+        /// Node whose widget type was checked.
+        node: NodeId,
+        /// Requested widget type.
+        expected: &'static str,
+    },
     /// A query matched multiple nodes.
     #[error("multiple matches")]
     MultipleMatches,
@@ -112,6 +120,12 @@ pub enum Error {
     /// Invalid structural operation.
     #[error("invalid operation: {0}")]
     InvalidOperation(String),
+    /// Structural mutation attempted while a failed edit is unwinding.
+    #[error("tree edit {operation} is not allowed during rollback")]
+    TreeEditDuringRollback {
+        /// Requested tree operation.
+        operation: &'static str,
+    },
     /// Command dispatch failure.
     #[error(transparent)]
     Command(#[from] CommandError),
@@ -151,6 +165,9 @@ pub enum Error {
     /// Node not found in the arena.
     #[error("node not found: {0:?}")]
     NodeNotFound(NodeId),
+    /// Node exists but is not attached to the root tree.
+    #[error("node is detached: {0:?}")]
+    NodeDetached(NodeId),
 }
 
 impl From<mpsc::RecvError> for Error {

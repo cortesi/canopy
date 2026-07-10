@@ -74,13 +74,13 @@ impl Root {
         let help = self.help_id(c)?;
 
         // Main pane uses Row for app + inspector
-        c.set_hidden_of(inspector, !self.inspector_active);
+        c.set_hidden_of(inspector, !self.inspector_active)?;
         c.set_layout_of(main_pane, Layout::fill().direction(Direction::Row))?;
         c.set_layout_of(app, Layout::fill())?;
         c.set_layout_of(inspector, Layout::fill())?;
 
         // Help overlay
-        c.set_hidden_of(help, !self.help_active);
+        c.set_hidden_of(help, !self.help_active)?;
         c.set_layout_of(help, Layout::fill())?;
 
         // Dim effect on main pane when help is visible
@@ -112,14 +112,14 @@ impl Root {
     /// Inspector node id (inside main pane).
     fn inspector_id(&self, c: &dyn Context) -> Result<NodeId> {
         let main_pane = self.main_pane_id(c)?;
-        c.get_child_in::<InspectorSlot>(main_pane)
+        c.get_child_in::<InspectorSlot>(main_pane)?
             .map(Into::into)
             .ok_or_else(|| Error::NotFound("inspector".into()))
     }
 
     /// Help node id.
     fn help_id(&self, c: &dyn Context) -> Result<NodeId> {
-        c.get_child::<HelpSlot>()
+        c.get_child::<HelpSlot>()?
             .map(Into::into)
             .ok_or_else(|| Error::NotFound("help".into()))
     }
@@ -157,7 +157,7 @@ impl Root {
             FocusDirection::Down => c.focus_down_global(),
             FocusDirection::Left => c.focus_left_global(),
             FocusDirection::Right => c.focus_right_global(),
-        }
+        }?;
         Ok(())
     }
 
@@ -167,7 +167,7 @@ impl Root {
         self.inspector_active = false;
         self.sync_layout(c)?;
         let app = self.app_id(c)?;
-        c.focus_first_in(app);
+        c.focus_first_in(app)?;
         Ok(())
     }
 
@@ -177,7 +177,7 @@ impl Root {
         self.inspector_active = true;
         self.sync_layout(c)?;
         let inspector = self.inspector_id(c)?;
-        c.focus_first_in(inspector);
+        c.focus_first_in(inspector)?;
         Ok(())
     }
 
@@ -197,7 +197,7 @@ impl Root {
         let inspector = self.inspector_id(c)?;
         let app = self.app_id(c)?;
         if c.node_is_on_focus_path(inspector) {
-            c.focus_first_in(app);
+            c.focus_first_in(app)?;
         }
         Ok(())
     }
@@ -211,7 +211,7 @@ impl Root {
 
         self.help_active = true;
         self.sync_layout(c)?;
-        c.focus_first_in(help);
+        c.focus_first_in(help)?;
         Ok(())
     }
 
@@ -221,7 +221,7 @@ impl Root {
         self.help_active = false;
         self.sync_layout(c)?;
         let app = self.app_id(c)?;
-        c.focus_first_in(app);
+        c.focus_first_in(app)?;
         Ok(())
     }
 
@@ -280,7 +280,7 @@ impl Root {
 
         // Create help modal (hidden by default)
         let help = Help::install(core)?;
-        core.set_hidden(help, true);
+        core.set_hidden(help, true)?;
 
         // Set up root with main pane and help as children
         let root = Self::new().with_inspector(inspector_active);
@@ -289,7 +289,7 @@ impl Root {
         core.attach_keyed(core.root_id(), HelpSlot::KEY, help)?;
 
         // Configure layout
-        core.set_hidden(inspector, !inspector_active);
+        core.set_hidden(inspector, !inspector_active)?;
         core.set_layout_of(core.root_id(), Layout::fill().direction(Direction::Stack))?;
         core.with_layout_of(app, |layout| {
             *layout = layout.width(Sizing::Flex(1)).height(Sizing::Flex(1));

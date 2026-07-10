@@ -14,6 +14,7 @@ use super::{
     world::Core,
 };
 use crate::{
+    ChangeOutcome,
     commands::{ArgValue, CommandError, CommandInvocation, CommandScopeFrame, ListRowContext},
     error::{Error, Result},
     event::{Event, mouse::MouseEvent},
@@ -92,7 +93,7 @@ impl<K: ChildKey> Slot<K> {
         make: impl FnOnce() -> K::Widget,
     ) -> Result<TypedId<K::Widget>> {
         let parent = parent.into();
-        if let Some(id) = ctx.get_child_in::<K>(parent) {
+        if let Some(id) = ctx.get_child_in::<K>(parent)? {
             self.id = Some(id);
             return Ok(id);
         }
@@ -120,7 +121,7 @@ impl<K: ChildKey> Slot<K> {
     ) -> Result<R> {
         let parent = parent.into();
         let id = ctx
-            .get_child_in::<K>(parent)
+            .get_child_in::<K>(parent)?
             .ok_or_else(|| Error::NotFound(K::KEY.to_string()))?;
         self.id = Some(id);
         ctx.with_typed(id, f)
@@ -236,6 +237,9 @@ pub trait ReadContext {
     /// Return the parent of a node, or `None` if it is the root or not found.
     fn parent_of(&self, node: NodeId) -> Option<NodeId>;
 
+    /// Return whether a node exists and is attached to the root tree.
+    fn node_is_attached(&self, node: NodeId) -> bool;
+
     /// Return the path for a node relative to a root.
     fn node_path(&self, root: NodeId, node: NodeId) -> Path;
 
@@ -244,11 +248,6 @@ pub trait ReadContext {
 
     /// Return a keyed child relative to a specific parent node.
     fn child_keyed_in(&self, parent: NodeId, key: &str) -> Option<NodeId>;
-
-    /// Current focus generation counter.
-    fn current_focus_gen(&self) -> u64 {
-        0
-    }
 
     /// Find the first node whose path matches the filter, relative to the current node.
     ///
@@ -324,6 +323,22 @@ pub struct Preorder<'a> {
     stack: Vec<NodeId>,
 }
 
+/// Validate one raw node ID against a requested widget type.
+fn checked_typed_id<W, C>(ctx: &C, node: NodeId) -> Result<TypedId<W>>
+where
+    W: Widget + 'static,
+    C: ReadContext + ?Sized,
+{
+    let actual = ctx.node_type_id(node).ok_or(Error::NodeNotFound(node))?;
+    if actual != TypeId::of::<W>() {
+        return Err(Error::NodeTypeMismatch {
+            node,
+            expected: type_name::<W>(),
+        });
+    }
+    Ok(TypedId::new(node))
+}
+
 impl<'a> Iterator for Preorder<'a> {
     type Item = NodeId;
 
@@ -338,6 +353,11 @@ impl<'a> Iterator for Preorder<'a> {
 }
 
 impl dyn ReadContext + '_ {
+    /// Validate an untyped node ID and return its typed form.
+    pub fn typed_id<W: Widget + 'static>(&self, node: impl Into<NodeId>) -> Result<TypedId<W>> {
+        checked_typed_id(self, node.into())
+    }
+
     /// Pre-order traversal of the subtree rooted at `root`.
     pub fn preorder(&self, root: impl Into<NodeId>) -> Preorder<'_> {
         Preorder {
@@ -545,126 +565,126 @@ fn clamp_scroll_offset(scroll: &mut Point, view: Size, canvas: Size) {
 
 /// Mutable context available to widgets during event handling.
 pub trait Context: ReadContext {
-    /// Focus a node. Returns `true` if focus changed.
-    fn set_focus(&mut self, node: NodeId) -> bool;
+    /// Focus an attached node.
+    fn set_focus(&mut self, node: NodeId) -> Result<ChangeOutcome>;
 
     /// Move focus in a specified direction within the current node's subtree.
-    fn focus_dir(&mut self, dir: Direction) {
+    fn focus_dir(&mut self, dir: Direction) -> Result<ChangeOutcome> {
         self.focus_dir_in(self.node_id(), dir)
     }
 
     /// Move focus in a specified direction within the specified subtree.
-    fn focus_dir_in(&mut self, root: NodeId, dir: Direction);
+    fn focus_dir_in(&mut self, root: NodeId, dir: Direction) -> Result<ChangeOutcome>;
 
     /// Move focus in a specified direction within the entire tree (from root).
-    fn focus_dir_global(&mut self, dir: Direction) {
+    fn focus_dir_global(&mut self, dir: Direction) -> Result<ChangeOutcome> {
         self.focus_dir_in(self.root_id(), dir)
     }
 
     /// Focus the first node that accepts focus in the current node's subtree.
-    fn focus_first(&mut self) {
+    fn focus_first(&mut self) -> Result<ChangeOutcome> {
         self.focus_first_in(self.node_id())
     }
 
     /// Focus the first node that accepts focus in the specified subtree.
-    fn focus_first_in(&mut self, root: NodeId);
+    fn focus_first_in(&mut self, root: NodeId) -> Result<ChangeOutcome>;
 
     /// Focus the first node that accepts focus in the entire tree (from root).
-    fn focus_first_global(&mut self) {
+    fn focus_first_global(&mut self) -> Result<ChangeOutcome> {
         self.focus_first_in(self.root_id())
     }
 
     /// Focus the next node in the current node's subtree.
-    fn focus_next(&mut self) {
+    fn focus_next(&mut self) -> Result<ChangeOutcome> {
         self.focus_next_in(self.node_id())
     }
 
     /// Focus the next node in the specified subtree.
-    fn focus_next_in(&mut self, root: NodeId);
+    fn focus_next_in(&mut self, root: NodeId) -> Result<ChangeOutcome>;
 
     /// Focus the next node in the entire tree (from root).
-    fn focus_next_global(&mut self) {
+    fn focus_next_global(&mut self) -> Result<ChangeOutcome> {
         self.focus_next_in(self.root_id())
     }
 
     /// Focus the previous node in the current node's subtree.
-    fn focus_prev(&mut self) {
+    fn focus_prev(&mut self) -> Result<ChangeOutcome> {
         self.focus_prev_in(self.node_id())
     }
 
     /// Focus the previous node in the specified subtree.
-    fn focus_prev_in(&mut self, root: NodeId);
+    fn focus_prev_in(&mut self, root: NodeId) -> Result<ChangeOutcome>;
 
     /// Focus the previous node in the entire tree (from root).
-    fn focus_prev_global(&mut self) {
+    fn focus_prev_global(&mut self) -> Result<ChangeOutcome> {
         self.focus_prev_in(self.root_id())
     }
 
     /// Move focus to the right within the current node's subtree.
-    fn focus_right(&mut self) {
+    fn focus_right(&mut self) -> Result<ChangeOutcome> {
         self.focus_dir(Direction::Right)
     }
 
     /// Move focus to the right within the specified subtree.
-    fn focus_right_in(&mut self, root: NodeId) {
+    fn focus_right_in(&mut self, root: NodeId) -> Result<ChangeOutcome> {
         self.focus_dir_in(root, Direction::Right)
     }
 
     /// Move focus to the right within the entire tree (from root).
-    fn focus_right_global(&mut self) {
+    fn focus_right_global(&mut self) -> Result<ChangeOutcome> {
         self.focus_dir_global(Direction::Right)
     }
 
     /// Move focus to the left within the current node's subtree.
-    fn focus_left(&mut self) {
+    fn focus_left(&mut self) -> Result<ChangeOutcome> {
         self.focus_dir(Direction::Left)
     }
 
     /// Move focus to the left within the specified subtree.
-    fn focus_left_in(&mut self, root: NodeId) {
+    fn focus_left_in(&mut self, root: NodeId) -> Result<ChangeOutcome> {
         self.focus_dir_in(root, Direction::Left)
     }
 
     /// Move focus to the left within the entire tree (from root).
-    fn focus_left_global(&mut self) {
+    fn focus_left_global(&mut self) -> Result<ChangeOutcome> {
         self.focus_dir_global(Direction::Left)
     }
 
     /// Move focus upward within the current node's subtree.
-    fn focus_up(&mut self) {
+    fn focus_up(&mut self) -> Result<ChangeOutcome> {
         self.focus_dir(Direction::Up)
     }
 
     /// Move focus upward within the specified subtree.
-    fn focus_up_in(&mut self, root: NodeId) {
+    fn focus_up_in(&mut self, root: NodeId) -> Result<ChangeOutcome> {
         self.focus_dir_in(root, Direction::Up)
     }
 
     /// Move focus upward within the entire tree (from root).
-    fn focus_up_global(&mut self) {
+    fn focus_up_global(&mut self) -> Result<ChangeOutcome> {
         self.focus_dir_global(Direction::Up)
     }
 
     /// Move focus downward within the current node's subtree.
-    fn focus_down(&mut self) {
+    fn focus_down(&mut self) -> Result<ChangeOutcome> {
         self.focus_dir(Direction::Down)
     }
 
     /// Move focus downward within the specified subtree.
-    fn focus_down_in(&mut self, root: NodeId) {
+    fn focus_down_in(&mut self, root: NodeId) -> Result<ChangeOutcome> {
         self.focus_dir_in(root, Direction::Down)
     }
 
     /// Move focus downward within the entire tree (from root).
-    fn focus_down_global(&mut self) {
+    fn focus_down_global(&mut self) -> Result<ChangeOutcome> {
         self.focus_dir_global(Direction::Down)
     }
 
-    /// Capture mouse events for the current node. Returns `true` if capture changed.
-    fn capture_mouse(&mut self) -> bool;
+    /// Capture mouse events for the current node.
+    fn capture_mouse(&mut self) -> Result<ChangeOutcome>;
 
-    /// Release mouse capture if held by the current node. Returns `true` if capture changed.
-    fn release_mouse(&mut self) -> bool;
+    /// Release mouse capture if held by the current node.
+    fn release_mouse(&mut self) -> Result<ChangeOutcome>;
 
     /// Scroll the view to the specified position. Returns `true` if movement occurred.
     fn scroll_to(&mut self, x: u32, y: u32) -> bool;
@@ -717,7 +737,13 @@ pub trait Context: ReadContext {
     fn with_layout_of(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Layout)) -> Result<()>;
 
     /// Create a new widget node detached from the tree.
-    fn create_detached_boxed(&mut self, widget: Box<dyn Widget>) -> NodeId;
+    fn create_detached_boxed(&mut self, widget: Box<dyn Widget>) -> Result<NodeId>;
+
+    /// Apply a related set of tree mutations atomically.
+    fn apply_tree_edit(
+        &mut self,
+        edit: &mut dyn FnMut(&mut dyn Context) -> Result<()>,
+    ) -> Result<()>;
 
     /// Execute a closure with mutable access to a widget and its node-bound context.
     fn with_widget_mut(
@@ -776,31 +802,31 @@ pub trait Context: ReadContext {
     /// Replace the children list for a specific parent node.
     fn set_children_of(&mut self, parent: NodeId, children: Vec<NodeId>) -> Result<()>;
 
-    /// Set the current node's visibility. Returns `true` if visibility changed.
-    fn set_hidden(&mut self, hidden: bool) -> bool {
+    /// Set the current node's visibility.
+    fn set_hidden(&mut self, hidden: bool) -> Result<ChangeOutcome> {
         self.set_hidden_of(self.node_id(), hidden)
     }
 
-    /// Set a specific node's visibility. Returns `true` if visibility changed.
-    fn set_hidden_of(&mut self, node: NodeId, hidden: bool) -> bool;
+    /// Set a specific node's visibility.
+    fn set_hidden_of(&mut self, node: NodeId, hidden: bool) -> Result<ChangeOutcome>;
 
-    /// Hide the current node. Returns `true` if visibility changed.
-    fn hide(&mut self) -> bool {
+    /// Hide the current node.
+    fn hide(&mut self) -> Result<ChangeOutcome> {
         self.set_hidden(true)
     }
 
-    /// Hide a specific node. Returns `true` if visibility changed.
-    fn hide_node(&mut self, node: NodeId) -> bool {
+    /// Hide a specific node.
+    fn hide_node(&mut self, node: NodeId) -> Result<ChangeOutcome> {
         self.set_hidden_of(node, true)
     }
 
-    /// Show the current node. Returns `true` if visibility changed.
-    fn show(&mut self) -> bool {
+    /// Show the current node.
+    fn show(&mut self) -> Result<ChangeOutcome> {
         self.set_hidden(false)
     }
 
-    /// Show a specific node. Returns `true` if visibility changed.
-    fn show_node(&mut self, node: NodeId) -> bool {
+    /// Show a specific node.
+    fn show_node(&mut self, node: NodeId) -> Result<ChangeOutcome> {
         self.set_hidden_of(node, false)
     }
 
@@ -845,86 +871,12 @@ pub trait Context: ReadContext {
     fn request_diagnostic_dump(&mut self, target: NodeId);
 }
 
-/// Focus-related context helpers.
-pub trait FocusContext: Context {
-    /// Focus a specific node.
-    fn focus_node(&mut self, node: NodeId) -> bool {
-        self.set_focus(node)
-    }
-
-    /// Move focus from the current node in a direction.
-    fn move_focus(&mut self, direction: Direction) {
-        self.focus_dir(direction);
-    }
-}
-
-impl<T: Context + ?Sized> FocusContext for T {}
-
-/// Tree mutation context helpers.
-pub trait TreeContext: Context {
-    /// Add a typed child to a parent node.
-    fn add_child_widget<W: Widget + 'static>(
-        &mut self,
-        parent: impl Into<NodeId>,
-        widget: W,
-    ) -> Result<TypedId<W>> {
-        let node = self.add_child_to_boxed(parent.into(), Box::new(widget))?;
-        Ok(TypedId::new(node))
-    }
-
-    /// Remove a subtree rooted at `node`.
-    fn remove_node_subtree(&mut self, node: impl Into<NodeId>) -> Result<()> {
-        self.remove_subtree(node.into())
-    }
-}
-
-impl<T: Context + ?Sized> TreeContext for T {}
-
-/// Layout mutation context helpers.
-pub trait LayoutContext: Context {
-    /// Replace a node's layout.
-    fn replace_layout(&mut self, node: impl Into<NodeId>, layout: Layout) -> Result<()> {
-        let node = node.into();
-        self.with_layout_of(node, &mut |target| *target = layout)
-    }
-}
-
-impl<T: Context + ?Sized> LayoutContext for T {}
-
-/// Scroll context helpers.
-pub trait ScrollContext: Context {
-    /// Scroll to a typed point.
-    fn scroll_to_point(&mut self, point: Point) -> bool {
-        self.scroll_to(point.x, point.y)
-    }
-}
-
-impl<T: Context + ?Sized> ScrollContext for T {}
-
-/// Command dispatch context helpers.
-pub trait CommandContext: Context {
-    /// Dispatch a prepared command invocation from the current node.
-    fn dispatch_prepared_command(
-        &mut self,
-        command: &CommandInvocation,
-    ) -> StdResult<ArgValue, CommandError> {
-        self.dispatch_command(command)
-    }
-}
-
-impl<T: Context + ?Sized> CommandContext for T {}
-
-/// Style context helpers.
-pub trait StyleContext: Context {
-    /// Queue a style map for the next render pass.
-    fn replace_style(&mut self, style: StyleMap) {
-        self.set_style(style);
-    }
-}
-
-impl<T: Context + ?Sized> StyleContext for T {}
-
 impl dyn Context + '_ {
+    /// Validate an untyped node ID and return its typed form.
+    pub fn typed_id<W: Widget + 'static>(&self, node: impl Into<NodeId>) -> Result<TypedId<W>> {
+        checked_typed_id(self, node.into())
+    }
+
     /// Get a read-only view of this context.
     ///
     /// This is useful for calling methods defined on `ReadContext` that are not
@@ -1106,9 +1058,9 @@ impl dyn Context + '_ {
     }
 
     /// Create a widget node detached from the tree.
-    pub fn create_detached<W: Widget + 'static>(&mut self, widget: W) -> TypedId<W> {
-        let id = self.create_detached_boxed(widget.into());
-        TypedId::new(id)
+    pub fn create_detached<W: Widget + 'static>(&mut self, widget: W) -> Result<TypedId<W>> {
+        let id = self.create_detached_boxed(widget.into())?;
+        Ok(TypedId::new(id))
     }
 
     /// Add a widget as a child of the current node and return the new typed node ID.
@@ -1270,21 +1222,25 @@ impl dyn Context + '_ {
     }
 
     /// Check if a typed keyed child exists.
-    pub fn has_child<K: ChildKey>(&self) -> bool {
-        self.child_keyed(K::KEY).is_some()
+    pub fn has_child<K: ChildKey>(&self) -> Result<bool> {
+        self.get_child::<K>().map(|child| child.is_some())
     }
 
     /// Get a typed keyed child's node ID.
-    pub fn get_child<K: ChildKey>(&self) -> Option<TypedId<K::Widget>> {
-        self.child_keyed(K::KEY).map(TypedId::new)
+    pub fn get_child<K: ChildKey>(&self) -> Result<Option<TypedId<K::Widget>>> {
+        self.child_keyed(K::KEY)
+            .map(|node| checked_typed_id(self, node))
+            .transpose()
     }
 
     /// Get a typed keyed child's node ID from a specific parent.
     pub fn get_child_in<K: ChildKey>(
         &self,
         parent: impl Into<NodeId>,
-    ) -> Option<TypedId<K::Widget>> {
-        ReadContext::child_keyed_in(self, parent.into(), K::KEY).map(TypedId::new)
+    ) -> Result<Option<TypedId<K::Widget>>> {
+        ReadContext::child_keyed_in(self, parent.into(), K::KEY)
+            .map(|node| checked_typed_id(self, node))
+            .transpose()
     }
 
     /// Add a typed keyed child to the current node and return its typed node ID.
@@ -1526,6 +1482,10 @@ impl<'a> ReadContext for CoreContext<'a> {
         self.core.nodes.get(node).and_then(|n| n.parent)
     }
 
+    fn node_is_attached(&self, node: NodeId) -> bool {
+        self.core.is_attached_to_root(node)
+    }
+
     fn node_path(&self, root: NodeId, node: NodeId) -> Path {
         self.core.node_path(root, node)
     }
@@ -1538,10 +1498,6 @@ impl<'a> ReadContext for CoreContext<'a> {
         self.core.child_keyed(parent, key)
     }
 
-    fn current_focus_gen(&self) -> u64 {
-        self.core.focus_gen
-    }
-
     fn pending_help_snapshot(&self) -> Option<&OwnedHelpSnapshot> {
         let snapshot = self.core.pending_help_snapshot.as_ref();
         if snapshot.is_some() {
@@ -1552,42 +1508,32 @@ impl<'a> ReadContext for CoreContext<'a> {
 }
 
 impl<'a> Context for CoreContext<'a> {
-    fn set_focus(&mut self, node: NodeId) -> bool {
+    fn set_focus(&mut self, node: NodeId) -> Result<ChangeOutcome> {
         self.core.set_focus(node)
     }
 
-    fn focus_dir_in(&mut self, root: NodeId, dir: Direction) {
-        self.core.focus_dir(root, dir);
+    fn focus_dir_in(&mut self, root: NodeId, dir: Direction) -> Result<ChangeOutcome> {
+        self.core.focus_dir(root, dir)
     }
 
-    fn focus_first_in(&mut self, root: NodeId) {
-        self.core.focus_first(root);
+    fn focus_first_in(&mut self, root: NodeId) -> Result<ChangeOutcome> {
+        self.core.focus_first(root)
     }
 
-    fn focus_next_in(&mut self, root: NodeId) {
-        self.core.focus_next(root);
+    fn focus_next_in(&mut self, root: NodeId) -> Result<ChangeOutcome> {
+        self.core.focus_next(root)
     }
 
-    fn focus_prev_in(&mut self, root: NodeId) {
-        self.core.focus_prev(root);
+    fn focus_prev_in(&mut self, root: NodeId) -> Result<ChangeOutcome> {
+        self.core.focus_prev(root)
     }
 
-    fn capture_mouse(&mut self) -> bool {
-        if self.core.mouse_capture == Some(self.node_id) {
-            false
-        } else {
-            self.core.mouse_capture = Some(self.node_id);
-            true
-        }
+    fn capture_mouse(&mut self) -> Result<ChangeOutcome> {
+        self.core.capture_mouse(self.node_id)
     }
 
-    fn release_mouse(&mut self) -> bool {
-        if self.core.mouse_capture == Some(self.node_id) {
-            self.core.mouse_capture = None;
-            true
-        } else {
-            false
-        }
+    fn release_mouse(&mut self) -> Result<ChangeOutcome> {
+        self.core.release_mouse(self.node_id)
     }
 
     fn scroll_to(&mut self, x: u32, y: u32) -> bool {
@@ -1624,8 +1570,19 @@ impl<'a> Context for CoreContext<'a> {
         self.core.with_layout_of(node, |layout| f(layout))
     }
 
-    fn create_detached_boxed(&mut self, widget: Box<dyn Widget>) -> NodeId {
-        self.core.create_detached_boxed(widget)
+    fn create_detached_boxed(&mut self, widget: Box<dyn Widget>) -> Result<NodeId> {
+        self.core.try_create_detached_boxed(widget)
+    }
+
+    fn apply_tree_edit(
+        &mut self,
+        edit: &mut dyn FnMut(&mut dyn Context) -> Result<()>,
+    ) -> Result<()> {
+        let node_id = self.node_id;
+        self.core.with_tree_edit("context tree edit", |core| {
+            let mut ctx = CoreContext::new(core, node_id);
+            edit(&mut ctx)
+        })
     }
 
     fn with_widget_mut(
@@ -1710,7 +1667,7 @@ impl<'a> Context for CoreContext<'a> {
         self.core.set_children(parent, children)
     }
 
-    fn set_hidden_of(&mut self, node: NodeId, hidden: bool) -> bool {
+    fn set_hidden_of(&mut self, node: NodeId, hidden: bool) -> Result<ChangeOutcome> {
         self.core.set_hidden(node, hidden)
     }
 
@@ -1874,6 +1831,10 @@ impl<'a> ReadContext for CoreViewContext<'a> {
         self.core.nodes.get(node).and_then(|n| n.parent)
     }
 
+    fn node_is_attached(&self, node: NodeId) -> bool {
+        self.core.is_attached_to_root(node)
+    }
+
     fn node_path(&self, root: NodeId, node: NodeId) -> Path {
         self.core.node_path(root, node)
     }
@@ -1884,10 +1845,6 @@ impl<'a> ReadContext for CoreViewContext<'a> {
 
     fn child_keyed_in(&self, parent: NodeId, key: &str) -> Option<NodeId> {
         self.core.child_keyed(parent, key)
-    }
-
-    fn current_focus_gen(&self) -> u64 {
-        self.core.focus_gen
     }
 
     fn pending_help_snapshot(&self) -> Option<&OwnedHelpSnapshot> {

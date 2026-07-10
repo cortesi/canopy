@@ -91,7 +91,7 @@ fn build_harness(text: &str, config: EditorConfig, width: u32, height: u32) -> H
     harness.render().expect("Failed to render");
     harness
         .with_root_context(|_root: &mut EditorHost, ctx| {
-            ctx.focus_first();
+            ctx.focus_first()?;
             Ok(())
         })
         .expect("Failed to focus editor");

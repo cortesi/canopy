@@ -39,6 +39,8 @@ pub mod view;
 // Core modules - internal
 /// Core Canopy application implementation.
 pub mod canopy;
+/// Accepted mutation outcomes.
+pub mod change;
 /// Core context traits and implementations.
 pub mod context;
 /// Focus management.
@@ -63,13 +65,11 @@ pub mod world;
 // Public exports from internal modules
 pub use canopy::{
     AutomationCallback, AutomationHandle, Canopy, Loader, RoutePhase, RouteTraceEntry,
-    ScriptJournalEntry,
+    ScriptApiState, ScriptJournalEntry,
 };
+pub use change::ChangeOutcome;
 pub use children::{KeyedChildren, RemovePolicy};
-pub use context::{
-    ChildKey, CommandContext, Context, FocusContext, LayoutContext, Preorder, ReadContext,
-    ScrollContext, Slot, StyleContext, TreeContext,
-};
+pub use context::{ChildKey, Context, Preorder, ReadContext, Slot};
 pub use fixture::{Fixture, FixtureInfo};
 pub use id::{NodeId, TypedId};
 pub use inputmap::{BindingId, InputMap, InputSpec};

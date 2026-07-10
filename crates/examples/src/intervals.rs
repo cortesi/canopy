@@ -231,9 +231,9 @@ impl Widget for Intervals {
     }
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-        let frame_id = c.create_detached(Frame::new());
+        let frame_id = c.create_detached(Frame::new())?;
         c.add_child_to(frame_id, List::<CounterItem>::new())?;
-        let status_id = c.create_detached(StatusBar);
+        let status_id = c.create_detached(StatusBar)?;
         c.add_child(
             VStack::new()
                 .push_flex(frame_id, 1)

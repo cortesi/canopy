@@ -5,7 +5,7 @@ use std::{
     thread,
 };
 
-use canopy::{AutomationHandle, Canopy};
+use canopy::{AutomationHandle, Canopy, error::Error as CanopyError};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tmcp::{Server, ToolError, ToolResult, mcp_server, schema::CallToolResult, tool};
@@ -111,7 +111,8 @@ impl LiveCanopyMcpServer {
         let bootstrap = block_in_place(move || {
             automation.request(|canopy| {
                 canopy.finalize_api()?;
-                Ok(bootstrap_for_canopy(canopy))
+                bootstrap_for_canopy(canopy)
+                    .map_err(|error| CanopyError::Internal(error.to_string()))
             })
         })
         .map_err(|error| ToolError::internal(error.to_string()))?;
@@ -136,7 +137,7 @@ impl LiveCanopyMcpServer {
     async fn script_api(&self) -> ToolResult<CallToolResult> {
         let automation = self.automation.clone();
         let api = block_in_place(move || {
-            automation.request(|canopy| Ok(canopy.script_api().to_string()))
+            automation.request(|canopy| canopy.script_api().map(str::to_string))
         })
         .map_err(|error| ToolError::internal(error.to_string()))?;
         Ok(CallToolResult::new().with_text_content(api))

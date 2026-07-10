@@ -125,7 +125,7 @@ impl Widget for FontGym {
         let style_state = FontStyleState::default();
         ctx.set_style(font_styles(self.gradient_phase));
 
-        let list_id = ctx.create_detached(List::new());
+        let list_id = ctx.create_detached(List::new())?;
         ctx.set_layout_of(list_id, Layout::fill())?;
 
         let blocks = ctx.with_typed(list_id, |list: &mut List<FontBlock>, ctx| {
@@ -197,11 +197,11 @@ impl Widget for FontGym {
         let font_frame_id = ctx.create_detached(FocusFrame::new(
             Frame::new().with_title("Fonts").with_glyphs(ROUND_THICK),
             list_id,
-        ));
+        ))?;
         ctx.set_children_of(font_frame_id.into(), vec![list_id.into()])?;
         ctx.set_layout_of(font_frame_id, Layout::fill().padding(Edges::all(1)))?;
 
-        let controls_id = ctx.create_detached(ControlsLegend);
+        let controls_id = ctx.create_detached(ControlsLegend)?;
         let controls_pad = Pad::wrap_with(
             ctx,
             controls_id,
@@ -224,7 +224,7 @@ impl Widget for FontGym {
             Text::new(status_text(BANNER_HEIGHT, style_state))
                 .with_style("fontgym/legend")
                 .with_wrap_width(STATUS_WRAP_WIDTH),
-        );
+        )?;
         let status_pad = Pad::wrap_with(
             ctx,
             status_id,
@@ -243,7 +243,7 @@ impl Widget for FontGym {
                 .padding(Edges::all(1)),
         )?;
 
-        let status_row_id = ctx.create_detached(StatusRow);
+        let status_row_id = ctx.create_detached(StatusRow)?;
         ctx.set_children_of(status_row_id.into(), vec![controls_frame, status_frame])?;
 
         let input_id = ctx.create_detached(FontGymInput::new(
@@ -252,7 +252,7 @@ impl Widget for FontGym {
             BANNER_HEIGHT,
             style_state,
             status_id,
-        ));
+        ))?;
         ctx.set_layout_of(input_id, Layout::fill())?;
 
         let input_frame = Frame::wrap_with(ctx, input_id, Frame::new().with_title("Text input"))?;
@@ -262,7 +262,7 @@ impl Widget for FontGym {
             .push_flex(font_frame_id, 1);
         let stack_id = ctx.add_child(stack)?;
         ctx.set_layout_of(stack_id, Layout::fill())?;
-        ctx.set_focus(input_id.into());
+        ctx.set_focus(input_id.into())?;
         Ok(())
     }
 
@@ -414,10 +414,10 @@ impl Widget for FontBlock {
 
     fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
         let banner = self.banner.take().expect("banner available on mount");
-        let banner_id = ctx.create_detached(banner);
+        let banner_id = ctx.create_detached(banner)?;
         ctx.set_layout_of(banner_id, Layout::fill().fixed_height(self.banner_height))?;
 
-        let label_id = ctx.create_detached(FontLabel::new(self.label.clone(), "fontgym/label"));
+        let label_id = ctx.create_detached(FontLabel::new(self.label.clone(), "fontgym/label"))?;
         ctx.set_layout_of(label_id, Layout::fill().fixed_height(LABEL_HEIGHT))?;
 
         ctx.set_children(vec![banner_id.into(), label_id.into()])?;

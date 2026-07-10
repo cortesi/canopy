@@ -1,6 +1,7 @@
 use crate::{
-    ReadContext,
+    ChangeOutcome, ReadContext,
     core::{context::CoreViewContext, id::NodeId, widget_access, world::Core},
+    error::{Error, Result},
     geom::{Direction, RectI32},
     path::Path,
 };
@@ -25,7 +26,7 @@ impl Core {
             if id == node {
                 return true;
             }
-            current = self.nodes[id].parent;
+            current = self.nodes.get(id).and_then(|entry| entry.parent);
         }
         false
     }
@@ -35,15 +36,38 @@ impl Core {
         self.focus == Some(node)
     }
 
-    /// Focus a node. Returns `true` if focus changed.
-    pub fn set_focus(&mut self, node: NodeId) -> bool {
-        if self.is_focused(node) {
-            false
-        } else {
-            self.focus_gen = self.focus_gen.saturating_add(1);
-            self.focus = Some(node);
-            true
+    /// Focus an attached node.
+    pub fn set_focus(&mut self, node: NodeId) -> Result<ChangeOutcome> {
+        self.transition_focus(Some(node))
+    }
+
+    /// Clear focus.
+    pub fn clear_focus(&mut self) -> Result<ChangeOutcome> {
+        self.transition_focus(None)
+    }
+
+    /// Apply one validated focus transition.
+    fn transition_focus(&mut self, target: Option<NodeId>) -> Result<ChangeOutcome> {
+        if let Some(node) = target {
+            self.validate_attached_node(node)?;
         }
+        if self.focus == target {
+            Ok(ChangeOutcome::Unchanged)
+        } else {
+            self.focus = target;
+            Ok(ChangeOutcome::Changed)
+        }
+    }
+
+    /// Validate that a node exists and belongs to the active tree.
+    pub(crate) fn validate_attached_node(&self, node: NodeId) -> Result<()> {
+        if !self.nodes.contains_key(node) {
+            return Err(Error::NodeNotFound(node));
+        }
+        if !self.is_attached_to_root(node) {
+            return Err(Error::NodeDetached(node));
+        }
+        Ok(())
     }
 
     /// Return the focus path for the subtree under `root`.
@@ -51,11 +75,14 @@ impl Core {
         let mut parts = Vec::new();
         let mut current = self.focus;
         while let Some(id) = current {
-            parts.push(self.nodes[id].name.to_string());
+            let Some(node) = self.nodes.get(id) else {
+                return Path::empty();
+            };
+            parts.push(node.name.to_string());
             if id == root {
                 break;
             }
-            current = self.nodes[id].parent;
+            current = node.parent;
         }
         if current != Some(root) {
             return Path::empty();
@@ -65,45 +92,45 @@ impl Core {
     }
 
     /// Focus the first node that accepts focus in the pre-order traversal of the subtree at root.
-    pub fn focus_first(&mut self, root: NodeId) {
+    pub fn focus_first(&mut self, root: NodeId) -> Result<ChangeOutcome> {
         if let Some(target) = first_focusable(self, root) {
-            self.set_focus(target);
+            self.set_focus(target)
+        } else {
+            Ok(ChangeOutcome::Unchanged)
         }
     }
 
     /// Focus the next node in the pre-order traversal of root.
-    pub fn focus_next(&mut self, root: NodeId) {
+    pub fn focus_next(&mut self, root: NodeId) -> Result<ChangeOutcome> {
         if let Some(current) = self.focus
             && let Some(target) = find_next_focus(self, root, current, false)
         {
-            self.set_focus(target);
-            return;
+            return self.set_focus(target);
         }
         if let Some(target) = first_focusable(self, root) {
-            self.set_focus(target);
+            self.set_focus(target)
         } else {
-            self.focus = None;
+            self.clear_focus()
         }
     }
 
     /// Focus the previous node in the pre-order traversal of `root`.
-    pub fn focus_prev(&mut self, root: NodeId) {
+    pub fn focus_prev(&mut self, root: NodeId) -> Result<ChangeOutcome> {
         if let Some(current) = self.focus
             && let Some(target) = find_prev_focus(self, root, current)
         {
-            self.set_focus(target);
-            return;
+            return self.set_focus(target);
         }
 
         if let Some(last) = find_last_focusable(self, root) {
-            self.set_focus(last);
+            self.set_focus(last)
         } else {
-            self.focus = None;
+            self.clear_focus()
         }
     }
 
     /// Move focus in a specified direction within the subtree at root.
-    pub fn focus_dir(&mut self, root: NodeId, dir: Direction) {
+    pub fn focus_dir(&mut self, root: NodeId, dir: Direction) -> Result<ChangeOutcome> {
         let mut focusables = Vec::new();
         let ctx = CoreViewContext::new(self, root);
         let ctx = &ctx as &dyn ReadContext;
@@ -117,15 +144,15 @@ impl Core {
             Some(id) => id,
             None => {
                 if let Some(first) = focusables.first().copied() {
-                    self.set_focus(first);
+                    return self.set_focus(first);
                 }
-                return;
+                return Ok(ChangeOutcome::Unchanged);
             }
         };
 
         let current_rect = match self.nodes.get(current).map(|n| n.view.outer) {
             Some(r) => r,
-            None => return,
+            None => return Ok(ChangeOutcome::Unchanged),
         };
 
         let mut candidates: Vec<(NodeId, RectI32)> = focusables
@@ -161,7 +188,7 @@ impl Core {
         });
 
         if candidates.is_empty() {
-            return;
+            return Ok(ChangeOutcome::Unchanged);
         }
 
         candidates.sort_by_key(|(_, rect)| match dir {
@@ -188,20 +215,22 @@ impl Core {
         });
 
         if let Some((target, _)) = candidates.first().copied() {
-            self.set_focus(target);
+            self.set_focus(target)
+        } else {
+            Ok(ChangeOutcome::Unchanged)
         }
     }
 
     /// Ensure the focus invariant is satisfied.
-    pub fn ensure_focus_valid(&mut self, removed_root: Option<NodeId>) {
+    pub fn ensure_focus_valid(&mut self, removed_root: Option<NodeId>) -> Result<ChangeOutcome> {
         let Some(focus) = self.focus else {
             self.focus_hint = None;
-            return;
+            return Ok(ChangeOutcome::Unchanged);
         };
 
         if self.is_attached_to_root(focus) && is_focus_candidate(self, focus, true) {
             self.focus_hint = None;
-            return;
+            return Ok(ChangeOutcome::Unchanged);
         }
 
         let hint = self.focus_hint.take();
@@ -214,36 +243,71 @@ impl Core {
                     .or_else(|| self.nearest_focusable_ancestor(removed_root))
             };
             if let Some(target) = candidate {
-                self.set_focus(target);
+                self.set_focus(target)
             } else {
-                self.focus = None;
+                self.clear_focus()
             }
-            return;
-        }
-
-        let candidate = find_next_focus(self, self.root, focus, false)
-            .or_else(|| first_focusable(self, self.root));
-        if let Some(target) = candidate {
-            self.set_focus(target);
         } else {
-            self.focus = None;
+            let candidate = find_next_focus(self, self.root, focus, false)
+                .or_else(|| first_focusable(self, self.root));
+            if let Some(target) = candidate {
+                self.set_focus(target)
+            } else {
+                self.clear_focus()
+            }
+        }
+    }
+
+    /// Capture mouse events for an attached node.
+    pub fn capture_mouse(&mut self, node: NodeId) -> Result<ChangeOutcome> {
+        self.transition_mouse_capture(Some(node))
+    }
+
+    /// Release mouse capture when held by the requesting node.
+    pub fn release_mouse(&mut self, requester: NodeId) -> Result<ChangeOutcome> {
+        self.validate_attached_node(requester)?;
+        if self.mouse_capture == Some(requester) {
+            self.transition_mouse_capture(None)
+        } else {
+            Ok(ChangeOutcome::Unchanged)
+        }
+    }
+
+    /// Clear mouse capture without a requester.
+    pub fn clear_mouse_capture(&mut self) -> Result<ChangeOutcome> {
+        self.transition_mouse_capture(None)
+    }
+
+    /// Apply one validated mouse-capture transition.
+    fn transition_mouse_capture(&mut self, target: Option<NodeId>) -> Result<ChangeOutcome> {
+        if let Some(node) = target {
+            self.validate_attached_node(node)?;
+        }
+        if self.mouse_capture == target {
+            Ok(ChangeOutcome::Unchanged)
+        } else {
+            self.mouse_capture = target;
+            Ok(ChangeOutcome::Changed)
         }
     }
 
     /// Ensure mouse capture only points at attached nodes.
-    pub fn ensure_mouse_capture_valid(&mut self) {
+    pub fn ensure_mouse_capture_valid(&mut self) -> Result<ChangeOutcome> {
         if let Some(capture) = self.mouse_capture
             && (!self.nodes.contains_key(capture) || !self.is_attached_to_root(capture))
         {
-            self.mouse_capture = None;
+            self.clear_mouse_capture()
+        } else {
+            Ok(ChangeOutcome::Unchanged)
         }
     }
 
     /// Ensure focus and mouse capture invariants after structural changes.
-    pub fn ensure_invariants(&mut self, removed_root: Option<NodeId>) {
-        self.ensure_focus_valid(removed_root);
-        self.ensure_mouse_capture_valid();
+    pub fn ensure_invariants(&mut self, removed_root: Option<NodeId>) -> Result<()> {
+        self.ensure_focus_valid(removed_root)?;
+        self.ensure_mouse_capture_valid()?;
         self.debug_assert_tree_invariants();
+        Ok(())
     }
 
     /// Return the focus path as node IDs from root to focus.
@@ -251,8 +315,11 @@ impl Core {
         let mut ids = Vec::new();
         let mut current = self.focus;
         while let Some(id) = current {
+            let Some(node) = self.nodes.get(id) else {
+                return Vec::new();
+            };
             ids.push(id);
-            current = self.nodes.get(id).and_then(|n| n.parent);
+            current = node.parent;
         }
         ids.reverse();
         ids

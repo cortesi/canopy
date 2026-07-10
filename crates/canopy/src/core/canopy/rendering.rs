@@ -71,16 +71,6 @@ impl Canopy {
         Ok(())
     }
 
-    /// Has the focus path status of this node changed since the last render sweep?
-    pub fn node_focus_path_changed(&self, node_id: impl Into<NodeId>) -> bool {
-        let node_id = node_id.into();
-        if self.focus_changed() {
-            self.core.is_on_focus_path(node_id) || self.last_focus_path.contains(&node_id)
-        } else {
-            false
-        }
-    }
-
     /// Register the poller channel.
     pub(crate) fn start_poller(&mut self, tx: mpsc::Sender<Event>) {
         self.event_tx = tx;
@@ -135,7 +125,7 @@ impl Canopy {
         }
 
         if !focus_seen {
-            self.core.focus_first(root);
+            self.core.focus_first(root)?;
         }
 
         Ok(layout_dirty)
@@ -333,9 +323,6 @@ impl Canopy {
             if let Some(target) = self.core.take_diagnostic_dump_request() {
                 eprintln!("{}", self.diagnostic_dump(target));
             }
-
-            self.last_render_focus_gen = self.core.focus_gen;
-            self.last_focus_path = self.core.focus_path_ids();
 
             if first_render && self.run_on_start_hooks()? {
                 return self.render(be);

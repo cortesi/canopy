@@ -26,6 +26,7 @@ schemars = "1.2.1"
 ruau = { path = "../../../../private/ruau/crates/ruau", default-features = false }
 tokio = { version = "1.52.3", features = ["rt", "time", "sync"] }
 futures = "0.3.32"
+parking_lot = "0.12.5"
 
 [dev-dependencies]
 rand = "0.10.1"

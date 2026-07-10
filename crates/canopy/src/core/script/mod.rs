@@ -41,7 +41,7 @@ thread_local! {
 }
 
 use crate::{
-    Canopy, NodeId,
+    Canopy, ChangeOutcome, Core, NodeId,
     commands::{self, ArgValue, CommandArgs, CommandInvocation, CommandSet, CommandSpec},
     core::{
         context::{Context, CoreContext, CoreViewContext, ReadContext},
@@ -69,6 +69,25 @@ pub(crate) use modules::ScriptModuleSource;
 
 /// Script identifier.
 pub type ScriptId = u64;
+
+/// One-shot fault-injection checkpoints for finalization tests.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum FinalizeStep {
+    /// Audited surfaces have been built but not staged.
+    SurfacePrepared,
+    /// Module declaration conformance has succeeded.
+    DeclarationsValidated,
+    /// Default binding scripts have compiled.
+    DefaultBindingsCompiled,
+    /// Startup scripts have compiled.
+    StartupScriptsCompiled,
+    /// The retained runtime has been built.
+    RuntimeBuilt,
+    /// A pending script is about to be loaded by sorted index.
+    PendingScript(usize),
+    /// All roots are loaded and publication is about to commit.
+    BeforePublish,
+}
 
 /// Stable handle for a stored Luau closure.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -207,9 +226,11 @@ impl ScriptCache {
         source: &str,
         runtime_source: Source,
         prepared: Option<PreparedGraphScript>,
-    ) -> ScriptId {
+    ) -> Result<ScriptId> {
         let id = self.next_script_id;
-        self.next_script_id = self.next_script_id.saturating_add(1);
+        self.next_script_id = self.next_script_id.checked_add(1).ok_or_else(|| {
+            error::Error::InvalidOperation("script identifier space exhausted".to_string())
+        })?;
         self.scripts.insert(
             id,
             Script {
@@ -220,7 +241,7 @@ impl ScriptCache {
                 root: None,
             },
         );
-        id
+        Ok(id)
     }
 
     /// Return the retained root for a script, if it is loaded.
@@ -315,9 +336,11 @@ impl ClosureRegistry {
     }
 
     /// Insert a stashed closure and return its stable function id.
-    fn insert(&mut self, stashed: StashedClosure, label: Option<String>) -> LuauFunctionId {
+    fn insert(&mut self, stashed: StashedClosure, label: Option<String>) -> Result<LuauFunctionId> {
         let id = LuauFunctionId(self.next_function_id);
-        self.next_function_id = self.next_function_id.saturating_add(1);
+        self.next_function_id = self.next_function_id.checked_add(1).ok_or_else(|| {
+            error::Error::InvalidOperation("closure identifier space exhausted".to_string())
+        })?;
         self.functions.insert(
             id,
             StoredFunction {
@@ -325,7 +348,7 @@ impl ClosureRegistry {
                 label,
             },
         );
-        id
+        Ok(id)
     }
 
     /// Return a stored function target.
@@ -448,6 +471,8 @@ struct LuauState {
     active_eval: bool,
     /// Deferred hooks to execute after the first live render.
     on_start_hooks: Vec<LuauFunctionId>,
+    /// Optional one-shot finalization failure used by deterministic tests.
+    finalize_failure: Option<FinalizeStep>,
 }
 
 impl LuauState {
@@ -464,11 +489,9 @@ impl LuauState {
         }
     }
 
-    /// Mark the script API as finalized and cache its definitions.
-    fn finalize(&mut self, definitions: String, surface: Surface, startup_surface: Surface) {
+    /// Mark a fully prepared script API as ready.
+    fn publish(&mut self, definitions: String) {
         self.definitions = Some(definitions);
-        self.surface = Some(surface);
-        self.startup_surface = Some(startup_surface);
         self.finalized = true;
     }
 
@@ -909,6 +932,17 @@ fn node_id_from_value<'s>(
                 ScriptErrorField::new("got", other.type_name()),
             ],
         )),
+    }
+}
+
+/// Validate a script-held node handle against the live arena.
+pub(crate) fn validate_node_handle(core: &Core, node_id: NodeId) -> Result<()> {
+    if core.nodes.contains_key(node_id) {
+        Ok(())
+    } else {
+        Err(error::Error::from(commands::CommandError::InvalidNode {
+            id: node_id,
+        }))
     }
 }
 
@@ -1890,13 +1924,7 @@ impl<'s> ArgReader<'s> {
     fn node_id(&mut self, scope: &Scope<'s>) -> StdResult<NodeId, RuntimeError> {
         let node_id = node_id_from_value(scope, self.next_value())?;
         with_current_canopy(scope, |canopy, _| {
-            if canopy.core.nodes.contains_key(node_id) {
-                Ok(node_id)
-            } else {
-                Err(error::Error::from(commands::CommandError::InvalidNode {
-                    id: node_id,
-                }))
-            }
+            validate_node_handle(&canopy.core, node_id).map(|()| node_id)
         })
         .map_err(|err| canopy_to_host(&err))
     }
@@ -1909,13 +1937,7 @@ impl<'s> ArgReader<'s> {
         }
         let node_id = node_id_from_value(scope, next)?;
         with_current_canopy(scope, |canopy, _| {
-            if canopy.core.nodes.contains_key(node_id) {
-                Ok(Some(node_id))
-            } else {
-                Err(error::Error::from(commands::CommandError::InvalidNode {
-                    id: node_id,
-                }))
-            }
+            validate_node_handle(&canopy.core, node_id).map(|()| Some(node_id))
         })
         .map_err(|err| canopy_to_host(&err))
     }
@@ -2230,7 +2252,12 @@ impl From<&error::Error> for CanopyErrorPayload {
             error::Error::NodeNotFound(node) => {
                 Self::new("node_not_found", err.to_string()).with_owner(format!("{node:?}"))
             }
-            error::Error::TypeMismatch { .. } => Self::new("type_mismatch", err.to_string()),
+            error::Error::NodeDetached(node) => {
+                Self::new("node_detached", err.to_string()).with_owner(format!("{node:?}"))
+            }
+            error::Error::TypeMismatch { .. } | error::Error::NodeTypeMismatch { .. } => {
+                Self::new("type_mismatch", err.to_string())
+            }
             error::Error::NotFound(_) => Self::new("not_found", err.to_string()),
             error::Error::Invalid(_) | error::Error::InvalidOperation(_) => {
                 Self::new("invalid", err.to_string())
@@ -2260,6 +2287,12 @@ impl From<&commands::CommandError> for CanopyErrorPayload {
             }
             commands::CommandError::DuplicateCommand { id } => {
                 Self::new("duplicate_command", err.to_string()).with_command(id.clone())
+            }
+            commands::CommandError::ConflictingCommand { id } => {
+                Self::new("conflicting_command", err.to_string()).with_command(id.clone())
+            }
+            commands::CommandError::InvalidCommand { id, .. } => {
+                Self::new("invalid_command", err.to_string()).with_command(id.clone())
             }
             commands::CommandError::NoTarget { id, owner } => {
                 Self::new("no_target", err.to_string())
@@ -2477,7 +2510,7 @@ fn install_function_binding<'s>(
             .unwrap_or_else(|| script_callback_label(scope)),
     );
     with_current_canopy(scope, |canopy, _| {
-        let function_id = canopy.script_host.store_function(stashed, label);
+        let function_id = canopy.script_host.store_function(stashed, label)?;
         let result = canopy.keymap.replace_binding(
             &options.mode,
             input,
@@ -2713,7 +2746,7 @@ fn host_set_focus<'s>(
     let focused = with_current_canopy(scope, |canopy, _| {
         let root_id = canopy.core.root_id();
         let mut ctx = CoreContext::new(&mut canopy.core, root_id);
-        Ok(ctx.set_focus(node_id))
+        ctx.set_focus(node_id).map(ChangeOutcome::changed)
     })
     .map_err(|err| canopy_to_host(&err))?;
     Ok(ret_one(ScopedValue::Boolean(focused)))
@@ -2746,7 +2779,7 @@ fn host_focus_next<'s>(
     with_current_canopy(scope, |canopy, _| {
         let root_id = canopy.core.root_id();
         let mut ctx = CoreContext::new(&mut canopy.core, root_id);
-        ctx.focus_next_global();
+        ctx.focus_next_global()?;
         Ok(())
     })
     .map_err(|err| canopy_to_host(&err))?;
@@ -2761,7 +2794,7 @@ fn host_focus_prev<'s>(
     with_current_canopy(scope, |canopy, _| {
         let root_id = canopy.core.root_id();
         let mut ctx = CoreContext::new(&mut canopy.core, root_id);
-        ctx.focus_prev_global();
+        ctx.focus_prev_global()?;
         Ok(())
     })
     .map_err(|err| canopy_to_host(&err))?;
@@ -2780,7 +2813,7 @@ fn host_focus_dir<'s>(
             .map_err(error::Error::from)?;
         let root_id = canopy.core.root_id();
         let mut ctx = CoreContext::new(&mut canopy.core, root_id);
-        ctx.focus_dir_global(dir);
+        ctx.focus_dir_global(dir)?;
         Ok(())
     })
     .map_err(|err| canopy_to_host(&err))?;
@@ -3214,7 +3247,7 @@ fn host_api<'s>(
     scope: &Scope<'s>,
     _args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let api = with_current_canopy(scope, |canopy, _| Ok(canopy.script_api().to_string()))
+    let api = with_current_canopy(scope, |canopy, _| canopy.script_api().map(str::to_string))
         .map_err(|err| canopy_to_host(&err))?;
     Ok(ret_one(ScopedValue::String(scope.create_string(&api)?)))
 }
@@ -3229,7 +3262,7 @@ fn host_on_start<'s>(
     let stashed = scope.stash_function(function)?;
     let label = script_callback_label(scope);
     with_current_canopy(scope, |canopy, _| {
-        let function_id = canopy.script_host.store_function(stashed, Some(label));
+        let function_id = canopy.script_host.store_function(stashed, Some(label))?;
         canopy
             .script_host
             .state
@@ -3493,6 +3526,25 @@ impl LuauHost {
         self.state.borrow().finalized
     }
 
+    /// Configure a one-shot finalization failure.
+    #[cfg(test)]
+    pub(crate) fn inject_finalize_failure(&self, step: FinalizeStep) {
+        self.state.borrow_mut().finalize_failure = Some(step);
+    }
+
+    /// Fail once when the configured finalization checkpoint is reached.
+    pub(crate) fn finalize_checkpoint(&self, step: FinalizeStep) -> Result<()> {
+        let mut state = self.state.borrow_mut();
+        if state.finalize_failure == Some(step) {
+            state.finalize_failure = None;
+            Err(error::Error::Script(format!(
+                "fault injected at finalization step {step:?}"
+            )))
+        } else {
+            Ok(())
+        }
+    }
+
     /// Return the finalized script surface.
     pub(crate) fn surface(&self) -> Option<Surface> {
         self.state.borrow().surface.clone()
@@ -3606,6 +3658,16 @@ impl LuauHost {
         self.state.borrow_mut().drain_on_start_hooks()
     }
 
+    /// Snapshot deferred startup hooks without consuming them.
+    pub(crate) fn on_start_hooks(&self) -> Vec<LuauFunctionId> {
+        self.state.borrow().on_start_hooks.clone()
+    }
+
+    /// Restore a deferred startup-hook snapshot and return the replaced queue.
+    pub(crate) fn replace_on_start_hooks(&self, hooks: Vec<LuauFunctionId>) -> Vec<LuauFunctionId> {
+        mem::replace(&mut self.state.borrow_mut().on_start_hooks, hooks)
+    }
+
     /// Return true when deferred `on_start` hooks are pending.
     pub fn has_on_start_hooks(&self) -> bool {
         !self.state.borrow().on_start_hooks.is_empty()
@@ -3640,20 +3702,17 @@ impl LuauHost {
         )
     }
 
-    /// Finalize the command surface: audit and build the script surface, then
-    /// construct the retained sandboxed runtime and load any scripts compiled
-    /// before finalization.
-    pub fn finalize(
+    /// Audit and stage the command and startup surfaces without publishing a runtime.
+    pub(crate) fn prepare_finalize(
         &self,
         commands: &CommandSet,
         default_binding_owners: &BTreeSet<String>,
         extra_modules: &[Arc<dyn NativeModule>],
         module_source: Option<Arc<dyn ModuleSource>>,
-        definitions: String,
     ) -> Result<()> {
-        if self.is_finalized() {
+        if self.is_finalized() || self.state.borrow().surface.is_some() {
             return Err(error::Error::InvalidOperation(
-                "Luau API already finalized".into(),
+                "Luau API finalization is already active or complete".into(),
             ));
         }
         let mut builder = Surface::builder().module(build_base_module()?);
@@ -3677,11 +3736,29 @@ impl LuauHost {
                     error::Error::Script(format!("building startup script checker failed: {err}"))
                 })?;
         }
+        self.finalize_checkpoint(FinalizeStep::SurfacePrepared)?;
+        let mut state = self.state.borrow_mut();
+        state.surface = Some(surface);
+        state.startup_surface = Some(startup_surface);
+        Ok(())
+    }
+
+    /// Build and publish the retained runtime after every other preparation step succeeds.
+    pub(crate) fn publish_finalize(&self, definitions: String) -> Result<()> {
+        if self.is_finalized() {
+            return Err(error::Error::InvalidOperation(
+                "Luau API already finalized".into(),
+            ));
+        }
+        let surface = self.state.borrow().surface.clone().ok_or_else(|| {
+            error::Error::InvalidOperation("Luau API surface is not prepared".into())
+        })?;
         let mut runtime = RetainedRuntime::new(
             surface.clone(),
             &VmConfig::untrusted(Ambient::production(0), default_vm_limits()),
         )
         .map_err(|err| error::Error::Script(format!("building script VM failed: {err}")))?;
+        self.finalize_checkpoint(FinalizeStep::RuntimeBuilt)?;
 
         let pending = self
             .state
@@ -3689,25 +3766,60 @@ impl LuauHost {
             .scripts
             .scripts
             .iter()
-            .map(|(id, script)| (*id, script.runtime_source.clone()))
+            .map(|(id, script)| (*id, script.runtime_source.clone(), script.prepared.clone()))
             .collect::<Vec<_>>();
-        for (id, source) in pending {
-            let prepared = surface
-                .prepare_graph(source)
-                .map_err(|error| prepare_graph_error_to_canopy(&error))?;
+        let mut pending = pending;
+        pending.sort_by_key(|(id, _, _)| *id);
+        let mut loaded = Vec::with_capacity(pending.len());
+        for (index, (id, source, prepared)) in pending.into_iter().enumerate() {
+            self.finalize_checkpoint(FinalizeStep::PendingScript(index))?;
+            let prepared = match prepared {
+                Some(prepared) => prepared,
+                None => surface
+                    .prepare_graph(source)
+                    .map_err(|error| prepare_graph_error_to_canopy(&error))?,
+            };
             let root = runtime.load_prepared(&prepared).map_err(|error| {
                 retained_runtime_error_to_canopy(&error, "loading prepared script", None)
             })?;
-            let mut state = self.state.borrow_mut();
-            state.scripts.set_prepared(id, prepared);
-            state.scripts.set_root(id, root);
+            loaded.push((id, prepared, root));
         }
-
+        self.finalize_checkpoint(FinalizeStep::BeforePublish)?;
         *self.runtime.borrow_mut() = Some(runtime);
-        self.state
-            .borrow_mut()
-            .finalize(definitions, surface, startup_surface);
+        {
+            let mut state = self.state.borrow_mut();
+            for (id, prepared, root) in loaded {
+                state.scripts.set_prepared(id, prepared);
+                state.scripts.set_root(id, root);
+            }
+            state.publish(definitions);
+        }
         Ok(())
+    }
+
+    /// Discard a failed finalization attempt and scripts compiled only for that attempt.
+    pub(crate) fn abort_finalize(&self, existing_scripts: &HashSet<ScriptId>) {
+        *self.runtime.borrow_mut() = None;
+        let mut state = self.state.borrow_mut();
+        state
+            .scripts
+            .scripts
+            .retain(|id, _| existing_scripts.contains(id));
+        state.definitions = None;
+        state.surface = None;
+        state.startup_surface = None;
+        state.finalized = false;
+    }
+
+    /// Return the script IDs that existed before a finalization attempt.
+    pub(crate) fn script_ids(&self) -> HashSet<ScriptId> {
+        self.state
+            .borrow()
+            .scripts
+            .scripts
+            .keys()
+            .copied()
+            .collect()
     }
 
     /// Compile a script and return its id.
@@ -3747,7 +3859,7 @@ impl LuauHost {
             self.state
                 .borrow_mut()
                 .scripts
-                .insert(chunk, &original, runtime_source, prepared);
+                .insert(chunk, &original, runtime_source, prepared)?;
         if self.is_finalized() {
             self.load_script(sid)?;
         }
@@ -3792,7 +3904,7 @@ impl LuauHost {
             &original,
             runtime_source,
             Some(prepared),
-        );
+        )?;
         if self.is_finalized() {
             self.load_script(sid)?;
         }
@@ -4074,7 +4186,11 @@ impl LuauHost {
     }
 
     /// Store a stashed Luau closure and return a stable host-side id.
-    fn store_function(&self, stashed: StashedClosure, label: Option<String>) -> LuauFunctionId {
+    fn store_function(
+        &self,
+        stashed: StashedClosure,
+        label: Option<String>,
+    ) -> Result<LuauFunctionId> {
         self.state.borrow_mut().closures.insert(stashed, label)
     }
 
@@ -4396,6 +4512,80 @@ mod tests {
                 marshaled.expect("marshaled value"),
                 node_handle_marshal(&NodeHandle { id: tree.a })
             );
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn retained_node_handle_is_rejected_after_removal() -> Result<()> {
+        run_ttree(|c, _, tree| {
+            c.finalize_api()?;
+            let host = c.script_host.clone();
+            c.core.remove_subtree(tree.a)?;
+            let anchor = c.core.root_id();
+            c.script_context_stack.push(anchor);
+            let mut runtime_cell = host.runtime.borrow_mut();
+            let runtime = runtime_cell.as_mut().expect("finalized runtime");
+            runtime
+                .step_with_context(c, &CallOptions::new(), |scope| {
+                    let handle = scope.create_userdata(NodeHandle { id: tree.a })?;
+                    let values = MultiValue::from_values(vec![ScopedValue::Userdata(handle)]);
+                    let error = ArgReader::new(values)
+                        .node_id(scope)
+                        .expect_err("removed node handle should be rejected");
+                    assert!(error.script_fields().iter().any(|field| {
+                        field.name == "kind"
+                            && matches!(&field.value, OwnedValue::Bytes(value) if value == b"node_invalid")
+                    }));
+                    Ok(())
+                })
+                .map_err(|error| error::Error::Script(error.to_string()))?;
+            assert_eq!(c.script_context_stack.pop(), Some(anchor));
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn binding_replacement_releases_old_and_failed_callbacks() -> Result<()> {
+        run_ttree(|c, _, _| {
+            c.finalize_api()?;
+            let host = c.script_host.clone();
+            let install = host.compile(
+                r#"canopy.bind_with("a", { path = "" }, function() local value = true end)"#,
+            )?;
+            host.execute(c, c.core.root_id(), install)?;
+            assert_eq!(host.state.borrow().closures.functions.len(), 1);
+
+            let replace = host.compile(
+                r#"canopy.bind_with("a", { path = "" }, function() local value = false end)"#,
+            )?;
+            host.execute(c, c.core.root_id(), replace)?;
+            assert_eq!(host.state.borrow().closures.functions.len(), 1);
+
+            let invalid = host
+                .compile(r#"canopy.bind_with("a", { path = "invalid-name" }, function() end)"#)?;
+            host.execute(c, c.core.root_id(), invalid)
+                .expect_err("invalid replacement path should fail");
+            assert_eq!(host.state.borrow().closures.functions.len(), 1);
+
+            let exhausted = host.compile("canopy.on_start(function() end)")?;
+            host.state.borrow_mut().closures.next_function_id = u64::MAX;
+            host.execute(c, c.core.root_id(), exhausted)
+                .expect_err("closure identifier exhaustion should fail");
+            assert_eq!(host.state.borrow().closures.functions.len(), 1);
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn script_identifier_exhaustion_is_reported() -> Result<()> {
+        run_ttree(|c, _, _| {
+            c.script_host.state.borrow_mut().scripts.next_script_id = u64::MAX;
+            let error = c
+                .script_host
+                .compile("return true")
+                .expect_err("script identifier exhaustion should fail");
+            assert!(matches!(error, error::Error::InvalidOperation(_)));
             Ok(())
         })
     }

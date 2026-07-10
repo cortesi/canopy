@@ -3,8 +3,6 @@
 //! A typed list container where items are actual widgets in the tree.
 //! Items participate in focus management and can be composed from other widgets.
 
-use std::marker::PhantomData;
-
 use canopy::{
     Context, EventOutcome, KeyedChildren, NodeId, ReadContext, RemovePolicy, TypedId, Widget,
     command,
@@ -115,7 +113,7 @@ pub trait Selectable: Widget {
 /// selection state independently of focus.
 pub struct List<W: Selectable> {
     /// Keyed list items in order.
-    items: KeyedChildren<ListKey>,
+    items: KeyedChildren<ListKey, W>,
     /// Next monotonic key to assign.
     next_key: u64,
     /// Currently selected item index.
@@ -126,8 +124,6 @@ pub struct List<W: Selectable> {
     on_activate: Option<ListActivateConfig>,
     /// Pending activation state while handling clicks.
     pending_activate: Option<PendingActivate>,
-    /// Marker for the widget type.
-    _marker: PhantomData<W>,
 }
 
 impl<W: Selectable> Default for List<W> {
@@ -147,7 +143,6 @@ impl<W: Selectable> List<W> {
             selection_indicator: None,
             on_activate: None,
             pending_activate: None,
-            _marker: PhantomData,
         }
     }
 
@@ -209,7 +204,7 @@ impl<W: Selectable> List<W> {
 
     /// Returns the typed ID of the item at the given index.
     pub fn item(&self, index: usize) -> Option<TypedId<W>> {
-        self.items.id_at(index).map(TypedId::new)
+        self.items.id_at(index)
     }
 
     /// Returns the currently selected index.
@@ -242,11 +237,13 @@ impl<W: Selectable> List<W> {
         // Auto-select and focus if this is the first item
         if self.selected.is_none() {
             self.update_selection(ctx, Some(self.items.len() - 1))?;
-            ctx.set_focus(id.into());
+            if ctx.node_is_attached(id.into()) {
+                ctx.set_focus(id.into())?;
+            }
         } else if let Some(previous_focus) = previous_focus {
-            ctx.set_focus(previous_focus);
+            ctx.set_focus(previous_focus)?;
         } else {
-            self.focus_selected(ctx);
+            self.focus_selected(ctx)?;
         }
 
         Ok(id)
@@ -281,12 +278,15 @@ impl<W: Selectable> List<W> {
         }
 
         // Focus first item if this was an empty list
-        if was_empty && let Some(first_id) = self.item(0) {
-            ctx.set_focus(first_id.into());
+        if was_empty
+            && let Some(first_id) = self.item(0)
+            && ctx.node_is_attached(first_id.into())
+        {
+            ctx.set_focus(first_id.into())?;
         } else if let Some(previous_focus) = previous_focus {
-            ctx.set_focus(previous_focus);
+            ctx.set_focus(previous_focus)?;
         } else {
-            self.focus_selected(ctx);
+            self.focus_selected(ctx)?;
         }
 
         Ok(id)
@@ -313,7 +313,6 @@ impl<W: Selectable> List<W> {
         let removed = self
             .items
             .id_at(index)
-            .map(TypedId::new)
             .ok_or_else(|| Error::Internal("list take missing node id".into()))?;
         desired.remove(index);
         self.reconcile_order(ctx, desired, RemovePolicy::Detach)?;
@@ -421,7 +420,7 @@ impl<W: Selectable> List<W> {
                 self.selected = None;
                 self.update_selection(ctx, new_sel)?;
                 if new_sel.is_some() {
-                    self.focus_selected(ctx);
+                    self.focus_selected(ctx)?;
                 }
             }
         }
@@ -436,7 +435,7 @@ impl<W: Selectable> List<W> {
             return Ok(());
         }
         self.update_selection(c, Some(0))?;
-        self.focus_selected(c);
+        self.focus_selected(c)?;
         self.ensure_selected_visible(c);
         Ok(())
     }
@@ -448,7 +447,7 @@ impl<W: Selectable> List<W> {
             return Ok(());
         }
         self.update_selection(c, Some(self.items.len() - 1))?;
-        self.focus_selected(c);
+        self.focus_selected(c)?;
         self.ensure_selected_visible(c);
         Ok(())
     }
@@ -466,7 +465,7 @@ impl<W: Selectable> List<W> {
             current.saturating_add(delta as usize)
         };
         self.update_selection(c, Some(next.min(self.items.len() - 1)))?;
-        self.focus_selected(c);
+        self.focus_selected(c)?;
         self.ensure_selected_visible(c);
         Ok(())
     }
@@ -479,7 +478,7 @@ impl<W: Selectable> List<W> {
                     return Ok(false);
                 };
                 self.select(c, index)?;
-                self.focus_selected(c);
+                self.focus_selected(c)?;
                 self.ensure_selected_visible(c);
                 if self.on_activate.is_some() {
                     self.pending_activate = Some(PendingActivate {
@@ -487,7 +486,7 @@ impl<W: Selectable> List<W> {
                         origin: event.location,
                         dragged: false,
                     });
-                    c.capture_mouse();
+                    c.capture_mouse()?;
                 }
                 Ok(true)
             }
@@ -505,7 +504,7 @@ impl<W: Selectable> List<W> {
             mouse::Action::Up if event.button == mouse::Button::Left => {
                 let pending = self.pending_activate.take();
                 if let Some(pending) = pending {
-                    c.release_mouse();
+                    c.release_mouse()?;
                     if !pending.dragged {
                         let index = self.index_at_location(c, event.location);
                         if index == Some(pending.index) {
@@ -521,10 +520,13 @@ impl<W: Selectable> List<W> {
     }
 
     /// Set focus on the currently selected item.
-    fn focus_selected(&self, c: &mut dyn Context) {
-        if let Some(id) = self.selected_item() {
-            c.set_focus(id.into());
+    fn focus_selected(&self, c: &mut dyn Context) -> Result<()> {
+        if let Some(id) = self.selected_item()
+            && c.node_is_attached(id.into())
+        {
+            c.set_focus(id.into())?;
         }
+        Ok(())
     }
 
     /// Dispatch the activation command for a selected row.
@@ -623,7 +625,7 @@ impl<W: Selectable> List<W> {
 
         if let Some(target_idx) = Self::index_at_y(&metrics, target_y) {
             self.select(c, target_idx)?;
-            self.focus_selected(c);
+            self.focus_selected(c)?;
             self.ensure_selected_visible(c);
         }
         Ok(())
@@ -645,7 +647,7 @@ impl<W: Selectable> List<W> {
 
         for id in self.items.iter_ids() {
             // Get the child's layout and compute its height
-            let height = c.node_view(id).map(|v| v.outer.h).unwrap_or(1);
+            let height = c.node_view(id.into()).map(|v| v.outer.h).unwrap_or(1);
 
             metrics.push((y_offset, height));
             y_offset = y_offset.saturating_add(height);

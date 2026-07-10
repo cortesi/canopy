@@ -129,7 +129,7 @@ impl TermDemo {
         }
 
         if let Some(active_id) = self.terminal_ids.get(self.active).copied() {
-            ctx.set_focus(active_id);
+            ctx.set_focus(active_id)?;
         }
 
         Ok(())

@@ -1988,14 +1988,18 @@ impl Editor {
     }
 
     /// Handle mouse interactions for selection and cursor movement.
-    fn handle_mouse_event(&mut self, event: &mouse::MouseEvent, ctx: &mut dyn Context) -> bool {
+    fn handle_mouse_event(
+        &mut self,
+        event: &mouse::MouseEvent,
+        ctx: &mut dyn Context,
+    ) -> Result<bool> {
         let view = ctx.view();
         let view_rect = view.view_rect();
         let origin = view.content_origin();
         let gutter_width = self.gutter_width();
         self.update_layout(view_rect, gutter_width);
         if event.location.x < origin.x || event.location.y < origin.y {
-            return false;
+            return Ok(false);
         }
         let local = Point {
             x: event.location.x.saturating_sub(origin.x),
@@ -2016,9 +2020,9 @@ impl Editor {
                 .layout
                 .position_for_point(&self.buffer, text_point, self.config.tab_stop);
 
-        match event.action {
+        Ok(match event.action {
             mouse::Action::Down if event.button == mouse::Button::Left => {
-                ctx.set_focus(ctx.node_id());
+                ctx.set_focus(ctx.node_id())?;
                 let click_type = self.mouse.click_type(event.location);
                 match click_type {
                     ClickType::Single => {
@@ -2058,7 +2062,7 @@ impl Editor {
                 true
             }
             _ => false,
-        }
+        })
     }
 
     /// Render the search/replace prompt overlay.
@@ -2391,7 +2395,7 @@ impl Widget for Editor {
                 _ => {}
             }
 
-            let handled = self.handle_mouse_event(mouse_event, ctx);
+            let handled = self.handle_mouse_event(mouse_event, ctx)?;
             if handled {
                 self.ensure_cursor_visible(ctx);
                 return Ok(EventOutcome::Handle);

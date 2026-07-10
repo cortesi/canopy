@@ -191,7 +191,7 @@ impl Logs {
 
     /// Ensure the list widget is mounted.
     fn ensure_tree(&self, c: &mut dyn Context) -> Result<()> {
-        if c.has_child::<ListSlot>() {
+        if c.has_child::<ListSlot>()? {
             return Ok(());
         }
 
@@ -205,7 +205,7 @@ impl Logs {
     where
         F: FnMut(&mut List<LogEntry>, &mut dyn Context) -> Result<R>,
     {
-        if !c.has_child::<ListSlot>() {
+        if !c.has_child::<ListSlot>()? {
             return Err(Error::Internal("logs list not initialized".into()));
         }
         c.with_child::<ListSlot, _>(f)
@@ -218,7 +218,7 @@ impl Logs {
         let vals: Vec<String> = b.drain(..).collect();
         drop(b);
 
-        if !c.has_child::<ListSlot>() {
+        if !c.has_child::<ListSlot>()? {
             return Ok(());
         }
 

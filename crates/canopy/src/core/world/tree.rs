@@ -1,8 +1,9 @@
 use std::{
-    any::TypeId,
-    cell::RefCell,
     collections::{HashMap, HashSet},
+    rc::Rc,
 };
+
+use parking_lot::RwLock;
 
 use super::*;
 use crate::{
@@ -18,6 +19,63 @@ use crate::{
     widget::Widget,
 };
 
+impl TreeStateSnapshot {
+    /// Capture all core-owned state that tree hooks can mutate.
+    fn capture(core: &Core) -> Self {
+        Self {
+            nodes: core.nodes.clone(),
+            root: core.root,
+            focus: core.focus,
+            exit_requested: core.exit_requested,
+            pending_style: core.pending_style.clone(),
+            mouse_capture: core.mouse_capture,
+            focus_hint: core.focus_hint,
+            commands: core.commands.clone(),
+            command_scope: core.command_scope.clone(),
+            pending_help_request: core.pending_help_request,
+            pending_help_snapshot: core.pending_help_snapshot.clone(),
+            pending_help_snapshot_observed: core.pending_help_snapshot_observed.get(),
+            pending_diagnostic_dump: core.pending_diagnostic_dump,
+        }
+    }
+
+    /// Restore a previously captured core state.
+    fn restore(self, core: &mut Core) {
+        core.nodes = self.nodes;
+        core.root = self.root;
+        core.focus = self.focus;
+        core.exit_requested = self.exit_requested;
+        core.pending_style = self.pending_style;
+        core.mouse_capture = self.mouse_capture;
+        core.focus_hint = self.focus_hint;
+        core.commands = self.commands;
+        core.command_scope = self.command_scope;
+        core.pending_help_request = self.pending_help_request;
+        core.pending_help_snapshot = self.pending_help_snapshot;
+        core.pending_help_snapshot_observed
+            .set(self.pending_help_snapshot_observed);
+        core.pending_diagnostic_dump = self.pending_diagnostic_dump;
+    }
+}
+
+impl TreeEditJournal {
+    /// Start a journal from the current core state.
+    fn new(core: &Core) -> Self {
+        Self {
+            before: TreeStateSnapshot::capture(core),
+            mounted: Vec::new(),
+            unmounted: HashSet::new(),
+        }
+    }
+}
+
+impl MountedWidget {
+    /// Return the stable identity of this widget slot.
+    fn identity(&self) -> usize {
+        Rc::as_ptr(&self.widget) as usize
+    }
+}
+
 impl Core {
     /// Add a boxed widget to the arena and return its node ID.
     pub(super) fn add_boxed(&mut self, widget: Box<dyn Widget>) -> NodeId {
@@ -25,8 +83,8 @@ impl Core {
         let name = widget.name();
         let widget_type = widget.as_ref().type_id();
 
-        let node_id = self.nodes.insert(Node {
-            widget: RefCell::new(Some(widget)),
+        self.nodes.insert(Node {
+            widget: Rc::new(RwLock::new(Some(widget))),
             widget_type,
             parent: None,
             children: Vec::new(),
@@ -44,9 +102,7 @@ impl Core {
             layout_dirty: false,
             effects: None,
             clear_inherited_effects: false,
-        });
-        self.record_created(node_id);
-        node_id
+        })
     }
 
     /// Update the layout for a node.
@@ -83,21 +139,9 @@ impl Core {
         W: Widget + 'static,
     {
         let node_id = node_id.into();
-        let name = widget.name();
-        let layout = widget.layout();
-        let widget_type = TypeId::of::<W>();
-        let node = self
-            .nodes
-            .get_mut(node_id)
-            .ok_or(Error::NodeNotFound(node_id))?;
-        node.widget = RefCell::new(Some(Box::new(widget)));
-        node.name = name;
-        node.layout = layout;
-        node.widget_type = widget_type;
-        node.mounted = false;
-        node.initialized = false;
-        self.ensure_invariants(None);
-        Ok(())
+        self.with_tree_edit("replace widget", move |core| {
+            core.replace_widget_inner(node_id, Box::new(widget), false)
+        })
     }
 
     /// Replace a widget and remove all descendant nodes.
@@ -106,17 +150,79 @@ impl Core {
         W: Widget + 'static,
     {
         let node_id = node_id.into();
-        let children = self
-            .nodes
-            .get(node_id)
-            .ok_or(Error::NodeNotFound(node_id))?
-            .children
-            .clone();
-        self.ensure_subtree_widget_slots_available(node_id, "replace subtree")?;
-        for child in children {
-            self.remove_subtree(child)?;
+        self.with_tree_edit("replace subtree", move |core| {
+            core.replace_widget_inner(node_id, Box::new(widget), true)
+        })
+    }
+
+    /// Replace one widget inside an active tree edit.
+    fn replace_widget_inner(
+        &mut self,
+        node_id: NodeId,
+        widget: Box<dyn Widget>,
+        remove_descendants: bool,
+    ) -> Result<()> {
+        if !self.nodes.contains_key(node_id) {
+            return Err(Error::NodeNotFound(node_id));
         }
-        self.replace_widget_keep_children(node_id, widget)
+
+        let plan = if remove_descendants {
+            self.plan_subtree_removal(node_id, "replace subtree")?
+        } else {
+            self.plan_widget_replacement(node_id, "replace widget")?
+        };
+        let removed_focus_root = if remove_descendants {
+            self.removed_focus_root(&plan)
+        } else {
+            None
+        };
+        let focus_hint = removed_focus_root.map(|root| self.focus_recovery_hint(root));
+        self.run_pre_remove_plan(&plan)?;
+        self.validate_removal_plan(&plan)?;
+        self.run_unmount_plan(&plan)?;
+        self.validate_removal_plan(&plan)?;
+
+        if remove_descendants {
+            let removed: HashSet<NodeId> = plan
+                .pre_order
+                .iter()
+                .skip(1)
+                .map(|entry| entry.node_id)
+                .collect();
+            for removed_node in plan.post_order.iter().copied() {
+                if removed_node != plan.root {
+                    self.nodes.remove(removed_node);
+                }
+            }
+            let node = self
+                .nodes
+                .get_mut(node_id)
+                .ok_or(Error::NodeNotFound(node_id))?;
+            node.children.clear();
+            node.child_keys.clear();
+            self.clear_removed_targets(&removed);
+        }
+
+        let name = widget.name();
+        let layout = widget.layout();
+        let widget_type = widget.as_ref().type_id();
+        let node = self
+            .nodes
+            .get_mut(node_id)
+            .ok_or(Error::NodeNotFound(node_id))?;
+        node.widget = Rc::new(RwLock::new(Some(widget)));
+        node.name = name;
+        node.layout = layout;
+        node.widget_type = widget_type;
+        node.mounted = false;
+        node.initialized = false;
+
+        if self.is_attached_to_root(node_id) {
+            self.mount_node(node_id)?;
+        }
+        self.focus_hint = focus_hint;
+        self.ensure_invariants(removed_focus_root)?;
+        Ok(())
     }
 
     /// Run the mount hook for a node if it has not been mounted yet.
@@ -125,10 +231,12 @@ impl Core {
             .nodes
             .get(node_id)
             .map(|node| !node.mounted)
-            .unwrap_or(false);
+            .ok_or(Error::NodeNotFound(node_id))?;
         if !should_mount {
             return Ok(());
         }
+
+        let widget_slot = Rc::clone(&self.nodes[node_id].widget);
 
         self.with_widget_mut(node_id, |widget, core| {
             let mut ctx = CoreContext::new(core, node_id);
@@ -138,151 +246,111 @@ impl Core {
         if let Some(node) = self.nodes.get_mut(node_id) {
             node.mounted = true;
         }
-        if let Some(tx) = self.transaction.as_mut() {
-            tx.mounted.push(node_id);
+        if let Some(journal) = self.tree_edit.as_mut() {
+            journal.mounted.push(MountedWidget {
+                node_id,
+                widget: widget_slot,
+            });
         }
 
         Ok(())
     }
 
-    /// Run a structural mutation transaction, rolling back on error.
-    fn with_transaction<R>(&mut self, f: impl FnOnce(&mut Self) -> Result<R>) -> Result<R> {
-        if self.transaction.is_some() {
-            return f(self);
+    /// Run a tree edit, joining an active journal or rolling back the outermost edit on failure.
+    pub(crate) fn with_tree_edit<R>(
+        &mut self,
+        operation: &'static str,
+        f: impl FnOnce(&mut Self) -> Result<R>,
+    ) -> Result<R> {
+        if self.rolling_back_tree_edit {
+            return Err(Error::TreeEditDuringRollback { operation });
+        }
+        if self.tree_edit.is_some() {
+            let before = TreeStateSnapshot::capture(self);
+            let (mounted_len, unmounted_before) = {
+                let journal = self.tree_edit.as_ref().expect("tree edit journal missing");
+                (journal.mounted.len(), journal.unmounted.clone())
+            };
+            let result = f(self);
+            return match result {
+                Ok(value) => Ok(value),
+                Err(error) => {
+                    let (mounted, unmounted) = {
+                        let journal = self.tree_edit.as_mut().expect("tree edit journal missing");
+                        let mounted = journal.mounted.split_off(mounted_len);
+                        let unmounted = journal.unmounted.clone();
+                        journal.unmounted = unmounted_before;
+                        (mounted, unmounted)
+                    };
+                    self.unwind_mounted_widgets(&mounted, &unmounted);
+                    before.restore(self);
+                    Err(error)
+                }
+            };
         }
 
-        self.transaction = Some(MountTransaction::default());
+        self.tree_edit = Some(TreeEditJournal::new(self));
         let result = f(self);
-        let transaction = self.transaction.take().expect("transaction missing");
+        let journal = self.tree_edit.take().expect("tree edit journal missing");
 
         match result {
             Ok(value) => Ok(value),
             Err(err) => {
-                self.rollback_transaction(&transaction);
+                self.rollback_tree_edit(journal);
                 Err(err)
             }
         }
     }
 
-    /// Record a node created during the active transaction.
-    fn record_created(&mut self, node_id: NodeId) {
-        if let Some(tx) = self.transaction.as_mut() {
-            tx.created.push(node_id);
-        }
+    /// Unwind completed mounts in reverse order and restore the captured state.
+    fn rollback_tree_edit(&mut self, journal: TreeEditJournal) {
+        self.unwind_mounted_widgets(&journal.mounted, &journal.unmounted);
+        journal.before.restore(self);
+        self.debug_assert_tree_invariants();
     }
 
-    /// Snapshot the structure of a node if it hasn't been recorded yet.
-    fn record_snapshot(&mut self, node_id: NodeId) {
-        let Some(tx) = self.transaction.as_mut() else {
-            return;
-        };
-        if tx.snapshots.contains_key(&node_id) {
-            return;
-        }
-        let Some(node) = self.nodes.get(node_id) else {
-            return;
-        };
-        tx.snapshots.insert(
-            node_id,
-            NodeStructureSnapshot {
-                parent: node.parent,
-                children: node.children.clone(),
-                child_keys: node.child_keys.clone(),
-            },
-        );
-    }
-
-    /// Restore node structure and cleanup after a failed transaction.
-    fn rollback_transaction(&mut self, tx: &MountTransaction) {
-        self.run_unmount_for_created(&tx.created);
-        self.restore_snapshots(&tx.snapshots);
-        self.restore_mount_flags(&tx.mounted, &tx.created);
-        self.remove_created_nodes(&tx.created);
-    }
-
-    /// Restore parent/child relationships from snapshots.
-    fn restore_snapshots(&mut self, snapshots: &HashMap<NodeId, NodeStructureSnapshot>) {
-        for (node_id, snapshot) in snapshots {
-            let Some(node) = self.nodes.get_mut(*node_id) else {
+    /// Run rollback cleanup for mounts completed after a journal checkpoint.
+    fn unwind_mounted_widgets(&mut self, mounted: &[MountedWidget], unmounted: &HashSet<usize>) {
+        self.rolling_back_tree_edit = true;
+        for mounted in mounted.iter().rev() {
+            if unmounted.contains(&mounted.identity()) {
+                continue;
+            }
+            let Some(mut widget) = mounted.widget.try_write() else {
+                debug_assert!(false, "mounted widget borrowed during tree rollback");
                 continue;
             };
-            node.parent = snapshot.parent;
-            node.children = snapshot.children.clone();
-            node.child_keys = snapshot.child_keys.clone();
-        }
-    }
-
-    /// Reset mounted flags for nodes mounted during a failed transaction.
-    fn restore_mount_flags(&mut self, mounted: &[NodeId], created: &[NodeId]) {
-        for node_id in mounted {
-            if created.contains(node_id) {
+            let Some(widget) = widget.as_deref_mut() else {
+                debug_assert!(false, "mounted widget missing during tree rollback");
                 continue;
-            }
-            if let Some(node) = self.nodes.get_mut(*node_id) {
-                node.mounted = false;
-            }
+            };
+            let mut ctx = CoreContext::new(self, mounted.node_id);
+            widget.on_unmount(&mut ctx);
         }
+        self.rolling_back_tree_edit = false;
     }
 
-    /// Remove nodes created during a failed transaction.
-    fn remove_created_nodes(&mut self, created: &[NodeId]) {
-        for node_id in created {
-            self.nodes.remove(*node_id);
+    /// Run an unmount hook once for a successfully mounted node.
+    fn unmount_node(&mut self, node_id: NodeId) -> Result<()> {
+        let node = self
+            .nodes
+            .get(node_id)
+            .ok_or(Error::NodeNotFound(node_id))?;
+        if !node.mounted {
+            return Ok(());
         }
-    }
-
-    /// Run unmount hooks for nodes created during a failed transaction.
-    fn run_unmount_for_created(&mut self, created: &[NodeId]) {
-        if created.is_empty() {
-            return;
+        let widget = Rc::clone(&node.widget);
+        self.with_widget_mut(node_id, |widget, core| {
+            let mut ctx = CoreContext::new(core, node_id);
+            widget.on_unmount(&mut ctx);
+        })?;
+        if let Some(node) = self.nodes.get_mut(node_id) {
+            node.mounted = false;
         }
-
-        let created_set: HashSet<NodeId> = created.iter().copied().collect();
-        let mut roots = Vec::new();
-        for node_id in created {
-            let parent = self.nodes.get(*node_id).and_then(|node| node.parent);
-            let parent_created = parent.is_some_and(|id| created_set.contains(&id));
-            if !parent_created {
-                roots.push(*node_id);
-            }
+        if let Some(journal) = self.tree_edit.as_mut() {
+            journal.unmounted.insert(Rc::as_ptr(&widget) as usize);
         }
-
-        for root in roots {
-            let order = self.post_order_filtered(root, &created_set);
-            for node_id in order {
-                if !self.nodes.contains_key(node_id) {
-                    continue;
-                }
-                let _ignored = self.with_widget_mut(node_id, |widget, core| {
-                    let mut ctx = CoreContext::new(core, node_id);
-                    widget.on_unmount(&mut ctx);
-                });
-            }
-        }
-    }
-
-    /// Return a post-order traversal restricted to nodes in `allowed`.
-    fn post_order_filtered(&self, root: NodeId, filter: &HashSet<NodeId>) -> Vec<NodeId> {
-        let mut out = Vec::new();
-        let mut stack = vec![(root, false)];
-        while let Some((node_id, visited)) = stack.pop() {
-            if !filter.contains(&node_id) {
-                continue;
-            }
-            if visited {
-                out.push(node_id);
-                continue;
-            }
-            stack.push((node_id, true));
-            if let Some(node) = self.nodes.get(node_id) {
-                for child in node.children.iter().rev() {
-                    if filter.contains(child) {
-                        stack.push((*child, false));
-                    }
-                }
-            }
-        }
-        out
+        Ok(())
     }
 
     /// Return true if `ancestor` appears in the parent chain of `node`.
@@ -578,6 +646,16 @@ impl Core {
         self.add_boxed(widget)
     }
 
+    /// Create a detached node through a context, rejecting edits during rollback.
+    pub(crate) fn try_create_detached_boxed(&mut self, widget: Box<dyn Widget>) -> Result<NodeId> {
+        if self.rolling_back_tree_edit {
+            return Err(Error::TreeEditDuringRollback {
+                operation: "create detached",
+            });
+        }
+        Ok(self.create_detached_boxed(widget))
+    }
+
     /// Add a boxed widget as a child of a specific parent and return the new node ID.
     pub fn add_child_to_boxed(
         &mut self,
@@ -585,7 +663,7 @@ impl Core {
         widget: Box<dyn Widget>,
     ) -> Result<NodeId> {
         let parent = parent.into();
-        self.with_transaction(|core| {
+        self.with_tree_edit("add child", |core| {
             let child = core.create_detached_boxed(widget);
             core.attach(parent, child)?;
             Ok(child)
@@ -600,7 +678,7 @@ impl Core {
         widget: Box<dyn Widget>,
     ) -> Result<NodeId> {
         let parent = parent.into();
-        self.with_transaction(|core| {
+        self.with_tree_edit("add keyed child", |core| {
             if core.child_keyed(parent, key).is_some() {
                 return Err(Error::DuplicateChildKey(key.to_string()));
             }
@@ -621,7 +699,7 @@ impl Core {
     pub fn attach(&mut self, parent: impl Into<NodeId>, child: impl Into<NodeId>) -> Result<()> {
         let parent = parent.into();
         let child = child.into();
-        self.with_transaction(|core| core.attach_inner(parent, child, None))
+        self.with_tree_edit("attach", |core| core.attach_inner(parent, child, None))
     }
 
     /// Attach a detached child under a parent with a unique key.
@@ -633,7 +711,9 @@ impl Core {
     ) -> Result<()> {
         let parent = parent.into();
         let child = child.into();
-        self.with_transaction(|core| core.attach_inner(parent, child, Some(key)))
+        self.with_tree_edit("attach keyed", |core| {
+            core.attach_inner(parent, child, Some(key))
+        })
     }
 
     /// Attach a child under a parent, optionally tracking a keyed association.
@@ -660,8 +740,9 @@ impl Core {
             return Err(Error::DuplicateChildKey(key.to_string()));
         }
 
-        self.record_snapshot(parent);
-        self.record_snapshot(child);
+        if self.is_attached_to_root(parent) {
+            self.ensure_unmounted_widget_slots_available(child, "attach")?;
+        }
 
         if let Some(key) = key
             && let Some(node) = self.nodes.get_mut(parent)
@@ -680,28 +761,24 @@ impl Core {
             self.mount_subtree_pre_order(child)?;
         }
 
-        self.ensure_invariants(None);
+        self.ensure_invariants(None)?;
         Ok(())
     }
 
     /// Detach a child from its parent if attached.
     pub fn detach(&mut self, child: impl Into<NodeId>) -> Result<()> {
         let child = child.into();
-        if !self.nodes.contains_key(child) {
-            return Err(Error::NodeNotFound(child));
-        }
-
-        let parent = self.nodes.get(child).and_then(|node| node.parent);
-        let hint = parent
-            .filter(|_| self.is_attached_to_root(child))
-            .map(|_| self.focus_recovery_hint(child));
-
-        self.with_transaction(|core| {
+        self.with_tree_edit("detach", |core| {
+            if !core.nodes.contains_key(child) {
+                return Err(Error::NodeNotFound(child));
+            }
+            let parent = core.nodes.get(child).and_then(|node| node.parent);
+            let hint = parent
+                .filter(|_| core.is_attached_to_root(child))
+                .map(|_| core.focus_recovery_hint(child));
             let Some(parent) = parent else {
                 return Ok(());
             };
-            core.record_snapshot(parent);
-            core.record_snapshot(child);
             if let Some(node) = core.nodes.get_mut(parent) {
                 node.children.retain(|id| *id != child);
                 node.child_keys.retain(|_, id| *id != child);
@@ -709,12 +786,10 @@ impl Core {
             if let Some(node) = core.nodes.get_mut(child) {
                 node.parent = None;
             }
+            core.focus_hint = hint;
+            core.ensure_invariants(Some(child))?;
             Ok(())
-        })?;
-
-        self.focus_hint = hint;
-        self.ensure_invariants(Some(child));
-        Ok(())
+        })
     }
 
     /// Mount unmounted nodes in a subtree using pre-order traversal.
@@ -752,6 +827,13 @@ impl Core {
     /// Replace the children list for a parent in the arena tree.
     pub fn set_children(&mut self, parent: impl Into<NodeId>, children: Vec<NodeId>) -> Result<()> {
         let parent = parent.into();
+        self.with_tree_edit("set children", move |core| {
+            core.set_children_inner(parent, children)
+        })
+    }
+
+    /// Replace a parent's children inside an active tree edit.
+    fn set_children_inner(&mut self, parent: NodeId, children: Vec<NodeId>) -> Result<()> {
         if !self.nodes.contains_key(parent) {
             return Err(Error::NodeNotFound(parent));
         }
@@ -779,15 +861,17 @@ impl Core {
         }
 
         let parent_attached = self.is_attached_to_root(parent);
-        self.record_snapshot(parent);
+        if parent_attached {
+            for child in &children {
+                self.ensure_unmounted_widget_slots_available(*child, "set children")?;
+            }
+        }
 
         for child in &children {
             let old_parent = self.nodes.get(*child).and_then(|n| n.parent);
             if let Some(old_parent) = old_parent
                 && old_parent != parent
             {
-                self.record_snapshot(old_parent);
-                self.record_snapshot(*child);
                 if let Some(node) = self.nodes.get_mut(old_parent) {
                     node.children.retain(|id| *id != *child);
                     node.child_keys.retain(|_, id| *id != *child);
@@ -800,14 +884,12 @@ impl Core {
 
         let old_children = self.nodes[parent].children.clone();
         for child in old_children {
-            self.record_snapshot(child);
             if let Some(node) = self.nodes.get_mut(child) {
                 node.parent = None;
             }
         }
 
         for child in &children {
-            self.record_snapshot(*child);
             if let Some(node) = self.nodes.get_mut(*child) {
                 node.parent = Some(parent);
             }
@@ -823,42 +905,34 @@ impl Core {
             }
         }
 
-        self.ensure_invariants(None);
+        self.ensure_invariants(None)?;
         Ok(())
     }
 
     /// Remove a node and all descendants from the arena.
     pub fn remove_subtree(&mut self, root_id: impl Into<NodeId>) -> Result<()> {
         let root_id = root_id.into();
+        self.with_tree_edit("remove subtree", |core| core.remove_subtree_inner(root_id))
+    }
+
+    /// Remove a subtree inside an active tree edit.
+    fn remove_subtree_inner(&mut self, root_id: NodeId) -> Result<()> {
         if root_id == self.root {
             return Err(Error::InvalidOperation("cannot remove root".into()));
         }
         if !self.nodes.contains_key(root_id) {
             return Err(Error::NodeNotFound(root_id));
         }
-        self.ensure_subtree_widget_slots_available(root_id, "remove subtree")?;
-
         let hint = if self.is_attached_to_root(root_id) {
             Some(self.focus_recovery_hint(root_id))
         } else {
             None
         };
-
-        let pre_order = self.subtree_pre_order(root_id);
-        for node_id in &pre_order {
-            self.with_widget_mut(*node_id, |widget, core| {
-                let mut ctx = CoreContext::new(core, *node_id);
-                widget.pre_remove(&mut ctx)
-            })??;
-        }
-
-        let post_order = self.subtree_post_order(root_id);
-        for node_id in &post_order {
-            self.with_widget_mut(*node_id, |widget, core| {
-                let mut ctx = CoreContext::new(core, *node_id);
-                widget.on_unmount(&mut ctx);
-            })?;
-        }
+        let plan = self.plan_subtree_removal(root_id, "remove subtree")?;
+        self.run_pre_remove_plan(&plan)?;
+        self.validate_removal_plan(&plan)?;
+        self.run_unmount_plan(&plan)?;
+        self.validate_removal_plan(&plan)?;
 
         let parent = self.nodes.get(root_id).and_then(|node| node.parent);
         if let Some(parent) = parent
@@ -868,13 +942,130 @@ impl Core {
             node.child_keys.retain(|_, id| *id != root_id);
         }
 
-        for node_id in &post_order {
-            self.nodes.remove(*node_id);
+        let removed: HashSet<NodeId> = plan.pre_order.iter().map(|entry| entry.node_id).collect();
+        for node_id in plan.post_order {
+            self.nodes.remove(node_id);
         }
 
+        self.clear_removed_targets(&removed);
         self.focus_hint = hint;
-        self.ensure_invariants(Some(root_id));
+        self.ensure_invariants(Some(root_id))?;
         Ok(())
+    }
+
+    /// Build a stable plan for removing a complete subtree.
+    fn plan_subtree_removal(&self, root: NodeId, operation: &'static str) -> Result<RemovalPlan> {
+        self.ensure_subtree_widget_slots_available(root, operation)?;
+        let pre_order = self
+            .subtree_pre_order(root)
+            .into_iter()
+            .map(|node_id| {
+                let node = self
+                    .nodes
+                    .get(node_id)
+                    .ok_or(Error::NodeNotFound(node_id))?;
+                Ok(RemovalEntry {
+                    node_id,
+                    widget: Rc::clone(&node.widget),
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Ok(RemovalPlan {
+            root,
+            pre_order,
+            post_order: self.subtree_post_order(root),
+            covers_subtree: true,
+        })
+    }
+
+    /// Build a stable lifecycle plan for replacing one widget in place.
+    fn plan_widget_replacement(
+        &self,
+        node_id: NodeId,
+        operation: &'static str,
+    ) -> Result<RemovalPlan> {
+        self.ensure_widget_slot_available(node_id, operation)?;
+        let node = self
+            .nodes
+            .get(node_id)
+            .ok_or(Error::NodeNotFound(node_id))?;
+        Ok(RemovalPlan {
+            root: node_id,
+            pre_order: vec![RemovalEntry {
+                node_id,
+                widget: Rc::clone(&node.widget),
+            }],
+            post_order: vec![node_id],
+            covers_subtree: false,
+        })
+    }
+
+    /// Run fallible removal hooks in deterministic pre-order.
+    fn run_pre_remove_plan(&mut self, plan: &RemovalPlan) -> Result<()> {
+        for entry in &plan.pre_order {
+            self.with_widget_mut(entry.node_id, |widget, core| {
+                let mut ctx = CoreContext::new(core, entry.node_id);
+                widget.pre_remove(&mut ctx)
+            })??;
+        }
+        Ok(())
+    }
+
+    /// Run unmount hooks in deterministic post-order.
+    fn run_unmount_plan(&mut self, plan: &RemovalPlan) -> Result<()> {
+        for node_id in &plan.post_order {
+            self.unmount_node(*node_id)?;
+        }
+        Ok(())
+    }
+
+    /// Confirm lifecycle hooks did not replace or reshape the planned removal target.
+    fn validate_removal_plan(&self, plan: &RemovalPlan) -> Result<()> {
+        if plan.covers_subtree {
+            let planned: Vec<NodeId> = plan.pre_order.iter().map(|entry| entry.node_id).collect();
+            if self.subtree_pre_order(plan.root) != planned {
+                return Err(Error::InvalidOperation(
+                    "removal target changed during lifecycle hooks".into(),
+                ));
+            }
+        }
+        for entry in &plan.pre_order {
+            let node = self
+                .nodes
+                .get(entry.node_id)
+                .ok_or(Error::NodeNotFound(entry.node_id))?;
+            if !Rc::ptr_eq(&node.widget, &entry.widget) {
+                return Err(Error::InvalidOperation(
+                    "removal widget changed during lifecycle hooks".into(),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Find the direct child whose removal invalidates focus, if any.
+    fn removed_focus_root(&self, plan: &RemovalPlan) -> Option<NodeId> {
+        let focus = self.focus?;
+        self.nodes[plan.root]
+            .children
+            .iter()
+            .copied()
+            .find(|child| self.is_ancestor(*child, focus))
+    }
+
+    /// Clear auxiliary targets that point into a removed set.
+    fn clear_removed_targets(&mut self, removed: &HashSet<NodeId>) {
+        if self.pending_help_request.is_some_and(|(target, focus)| {
+            removed.contains(&target) || focus.is_some_and(|id| removed.contains(&id))
+        }) {
+            self.pending_help_request = None;
+        }
+        if self
+            .pending_diagnostic_dump
+            .is_some_and(|target| removed.contains(&target))
+        {
+            self.pending_diagnostic_dump = None;
+        }
     }
 
     /// Collect a subtree in pre-order, including the root.
@@ -900,25 +1091,46 @@ impl Core {
         operation: &'static str,
     ) -> Result<()> {
         for node_id in self.subtree_pre_order(root) {
-            let Some(node) = self.nodes.get(node_id) else {
-                continue;
-            };
-            let Ok(widget) = node.widget.try_borrow() else {
-                return Err(self.widget_operation_error(
-                    WidgetOperation::access(operation),
-                    node_id,
-                    &Error::ReentrantWidgetBorrow(node_id),
-                ));
-            };
-            if widget.is_none() {
-                return Err(self.widget_operation_error(
-                    WidgetOperation::access(operation),
-                    node_id,
-                    &Error::ReentrantWidgetBorrow(node_id),
-                ));
+            self.ensure_widget_slot_available(node_id, operation)?;
+        }
+        Ok(())
+    }
+
+    /// Ensure every unmounted widget in a subtree is available before topology publication.
+    fn ensure_unmounted_widget_slots_available(
+        &self,
+        root: NodeId,
+        operation: &'static str,
+    ) -> Result<()> {
+        for node_id in self.subtree_pre_order(root) {
+            if self.nodes.get(node_id).is_some_and(|node| !node.mounted) {
+                self.ensure_widget_slot_available(node_id, operation)?;
             }
         }
         Ok(())
+    }
+
+    /// Ensure one widget slot is present and not held by a callback.
+    fn ensure_widget_slot_available(&self, node_id: NodeId, operation: &'static str) -> Result<()> {
+        let node = self
+            .nodes
+            .get(node_id)
+            .ok_or(Error::NodeNotFound(node_id))?;
+        let Some(widget) = node.widget.try_read() else {
+            return Err(self.widget_operation_error(
+                WidgetOperation::access(operation),
+                node_id,
+                &Error::ReentrantWidgetBorrow(node_id),
+            ));
+        };
+        if widget.is_some() {
+            return Ok(());
+        }
+        Err(self.widget_operation_error(
+            WidgetOperation::access(operation),
+            node_id,
+            &Error::ReentrantWidgetBorrow(node_id),
+        ))
     }
 
     /// Collect a subtree in post-order, including the root.
@@ -941,27 +1153,34 @@ impl Core {
         out
     }
 
-    /// Set a node's hidden flag. Returns `true` if visibility changed.
-    pub fn set_hidden(&mut self, node_id: impl Into<NodeId>, hidden: bool) -> bool {
+    /// Set a node's hidden flag.
+    pub fn set_hidden(
+        &mut self,
+        node_id: impl Into<NodeId>,
+        hidden: bool,
+    ) -> Result<ChangeOutcome> {
         let node_id = node_id.into();
-        let Some(node) = self.nodes.get_mut(node_id) else {
-            return false;
-        };
+        let node = self
+            .nodes
+            .get_mut(node_id)
+            .ok_or(Error::NodeNotFound(node_id))?;
         let changed = node.hidden != hidden;
         node.hidden = hidden;
         if changed {
-            self.ensure_invariants(None);
+            self.ensure_invariants(None)?;
+            Ok(ChangeOutcome::Changed)
+        } else {
+            Ok(ChangeOutcome::Unchanged)
         }
-        changed
     }
 
-    /// Hide a node. Returns `true` if visibility changed.
-    pub fn hide(&mut self, node_id: impl Into<NodeId>) -> bool {
+    /// Hide a node.
+    pub fn hide(&mut self, node_id: impl Into<NodeId>) -> Result<ChangeOutcome> {
         self.set_hidden(node_id, true)
     }
 
-    /// Show a node. Returns `true` if visibility changed.
-    pub fn show(&mut self, node_id: impl Into<NodeId>) -> bool {
+    /// Show a node.
+    pub fn show(&mut self, node_id: impl Into<NodeId>) -> Result<ChangeOutcome> {
         self.set_hidden(node_id, false)
     }
 

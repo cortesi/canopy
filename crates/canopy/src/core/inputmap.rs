@@ -1,8 +1,11 @@
-use std::{collections::HashMap, fmt, iter};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt, iter,
+};
 
 use crate::{
     commands::CommandInvocation,
-    error::Result,
+    error::{Error, Result},
     event::{
         key::Key,
         mouse::{self, Mouse},
@@ -20,10 +23,12 @@ pub struct BindingId(u64);
 
 impl BindingId {
     /// Allocate the next binding ID.
-    fn next(next: &mut u64) -> Self {
+    fn next(next: &mut u64) -> Result<Self> {
         let id = Self(*next);
-        *next = next.saturating_add(1);
-        id
+        *next = next.checked_add(1).ok_or_else(|| {
+            Error::InvalidOperation("binding identifier space exhausted".to_string())
+        })?;
+        Ok(id)
     }
 
     /// Return the numeric binding identifier.
@@ -38,7 +43,7 @@ impl BindingId {
 }
 
 /// An action to be taken in response to an event, if the path matches.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct BoundAction {
     /// Unique identifier for the binding.
     id: BindingId,
@@ -155,7 +160,7 @@ impl fmt::Display for InputSpec {
 }
 
 /// A InputMode contains a set of bound keys and mouse actions.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct InputMode {
     /// Input bindings for this mode.
     inputs: HashMap<InputSpec, Vec<BoundAction>>,
@@ -233,6 +238,13 @@ impl InputMode {
                 });
             }
         }
+        out.sort_by(|left, right| {
+            left.input
+                .to_string()
+                .cmp(&right.input.to_string())
+                .then_with(|| left.path_filter.cmp(right.path_filter))
+                .then_with(|| left.id.0.cmp(&right.id.0))
+        });
         out
     }
 
@@ -254,6 +266,14 @@ impl InputMode {
                 }
             }
         }
+        out.sort_by(|left, right| {
+            left.info
+                .input
+                .to_string()
+                .cmp(&right.info.input.to_string())
+                .then_with(|| left.info.path_filter.cmp(right.info.path_filter))
+                .then_with(|| left.info.id.0.cmp(&right.info.id.0))
+        });
         out
     }
 
@@ -343,7 +363,7 @@ impl InputMode {
 /// into a set of possible action specifications. We then walk the tree of nodes
 /// from the focus to the root, trying each action specification in turn, until
 /// an action is handled by a node. If no action is handled, the key is ignored.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct InputMap {
     /// Registered modes and bindings.
     modes: HashMap<String, InputMode>,
@@ -577,7 +597,8 @@ impl InputMap {
         action: BindingTarget,
     ) -> Result<BindingId> {
         let pathmatch = PathMatcher::new(path_filter)?;
-        let id = BindingId::next(&mut self.next_id);
+        validate_binding_target(&action)?;
+        let id = BindingId::next(&mut self.next_id)?;
         self.modes
             .entry(mode.to_string())
             .or_insert_with(InputMode::new)
@@ -635,6 +656,9 @@ impl InputMap {
         path_filter: &str,
         target: BindingTarget,
     ) -> Result<(BindingId, Vec<(BindingId, BindingTarget)>)> {
+        let pathmatch = PathMatcher::new(path_filter)?;
+        validate_binding_target(&target)?;
+        let id = BindingId::next(&mut self.next_id)?;
         let removed = self.unbind_input(
             input,
             BindingFilter {
@@ -642,7 +666,10 @@ impl InputMap {
                 path_filter: Some(path_filter),
             },
         );
-        let id = self.bind_action(mode, input, path_filter, target)?;
+        self.modes
+            .entry(mode.to_string())
+            .or_insert_with(InputMode::new)
+            .insert(id, pathmatch, input, target);
         Ok((id, removed))
     }
 
@@ -667,6 +694,27 @@ impl InputMap {
         self.modes
             .retain(|mode, actions| mode == DEFAULT_MODE || !actions.inputs.is_empty());
         removed
+    }
+
+    /// Return every binding ID currently stored in the map.
+    pub(crate) fn binding_ids(&self) -> HashSet<BindingId> {
+        self.modes
+            .values()
+            .flat_map(|mode| mode.inputs.values())
+            .flatten()
+            .map(|action| action.id)
+            .collect()
+    }
+
+    /// Clone targets owned by bindings absent from a baseline ID set.
+    pub(crate) fn targets_not_in(&self, baseline: &HashSet<BindingId>) -> Vec<BindingTarget> {
+        self.modes
+            .values()
+            .flat_map(|mode| mode.inputs.values())
+            .flatten()
+            .filter(|action| !baseline.contains(&action.id))
+            .map(|action| action.action.clone())
+            .collect()
     }
 
     /// Return the name of the current input mode.
@@ -701,6 +749,24 @@ impl InputMap {
             .get(mode)
             .map(|m| m.bindings_for_path(path))
             .unwrap_or_default()
+    }
+}
+
+/// Validate a binding target before mutating the input map.
+fn validate_binding_target(target: &BindingTarget) -> Result<()> {
+    let valid_command = |command: &CommandInvocation| !command.id.0.is_empty();
+    let valid = match target {
+        BindingTarget::Script(id) => *id != 0,
+        BindingTarget::Command(command) => valid_command(command),
+        BindingTarget::CommandSequence(commands) => {
+            !commands.is_empty() && commands.iter().all(valid_command)
+        }
+        BindingTarget::SetInputMode(_) | BindingTarget::LuauFunction(_) => true,
+    };
+    if valid {
+        Ok(())
+    } else {
+        Err(Error::Invalid("invalid input binding target".to_string()))
     }
 }
 
@@ -739,6 +805,80 @@ pub struct ModeBindingInfo<'a> {
 mod tests {
     use super::*;
     use crate::{error::Result, event::key, script};
+
+    #[test]
+    fn replacement_errors_preserve_the_old_binding() -> Result<()> {
+        let mut map = InputMap::new();
+        let input = InputSpec::Key('a'.into());
+        let original = map.bind("", input, "", 1)?;
+
+        assert!(
+            map.replace_binding("", input, "invalid-name", BindingTarget::Script(2))
+                .is_err()
+        );
+        assert_eq!(
+            map.resolve(&Path::empty(), &input),
+            Some(BindingTarget::Script(1))
+        );
+        assert_eq!(map.bindings()[0].info.id, original);
+
+        assert!(
+            map.replace_binding("", input, "", BindingTarget::Script(0))
+                .is_err()
+        );
+        assert_eq!(
+            map.resolve(&Path::empty(), &input),
+            Some(BindingTarget::Script(1))
+        );
+
+        map.next_id = u64::MAX;
+        assert!(
+            map.replace_binding("", input, "", BindingTarget::Script(2))
+                .is_err()
+        );
+        assert_eq!(
+            map.resolve(&Path::empty(), &input),
+            Some(BindingTarget::Script(1))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn binding_views_are_independent_of_insertion_order() -> Result<()> {
+        fn build(inputs: [char; 2]) -> Result<InputMap> {
+            let mut map = InputMap::new();
+            for input in inputs {
+                map.bind_input_mode("", InputSpec::Key(input.into()), "", &input.to_string())?;
+            }
+            Ok(map)
+        }
+
+        let forward = build(['a', 'b'])?;
+        let reverse = build(['b', 'a'])?;
+        let signature = |map: &InputMap| {
+            map.bindings()
+                .into_iter()
+                .map(|binding| (binding.mode.to_string(), binding.info.input.to_string()))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(signature(&forward), signature(&reverse));
+        assert_eq!(
+            signature(&forward),
+            [
+                ("".to_string(), "a".to_string()),
+                ("".to_string(), "b".to_string())
+            ]
+        );
+
+        let matched = |map: &InputMap| {
+            map.bindings_matching_path("", &Path::empty())
+                .into_iter()
+                .map(|binding| binding.info.input.to_string())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(matched(&forward), matched(&reverse));
+        Ok(())
+    }
 
     #[test]
     fn caseconfusion() -> Result<()> {

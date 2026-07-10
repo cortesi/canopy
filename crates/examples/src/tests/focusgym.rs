@@ -347,7 +347,7 @@ fn test_separators_remain_continuous_after_nested_splits() -> Result<()> {
 
     let (_, right) = root_children_pair(&mut harness)?;
     harness.with_root_context(|_root: &mut FocusGym, ctx| {
-        ctx.set_focus(right);
+        ctx.set_focus(right)?;
         Ok(())
     })?;
     harness.key('s')?;

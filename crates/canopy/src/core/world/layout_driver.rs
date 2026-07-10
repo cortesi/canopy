@@ -25,7 +25,7 @@ impl Core {
         );
         pass.update_views(root, screen_view)?;
 
-        self.ensure_focus_valid(None);
+        self.ensure_focus_valid(None)?;
         self.validate_invariants()?;
 
         Ok(())

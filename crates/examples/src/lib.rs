@@ -36,7 +36,7 @@ pub mod widget_editor;
 /// Finalize and print the Luau API definitions for a demo app.
 pub fn print_luau_api(cnpy: &mut Canopy) -> Result<()> {
     cnpy.finalize_api()?;
-    print!("{}", cnpy.script_api());
+    print!("{}", cnpy.script_api()?);
     Ok(())
 }
 

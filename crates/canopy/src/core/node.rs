@@ -1,4 +1,6 @@
-use std::{any::TypeId, cell::RefCell, collections::HashMap};
+use std::{any::TypeId, collections::HashMap, rc::Rc};
+
+use parking_lot::RwLock;
 
 use crate::{
     core::{id::NodeId, style::Effect, view::View},
@@ -9,9 +11,10 @@ use crate::{
 };
 
 /// Core node data stored in the arena.
+#[derive(Clone)]
 pub struct Node {
     /// Widget behavior and state.
-    pub(crate) widget: RefCell<Option<Box<dyn Widget>>>,
+    pub(crate) widget: Rc<RwLock<Option<Box<dyn Widget>>>>,
 
     /// Widget type identifier for fast type checks.
     pub(crate) widget_type: TypeId,

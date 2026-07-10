@@ -34,10 +34,9 @@ pub use core::termbuf::TermBuf;
 pub use core::testing;
 // Stable app-author surface.
 pub use core::{
-    AutomationCallback, AutomationHandle, BindingId, Canopy, ChildKey, CommandContext, Context,
-    Fixture, FixtureInfo, FocusContext, KeyedChildren, LayoutContext, Loader, NodeId, Path,
-    PathFilter, ReadContext, RemovePolicy, ScriptJournalEntry, ScriptModuleRoots, ScrollContext,
-    Slot, StyleContext, TreeContext, TypedId,
+    AutomationCallback, AutomationHandle, BindingId, Canopy, ChangeOutcome, ChildKey, Context,
+    Fixture, FixtureInfo, KeyedChildren, Loader, NodeId, Path, PathFilter, ReadContext,
+    RemovePolicy, ScriptApiState, ScriptJournalEntry, ScriptModuleRoots, Slot, TypedId,
 };
 // Lower-level runtime exports retained for internal crates and diagnostics.
 #[doc(hidden)]

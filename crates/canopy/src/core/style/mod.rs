@@ -490,7 +490,7 @@ fn parse_path(path: &str) -> Vec<String> {
 }
 
 /// Map of style paths to partial styles.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct StyleMap {
     /// Path-to-style map.
     styles: HashMap<Vec<String>, PartialStyle>,

@@ -80,7 +80,7 @@ impl Panes {
         let current = self.focused_column_index(c).unwrap_or(0);
         let len = columns.len() as i32;
         let next = ((current as i32 + delta).rem_euclid(len)) as usize;
-        focus_column_node(c, columns[next]);
+        focus_column_node(c, columns[next])?;
         Ok(())
     }
 
@@ -112,7 +112,7 @@ impl Panes {
             }
             self.sync_layout(c)?;
             if let Some(column_node) = self.column_nodes.get(focus_idx).copied() {
-                focus_column_node(c, column_node);
+                focus_column_node(c, column_node)?;
             }
         }
         Ok(())
@@ -135,11 +135,11 @@ impl Panes {
         let coords = self.focus_coords(c);
         let target_idx = if let Some((x, _)) = coords {
             while self.column_nodes.len() < self.columns.len() {
-                let column_node = NodeId::from(c.create_detached(PaneColumn));
+                let column_node = NodeId::from(c.create_detached(PaneColumn)?);
                 self.column_nodes.push(column_node);
             }
             self.columns.insert(x + 1, vec![n]);
-            let column_node = NodeId::from(c.create_detached(PaneColumn));
+            let column_node = NodeId::from(c.create_detached(PaneColumn)?);
             self.column_nodes.insert(x + 1, column_node);
             x + 1
         } else {
@@ -148,7 +148,7 @@ impl Panes {
         };
         self.sync_layout(c)?;
         if let Some(column_node) = self.column_nodes.get(target_idx).copied() {
-            focus_column_node(c, column_node);
+            focus_column_node(c, column_node)?;
         }
         Ok(())
     }
@@ -156,7 +156,7 @@ impl Panes {
     /// Sync child layout and grid placement styles.
     fn sync_layout(&mut self, c: &mut dyn Context) -> Result<()> {
         while self.column_nodes.len() < self.columns.len() {
-            let column_node = NodeId::from(c.create_detached(PaneColumn));
+            let column_node = NodeId::from(c.create_detached(PaneColumn)?);
             self.column_nodes.push(column_node);
         }
 
@@ -188,15 +188,16 @@ impl Panes {
 }
 
 /// Focus the first focusable leaf under a column, falling back to the first leaf.
-fn focus_column_node(c: &mut dyn Context, column_node: NodeId) {
+fn focus_column_node(c: &mut dyn Context, column_node: NodeId) -> Result<()> {
     let focusables = c.focusable_leaves(column_node);
     if let Some(target) = focusables
         .first()
         .copied()
         .or_else(|| c.first_leaf(column_node))
     {
-        c.set_focus(target);
+        c.set_focus(target)?;
     }
+    Ok(())
 }
 
 impl Default for Panes {

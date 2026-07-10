@@ -553,6 +553,7 @@ dependencies = [
  "criterion",
  "crossterm",
  "futures",
+ "parking_lot",
  "proptest",
  "rand 0.10.1",
  "ruau",

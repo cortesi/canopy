@@ -74,22 +74,25 @@ pub trait Widget: Any + Send {
         None
     }
 
-    /// Called exactly once when the widget is first mounted in the tree, before the first render.
+    /// Called when the widget is mounted in the tree, before its first render.
     ///
-    /// The framework guarantees single invocation via an internal `mounted` flag on each node.
-    /// There is no need to guard against multiple calls within this method.
+    /// A failed hook rolls back core-owned state. External effects and widget-owned state must be
+    /// repeatable or compensating because a later mount attempt may call this hook again.
     fn on_mount(&mut self, _ctx: &mut dyn Context) -> Result<()> {
         Ok(())
     }
 
-    /// Validation hook before a node is removed from the arena.
+    /// Validation hook before a widget is removed or replaced.
     ///
     /// This hook must be side-effect free or safely repeatable.
     fn pre_remove(&mut self, _ctx: &mut dyn Context) -> Result<()> {
         Ok(())
     }
 
-    /// Called exactly once immediately before the node is removed from the arena.
+    /// Called before a successfully mounted widget is removed or replaced.
+    ///
+    /// This hook cannot veto removal. During failure rollback, structural context operations are
+    /// rejected and external cleanup must be safe to repeat.
     fn on_unmount(&mut self, _ctx: &mut dyn Context) {}
 
     /// Name used for commands and paths.

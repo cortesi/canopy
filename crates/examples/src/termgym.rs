@@ -231,7 +231,7 @@ impl TermGym {
         self.with_list(c, |list, ctx| list.select(ctx, active))?;
 
         if let Some(active_id) = terminals.get(self.active).copied() {
-            c.set_focus(active_id);
+            c.set_focus(active_id)?;
         }
 
         Ok(())
@@ -296,9 +296,9 @@ impl TermGym {
     fn focus_sidebar_list(&self, c: &mut dyn Context) -> Result<()> {
         self.with_list(c, |list, ctx| {
             if let Some(selected) = list.selected_item() {
-                ctx.set_focus(NodeId::from(selected));
+                ctx.set_focus(NodeId::from(selected))?;
             } else {
-                ctx.focus_first_in(ctx.node_id());
+                ctx.focus_first_in(ctx.node_id())?;
             }
             Ok(())
         })
@@ -375,7 +375,7 @@ impl TermGym {
     pub fn focus_active_terminal(&mut self, c: &mut dyn Context) -> Result<()> {
         let terminals = self.terminal_ids(c)?;
         if let Some(active_id) = terminals.get(self.active).copied() {
-            c.set_focus(active_id);
+            c.set_focus(active_id)?;
         }
         Ok(())
     }
@@ -397,10 +397,10 @@ impl Widget for TermGym {
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         let list_id = c.create_detached(
             List::<TermEntry>::new().with_on_activate(Self::cmd_activate_terminal().call()),
-        );
+        )?;
         let button_id = c.create_detached(
             Button::new("+ New terminal").with_command(Self::cmd_new_terminal().call()),
-        );
+        )?;
         let sidebar_id = c.add_child(
             VStack::new()
                 .push_fixed(button_id, ENTRY_HEIGHT)

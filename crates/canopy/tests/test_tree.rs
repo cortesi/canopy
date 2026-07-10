@@ -452,19 +452,19 @@ mod tests {
                 .and_then(|id| canopy.core().node(id).map(|n| n.name().to_string()))
         };
 
-        canopy.core_mut().focus_first(grid.root);
+        canopy.core_mut().focus_first(grid.root)?;
         assert_eq!(get_focused_cell(&canopy), Some("cell_0_0".to_string()));
 
-        canopy.core_mut().focus_dir(grid.root, Direction::Right);
+        canopy.core_mut().focus_dir(grid.root, Direction::Right)?;
         assert_eq!(get_focused_cell(&canopy), Some("cell_1_0".to_string()));
 
-        canopy.core_mut().focus_dir(grid.root, Direction::Down);
+        canopy.core_mut().focus_dir(grid.root, Direction::Down)?;
         assert_eq!(get_focused_cell(&canopy), Some("cell_1_1".to_string()));
 
-        canopy.core_mut().focus_dir(grid.root, Direction::Left);
+        canopy.core_mut().focus_dir(grid.root, Direction::Left)?;
         assert_eq!(get_focused_cell(&canopy), Some("cell_0_1".to_string()));
 
-        canopy.core_mut().focus_dir(grid.root, Direction::Up);
+        canopy.core_mut().focus_dir(grid.root, Direction::Up)?;
         assert_eq!(get_focused_cell(&canopy), Some("cell_0_0".to_string()));
 
         Ok(())

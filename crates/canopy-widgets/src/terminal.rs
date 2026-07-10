@@ -905,7 +905,7 @@ impl Widget for Terminal {
                 Ok(EventOutcome::Handle)
             }
             event::Event::Mouse(mouse_event) => {
-                ctx.set_focus(ctx.node_id());
+                ctx.set_focus(ctx.node_id())?;
                 let Some(state) = self.state() else {
                     return Ok(EventOutcome::Ignore);
                 };

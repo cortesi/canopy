@@ -124,7 +124,7 @@ impl Frame {
     /// Wrap an existing child node in a configured frame and return the frame node ID.
     pub fn wrap_with(c: &mut dyn Context, child: impl Into<NodeId>, frame: Self) -> Result<NodeId> {
         let child = child.into();
-        let frame_id = NodeId::from(c.create_detached(frame));
+        let frame_id = NodeId::from(c.create_detached(frame)?);
         c.detach(child)?;
         c.attach(frame_id, child)?;
         Ok(frame_id)
@@ -206,12 +206,12 @@ impl Widget for Frame {
                         return Ok(outcome);
                     }
                     self.scroll_drag = None;
-                    ctx.release_mouse();
+                    ctx.release_mouse()?;
                     return Ok(EventOutcome::Consume);
                 }
                 mouse::Action::Up if m.button == mouse::Button::Left => {
                     self.scroll_drag = None;
-                    ctx.release_mouse();
+                    ctx.release_mouse()?;
                     return Ok(EventOutcome::Handle);
                 }
                 _ => {}
@@ -255,7 +255,7 @@ impl Widget for Frame {
                     {
                         let grab_offset = outer_location.y.saturating_sub(active.tl.y);
                         self.scroll_drag = Some(ScrollDrag::vertical(grab_offset));
-                        ctx.capture_mouse();
+                        ctx.capture_mouse()?;
                         return Ok(EventOutcome::Handle);
                     }
 
@@ -277,7 +277,7 @@ impl Widget for Frame {
                     {
                         let grab_offset = outer_location.x.saturating_sub(active.tl.x);
                         self.scroll_drag = Some(ScrollDrag::horizontal(grab_offset));
-                        ctx.capture_mouse();
+                        ctx.capture_mouse()?;
                         return Ok(EventOutcome::Handle);
                     }
 

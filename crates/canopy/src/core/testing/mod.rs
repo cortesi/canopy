@@ -102,7 +102,7 @@ mod tests {
         canopy.render(&mut tr)?;
         tr.text.lock().unwrap().text.clear();
 
-        canopy.core.focus_next(canopy.core.root);
+        canopy.core.focus_next(canopy.core.root)?;
         canopy.render(&mut tr)?;
         assert!(tr.buf_empty());
 

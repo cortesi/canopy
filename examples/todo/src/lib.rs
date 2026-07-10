@@ -156,7 +156,7 @@ impl Todo {
     }
 
     fn ensure_tree(&mut self, c: &mut dyn Context) -> Result<()> {
-        if c.has_child::<MainSlot>() {
+        if c.has_child::<MainSlot>()? {
             return Ok(());
         }
 
@@ -194,7 +194,7 @@ impl Todo {
     }
 
     fn ensure_modal(&mut self, c: &mut dyn Context) -> Result<()> {
-        if c.has_child::<ModalSlot>() {
+        if c.has_child::<ModalSlot>()? {
             return Ok(());
         }
 
@@ -217,7 +217,7 @@ impl Todo {
 
     fn sync_modal_state(&mut self, c: &mut dyn Context) -> Result<()> {
         let main_content_id = c
-            .get_child::<MainSlot>()
+            .get_child::<MainSlot>()?
             .expect("main content not initialized");
         let main_content_node = NodeId::from(main_content_id);
 
@@ -225,14 +225,14 @@ impl Todo {
             self.ensure_modal(c)?;
             c.push_effect(main_content_node, effects::dim(0.5))?;
             c.with_child::<ModalSlot, _>(|_, ctx| {
-                ctx.set_hidden(false);
+                ctx.set_hidden(false)?;
                 Ok(())
             })?;
         } else {
             // Clear dimming when modal is not active
             c.clear_effects(main_content_node)?;
             let _ = c.try_with_child::<ModalSlot, _>(|_, ctx| {
-                ctx.set_hidden(true);
+                ctx.set_hidden(true)?;
                 Ok(())
             })?;
         }
@@ -283,10 +283,10 @@ impl Todo {
                 Ok(())
             })?;
             if let Some(input_id) = c.unique_descendant::<Input>()? {
-                c.set_focus(NodeId::from(input_id));
+                c.set_focus(NodeId::from(input_id))?;
             }
         } else if items.is_empty() {
-            c.set_focus(c.node_id());
+            c.set_focus(c.node_id())?;
         }
         Ok(())
     }
@@ -302,7 +302,7 @@ impl Todo {
             Ok(())
         })?;
         if let Some(input_id) = c.unique_descendant::<Input>()? {
-            c.set_focus(NodeId::from(input_id));
+            c.set_focus(NodeId::from(input_id))?;
         }
         Ok(())
     }
@@ -348,7 +348,7 @@ impl Todo {
 
         self.adder_active = false;
         self.sync_modal_state(c)?;
-        c.set_focus(c.node_id());
+        c.set_focus(c.node_id())?;
         Ok(())
     }
 
@@ -356,7 +356,7 @@ impl Todo {
     pub fn cancel_add(&mut self, c: &mut dyn Context) -> Result<()> {
         self.adder_active = false;
         self.sync_modal_state(c)?;
-        c.set_focus(c.node_id());
+        c.set_focus(c.node_id())?;
         Ok(())
     }
 

@@ -1,7 +1,7 @@
 use std::{
     any::{Any, type_name},
     collections::{BTreeMap, HashMap, HashSet},
-    fmt,
+    fmt, ptr,
 };
 
 pub use ruau::decl;
@@ -1287,6 +1287,17 @@ pub trait CommandNode {
 }
 
 impl CommandSpec {
+    /// Return whether two specifications define the same command contract.
+    fn equivalent(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.name == other.name
+            && self.dispatch == other.dispatch
+            && self.params == other.params
+            && self.ret == other.ret
+            && self.doc == other.doc
+            && ptr::fn_addr_eq(self.invoke, other.invoke)
+    }
+
     /// Build a call to this command with no arguments.
     pub fn call(&'static self) -> CommandCall {
         self.call_with(())
@@ -1376,30 +1387,45 @@ impl From<&'static CommandSpec> for CommandInvocation {
 }
 
 /// Collection of available commands keyed by id.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct CommandSet {
     /// Registry of command specs by id.
-    commands: HashMap<&'static str, &'static CommandSpec>,
+    commands: BTreeMap<&'static str, &'static CommandSpec>,
 }
 
 impl CommandSet {
     /// Construct an empty command set.
     pub fn new() -> Self {
         Self {
-            commands: HashMap::new(),
+            commands: BTreeMap::new(),
         }
     }
 
-    /// Add command specs to the set.
-    /// Returns an error if any command id is already registered.
+    /// Add a command batch atomically.
+    ///
+    /// Repeating an equivalent definition is idempotent. A conflicting definition or invalid
+    /// batch leaves the set unchanged.
     pub fn add(&mut self, specs: &'static [&'static CommandSpec]) -> Result<(), CommandError> {
+        let mut batch = HashMap::with_capacity(specs.len());
         for spec in specs {
-            if self.commands.contains_key(spec.id.0) {
-                return Err(CommandError::DuplicateCommand {
+            validate_command_spec(spec)?;
+            if let Some(previous) = batch.insert(spec.id.0, *spec)
+                && !previous.equivalent(spec)
+            {
+                return Err(CommandError::ConflictingCommand {
                     id: spec.id.0.to_string(),
                 });
             }
-            self.commands.insert(spec.id.0, spec);
+            if let Some(previous) = self.commands.get(spec.id.0)
+                && !previous.equivalent(spec)
+            {
+                return Err(CommandError::ConflictingCommand {
+                    id: spec.id.0.to_string(),
+                });
+            }
+        }
+        for (id, spec) in batch {
+            self.commands.entry(id).or_insert(spec);
         }
         Ok(())
     }
@@ -1413,6 +1439,26 @@ impl CommandSet {
     pub fn iter(&self) -> impl Iterator<Item = (&'static str, &'static CommandSpec)> + '_ {
         self.commands.iter().map(|(k, v)| (*k, *v))
     }
+}
+
+/// Validate the static metadata for one command before registry mutation.
+fn validate_command_spec(spec: &CommandSpec) -> Result<(), CommandError> {
+    if spec.id.0.is_empty() || spec.name.is_empty() {
+        return Err(CommandError::InvalidCommand {
+            id: spec.id.0.to_string(),
+            message: "command id and name must not be empty".to_string(),
+        });
+    }
+    let mut names = HashSet::with_capacity(spec.params.len());
+    for param in spec.params {
+        if param.name.is_empty() || !names.insert(param.name) {
+            return Err(CommandError::InvalidCommand {
+                id: spec.id.0.to_string(),
+                message: format!("invalid or duplicate parameter name `{}`", param.name),
+            });
+        }
+    }
+    Ok(())
 }
 
 /// Error type for command dispatch and conversion.
@@ -1430,6 +1476,22 @@ pub enum CommandError {
     DuplicateCommand {
         /// Duplicate command id.
         id: String,
+    },
+
+    /// A command ID was registered with a different specification.
+    #[error("conflicting command definition: {id}")]
+    ConflictingCommand {
+        /// Conflicting command id.
+        id: String,
+    },
+
+    /// Static command metadata is invalid.
+    #[error("invalid command definition {id}: {message}")]
+    InvalidCommand {
+        /// Invalid command id.
+        id: String,
+        /// Validation failure.
+        message: String,
     },
 
     /// No matching target found for a node-routed command.
@@ -1801,6 +1863,96 @@ mod tests {
     use serde::{Serialize, ser};
 
     use super::*;
+
+    fn registry_invoke(
+        _target: Option<&mut dyn Any>,
+        _ctx: &mut dyn Context,
+        _invocation: &CommandInvocation,
+    ) -> Result<ArgValue, CommandError> {
+        Ok(ArgValue::Null)
+    }
+
+    static REGISTRY_A: CommandSpec = CommandSpec {
+        id: CommandId("registry.a"),
+        name: "a",
+        dispatch: CommandDispatchKind::Free,
+        params: &[],
+        ret: CommandReturnSpec::Unit,
+        doc: CommandDocSpec {
+            short: Some("a"),
+            long: None,
+            hidden: false,
+        },
+        invoke: registry_invoke,
+    };
+    static REGISTRY_A_CONFLICT: CommandSpec = CommandSpec {
+        id: CommandId("registry.a"),
+        name: "a",
+        dispatch: CommandDispatchKind::Free,
+        params: &[],
+        ret: CommandReturnSpec::Unit,
+        doc: CommandDocSpec {
+            short: Some("conflict"),
+            long: None,
+            hidden: false,
+        },
+        invoke: registry_invoke,
+    };
+    static REGISTRY_B: CommandSpec = CommandSpec {
+        id: CommandId("registry.b"),
+        name: "b",
+        dispatch: CommandDispatchKind::Free,
+        params: &[],
+        ret: CommandReturnSpec::Unit,
+        doc: CommandDocSpec {
+            short: None,
+            long: None,
+            hidden: false,
+        },
+        invoke: registry_invoke,
+    };
+    static REGISTRY_A_BATCH: &[&CommandSpec] = &[&REGISTRY_A];
+    static REGISTRY_CONFLICT_BATCH: &[&CommandSpec] = &[&REGISTRY_B, &REGISTRY_A_CONFLICT];
+    static REGISTRY_RETRY_BATCH: &[&CommandSpec] = &[&REGISTRY_B, &REGISTRY_A];
+    static REGISTRY_FORWARD_BATCH: &[&CommandSpec] = &[&REGISTRY_A, &REGISTRY_B];
+    static REGISTRY_REVERSE_BATCH: &[&CommandSpec] = &[&REGISTRY_B, &REGISTRY_A];
+
+    #[test]
+    fn command_batches_are_atomic_conflict_aware_and_idempotent() {
+        let mut commands = CommandSet::new();
+        commands.add(REGISTRY_A_BATCH).unwrap();
+
+        let error = commands.add(REGISTRY_CONFLICT_BATCH).unwrap_err();
+        assert!(matches!(error, CommandError::ConflictingCommand { .. }));
+        assert!(commands.get("registry.b").is_none());
+
+        commands.add(REGISTRY_RETRY_BATCH).unwrap();
+        commands.add(REGISTRY_RETRY_BATCH).unwrap();
+        assert!(commands.get("registry.a").is_some());
+        assert!(commands.get("registry.b").is_some());
+        assert_eq!(commands.iter().count(), 2);
+    }
+
+    #[test]
+    fn command_availability_is_independent_of_registration_order() {
+        let mut forward = Core::new();
+        forward.commands.add(REGISTRY_FORWARD_BATCH).unwrap();
+        let mut reverse = Core::new();
+        reverse.commands.add(REGISTRY_REVERSE_BATCH).unwrap();
+
+        let forward_ids = CommandResolver::new(&forward, forward.root)
+            .availability()
+            .into_iter()
+            .map(|item| item.spec.id.0)
+            .collect::<Vec<_>>();
+        let reverse_ids = CommandResolver::new(&reverse, reverse.root)
+            .availability()
+            .into_iter()
+            .map(|item| item.spec.id.0)
+            .collect::<Vec<_>>();
+        assert_eq!(forward_ids, vec!["registry.a", "registry.b"]);
+        assert_eq!(reverse_ids, forward_ids);
+    }
 
     #[test]
     fn int_range_checks() {

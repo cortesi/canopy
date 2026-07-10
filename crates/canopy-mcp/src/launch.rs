@@ -61,7 +61,7 @@ pub fn launch(factory: AppFactory, mode: LaunchMode) -> Result<i32> {
         LaunchMode::Smoke(config) => run_smoke(&factory, &config),
         LaunchMode::Api => {
             let canopy = (factory.as_ref())()?;
-            print!("{}", canopy.script_api());
+            print!("{}", canopy.script_api()?);
             Ok(0)
         }
     }

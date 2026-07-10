@@ -276,7 +276,7 @@ impl AppEvaluator {
     pub fn script_api(&self) -> Result<String> {
         let mut canopy = (self.factory)()?;
         canopy.finalize_api()?;
-        Ok(canopy.script_api().to_string())
+        Ok(canopy.script_api()?.to_string())
     }
 
     /// Return the evaluator's registered fixture catalog.
@@ -288,7 +288,7 @@ impl AppEvaluator {
     /// Return bootstrap information for a fresh headless app instance.
     pub fn bootstrap(&self) -> Result<BootstrapResponse> {
         let mut session = HeadlessSession::new(&self.factory, self.view_size, None)?;
-        Ok(bootstrap_for_canopy(&mut session.canopy))
+        bootstrap_for_canopy(&mut session.canopy)
     }
 
     /// Evaluate a Luau script against a fresh headless app.
@@ -350,16 +350,16 @@ impl AppEvaluator {
 }
 
 /// Build a bootstrap payload from a finalized app.
-pub fn bootstrap_for_canopy(canopy: &mut Canopy) -> BootstrapResponse {
-    let api = canopy.script_api().to_string();
-    BootstrapResponse {
+pub fn bootstrap_for_canopy(canopy: &mut Canopy) -> Result<BootstrapResponse> {
+    let api = canopy.script_api()?.to_string();
+    Ok(BootstrapResponse {
         guide: BOOTSTRAP_GUIDE.to_string(),
         api_digest: stable_digest(&api),
         api,
         fixtures: canopy.fixture_infos(),
         commands: bootstrap_commands(canopy),
         journal: bootstrap_journal(canopy),
-    }
+    })
 }
 
 /// Return command availability records.

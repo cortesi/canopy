@@ -72,10 +72,10 @@ impl Canopy {
     /// Return the starting target and binding path for a mouse event.
     fn mouse_route_start(&mut self, location: Point) -> Result<(Option<NodeId>, Path)> {
         if let Some(capture) = self.core.mouse_capture {
-            if self.core.nodes.contains_key(capture) {
+            if self.core.validate_attached_node(capture).is_ok() {
                 return Ok((Some(capture), self.core.node_path(self.core.root, capture)));
             } else {
-                self.core.mouse_capture = None;
+                self.core.clear_mouse_capture()?;
             }
         }
 
@@ -262,7 +262,7 @@ impl Canopy {
     {
         let key = tk.into();
         if self.core.focus.is_none() {
-            self.core.focus_first(self.core.root);
+            self.core.focus_first(self.core.root)?;
         }
 
         let start = self.core.focus.unwrap_or(self.core.root);
@@ -282,7 +282,7 @@ impl Canopy {
     {
         let key = tk.into();
         if self.core.focus.is_none() {
-            self.core.focus_first(self.core.root);
+            self.core.focus_first(self.core.root)?;
         }
 
         let start = self.core.focus.unwrap_or(self.core.root);
@@ -299,7 +299,7 @@ impl Canopy {
     /// Dispatch a focus-related event to the focused node, bubbling as needed.
     fn dispatch_focus_event(&mut self, event: &Event) -> Result<()> {
         if self.core.focus.is_none() {
-            self.core.focus_first(self.core.root);
+            self.core.focus_first(self.core.root)?;
         }
 
         let start = self.core.focus.unwrap_or(self.core.root);
@@ -409,7 +409,7 @@ impl Canopy {
 
     /// Release any Luau closures referenced by removed bindings.
     pub(crate) fn release_removed_bindings(
-        &self,
+        &mut self,
         removed: Vec<(inputmap::BindingId, inputmap::BindingTarget)>,
     ) -> usize {
         let released = removed.len();
@@ -420,9 +420,13 @@ impl Canopy {
     }
 
     /// Release script-host resources held by a binding target.
-    pub(crate) fn release_binding_target(&self, binding: &inputmap::BindingTarget) {
+    pub(crate) fn release_binding_target(&mut self, binding: &inputmap::BindingTarget) {
         if let inputmap::BindingTarget::LuauFunction(id) = binding {
-            self.script_host.release_function(*id);
+            if let Some(releases) = &mut self.deferred_binding_releases {
+                releases.push(binding.clone());
+            } else {
+                self.script_host.release_function(*id);
+            }
         }
     }
 }

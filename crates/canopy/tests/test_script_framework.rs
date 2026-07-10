@@ -10,15 +10,16 @@ mod tests {
     };
 
     use canopy::{
-        Canopy, Context, EventOutcome, Loader, NodeId, ReadContext, Widget, command,
+        Canopy, Context, EventOutcome, Loader, NodeId, ReadContext, ScriptApiState, Widget,
+        command,
         commands::ArgValue,
         derive_commands,
         error::Result,
         event::{Event, mouse},
-        geom::Line,
+        geom::{Line, Size},
         layout::Layout,
         render::Render,
-        testing::harness::Harness,
+        testing::{backend::TestRender, harness::Harness},
     };
 
     struct ApiLeaf {
@@ -96,7 +97,7 @@ mod tests {
             let right = ctx.add_child(ApiLeaf::new())?;
             ctx.set_layout_of(left, Layout::fill())?;
             ctx.set_layout_of(right, Layout::fill())?;
-            let _ = ctx.set_focus(left.into());
+            ctx.set_focus(left.into())?;
             Ok(())
         }
     }
@@ -589,6 +590,74 @@ mod tests {
     }
 
     #[test]
+    fn startup_retry_skips_successes_and_restores_prior_registrations() -> Result<()> {
+        let mut canopy = raw_canopy_with_leaf()?;
+        canopy.register_startup_script(
+            "first",
+            r#"
+            function setup()
+                api_leaf.set(1)
+                canopy.bind("x", function() api_leaf.set(7) end)
+            end
+        "#,
+        )?;
+        canopy.register_startup_script(
+            "second",
+            r#"
+            function setup()
+                api_leaf.set(api_leaf.get() + 10)
+                canopy.bind("x", function() api_leaf.set(99) end)
+                canopy.on_start(function() api_leaf.set(88) end)
+                error("second failed")
+            end
+        "#,
+        )?;
+
+        canopy
+            .run_startup_scripts()
+            .expect_err("second startup should fail");
+        assert_eq!(
+            canopy.eval_script_value("return api_leaf.get()")?,
+            ArgValue::Int(11)
+        );
+        canopy
+            .run_startup_scripts()
+            .expect_err("second startup retry should fail");
+        assert_eq!(
+            canopy.eval_script_value("return api_leaf.get()")?,
+            ArgValue::Int(21)
+        );
+
+        canopy.eval_script(r#"canopy.send_key("x")"#)?;
+        assert_eq!(
+            canopy.eval_script_value("return api_leaf.get()")?,
+            ArgValue::Int(7)
+        );
+
+        let (_, mut render) = TestRender::create();
+        canopy.set_root_size(Size::new(10, 1))?;
+        canopy.render(&mut render)?;
+        assert_eq!(
+            canopy.eval_script_value("return api_leaf.get()")?,
+            ArgValue::Int(7)
+        );
+
+        let first_runs = canopy
+            .script_journal()
+            .iter()
+            .filter(|entry| entry.origin == "startup:first")
+            .count();
+        let second_runs = canopy
+            .script_journal()
+            .iter()
+            .filter(|entry| entry.origin == "startup:second")
+            .count();
+        assert_eq!(first_runs, 1);
+        assert_eq!(second_runs, 2);
+        Ok(())
+    }
+
+    #[test]
     fn script_module_declarations_must_conform() -> Result<()> {
         let root = test_dir("conformance");
         let project_root = root.join("work/.canopy");
@@ -613,6 +682,20 @@ mod tests {
             .finalize_api()
             .expect_err("mismatched declaration should fail finalization");
         assert!(err.to_string().contains("settings.d.luau"));
+        assert_eq!(canopy.script_api_state(), ScriptApiState::Open);
+        assert!(canopy.script_api().is_err());
+
+        write_script(
+            &project_root.join("settings.d.luau"),
+            r#"
+            declare module: {
+                value: string,
+            }
+        "#,
+        );
+        canopy.finalize_api()?;
+        assert_eq!(canopy.script_api_state(), ScriptApiState::Ready);
+        assert!(canopy.script_api().is_ok());
 
         let _removed = fs::remove_dir_all(root);
         Ok(())

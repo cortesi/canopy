@@ -112,7 +112,7 @@ impl Widget for TextGym {
 
 /// Wrap a text widget in a titled frame.
 fn section(c: &mut dyn Context, title: &str, text: Text, layout: Layout) -> Result<NodeId> {
-    let text_id = c.create_detached(text);
+    let text_id = c.create_detached(text)?;
     c.set_layout_of(text_id, Layout::fill())?;
     let frame_id = Frame::wrap_with(c, text_id, Frame::new().with_title(title))?;
     let pad_id = Pad::wrap_with(c, frame_id, Pad::uniform(OUTER_PADDING))?;

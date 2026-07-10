@@ -5,10 +5,12 @@
 
 use std::{
     any::TypeId,
-    cell::{Cell, RefCell},
-    collections::HashMap,
+    cell::Cell,
+    collections::{HashMap, HashSet},
+    rc::Rc,
 };
 
+use parking_lot::RwLock;
 use slotmap::SlotMap;
 
 use super::{
@@ -17,7 +19,7 @@ use super::{
     widget_access::{WidgetMutGuard, WidgetReadGuard, WidgetSlotGuard},
 };
 use crate::{
-    ReadContext,
+    ChangeOutcome, ReadContext,
     backend::BackendControl,
     commands::{CommandScopeFrame, CommandSet},
     core::{id::NodeId, node::Node, view::View},
@@ -47,8 +49,6 @@ pub struct Core {
     pub(crate) root: NodeId,
     /// Currently focused node.
     pub(crate) focus: Option<NodeId>,
-    /// Focus generation counter.
-    pub(crate) focus_gen: u64,
     /// Active backend controller.
     pub(crate) backend: Option<Box<dyn BackendControl>>,
     /// Exit code requested by a widget or command, if any.
@@ -59,8 +59,10 @@ pub struct Core {
     pub(crate) mouse_capture: Option<NodeId>,
     /// Focus recovery hint for the most recent structural removal.
     pub(crate) focus_hint: Option<FocusRecoveryHint>,
-    /// Active structural transaction for rollback on failure.
-    transaction: Option<MountTransaction>,
+    /// Active tree edit and its rollback state.
+    tree_edit: Option<TreeEditJournal>,
+    /// Whether lifecycle cleanup is unwinding a failed tree edit.
+    rolling_back_tree_edit: bool,
     /// Registered command specs.
     pub(crate) commands: CommandSet,
     /// Command scope stack for injection.
@@ -75,26 +77,72 @@ pub struct Core {
     pub(crate) pending_diagnostic_dump: Option<NodeId>,
 }
 
-#[derive(Default)]
-/// Transaction state used to roll back structural mutations.
-struct MountTransaction {
-    /// Nodes created during the transaction.
-    created: Vec<NodeId>,
-    /// Node structure snapshots captured for rollback.
-    snapshots: HashMap<NodeId, NodeStructureSnapshot>,
-    /// Nodes that were mounted during the transaction.
-    mounted: Vec<NodeId>,
+/// Journal for one outermost tree edit and all nested edits it performs.
+struct TreeEditJournal {
+    /// Core-owned state from before the edit began.
+    before: TreeStateSnapshot,
+    /// Widgets whose mount hooks completed during the edit.
+    mounted: Vec<MountedWidget>,
+    /// Mounted widgets already unmounted by a later nested edit.
+    unmounted: HashSet<usize>,
 }
 
-#[derive(Clone)]
-/// Snapshot of a node's structural fields for rollback.
-struct NodeStructureSnapshot {
-    /// Stored parent pointer.
-    parent: Option<NodeId>,
-    /// Stored children list.
-    children: Vec<NodeId>,
-    /// Stored keyed child map.
-    child_keys: HashMap<String, NodeId>,
+/// A successfully mounted widget retained for reverse-order cleanup.
+struct MountedWidget {
+    /// Node that owned the widget when its mount completed.
+    node_id: NodeId,
+    /// Stable widget slot identity across node snapshots and replacement.
+    widget: Rc<RwLock<Option<Box<dyn Widget>>>>,
+}
+
+/// Stable node and widget identities for one removal lifecycle.
+struct RemovalPlan {
+    /// Root whose lifecycle initiated the plan.
+    root: NodeId,
+    /// Nodes in deterministic pre-order with their original widget slots.
+    pre_order: Vec<RemovalEntry>,
+    /// Nodes in deterministic post-order.
+    post_order: Vec<NodeId>,
+    /// Whether the plan covers the root's complete subtree.
+    covers_subtree: bool,
+}
+
+/// One node expected to survive unchanged until a removal plan commits.
+struct RemovalEntry {
+    /// Planned node.
+    node_id: NodeId,
+    /// Widget slot validated before lifecycle hooks run.
+    widget: Rc<RwLock<Option<Box<dyn Widget>>>>,
+}
+
+/// Core-owned state restored when a tree edit fails.
+struct TreeStateSnapshot {
+    /// Arena contents and all node metadata.
+    nodes: SlotMap<NodeId, Node>,
+    /// Root node ID.
+    root: NodeId,
+    /// Focus target.
+    focus: Option<NodeId>,
+    /// Requested process exit.
+    exit_requested: Option<i32>,
+    /// Pending style replacement.
+    pending_style: Option<StyleMap>,
+    /// Mouse capture target.
+    mouse_capture: Option<NodeId>,
+    /// Focus recovery candidates.
+    focus_hint: Option<FocusRecoveryHint>,
+    /// Registered commands.
+    commands: CommandSet,
+    /// Active command-dispatch scopes.
+    command_scope: Vec<CommandScopeFrame>,
+    /// Pending help request.
+    pending_help_request: Option<(NodeId, Option<NodeId>)>,
+    /// Pending owned help data.
+    pending_help_snapshot: Option<OwnedHelpSnapshot>,
+    /// Whether pending help was observed.
+    pending_help_snapshot_observed: bool,
+    /// Pending diagnostic target.
+    pending_diagnostic_dump: Option<NodeId>,
 }
 
 /// Widget operation whose failures should carry node context.
@@ -152,7 +200,7 @@ impl Core {
         let layout = root_widget.layout();
         let root_name = root_widget.name();
         let root = nodes.insert(Node {
-            widget: RefCell::new(Some(Box::new(root_widget))),
+            widget: Rc::new(RwLock::new(Some(Box::new(root_widget)))),
             widget_type: root_type,
             parent: None,
             children: Vec::new(),
@@ -176,13 +224,13 @@ impl Core {
             nodes,
             root,
             focus: None,
-            focus_gen: 1,
             backend: None,
             exit_requested: None,
             pending_style: None,
             mouse_capture: None,
             focus_hint: None,
-            transaction: None,
+            tree_edit: None,
+            rolling_back_tree_edit: false,
             commands: CommandSet::new(),
             command_scope: Vec::new(),
             pending_help_request: None,
@@ -249,11 +297,6 @@ impl Core {
     /// Return the currently focused node id, if any.
     pub fn focus_id(&self) -> Option<NodeId> {
         self.focus
-    }
-
-    /// Return the focus generation counter.
-    pub fn focus_generation(&self) -> u64 {
-        self.focus_gen
     }
 
     /// Return a reference to a node by id.

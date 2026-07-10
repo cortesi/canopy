@@ -3,7 +3,7 @@ use std::{any::TypeId, result::Result as StdResult};
 use slotmap::Key;
 
 use crate::{
-    Context, ReadContext,
+    ChangeOutcome, Context, ReadContext,
     commands::{ArgValue, CommandError, CommandInvocation, CommandScopeFrame, ListRowContext},
     core::{NodeId, help::OwnedHelpSnapshot, style::Effect, view::View},
     error::Result,
@@ -109,6 +109,10 @@ impl ReadContext for DummyContext {
         None
     }
 
+    fn node_is_attached(&self, _node: NodeId) -> bool {
+        false
+    }
+
     fn node_path(&self, _root: NodeId, _node: NodeId) -> Path {
         Path::empty()
     }
@@ -127,24 +131,32 @@ impl ReadContext for DummyContext {
 }
 
 impl Context for DummyContext {
-    fn set_focus(&mut self, _node: NodeId) -> bool {
-        false
+    fn set_focus(&mut self, _node: NodeId) -> Result<ChangeOutcome> {
+        Ok(ChangeOutcome::Unchanged)
     }
 
-    fn focus_dir_in(&mut self, _root: NodeId, _dir: Direction) {}
-
-    fn focus_first_in(&mut self, _root: NodeId) {}
-
-    fn focus_next_in(&mut self, _root: NodeId) {}
-
-    fn focus_prev_in(&mut self, _root: NodeId) {}
-
-    fn capture_mouse(&mut self) -> bool {
-        false
+    fn focus_dir_in(&mut self, _root: NodeId, _dir: Direction) -> Result<ChangeOutcome> {
+        Ok(ChangeOutcome::Unchanged)
     }
 
-    fn release_mouse(&mut self) -> bool {
-        false
+    fn focus_first_in(&mut self, _root: NodeId) -> Result<ChangeOutcome> {
+        Ok(ChangeOutcome::Unchanged)
+    }
+
+    fn focus_next_in(&mut self, _root: NodeId) -> Result<ChangeOutcome> {
+        Ok(ChangeOutcome::Unchanged)
+    }
+
+    fn focus_prev_in(&mut self, _root: NodeId) -> Result<ChangeOutcome> {
+        Ok(ChangeOutcome::Unchanged)
+    }
+
+    fn capture_mouse(&mut self) -> Result<ChangeOutcome> {
+        Ok(ChangeOutcome::Unchanged)
+    }
+
+    fn release_mouse(&mut self) -> Result<ChangeOutcome> {
+        Ok(ChangeOutcome::Unchanged)
     }
 
     fn scroll_to(&mut self, _x: u32, _y: u32) -> bool {
@@ -161,8 +173,15 @@ impl Context for DummyContext {
         Ok(())
     }
 
-    fn create_detached_boxed(&mut self, _widget: Box<dyn Widget>) -> NodeId {
-        NodeId::null()
+    fn create_detached_boxed(&mut self, _widget: Box<dyn Widget>) -> Result<NodeId> {
+        Ok(NodeId::null())
+    }
+
+    fn apply_tree_edit(
+        &mut self,
+        edit: &mut dyn FnMut(&mut dyn Context) -> Result<()>,
+    ) -> Result<()> {
+        edit(self)
     }
 
     fn with_widget_mut(
@@ -230,8 +249,8 @@ impl Context for DummyContext {
         Ok(())
     }
 
-    fn set_hidden_of(&mut self, _node: NodeId, _hidden: bool) -> bool {
-        false
+    fn set_hidden_of(&mut self, _node: NodeId, _hidden: bool) -> Result<ChangeOutcome> {
+        Ok(ChangeOutcome::Unchanged)
     }
 
     fn start(&mut self) -> Result<()> {

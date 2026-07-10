@@ -164,7 +164,7 @@ impl Block {
         if !self.size_limited(size) && c.children().is_empty() {
             c.add_child(Self::new(!self.horizontal))?;
             c.add_child(Self::new(!self.horizontal))?;
-            c.focus_next();
+            c.focus_next()?;
         }
         Ok(())
     }
@@ -196,7 +196,7 @@ impl Block {
     #[command]
     /// Focus this block.
     fn focus(&self, c: &mut dyn Context) -> Result<()> {
-        c.set_focus(c.node_id());
+        c.set_focus(c.node_id())?;
         Ok(())
     }
 }
@@ -255,7 +255,7 @@ impl FocusGym {
             return Ok(());
         };
         c.remove_subtree(focused)?;
-        c.focus_first_in(root_block);
+        c.focus_first_in(root_block)?;
         Ok(())
     }
 }

@@ -287,7 +287,7 @@ impl Stylegym {
         self.modal_visible = true;
 
         self.with_right_container(c, |_, ctx| {
-            if ctx.has_child::<ModalSlot>() {
+            if ctx.has_child::<ModalSlot>()? {
                 return Ok(());
             }
             let modal_id = ctx.add_keyed::<ModalSlot>(Modal::new())?;

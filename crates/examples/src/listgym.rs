@@ -225,7 +225,7 @@ impl ListGym {
 
     /// Create a framed list column and return the frame node id.
     fn create_column(c: &mut dyn Context) -> Result<TypedId<Frame>> {
-        let frame_id = c.create_detached(Frame::new());
+        let frame_id = c.create_detached(Frame::new())?;
         let list_id = c.add_child_to(
             frame_id,
             List::<ListEntry>::new().with_selection_indicator("list/selected", "█ ", true),
@@ -305,8 +305,8 @@ impl Widget for ListGym {
     }
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-        let panes_id = c.create_detached(Panes::new());
-        let status_id = c.create_detached(StatusBar::new());
+        let panes_id = c.create_detached(Panes::new())?;
+        let status_id = c.create_detached(StatusBar::new())?;
         c.add_child(
             VStack::new()
                 .push_flex(panes_id, 1)
