@@ -20,7 +20,6 @@ use super::{
 };
 use crate::{
     ChangeOutcome, ReadContext,
-    backend::BackendControl,
     commands::{CommandScopeFrame, CommandSet},
     core::{id::NodeId, node::Node, view::View},
     error::{Error, Result},
@@ -49,8 +48,6 @@ pub struct Core {
     pub(crate) root: NodeId,
     /// Currently focused node.
     pub(crate) focus: Option<NodeId>,
-    /// Active backend controller.
-    pub(crate) backend: Option<Box<dyn BackendControl>>,
     /// Exit code requested by a widget or command, if any.
     pub(crate) exit_requested: Option<i32>,
     /// Pending style map to be applied before next render.
@@ -224,7 +221,6 @@ impl Core {
             nodes,
             root,
             focus: None,
-            backend: None,
             exit_requested: None,
             pending_style: None,
             mouse_capture: None,

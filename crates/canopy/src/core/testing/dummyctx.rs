@@ -253,14 +253,6 @@ impl Context for DummyContext {
         Ok(ChangeOutcome::Unchanged)
     }
 
-    fn start(&mut self) -> Result<()> {
-        Ok(())
-    }
-
-    fn stop(&mut self) -> Result<()> {
-        Ok(())
-    }
-
     fn exit(&mut self, _code: i32) {}
 
     fn push_effect(&mut self, _node: NodeId, _effect: Effect) -> Result<()> {

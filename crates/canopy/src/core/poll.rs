@@ -9,6 +9,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+use futures::channel::mpsc::UnboundedSender;
+
 use crate::{
     NodeId,
     error::{Error, Result},
@@ -159,14 +161,14 @@ fn apply_command(command: SchedulerCommand, pending: &mut PendingHeap) -> bool {
 /// Run the scheduler until shutdown or the event receiver closes.
 fn scheduler_worker(
     commands: &mpsc::Receiver<SchedulerCommand>,
-    event_tx: &mpsc::Sender<Event>,
+    event_tx: &UnboundedSender<Event>,
     clock: &dyn Clock,
 ) {
     let mut pending = PendingHeap::default();
     loop {
         let now = clock.now();
         let due = pending.collect(now);
-        if !due.is_empty() && event_tx.send(Event::Poll(due)).is_err() {
+        if !due.is_empty() && event_tx.unbounded_send(Event::Poll(due)).is_err() {
             return;
         }
 
@@ -200,12 +202,12 @@ pub struct Poller {
 
 impl Poller {
     /// Construct a scheduler using the system monotonic clock.
-    pub(crate) fn new(event_tx: mpsc::Sender<Event>) -> Self {
+    pub(crate) fn new(event_tx: UnboundedSender<Event>) -> Self {
         Self::with_clock(event_tx, Arc::new(SystemClock))
     }
 
     /// Construct a scheduler with an explicit clock.
-    fn with_clock(event_tx: mpsc::Sender<Event>, clock: Arc<dyn Clock>) -> Self {
+    fn with_clock(event_tx: UnboundedSender<Event>, clock: Arc<dyn Clock>) -> Self {
         let (command_tx, command_rx) = mpsc::channel();
         let worker_clock = Arc::clone(&clock);
         let worker = thread::spawn(move || {
@@ -273,6 +275,7 @@ impl Drop for Poller {
 
 #[cfg(test)]
 mod tests {
+    use futures::{StreamExt, channel::mpsc::unbounded, executor::block_on};
     use parking_lot::Mutex;
     use slotmap::SlotMap;
 
@@ -329,7 +332,7 @@ mod tests {
     fn worker_uses_injected_clock_and_emits_due_nodes() {
         let now = Instant::now();
         let clock = Arc::new(ManualClock::new(now));
-        let (event_tx, event_rx) = mpsc::channel();
+        let (event_tx, mut event_rx) = unbounded();
         let poller = Poller::with_clock(event_tx, clock.clone());
         let (node, _) = node_ids();
 
@@ -337,13 +340,13 @@ mod tests {
         poller
             .schedule(node, Duration::ZERO)
             .expect("scheduler should accept work");
-        let event = event_rx.recv().expect("scheduler should emit an event");
+        let event = block_on(event_rx.next()).expect("scheduler should emit an event");
         assert!(matches!(event, Event::Poll(nodes) if nodes == vec![node]));
     }
 
     #[test]
     fn shutdown_joins_worker_and_rejects_more_work() {
-        let (event_tx, _event_rx) = mpsc::channel();
+        let (event_tx, _event_rx) = unbounded();
         let mut poller = Poller::new(event_tx);
         let (node, _) = node_ids();
 
@@ -357,7 +360,7 @@ mod tests {
     #[test]
     fn repeated_construct_drop_joins_every_worker() {
         for _ in 0..64 {
-            let (event_tx, _event_rx) = mpsc::channel();
+            let (event_tx, _event_rx) = unbounded();
             drop(Poller::new(event_tx));
         }
     }

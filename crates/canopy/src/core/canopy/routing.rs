@@ -338,7 +338,7 @@ impl Canopy {
             serviced += 1;
         }
         if serviced == AUTOMATION_SERVICE_BUDGET {
-            let _receiver_closed = self.event_tx.send(Event::Wake);
+            let _receiver_closed = self.event_tx.unbounded_send(Event::Wake);
         }
         serviced
     }

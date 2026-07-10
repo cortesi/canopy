@@ -830,12 +830,6 @@ pub trait Context: ReadContext {
         self.set_hidden_of(node, false)
     }
 
-    /// Start the backend renderer.
-    fn start(&mut self) -> Result<()>;
-
-    /// Stop the backend renderer, releasing control of the terminal.
-    fn stop(&mut self) -> Result<()>;
-
     /// Request a cooperative shutdown with the provided status code.
     fn exit(&mut self, code: i32);
 
@@ -1669,22 +1663,6 @@ impl<'a> Context for CoreContext<'a> {
 
     fn set_hidden_of(&mut self, node: NodeId, hidden: bool) -> Result<ChangeOutcome> {
         self.core.set_hidden(node, hidden)
-    }
-
-    fn start(&mut self) -> Result<()> {
-        self.core
-            .backend
-            .as_mut()
-            .ok_or_else(|| Error::Internal("backend not set".into()))?
-            .start()
-    }
-
-    fn stop(&mut self) -> Result<()> {
-        self.core
-            .backend
-            .as_mut()
-            .ok_or_else(|| Error::Internal("backend not set".into()))?
-            .stop()
     }
 
     fn exit(&mut self, code: i32) {

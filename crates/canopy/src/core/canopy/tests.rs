@@ -4,8 +4,11 @@ use std::{
         Arc,
         atomic::{AtomicUsize, Ordering},
     },
+    thread,
     time::Duration,
 };
+
+use futures::{StreamExt, executor::block_on};
 
 use super::*;
 use crate::{
@@ -70,6 +73,22 @@ fn automation_submission_applies_backpressure() -> Result<()> {
         handle.submit(Box::new(|_| {})),
         Err(Error::RunLoop(_))
     ));
+    Ok(())
+}
+
+#[test]
+fn cross_thread_automation_request_completes_via_service_path() -> Result<()> {
+    let mut canopy = Canopy::new();
+    let mut events = canopy
+        .event_rx
+        .take()
+        .expect("test should own framework events");
+    let handle = canopy.automation_handle();
+    let worker = thread::spawn(move || handle.request(|_| Ok(42)));
+
+    assert!(matches!(block_on(events.next()), Some(Event::Wake)));
+    assert_eq!(canopy.service_automation(), 1);
+    assert_eq!(worker.join().expect("request worker should not panic")?, 42);
     Ok(())
 }
 

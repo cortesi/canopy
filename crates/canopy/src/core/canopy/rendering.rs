@@ -1,14 +1,11 @@
 //! Rendering pipeline for the canopy facade.
 
-use std::sync::mpsc;
-
 use super::Canopy;
 use crate::{
     NodeId,
     core::{context::CoreViewContext, termbuf::TermBuf, view::View, world::WidgetOperation},
     cursor,
     error::Result,
-    event::Event,
     geom::{Point, Rect, RectI32, Size},
     layout::Display,
     render::{Render, RenderBackend},
@@ -69,11 +66,6 @@ impl Canopy {
         let mut backend = SnapshotBackend;
         let _ignored = self.render_if_pending(&mut backend)?;
         Ok(())
-    }
-
-    /// Register the poller channel.
-    pub(crate) fn start_poller(&mut self, tx: mpsc::Sender<Event>) {
-        self.event_tx = tx;
     }
 
     /// Pre-render sweep of the tree.

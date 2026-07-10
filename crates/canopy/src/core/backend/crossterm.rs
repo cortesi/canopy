@@ -1,12 +1,17 @@
 use std::{
     io::{self, Stderr, Write},
     mem, panic,
-    result::Result as StdResult,
-    sync::mpsc::{self, TryRecvError},
-    thread,
 };
 
 use color_backtrace::{BacktracePrinter, default_output_stream};
+use futures::{
+    FutureExt,
+    channel::mpsc::UnboundedReceiver,
+    executor::block_on,
+    future::{Either, select},
+    pin_mut,
+    stream::{Stream, StreamExt},
+};
 use scopeguard::guard;
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -27,26 +32,62 @@ use crate::{
 /// Simple event source wrapper for receiving events.
 ///
 /// This coalesces consecutive mouse-move events so clicks are not delayed by move bursts.
-struct EventSource {
-    /// Event receiver channel.
-    rx: mpsc::Receiver<Event>,
+struct EventSource<S> {
+    /// Cancellable terminal event stream owned by the run loop.
+    terminal: S,
+    /// Framework event receiver channel.
+    internal: UnboundedReceiver<Event>,
     /// Buffered non-move event encountered while coalescing.
     pending: Option<Event>,
 }
 
-impl EventSource {
+impl<S> EventSource<S>
+where
+    S: Stream<Item = io::Result<cevent::Event>> + Unpin,
+{
     /// Construct a new event source.
-    fn new(rx: mpsc::Receiver<Event>) -> Self {
-        Self { rx, pending: None }
+    fn new(terminal: S, internal: UnboundedReceiver<Event>) -> Self {
+        Self {
+            terminal,
+            internal,
+            pending: None,
+        }
     }
 
-    /// Block until the next event arrives.
-    fn next(&mut self) -> StdResult<Event, mpsc::RecvError> {
+    /// Await one event from either the terminal or the framework channel.
+    async fn next_uncoalesced(&mut self) -> Result<Event> {
+        let terminal = self.terminal.next();
+        let internal = self.internal.next();
+        pin_mut!(terminal, internal);
+        match select(terminal, internal).await {
+            Either::Left((terminal, _)) => terminal_event(terminal),
+            Either::Right((Some(event), _)) => Ok(event),
+            Either::Right((None, _)) => Err(error::Error::RunLoop(
+                "framework event channel closed".into(),
+            )),
+        }
+    }
+
+    /// Take one event that is already available without waiting.
+    fn next_ready(&mut self) -> Result<Option<Event>> {
+        if let Some(internal) = self.internal.next().now_or_never() {
+            return internal
+                .map(Some)
+                .ok_or_else(|| error::Error::RunLoop("framework event channel closed".into()));
+        }
+        if let Some(terminal) = self.terminal.next().now_or_never() {
+            return terminal_event(terminal).map(Some);
+        }
+        Ok(None)
+    }
+
+    /// Await the next event, coalescing consecutive ready mouse moves.
+    async fn next(&mut self) -> Result<Event> {
         if let Some(event) = self.pending.take() {
             return Ok(event);
         }
 
-        let mut event = self.rx.recv()?;
+        let mut event = self.next_uncoalesced().await?;
         if matches!(
             event,
             Event::Mouse(mouse::MouseEvent {
@@ -54,29 +95,34 @@ impl EventSource {
                 ..
             })
         ) {
-            loop {
-                match self.rx.try_recv() {
-                    Ok(next) => {
-                        if matches!(
-                            next,
-                            Event::Mouse(mouse::MouseEvent {
-                                action: mouse::Action::Moved,
-                                ..
-                            })
-                        ) {
-                            event = next;
-                        } else {
-                            self.pending = Some(next);
-                            break;
-                        }
-                    }
-                    Err(TryRecvError::Empty) => break,
-                    Err(TryRecvError::Disconnected) => break,
+            while let Some(next) = self.next_ready()? {
+                if matches!(
+                    next,
+                    Event::Mouse(mouse::MouseEvent {
+                        action: mouse::Action::Moved,
+                        ..
+                    })
+                ) {
+                    event = next;
+                } else {
+                    self.pending = Some(next);
+                    break;
                 }
             }
         }
 
         Ok(event)
+    }
+}
+
+/// Translate one terminal stream item or report reader termination.
+fn terminal_event(event: Option<io::Result<cevent::Event>>) -> Result<Event> {
+    match event {
+        Some(Ok(event)) => Ok(translate_event(event)),
+        Some(Err(error)) => Err(error::Error::RunLoop(format!(
+            "terminal event reader failed: {error}"
+        ))),
+        None => Err(error::Error::RunLoop("terminal event stream closed".into())),
     }
 }
 
@@ -116,52 +162,219 @@ fn translate_result<T>(e: io::Result<T>) -> Result<T> {
     }
 }
 
+/// Terminal operations needed to acquire and restore a session.
+trait TerminalOperations: io::Write {
+    /// Enable terminal raw mode.
+    fn enable_raw_mode(&mut self) -> io::Result<()>;
+    /// Disable terminal raw mode.
+    fn disable_raw_mode(&mut self) -> io::Result<()>;
+    /// Enter the alternate screen.
+    fn enter_alternate_screen(&mut self) -> io::Result<()>;
+    /// Leave the alternate screen.
+    fn leave_alternate_screen(&mut self) -> io::Result<()>;
+    /// Enable mouse capture.
+    fn enable_mouse_capture(&mut self) -> io::Result<()>;
+    /// Disable mouse capture.
+    fn disable_mouse_capture(&mut self) -> io::Result<()>;
+    /// Hide the cursor.
+    fn hide_cursor(&mut self) -> io::Result<()>;
+    /// Show the cursor.
+    fn show_cursor(&mut self) -> io::Result<()>;
+    /// Push keyboard enhancement flags.
+    fn push_keyboard_enhancements(&mut self) -> io::Result<()>;
+    /// Pop keyboard enhancement flags.
+    fn pop_keyboard_enhancements(&mut self) -> io::Result<()>;
+}
+
+impl TerminalOperations for Stderr {
+    fn enable_raw_mode(&mut self) -> io::Result<()> {
+        terminal::enable_raw_mode()
+    }
+
+    fn disable_raw_mode(&mut self) -> io::Result<()> {
+        terminal::disable_raw_mode()
+    }
+
+    fn enter_alternate_screen(&mut self) -> io::Result<()> {
+        self.execute(terminal::EnterAlternateScreen).map(|_| ())
+    }
+
+    fn leave_alternate_screen(&mut self) -> io::Result<()> {
+        self.execute(terminal::LeaveAlternateScreen).map(|_| ())
+    }
+
+    fn enable_mouse_capture(&mut self) -> io::Result<()> {
+        self.execute(cevent::EnableMouseCapture).map(|_| ())
+    }
+
+    fn disable_mouse_capture(&mut self) -> io::Result<()> {
+        self.execute(cevent::DisableMouseCapture).map(|_| ())
+    }
+
+    fn hide_cursor(&mut self) -> io::Result<()> {
+        self.execute(ccursor::Hide).map(|_| ())
+    }
+
+    fn show_cursor(&mut self) -> io::Result<()> {
+        self.execute(ccursor::Show).map(|_| ())
+    }
+
+    fn push_keyboard_enhancements(&mut self) -> io::Result<()> {
+        self.execute(cevent::PushKeyboardEnhancementFlags(
+            cevent::KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES,
+        ))
+        .map(|_| ())
+    }
+
+    fn pop_keyboard_enhancements(&mut self) -> io::Result<()> {
+        self.execute(cevent::PopKeyboardEnhancementFlags)
+            .map(|_| ())
+    }
+}
+
+/// Terminal capabilities currently owned by one controller.
+#[derive(Debug, Default)]
+struct TerminalCapabilities {
+    /// Whether raw mode is active.
+    raw_mode_enabled: bool,
+    /// Whether the alternate screen is active.
+    alternate_screen_entered: bool,
+    /// Whether mouse capture is active.
+    mouse_capture_enabled: bool,
+    /// Whether the cursor is hidden.
+    cursor_hidden: bool,
+    /// Whether keyboard enhancement flags were pushed.
+    keyboard_enhancements_pushed: bool,
+}
+
+impl TerminalCapabilities {
+    /// Return whether any terminal capability remains acquired.
+    fn is_active(&self) -> bool {
+        self.raw_mode_enabled
+            || self.alternate_screen_entered
+            || self.mouse_capture_enabled
+            || self.cursor_hidden
+            || self.keyboard_enhancements_pushed
+    }
+}
+
+/// Acquire terminal capabilities in dependency order.
+fn acquire_terminal(
+    terminal: &mut impl TerminalOperations,
+    capabilities: &mut TerminalCapabilities,
+    keyboard_enhancements: bool,
+) -> io::Result<()> {
+    terminal.enable_raw_mode()?;
+    capabilities.raw_mode_enabled = true;
+    terminal.enter_alternate_screen()?;
+    capabilities.alternate_screen_entered = true;
+    terminal.enable_mouse_capture()?;
+    capabilities.mouse_capture_enabled = true;
+    terminal.hide_cursor()?;
+    capabilities.cursor_hidden = true;
+    if keyboard_enhancements {
+        terminal.push_keyboard_enhancements()?;
+        capabilities.keyboard_enhancements_pushed = true;
+    }
+    Ok(())
+}
+
+/// Record a capability-release result while retaining the first error.
+fn record_release(result: io::Result<()>, active: &mut bool, first_error: &mut Option<io::Error>) {
+    match result {
+        Ok(()) => *active = false,
+        Err(error) if first_error.is_none() => *first_error = Some(error),
+        Err(_) => {}
+    }
+}
+
+/// Release every acquired terminal capability in reverse order.
+fn release_terminal(
+    terminal: &mut impl TerminalOperations,
+    capabilities: &mut TerminalCapabilities,
+) -> io::Result<()> {
+    let mut first_error = None;
+    if capabilities.keyboard_enhancements_pushed {
+        record_release(
+            terminal.pop_keyboard_enhancements(),
+            &mut capabilities.keyboard_enhancements_pushed,
+            &mut first_error,
+        );
+    }
+    if capabilities.cursor_hidden {
+        record_release(
+            terminal.show_cursor(),
+            &mut capabilities.cursor_hidden,
+            &mut first_error,
+        );
+    }
+    if capabilities.mouse_capture_enabled {
+        record_release(
+            terminal.disable_mouse_capture(),
+            &mut capabilities.mouse_capture_enabled,
+            &mut first_error,
+        );
+    }
+    if capabilities.alternate_screen_entered {
+        record_release(
+            terminal.leave_alternate_screen(),
+            &mut capabilities.alternate_screen_entered,
+            &mut first_error,
+        );
+    }
+    if capabilities.raw_mode_enabled {
+        record_release(
+            terminal.disable_raw_mode(),
+            &mut capabilities.raw_mode_enabled,
+            &mut first_error,
+        );
+    }
+    first_error.map_or(Ok(()), Err)
+}
+
 /// Crossterm-backed implementation of `BackendControl`.
 #[derive(Debug)]
 pub struct CrosstermControl {
-    /// Stderr handle used for control output.
-    fp: Stderr,
+    /// Stderr handle used for terminal operations.
+    terminal: Stderr,
+    /// Capabilities currently owned by the controller.
+    capabilities: TerminalCapabilities,
     /// Whether to enable keyboard enhancement flags on startup.
     enable_keyboard_enhancements: bool,
-    /// Track whether keyboard enhancements were pushed.
-    keyboard_enhancements_pushed: bool,
 }
 
 impl CrosstermControl {
     /// Build a crossterm controller with keyboard enhancements enabled or disabled.
     pub fn new(enable_keyboard_enhancements: bool) -> Self {
         Self {
-            fp: io::stderr(),
+            terminal: io::stderr(),
+            capabilities: TerminalCapabilities::default(),
             enable_keyboard_enhancements,
-            keyboard_enhancements_pushed: false,
         }
     }
 
-    /// Enter alternate screen and raw mode.
+    /// Enter alternate screen and raw mode, rolling back a partial start.
     fn enter(&mut self) -> io::Result<()> {
-        terminal::enable_raw_mode()?;
-        self.fp.execute(terminal::EnterAlternateScreen)?;
-        self.fp.execute(cevent::EnableMouseCapture)?;
-        self.fp.execute(ccursor::Hide)?;
-        if self.enable_keyboard_enhancements {
-            self.fp.execute(cevent::PushKeyboardEnhancementFlags(
-                cevent::KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES,
-            ))?;
-            self.keyboard_enhancements_pushed = true;
+        if self.capabilities.is_active() {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "terminal backend is already active",
+            ));
+        }
+        if let Err(error) = acquire_terminal(
+            &mut self.terminal,
+            &mut self.capabilities,
+            self.enable_keyboard_enhancements,
+        ) {
+            drop(release_terminal(&mut self.terminal, &mut self.capabilities));
+            return Err(error);
         }
         Ok(())
     }
+
     /// Leave alternate screen and restore terminal state.
     fn exit(&mut self) -> io::Result<()> {
-        if self.keyboard_enhancements_pushed {
-            self.fp.execute(cevent::PopKeyboardEnhancementFlags)?;
-            self.keyboard_enhancements_pushed = false;
-        }
-        self.fp.execute(terminal::LeaveAlternateScreen)?;
-        self.fp.execute(cevent::DisableMouseCapture)?;
-        self.fp.execute(ccursor::Show)?;
-        terminal::disable_raw_mode()?;
-        Ok(())
+        release_terminal(&mut self.terminal, &mut self.capabilities)
     }
 }
 
@@ -177,6 +390,12 @@ impl BackendControl for CrosstermControl {
     }
     fn stop(&mut self) -> Result<()> {
         translate_result(self.exit())
+    }
+}
+
+impl Drop for CrosstermControl {
+    fn drop(&mut self) {
+        drop(self.exit());
     }
 }
 
@@ -498,29 +717,6 @@ fn translate_event(e: cevent::Event) -> Event {
     }
 }
 
-/// Thread entry that forwards crossterm events into the channel.
-fn event_emitter(evt_tx: mpsc::Sender<Event>) {
-    thread::spawn(move || {
-        loop {
-            match cevent::read() {
-                Ok(evt) => {
-                    if evt_tx.send(translate_event(evt)).is_err() {
-                        // The receiver has been dropped, which usually means the application is shutting down.
-                        return;
-                    }
-                }
-                Err(e) => {
-                    // Log the error and notify the main loop if possible, or exit gracefully.
-                    tracing::error!("Crossterm event read error: {}", e);
-                    // We can't easily notify the main loop without a dedicated error channel or
-                    // a special Event variant. For now, we'll just exit the thread.
-                    return;
-                }
-            }
-        }
-    });
-}
-
 /// Helper function to handle render errors by exiting alternate screen mode
 /// and displaying the error with a node tree dump
 fn handle_render_error(
@@ -528,7 +724,7 @@ fn handle_render_error(
     core: &Core,
     root: NodeId,
     focus: Option<NodeId>,
-    session: &mut TerminalSession,
+    session: &TerminalSession,
 ) -> error::Error {
     drop(session.stop());
 
@@ -597,30 +793,18 @@ pub fn runloop(cnpy: Canopy) -> Result<i32> {
 pub fn runloop_with_options(mut cnpy: Canopy, options: RunloopOptions) -> Result<i32> {
     let mut be = CrosstermRender::default();
     cnpy.register_backend(CrosstermControl::new(options.enable_keyboard_enhancements));
-    let mut session = {
-        let backend = cnpy
-            .core
-            .backend
-            .as_mut()
-            .ok_or_else(|| error::Error::Internal("backend not set".into()))?;
-        TerminalSession::new(backend)?
-    };
+    let backend = cnpy
+        .backend
+        .take()
+        .ok_or_else(|| error::Error::Internal("backend not set".into()))?;
+    let session = TerminalSession::new(backend)?;
 
     let _panic_hook = if options.install_panic_hook {
         let previous = panic::take_hook();
-        panic::set_hook(Box::new(|pi| {
-            let mut stderr = io::stderr();
-            #[allow(unused_must_use)]
-            {
-                crossterm::execute!(
-                    stderr,
-                    terminal::LeaveAlternateScreen,
-                    cevent::DisableMouseCapture,
-                    ccursor::Show
-                );
-                terminal::disable_raw_mode();
-                BacktracePrinter::new().print_panic_info(pi, &mut default_output_stream());
-            }
+        let cleanup = session.cleanup();
+        panic::set_hook(Box::new(move |pi| {
+            drop(cleanup.stop());
+            drop(BacktracePrinter::new().print_panic_info(pi, &mut default_output_stream()));
         }));
         Some(guard(previous, |hook| {
             panic::set_hook(hook);
@@ -634,11 +818,9 @@ pub fn runloop_with_options(mut cnpy: Canopy, options: RunloopOptions) -> Result
         .take()
         .ok_or_else(|| error::Error::InvalidOperation("event loop already initialized".into()))?;
 
-    let mut events = EventSource::new(rx);
-    event_emitter(cnpy.event_tx.clone());
+    let mut events = EventSource::new(cevent::EventStream::new(), rx);
     let size = translate_result(terminal::size())?;
     cnpy.set_root_size(Size::new(size.0.into(), size.1.into()))?;
-    cnpy.start_poller(cnpy.event_tx.clone());
 
     if let Err(e) = cnpy.render(&mut be) {
         return Err(handle_render_error(
@@ -646,7 +828,7 @@ pub fn runloop_with_options(mut cnpy: Canopy, options: RunloopOptions) -> Result
             &cnpy.core,
             cnpy.core.root,
             cnpy.core.focus,
-            &mut session,
+            &session,
         ));
     }
     translate_result(be.flush())?;
@@ -655,7 +837,7 @@ pub fn runloop_with_options(mut cnpy: Canopy, options: RunloopOptions) -> Result
     }
 
     loop {
-        let event = events.next()?;
+        let event = block_on(events.next())?;
 
         if matches!(
             &event,
@@ -689,7 +871,7 @@ pub fn runloop_with_options(mut cnpy: Canopy, options: RunloopOptions) -> Result
                         &cnpy.core,
                         cnpy.core.root,
                         cnpy.core.focus,
-                        &mut session,
+                        &session,
                     ));
                 }
             }
@@ -699,7 +881,7 @@ pub fn runloop_with_options(mut cnpy: Canopy, options: RunloopOptions) -> Result
                     &cnpy.core,
                     cnpy.core.root,
                     cnpy.core.focus,
-                    &mut session,
+                    &session,
                 ));
             }
         }
@@ -708,7 +890,116 @@ pub fn runloop_with_options(mut cnpy: Canopy, options: RunloopOptions) -> Result
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        io::Write,
+        pin::Pin,
+        sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        },
+        task::{Context, Poll},
+    };
+
+    use futures::{channel::mpsc::unbounded, stream};
+
     use super::*;
+
+    /// Pending stream that records when cancellation drops it.
+    struct DropReader {
+        dropped: Arc<AtomicBool>,
+    }
+
+    /// Fault-injecting terminal used to verify acquisition rollback.
+    #[derive(Debug, Default)]
+    struct FakeTerminal {
+        calls: Vec<&'static str>,
+        fail_at: Option<usize>,
+        acquisitions: usize,
+    }
+
+    impl FakeTerminal {
+        /// Record an acquisition and fail at the configured step.
+        fn acquire(&mut self, name: &'static str) -> io::Result<()> {
+            self.calls.push(name);
+            self.acquisitions += 1;
+            if self.fail_at == Some(self.acquisitions) {
+                return Err(io::Error::other("injected terminal failure"));
+            }
+            Ok(())
+        }
+
+        /// Record an infallible release.
+        fn release(&mut self, name: &'static str) -> io::Result<()> {
+            self.calls.push(name);
+            Ok(())
+        }
+    }
+
+    impl Write for FakeTerminal {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl TerminalOperations for FakeTerminal {
+        fn enable_raw_mode(&mut self) -> io::Result<()> {
+            self.acquire("raw+")
+        }
+
+        fn disable_raw_mode(&mut self) -> io::Result<()> {
+            self.release("raw-")
+        }
+
+        fn enter_alternate_screen(&mut self) -> io::Result<()> {
+            self.acquire("screen+")
+        }
+
+        fn leave_alternate_screen(&mut self) -> io::Result<()> {
+            self.release("screen-")
+        }
+
+        fn enable_mouse_capture(&mut self) -> io::Result<()> {
+            self.acquire("mouse+")
+        }
+
+        fn disable_mouse_capture(&mut self) -> io::Result<()> {
+            self.release("mouse-")
+        }
+
+        fn hide_cursor(&mut self) -> io::Result<()> {
+            self.acquire("cursor-")
+        }
+
+        fn show_cursor(&mut self) -> io::Result<()> {
+            self.release("cursor+")
+        }
+
+        fn push_keyboard_enhancements(&mut self) -> io::Result<()> {
+            self.acquire("keyboard+")
+        }
+
+        fn pop_keyboard_enhancements(&mut self) -> io::Result<()> {
+            self.release("keyboard-")
+        }
+    }
+
+    impl Stream for DropReader {
+        type Item = io::Result<cevent::Event>;
+
+        fn poll_next(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+            Poll::Pending
+        }
+    }
+
+    impl Drop for DropReader {
+        fn drop(&mut self) {
+            self.dropped.store(true, Ordering::Relaxed);
+        }
+    }
 
     fn text_run(x: u32, y: u32, text: &str) -> PositionedTextRun {
         PositionedTextRun {
@@ -729,6 +1020,93 @@ mod tests {
                 text_run(8, 2, "bc"),
             ]
         );
+    }
+
+    #[test]
+    fn terminal_capabilities_balance_in_reverse_order() -> io::Result<()> {
+        let mut terminal = FakeTerminal::default();
+        let mut capabilities = TerminalCapabilities::default();
+
+        acquire_terminal(&mut terminal, &mut capabilities, true)?;
+        release_terminal(&mut terminal, &mut capabilities)?;
+
+        assert_eq!(
+            terminal.calls,
+            [
+                "raw+",
+                "screen+",
+                "mouse+",
+                "cursor-",
+                "keyboard+",
+                "keyboard-",
+                "cursor+",
+                "mouse-",
+                "screen-",
+                "raw-",
+            ]
+        );
+        assert!(!capabilities.is_active());
+        Ok(())
+    }
+
+    #[test]
+    fn every_partial_terminal_start_restores_acquired_capabilities() {
+        for fail_at in 1..=5 {
+            let mut terminal = FakeTerminal {
+                fail_at: Some(fail_at),
+                ..FakeTerminal::default()
+            };
+            let mut capabilities = TerminalCapabilities::default();
+
+            acquire_terminal(&mut terminal, &mut capabilities, true)
+                .expect_err("configured acquisition should fail");
+            release_terminal(&mut terminal, &mut capabilities)
+                .expect("rollback should release every acquired capability");
+
+            assert!(!capabilities.is_active(), "failed at step {fail_at}");
+        }
+    }
+
+    #[test]
+    fn event_source_surfaces_terminal_reader_failure() {
+        let (_internal_tx, internal_rx) = unbounded();
+        let terminal = stream::iter(vec![Err(io::Error::other("reader failed"))]);
+        let mut events = EventSource::new(terminal, internal_rx);
+
+        let error = block_on(events.next()).expect_err("reader failure should reach run loop");
+        assert!(
+            matches!(error, error::Error::RunLoop(message) if message.contains("reader failed"))
+        );
+    }
+
+    #[test]
+    fn dropping_event_source_cancels_terminal_reader() {
+        let dropped = Arc::new(AtomicBool::new(false));
+        let terminal = DropReader {
+            dropped: Arc::clone(&dropped),
+        };
+        let (_internal_tx, internal_rx) = unbounded();
+
+        drop(EventSource::new(terminal, internal_rx));
+
+        assert!(dropped.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn internal_event_wakes_pending_terminal_reader() {
+        let dropped = Arc::new(AtomicBool::new(false));
+        let terminal = DropReader {
+            dropped: Arc::clone(&dropped),
+        };
+        let (internal_tx, internal_rx) = unbounded();
+        internal_tx
+            .unbounded_send(Event::Wake)
+            .expect("internal event receiver should be open");
+        let mut events = EventSource::new(terminal, internal_rx);
+
+        assert!(matches!(block_on(events.next()), Ok(Event::Wake)));
+        drop(events);
+        assert!(dropped.load(Ordering::Relaxed));
     }
 
     #[test]

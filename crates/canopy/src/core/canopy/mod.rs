@@ -14,6 +14,7 @@ use std::{
 };
 
 use comfy_table::{ContentArrangement, Table, presets::UTF8_FULL};
+use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender, unbounded};
 use ruau::{fs::FilesystemMountsError, source::ModuleSource, vm_api::NativeModule};
 use serde::{Deserialize, Serialize};
 
@@ -49,6 +50,8 @@ use crate::{
 pub struct Canopy {
     /// Core state.
     pub(super) core: Core,
+    /// Backend controller waiting to be acquired by a terminal session.
+    pub(crate) backend: Option<Box<dyn BackendControl>>,
 
     /// The poller is responsible for tracking nodes that have pending poll events.
     poller: Poller,
@@ -99,9 +102,9 @@ pub struct Canopy {
     render_pending: bool,
 
     /// Event sender channel.
-    pub(crate) event_tx: mpsc::Sender<Event>,
+    pub(crate) event_tx: UnboundedSender<Event>,
     /// Event receiver channel.
-    pub(crate) event_rx: Option<mpsc::Receiver<Event>>,
+    pub(crate) event_rx: Option<UnboundedReceiver<Event>>,
     /// Cross-thread automation callback sender.
     automation_tx: mpsc::SyncSender<AutomationCallback>,
     /// Cross-thread automation callback receiver.
@@ -188,7 +191,7 @@ pub struct AutomationHandle {
     /// Sender for queued UI-thread callbacks.
     callback_tx: mpsc::SyncSender<AutomationCallback>,
     /// Sender for wake events so the runloop notices queued work.
-    wake_tx: mpsc::Sender<Event>,
+    wake_tx: UnboundedSender<Event>,
     /// Thread that owns the associated Canopy instance.
     ui_thread: ThreadId,
 }
@@ -207,7 +210,7 @@ impl AutomationHandle {
                 }
             })?;
         self.wake_tx
-            .send(Event::Wake)
+            .unbounded_send(Event::Wake)
             .map_err(|_| error::Error::RunLoop("event loop wake channel closed".into()))?;
         Ok(())
     }
@@ -324,7 +327,7 @@ pub struct ScriptJournalEntry {
 impl Canopy {
     /// Construct a new Canopy instance.
     pub fn new() -> Self {
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = unbounded();
         let (automation_tx, automation_rx) = mpsc::sync_channel(AUTOMATION_QUEUE_CAPACITY);
         let core = Core::new();
         Self {
@@ -356,6 +359,7 @@ impl Canopy {
             render_limits: RenderLimits::default(),
             termbuf: None,
             render_pending: true,
+            backend: None,
             core,
         }
     }
@@ -434,7 +438,7 @@ impl Canopy {
 
     /// Register a backend controller.
     pub fn register_backend<T: BackendControl + 'static>(&mut self, be: T) {
-        self.core.backend = Some(Box::new(be))
+        self.backend = Some(Box::new(be));
     }
 
     /// Get a reference to the current render buffer, if any.

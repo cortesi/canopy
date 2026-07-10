@@ -270,7 +270,7 @@ lazy, tiled, or application-specific storage.
    a redraw through one explicit contract. Expose a supported servicing path for custom run loops
    instead of leaving `service_automation` crate-private.
 
-32. [ ] Centralize terminal-session ownership.
+32. [x] Centralize terminal-session ownership.
 
    Eliminate `TerminalSession`'s raw pointer into replaceable `Core` storage and prevent widget
    contexts from starting or stopping the backend behind the session state. Unify control exit,
@@ -281,13 +281,13 @@ Use crossterm's async `EventStream` and make stream ownership part of the run lo
 loop cancels the reader. If a focused spike proves it unsuitable, use an OS wakeup primitive. A
 permanently blocked detached reader thread is not an acceptable fallback.
 
-33. [ ] Give backend event sources explicit cancellation.
+33. [x] Give backend event sources explicit cancellation.
 
    Implement cancellation so a run loop can stop cleanly without a terminal event. Surface reader
    failure to the main loop instead of logging and leaving `recv()` blocked, and test cancellation
    and reader death without arbitrary sleeps or timeouts.
 
-34. [ ] Pass the runtime stage gate.
+34. [x] Pass the runtime stage gate.
 
    Add deterministic scheduler and automation concurrency tests, repeated construct-run-drop loops,
    and thread-leak assertions. Run terminal restoration smoke tests before review.
