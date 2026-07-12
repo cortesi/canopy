@@ -143,6 +143,7 @@ canopy::key!(EffectsFrameSlot: Frame);
 canopy::key!(EffectsSelectorSlot: Selector<EffectOption>);
 canopy::key!(RightContainerSlot: Container);
 canopy::key!(DemoFrameSlot: Frame);
+canopy::key!(DemoContentSlot: DemoContent);
 canopy::key!(ModalSlot: Modal);
 
 /// The demo content pane showing styled samples.
@@ -270,12 +271,14 @@ impl Stylegym {
         c.with_child::<RightContainerSlot, _>(f)
     }
 
-    /// Execute a closure with the demo frame widget.
-    fn with_demo_frame<F, R>(&self, c: &mut dyn Context, f: F) -> Result<R>
+    /// Execute a closure with the demo content widget.
+    fn with_demo_content<F, R>(&self, c: &mut dyn Context, f: F) -> Result<R>
     where
-        F: FnOnce(&mut Frame, &mut dyn Context) -> Result<R>,
+        F: FnOnce(&mut DemoContent, &mut dyn Context) -> Result<R>,
     {
-        self.with_right_container(c, |_, ctx| ctx.with_child::<DemoFrameSlot, _>(f))
+        self.with_right_container(c, |_, ctx| {
+            ctx.with_child::<DemoFrameSlot, _>(|_, ctx| ctx.with_child::<DemoContentSlot, _>(f))
+        })
     }
 
     /// Show the modal overlay.
@@ -303,8 +306,8 @@ impl Stylegym {
             Ok(())
         })?;
 
-        // Dim the demo content frame
-        self.with_demo_frame(c, |_frame, ctx| {
+        // Dim the demo content
+        self.with_demo_content(c, |_content, ctx| {
             ctx.push_effect(ctx.node_id(), effects::dim(0.5))
         })?;
 
@@ -361,7 +364,7 @@ impl Stylegym {
             })?
             .unwrap_or_default();
 
-        self.with_demo_frame(c, |_frame, ctx| {
+        self.with_demo_content(c, |_content, ctx| {
             // Clear all existing effects on demo pane
             ctx.clear_effects(ctx.node_id())?;
 
@@ -466,7 +469,7 @@ impl Widget for Stylegym {
             DemoFrameSlot::KEY,
             Frame::new().with_title("Demo"),
         )?;
-        c.add_child_to(right_frame_id, DemoContent)?;
+        c.add_keyed_to(right_frame_id, DemoContentSlot::KEY, DemoContent)?;
         c.set_layout_of(right_frame_id, Layout::fill().padding(Edges::all(1)))?;
 
         Ok(())
