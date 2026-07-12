@@ -2309,7 +2309,6 @@ dependencies = [
  "regex-automata",
  "rustix-openpty",
  "serde",
- "signal-hook 0.4.4",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -2347,6 +2346,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "tokio",
+ "unicode-width",
 ]
 
 [[package]]
@@ -3877,36 +3877,16 @@ dependencies = [
 name = "ruau"
 version = "0.1.0"
 dependencies = [
- "ruau-analysis",
- "ruau-ast",
  "ruau-bytecode",
- "ruau-decl",
- "ruau-fs",
- "ruau-host",
- "ruau-runner",
+ "ruau-declaration",
+ "ruau-executor",
+ "ruau-filesystem",
+ "ruau-session",
  "ruau-source",
  "ruau-surface",
+ "ruau-syntax",
  "ruau-typecheck",
  "ruau-vm",
- "ruau-vm-api",
-]
-
-[[package]]
-name = "ruau-analysis"
-version = "0.1.0"
-dependencies = [
- "ruau-ast",
- "ruau-source",
- "serde_json",
-]
-
-[[package]]
-name = "ruau-ast"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "strum",
 ]
 
 [[package]]
@@ -3914,53 +3894,51 @@ name = "ruau-bytecode"
 version = "0.1.0"
 dependencies = [
  "foldhash 0.2.0",
- "ruau-ast",
+ "ruau-syntax",
  "serde",
  "serde_json",
 ]
 
 [[package]]
-name = "ruau-decl"
+name = "ruau-declaration"
 version = "0.1.0"
 
 [[package]]
-name = "ruau-fs"
+name = "ruau-executor"
 version = "0.1.0"
 dependencies = [
- "ruau-analysis",
- "ruau-ast",
- "ruau-source",
- "serde_json",
-]
-
-[[package]]
-name = "ruau-host"
-version = "0.1.0"
-dependencies = [
+ "blake3",
  "ruau-bytecode",
- "ruau-decl",
+ "ruau-declaration",
  "ruau-source",
  "ruau-surface",
+ "ruau-syntax",
+ "ruau-typecheck",
  "ruau-vm",
- "ruau-vm-api",
  "serde_json",
  "tokio",
 ]
 
 [[package]]
-name = "ruau-runner"
+name = "ruau-filesystem"
 version = "0.1.0"
 dependencies = [
- "blake3",
- "ruau-analysis",
- "ruau-ast",
+ "ruau-source",
+ "ruau-syntax",
+ "ruau-typecheck",
+ "serde_json",
+]
+
+[[package]]
+name = "ruau-session"
+version = "0.1.0"
+dependencies = [
  "ruau-bytecode",
- "ruau-decl",
+ "ruau-declaration",
  "ruau-source",
  "ruau-surface",
  "ruau-typecheck",
  "ruau-vm",
- "ruau-vm-api",
  "serde_json",
  "tokio",
 ]
@@ -3973,14 +3951,21 @@ version = "0.1.0"
 name = "ruau-surface"
 version = "0.1.0"
 dependencies = [
- "ruau-analysis",
- "ruau-ast",
  "ruau-bytecode",
- "ruau-decl",
+ "ruau-declaration",
  "ruau-source",
+ "ruau-syntax",
  "ruau-typecheck",
  "ruau-vm",
- "ruau-vm-api",
+]
+
+[[package]]
+name = "ruau-syntax"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "strum",
 ]
 
 [[package]]
@@ -3988,9 +3973,8 @@ name = "ruau-typecheck"
 version = "0.1.0"
 dependencies = [
  "foldhash 0.2.0",
- "ruau-analysis",
- "ruau-ast",
  "ruau-source",
+ "ruau-syntax",
  "serde",
  "serde_json",
 ]
@@ -4004,22 +3988,13 @@ dependencies = [
  "pin-project-lite",
  "rmp-serde",
  "ruau-bytecode",
- "ruau-decl",
+ "ruau-declaration",
  "ruau-source",
- "ruau-vm-api",
  "serde",
  "serde_json",
  "stacker",
  "tokio",
  "tokio-util",
-]
-
-[[package]]
-name = "ruau-vm-api"
-version = "0.1.0"
-dependencies = [
- "ruau-decl",
- "serde",
 ]
 
 [[package]]

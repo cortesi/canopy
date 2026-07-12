@@ -15,7 +15,10 @@ use std::{
 
 use comfy_table::{ContentArrangement, Table, presets::UTF8_FULL};
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender, unbounded};
-use ruau::{fs::FilesystemMountsError, source::ModuleSource, vm_api::NativeModule};
+use ruau::{
+    source::{SourceProvider, fs::DirectoryMountsError},
+    vm::NativeModule,
+};
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -921,7 +924,7 @@ impl Canopy {
             let mounted_source = match &self.script_module_source {
                 Some(mounts) => match mounts.source_for_path(path) {
                     Ok(source) => Some(source),
-                    Err(FilesystemMountsError::OutsideRoots { .. }) => None,
+                    Err(DirectoryMountsError::OutsideRoots { .. }) => None,
                     Err(error) => {
                         return Err(error::Error::Invalid(format!(
                             "config path is invalid for script module roots: {error}"
@@ -1086,7 +1089,7 @@ impl Canopy {
         })?;
         let surface_source = module_source
             .as_ref()
-            .map(|source| Arc::clone(source) as Arc<dyn ModuleSource>);
+            .map(|source| Arc::clone(source) as Arc<dyn SourceProvider>);
         let default_binding_owners = self.default_binding_owners();
         let definitions = script::defs::render_definitions(
             &self.core.commands,

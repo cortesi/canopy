@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use ruau::{decl, module::NativeModuleBuilder};
+use ruau::{declaration, module};
 
 use super::{base_api, luau_global_owner_name};
 use crate::{
@@ -21,13 +21,13 @@ pub(crate) fn preamble() -> String {
         output.push('\n');
     }
     output.push('\n');
-    let mut builder = decl::Builder::new();
-    builder.class(decl::Class::new("NodeId"));
+    let mut builder = declaration::Builder::new();
+    builder.add_class(declaration::Class::new("NodeId"));
     register_framework_declarations(&mut builder);
     base_api::register_declarations(&mut builder);
     output.push_str(
         &builder
-            .finish()
+            .build()
             .expect("framework declarations are statically valid")
             .render(),
     );
@@ -70,8 +70,8 @@ pub fn render_definitions(
             output.push_str(&format!("-- {}: {}\n", fixture.name, fixture.description));
         }
     }
-    let mut builder = decl::Builder::new();
-    builder.section("Application Commands");
+    let mut builder = declaration::Builder::new();
+    builder.add_section("Application Commands");
     for (owner, specs) in owners {
         register_owner_declaration(
             &mut builder,
@@ -83,7 +83,7 @@ pub fn render_definitions(
     output.push('\n');
     output.push_str(
         &builder
-            .finish()
+            .build()
             .expect("command declarations are statically valid")
             .render(),
     );
@@ -92,13 +92,16 @@ pub fn render_definitions(
 }
 
 /// Build a Luau function signature for a command.
-pub(crate) fn command_fn_sig(spec: &CommandSpec) -> decl::FnSig {
+pub(crate) fn command_fn_sig(spec: &CommandSpec) -> declaration::FunctionSignature {
     let params = spec
         .params
         .iter()
         .filter(|param| param.kind == CommandParamKind::User)
-        .map(|param| decl::Param::new(param.name, param.ty.luau_ty()))
-        .fold(decl::FnSig::new(), decl::FnSig::param);
+        .map(|param| declaration::Parameter::new(param.name, param.ty.luau_ty()))
+        .fold(
+            declaration::FunctionSignature::new(),
+            declaration::FunctionSignature::param,
+        );
     match spec.ret {
         CommandReturnSpec::Unit => params,
         CommandReturnSpec::Value(ty) => params.ret(ty.luau_ty()),
@@ -112,89 +115,98 @@ pub fn command_type_to_luau(spec: &CommandTypeSpec) -> String {
 
 /// Register framework-owned record and alias declarations.
 fn register_framework_declarations(builder: &mut impl FrameworkDeclarationSink) {
-    builder.alias(decl::Alias::new(
+    builder.alias(declaration::Alias::new(
         "Point",
-        decl::Ty::table([
-            decl::Field::new("x", decl::Ty::Number).doc("Horizontal position."),
-            decl::Field::new("y", decl::Ty::Number).doc("Vertical position."),
+        declaration::Type::table([
+            declaration::Field::new("x", declaration::Type::Number).doc("Horizontal position."),
+            declaration::Field::new("y", declaration::Type::Number).doc("Vertical position."),
         ]),
     ));
-    builder.alias(decl::Alias::new(
+    builder.alias(declaration::Alias::new(
         "Size",
-        decl::Ty::table([
-            decl::Field::new("w", decl::Ty::Number).doc("Width in cells."),
-            decl::Field::new("h", decl::Ty::Number).doc("Height in cells."),
+        declaration::Type::table([
+            declaration::Field::new("w", declaration::Type::Number).doc("Width in cells."),
+            declaration::Field::new("h", declaration::Type::Number).doc("Height in cells."),
         ]),
     ));
-    builder.alias(decl::Alias::new(
+    builder.alias(declaration::Alias::new(
         "Rect",
-        decl::Ty::table([
-            decl::Field::new("x", decl::Ty::Number).doc("Left edge in cells from the origin."),
-            decl::Field::new("y", decl::Ty::Number).doc("Top edge in cells from the origin."),
-            decl::Field::new("w", decl::Ty::Number).doc("Width in cells."),
-            decl::Field::new("h", decl::Ty::Number).doc("Height in cells."),
+        declaration::Type::table([
+            declaration::Field::new("x", declaration::Type::Number)
+                .doc("Left edge in cells from the origin."),
+            declaration::Field::new("y", declaration::Type::Number)
+                .doc("Top edge in cells from the origin."),
+            declaration::Field::new("w", declaration::Type::Number).doc("Width in cells."),
+            declaration::Field::new("h", declaration::Type::Number).doc("Height in cells."),
         ]),
     ));
     builder.alias(
-        decl::Alias::new(
+        declaration::Alias::new(
             "NodeInfo",
-            decl::Ty::table([
-                decl::Field::new("id", decl::Ty::named("NodeId"))
+            declaration::Type::table([
+                declaration::Field::new("id", declaration::Type::named("NodeId"))
                     .doc("Stable node handle for use in other API calls."),
-                decl::Field::new("name", decl::Ty::String)
+                declaration::Field::new("name", declaration::Type::String)
                     .doc("Widget owner name used in paths and command dispatch."),
-                decl::Field::new("focused", decl::Ty::Boolean)
+                declaration::Field::new("focused", declaration::Type::Boolean)
                     .doc("True when this node currently owns focus."),
-                decl::Field::new("on_focus_path", decl::Ty::Boolean)
+                declaration::Field::new("on_focus_path", declaration::Type::Boolean)
                     .doc("True when this node lies on the path to the focused node."),
-                decl::Field::new("hidden", decl::Ty::Boolean)
+                declaration::Field::new("hidden", declaration::Type::Boolean)
                     .doc("True when the node's hidden flag is set."),
-                decl::Field::new("visible", decl::Ty::Boolean)
+                declaration::Field::new("visible", declaration::Type::Boolean)
                     .doc("True when the node is visible."),
-                decl::Field::new("children", decl::Ty::named("NodeId").array())
+                declaration::Field::new("children", declaration::Type::named("NodeId").array())
                     .doc("Direct child nodes in tree order."),
-                decl::Field::new("rect", decl::Ty::named("Rect").optional())
+                declaration::Field::new("rect", declaration::Type::named("Rect").optional())
                     .doc("Outer rectangle on screen, or nil for zero-sized nodes."),
-                decl::Field::new("content_rect", decl::Ty::named("Rect").optional())
-                    .doc("Inner content rectangle after padding, or nil when zero-sized."),
-                decl::Field::new("canvas", decl::Ty::named("Size"))
+                declaration::Field::new(
+                    "content_rect",
+                    declaration::Type::named("Rect").optional(),
+                )
+                .doc("Inner content rectangle after padding, or nil when zero-sized."),
+                declaration::Field::new("canvas", declaration::Type::named("Size"))
                     .doc("Total scrollable canvas size in content coordinates."),
-                decl::Field::new("scroll", decl::Ty::named("Point"))
+                declaration::Field::new("scroll", declaration::Type::named("Point"))
                     .doc("Current viewport origin within the canvas."),
-                decl::Field::new("accept_focus", decl::Ty::Boolean)
+                declaration::Field::new("accept_focus", declaration::Type::Boolean)
                     .doc("True when the widget reports that it can accept focus."),
             ]),
         )
         .doc("Summary information for a node in the widget tree."),
     );
-    builder.alias(decl::Alias::new(
+    builder.alias(declaration::Alias::new(
         "TreeNode",
-        decl::Ty::Intersection(vec![
-            decl::Ty::named("NodeInfo"),
-            decl::Ty::table([
-                decl::Field::new("children", decl::Ty::named("TreeNode").array())
-                    .doc("Recursive child tree entries in tree order."),
-            ]),
+        declaration::Type::Intersection(vec![
+            declaration::Type::named("NodeInfo"),
+            declaration::Type::table([declaration::Field::new(
+                "children",
+                declaration::Type::named("TreeNode").array(),
+            )
+            .doc("Recursive child tree entries in tree order.")]),
         ]),
     ));
-    builder.alias(decl::Alias::new(
+    builder.alias(declaration::Alias::new(
         "BindOptions",
-        decl::Ty::table([
-            decl::Field::new("mode", decl::Ty::String.optional())
+        declaration::Type::table([
+            declaration::Field::new("mode", declaration::Type::String.optional())
                 .doc("Optional input mode. Nil or empty uses the default mode."),
-            decl::Field::new("path", decl::Ty::String.optional())
+            declaration::Field::new("path", declaration::Type::String.optional())
                 .doc("Optional path filter such as `editor/*`."),
-            decl::Field::new("desc", decl::Ty::String.optional())
+            declaration::Field::new("desc", declaration::Type::String.optional())
                 .doc("Optional human-readable description used by discovery tooling."),
         ]),
     ));
-    builder.alias(decl::Alias::new("MouseSpec", decl::Ty::String));
-    builder.alias(decl::Alias::new(
+    builder.alias(declaration::Alias::new(
+        "MouseSpec",
+        declaration::Type::String,
+    ));
+    builder.alias(declaration::Alias::new(
         "FixtureInfo",
-        decl::Ty::table([
-            decl::Field::new("name", decl::Ty::String)
+        declaration::Type::table([
+            declaration::Field::new("name", declaration::Type::String)
                 .doc("Stable fixture name used by automation tooling."),
-            decl::Field::new("description", decl::Ty::String)
+            declaration::Field::new("description", declaration::Type::String)
                 .doc("Human-readable description of the state the fixture creates."),
         ]),
     ));
@@ -204,43 +216,44 @@ fn register_framework_declarations(builder: &mut impl FrameworkDeclarationSink) 
 }
 
 /// Add framework-owned aliases to a generated native module.
-pub(crate) fn register_framework_types(builder: &mut NativeModuleBuilder) {
+pub(crate) fn register_framework_types(builder: &mut module::Builder) {
     register_framework_declarations(builder);
 }
 
 /// Target supporting Canopy's framework-owned alias and class declarations.
 trait FrameworkDeclarationSink {
     /// Add one alias.
-    fn alias(&mut self, alias: decl::Alias);
+    fn alias(&mut self, alias: declaration::Alias);
 }
 
-impl FrameworkDeclarationSink for decl::Builder {
-    fn alias(&mut self, alias: decl::Alias) {
-        Self::alias(self, alias);
+impl FrameworkDeclarationSink for declaration::Builder {
+    fn alias(&mut self, alias: declaration::Alias) {
+        Self::add_alias(self, alias);
     }
 }
 
-impl FrameworkDeclarationSink for NativeModuleBuilder {
-    fn alias(&mut self, alias: decl::Alias) {
+impl FrameworkDeclarationSink for module::Builder {
+    fn alias(&mut self, alias: declaration::Alias) {
         Self::alias(self, alias);
     }
 }
 
 /// Register the active-binding discovery record.
 fn register_binding_info(builder: &mut impl FrameworkDeclarationSink) {
-    builder.alias(decl::Alias::new(
+    builder.alias(declaration::Alias::new(
         "BindingInfo",
-        decl::Ty::table([
-            decl::Field::new("input", decl::Ty::String).doc("Normalized key or mouse spec string."),
-            decl::Field::new("input_type", decl::Ty::literals(["key", "mouse"]))
+        declaration::Type::table([
+            declaration::Field::new("input", declaration::Type::String)
+                .doc("Normalized key or mouse spec string."),
+            declaration::Field::new("input_type", declaration::Type::literals(["key", "mouse"]))
                 .doc("Input category."),
-            decl::Field::new("mode", decl::Ty::String)
+            declaration::Field::new("mode", declaration::Type::String)
                 .doc("Input mode name. The default mode is the empty string."),
-            decl::Field::new("path", decl::Ty::String)
+            declaration::Field::new("path", declaration::Type::String)
                 .doc("Path filter string used when matching the focused path."),
-            decl::Field::new("desc", decl::Ty::String.optional())
+            declaration::Field::new("desc", declaration::Type::String.optional())
                 .doc("Optional human-readable description when available."),
-            decl::Field::new("target", decl::Ty::String)
+            declaration::Field::new("target", declaration::Type::String)
                 .doc("Human-readable binding target summary such as `root.quit()` or `luau`."),
         ]),
     ));
@@ -248,43 +261,46 @@ fn register_binding_info(builder: &mut impl FrameworkDeclarationSink) {
 
 /// Register command discovery records.
 fn register_command_info(builder: &mut impl FrameworkDeclarationSink) {
-    builder.alias(decl::Alias::new(
+    builder.alias(declaration::Alias::new(
         "CommandParamInfo",
-        decl::Ty::table([
-            decl::Field::new("name", decl::Ty::String)
+        declaration::Type::table([
+            declaration::Field::new("name", declaration::Type::String)
                 .doc("Parameter name used for named invocation."),
-            decl::Field::new("kind", decl::Ty::literals(["injected", "user"]))
+            declaration::Field::new("kind", declaration::Type::literals(["injected", "user"]))
                 .doc("Whether the parameter is injected or user-supplied."),
-            decl::Field::new("rust_type", decl::Ty::String)
+            declaration::Field::new("rust_type", declaration::Type::String)
                 .doc("Rust type name from command metadata."),
-            decl::Field::new("luau_type", decl::Ty::String)
+            declaration::Field::new("luau_type", declaration::Type::String)
                 .doc("Luau type rendered for this parameter."),
-            decl::Field::new("doc", decl::Ty::String.optional())
+            declaration::Field::new("doc", declaration::Type::String.optional())
                 .doc("Optional parameter documentation."),
-            decl::Field::new("optional", decl::Ty::Boolean)
+            declaration::Field::new("optional", declaration::Type::Boolean)
                 .doc("True when the caller may omit the parameter."),
-            decl::Field::new("default", decl::Ty::String.optional())
+            declaration::Field::new("default", declaration::Type::String.optional())
                 .doc("Default expression string, when one exists."),
         ]),
     ));
-    builder.alias(decl::Alias::new(
+    builder.alias(declaration::Alias::new(
         "CommandInfo",
-        decl::Ty::table([
-            decl::Field::new("name", decl::Ty::String)
+        declaration::Type::table([
+            declaration::Field::new("name", declaration::Type::String)
                 .doc("Command name relative to its owner table."),
-            decl::Field::new("owner", decl::Ty::String)
+            declaration::Field::new("owner", declaration::Type::String)
                 .doc("Widget owner name, or the empty string for free commands."),
-            decl::Field::new("doc", decl::Ty::String.optional())
+            declaration::Field::new("doc", declaration::Type::String.optional())
                 .doc("Optional command documentation."),
-            decl::Field::new("params", decl::Ty::named("CommandParamInfo").array())
-                .doc("Parameter metadata in declaration order."),
-            decl::Field::new("ret", decl::Ty::String)
+            declaration::Field::new(
+                "params",
+                declaration::Type::named("CommandParamInfo").array(),
+            )
+            .doc("Parameter metadata in declaration order."),
+            declaration::Field::new("ret", declaration::Type::String)
                 .doc("Luau return type rendered for this command."),
-            decl::Field::new("ret_doc", decl::Ty::String.optional())
+            declaration::Field::new("ret_doc", declaration::Type::String.optional())
                 .doc("Optional return documentation."),
-            decl::Field::new("available", decl::Ty::Boolean)
+            declaration::Field::new("available", declaration::Type::Boolean)
                 .doc("True when the command can resolve from the current script anchor."),
-            decl::Field::new("target", decl::Ty::named("NodeId").optional())
+            declaration::Field::new("target", declaration::Type::named("NodeId").optional())
                 .doc("Current target node, when a node command can resolve."),
         ]),
     ));
@@ -292,77 +308,93 @@ fn register_command_info(builder: &mut impl FrameworkDeclarationSink) {
 
 /// Register observation and diagnostics records.
 fn register_observation_info(builder: &mut impl FrameworkDeclarationSink) {
-    builder.alias(decl::Alias::new(
+    builder.alias(declaration::Alias::new(
         "ScreenCell",
-        decl::Ty::table([
-            decl::Field::new("x", decl::Ty::Number).doc("Screen column."),
-            decl::Field::new("y", decl::Ty::Number).doc("Screen row."),
-            decl::Field::new("text", decl::Ty::String).doc("Rendered grapheme text for this cell."),
-            decl::Field::new("fg", decl::Ty::String).doc("Resolved foreground color as #rrggbb."),
-            decl::Field::new("bg", decl::Ty::String).doc("Resolved background color as #rrggbb."),
-            decl::Field::new("attrs", decl::Ty::String.array())
+        declaration::Type::table([
+            declaration::Field::new("x", declaration::Type::Number).doc("Screen column."),
+            declaration::Field::new("y", declaration::Type::Number).doc("Screen row."),
+            declaration::Field::new("text", declaration::Type::String)
+                .doc("Rendered grapheme text for this cell."),
+            declaration::Field::new("fg", declaration::Type::String)
+                .doc("Resolved foreground color as #rrggbb."),
+            declaration::Field::new("bg", declaration::Type::String)
+                .doc("Resolved background color as #rrggbb."),
+            declaration::Field::new("attrs", declaration::Type::String.array())
                 .doc("Resolved text attributes such as bold or underline."),
-            decl::Field::new("continuation", decl::Ty::Boolean)
+            declaration::Field::new("continuation", declaration::Type::Boolean)
                 .doc("True when this cell continues a wide grapheme."),
         ]),
     ));
-    builder.alias(decl::Alias::new(
+    builder.alias(declaration::Alias::new(
         "RouteTraceEntry",
-        decl::Ty::table([
-            decl::Field::new("phase", decl::Ty::String).doc("Routing phase label."),
-            decl::Field::new("node", decl::Ty::named("NodeId").optional())
+        declaration::Type::table([
+            declaration::Field::new("phase", declaration::Type::String).doc("Routing phase label."),
+            declaration::Field::new("node", declaration::Type::named("NodeId").optional())
                 .doc("Node associated with this route step."),
-            decl::Field::new("path", decl::Ty::String).doc("Focused path visible to this step."),
-            decl::Field::new("detail", decl::Ty::String).doc("Human-readable route detail."),
+            declaration::Field::new("path", declaration::Type::String)
+                .doc("Focused path visible to this step."),
+            declaration::Field::new("detail", declaration::Type::String)
+                .doc("Human-readable route detail."),
         ]),
     ));
-    builder.alias(decl::Alias::new(
+    builder.alias(declaration::Alias::new(
         "HelpBinding",
-        decl::Ty::table([
-            decl::Field::new("input", decl::Ty::String).doc("Normalized input spec."),
-            decl::Field::new("mode", decl::Ty::String).doc("Input mode."),
-            decl::Field::new("path", decl::Ty::String).doc("Path filter."),
-            decl::Field::new("kind", decl::Ty::literals(["pre", "post"]))
+        declaration::Type::table([
+            declaration::Field::new("input", declaration::Type::String)
+                .doc("Normalized input spec."),
+            declaration::Field::new("mode", declaration::Type::String).doc("Input mode."),
+            declaration::Field::new("path", declaration::Type::String).doc("Path filter."),
+            declaration::Field::new("kind", declaration::Type::literals(["pre", "post"]))
                 .doc("Whether the binding is a pre-event override or post-event fallback."),
-            decl::Field::new("target", decl::Ty::String)
+            declaration::Field::new("target", declaration::Type::String)
                 .doc("Human-readable binding target summary."),
-            decl::Field::new("label", decl::Ty::String).doc("Help label for display."),
+            declaration::Field::new("label", declaration::Type::String)
+                .doc("Help label for display."),
         ]),
     ));
-    builder.alias(decl::Alias::new(
+    builder.alias(declaration::Alias::new(
         "HelpSnapshot",
-        decl::Ty::table([
-            decl::Field::new("focus", decl::Ty::named("NodeId")).doc("Current focus node."),
-            decl::Field::new("focus_path", decl::Ty::String).doc("Path from root to focus."),
-            decl::Field::new("input_mode", decl::Ty::String).doc("Current input mode."),
-            decl::Field::new("bindings", decl::Ty::named("HelpBinding").array())
+        declaration::Type::table([
+            declaration::Field::new("focus", declaration::Type::named("NodeId"))
+                .doc("Current focus node."),
+            declaration::Field::new("focus_path", declaration::Type::String)
+                .doc("Path from root to focus."),
+            declaration::Field::new("input_mode", declaration::Type::String)
+                .doc("Current input mode."),
+            declaration::Field::new("bindings", declaration::Type::named("HelpBinding").array())
                 .doc("Bindings visible from the current focus context."),
-            decl::Field::new("commands", decl::Ty::named("CommandInfo").array())
+            declaration::Field::new("commands", declaration::Type::named("CommandInfo").array())
                 .doc("Commands visible from the current focus context."),
         ]),
     ));
-    builder.alias(decl::Alias::new(
+    builder.alias(declaration::Alias::new(
         "ScriptAssertionInfo",
-        decl::Ty::table([
-            decl::Field::new("passed", decl::Ty::Boolean).doc("Whether the assertion passed."),
-            decl::Field::new("message", decl::Ty::String).doc("Assertion message."),
+        declaration::Type::table([
+            declaration::Field::new("passed", declaration::Type::Boolean)
+                .doc("Whether the assertion passed."),
+            declaration::Field::new("message", declaration::Type::String).doc("Assertion message."),
         ]),
     ));
-    builder.alias(decl::Alias::new(
+    builder.alias(declaration::Alias::new(
         "ScriptJournalEntry",
-        decl::Ty::table([
-            decl::Field::new("id", decl::Ty::Number).doc("Monotonic journal id."),
-            decl::Field::new("origin", decl::Ty::String)
+        declaration::Type::table([
+            declaration::Field::new("id", declaration::Type::Number).doc("Monotonic journal id."),
+            declaration::Field::new("origin", declaration::Type::String)
                 .doc("Script origin such as eval, config, or startup."),
-            decl::Field::new("source", decl::Ty::String).doc("Evaluated source text."),
-            decl::Field::new("ok", decl::Ty::Boolean)
+            declaration::Field::new("source", declaration::Type::String)
+                .doc("Evaluated source text."),
+            declaration::Field::new("ok", declaration::Type::Boolean)
                 .doc("True when evaluation completed successfully."),
-            decl::Field::new("error", decl::Ty::String.optional())
+            declaration::Field::new("error", declaration::Type::String.optional())
                 .doc("Error message when evaluation failed."),
-            decl::Field::new("logs", decl::Ty::String.array()).doc("Logs emitted by the script."),
-            decl::Field::new("assertions", decl::Ty::named("ScriptAssertionInfo").array())
-                .doc("Assertions emitted by the script."),
-            decl::Field::new("duration_ms", decl::Ty::Number)
+            declaration::Field::new("logs", declaration::Type::String.array())
+                .doc("Logs emitted by the script."),
+            declaration::Field::new(
+                "assertions",
+                declaration::Type::named("ScriptAssertionInfo").array(),
+            )
+            .doc("Assertions emitted by the script."),
+            declaration::Field::new("duration_ms", declaration::Type::Number)
                 .doc("Wall-clock duration in milliseconds."),
         ]),
     ));
@@ -370,18 +402,19 @@ fn register_observation_info(builder: &mut impl FrameworkDeclarationSink) {
 
 /// Register one owner command table and all command-owned declaration dependencies.
 fn register_owner_declaration(
-    builder: &mut decl::Builder,
+    builder: &mut declaration::Builder,
     owner: &str,
     specs: &[&'static CommandSpec],
     has_default_bindings: bool,
 ) {
     let mut registry = DeclRegistry::new(builder);
     register_command_deps(&mut registry, specs);
-    builder.section(format!("Commands for widget \"{owner}\""));
+    builder.add_section(format!("Commands for widget \"{owner}\""));
     let mut fields = specs
         .iter()
         .map(|spec| {
-            let mut field = decl::Field::new(spec.name, decl::Ty::func(command_fn_sig(spec)));
+            let mut field =
+                declaration::Field::new(spec.name, declaration::Type::func(command_fn_sig(spec)));
             if let Some(doc) = command_doc(spec) {
                 field = field.doc(doc);
             }
@@ -390,13 +423,16 @@ fn register_owner_declaration(
         .collect::<Vec<_>>();
     if has_default_bindings {
         fields.push(
-            decl::Field::new("default_bindings", decl::Ty::func(decl::FnSig::new()))
-                .doc("Register this widget's default bindings."),
+            declaration::Field::new(
+                "default_bindings",
+                declaration::Type::func(declaration::FunctionSignature::new()),
+            )
+            .doc("Register this widget's default bindings."),
         );
     }
-    builder.global(decl::Global::new(
+    builder.add_global(declaration::Global::new(
         luau_global_owner_name(owner),
-        decl::Ty::table(fields),
+        declaration::Type::table(fields),
     ));
 }
 
@@ -418,7 +454,7 @@ fn register_command_deps(registry: &mut DeclRegistry<'_>, specs: &[&'static Comm
 
 /// Add command-owned declaration dependencies to a generated owner module.
 pub(crate) fn register_owner_dependencies(
-    builder: &mut NativeModuleBuilder,
+    builder: &mut module::Builder,
     specs: &[&'static CommandSpec],
 ) {
     let mut registry = DeclRegistry::native_module(builder);

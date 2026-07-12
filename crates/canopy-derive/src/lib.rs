@@ -81,7 +81,7 @@ pub fn derive_command_arg(input: proc_macro::TokenStream) -> proc_macro::TokenSt
         let ty = &field.ty;
         let doc = doc_tokens(&field.attrs);
         quote! {
-            canopy::commands::decl::Field::new(
+            canopy::commands::declaration::Field::new(
                 #name,
                 <#ty as canopy::commands::CommandType>::luau_ty(),
             )
@@ -93,8 +93,8 @@ pub fn derive_command_arg(input: proc_macro::TokenStream) -> proc_macro::TokenSt
         impl #impl_generics canopy::commands::CommandArg for #ident #ty_generics #where_clause {}
 
         impl #impl_generics canopy::commands::CommandType for #ident #ty_generics #where_clause {
-            fn luau_ty() -> canopy::commands::decl::Ty {
-                canopy::commands::decl::Ty::named(#type_name)
+            fn luau_ty() -> canopy::commands::declaration::Type {
+                canopy::commands::declaration::Type::named(#type_name)
             }
 
             fn luau_decls(registry: &mut canopy::commands::DeclRegistry<'_>) {
@@ -103,9 +103,9 @@ pub fn derive_command_arg(input: proc_macro::TokenStream) -> proc_macro::TokenSt
                 }
                 #(#field_decl_regs)*
                 registry.alias(
-                    canopy::commands::decl::Alias::new(
+                    canopy::commands::declaration::Alias::new(
                         #type_name,
-                        canopy::commands::decl::Ty::table([#(#field_tokens),*]),
+                        canopy::commands::declaration::Type::table([#(#field_tokens),*]),
                     )
                     #type_doc,
                 );
@@ -239,17 +239,17 @@ pub fn derive_command_enum(input: proc_macro::TokenStream) -> proc_macro::TokenS
         }
 
         impl #impl_generics canopy::commands::CommandType for #ident #ty_generics #where_clause {
-            fn luau_ty() -> canopy::commands::decl::Ty {
-                canopy::commands::decl::Ty::named(#type_name)
+            fn luau_ty() -> canopy::commands::declaration::Type {
+                canopy::commands::declaration::Type::named(#type_name)
             }
 
             fn luau_decls(registry: &mut canopy::commands::DeclRegistry<'_>) {
                 if !registry.begin(#type_name) {
                     return;
                 }
-                registry.alias(canopy::commands::decl::Alias::new(
+                registry.alias(canopy::commands::declaration::Alias::new(
                     #type_name,
-                    canopy::commands::decl::Ty::literals(Self::LUAU_VALUES.iter().copied()),
+                    canopy::commands::declaration::Type::literals(Self::LUAU_VALUES.iter().copied()),
                 ));
             }
         }

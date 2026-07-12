@@ -934,7 +934,7 @@ pub mod canopy {
         }
 
         impl CommandType for crate::core::NodeId {
-            fn luau_ty() -> decl::Ty {}
+            fn luau_ty() -> declaration::Type {}
 
             fn luau_decls(registry: &mut DeclRegistry<'_>) {}
         }
@@ -3107,7 +3107,7 @@ pub mod canopy {
     }
 
     impl CommandType for crate::core::NodeId {
-        fn luau_ty() -> decl::Ty {}
+        fn luau_ty() -> declaration::Type {}
 
         fn luau_decls(registry: &mut DeclRegistry<'_>) {}
     }
@@ -3466,7 +3466,7 @@ pub mod canopy {
     pub mod commands {
         //! Command definition and dispatch.
 
-        pub use ruau::decl;
+        pub use ruau::declaration;
         /// Canonical dynamic representation for command arguments and return values.
         #[derive(Clone, Debug, StructuralPartialEq, PartialEq)]
         pub enum ArgValue {
@@ -3513,7 +3513,7 @@ pub mod canopy {
         }
 
         impl CommandType for ArgValue {
-            fn luau_ty() -> decl::Ty {}
+            fn luau_ty() -> declaration::Type {}
         }
 
         /// Direction for focus movement commands.
@@ -3545,7 +3545,7 @@ pub mod canopy {
         }
 
         impl CommandType for FocusDirection {
-            fn luau_ty() -> canopy::commands::decl::Ty {}
+            fn luau_ty() -> canopy::commands::declaration::Type {}
 
             fn luau_decls(registry: &mut canopy::commands::DeclRegistry<'_>) {}
         }
@@ -3571,7 +3571,7 @@ pub mod canopy {
         }
 
         impl CommandType for ZoomDirection {
-            fn luau_ty() -> canopy::commands::decl::Ty {}
+            fn luau_ty() -> canopy::commands::declaration::Type {}
 
             fn luau_decls(registry: &mut canopy::commands::DeclRegistry<'_>) {}
         }
@@ -3591,7 +3591,7 @@ pub mod canopy {
         /// Static Luau type metadata for values in command signatures.
         pub trait CommandType {
             /// Luau type expression for this Rust value.
-            fn luau_ty() -> decl::Ty;
+            fn luau_ty() -> declaration::Type;
 
             /// Registers declaration items needed by this type.
             fn luau_decls(_registry: &mut DeclRegistry<'_>) {}
@@ -3609,7 +3609,7 @@ pub mod canopy {
 
         impl<'a> DeclRegistry<'a> {
             /// Wrap a declaration builder.
-            pub fn new(builder: &'a mut decl::Builder) -> Self {}
+            pub fn new(builder: &'a mut declaration::Builder) -> Self {}
 
             /// Claim a type name for registration.
             ///
@@ -3618,13 +3618,13 @@ pub mod canopy {
             pub fn begin(&mut self, name: &str) -> bool {}
 
             /// Registers an alias declaration.
-            pub fn alias(&mut self, alias: decl::Alias) {}
+            pub fn alias(&mut self, alias: declaration::Alias) {}
 
             /// Registers a class declaration.
-            pub fn class(&mut self, class: decl::Class) {}
+            pub fn class(&mut self, class: declaration::Class) {}
 
             /// Registers an external type name.
-            pub fn extern_ty(&mut self, name: impl Into<decl::Text>) {}
+            pub fn extern_ty(&mut self, name: impl Into<declaration::Text>) {}
         }
 
         /// Wrapper for fallible serde argument conversion.
@@ -3736,7 +3736,7 @@ pub mod canopy {
             /// Rust type name for introspection.
             pub rust: &'static str,
             /// Luau type expression factory.
-            pub ty: fn() -> decl::Ty,
+            pub ty: fn() -> declaration::Type,
             /// Declaration dependency registration function.
             pub decls: fn(_: &mut DeclRegistry<'a>),
             /// Optional documentation string.
@@ -3745,7 +3745,7 @@ pub mod canopy {
 
         impl CommandTypeSpec {
             /// Returns the Luau type expression.
-            pub fn luau_ty(self) -> decl::Ty {}
+            pub fn luau_ty(self) -> declaration::Type {}
 
             /// Registers declaration dependencies for this type.
             pub fn luau_decls(self, registry: &mut DeclRegistry<'_>) {}

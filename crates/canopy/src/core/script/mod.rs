@@ -16,19 +16,19 @@ use std::{
 use futures::executor;
 use ruau::{
     bytecode::{BytecodeChunk, CompileError, CompileOptions},
-    host::{FunctionHandle, RetainedRuntime, RetainedRuntimeError, RootHandle},
-    module::{NativeBinding, NativeModuleBuilder},
-    source::{ModuleId, ModuleSource, Source},
-    surface::{PrepareGraphError, PrepareOptions, PreparedGraphScript, Surface, VmConfig},
+    module::{self, Binding},
+    session::{FunctionHandle, LifecycleError, RootHandle, Runtime},
+    source::{ModuleId, Source, SourceProvider},
+    surface::{CheckOptions, PrepareGraphError, PrepareOptions, PreparedGraph, Surface, VmConfig},
     typecheck::{DiagnosticRecord, ModuleDiagnosticRecord, Severity},
     vm::{
         Ambient, AsyncHostContext, AsyncHostFunction, CallOptions, Cancel, ExecError, FromLuaMulti,
-        Function, HostType, HostTypeBuilder, IntoLua, Limits, MarshaledPair, MarshaledScriptError,
-        MarshaledValue, MultiValue, RuntimeCapabilities, RuntimeError, Scope, ScopedValue,
-        ScriptError, SinkQuota, StashedClosure, Table, TableLayout, UnsupportedTableKey,
+        Function, HostReturn, HostType, HostTypeBuilder, IntoLua, Limits, MarshaledPair,
+        MarshaledScriptError, MultiValue, NativeModule, OwnedValue, RuntimeCapabilities,
+        RuntimeError, RuntimeErrorKind, Scope, ScopedValue, ScriptError, ScriptErrorField,
+        SinkQuota, StashedClosure, Table, TableLayout, UnsupportedTableKey, ValueSnapshot,
         async_host_fn, classify_marshaled_table,
     },
-    vm_api::{HostReturn, NativeModule, OwnedValue, RuntimeErrorKind, ScriptErrorField},
 };
 use serde::{Deserialize, Serialize};
 use tokio::{
@@ -197,7 +197,7 @@ struct Script {
     /// Strict source executed at runtime, including identity and diagnostic metadata.
     runtime_source: Source,
     /// Checked graph artifact used to produce the chunk, when the surface is finalized.
-    prepared: Option<PreparedGraphScript>,
+    prepared: Option<PreparedGraph>,
     /// Root loaded into the retained runtime.
     root: Option<RootHandle>,
 }
@@ -226,7 +226,7 @@ impl ScriptCache {
         chunk: BytecodeChunk,
         source: &str,
         runtime_source: Source,
-        prepared: Option<PreparedGraphScript>,
+        prepared: Option<PreparedGraph>,
     ) -> Result<ScriptId> {
         let id = self.next_script_id;
         self.next_script_id = self.next_script_id.checked_add(1).ok_or_else(|| {
@@ -256,14 +256,14 @@ impl ScriptCache {
     }
 
     /// Return the prepared graph for a script.
-    fn prepared(&self, id: ScriptId) -> Option<PreparedGraphScript> {
+    fn prepared(&self, id: ScriptId) -> Option<PreparedGraph> {
         self.scripts
             .get(&id)
             .and_then(|script| script.prepared.clone())
     }
 
     /// Replace a script's compiled chunk with its checked graph artifact.
-    fn set_prepared(&mut self, id: ScriptId, prepared: PreparedGraphScript) {
+    fn set_prepared(&mut self, id: ScriptId, prepared: PreparedGraph) {
         if let Some(script) = self.scripts.get_mut(&id) {
             script.chunk = prepared.chunk().clone();
             script.prepared = Some(prepared);
@@ -376,20 +376,16 @@ impl ClosureRegistry {
     }
 
     /// Promote pending stashes and release removed handles between VM invocations.
-    fn synchronize(
-        &mut self,
-        runtime: &mut RetainedRuntime,
-    ) -> StdResult<(), RetainedRuntimeError> {
+    fn synchronize(&mut self, runtime: &mut Runtime) -> StdResult<(), LifecycleError> {
         for handle in self.released.drain(..) {
-            match runtime.release_function(&handle) {
-                Ok(()) | Err(RetainedRuntimeError::StaleHandle { .. }) => {}
+            match runtime.release(&handle) {
+                Ok(()) | Err(LifecycleError::StaleHandle { .. }) => {}
                 Err(error) => return Err(error),
             }
         }
         for function in self.functions.values_mut() {
             if let StoredFunctionTarget::Pending(stash) = &function.target {
-                function.target =
-                    StoredFunctionTarget::Retained(runtime.stash_function(stash.clone()));
+                function.target = StoredFunctionTarget::Retained(runtime.retain(stash.clone()));
             }
         }
         Ok(())
@@ -613,7 +609,7 @@ pub(crate) fn in_live_scope(canopy: &Canopy) -> bool {
 #[derive(Clone)]
 pub(crate) struct LuauHost {
     /// Retained Ruau runtime, built by `finalize()`.
-    runtime: Rc<RefCell<Option<RetainedRuntime>>>,
+    runtime: Rc<RefCell<Option<Runtime>>>,
     /// Shared mutable host state.
     state: Rc<RefCell<LuauState>>,
 }
@@ -787,7 +783,7 @@ fn module_diagnostic_to_script(diagnostic: ModuleDiagnosticRecord) -> ScriptChec
 /// Check a named source and convert its owned diagnostics through the Canopy adapter.
 fn check_source_with_surface(surface: &Surface, source: &Source) -> ScriptCheckResult {
     let source_name = source.display_name().to_string();
-    let checked = surface.check(source);
+    let checked = surface.check(source, CheckOptions::default());
     ScriptCheckResult {
         diagnostics: checked
             .diagnostics()
@@ -885,7 +881,7 @@ struct NodeHandle {
 /// Build the host userdata descriptor for `NodeId` handles.
 fn node_handle_type() -> HostType {
     HostTypeBuilder::<NodeHandle>::new("NodeId")
-        .class(&commands::decl::Class::new("NodeId"))
+        .class(&commands::declaration::Class::new("NodeId"))
         .eq_by(|left, right| left.id == right.id)
         .marshal(node_handle_marshal)
         .tostring(|handle| node_token(handle.id))
@@ -898,8 +894,8 @@ fn node_token(node_id: NodeId) -> String {
 }
 
 /// Marshal a node handle to the external automation token record.
-fn node_handle_marshal(handle: &NodeHandle) -> MarshaledValue {
-    MarshaledValue::Table(vec![
+fn node_handle_marshal(handle: &NodeHandle) -> ValueSnapshot {
+    ValueSnapshot::Table(vec![
         marshaled_string_pair("type", "NodeId"),
         marshaled_string_pair("token", node_token(handle.id)),
     ])
@@ -908,8 +904,8 @@ fn node_handle_marshal(handle: &NodeHandle) -> MarshaledValue {
 /// Build a string-keyed marshaled table pair.
 fn marshaled_string_pair(key: &str, value: impl Into<String>) -> MarshaledPair {
     MarshaledPair {
-        key: MarshaledValue::String(key.as_bytes().to_vec()),
-        value: MarshaledValue::String(value.into().into_bytes()),
+        key: ValueSnapshot::String(key.as_bytes().to_vec()),
+        value: ValueSnapshot::String(value.into().into_bytes()),
     }
 }
 
@@ -2391,31 +2387,31 @@ impl CanopyErrorPayload {
 }
 
 /// Convert an owned async-driver result into a command argument value.
-fn marshaled_to_arg_value(value: &MarshaledValue) -> StdResult<ArgValue, String> {
+fn marshaled_to_arg_value(value: &ValueSnapshot) -> StdResult<ArgValue, String> {
     marshaled_to_arg_value_at(value, &ValuePath::root("result"))
 }
 
 /// Convert a marshaled value at one nested command-value path.
 fn marshaled_to_arg_value_at(
-    value: &MarshaledValue,
+    value: &ValueSnapshot,
     path: &ValuePath,
 ) -> StdResult<ArgValue, String> {
     match value {
-        MarshaledValue::Nil => Ok(ArgValue::Null),
-        MarshaledValue::Boolean(value) => Ok(ArgValue::Bool(*value)),
-        MarshaledValue::Integer(value) => Ok(ArgValue::Int(*value)),
-        MarshaledValue::Number(value) => number_to_arg_value(*value, path),
-        MarshaledValue::String(bytes) => Ok(ArgValue::String(
+        ValueSnapshot::Nil => Ok(ArgValue::Null),
+        ValueSnapshot::Boolean(value) => Ok(ArgValue::Bool(*value)),
+        ValueSnapshot::Integer(value) => Ok(ArgValue::Int(*value)),
+        ValueSnapshot::Number(value) => number_to_arg_value(*value, path),
+        ValueSnapshot::String(bytes) => Ok(ArgValue::String(
             String::from_utf8(bytes.clone())
                 .map_err(|error| path.error(format!("invalid UTF-8 string: {error}")))?,
         )),
-        MarshaledValue::Table(pairs) => marshaled_table_to_arg_value(pairs, path),
-        MarshaledValue::Vector(_) => Err(path.error("unsupported script value type: vector")),
-        MarshaledValue::LightUserdata { .. } => {
+        ValueSnapshot::Table(pairs) => marshaled_table_to_arg_value(pairs, path),
+        ValueSnapshot::Vector(_) => Err(path.error("unsupported script value type: vector")),
+        ValueSnapshot::LightUserdata { .. } => {
             Err(path.error("unsupported script value type: lightuserdata"))
         }
-        MarshaledValue::Buffer(_) => Err(path.error("unsupported script value type: buffer")),
-        MarshaledValue::Opaque(kind) => {
+        ValueSnapshot::Buffer(_) => Err(path.error("unsupported script value type: buffer")),
+        ValueSnapshot::Opaque(kind) => {
             Err(path.error(format!("unsupported script value type: {kind}")))
         }
     }
@@ -2463,11 +2459,11 @@ fn marshaled_table_to_arg_value(
 }
 
 /// Read a sequence index from a classified marshaled key.
-fn marshaled_sequence_index(key: &MarshaledValue, path: &ValuePath) -> StdResult<usize, String> {
+fn marshaled_sequence_index(key: &ValueSnapshot, path: &ValuePath) -> StdResult<usize, String> {
     match key {
-        MarshaledValue::Integer(index) => usize::try_from(*index)
+        ValueSnapshot::Integer(index) => usize::try_from(*index)
             .map_err(|_| path.error(format!("table index is out of range: {index}"))),
-        MarshaledValue::Number(index) => Ok(*index as usize),
+        ValueSnapshot::Number(index) => Ok(*index as usize),
         other => Err(path.error(format!(
             "expected sequence index, got {}",
             other.type_name()
@@ -2476,8 +2472,8 @@ fn marshaled_sequence_index(key: &MarshaledValue, path: &ValuePath) -> StdResult
 }
 
 /// Read a strict UTF-8 string key from a classified marshaled key.
-fn marshaled_table_key(key: &MarshaledValue, path: &ValuePath) -> StdResult<String, String> {
-    let MarshaledValue::String(bytes) = key else {
+fn marshaled_table_key(key: &ValueSnapshot, path: &ValuePath) -> StdResult<String, String> {
+    let ValueSnapshot::String(bytes) = key else {
         return Err(path.error(format!("expected string key, got {}", key.type_name())));
     };
     String::from_utf8(bytes.clone())
@@ -2485,13 +2481,13 @@ fn marshaled_table_key(key: &MarshaledValue, path: &ValuePath) -> StdResult<Stri
 }
 
 /// Display an owned async-driver value in an error message.
-fn marshaled_value_to_display(value: &MarshaledValue) -> String {
+fn marshaled_value_to_display(value: &ValueSnapshot) -> String {
     match value {
-        MarshaledValue::Nil => "nil".to_string(),
-        MarshaledValue::Boolean(value) => value.to_string(),
-        MarshaledValue::Integer(value) => value.to_string(),
-        MarshaledValue::Number(value) => value.to_string(),
-        MarshaledValue::String(bytes) => String::from_utf8_lossy(bytes).into_owned(),
+        ValueSnapshot::Nil => "nil".to_string(),
+        ValueSnapshot::Boolean(value) => value.to_string(),
+        ValueSnapshot::Integer(value) => value.to_string(),
+        ValueSnapshot::Number(value) => value.to_string(),
+        ValueSnapshot::String(bytes) => String::from_utf8_lossy(bytes).into_owned(),
         other => format!("<{}>", other.type_name()),
     }
 }
@@ -3306,10 +3302,10 @@ fn host_fixtures<'s>(
 
 /// Build the declaration-coupled base Canopy module.
 fn build_base_module() -> Result<Arc<dyn NativeModule>> {
-    let mut builder = NativeModuleBuilder::new("canopy");
+    let mut builder = module::Builder::new("canopy");
     defs::register_framework_types(&mut builder);
     builder.host_type(
-        commands::decl::Class::new("NodeId"),
+        commands::declaration::Class::new("NodeId"),
         Arc::new(node_handle_type()),
     );
     base_api::register(&mut builder);
@@ -3326,12 +3322,12 @@ fn build_owner_modules(
     let mut modules = Vec::new();
     for (owner, specs) in defs::owner_command_specs(commands, default_binding_owners) {
         let global_name = luau_global_owner_name(&owner);
-        let mut builder = NativeModuleBuilder::new(global_name.clone());
+        let mut builder = module::Builder::new(global_name.clone());
         defs::register_owner_dependencies(&mut builder, &specs);
         for spec in specs {
-            let mut binding = NativeBinding::library(
+            let mut binding = Binding::library(
                 global_name.clone(),
-                commands::decl::Ty::func(defs::command_fn_sig(spec)),
+                commands::declaration::Type::func(defs::command_fn_sig(spec)),
             );
             if let Some(documentation) = defs::command_doc(spec) {
                 binding = binding.doc(documentation);
@@ -3353,9 +3349,11 @@ fn build_owner_modules(
         if default_binding_owners.contains(&owner) {
             builder.borrowed_function(
                 "default_bindings",
-                NativeBinding::library(
+                Binding::library(
                     global_name,
-                    commands::decl::Ty::func(commands::decl::FnSig::new()),
+                    commands::declaration::Type::func(
+                        commands::declaration::FunctionSignature::new(),
+                    ),
                 )
                 .doc("Register this widget's default bindings."),
                 move |scope: &Scope<'_>, _args: MultiValue<'_>| {
@@ -3459,17 +3457,17 @@ fn exec_error_to_canopy(error: &ExecError, label: &str, timeout: Option<Duration
 
 /// Convert a retained-runtime state or execution failure into a canopy error.
 fn retained_runtime_error_to_canopy(
-    error: &RetainedRuntimeError,
+    error: &LifecycleError,
     label: &str,
     timeout: Option<Duration>,
 ) -> error::Error {
     match error {
-        RetainedRuntimeError::Exec(error) => exec_error_to_canopy(error, label, timeout),
-        RetainedRuntimeError::Runtime(error) => runtime_error_to_canopy(error, label, timeout),
-        RetainedRuntimeError::StaleHandle { .. }
-        | RetainedRuntimeError::Load(_)
-        | RetainedRuntimeError::PreparedLoad(_)
-        | RetainedRuntimeError::BindEnvironment(_) => {
+        LifecycleError::Exec(error) => exec_error_to_canopy(error, label, timeout),
+        LifecycleError::Runtime(error) => runtime_error_to_canopy(error, label, timeout),
+        LifecycleError::StaleHandle { .. }
+        | LifecycleError::Load(_)
+        | LifecycleError::PreparedLoad(_)
+        | LifecycleError::BindEnvironment(_) => {
             error::Error::Script(format!("{label} failed: {error}"))
         }
     }
@@ -3727,7 +3725,7 @@ impl LuauHost {
         commands: &CommandSet,
         default_binding_owners: &BTreeSet<String>,
         extra_modules: &[Arc<dyn NativeModule>],
-        module_source: Option<Arc<dyn ModuleSource>>,
+        module_source: Option<Arc<dyn SourceProvider>>,
     ) -> Result<()> {
         if self.is_finalized() || self.state.borrow().surface.is_some() {
             return Err(error::Error::InvalidOperation(
@@ -3772,7 +3770,7 @@ impl LuauHost {
         let surface = self.state.borrow().surface.clone().ok_or_else(|| {
             error::Error::InvalidOperation("Luau API surface is not prepared".into())
         })?;
-        let mut runtime = RetainedRuntime::new(
+        let mut runtime = Runtime::new(
             surface.clone(),
             &VmConfig::untrusted(Ambient::production(0), default_vm_limits()),
         )
@@ -3795,7 +3793,7 @@ impl LuauHost {
             let prepared = match prepared {
                 Some(prepared) => prepared,
                 None => surface
-                    .prepare_graph(source)
+                    .prepare_graph_blocking(source)
                     .map_err(|error| prepare_graph_error_to_canopy(&error))?,
             };
             let root = runtime.load_prepared(&prepared).map_err(|error| {
@@ -3864,7 +3862,7 @@ impl LuauHost {
         let runtime_source = strict_named_source(source)?;
         let (chunk, prepared) = if let Some(surface) = self.state.borrow().surface.clone() {
             let prepared = surface
-                .prepare_graph(runtime_source.clone())
+                .prepare_graph_blocking(runtime_source.clone())
                 .map_err(|error| prepare_graph_error_to_canopy(&error))?;
             (prepared.chunk().clone(), Some(prepared))
         } else {
@@ -3915,7 +3913,7 @@ impl LuauHost {
             )
         })?;
         let prepared = surface
-            .prepare_graph(runtime_source.clone())
+            .prepare_graph_blocking(runtime_source.clone())
             .map_err(|error| prepare_graph_error_to_canopy(&error))?;
         let chunk = prepared.chunk().clone();
         let sid = self.state.borrow_mut().scripts.insert(
@@ -3977,7 +3975,7 @@ impl LuauHost {
             })?;
             runtime
                 .as_mut()
-                .and_then(RetainedRuntime::invalidate_if_source_changed)
+                .and_then(Runtime::invalidate_if_source_changed)
                 .is_some()
         };
         if invalidated {
@@ -4153,7 +4151,7 @@ impl LuauHost {
         match outcome {
             Ok(values) => {
                 synchronized?;
-                let value = values.first().unwrap_or(&MarshaledValue::Nil);
+                let value = values.first().unwrap_or(&ValueSnapshot::Nil);
                 marshaled_to_arg_value(value)
                     .map_err(|message| error::Error::Script(format!("{label}: {message}")))
             }
@@ -4179,7 +4177,7 @@ impl LuauHost {
     /// Promote and release callback handles between retained-runtime invocations.
     fn synchronize_closures(
         &self,
-        runtime: &mut RetainedRuntime,
+        runtime: &mut Runtime,
         label: &str,
         timeout: Option<Duration>,
     ) -> Result<()> {
@@ -4472,40 +4470,40 @@ mod tests {
     }
 
     /// Build one marshaled table pair for value-policy tests.
-    fn pair(key: MarshaledValue, value: MarshaledValue) -> MarshaledPair {
+    fn pair(key: ValueSnapshot, value: ValueSnapshot) -> MarshaledPair {
         MarshaledPair { key, value }
     }
 
     #[test]
     fn marshaled_scalar_policy_is_explicit() {
         assert_eq!(
-            marshaled_to_arg_value(&MarshaledValue::Nil),
+            marshaled_to_arg_value(&ValueSnapshot::Nil),
             Ok(ArgValue::Null)
         );
         assert_eq!(
-            marshaled_to_arg_value(&MarshaledValue::Boolean(true)),
+            marshaled_to_arg_value(&ValueSnapshot::Boolean(true)),
             Ok(ArgValue::Bool(true))
         );
         assert_eq!(
-            marshaled_to_arg_value(&MarshaledValue::Integer(7)),
+            marshaled_to_arg_value(&ValueSnapshot::Integer(7)),
             Ok(ArgValue::Int(7))
         );
         assert_eq!(
-            marshaled_to_arg_value(&MarshaledValue::Number(7.0)),
+            marshaled_to_arg_value(&ValueSnapshot::Number(7.0)),
             Ok(ArgValue::Int(7))
         );
         assert_eq!(
-            marshaled_to_arg_value(&MarshaledValue::Number(7.5)),
+            marshaled_to_arg_value(&ValueSnapshot::Number(7.5)),
             Ok(ArgValue::Float(7.5))
         );
         for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
             assert_eq!(
-                marshaled_to_arg_value(&MarshaledValue::Number(value)),
+                marshaled_to_arg_value(&ValueSnapshot::Number(value)),
                 Err("result: non-finite numbers are not supported".to_string())
             );
         }
         assert_eq!(
-            marshaled_to_arg_value(&MarshaledValue::String(vec![0xff])),
+            marshaled_to_arg_value(&ValueSnapshot::String(vec![0xff])),
             Err(
                 "result: invalid UTF-8 string: invalid utf-8 sequence of 1 bytes from index 0"
                     .to_string()
@@ -4516,18 +4514,18 @@ mod tests {
     #[test]
     fn marshaled_table_policy_uses_shared_layouts_and_paths() {
         assert_eq!(
-            marshaled_to_arg_value(&MarshaledValue::Table(Vec::new())),
+            marshaled_to_arg_value(&ValueSnapshot::Table(Vec::new())),
             Ok(ArgValue::Map(BTreeMap::new()))
         );
         assert_eq!(
-            marshaled_to_arg_value(&MarshaledValue::Table(vec![
+            marshaled_to_arg_value(&ValueSnapshot::Table(vec![
                 pair(
-                    MarshaledValue::Integer(2),
-                    MarshaledValue::String(b"b".to_vec())
+                    ValueSnapshot::Integer(2),
+                    ValueSnapshot::String(b"b".to_vec())
                 ),
                 pair(
-                    MarshaledValue::Integer(1),
-                    MarshaledValue::String(b"a".to_vec())
+                    ValueSnapshot::Integer(1),
+                    ValueSnapshot::String(b"a".to_vec())
                 ),
             ])),
             Ok(ArgValue::Array(vec![
@@ -4536,14 +4534,14 @@ mod tests {
             ]))
         );
 
-        let external_node = MarshaledValue::Table(vec![
+        let external_node = ValueSnapshot::Table(vec![
             pair(
-                MarshaledValue::String(b"type".to_vec()),
-                MarshaledValue::String(b"NodeId".to_vec()),
+                ValueSnapshot::String(b"type".to_vec()),
+                ValueSnapshot::String(b"NodeId".to_vec()),
             ),
             pair(
-                MarshaledValue::String(b"token".to_vec()),
-                MarshaledValue::String(b"node-1".to_vec()),
+                ValueSnapshot::String(b"token".to_vec()),
+                ValueSnapshot::String(b"node-1".to_vec()),
             ),
         ]);
         assert!(matches!(
@@ -4551,13 +4549,13 @@ mod tests {
             Ok(ArgValue::Map(_))
         ));
 
-        let nested = MarshaledValue::Table(vec![pair(
-            MarshaledValue::String(b"actions".to_vec()),
-            MarshaledValue::Table(vec![pair(
-                MarshaledValue::Integer(1),
-                MarshaledValue::Table(vec![pair(
-                    MarshaledValue::String(b"target".to_vec()),
-                    MarshaledValue::Opaque("userdata"),
+        let nested = ValueSnapshot::Table(vec![pair(
+            ValueSnapshot::String(b"actions".to_vec()),
+            ValueSnapshot::Table(vec![pair(
+                ValueSnapshot::Integer(1),
+                ValueSnapshot::Table(vec![pair(
+                    ValueSnapshot::String(b"target".to_vec()),
+                    ValueSnapshot::Opaque("userdata"),
                 )]),
             )]),
         )]);
@@ -4568,27 +4566,21 @@ mod tests {
 
         let invalid = [
             (
-                MarshaledValue::Table(vec![
-                    pair(MarshaledValue::Integer(1), MarshaledValue::Nil),
-                    pair(MarshaledValue::Integer(3), MarshaledValue::Nil),
+                ValueSnapshot::Table(vec![
+                    pair(ValueSnapshot::Integer(1), ValueSnapshot::Nil),
+                    pair(ValueSnapshot::Integer(3), ValueSnapshot::Nil),
                 ]),
                 "result: sparse table missing index 2",
             ),
             (
-                MarshaledValue::Table(vec![
-                    pair(MarshaledValue::Integer(1), MarshaledValue::Nil),
-                    pair(
-                        MarshaledValue::String(b"name".to_vec()),
-                        MarshaledValue::Nil,
-                    ),
+                ValueSnapshot::Table(vec![
+                    pair(ValueSnapshot::Integer(1), ValueSnapshot::Nil),
+                    pair(ValueSnapshot::String(b"name".to_vec()), ValueSnapshot::Nil),
                 ]),
                 "result: mixed integer and string table keys are not supported",
             ),
             (
-                MarshaledValue::Table(vec![pair(
-                    MarshaledValue::Boolean(true),
-                    MarshaledValue::Nil,
-                )]),
+                ValueSnapshot::Table(vec![pair(ValueSnapshot::Boolean(true), ValueSnapshot::Nil)]),
                 "result: unsupported table key type: boolean",
             ),
         ];
@@ -4604,7 +4596,10 @@ mod tests {
             .build()
             .expect("surface builds");
         let mut vm = surface
-            .vm_builder(&VmConfig::deterministic(0))
+            .vm_builder(&VmConfig::untrusted(
+                Ambient::deterministic(0),
+                Limits::unlimited(),
+            ))
             .build()
             .expect("VM builds");
         vm.step(|scope| {

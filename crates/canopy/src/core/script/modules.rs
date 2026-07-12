@@ -3,9 +3,9 @@ use std::{
     sync::Arc,
 };
 
-use ruau::fs::{FilesystemMounts, FilesystemMountsError};
+use ruau::source::fs::{DirectoryMounts, DirectoryMountsError};
 #[cfg(test)]
-use ruau::source::{ModuleId, ModuleSource, ModuleSourceError, poll_ready_once};
+use ruau::source::{ModuleId, ReadySourceFutureExt, SourceError, SourceProvider};
 
 /// Module id prefix for the per-user script root.
 const USER_PREFIX: &str = "@user";
@@ -112,11 +112,11 @@ impl ScriptModuleRoots {
     /// Build the validated filesystem source for the configured roots.
     pub(crate) fn module_source(
         &self,
-    ) -> Result<Option<Arc<ScriptModuleSource>>, FilesystemMountsError> {
+    ) -> Result<Option<Arc<ScriptModuleSource>>, DirectoryMountsError> {
         if self.user.is_none() && self.project.is_none() {
             return Ok(None);
         }
-        let mut builder = FilesystemMounts::builder();
+        let mut builder = DirectoryMounts::builder();
         if let Some(root) = &self.user {
             builder = builder.mount(USER_PREFIX, root);
         }
@@ -136,7 +136,7 @@ impl ScriptModuleRoots {
 }
 
 /// Canopy's persistent source is Ruau's validated multi-root filesystem source.
-pub type ScriptModuleSource = FilesystemMounts;
+pub type ScriptModuleSource = DirectoryMounts;
 
 /// Persistent script namespace.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -228,9 +228,11 @@ mod tests {
             .expect("mounts build")
             .expect("source");
 
-        let error = poll_ready_once(source.resolve(None, b"keymap"), "resolving")
+        let error = source
+            .resolve(None, b"keymap")
+            .ready_only("resolving")
             .expect_err("bare root imports are rejected");
-        assert!(matches!(error, ModuleSourceError::MissingModule { .. }));
+        assert!(matches!(error, SourceError::MissingModule { .. }));
         fs::remove_dir_all(user).expect("fixture removes");
     }
 }

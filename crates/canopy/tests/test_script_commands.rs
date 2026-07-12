@@ -313,14 +313,14 @@ mod tests {
 
     #[test]
     fn recursive_command_arg_declarations_terminate() {
-        use canopy::commands::{CommandType, DeclRegistry, decl};
+        use canopy::commands::{CommandType, DeclRegistry, declaration};
 
-        let mut builder = decl::Builder::new();
+        let mut builder = declaration::Builder::new();
         let mut registry = DeclRegistry::new(&mut builder);
         TreePayload::luau_decls(&mut registry);
         TreePayload::luau_decls(&mut registry);
 
-        let rendered = builder.finish().expect("valid declarations").render();
+        let rendered = builder.build().expect("valid declarations").render();
         assert_eq!(rendered.matches("export type TreePayload").count(), 1);
         assert!(rendered.contains("children: {TreePayload}"));
     }

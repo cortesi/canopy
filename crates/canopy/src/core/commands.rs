@@ -5,8 +5,8 @@ use std::{
     fmt, ptr,
 };
 
-pub use ruau::decl;
-use ruau::module::NativeModuleBuilder;
+pub use ruau::declaration;
+use ruau::module;
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Map as JsonMap, Number as JsonNumber, Value as JsonValue};
 
@@ -594,7 +594,7 @@ impl FromArgValue for () {
 /// Static Luau type metadata for values in command signatures.
 pub trait CommandType {
     /// Luau type expression for this Rust value.
-    fn luau_ty() -> decl::Ty;
+    fn luau_ty() -> declaration::Type;
 
     /// Registers declaration items needed by this type.
     fn luau_decls(_registry: &mut DeclRegistry<'_>) {}
@@ -604,32 +604,32 @@ pub trait CommandType {
 pub trait CommandArg: Serialize + DeserializeOwned + 'static {}
 
 impl CommandType for ArgValue {
-    fn luau_ty() -> decl::Ty {
-        decl::Ty::Any
+    fn luau_ty() -> declaration::Type {
+        declaration::Type::Any
     }
 }
 
 impl CommandType for bool {
-    fn luau_ty() -> decl::Ty {
-        decl::Ty::Boolean
+    fn luau_ty() -> declaration::Type {
+        declaration::Type::Boolean
     }
 }
 
 impl CommandType for String {
-    fn luau_ty() -> decl::Ty {
-        decl::Ty::String
+    fn luau_ty() -> declaration::Type {
+        declaration::Type::String
     }
 }
 
 impl CommandType for &str {
-    fn luau_ty() -> decl::Ty {
-        decl::Ty::String
+    fn luau_ty() -> declaration::Type {
+        declaration::Type::String
     }
 }
 
 impl CommandType for NodeId {
-    fn luau_ty() -> decl::Ty {
-        decl::Ty::named("NodeId")
+    fn luau_ty() -> declaration::Type {
+        declaration::Type::named("NodeId")
     }
 
     fn luau_decls(registry: &mut DeclRegistry<'_>) {
@@ -642,8 +642,8 @@ macro_rules! impl_number_command_type {
     ($($ty:ty),+ $(,)?) => {
         $(
             impl CommandType for $ty {
-                fn luau_ty() -> decl::Ty {
-                    decl::Ty::Number
+                fn luau_ty() -> declaration::Type {
+                    declaration::Type::Number
                 }
             }
         )+
@@ -653,13 +653,13 @@ macro_rules! impl_number_command_type {
 impl_number_command_type!(i8, i16, i32, i64, isize, u8, u16, u32, u64, usize, f32, f64);
 
 impl CommandType for Direction {
-    fn luau_ty() -> decl::Ty {
-        decl::Ty::literals(["Up", "Down", "Left", "Right"])
+    fn luau_ty() -> declaration::Type {
+        declaration::Type::literals(["Up", "Down", "Left", "Right"])
     }
 }
 
 impl<T: CommandType> CommandType for Option<T> {
-    fn luau_ty() -> decl::Ty {
+    fn luau_ty() -> declaration::Type {
         T::luau_ty().optional()
     }
 
@@ -669,7 +669,7 @@ impl<T: CommandType> CommandType for Option<T> {
 }
 
 impl<T: CommandType> CommandType for Vec<T> {
-    fn luau_ty() -> decl::Ty {
+    fn luau_ty() -> declaration::Type {
         T::luau_ty().array()
     }
 
@@ -679,8 +679,8 @@ impl<T: CommandType> CommandType for Vec<T> {
 }
 
 impl<T: CommandType> CommandType for BTreeMap<String, T> {
-    fn luau_ty() -> decl::Ty {
-        decl::Ty::map(decl::Ty::String, T::luau_ty())
+    fn luau_ty() -> declaration::Type {
+        declaration::Type::map(declaration::Type::String, T::luau_ty())
     }
 
     fn luau_decls(registry: &mut DeclRegistry<'_>) {
@@ -689,8 +689,8 @@ impl<T: CommandType> CommandType for BTreeMap<String, T> {
 }
 
 impl<T: CommandType> CommandType for HashMap<String, T> {
-    fn luau_ty() -> decl::Ty {
-        decl::Ty::map(decl::Ty::String, T::luau_ty())
+    fn luau_ty() -> declaration::Type {
+        declaration::Type::map(declaration::Type::String, T::luau_ty())
     }
 
     fn luau_decls(registry: &mut DeclRegistry<'_>) {
@@ -707,20 +707,20 @@ pub struct DeclRegistry<'a> {
     /// Underlying declaration target.
     target: DeclRegistryTarget<'a>,
     /// Names currently being declared during this registration pass.
-    seen: HashSet<decl::Text>,
+    seen: HashSet<declaration::Text>,
 }
 
 /// Declaration target used while collecting command type dependencies.
 enum DeclRegistryTarget<'a> {
     /// Rendered declaration-file builder.
-    Declaration(&'a mut decl::Builder),
+    Declaration(&'a mut declaration::Builder),
     /// Declaration-coupled native-module builder.
-    NativeModule(&'a mut NativeModuleBuilder),
+    NativeModule(&'a mut module::Builder),
 }
 
 impl<'a> DeclRegistry<'a> {
     /// Wrap a declaration builder.
-    pub fn new(builder: &'a mut decl::Builder) -> Self {
+    pub fn new(builder: &'a mut declaration::Builder) -> Self {
         Self {
             target: DeclRegistryTarget::Declaration(builder),
             seen: HashSet::new(),
@@ -728,7 +728,7 @@ impl<'a> DeclRegistry<'a> {
     }
 
     /// Wrap a declaration-coupled native-module builder.
-    pub(crate) fn native_module(builder: &'a mut NativeModuleBuilder) -> Self {
+    pub(crate) fn native_module(builder: &'a mut module::Builder) -> Self {
         Self {
             target: DeclRegistryTarget::NativeModule(builder),
             seen: HashSet::new(),
@@ -748,9 +748,9 @@ impl<'a> DeclRegistry<'a> {
     }
 
     /// Registers an alias declaration.
-    pub fn alias(&mut self, alias: decl::Alias) {
+    pub fn alias(&mut self, alias: declaration::Alias) {
         match &mut self.target {
-            DeclRegistryTarget::Declaration(builder) => builder.alias(alias),
+            DeclRegistryTarget::Declaration(builder) => builder.add_alias(alias),
             DeclRegistryTarget::NativeModule(builder) => {
                 builder.alias(alias);
             }
@@ -758,9 +758,9 @@ impl<'a> DeclRegistry<'a> {
     }
 
     /// Registers a class declaration.
-    pub fn class(&mut self, class: decl::Class) {
+    pub fn class(&mut self, class: declaration::Class) {
         match &mut self.target {
-            DeclRegistryTarget::Declaration(builder) => builder.class(class),
+            DeclRegistryTarget::Declaration(builder) => builder.add_class(class),
             DeclRegistryTarget::NativeModule(builder) => {
                 builder.class(class);
             }
@@ -768,10 +768,10 @@ impl<'a> DeclRegistry<'a> {
     }
 
     /// Registers an external type name.
-    pub fn extern_ty(&mut self, name: impl Into<decl::Text>) {
+    pub fn extern_ty(&mut self, name: impl Into<declaration::Text>) {
         let name = name.into();
         match &mut self.target {
-            DeclRegistryTarget::Declaration(builder) => builder.extern_ty(name),
+            DeclRegistryTarget::Declaration(builder) => builder.add_external_type(name),
             DeclRegistryTarget::NativeModule(builder) => {
                 builder.extern_ty(name.into_owned());
             }
@@ -1062,7 +1062,7 @@ pub struct CommandTypeSpec {
     /// Rust type name for introspection.
     pub rust: &'static str,
     /// Luau type expression factory.
-    pub ty: fn() -> decl::Ty,
+    pub ty: fn() -> declaration::Type,
     /// Declaration dependency registration function.
     pub decls: for<'a> fn(&mut DeclRegistry<'a>),
     /// Optional documentation string.
@@ -1071,7 +1071,7 @@ pub struct CommandTypeSpec {
 
 impl CommandTypeSpec {
     /// Returns the Luau type expression.
-    pub fn luau_ty(self) -> decl::Ty {
+    pub fn luau_ty(self) -> declaration::Type {
         (self.ty)()
     }
 

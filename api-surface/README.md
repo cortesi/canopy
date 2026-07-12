@@ -71,9 +71,9 @@ run-loop policy and entry points.
   do not add root/local aliases or expose storage to shorten callers.
 - `Context` and `ViewContext` are at their budgets. Extension behavior should be default methods or
   free helpers only when it composes existing primitives and does not create another synonym.
-- `canopy::commands::decl` is an intentional narrow Ruau declaration seam required by generated
-  command implementations. Native-module registration names the Ruau trait in one method but no
-  longer re-exports the embedding namespaces.
+- `canopy::commands::declaration` is an intentional narrow Ruau declaration seam required by
+  generated command implementations. Native-module registration names the Ruau trait in one method
+  but no longer re-exports the embedding namespaces.
 
 ### Minor
 
