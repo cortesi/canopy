@@ -3442,10 +3442,9 @@ fn exec_error_to_canopy(error: &ExecError, label: &str, timeout: Option<Duration
     }
     match error {
         ExecError::Script(error) => marshaled_script_error_to_canopy(error, label, timeout),
-        ExecError::Cancelled | ExecError::Deadline => timeout_error(error.kind(), timeout)
-            .unwrap_or_else(|| {
-                error::Error::Script(format!("{label} failed: script evaluation was cancelled"))
-            }),
+        ExecError::Stopped(_) => timeout_error(error.kind(), timeout).unwrap_or_else(|| {
+            error::Error::Script(format!("{label} failed: script evaluation was cancelled"))
+        }),
         ExecError::PanicPoison => error::Error::Script(format!(
             "{label} failed: script VM is poisoned and refuses further work"
         )),
@@ -3465,6 +3464,8 @@ fn retained_runtime_error_to_canopy(
         LifecycleError::Exec(error) => exec_error_to_canopy(error, label, timeout),
         LifecycleError::Runtime(error) => runtime_error_to_canopy(error, label, timeout),
         LifecycleError::StaleHandle { .. }
+        | LifecycleError::InUse { .. }
+        | LifecycleError::PermanentHandle { .. }
         | LifecycleError::Load(_)
         | LifecycleError::PreparedLoad(_)
         | LifecycleError::BindEnvironment(_) => {
@@ -3793,7 +3794,7 @@ impl LuauHost {
             let prepared = match prepared {
                 Some(prepared) => prepared,
                 None => surface
-                    .prepare_graph_blocking(source)
+                    .prepare_graph_ready(source)
                     .map_err(|error| prepare_graph_error_to_canopy(&error))?,
             };
             let root = runtime.load_prepared(&prepared).map_err(|error| {
@@ -3862,7 +3863,7 @@ impl LuauHost {
         let runtime_source = strict_named_source(source)?;
         let (chunk, prepared) = if let Some(surface) = self.state.borrow().surface.clone() {
             let prepared = surface
-                .prepare_graph_blocking(runtime_source.clone())
+                .prepare_graph_ready(runtime_source.clone())
                 .map_err(|error| prepare_graph_error_to_canopy(&error))?;
             (prepared.chunk().clone(), Some(prepared))
         } else {
@@ -3913,7 +3914,7 @@ impl LuauHost {
             )
         })?;
         let prepared = surface
-            .prepare_graph_blocking(runtime_source.clone())
+            .prepare_graph_ready(runtime_source.clone())
             .map_err(|error| prepare_graph_error_to_canopy(&error))?;
         let chunk = prepared.chunk().clone();
         let sid = self.state.borrow_mut().scripts.insert(
