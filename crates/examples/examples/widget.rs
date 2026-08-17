@@ -23,7 +23,7 @@ use unicode_width::UnicodeWidthStr;
 /// Default text for the font demo.
 const DEFAULT_TEXT: &str = "Canopy";
 /// Default font directory for the font demo.
-const DEFAULT_FONT_DIR: &str = "assets/fonts";
+const DEFAULT_FONT_DIR: &str = "crates/canopy-widgets/assets/fonts";
 /// Default interval for switching fonts, in milliseconds.
 const DEFAULT_FONT_INTERVAL_MS: u64 = 1000;
 /// Default image path for the image demo.

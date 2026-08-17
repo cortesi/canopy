@@ -61,7 +61,7 @@ Independent, low-risk, mostly deletions. Do these first.
   Completion proof for the workflow itself is one clean hosted run once the sibling crates are
   reachable. Windows support is a product decision (see Considered and rejected).
 
-- [ ] **0.3 Keep one copy of the font assets.** `assets/fonts/*` and
+- [x] **0.3 Keep one copy of the font assets.** `assets/fonts/*` and
   `crates/canopy-widgets/assets/fonts/*` are byte-identical (six files, ~365 KB). Both
   `include_bytes!` users already point at the widgets copy (`crates/canopy-widgets/src/font.rs:929`,
   `crates/examples/src/fontgym.rs:946-963`). Point `DEFAULT_FONT_DIR` in
