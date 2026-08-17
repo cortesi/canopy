@@ -252,54 +252,36 @@ impl Root {
         W: Widget + 'static,
     {
         let app_id = canopy.create_detached(app)?;
-        Self::install_with_inspector(canopy, app_id, inspector_active)?;
-        Ok(app_id)
-    }
-
-    /// Helper to install a root widget and configure children.
-    pub fn install(canopy: &mut Canopy, app: impl Into<NodeId>) -> Result<NodeId> {
-        Self::install_with_inspector(canopy, app, false)
-    }
-
-    /// Helper to install a root widget with an optional inspector pane.
-    pub fn install_with_inspector(
-        canopy: &mut Canopy,
-        app: impl Into<NodeId>,
-        inspector_active: bool,
-    ) -> Result<NodeId> {
-        let app = app.into();
+        let app_node = NodeId::from(app_id);
         let root = Self::new().with_inspector(inspector_active);
         let root_id: NodeId = canopy.replace_root(root)?.into();
         canopy.with_root_context(|context| {
-            // Create main pane container for app + inspector
+            // Main pane holds the app beside the inspector.
             let main_pane: NodeId = context.create_detached(MainPane)?.into();
             let inspector = Inspector::install(context)?;
-
-            // Attach app and inspector to main pane
-            context.attach_keyed(main_pane, KEY_APP, app)?;
+            context.attach_keyed(main_pane, KEY_APP, app_node)?;
             context.attach_keyed(main_pane, InspectorSlot::KEY, inspector)?;
 
-            // Create help modal (hidden by default)
+            // The help modal overlays the main pane.
             let help = Help::install(context)?;
-            context.set_hidden_of(help, true)?;
-
-            // Set up root with main pane and help as children
             context.attach_keyed(root_id, KEY_MAIN_PANE, main_pane)?;
             context.attach_keyed(root_id, HelpSlot::KEY, help)?;
 
-            // Configure layout
-            context.set_hidden_of(inspector, !inspector_active)?;
-            context.set_layout_of(root_id, Layout::fill().direction(Direction::Stack))?;
-            context.with_layout_of(app, &mut |layout: &mut Layout| {
+            context.with_layout_of(app_node, &mut |layout: &mut Layout| {
                 *layout = layout.width(Sizing::Flex(1)).height(Sizing::Flex(1));
             })?;
             context.with_layout_of(inspector, &mut |layout: &mut Layout| {
                 *layout = layout.width(Sizing::Flex(1)).height(Sizing::Flex(1));
             })?;
-            context.set_layout_of(help, Layout::fill())?;
-
-            Ok(root_id)
-        })
+            Ok(())
+        })?;
+        canopy.with_root_context(|context| {
+            let root_id = context.node_id();
+            context.with_node(root_id, |root: &mut Self, context| {
+                root.sync_layout(context)
+            })
+        })?;
+        Ok(app_id)
     }
 }
 
@@ -422,7 +404,7 @@ mod tests {
         let mut canopy = Canopy::new();
         Root::load(&mut canopy)?;
 
-        let app_id = canopy.create_detached(App)?;
+        let app_id = Root::install_app(&mut canopy, App)?;
         let left = canopy.create_detached(FocusLeaf::new("left"))?;
         let right = canopy.create_detached(FocusLeaf::new("right"))?;
         canopy.with_root_context(|context| {
@@ -431,8 +413,6 @@ mod tests {
             context.set_layout_of(left, Layout::fill())?;
             context.set_layout_of(right, Layout::fill())
         })?;
-
-        Root::install(&mut canopy, app_id)?;
         canopy.set_root_size(Size::new(20, 6))?;
 
         let mut backend = NopBackend::new();

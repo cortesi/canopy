@@ -1480,17 +1480,6 @@ pub mod canopy_widgets {
             W: Widget + 'static, {
         }
 
-        /// Helper to install a root widget and configure children.
-        pub fn install(canopy: &mut Canopy, app: impl Into<NodeId>) -> Result<NodeId> {}
-
-        /// Helper to install a root widget with an optional inspector pane.
-        pub fn install_with_inspector(
-            canopy: &mut Canopy,
-            app: impl Into<NodeId>,
-            inspector_active: bool,
-        ) -> Result<NodeId> {
-        }
-
         /// Return a typed command reference for this command.
         pub fn cmd_quit() -> &'static canopy::commands::CommandSpec {}
 

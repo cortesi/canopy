@@ -552,7 +552,7 @@ Independent, low-risk, mostly deletions. Do these first.
   `align_offset` is duplicated in `font_banner.rs:210-219`; `Glyph.bearing_right` is write-only.
   Delete all of it. About −130 lines.
 
-- [ ] **4.3 `Root` install surface.** `Root::install` and `Root::install_with_inspector` have
+- [x] **4.3 `Root` install surface.** `Root::install` and `Root::install_with_inspector` have
   zero callers outside root.rs's own test; keep `install_app` and `install_app_with_inspector`.
   The layout/hidden setup at `root.rs:257-279` duplicates `sync_layout` (`:71-100`); call it.
   About −35 lines.
