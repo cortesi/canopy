@@ -661,6 +661,7 @@ impl Canopy {
                         module.namespace.name()
                     ))
                 })?;
+            let mounted_source = mounted_source.source();
             let source = mounted_source
                 .as_str()
                 .expect("filesystem sources are validated as UTF-8")
@@ -934,7 +935,7 @@ impl Canopy {
                 None => None,
             };
             let script_id = match mounted_source {
-                Some(source) => self.script_host.compile_source(&source)?,
+                Some(source) => self.script_host.compile_source(source.source())?,
                 None => self.script_host.compile_named(&source, b"canopy")?,
             };
             let host = self.script_host.clone();

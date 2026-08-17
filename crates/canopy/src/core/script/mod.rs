@@ -1036,7 +1036,6 @@ fn reject_unsupported_layout(layout: &TableLayout, path: &ValuePath) -> StdResul
             Err(path.error("mixed integer and string table keys are not supported"))
         }
         TableLayout::UnsupportedKey { key } => Err(path.error(unsupported_key_message(key))),
-        _ => Err(path.error("unsupported table layout")),
     }
 }
 
@@ -1058,7 +1057,6 @@ fn unsupported_key_message(key: &UnsupportedTableKey) -> String {
         UnsupportedTableKey::Type { type_name } => {
             format!("unsupported table key type: {type_name}")
         }
-        _ => "unsupported table key".to_string(),
     }
 }
 
@@ -3448,6 +3446,7 @@ fn exec_error_to_canopy(error: &ExecError, label: &str, timeout: Option<Duration
         ExecError::PanicPoison => error::Error::Script(format!(
             "{label} failed: script VM is poisoned and refuses further work"
         )),
+        ExecError::Entry { message } => error::Error::Script(format!("{label} failed: {message}")),
         ExecError::Marshal { message } => error::Error::Script(format!(
             "{label} failed: marshaling script result failed: {message}"
         )),
@@ -3954,7 +3953,7 @@ impl LuauHost {
         let prepared = match prepared {
             Some(prepared) => prepared,
             None => runtime
-                .prepare(source, PrepareOptions::new())
+                .prepare_ready(source, PrepareOptions::new())
                 .map_err(|error| prepare_graph_error_to_canopy(&error))?,
         };
         let root = runtime.load_prepared(&prepared).map_err(|error| {
@@ -4133,7 +4132,7 @@ impl LuauHost {
         let print_lines = Arc::new(Mutex::new(Vec::new()));
         let options = invocation_options(timeout, &print_lines);
         canopy.script_context_stack.push(node_id);
-        let future = runtime.run_async_with_context(root, canopy, options);
+        let future = runtime.run_with_context(root, canopy, options);
         let outcome = if Handle::try_current().is_ok() {
             executor::block_on(future)
         } else {
