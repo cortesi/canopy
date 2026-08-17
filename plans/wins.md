@@ -68,7 +68,7 @@ Independent, low-risk, mostly deletions. Do these first.
   `crates/examples/examples/widget.rs:26` at `crates/canopy-widgets/assets/fonts` and delete
   `assets/fonts/`. Keep `assets/tiger.jpg`.
 
-- [ ] **0.4 Remove the workspace-root `tests/snapshots/` directory.** Only
+- [x] **0.4 Remove the workspace-root `tests/snapshots/` directory.** Only
   `crates/canopy-widgets/src/snapshots.rs:65-107` reads it, through a three-branch cwd fallback.
   Replace the four snapshot files (14 lines total) with inline
   `harness.tbuf().assert_matches(buf![..])` assertions, the idiom used 12 times elsewhere

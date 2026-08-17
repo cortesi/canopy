@@ -77,4 +77,4 @@ pub use text::{CanvasWidth, Text};
 pub use vstack::VStack;
 
 #[cfg(test)]
-mod snapshots;
+mod render_tests;
