@@ -21,14 +21,8 @@ pub struct FocusRecoveryHint {
 impl Core {
     /// Check whether a node is on the focus path.
     pub fn is_on_focus_path(&self, node: NodeId) -> bool {
-        let mut current = self.focus;
-        while let Some(id) = current {
-            if id == node {
-                return true;
-            }
-            current = self.nodes.get(id).and_then(|entry| entry.parent);
-        }
-        false
+        self.focus
+            .is_some_and(|focus| self.is_ancestor_or_self(node, focus))
     }
 
     /// Does the node have terminal focus?
@@ -388,7 +382,7 @@ fn find_next_focus_with(
         if !past_target {
             continue;
         }
-        if skip_subtree && is_descendant(core, target, id) {
+        if skip_subtree && core.is_ancestor_or_self(target, id) {
             continue;
         }
         if is_focus_candidate(core, id, require_view) {
@@ -431,18 +425,6 @@ fn find_prev_focus_with(
         }
     }
     prev
-}
-
-/// Return true if `node` is within the subtree rooted at `root`.
-fn is_descendant(core: &Core, root: NodeId, node: NodeId) -> bool {
-    let mut current = Some(node);
-    while let Some(id) = current {
-        if id == root {
-            return true;
-        }
-        current = core.nodes.get(id).and_then(|n| n.parent);
-    }
-    false
 }
 
 /// Return the nearest focusable ancestor of `start` with optional view requirement.

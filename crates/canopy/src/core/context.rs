@@ -1190,18 +1190,6 @@ fn node_accepts_focus(core: &Core, node_id: NodeId) -> bool {
     widget_access::accepts_focus(core, node_id)
 }
 
-/// Return true if `node` is within the subtree rooted at `root`.
-fn is_descendant(core: &Core, root: NodeId, node: NodeId) -> bool {
-    let mut current = Some(node);
-    while let Some(id) = current {
-        if id == root {
-            return true;
-        }
-        current = core.nodes.get(id).and_then(|n| n.parent);
-    }
-    false
-}
-
 /// Collect focusable leaves in pre-order for a core subtree.
 fn focusable_leaves_for(core: &Core, root: NodeId) -> Vec<NodeId> {
     let mut out = Vec::new();
@@ -1225,7 +1213,7 @@ fn focusable_leaves_for(core: &Core, root: NodeId) -> Vec<NodeId> {
 fn focused_leaf_for(core: &Core, root: NodeId) -> Option<NodeId> {
     let focused = core.focus?;
     let node = core.nodes.get(focused)?;
-    if node.hidden || node.view.is_zero() || !is_descendant(core, root, focused) {
+    if node.hidden || node.view.is_zero() || !core.is_ancestor_or_self(root, focused) {
         return None;
     }
     if node_accepts_focus(core, focused) {

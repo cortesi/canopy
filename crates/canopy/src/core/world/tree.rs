@@ -127,7 +127,7 @@ impl Core {
     }
 
     /// Set the layout for a node.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "testing"))]
     pub fn set_layout_of(&mut self, node: impl Into<NodeId>, layout: Layout) -> Result<()> {
         self.with_layout_of(node, |l| *l = layout)
     }
@@ -342,8 +342,8 @@ impl Core {
         Ok(())
     }
 
-    /// Return true if `ancestor` appears in the parent chain of `node`.
-    fn is_ancestor(&self, ancestor: NodeId, node: NodeId) -> bool {
+    /// Return true if `ancestor` is `node` or appears in the parent chain of `node`.
+    pub(crate) fn is_ancestor_or_self(&self, ancestor: NodeId, node: NodeId) -> bool {
         let mut current = Some(node);
         while let Some(id) = current {
             if id == ancestor {
@@ -356,14 +356,7 @@ impl Core {
 
     /// Return true if `node_id` is attached to the root.
     pub fn is_attached_to_root(&self, node_id: impl Into<NodeId>) -> bool {
-        let mut current = Some(node_id.into());
-        while let Some(id) = current {
-            if id == self.root {
-                return true;
-            }
-            current = self.nodes.get(id).and_then(|n| n.parent);
-        }
-        false
+        self.is_ancestor_or_self(self.root, node_id.into())
     }
 
     /// Validate structural and cached state invariants for the core arena.
@@ -717,7 +710,7 @@ impl Core {
         if child_parent.is_some() {
             return Err(Error::AlreadyAttached(child));
         }
-        if parent == child || self.is_ancestor(child, parent) {
+        if self.is_ancestor_or_self(child, parent) {
             return Err(Error::WouldCreateCycle { parent, child });
         }
         if let Some(key) = key
@@ -838,7 +831,7 @@ impl Core {
         }
 
         for child in &children {
-            if *child == parent || self.is_ancestor(*child, parent) {
+            if self.is_ancestor_or_self(*child, parent) {
                 return Err(Error::WouldCreateCycle {
                     parent,
                     child: *child,
@@ -1039,7 +1032,7 @@ impl Core {
             .children
             .iter()
             .copied()
-            .find(|child| self.is_ancestor(*child, focus))
+            .find(|child| self.is_ancestor_or_self(*child, focus))
     }
 
     /// Clear auxiliary targets that point into a removed set.
