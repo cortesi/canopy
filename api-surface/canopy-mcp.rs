@@ -71,8 +71,6 @@ pub mod canopy_mcp {
             Run {
                 /// Optional live MCP Unix-domain socket path.
                 mcp_socket: Option<std::path::PathBuf>,
-                /// Crossterm runloop options.
-                runloop: canopy::terminal::RunloopOptions,
             },
             /// Serve the headless MCP automation server over stdio.
             HeadlessMcp,
@@ -83,7 +81,7 @@ pub mod canopy_mcp {
         }
 
         impl LaunchMode {
-            /// Run the interactive terminal UI with the default Ctrl+C diagnostics.
+            /// Run the interactive terminal UI.
             pub fn run() -> Self {}
 
             /// Run the interactive terminal UI with a live MCP socket.
@@ -584,8 +582,6 @@ pub mod canopy_mcp {
         Run {
             /// Optional live MCP Unix-domain socket path.
             mcp_socket: Option<std::path::PathBuf>,
-            /// Crossterm runloop options.
-            runloop: canopy::terminal::RunloopOptions,
         },
         /// Serve the headless MCP automation server over stdio.
         HeadlessMcp,
@@ -596,7 +592,7 @@ pub mod canopy_mcp {
     }
 
     impl LaunchMode {
-        /// Run the interactive terminal UI with the default Ctrl+C diagnostics.
+        /// Run the interactive terminal UI.
         pub fn run() -> Self {}
 
         /// Run the interactive terminal UI with a live MCP socket.

@@ -1,9 +1,8 @@
 use std::{
     io::{self, Stderr, Write},
-    mem, panic,
+    mem,
 };
 
-use color_backtrace::{BacktracePrinter, default_output_stream};
 use futures::{
     FutureExt,
     channel::mpsc::UnboundedReceiver,
@@ -12,11 +11,10 @@ use futures::{
     pin_mut,
     stream::{Stream, StreamExt},
 };
-use scopeguard::guard;
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
-    Canopy, NodeId,
+    Canopy,
     backend::{BackendControl, TerminalSession},
     core::{Core, dump::dump, text},
     error::{self, Result},
@@ -712,8 +710,6 @@ fn translate_event(e: cevent::Event) -> Event {
 fn handle_render_error(
     error: error::Error,
     core: &Core,
-    root: NodeId,
-    focus: Option<NodeId>,
     session: &TerminalSession,
 ) -> error::Error {
     drop(session.stop());
@@ -721,7 +717,7 @@ fn handle_render_error(
     // Print error and node dump
     eprintln!("Render error: {error}");
     eprintln!("\nNode tree dump:");
-    match dump(core, root, focus) {
+    match dump(core, core.root, core.focus) {
         Ok(dump_str) => eprintln!("{dump_str}"),
         Err(dump_err) => eprintln!("Failed to dump node tree: {dump_err}"),
     }
@@ -729,74 +725,18 @@ fn handle_render_error(
     error
 }
 
-/// Ctrl+C handling policy for the crossterm runloop.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CtrlCBehavior {
-    /// Stop the runloop with status 130.
-    Exit,
-    /// Dump the node tree and stop the runloop with status 130.
-    DumpTreeAndExit,
-}
-
-/// Options for configuring the crossterm runloop behavior.
-#[derive(Debug, Clone, Copy)]
-pub struct RunloopOptions {
-    /// Install a panic hook that restores the terminal before printing a backtrace.
-    pub install_panic_hook: bool,
-    /// Configure how Ctrl+C is handled.
-    pub ctrl_c: CtrlCBehavior,
-    /// Enable keyboard enhancement flags for disambiguated escape codes.
-    pub enable_keyboard_enhancements: bool,
-}
-
-impl RunloopOptions {
-    /// Construct options that dump the node tree before exiting on Ctrl+C.
-    pub fn ctrlc_dump() -> Self {
-        Self {
-            ctrl_c: CtrlCBehavior::DumpTreeAndExit,
-            ..Self::default()
-        }
-    }
-}
-
-impl Default for RunloopOptions {
-    fn default() -> Self {
-        Self {
-            install_panic_hook: false,
-            ctrl_c: CtrlCBehavior::Exit,
-            enable_keyboard_enhancements: true,
-        }
-    }
-}
-
 /// Run the main render/event loop using the crossterm backend.
-pub fn runloop(cnpy: Canopy) -> Result<i32> {
-    runloop_with_options(cnpy, RunloopOptions::default())
-}
-
-/// Run the main render/event loop using the crossterm backend with custom options.
-pub fn runloop_with_options(mut cnpy: Canopy, options: RunloopOptions) -> Result<i32> {
+///
+/// Ctrl+C dumps the node tree and stops the loop with status 130. Keyboard enhancement flags
+/// are enabled so escape codes are unambiguous.
+pub fn runloop(mut cnpy: Canopy) -> Result<i32> {
     let mut be = CrosstermRender::default();
-    cnpy.register_backend(CrosstermControl::new(options.enable_keyboard_enhancements));
+    cnpy.register_backend(CrosstermControl::new(true));
     let backend = cnpy
         .backend
         .take()
         .ok_or_else(|| error::Error::Internal("backend not set".into()))?;
     let session = TerminalSession::new(backend)?;
-
-    let _panic_hook = if options.install_panic_hook {
-        let previous = panic::take_hook();
-        let cleanup = session.cleanup();
-        panic::set_hook(Box::new(move |pi| {
-            drop(cleanup.stop());
-            drop(BacktracePrinter::new().print_panic_info(pi, &mut default_output_stream()));
-        }));
-        Some(guard(previous, |hook| {
-            panic::set_hook(hook);
-        }))
-    } else {
-        None
-    };
 
     let rx = cnpy
         .event_rx
@@ -808,13 +748,7 @@ pub fn runloop_with_options(mut cnpy: Canopy, options: RunloopOptions) -> Result
     cnpy.set_root_size(Size::new(size.0.into(), size.1.into()))?;
 
     if let Err(e) = cnpy.render(&mut be) {
-        return Err(handle_render_error(
-            e,
-            &cnpy.core,
-            cnpy.core.root,
-            cnpy.core.focus,
-            &session,
-        ));
+        return Err(handle_render_error(e, &cnpy.core, &session));
     }
     translate_result(be.flush())?;
     if let Some(code) = cnpy.core.take_exit_request() {
@@ -832,14 +766,11 @@ pub fn runloop_with_options(mut cnpy: Canopy, options: RunloopOptions) -> Result
             })
         ) {
             drop(session.stop());
-            if options.ctrl_c == CtrlCBehavior::DumpTreeAndExit {
-                eprintln!("\nCtrl+C pressed - Node tree dump:");
-                match dump(&cnpy.core, cnpy.core.root, cnpy.core.focus) {
-                    Ok(dump_str) => eprintln!("{dump_str}"),
-                    Err(dump_err) => eprintln!("Failed to dump node tree: {dump_err}"),
-                }
+            eprintln!("\nCtrl+C pressed - Node tree dump:");
+            match dump(&cnpy.core, cnpy.core.root, cnpy.core.focus) {
+                Ok(dump_str) => eprintln!("{dump_str}"),
+                Err(dump_err) => eprintln!("Failed to dump node tree: {dump_err}"),
             }
-
             return Ok(130);
         }
 
@@ -851,23 +782,11 @@ pub fn runloop_with_options(mut cnpy: Canopy, options: RunloopOptions) -> Result
         match cnpy.render_if_pending(&mut be) {
             Ok(rendered) => {
                 if rendered && let Err(e) = translate_result(be.flush()) {
-                    return Err(handle_render_error(
-                        e,
-                        &cnpy.core,
-                        cnpy.core.root,
-                        cnpy.core.focus,
-                        &session,
-                    ));
+                    return Err(handle_render_error(e, &cnpy.core, &session));
                 }
             }
             Err(e) => {
-                return Err(handle_render_error(
-                    e,
-                    &cnpy.core,
-                    cnpy.core.root,
-                    cnpy.core.focus,
-                    &session,
-                ));
+                return Err(handle_render_error(e, &cnpy.core, &session));
             }
         }
     }

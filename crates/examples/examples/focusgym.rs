@@ -2,10 +2,7 @@
 
 use std::process;
 
-use canopy::{
-    prelude::*,
-    terminal::{RunloopOptions, runloop_with_options},
-};
+use canopy::{prelude::*, terminal::runloop};
 use canopy_examples::{
     focusgym::{FocusGym, setup_bindings},
     print_luau_api,
@@ -40,7 +37,7 @@ fn main() -> Result<()> {
     }
 
     Root::install_app_with_inspector(&mut cnpy, FocusGym::new(), args.inspector)?;
-    let exit_code = runloop_with_options(cnpy, RunloopOptions::ctrlc_dump())?;
+    let exit_code = runloop(cnpy)?;
     if exit_code != 0 {
         process::exit(exit_code);
     }

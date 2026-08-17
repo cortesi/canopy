@@ -7,10 +7,7 @@ use std::{
     time::Duration,
 };
 
-use canopy::{
-    prelude::*,
-    terminal::{RunloopOptions, runloop_with_options},
-};
+use canopy::{prelude::*, terminal::runloop};
 use canopy_examples::{
     print_luau_api,
     widget::{DemoHost, DemoSize, FontDemo, FontSource, ListDemo, TermDemo},
@@ -228,7 +225,7 @@ fn main() -> Result<()> {
         }
     };
     Root::install_app_with_inspector(&mut cnpy, demo, args.inspector)?;
-    let exit_code = runloop_with_options(cnpy, RunloopOptions::ctrlc_dump())?;
+    let exit_code = runloop(cnpy)?;
     if exit_code != 0 {
         process::exit(exit_code);
     }

@@ -2,10 +2,7 @@
 
 use std::{error::Error, fs, process, result::Result};
 
-use canopy::{
-    prelude::*,
-    terminal::{RunloopOptions, runloop_with_options},
-};
+use canopy::{prelude::*, terminal::runloop};
 use canopy_examples::{
     pager::{Pager, setup_bindings},
     print_luau_api,
@@ -49,7 +46,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let contents = fs::read_to_string(filename)?;
     Root::install_app(&mut cnpy, Pager::new(&contents))?;
-    let exit_code = runloop_with_options(cnpy, RunloopOptions::ctrlc_dump())?;
+    let exit_code = runloop(cnpy)?;
     if exit_code != 0 {
         process::exit(exit_code);
     }

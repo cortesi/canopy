@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use canopy::terminal::{RunloopOptions, runloop_with_options};
+use canopy::terminal::runloop;
 
 use crate::{
     Result, ScriptStatus, SuiteConfig, run_suite,
@@ -14,8 +14,6 @@ pub enum LaunchMode {
     Run {
         /// Optional live MCP Unix-domain socket path.
         mcp_socket: Option<PathBuf>,
-        /// Crossterm runloop options.
-        runloop: RunloopOptions,
     },
     /// Serve the headless MCP automation server over stdio.
     HeadlessMcp,
@@ -26,19 +24,15 @@ pub enum LaunchMode {
 }
 
 impl LaunchMode {
-    /// Run the interactive terminal UI with the default Ctrl+C diagnostics.
+    /// Run the interactive terminal UI.
     pub fn run() -> Self {
-        Self::Run {
-            mcp_socket: None,
-            runloop: RunloopOptions::ctrlc_dump(),
-        }
+        Self::Run { mcp_socket: None }
     }
 
     /// Run the interactive terminal UI with a live MCP socket.
     pub fn run_with_mcp(socket_path: PathBuf) -> Self {
         Self::Run {
             mcp_socket: Some(socket_path),
-            runloop: RunloopOptions::ctrlc_dump(),
         }
     }
 }
@@ -50,10 +44,7 @@ impl LaunchMode {
 /// live MCP, and the terminal runloop.
 pub fn launch(factory: AppFactory, mode: LaunchMode) -> Result<i32> {
     match mode {
-        LaunchMode::Run {
-            mcp_socket,
-            runloop,
-        } => run_interactive(&factory, mcp_socket.as_deref(), runloop),
+        LaunchMode::Run { mcp_socket } => run_interactive(&factory, mcp_socket.as_deref()),
         LaunchMode::HeadlessMcp => {
             serve_stdio(move || (factory.as_ref())())?;
             Ok(0)
@@ -68,18 +59,14 @@ pub fn launch(factory: AppFactory, mode: LaunchMode) -> Result<i32> {
 }
 
 /// Run the interactive terminal UI, optionally serving live MCP automation.
-fn run_interactive(
-    factory: &AppFactory,
-    mcp_socket: Option<&Path>,
-    runloop: RunloopOptions,
-) -> Result<i32> {
+fn run_interactive(factory: &AppFactory, mcp_socket: Option<&Path>) -> Result<i32> {
     let canopy = (factory.as_ref())()?;
     let automation = canopy.automation_handle();
     let live_server = mcp_socket
         .map(|socket_path| serve_uds(socket_path, automation))
         .transpose()?;
 
-    let run_result = runloop_with_options(canopy, runloop);
+    let run_result = runloop(canopy);
     if let Some(server) = live_server {
         server.stop()?;
     }

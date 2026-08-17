@@ -47,9 +47,7 @@ pub use core::{
 
 /// Crossterm terminal run-loop integration.
 pub mod terminal {
-    pub use crate::core::backend::crossterm::{
-        CtrlCBehavior, RunloopOptions, runloop, runloop_with_options,
-    };
+    pub use crate::core::backend::crossterm::runloop;
 }
 
 // Re-export derive macros

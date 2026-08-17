@@ -2,10 +2,7 @@
 
 use std::{error::Error, process, result::Result};
 
-use canopy::{
-    prelude::*,
-    terminal::{RunloopOptions, runloop_with_options},
-};
+use canopy::{prelude::*, terminal::runloop};
 use canopy_examples::{print_luau_api, textgym::TextGym};
 use canopy_widgets::Root;
 use clap::Parser;
@@ -44,7 +41,7 @@ end)
     }
 
     Root::install_app(&mut cnpy, TextGym::new())?;
-    let exit_code = runloop_with_options(cnpy, RunloopOptions::ctrlc_dump())?;
+    let exit_code = runloop(cnpy)?;
     if exit_code != 0 {
         process::exit(exit_code);
     }

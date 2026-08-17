@@ -12,10 +12,8 @@ doctest = false
 canopy-geom = { path = "../canopy-geom" }
 crossterm = { version = "0.29.0", features = ["event-stream"] }
 thiserror.workspace = true
-scopeguard = "1.2.0"
 convert_case.workspace = true
 termcolor = "1.4.1"
-color-backtrace = "0.7.2"
 tracing = "0.1.44"
 canopy-derive = { path = "../canopy-derive" }
 slotmap = "1.1.1"

@@ -2,10 +2,7 @@
 
 use std::{path::PathBuf, process};
 
-use canopy::{
-    prelude::*,
-    terminal::{RunloopOptions, runloop_with_options},
-};
+use canopy::{prelude::*, terminal::runloop};
 use canopy_examples::{
     imgview::{create_app, setup_bindings},
     print_luau_api,
@@ -46,7 +43,7 @@ fn main() -> Result<()> {
         }
     };
     let cnpy = create_app(&path)?;
-    let exit_code = runloop_with_options(cnpy, RunloopOptions::ctrlc_dump())?;
+    let exit_code = runloop(cnpy)?;
     if exit_code != 0 {
         process::exit(exit_code);
     }

@@ -2190,40 +2190,11 @@ pub mod canopy {
     pub mod terminal {
         //! Crossterm terminal run-loop integration.
 
-        /// Ctrl+C handling policy for the crossterm runloop.
-        #[derive(Debug, Clone, Copy, StructuralPartialEq, PartialEq, Eq)]
-        pub enum CtrlCBehavior {
-            /// Stop the runloop with status 130.
-            Exit,
-            /// Dump the node tree and stop the runloop with status 130.
-            DumpTreeAndExit,
-        }
-
-        /// Options for configuring the crossterm runloop behavior.
-        #[derive(Debug, Clone, Copy, Default)]
-        pub struct RunloopOptions {
-            /// Install a panic hook that restores the terminal before printing a backtrace.
-            pub install_panic_hook: bool,
-            /// Configure how Ctrl+C is handled.
-            pub ctrl_c: CtrlCBehavior,
-            /// Enable keyboard enhancement flags for disambiguated escape codes.
-            pub enable_keyboard_enhancements: bool,
-        }
-
-        impl RunloopOptions {
-            /// Construct options that dump the node tree before exiting on Ctrl+C.
-            pub fn ctrlc_dump() -> Self {}
-        }
-
         /// Run the main render/event loop using the crossterm backend.
+        ///
+        /// Ctrl+C dumps the node tree and stops the loop with status 130. Keyboard enhancement flags
+        /// are enabled so escape codes are unambiguous.
         pub fn runloop(cnpy: crate::Canopy) -> crate::error::Result<i32> {}
-
-        /// Run the main render/event loop using the crossterm backend with custom options.
-        pub fn runloop_with_options(
-            cnpy: crate::Canopy,
-            options: RunloopOptions,
-        ) -> crate::error::Result<i32> {
-        }
     }
 
     pub use canopy_geom as geom;

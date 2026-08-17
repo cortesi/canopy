@@ -314,7 +314,7 @@ Independent, low-risk, mostly deletions. Do these first.
   (`render.rs:12-33`) have no default bodies, so eight of eleven impls write the trivial ones;
   `supports_line_shift`/`shift_lines` already default. Add defaults. About −50 lines.
 
-- [ ] **2.6 One runloop entry point.** `runloop()` has zero callers; every caller (14 example
+- [x] **2.6 One runloop entry point.** `runloop()` has zero callers; every caller (14 example
   bins and `canopy-mcp/launch.rs`) uses `runloop_with_options(cnpy, RunloopOptions::ctrlc_dump())`,
   which is `ctrl_c: DumpTreeAndExit`, `install_panic_hook: false`,
   `enable_keyboard_enhancements: true`. No caller sets any other value. Delete `RunloopOptions`,
