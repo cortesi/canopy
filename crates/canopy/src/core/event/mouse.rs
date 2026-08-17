@@ -1,5 +1,3 @@
-use std::ops::Add;
-
 use crate::{event::key, geom::Point};
 
 /// An abstract specification for a mouse action.
@@ -24,36 +22,6 @@ pub enum Button {
     Middle,
     /// No button (for move/scroll).
     None,
-}
-
-/// Synthesize a Mouse specification - the action is assumed to be
-/// `Action::Down`.
-impl Add<key::Mods> for Button {
-    type Output = Mouse;
-
-    fn add(self, other: key::Mods) -> Self::Output {
-        Mouse {
-            action: Action::Down,
-            button: self,
-            modifiers: other,
-        }
-    }
-}
-
-impl Add<Button> for key::Mods {
-    type Output = Mouse;
-
-    fn add(self, other: Button) -> Self::Output {
-        other + self
-    }
-}
-
-impl Add<Action> for Button {
-    type Output = Mouse;
-
-    fn add(self, other: Action) -> Self::Output {
-        other + self
-    }
 }
 
 /// Mouse action kinds.
@@ -93,40 +61,6 @@ impl Action {
     }
 }
 
-/// Synthesize a `Mouse` input specification by adding modifiers to an action.
-/// Assume that the button is `Button::None`.
-impl Add<key::Mods> for Action {
-    type Output = Mouse;
-
-    fn add(self, other: key::Mods) -> Self::Output {
-        Mouse {
-            action: self,
-            button: Button::None,
-            modifiers: other,
-        }
-    }
-}
-
-impl Add<Action> for key::Mods {
-    type Output = Mouse;
-
-    fn add(self, other: Action) -> Self::Output {
-        other + self
-    }
-}
-
-impl Add<Button> for Action {
-    type Output = Mouse;
-
-    fn add(self, other: Button) -> Self::Output {
-        Mouse {
-            action: self,
-            button: other,
-            modifiers: key::Empty,
-        }
-    }
-}
-
 impl From<MouseEvent> for Mouse {
     fn from(o: MouseEvent) -> Self {
         Self {
@@ -134,74 +68,6 @@ impl From<MouseEvent> for Mouse {
             modifiers: o.modifiers,
             button: o.button,
         }
-    }
-}
-
-impl From<Button> for Mouse {
-    fn from(e: Button) -> Self {
-        Self {
-            action: Action::Down,
-            modifiers: key::Empty,
-            button: e,
-        }
-    }
-}
-
-impl From<Action> for Mouse {
-    fn from(e: Action) -> Self {
-        Self {
-            action: e,
-            modifiers: key::Empty,
-            button: if e.is_button() {
-                Button::Left
-            } else {
-                Button::None
-            },
-        }
-    }
-}
-
-impl PartialEq<Button> for Mouse {
-    fn eq(&self, k: &Button) -> bool {
-        let m: Self = (*k).into();
-        *self == m
-    }
-}
-
-impl PartialEq<Action> for Mouse {
-    fn eq(&self, k: &Action) -> bool {
-        let m: Self = (*k).into();
-        *self == m
-    }
-}
-
-impl Add<Button> for Mouse {
-    type Output = Self;
-
-    fn add(self, other: Button) -> Self::Output {
-        let mut r = self;
-        r.button = other;
-        r
-    }
-}
-
-impl Add<Action> for Mouse {
-    type Output = Self;
-
-    fn add(self, other: Action) -> Self::Output {
-        let mut r = self;
-        r.action = other;
-        r
-    }
-}
-
-impl Add<key::Mods> for Mouse {
-    type Output = Self;
-
-    fn add(self, other: key::Mods) -> Self::Output {
-        let mut r = self;
-        r.modifiers = other;
-        r
     }
 }
 
@@ -286,124 +152,45 @@ pub struct MouseEvent {
     pub location: Point,
 }
 
-impl PartialEq<Mouse> for MouseEvent {
-    fn eq(&self, o: &Mouse) -> bool {
-        self.action == o.action && self.button == o.button && self.modifiers == o.modifiers
-    }
-}
-
-impl PartialEq<Mouse> for &MouseEvent {
-    fn eq(&self, o: &Mouse) -> bool {
-        self.action == o.action && self.button == o.button && self.modifiers == o.modifiers
-    }
-}
-
-impl PartialEq<Action> for MouseEvent {
-    fn eq(&self, o: &Action) -> bool {
-        let m: Mouse = (*o).into();
-        self == m
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::{error::Result, event::mouse::*};
 
+    fn spec(action: Action, button: Button, modifiers: key::Mods) -> Mouse {
+        Mouse {
+            action,
+            button,
+            modifiers,
+        }
+    }
+
     #[test]
-    fn tmouse() -> Result<()> {
+    fn mouse_event_converts_to_a_spec() {
+        let event = MouseEvent {
+            action: Action::Drag,
+            button: Button::Middle,
+            modifiers: key::Shift,
+            location: Point { x: 3, y: 4 },
+        };
         assert_eq!(
-            Mouse {
-                button: Button::Left,
-                action: Action::Down,
-                modifiers: key::Empty,
-            },
-            Button::Left
+            Mouse::from(event),
+            spec(Action::Drag, Button::Middle, key::Shift)
         );
-        assert_eq!(
-            Mouse {
-                button: Button::Left,
-                action: Action::Down,
-                modifiers: key::Empty,
-            },
-            Button::Left + Action::Down
-        );
-        assert_eq!(
-            Mouse {
-                button: Button::Left,
-                action: Action::Down,
-                modifiers: key::Empty,
-            },
-            Action::Down
-        );
-        assert_ne!(
-            Mouse {
-                button: Button::Left,
-                action: Action::Down,
-                modifiers: key::Empty,
-            },
-            Action::Down + Button::Right
-        );
-        assert_ne!(
-            Mouse {
-                button: Button::Left,
-                action: Action::Down,
-                modifiers: key::Empty,
-            },
-            Button::Right
-        );
-        assert_ne!(
-            Mouse {
-                button: Button::Left,
-                action: Action::Down,
-                modifiers: key::Empty,
-            },
-            key::Alt + Button::Right
-        );
-        assert_eq!(
-            Mouse {
-                button: Button::Left,
-                action: Action::Down,
-                modifiers: key::Alt,
-            },
-            key::Alt + Button::Left
-        );
-        assert_eq!(
-            Mouse {
-                button: Button::Left,
-                action: Action::Down,
-                modifiers: key::Alt,
-            },
-            key::Alt + Action::Down + Button::Left
-        );
-        assert_ne!(
-            Mouse {
-                button: Button::Left,
-                action: Action::Down,
-                modifiers: key::Alt,
-            },
-            key::Alt + Action::Up + Button::Left
-        );
-        assert_eq!(
-            Mouse {
-                button: Button::Left,
-                action: Action::Down,
-                modifiers: key::Empty,
-            },
-            Action::Down
-        );
-        Ok(())
     }
 
     #[test]
     fn parse_specs() -> Result<()> {
-        assert_eq!(Mouse::parse_spec("ScrollUp"), Ok(Action::ScrollUp.into()));
+        assert_eq!(
+            Mouse::parse_spec("ScrollUp"),
+            Ok(spec(Action::ScrollUp, Button::None, key::Empty))
+        );
         assert_eq!(
             Mouse::parse_spec("ctrl-LeftDown"),
-            Ok(key::Ctrl + Button::Left)
+            Ok(spec(Action::Down, Button::Left, key::Ctrl))
         );
         assert_eq!(
             Mouse::parse_spec("shift-MiddleDrag"),
-            Ok(key::Shift + Action::Drag + Button::Middle)
+            Ok(spec(Action::Drag, Button::Middle, key::Shift))
         );
         assert!(Mouse::parse_spec("ctrl-nope").is_err());
         Ok(())

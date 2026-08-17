@@ -331,7 +331,7 @@ Independent, low-risk, mostly deletions. Do these first.
   `&Core` and read root/focus itself. Proof: every example binary and `canopy-mcp` compile
   against `runloop`; `cargo tree -i color-backtrace` reports no path. About −80 lines.
 
-- [ ] **2.7 Delete the unused mouse-spec operator DSL.** `event/mouse.rs`: nine `Add` impls,
+- [x] **2.7 Delete the unused mouse-spec operator DSL.** `event/mouse.rs`: nine `Add` impls,
   `From<Button>`/`From<Action>` for `Mouse`, and five cross-type `PartialEq` impls
   (`:31-56, 98-128, 140-205, 289-306`) have no production callers; production builds `Mouse` via
   `parse_spec` and `From<MouseEvent>`, and widgets compare `.action`/`.button` fields. Keep the

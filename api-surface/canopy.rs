@@ -1550,19 +1550,7 @@ pub mod canopy {
             //! Mouse event types.
 
             /// An abstract specification for a mouse action.
-            #[derive(
-                Debug,
-                Clone,
-                Copy,
-                Hash,
-                StructuralPartialEq,
-                PartialEq,
-                Eq,
-                PartialEq,
-                PartialEq,
-                PartialEq,
-                PartialEq,
-            )]
+            #[derive(Debug, Clone, Copy, Hash, StructuralPartialEq, PartialEq, Eq)]
             pub struct Mouse {
                 /// Mouse action type.
                 pub action: Action,
@@ -1581,33 +1569,8 @@ pub mod canopy {
                 fn from(o: MouseEvent) -> Self {}
             }
 
-            impl From<Button> for Mouse {
-                fn from(e: Button) -> Self {}
-            }
-
-            impl From<Action> for Mouse {
-                fn from(e: Action) -> Self {}
-            }
-
-            impl Add<Button> for Mouse {
-                type Output = Mouse;
-                fn add(self, other: Button) -> Self::Output {}
-            }
-
-            impl Add<Action> for Mouse {
-                type Output = Mouse;
-                fn add(self, other: Action) -> Self::Output {}
-            }
-
-            impl Add<Mods> for Mouse {
-                type Output = Mouse;
-                fn add(self, other: key::Mods) -> Self::Output {}
-            }
-
             /// Mouse button codes.
-            #[derive(
-                Debug, PartialOrd, StructuralPartialEq, PartialEq, Eq, Clone, Copy, Hash, PartialEq,
-            )]
+            #[derive(Debug, PartialOrd, StructuralPartialEq, PartialEq, Eq, Clone, Copy, Hash)]
             pub enum Button {
                 /// Left mouse button.
                 Left,
@@ -1619,50 +1582,8 @@ pub mod canopy {
                 None,
             }
 
-            /// Synthesize a Mouse specification - the action is assumed to be
-            /// `Action::Down`.
-            impl Add<Mods> for Button {
-                type Output = Mouse;
-                fn add(self, other: key::Mods) -> Self::Output {}
-            }
-
-            impl Add<Button> for key::Mods {
-                type Output = Mouse;
-                fn add(self, other: Button) -> Self::Output {}
-            }
-
-            impl Add<Action> for Button {
-                type Output = Mouse;
-                fn add(self, other: Action) -> Self::Output {}
-            }
-
-            impl Add<Button> for Action {
-                type Output = Mouse;
-                fn add(self, other: Button) -> Self::Output {}
-            }
-
-            impl From<Button> for Mouse {
-                fn from(e: Button) -> Self {}
-            }
-
-            impl Add<Button> for Mouse {
-                type Output = Mouse;
-                fn add(self, other: Button) -> Self::Output {}
-            }
-
             /// Mouse action kinds.
-            #[derive(
-                Debug,
-                PartialOrd,
-                StructuralPartialEq,
-                PartialEq,
-                Eq,
-                Clone,
-                Copy,
-                Hash,
-                PartialEq,
-                PartialEq,
-            )]
+            #[derive(Debug, PartialOrd, StructuralPartialEq, PartialEq, Eq, Clone, Copy, Hash)]
             pub enum Action {
                 /// Button press.
                 Down,
@@ -1687,40 +1608,9 @@ pub mod canopy {
                 pub fn is_button(&self) -> bool {}
             }
 
-            impl Add<Action> for Button {
-                type Output = Mouse;
-                fn add(self, other: Action) -> Self::Output {}
-            }
-
-            /// Synthesize a `Mouse` input specification by adding modifiers to an action.
-            /// Assume that the button is `Button::None`.
-            impl Add<Mods> for Action {
-                type Output = Mouse;
-                fn add(self, other: key::Mods) -> Self::Output {}
-            }
-
-            impl Add<Action> for key::Mods {
-                type Output = Mouse;
-                fn add(self, other: Action) -> Self::Output {}
-            }
-
-            impl Add<Button> for Action {
-                type Output = Mouse;
-                fn add(self, other: Button) -> Self::Output {}
-            }
-
-            impl From<Action> for Mouse {
-                fn from(e: Action) -> Self {}
-            }
-
-            impl Add<Action> for Mouse {
-                type Output = Mouse;
-                fn add(self, other: Action) -> Self::Output {}
-            }
-
             /// A mouse input event. This has the same fields as the `Mouse` event
             /// specification, but also includes a location.
-            #[derive(Debug, Clone, Copy, PartialEq, PartialEq, PartialEq)]
+            #[derive(Debug, Clone, Copy)]
             pub struct MouseEvent {
                 /// Mouse action type.
                 pub action: Action,
@@ -4194,35 +4084,6 @@ pub mod canopy {
                 fn add(self, other: Self) -> Self::Output {}
             }
 
-            /// Synthesize a Mouse specification - the action is assumed to be
-            /// `Action::Down`.
-            impl Add<Mods> for Button {
-                type Output = Mouse;
-                fn add(self, other: key::Mods) -> Self::Output {}
-            }
-
-            impl Add<Button> for key::Mods {
-                type Output = Mouse;
-                fn add(self, other: Button) -> Self::Output {}
-            }
-
-            /// Synthesize a `Mouse` input specification by adding modifiers to an action.
-            /// Assume that the button is `Button::None`.
-            impl Add<Mods> for Action {
-                type Output = Mouse;
-                fn add(self, other: key::Mods) -> Self::Output {}
-            }
-
-            impl Add<Action> for key::Mods {
-                type Output = Mouse;
-                fn add(self, other: Action) -> Self::Output {}
-            }
-
-            impl Add<Mods> for Mouse {
-                type Output = Mouse;
-                fn add(self, other: key::Mods) -> Self::Output {}
-            }
-
             /// No modifiers pressed.
             pub const Empty: Mods = _;
 
@@ -4473,19 +4334,7 @@ pub mod canopy {
             //! Mouse event types.
 
             /// An abstract specification for a mouse action.
-            #[derive(
-                Debug,
-                Clone,
-                Copy,
-                Hash,
-                StructuralPartialEq,
-                PartialEq,
-                Eq,
-                PartialEq,
-                PartialEq,
-                PartialEq,
-                PartialEq,
-            )]
+            #[derive(Debug, Clone, Copy, Hash, StructuralPartialEq, PartialEq, Eq)]
             pub struct Mouse {
                 /// Mouse action type.
                 pub action: Action,
@@ -4504,33 +4353,8 @@ pub mod canopy {
                 fn from(o: MouseEvent) -> Self {}
             }
 
-            impl From<Button> for Mouse {
-                fn from(e: Button) -> Self {}
-            }
-
-            impl From<Action> for Mouse {
-                fn from(e: Action) -> Self {}
-            }
-
-            impl Add<Button> for Mouse {
-                type Output = Mouse;
-                fn add(self, other: Button) -> Self::Output {}
-            }
-
-            impl Add<Action> for Mouse {
-                type Output = Mouse;
-                fn add(self, other: Action) -> Self::Output {}
-            }
-
-            impl Add<Mods> for Mouse {
-                type Output = Mouse;
-                fn add(self, other: key::Mods) -> Self::Output {}
-            }
-
             /// Mouse button codes.
-            #[derive(
-                Debug, PartialOrd, StructuralPartialEq, PartialEq, Eq, Clone, Copy, Hash, PartialEq,
-            )]
+            #[derive(Debug, PartialOrd, StructuralPartialEq, PartialEq, Eq, Clone, Copy, Hash)]
             pub enum Button {
                 /// Left mouse button.
                 Left,
@@ -4542,50 +4366,8 @@ pub mod canopy {
                 None,
             }
 
-            /// Synthesize a Mouse specification - the action is assumed to be
-            /// `Action::Down`.
-            impl Add<Mods> for Button {
-                type Output = Mouse;
-                fn add(self, other: key::Mods) -> Self::Output {}
-            }
-
-            impl Add<Button> for key::Mods {
-                type Output = Mouse;
-                fn add(self, other: Button) -> Self::Output {}
-            }
-
-            impl Add<Action> for Button {
-                type Output = Mouse;
-                fn add(self, other: Action) -> Self::Output {}
-            }
-
-            impl Add<Button> for Action {
-                type Output = Mouse;
-                fn add(self, other: Button) -> Self::Output {}
-            }
-
-            impl From<Button> for Mouse {
-                fn from(e: Button) -> Self {}
-            }
-
-            impl Add<Button> for Mouse {
-                type Output = Mouse;
-                fn add(self, other: Button) -> Self::Output {}
-            }
-
             /// Mouse action kinds.
-            #[derive(
-                Debug,
-                PartialOrd,
-                StructuralPartialEq,
-                PartialEq,
-                Eq,
-                Clone,
-                Copy,
-                Hash,
-                PartialEq,
-                PartialEq,
-            )]
+            #[derive(Debug, PartialOrd, StructuralPartialEq, PartialEq, Eq, Clone, Copy, Hash)]
             pub enum Action {
                 /// Button press.
                 Down,
@@ -4610,40 +4392,9 @@ pub mod canopy {
                 pub fn is_button(&self) -> bool {}
             }
 
-            impl Add<Action> for Button {
-                type Output = Mouse;
-                fn add(self, other: Action) -> Self::Output {}
-            }
-
-            /// Synthesize a `Mouse` input specification by adding modifiers to an action.
-            /// Assume that the button is `Button::None`.
-            impl Add<Mods> for Action {
-                type Output = Mouse;
-                fn add(self, other: key::Mods) -> Self::Output {}
-            }
-
-            impl Add<Action> for key::Mods {
-                type Output = Mouse;
-                fn add(self, other: Action) -> Self::Output {}
-            }
-
-            impl Add<Button> for Action {
-                type Output = Mouse;
-                fn add(self, other: Button) -> Self::Output {}
-            }
-
-            impl From<Action> for Mouse {
-                fn from(e: Action) -> Self {}
-            }
-
-            impl Add<Action> for Mouse {
-                type Output = Mouse;
-                fn add(self, other: Action) -> Self::Output {}
-            }
-
             /// A mouse input event. This has the same fields as the `Mouse` event
             /// specification, but also includes a location.
-            #[derive(Debug, Clone, Copy, PartialEq, PartialEq, PartialEq)]
+            #[derive(Debug, Clone, Copy)]
             pub struct MouseEvent {
                 /// Mouse action type.
                 pub action: Action,
