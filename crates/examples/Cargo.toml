@@ -7,9 +7,9 @@ license.workspace = true
 [dependencies]
 canopy = { path = "../canopy" }
 canopy-widgets = { path = "../canopy-widgets" }
-clap = { version = "4.6.1", features = ["derive"] }
+clap.workspace = true
 rand = "0.10.1"
-unicode-width = "0.2.2"
+unicode-width.workspace = true
 
 [dev-dependencies]
 canopy = { path = "../canopy", features = ["testing"] }

@@ -117,7 +117,7 @@ Independent, low-risk, mostly deletions. Do these first.
   (`crates/canopy-mcp/Cargo.toml:10`), so production app binaries stop compiling the
   ~1,900-line testing module.
 
-- [ ] **0.8 Centralize shared dependencies.** Add `[workspace.dependencies]` for everything
+- [x] **0.8 Centralize shared dependencies.** Add `[workspace.dependencies]` for everything
   declared in three or more manifests (`thiserror`, `tokio`, `clap`, `serde`, `serde_json`,
   `schemars`, `anyhow`, `textwrap`, `unicode-width`, `unicode-segmentation`, `proptest`,
   `criterion`, `tmcp`, and the three sibling path crates) and use `.workspace = true`. This

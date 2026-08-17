@@ -6,12 +6,12 @@ license.workspace = true
 
 [dependencies]
 canopy = { version = "0.0.1", path = "../canopy" }
-schemars = "1.2.1"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.149"
-thiserror = "2.0.18"
-tmcp = { version = "0.5.0", path = "../../../tmcp/crates/tmcp" }
-tokio = { version = "1.52.1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tmcp.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "sync"] }
 
 [lints]
 workspace = true

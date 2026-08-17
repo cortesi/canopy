@@ -1,16 +1,17 @@
 [package]
 name = "todo"
 version = "0.1.0"
-edition = "2024"
+edition.workspace = true
+license.workspace = true
 
 [dependencies]
-anyhow = "1.0.102"
+anyhow.workspace = true
 canopy = { path = "../../crates/canopy" }
 canopy-mcp = { version = "0.1.0", path = "../../crates/canopy-mcp" }
 canopy-widgets = { path = "../../crates/canopy-widgets" }
-clap = { version = "4.6.1", features = ["derive"] }
+clap.workspace = true
 rusqlite = "0.39"
-textwrap = "0.16.2"
+textwrap.workspace = true
 
 [dev-dependencies]
 canopy = { path = "../../crates/canopy", features = ["testing"] }

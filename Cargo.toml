@@ -6,6 +6,25 @@ members = ["crates/*", "examples/*", "xtask"]
 edition = "2024"
 license = "MIT"
 
+[workspace.dependencies]
+anyhow = "1.0.102"
+clap = { version = "4.6.1", features = ["derive"] }
+convert_case = "0.11.0"
+criterion = "0.8.2"
+itty-core = { version = "0.1.0", path = "../itty/crates/itty-core" }
+itty-script = { version = "0.1.0", path = "../itty/crates/itty-script" }
+proptest = "1.11.0"
+ruau = { version = "0.1.0", path = "../../private/ruau/crates/ruau", default-features = false }
+schemars = "1.2.1"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+textwrap = "0.16.2"
+thiserror = "2.0.18"
+tmcp = { version = "0.5.0", path = "../tmcp/crates/tmcp" }
+tokio = "1.52.3"
+unicode-segmentation = "1.13.2"
+unicode-width = "0.2.2"
+
 [workspace.lints.rust]
 missing_docs = "warn"
 

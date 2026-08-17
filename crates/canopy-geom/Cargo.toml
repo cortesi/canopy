@@ -6,10 +6,10 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-thiserror = "2.0.18"
+thiserror.workspace = true
 
 [lints]
 workspace = true
 
 [dev-dependencies]
-proptest = "1.11.0"
+proptest.workspace = true

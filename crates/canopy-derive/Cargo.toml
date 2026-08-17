@@ -12,8 +12,8 @@ syn = { version = "2.0.117", features = ["full"] }
 quote = "1.0.45"
 proc-macro2 = "1.0.106"
 proc-macro-error = "1.0.4"
-thiserror = "2.0.18"
-convert_case = "0.11.0"
+thiserror.workspace = true
+convert_case.workspace = true
 
 [dev-dependencies]
 canopy = { path = "../canopy", features = ["testing"] }

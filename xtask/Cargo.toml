@@ -9,4 +9,4 @@ publish = false
 workspace = true
 
 [dependencies]
-clap = { version = "4.6", features = ["derive"] }
+clap.workspace = true
