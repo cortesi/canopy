@@ -264,7 +264,7 @@ Independent, low-risk, mostly deletions. Do these first.
   `compute_canvas:663-666` already clamped; `clamp_axis:757-762` handles `min > max` that
   `Layout::validate` (run on every refresh) already rejects. About −40 lines.
 
-- [ ] **1.9 Widget slots do not need a lock.** `Node.widget` is `Rc<RwLock<Option<Box<dyn Widget>>>>`
+- [x] **1.9 Widget slots do not need a lock.** `Node.widget` is `Rc<RwLock<Option<Box<dyn Widget>>>>`
   (`node.rs:16`); `Rc` makes the type single-threaded, so `parking_lot::RwLock` only adds
   atomics and a misleading signal. Use `Rc<RefCell<..>>` with `try_borrow`/`try_borrow_mut` in
   `widget_access.rs`; the guards map 1:1 (`Ref`/`RefMut`). Keep `parking_lot` for the backend

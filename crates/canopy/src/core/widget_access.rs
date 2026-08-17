@@ -1,6 +1,7 @@
-use std::rc::Rc;
-
-use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::{
+    cell::{Ref, RefCell, RefMut},
+    rc::Rc,
+};
 
 use super::{context::CoreViewContext, id::NodeId, node::Node, world::Core};
 use crate::{
@@ -20,7 +21,7 @@ pub enum WidgetSlotPolicy {
 /// Immutable borrow of a widget slot.
 pub struct WidgetReadGuard<'a> {
     /// Borrowed widget slot.
-    slot: RwLockReadGuard<'a, Option<Box<dyn Widget>>>,
+    slot: Ref<'a, Option<Box<dyn Widget>>>,
 }
 
 impl<'a> WidgetReadGuard<'a> {
@@ -28,8 +29,8 @@ impl<'a> WidgetReadGuard<'a> {
     pub(crate) fn borrow(node_id: NodeId, node: &'a Node) -> Result<Self> {
         let slot = node
             .widget
-            .try_read()
-            .ok_or(Error::ReentrantWidgetBorrow(node_id))?;
+            .try_borrow()
+            .map_err(|_| Error::ReentrantWidgetBorrow(node_id))?;
         if slot.is_none() {
             return Err(Error::ReentrantWidgetBorrow(node_id));
         }
@@ -47,7 +48,7 @@ impl<'a> WidgetReadGuard<'a> {
 /// Mutable borrow of a widget slot that does not need mutable core access.
 pub struct WidgetMutGuard<'a> {
     /// Borrowed widget slot.
-    slot: RwLockWriteGuard<'a, Option<Box<dyn Widget>>>,
+    slot: RefMut<'a, Option<Box<dyn Widget>>>,
 }
 
 impl<'a> WidgetMutGuard<'a> {
@@ -55,8 +56,8 @@ impl<'a> WidgetMutGuard<'a> {
     pub(crate) fn borrow(node_id: NodeId, node: &'a Node) -> Result<Self> {
         let slot = node
             .widget
-            .try_write()
-            .ok_or(Error::ReentrantWidgetBorrow(node_id))?;
+            .try_borrow_mut()
+            .map_err(|_| Error::ReentrantWidgetBorrow(node_id))?;
         if slot.is_none() {
             return Err(Error::ReentrantWidgetBorrow(node_id));
         }
@@ -74,7 +75,7 @@ impl<'a> WidgetMutGuard<'a> {
 /// Temporary widget extraction guard for callbacks that need mutable core access.
 pub struct WidgetSlotGuard {
     /// Owned reference to the extracted widget slot.
-    slot: Rc<RwLock<Option<Box<dyn Widget>>>>,
+    slot: Rc<RefCell<Option<Box<dyn Widget>>>>,
     /// Widget owned while the node slot is empty.
     widget: Option<Box<dyn Widget>>,
 }
@@ -89,8 +90,8 @@ impl WidgetSlotGuard {
         let slot = Rc::clone(&node.widget);
         let widget = {
             let mut widget = slot
-                .try_write()
-                .ok_or(Error::ReentrantWidgetBorrow(node_id))?;
+                .try_borrow_mut()
+                .map_err(|_| Error::ReentrantWidgetBorrow(node_id))?;
             widget.take().ok_or(Error::ReentrantWidgetBorrow(node_id))?
         };
         Ok(Self {
@@ -109,7 +110,7 @@ impl WidgetSlotGuard {
 
 impl Drop for WidgetSlotGuard {
     fn drop(&mut self) {
-        if let Some(mut slot) = self.slot.try_write()
+        if let Ok(mut slot) = self.slot.try_borrow_mut()
             && slot.is_none()
         {
             *slot = self.widget.take();
@@ -119,7 +120,7 @@ impl Drop for WidgetSlotGuard {
 
 /// Validate a widget slot according to the supplied policy.
 pub fn validate_slot(node_id: NodeId, node: &Node, policy: WidgetSlotPolicy) -> Result<()> {
-    let Some(widget) = node.widget.try_read() else {
+    let Ok(widget) = node.widget.try_borrow() else {
         return match policy {
             WidgetSlotPolicy::RequirePresent => Err(Error::ReentrantWidgetBorrow(node_id)),
             WidgetSlotPolicy::AllowBorrowed => Ok(()),

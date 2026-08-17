@@ -1,6 +1,4 @@
-use std::{any::TypeId, collections::HashMap, rc::Rc};
-
-use parking_lot::RwLock;
+use std::{any::TypeId, cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
     core::{id::NodeId, style::Effect, view::View},
@@ -14,7 +12,7 @@ use crate::{
 #[derive(Clone)]
 pub struct Node {
     /// Widget behavior and state.
-    pub(crate) widget: Rc<RwLock<Option<Box<dyn Widget>>>>,
+    pub(crate) widget: Rc<RefCell<Option<Box<dyn Widget>>>>,
 
     /// Widget type identifier for fast type checks.
     pub(crate) widget_type: TypeId,
@@ -65,7 +63,7 @@ impl Node {
         let name = widget.name();
         let widget_type = widget.as_ref().type_id();
         Self {
-            widget: Rc::new(RwLock::new(Some(widget))),
+            widget: Rc::new(RefCell::new(Some(widget))),
             widget_type,
             parent: None,
             children: Vec::new(),

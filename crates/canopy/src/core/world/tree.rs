@@ -1,6 +1,4 @@
-use std::{collections::HashSet, rc::Rc};
-
-use parking_lot::RwLock;
+use std::{cell::RefCell, collections::HashSet, rc::Rc};
 
 use super::*;
 use crate::{
@@ -166,7 +164,7 @@ impl Core {
             .nodes
             .get_mut(node_id)
             .ok_or(Error::NodeNotFound(node_id))?;
-        node.widget = Rc::new(RwLock::new(Some(widget)));
+        node.widget = Rc::new(RefCell::new(Some(widget)));
         node.name = name;
         node.layout = layout;
         node.widget_type = widget_type;
@@ -269,7 +267,7 @@ impl Core {
             if unmounted.contains(&mounted.identity()) {
                 continue;
             }
-            let Some(mut widget) = mounted.widget.try_write() else {
+            let Ok(mut widget) = mounted.widget.try_borrow_mut() else {
                 debug_assert!(false, "mounted widget borrowed during tree rollback");
                 continue;
             };
@@ -1043,7 +1041,7 @@ impl Core {
             .nodes
             .get(node_id)
             .ok_or(Error::NodeNotFound(node_id))?;
-        let Some(widget) = node.widget.try_read() else {
+        let Ok(widget) = node.widget.try_borrow() else {
             return Err(self.widget_operation_error(
                 WidgetOperation::access(operation),
                 node_id,

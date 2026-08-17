@@ -3,9 +3,12 @@
     reason = "Core methods are split by arena, layout, and dispatch concerns."
 )]
 
-use std::{cell::Cell, collections::HashSet, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    collections::HashSet,
+    rc::Rc,
+};
 
-use parking_lot::RwLock;
 use slotmap::SlotMap;
 
 use self::focus::FocusRecoveryHint;
@@ -85,7 +88,7 @@ struct MountedWidget {
     /// Node that owned the widget when its mount completed.
     node_id: NodeId,
     /// Stable widget slot identity across node snapshots and replacement.
-    widget: Rc<RwLock<Option<Box<dyn Widget>>>>,
+    widget: Rc<RefCell<Option<Box<dyn Widget>>>>,
 }
 
 /// Stable node and widget identities for one removal lifecycle.
@@ -105,7 +108,7 @@ struct RemovalEntry {
     /// Planned node.
     node_id: NodeId,
     /// Widget slot validated before lifecycle hooks run.
-    widget: Rc<RwLock<Option<Box<dyn Widget>>>>,
+    widget: Rc<RefCell<Option<Box<dyn Widget>>>>,
 }
 
 /// Core-owned state restored when a tree edit fails.
