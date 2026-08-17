@@ -768,7 +768,7 @@ visibility) and no behavior.
 
 ## Stage 8: final consistency check
 
-- [ ] **8.1 Confirm the contracts agree with the code.** Each item already updated the
+- [x] **8.1 Confirm the contracts agree with the code.** Each item already updated the
   documents it changed. Read `docs/architecture.md`, `docs/scripting.md`, `docs/agent-loop.md`,
   `docs/fixtures.md`, `api-surface/README.md`, and `README.md` once against the finished tree,
   fix any drift, and run `cargo xtask api` to confirm the skeletons are current.

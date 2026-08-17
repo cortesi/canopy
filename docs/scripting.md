@@ -15,7 +15,8 @@ install order:
 1. The header comment in `crates/canopy/luau/preamble.d.luau`.
 2. The base `canopy` module, which declares `NodeId`, `Point`, `Size`, `Rect`, `NodeInfo`,
    `TreeNode`, `BindOptions`, `MouseSpec`, `FixtureInfo`, `BindingInfo`, `CommandParamInfo`,
-   `CommandInfo`, the `canopy` global, and `fixtures()`.
+   `CommandInfo`, `ScreenCell`, `RouteTraceEntry`, `HelpBinding`, `HelpSnapshot`,
+   `ScriptAssertionInfo`, `ScriptJournalEntry`, the `canopy` global, and `fixtures()`.
 3. Each module registered through `Canopy::register_script_module`.
 4. One module per widget owner, carrying its command table and default-binding helper.
 5. Fixture comment lines.

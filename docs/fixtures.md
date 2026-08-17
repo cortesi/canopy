@@ -20,7 +20,7 @@ Root-level smoke scripts run without a fixture:
 
 | Script | Purpose |
 | --- | --- |
-| `bootstrap.luau` | Verify the app starts, renders, and exposes commands. |
+| `bootstrap.luau` | Verify the app starts, renders, mounts the todo tree, and takes focus. |
 | `fixtures.luau` | Verify the fixture catalog is visible to Luau automation. |
 
 Fixture directories map directly to fixture names. For example,

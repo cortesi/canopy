@@ -66,8 +66,7 @@ Async predicate waits run on the Ruau async driver. Use
 or `canopy.wait_for_screen_text(text, timeout_ms?)` when an eval must observe
 state that may arrive through automation while the script is active. The wait
 helpers service automation between predicate checks; broader terminal event
-redraw during a pending eval is tracked in `plans/ruau.md` as the remaining
-live-loop refinement.
+redraw during a pending eval remains the outstanding live-loop refinement.
 
 ## Startup Shape
 

@@ -62,8 +62,9 @@ them out again.
 
 ## Invariants
 
-`Core::validate_invariants()` checks invariants that do not mutate widgets. Tests
-and smoke tests should call it after tree mutations and layout-sensitive flows.
+`Core::validate_invariants()` checks invariants that do not mutate widgets. Every
+layout pass ends with it, so any tree mutation that reaches layout is checked.
+`Core` is crate-private, so only canopy's own tests call it directly.
 
 It checks the root, widget slots, reciprocal links, duplicate children, cycles,
 keys, focus, mouse capture, pending help targets, lifecycle flags, layout caches,
