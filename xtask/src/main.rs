@@ -224,46 +224,30 @@ fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
+/// Return the cargo arguments that format the workspace.
+fn fmt_args(check: bool) -> Vec<&'static str> {
+    let mut args = vec![
+        FORMAT_TOOLCHAIN,
+        "fmt",
+        "--all",
+        "--",
+        "--config-path",
+        "./rustfmt-nightly.toml",
+    ];
+    if check {
+        args.push("--check");
+    }
+    args
+}
+
 /// Run cargo fmt for the workspace.
 fn run_fmt(workspace_root: &Path) -> bool {
-    if workspace_root.join("rustfmt-nightly.toml").exists() {
-        run_cargo_command(
-            workspace_root,
-            &[
-                FORMAT_TOOLCHAIN,
-                "fmt",
-                "--all",
-                "--",
-                "--config-path",
-                "./rustfmt-nightly.toml",
-            ],
-        )
-    } else {
-        run_cargo_command(workspace_root, &[FORMAT_TOOLCHAIN, "fmt", "--all"])
-    }
+    run_cargo_command(workspace_root, &fmt_args(false))
 }
 
 /// Verify workspace formatting without modifying files.
 fn run_fmt_check(workspace_root: &Path) -> bool {
-    if workspace_root.join("rustfmt-nightly.toml").exists() {
-        run_cargo_command(
-            workspace_root,
-            &[
-                FORMAT_TOOLCHAIN,
-                "fmt",
-                "--all",
-                "--",
-                "--config-path",
-                "./rustfmt-nightly.toml",
-                "--check",
-            ],
-        )
-    } else {
-        run_cargo_command(
-            workspace_root,
-            &[FORMAT_TOOLCHAIN, "fmt", "--all", "--", "--check"],
-        )
-    }
+    run_cargo_command(workspace_root, &fmt_args(true))
 }
 
 /// Run clippy with workspace fixes enabled.
@@ -274,12 +258,10 @@ fn run_clippy(workspace_root: &Path) -> bool {
             "clippy",
             "-q",
             "--fix",
-            "--all",
+            "--workspace",
             "--all-targets",
             "--all-features",
             "--allow-dirty",
-            "--tests",
-            "--examples",
         ],
     )
 }

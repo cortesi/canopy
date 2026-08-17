@@ -145,7 +145,7 @@ Independent, low-risk, mostly deletions. Do these first.
   the installed `ruskel --version` differs, and install that version in the CI job (item 0.2).
   Proof: `cargo xtask api` leaves no diff on a clean tree.
 
-- [ ] **0.11 xtask cleanups.** `run_fmt`/`run_fmt_check` duplicate the argument list and both
+- [x] **0.11 xtask cleanups.** `run_fmt`/`run_fmt_check` duplicate the argument list and both
   branch on the existence of `rustfmt-nightly.toml`, a tracked file; write one `fmt_args(check)`.
   Tidy clippy passes deprecated `--all` plus `--tests --examples` (subsumed by `--all-targets`).
   (Item 6.1 owns the loom step in `run_dynamic`.)
