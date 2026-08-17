@@ -174,7 +174,6 @@ impl Panes {
         for (idx, column_node) in active_columns.iter().enumerate() {
             let pane_nodes = self.columns.get(idx).cloned().unwrap_or_default();
             c.set_children_of(*column_node, pane_nodes.clone())?;
-            c.set_layout_of(*column_node, Layout::fill())?;
             for pane in pane_nodes {
                 c.with_layout_of(pane, &mut |layout| {
                     layout.width = Sizing::Flex(1);

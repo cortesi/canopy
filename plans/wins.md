@@ -525,7 +525,7 @@ Independent, low-risk, mostly deletions. Do these first.
 
 ## Stage 4: canopy-widgets
 
-- [ ] **4.1 Empty shells carry their own layout.** `MainPane` (`root.rs:309-323`) and
+- [x] **4.1 Empty shells carry their own layout.** `MainPane` (`root.rs:309-323`) and
   inspector `View` (`inspector/view.rs:8-18`) return the default `Layout::column()` and rely on
   a later `set_layout_of` (`root.rs:79, 283`; `inspector/view.rs:34`) for their real layout;
   `PaneColumn` returns `Layout::fill()` and `panes.rs:177` sets it again. `invalidate_layout()`

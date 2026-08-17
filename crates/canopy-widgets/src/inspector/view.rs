@@ -9,6 +9,10 @@ use crate::tabs::Tabs;
 pub struct View;
 
 impl Widget for View {
+    fn layout(&self) -> Layout {
+        Layout::fill()
+    }
+
     fn render(&mut self, _rndr: &mut canopy::render::Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
@@ -31,7 +35,6 @@ impl View {
         let logs = context.create_detached(super::logs::Logs::new())?;
         let view_id = context.create_detached(Self::new())?;
         context.set_children_of(view_id.into(), vec![tabs.into(), logs.into()])?;
-        context.set_layout_of(view_id, Layout::fill())?;
         context.set_layout_of(tabs, Layout::column().flex_horizontal(1).fixed_height(1))?;
         context.set_layout_of(logs, Layout::fill())?;
         Ok((view_id.into(), tabs.into(), logs.into()))

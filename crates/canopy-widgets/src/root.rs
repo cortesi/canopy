@@ -74,9 +74,7 @@ impl Root {
         let inspector = self.inspector_id(c)?;
         let help = self.help_id(c)?;
 
-        // Main pane uses Row for app + inspector
         c.set_hidden_of(inspector, !self.inspector_active)?;
-        c.set_layout_of(main_pane, Layout::fill().direction(Direction::Row))?;
         c.set_layout_of(app, Layout::fill())?;
         c.set_layout_of(inspector, Layout::fill())?;
 
@@ -280,7 +278,6 @@ impl Root {
             // Attach app and inspector to main pane
             context.attach_keyed(main_pane, KEY_APP, app)?;
             context.attach_keyed(main_pane, InspectorSlot::KEY, inspector)?;
-            context.set_layout_of(main_pane, Layout::fill().direction(Direction::Row))?;
 
             // Create help modal (hidden by default)
             let help = Help::install(context)?;
@@ -310,6 +307,10 @@ impl Root {
 struct MainPane;
 
 impl Widget for MainPane {
+    fn layout(&self) -> Layout {
+        Layout::fill().direction(Direction::Row)
+    }
+
     fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
