@@ -708,7 +708,7 @@ Independent, low-risk, mostly deletions. Do these first.
   `test_buftest_instance_methods`). Make `Harness::new` delegate to `builder(root).build()` so
   both paths apply the root `Flex(1)` layout. About −120 lines.
 
-- [ ] **6.6 One instrumented node in `ttree.rs`.** `leaf!`, `branch!`, and `R`
+- [x] **6.6 One instrumented node in `ttree.rs`.** `leaf!`, `branch!`, and `R`
   (`testing/ttree.rs:69-290`) define the same handle, `Widget` impl, and `OutcomeTarget` impl three
   times; one `node!(Type [, name] [, command])` macro covers the seven uses. About −110 lines.
 

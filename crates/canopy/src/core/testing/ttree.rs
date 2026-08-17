@@ -68,105 +68,62 @@ pub trait OutcomeTarget {
     fn set_outcome(&mut self, outcome: EventOutcome);
 }
 
-/// Generate a test leaf node type with instrumentation hooks.
-macro_rules! leaf {
-    ($a:ident) => {
-        /// Test leaf node with instrumented behavior.
-        pub struct $a {
-            /// Next event outcome override.
-            pub next_outcome: Option<EventOutcome>,
-        }
-
-        #[derive_commands]
-        impl $a {
-            /// Construct a new leaf node.
-            pub fn new() -> Self {
-                $a { next_outcome: None }
-            }
-
+/// Define an instrumented test node.
+///
+/// `node!(Type)` names the node after its type; `node!(Type, "name")` overrides that name. A
+/// trailing identifier adds a `#[command]` method of that name which records its own call.
+macro_rules! node {
+    ($type:ident) => {
+        node!(@node $type, stringify!($type), {});
+    };
+    ($type:ident, $name:literal) => {
+        node!(@node $type, $name, {});
+    };
+    ($type:ident, $command:ident) => {
+        node!(@node $type, stringify!($type), {
             #[command]
-            /// A command that appears only on leaf nodes.
-            pub fn c_leaf(&self, _core: &mut dyn Context) -> Result<()> {
+            /// A command that only this node kind carries.
+            pub fn $command(&self, _core: &mut dyn Context) -> Result<()> {
                 TSTATE.with(|s| {
-                    s.borrow_mut().add_command(&self.name(), "c_leaf");
+                    s.borrow_mut().add_command(&self.name(), stringify!($command));
                 });
                 Ok(())
             }
-        }
-
-        impl $a {
-            fn handle(&mut self, evt: &str) -> EventOutcome {
-                let ret = if let Some(x) = self.next_outcome.take() {
-                    x
-                } else {
-                    EventOutcome::Ignore
-                };
-                TSTATE.with(|s| {
-                    s.borrow_mut().add_event(&self.name(), evt, &ret);
-                });
-                ret
-            }
-        }
-
-        impl Widget for $a {
-            fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
-                true
-            }
-
-            fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
-                r.text(
-                    "any",
-                    ctx.view().outer_rect_local().line(0)?,
-                    &format!("<{}>", self.name()),
-                )
-            }
-
-            fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {
-                let outcome = match event {
-                    Event::Key(_) => self.handle("key"),
-                    Event::Mouse(_) => self.handle("mouse"),
-                    _ => EventOutcome::Ignore,
-                };
-                Ok(outcome)
-            }
-
-            fn name(&self) -> NodeName {
-                NodeName::convert(stringify!($a))
-            }
-        }
-
-        impl OutcomeTarget for $a {
-            fn set_outcome(&mut self, outcome: EventOutcome) {
-                self.next_outcome = Some(outcome);
-            }
-        }
+        });
     };
-}
-
-/// Generate a test branch node type with instrumentation hooks.
-macro_rules! branch {
-    ($name:ident) => {
-        /// Test branch node with instrumented behavior.
-        pub struct $name {
+    ($type:ident, $name:literal, $command:ident) => {
+        node!(@node $type, $name, {
+            #[command]
+            /// A command that only this node kind carries.
+            pub fn $command(&self, _core: &mut dyn Context) -> Result<()> {
+                TSTATE.with(|s| {
+                    s.borrow_mut().add_command(&self.name(), stringify!($command));
+                });
+                Ok(())
+            }
+        });
+    };
+    (@node $type:ident, $name:expr, { $($command:tt)* }) => {
+        /// Test node with instrumented event and command behavior.
+        pub struct $type {
             /// Next event outcome override.
             pub next_outcome: Option<EventOutcome>,
         }
 
         #[derive_commands]
-        impl $name {
-            /// Construct a new branch node.
+        impl $type {
+            /// Construct a new test node.
             pub fn new() -> Self {
-                $name { next_outcome: None }
+                Self { next_outcome: None }
             }
+
+            $($command)*
         }
 
-        impl $name {
+        impl $type {
+            /// Record an event and return the pending outcome override.
             fn handle(&mut self, evt: &str) -> EventOutcome {
-                let ret = if let Some(x) = self.next_outcome.take() {
-                    x
-                } else {
-                    EventOutcome::Ignore
-                };
+                let ret = self.next_outcome.take().unwrap_or(EventOutcome::Ignore);
                 TSTATE.with(|s| {
                     s.borrow_mut().add_event(&self.name(), evt, &ret);
                 });
@@ -174,7 +131,7 @@ macro_rules! branch {
             }
         }
 
-        impl Widget for $name {
+        impl Widget for $type {
             fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
                 true
             }
@@ -197,11 +154,11 @@ macro_rules! branch {
             }
 
             fn name(&self) -> NodeName {
-                NodeName::convert(stringify!($name))
+                NodeName::convert($name)
             }
         }
 
-        impl OutcomeTarget for $name {
+        impl OutcomeTarget for $type {
             fn set_outcome(&mut self, outcome: EventOutcome) {
                 self.next_outcome = Some(outcome);
             }
@@ -209,81 +166,13 @@ macro_rules! branch {
     };
 }
 
-leaf!(BaLa);
-leaf!(BaLb);
-leaf!(BbLa);
-leaf!(BbLb);
-branch!(Ba);
-branch!(Bb);
-
-/// Root node for the test tree.
-pub struct R {
-    /// Next event outcome override.
-    pub next_outcome: Option<EventOutcome>,
-}
-
-#[derive_commands]
-impl R {
-    /// Construct a new test root.
-    pub fn new() -> Self {
-        Self { next_outcome: None }
-    }
-
-    #[command]
-    /// A command that appears only on root.
-    pub fn c_root(&self, _core: &mut dyn Context) -> Result<()> {
-        TSTATE.with(|s| {
-            s.borrow_mut().add_command(&self.name(), "c_root");
-        });
-        Ok(())
-    }
-
-    /// Handle an event and record the outcome.
-    fn handle(&mut self, evt: &str) -> EventOutcome {
-        let ret = if let Some(x) = self.next_outcome.take() {
-            x
-        } else {
-            EventOutcome::Ignore
-        };
-        TSTATE.with(|s| {
-            s.borrow_mut().add_event(&self.name(), evt, &ret);
-        });
-        ret
-    }
-}
-
-impl OutcomeTarget for R {
-    fn set_outcome(&mut self, outcome: EventOutcome) {
-        self.next_outcome = Some(outcome);
-    }
-}
-
-impl Widget for R {
-    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
-        true
-    }
-
-    fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
-        r.text(
-            "any",
-            ctx.view().outer_rect_local().line(0)?,
-            &format!("<{}>", self.name()),
-        )
-    }
-
-    fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {
-        let outcome = match event {
-            Event::Key(_) => self.handle("key"),
-            Event::Mouse(_) => self.handle("mouse"),
-            _ => EventOutcome::Ignore,
-        };
-        Ok(outcome)
-    }
-
-    fn name(&self) -> NodeName {
-        NodeName::convert("r")
-    }
-}
+node!(BaLa, c_leaf);
+node!(BaLb, c_leaf);
+node!(BbLa, c_leaf);
+node!(BbLb, c_leaf);
+node!(Ba);
+node!(Bb);
+node!(R, "r", c_root);
 
 /// Node IDs for the test tree.
 #[derive(Debug, Clone, Copy)]
