@@ -11,6 +11,11 @@ use crate::model::{
     CommandMeta, DefaultValue, DocMeta, MacroArgs, ParamKind, ParamMeta, ReturnKind, ReturnMeta,
 };
 
+/// Extract normalized documentation text from `#[doc = "..."]` attributes.
+pub fn doc_string(attrs: &[Attribute]) -> Option<String> {
+    extract_doc_comments(attrs).0
+}
+
 /// Extract documentation from `#[doc = "..."]` attributes.
 fn extract_doc_comments(
     attrs: &[Attribute],

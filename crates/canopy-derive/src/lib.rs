@@ -10,9 +10,7 @@ mod model;
 mod parse;
 
 use quote::quote;
-use syn::{
-    Attribute, Expr, ExprLit, Fields, ItemImpl, Lit, Meta, Result, parse_macro_input, parse_quote,
-};
+use syn::{Attribute, Fields, ItemImpl, Result, parse_macro_input, parse_quote};
 
 /// Generate command metadata and wrappers for `#[command]` methods in an impl block.
 #[proc_macro_attribute]
@@ -136,38 +134,13 @@ fn expand_command_arg(input: &syn::DeriveInput) -> Result<proc_macro2::TokenStre
 
 /// Render a doc-attachment token stream for declaration model items.
 fn doc_tokens(attrs: &[Attribute]) -> proc_macro2::TokenStream {
-    match doc_string(attrs) {
+    match parse::doc_string(attrs) {
         Some(doc) => {
             let doc = syn::LitStr::new(&doc, proc_macro2::Span::call_site());
             quote! { .doc(#doc) }
         }
         None => quote! {},
     }
-}
-
-/// Extract normalized Rust doc comments.
-fn doc_string(attrs: &[Attribute]) -> Option<String> {
-    let lines = attrs
-        .iter()
-        .filter_map(|attr| {
-            if !attr.path().is_ident("doc") {
-                return None;
-            }
-            let Meta::NameValue(name_value) = &attr.meta else {
-                return None;
-            };
-            let Expr::Lit(ExprLit {
-                lit: Lit::Str(value),
-                ..
-            }) = &name_value.value
-            else {
-                return None;
-            };
-            Some(value.value().trim().to_string())
-        })
-        .filter(|line| !line.is_empty())
-        .collect::<Vec<_>>();
-    (!lines.is_empty()).then(|| lines.join("\n"))
 }
 
 /// Derive command enum conversions from/to ArgValue.
@@ -242,11 +215,6 @@ fn expand_command_enum(input: syn::DeriveInput) -> Result<proc_macro2::TokenStre
             }
         }
 
-        impl #impl_generics #ident #ty_generics #where_clause {
-            /// Luau literal values for this command enum.
-            pub const LUAU_VALUES: &'static [&'static str] = &[#(#luau_values),*];
-        }
-
         impl #impl_generics canopy::commands::CommandType for #ident #ty_generics #where_clause {
             fn luau_ty() -> canopy::commands::declaration::Type {
                 canopy::commands::declaration::Type::named(#type_name)
@@ -258,7 +226,7 @@ fn expand_command_enum(input: syn::DeriveInput) -> Result<proc_macro2::TokenStre
                 }
                 registry.alias(canopy::commands::declaration::Alias::new(
                     #type_name,
-                    canopy::commands::declaration::Type::literals(Self::LUAU_VALUES.iter().copied()),
+                    canopy::commands::declaration::Type::literals([#(#luau_values),*]),
                 ));
             }
         }

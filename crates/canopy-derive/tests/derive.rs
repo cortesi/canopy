@@ -20,6 +20,7 @@ mod tests {
 
     struct Opaque {}
 
+    #[derive(Default)]
     struct Foo {
         a_triggered: bool,
         b_triggered: bool,
@@ -198,15 +199,7 @@ mod tests {
 
     #[test]
     fn invoke_dispatches() {
-        let mut f = Foo {
-            a_triggered: false,
-            b_triggered: false,
-            c_triggered: false,
-            naked_str_triggered: false,
-            ignored_result_triggered: false,
-            core_isize: None,
-            naked_isize: None,
-        };
+        let mut f = Foo::default();
         let mut ctx = DummyContext::default();
         let inv = Foo::cmd_a().call_with(()).invocation();
         let out = (Foo::cmd_a().invoke)(Some(&mut f as &mut dyn Any), &mut ctx, &inv).unwrap();
@@ -217,15 +210,7 @@ mod tests {
 
     #[test]
     fn missing_args_error() {
-        let mut f = Foo {
-            a_triggered: false,
-            b_triggered: false,
-            c_triggered: false,
-            naked_str_triggered: false,
-            ignored_result_triggered: false,
-            core_isize: None,
-            naked_isize: None,
-        };
+        let mut f = Foo::default();
         let mut ctx = DummyContext::default();
         let inv = Foo::cmd_naked_isize().call_with(()).invocation();
         let err = (Foo::cmd_naked_isize().invoke)(Some(&mut f as &mut dyn Any), &mut ctx, &inv)
@@ -237,15 +222,7 @@ mod tests {
 
     #[test]
     fn ignored_result_wraps_errors() {
-        let mut f = Foo {
-            a_triggered: false,
-            b_triggered: false,
-            c_triggered: false,
-            naked_str_triggered: false,
-            ignored_result_triggered: false,
-            core_isize: None,
-            naked_isize: None,
-        };
+        let mut f = Foo::default();
         let mut ctx = DummyContext::default();
         let inv = Foo::cmd_ignored_result().call_with(()).invocation();
         let err = (Foo::cmd_ignored_result().invoke)(Some(&mut f as &mut dyn Any), &mut ctx, &inv)

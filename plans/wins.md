@@ -505,7 +505,7 @@ Independent, low-risk, mostly deletions. Do these first.
   every `.doc.hidden` filter (`help.rs:131,137`, `script/mod.rs:1675`; no command sets it) and
   `#[canopy(type_name = ..)]` (`derive/lib.rs:120-137`; no users).
 
-- [ ] **3.10 Derive codegen tidy.** The `Option<String>` → `Some("..")`/`None` token helper is
+- [x] **3.10 Derive codegen tidy.** The `Option<String>` → `Some("..")`/`None` token helper is
   written four times (`codegen.rs:13-19, 58-64, 198-204, 257-268`): write one
   `opt_str_tokens`. `#[doc]` extraction is written twice (`lib.rs:150-166` vs
   `parse.rs:18-46`): keep the `parse.rs` version. `LUAU_VALUES` (`lib.rs:236-239`) is a public

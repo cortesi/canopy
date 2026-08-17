@@ -2,18 +2,18 @@ use quote::quote;
 use syn::{ImplItem, ItemImpl};
 
 use crate::{
-    model::{
-        CommandMeta, DefaultValue, DocMeta, ParamKind, ParamMeta, ReturnKind, ReturnMeta,
-        UserBindingSource,
-    },
+    model::{CommandMeta, ParamKind, ParamMeta, ReturnKind, ReturnMeta, UserBindingSource},
     parse::{owner_name, parse_command_method},
 };
 
-impl DefaultValue {
-    /// Render this default value for metadata.
-    fn metadata_tokens(&self) -> proc_macro2::TokenStream {
-        let display = syn::LitStr::new(&self.display, proc_macro2::Span::call_site());
-        quote! { Some(#display) }
+/// Render an `Option<&str>` metadata field from an optional string.
+fn opt_str_tokens(value: Option<&str>) -> proc_macro2::TokenStream {
+    match value {
+        Some(value) => {
+            let value = syn::LitStr::new(value, proc_macro2::Span::call_site());
+            quote! { Some(#value) }
+        }
+        None => quote! { None },
     }
 }
 
@@ -54,17 +54,8 @@ impl ParamMeta {
         let name = self.name_lit();
         let ty = self.ty_lit();
         let optional = self.is_optional_for_dispatch();
-        let doc = self.doc.as_ref().map_or_else(
-            || quote! { None },
-            |doc| {
-                let doc = syn::LitStr::new(doc, proc_macro2::Span::call_site());
-                quote! { Some(#doc) }
-            },
-        );
-        let default = self
-            .default
-            .as_ref()
-            .map_or_else(|| quote! { None }, DefaultValue::metadata_tokens);
+        let doc = opt_str_tokens(self.doc.as_deref());
+        let default = opt_str_tokens(self.default.as_ref().map(|value| value.display.as_str()));
 
         Some(quote! {
             canopy::commands::CommandParamSpec {
@@ -186,13 +177,7 @@ impl ReturnMeta {
             ReturnKind::Unit => quote! { canopy::commands::CommandReturnSpec::Unit },
             ReturnKind::Value { ty, ty_str } => {
                 let ty_lit = syn::LitStr::new(ty_str, proc_macro2::Span::call_site());
-                let doc = self.doc.as_ref().map_or_else(
-                    || quote! { None },
-                    |doc| {
-                        let doc = syn::LitStr::new(doc, proc_macro2::Span::call_site());
-                        quote! { Some(#doc) }
-                    },
-                );
+                let doc = opt_str_tokens(self.doc.as_deref());
                 quote! {
                     canopy::commands::CommandReturnSpec::Value(
                         canopy::commands::CommandTypeSpec {
@@ -241,19 +226,6 @@ impl ReturnMeta {
                 let value = #call;
                 return Ok(canopy::commands::ToArgValue::to_arg_value(value));
             }
-        }
-    }
-}
-
-impl DocMeta {
-    /// Render an optional string field inside generated metadata.
-    fn option_tokens(value: &Option<String>) -> proc_macro2::TokenStream {
-        match value {
-            Some(value) => {
-                let value = syn::LitStr::new(value, proc_macro2::Span::call_site());
-                quote! { Some(#value) }
-            }
-            None => quote! { None },
         }
     }
 }
@@ -488,7 +460,7 @@ impl CommandMeta {
         let name = &self.name;
         let owner = &self.owner;
         let ret = self.ret.spec_tokens(self.ignore_result);
-        let long = DocMeta::option_tokens(&self.doc.long);
+        let long = opt_str_tokens(self.doc.long.as_deref());
 
         quote! {
             const #spec_const_ident: canopy::commands::CommandSpec = canopy::commands::CommandSpec {
