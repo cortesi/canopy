@@ -167,7 +167,7 @@ Independent, low-risk, mostly deletions. Do these first.
   `core/focus.rs` to `core/world/focus.rs` beside the other `Core`
   concern splits and remove its stray `#[allow(clippy::multiple_inherent_impl)]`. About −80 lines.
 
-- [ ] **1.2 Collapse the duplicate `ViewContext` implementation.** `impl ViewContext for
+- [x] **1.2 Collapse the duplicate `ViewContext` implementation.** `impl ViewContext for
   CoreContext` (`core/context.rs:1253-1361`) and `for CoreViewContext` (`:1598-1706`) are
   byte-identical apart from `&mut Core` vs `&Core`. Replace both structs with
   `pub struct NodeCtx<C> { core: C, node_id: NodeId }`, one

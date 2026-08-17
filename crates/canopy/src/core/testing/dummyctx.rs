@@ -8,27 +8,11 @@ use crate::{
     core::{NodeId, help::OwnedHelpSnapshot, style::Effect, view::View},
     error::Result,
     event::{Event, mouse::MouseEvent},
-    geom::{Direction, Point, PointI32, RectI32, Size},
+    geom::{Direction, Point},
     layout::Layout,
     path::Path,
     style::StyleMap,
     widget::Widget,
-};
-
-/// Default view used by DummyContext.
-const DUMMY_VIEW: View = View {
-    outer: RectI32 {
-        tl: PointI32 { x: 0, y: 0 },
-        w: 0,
-        h: 0,
-    },
-    content: RectI32 {
-        tl: PointI32 { x: 0, y: 0 },
-        w: 0,
-        h: 0,
-    },
-    tl: Point { x: 0, y: 0 },
-    canvas: Size { w: 0, h: 0 },
 };
 
 /// Dummy context for tests.
@@ -57,14 +41,6 @@ impl ViewContext for DummyContext {
         self.root_id
     }
 
-    fn view(&self) -> &View {
-        &DUMMY_VIEW
-    }
-
-    fn layout(&self) -> Layout {
-        Layout::default()
-    }
-
     fn node_view(&self, _node: NodeId) -> Option<View> {
         None
     }
@@ -81,20 +57,12 @@ impl ViewContext for DummyContext {
         Vec::new()
     }
 
-    fn is_focused(&self) -> bool {
-        false
-    }
-
     fn node_is_focused(&self, _node: NodeId) -> bool {
         false
     }
 
     fn focused_node(&self) -> Option<NodeId> {
         None
-    }
-
-    fn is_on_focus_path(&self) -> bool {
-        false
     }
 
     fn node_is_on_focus_path(&self, _node: NodeId) -> bool {
@@ -123,10 +91,6 @@ impl ViewContext for DummyContext {
 
     fn locate(&self, _root: NodeId, _point: Point) -> Result<Option<NodeId>> {
         Ok(None)
-    }
-
-    fn child_keyed(&self, _key: &str) -> Option<NodeId> {
-        None
     }
 
     fn child_keyed_in(&self, _parent: NodeId, _key: &str) -> Option<NodeId> {

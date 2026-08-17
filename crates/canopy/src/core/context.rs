@@ -1,6 +1,7 @@
 use std::{
     any::{Any, TypeId, type_name, type_name_of_val},
     marker::PhantomData,
+    ops::Deref,
     result::Result as StdResult,
 };
 
@@ -17,7 +18,7 @@ use crate::{
     commands::{ArgValue, CommandError, CommandInvocation, CommandScopeFrame, ListRowContext},
     error::{Error, Result},
     event::{Event, mouse::MouseEvent},
-    geom::{Direction, Point, PointI32, Rect, RectI32, Size},
+    geom::{Direction, Point, Rect, Size},
     layout::Layout,
     path::{Path, PathFilter},
     style::StyleMap,
@@ -179,10 +180,14 @@ pub trait ViewContext {
     fn root_id(&self) -> NodeId;
 
     /// View information for the current node.
-    fn view(&self) -> &View;
+    fn view(&self) -> View {
+        self.node_view(self.node_id()).unwrap_or_default()
+    }
 
     /// Cached layout configuration for the current node.
-    fn layout(&self) -> Layout;
+    fn layout(&self) -> Layout {
+        self.node_layout(self.node_id()).unwrap_or_default()
+    }
 
     /// View information for a specific node.
     fn node_view(&self, node: NodeId) -> Option<View>;
@@ -222,7 +227,9 @@ pub trait ViewContext {
     fn children_of(&self, node: NodeId) -> Vec<NodeId>;
 
     /// Does the current node have focus?
-    fn is_focused(&self) -> bool;
+    fn is_focused(&self) -> bool {
+        self.node_is_focused(self.node_id())
+    }
 
     /// Does the specified node have focus?
     fn node_is_focused(&self, node: NodeId) -> bool;
@@ -231,7 +238,9 @@ pub trait ViewContext {
     fn focused_node(&self) -> Option<NodeId>;
 
     /// Is the current node on the focus path?
-    fn is_on_focus_path(&self) -> bool;
+    fn is_on_focus_path(&self) -> bool {
+        self.node_is_on_focus_path(self.node_id())
+    }
 
     /// Is the specified node on the focus path?
     fn node_is_on_focus_path(&self, node: NodeId) -> bool;
@@ -255,7 +264,9 @@ pub trait ViewContext {
     fn locate(&self, root: NodeId, point: Point) -> Result<Option<NodeId>>;
 
     /// Return a keyed child relative to the current node.
-    fn child_keyed(&self, key: &str) -> Option<NodeId>;
+    fn child_keyed(&self, key: &str) -> Option<NodeId> {
+        self.child_keyed_in(self.node_id(), key)
+    }
 
     /// Return a keyed child relative to a specific parent node.
     fn child_keyed_in(&self, parent: NodeId, key: &str) -> Option<NodeId>;
@@ -541,22 +552,6 @@ impl dyn ViewContext + '_ {
             .find(|id| ViewContext::children_of(self, *id).is_empty())
     }
 }
-
-/// Default zero-sized view used when a node lacks layout data.
-const DEFAULT_VIEW: View = View {
-    outer: RectI32 {
-        tl: PointI32 { x: 0, y: 0 },
-        w: 0,
-        h: 0,
-    },
-    content: RectI32 {
-        tl: PointI32 { x: 0, y: 0 },
-        w: 0,
-        h: 0,
-    },
-    tl: Point { x: 0, y: 0 },
-    canvas: Size { w: 0, h: 0 },
-};
 
 /// Clamp a scroll offset so it stays within the view/canvas bounds.
 fn clamp_scroll_offset(scroll: &mut Point, view: Size, canvas: Size) {
@@ -1181,44 +1176,34 @@ impl dyn Context + '_ {
     }
 }
 
-/// Context implementation bound to a specific node.
-pub struct CoreContext<'a> {
+/// Context bound to a specific node, over a shared or exclusive borrow of the core.
+pub struct NodeCtx<C> {
     /// Core state reference.
-    core: &'a mut Core,
+    core: C,
     /// Node bound to this context.
     node_id: NodeId,
 }
 
-impl<'a> CoreContext<'a> {
+/// Mutating context bound to a specific node.
+pub type CoreContext<'a> = NodeCtx<&'a mut Core>;
+
+/// Read-only context bound to a specific node.
+pub type CoreViewContext<'a> = NodeCtx<&'a Core>;
+
+impl<C> NodeCtx<C> {
     /// Create a new context for a node.
-    pub fn new(core: &'a mut Core, node_id: NodeId) -> Self {
+    pub fn new(core: C, node_id: NodeId) -> Self {
         Self { core, node_id }
     }
 }
 
-impl<'a> ViewContext for CoreContext<'a> {
+impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
     fn node_id(&self) -> NodeId {
         self.node_id
     }
 
     fn root_id(&self) -> NodeId {
         self.core.root
-    }
-
-    fn view(&self) -> &View {
-        self.core
-            .nodes
-            .get(self.node_id)
-            .map(|n| &n.view)
-            .unwrap_or(&DEFAULT_VIEW)
-    }
-
-    fn layout(&self) -> Layout {
-        self.core
-            .nodes
-            .get(self.node_id)
-            .map(|n| n.layout)
-            .unwrap_or_default()
     }
 
     fn node_view(&self, node: NodeId) -> Option<View> {
@@ -1241,20 +1226,12 @@ impl<'a> ViewContext for CoreContext<'a> {
             .unwrap_or_default()
     }
 
-    fn is_focused(&self) -> bool {
-        self.core.is_focused(self.node_id)
-    }
-
     fn node_is_focused(&self, node: NodeId) -> bool {
         self.core.is_focused(node)
     }
 
     fn focused_node(&self) -> Option<NodeId> {
         self.core.focus
-    }
-
-    fn is_on_focus_path(&self) -> bool {
-        self.core.is_on_focus_path(self.node_id)
     }
 
     fn node_is_on_focus_path(&self, node: NodeId) -> bool {
@@ -1285,10 +1262,6 @@ impl<'a> ViewContext for CoreContext<'a> {
         self.core.locate_node(root, point)
     }
 
-    fn child_keyed(&self, key: &str) -> Option<NodeId> {
-        self.core.child_keyed(self.node_id, key)
-    }
-
     fn child_keyed_in(&self, parent: NodeId, key: &str) -> Option<NodeId> {
         self.core.child_keyed(parent, key)
     }
@@ -1302,7 +1275,7 @@ impl<'a> ViewContext for CoreContext<'a> {
     }
 }
 
-impl<'a> Context for CoreContext<'a> {
+impl Context for NodeCtx<&mut Core> {
     fn set_focus(&mut self, node: NodeId) -> Result<ChangeOutcome> {
         self.core.set_focus(node)
     }
@@ -1519,127 +1492,6 @@ impl<'a> Context for CoreContext<'a> {
 
     fn request_diagnostic_dump(&mut self, target: NodeId) {
         self.core.request_diagnostic_dump(target);
-    }
-}
-
-/// Read-only context bound to a specific node.
-pub struct CoreViewContext<'a> {
-    /// Core state reference.
-    core: &'a Core,
-    /// Node bound to this context.
-    node_id: NodeId,
-}
-
-impl<'a> CoreViewContext<'a> {
-    /// Create a new read-only context for a node.
-    pub fn new(core: &'a Core, node_id: NodeId) -> Self {
-        Self { core, node_id }
-    }
-}
-
-impl<'a> ViewContext for CoreViewContext<'a> {
-    fn node_id(&self) -> NodeId {
-        self.node_id
-    }
-
-    fn root_id(&self) -> NodeId {
-        self.core.root
-    }
-
-    fn view(&self) -> &View {
-        self.core
-            .nodes
-            .get(self.node_id)
-            .map(|n| &n.view)
-            .unwrap_or(&DEFAULT_VIEW)
-    }
-
-    fn layout(&self) -> Layout {
-        self.core
-            .nodes
-            .get(self.node_id)
-            .map(|n| n.layout)
-            .unwrap_or_default()
-    }
-
-    fn node_view(&self, node: NodeId) -> Option<View> {
-        self.core.nodes.get(node).map(|n| n.view)
-    }
-
-    fn node_layout(&self, node: NodeId) -> Option<Layout> {
-        self.core.nodes.get(node).map(|n| n.layout)
-    }
-
-    fn node_type_id(&self, node: NodeId) -> Option<TypeId> {
-        self.core.nodes.get(node).map(|n| n.widget_type)
-    }
-
-    fn children_of(&self, node: NodeId) -> Vec<NodeId> {
-        self.core
-            .nodes
-            .get(node)
-            .map(|n| n.children.clone())
-            .unwrap_or_default()
-    }
-
-    fn is_focused(&self) -> bool {
-        self.core.is_focused(self.node_id)
-    }
-
-    fn node_is_focused(&self, node: NodeId) -> bool {
-        self.core.is_focused(node)
-    }
-
-    fn focused_node(&self) -> Option<NodeId> {
-        self.core.focus
-    }
-
-    fn is_on_focus_path(&self) -> bool {
-        self.core.is_on_focus_path(self.node_id)
-    }
-
-    fn node_is_on_focus_path(&self, node: NodeId) -> bool {
-        self.core.is_on_focus_path(node)
-    }
-
-    fn focused_leaf(&self, root: NodeId) -> Option<NodeId> {
-        self.core.focused_leaf(root)
-    }
-
-    fn focusable_leaves(&self, root: NodeId) -> Vec<NodeId> {
-        self.core.focusable_leaves(root)
-    }
-
-    fn parent_of(&self, node: NodeId) -> Option<NodeId> {
-        self.core.nodes.get(node).and_then(|n| n.parent)
-    }
-
-    fn node_is_attached(&self, node: NodeId) -> bool {
-        self.core.is_attached_to_root(node)
-    }
-
-    fn node_path(&self, root: NodeId, node: NodeId) -> Path {
-        self.core.node_path(root, node)
-    }
-
-    fn locate(&self, root: NodeId, point: Point) -> Result<Option<NodeId>> {
-        self.core.locate_node(root, point)
-    }
-
-    fn child_keyed(&self, key: &str) -> Option<NodeId> {
-        self.core.child_keyed(self.node_id, key)
-    }
-
-    fn child_keyed_in(&self, parent: NodeId, key: &str) -> Option<NodeId> {
-        self.core.child_keyed(parent, key)
-    }
-
-    fn pending_help_snapshot(&self) -> Option<&OwnedHelpSnapshot> {
-        let snapshot = self.core.pending_help_snapshot.as_ref();
-        if snapshot.is_some() {
-            self.core.mark_help_snapshot_observed();
-        }
-        snapshot
     }
 }
 

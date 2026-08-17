@@ -1094,10 +1094,10 @@ pub mod canopy {
             fn root_id(&self) -> NodeId;
 
             /// View information for the current node.
-            fn view(&self) -> &View;
+            fn view(&self) -> View {}
 
             /// Cached layout configuration for the current node.
-            fn layout(&self) -> Layout;
+            fn layout(&self) -> Layout {}
 
             /// View information for a specific node.
             fn node_view(&self, node: NodeId) -> Option<View>;
@@ -1127,7 +1127,7 @@ pub mod canopy {
             fn children_of(&self, node: NodeId) -> Vec<NodeId>;
 
             /// Does the current node have focus?
-            fn is_focused(&self) -> bool;
+            fn is_focused(&self) -> bool {}
 
             /// Does the specified node have focus?
             fn node_is_focused(&self, node: NodeId) -> bool;
@@ -1136,7 +1136,7 @@ pub mod canopy {
             fn focused_node(&self) -> Option<NodeId>;
 
             /// Is the current node on the focus path?
-            fn is_on_focus_path(&self) -> bool;
+            fn is_on_focus_path(&self) -> bool {}
 
             /// Is the specified node on the focus path?
             fn node_is_on_focus_path(&self, node: NodeId) -> bool;
@@ -1160,7 +1160,7 @@ pub mod canopy {
             fn locate(&self, root: NodeId, point: Point) -> Result<Option<NodeId>>;
 
             /// Return a keyed child relative to the current node.
-            fn child_keyed(&self, key: &str) -> Option<NodeId>;
+            fn child_keyed(&self, key: &str) -> Option<NodeId> {}
 
             /// Return a keyed child relative to a specific parent node.
             fn child_keyed_in(&self, parent: NodeId, key: &str) -> Option<NodeId>;
@@ -3363,10 +3363,10 @@ pub mod canopy {
         fn root_id(&self) -> NodeId;
 
         /// View information for the current node.
-        fn view(&self) -> &View;
+        fn view(&self) -> View {}
 
         /// Cached layout configuration for the current node.
-        fn layout(&self) -> Layout;
+        fn layout(&self) -> Layout {}
 
         /// View information for a specific node.
         fn node_view(&self, node: NodeId) -> Option<View>;
@@ -3396,7 +3396,7 @@ pub mod canopy {
         fn children_of(&self, node: NodeId) -> Vec<NodeId>;
 
         /// Does the current node have focus?
-        fn is_focused(&self) -> bool;
+        fn is_focused(&self) -> bool {}
 
         /// Does the specified node have focus?
         fn node_is_focused(&self, node: NodeId) -> bool;
@@ -3405,7 +3405,7 @@ pub mod canopy {
         fn focused_node(&self) -> Option<NodeId>;
 
         /// Is the current node on the focus path?
-        fn is_on_focus_path(&self) -> bool;
+        fn is_on_focus_path(&self) -> bool {}
 
         /// Is the specified node on the focus path?
         fn node_is_on_focus_path(&self, node: NodeId) -> bool;
@@ -3429,7 +3429,7 @@ pub mod canopy {
         fn locate(&self, root: NodeId, point: Point) -> Result<Option<NodeId>>;
 
         /// Return a keyed child relative to the current node.
-        fn child_keyed(&self, key: &str) -> Option<NodeId>;
+        fn child_keyed(&self, key: &str) -> Option<NodeId> {}
 
         /// Return a keyed child relative to a specific parent node.
         fn child_keyed_in(&self, parent: NodeId, key: &str) -> Option<NodeId>;
