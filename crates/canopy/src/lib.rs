@@ -37,7 +37,7 @@ pub use core::testing;
 pub use core::{
     AutomationCallback, AutomationHandle, BindingId, Canopy, ChangeOutcome, ChildKey, Context,
     Fixture, FixtureInfo, FocusScope, InputSpec, KeyedChildren, Loader, NodeId, Path, PathFilter,
-    Preorder, RemovePolicy, RoutePhase, RouteTraceEntry, ScriptApiState, ScriptJournalEntry,
+    RemovePolicy, RoutePhase, RouteTraceEntry, ScriptApiState, ScriptJournalEntry,
     ScriptModuleRoots, Slot, TypedId, ViewContext,
 };
 // App-author modules used by widget implementations and derive output.

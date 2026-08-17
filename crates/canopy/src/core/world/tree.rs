@@ -73,13 +73,6 @@ impl MountedWidget {
 }
 
 impl Core {
-    /// Add a boxed widget to the arena and return its node ID.
-    pub(super) fn add_boxed(&mut self, widget: Box<dyn Widget>) -> Result<NodeId> {
-        let node = Node::new(widget);
-        node.layout.validate()?;
-        Ok(self.nodes.insert(node))
-    }
-
     /// Update the layout for a node.
     pub fn with_layout_of(
         &mut self,
@@ -201,10 +194,7 @@ impl Core {
 
         let widget_slot = Rc::clone(&self.nodes[node_id].widget);
 
-        self.with_widget_mut(node_id, |widget, core| {
-            let mut ctx = CoreContext::new(core, node_id);
-            widget.on_mount(&mut ctx)
-        })??;
+        self.with_widget_ctx(node_id, |widget, ctx| widget.on_mount(ctx))??;
 
         if let Some(node) = self.nodes.get_mut(node_id) {
             node.mounted = true;
@@ -303,10 +293,7 @@ impl Core {
             return Ok(());
         }
         let widget = Rc::clone(&node.widget);
-        self.with_widget_mut(node_id, |widget, core| {
-            let mut ctx = CoreContext::new(core, node_id);
-            widget.on_unmount(&mut ctx);
-        })?;
+        self.with_widget_ctx(node_id, |widget, ctx| widget.on_unmount(ctx))?;
         if let Some(node) = self.nodes.get_mut(node_id) {
             node.mounted = false;
         }
@@ -342,7 +329,7 @@ impl Core {
     fn validate_invariants_with(&self, widget_slot_policy: WidgetSlotPolicy) -> Result<()> {
         self.validate_root()?;
         for (node_id, node) in &self.nodes {
-            self.validate_widget_slot(node_id, node, widget_slot_policy)?;
+            validate_slot(node_id, node, widget_slot_policy)?;
             self.validate_node_links(node_id, node)?;
             self.validate_parent_chain(node_id)?;
             self.validate_lifecycle_state(node_id, node)?;
@@ -374,16 +361,6 @@ impl Core {
             return Err(invariant_violation("root node has a parent"));
         }
         Ok(())
-    }
-
-    /// Validate that the widget slot is present and currently inspectable.
-    fn validate_widget_slot(
-        &self,
-        node_id: NodeId,
-        node: &Node,
-        policy: WidgetSlotPolicy,
-    ) -> Result<()> {
-        validate_slot(node_id, node, policy)
     }
 
     /// Validate parent, child, and keyed child links for a node.
@@ -594,22 +571,19 @@ impl Core {
     where
         W: Widget + 'static,
     {
-        self.add_boxed(Box::new(widget))
+        self.create_detached_boxed(Box::new(widget))
     }
 
     /// Create a node in the arena detached from the tree using a boxed widget.
     pub fn create_detached_boxed(&mut self, widget: Box<dyn Widget>) -> Result<NodeId> {
-        self.add_boxed(widget)
-    }
-
-    /// Create a detached node through a context, rejecting edits during rollback.
-    pub(crate) fn try_create_detached_boxed(&mut self, widget: Box<dyn Widget>) -> Result<NodeId> {
         if self.rolling_back_tree_edit {
             return Err(Error::TreeEditDuringRollback {
                 operation: "create detached",
             });
         }
-        self.create_detached_boxed(widget)
+        let node = Node::new(widget);
+        node.layout.validate()?;
+        Ok(self.nodes.insert(node))
     }
 
     /// Add a boxed widget as a child of a specific parent and return the new node ID.
@@ -959,10 +933,7 @@ impl Core {
     /// Run fallible removal hooks in deterministic pre-order.
     fn run_pre_remove_plan(&mut self, plan: &RemovalPlan) -> Result<()> {
         for entry in &plan.pre_order {
-            self.with_widget_mut(entry.node_id, |widget, core| {
-                let mut ctx = CoreContext::new(core, entry.node_id);
-                widget.pre_remove(&mut ctx)
-            })??;
+            self.with_widget_ctx(entry.node_id, |widget, ctx| widget.pre_remove(ctx))??;
         }
         Ok(())
     }

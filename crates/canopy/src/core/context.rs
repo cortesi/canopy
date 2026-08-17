@@ -1,5 +1,6 @@
 use std::{
     any::{Any, TypeId, type_name, type_name_of_val},
+    iter,
     marker::PhantomData,
     ops::Deref,
     result::Result as StdResult,
@@ -332,14 +333,6 @@ pub trait ViewContext {
     fn pending_help_snapshot(&self) -> Option<&OwnedHelpSnapshot>;
 }
 
-/// Pre-order traversal iterator over a subtree.
-pub struct Preorder<'a> {
-    /// Read-only context used to access children.
-    ctx: &'a dyn ViewContext,
-    /// Traversal stack.
-    stack: Vec<NodeId>,
-}
-
 /// Validate one raw node ID against a requested widget type.
 fn checked_typed_id<W, C>(ctx: &C, node: NodeId) -> Result<TypedId<W>>
 where
@@ -356,19 +349,6 @@ where
     Ok(TypedId::new(node))
 }
 
-impl<'a> Iterator for Preorder<'a> {
-    type Item = NodeId;
-
-    fn next(&mut self) -> Option<NodeId> {
-        let id = self.stack.pop()?;
-        let children = ViewContext::children_of(self.ctx, id);
-        for child in children.into_iter().rev() {
-            self.stack.push(child);
-        }
-        Some(id)
-    }
-}
-
 impl dyn ViewContext + '_ {
     /// Validate an untyped node ID and return its typed form.
     pub fn typed_id<W: Widget + 'static>(&self, node: impl Into<NodeId>) -> Result<TypedId<W>> {
@@ -376,11 +356,15 @@ impl dyn ViewContext + '_ {
     }
 
     /// Pre-order traversal of the subtree rooted at `root`.
-    pub fn preorder(&self, root: impl Into<NodeId>) -> Preorder<'_> {
-        Preorder {
-            ctx: self,
-            stack: vec![root.into()],
-        }
+    pub fn preorder(&self, root: impl Into<NodeId>) -> impl Iterator<Item = NodeId> + '_ {
+        let mut stack = vec![root.into()];
+        iter::from_fn(move || {
+            let id = stack.pop()?;
+            for child in ViewContext::children_of(self, id).into_iter().rev() {
+                stack.push(child);
+            }
+            Some(id)
+        })
     }
 
     /// Return the first widget of type `W` anywhere in the tree, including the root.
@@ -1047,7 +1031,7 @@ impl Context for NodeCtx<&mut Core> {
     }
 
     fn create_detached_boxed(&mut self, widget: Box<dyn Widget>) -> Result<NodeId> {
-        self.core.try_create_detached_boxed(widget)
+        self.core.create_detached_boxed(widget)
     }
 
     fn apply_tree_edit(
@@ -1066,10 +1050,8 @@ impl Context for NodeCtx<&mut Core> {
         node: NodeId,
         f: &mut dyn FnMut(&mut dyn Widget, &mut dyn Context) -> Result<()>,
     ) -> Result<()> {
-        self.core.with_widget_mut(node, |widget, core| {
-            let mut ctx = CoreContext::new(core, node);
-            f(widget, &mut ctx)
-        })?
+        self.core
+            .with_widget_ctx(node, |widget, ctx| f(widget, ctx))?
     }
 
     fn dispatch_command(&mut self, cmd: &CommandInvocation) -> StdResult<ArgValue, CommandError> {

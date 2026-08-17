@@ -34,7 +34,7 @@ use crate::{
     commands::{self, CommandDispatchKind},
     core::{
         Core, NodeId, TypedId,
-        dump::dump_with_focus,
+        dump::dump,
         fixture::{Fixture, FixtureInfo},
         help,
     },
@@ -1487,7 +1487,7 @@ impl Canopy {
         }
 
         out.push_str("\nnode tree:\n");
-        match dump_with_focus(&self.core, self.core.root, focus) {
+        match dump(&self.core, self.core.root, focus) {
             Ok(tree) => {
                 out.push_str(&tree);
                 if !tree.ends_with('\n') {

@@ -68,11 +68,6 @@ where
         &self.order
     }
 
-    /// Return the key at a given index.
-    pub fn key_at(&self, index: usize) -> Option<&K> {
-        self.order.get(index)
-    }
-
     /// Return the node ID for a key, if present.
     pub fn id_for(&self, key: &K) -> Option<TypedId<W>> {
         self.map.get(key).copied()
@@ -80,7 +75,7 @@ where
 
     /// Return the node ID at a given index, if present.
     pub fn id_at(&self, index: usize) -> Option<TypedId<W>> {
-        self.key_at(index).and_then(|key| self.id_for(key))
+        self.order.get(index).and_then(|key| self.id_for(key))
     }
 
     /// Iterate node IDs in the current order.
@@ -92,24 +87,6 @@ where
 
     /// Reconcile this collection against the desired key order.
     pub fn reconcile<I, C, U>(
-        &mut self,
-        ctx: &mut dyn Context,
-        desired: I,
-        create: C,
-        update: U,
-        remove: RemovePolicy,
-    ) -> Result<Vec<TypedId<W>>>
-    where
-        I: IntoIterator<Item = K>,
-        C: FnMut(&K) -> W,
-        U: FnMut(&K, TypedId<W>, &mut dyn Context) -> Result<()>,
-    {
-        let mut create = create;
-        self.try_reconcile(ctx, desired, |key| Ok(create(key)), update, remove)
-    }
-
-    /// Reconcile this collection against the desired key order with fallible creation.
-    pub fn try_reconcile<I, C, U>(
         &mut self,
         ctx: &mut dyn Context,
         desired: I,

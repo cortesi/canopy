@@ -67,7 +67,7 @@ pub use canopy::{
 };
 pub use change::ChangeOutcome;
 pub use children::{KeyedChildren, RemovePolicy};
-pub use context::{ChildKey, Context, FocusScope, Preorder, Slot, ViewContext};
+pub use context::{ChildKey, Context, FocusScope, Slot, ViewContext};
 pub use fixture::{Fixture, FixtureInfo};
 pub use id::{NodeId, TypedId};
 pub use inputmap::{BindingId, InputSpec};

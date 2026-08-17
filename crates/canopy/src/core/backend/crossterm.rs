@@ -18,11 +18,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use crate::{
     Canopy, NodeId,
     backend::{BackendControl, TerminalSession},
-    core::{
-        Core,
-        dump::{dump, dump_with_focus},
-        text,
-    },
+    core::{Core, dump::dump, text},
     error::{self, Result},
     event::{Event, key, mouse},
     geom::{Point, Size},
@@ -729,12 +725,7 @@ fn handle_render_error(
     // Print error and node dump
     eprintln!("Render error: {error}");
     eprintln!("\nNode tree dump:");
-    let dump_result = if focus.is_some() {
-        dump_with_focus(core, root, focus)
-    } else {
-        dump(core, root)
-    };
-    match dump_result {
+    match dump(core, root, focus) {
         Ok(dump_str) => eprintln!("{dump_str}"),
         Err(dump_err) => eprintln!("Failed to dump node tree: {dump_err}"),
     }
@@ -847,7 +838,7 @@ pub fn runloop_with_options(mut cnpy: Canopy, options: RunloopOptions) -> Result
             drop(session.stop());
             if options.ctrl_c == CtrlCBehavior::DumpTreeAndExit {
                 eprintln!("\nCtrl+C pressed - Node tree dump:");
-                match dump_with_focus(&cnpy.core, cnpy.core.root, cnpy.core.focus) {
+                match dump(&cnpy.core, cnpy.core.root, cnpy.core.focus) {
                     Ok(dump_str) => eprintln!("{dump_str}"),
                     Err(dump_err) => eprintln!("Failed to dump node tree: {dump_err}"),
                 }

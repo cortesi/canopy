@@ -225,7 +225,7 @@ Independent, low-risk, mostly deletions. Do these first.
   `execute(canopy, node, sid, timeout: Option<Duration>)` and delete `compile_named` (its only
   external caller passes the default name). About −60 lines.
 
-- [ ] **1.6 Small core dedupes.** `context.rs:565-579` `clamp_scroll_offset` duplicates
+- [x] **1.6 Small core dedupes.** `context.rs:565-579` `clamp_scroll_offset` duplicates
   `layout_driver.rs:839-853` `clamp_scroll` (make the latter `pub(crate)`).
   `WidgetOperationKind` (`world/mod.rs:145-189, 359-378`) mirrors `NodeOperationKind` 1:1; store
   `NodeOperationKind` in `WidgetOperation` and delete the mapping. `Core::new` (`world/mod.rs:195-218`)

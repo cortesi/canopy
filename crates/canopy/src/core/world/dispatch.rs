@@ -1,5 +1,5 @@
 use super::*;
-use crate::{core::context::CoreContext, event::Event, widget::EventOutcome};
+use crate::{event::Event, widget::EventOutcome};
 
 impl Core {
     /// Build a command-scope frame for a specific event.
@@ -30,10 +30,7 @@ impl Core {
     fn dispatch_event_inner(&mut self, start: NodeId, event: &Event) -> Result<EventOutcome> {
         let mut target = Some(start);
         while let Some(id) = target {
-            let outcome = self.with_widget_mut(id, |w, core| {
-                let mut ctx = CoreContext::new(core, id);
-                w.on_event(event, &mut ctx)
-            })??;
+            let outcome = self.with_widget_ctx(id, |w, ctx| w.on_event(event, ctx))??;
             match outcome {
                 EventOutcome::Handle | EventOutcome::Consume => return Ok(outcome),
                 EventOutcome::Ignore => {
@@ -52,10 +49,7 @@ impl Core {
     ) -> Result<EventOutcome> {
         let node_id = node_id.into();
         let depth = self.push_command_scope(self.command_scope_for_event(event));
-        let outcome = self.with_widget_mut(node_id, |w, core| {
-            let mut ctx = CoreContext::new(core, node_id);
-            w.on_event(event, &mut ctx)
-        });
+        let outcome = self.with_widget_ctx(node_id, |w, ctx| w.on_event(event, ctx));
         self.pop_command_scope(depth);
         let outcome = outcome??;
         Ok(outcome)

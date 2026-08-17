@@ -16,7 +16,7 @@ use super::{
 use crate::{
     ChangeOutcome, ViewContext,
     commands::{CommandScopeFrame, CommandSet},
-    core::{id::NodeId, node::Node},
+    core::{context::CoreContext, id::NodeId, node::Node},
     error::{Error, NodeOperationKind, Result},
     layout::Layout,
     render::Render,
@@ -30,7 +30,7 @@ mod dispatch;
 /// Focus and mouse-capture management.
 mod focus;
 /// Layout traversal, measurement, and hit-testing.
-pub(crate) mod layout_driver;
+pub mod layout_driver;
 #[cfg(test)]
 mod tests;
 /// Arena mutation, structural invariants, and path helpers.
@@ -276,6 +276,18 @@ impl Core {
             )
         })?;
         Ok(f(guard.widget_mut(), self))
+    }
+
+    /// Borrow a widget mutably alongside a context bound to the same node.
+    pub(crate) fn with_widget_ctx<R>(
+        &mut self,
+        node_id: NodeId,
+        f: impl FnOnce(&mut dyn Widget, &mut CoreContext<'_>) -> R,
+    ) -> Result<R> {
+        self.with_widget_mut(node_id, |widget, core| {
+            let mut ctx = CoreContext::new(core, node_id);
+            f(widget, &mut ctx)
+        })
     }
 
     /// Borrow a widget immutably for a read-only core query.

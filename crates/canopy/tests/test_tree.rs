@@ -31,14 +31,16 @@ mod tests {
         match outcome {
             TriggerOutcome::Skip => Ok(Walk::Skip),
             TriggerOutcome::Handle => Ok(Walk::Handle(())),
-            TriggerOutcome::NoResult => Err(Error::NoResult),
+            TriggerOutcome::NoResult => Err(Error::Internal("no result".into())),
         }
     }
 
     fn assert_walk_result(actual: Result<Walk<()>>, expected: Result<Walk<()>>) {
         match (actual, expected) {
             (Ok(actual), Ok(expected)) => assert_eq!(actual, expected),
-            (Err(Error::NoResult), Err(Error::NoResult)) => {}
+            (Err(Error::Internal(actual)), Err(Error::Internal(expected))) => {
+                assert_eq!(actual, expected);
+            }
             (Err(actual), Err(expected)) => {
                 panic!("expected Err({expected}), got Err({actual})");
             }
@@ -214,11 +216,11 @@ mod tests {
 
         let (visited, result) = trigger("ba_la", TriggerOutcome::NoResult);
         assert_eq!(visited, vc(&["r", "ba", "ba_la"]));
-        assert_walk_result(result, Err(Error::NoResult));
+        assert_walk_result(result, Err(Error::Internal("no result".into())));
 
         let (visited, result) = trigger("r", TriggerOutcome::NoResult);
         assert_eq!(visited, vc(&["r"]));
-        assert_walk_result(result, Err(Error::NoResult));
+        assert_walk_result(result, Err(Error::Internal("no result".into())));
 
         Ok(())
     }
@@ -282,14 +284,14 @@ mod tests {
 
         let (visited, result) = trigger("ba_la", TriggerOutcome::NoResult);
         assert_eq!(visited, vc(&["ba_la"]));
-        assert_walk_result(result, Err(Error::NoResult));
+        assert_walk_result(result, Err(Error::Internal("no result".into())));
 
         let (visited, result) = trigger("bb", TriggerOutcome::NoResult);
         assert_eq!(
             visited,
             vc(&["ba_la", "ba_lb", "ba", "bb_la", "bb_lb", "bb"])
         );
-        assert_walk_result(result, Err(Error::NoResult));
+        assert_walk_result(result, Err(Error::Internal("no result".into())));
 
         Ok(())
     }

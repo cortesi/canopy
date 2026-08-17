@@ -141,7 +141,8 @@ impl<'a> LayoutPass<'a> {
             effective_layout.overflow_y = true;
         }
 
-        let outer = self.resolve_outer_size(node_id, effective_layout, available_outer)?;
+        let outer =
+            self.resolve_outer_size_with_layout(node_id, effective_layout, available_outer)?;
         let pad_x = layout.padding.horizontal();
         let pad_y = layout.padding.vertical();
         let content_size = Size::new(outer.w.saturating_sub(pad_x), outer.h.saturating_sub(pad_y));
@@ -223,16 +224,6 @@ impl<'a> LayoutPass<'a> {
         }
 
         Ok(())
-    }
-
-    /// Resolve a node's outer size using its layout configuration.
-    fn resolve_outer_size(
-        &mut self,
-        node_id: NodeId,
-        layout: Layout,
-        available_outer: Size,
-    ) -> Result<Size<u32>> {
-        self.resolve_outer_size_with_layout(node_id, layout, available_outer)
     }
 
     /// Resolve a node's outer size using an explicit layout snapshot.
@@ -837,7 +828,7 @@ pub(super) fn constraint_for_axis(
 }
 
 /// Clamp a scroll offset so it stays within view/canvas bounds.
-pub(crate) fn clamp_scroll(scroll: &mut Point, view: Size<u32>, canvas: Size<u32>) {
+pub fn clamp_scroll(scroll: &mut Point, view: Size<u32>, canvas: Size<u32>) {
     let max_x = if view.w == 0 {
         0
     } else {

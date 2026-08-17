@@ -9,21 +9,9 @@ use crate::{
 };
 
 /// Traverses a tree of nodes and returns a string showing the node names and
-/// views for each node for visual display. This is a debug function.
-pub fn dump(core: &Core, root: impl Into<NodeId>) -> Result<String> {
-    let mut buffer = Buffer::ansi();
-    dump_node(&mut buffer, core, root.into(), 0, None)?;
-    Ok(String::from_utf8_lossy(buffer.as_slice()).into_owned())
-}
-
-/// Traverses a tree of nodes and returns a string showing the node names and
-/// views for each node for visual display, with focus information.
+/// views for each node for visual display, marking `focus` when it is set.
 /// This is a debug function.
-pub fn dump_with_focus(
-    core: &Core,
-    root: impl Into<NodeId>,
-    focus: Option<NodeId>,
-) -> Result<String> {
+pub fn dump(core: &Core, root: impl Into<NodeId>, focus: Option<NodeId>) -> Result<String> {
     let mut buffer = Buffer::ansi();
     dump_node(&mut buffer, core, root.into(), 0, focus)?;
     Ok(String::from_utf8_lossy(buffer.as_slice()).into_owned())

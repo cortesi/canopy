@@ -700,7 +700,7 @@ impl<W: Selectable> List<W> {
             return Err(Error::Internal("list key collision".into()));
         }
         let mut widget = Some(widget);
-        self.items.try_reconcile(
+        self.items.reconcile(
             ctx,
             desired,
             |requested| {
@@ -725,7 +725,7 @@ impl<W: Selectable> List<W> {
         desired: Vec<ListKey>,
         remove: RemovePolicy,
     ) -> Result<Vec<TypedId<W>>> {
-        self.items.try_reconcile(
+        self.items.reconcile(
             ctx,
             desired,
             |requested| {

@@ -1761,9 +1761,8 @@ fn dispatch_on_node(
     spec: &CommandSpec,
     inv: &CommandInvocation,
 ) -> Result<ArgValue, CommandError> {
-    core.with_widget_mut(node_id, |widget, core| {
-        let mut ctx = CoreContext::new(core, node_id);
-        (spec.invoke)(Some(widget as &mut dyn Any), &mut ctx, inv)
+    core.with_widget_ctx(node_id, |widget, ctx| {
+        (spec.invoke)(Some(widget as &mut dyn Any), ctx, inv)
     })
     .map_err(CommandError::execution)?
 }

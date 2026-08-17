@@ -332,10 +332,6 @@ pub enum Error {
         timeout_ms: u64,
     },
 
-    /// No result was generated on node traversal.
-    #[error("no result")]
-    NoResult,
-
     /// Node not found in the arena.
     #[error("node not found: {0:?}")]
     NodeNotFound(NodeId),

@@ -1407,8 +1407,6 @@ pub mod canopy {
                     /// Requested timeout in milliseconds.
                     timeout_ms: u64,
                 },
-                /// No result was generated on node traversal.
-                NoResult,
                 /// Node not found in the arena.
                 NodeNotFound(crate::core::id::NodeId),
                 /// Node exists but is not attached to the root tree.
@@ -2914,9 +2912,6 @@ pub mod canopy {
         /// Return the ordered key slice.
         pub fn keys(&self) -> &[K] {}
 
-        /// Return the key at a given index.
-        pub fn key_at(&self, index: usize) -> Option<&K> {}
-
         /// Return the node ID for a key, if present.
         pub fn id_for(&self, key: &K) -> Option<TypedId<W>> {}
 
@@ -2928,21 +2923,6 @@ pub mod canopy {
 
         /// Reconcile this collection against the desired key order.
         pub fn reconcile<I, C, U>(
-            &mut self,
-            ctx: &mut dyn Context,
-            desired: I,
-            create: C,
-            update: U,
-            remove: RemovePolicy,
-        ) -> Result<Vec<TypedId<W>>>
-        where
-            I: IntoIterator<Item = K>,
-            C: FnMut(&K) -> W,
-            U: FnMut(&K, TypedId<W>, &mut dyn Context) -> Result<()>, {
-        }
-
-        /// Reconcile this collection against the desired key order with fallible creation.
-        pub fn try_reconcile<I, C, U>(
             &mut self,
             ctx: &mut dyn Context,
             desired: I,
@@ -3048,14 +3028,6 @@ pub mod canopy {
 
         /// Return the original filter string.
         pub fn as_str(&self) -> &str {}
-    }
-
-    /// Pre-order traversal iterator over a subtree.
-    pub struct Preorder<'a> {}
-
-    impl<'a> Iterator for Preorder<'a> {
-        type Item = NodeId;
-        fn next(&mut self) -> Option<NodeId> {}
     }
 
     /// Policy for removing children that are no longer desired.
@@ -4201,8 +4173,6 @@ pub mod canopy {
                 /// Requested timeout in milliseconds.
                 timeout_ms: u64,
             },
-            /// No result was generated on node traversal.
-            NoResult,
             /// Node not found in the arena.
             NodeNotFound(crate::core::id::NodeId),
             /// Node exists but is not attached to the root tree.
