@@ -8,7 +8,7 @@ use crate::{
     error::{Error, Result},
     geom::{Line, Point, Rect, Size},
     render::RenderBackend,
-    style::{Attr, AttrSet, Color, ResolvedStyle},
+    style::{Attr, ResolvedStyle},
 };
 
 /// NULL character constant.
@@ -226,37 +226,6 @@ impl TermBuf {
         cells.resize(count, cell);
         Ok(Self { size, cells })
     }
-    /// Create an empty TermBuf filled with NULL characters.
-    pub fn empty_with_style(size: impl Into<Size>, style: ResolvedStyle) -> Result<Self> {
-        Self::empty_with_style_and_limits(size, style, RenderLimits::default())
-    }
-
-    /// Create an empty buffer with explicit visible render-target limits.
-    pub fn empty_with_style_and_limits(
-        size: impl Into<Size>,
-        style: ResolvedStyle,
-        limits: RenderLimits,
-    ) -> Result<Self> {
-        let size = size.into();
-        let cell = Cell::empty(style);
-        let count = limits.cell_count(size)?;
-        let mut cells = Vec::new();
-        cells
-            .try_reserve_exact(count)
-            .map_err(|_| Error::RenderAllocation { cells: count })?;
-        cells.resize(count, cell);
-        Ok(Self { size, cells })
-    }
-
-    /// Create an empty TermBuf filled with NULL characters.
-    pub fn empty(size: impl Into<Size>) -> Result<Self> {
-        let default_style = ResolvedStyle {
-            fg: Color::White,
-            bg: Color::Black,
-            attrs: AttrSet::default(),
-        };
-        Self::empty_with_style(size, default_style)
-    }
 
     /// Return the buffer size.
     pub fn size(&self) -> Size {
@@ -373,21 +342,6 @@ impl TermBuf {
                     let point = Point { x, y };
                     self.put(point, ch, style_at(point))?;
                 }
-            }
-        }
-        Ok(())
-    }
-
-    /// Fill all empty cells with the given character and style.
-    pub fn fill_empty(&mut self, ch: char, style: &ResolvedStyle) -> Result<()> {
-        validate_cell_character(ch)?;
-        for i in 0..self.cells.len() {
-            if self.cells[i].is_empty() {
-                self.cells[i] = if ch == NULL {
-                    Cell::empty(*style)
-                } else {
-                    Cell::new(ch, *style)
-                };
             }
         }
         Ok(())
@@ -566,60 +520,14 @@ impl TermBuf {
         if self.size != prev.size {
             return self.render(backend);
         }
-        if backend.supports_line_shift()
-            && let Some(shift) = detect_row_shift(self, prev, MAX_ROW_SHIFT)
-        {
-            let last_row = self.size.h.saturating_sub(1);
-            backend.shift_lines(0, last_row, shift)?;
-            let width = self.size.w as usize;
-            let count = shift.unsigned_abs();
-            if shift > 0 {
-                for y in 0..count {
-                    let row_start = y as usize * width;
-                    let row_end = row_start + width;
-                    let row = &self.cells[row_start..row_end];
-                    render_line_range(backend, row, y, 0, width)?;
-                }
-            } else if shift < 0 {
-                let start = self.size.h.saturating_sub(count);
-                for y in start..self.size.h {
-                    let row_start = y as usize * width;
-                    let row_end = row_start + width;
-                    let row = &self.cells[row_start..row_end];
-                    render_line_range(backend, row, y, 0, width)?;
-                }
+        if backend.supports_line_shift() {
+            let full = self.rect();
+            if let Some(shift) = detect_row_shift_in_rect(self, prev, full, MAX_ROW_SHIFT) {
+                return render_shifted_rect(self, backend, full, shift);
             }
-            backend.flush()?;
-            return Ok(());
-        }
-        if backend.supports_line_shift()
-            && let Some((rect, shift)) = detect_inner_shift(self, prev, MAX_ROW_SHIFT)
-        {
-            let top = rect.tl.y;
-            let bottom = rect.tl.y + rect.h - 1;
-            backend.shift_lines(top, bottom, shift)?;
-            let width = self.size.w as usize;
-            let count = shift.unsigned_abs();
-            let start_x = rect.tl.x as usize;
-            let len = rect.w as usize;
-            if shift > 0 {
-                for y in rect.tl.y..rect.tl.y + count {
-                    let row_start = y as usize * width;
-                    let row_end = row_start + width;
-                    let row = &self.cells[row_start..row_end];
-                    render_line_range(backend, row, y, start_x, len)?;
-                }
-            } else if shift < 0 {
-                let start = rect.tl.y + rect.h - count;
-                for y in start..rect.tl.y + rect.h {
-                    let row_start = y as usize * width;
-                    let row_end = row_start + width;
-                    let row = &self.cells[row_start..row_end];
-                    render_line_range(backend, row, y, start_x, len)?;
-                }
+            if let Some((rect, shift)) = detect_inner_shift(self, prev, MAX_ROW_SHIFT) {
+                return render_shifted_rect(self, backend, rect, shift);
             }
-            backend.flush()?;
-            return Ok(());
         }
         let width = self.size.w as usize;
         let can_shift = backend.supports_char_shift();
@@ -761,30 +669,6 @@ fn detect_line_shift(current: &[Cell], prev: &[Cell], max_shift: usize) -> Optio
     None
 }
 
-/// Check whether two buffers are identical up to a vertical shift.
-fn detect_row_shift(current: &TermBuf, prev: &TermBuf, max_shift: usize) -> Option<i32> {
-    let height = current.size.h as i32;
-    if height == 0 || height != prev.size.h as i32 {
-        return None;
-    }
-
-    let max = max_shift.min(height.saturating_sub(2) as usize);
-    if max == 0 {
-        return None;
-    }
-
-    for shift in 1..=max {
-        let shift = shift as i32;
-        if buffer_matches_shift(current, prev, shift) {
-            return Some(shift);
-        }
-        if buffer_matches_shift(current, prev, -shift) {
-            return Some(-shift);
-        }
-    }
-    None
-}
-
 /// Check whether two buffers have matching borders and a shifted interior.
 fn detect_inner_shift(current: &TermBuf, prev: &TermBuf, max_shift: usize) -> Option<(Rect, i32)> {
     if current.size != prev.size {
@@ -873,33 +757,27 @@ fn detect_row_shift_in_rect(
     None
 }
 
-/// Determine whether two buffers match for a given vertical shift.
-fn buffer_matches_shift(current: &TermBuf, prev: &TermBuf, shift: i32) -> bool {
-    let height = current.size.h as i32;
-    let width = current.size.w as usize;
-    if shift == 0 || shift.unsigned_abs() as i32 >= height {
-        return false;
-    }
-
-    if shift > 0 {
-        for y in shift..height {
-            let row = y as usize * width;
-            let prev_row = (y - shift) as usize * width;
-            if current.cells[row..row + width] != prev.cells[prev_row..prev_row + width] {
-                return false;
-            }
-        }
+/// Shift the rows of `rect` on the backend and repaint the rows the shift exposed.
+fn render_shifted_rect<R: RenderBackend>(
+    buf: &TermBuf,
+    backend: &mut R,
+    rect: Rect,
+    shift: i32,
+) -> Result<()> {
+    backend.shift_lines(rect.tl.y, rect.tl.y + rect.h - 1, shift)?;
+    let width = buf.size.w as usize;
+    let count = shift.unsigned_abs();
+    let exposed = if shift > 0 {
+        rect.tl.y..rect.tl.y + count
     } else {
-        let limit = height + shift;
-        for y in 0..limit {
-            let row = y as usize * width;
-            let prev_row = (y - shift) as usize * width;
-            if current.cells[row..row + width] != prev.cells[prev_row..prev_row + width] {
-                return false;
-            }
-        }
+        rect.tl.y + rect.h - count..rect.tl.y + rect.h
+    };
+    for y in exposed {
+        let row_start = y as usize * width;
+        let row = &buf.cells[row_start..row_start + width];
+        render_line_range(backend, row, y, rect.tl.x as usize, rect.w as usize)?;
     }
-    true
+    backend.flush()
 }
 
 /// Determine whether two buffers match for a given vertical shift within a rect.
@@ -1114,13 +992,14 @@ mod tests {
             TermBuf::new(Size::new(1, 1), '界', style),
             Err(Error::InvalidCellCharacter { width: 2, .. })
         ));
-        let mut buf = TermBuf::empty(Size::new(3, 3)).expect("test render target should allocate");
+        let mut buf = TermBuf::new(Size::new(3, 3), '\0', def_style())
+            .expect("test render target should allocate");
         assert!(matches!(
             buf.fill(&style, Rect::new(0, 0, 1, 1), '界'),
             Err(Error::InvalidCellCharacter { width: 2, .. })
         ));
         assert!(matches!(
-            buf.fill_empty('\u{0301}', &style),
+            buf.fill(&style, Rect::new(0, 0, 1, 1), '\u{0301}'),
             Err(Error::InvalidCellCharacter { width: 0, .. })
         ));
     }
@@ -1165,7 +1044,7 @@ mod tests {
     #[test]
     fn cursor_overlay_styles_complete_graphemes() -> Result<()> {
         let style = def_style();
-        let mut buf = TermBuf::empty(Size::new(2, 1))?;
+        let mut buf = TermBuf::new(Size::new(2, 1), '\0', def_style())?;
         buf.put_grapheme(Point::zero(), "界", style)?;
         buf.overlay_cursor(Point { x: 1, y: 0 }, cursor::CursorShape::Block);
 
@@ -1181,12 +1060,12 @@ mod tests {
 
     #[test]
     fn rendering_rejects_noncanonical_buffers() -> Result<()> {
-        let mut buf = TermBuf::empty(Size::new(1, 1))?;
+        let mut buf = TermBuf::new(Size::new(1, 1), '\0', def_style())?;
         buf.cells[0] = Cell::continuation(def_style());
         let mut backend = RecBackend::new();
         assert!(matches!(buf.render(&mut backend), Err(Error::Invariant(_))));
 
-        let mut ragged = TermBuf::empty(Size::new(2, 1))?;
+        let mut ragged = TermBuf::new(Size::new(2, 1), '\0', def_style())?;
         ragged.cells.pop();
         assert!(matches!(
             ragged.render(&mut backend),
@@ -2074,7 +1953,8 @@ mod tests {
     #[test]
     fn text_clips_wide_grapheme_without_partial_cell() {
         let style = def_style();
-        let mut tb = TermBuf::empty(Size::new(1, 1)).expect("test render target should allocate");
+        let mut tb = TermBuf::new(Size::new(1, 1), '\0', def_style())
+            .expect("test render target should allocate");
         tb.text(&style, Line::new(0, 0, 1), "界")
             .expect("test buffer mutation should succeed");
 
@@ -2173,7 +2053,8 @@ mod tests {
 
     #[test]
     fn empty_constructor_uses_canonical_empty_cells() {
-        let empty = TermBuf::empty(Size::new(5, 3)).expect("test render target should allocate");
+        let empty = TermBuf::new(Size::new(5, 3), '\0', def_style())
+            .expect("test render target should allocate");
         assert_eq!(empty.size(), Size::new(5, 3));
         BufTest::new(&empty).assert_matches(buf![
             "XXXXX"
@@ -2223,46 +2104,5 @@ mod tests {
         // Test that it doesn't match wrong combinations
         let italic_red = PartialStyle::fg(Color::Red).with_attrs(AttrSet::new(Attr::Italic));
         assert!(!BufTest::new(&tb).contains_text_style("bold", &italic_red));
-    }
-
-    #[test]
-    fn test_fill_empty() {
-        // Create an empty buffer
-        let mut tb = TermBuf::empty(Size::new(5, 3)).expect("test render target should allocate");
-
-        // Verify all cells are NULL initially using buf macro
-        BufTest::new(&tb).assert_matches(buf![
-            "XXXXX"
-            "XXXXX"
-            "XXXXX"
-        ]);
-
-        // Add some content to part of the buffer
-        tb.text(&def_style(), Line::new(1, 1, 3), "ABC")
-            .expect("test buffer mutation should succeed");
-
-        // Verify the content before fill_empty
-        BufTest::new(&tb).assert_matches(buf![
-            "XXXXX"
-            "XABCX"
-            "XXXXX"
-        ]);
-
-        // Fill empty cells with a specific character and style
-        let mut fill_style = def_style();
-        fill_style.fg = Color::Red;
-        tb.fill_empty('.', &fill_style)
-            .expect("test buffer mutation should succeed");
-
-        // Check that the buffer now has dots where there were NULLs
-        BufTest::new(&tb).assert_matches(buf![
-            "....."
-            ".ABC."
-            "....."
-        ]);
-
-        // Verify specific style properties
-        assert_eq!(tb.get(Point { x: 0, y: 0 }).unwrap().style.fg, Color::Red);
-        assert_eq!(tb.get(Point { x: 1, y: 1 }).unwrap().style.fg, Color::White);
     }
 }

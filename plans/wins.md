@@ -302,7 +302,7 @@ Independent, low-risk, mostly deletions. Do these first.
   make both `Render::text` paths use it; delete the redundant pad and the duplicated loop. Same
   shape for `Render::fill` vs `TermBuf::fill`. Existing termbuf/render tests cover behavior.
 
-- [ ] **2.4 `TermBuf` constructors and diff.** `empty_with_style_and_limits` is a verbatim copy
+- [x] **2.4 `TermBuf` constructors and diff.** `empty_with_style_and_limits` is a verbatim copy
   of `new_with_limits` with `ch = '\0'`; collapse the five constructors (`termbuf.rs:203-259`) to
   `new` + `new_with_limits`. Delete `fill_empty` (test-only). In `diff`, the whole-buffer row-shift
   block (`:559-583`, `detect_row_shift`, `buffer_matches_shift`) is the `rect = self.rect()`

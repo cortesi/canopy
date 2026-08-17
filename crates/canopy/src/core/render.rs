@@ -450,7 +450,7 @@ mod tests {
             .get(&stylemap, "")
             .resolve_solid()
             .expect("default style resolves to solid colors");
-        let mut target = TermBuf::empty_with_style(geom::Size::new(6, 4), default_style)
+        let mut target = TermBuf::new(geom::Size::new(6, 4), '\0', default_style)
             .expect("test render target should allocate");
 
         let clip = geom::Rect::new(2, 1, 2, 2);

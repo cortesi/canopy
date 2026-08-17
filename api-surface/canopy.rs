@@ -2260,20 +2260,6 @@ pub mod canopy {
         ) -> Result<Self> {
         }
 
-        /// Create an empty TermBuf filled with NULL characters.
-        pub fn empty_with_style(size: impl Into<Size>, style: ResolvedStyle) -> Result<Self> {}
-
-        /// Create an empty buffer with explicit visible render-target limits.
-        pub fn empty_with_style_and_limits(
-            size: impl Into<Size>,
-            style: ResolvedStyle,
-            limits: RenderLimits,
-        ) -> Result<Self> {
-        }
-
-        /// Create an empty TermBuf filled with NULL characters.
-        pub fn empty(size: impl Into<Size>) -> Result<Self> {}
-
         /// Return the buffer size.
         pub fn size(&self) -> Size {}
 
@@ -2291,9 +2277,6 @@ pub mod canopy {
             style_at: impl Fn(Point) -> ResolvedStyle,
         ) -> Result<()> {
         }
-
-        /// Fill all empty cells with the given character and style.
-        pub fn fill_empty(&mut self, ch: char, style: &ResolvedStyle) -> Result<()> {}
 
         /// Overlay a cursor on a cell by adjusting its style.
         pub fn overlay_cursor(&mut self, location: Point, shape: cursor::CursorShape) {}

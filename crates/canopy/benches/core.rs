@@ -251,7 +251,8 @@ fn bench_tree_edit(c: &mut Criterion) {
 /// Benchmark diff rendering from an empty buffer to a populated buffer.
 fn bench_render_diffing(c: &mut Criterion) {
     c.bench_function("render_diffing", |b| {
-        let previous = TermBuf::empty((160, 60)).expect("test render target should allocate");
+        let previous =
+            TermBuf::new((160, 60), '\0', style()).expect("test render target should allocate");
         let current = filled_buffer();
         let mut backend = CountingBackend::default();
         b.iter(|| {
