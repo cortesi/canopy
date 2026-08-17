@@ -670,7 +670,7 @@ impl Canopy {
             let script_id = match self.startup_module_scripts.get(&module.path).copied() {
                 Some(script_id) => script_id,
                 None => {
-                    let script_id = host.compile_startup_source(&mounted_source)?;
+                    let script_id = host.compile_startup_source(mounted_source)?;
                     self.startup_module_scripts
                         .insert(module.path.clone(), script_id);
                     script_id
