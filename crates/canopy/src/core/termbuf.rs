@@ -354,13 +354,24 @@ impl TermBuf {
 
     /// Fill a rectangle with a glyph and style.
     pub fn fill(&mut self, style: &ResolvedStyle, r: Rect, ch: char) -> Result<()> {
+        self.fill_with(r, ch, |_| *style)
+    }
+
+    /// Fill a rectangle, resolving the style separately for each cell.
+    pub fn fill_with(
+        &mut self,
+        r: Rect,
+        ch: char,
+        style_at: impl Fn(Point) -> ResolvedStyle,
+    ) -> Result<()> {
         validate_cell_character(ch)?;
         if let Some(isec) = self.rect().intersect(r) {
             let end_y = isec.tl.y.saturating_add(isec.h);
             let end_x = isec.tl.x.saturating_add(isec.w);
             for y in isec.tl.y..end_y {
                 for x in isec.tl.x..end_x {
-                    self.put(Point { x, y }, ch, *style)?;
+                    let point = Point { x, y };
+                    self.put(point, ch, style_at(point))?;
                 }
             }
         }
@@ -414,40 +425,51 @@ impl TermBuf {
 
     /// Draw text clipped to the given line.
     pub fn text(&mut self, style: &ResolvedStyle, l: Line, txt: &str) -> Result<()> {
-        if let Some(isec) = self.rect().intersect(l.rect()) {
-            let offset = isec.tl.x.saturating_sub(l.tl.x) as usize;
-            let max = isec.w as usize;
-            let (out, _) = text::slice_by_columns(txt, offset, max);
-            let mut col = 0usize;
-            let mut x = isec.tl.x;
+        self.text_with(l, txt, |_| *style)
+    }
 
-            for grapheme in out.graphemes(true) {
-                let width = text::grapheme_width(grapheme);
-                if width == 0 {
-                    continue;
-                }
-                if col + width > max {
-                    break;
-                }
+    /// Write text along a line, resolving the style separately for each cell.
+    ///
+    /// The text is clipped to the line and padded with spaces to the line's width.
+    pub fn text_with(
+        &mut self,
+        l: Line,
+        txt: &str,
+        style_at: impl Fn(Point) -> ResolvedStyle,
+    ) -> Result<()> {
+        let Some(isec) = self.rect().intersect(l.rect()) else {
+            return Ok(());
+        };
+        let offset = isec.tl.x.saturating_sub(l.tl.x) as usize;
+        let max = isec.w as usize;
+        let (out, _) = text::slice_by_columns(txt, offset, max);
+        let mut col = 0usize;
+        let mut x = isec.tl.x;
 
-                self.put_grapheme(Point { x, y: isec.tl.y }, grapheme, *style)?;
-                x = x.saturating_add(u32::try_from(width).unwrap_or(u32::MAX));
-                col = col.saturating_add(width);
+        for grapheme in out.graphemes(true) {
+            let width = text::grapheme_width(grapheme);
+            if width == 0 {
+                continue;
+            }
+            if col + width > max {
+                break;
             }
 
-            for i in col..max {
-                self.put(
-                    Point {
-                        x: isec
-                            .tl
-                            .x
-                            .saturating_add(u32::try_from(i).unwrap_or(u32::MAX)),
-                        y: isec.tl.y,
-                    },
-                    ' ',
-                    *style,
-                )?;
-            }
+            let point = Point { x, y: isec.tl.y };
+            self.put_grapheme(point, grapheme, style_at(point))?;
+            x = x.saturating_add(u32::try_from(width).unwrap_or(u32::MAX));
+            col = col.saturating_add(width);
+        }
+
+        for i in col..max {
+            let point = Point {
+                x: isec
+                    .tl
+                    .x
+                    .saturating_add(u32::try_from(i).unwrap_or(u32::MAX)),
+                y: isec.tl.y,
+            };
+            self.put(point, ' ', style_at(point))?;
         }
         Ok(())
     }

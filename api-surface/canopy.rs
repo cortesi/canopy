@@ -2283,6 +2283,15 @@ pub mod canopy {
         /// Fill a rectangle with a glyph and style.
         pub fn fill(&mut self, style: &ResolvedStyle, r: Rect, ch: char) -> Result<()> {}
 
+        /// Fill a rectangle, resolving the style separately for each cell.
+        pub fn fill_with(
+            &mut self,
+            r: Rect,
+            ch: char,
+            style_at: impl Fn(Point) -> ResolvedStyle,
+        ) -> Result<()> {
+        }
+
         /// Fill all empty cells with the given character and style.
         pub fn fill_empty(&mut self, ch: char, style: &ResolvedStyle) -> Result<()> {}
 
@@ -2291,6 +2300,17 @@ pub mod canopy {
 
         /// Draw text clipped to the given line.
         pub fn text(&mut self, style: &ResolvedStyle, l: Line, txt: &str) -> Result<()> {}
+
+        /// Write text along a line, resolving the style separately for each cell.
+        ///
+        /// The text is clipped to the line and padded with spaces to the line's width.
+        pub fn text_with(
+            &mut self,
+            l: Line,
+            txt: &str,
+            style_at: impl Fn(Point) -> ResolvedStyle,
+        ) -> Result<()> {
+        }
 
         /// Get a cell by position.
         pub fn get(&self, p: Point) -> Option<&Cell> {}

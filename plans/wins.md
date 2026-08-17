@@ -295,7 +295,7 @@ Independent, low-risk, mostly deletions. Do these first.
   tests near `:771`) as four `fill` calls on the frame parts and drop the `solid_frame` case from
   `benches/core.rs:348`. About −80 lines.
 
-- [ ] **2.3 One grapheme-clipping loop.** `Render::text` (`render.rs:226-283`) calls
+- [x] **2.3 One grapheme-clipping loop.** `Render::text` (`render.rs:226-283`) calls
   `TermBuf::text`, which already pads `col..max` with spaces (`termbuf.rs:452-465`), and then
   fills the same `pad_rect` again (`:241-248`); the non-solid path re-implements the same
   grapheme walk with a per-cell style. Give `TermBuf` one `text_with(line, txt, style_at)` and

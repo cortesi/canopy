@@ -1,5 +1,3 @@
-use unicode_segmentation::UnicodeSegmentation;
-
 use super::termbuf::TermBuf;
 use crate::{
     core::text,
@@ -98,6 +96,16 @@ impl Offset {
     }
 }
 
+/// Translate a point from buffer coordinates back to canvas coordinates.
+fn untranslate(origin: Offset, p: geom::Point) -> geom::Point {
+    let x = i64::from(p.x) - origin.x;
+    let y = i64::from(p.y) - origin.y;
+    geom::Point {
+        x: u32::try_from(x.clamp(0, i64::from(u32::MAX))).unwrap_or(u32::MAX),
+        y: u32::try_from(y.clamp(0, i64::from(u32::MAX))).unwrap_or(u32::MAX),
+    }
+}
+
 /// A renderer that only renders to a specific rectangle within the target terminal buffer.
 pub struct Render<'a> {
     /// The terminal buffer to render to.
@@ -190,89 +198,35 @@ impl<'a> Render<'a> {
 
     /// Fill a rectangle with a specified character. Writes out of bounds will be clipped.
     pub fn fill(&mut self, style: &str, r: geom::Rect, c: char) -> Result<()> {
-        if let Some(intersection) = r.intersect(self.clip) {
-            let style = self.resolve_style(style);
-            if let Some(resolved) = style.resolve_solid() {
-                let adjusted = self.translate_rect(intersection);
-                self.buf.fill(&resolved, adjusted, c)?;
-            } else {
-                let max_y = intersection.tl.y.saturating_add(intersection.h);
-                let max_x = intersection.tl.x.saturating_add(intersection.w);
-                for y in intersection.tl.y..max_y {
-                    for x in intersection.tl.x..max_x {
-                        let point = geom::Point { x, y };
-                        let adjusted = self.translate_point(point);
-                        let resolved = style.resolve_at(r, point);
-                        self.buf.put(adjusted, c, resolved)?;
-                    }
-                }
-            }
-        }
-        Ok(())
+        let Some(intersection) = r.intersect(self.clip) else {
+            return Ok(());
+        };
+        let style = self.resolve_style(style);
+        let adjusted = self.translate_rect(intersection);
+        let origin = self.origin;
+        self.buf
+            .fill_with(adjusted, c, |p| style.resolve_at(r, untranslate(origin, p)))
     }
 
     /// Print text in the specified line. If the text is wider than the
     /// rectangle, it will be truncated; if it is shorter, it will be padded.
     pub fn text(&mut self, style: &str, l: geom::Line, txt: &str) -> Result<()> {
         let line_rect = geom::Rect::new(l.tl.x, l.tl.y, l.w, 1);
-        if let Some(intersection) = line_rect.intersect(self.clip) {
-            let style = self.resolve_style(style);
+        let Some(intersection) = line_rect.intersect(self.clip) else {
+            return Ok(());
+        };
+        let style = self.resolve_style(style);
 
-            let skip_amount = intersection.tl.x.saturating_sub(l.tl.x) as usize;
-            let take_amount = intersection.w as usize;
-            let (out, out_width) = text::slice_by_columns(txt, skip_amount, take_amount);
-
-            if let Some(resolved) = style.resolve_solid() {
-                let adjusted_line = geom::Line {
-                    tl: self.translate_point(intersection.tl),
-                    w: intersection.w,
-                };
-                self.buf.text(&resolved, adjusted_line, out)?;
-                if out_width < adjusted_line.w as usize {
-                    let pad_rect = geom::Rect::new(
-                        adjusted_line.tl.x + out_width as u32,
-                        adjusted_line.tl.y,
-                        adjusted_line.w - out_width as u32,
-                        1,
-                    );
-                    self.buf.fill(&resolved, pad_rect, ' ')?;
-                }
-                return Ok(());
-            }
-
-            let mut col = 0usize;
-            let mut x = intersection.tl.x;
-            for grapheme in out.graphemes(true) {
-                let width = text::grapheme_width(grapheme);
-                if width == 0 {
-                    continue;
-                }
-                if col + width > take_amount {
-                    break;
-                }
-
-                let point = geom::Point {
-                    x,
-                    y: intersection.tl.y,
-                };
-                let adjusted = self.translate_point(point);
-                let resolved = style.resolve_at(line_rect, point);
-                self.buf.put_grapheme(adjusted, grapheme, resolved)?;
-                x = x.saturating_add(width as u32);
-                col = col.saturating_add(width);
-            }
-
-            for offset in col..take_amount {
-                let point = geom::Point {
-                    x: intersection.tl.x.saturating_add(offset as u32),
-                    y: intersection.tl.y,
-                };
-                let adjusted = self.translate_point(point);
-                let resolved = style.resolve_at(line_rect, point);
-                self.buf.put(adjusted, ' ', resolved)?;
-            }
-        }
-        Ok(())
+        let skip_amount = intersection.tl.x.saturating_sub(l.tl.x) as usize;
+        let (out, _) = text::slice_by_columns(txt, skip_amount, intersection.w as usize);
+        let adjusted_line = geom::Line {
+            tl: self.translate_point(intersection.tl),
+            w: intersection.w,
+        };
+        let origin = self.origin;
+        self.buf.text_with(adjusted_line, out, |p| {
+            style.resolve_at(line_rect, untranslate(origin, p))
+        })
     }
 
     /// Write a single cell with a resolved style.
