@@ -272,7 +272,7 @@ Independent, low-risk, mostly deletions. Do these first.
 
 ## Stage 2: rendering, style, backend, geometry, events
 
-- [ ] **2.1 Prune `canopy-geom` to what canopy uses.** Zero external callers (verified per
+- [x] **2.1 Prune `canopy-geom` to what canopy uses.** Zero external callers (verified per
   method): `Rect::{area, at, carve_hstart, carve_vstart, carve_vend, clamp_within, inner,
   rebase_point, rebase_rect, shift, shift_within, split_vertical, split_panes, search_up,
   search_down, search_left, search_right, search, sub}` (`expanse` is used only by

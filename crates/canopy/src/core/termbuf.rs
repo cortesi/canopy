@@ -355,7 +355,7 @@ impl TermBuf {
     /// Fill a rectangle with a glyph and style.
     pub fn fill(&mut self, style: &ResolvedStyle, r: Rect, ch: char) -> Result<()> {
         validate_cell_character(ch)?;
-        if let Some(isec) = self.rect().intersect(&r) {
+        if let Some(isec) = self.rect().intersect(r) {
             let end_y = isec.tl.y.saturating_add(isec.h);
             let end_x = isec.tl.x.saturating_add(isec.w);
             for y in isec.tl.y..end_y {
@@ -426,7 +426,7 @@ impl TermBuf {
 
     /// Draw text clipped to the given line.
     pub fn text(&mut self, style: &ResolvedStyle, l: Line, txt: &str) -> Result<()> {
-        if let Some(isec) = self.rect().intersect(&l.rect()) {
+        if let Some(isec) = self.rect().intersect(l.rect()) {
             let offset = isec.tl.x.saturating_sub(l.tl.x) as usize;
             let max = isec.w as usize;
             let (out, _) = text::slice_by_columns(txt, offset, max);
@@ -1651,7 +1651,7 @@ mod tests {
         }
 
         fn fill(&mut self, rect: Rect, ch: char, style: ResolvedStyle) {
-            let Some(rect) = self.size.rect().intersect(&rect) else {
+            let Some(rect) = self.size.rect().intersect(rect) else {
                 return;
             };
             for y in rect.tl.y..rect.tl.y.saturating_add(rect.h) {
@@ -1662,7 +1662,7 @@ mod tests {
         }
 
         fn text(&mut self, line: Line, text: &str, style: ResolvedStyle) {
-            let Some(line) = self.size.rect().intersect(&line.rect()) else {
+            let Some(line) = self.size.rect().intersect(line.rect()) else {
                 return;
             };
             let mut x = line.tl.x;

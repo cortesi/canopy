@@ -232,7 +232,7 @@ impl<'a> Render<'a> {
 
     /// Fill a rectangle with a specified character. Writes out of bounds will be clipped.
     pub fn fill(&mut self, style: &str, r: geom::Rect, c: char) -> Result<()> {
-        if let Some(intersection) = r.intersect(&self.clip) {
+        if let Some(intersection) = r.intersect(self.clip) {
             let style = self.resolve_style(style);
             if let Some(resolved) = style.resolve_solid() {
                 let adjusted = self.translate_rect(intersection);
@@ -270,7 +270,7 @@ impl<'a> Render<'a> {
     /// rectangle, it will be truncated; if it is shorter, it will be padded.
     pub fn text(&mut self, style: &str, l: geom::Line, txt: &str) -> Result<()> {
         let line_rect = geom::Rect::new(l.tl.x, l.tl.y, l.w, 1);
-        if let Some(intersection) = line_rect.intersect(&self.clip) {
+        if let Some(intersection) = line_rect.intersect(self.clip) {
             let style = self.resolve_style(style);
 
             let skip_amount = intersection.tl.x.saturating_sub(l.tl.x) as usize;
@@ -352,7 +352,7 @@ impl<'a> Render<'a> {
             return Ok(());
         }
         let glyph_rect = geom::Rect::new(p.x, p.y, width as u32, 1);
-        if self.clip.contains_rect(&glyph_rect) {
+        if self.clip.contains_rect(glyph_rect) {
             let adjusted = self.translate_point(p);
             self.buffer_mut().put_grapheme(adjusted, grapheme, style)?;
         }

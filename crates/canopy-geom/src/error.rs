@@ -2,7 +2,7 @@ use std::result::Result as StdResult;
 
 use thiserror::Error;
 
-use crate::{LineSegment, Point, Rect};
+use crate::{LineSegment, Rect};
 
 /// Geometry error type.
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
@@ -18,14 +18,6 @@ pub enum Error {
         /// Enclosing view extent.
         view: LineSegment,
     },
-    /// A rectangle cannot fit within a smaller target rectangle.
-    #[error("rectangle {rect:?} cannot fit within {target:?}")]
-    ClampTargetTooSmall {
-        /// Rectangle being moved.
-        rect: Rect,
-        /// Requested enclosing rectangle.
-        target: Rect,
-    },
     /// A line extent lies outside the requested rectangle axis.
     #[error("extent {extent:?} lies outside rectangle {rect:?}")]
     ExtentOutsideRect {
@@ -33,28 +25,6 @@ pub enum Error {
         extent: LineSegment,
         /// Rectangle used as the bound.
         rect: Rect,
-    },
-    /// A point cannot be rebased because it lies outside the rectangle.
-    #[error("point {point:?} lies outside rectangle {rect:?}")]
-    PointOutsideRect {
-        /// Rejected point.
-        point: Point,
-        /// Enclosing rectangle.
-        rect: Rect,
-    },
-    /// A rectangle cannot be rebased because it is not contained.
-    #[error("rectangle {inner:?} is not contained by {outer:?}")]
-    RectOutsideRect {
-        /// Rejected inner rectangle.
-        inner: Rect,
-        /// Expected outer rectangle.
-        outer: Rect,
-    },
-    /// A pane column count cannot be represented by the geometry model.
-    #[error("pane column count {count} exceeds u32")]
-    PaneColumnCountOverflow {
-        /// Requested number of columns.
-        count: usize,
     },
     /// A line offset lies outside a rectangle's height.
     #[error("line offset {offset} exceeds rectangle height {height}")]
@@ -78,10 +48,12 @@ mod tests {
 
     #[test]
     fn geometry_errors_expose_rejected_operands() {
-        let rect = Rect::new(1, 2, 3, 4);
-        let target = Rect::new(0, 0, 2, 2);
-        let error = rect.clamp_within(target).expect_err("target is too small");
+        let rect = Rect::new(0, 0, 4, 4);
+        let extent = LineSegment { off: 2, len: 8 };
+        let error = rect
+            .hslice(extent)
+            .expect_err("extent exceeds the rectangle");
 
-        assert_eq!(error, Error::ClampTargetTooSmall { rect, target });
+        assert_eq!(error, Error::ExtentOutsideRect { extent, rect });
     }
 }

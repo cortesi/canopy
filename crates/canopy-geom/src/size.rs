@@ -20,11 +20,6 @@ impl Size<u32> {
     /// Zero size.
     pub const ZERO: Self = Self { w: 0, h: 0 };
 
-    /// The area of this expanse.
-    pub fn area(&self) -> u32 {
-        self.w.saturating_mul(self.h)
-    }
-
     /// Return a `Rect` with the same dimensions as the `Size`, but a location at (0, 0).
     pub fn rect(&self) -> Rect {
         Rect {
@@ -32,10 +27,6 @@ impl Size<u32> {
             w: self.w,
             h: self.h,
         }
-    }
-    /// True if this Size can completely enclose the target size in both dimensions.
-    pub fn contains(&self, other: &Self) -> bool {
-        self.w >= other.w && self.h >= other.h
     }
 }
 

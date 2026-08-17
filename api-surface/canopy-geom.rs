@@ -29,38 +29,12 @@ pub mod canopy_geom {
             /// Enclosing view extent.
             view: crate::LineSegment,
         },
-        /// A rectangle cannot fit within a smaller target rectangle.
-        ClampTargetTooSmall {
-            /// Rectangle being moved.
-            rect: crate::Rect,
-            /// Requested enclosing rectangle.
-            target: crate::Rect,
-        },
         /// A line extent lies outside the requested rectangle axis.
         ExtentOutsideRect {
             /// Rejected extent.
             extent: crate::LineSegment,
             /// Rectangle used as the bound.
             rect: crate::Rect,
-        },
-        /// A point cannot be rebased because it lies outside the rectangle.
-        PointOutsideRect {
-            /// Rejected point.
-            point: crate::Point,
-            /// Enclosing rectangle.
-            rect: crate::Rect,
-        },
-        /// A rectangle cannot be rebased because it is not contained.
-        RectOutsideRect {
-            /// Rejected inner rectangle.
-            inner: crate::Rect,
-            /// Expected outer rectangle.
-            outer: crate::Rect,
-        },
-        /// A pane column count cannot be represented by the geometry model.
-        PaneColumnCountOverflow {
-            /// Requested number of columns.
-            count: usize,
         },
         /// A line offset lies outside a rectangle's height.
         LineOffsetOutside {
@@ -150,12 +124,6 @@ pub mod canopy_geom {
         /// The exclusive far edge of the extent using widened arithmetic.
         pub fn end(&self) -> u64 {}
 
-        /// Return a segment starting at the nearer input and extending toward the
-        /// farther input.
-        ///
-        /// The length saturates when the complete span exceeds `u32::MAX`.
-        pub fn saturating_enclose(&self, other: &Self) -> Self {}
-
         /// Carve off a fixed-size portion from the start of this LineSegment,
         /// returning a (head, tail) tuple. If the segment is too short to carve out
         /// the width specified, the length of the head will be zero.
@@ -166,14 +134,8 @@ pub mod canopy_geom {
         /// the width specified, the length of the tail will be zero.
         pub fn carve_end(&self, n: u32) -> (Self, Self) {}
 
-        /// Are these two line segments adjacent but non-overlapping?
-        pub fn abuts(&self, other: &Self) -> bool {}
-
         /// Does other lie completely within this extent.
         pub fn contains(&self, other: &Self) -> bool {}
-
-        /// Return true if the two segments overlap.
-        pub fn intersects(&self, other: &Self) -> bool {}
 
         /// Return the intersection between this line segment and other. The line
         /// segment returned will always have a non-zero length.
@@ -203,15 +165,6 @@ pub mod canopy_geom {
 
         /// Shift the point by an offset, avoiding under- or overflow.
         pub fn scroll(&self, x: i32, y: i32) -> Self {}
-
-        /// Clamp a point to the cells in `rect`.
-        ///
-        /// An empty rectangle contains no point, so its origin is returned as the
-        /// canonical clamped value.
-        pub fn clamp(&self, rect: Rect) -> Self {}
-
-        /// Like scroll, but constrained within a rectangle.
-        pub fn scroll_within(&self, x: i32, y: i32, rect: Rect) -> Self {}
     }
 
     impl Add for Point {
@@ -223,10 +176,6 @@ pub mod canopy_geom {
         fn from(v: (u32, u32)) -> Self {}
     }
 
-    impl From<Point> for PointI32 {
-        fn from(p: Point) -> Self {}
-    }
-
     /// A signed 2D point in integer cell coordinates.
     #[derive(Debug, Clone, Copy, Hash, StructuralPartialEq, PartialEq, Eq, Default)]
     pub struct PointI32 {
@@ -234,30 +183,6 @@ pub mod canopy_geom {
         pub x: i32,
         /// Y coordinate.
         pub y: i32,
-    }
-
-    impl PointI32 {
-        /// Construct a new signed point.
-        pub fn new(x: i32, y: i32) -> Self {}
-
-        /// Return the origin point.
-        pub fn zero() -> Self {}
-
-        /// Return true when both coordinates are zero.
-        pub fn is_zero(&self) -> bool {}
-    }
-
-    impl Add for PointI32 {
-        type Output = PointI32;
-        fn add(self, other: Self) -> Self {}
-    }
-
-    impl From<(i32, i32)> for PointI32 {
-        fn from(v: (i32, i32)) -> Self {}
-    }
-
-    impl From<Point> for PointI32 {
-        fn from(p: Point) -> Self {}
     }
 
     /// A half-open rectangle with an unsigned origin and size.
@@ -275,39 +200,13 @@ pub mod canopy_geom {
         /// Construct a rectangle from coordinates and size.
         pub fn new(x: u32, y: u32, w: u32, h: u32) -> Self {}
 
-        /// The width times the height of the rectangle, saturated to `u32::MAX`.
-        pub fn area(&self) -> u32 {}
-
         /// Create a zero-sized `Rect` at the origin.
         pub fn zero() -> Self {}
-
-        /// Return a rect with the same size, with the top left at the given point.
-        pub fn at(&self, p: impl Into<Point>) -> Self {}
-
-        /// Carve a rectangle with a fixed width out of the start of the horizontal
-        /// extent of this rect. Returns a [left, right] array. Left is either
-        /// empty or has the extract width specified.
-        pub fn carve_hstart(&self, width: u32) -> (Self, Self) {}
 
         /// Carve a rectangle with a fixed width out of the end of the horizontal
         /// extent of this rect. Returns a [left, right] array. Right is either
         /// empty or has the exact width specified.
         pub fn carve_hend(&self, width: u32) -> (Self, Self) {}
-
-        /// Carve a rectangle with a fixed height out of the start of the vertical
-        /// extent of this rect. Returns a [top, bottom] array. Top is either empty
-        /// or has the exact height specified.
-        pub fn carve_vstart(&self, height: u32) -> (Self, Self) {}
-
-        /// Carve a rectangle with a fixed height out of the end of the vertical
-        /// extent of this rect. Returns a [top, bottom] array. Bottom is either
-        /// empty or has the exact height specified.
-        pub fn carve_vend(&self, height: u32) -> (Self, Self) {}
-
-        /// Clamp this rectangle, shifting it to lie within another rectangle. The
-        /// size of the returned Rect is always equal to that of self. If self is
-        /// larger than the enclosing rectangle, return an error.
-        pub fn clamp_within(&self, rect: impl Into<Self>) -> Result<Self> {}
 
         /// Return the exclusive right edge using widened arithmetic.
         pub fn right(&self) -> u64 {}
@@ -323,74 +222,23 @@ pub mod canopy_geom {
         /// Empty rectangles are treated as anchored bounds. They are contained
         /// when their coincident edges fall within this rectangle's closed edge
         /// bounds, including the far edge.
-        pub fn contains_rect(&self, other: &Self) -> bool {}
-
-        /// Extracts an inner rectangle, given a border width. If the border width
-        /// would exceed the size of the Rect, we return a zero rect.
-        pub fn inner(&self, border: u32) -> Self {}
+        pub fn contains_rect(&self, other: Self) -> bool {}
 
         /// Extract a horizontal section of this rect based on an extent.
-        pub fn hslice(&self, e: &LineSegment) -> Result<Self> {}
+        pub fn hslice(&self, e: LineSegment) -> Result<Self> {}
 
         /// The horizontal extent of this rect.
         pub fn hextent(&self) -> LineSegment {}
 
         /// Calculate the intersection of this rectangle and another.
-        pub fn intersect(&self, other: &Self) -> Option<Self> {}
-
-        /// Given a point that falls within this rectangle, shift the point to be
-        /// relative to our origin. If the point falls outside the rect, an error is
-        /// returned.
-        pub fn rebase_point(&self, pt: impl Into<Point>) -> Result<Point> {}
-
-        /// Given a rectangle contained within this rectangle, shift the inner
-        /// rectangle to be relative to our origin. If the rect is not entirely
-        /// contained, an error is returned.
-        pub fn rebase_rect(&self, other: &Self) -> Result<Self> {}
-
-        /// A safe function for shifting the rectangle by an offset, which won't
-        /// under- or overflow.
-        pub fn shift(&self, x: i32, y: i32) -> Self {}
-
-        /// Shift this rectangle, constrained to be within another rectangle. The
-        /// size of the returned Rect is always equal to that of self. If self is
-        /// larger than the enclosing rectangle, self unchanged.
-        pub fn shift_within(&self, x: i32, y: i32, rect: Self) -> Self {}
+        pub fn intersect(&self, other: Self) -> Option<Self> {}
 
         /// Splits the rectangle horizontally into n sections, as close to equally
         /// sized as possible.
         pub fn split_horizontal(&self, n: u32) -> Result<Vec<Self>> {}
 
-        /// Splits the rectangle vertically into n sections, as close to equally
-        /// sized as possible.
-        pub fn split_vertical(&self, n: u32) -> Result<Vec<Self>> {}
-
-        /// Splits the rectangle into columns, with each column split into rows.
-        /// Returns a Vec of rects per column.
-        pub fn split_panes(&self, spec: &[u32]) -> Result<Vec<Vec<Self>>> {}
-
-        /// Sweeps upwards from the top of the rectangle. Stops once the closure returns true.
-        pub fn search_up(&self, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {}
-
-        /// Sweeps downwards from the bottom of the rectangle. Stops once the closure returns true.
-        pub fn search_down(&self, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {}
-
-        /// Sweeps leftwards the left of the rectangle. Stops once the closure returns true.
-        pub fn search_left(&self, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {}
-
-        /// Sweeps rightwards from the right of the rectangle. Stops once the closure returns true.
-        pub fn search_right(&self, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {}
-
-        /// Searches in a given direction sweeping to and fro. Stops once the closure returns true.
-        pub fn search(
-            &self,
-            dir: Direction,
-            f: &mut dyn FnMut(Point) -> Result<bool>,
-        ) -> Result<()> {
-        }
-
         /// Extract a slice of this rect based on a vertical extent.
-        pub fn vslice(&self, e: &LineSegment) -> Result<Self> {}
+        pub fn vslice(&self, e: LineSegment) -> Result<Self> {}
 
         /// The vertical extent of this rect.
         pub fn vextent(&self) -> LineSegment {}
@@ -404,10 +252,6 @@ pub mod canopy_geom {
         /// Return the `Size` of this rectangle, which has the same size as the
         /// `Rect` but no location.
         pub fn expanse(&self) -> Size {}
-
-        /// Subtract a rectangle from this one, returning a set of rectangles
-        /// describing what remains.
-        pub fn sub(&self, other: &Self) -> Vec<Self> {}
     }
 
     impl From<Size> for Rect {
@@ -420,10 +264,6 @@ pub mod canopy_geom {
 
     impl From<(u32, u32, u32, u32)> for Rect {
         fn from(v: (u32, u32, u32, u32)) -> Self {}
-    }
-
-    impl From<Rect> for RectI32 {
-        fn from(r: Rect) -> Self {}
     }
 
     impl From<Rect> for Size<u32> {
@@ -480,10 +320,6 @@ pub mod canopy_geom {
         pub fn overlaps_horizontal(&self, other: Self) -> bool {}
     }
 
-    impl From<Rect> for RectI32 {
-        fn from(r: Rect) -> Self {}
-    }
-
     /// Size with width and height.
     #[derive(Clone, Copy, Debug, Default, StructuralPartialEq, PartialEq, Eq, Hash)]
     pub struct Size<T = u32> {
@@ -499,14 +335,8 @@ pub mod canopy_geom {
     }
 
     impl Size<u32> {
-        /// The area of this expanse.
-        pub fn area(&self) -> u32 {}
-
         /// Return a `Rect` with the same dimensions as the `Size`, but a location at (0, 0).
         pub fn rect(&self) -> Rect {}
-
-        /// True if this Size can completely enclose the target size in both dimensions.
-        pub fn contains(&self, other: &Self) -> bool {}
     }
 
     impl From<Size> for Rect {

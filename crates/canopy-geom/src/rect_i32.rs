@@ -125,19 +125,6 @@ impl RectI32 {
     }
 }
 
-impl From<Rect> for RectI32 {
-    fn from(r: Rect) -> Self {
-        Self {
-            tl: PointI32 {
-                x: i32::try_from(r.tl.x).unwrap_or(i32::MAX),
-                y: i32::try_from(r.tl.y).unwrap_or(i32::MAX),
-            },
-            w: r.w,
-            h: r.h,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
@@ -169,12 +156,6 @@ mod tests {
     }
 
     #[test]
-    fn unsigned_origins_clamp_when_converted() {
-        let converted = RectI32::from(Rect::new(u32::MAX, u32::MAX, 1, 1));
-        assert_eq!(converted.tl, PointI32::new(i32::MAX, i32::MAX));
-    }
-
-    #[test]
     fn intersection_uses_widened_edges() {
         let signed = RectI32::new(i32::MAX - 2, 0, 10, 1);
         let unsigned = Rect::new(i32::MAX as u32, 0, 8, 1);
@@ -200,7 +181,7 @@ mod tests {
             let other = Rect::new(other_x, other_y, other_w, other_h);
             if let Some(intersection) = signed.intersect_rect(other) {
                 prop_assert!(!intersection.is_zero());
-                prop_assert!(other.contains_rect(&intersection));
+                prop_assert!(other.contains_rect(intersection));
                 prop_assert!(signed.contains_point(intersection.tl));
             }
         }

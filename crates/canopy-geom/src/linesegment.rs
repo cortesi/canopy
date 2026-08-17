@@ -15,18 +15,6 @@ impl LineSegment {
         u64::from(self.off) + u64::from(self.len)
     }
 
-    /// Return a segment starting at the nearer input and extending toward the
-    /// farther input.
-    ///
-    /// The length saturates when the complete span exceeds `u32::MAX`.
-    pub fn saturating_enclose(&self, other: &Self) -> Self {
-        let off = self.off.min(other.off);
-        Self {
-            off,
-            len: u32::try_from(self.end().max(other.end()) - u64::from(off)).unwrap_or(u32::MAX),
-        }
-    }
-
     /// Carve off a fixed-size portion from the start of this LineSegment,
     /// returning a (head, tail) tuple. If the segment is too short to carve out
     /// the width specified, the length of the head will be zero.
@@ -80,19 +68,9 @@ impl LineSegment {
         }
     }
 
-    /// Are these two line segments adjacent but non-overlapping?
-    pub fn abuts(&self, other: &Self) -> bool {
-        self.end() == u64::from(other.off) || other.end() == u64::from(self.off)
-    }
-
     /// Does other lie completely within this extent.
     pub fn contains(&self, other: &Self) -> bool {
         self.off <= other.off && self.end() >= other.end()
-    }
-
-    /// Return true if the two segments overlap.
-    pub fn intersects(&self, other: &Self) -> bool {
-        self.intersection(other).is_some()
     }
 
     /// Return the intersection between this line segment and other. The line
@@ -199,13 +177,6 @@ mod tests {
         }
 
         #[test]
-        fn enclose_contains_both_segments(a in segment_strategy(), b in segment_strategy()) {
-            let enclosure = a.saturating_enclose(&b);
-            prop_assert!(enclosure.contains(&a));
-            prop_assert!(enclosure.contains(&b));
-        }
-
-        #[test]
         fn carve_start_preserves_original_extent(segment in segment_strategy(), n in 0u32..150) {
             let (head, tail) = segment.carve_start(n);
             prop_assert_eq!(head.off, segment.off);
@@ -284,46 +255,6 @@ mod tests {
         assert!(!v.contains(&LineSegment { off: 2, len: 3 }));
         assert!(!v.contains(&LineSegment { off: 0, len: 2 }));
 
-        Ok(())
-    }
-
-    #[test]
-    fn abuts() -> Result<()> {
-        let v = LineSegment { off: 1, len: 3 };
-        assert!(!v.abuts(&LineSegment { off: 1, len: 3 }));
-        assert!(v.abuts(&LineSegment { off: 0, len: 1 }));
-        assert!(v.abuts(&LineSegment { off: 4, len: 4 }));
-        assert!(!v.abuts(&LineSegment { off: 3, len: 4 }));
-        Ok(())
-    }
-
-    fn check_enclosure(a: LineSegment, b: LineSegment, enclosure: LineSegment) {
-        assert_eq!(a.saturating_enclose(&b), enclosure);
-        assert_eq!(b.saturating_enclose(&a), enclosure);
-    }
-
-    #[test]
-    fn enclose() -> Result<()> {
-        check_enclosure(
-            LineSegment { off: 1, len: 3 },
-            LineSegment { off: 1, len: 3 },
-            LineSegment { off: 1, len: 3 },
-        );
-        check_enclosure(
-            LineSegment { off: 1, len: 3 },
-            LineSegment { off: 0, len: 3 },
-            LineSegment { off: 0, len: 4 },
-        );
-        check_enclosure(
-            LineSegment { off: 1, len: 3 },
-            LineSegment { off: 4, len: 3 },
-            LineSegment { off: 1, len: 6 },
-        );
-        check_enclosure(
-            LineSegment { off: 1, len: 3 },
-            LineSegment { off: 5, len: 3 },
-            LineSegment { off: 1, len: 7 },
-        );
         Ok(())
     }
 

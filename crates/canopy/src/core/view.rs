@@ -76,9 +76,9 @@ impl View {
                 .vextent()
                 .split_active(view.vextent(), self.canvas.rect().vextent())?;
             Ok(Some((
-                margin.vslice(&pre)?,
-                margin.vslice(&active)?,
-                margin.vslice(&post)?,
+                margin.vslice(pre)?,
+                margin.vslice(active)?,
+                margin.vslice(post)?,
             )))
         }
     }
@@ -94,9 +94,9 @@ impl View {
                 .hextent()
                 .split_active(view.hextent(), self.canvas.rect().hextent())?;
             Ok(Some((
-                margin.hslice(&pre)?,
-                margin.hslice(&active)?,
-                margin.hslice(&post)?,
+                margin.hslice(pre)?,
+                margin.hslice(active)?,
+                margin.hslice(post)?,
             )))
         }
     }
@@ -124,7 +124,7 @@ mod tests {
                 && part.tl.y >= margin.tl.y
                 && part.tl.y <= margin.tl.y.saturating_add(margin.h)
         } else {
-            margin.contains_rect(&part)
+            margin.contains_rect(part)
         }
     }
 
@@ -135,7 +135,7 @@ mod tests {
                 && part.tl.x >= margin.tl.x
                 && part.tl.x <= margin.tl.x.saturating_add(margin.w)
         } else {
-            margin.contains_rect(&part)
+            margin.contains_rect(part)
         }
     }
 
