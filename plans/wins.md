@@ -746,7 +746,7 @@ Do these after the content changes above, so each move is a self-contained commi
 module boundaries only (new `mod` declarations, imports, and `pub(super)`/`pub(crate)`
 visibility) and no behavior.
 
-- [ ] **7.1 Repair the stale `canopy-core` doc.** `crates/canopy/src/core/error.rs:7` documents
+- [x] **7.1 Repair the stale `canopy-core` doc.** `crates/canopy/src/core/error.rs:7` documents
   `Result` as "for canopy-core operations", a crate that no longer exists. Fix the sentence.
   (Flattening `core/` into `src/` was considered and is listed under Considered and rejected.)
 

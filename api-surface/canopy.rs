@@ -1176,7 +1176,7 @@ pub mod canopy {
         pub mod error {
             //! Core error types.
 
-            /// Result type for canopy-core operations.
+            /// Result type for canopy operations.
             pub type Result<T> = std::result::Result<T, Error>;
 
             /// Parse error marker type.
@@ -3687,7 +3687,7 @@ pub mod canopy {
     pub mod error {
         //! Core error types.
 
-        /// Result type for canopy-core operations.
+        /// Result type for canopy operations.
         pub type Result<T> = std::result::Result<T, Error>;
 
         /// Parse error marker type.

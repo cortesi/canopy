@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use crate::{commands::CommandError, core::id::NodeId, geom, layout::LayoutValidationError};
 
-/// Result type for canopy-core operations.
+/// Result type for canopy operations.
 pub type Result<T> = StdResult<T, Error>;
 
 /// Parse error marker type.
