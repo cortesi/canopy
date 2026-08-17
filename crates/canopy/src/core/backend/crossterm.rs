@@ -585,10 +585,6 @@ impl RenderBackend for CrosstermRender {
         translate_result(self.fp.queue(style::Print("\x1b[r")))?;
         Ok(())
     }
-
-    fn reset(&mut self) -> Result<()> {
-        Ok(())
-    }
 }
 
 /// Translate crossterm key modifiers into canopy modifiers.

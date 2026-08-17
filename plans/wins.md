@@ -310,7 +310,7 @@ Independent, low-risk, mostly deletions. Do these first.
   "shift region + repaint exposed rows" helper. The proptest replay harness covers the
   "diff equals full repaint" contract. About −120 lines.
 
-- [ ] **2.5 `RenderBackend` defaults.** `supports_char_shift`, `shift_chars`, and `reset`
+- [x] **2.5 `RenderBackend` defaults.** `supports_char_shift`, `shift_chars`, and `reset`
   (`render.rs:12-33`) have no default bodies, so eight of eleven impls write the trivial ones;
   `supports_line_shift`/`shift_lines` already default. Add defaults. About −50 lines.
 

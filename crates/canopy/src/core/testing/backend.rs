@@ -94,14 +94,6 @@ impl RenderBackend for TestRender {
         }
         Ok(())
     }
-
-    fn supports_char_shift(&self) -> bool {
-        false
-    }
-
-    fn shift_chars(&mut self, _loc: Point, _count: i32) -> Result<()> {
-        Ok(())
-    }
 }
 
 /// A simple in-memory canvas for verifying render placement in tests.
@@ -189,14 +181,6 @@ impl RenderBackend for CanvasRender {
             }
             x = x.saturating_add(width);
         }
-        Ok(())
-    }
-
-    fn supports_char_shift(&self) -> bool {
-        false
-    }
-
-    fn shift_chars(&mut self, _loc: Point, _count: i32) -> Result<()> {
         Ok(())
     }
 }

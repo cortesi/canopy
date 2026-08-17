@@ -4970,11 +4970,11 @@ pub mod canopy {
             fn text(&mut self, loc: geom::Point, txt: &str) -> Result<()>;
 
             /// Return true if the backend can shift characters within a line.
-            fn supports_char_shift(&self) -> bool;
+            fn supports_char_shift(&self) -> bool {}
 
             /// Shift characters within a line starting at the location.
             /// Positive counts insert blanks and shift right, negative counts delete and shift left.
-            fn shift_chars(&mut self, loc: geom::Point, count: i32) -> Result<()>;
+            fn shift_chars(&mut self, _loc: geom::Point, _count: i32) -> Result<()> {}
 
             /// Return true if the backend can shift lines within a region.
             fn supports_line_shift(&self) -> bool {}
@@ -4987,7 +4987,7 @@ pub mod canopy {
             fn flush(&mut self) -> Result<()>;
 
             /// Reset the backend to a clean state.
-            fn reset(&mut self) -> Result<()>;
+            fn reset(&mut self) -> Result<()> {}
         }
 
         /// A render backend that discards all output.
@@ -5007,13 +5007,7 @@ pub mod canopy {
 
             fn text(&mut self, _loc: geom::Point, _txt: &str) -> Result<()> {}
 
-            fn supports_char_shift(&self) -> bool {}
-
-            fn shift_chars(&mut self, _loc: geom::Point, _count: i32) -> Result<()> {}
-
             fn flush(&mut self) -> Result<()> {}
-
-            fn reset(&mut self) -> Result<()> {}
         }
 
         /// A renderer that only renders to a specific rectangle within the target terminal buffer.

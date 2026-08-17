@@ -129,10 +129,6 @@ impl RenderBackend for CountingBackend {
     fn flush(&mut self) -> Result<()> {
         Ok(())
     }
-
-    fn reset(&mut self) -> Result<()> {
-        Ok(())
-    }
 }
 
 /// Build a deterministic tree for layout and render benchmarks.

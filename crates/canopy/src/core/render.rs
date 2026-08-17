@@ -13,10 +13,14 @@ pub trait RenderBackend {
     /// Output text to screen. This method is used for all text output.
     fn text(&mut self, loc: geom::Point, txt: &str) -> Result<()>;
     /// Return true if the backend can shift characters within a line.
-    fn supports_char_shift(&self) -> bool;
+    fn supports_char_shift(&self) -> bool {
+        false
+    }
     /// Shift characters within a line starting at the location.
     /// Positive counts insert blanks and shift right, negative counts delete and shift left.
-    fn shift_chars(&mut self, loc: geom::Point, count: i32) -> Result<()>;
+    fn shift_chars(&mut self, _loc: geom::Point, _count: i32) -> Result<()> {
+        Ok(())
+    }
     /// Return true if the backend can shift lines within a region.
     fn supports_line_shift(&self) -> bool {
         false
@@ -29,7 +33,9 @@ pub trait RenderBackend {
     /// Flush output to the terminal.
     fn flush(&mut self) -> Result<()>;
     /// Reset the backend to a clean state.
-    fn reset(&mut self) -> Result<()>;
+    fn reset(&mut self) -> Result<()> {
+        Ok(())
+    }
 }
 
 /// A render backend that discards all output.
@@ -60,19 +66,7 @@ impl RenderBackend for NopBackend {
         Ok(())
     }
 
-    fn supports_char_shift(&self) -> bool {
-        false
-    }
-
-    fn shift_chars(&mut self, _loc: geom::Point, _count: i32) -> Result<()> {
-        Ok(())
-    }
-
     fn flush(&mut self) -> Result<()> {
-        Ok(())
-    }
-
-    fn reset(&mut self) -> Result<()> {
         Ok(())
     }
 }
