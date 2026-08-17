@@ -219,6 +219,11 @@ pub mod canopy {
             /// Allow vertical overflow during measurement.
             pub fn overflow_y(self) -> Self {}
 
+            /// Inherit overflow permission from an enclosing layout.
+            ///
+            /// Overflow only widens: a layout that already allows overflow on an axis keeps it.
+            pub fn inherit_overflow(&mut self, x: bool, y: bool) {}
+
             /// Convenience: fixed outer width without a `Fixed` enum.
             pub fn fixed_width(self, n: u32) -> Self {}
 
@@ -1905,6 +1910,11 @@ pub mod canopy {
 
             /// Allow vertical overflow during measurement.
             pub fn overflow_y(self) -> Self {}
+
+            /// Inherit overflow permission from an enclosing layout.
+            ///
+            /// Overflow only widens: a layout that already allows overflow on an axis keeps it.
+            pub fn inherit_overflow(&mut self, x: bool, y: bool) {}
 
             /// Convenience: fixed outer width without a `Fixed` enum.
             pub fn fixed_width(self, n: u32) -> Self {}

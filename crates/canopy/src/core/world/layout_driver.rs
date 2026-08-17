@@ -134,12 +134,7 @@ impl<'a> LayoutPass<'a> {
         }
 
         let mut effective_layout = layout;
-        if parent_overflow.x {
-            effective_layout.overflow_x = true;
-        }
-        if parent_overflow.y {
-            effective_layout.overflow_y = true;
-        }
+        effective_layout.inherit_overflow(parent_overflow.x, parent_overflow.y);
 
         let outer =
             self.resolve_outer_size_with_layout(node_id, effective_layout, available_outer)?;
@@ -365,12 +360,7 @@ impl<'a> LayoutPass<'a> {
                 set_cross_sizing(&mut effective, layout.direction, Sizing::Measure);
             }
 
-            if layout.overflow_x {
-                effective.overflow_x = true;
-            }
-            if layout.overflow_y {
-                effective.overflow_y = true;
-            }
+            effective.inherit_overflow(layout.overflow_x, layout.overflow_y);
 
             let eff_main = main_sizing(effective, layout.direction);
             if let Sizing::Flex(w) = eff_main {
@@ -398,12 +388,7 @@ impl<'a> LayoutPass<'a> {
                 if !cross_fixed && matches!(child_cross, Sizing::Flex(_)) {
                     set_cross_sizing(&mut effective, layout.direction, Sizing::Measure);
                 }
-                if layout.overflow_x {
-                    effective.overflow_x = true;
-                }
-                if layout.overflow_y {
-                    effective.overflow_y = true;
-                }
+                effective.inherit_overflow(layout.overflow_x, layout.overflow_y);
                 let child_available = layout
                     .direction
                     .size_from_main_cross(shares[idx], avail_cross);
@@ -458,12 +443,7 @@ impl<'a> LayoutPass<'a> {
                 effective.height = Sizing::Measure;
             }
 
-            if layout.overflow_x {
-                effective.overflow_x = true;
-            }
-            if layout.overflow_y {
-                effective.overflow_y = true;
-            }
+            effective.inherit_overflow(layout.overflow_x, layout.overflow_y);
 
             let size = self.resolve_outer_size_with_layout(*child, effective, avail)?;
             max_w = max_w.max(size.w);
@@ -535,12 +515,7 @@ impl<'a> LayoutPass<'a> {
             }
 
             let mut effective = child_layout;
-            if parent_overflow.x {
-                effective.overflow_x = true;
-            }
-            if parent_overflow.y {
-                effective.overflow_y = true;
-            }
+            effective.inherit_overflow(parent_overflow.x, parent_overflow.y);
 
             let child_available = content;
             let size = self.resolve_outer_size_with_layout(*child, effective, child_available)?;
@@ -564,12 +539,7 @@ impl<'a> LayoutPass<'a> {
         for (i, child) in children.iter().enumerate() {
             let child_layout = self.node_layout_snapshot(*child)?.0;
             let mut effective = child_layout;
-            if parent_overflow.x {
-                effective.overflow_x = true;
-            }
-            if parent_overflow.y {
-                effective.overflow_y = true;
-            }
+            effective.inherit_overflow(parent_overflow.x, parent_overflow.y);
 
             let main = match main_sizing(effective, layout.direction) {
                 Sizing::Flex(_) => {
@@ -680,13 +650,9 @@ impl<'a> LayoutPass<'a> {
         ))
     }
 
-    /// Store canvas size and clamp scroll offset for a node.
+    /// Store the canvas size compute_canvas returned and clamp the scroll offset.
     fn update_canvas(&mut self, node_id: NodeId, view_size: Size<u32>, canvas: Size<u32>) {
         if let Some(node) = self.core.nodes.get_mut(node_id) {
-            let mut canvas = canvas;
-            canvas.w = canvas.w.max(view_size.w);
-            canvas.h = canvas.h.max(view_size.h);
-
             let mut scroll = node.scroll;
             clamp_scroll(&mut scroll, view_size, canvas);
             node.scroll = scroll;
@@ -781,10 +747,10 @@ pub(super) fn clamp_outer(size: Size<u32>, layout: Layout) -> Size<u32> {
 
 /// Clamp a single axis against optional min/max bounds.
 fn clamp_axis(value: u32, min: Option<u32>, max: Option<u32>) -> u32 {
-    let (min, max) = match (min, max) {
-        (Some(min), Some(max)) if min > max => (Some(max), Some(max)),
-        other => other,
-    };
+    debug_assert!(
+        !matches!((min, max), (Some(min), Some(max)) if min > max),
+        "Layout::validate rejects min above max before layout runs"
+    );
     let mut value = value;
     if let Some(max) = max {
         value = value.min(max);

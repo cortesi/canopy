@@ -258,7 +258,7 @@ Independent, low-risk, mostly deletions. Do these first.
   matching for diagnostics. Proof: the diagnostic-dump and help-snapshot tests pass unchanged.
   About −60 lines.
 
-- [ ] **1.8 Layout driver copy sites.** Six hand-copied overflow-inheritance blocks
+- [x] **1.8 Layout driver copy sites.** Six hand-copied overflow-inheritance blocks
   (`layout_driver.rs:137-142, 377-382, 410-415, 470-475, 547-552, 576-581`); add
   `Layout::inherit_overflow(x, y)` and call it. `update_canvas:672-675` re-clamps a canvas that
   `compute_canvas:663-666` already clamped; `clamp_axis:757-762` handles `min > max` that
