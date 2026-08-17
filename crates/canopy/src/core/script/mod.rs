@@ -577,32 +577,30 @@ fn with_reentrant_canopy<R>(f: impl FnOnce(&mut Canopy) -> Result<R>) -> Option<
     })
 }
 
-/// Push the active script anchor using the normal context or reentrant bridge.
-fn push_script_anchor(scope: &Scope<'_>, node_id: NodeId) -> StdResult<(), RuntimeError> {
+/// Execute a closure with the live Canopy, through the normal context or the reentrant bridge.
+fn with_canopy<R>(scope: &Scope<'_>, f: impl FnOnce(&mut Canopy) -> Result<R>) -> Result<R> {
     if let Some(mut canopy) = scope.context_mut::<Canopy>() {
-        canopy.script_context_stack.push(node_id);
-        return Ok(());
+        return f(&mut canopy);
     }
-    match with_reentrant_canopy(|canopy| {
-        canopy.script_context_stack.push(node_id);
-        Ok(())
-    }) {
-        Some(Ok(())) => Ok(()),
-        Some(Err(err)) => Err(canopy_to_host(&err)),
-        None => Err(RuntimeError::runtime("no active canopy context")),
-    }
+    with_reentrant_canopy(f)
+        .unwrap_or_else(|| Err(error::Error::Script("no active canopy context".into())))
 }
 
-/// Pop the active script anchor using the normal context or reentrant bridge.
-fn pop_script_anchor(scope: &Scope<'_>) {
-    if let Some(mut canopy) = scope.context_mut::<Canopy>() {
-        let _ = canopy.script_context_stack.pop();
-        return;
-    }
-    let _ = with_reentrant_canopy(|canopy| {
-        let _ = canopy.script_context_stack.pop();
+/// Push the active script anchor.
+fn push_script_anchor(scope: &Scope<'_>, node_id: NodeId) -> StdResult<(), RuntimeError> {
+    Ok(with_canopy(scope, |canopy| {
+        canopy.script_context_stack.push(node_id);
         Ok(())
-    });
+    })?)
+}
+
+/// Pop the active script anchor.
+fn pop_script_anchor(scope: &Scope<'_>) {
+    with_canopy(scope, |canopy| {
+        canopy.script_context_stack.pop();
+        Ok(())
+    })
+    .ok();
 }
 
 /// Return true when a live script scope is active on this thread.
@@ -841,15 +839,7 @@ fn with_current_canopy<R>(
     scope: &Scope<'_>,
     f: impl FnOnce(&mut Canopy, NodeId) -> Result<R>,
 ) -> Result<R> {
-    if let Some(mut canopy) = scope.context_mut::<Canopy>() {
-        let node_id = canopy
-            .script_context_stack
-            .last()
-            .copied()
-            .ok_or_else(|| error::Error::Script("no active script context".into()))?;
-        return f(&mut canopy, node_id);
-    }
-    with_reentrant_canopy(|canopy| {
+    with_canopy(scope, |canopy| {
         let node_id = canopy
             .script_context_stack
             .last()
@@ -857,26 +847,6 @@ fn with_current_canopy<R>(
             .ok_or_else(|| error::Error::Script("no active script context".into()))?;
         f(canopy, node_id)
     })
-    .unwrap_or_else(|| Err(error::Error::Script("no active script context".into())))
-}
-
-/// Return the current script dispatch anchor without retaining the Canopy borrow.
-fn current_script_anchor(scope: &Scope<'_>) -> Result<NodeId> {
-    if let Some(canopy) = scope.context_mut::<Canopy>() {
-        return canopy
-            .script_context_stack
-            .last()
-            .copied()
-            .ok_or_else(|| error::Error::Script("no active script context".into()));
-    }
-    with_reentrant_canopy(|canopy| {
-        canopy
-            .script_context_stack
-            .last()
-            .copied()
-            .ok_or_else(|| error::Error::Script("no active script context".into()))
-    })
-    .unwrap_or_else(|| Err(error::Error::Script("no active script context".into())))
 }
 
 /// Script-side opaque handle for a canopy node.
@@ -1761,18 +1731,25 @@ fn dispatch_command(
 fn dispatch_command_by_name(
     scope: &Scope<'_>,
     name: &str,
+    node_id: Option<NodeId>,
     values: Vec<ArgValue>,
 ) -> Result<ArgValue> {
     let allow_map_named = values.len() == 1;
-    let (node_id, spec) = with_current_canopy(scope, |canopy, node_id| {
+    let (anchor, spec) = with_current_canopy(scope, |canopy, anchor| {
         let spec = canopy.core.commands.get(name).ok_or_else(|| {
             error::Error::from(commands::CommandError::UnknownCommand {
                 id: name.to_string(),
             })
         })?;
-        Ok((node_id, spec))
+        Ok((anchor, spec))
     })?;
-    dispatch_command(scope, spec, node_id, values, allow_map_named)
+    dispatch_command(
+        scope,
+        spec,
+        node_id.unwrap_or(anchor),
+        values,
+        allow_map_named,
+    )
 }
 
 /// Return the Luau-safe global name for a command owner.
@@ -2088,7 +2065,7 @@ async fn wait_for_screen_text(
                 let mut canopy = scope
                     .context_mut::<Canopy>()
                     .ok_or_else(|| RuntimeError::runtime("no active canopy context"))?;
-                let screen = screen_text(&mut canopy).map_err(|err| canopy_to_host(&err))?;
+                let screen = screen_text(&mut canopy)?;
                 Ok(screen.contains(&text))
             })
             .await
@@ -2121,6 +2098,15 @@ fn values_to_args<'s>(
         .into_iter()
         .map(|value| scoped_to_arg_value(scope, value).map_err(RuntimeError::runtime))
         .collect()
+}
+
+/// Run a query against the live Canopy and return its value to the script.
+fn host_value<'s>(
+    scope: &Scope<'s>,
+    f: impl FnOnce(&mut Canopy, NodeId) -> Result<ArgValue>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    let value = with_current_canopy(scope, f)?;
+    ret_arg(scope, &value)
 }
 
 /// Build an empty host-call return.
@@ -2166,6 +2152,13 @@ fn owned_value_to_display(value: &OwnedValue) -> String {
 }
 
 /// Convert a canopy error into a host-call error.
+impl From<error::Error> for RuntimeError {
+    fn from(error: error::Error) -> Self {
+        canopy_to_host(&error)
+    }
+}
+
+/// Convert a canopy error into a structured Ruau runtime error.
 fn canopy_to_host(err: &error::Error) -> RuntimeError {
     let payload = CanopyErrorPayload::from(err);
     let mut fields = vec![ScriptErrorField::new("kind", payload.kind.as_str())];
@@ -2506,8 +2499,7 @@ fn host_cmd<'s>(
     let mut args = ArgReader::new(args);
     let name = args.string(scope)?;
     let values = values_to_args(scope, args.rest())?;
-    let result =
-        dispatch_command_by_name(scope, &name, values).map_err(|err| canopy_to_host(&err))?;
+    let result = dispatch_command_by_name(scope, &name, None, values)?;
     ret_arg(scope, &result)
 }
 
@@ -2520,22 +2512,7 @@ fn host_cmd_on<'s>(
     let node_id = args.node_id(scope)?;
     let name = args.string(scope)?;
     let values = values_to_args(scope, args.rest())?;
-    let allow_map_named = values.len() == 1;
-    let spec = with_current_canopy(scope, |canopy, _| {
-        let spec = canopy
-            .core
-            .commands
-            .get(&name)
-            .ok_or_else(|| error::Error::Script(format!("unknown command: {name}")))?;
-        Ok(spec)
-    })
-    .map_err(|err| canopy_to_host(&err))?;
-    let result =
-        dispatch_command(scope, spec, node_id, values, allow_map_named).map_err(|err| {
-            canopy_to_host(&error::Error::Script(format!(
-                "command {name} failed: {err}"
-            )))
-        })?;
+    let result = dispatch_command_by_name(scope, &name, Some(node_id), values)?;
     ret_arg(scope, &result)
 }
 
@@ -2550,8 +2527,7 @@ fn host_log<'s>(
     with_current_canopy(scope, |canopy, _| {
         canopy.script_host.push_log(message);
         Ok(())
-    })
-    .map_err(|err| canopy_to_host(&err))?;
+    })?;
     Ok(ret_none())
 }
 
@@ -2574,8 +2550,7 @@ fn host_assert<'s>(
             .script_host
             .push_assertion(condition, message.clone());
         Ok(())
-    })
-    .map_err(|err| canopy_to_host(&err))?;
+    })?;
     if condition {
         Ok(ret_none())
     } else {
@@ -2588,9 +2563,7 @@ fn host_root<'s>(
     scope: &Scope<'s>,
     _args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let root = with_current_canopy(scope, |canopy, _| Ok(node_id_to_arg(canopy.core.root_id())))
-        .map_err(|err| canopy_to_host(&err))?;
-    ret_arg(scope, &root)
+    host_value(scope, |canopy, _| Ok(node_id_to_arg(canopy.core.root_id())))
 }
 
 /// `canopy.focused`: return the focused node id, or nil.
@@ -2598,15 +2571,13 @@ fn host_focused<'s>(
     scope: &Scope<'s>,
     _args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let focused = with_current_canopy(scope, |canopy, _| {
+    host_value(scope, |canopy, _| {
         Ok(canopy
             .core
             .focus_id()
             .map(node_id_to_arg)
             .unwrap_or(ArgValue::Null))
     })
-    .map_err(|err| canopy_to_host(&err))?;
-    ret_arg(scope, &focused)
 }
 
 /// `canopy.node_info`: return the `NodeInfo` record for a node.
@@ -2616,11 +2587,9 @@ fn host_node_info<'s>(
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
     let mut args = ArgReader::new(args);
     let node_id = args.node_id(scope)?;
-    let info = with_current_canopy(scope, |canopy, _| {
+    host_value(scope, |canopy, _| {
         node_info_to_arg(canopy, node_id).map(ArgValue::Map)
     })
-    .map_err(|err| canopy_to_host(&err))?;
-    ret_arg(scope, &info)
 }
 
 /// `canopy.find_node`: return the first node matching a path pattern.
@@ -2630,7 +2599,7 @@ fn host_find_node<'s>(
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
     let mut args = ArgReader::new(args);
     let pattern = args.string(scope)?;
-    let result = with_current_canopy(scope, |canopy, _| {
+    host_value(scope, |canopy, _| {
         let filter = PathFilter::normalized(&pattern)?;
         let root_ctx = CoreViewContext::new(&canopy.core, canopy.core.root_id());
         Ok(root_ctx
@@ -2638,8 +2607,6 @@ fn host_find_node<'s>(
             .map(node_id_to_arg)
             .unwrap_or(ArgValue::Null))
     })
-    .map_err(|err| canopy_to_host(&err))?;
-    ret_arg(scope, &result)
 }
 
 /// `canopy.find_nodes`: return all nodes matching a path pattern.
@@ -2649,13 +2616,11 @@ fn host_find_nodes<'s>(
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
     let mut args = ArgReader::new(args);
     let pattern = args.string(scope)?;
-    let result = with_current_canopy(scope, |canopy, _| {
+    host_value(scope, |canopy, _| {
         let filter = PathFilter::normalized(&pattern)?;
         let root_ctx = CoreViewContext::new(&canopy.core, canopy.core.root_id());
         Ok(node_list_to_arg(root_ctx.find_nodes_matching(&filter)))
     })
-    .map_err(|err| canopy_to_host(&err))?;
-    ret_arg(scope, &result)
 }
 
 /// `canopy.parent`: return a node's parent, or nil for the root.
@@ -2665,15 +2630,13 @@ fn host_parent<'s>(
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
     let mut args = ArgReader::new(args);
     let node_id = args.node_id(scope)?;
-    let result = with_current_canopy(scope, |canopy, _| {
+    host_value(scope, |canopy, _| {
         let root_ctx = CoreViewContext::new(&canopy.core, canopy.core.root_id());
         Ok(root_ctx
             .parent_of(node_id)
             .map(node_id_to_arg)
             .unwrap_or(ArgValue::Null))
     })
-    .map_err(|err| canopy_to_host(&err))?;
-    ret_arg(scope, &result)
 }
 
 /// `canopy.children`: return a node's children.
@@ -2683,12 +2646,10 @@ fn host_children<'s>(
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
     let mut args = ArgReader::new(args);
     let node_id = args.node_id(scope)?;
-    let result = with_current_canopy(scope, |canopy, _| {
+    host_value(scope, |canopy, _| {
         let root_ctx = CoreViewContext::new(&canopy.core, canopy.core.root_id());
         Ok(node_list_to_arg(root_ctx.children_of(node_id)))
     })
-    .map_err(|err| canopy_to_host(&err))?;
-    ret_arg(scope, &result)
 }
 
 /// `canopy.tree`: return the recursive node tree from the root.
@@ -2696,11 +2657,9 @@ fn host_tree<'s>(
     scope: &Scope<'s>,
     _args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let tree = with_current_canopy(scope, |canopy, _| {
+    host_value(scope, |canopy, _| {
         tree_node_to_arg(canopy, canopy.core.root_id())
     })
-    .map_err(|err| canopy_to_host(&err))?;
-    ret_arg(scope, &tree)
 }
 
 /// `canopy.set_focus`: focus a node, returning whether focus moved.
@@ -2714,8 +2673,7 @@ fn host_set_focus<'s>(
         let root_id = canopy.core.root_id();
         let mut ctx = CoreContext::new(&mut canopy.core, root_id);
         ctx.set_focus(node_id).map(ChangeOutcome::changed)
-    })
-    .map_err(|err| canopy_to_host(&err))?;
+    })?;
     Ok(ret_one(ScopedValue::Boolean(focused)))
 }
 
@@ -2727,15 +2685,13 @@ fn host_node_at<'s>(
     let mut args = ArgReader::new(args);
     let x = args.integer(scope)?;
     let y = args.integer(scope)?;
-    let result = with_current_canopy(scope, |canopy, _| {
+    host_value(scope, |canopy, _| {
         Ok(canopy
             .core
             .locate_node(canopy.core.root_id(), point_from_coords(x, y)?)?
             .map(node_id_to_arg)
             .unwrap_or(ArgValue::Null))
     })
-    .map_err(|err| canopy_to_host(&err))?;
-    ret_arg(scope, &result)
 }
 
 /// `canopy.focus_next`: move focus to the next focusable node.
@@ -2748,8 +2704,7 @@ fn host_focus_next<'s>(
         let mut ctx = CoreContext::new(&mut canopy.core, root_id);
         ctx.focus_next(FocusScope::Root)?;
         Ok(())
-    })
-    .map_err(|err| canopy_to_host(&err))?;
+    })?;
     Ok(ret_none())
 }
 
@@ -2763,8 +2718,7 @@ fn host_focus_prev<'s>(
         let mut ctx = CoreContext::new(&mut canopy.core, root_id);
         ctx.focus_prev(FocusScope::Root)?;
         Ok(())
-    })
-    .map_err(|err| canopy_to_host(&err))?;
+    })?;
     Ok(ret_none())
 }
 
@@ -2782,8 +2736,7 @@ fn host_focus_dir<'s>(
         let mut ctx = CoreContext::new(&mut canopy.core, root_id);
         ctx.focus_dir(FocusScope::Root, dir)?;
         Ok(())
-    })
-    .map_err(|err| canopy_to_host(&err))?;
+    })?;
     Ok(ret_none())
 }
 
@@ -2798,8 +2751,7 @@ fn host_send_key<'s>(
         let key = key::Key::parse_spec(&key_spec).map_err(error::Error::Script)?;
         let _reentrant = ReentrantCanopyGuard::push(canopy);
         canopy.key(Some(scope), key)
-    })
-    .map_err(|err| canopy_to_host(&err))?;
+    })?;
     Ok(ret_none())
 }
 
@@ -2832,8 +2784,7 @@ fn host_send_click<'s>(
                 location,
             },
         )
-    })
-    .map_err(|err| canopy_to_host(&err))?;
+    })?;
     Ok(ret_none())
 }
 
@@ -2866,8 +2817,7 @@ fn host_send_scroll<'s>(
                 location: point_from_coords(x, y)?,
             },
         )
-    })
-    .map_err(|err| canopy_to_host(&err))?;
+    })?;
     Ok(ret_none())
 }
 /// `canopy.bindings`: return the active binding table across all modes.
@@ -2875,7 +2825,7 @@ fn host_bindings<'s>(
     scope: &Scope<'s>,
     _args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let bindings = with_current_canopy(scope, |canopy, _| {
+    host_value(scope, |canopy, _| {
         Ok(ArgValue::Array(
             canopy
                 .keymap
@@ -2885,8 +2835,6 @@ fn host_bindings<'s>(
                 .collect(),
         ))
     })
-    .map_err(|err| canopy_to_host(&err))?;
-    ret_arg(scope, &bindings)
 }
 
 /// `canopy.commands`: return metadata for all registered commands.
@@ -2894,7 +2842,7 @@ fn host_commands<'s>(
     scope: &Scope<'s>,
     _args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let commands = with_current_canopy(scope, |canopy, node_id| {
+    host_value(scope, |canopy, node_id| {
         let resolver = commands::CommandResolver::new(&canopy.core, node_id);
         let mut availability = resolver.availability();
         availability.sort_by_key(|item| item.spec.id.0);
@@ -2905,8 +2853,6 @@ fn host_commands<'s>(
                 .collect(),
         ))
     })
-    .map_err(|err| canopy_to_host(&err))?;
-    ret_arg(scope, &commands)
 }
 
 /// `canopy.resolve`: return the dispatch target for an owner.
@@ -2916,15 +2862,13 @@ fn host_resolve<'s>(
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
     let mut args = ArgReader::new(args);
     let owner = args.string(scope)?;
-    let node = with_current_canopy(scope, |canopy, node_id| {
+    host_value(scope, |canopy, node_id| {
         let resolver = commands::CommandResolver::new(&canopy.core, node_id);
         Ok(resolver
             .resolve_owner(&owner)
             .and_then(commands::CommandResolution::target)
             .map_or(ArgValue::Null, node_id_to_arg))
     })
-    .map_err(|err| canopy_to_host(&err))?;
-    ret_arg(scope, &node)
 }
 
 /// `canopy.input_mode`: return the active input mode.
@@ -2932,8 +2876,7 @@ fn host_input_mode<'s>(
     scope: &Scope<'s>,
     _args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mode = with_current_canopy(scope, |canopy, _| Ok(canopy.input_mode().to_string()))
-        .map_err(|err| canopy_to_host(&err))?;
+    let mode = with_current_canopy(scope, |canopy, _| Ok(canopy.input_mode().to_string()))?;
     Ok(ret_one(ScopedValue::String(scope.create_string(&mode)?)))
 }
 
@@ -2947,8 +2890,7 @@ fn host_set_mode<'s>(
     with_current_canopy(scope, |canopy, _| {
         canopy.set_input_mode(&mode)?;
         Ok(())
-    })
-    .map_err(|err| canopy_to_host(&err))?;
+    })?;
     Ok(ret_none())
 }
 
@@ -2962,8 +2904,7 @@ fn host_push_mode<'s>(
     with_current_canopy(scope, |canopy, _| {
         canopy.push_input_mode(&mode)?;
         Ok(())
-    })
-    .map_err(|err| canopy_to_host(&err))?;
+    })?;
     Ok(ret_none())
 }
 
@@ -2972,8 +2913,7 @@ fn host_pop_mode<'s>(
     scope: &Scope<'s>,
     _args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mode = with_current_canopy(scope, |canopy, _| Ok(canopy.pop_input_mode().to_string()))
-        .map_err(|err| canopy_to_host(&err))?;
+    let mode = with_current_canopy(scope, |canopy, _| Ok(canopy.pop_input_mode().to_string()))?;
     Ok(ret_one(ScopedValue::String(scope.create_string(&mode)?)))
 }
 
@@ -2985,11 +2925,8 @@ fn host_bind<'s>(
     let mut args = ArgReader::new(args);
     let key_spec = args.string(scope)?;
     let function = args.function(scope)?;
-    let input = inputmap::InputSpec::Key(
-        key::Key::parse_spec(&key_spec)
-            .map_err(error::Error::Script)
-            .map_err(|err| canopy_to_host(&err))?,
-    );
+    let input =
+        inputmap::InputSpec::Key(key::Key::parse_spec(&key_spec).map_err(error::Error::Script)?);
     let id = install_function_binding(scope, function, input, &ScriptBindOptions::default())?;
     Ok(ret_one(ScopedValue::Number(id as f64)))
 }
@@ -3003,11 +2940,8 @@ fn host_bind_with<'s>(
     let key_spec = args.string(scope)?;
     let options = parse_bind_options(scope, args.opt_table(scope)?)?;
     let function = args.function(scope)?;
-    let input = inputmap::InputSpec::Key(
-        key::Key::parse_spec(&key_spec)
-            .map_err(error::Error::Script)
-            .map_err(|err| canopy_to_host(&err))?,
-    );
+    let input =
+        inputmap::InputSpec::Key(key::Key::parse_spec(&key_spec).map_err(error::Error::Script)?);
     let id = install_function_binding(scope, function, input, &options)?;
     Ok(ret_one(ScopedValue::Number(id as f64)))
 }
@@ -3021,9 +2955,7 @@ fn host_bind_mouse<'s>(
     let mouse_spec = args.string(scope)?;
     let function = args.function(scope)?;
     let input = inputmap::InputSpec::Mouse(
-        mouse::Mouse::parse_spec(&mouse_spec)
-            .map_err(error::Error::Script)
-            .map_err(|err| canopy_to_host(&err))?,
+        mouse::Mouse::parse_spec(&mouse_spec).map_err(error::Error::Script)?,
     );
     let id = install_function_binding(scope, function, input, &ScriptBindOptions::default())?;
     Ok(ret_one(ScopedValue::Number(id as f64)))
@@ -3039,9 +2971,7 @@ fn host_bind_mouse_with<'s>(
     let options = parse_bind_options(scope, args.opt_table(scope)?)?;
     let function = args.function(scope)?;
     let input = inputmap::InputSpec::Mouse(
-        mouse::Mouse::parse_spec(&mouse_spec)
-            .map_err(error::Error::Script)
-            .map_err(|err| canopy_to_host(&err))?,
+        mouse::Mouse::parse_spec(&mouse_spec).map_err(error::Error::Script)?,
     );
     let id = install_function_binding(scope, function, input, &options)?;
     Ok(ret_one(ScopedValue::Number(id as f64)))
@@ -3056,8 +2986,7 @@ fn host_unbind<'s>(
     let id = args.integer(scope)?;
     let removed = with_current_canopy(scope, |canopy, _| {
         Ok(canopy.unbind(inputmap::BindingId::from_u64(id as u64)))
-    })
-    .map_err(|err| canopy_to_host(&err))?;
+    })?;
     Ok(ret_one(ScopedValue::Boolean(removed)))
 }
 
@@ -3075,8 +3004,7 @@ fn host_unbind_key<'s>(
         let key = key::Key::parse_spec(&key_spec).map_err(error::Error::Script)?;
         let _ = canopy.unbind_input(inputmap::InputSpec::Key(key), mode, path);
         Ok(())
-    })
-    .map_err(|err| canopy_to_host(&err))?;
+    })?;
     Ok(ret_none())
 }
 
@@ -3088,8 +3016,7 @@ fn host_clear_bindings<'s>(
     with_current_canopy(scope, |canopy, _| {
         let _ = canopy.clear_bindings();
         Ok(())
-    })
-    .map_err(|err| canopy_to_host(&err))?;
+    })?;
     Ok(ret_none())
 }
 
@@ -3098,8 +3025,7 @@ fn host_screen<'s>(
     scope: &Scope<'s>,
     _args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let rows = with_current_canopy(scope, |canopy, _| screen_to_arg(canopy))
-        .map_err(|err| canopy_to_host(&err))?;
+    let rows = with_current_canopy(scope, |canopy, _| screen_to_arg(canopy))?;
     ret_arg(scope, &rows)
 }
 
@@ -3108,8 +3034,7 @@ fn host_screen_cells<'s>(
     scope: &Scope<'s>,
     _args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let rows = with_current_canopy(scope, |canopy, _| screen_cells_to_arg(canopy))
-        .map_err(|err| canopy_to_host(&err))?;
+    let rows = with_current_canopy(scope, |canopy, _| screen_cells_to_arg(canopy))?;
     ret_arg(scope, &rows)
 }
 
@@ -3118,8 +3043,7 @@ fn host_screen_text<'s>(
     scope: &Scope<'s>,
     _args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let text = with_current_canopy(scope, |canopy, _| screen_text(canopy))
-        .map_err(|err| canopy_to_host(&err))?;
+    let text = with_current_canopy(scope, |canopy, _| screen_text(canopy))?;
     Ok(ret_one(ScopedValue::String(scope.create_string(&text)?)))
 }
 
@@ -3139,8 +3063,7 @@ fn host_screen_region<'s>(
         u32::try_from(w.max(0)).unwrap_or(u32::MAX),
         u32::try_from(h.max(0)).unwrap_or(u32::MAX),
     );
-    let text = with_current_canopy(scope, |canopy, _| screen_text_for_rect(canopy, rect))
-        .map_err(|err| canopy_to_host(&err))?;
+    let text = with_current_canopy(scope, |canopy, _| screen_text_for_rect(canopy, rect))?;
     Ok(ret_one(ScopedValue::String(scope.create_string(&text)?)))
 }
 
@@ -3159,8 +3082,7 @@ fn host_node_region<'s>(
             .ok_or_else(|| error::Error::from(commands::CommandError::InvalidNode { id: node_id }))?
             .view;
         screen_text_for_rect(canopy, view.content)
-    })
-    .map_err(|err| canopy_to_host(&err))?;
+    })?;
     Ok(ret_one(ScopedValue::String(scope.create_string(&text)?)))
 }
 
@@ -3169,9 +3091,7 @@ fn host_route_trace<'s>(
     scope: &Scope<'s>,
     _args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let trace = with_current_canopy(scope, |canopy, _| Ok(route_trace_to_arg(canopy)))
-        .map_err(|err| canopy_to_host(&err))?;
-    ret_arg(scope, &trace)
+    host_value(scope, |canopy, _| Ok(route_trace_to_arg(canopy)))
 }
 
 /// `canopy.diagnostic_dump`: return a diagnostic dump for a node.
@@ -3184,8 +3104,7 @@ fn host_diagnostic_dump<'s>(
     let dump = with_current_canopy(scope, |canopy, node_id| {
         let target = requested.unwrap_or(node_id);
         Ok(canopy.diagnostic_dump(target))
-    })
-    .map_err(|err| canopy_to_host(&err))?;
+    })?;
     Ok(ret_one(ScopedValue::String(scope.create_string(&dump)?)))
 }
 
@@ -3194,9 +3113,7 @@ fn host_help_snapshot<'s>(
     scope: &Scope<'s>,
     _args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let snapshot = with_current_canopy(scope, |canopy, _| Ok(help_snapshot_to_arg(canopy)))
-        .map_err(|err| canopy_to_host(&err))?;
-    ret_arg(scope, &snapshot)
+    host_value(scope, |canopy, _| Ok(help_snapshot_to_arg(canopy)))
 }
 
 /// `canopy.script_journal`: return recorded script evaluations.
@@ -3204,9 +3121,7 @@ fn host_script_journal<'s>(
     scope: &Scope<'s>,
     _args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let journal = with_current_canopy(scope, |canopy, _| Ok(script_journal_to_arg(canopy)))
-        .map_err(|err| canopy_to_host(&err))?;
-    ret_arg(scope, &journal)
+    host_value(scope, |canopy, _| Ok(script_journal_to_arg(canopy)))
 }
 
 /// `canopy.api`: return the generated Luau API definition.
@@ -3214,8 +3129,7 @@ fn host_api<'s>(
     scope: &Scope<'s>,
     _args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let api = with_current_canopy(scope, |canopy, _| canopy.script_api().map(str::to_string))
-        .map_err(|err| canopy_to_host(&err))?;
+    let api = with_current_canopy(scope, |canopy, _| canopy.script_api().map(str::to_string))?;
     Ok(ret_one(ScopedValue::String(scope.create_string(&api)?)))
 }
 
@@ -3237,8 +3151,7 @@ fn host_on_start<'s>(
             .on_start_hooks
             .push(function_id);
         Ok(())
-    })
-    .map_err(|err| canopy_to_host(&err))?;
+    })?;
     Ok(ret_none())
 }
 
@@ -3247,9 +3160,7 @@ fn host_fixtures<'s>(
     scope: &Scope<'s>,
     _args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let fixtures = with_current_canopy(scope, |canopy, _| Ok(fixtures_to_arg(canopy)))
-        .map_err(|err| canopy_to_host(&err))?;
-    ret_arg(scope, &fixtures)
+    host_value(scope, |canopy, _| Ok(fixtures_to_arg(canopy)))
 }
 
 /// Build the declaration-coupled base Canopy module.
@@ -3290,10 +3201,8 @@ fn build_owner_modules(
                 move |scope: &Scope<'_>, args: MultiValue<'_>| {
                     let values = values_to_args(scope, ArgReader::new(args).rest())?;
                     let allow_map_named = values.len() == 1;
-                    let node_id =
-                        current_script_anchor(scope).map_err(|error| canopy_to_host(&error))?;
-                    let result = dispatch_command(scope, spec, node_id, values, allow_map_named)
-                        .map_err(|error| canopy_to_host(&error))?;
+                    let node_id = with_current_canopy(scope, |_, node_id| Ok(node_id))?;
+                    let result = dispatch_command(scope, spec, node_id, values, allow_map_named)?;
                     ret_arg(scope, &result)
                 },
             );
@@ -3309,8 +3218,7 @@ fn build_owner_modules(
                 )
                 .doc("Register this widget's default bindings."),
                 move |scope: &Scope<'_>, _args: MultiValue<'_>| {
-                    run_default_bindings_in_scope(scope, &owner)
-                        .map_err(|error| canopy_to_host(&error))?;
+                    run_default_bindings_in_scope(scope, &owner)?;
                     Ok(ret_none())
                 },
             );

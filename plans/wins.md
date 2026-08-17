@@ -444,7 +444,7 @@ Independent, low-risk, mostly deletions. Do these first.
   tests that match on `Error::Unsupported` to message matching. Proof: `tests/derive.rs` passes;
   `cargo tree -i syn@1` reports no path.
 
-- [ ] **3.4 Host-function boilerplate.** `script/mod.rs` has 53 `.map_err(|e| canopy_to_host(&e))`
+- [x] **3.4 Host-function boilerplate.** `script/mod.rs` has 53 `.map_err(|e| canopy_to_host(&e))`
   and 48 `with_current_canopy(scope, ..)` calls, and the "normal context or reentrant bridge"
   branch is written four times (`:572-598, 831-872`). Add `impl From<error::Error> for
   ruau RuntimeError` so host fns use `?`; write one `with_canopy(scope, f)` that owns the branch;
