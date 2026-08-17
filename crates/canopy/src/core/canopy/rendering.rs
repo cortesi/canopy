@@ -8,8 +8,8 @@ use crate::{
     error::Result,
     geom::{Point, Rect, RectI32, Size},
     layout::Display,
-    render::{Render, RenderBackend},
-    style::{Effect, ResolvedStyle, StyleManager},
+    render::{NopBackend, Render, RenderBackend},
+    style::{Effect, StyleManager},
 };
 
 /// Rendering traversal scratch state shared across recursion.
@@ -20,35 +20,6 @@ struct RenderTraversal<'a> {
     styl: &'a mut StyleManager,
     /// Accumulated style effects for the current subtree.
     effect_stack: &'a mut Vec<Effect>,
-}
-
-/// No-op backend used to refresh the offscreen terminal buffer for inspection.
-struct SnapshotBackend;
-
-impl RenderBackend for SnapshotBackend {
-    fn style(&mut self, _style: &ResolvedStyle) -> Result<()> {
-        Ok(())
-    }
-
-    fn text(&mut self, _loc: Point, _txt: &str) -> Result<()> {
-        Ok(())
-    }
-
-    fn supports_char_shift(&self) -> bool {
-        false
-    }
-
-    fn shift_chars(&mut self, _loc: Point, _count: i32) -> Result<()> {
-        Ok(())
-    }
-
-    fn flush(&mut self) -> Result<()> {
-        Ok(())
-    }
-
-    fn reset(&mut self) -> Result<()> {
-        Ok(())
-    }
 }
 
 impl Canopy {
@@ -63,7 +34,7 @@ impl Canopy {
 
     /// Refresh the cached terminal buffer without producing user-visible output.
     pub(crate) fn refresh_snapshot(&mut self) -> Result<()> {
-        let mut backend = SnapshotBackend;
+        let mut backend = NopBackend;
         let _ignored = self.render_if_pending(&mut backend)?;
         Ok(())
     }

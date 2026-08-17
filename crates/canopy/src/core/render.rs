@@ -34,6 +34,51 @@ pub trait RenderBackend {
     fn reset(&mut self) -> Result<()>;
 }
 
+/// A render backend that discards all output.
+///
+/// Rendering through this backend refreshes the terminal buffer without
+/// producing user-visible output, so callers can inspect the buffer directly.
+pub struct NopBackend;
+
+impl NopBackend {
+    /// Construct a no-op backend.
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for NopBackend {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl RenderBackend for NopBackend {
+    fn style(&mut self, _style: &ResolvedStyle) -> Result<()> {
+        Ok(())
+    }
+
+    fn text(&mut self, _loc: geom::Point, _txt: &str) -> Result<()> {
+        Ok(())
+    }
+
+    fn supports_char_shift(&self) -> bool {
+        false
+    }
+
+    fn shift_chars(&mut self, _loc: geom::Point, _count: i32) -> Result<()> {
+        Ok(())
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    fn reset(&mut self) -> Result<()> {
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Signed translation offset in cell coordinates.
 struct Offset {

@@ -28,6 +28,7 @@ futures = "0.3.32"
 parking_lot = "0.12.5"
 
 [dev-dependencies]
+canopy = { path = ".", features = ["testing"] }
 rand = "0.10.1"
 proptest = "1.11.0"
 criterion = "0.8.2"

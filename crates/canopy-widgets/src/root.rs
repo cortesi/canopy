@@ -363,9 +363,8 @@ mod tests {
         error::Result,
         geom::Size,
         layout::Layout,
-        render::Render,
+        render::{NopBackend, Render},
         state::NodeName,
-        testing::render::NopBackend,
     };
 
     use super::*;

@@ -97,7 +97,7 @@ Independent, low-risk, mostly deletions. Do these first.
   no path, and the imgview demo still opens `assets/tiger.jpg`. Trimming the decoder list further
   is a product choice (see Considered and rejected).
 
-- [ ] **0.7 Fix the `testing` features.** (a) `canopy-widgets` declares `testing = []` that
+- [x] **0.7 Fix the `testing` features.** (a) `canopy-widgets` declares `testing = []` that
   gates nothing (`grep 'feature = "testing"' crates/canopy-widgets/src` is empty). Delete the
   feature, the two `required-features = ["testing"]` lines on its benches (they silently skip
   under `cargo bench -p canopy-widgets`), and `features = ["testing"]` on the `canopy-widgets`

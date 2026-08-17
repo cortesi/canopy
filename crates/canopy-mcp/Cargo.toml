@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-canopy = { version = "0.0.1", path = "../canopy", features = ["testing"] }
+canopy = { version = "0.0.1", path = "../canopy" }
 schemars = "1.2.1"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"

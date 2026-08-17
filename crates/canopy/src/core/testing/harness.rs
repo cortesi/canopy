@@ -1,6 +1,6 @@
 use std::any::Any;
 
-use super::{buf::BufTest, render::NopBackend};
+use super::buf::BufTest;
 use crate::{
     Canopy, Context, Loader, NodeId, ViewContext,
     core::{
@@ -11,6 +11,7 @@ use crate::{
     event::{key, mouse},
     geom::Size,
     layout::Sizing,
+    render::NopBackend,
     widget::Widget,
 };
 

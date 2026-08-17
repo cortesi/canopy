@@ -11,8 +11,6 @@ pub mod harness;
 /// Shared property-model failure diagnostics.
 #[cfg(test)]
 pub(crate) mod model;
-/// Render helpers for tests.
-pub mod render;
 /// Test tree helpers.
 pub mod ttree;
 

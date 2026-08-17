@@ -8,7 +8,7 @@ use canopy::{
     commands::{ArgValue, CommandDispatchKind, CommandResolution},
     error::{Error as CanopyError, ScriptErrorKind},
     geom::Size,
-    testing::render::NopBackend,
+    render::NopBackend,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

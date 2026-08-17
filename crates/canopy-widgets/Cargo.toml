@@ -45,18 +45,14 @@ itty-script = { path = "../../../itty/crates/itty-script" }
 loom = "0.7.2"
 proptest = "1.11.0"
 
-[features]
-testing = []
 
 [[bench]]
 name = "editor"
 harness = false
-required-features = ["testing"]
 
 [[bench]]
 name = "rendering"
 harness = false
-required-features = ["testing"]
 
 [lints]
 workspace = true
