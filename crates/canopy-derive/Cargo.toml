@@ -9,11 +9,9 @@ proc-macro = true
 doctest = false
 
 [dependencies]
-syn = { version = "2.0.117", features = ["full"] }
+syn = { version = "2.0.117", features = ["extra-traits", "full"] }
 quote = "1.0.45"
 proc-macro2 = "1.0.106"
-proc-macro-error = "1.0.4"
-thiserror.workspace = true
 convert_case.workspace = true
 
 [dev-dependencies]

@@ -4,29 +4,27 @@
 
 /// Command metadata token emission.
 mod codegen;
-/// Local error type for derive parsing.
-mod error;
 /// Parsed command metadata model.
 mod model;
 /// Parsing support for `derive_commands`.
 mod parse;
 
-use proc_macro_error::{abort, abort_call_site, proc_macro_error};
 use quote::quote;
 use syn::{
-    Attribute, Expr, ExprLit, Fields, ItemImpl, Lit, Meta, parse_macro_input, parse_quote,
-    spanned::Spanned,
+    Attribute, Expr, ExprLit, Fields, ItemImpl, Lit, Meta, Result, parse_macro_input, parse_quote,
 };
 
 /// Generate command metadata and wrappers for `#[command]` methods in an impl block.
-#[proc_macro_error]
 #[proc_macro_attribute]
 pub fn derive_commands(
     _attr: proc_macro::TokenStream,
     input: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as ItemImpl);
-    codegen::expand_derive_commands(input)
+    match codegen::expand_derive_commands(input) {
+        Ok(tokens) => tokens.into(),
+        Err(error) => error.to_compile_error().into(),
+    }
 }
 
 /// Mark a method as a command. This macro should be used to decorate methods in
@@ -43,15 +41,33 @@ pub fn command(
 #[proc_macro_derive(CommandArg, attributes(canopy))]
 pub fn derive_command_arg(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as syn::DeriveInput);
+    match expand_command_arg(&input) {
+        Ok(tokens) => tokens.into(),
+        Err(error) => error.to_compile_error().into(),
+    }
+}
+
+/// Expand the `CommandArg` derive for one input.
+fn expand_command_arg(input: &syn::DeriveInput) -> Result<proc_macro2::TokenStream> {
     let ident = &input.ident;
-    let type_name = command_arg_type_name(&input.attrs, ident);
+    let type_name = command_arg_type_name(&input.attrs, ident)?;
     let type_doc = doc_tokens(&input.attrs);
     let fields = match &input.data {
         syn::Data::Struct(data) => match &data.fields {
             Fields::Named(fields) => &fields.named,
-            _ => abort!(ident.span(), "CommandArg only supports named-field structs"),
+            _ => {
+                return Err(syn::Error::new_spanned(
+                    ident,
+                    "CommandArg only supports named-field structs",
+                ));
+            }
         },
-        _ => abort!(ident.span(), "CommandArg can only be derived for structs"),
+        _ => {
+            return Err(syn::Error::new_spanned(
+                ident,
+                "CommandArg can only be derived for structs",
+            ));
+        }
     };
     let mut generics = input.generics.clone();
     // Field-type bounds are only needed to propagate generic parameters; for
@@ -72,24 +88,28 @@ pub fn derive_command_arg(input: proc_macro::TokenStream) -> proc_macro::TokenSt
         let ty = &field.ty;
         quote! { <#ty as canopy::commands::CommandType>::luau_decls(registry); }
     });
-    let field_tokens = fields.iter().map(|field| {
+    let mut field_tokens = Vec::new();
+    for field in fields {
         let Some(ident) = &field.ident else {
-            abort!(field, "CommandArg only supports named-field structs");
+            return Err(syn::Error::new_spanned(
+                field,
+                "CommandArg only supports named-field structs",
+            ));
         };
         let name = ident.to_string();
         let name = syn::LitStr::new(&name, ident.span());
         let ty = &field.ty;
         let doc = doc_tokens(&field.attrs);
-        quote! {
+        field_tokens.push(quote! {
             canopy::commands::declaration::Field::new(
                 #name,
                 <#ty as canopy::commands::CommandType>::luau_ty(),
             )
             #doc
-        }
-    });
+        });
+    }
 
-    let expanded = quote! {
+    Ok(quote! {
         impl #impl_generics canopy::commands::CommandArg for #ident #ty_generics #where_clause {}
 
         impl #impl_generics canopy::commands::CommandType for #ident #ty_generics #where_clause {
@@ -111,13 +131,11 @@ pub fn derive_command_arg(input: proc_macro::TokenStream) -> proc_macro::TokenSt
                 );
             }
         }
-    };
-
-    expanded.into()
+    })
 }
 
 /// Return the explicit `#[canopy(type_name = "...")]` or the Rust identifier.
-fn command_arg_type_name(attrs: &[Attribute], ident: &syn::Ident) -> syn::LitStr {
+fn command_arg_type_name(attrs: &[Attribute], ident: &syn::Ident) -> Result<syn::LitStr> {
     let mut type_name = None;
     for attr in attrs.iter().filter(|attr| attr.path().is_ident("canopy")) {
         attr.parse_nested_meta(|meta| {
@@ -129,10 +147,9 @@ fn command_arg_type_name(attrs: &[Attribute], ident: &syn::Ident) -> syn::LitStr
             } else {
                 Err(meta.error("unsupported canopy attribute"))
             }
-        })
-        .unwrap_or_else(|err| abort!(attr.span(), err));
+        })?;
     }
-    type_name.unwrap_or_else(|| syn::LitStr::new(&ident.to_string(), ident.span()))
+    Ok(type_name.unwrap_or_else(|| syn::LitStr::new(&ident.to_string(), ident.span())))
 }
 
 /// Render a doc-attachment token stream for declaration model items.
@@ -175,22 +192,32 @@ fn doc_string(attrs: &[Attribute]) -> Option<String> {
 #[proc_macro_derive(CommandEnum, attributes(canopy))]
 pub fn derive_command_enum(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as syn::DeriveInput);
+    match expand_command_enum(input) {
+        Ok(tokens) => tokens.into(),
+        Err(error) => error.to_compile_error().into(),
+    }
+}
+
+/// Expand the `CommandEnum` derive for one input.
+fn expand_command_enum(input: syn::DeriveInput) -> Result<proc_macro2::TokenStream> {
     let ident = input.ident;
-    let type_name = command_arg_type_name(&input.attrs, &ident);
+    let type_name = command_arg_type_name(&input.attrs, &ident)?;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
-    let data = match input.data {
-        syn::Data::Enum(data) => data,
-        _ => abort_call_site!("CommandEnum can only be derived for enums"),
+    let syn::Data::Enum(data) = input.data else {
+        return Err(syn::Error::new_spanned(
+            &ident,
+            "CommandEnum can only be derived for enums",
+        ));
     };
 
     let mut variants = Vec::new();
     for variant in data.variants {
         if !variant.fields.is_empty() {
-            abort!(
-                variant.ident.span(),
-                "CommandEnum only supports fieldless variants"
-            );
+            return Err(syn::Error::new_spanned(
+                &variant.ident,
+                "CommandEnum only supports fieldless variants",
+            ));
         }
         variants.push(variant.ident);
     }
@@ -209,7 +236,7 @@ pub fn derive_command_enum(input: proc_macro::TokenStream) -> proc_macro::TokenS
         .iter()
         .map(|variant| syn::LitStr::new(&variant.to_string(), proc_macro2::Span::call_site()));
 
-    let expanded = quote! {
+    Ok(quote! {
         impl #impl_generics canopy::commands::ToArgValue for #ident #ty_generics #where_clause {
             fn to_arg_value(self) -> canopy::commands::ArgValue {
                 let name = match self {
@@ -253,7 +280,5 @@ pub fn derive_command_enum(input: proc_macro::TokenStream) -> proc_macro::TokenS
                 ));
             }
         }
-    };
-
-    expanded.into()
+    })
 }

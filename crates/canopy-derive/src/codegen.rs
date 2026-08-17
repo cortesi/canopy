@@ -1,4 +1,3 @@
-use proc_macro_error::{ResultExt, abort_call_site};
 use quote::quote;
 use syn::{ImplItem, ItemImpl};
 
@@ -531,67 +530,63 @@ impl CommandMeta {
     }
 
     /// Render all generated impl items for this command.
-    fn generated_items(&self) -> Vec<ImplItem> {
-        vec![
-            parse_impl_item(self.names_const_tokens(), "command user params const"),
-            parse_impl_item(self.params_const_tokens(), "command params const"),
-            parse_impl_item(self.invoke_tokens(), "command invoke fn"),
-            parse_impl_item(self.spec_const_tokens(), "command spec const"),
-            parse_impl_item(self.accessor_tokens(), "command spec accessor"),
-        ]
+    fn generated_items(&self) -> proc_macro2::TokenStream {
+        let names = self.names_const_tokens();
+        let params = self.params_const_tokens();
+        let invoke = self.invoke_tokens();
+        let spec = self.spec_const_tokens();
+        let accessor = self.accessor_tokens();
+        quote! {
+            #names
+            #params
+            #invoke
+            #spec
+            #accessor
+        }
     }
 }
 
-/// Parse generated tokens into an impl item with context on failure.
-fn parse_impl_item(tokens: proc_macro2::TokenStream, label: &str) -> ImplItem {
-    syn::parse2(tokens)
-        .unwrap_or_else(|error| abort_call_site!("{} parse failed: {}", label, error))
-}
-
 /// Generate command metadata and wrappers for `#[command]` methods in an impl block.
-pub fn expand_derive_commands(mut input: ItemImpl) -> proc_macro::TokenStream {
-    let owner = owner_name(&input).unwrap_or_abort();
+pub fn expand_derive_commands(mut input: ItemImpl) -> syn::Result<proc_macro2::TokenStream> {
+    let owner = owner_name(&input)?;
     let name = input.self_ty.clone();
     let (impl_generics, _, where_clause) = input.generics.split_for_impl();
 
     let mut commands = Vec::new();
     for item in &mut input.items {
         if let ImplItem::Fn(method) = item
-            && let Some(command) = parse_command_method(&owner, method).unwrap_or_abort()
+            && let Some(command) = parse_command_method(&owner, method)?
         {
             commands.push(command);
         }
     }
 
-    let mut generated_items: Vec<ImplItem> = Vec::new();
+    let mut generated = proc_macro2::TokenStream::new();
     let mut spec_refs = Vec::new();
 
     for command in &commands {
         spec_refs.push(command.spec_ref_tokens());
-        generated_items.extend(command.generated_items());
+        generated.extend(command.generated_items());
     }
 
     let commands_const_ident = syn::Ident::new("__CANOPY_COMMANDS", proc_macro2::Span::call_site());
-    let commands_const = quote! {
+    generated.extend(quote! {
         const #commands_const_ident: &'static [&'static canopy::commands::CommandSpec] = &[
             #(#spec_refs),*
         ];
-    };
-    generated_items.push(parse_impl_item(commands_const, "command list const"));
+    });
 
-    input.items.extend(generated_items);
+    Ok(quote! {
+        #input
 
-    let command_node_impl = quote! {
+        impl #impl_generics #name #where_clause {
+            #generated
+        }
+
         impl #impl_generics canopy::commands::CommandNode for #name #where_clause {
             fn commands() -> &'static [&'static canopy::commands::CommandSpec] {
                 Self::#commands_const_ident
             }
         }
-    };
-
-    quote! {
-        #input
-        #command_node_impl
-    }
-    .into()
+    })
 }

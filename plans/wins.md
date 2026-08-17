@@ -429,7 +429,7 @@ Independent, low-risk, mostly deletions. Do these first.
   declaration exactly once; the existing declaration-conformance and `luau_check` tests pass.
   About −150 lines.
 
-- [ ] **3.3 Replace `proc-macro-error` with `syn::Error`.** `canopy-derive` uses
+- [x] **3.3 Replace `proc-macro-error` with `syn::Error`.** `canopy-derive` uses
   `proc-macro-error` (unmaintained; the only reason `syn 1.0.109` is in the lockfile) plus a
   local `thiserror` enum that reports every error at `Span::call_site()`. This item owns every
   call site: return `syn::Result` from `parse.rs` with real spans; replace `abort!`,
@@ -438,7 +438,9 @@ Independent, low-risk, mostly deletions. Do these first.
   three macro entry points turn into `to_compile_error()` output; delete `src/error.rs`; then drop
   `proc-macro-error`, `proc-macro-error-attr`, and `thiserror` from the derive crate. Land item
   3.10's `parse_impl_item` change (emit a second `impl` block instead of re-parsing generated
-  tokens) inside this item, because those abort paths disappear with it. Adjust the `parse.rs`
+  tokens) inside this item, because those abort paths disappear with it. `canopy-derive` also
+  needs `syn`'s `extra-traits` feature, which `thiserror` used to pull in for the model's
+  `Debug` derives. Adjust the `parse.rs`
   tests that match on `Error::Unsupported` to message matching. Proof: `tests/derive.rs` passes;
   `cargo tree -i syn@1` reports no path.
 

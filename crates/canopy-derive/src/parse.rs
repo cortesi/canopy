@@ -3,15 +3,12 @@ use std::collections::HashMap;
 use convert_case::{Case, Casing};
 use quote::ToTokens;
 use syn::{
-    Attribute, GenericArgument, ImplItemFn, ItemImpl, Meta, Pat, PathArguments, ReturnType, Type,
-    TypeParamBound,
+    Attribute, GenericArgument, ImplItemFn, ItemImpl, Meta, Pat, PathArguments, Result, ReturnType,
+    Type, TypeParamBound,
 };
 
-use crate::{
-    error::{Error, Result},
-    model::{
-        CommandMeta, DefaultValue, DocMeta, MacroArgs, ParamKind, ParamMeta, ReturnKind, ReturnMeta,
-    },
+use crate::model::{
+    CommandMeta, DefaultValue, DocMeta, MacroArgs, ParamKind, ParamMeta, ReturnKind, ReturnMeta,
 };
 
 /// Extract documentation from `#[doc = "..."]` attributes.
@@ -181,11 +178,10 @@ fn parse_arg_default(attrs: &[Attribute]) -> Result<Option<DefaultValue>> {
                         return Ok(());
                     }
                     Err(syn::Error::new_spanned(meta.path, "unknown arg attribute"))
-                })
-                .map_err(|error| Error::Parse(error.to_string()))?;
+                })?;
             }
             _ => {
-                return Err(Error::Parse("invalid arg attribute".into()));
+                return Err(syn::Error::new_spanned(attr, "invalid arg attribute"));
             }
         }
     }
@@ -260,11 +256,10 @@ fn parse_command_macro_args(attrs: &[Attribute]) -> Result<Option<MacroArgs>> {
                         ));
                     }
                     Ok(())
-                })
-                .map_err(|error| Error::Parse(error.to_string()))?;
+                })?;
             }
             Meta::NameValue(_) => {
-                return Err(Error::Parse("invalid command argument".into()));
+                return Err(syn::Error::new_spanned(attr, "invalid command argument"));
             }
         }
         macro_args = Some(args);
@@ -295,8 +290,9 @@ fn validate_receiver(receiver: &syn::Receiver) -> Result<()> {
     if receiver.reference.is_some() {
         Ok(())
     } else {
-        Err(Error::Unsupported(
-            "command methods must take &self or &mut self".into(),
+        Err(syn::Error::new_spanned(
+            receiver,
+            "command methods must take &self or &mut self",
         ))
     }
 }
@@ -305,8 +301,9 @@ fn validate_receiver(receiver: &syn::Receiver) -> Result<()> {
 fn parse_param_ident(pat: &Pat) -> Result<syn::Ident> {
     match pat {
         Pat::Ident(ident) => Ok(ident.ident.clone()),
-        _ => Err(Error::Unsupported(
-            "command arguments must be identifiers".into(),
+        _ => Err(syn::Error::new_spanned(
+            pat,
+            "command arguments must be identifiers",
         )),
     }
 }
@@ -320,8 +317,9 @@ fn classify_value_param(ty: &Type, default: Option<&DefaultValue>) -> Result<(Pa
     };
 
     if matches!(inner, Type::Reference(_)) {
-        return Err(Error::Unsupported(
-            "reference arguments are not supported".into(),
+        return Err(syn::Error::new_spanned(
+            ty,
+            "reference arguments are not supported",
         ));
     }
 
@@ -334,14 +332,16 @@ fn classify_value_param(ty: &Type, default: Option<&DefaultValue>) -> Result<(Pa
     };
 
     if kind != ParamKind::User && default.is_some() {
-        return Err(Error::Unsupported(
-            "only user arguments may have defaults".into(),
+        return Err(syn::Error::new_spanned(
+            ty,
+            "only user arguments may have defaults",
         ));
     }
 
     if kind == ParamKind::User && is_option && default.is_some() {
-        return Err(Error::Unsupported(
-            "Option parameters cannot have defaults".into(),
+        return Err(syn::Error::new_spanned(
+            ty,
+            "Option parameters cannot have defaults",
         ));
     }
 
@@ -359,8 +359,9 @@ fn parse_command_param(pat: &mut syn::PatType) -> Result<ParamMeta> {
 
     if let Some(mutable) = is_context_ref(&ty) {
         if default.is_some() {
-            return Err(Error::Unsupported(
-                "context parameters cannot have defaults".into(),
+            return Err(syn::Error::new_spanned(
+                &ty,
+                "context parameters cannot have defaults",
             ));
         }
 
@@ -411,8 +412,9 @@ pub fn parse_command_method(owner: &str, method: &mut ImplItemFn) -> Result<Opti
     }
 
     if !has_receiver {
-        return Err(Error::Unsupported(
-            "command methods must take &self or &mut self".into(),
+        return Err(syn::Error::new_spanned(
+            &method.sig,
+            "command methods must take &self or &mut self",
         ));
     }
 
@@ -436,10 +438,16 @@ pub fn parse_command_method(owner: &str, method: &mut ImplItemFn) -> Result<Opti
 /// Resolve the owner type name for an impl block.
 pub fn owner_name(input: &ItemImpl) -> Result<String> {
     let Type::Path(path) = &*input.self_ty else {
-        return Err(Error::Unsupported("unsupported impl type".into()));
+        return Err(syn::Error::new_spanned(
+            &input.self_ty,
+            "unsupported impl type",
+        ));
     };
     let Some(segment) = path.path.segments.last() else {
-        return Err(Error::Unsupported("unsupported impl type".into()));
+        return Err(syn::Error::new_spanned(
+            &input.self_ty,
+            "unsupported impl type",
+        ));
     };
     let raw = segment.ident.to_string();
     let snake = raw.to_case(Case::Snake);
@@ -455,7 +463,6 @@ mod tests {
     use syn::parse_quote;
 
     use super::parse_command_method;
-    use crate::error::Error;
 
     #[test]
     fn ignore_result_preserves_result_flag() {
@@ -477,6 +484,6 @@ mod tests {
             fn bad_ref(&mut self, _core: &mut dyn canopy::Context, name: &str) {}
         };
         let err = parse_command_method("foo", &mut method).unwrap_err();
-        assert!(matches!(err, Error::Unsupported(_)));
+        assert_eq!(err.to_string(), "reference arguments are not supported");
     }
 }
