@@ -14,12 +14,7 @@ use crate::model::{
 /// Extract documentation from `#[doc = "..."]` attributes.
 fn extract_doc_comments(
     attrs: &[Attribute],
-) -> (
-    Option<String>,
-    Option<String>,
-    HashMap<String, String>,
-    Option<String>,
-) {
+) -> (Option<String>, HashMap<String, String>, Option<String>) {
     let mut lines = Vec::new();
     let mut param_docs = HashMap::new();
     let mut return_doc = None;
@@ -43,7 +38,7 @@ fn extract_doc_comments(
     }
 
     if lines.is_empty() {
-        return (None, None, param_docs, None);
+        return (None, param_docs, None);
     }
 
     let mut body = Vec::new();
@@ -66,16 +61,7 @@ fn extract_doc_comments(
     }
 
     let long = Some(body.join("\n").trim().to_string()).filter(|text| !text.is_empty());
-    let first_line = body.iter().find(|line| !line.is_empty()).cloned();
-    let short = first_line.map(|line| {
-        if let Some(index) = line.find(". ") {
-            format!("{}.", &line[..index])
-        } else {
-            line
-        }
-    });
-
-    (short, long, param_docs, return_doc)
+    (long, param_docs, return_doc)
 }
 
 /// Render a Rust type into a string for metadata.
@@ -244,11 +230,6 @@ fn parse_command_macro_args(attrs: &[Attribute]) -> Result<Option<MacroArgs>> {
                 attr.parse_nested_meta(|meta| {
                     if meta.path.is_ident("ignore_result") {
                         args.ignore_result = true;
-                    } else if meta.path.is_ident("hidden") {
-                        args.hidden = true;
-                    } else if meta.path.is_ident("desc") {
-                        let value = meta.value()?;
-                        args.desc = Some(value.parse()?);
                     } else {
                         return Err(syn::Error::new_spanned(
                             meta.path,
@@ -269,20 +250,9 @@ fn parse_command_macro_args(attrs: &[Attribute]) -> Result<Option<MacroArgs>> {
 }
 
 /// Build documentation metadata for a parsed command method.
-fn build_doc_meta(
-    attrs: &[Attribute],
-    macro_args: &MacroArgs,
-) -> (DocMeta, HashMap<String, String>, Option<String>) {
-    let (short, long, param_docs, return_doc) = extract_doc_comments(attrs);
-    (
-        DocMeta {
-            short: macro_args.desc.as_ref().map(syn::LitStr::value).or(short),
-            long,
-            hidden: macro_args.hidden,
-        },
-        param_docs,
-        return_doc,
-    )
+fn build_doc_meta(attrs: &[Attribute]) -> (DocMeta, HashMap<String, String>, Option<String>) {
+    let (long, param_docs, return_doc) = extract_doc_comments(attrs);
+    (DocMeta { long }, param_docs, return_doc)
 }
 
 /// Ensure a command receiver is borrowed.
@@ -394,7 +364,7 @@ pub fn parse_command_method(owner: &str, method: &mut ImplItemFn) -> Result<Opti
     let Some(macro_args) = parse_command_macro_args(&method.attrs)? else {
         return Ok(None);
     };
-    let (doc, param_docs, return_doc) = build_doc_meta(&method.attrs, &macro_args);
+    let (doc, param_docs, return_doc) = build_doc_meta(&method.attrs);
 
     let mut params = Vec::new();
     let mut has_receiver = false;

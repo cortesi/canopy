@@ -497,7 +497,7 @@ Independent, low-risk, mostly deletions. Do these first.
   `impl_int_from_arg_value!`, `impl_uint_from_arg_value!`, and the standalone `isize`/`usize`
   impls (`:378-446`) share one body; use one macro over the ten integer types. About −200 lines.
 
-- [ ] **3.9 Command docs have one field.** `CommandDocSpec.short` is always the first sentence
+- [x] **3.9 Command docs have one field.** `CommandDocSpec.short` is always the first sentence
   of `long` because `#[command(desc = ..)]` has zero users, and `defs::command_doc`
   (`:465-488`) de-dups only whole lines, so multi-sentence first lines are emitted twice in the
   generated API (see `root.quit` in `focusgym --api`). Remove `desc`, `DocMeta.short`,

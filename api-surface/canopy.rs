@@ -3429,12 +3429,8 @@ pub mod canopy {
         /// Documentation metadata for a command.
         #[derive(Clone, Copy, Debug, Default, StructuralPartialEq, PartialEq, Eq)]
         pub struct CommandDocSpec {
-            /// Short, single-line description for tables/tooltips.
-            pub short: Option<&'static str>,
-            /// Full description (future: rich help/palette).
+            /// Command documentation, taken from the method's doc comment.
             pub long: Option<&'static str>,
-            /// Hide from interactive help unless explicitly requested.
-            pub hidden: bool,
         }
 
         /// Static metadata for a command.

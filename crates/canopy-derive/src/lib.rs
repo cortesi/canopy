@@ -38,7 +38,7 @@ pub fn command(
 }
 
 /// Derive the CommandArg marker trait for serde-backed types.
-#[proc_macro_derive(CommandArg, attributes(canopy))]
+#[proc_macro_derive(CommandArg)]
 pub fn derive_command_arg(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as syn::DeriveInput);
     match expand_command_arg(&input) {
@@ -50,7 +50,7 @@ pub fn derive_command_arg(input: proc_macro::TokenStream) -> proc_macro::TokenSt
 /// Expand the `CommandArg` derive for one input.
 fn expand_command_arg(input: &syn::DeriveInput) -> Result<proc_macro2::TokenStream> {
     let ident = &input.ident;
-    let type_name = command_arg_type_name(&input.attrs, ident)?;
+    let type_name = syn::LitStr::new(&ident.to_string(), ident.span());
     let type_doc = doc_tokens(&input.attrs);
     let fields = match &input.data {
         syn::Data::Struct(data) => match &data.fields {
@@ -134,24 +134,6 @@ fn expand_command_arg(input: &syn::DeriveInput) -> Result<proc_macro2::TokenStre
     })
 }
 
-/// Return the explicit `#[canopy(type_name = "...")]` or the Rust identifier.
-fn command_arg_type_name(attrs: &[Attribute], ident: &syn::Ident) -> Result<syn::LitStr> {
-    let mut type_name = None;
-    for attr in attrs.iter().filter(|attr| attr.path().is_ident("canopy")) {
-        attr.parse_nested_meta(|meta| {
-            if meta.path.is_ident("type_name") {
-                let value = meta.value()?;
-                let value: syn::LitStr = value.parse()?;
-                type_name = Some(value);
-                Ok(())
-            } else {
-                Err(meta.error("unsupported canopy attribute"))
-            }
-        })?;
-    }
-    Ok(type_name.unwrap_or_else(|| syn::LitStr::new(&ident.to_string(), ident.span())))
-}
-
 /// Render a doc-attachment token stream for declaration model items.
 fn doc_tokens(attrs: &[Attribute]) -> proc_macro2::TokenStream {
     match doc_string(attrs) {
@@ -189,7 +171,7 @@ fn doc_string(attrs: &[Attribute]) -> Option<String> {
 }
 
 /// Derive command enum conversions from/to ArgValue.
-#[proc_macro_derive(CommandEnum, attributes(canopy))]
+#[proc_macro_derive(CommandEnum)]
 pub fn derive_command_enum(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as syn::DeriveInput);
     match expand_command_enum(input) {
@@ -201,7 +183,7 @@ pub fn derive_command_enum(input: proc_macro::TokenStream) -> proc_macro::TokenS
 /// Expand the `CommandEnum` derive for one input.
 fn expand_command_enum(input: syn::DeriveInput) -> Result<proc_macro2::TokenStream> {
     let ident = input.ident;
-    let type_name = command_arg_type_name(&input.attrs, &ident)?;
+    let type_name = syn::LitStr::new(&ident.to_string(), ident.span());
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
     let syn::Data::Enum(data) = input.data else {

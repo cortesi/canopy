@@ -208,7 +208,7 @@ fn register_binding_info(builder: &mut module::Builder) {
             declaration::Field::new("desc", declaration::Type::String.optional())
                 .doc("Optional human-readable description when available."),
             declaration::Field::new("target", declaration::Type::String)
-                .doc("Human-readable binding target summary such as `root.quit()` or `luau`."),
+                .doc("Binding target kind. Always `luau`."),
         ]),
     ));
 }
@@ -382,14 +382,8 @@ pub(crate) fn register_owner_dependencies(
 /// Compose command docs and parameter tags for a command table field.
 pub(crate) fn command_doc(spec: &CommandSpec) -> Option<String> {
     let mut lines = Vec::new();
-    if let Some(short) = spec.doc.short {
-        lines.push(short.to_string());
-    }
     if let Some(long) = spec.doc.long {
         for line in long.lines().filter(|line| !line.trim().is_empty()) {
-            if spec.doc.short.is_some_and(|short| short == line.trim()) {
-                continue;
-            }
             lines.push(line.trim().to_string());
         }
     }

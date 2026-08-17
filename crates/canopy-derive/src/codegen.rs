@@ -488,9 +488,7 @@ impl CommandMeta {
         let name = &self.name;
         let owner = &self.owner;
         let ret = self.ret.spec_tokens(self.ignore_result);
-        let short = DocMeta::option_tokens(&self.doc.short);
         let long = DocMeta::option_tokens(&self.doc.long);
-        let hidden = self.doc.hidden;
 
         quote! {
             const #spec_const_ident: canopy::commands::CommandSpec = canopy::commands::CommandSpec {
@@ -500,9 +498,7 @@ impl CommandMeta {
                 params: Self::#params_const_ident,
                 ret: #ret,
                 doc: canopy::commands::CommandDocSpec {
-                    short: #short,
                     long: #long,
-                    hidden: #hidden,
                 },
                 invoke: Self::#invoke_ident,
             };

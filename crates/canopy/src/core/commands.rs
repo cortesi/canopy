@@ -964,12 +964,8 @@ pub enum CommandDispatchKind {
 /// Documentation metadata for a command.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct CommandDocSpec {
-    /// Short, single-line description for tables/tooltips.
-    pub short: Option<&'static str>,
-    /// Full description (future: rich help/palette).
+    /// Command documentation, taken from the method's doc comment.
     pub long: Option<&'static str>,
-    /// Hide from interactive help unless explicitly requested.
-    pub hidden: bool,
 }
 
 /// Static metadata for a command.
@@ -1582,11 +1578,7 @@ mod tests {
         dispatch: CommandDispatchKind::Free,
         params: &[],
         ret: CommandReturnSpec::Unit,
-        doc: CommandDocSpec {
-            short: Some("a"),
-            long: None,
-            hidden: false,
-        },
+        doc: CommandDocSpec { long: Some("a") },
         invoke: registry_invoke,
     };
     static REGISTRY_A_CONFLICT: CommandSpec = CommandSpec {
@@ -1596,9 +1588,7 @@ mod tests {
         params: &[],
         ret: CommandReturnSpec::Unit,
         doc: CommandDocSpec {
-            short: Some("conflict"),
-            long: None,
-            hidden: false,
+            long: Some("conflict"),
         },
         invoke: registry_invoke,
     };
@@ -1608,11 +1598,7 @@ mod tests {
         dispatch: CommandDispatchKind::Free,
         params: &[],
         ret: CommandReturnSpec::Unit,
-        doc: CommandDocSpec {
-            short: None,
-            long: None,
-            hidden: false,
-        },
+        doc: CommandDocSpec { long: None },
         invoke: registry_invoke,
     };
     static REGISTRY_A_BATCH: &[&CommandSpec] = &[&REGISTRY_A];

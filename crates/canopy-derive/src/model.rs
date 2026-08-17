@@ -5,10 +5,6 @@ use syn::Type;
 pub struct MacroArgs {
     /// Ignore command return value when dispatching.
     pub(crate) ignore_result: bool,
-    /// Override short description.
-    pub(crate) desc: Option<syn::LitStr>,
-    /// Mark command as hidden from help.
-    pub(crate) hidden: bool,
 }
 
 /// Parsed default argument value.
@@ -83,12 +79,8 @@ pub struct ReturnMeta {
 /// Extracted documentation from a method.
 #[derive(Debug, Clone, Default)]
 pub struct DocMeta {
-    /// Short description (first sentence or explicit override).
-    pub(crate) short: Option<String>,
     /// Full description (all doc comments joined).
     pub(crate) long: Option<String>,
-    /// Whether this command is hidden from help.
-    pub(crate) hidden: bool,
 }
 
 /// Parsed metadata describing a command.

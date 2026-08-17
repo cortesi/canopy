@@ -1316,7 +1316,7 @@ fn command_info_to_arg(
             ArgValue::Bool(resolution.is_some()),
         ),
     ]);
-    if let Some(doc) = spec.doc.long.or(spec.doc.short) {
+    if let Some(doc) = spec.doc.long {
         record.insert("doc".to_string(), ArgValue::String(doc.to_string()));
     }
     if let commands::CommandReturnSpec::Value(ty) = spec.ret
@@ -1514,7 +1514,6 @@ fn help_snapshot_to_arg(canopy: &Canopy) -> ArgValue {
     let commands = snapshot
         .commands
         .iter()
-        .filter(|command| !command.spec.doc.hidden)
         .map(|command| command_info_to_arg(command.spec, command.resolution))
         .collect();
     ArgValue::Map(BTreeMap::from([
