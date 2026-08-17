@@ -180,7 +180,7 @@ Independent, low-risk, mostly deletions. Do these first.
   `view()` (it is `Copy`; all 56 callers use `.field`/`.method()`), which deletes the
   `DEFAULT_VIEW` literal at `:549-563`. About −120 lines.
 
-- [ ] **1.3 Delete dead `Context`/`ViewContext` helpers.** Zero callers anywhere:
+- [x] **1.3 Delete dead `Context`/`ViewContext` helpers.** Zero callers anywhere:
   `Context::{hide, hide_node, show, show_node, set_clear_inherited_effects}`,
   `ViewContext::canvas`, and on `impl dyn Context`: `add_child_to_with_layout`, `add_children`,
   `add_children_to`, `add_children_boxed`, `add_children_to_boxed`, `try_with_node`,

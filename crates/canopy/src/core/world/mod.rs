@@ -216,7 +216,6 @@ impl Core {
             mounted: false,
             layout_dirty: false,
             effects: None,
-            clear_inherited_effects: false,
         });
 
         Self {

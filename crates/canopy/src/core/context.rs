@@ -198,11 +198,6 @@ pub trait ViewContext {
     /// Widget type identifier for a specific node.
     fn node_type_id(&self, node: NodeId) -> Option<TypeId>;
 
-    /// Canvas size for the current node.
-    fn canvas(&self) -> Size {
-        self.view().canvas
-    }
-
     /// Visible view rectangle in content coordinates.
     fn view_rect(&self) -> Rect {
         self.view().view_rect()
@@ -388,77 +383,30 @@ impl dyn ViewContext + '_ {
         }
     }
 
-    /// Return the first node of type `W` within `root` and its descendants.
-    pub fn first_from<W: Widget + 'static>(&self, root: impl Into<NodeId>) -> Option<TypedId<W>> {
-        let root = root.into();
-        for id in self.preorder(root) {
-            if ViewContext::node_type_id(self, id) == Some(TypeId::of::<W>()) {
-                return Some(TypedId::new(id));
-            }
-        }
-        None
-    }
-
-    /// Return all nodes of type `W` within `root` and its descendants.
-    pub fn all_from<W: Widget + 'static>(&self, root: impl Into<NodeId>) -> Vec<TypedId<W>> {
-        let root = root.into();
-        let mut out = Vec::new();
-        for id in self.preorder(root) {
-            if ViewContext::node_type_id(self, id) == Some(TypeId::of::<W>()) {
-                out.push(TypedId::new(id));
-            }
-        }
-        out
-    }
-
     /// Return the first widget of type `W` anywhere in the tree, including the root.
     pub fn first_in_tree<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
-        self.first_from::<W>(self.root_id())
+        self.preorder(self.root_id())
+            .find(|id| ViewContext::node_type_id(self, *id) == Some(TypeId::of::<W>()))
+            .map(TypedId::new)
     }
 
     /// Return all widgets of type `W` anywhere in the tree, including the root.
     pub fn all_in_tree<W: Widget + 'static>(&self) -> Vec<TypedId<W>> {
-        self.all_from::<W>(self.root_id())
+        self.preorder(self.root_id())
+            .filter(|id| ViewContext::node_type_id(self, *id) == Some(TypeId::of::<W>()))
+            .map(TypedId::new)
+            .collect()
     }
 
     /// Find exactly one node matching a path filter.
     pub fn find_one(&self, path: &str) -> Result<NodeId> {
         let filter = PathFilter::normalized(path)?;
-        self.find_one_matching(&filter)
-    }
-
-    /// Try to find exactly one node matching a path filter.
-    pub fn try_find_one(&self, path: &str) -> Result<Option<NodeId>> {
-        let filter = PathFilter::normalized(path)?;
-        self.try_find_one_matching(&filter)
-    }
-
-    /// Find exactly one node matching a validated path filter.
-    pub fn find_one_matching(&self, path_filter: &PathFilter) -> Result<NodeId> {
-        let matches = self.find_nodes_matching(path_filter);
+        let matches = self.find_nodes_matching(&filter);
         match matches.len() {
-            0 => Err(Error::NotFound(format!("path {}", path_filter.as_str()))),
+            0 => Err(Error::NotFound(format!("path {}", filter.as_str()))),
             1 => Ok(matches[0]),
             _ => Err(Error::MultipleMatches),
         }
-    }
-
-    /// Try to find exactly one node matching a validated path filter.
-    pub fn try_find_one_matching(&self, path_filter: &PathFilter) -> Result<Option<NodeId>> {
-        let matches = self.find_nodes_matching(path_filter);
-        match matches.len() {
-            0 => Ok(None),
-            1 => Ok(Some(matches[0])),
-            _ => Err(Error::MultipleMatches),
-        }
-    }
-
-    /// Return the first child of type `W`.
-    pub fn first_child<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
-        self.children()
-            .into_iter()
-            .find(|id| self.node_matches_type::<W>(*id))
-            .map(TypedId::new)
     }
 
     /// Return the unique child of type `W`, or error if more than one exists.
@@ -738,26 +686,6 @@ pub trait Context: ViewContext {
     /// Set a specific node's visibility.
     fn set_hidden_of(&mut self, node: NodeId, hidden: bool) -> Result<ChangeOutcome>;
 
-    /// Hide the current node.
-    fn hide(&mut self) -> Result<ChangeOutcome> {
-        self.set_hidden(true)
-    }
-
-    /// Hide a specific node.
-    fn hide_node(&mut self, node: NodeId) -> Result<ChangeOutcome> {
-        self.set_hidden_of(node, true)
-    }
-
-    /// Show the current node.
-    fn show(&mut self) -> Result<ChangeOutcome> {
-        self.set_hidden(false)
-    }
-
-    /// Show a specific node.
-    fn show_node(&mut self, node: NodeId) -> Result<ChangeOutcome> {
-        self.set_hidden_of(node, false)
-    }
-
     /// Request a cooperative shutdown with the provided status code.
     fn exit(&mut self, code: i32);
 
@@ -767,9 +695,6 @@ pub trait Context: ViewContext {
 
     /// Clear all effects on a node.
     fn clear_effects(&mut self, node: NodeId) -> Result<()>;
-
-    /// Set whether a node should clear inherited effects before applying local ones.
-    fn set_clear_inherited_effects(&mut self, node: NodeId, clear: bool) -> Result<()>;
 
     /// Set the style map to be used for rendering.
     /// The style change will be applied before the next render.
@@ -850,45 +775,6 @@ impl dyn Context + '_ {
         output.ok_or_else(|| Error::Internal("missing widget result".into()))
     }
 
-    /// Execute a closure with mutable access if a node stores the requested widget type.
-    pub fn try_with_node<W, R>(
-        &mut self,
-        node: impl Into<NodeId>,
-        f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
-    ) -> Result<Option<R>>
-    where
-        W: Widget + 'static,
-    {
-        let node = node.into();
-        let mut output = None;
-        let mut matched = false;
-        let mut f = Some(f);
-        let expected = TypeId::of::<W>();
-        self.with_widget_mut(node, &mut |widget, ctx| {
-            let actual = ViewContext::node_type_id(ctx, node).ok_or(Error::NodeNotFound(node))?;
-            if actual != expected {
-                return Ok(());
-            }
-            let any = widget as &mut dyn Any;
-            let widget = any
-                .downcast_mut::<W>()
-                .ok_or_else(|| Error::Internal("widget type mismatch".into()))?;
-            matched = true;
-            let f = f
-                .take()
-                .ok_or_else(|| Error::Internal("missing widget closure".into()))?;
-            output = Some(f(widget, ctx)?);
-            Ok(())
-        })?;
-        if matched {
-            output
-                .ok_or_else(|| Error::Internal("missing widget result".into()))
-                .map(Some)
-        } else {
-            Ok(None)
-        }
-    }
-
     /// Create a widget node detached from the tree.
     pub fn create_detached<W: Widget + 'static>(&mut self, widget: W) -> Result<TypedId<W>> {
         let id = self.create_detached_boxed(widget.into())?;
@@ -910,125 +796,6 @@ impl dyn Context + '_ {
         Ok(TypedId::new(id))
     }
 
-    /// Add a widget as a child of a specific parent and assign a layout.
-    pub fn add_child_to_with_layout<W: Widget + 'static>(
-        &mut self,
-        parent: impl Into<NodeId>,
-        widget: W,
-        layout: Layout,
-    ) -> Result<TypedId<W>> {
-        let id = self.add_child_to(parent, widget)?;
-        self.set_layout_of(id, layout)?;
-        Ok(id)
-    }
-
-    /// Add a widget as a keyed child of the current node and return the new typed node ID.
-    pub fn add_child_keyed<W: Widget + 'static>(
-        &mut self,
-        key: &str,
-        widget: W,
-    ) -> Result<TypedId<W>> {
-        self.add_child_to_keyed(self.node_id(), key, widget)
-    }
-
-    /// Add a widget as a keyed child of a specific parent and return the new typed node ID.
-    pub fn add_child_to_keyed<W: Widget + 'static>(
-        &mut self,
-        parent: impl Into<NodeId>,
-        key: &str,
-        widget: W,
-    ) -> Result<TypedId<W>> {
-        let id = self.add_child_to_keyed_boxed(parent.into(), key, widget.into())?;
-        Ok(TypedId::new(id))
-    }
-
-    /// Add multiple typed widgets as children of the current node and return their typed node IDs.
-    pub fn add_children<W, I>(&mut self, widgets: I) -> Result<Vec<TypedId<W>>>
-    where
-        W: Widget + 'static,
-        I: IntoIterator<Item = W>,
-    {
-        let mut ids = Vec::new();
-        for widget in widgets {
-            let child = self.add_child_to(self.node_id(), widget)?;
-            ids.push(child);
-        }
-        Ok(ids)
-    }
-
-    /// Add multiple typed widgets as children of a specific parent and return their typed node IDs.
-    pub fn add_children_to<W, I>(
-        &mut self,
-        parent: impl Into<NodeId>,
-        widgets: I,
-    ) -> Result<Vec<TypedId<W>>>
-    where
-        W: Widget + 'static,
-        I: IntoIterator<Item = W>,
-    {
-        let parent = parent.into();
-        let mut ids = Vec::new();
-        for widget in widgets {
-            let child = self.add_child_to(parent, widget)?;
-            ids.push(child);
-        }
-        Ok(ids)
-    }
-
-    /// Add multiple boxed widgets as children of the current node and return their node IDs.
-    pub fn add_children_boxed<I>(&mut self, widgets: I) -> Result<Vec<NodeId>>
-    where
-        I: IntoIterator<Item = Box<dyn Widget>>,
-    {
-        let mut ids = Vec::new();
-        for widget in widgets {
-            let child = self.add_child_to_boxed(self.node_id(), widget)?;
-            ids.push(child);
-        }
-        Ok(ids)
-    }
-
-    /// Add multiple boxed widgets as children of a specific parent and return their node IDs.
-    pub fn add_children_to_boxed<I>(
-        &mut self,
-        parent: impl Into<NodeId>,
-        widgets: I,
-    ) -> Result<Vec<NodeId>>
-    where
-        I: IntoIterator<Item = Box<dyn Widget>>,
-    {
-        let parent = parent.into();
-        let mut ids = Vec::new();
-        for widget in widgets {
-            let child = self.add_child_to_boxed(parent, widget)?;
-            ids.push(child);
-        }
-        Ok(ids)
-    }
-
-    /// Execute a closure with a widget at a unique path match.
-    pub fn with_node_at<W: Widget + 'static, R>(
-        &mut self,
-        path: &str,
-        f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
-    ) -> Result<R> {
-        let node = (self as &dyn ViewContext).find_one(path)?;
-        self.with_node(node, f)
-    }
-
-    /// Execute a closure with a widget at a unique path match if it exists.
-    pub fn try_with_node_at<W: Widget + 'static, R>(
-        &mut self,
-        path: &str,
-        f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
-    ) -> Result<Option<R>> {
-        let node = (self as &dyn ViewContext).try_find_one(path)?;
-        let Some(node) = node else {
-            return Ok(None);
-        };
-        self.with_node(node, f).map(Some)
-    }
-
     /// Execute a closure with a keyed child of type `W`.
     pub fn with_keyed<W: Widget + 'static, R>(
         &mut self,
@@ -1039,18 +806,6 @@ impl dyn Context + '_ {
             .child_keyed(key)
             .ok_or_else(|| Error::NotFound(format!("key {key}")))?;
         self.with_node(node, f)
-    }
-
-    /// Execute a closure with a keyed child of type `W` if it exists.
-    pub fn try_with_keyed<W: Widget + 'static, R>(
-        &mut self,
-        key: &str,
-        f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
-    ) -> Result<Option<R>> {
-        let Some(node) = self.child_keyed(key) else {
-            return Ok(None);
-        };
-        self.with_node(node, f).map(Some)
     }
 
     /// Check if a typed keyed child exists.
@@ -1077,7 +832,7 @@ impl dyn Context + '_ {
 
     /// Add a typed keyed child to the current node and return its typed node ID.
     pub fn add_keyed<K: ChildKey>(&mut self, widget: K::Widget) -> Result<TypedId<K::Widget>> {
-        self.add_child_keyed(K::KEY, widget)
+        self.add_keyed_to(self.node_id(), K::KEY, widget)
     }
 
     /// Add a typed keyed child to a specific parent and return its typed node ID.
@@ -1087,20 +842,8 @@ impl dyn Context + '_ {
         key: &str,
         widget: W,
     ) -> Result<TypedId<W>> {
-        self.add_child_to_keyed(parent, key, widget)
-    }
-
-    /// Add a typed keyed child to a specific parent and assign a layout.
-    pub fn add_keyed_to_with_layout<W: Widget + 'static>(
-        &mut self,
-        parent: impl Into<NodeId>,
-        key: &str,
-        widget: W,
-        layout: Layout,
-    ) -> Result<TypedId<W>> {
-        let id = self.add_keyed_to::<W>(parent, key, widget)?;
-        self.set_layout_of(id, layout)?;
-        Ok(id)
+        let id = self.add_child_to_keyed_boxed(parent.into(), key, widget.into())?;
+        Ok(TypedId::new(id))
     }
 
     /// Execute a closure with a typed keyed child.
@@ -1116,18 +859,10 @@ impl dyn Context + '_ {
         &mut self,
         f: impl FnOnce(&mut K::Widget, &mut dyn Context) -> Result<R>,
     ) -> Result<Option<R>> {
-        self.try_with_keyed(K::KEY, f)
-    }
-
-    /// Execute a closure with the focused descendant of type `W`, or the first if none focused.
-    pub fn with_focused_or_first_descendant<W: Widget + 'static, R>(
-        &mut self,
-        f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
-    ) -> Result<R> {
-        let node = (self as &dyn ViewContext)
-            .focused_or_first_descendant::<W>()
-            .ok_or_else(|| Error::NotFound(type_name::<W>().to_string()))?;
-        self.with_widget(node, f)
+        let Some(node) = self.child_keyed(K::KEY) else {
+            return Ok(None);
+        };
+        self.with_node(node, f).map(Some)
     }
 
     /// Execute a closure with the first descendant of type `W`.
@@ -1139,17 +874,6 @@ impl dyn Context + '_ {
             .first_descendant::<W>()
             .ok_or_else(|| Error::NotFound(type_name::<W>().to_string()))?;
         self.with_widget(node, f)
-    }
-
-    /// Execute a closure with the first descendant of type `W` if it exists.
-    pub fn try_with_first_descendant<W: Widget + 'static, R>(
-        &mut self,
-        f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
-    ) -> Result<Option<R>> {
-        let Some(node) = (self as &dyn ViewContext).first_descendant::<W>() else {
-            return Ok(None);
-        };
-        self.with_widget(node, f).map(Some)
     }
 
     /// Execute a closure with the unique descendant of type `W`.
@@ -1464,16 +1188,6 @@ impl Context for NodeCtx<&mut Core> {
             .get_mut(node)
             .ok_or(Error::NodeNotFound(node))?;
         node.effects = None;
-        Ok(())
-    }
-
-    fn set_clear_inherited_effects(&mut self, node: NodeId, clear: bool) -> Result<()> {
-        let node = self
-            .core
-            .nodes
-            .get_mut(node)
-            .ok_or(Error::NodeNotFound(node))?;
-        node.clear_inherited_effects = clear;
         Ok(())
     }
 

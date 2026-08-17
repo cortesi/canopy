@@ -235,10 +235,6 @@ impl Context for DummyContext {
         Ok(())
     }
 
-    fn set_clear_inherited_effects(&mut self, _node: NodeId, _clear: bool) -> Result<()> {
-        Ok(())
-    }
-
     fn set_style(&mut self, _style: StyleMap) {
         // DummyContext does not track styles
     }

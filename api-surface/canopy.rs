@@ -841,18 +841,6 @@ pub mod canopy {
             /// Set a specific node's visibility.
             fn set_hidden_of(&mut self, node: NodeId, hidden: bool) -> Result<ChangeOutcome>;
 
-            /// Hide the current node.
-            fn hide(&mut self) -> Result<ChangeOutcome> {}
-
-            /// Hide a specific node.
-            fn hide_node(&mut self, node: NodeId) -> Result<ChangeOutcome> {}
-
-            /// Show the current node.
-            fn show(&mut self) -> Result<ChangeOutcome> {}
-
-            /// Show a specific node.
-            fn show_node(&mut self, node: NodeId) -> Result<ChangeOutcome> {}
-
             /// Request a cooperative shutdown with the provided status code.
             fn exit(&mut self, code: i32);
 
@@ -862,9 +850,6 @@ pub mod canopy {
 
             /// Clear all effects on a node.
             fn clear_effects(&mut self, node: NodeId) -> Result<()>;
-
-            /// Set whether a node should clear inherited effects before applying local ones.
-            fn set_clear_inherited_effects(&mut self, node: NodeId, clear: bool) -> Result<()>;
 
             /// Set the style map to be used for rendering.
             /// The style change will be applied before the next render.
@@ -1107,9 +1092,6 @@ pub mod canopy {
 
             /// Widget type identifier for a specific node.
             fn node_type_id(&self, node: NodeId) -> Option<TypeId>;
-
-            /// Canvas size for the current node.
-            fn canvas(&self) -> Size {}
 
             /// Visible view rectangle in content coordinates.
             fn view_rect(&self) -> Rect {}
@@ -2898,18 +2880,6 @@ pub mod canopy {
         /// Set a specific node's visibility.
         fn set_hidden_of(&mut self, node: NodeId, hidden: bool) -> Result<ChangeOutcome>;
 
-        /// Hide the current node.
-        fn hide(&mut self) -> Result<ChangeOutcome> {}
-
-        /// Hide a specific node.
-        fn hide_node(&mut self, node: NodeId) -> Result<ChangeOutcome> {}
-
-        /// Show the current node.
-        fn show(&mut self) -> Result<ChangeOutcome> {}
-
-        /// Show a specific node.
-        fn show_node(&mut self, node: NodeId) -> Result<ChangeOutcome> {}
-
         /// Request a cooperative shutdown with the provided status code.
         fn exit(&mut self, code: i32);
 
@@ -2919,9 +2889,6 @@ pub mod canopy {
 
         /// Clear all effects on a node.
         fn clear_effects(&mut self, node: NodeId) -> Result<()>;
-
-        /// Set whether a node should clear inherited effects before applying local ones.
-        fn set_clear_inherited_effects(&mut self, node: NodeId, clear: bool) -> Result<()>;
 
         /// Set the style map to be used for rendering.
         /// The style change will be applied before the next render.
@@ -3376,9 +3343,6 @@ pub mod canopy {
 
         /// Widget type identifier for a specific node.
         fn node_type_id(&self, node: NodeId) -> Option<TypeId>;
-
-        /// Canvas size for the current node.
-        fn canvas(&self) -> Size {}
 
         /// Visible view rectangle in content coordinates.
         fn view_rect(&self) -> Rect {}

@@ -129,15 +129,9 @@ impl Canopy {
         active_start: usize,
         active_len: usize,
     ) -> Result<()> {
-        let (hidden, layout, view, children, clear_inherited) = {
+        let (hidden, layout, view, children) = {
             let node = &self.core.nodes[node_id];
-            (
-                node.hidden,
-                node.layout,
-                node.view,
-                node.children.clone(),
-                node.clear_inherited_effects,
-            )
+            (node.hidden, node.layout, node.view, node.children.clone())
         };
 
         if hidden || layout.display == Display::None {
@@ -149,22 +143,17 @@ impl Canopy {
         };
 
         let saved_len = traversal.effect_stack.len();
-        let (base_start, base_len) = if clear_inherited {
-            (saved_len, 0)
-        } else {
-            (active_start, active_len)
-        };
 
         if let Some(local) = self.core.nodes[node_id].effects.as_ref() {
             traversal.effect_stack.extend(local.iter().cloned());
         }
 
-        let current_len = base_len + traversal.effect_stack.len() - saved_len;
+        let current_len = active_len + traversal.effect_stack.len() - saved_len;
 
         traversal.styl.push();
 
         {
-            let effect_slice = &traversal.effect_stack[base_start..base_start + current_len];
+            let effect_slice = &traversal.effect_stack[active_start..active_start + current_len];
             self.render_node(
                 traversal.dest_buf,
                 traversal.styl,
@@ -177,7 +166,7 @@ impl Canopy {
 
         if let Some(children_clip) = view.content.intersect_rect(parent_clip) {
             for child in children {
-                self.render_recursive(traversal, child, children_clip, base_start, current_len)?;
+                self.render_recursive(traversal, child, children_clip, active_start, current_len)?;
             }
         }
 

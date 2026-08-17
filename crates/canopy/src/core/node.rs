@@ -54,8 +54,6 @@ pub struct Node {
     /// Effects to apply to this node and descendants during rendering.
     /// None for the common case of no effects (avoids per-node Vec allocation).
     pub(crate) effects: Option<Vec<Effect>>,
-    /// If true, clear inherited effects before applying local effects.
-    pub(crate) clear_inherited_effects: bool,
 }
 
 impl Node {
