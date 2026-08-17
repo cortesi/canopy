@@ -31,6 +31,7 @@ mod image_view;
 mod input;
 /// Experimental inspector overlay internals.
 pub mod inspector;
+mod label;
 /// Typed list container with selection.
 mod list;
 /// Modal overlay container.
@@ -55,7 +56,7 @@ mod vstack;
 pub use boxed::{Box, BoxGlyphs, DOUBLE, ROUND, ROUND_THICK, SINGLE, SINGLE_THICK};
 pub use button::Button;
 pub use center::Center;
-pub use dropdown::{Dropdown, DropdownItem};
+pub use dropdown::Dropdown;
 pub use error::{Error, Result};
 /// Experimental ASCII font rendering API.
 pub use font::{Font, FontCell, FontEffects, FontLayout, FontRenderer, GlyphRamp, LayoutOptions};
@@ -63,12 +64,13 @@ pub use font_banner::FontBanner;
 pub use frame::{Frame, SCROLL, ScrollGlyphs};
 pub use image_view::ImageView;
 pub use input::Input;
+pub use label::Label;
 pub use list::{List, ListActivateConfig, Selectable};
 pub use modal::Modal;
 pub use pad::Pad;
 pub use panes::Panes;
 pub use root::Root;
-pub use selector::{Selector, SelectorItem};
+pub use selector::Selector;
 pub use terminal::{Terminal, TerminalColors, TerminalConfig};
 pub use text::{CanvasWidth, Text};
 pub use vstack::VStack;

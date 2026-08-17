@@ -8,26 +8,9 @@ use canopy::{
     render::Render,
     state::NodeName,
 };
+use unicode_width::UnicodeWidthStr;
 
-/// Trait for items that can be displayed in a Selector.
-pub trait SelectorItem {
-    /// Return the display label for this item.
-    fn label(&self) -> &str;
-}
-
-/// Simple string-based selector item.
-impl SelectorItem for String {
-    fn label(&self) -> &str {
-        self
-    }
-}
-
-/// Simple &str-based selector item.
-impl SelectorItem for &str {
-    fn label(&self) -> &str {
-        self
-    }
-}
+use crate::label::Label;
 
 /// A multi-select widget with checkbox-style items.
 ///
@@ -35,7 +18,7 @@ impl SelectorItem for &str {
 /// in the order they were selected, allowing for ordered selection if needed.
 pub struct Selector<T>
 where
-    T: SelectorItem,
+    T: Label,
 {
     /// Available items.
     items: Vec<T>,
@@ -48,7 +31,7 @@ where
 #[derive_commands]
 impl<T> Selector<T>
 where
-    T: SelectorItem + 'static,
+    T: Label + 'static,
 {
     /// Create a new selector with the given items.
     pub fn new(items: Vec<T>) -> Self {
@@ -145,25 +128,17 @@ where
         Ok(())
     }
 
-    /// Handle a click inside the selector.
-    fn handle_click(&mut self, _c: &mut dyn Context, event: mouse::MouseEvent) -> Result<bool> {
+    /// Focus and toggle the clicked row.
+    fn handle_click(&mut self, c: &mut dyn Context, event: mouse::MouseEvent) -> Result<()> {
         if event.action != mouse::Action::Down || event.button != mouse::Button::Left {
-            return Ok(false);
+            return Ok(());
         }
         let clicked_row = event.location.y as usize;
         if clicked_row < self.items.len() {
-            // Move focus to clicked row.
             self.focused = clicked_row;
-            // Toggle selection.
-            if let Some(pos) = self.selected.iter().position(|&idx| idx == self.focused) {
-                self.selected.remove(pos);
-            } else {
-                self.selected.push(self.focused);
-            }
-            debug_assert!(self.selection_invariant_holds());
-            return Ok(true);
+            self.toggle(c)?;
         }
-        Ok(false)
+        Ok(())
     }
 
     /// Select all items.
@@ -194,7 +169,7 @@ where
         let max_label_width = self
             .items
             .iter()
-            .map(|item| item.label().len())
+            .map(|item| UnicodeWidthStr::width(item.label()))
             .max()
             .unwrap_or(0) as u32;
 
@@ -217,15 +192,13 @@ where
 
 impl<T> Widget for Selector<T>
 where
-    T: SelectorItem + Send + 'static,
+    T: Label + Send + 'static,
 {
     fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
-        if let Event::Mouse(mouse_event) = event
-            && self.handle_click(ctx, *mouse_event)?
-        {
-            // Return Ignore so mouse bindings can also fire (e.g., to trigger effects).
-            return Ok(EventOutcome::Ignore);
+        if let Event::Mouse(mouse_event) = event {
+            self.handle_click(ctx, *mouse_event)?;
         }
+        // Ignore so mouse bindings can also fire, for example to trigger effects.
         Ok(EventOutcome::Ignore)
     }
 

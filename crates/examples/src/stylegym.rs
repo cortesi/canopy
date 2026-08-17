@@ -8,7 +8,7 @@ use canopy::{
     prelude::*,
     style::{StyleMap, dracula, effects, gruvbox, solarized},
 };
-use canopy_widgets::{Dropdown, DropdownItem, Frame, Modal, Root, Selector, SelectorItem};
+use canopy_widgets::{Dropdown, Frame, Label, Modal, Root, Selector};
 
 /// Default bindings for the style gym demo.
 const DEFAULT_BINDINGS: &str = r#"
@@ -81,7 +81,7 @@ pub struct ThemeOption {
     pub builder: fn() -> StyleMap,
 }
 
-impl DropdownItem for ThemeOption {
+impl Label for ThemeOption {
     fn label(&self) -> &str {
         self.name
     }
@@ -94,7 +94,7 @@ pub struct EffectOption {
     pub name: &'static str,
 }
 
-impl SelectorItem for EffectOption {
+impl Label for EffectOption {
     fn label(&self) -> &str {
         self.name
     }

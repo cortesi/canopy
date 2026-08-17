@@ -584,7 +584,7 @@ impl<W: Selectable> List<W> {
         let view_rect = view.view_rect();
 
         // Compute item positions by measuring each child
-        let metrics = self.item_metrics(c, view_rect.w.max(1));
+        let metrics = self.item_metrics(c);
         let Some((start, height)) = metrics.get(selected_idx).copied() else {
             return;
         };
@@ -610,7 +610,7 @@ impl<W: Selectable> List<W> {
             return Ok(());
         }
 
-        let metrics = self.item_metrics(c, view_rect.w.max(1));
+        let metrics = self.item_metrics(c);
         let selected_idx = self.selected.unwrap_or(0).min(self.items.len() - 1);
         let Some((start, _height)) = metrics.get(selected_idx).copied() else {
             return Ok(());
@@ -636,12 +636,12 @@ impl<W: Selectable> List<W> {
         let view = c.view();
         let view_rect = view.view_rect();
         let content_y = view_rect.tl.y.saturating_add(location.y);
-        let metrics = self.item_metrics(c, view_rect.w.max(1));
+        let metrics = self.item_metrics(c);
         Self::index_at_y(&metrics, content_y)
     }
 
     /// Build (start_y, height) tuples for each item.
-    fn item_metrics(&self, c: &dyn ViewContext, available_width: u32) -> Vec<(u32, u32)> {
+    fn item_metrics(&self, c: &dyn ViewContext) -> Vec<(u32, u32)> {
         let mut metrics = Vec::with_capacity(self.items.len());
         let mut y_offset = 0u32;
 
@@ -660,7 +660,6 @@ impl<W: Selectable> List<W> {
             }
         }
 
-        let _ = available_width; // Future: could use for responsive layouts
         metrics
     }
 
@@ -770,7 +769,7 @@ impl<W: Selectable + Send + 'static> Widget for List<W> {
             && let Some(selected_idx) = self.selected
             && indicator.width > 0
         {
-            let metrics = self.item_metrics(ctx, view.view_rect().w.max(1));
+            let metrics = self.item_metrics(ctx);
             if let Some((start, height)) = metrics.get(selected_idx).copied() {
                 let view_rect = view.view_rect();
                 let visible_start = start.max(view_rect.tl.y);

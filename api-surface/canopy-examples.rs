@@ -606,7 +606,7 @@ pub mod canopy_examples {
             pub builder: fn() -> canopy::style::StyleMap,
         }
 
-        impl DropdownItem for ThemeOption {
+        impl Label for ThemeOption {
             fn label(&self) -> &str {}
         }
 
@@ -617,7 +617,7 @@ pub mod canopy_examples {
             pub name: &'static str,
         }
 
-        impl SelectorItem for EffectOption {
+        impl Label for EffectOption {
             fn label(&self) -> &str {}
         }
 

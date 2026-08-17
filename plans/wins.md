@@ -557,7 +557,7 @@ Independent, low-risk, mostly deletions. Do these first.
   The layout/hidden setup at `root.rs:257-279` duplicates `sync_layout` (`:71-100`); call it.
   About −35 lines.
 
-- [ ] **4.4 Shared small helpers.** `DropdownItem` and `SelectorItem` are the same trait with
+- [x] **4.4 Shared small helpers.** `DropdownItem` and `SelectorItem` are the same trait with
   the same two impls; keep one `Label` trait. Both `content_size` computations, `Frame`'s title
   width (`frame.rs:150`), and `LogEntry` (`inspector/logs.rs:90`) size text by `.len()` (bytes);
   use `UnicodeWidthStr::width` (already a dependency). `List::item_metrics` takes an

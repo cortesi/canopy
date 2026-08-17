@@ -8,26 +8,9 @@ use canopy::{
     render::Render,
     state::NodeName,
 };
+use unicode_width::UnicodeWidthStr;
 
-/// Trait for items that can be displayed in a Dropdown.
-pub trait DropdownItem {
-    /// Return the display label for this item.
-    fn label(&self) -> &str;
-}
-
-/// Simple string-based dropdown item.
-impl DropdownItem for String {
-    fn label(&self) -> &str {
-        self
-    }
-}
-
-/// Simple &str-based dropdown item.
-impl DropdownItem for &str {
-    fn label(&self) -> &str {
-        self
-    }
-}
+use crate::label::Label;
 
 /// A dropdown widget for single-value selection.
 ///
@@ -35,7 +18,7 @@ impl DropdownItem for &str {
 /// When expanded, displays all options for selection.
 pub struct Dropdown<T>
 where
-    T: DropdownItem,
+    T: Label,
 {
     /// Available items.
     items: Vec<T>,
@@ -50,7 +33,7 @@ where
 #[derive_commands]
 impl<T> Dropdown<T>
 where
-    T: DropdownItem + 'static,
+    T: Label + 'static,
 {
     /// Create a new dropdown with the given items.
     ///
@@ -130,30 +113,20 @@ where
         Ok(())
     }
 
-    /// Handle a click inside the dropdown.
-    fn handle_click(&mut self, c: &mut dyn Context, event: mouse::MouseEvent) -> Result<bool> {
+    /// Confirm the clicked row when expanded, or expand when collapsed.
+    fn handle_click(&mut self, c: &mut dyn Context, event: mouse::MouseEvent) -> Result<()> {
         if event.action != mouse::Action::Down || event.button != mouse::Button::Left {
-            return Ok(false);
+            return Ok(());
         }
         let clicked_row = event.location.y as usize;
-        if self.expanded {
-            // When expanded, click selects and confirms.
-            if clicked_row < self.items.len() {
-                self.highlighted = clicked_row;
-                self.selected = self.highlighted;
-                self.expanded = false;
-                c.invalidate_layout();
-                debug_assert!(self.selection_invariant_holds());
-                return Ok(true);
-            }
-            return Ok(false);
+        if !self.expanded {
+            return self.toggle(c);
         }
-        // When collapsed, click toggles expansion.
-        self.expanded = true;
-        self.highlighted = self.selected;
-        c.invalidate_layout();
-        debug_assert!(self.selection_invariant_holds());
-        Ok(true)
+        if clicked_row < self.items.len() {
+            self.highlighted = clicked_row;
+            self.confirm(c)?;
+        }
+        Ok(())
     }
 
     /// Collapse without changing selection.
@@ -183,7 +156,7 @@ where
         let max_label_width = self
             .items
             .iter()
-            .map(|item| item.label().len())
+            .map(|item| UnicodeWidthStr::width(item.label()))
             .max()
             .unwrap_or(0) as u32;
 
@@ -207,15 +180,13 @@ where
 
 impl<T> Widget for Dropdown<T>
 where
-    T: DropdownItem + Send + 'static,
+    T: Label + Send + 'static,
 {
     fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
-        if let Event::Mouse(mouse_event) = event
-            && self.handle_click(ctx, *mouse_event)?
-        {
-            // Return Ignore so mouse bindings can also fire.
-            return Ok(EventOutcome::Ignore);
+        if let Event::Mouse(mouse_event) = event {
+            self.handle_click(ctx, *mouse_event)?;
         }
+        // Ignore so mouse bindings can also fire.
         Ok(EventOutcome::Ignore)
     }
 

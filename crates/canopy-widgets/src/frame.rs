@@ -8,6 +8,7 @@ use canopy::{
     state::NodeName,
     view::View,
 };
+use unicode_width::UnicodeWidthStr;
 
 use super::boxed::{BoxGlyphs, ROUND};
 
@@ -151,7 +152,7 @@ impl Widget for Frame {
 
         if let Some(title) = &self.title {
             let title_with_spaces = format!(" {title} ");
-            let title_len = title_with_spaces.len();
+            let title_len = UnicodeWidthStr::width(title_with_spaces.as_str());
 
             let title_line = f.top.line(0)?;
             let title_rect = geom::Rect::new(

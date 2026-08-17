@@ -715,11 +715,11 @@ pub mod canopy_widgets {
     /// When expanded, displays all options for selection.
     pub struct Dropdown<T>
     where
-        T: DropdownItem, {}
+        T: Label, {}
 
     impl<T> Dropdown<T>
     where
-        T: DropdownItem + 'static,
+        T: Label + 'static,
     {
         /// Create a new dropdown with the given items.
         ///
@@ -771,14 +771,14 @@ pub mod canopy_widgets {
 
     impl<T> CommandNode for Dropdown<T>
     where
-        T: DropdownItem + 'static,
+        T: Label + 'static,
     {
         fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
     }
 
     impl<T> Widget for Dropdown<T>
     where
-        T: DropdownItem + Send + 'static,
+        T: Label + Send + 'static,
     {
         fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {}
 
@@ -791,12 +791,6 @@ pub mod canopy_widgets {
         fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
         fn name(&self) -> NodeName {}
-    }
-
-    /// Trait for items that can be displayed in a Dropdown.
-    pub trait DropdownItem {
-        /// Return the display label for this item.
-        fn label(&self) -> &str;
     }
 
     /// Errors emitted by canopy-widgets helpers.
@@ -1126,6 +1120,12 @@ pub mod canopy_widgets {
         fn measure(&self, c: MeasureConstraints) -> Measurement {}
 
         fn name(&self) -> NodeName {}
+    }
+
+    /// An item that renders as one line of text.
+    pub trait Label {
+        /// Return the display label for this item.
+        fn label(&self) -> &str;
     }
 
     /// A typed list container for widget items.
@@ -1538,11 +1538,11 @@ pub mod canopy_widgets {
     /// in the order they were selected, allowing for ordered selection if needed.
     pub struct Selector<T>
     where
-        T: SelectorItem, {}
+        T: Label, {}
 
     impl<T> Selector<T>
     where
-        T: SelectorItem + 'static,
+        T: Label + 'static,
     {
         /// Create a new selector with the given items.
         pub fn new(items: Vec<T>) -> Self {}
@@ -1607,14 +1607,14 @@ pub mod canopy_widgets {
 
     impl<T> CommandNode for Selector<T>
     where
-        T: SelectorItem + 'static,
+        T: Label + 'static,
     {
         fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
     }
 
     impl<T> Widget for Selector<T>
     where
-        T: SelectorItem + Send + 'static,
+        T: Label + Send + 'static,
     {
         fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {}
 
@@ -1627,12 +1627,6 @@ pub mod canopy_widgets {
         fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
         fn name(&self) -> NodeName {}
-    }
-
-    /// Trait for items that can be displayed in a Selector.
-    pub trait SelectorItem {
-        /// Return the display label for this item.
-        fn label(&self) -> &str;
     }
 
     /// Terminal widget backed by `itty`.
