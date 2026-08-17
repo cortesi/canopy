@@ -46,7 +46,6 @@ tracing-subscriber.workspace = true
 canopy = { path = "../canopy", features = ["testing"] }
 criterion.workspace = true
 itty-script.workspace = true
-loom = "0.7.2"
 proptest.workspace = true
 
 

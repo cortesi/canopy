@@ -663,7 +663,7 @@ Independent, low-risk, mostly deletions. Do these first.
 
 ## Stage 6: tests and test infrastructure
 
-- [ ] **6.1 Delete the loom tests and dependency.** `poll.rs:367-428` and
+- [x] **6.1 Delete the loom tests and dependency.** `poll.rs:367-428` and
   `terminal.rs:1389-1425` build self-contained models (local enums, channels, threads) inside
   `loom::model` and reference no production item; there is no `cfg(loom)` anywhere. Delete both
   tests, the `loom` dev-dep in both crates, and the `test(loom_)` step in `xtask dynamic` (do all

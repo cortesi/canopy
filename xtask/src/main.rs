@@ -30,7 +30,7 @@ enum Task {
     Test,
     /// Type-check every tracked Luau source against its owning app surface.
     Luau,
-    /// Run targeted Loom and Miri checks for concurrent and unsafe code.
+    /// Run targeted Miri checks for unsafe code.
     Dynamic,
     /// Run all smoke-test integration targets.
     Smoke,
@@ -138,26 +138,9 @@ fn run_test() -> ExitCode {
     exit_code(run_nextest(&workspace_root()))
 }
 
-/// Run the targeted deterministic-concurrency and unsafe-code suites.
+/// Run the targeted unsafe-code suites under Miri.
 fn run_dynamic() -> ExitCode {
     let workspace_root = workspace_root();
-    if installed_nextest_version(&workspace_root).as_deref() != Some(NEXTEST_VERSION) {
-        eprintln!("cargo-nextest {NEXTEST_VERSION} is required for the dynamic gate");
-        return ExitCode::FAILURE;
-    }
-    if !run_cargo_command(
-        &workspace_root,
-        &[
-            "nextest",
-            "run",
-            "--workspace",
-            "--all-features",
-            "-E",
-            "test(loom_)",
-        ],
-    ) {
-        return ExitCode::FAILURE;
-    }
     for filter in [
         "widget_slot_restores",
         "core::backend::tests",

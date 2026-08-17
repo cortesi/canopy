@@ -32,7 +32,6 @@ canopy = { path = ".", features = ["testing"] }
 rand = "0.10.1"
 proptest.workspace = true
 criterion.workspace = true
-loom = "0.7.2"
 
 [features]
 testing = []
