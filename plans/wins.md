@@ -78,7 +78,7 @@ Independent, low-risk, mostly deletions. Do these first.
   expectations. Delete `snapshot_dir`, `snapshot_path`, `visible_snapshot`, `render_snapshot`,
   `assert_snapshot`, and the directory.
 
-- [ ] **0.5 Delete unused dependency declarations.** Verified by identifier grep in each
+- [x] **0.5 Delete unused dependency declarations.** Verified by identifier grep in each
   crate's own targets: `canopy-widgets`: `canopy-derive` (macros come through `canopy::`),
   `tracing`; `canopy-mcp`: `async-trait`; `canopyctl`: `async-trait`, `schemars`;
   `canopy-examples`: `anyhow`, `textwrap`, `tracing`, `tracing-subscriber`; `todo`: `tracing`

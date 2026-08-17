@@ -7,7 +7,6 @@ license.workspace = true
 
 [dependencies]
 canopy = { path = "../canopy" }
-canopy-derive = { path = "../canopy-derive" }
 
 # Widget-specific dependencies
 textwrap = "0.16.2"
@@ -17,7 +16,6 @@ image = "0.25.10"
 ropey = "1.6.1"
 syntect = "5.3.0"
 portable-pty = "0.9.0"
-tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
 fontdue = "0.9.3"
 thiserror = "2.0.18"
