@@ -1098,7 +1098,6 @@ fn cursor_from_state(state: &TerminalState) -> Option<cursor::Cursor> {
             y: row as u32,
         },
         shape,
-        blink: false,
     })
 }
 

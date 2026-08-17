@@ -179,7 +179,6 @@ impl Canopy {
     /// Render the tree into an offscreen buffer.
     fn render_pass(&mut self, root_size: Size) -> Result<TermBuf> {
         let mut styl = StyleManager::default();
-        styl.reset();
 
         let def_style = styl
             .get(&self.style, "")

@@ -676,20 +676,18 @@ impl Default for StyleManager {
 }
 
 impl StyleManager {
-    /// Construct a new style manager.
+    /// Construct a style manager in the reset state.
     pub fn new() -> Self {
         Self {
             level: 0,
             layers: vec![],
-            layer_levels: vec![],
+            layer_levels: vec![0],
         }
     }
 
     /// Reset all layers and levels.
     pub fn reset(&mut self) {
-        self.level = 0;
-        self.layers = vec![];
-        self.layer_levels = vec![0];
+        *self = Self::new();
     }
 
     /// Increment the render level.
@@ -940,7 +938,7 @@ mod tests {
     fn style_layers_basic() -> Result<()> {
         let mut c = StyleManager::new();
         assert!(c.layers.is_empty());
-        assert_eq!(c.layer_levels, Vec::<usize>::new());
+        assert_eq!(c.layer_levels, vec![0]);
         assert_eq!(c.level, 0);
 
         // A nop at this level
@@ -951,7 +949,7 @@ mod tests {
         c.push_layer("foo");
         assert_eq!(c.level, 1);
         assert_eq!(c.layers, vec!["foo"]);
-        assert_eq!(c.layer_levels, vec![1]);
+        assert_eq!(c.layer_levels, vec![0, 1]);
 
         Ok(())
     }
@@ -967,7 +965,7 @@ mod tests {
         c.push_layer("bar");
         assert_eq!(c.level, 3);
         assert_eq!(c.layers, vec!["foo", "bar"]);
-        assert_eq!(c.layer_levels, vec![1, 3]);
+        assert_eq!(c.layer_levels, vec![0, 1, 3]);
 
         c.push();
         assert_eq!(c.level, 4);
@@ -975,27 +973,27 @@ mod tests {
         c.pop();
         assert_eq!(c.level, 3);
         assert_eq!(c.layers, vec!["foo", "bar"]);
-        assert_eq!(c.layer_levels, vec![1, 3]);
+        assert_eq!(c.layer_levels, vec![0, 1, 3]);
 
         c.pop();
         assert_eq!(c.level, 2);
         assert_eq!(c.layers, vec!["foo"]);
-        assert_eq!(c.layer_levels, vec![1]);
+        assert_eq!(c.layer_levels, vec![0, 1]);
 
         c.pop();
         assert_eq!(c.level, 1);
         assert_eq!(c.layers, vec!["foo"]);
-        assert_eq!(c.layer_levels, vec![1]);
+        assert_eq!(c.layer_levels, vec![0, 1]);
 
         c.pop();
         assert_eq!(c.level, 0);
         assert!(c.layers.is_empty());
-        assert!(c.layer_levels.is_empty());
+        assert_eq!(c.layer_levels, vec![0]);
 
         c.pop();
         assert_eq!(c.level, 0);
         assert!(c.layers.is_empty());
-        assert!(c.layer_levels.is_empty());
+        assert_eq!(c.layer_levels, vec![0]);
 
         Ok(())
     }

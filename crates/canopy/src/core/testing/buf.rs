@@ -47,6 +47,17 @@ impl<'a> BufTest<'a> {
         self
     }
 
+    /// Return one row as a string, rendering NULL cells as the configured null character.
+    fn row_string(&self, y: u32) -> String {
+        (0..self.buf.size().w)
+            .filter_map(|x| self.buf.get(Point { x, y }))
+            .map(|cell| match cell.display_char() {
+                '\0' => self.null_char,
+                ch => ch,
+            })
+            .collect()
+    }
+
     /// Returns true if the buffer content matches the expected lines.
     pub fn matches(&self, expected: &[&str]) -> bool {
         if expected.len() != self.buf.size().h as usize {
@@ -54,19 +65,7 @@ impl<'a> BufTest<'a> {
         }
 
         for (y, expected_line) in expected.iter().enumerate() {
-            // Get actual line character by character to handle NULL cells
-            let mut actual_chars = Vec::new();
-            for x in 0..self.buf.size().w {
-                if let Some(cell) = self.buf.get(Point { x, y: y as u32 }) {
-                    let ch = cell.display_char();
-                    if ch == '\0' {
-                        actual_chars.push(self.null_char);
-                    } else {
-                        actual_chars.push(ch);
-                    }
-                }
-            }
-            let actual_line: String = actual_chars.into_iter().collect();
+            let actual_line = self.row_string(y as u32);
 
             // Compare lines character by character to handle any_char
             let expected_trimmed = expected_line.trim_end();
@@ -193,18 +192,7 @@ impl<'a> BufTest<'a> {
         println!("┌{}┐", "─".repeat(width));
 
         for y in 0..self.buf.size().h {
-            print!("│");
-            for x in 0..self.buf.size().w {
-                if let Some(cell) = self.buf.get(Point { x, y }) {
-                    let ch = cell.display_char();
-                    if ch == '\0' {
-                        print!("X");
-                    } else {
-                        print!("{ch}");
-                    }
-                }
-            }
-            println!("│{}", y % 10);
+            println!("│{}│{}", self.row_string(y), y % 10);
         }
 
         println!("└{}┘", "─".repeat(width));
@@ -237,18 +225,7 @@ impl<'a> BufTest<'a> {
         );
         println!("┌{}┐", "─".repeat(width));
 
-        print!("│");
-        for x in 0..self.buf.size().w {
-            if let Some(cell) = self.buf.get(Point { x, y: line_num }) {
-                let ch = cell.display_char();
-                if ch == '\0' {
-                    print!("X");
-                } else {
-                    print!("{ch}");
-                }
-            }
-        }
-        println!("│");
+        println!("│{}│", self.row_string(line_num));
 
         println!("└{}┘", "─".repeat(width));
 
@@ -262,36 +239,12 @@ impl<'a> BufTest<'a> {
 
     /// Return the contents of a line as a `String`.
     pub fn line_text(&self, y: u32) -> Option<String> {
-        if y >= self.buf.size().h {
-            return None;
-        }
-        let mut ret = String::new();
-        for x in 0..self.buf.size().w {
-            if let Some(c) = self.buf.get(Point { x, y }) {
-                ret.push(c.display_char());
-            }
-        }
-        Some(ret)
+        (y < self.buf.size().h).then(|| self.row_string(y))
     }
 
     /// Return the contents of the buffer as lines of text.
     pub fn lines(&self) -> Vec<String> {
-        (0..self.buf.size().h)
-            .map(|y| {
-                let mut chars = Vec::new();
-                for x in 0..self.buf.size().w {
-                    if let Some(cell) = self.buf.get(Point { x, y }) {
-                        let ch = cell.display_char();
-                        if ch == '\0' {
-                            chars.push('X');
-                        } else {
-                            chars.push(ch);
-                        }
-                    }
-                }
-                chars.into_iter().collect()
-            })
-            .collect()
+        (0..self.buf.size().h).map(|y| self.row_string(y)).collect()
     }
 
     /// Return a newline-joined snapshot of the buffer contents.

@@ -3774,20 +3774,13 @@ pub mod canopy {
             Block,
         }
 
-        /// Cursor position, shape, and blink behavior.
+        /// Cursor position and shape.
         #[derive(Debug, Clone, Hash, StructuralPartialEq, PartialEq, Eq)]
         pub struct Cursor {
             /// Location of the cursor, relative to (0, 0) in the node view rect.
             pub location: geom::Point,
             /// Shape of the cursor.
             pub shape: CursorShape,
-            /// Should the cursor blink?
-            pub blink: bool,
-        }
-
-        impl Add<Point> for Cursor {
-            type Output = Cursor;
-            fn add(self, other: geom::Point) -> Self {}
         }
     }
 
@@ -5675,7 +5668,7 @@ pub mod canopy {
         pub struct StyleManager {}
 
         impl StyleManager {
-            /// Construct a new style manager.
+            /// Construct a style manager in the reset state.
             pub fn new() -> Self {}
 
             /// Reset all layers and levels.

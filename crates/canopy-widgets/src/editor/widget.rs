@@ -2289,11 +2289,7 @@ impl Widget for Editor {
                 _ => cursor::CursorShape::Block,
             },
         };
-        Some(cursor::Cursor {
-            location,
-            shape,
-            blink: true,
-        })
+        Some(cursor::Cursor { location, shape })
     }
 
     fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {

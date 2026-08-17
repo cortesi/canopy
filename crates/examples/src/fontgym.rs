@@ -670,7 +670,6 @@ impl Widget for FontGymInput {
                 y: 0,
             },
             shape: CursorShape::Block,
-            blink: true,
         })
     }
 

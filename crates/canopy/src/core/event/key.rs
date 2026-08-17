@@ -282,35 +282,18 @@ impl Key {
             }
         }
 
-        if normalized.mods.shift {
-            if let KeyCode::Char(c) = normalized.key {
-                if c.is_ascii_lowercase() {
-                    Self {
-                        mods: Mods {
-                            shift: false,
-                            alt: normalized.mods.alt,
-                            ctrl: normalized.mods.ctrl,
-                        },
-                        key: KeyCode::Char(c.to_ascii_uppercase()),
-                    }
-                } else if LEAVE_INTACT.contains(&normalized.key) {
-                    normalized
-                } else {
-                    Self {
-                        mods: Mods {
-                            shift: false,
-                            alt: normalized.mods.alt,
-                            ctrl: normalized.mods.ctrl,
-                        },
-                        key: normalized.key,
-                    }
-                }
-            } else {
-                normalized
-            }
-        } else {
-            normalized
+        // Shift is folded into the character it produced, except for the keys that keep it.
+        if !normalized.mods.shift
+            || !matches!(normalized.key, KeyCode::Char(_))
+            || LEAVE_INTACT.contains(&normalized.key)
+        {
+            return normalized;
         }
+        if let KeyCode::Char(c) = normalized.key {
+            normalized.key = KeyCode::Char(c.to_ascii_uppercase());
+        }
+        normalized.mods.shift = false;
+        normalized
     }
 
     /// Parse a key specification such as `ctrl-s`, `PageDown`, or `A`.

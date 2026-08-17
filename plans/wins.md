@@ -380,7 +380,7 @@ Independent, low-risk, mostly deletions. Do these first.
   `underline`, `attr_dim`, `set_attrs`, `clear_attrs`, and the structs behind them have zero
   callers; delete them (re-add on demand). About −60 lines.
 
-- [ ] **2.12 Small render/event cleanups.** `Cursor.blink` is written by four widgets and read
+- [x] **2.12 Small render/event cleanups.** `Cursor.blink` is written by four widgets and read
   by nothing except an unused `impl Add<Point> for Cursor` (`cursor.rs:24-37`); delete the field,
   its four initializers, and the `Add` impl (blinking is unimplemented; wiring it is a feature,
   not a cleanup). `Key::normalize` (`key.rs:285-313`) has two identical

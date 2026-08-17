@@ -254,7 +254,6 @@ impl Widget for Input {
                 y: 0,
             },
             shape: cursor::CursorShape::Block,
-            blink: true,
         })
     }
 
