@@ -127,17 +127,6 @@ pub struct ScriptCheckDiagnostic {
 }
 
 impl ScriptCheckDiagnostic {
-    /// Construct an error diagnostic at a source location.
-    pub fn error(line: usize, column: usize, message: impl Into<String>) -> Self {
-        Self {
-            source: None,
-            severity: "error".to_string(),
-            line,
-            column,
-            message: message.into(),
-        }
-    }
-
     /// Return true if this diagnostic should fail script evaluation.
     pub fn is_error(&self) -> bool {
         self.severity == "error"
@@ -166,11 +155,9 @@ pub struct ScriptCheckResult {
 }
 
 impl ScriptCheckResult {
-    /// Construct a successful typecheck result.
-    pub fn ok() -> Self {
-        Self {
-            diagnostics: Vec::new(),
-        }
+    /// Construct a result from checker diagnostics.
+    pub fn from_diagnostics(diagnostics: Vec<ScriptCheckDiagnostic>) -> Self {
+        Self { diagnostics }
     }
 
     /// Return true if there are no failing diagnostics.
@@ -194,12 +181,18 @@ impl ScriptCheckResult {
             .iter()
             .filter(|diagnostic| diagnostic.is_error())
     }
+
+    /// Render the failing diagnostics one per line.
+    pub fn format_diagnostics(&self) -> String {
+        self.errors()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
 }
 
 /// Cached compiled script and its retained root once the host is finalized.
 struct Script {
-    /// Compiled bytecode chunk.
-    chunk: BytecodeChunk,
     /// Original source text.
     source: String,
     /// Strict source executed at runtime, including identity and diagnostic metadata.
@@ -231,7 +224,6 @@ impl ScriptCache {
     /// Insert a compiled script and return its id.
     fn insert(
         &mut self,
-        chunk: BytecodeChunk,
         source: &str,
         runtime_source: Source,
         prepared: Option<PreparedGraph>,
@@ -243,7 +235,6 @@ impl ScriptCache {
         self.scripts.insert(
             id,
             Script {
-                chunk,
                 source: source.to_string(),
                 runtime_source,
                 prepared,
@@ -253,14 +244,14 @@ impl ScriptCache {
         Ok(id)
     }
 
+    /// Return true when the cache holds a script.
+    fn contains(&self, id: ScriptId) -> bool {
+        self.scripts.contains_key(&id)
+    }
+
     /// Return the retained root for a script, if it is loaded.
     fn root(&self, id: ScriptId) -> Option<RootHandle> {
         self.scripts.get(&id).and_then(|script| script.root.clone())
-    }
-
-    /// Return a clone of the compiled chunk for a script.
-    fn chunk(&self, id: ScriptId) -> Option<BytecodeChunk> {
-        self.scripts.get(&id).map(|script| script.chunk.clone())
     }
 
     /// Return the prepared graph for a script.
@@ -270,10 +261,9 @@ impl ScriptCache {
             .and_then(|script| script.prepared.clone())
     }
 
-    /// Replace a script's compiled chunk with its checked graph artifact.
+    /// Record a script's checked graph artifact.
     fn set_prepared(&mut self, id: ScriptId, prepared: PreparedGraph) {
         if let Some(script) = self.scripts.get_mut(&id) {
-            script.chunk = prepared.chunk().clone();
             script.prepared = Some(prepared);
         }
     }
@@ -406,53 +396,6 @@ impl ClosureRegistry {
     }
 }
 
-/// Diagnostics collected during script execution.
-#[derive(Default)]
-struct ScriptDiagnostics {
-    /// Log messages emitted by the most recent script evaluation.
-    logs: Vec<String>,
-    /// Assertion results emitted by the most recent script evaluation.
-    assertions: Vec<ScriptAssertion>,
-}
-
-impl ScriptDiagnostics {
-    /// Clear recorded logs and assertions.
-    fn clear(&mut self) {
-        self.logs.clear();
-        self.assertions.clear();
-    }
-
-    /// Append a log line.
-    fn push_log(&mut self, message: String) {
-        self.logs.push(message);
-    }
-
-    /// Append an assertion result.
-    fn push_assertion(&mut self, passed: bool, message: String) {
-        self.assertions.push(ScriptAssertion { passed, message });
-    }
-
-    /// Drain log lines.
-    fn take_logs(&mut self) -> Vec<String> {
-        mem::take(&mut self.logs)
-    }
-
-    /// Return a clone of current log lines.
-    fn logs(&self) -> Vec<String> {
-        self.logs.clone()
-    }
-
-    /// Drain assertion results.
-    fn take_assertions(&mut self) -> Vec<ScriptAssertion> {
-        mem::take(&mut self.assertions)
-    }
-
-    /// Return a clone of current assertion results.
-    fn assertions(&self) -> Vec<ScriptAssertion> {
-        self.assertions.clone()
-    }
-}
-
 /// Shared mutable host state.
 #[derive(Default)]
 struct LuauState {
@@ -460,10 +403,10 @@ struct LuauState {
     scripts: ScriptCache,
     /// Stored closure registry.
     closures: ClosureRegistry,
-    /// Execution diagnostics.
-    diagnostics: ScriptDiagnostics,
-    /// Cached rendered d.luau definitions.
-    definitions: Option<String>,
+    /// Log messages emitted by the most recent script evaluation.
+    logs: Vec<String>,
+    /// Assertion results emitted by the most recent script evaluation.
+    assertions: Vec<ScriptAssertion>,
     /// Audited script surface used for checks and VM construction.
     surface: Option<Surface>,
     /// Script surface with startup-root global obligations.
@@ -495,8 +438,7 @@ impl LuauState {
     }
 
     /// Mark a fully prepared script API as ready.
-    fn publish(&mut self, definitions: String) {
-        self.definitions = Some(definitions);
+    fn publish(&mut self) {
         self.finalized = true;
     }
 
@@ -626,12 +568,6 @@ impl fmt::Debug for LuauHost {
     }
 }
 
-/// The VM runtime capabilities every canopy app runs under: the full safe standard library
-/// without runtime compilation (`loadstring`), and no `require` source.
-fn canopy_runtime_capabilities() -> RuntimeCapabilities {
-    RuntimeCapabilities::default()
-}
-
 /// Builder-level execution ceilings for the retained VM. Gas bounds runaway
 /// scripts even without an explicit timeout; the memory cap bounds script
 /// allocations. Wall-clock timeouts are layered per invocation via `Cancel`.
@@ -724,17 +660,8 @@ fn startup_runtime_source(source: &str) -> String {
 
 /// Compile Luau source under the canopy profile before the surface is finalized.
 fn compile_chunk(source: &str) -> Result<BytecodeChunk> {
-    compile_chunk_with_runtime_capabilities(&canopy_runtime_capabilities(), source)
-}
-
-/// Compile Luau source under explicit VM runtime capabilities.
-fn compile_chunk_with_runtime_capabilities(
-    runtime_capabilities: &RuntimeCapabilities,
-    source: &str,
-) -> Result<BytecodeChunk> {
-    let options = CompileOptions::new();
-    runtime_capabilities
-        .compile_source(source.as_bytes(), &options)
+    RuntimeCapabilities::default()
+        .compile_source(source.as_bytes(), &CompileOptions::new())
         .map_err(|err| compile_error_to_canopy(&err))
 }
 
@@ -746,15 +673,6 @@ fn compile_error_to_canopy(err: &CompileError) -> error::Error {
         begin.map(|position| position.line as usize + 1),
         begin.map(|position| position.column as usize + 1),
     ))
-}
-
-/// Format Luau typecheck diagnostics for display.
-fn format_typecheck_diagnostics(result: &ScriptCheckResult) -> String {
-    result
-        .errors()
-        .map(ToString::to_string)
-        .collect::<Vec<_>>()
-        .join("\n")
 }
 
 /// Convert one owned Ruau diagnostic record to Canopy's stable script shape.
@@ -810,9 +728,7 @@ fn prepare_graph_error_to_canopy(error: &PrepareGraphError) -> error::Error {
                 .map(module_diagnostic_to_script)
                 .collect(),
         };
-        return error::Error::Parse(error::ParseError::new(format_typecheck_diagnostics(
-            &result,
-        )));
+        return error::Error::Parse(error::ParseError::new(result.format_diagnostics()));
     }
     if let Some(error) = error.compile_error() {
         return compile_error_to_canopy(error);
@@ -3494,7 +3410,7 @@ impl LuauHost {
             Ok(())
         } else {
             Err(error::Error::Parse(error::ParseError::new(
-                format_typecheck_diagnostics(&result),
+                result.format_diagnostics(),
             )))
         }
     }
@@ -3509,27 +3425,29 @@ impl LuauHost {
             Ok(())
         } else {
             Err(error::Error::Parse(error::ParseError::new(
-                format_typecheck_diagnostics(&result),
+                result.format_diagnostics(),
             )))
         }
     }
 
     /// Clear recorded logs and assertions for the next script evaluation.
     fn clear_diagnostics(&self) {
-        self.state.borrow_mut().diagnostics.clear();
+        let mut state = self.state.borrow_mut();
+        state.logs.clear();
+        state.assertions.clear();
     }
 
     /// Append a log line to the current evaluation state.
     fn push_log(&self, message: String) {
-        self.state.borrow_mut().diagnostics.push_log(message);
+        self.state.borrow_mut().logs.push(message);
     }
 
     /// Append an assertion result to the current evaluation state.
     fn push_assertion(&self, passed: bool, message: String) {
         self.state
             .borrow_mut()
-            .diagnostics
-            .push_assertion(passed, message);
+            .assertions
+            .push(ScriptAssertion { passed, message });
     }
 
     /// Drain deferred `on_start` hooks in registration order.
@@ -3554,31 +3472,28 @@ impl LuauHost {
 
     /// Take the logs collected during the most recent evaluation.
     pub fn take_logs(&self) -> Vec<String> {
-        self.state.borrow_mut().diagnostics.take_logs()
+        mem::take(&mut self.state.borrow_mut().logs)
     }
 
     /// Return log lines collected during the most recent evaluation.
     pub fn logs(&self) -> Vec<String> {
-        self.state.borrow().diagnostics.logs()
+        self.state.borrow().logs.clone()
     }
 
     /// Take the assertions collected during the most recent evaluation.
     pub fn take_assertions(&self) -> Vec<ScriptAssertion> {
-        self.state.borrow_mut().diagnostics.take_assertions()
+        mem::take(&mut self.state.borrow_mut().assertions)
     }
 
     /// Return assertions collected during the most recent evaluation.
     pub fn assertions(&self) -> Vec<ScriptAssertion> {
-        self.state.borrow().diagnostics.assertions()
+        self.state.borrow().assertions.clone()
     }
 
     /// Return current (log, assertion) counts for journal baselines.
     pub(crate) fn diagnostics_counts(&self) -> (usize, usize) {
         let state = self.state.borrow();
-        (
-            state.diagnostics.logs.len(),
-            state.diagnostics.assertions.len(),
-        )
+        (state.logs.len(), state.assertions.len())
     }
 
     /// Audit and stage the command and startup surfaces without publishing a runtime.
@@ -3628,7 +3543,7 @@ impl LuauHost {
     }
 
     /// Build and publish the retained runtime after every other preparation step succeeds.
-    pub(crate) fn publish_finalize(&self, definitions: String) -> Result<()> {
+    pub(crate) fn publish_finalize(&self) -> Result<()> {
         if self.is_finalized() {
             return Err(error::Error::InvalidOperation(
                 "Luau API already finalized".into(),
@@ -3676,7 +3591,7 @@ impl LuauHost {
                 state.scripts.set_prepared(id, prepared);
                 state.scripts.set_root(id, root);
             }
-            state.publish(definitions);
+            state.publish();
         }
         Ok(())
     }
@@ -3689,7 +3604,6 @@ impl LuauHost {
             .scripts
             .scripts
             .retain(|id, _| existing_scripts.contains(id));
-        state.definitions = None;
         state.surface = None;
         state.startup_surface = None;
         state.finalized = false;
@@ -3721,23 +3635,24 @@ impl LuauHost {
         })?;
         let original = original.to_string();
         let runtime_source = strict_named_source(source)?;
-        let (chunk, prepared) = if let Some(surface) = self.state.borrow().surface.clone() {
-            let prepared = surface
-                .prepare_graph_ready(runtime_source.clone())
-                .map_err(|error| prepare_graph_error_to_canopy(&error))?;
-            (prepared.chunk().clone(), Some(prepared))
+        let prepared = if let Some(surface) = self.state.borrow().surface.clone() {
+            Some(
+                surface
+                    .prepare_graph_ready(runtime_source.clone())
+                    .map_err(|error| prepare_graph_error_to_canopy(&error))?,
+            )
         } else {
             self.maybe_typecheck(&original)?;
-            (
-                compile_chunk(runtime_source.as_str().expect("strict source is UTF-8"))?,
-                None,
-            )
+            // Compiling before finalization proves the source is well formed; the retained
+            // runtime recompiles it from the prepared graph.
+            compile_chunk(runtime_source.as_str().expect("strict source is UTF-8"))?;
+            None
         };
-        let sid =
-            self.state
-                .borrow_mut()
-                .scripts
-                .insert(chunk, &original, runtime_source, prepared)?;
+        let sid = self
+            .state
+            .borrow_mut()
+            .scripts
+            .insert(&original, runtime_source, prepared)?;
         if self.is_finalized() {
             self.load_script(sid)?;
         }
@@ -3776,13 +3691,11 @@ impl LuauHost {
         let prepared = surface
             .prepare_graph_ready(runtime_source.clone())
             .map_err(|error| prepare_graph_error_to_canopy(&error))?;
-        let chunk = prepared.chunk().clone();
-        let sid = self.state.borrow_mut().scripts.insert(
-            chunk,
-            &original,
-            runtime_source,
-            Some(prepared),
-        )?;
+        let sid =
+            self.state
+                .borrow_mut()
+                .scripts
+                .insert(&original, runtime_source, Some(prepared))?;
         if self.is_finalized() {
             self.load_script(sid)?;
         }
@@ -3847,7 +3760,7 @@ impl LuauHost {
         if let Some(root) = self.state.borrow().scripts.root(sid) {
             return Ok(root);
         }
-        if self.state.borrow().scripts.chunk(sid).is_none() {
+        if !self.state.borrow().scripts.contains(sid) {
             return Err(error::Error::Script(format!("script {sid} not found")));
         }
         self.load_script(sid)

@@ -843,6 +843,7 @@ pub mod canopy {
             Node(super::id::NodeId),
         }
 
+        /// Render script diagnostics for an error message.
         /// A trait that allows widgets to perform recursive initialization of themselves and their
         /// children.
         pub trait Loader {
@@ -2770,6 +2771,7 @@ pub mod canopy {
         }
     }
 
+    /// Render script diagnostics for an error message.
     /// A trait that allows widgets to perform recursive initialization of themselves and their
     /// children.
     pub trait Loader {
@@ -4844,9 +4846,6 @@ pub mod canopy {
         }
 
         impl ScriptCheckDiagnostic {
-            /// Construct an error diagnostic at a source location.
-            pub fn error(line: usize, column: usize, message: impl Into<String>) -> Self {}
-
             /// Return true if this diagnostic should fail script evaluation.
             pub fn is_error(&self) -> bool {}
         }
@@ -4856,8 +4855,8 @@ pub mod canopy {
         pub struct ScriptCheckResult {}
 
         impl ScriptCheckResult {
-            /// Construct a successful typecheck result.
-            pub fn ok() -> Self {}
+            /// Construct a result from checker diagnostics.
+            pub fn from_diagnostics(diagnostics: Vec<ScriptCheckDiagnostic>) -> Self {}
 
             /// Return true if there are no failing diagnostics.
             pub fn is_ok(&self) -> bool {}
@@ -4870,6 +4869,9 @@ pub mod canopy {
 
             /// Return failing diagnostics.
             pub fn errors(&self) -> impl Iterator<Item = &ScriptCheckDiagnostic> {}
+
+            /// Render the failing diagnostics one per line.
+            pub fn format_diagnostics(&self) -> String {}
         }
     }
 

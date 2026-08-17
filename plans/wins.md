@@ -453,7 +453,7 @@ Independent, low-risk, mostly deletions. Do these first.
   `dispatch_command_by_name` (`:1804-1820`) and downgrades structured errors to
   `Error::Script(..)`; give `dispatch_command_by_name` an `Option<NodeId>`. About −135 lines.
 
-- [ ] **3.5 Dead script-host state.** `LuauState.definitions` is written and never read
+- [x] **3.5 Dead script-host state.** `LuauState.definitions` is written and never read
   (`Canopy.script_api_text` is the real copy); `Script.chunk`/`ScriptCache::chunk` serve only an
   existence check at `:3989`; `compile_chunk` → `compile_chunk_with_runtime_capabilities` →
   `canopy_runtime_capabilities()` is three functions for

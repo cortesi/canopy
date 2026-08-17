@@ -1015,7 +1015,7 @@ impl Canopy {
             self.compile_registered_startup_scripts()?;
             self.script_host
                 .finalize_checkpoint(script::FinalizeStep::StartupScriptsCompiled)?;
-            self.script_host.publish_finalize(definitions.clone())
+            self.script_host.publish_finalize()
         })();
         if let Err(error) = prepared {
             self.script_host.abort_finalize(&existing_scripts);
@@ -1134,20 +1134,22 @@ impl Canopy {
             if check.is_ok() {
                 continue;
             }
-            let diagnostics = check
-                .diagnostics()
-                .records()
-                .map(|diagnostic| {
-                    script::diagnostic_record_to_script(
-                        Some(pair.implementation_path.display().to_string()),
-                        diagnostic,
-                    )
-                })
-                .collect::<Vec<_>>();
+            let result = script::ScriptCheckResult::from_diagnostics(
+                check
+                    .diagnostics()
+                    .records()
+                    .map(|diagnostic| {
+                        script::diagnostic_record_to_script(
+                            Some(pair.implementation_path.display().to_string()),
+                            diagnostic,
+                        )
+                    })
+                    .collect(),
+            );
             failures.push(format!(
                 "{}:\n{}",
                 pair.declaration_path.display(),
-                format_script_diagnostics(&diagnostics)
+                result.format_diagnostics()
             ));
         }
         if failures.is_empty() {
@@ -1517,15 +1519,6 @@ fn implementation_path_for_declaration(path: &FsPath) -> Option<PathBuf> {
 }
 
 /// Render script diagnostics for an error message.
-fn format_script_diagnostics(diagnostics: &[script::ScriptCheckDiagnostic]) -> String {
-    diagnostics
-        .iter()
-        .filter(|diagnostic| diagnostic.is_error())
-        .map(ToString::to_string)
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
 /// A trait that allows widgets to perform recursive initialization of themselves and their
 /// children.
 pub trait Loader {
