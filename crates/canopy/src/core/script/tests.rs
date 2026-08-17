@@ -1,11 +1,14 @@
 //! Tests for the Luau scripting host.
 
+use std::collections::BTreeMap;
+
 use proptest::{
     prelude::*,
     test_runner::{TestCaseError, TestCaseResult},
 };
+use ruau::vm::{MarshaledPair, MultiValue, OwnedValue, ScopedValue};
 
-use super::*;
+use super::{base_api::ArgReader, bridge::REENTRANT_CANOPY, *};
 use crate::{
     core::testing::model::trace_result,
     testing::ttree::{get_state, run_ttree},

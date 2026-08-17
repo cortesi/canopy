@@ -750,7 +750,7 @@ visibility) and no behavior.
   `Result` as "for canopy-core operations", a crate that no longer exists. Fix the sentence.
   (Flattening `core/` into `src/` was considered and is listed under Considered and rejected.)
 
-- [ ] **7.2 Split `script/mod.rs` (4,938 lines).** Distinct responsibilities and current ranges:
+- [x] **7.2 Split `script/mod.rs` (4,938 lines).** Distinct responsibilities and current ranges:
   public types (71-190), host state (191-508), guards and the reentrant Canopy bridge (510-606,
   831-872), VM config/compile (623-829), NodeId host type (874-944), scoped value conversion
   (946-1213), state→record builders (1215-1740), command dispatch (1742-1834), arg parsing
