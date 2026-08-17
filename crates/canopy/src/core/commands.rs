@@ -375,7 +375,7 @@ fn float_out_of_range<T>(value: f64) -> CommandError {
     ))
 }
 
-/// Implement `FromArgValue` for signed integer primitives.
+/// Implement `FromArgValue` for the integer primitives.
 macro_rules! impl_int_from_arg_value {
     ($($ty:ty),+ $(,)?) => {
         $(
@@ -394,56 +394,7 @@ macro_rules! impl_int_from_arg_value {
     };
 }
 
-impl_int_from_arg_value!(i8, i16, i32, i64);
-
-impl FromArgValue for isize {
-    fn from_arg_value(v: &ArgValue) -> Result<Self, CommandError> {
-        match v {
-            ArgValue::Int(value) => {
-                Self::try_from(*value).map_err(|_| int_out_of_range::<Self>(*value))
-            }
-            ArgValue::UInt(value) => {
-                Self::try_from(*value).map_err(|_| uint_out_of_range::<Self>(*value))
-            }
-            other => Err(CommandError::type_mismatch("isize", other)),
-        }
-    }
-}
-
-/// Implement `FromArgValue` for unsigned integer primitives.
-macro_rules! impl_uint_from_arg_value {
-    ($($ty:ty),+ $(,)?) => {
-        $(
-            impl FromArgValue for $ty {
-                fn from_arg_value(v: &ArgValue) -> Result<Self, CommandError> {
-                    match v {
-                        ArgValue::Int(value) => <$ty>::try_from(*value)
-                            .map_err(|_| int_out_of_range::<$ty>(*value)),
-                        ArgValue::UInt(value) => <$ty>::try_from(*value)
-                            .map_err(|_| uint_out_of_range::<$ty>(*value)),
-                        other => Err(CommandError::type_mismatch(stringify!($ty), other)),
-                    }
-                }
-            }
-        )+
-    };
-}
-
-impl_uint_from_arg_value!(u8, u16, u32, u64);
-
-impl FromArgValue for usize {
-    fn from_arg_value(v: &ArgValue) -> Result<Self, CommandError> {
-        match v {
-            ArgValue::Int(value) => {
-                Self::try_from(*value).map_err(|_| int_out_of_range::<Self>(*value))
-            }
-            ArgValue::UInt(value) => {
-                Self::try_from(*value).map_err(|_| uint_out_of_range::<Self>(*value))
-            }
-            other => Err(CommandError::type_mismatch("usize", other)),
-        }
-    }
-}
+impl_int_from_arg_value!(i8, i16, i32, i64, isize, u8, u16, u32, u64, usize);
 
 impl FromArgValue for f32 {
     fn from_arg_value(v: &ArgValue) -> Result<Self, CommandError> {
@@ -829,21 +780,6 @@ fn json_to_arg_value(value: JsonValue) -> Result<ArgValue, CommandError> {
     }
 }
 
-/// Convert a typed value into an ArgValue with fallible encoding.
-pub trait TryToArgValue {
-    /// Encode the value as an ArgValue.
-    fn try_to_arg_value(self) -> Result<ArgValue, CommandError>;
-}
-
-impl<T> TryToArgValue for T
-where
-    T: ToArgValue,
-{
-    fn try_to_arg_value(self) -> Result<ArgValue, CommandError> {
-        Ok(self.to_arg_value())
-    }
-}
-
 impl<T> SerdeArg<T>
 where
     T: Serialize,
@@ -853,15 +789,6 @@ where
         let value = serde_json::to_value(self.0)
             .map_err(|err| CommandError::conversion(err.to_string()))?;
         json_to_arg_value(value)
-    }
-}
-
-impl<T> TryToArgValue for SerdeArg<T>
-where
-    T: Serialize,
-{
-    fn try_to_arg_value(self) -> Result<ArgValue, CommandError> {
-        Self::try_to_arg_value(self)
     }
 }
 
@@ -935,70 +862,6 @@ where
                 .map(|(k, v)| (k, v.to_arg_value()))
                 .collect(),
         )
-    }
-}
-
-impl CommandArgs {
-    /// Build command arguments with fallible conversions.
-    pub fn try_from_args(args: impl TryIntoCommandArgs) -> Result<Self, CommandError> {
-        args.try_into_command_args()
-    }
-}
-
-/// Fallible conversion into command arguments.
-pub trait TryIntoCommandArgs {
-    /// Convert into command arguments.
-    fn try_into_command_args(self) -> Result<CommandArgs, CommandError>;
-}
-
-impl TryIntoCommandArgs for CommandArgs {
-    fn try_into_command_args(self) -> Result<CommandArgs, CommandError> {
-        Ok(self)
-    }
-}
-
-impl TryIntoCommandArgs for () {
-    fn try_into_command_args(self) -> Result<CommandArgs, CommandError> {
-        Ok(CommandArgs::Positional(Vec::new()))
-    }
-}
-
-impl<T, const N: usize> TryIntoCommandArgs for [T; N]
-where
-    T: TryToArgValue,
-{
-    fn try_into_command_args(self) -> Result<CommandArgs, CommandError> {
-        let mut out = Vec::with_capacity(N);
-        for value in self {
-            out.push(value.try_to_arg_value()?);
-        }
-        Ok(CommandArgs::Positional(out))
-    }
-}
-
-impl<T> TryIntoCommandArgs for Vec<T>
-where
-    T: TryToArgValue,
-{
-    fn try_into_command_args(self) -> Result<CommandArgs, CommandError> {
-        let mut out = Vec::with_capacity(self.len());
-        for value in self {
-            out.push(value.try_to_arg_value()?);
-        }
-        Ok(CommandArgs::Positional(out))
-    }
-}
-
-impl<T> TryIntoCommandArgs for BTreeMap<String, T>
-where
-    T: TryToArgValue,
-{
-    fn try_into_command_args(self) -> Result<CommandArgs, CommandError> {
-        let mut out = BTreeMap::new();
-        for (key, value) in self {
-            out.insert(key, value.try_to_arg_value()?);
-        }
-        Ok(CommandArgs::Named(out))
     }
 }
 
@@ -1260,17 +1123,6 @@ impl CommandSpec {
             args: args.into(),
         }
     }
-
-    /// Build a call to this command with fallible argument conversion.
-    pub fn try_call_with(
-        &'static self,
-        args: impl TryIntoCommandArgs,
-    ) -> Result<CommandCall, CommandError> {
-        Ok(CommandCall {
-            spec: self,
-            args: args.try_into_command_args()?,
-        })
-    }
 }
 
 /// Builder for a command invocation.
@@ -1386,13 +1238,6 @@ pub enum CommandError {
     #[error("unknown command: {id}")]
     UnknownCommand {
         /// Requested command id.
-        id: String,
-    },
-
-    /// Duplicate command identifier.
-    #[error("duplicate command id: {id}")]
-    DuplicateCommand {
-        /// Duplicate command id.
         id: String,
     },
 
@@ -1536,65 +1381,18 @@ impl CommandError {
     }
 }
 
-/// Errors raised during injection.
-#[derive(Debug)]
-pub enum InjectError {
-    /// Required injected value missing.
-    Missing {
-        /// Expected type.
-        expected: &'static str,
-    },
-    /// Injected value failed.
-    Failed {
-        /// Expected type.
-        expected: &'static str,
-        /// Error message.
-        message: String,
-    },
-}
-
 /// Trait for injectable parameters.
 pub trait Inject: Sized {
-    /// Inject a value from the context.
-    fn inject(ctx: &dyn Context) -> Result<Self, InjectError>;
+    /// Inject a value from the context, or `None` when the context has none.
+    fn inject(ctx: &dyn Context) -> Option<Self>;
 }
 
 impl<T> Inject for Option<T>
 where
     T: Inject,
 {
-    fn inject(ctx: &dyn Context) -> Result<Self, InjectError> {
-        match T::inject(ctx) {
-            Ok(value) => Ok(Some(value)),
-            Err(InjectError::Missing { .. }) => Ok(None),
-            Err(err) => Err(err),
-        }
-    }
-}
-
-/// Explicit injection wrapper.
-#[derive(Debug, Clone, Copy)]
-pub struct Injected<T>(pub T);
-
-impl<T> Inject for Injected<T>
-where
-    T: Inject,
-{
-    fn inject(ctx: &dyn Context) -> Result<Self, InjectError> {
-        T::inject(ctx).map(Injected)
-    }
-}
-
-/// Explicit user argument wrapper.
-#[derive(Debug)]
-pub struct Arg<T>(pub T);
-
-impl<T> FromArgValue for Arg<T>
-where
-    T: FromArgValue,
-{
-    fn from_arg_value(v: &ArgValue) -> Result<Self, CommandError> {
-        T::from_arg_value(v).map(Arg)
+    fn inject(ctx: &dyn Context) -> Option<Self> {
+        Some(T::inject(ctx))
     }
 }
 
@@ -1608,26 +1406,20 @@ pub struct ListRowContext {
 }
 
 impl Inject for MouseEvent {
-    fn inject(ctx: &dyn Context) -> Result<Self, InjectError> {
-        ctx.current_mouse_event().ok_or(InjectError::Missing {
-            expected: "MouseEvent",
-        })
+    fn inject(ctx: &dyn Context) -> Option<Self> {
+        ctx.current_mouse_event()
     }
 }
 
 impl Inject for ListRowContext {
-    fn inject(ctx: &dyn Context) -> Result<Self, InjectError> {
-        ctx.current_list_row().ok_or(InjectError::Missing {
-            expected: "ListRowContext",
-        })
+    fn inject(ctx: &dyn Context) -> Option<Self> {
+        ctx.current_list_row()
     }
 }
 
 impl Inject for Event {
-    fn inject(ctx: &dyn Context) -> Result<Self, InjectError> {
-        ctx.current_event()
-            .cloned()
-            .ok_or(InjectError::Missing { expected: "Event" })
+    fn inject(ctx: &dyn Context) -> Option<Self> {
+        ctx.current_event().cloned()
     }
 }
 
@@ -1768,21 +1560,6 @@ fn validate_node_arg(core: &Core, value: &ArgValue) -> Result<(), CommandError> 
         }
         _ => Ok(()),
     }
-}
-
-/// Convenience macro for building named arguments.
-#[macro_export]
-macro_rules! named_args {
-    ($($key:ident : $value:expr),* $(,)?) => {{
-        let mut map = ::std::collections::BTreeMap::new();
-        $(
-            map.insert(
-                ::std::string::ToString::to_string(stringify!($key)),
-                $crate::commands::ToArgValue::to_arg_value($value),
-            );
-        )*
-        $crate::commands::CommandArgs::Named(map)
-    }};
 }
 
 #[cfg(test)]
@@ -1952,9 +1729,9 @@ mod tests {
     }
 
     #[test]
-    fn try_args_accepts_serde_arg() {
+    fn serde_arg_encodes_large_unsigned_values() {
         let value = (i64::MAX as u64) + 1;
-        let args = CommandArgs::try_from_args([SerdeArg(value)]).unwrap();
-        assert_eq!(args, CommandArgs::Positional(vec![ArgValue::UInt(value)]));
+        let encoded = SerdeArg(value).try_to_arg_value().unwrap();
+        assert_eq!(encoded, ArgValue::UInt(value));
     }
 }

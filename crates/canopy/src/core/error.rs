@@ -97,7 +97,6 @@ pub enum ScriptErrorKind {
     /// Unknown command identifier.
     UnknownCommand,
     /// Duplicate command identifier.
-    DuplicateCommand,
     /// Conflicting command definition.
     ConflictingCommand,
     /// Invalid command definition.
@@ -136,7 +135,6 @@ impl ScriptErrorKind {
             Self::Invalid => "invalid",
             Self::Canopy => "canopy_error",
             Self::UnknownCommand => "unknown_command",
-            Self::DuplicateCommand => "duplicate_command",
             Self::ConflictingCommand => "conflicting_command",
             Self::InvalidCommand => "invalid_command",
             Self::NoTarget => "no_target",

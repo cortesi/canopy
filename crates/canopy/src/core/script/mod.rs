@@ -2136,10 +2136,6 @@ impl From<&commands::CommandError> for CanopyErrorPayload {
                 Self::new(error::ScriptErrorKind::UnknownCommand, err.to_string())
                     .with_command(id.clone())
             }
-            commands::CommandError::DuplicateCommand { id } => {
-                Self::new(error::ScriptErrorKind::DuplicateCommand, err.to_string())
-                    .with_command(id.clone())
-            }
             commands::CommandError::ConflictingCommand { id } => {
                 Self::new(error::ScriptErrorKind::ConflictingCommand, err.to_string())
                     .with_command(id.clone())

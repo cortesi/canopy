@@ -483,7 +483,7 @@ Independent, low-risk, mostly deletions. Do these first.
   owned snapshot (`canopy-widgets/src/help/mod.rs:247-282`) reads `bindings[].{input, label,
   kind}`. Delete them and the work `to_owned` does to compute them. About −90 lines.
 
-- [ ] **3.8 `commands.rs` dead API and duplicated impls.** Delete `named_args!` (zero users),
+- [x] **3.8 `commands.rs` dead API and duplicated impls.** Delete `named_args!` (zero users),
   the fallible-args layer `TryToArgValue`, `TryIntoCommandArgs`, `CommandArgs::try_from_args`,
   `CommandSpec::try_call_with` (test-only callers; keep `SerdeArg`, the only way to encode a
   `#[derive(CommandArg)]` struct from Rust), the `Injected<T>` and `Arg<T>` newtypes together

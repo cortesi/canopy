@@ -1234,7 +1234,6 @@ pub mod canopy {
                 /// Unknown command identifier.
                 UnknownCommand,
                 /// Duplicate command identifier.
-                DuplicateCommand,
                 /// Conflicting command definition.
                 ConflictingCommand,
                 /// Invalid command definition.
@@ -1457,7 +1456,7 @@ pub mod canopy {
         }
 
         impl Inject for crate::event::Event {
-            fn inject(ctx: &dyn Context) -> Result<Self, InjectError> {}
+            fn inject(ctx: &dyn Context) -> Option<Self> {}
         }
 
         /// A keystroke along with modifiers.
@@ -1620,7 +1619,7 @@ pub mod canopy {
             }
 
             impl Inject for crate::event::mouse::MouseEvent {
-                fn inject(ctx: &dyn Context) -> Result<Self, InjectError> {}
+                fn inject(ctx: &dyn Context) -> Option<Self> {}
             }
 
             impl From<MouseEvent> for Mouse {
@@ -3297,19 +3296,6 @@ pub mod canopy {
             pub fn try_to_arg_value(self) -> Result<ArgValue, CommandError> {}
         }
 
-        impl<T> TryToArgValue for SerdeArg<T>
-        where
-            T: Serialize,
-        {
-            fn try_to_arg_value(self) -> Result<ArgValue, CommandError> {}
-        }
-
-        /// Convert a typed value into an ArgValue with fallible encoding.
-        pub trait TryToArgValue {
-            /// Encode the value as an ArgValue.
-            fn try_to_arg_value(self) -> Result<ArgValue, CommandError>;
-        }
-
         /// Identifier for a command.
         #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq, Hash, Display)]
         pub struct CommandId(pub &'static str);
@@ -3321,11 +3307,6 @@ pub mod canopy {
             Positional(Vec<ArgValue>),
             /// Named arguments.
             Named(std::collections::BTreeMap<String, ArgValue>),
-        }
-
-        impl CommandArgs {
-            /// Build command arguments with fallible conversions.
-            pub fn try_from_args(args: impl TryIntoCommandArgs) -> Result<Self, CommandError> {}
         }
 
         impl From<()> for CommandArgs {
@@ -3351,16 +3332,6 @@ pub mod canopy {
             T: ToArgValue,
         {
             fn from(values: BTreeMap<String, T>) -> Self {}
-        }
-
-        impl TryIntoCommandArgs for CommandArgs {
-            fn try_into_command_args(self) -> Result<CommandArgs, CommandError> {}
-        }
-
-        /// Fallible conversion into command arguments.
-        pub trait TryIntoCommandArgs {
-            /// Convert into command arguments.
-            fn try_into_command_args(self) -> Result<CommandArgs, CommandError>;
         }
 
         /// A command invocation with encoded arguments.
@@ -3491,13 +3462,6 @@ pub mod canopy {
 
             /// Build a call to this command.
             pub fn call_with(&self, args: impl Into<CommandArgs>) -> CommandCall {}
-
-            /// Build a call to this command with fallible argument conversion.
-            pub fn try_call_with(
-                &self,
-                args: impl TryIntoCommandArgs,
-            ) -> Result<CommandCall, CommandError> {
-            }
         }
 
         impl From<&'static CommandSpec> for CommandInvocation {
@@ -3589,11 +3553,6 @@ pub mod canopy {
                 /// Requested command id.
                 id: String,
             },
-            /// Duplicate command identifier.
-            DuplicateCommand {
-                /// Duplicate command id.
-                id: String,
-            },
             /// A command ID was registered with a different specification.
             ConflictingCommand {
                 /// Conflicting command id.
@@ -3674,49 +3633,10 @@ pub mod canopy {
             fn from(err: &commands::CommandError) -> Self {}
         }
 
-        /// Errors raised during injection.
-        #[derive(Debug)]
-        pub enum InjectError {
-            /// Required injected value missing.
-            Missing {
-                /// Expected type.
-                expected: &'static str,
-            },
-            /// Injected value failed.
-            Failed {
-                /// Expected type.
-                expected: &'static str,
-                /// Error message.
-                message: String,
-            },
-        }
-
         /// Trait for injectable parameters.
         pub trait Inject: Sized {
-            /// Inject a value from the context.
-            fn inject(ctx: &dyn Context) -> Result<Self, InjectError>;
-        }
-
-        /// Explicit injection wrapper.
-        #[derive(Debug, Clone, Copy)]
-        pub struct Injected<T>(pub T);
-
-        impl<T> Inject for Injected<T>
-        where
-            T: Inject,
-        {
-            fn inject(ctx: &dyn Context) -> Result<Self, InjectError> {}
-        }
-
-        /// Explicit user argument wrapper.
-        #[derive(Debug)]
-        pub struct Arg<T>(pub T);
-
-        impl<T> FromArgValue for Arg<T>
-        where
-            T: FromArgValue,
-        {
-            fn from_arg_value(v: &ArgValue) -> Result<Self, CommandError> {}
+            /// Inject a value from the context, or `None` when the context has none.
+            fn inject(ctx: &dyn Context) -> Option<Self>;
         }
 
         /// Context passed to list row injections.
@@ -3729,7 +3649,7 @@ pub mod canopy {
         }
 
         impl Inject for ListRowContext {
-            fn inject(ctx: &dyn Context) -> Result<Self, InjectError> {}
+            fn inject(ctx: &dyn Context) -> Option<Self> {}
         }
 
         /// Command scope frame for injection.
@@ -3829,7 +3749,6 @@ pub mod canopy {
             /// Unknown command identifier.
             UnknownCommand,
             /// Duplicate command identifier.
-            DuplicateCommand,
             /// Conflicting command definition.
             ConflictingCommand,
             /// Invalid command definition.
@@ -4387,7 +4306,7 @@ pub mod canopy {
             }
 
             impl Inject for crate::event::mouse::MouseEvent {
-                fn inject(ctx: &dyn Context) -> Result<Self, InjectError> {}
+                fn inject(ctx: &dyn Context) -> Option<Self> {}
             }
 
             impl From<MouseEvent> for Mouse {
@@ -4417,7 +4336,7 @@ pub mod canopy {
         }
 
         impl Inject for crate::event::Event {
-            fn inject(ctx: &dyn Context) -> Result<Self, InjectError> {}
+            fn inject(ctx: &dyn Context) -> Option<Self> {}
         }
     }
 
@@ -5747,11 +5666,6 @@ pub mod canopy {
         fn name(&self) -> NodeName {}
     }
 
-    /// Convenience macro for building named arguments.
-    #[macro_export]
-    macro_rules! named_args {
-    ($($key:ident : $value:expr),* $(,)?) => { ... };
-}
     /// Build a [`Color`](crate::style::Color) from a `#RRGGBB` or `RRGGBB` literal at compile time.
     #[macro_export]
     macro_rules! rgb {

@@ -94,22 +94,14 @@ impl ParamMeta {
                 let ident = &self.ident;
                 let ty = &self.ty;
                 let name = self.name_lit();
+                let ty_name = self.ty_lit();
                 Some(quote! {
-                    let #ident: #ty = <#ty as canopy::commands::Inject>::inject(&*ctx)
-                        .map_err(|err| match err {
-                            canopy::commands::InjectError::Missing { expected } => {
-                                canopy::commands::CommandError::MissingInjected {
-                                    param: #name.to_string(),
-                                    expected,
-                                }
-                            }
-                            canopy::commands::InjectError::Failed { message, .. } => {
-                                canopy::commands::CommandError::Conversion {
-                                    param: #name.to_string(),
-                                    message,
-                                }
-                            }
-                        })?;
+                    let #ident: #ty = <#ty as canopy::commands::Inject>::inject(&*ctx).ok_or(
+                        canopy::commands::CommandError::MissingInjected {
+                            param: #name.to_string(),
+                            expected: #ty_name,
+                        },
+                    )?;
                 })
             }
             _ => None,

@@ -323,9 +323,7 @@ fn classify_value_param(ty: &Type, default: Option<&DefaultValue>) -> Result<(Pa
         ));
     }
 
-    let kind = if extract_single_generic(inner, "Arg").is_some() {
-        ParamKind::User
-    } else if extract_single_generic(inner, "Injected").is_some() || is_builtin_injected(inner) {
+    let kind = if is_builtin_injected(inner) {
         ParamKind::Injected
     } else {
         ParamKind::User
