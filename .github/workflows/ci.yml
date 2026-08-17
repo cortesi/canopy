@@ -1,19 +1,42 @@
+# Blocker: this workflow cannot pass on a hosted runner yet. The workspace
+# depends on the sibling path crates ruau, tmcp, itty-core, and the itty-script
+# dev-dependency, which are not published and are not part of this repository.
+# The job stays red until those crates are published, vendored, or checked out
+# beside the workspace here. Do not replace it with a passing no-op.
+name: CI
+
 on: [push, pull_request]
 
 jobs:
-    test:
-        name: canopy - ${{ matrix.os }} ${{ matrix.toolchain }}
-        runs-on: ${{ matrix.os }}
-        strategy:
-            fail-fast: false
-            matrix:
-                include:
-                - { toolchain: beta, os: ubuntu-latest }
-                - { toolchain: beta, os: windows-latest }
-                - { toolchain: beta, os: macos-latest }
-        steps:
-            - uses: actions/checkout@v3
-            - uses: dtolnay/rust-toolchain@master
-              with:
-                    toolchain: ${{ matrix.toolchain }}
-            - run: cargo xtask test
+  ci:
+    name: canopy - ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      # The pinned channel comes from rust-toolchain.toml.
+      - name: Install the pinned toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.96.1
+          components: clippy, rustfmt
+
+      # cargo xtask tidy and ci format with this nightly.
+      - name: Install the format toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-07-01
+          components: rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install the pinned tools
+        run: |
+          cargo install cargo-nextest --version 0.9.99 --locked
+          cargo install ruskel --version 0.0.11 --locked
+
+      - run: cargo xtask ci

@@ -46,7 +46,7 @@ Independent, low-risk, mostly deletions. Do these first.
   `.scripts/docs` and `.github/workflows/main.yml` (both run `mdbook build ./docs`; the book
   was removed in commit 327ea473). Remove the "Guide" and "API" links in `README.md:57-58`.
 
-- [ ] **0.2 Make CI honest.** (Prerequisite: item 0.10 for the `ruskel` pin.)
+- [x] **0.2 Make CI honest.** (Prerequisite: item 0.10 for the `ruskel` pin.)
   `.github/workflows/ci.yml` runs `cargo xtask test` on the `beta`
   toolchain (overriding `rust-toolchain.toml`) on Ubuntu, Windows, and macOS, without installing
   the pinned `cargo-nextest 0.9.99`, so it fails before it builds. The Windows leg cannot pass
