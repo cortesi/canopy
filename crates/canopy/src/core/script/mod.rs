@@ -22,12 +22,12 @@ use ruau::{
     surface::{CheckOptions, PrepareGraphError, PrepareOptions, PreparedGraph, Surface, VmConfig},
     typecheck::{DiagnosticRecord, ModuleDiagnosticRecord, Severity},
     vm::{
-        Ambient, AsyncHostContext, AsyncHostFunction, CallOptions, Cancel, ExecError, FromLuaMulti,
-        Function, HostReturn, HostType, HostTypeBuilder, IntoLua, Limits, MarshaledPair,
+        Ambient, AsyncHostContext, CallOptions, Cancel, ExecError, FromLuaMulti, Function,
+        HostReturn, HostType, HostTypeBuilder, IntoLua, Limits, MarshaledPair,
         MarshaledScriptError, MultiValue, NativeModule, OwnedValue, RuntimeCapabilities,
         RuntimeError, RuntimeErrorKind, Scope, ScopedValue, ScriptError, ScriptErrorField,
         SinkQuota, StashedClosure, Table, TableLayout, UnsupportedTableKey, ValueSnapshot,
-        async_host_fn, classify_marshaled_table,
+        classify_marshaled_table,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -1988,21 +1988,6 @@ async fn wait_for_screen_text(
         })
     })
     .await
-}
-
-/// Async host function for `canopy.wait_for`.
-fn wait_for_host_fn() -> Box<dyn AsyncHostFunction> {
-    async_host_fn(wait_for_predicate)
-}
-
-/// Async host function for `canopy.wait_for_node`.
-fn wait_for_node_host_fn() -> Box<dyn AsyncHostFunction> {
-    async_host_fn(wait_for_node)
-}
-
-/// Async host function for `canopy.wait_for_screen_text`.
-fn wait_for_screen_text_host_fn() -> Box<dyn AsyncHostFunction> {
-    async_host_fn(wait_for_screen_text)
 }
 
 /// Convert the remaining host-call values into command arguments.

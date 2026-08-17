@@ -470,7 +470,7 @@ Independent, low-risk, mostly deletions. Do these first.
   `ScriptCheckResult::format_diagnostics(&self) -> String` and delete both free functions.
   About −80 lines.
 
-- [ ] **3.6 One base-API table.** `base_api.rs` keeps `BaseFunction` and `AsyncBaseFunction`
+- [x] **3.6 One base-API table.** `base_api.rs` keeps `BaseFunction` and `AsyncBaseFunction`
   as two structs, two consts, two field renderers, and two registration loops (`:24-46, 49-468,
   490-531`); `wait_for_host_fn` and friends (`script/mod.rs:2144-2157`) exist only to fit the
   async slot type. Use one struct with `handler: Sync(..) | Async(..)`, one table, one loop.
