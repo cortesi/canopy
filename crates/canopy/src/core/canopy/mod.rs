@@ -1380,38 +1380,7 @@ impl Canopy {
             })
             .collect();
 
-        let mut matched_bindings = Vec::new();
-        for mode in self.keymap.active_modes() {
-            for binding in self.keymap.bindings_matching_path(mode, &focus_path) {
-                matched_bindings.push((mode, binding));
-            }
-        }
-        let help_bindings: Vec<super::help::HelpBinding<'_>> = matched_bindings
-            .into_iter()
-            .map(|(mode, mb)| {
-                let kind = if mb.m.anchored_end && mb.m.depth > 0 {
-                    super::help::BindingKind::PreEventOverride
-                } else {
-                    super::help::BindingKind::PostEventFallback
-                };
-
-                let label = super::help::binding_label(
-                    mb.info.target,
-                    &self.core.commands,
-                    |sid| self.script_host.script_source(sid),
-                    |id| self.script_host.function_label(id),
-                );
-
-                super::help::HelpBinding {
-                    input: mb.info.input,
-                    mode,
-                    path_filter: mb.info.path_filter,
-                    target: mb.info.target,
-                    kind,
-                    label,
-                }
-            })
-            .collect();
+        let help_bindings = self.matched_bindings(&focus_path);
 
         super::help::HelpSnapshot {
             focus,
@@ -1420,6 +1389,36 @@ impl Canopy {
             bindings: help_bindings,
             commands: help_commands,
         }
+    }
+
+    /// Collect every active-mode binding whose filter matches `path`.
+    fn matched_bindings(&self, path: &Path) -> Vec<super::help::HelpBinding<'_>> {
+        let mut out = Vec::new();
+        for mode in self.keymap.active_modes() {
+            for mb in self.keymap.bindings_matching_path(mode, path) {
+                let kind = if mb.m.anchored_end && mb.m.depth > 0 {
+                    super::help::BindingKind::PreEventOverride
+                } else {
+                    super::help::BindingKind::PostEventFallback
+                };
+                let label = super::help::binding_label(
+                    mb.info.target,
+                    &self.core.commands,
+                    |sid| self.script_host.script_source(sid),
+                    |id| self.script_host.function_label(id),
+                );
+                out.push(super::help::HelpBinding {
+                    id: mb.info.id,
+                    input: mb.info.input,
+                    mode,
+                    path_filter: mb.info.path_filter,
+                    target: mb.info.target,
+                    kind,
+                    label,
+                });
+            }
+        }
+        out
     }
 
     /// Build a diagnostic dump with tree, focus, and binding details.
@@ -1442,31 +1441,19 @@ impl Canopy {
         out.push_str(&format!("target path: {target_path}\n"));
         out.push_str(&format!("input mode: {input_mode}\n"));
 
-        let mut bindings = Vec::new();
-        for mode in self.keymap.active_modes() {
-            for binding in self.keymap.bindings_matching_path(mode, &target_path) {
-                bindings.push((mode, binding));
-            }
-        }
+        let bindings = self.matched_bindings(&target_path);
         if bindings.is_empty() {
             out.push_str("bindings: (none)\n");
         } else {
             out.push_str("bindings:\n");
-            for (mode, mb) in bindings {
-                let kind = if mb.m.anchored_end && mb.m.depth > 0 {
-                    "pre"
-                } else {
-                    "post"
+            for binding in bindings {
+                let kind = match binding.kind {
+                    help::BindingKind::PreEventOverride => "pre",
+                    help::BindingKind::PostEventFallback => "post",
                 };
-                let label = help::binding_label(
-                    mb.info.target,
-                    &self.core.commands,
-                    |sid| self.script_host.script_source(sid),
-                    |id| self.script_host.function_label(id),
-                );
                 out.push_str(&format!(
-                    "  [{:?}] mode={mode:?} {} {} ({kind}) -> {label}\n",
-                    mb.info.id, mb.info.input, mb.info.path_filter
+                    "  [{:?}] mode={:?} {} {} ({kind}) -> {}\n",
+                    binding.id, binding.mode, binding.input, binding.path_filter, binding.label
                 ));
             }
         }

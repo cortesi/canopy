@@ -2840,7 +2840,7 @@ fn host_send_key<'s>(
     with_current_canopy(scope, |canopy, _| {
         let key = key::Key::parse_spec(&key_spec).map_err(error::Error::Script)?;
         let _reentrant = ReentrantCanopyGuard::push(canopy);
-        canopy.key_in_script_scope(scope, key)
+        canopy.key(Some(scope), key)
     })
     .map_err(|err| canopy_to_host(&err))?;
     Ok(ret_none())
@@ -2857,8 +2857,8 @@ fn host_send_click<'s>(
     with_current_canopy(scope, |canopy, _| {
         let location = point_from_coords(x, y)?;
         let _reentrant = ReentrantCanopyGuard::push(canopy);
-        canopy.mouse_in_script_scope(
-            scope,
+        canopy.mouse(
+            Some(scope),
             mouse::MouseEvent {
                 action: mouse::Action::Down,
                 button: mouse::Button::Left,
@@ -2866,8 +2866,8 @@ fn host_send_click<'s>(
                 location,
             },
         )?;
-        canopy.mouse_in_script_scope(
-            scope,
+        canopy.mouse(
+            Some(scope),
             mouse::MouseEvent {
                 action: mouse::Action::Up,
                 button: mouse::Button::Left,
@@ -2900,8 +2900,8 @@ fn host_send_scroll<'s>(
             )));
         };
         let _reentrant = ReentrantCanopyGuard::push(canopy);
-        canopy.mouse_in_script_scope(
-            scope,
+        canopy.mouse(
+            Some(scope),
             mouse::MouseEvent {
                 action,
                 button: mouse::Button::None,

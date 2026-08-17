@@ -244,7 +244,7 @@ Independent, low-risk, mostly deletions. Do these first.
   use `Error::Internal` there). `preorder()` can return `impl Iterator<Item = NodeId> + '_` and stop
   exporting `Preorder`. About −150 lines.
 
-- [ ] **1.7 Routing twins.** `canopy/routing.rs`: `route_input` wraps
+- [x] **1.7 Routing twins.** `canopy/routing.rs`: `route_input` wraps
   `route_input_with_scope(.., None)`; `mouse`/`mouse_in_script_scope` and `key`/`key_in_script_scope`
   are pairs; `dispatch_focus_event` and both repeat the "focus_first if none, then focus-or-root"
   prologue. Use `key(scope: Option<&Scope>, ..)`, `mouse(scope, ..)`, one `route_input(.., scope)`,

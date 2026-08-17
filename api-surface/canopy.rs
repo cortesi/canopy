@@ -4750,6 +4750,8 @@ pub mod canopy {
         /// A binding in the help snapshot.
         #[derive(Debug, Clone)]
         pub struct HelpBinding<'a> {
+            /// Identifier of the matched binding.
+            pub id: crate::core::inputmap::BindingId,
             /// The input (key or mouse) that triggers this binding.
             pub input: crate::core::inputmap::InputSpec,
             /// The mode this binding belongs to.

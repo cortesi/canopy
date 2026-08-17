@@ -124,13 +124,13 @@ impl Harness {
     where
         T: Into<key::Key>,
     {
-        self.canopy.key(k)?;
+        self.canopy.key(None, k)?;
         self.canopy.render(&mut self.backend)
     }
 
     /// Send a mouse event and render.
     pub fn mouse(&mut self, m: mouse::MouseEvent) -> Result<()> {
-        self.canopy.mouse(m)?;
+        self.canopy.mouse(None, m)?;
         self.canopy.render(&mut self.backend)
     }
 

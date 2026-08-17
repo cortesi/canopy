@@ -103,17 +103,9 @@ impl Canopy {
     }
 
     /// Propagate a key or mouse event through one bubbling route.
+    ///
+    /// `scope` carries an active script scope so Luau bindings run inside it.
     fn route_input(
-        &mut self,
-        start: Option<NodeId>,
-        path: Path,
-        input: RoutedInput,
-    ) -> Result<bool> {
-        self.route_input_with_scope(start, path, input, None)
-    }
-
-    /// Propagate input while preserving an active script scope for Luau bindings.
-    fn route_input_with_scope(
         &mut self,
         start: Option<NodeId>,
         mut path: Path,
@@ -231,24 +223,11 @@ impl Canopy {
     }
 
     /// Propagate a mouse event through the node under the event and all its ancestors.
-    pub(crate) fn mouse(&mut self, m: mouse::MouseEvent) -> Result<()> {
+    ///
+    /// `scope` carries an active script scope for a script-originated event.
+    pub(crate) fn mouse(&mut self, scope: Option<&Scope<'_>>, m: mouse::MouseEvent) -> Result<()> {
         let (target, path) = self.mouse_route_start(m.location)?;
-        let changed = self.route_input(target, path, RoutedInput::Mouse(m))?;
-        if changed {
-            self.render_pending = true;
-        }
-        Ok(())
-    }
-
-    /// Propagate a script-originated mouse event through the current live scope.
-    pub(crate) fn mouse_in_script_scope(
-        &mut self,
-        scope: &Scope<'_>,
-        m: mouse::MouseEvent,
-    ) -> Result<()> {
-        let (target, path) = self.mouse_route_start(m.location)?;
-        let changed =
-            self.route_input_with_scope(target, path, RoutedInput::Mouse(m), Some(scope))?;
+        let changed = self.route_input(target, path, RoutedInput::Mouse(m), scope)?;
         if changed {
             self.render_pending = true;
         }
@@ -256,18 +235,15 @@ impl Canopy {
     }
 
     /// Propagate a key event through the focus and all its ancestors.
-    pub(crate) fn key<T>(&mut self, tk: T) -> Result<()>
+    ///
+    /// `scope` carries an active script scope for a script-originated event.
+    pub(crate) fn key<T>(&mut self, scope: Option<&Scope<'_>>, tk: T) -> Result<()>
     where
         T: Into<key::Key>,
     {
-        let key = tk.into();
-        if self.core.focus.is_none() {
-            self.core.focus_first(self.core.root)?;
-        }
-
-        let start = self.core.focus.unwrap_or(self.core.root);
+        let start = self.focus_or_root()?;
         let path = self.core.node_path(self.core.root, start);
-        let changed = self.route_input(Some(start), path, RoutedInput::Key(key))?;
+        let changed = self.route_input(Some(start), path, RoutedInput::Key(tk.into()), scope)?;
         if changed {
             self.render_pending = true;
         }
@@ -275,34 +251,17 @@ impl Canopy {
         Ok(())
     }
 
-    /// Propagate a script-originated key event through the current live scope.
-    pub(crate) fn key_in_script_scope<T>(&mut self, scope: &Scope<'_>, tk: T) -> Result<()>
-    where
-        T: Into<key::Key>,
-    {
-        let key = tk.into();
+    /// Return the focused node, focusing the first candidate when nothing holds focus.
+    fn focus_or_root(&mut self) -> Result<NodeId> {
         if self.core.focus.is_none() {
             self.core.focus_first(self.core.root)?;
         }
-
-        let start = self.core.focus.unwrap_or(self.core.root);
-        let path = self.core.node_path(self.core.root, start);
-        let changed =
-            self.route_input_with_scope(Some(start), path, RoutedInput::Key(key), Some(scope))?;
-        if changed {
-            self.render_pending = true;
-        }
-
-        Ok(())
+        Ok(self.core.focus.unwrap_or(self.core.root))
     }
 
     /// Dispatch a focus-related event to the focused node, bubbling as needed.
     fn dispatch_focus_event(&mut self, event: &Event) -> Result<()> {
-        if self.core.focus.is_none() {
-            self.core.focus_first(self.core.root)?;
-        }
-
-        let start = self.core.focus.unwrap_or(self.core.root);
+        let start = self.focus_or_root()?;
         self.core.dispatch_event(start, event)?;
         Ok(())
     }
@@ -346,8 +305,8 @@ impl Canopy {
     /// Propagate an event through the tree.
     pub(crate) fn event(&mut self, e: Event) -> Result<()> {
         match e {
-            Event::Key(k) => self.key(k),
-            Event::Mouse(m) => self.mouse(m),
+            Event::Key(k) => self.key(None, k),
+            Event::Mouse(m) => self.mouse(None, m),
             Event::Resize(s) => {
                 self.render_pending = true;
                 self.set_root_size(s)

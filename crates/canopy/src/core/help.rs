@@ -8,7 +8,7 @@ use crate::{
     commands::{CommandResolution, CommandSet, CommandSpec},
     core::{
         NodeId,
-        inputmap::{BindingTarget, InputSpec},
+        inputmap::{BindingId, BindingTarget, InputSpec},
     },
     path::Path,
     script::{LuauFunctionId, ScriptId},
@@ -26,6 +26,8 @@ pub enum BindingKind {
 /// A binding in the help snapshot.
 #[derive(Debug, Clone)]
 pub struct HelpBinding<'a> {
+    /// Identifier of the matched binding.
+    pub id: BindingId,
     /// The input (key or mouse) that triggers this binding.
     pub input: InputSpec,
     /// The mode this binding belongs to.
