@@ -3119,7 +3119,7 @@ fn host_unbind_key<'s>(
         let mode = (!options.mode.is_empty()).then_some(options.mode.as_str());
         let path = (!options.path.is_empty()).then_some(options.path.as_str());
         let key = key::Key::parse_spec(&key_spec).map_err(error::Error::Script)?;
-        let _ = canopy.unbind_key_input(key, mode, path);
+        let _ = canopy.unbind_input(inputmap::InputSpec::Key(key), mode, path);
         Ok(())
     })
     .map_err(|err| canopy_to_host(&err))?;

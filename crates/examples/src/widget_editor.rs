@@ -69,6 +69,6 @@ impl Loader for WidgetEditor {
 
 /// Install key bindings for the widget editor example.
 pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
-    cnpy.run_default_script(DEFAULT_BINDINGS)?;
+    cnpy.eval_script(DEFAULT_BINDINGS)?;
     Ok(())
 }

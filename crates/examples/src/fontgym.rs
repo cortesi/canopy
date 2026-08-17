@@ -1128,7 +1128,7 @@ fn status_text(height: u32, state: FontStyleState) -> String {
 
 /// Install key bindings for focus navigation.
 pub fn setup_bindings(c: &mut Canopy) -> Result<()> {
-    c.run_default_script(
+    c.eval_script(
         r#"
 canopy.bind_with("Tab", { desc = "Next focus" }, function()
     root.focus("Next")

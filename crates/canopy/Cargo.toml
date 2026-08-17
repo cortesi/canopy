@@ -15,7 +15,6 @@ thiserror.workspace = true
 scopeguard = "1.2.0"
 convert_case.workspace = true
 termcolor = "1.4.1"
-comfy-table = "7.2.2"
 color-backtrace = "0.7.2"
 tracing = "0.1.44"
 canopy-derive = { path = "../canopy-derive" }

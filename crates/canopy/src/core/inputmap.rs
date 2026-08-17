@@ -420,7 +420,8 @@ impl InputMap {
     }
 
     /// Return active non-default modes from oldest to newest.
-    pub fn mode_stack(&self) -> &[String] {
+    #[cfg(test)]
+    pub(crate) fn mode_stack(&self) -> &[String] {
         &self.mode_stack
     }
 
@@ -643,14 +644,6 @@ impl InputMap {
             }
         }
         out
-    }
-
-    /// Return all bindings defined for a mode.
-    pub fn bindings_for_mode(&self, mode: &str) -> Vec<BindingInfo<'_>> {
-        self.modes
-            .get(mode)
-            .map(|m| m.bindings())
-            .unwrap_or_default()
     }
 
     /// Return bindings in a mode that match a specific path.

@@ -44,20 +44,6 @@ impl ScriptModuleRoots {
         self.project.as_deref()
     }
 
-    /// Return this root set with `@user` mounted at `root`.
-    #[must_use]
-    pub fn with_user_root(mut self, root: impl Into<PathBuf>) -> Self {
-        self.user = Some(root.into());
-        self
-    }
-
-    /// Return this root set with `@project` mounted at `root`.
-    #[must_use]
-    pub fn with_project_root(mut self, root: impl Into<PathBuf>) -> Self {
-        self.project = Some(root.into());
-        self
-    }
-
     /// Mount `@user` at `root`.
     pub fn set_user_root(&mut self, root: impl Into<PathBuf>) {
         self.user = Some(root.into());
@@ -66,16 +52,6 @@ impl ScriptModuleRoots {
     /// Mount `@project` at `root`.
     pub fn set_project_root(&mut self, root: impl Into<PathBuf>) {
         self.project = Some(root.into());
-    }
-
-    /// Remove the `@user` mount.
-    pub fn clear_user_root(&mut self) {
-        self.user = None;
-    }
-
-    /// Remove the `@project` mount.
-    pub fn clear_project_root(&mut self) {
-        self.project = None;
     }
 
     /// Locate the nearest `.canopy` directory at or above `start`.
@@ -200,9 +176,9 @@ mod tests {
         let project_file = project.join("nested/init.luau");
         write(&user_file, "return {}");
         write(&project_file, "return {}");
-        let roots = ScriptModuleRoots::new()
-            .with_user_root(&user)
-            .with_project_root(&project);
+        let mut roots = ScriptModuleRoots::new();
+        roots.set_user_root(&user);
+        roots.set_project_root(&project);
         let source = roots
             .module_source()
             .expect("mounts build")
@@ -222,8 +198,9 @@ mod tests {
     #[test]
     fn composite_source_requires_explicit_roots_for_root_imports() {
         let user = fixture_root("explicit");
-        let source = ScriptModuleRoots::new()
-            .with_user_root(&user)
+        let mut roots = ScriptModuleRoots::new();
+        roots.set_user_root(&user);
+        let source = roots
             .module_source()
             .expect("mounts build")
             .expect("source");

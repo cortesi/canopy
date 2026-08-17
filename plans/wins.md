@@ -195,7 +195,7 @@ Independent, low-risk, mostly deletions. Do these first.
   `Context` 48→43 trait methods, `ViewContext` 32→31 (`canvas`; the `dyn` helpers are not
   trait methods; item 1.1 removes `focus_path` for 30).
 
-- [ ] **1.4 Prune the `Canopy` facade.** Delete zero-caller methods: `print_command_table`
+- [x] **1.4 Prune the `Canopy` facade.** Delete zero-caller methods: `print_command_table`
   (sole user of `comfy-table`; also delete `CommandSpec::signature`, used only there and in one
   assert), `run_default_script` (pure alias of `eval_script`; rename its 20 callers),
   `unbind_mouse_input` (zero callers), `discover_project_script_root_from`,
@@ -211,8 +211,9 @@ Independent, low-risk, mostly deletions. Do these first.
   `clear_project_root`: `Canopy` exposes only `&ScriptModuleRoots`, so no app can reach them;
   rewrite the two `modules.rs` tests that use `with_*` to call `set_user_root`/`set_project_root`.
   Replace the three inline "sealed after finalize" checks at
-  `canopy/mod.rs:750-754, 785-789, 1073-1077` with `ensure_api_unfinalized(..)`. Make
-  `ScriptJournalBaseline` and `DefaultBindingsRun` `pub(crate)`. Fix the stray doc line at
+  `canopy/mod.rs:750-754, 785-789, 1073-1077` with `ensure_api_unfinalized(..)`. `ScriptJournalBaseline` and `DefaultBindingsRun` need no visibility change: they live in a
+  private module and are not re-exported, so they are already crate-internal, and
+  `clippy::redundant_pub_crate` rejects the `pub(crate)` spelling there. Fix the stray doc line at
   `canopy/mod.rs:1682` ("Validate a child view position..." on `Loader`). About −150 lines.
 
 - [ ] **1.5 One journaled script-eval path.** `eval_script`, `eval_script_value`, and

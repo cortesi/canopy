@@ -6,14 +6,12 @@
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     fs,
-    io::Write,
     path::{Path as FsPath, PathBuf},
     sync::{Arc, mpsc},
     thread::{self, ThreadId},
     time::{Duration, Instant},
 };
 
-use comfy_table::{ContentArrangement, Table, presets::UTF8_FULL};
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender, unbounded};
 use ruau::{
     source::{SourceProvider, fs::DirectoryMountsError},
@@ -41,7 +39,7 @@ use crate::{
         help,
     },
     error::{self, Result},
-    event::{Event, key, mouse},
+    event::Event,
     geom::Size,
     path::Path,
     script,
@@ -509,16 +507,6 @@ impl Canopy {
         result
     }
 
-    /// Evaluate the app's built-in default bindings script.
-    pub fn run_default_script(&mut self, source: &str) -> Result<()> {
-        self.eval_script(source)
-    }
-
-    /// Return the configured persistent script module roots.
-    pub fn script_module_roots(&self) -> &script::ScriptModuleRoots {
-        &self.script_module_roots
-    }
-
     /// Configure the `@user` persistent script root.
     pub fn set_user_script_root(&mut self, root: impl Into<PathBuf>) -> Result<()> {
         self.ensure_api_unfinalized("script module roots")?;
@@ -533,50 +521,19 @@ impl Canopy {
         Ok(())
     }
 
-    /// Discover and configure the nearest `.canopy` project script root.
-    pub fn discover_project_script_root_from(&mut self, start: impl AsRef<FsPath>) -> Result<bool> {
-        self.ensure_api_unfinalized("script module roots")?;
-        let Some(root) = script::ScriptModuleRoots::discover_project_root(start) else {
-            return Ok(false);
-        };
-        self.script_module_roots.set_project_root(root);
-        Ok(true)
-    }
-
     /// Invalidate cached exports from persistent script modules.
-    pub fn invalidate_script_modules(&mut self) -> Option<u64> {
-        let epoch = self
-            .script_module_source
-            .as_ref()
-            .map(|source| source.invalidate_all());
-        if epoch.is_some() {
-            self.clear_script_callbacks();
-        }
-        epoch
-    }
-
-    /// Invalidate cached exports from the `@user` persistent script root.
-    pub fn invalidate_user_script_modules(&mut self) -> Option<u64> {
-        let epoch = self
-            .script_module_source
-            .as_ref()
-            .and_then(|source| source.invalidate("@user").ok());
-        if epoch.is_some() {
-            self.clear_script_callbacks();
-        }
-        epoch
-    }
-
-    /// Invalidate cached exports from the `@project` persistent script root.
-    pub fn invalidate_project_script_modules(&mut self) -> Option<u64> {
-        let epoch = self
-            .script_module_source
-            .as_ref()
-            .and_then(|source| source.invalidate("@project").ok());
-        if epoch.is_some() {
-            self.clear_script_callbacks();
-        }
-        epoch
+    ///
+    /// Pass a root such as `@user` or `@project` to invalidate one root, or `None` to
+    /// invalidate every root. Returns the new source epoch, or `None` when no module source
+    /// is configured or the named root is unknown.
+    pub fn invalidate_script_modules(&mut self, root: Option<&str>) -> Option<u64> {
+        let source = self.script_module_source.as_ref()?;
+        let epoch = match root {
+            Some(root) => source.invalidate(root).ok()?,
+            None => source.invalidate_all(),
+        };
+        self.clear_script_callbacks();
+        Some(epoch)
     }
 
     /// Register an audited Ruau native module on the same surface as Canopy commands.
@@ -747,11 +704,7 @@ impl Canopy {
 
     /// Register a Luau script as the default bindings for a widget namespace.
     pub fn register_default_bindings(&mut self, name: &str, script: &str) -> Result<()> {
-        if self.script_host.is_finalized() {
-            return Err(error::Error::InvalidOperation(
-                "default binding registration is sealed after finalize_api()".into(),
-            ));
-        }
+        self.ensure_api_unfinalized("default binding registration")?;
         if name.trim().is_empty() {
             return Err(error::Error::Invalid(
                 "default binding owner name cannot be empty".into(),
@@ -782,11 +735,7 @@ impl Canopy {
 
     /// Register a named fixture available to headless and live automation.
     pub fn register_fixture(&mut self, fixture: Fixture) -> Result<()> {
-        if self.script_host.is_finalized() {
-            return Err(error::Error::InvalidOperation(
-                "fixture registration is sealed after finalize_api()".into(),
-            ));
-        }
+        self.ensure_api_unfinalized("fixture registration")?;
         if fixture.name.trim().is_empty() {
             return Err(error::Error::Invalid("fixture name cannot be empty".into()));
         }
@@ -908,11 +857,6 @@ impl Canopy {
         self.enforce_script_journal_limit();
     }
 
-    /// Clear the in-memory script evaluation journal.
-    pub fn clear_script_journal(&mut self) {
-        self.script_journal.clear();
-    }
-
     /// Evaluate a Luau config file from disk.
     pub fn run_config(&mut self, path: &FsPath) -> Result<()> {
         let baseline = self.begin_script_journal();
@@ -962,37 +906,16 @@ impl Canopy {
         true
     }
 
-    /// Remove bindings for a key input, optionally filtered by mode and path.
-    pub fn unbind_key_input<K>(
+    /// Remove bindings for an input, optionally filtered by mode and path.
+    pub fn unbind_input(
         &mut self,
-        key: K,
+        input: inputmap::InputSpec,
         mode: Option<&str>,
         path_filter: Option<&str>,
-    ) -> usize
-    where
-        key::Key: From<K>,
-    {
-        let removed = self.keymap.unbind_input(
-            inputmap::InputSpec::Key(key.into()),
-            inputmap::BindingFilter { mode, path_filter },
-        );
-        self.release_removed_bindings(removed)
-    }
-
-    /// Remove bindings for a mouse input, optionally filtered by mode and path.
-    pub fn unbind_mouse_input<K>(
-        &mut self,
-        mouse: K,
-        mode: Option<&str>,
-        path_filter: Option<&str>,
-    ) -> usize
-    where
-        mouse::Mouse: From<K>,
-    {
-        let removed = self.keymap.unbind_input(
-            inputmap::InputSpec::Mouse(mouse.into()),
-            inputmap::BindingFilter { mode, path_filter },
-        );
+    ) -> usize {
+        let removed = self
+            .keymap
+            .unbind_input(input, inputmap::BindingFilter { mode, path_filter });
         self.release_removed_bindings(removed)
     }
 
@@ -1011,11 +934,6 @@ impl Canopy {
         }
     }
 
-    /// Return all bindings defined for a mode.
-    pub fn bindings_for_mode(&self, mode: &str) -> Vec<inputmap::BindingInfo<'_>> {
-        self.keymap.bindings_for_mode(mode)
-    }
-
     /// Return bindings in a mode that match a specific path.
     pub fn bindings_matching_path(
         &self,
@@ -1028,11 +946,6 @@ impl Canopy {
     /// Return the active input mode.
     pub fn input_mode(&self) -> &str {
         self.keymap.current_mode()
-    }
-
-    /// Return active non-default input modes from oldest to newest.
-    pub fn input_mode_stack(&self) -> &[String] {
-        self.keymap.mode_stack()
     }
 
     /// Set the active input mode.
@@ -1070,11 +983,7 @@ impl Canopy {
     /// Load the commands from a command node using the default node name.
     /// Returns an error if any command id is already registered.
     pub fn add_commands<T: commands::CommandNode>(&mut self) -> Result<()> {
-        if self.script_host.is_finalized() {
-            return Err(error::Error::InvalidOperation(
-                "command registration is sealed after finalize_api()".into(),
-            ));
-        }
+        self.ensure_api_unfinalized("command registration")?;
         let cmds = <T>::commands();
         self.core.commands.add(cmds)?;
         Ok(())
@@ -1402,34 +1311,6 @@ impl Canopy {
         Ok(ran)
     }
 
-    /// Output a formatted table of commands to a writer.
-    ///
-    /// If `include_hidden` is false, commands with `doc.hidden = true` are excluded.
-    pub fn print_command_table(&self, w: &mut dyn Write, include_hidden: bool) -> Result<()> {
-        let mut cmds: Vec<&commands::CommandSpec> = self
-            .core
-            .commands
-            .iter()
-            .map(|(_, v)| v)
-            .filter(|c| include_hidden || !c.doc.hidden)
-            .collect();
-
-        cmds.sort_by_key(|a| a.id.0);
-
-        let mut table = Table::new();
-        table.set_content_arrangement(ContentArrangement::Dynamic);
-        table.load_preset(UTF8_FULL);
-        for i in cmds {
-            let desc = i.doc.short.unwrap_or("");
-            table.add_row(vec![
-                comfy_table::Cell::new(i.id.0).fg(comfy_table::Color::Green),
-                comfy_table::Cell::new(i.signature()),
-                comfy_table::Cell::new(desc).fg(comfy_table::Color::Cyan),
-            ]);
-        }
-        writeln!(w, "{table}").map_err(|x| error::Error::Internal(x.to_string()))
-    }
-
     /// Return command availability from the current focus position.
     ///
     /// This computes which commands would resolve to a target if dispatched from the current
@@ -1679,7 +1560,6 @@ fn format_script_diagnostics(diagnostics: &[script::ScriptCheckDiagnostic]) -> S
         .join("\n")
 }
 
-/// Validate a child view position against the parent canvas bounds.
 /// A trait that allows widgets to perform recursive initialization of themselves and their
 /// children.
 pub trait Loader {

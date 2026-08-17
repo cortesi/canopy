@@ -1307,38 +1307,6 @@ impl CommandSpec {
             args: args.try_into_command_args()?,
         })
     }
-
-    /// Render a signature string for this command.
-    pub fn signature(&self) -> String {
-        let mut out = String::new();
-        out.push_str(self.id.0);
-        out.push('(');
-        for (idx, param) in self.params.iter().enumerate() {
-            if idx > 0 {
-                out.push_str(", ");
-            }
-            if param.kind == CommandParamKind::Injected {
-                out.push('@');
-            }
-            out.push_str(param.name);
-            if param.optional && param.default.is_none() {
-                out.push('?');
-            }
-            out.push_str(": ");
-            out.push_str(param.ty.rust);
-            if let Some(default) = param.default {
-                out.push_str(" = ");
-                out.push_str(default);
-            }
-        }
-        out.push(')');
-        out.push_str(" -> ");
-        match self.ret {
-            CommandReturnSpec::Unit => out.push_str("()"),
-            CommandReturnSpec::Value(ty) => out.push_str(ty.rust),
-        }
-        out
-    }
 }
 
 /// Builder for a command invocation.

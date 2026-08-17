@@ -431,33 +431,18 @@ pub mod canopy {
             ) -> Result<commands::ArgValue> {
             }
 
-            /// Evaluate the app's built-in default bindings script.
-            pub fn run_default_script(&mut self, source: &str) -> Result<()> {}
-
-            /// Return the configured persistent script module roots.
-            pub fn script_module_roots(&self) -> &script::ScriptModuleRoots {}
-
             /// Configure the `@user` persistent script root.
             pub fn set_user_script_root(&mut self, root: impl Into<PathBuf>) -> Result<()> {}
 
             /// Configure the `@project` persistent script root.
             pub fn set_project_script_root(&mut self, root: impl Into<PathBuf>) -> Result<()> {}
 
-            /// Discover and configure the nearest `.canopy` project script root.
-            pub fn discover_project_script_root_from(
-                &mut self,
-                start: impl AsRef<FsPath>,
-            ) -> Result<bool> {
-            }
-
             /// Invalidate cached exports from persistent script modules.
-            pub fn invalidate_script_modules(&mut self) -> Option<u64> {}
-
-            /// Invalidate cached exports from the `@user` persistent script root.
-            pub fn invalidate_user_script_modules(&mut self) -> Option<u64> {}
-
-            /// Invalidate cached exports from the `@project` persistent script root.
-            pub fn invalidate_project_script_modules(&mut self) -> Option<u64> {}
+            ///
+            /// Pass a root such as `@user` or `@project` to invalidate one root, or `None` to
+            /// invalidate every root. Returns the new source epoch, or `None` when no module source
+            /// is configured or the named root is unknown.
+            pub fn invalidate_script_modules(&mut self, root: Option<&str>) -> Option<u64> {}
 
             /// Register an audited Ruau native module on the same surface as Canopy commands.
             pub fn register_script_module(&mut self, module: Arc<dyn NativeModule>) -> Result<()> {}
@@ -536,42 +521,23 @@ pub mod canopy {
             /// limit of zero disables retention entirely.
             pub fn set_script_journal_limit(&mut self, limit: usize) {}
 
-            /// Clear the in-memory script evaluation journal.
-            pub fn clear_script_journal(&mut self) {}
-
             /// Evaluate a Luau config file from disk.
             pub fn run_config(&mut self, path: &FsPath) -> Result<()> {}
 
             /// Remove a binding by ID. Returns true if a binding was removed.
             pub fn unbind(&mut self, id: inputmap::BindingId) -> bool {}
 
-            /// Remove bindings for a key input, optionally filtered by mode and path.
-            pub fn unbind_key_input<K>(
+            /// Remove bindings for an input, optionally filtered by mode and path.
+            pub fn unbind_input(
                 &mut self,
-                key: K,
+                input: inputmap::InputSpec,
                 mode: Option<&str>,
                 path_filter: Option<&str>,
-            ) -> usize
-            where
-                key::Key: From<K>, {
-            }
-
-            /// Remove bindings for a mouse input, optionally filtered by mode and path.
-            pub fn unbind_mouse_input<K>(
-                &mut self,
-                mouse: K,
-                mode: Option<&str>,
-                path_filter: Option<&str>,
-            ) -> usize
-            where
-                mouse::Mouse: From<K>, {
+            ) -> usize {
             }
 
             /// Remove all bindings from all modes.
             pub fn clear_bindings(&mut self) -> usize {}
-
-            /// Return all bindings defined for a mode.
-            pub fn bindings_for_mode(&self, mode: &str) -> Vec<inputmap::BindingInfo<'_>> {}
 
             /// Return bindings in a mode that match a specific path.
             pub fn bindings_matching_path(
@@ -583,9 +549,6 @@ pub mod canopy {
 
             /// Return the active input mode.
             pub fn input_mode(&self) -> &str {}
-
-            /// Return active non-default input modes from oldest to newest.
-            pub fn input_mode_stack(&self) -> &[String] {}
 
             /// Set the active input mode.
             pub fn set_input_mode(&mut self, mode: &str) -> Result<()> {}
@@ -621,16 +584,6 @@ pub mod canopy {
 
             /// Return the rendered Luau definition file for a ready app.
             pub fn script_api(&self) -> Result<&str> {}
-
-            /// Output a formatted table of commands to a writer.
-            ///
-            /// If `include_hidden` is false, commands with `doc.hidden = true` are excluded.
-            pub fn print_command_table(
-                &self,
-                w: &mut dyn Write,
-                include_hidden: bool,
-            ) -> Result<()> {
-            }
 
             /// Return command availability from the current focus position.
             ///
@@ -895,7 +848,6 @@ pub mod canopy {
             Node(super::id::NodeId),
         }
 
-        /// Validate a child view position against the parent canvas bounds.
         /// A trait that allows widgets to perform recursive initialization of themselves and their
         /// children.
         pub trait Loader {
@@ -2487,33 +2439,18 @@ pub mod canopy {
         ) -> Result<commands::ArgValue> {
         }
 
-        /// Evaluate the app's built-in default bindings script.
-        pub fn run_default_script(&mut self, source: &str) -> Result<()> {}
-
-        /// Return the configured persistent script module roots.
-        pub fn script_module_roots(&self) -> &script::ScriptModuleRoots {}
-
         /// Configure the `@user` persistent script root.
         pub fn set_user_script_root(&mut self, root: impl Into<PathBuf>) -> Result<()> {}
 
         /// Configure the `@project` persistent script root.
         pub fn set_project_script_root(&mut self, root: impl Into<PathBuf>) -> Result<()> {}
 
-        /// Discover and configure the nearest `.canopy` project script root.
-        pub fn discover_project_script_root_from(
-            &mut self,
-            start: impl AsRef<FsPath>,
-        ) -> Result<bool> {
-        }
-
         /// Invalidate cached exports from persistent script modules.
-        pub fn invalidate_script_modules(&mut self) -> Option<u64> {}
-
-        /// Invalidate cached exports from the `@user` persistent script root.
-        pub fn invalidate_user_script_modules(&mut self) -> Option<u64> {}
-
-        /// Invalidate cached exports from the `@project` persistent script root.
-        pub fn invalidate_project_script_modules(&mut self) -> Option<u64> {}
+        ///
+        /// Pass a root such as `@user` or `@project` to invalidate one root, or `None` to
+        /// invalidate every root. Returns the new source epoch, or `None` when no module source
+        /// is configured or the named root is unknown.
+        pub fn invalidate_script_modules(&mut self, root: Option<&str>) -> Option<u64> {}
 
         /// Register an audited Ruau native module on the same surface as Canopy commands.
         pub fn register_script_module(&mut self, module: Arc<dyn NativeModule>) -> Result<()> {}
@@ -2592,42 +2529,23 @@ pub mod canopy {
         /// limit of zero disables retention entirely.
         pub fn set_script_journal_limit(&mut self, limit: usize) {}
 
-        /// Clear the in-memory script evaluation journal.
-        pub fn clear_script_journal(&mut self) {}
-
         /// Evaluate a Luau config file from disk.
         pub fn run_config(&mut self, path: &FsPath) -> Result<()> {}
 
         /// Remove a binding by ID. Returns true if a binding was removed.
         pub fn unbind(&mut self, id: inputmap::BindingId) -> bool {}
 
-        /// Remove bindings for a key input, optionally filtered by mode and path.
-        pub fn unbind_key_input<K>(
+        /// Remove bindings for an input, optionally filtered by mode and path.
+        pub fn unbind_input(
             &mut self,
-            key: K,
+            input: inputmap::InputSpec,
             mode: Option<&str>,
             path_filter: Option<&str>,
-        ) -> usize
-        where
-            key::Key: From<K>, {
-        }
-
-        /// Remove bindings for a mouse input, optionally filtered by mode and path.
-        pub fn unbind_mouse_input<K>(
-            &mut self,
-            mouse: K,
-            mode: Option<&str>,
-            path_filter: Option<&str>,
-        ) -> usize
-        where
-            mouse::Mouse: From<K>, {
+        ) -> usize {
         }
 
         /// Remove all bindings from all modes.
         pub fn clear_bindings(&mut self) -> usize {}
-
-        /// Return all bindings defined for a mode.
-        pub fn bindings_for_mode(&self, mode: &str) -> Vec<inputmap::BindingInfo<'_>> {}
 
         /// Return bindings in a mode that match a specific path.
         pub fn bindings_matching_path(
@@ -2639,9 +2557,6 @@ pub mod canopy {
 
         /// Return the active input mode.
         pub fn input_mode(&self) -> &str {}
-
-        /// Return active non-default input modes from oldest to newest.
-        pub fn input_mode_stack(&self) -> &[String] {}
 
         /// Set the active input mode.
         pub fn set_input_mode(&mut self, mode: &str) -> Result<()> {}
@@ -2677,11 +2592,6 @@ pub mod canopy {
 
         /// Return the rendered Luau definition file for a ready app.
         pub fn script_api(&self) -> Result<&str> {}
-
-        /// Output a formatted table of commands to a writer.
-        ///
-        /// If `include_hidden` is false, commands with `doc.hidden = true` are excluded.
-        pub fn print_command_table(&self, w: &mut dyn Write, include_hidden: bool) -> Result<()> {}
 
         /// Return command availability from the current focus position.
         ///
@@ -3047,7 +2957,6 @@ pub mod canopy {
         }
     }
 
-    /// Validate a child view position against the parent canvas bounds.
     /// A trait that allows widgets to perform recursive initialization of themselves and their
     /// children.
     pub trait Loader {
@@ -3245,23 +3154,11 @@ pub mod canopy {
         /// Return the configured `@project` root.
         pub fn project_root(&self) -> Option<&Path> {}
 
-        /// Return this root set with `@user` mounted at `root`.
-        pub fn with_user_root(self, root: impl Into<PathBuf>) -> Self {}
-
-        /// Return this root set with `@project` mounted at `root`.
-        pub fn with_project_root(self, root: impl Into<PathBuf>) -> Self {}
-
         /// Mount `@user` at `root`.
         pub fn set_user_root(&mut self, root: impl Into<PathBuf>) {}
 
         /// Mount `@project` at `root`.
         pub fn set_project_root(&mut self, root: impl Into<PathBuf>) {}
-
-        /// Remove the `@user` mount.
-        pub fn clear_user_root(&mut self) {}
-
-        /// Remove the `@project` mount.
-        pub fn clear_project_root(&mut self) {}
 
         /// Locate the nearest `.canopy` directory at or above `start`.
         pub fn discover_project_root(start: impl AsRef<Path>) -> Option<PathBuf> {}
@@ -3797,9 +3694,6 @@ pub mod canopy {
                 args: impl TryIntoCommandArgs,
             ) -> Result<CommandCall, CommandError> {
             }
-
-            /// Render a signature string for this command.
-            pub fn signature(&self) -> String {}
         }
 
         impl From<&'static CommandSpec> for CommandInvocation {
@@ -5281,23 +5175,11 @@ pub mod canopy {
             /// Return the configured `@project` root.
             pub fn project_root(&self) -> Option<&Path> {}
 
-            /// Return this root set with `@user` mounted at `root`.
-            pub fn with_user_root(self, root: impl Into<PathBuf>) -> Self {}
-
-            /// Return this root set with `@project` mounted at `root`.
-            pub fn with_project_root(self, root: impl Into<PathBuf>) -> Self {}
-
             /// Mount `@user` at `root`.
             pub fn set_user_root(&mut self, root: impl Into<PathBuf>) {}
 
             /// Mount `@project` at `root`.
             pub fn set_project_root(&mut self, root: impl Into<PathBuf>) {}
-
-            /// Remove the `@user` mount.
-            pub fn clear_user_root(&mut self) {}
-
-            /// Remove the `@project` mount.
-            pub fn clear_project_root(&mut self) {}
 
             /// Locate the nearest `.canopy` directory at or above `start`.
             pub fn discover_project_root(start: impl AsRef<Path>) -> Option<PathBuf> {}

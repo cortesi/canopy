@@ -315,7 +315,7 @@ fn file_title(path: &Path) -> String {
 
 /// Register keybindings for image zooming and panning.
 fn setup_image_bindings(cnpy: &mut Canopy) -> Result<()> {
-    cnpy.run_default_script(
+    cnpy.eval_script(
         r#"
 canopy.bind_with("q", { desc = "Quit" }, function()
     root.quit()
@@ -357,7 +357,7 @@ end)
 
 /// Register keybindings for the terminal demo.
 fn setup_term_bindings(cnpy: &mut Canopy) -> Result<()> {
-    cnpy.run_default_script(
+    cnpy.eval_script(
         r#"
 canopy.bind_with("ctrl-Tab", { path = "term_demo/**/", desc = "Next tab" }, function()
     term_demo.next_tab()

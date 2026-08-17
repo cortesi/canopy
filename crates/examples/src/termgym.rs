@@ -490,6 +490,6 @@ pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
         )
         .apply();
 
-    cnpy.run_default_script(DEFAULT_BINDINGS)?;
+    cnpy.eval_script(DEFAULT_BINDINGS)?;
     Ok(())
 }

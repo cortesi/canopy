@@ -285,5 +285,5 @@ impl Loader for FocusGym {
 
 /// Install key bindings for the focus gym demo.
 pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
-    cnpy.run_default_script(DEFAULT_BINDINGS)
+    cnpy.eval_script(DEFAULT_BINDINGS)
 }

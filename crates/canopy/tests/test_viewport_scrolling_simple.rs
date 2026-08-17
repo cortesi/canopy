@@ -74,7 +74,7 @@ mod tests {
     #[test]
     fn test_scroll_behavior() -> Result<()> {
         let mut harness = Harness::builder(ScrollTest::new()).size(30, 10).build()?;
-        harness.canopy.run_default_script(
+        harness.canopy.eval_script(
             r#"
 canopy.bind_with("Down", { desc = "Scroll down" }, function()
     scroll_test.scroll_down()

@@ -27,7 +27,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     Root::load(&mut cnpy)?;
     TextGym::load(&mut cnpy)?;
 
-    cnpy.run_default_script(
+    cnpy.eval_script(
         r#"
 canopy.bind_with("q", { path = "root", desc = "Quit" }, function()
     root.quit()

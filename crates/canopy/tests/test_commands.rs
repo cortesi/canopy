@@ -216,7 +216,7 @@ mod tests {
 
         let cmd_a = Foo::cmd_a();
         assert_eq!(cmd_a.id.0, "foo::a");
-        assert_eq!(cmd_a.signature(), "foo::a() -> ()");
+        assert!(cmd_a.params.is_empty());
 
         Ok(())
     }

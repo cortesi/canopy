@@ -552,7 +552,7 @@ pub fn setup_app_with_config(cnpy: &mut Canopy, config: Option<&Path>) -> Result
     style(cnpy);
     register_fixtures(cnpy)?;
     cnpy.finalize_api()?;
-    cnpy.run_default_script(DEFAULT_BINDINGS)?;
+    cnpy.eval_script(DEFAULT_BINDINGS)?;
     if let Some(config) = config {
         cnpy.run_config(config)?;
     }

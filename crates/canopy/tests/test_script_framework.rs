@@ -731,7 +731,7 @@ mod tests {
         );
 
         write_script(&project_root.join("lib.luau"), "return { value = 45 }");
-        assert!(canopy.invalidate_project_script_modules().is_some());
+        assert!(canopy.invalidate_script_modules(Some("@project")).is_some());
         canopy.eval_script(r#"canopy.send_key("x")"#)?;
         assert_eq!(
             canopy.eval_script_value("return api_leaf.get()")?,

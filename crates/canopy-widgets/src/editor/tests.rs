@@ -427,7 +427,7 @@ fn binding_precedence_blocks_text_entry() {
     let mut harness = build_harness("", config, 10, 1);
     harness
         .canopy
-        .run_default_script(
+        .eval_script(
             r#"
 canopy.bind_with("x", { path = "editor", desc = "Cursor left" }, function()
     editor.cursor("Left")
@@ -515,7 +515,7 @@ fn root_binding_does_not_override_text_entry() {
     let mut harness = build_harness("", config, 6, 1);
     harness
         .canopy
-        .run_default_script(
+        .eval_script(
             r#"
 canopy.bind_with("q", { path = "editor_host", desc = "Record binding" }, function()
     editor_host.record_binding()
