@@ -54,5 +54,7 @@ All interface operations are defined cleanly as traversals of this node tree.
 
 # Documentation
 
-- [Guide](https://cortesi.github.io/canopy/book)
-- [API](https://cortesi.github.io/canopy/book/doc/canopy/index.html)
+- [Architecture](./docs/architecture.md)
+- [Scripting](./docs/scripting.md)
+- [Agent loop](./docs/agent-loop.md)
+- [Fixtures](./docs/fixtures.md)

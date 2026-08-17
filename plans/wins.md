@@ -39,7 +39,7 @@ for `testing/...` paths in Stage 6. `world/tests.rs` means `crates/canopy/src/co
 
 Independent, low-risk, mostly deletions. Do these first.
 
-- [ ] **0.1 Delete stale artifacts.** `GEMINI.md` (superseded by `AGENTS.md` and the nano
+- [x] **0.1 Delete stale artifacts.** `GEMINI.md` (superseded by `AGENTS.md` and the nano
   skills; zero references), `TODO.md` (last touched July 2025; lists shipped features as todo),
   `demos/*.rhai` (Rhai recorder scripts; the recorder now uses Luau; keep `demos/*.gif`),
   `crates/canopy/Cargo.lock` (nested lockfile inside a workspace member; Cargo ignores it),
