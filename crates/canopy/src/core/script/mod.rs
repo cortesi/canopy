@@ -765,20 +765,13 @@ fn with_current_canopy<R>(
     })
 }
 
-/// Script-side opaque handle for a canopy node.
-#[derive(Clone, Copy, Debug)]
-struct NodeHandle {
-    /// Backing arena id.
-    id: NodeId,
-}
-
 /// Build the host userdata descriptor for `NodeId` handles.
 fn node_handle_type() -> HostType {
-    HostTypeBuilder::<NodeHandle>::new("NodeId")
+    HostTypeBuilder::<NodeId>::new("NodeId")
         .class(&commands::declaration::Class::new("NodeId"))
-        .eq_by(|left, right| left.id == right.id)
+        .eq_by(|left, right| left == right)
         .marshal(node_handle_marshal)
-        .tostring(|handle| node_token(handle.id))
+        .tostring(|node_id| node_token(*node_id))
         .build()
 }
 
@@ -788,10 +781,10 @@ fn node_token(node_id: NodeId) -> String {
 }
 
 /// Marshal a node handle to the external automation token record.
-fn node_handle_marshal(handle: &NodeHandle) -> ValueSnapshot {
+fn node_handle_marshal(node_id: &NodeId) -> ValueSnapshot {
     ValueSnapshot::Table(vec![
         marshaled_string_pair("type", "NodeId"),
-        marshaled_string_pair("token", node_token(handle.id)),
+        marshaled_string_pair("token", node_token(*node_id)),
     ])
 }
 
@@ -814,7 +807,7 @@ fn node_id_from_value<'s>(
     value: ScopedValue<'s>,
 ) -> StdResult<NodeId, RuntimeError> {
     match value {
-        ScopedValue::Userdata(userdata) => Ok(userdata.borrow::<NodeHandle>(scope)?.id),
+        ScopedValue::Userdata(userdata) => Ok(*userdata.borrow::<NodeId>(scope)?),
         other => Err(RuntimeError::structured(
             format!("expected NodeId, got {}", other.type_name()),
             [
@@ -1011,8 +1004,8 @@ fn scoped_to_arg_value_at<'s>(
             }),
         ScopedValue::Table(table) => table_to_arg_value(scope, table, path),
         ScopedValue::Userdata(userdata) => userdata
-            .borrow::<NodeHandle>(scope)
-            .map(|handle| ArgValue::Node(handle.id))
+            .borrow::<NodeId>(scope)
+            .map(|node_id| ArgValue::Node(*node_id))
             .map_err(|_| path.error("expected NodeId userdata")),
         other => Err(path.error(format!(
             "unsupported script value type: {}",
@@ -1085,7 +1078,7 @@ fn arg_value_to_scoped<'s>(
         ArgValue::UInt(value) => ScopedValue::Number(*value as f64),
         ArgValue::Float(value) => ScopedValue::Number(*value),
         ArgValue::String(value) => ScopedValue::String(scope.create_string(value)?),
-        ArgValue::Node(id) => ScopedValue::Userdata(scope.create_userdata(NodeHandle { id: *id })?),
+        ArgValue::Node(id) => ScopedValue::Userdata(scope.create_userdata(*id)?),
         ArgValue::Array(values) => {
             let array = values
                 .iter()
@@ -4343,11 +4336,7 @@ mod tests {
 
             let node_id = NodeId::default();
             let nested_node = scope.create_table()?;
-            nested_node.set(
-                scope,
-                "target",
-                scope.create_userdata(NodeHandle { id: node_id })?,
-            )?;
+            nested_node.set(scope, "target", scope.create_userdata(node_id)?)?;
             assert_eq!(
                 scoped_to_arg_value(scope, ScopedValue::Table(nested_node)),
                 Ok(ArgValue::Map(BTreeMap::from([(
@@ -4447,8 +4436,7 @@ mod tests {
             let mut marshaled = None;
             runtime
                 .step(&CallOptions::new(), |scope| {
-                    let value =
-                        ScopedValue::Userdata(scope.create_userdata(NodeHandle { id: tree.a })?);
+                    let value = ScopedValue::Userdata(scope.create_userdata(tree.a)?);
                     marshaled = Some(scope.marshal(value)?);
                     Ok(())
                 })
@@ -4456,7 +4444,7 @@ mod tests {
 
             assert_eq!(
                 marshaled.expect("marshaled value"),
-                node_handle_marshal(&NodeHandle { id: tree.a })
+                node_handle_marshal(&tree.a)
             );
             Ok(())
         })
@@ -4474,7 +4462,7 @@ mod tests {
             let runtime = runtime_cell.as_mut().expect("finalized runtime");
             runtime
                 .step_with_context(c, &CallOptions::new(), |scope| {
-                    let handle = scope.create_userdata(NodeHandle { id: tree.a })?;
+                    let handle = scope.create_userdata(tree.a)?;
                     let values = MultiValue::from_values(vec![ScopedValue::Userdata(handle)]);
                     let error = ArgReader::new(values)
                         .node_id(scope)

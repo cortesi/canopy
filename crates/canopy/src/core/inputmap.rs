@@ -52,30 +52,10 @@ struct BoundAction {
     action: LuauFunctionId,
 }
 
-/// Binding match priority. Higher values win; later insertion wins exact ties.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-struct BindingPriority {
-    /// Count of literal path segments.
-    literals: usize,
-    /// Whether the match ends at the focused path terminus.
-    anchored_end: bool,
-    /// Number of path components matched.
-    depth: usize,
-    /// Insertion position for stable replacement on otherwise equal matches.
-    insertion_order: usize,
-}
-
-impl BindingPriority {
-    /// Build priority from path match metadata and insertion order.
-    fn new(path_match: PathMatch, insertion_order: usize) -> Self {
-        Self {
-            literals: path_match.literals,
-            anchored_end: path_match.anchored_end,
-            depth: path_match.depth,
-            insertion_order,
-        }
-    }
-}
+/// Binding match precedence: the path-match score, then insertion order.
+///
+/// Higher values win, so a later insertion wins an otherwise exact tie.
+type BindingPriority = ((usize, usize, usize), usize);
 
 /// Tuple storing a binding match and its score.
 type BindingCandidate = (BindingPriority, LuauFunctionId, PathMatch);
@@ -188,7 +168,7 @@ impl InputMode {
         let mut best: Option<BindingCandidate> = None;
         for (idx, k) in self.inputs.get(&input)?.iter().enumerate() {
             if let Some(m) = k.pathmatch.check_match(path) {
-                let score = BindingPriority::new(m, idx);
+                let score: BindingPriority = (m.score(), idx);
                 let replace = match best {
                     Some((best_score, _, _)) => score > best_score,
                     None => true,

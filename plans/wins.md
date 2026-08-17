@@ -513,7 +513,7 @@ Independent, low-risk, mostly deletions. Do these first.
   `tests/derive.rs:201-248` can be `Foo::default()`. (Item 3.3 owns the `parse_impl_item`
   rewrite.) About −40 lines.
 
-- [ ] **3.11 One precedence rule.** `BindingPriority` (`inputmap.rs:56-79`, derived `Ord`) and
+- [x] **3.11 One precedence rule.** `BindingPriority` (`inputmap.rs:56-79`, derived `Ord`) and
   `PathMatch::score()` (`path.rs:165-170`) both define which match wins; compare
   `(m.score(), idx)` tuples and delete the struct. `NodeHandle` (`script/mod.rs:874-902`) wraps
   `NodeId` for no gain (ruau requires only `T: Send + 'static`); register `NodeId` directly.
