@@ -363,7 +363,7 @@ Independent, low-risk, mostly deletions. Do these first.
   be chosen by hand instead of mapped, do step 1 differently; step 2 does not depend on which
   colours step 1 picks. About −110 lines.
 
-- [ ] **2.10 `Color::rgb()` returns a tuple.** `Color::to_rgb` (`style/color.rs:108-165`)
+- [x] **2.10 `Color::rgb()` returns a tuple.** `Color::to_rgb` (`style/color.rs:108-165`)
   returns `Color`, so eight call sites (six in `color.rs:169-239`,
   `canopy-widgets/src/terminal.rs:1007`, `script/mod.rs:1544`) write
   `let Self::Rgb{..} = self.to_rgb() else { unreachable!() }`, and its

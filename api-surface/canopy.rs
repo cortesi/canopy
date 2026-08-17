@@ -5294,13 +5294,10 @@ pub mod canopy {
         }
 
         impl Color {
-            /// Construct a color from a hex RGB string.
-            /// Accepts "#RRGGBB" or "RRGGBB" and panics on invalid input.
-            pub fn rgb(hex: &str) -> Self {}
-
-            /// Convert any color variant to RGB for transformation.
-            /// Named colors and ANSI-256 use standard palette mappings.
-            pub fn to_rgb(self) -> Self {}
+            /// Return this color's RGB channels.
+            ///
+            /// Named colors and ANSI-256 values use the standard palette mappings.
+            pub fn rgb(self) -> (u8, u8, u8) {}
 
             /// Scale brightness by a factor. 0.0 = black, 1.0 = unchanged, 2.0 = double brightness.
             pub fn scale_brightness(self, factor: f32) -> Self {}

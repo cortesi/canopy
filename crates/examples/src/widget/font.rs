@@ -7,6 +7,7 @@ use canopy::{
     error::{Error, Result},
     layout::{Align, Layout},
     render::Render,
+    rgb,
     state::NodeName,
     style::{Color, GradientSpec, GradientStop, Paint, StyleMap},
 };
@@ -186,10 +187,10 @@ fn font_gradient_style() -> StyleMap {
             Paint::gradient(GradientSpec::with_stops(
                 25.0,
                 gradient_stops([
-                    Color::rgb("#00E5FF"),
-                    Color::rgb("#008CFF"),
-                    Color::rgb("#6A2DFF"),
-                    Color::rgb("#FF2D2D"),
+                    rgb!("#00E5FF"),
+                    rgb!("#008CFF"),
+                    rgb!("#6A2DFF"),
+                    rgb!("#FF2D2D"),
                 ]),
             )),
         )

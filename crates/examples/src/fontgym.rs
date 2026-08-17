@@ -9,6 +9,7 @@ use canopy::{
     geom::{Line, Point},
     layout::{Align, Edges, Layout, MeasureConstraints, Measurement, Size},
     render::Render,
+    rgb,
     state::NodeName,
     style::{AttrSet, Color, GradientSpec, GradientStop, Paint, StyleMap},
     text,
@@ -992,37 +993,37 @@ fn font_styles(phase: f32) -> StyleMap {
     let hue = (phase * TAU).sin() * HUE_SWEEP_DEG;
     let solar = shift_palette(
         [
-            Color::rgb("#FFF200"),
-            Color::rgb("#FF9F00"),
-            Color::rgb("#FF003C"),
-            Color::rgb("#7A00FF"),
+            rgb!("#FFF200"),
+            rgb!("#FF9F00"),
+            rgb!("#FF003C"),
+            rgb!("#7A00FF"),
         ],
         hue,
     );
     let ocean = shift_palette(
         [
-            Color::rgb("#00F5FF"),
-            Color::rgb("#0084FF"),
-            Color::rgb("#003BFF"),
-            Color::rgb("#00FF9D"),
+            rgb!("#00F5FF"),
+            rgb!("#0084FF"),
+            rgb!("#003BFF"),
+            rgb!("#00FF9D"),
         ],
         hue,
     );
     let ember = shift_palette(
         [
-            Color::rgb("#FFD000"),
-            Color::rgb("#FF7A00"),
-            Color::rgb("#FF1F00"),
-            Color::rgb("#B00000"),
+            rgb!("#FFD000"),
+            rgb!("#FF7A00"),
+            rgb!("#FF1F00"),
+            rgb!("#B00000"),
         ],
         hue,
     );
     let violet = shift_palette(
         [
-            Color::rgb("#FFD6FF"),
-            Color::rgb("#B5179E"),
-            Color::rgb("#7209B7"),
-            Color::rgb("#4361EE"),
+            rgb!("#FFD6FF"),
+            rgb!("#B5179E"),
+            rgb!("#7209B7"),
+            rgb!("#4361EE"),
         ],
         hue,
     );
@@ -1049,9 +1050,9 @@ fn font_styles(phase: f32) -> StyleMap {
                 ..AttrSet::default()
             },
         )
-        .fg("fontgym/legend/title", Color::rgb("#E9ECEF"))
-        .fg("fontgym/key", Color::rgb("#FFD166"))
-        .fg("fontgym/label", Color::rgb("#A3B1C2"))
+        .fg("fontgym/legend/title", rgb!("#E9ECEF"))
+        .fg("fontgym/key", rgb!("#FFD166"))
+        .fg("fontgym/label", rgb!("#A3B1C2"))
         .fg(
             "font/banner/solar",
             Paint::gradient(GradientSpec::with_stops(

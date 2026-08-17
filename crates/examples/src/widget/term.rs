@@ -7,6 +7,7 @@ use canopy::{
     error::{Error, Result},
     layout::{Direction, Edges, Layout},
     render::Render,
+    rgb,
     state::NodeName,
     style::{Color, Paint, StyleMap},
 };
@@ -156,8 +157,8 @@ impl Widget for TermDemo {
         style
             .rules()
             .prefix(TAB_STYLE_PREFIX)
-            .fg("active/border", Paint::solid(Color::rgb("#FF8C00")))
-            .fg("inactive/border", Paint::solid(Color::rgb("#6B6B6B")))
+            .fg("active/border", Paint::solid(rgb!("#FF8C00")))
+            .fg("inactive/border", Paint::solid(rgb!("#6B6B6B")))
             .fg("active/text", Paint::solid(Color::White))
             .fg("inactive/text", Paint::solid(Color::White))
             .apply();

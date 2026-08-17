@@ -1538,9 +1538,7 @@ fn cell_to_arg(x: u32, y: u32, cell: &Cell) -> ArgValue {
 
 /// Convert a color to a stable RGB string.
 fn color_to_arg(color: Color) -> ArgValue {
-    let Color::Rgb { r, g, b } = color.to_rgb() else {
-        unreachable!("to_rgb always returns Color::Rgb")
-    };
+    let (r, g, b) = color.rgb();
     ArgValue::String(format!("#{r:02x}{g:02x}{b:02x}"))
 }
 

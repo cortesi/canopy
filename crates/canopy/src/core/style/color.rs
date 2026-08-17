@@ -80,95 +80,56 @@ macro_rules! rgb {
     }};
 }
 
+/// RGB values for the sixteen named and ANSI-16 colors, in ANSI order.
+const ANSI16: [(u8, u8, u8); 16] = [
+    (0, 0, 0),
+    (128, 0, 0),
+    (0, 128, 0),
+    (128, 128, 0),
+    (0, 0, 128),
+    (128, 0, 128),
+    (0, 128, 128),
+    (192, 192, 192),
+    (128, 128, 128),
+    (255, 0, 0),
+    (0, 255, 0),
+    (255, 255, 0),
+    (0, 0, 255),
+    (255, 0, 255),
+    (0, 255, 255),
+    (255, 255, 255),
+];
+
 impl Color {
-    /// Construct a color from a hex RGB string.
-    /// Accepts "#RRGGBB" or "RRGGBB" and panics on invalid input.
-    pub fn rgb(hex: &str) -> Self {
-        let hex = hex.trim_start_matches('#');
-
-        if hex.len() != 6 {
-            panic!(
-                "Invalid hex color string: expected 6 hex digits, got {}",
-                hex.len()
-            );
-        }
-
-        let r = u8::from_str_radix(&hex[0..2], 16)
-            .expect("Invalid hex color: failed to parse red component");
-        let g = u8::from_str_radix(&hex[2..4], 16)
-            .expect("Invalid hex color: failed to parse green component");
-        let b = u8::from_str_radix(&hex[4..6], 16)
-            .expect("Invalid hex color: failed to parse blue component");
-
-        Self::Rgb { r, g, b }
-    }
-
-    /// Convert any color variant to RGB for transformation.
-    /// Named colors and ANSI-256 use standard palette mappings.
-    pub fn to_rgb(self) -> Self {
+    /// Return this color's RGB channels.
+    ///
+    /// Named colors and ANSI-256 values use the standard palette mappings.
+    pub fn rgb(self) -> (u8, u8, u8) {
         match self {
-            Self::Rgb { r, g, b } => Self::Rgb { r, g, b },
-            Self::Black => Self::Rgb { r: 0, g: 0, b: 0 },
-            Self::DarkGrey => Self::Rgb {
-                r: 128,
-                g: 128,
-                b: 128,
-            },
-            Self::Red => Self::Rgb { r: 255, g: 0, b: 0 },
-            Self::DarkRed => Self::Rgb { r: 128, g: 0, b: 0 },
-            Self::Green => Self::Rgb { r: 0, g: 255, b: 0 },
-            Self::DarkGreen => Self::Rgb { r: 0, g: 128, b: 0 },
-            Self::Yellow => Self::Rgb {
-                r: 255,
-                g: 255,
-                b: 0,
-            },
-            Self::DarkYellow => Self::Rgb {
-                r: 128,
-                g: 128,
-                b: 0,
-            },
-            Self::Blue => Self::Rgb { r: 0, g: 0, b: 255 },
-            Self::DarkBlue => Self::Rgb { r: 0, g: 0, b: 128 },
-            Self::Magenta => Self::Rgb {
-                r: 255,
-                g: 0,
-                b: 255,
-            },
-            Self::DarkMagenta => Self::Rgb {
-                r: 128,
-                g: 0,
-                b: 128,
-            },
-            Self::Cyan => Self::Rgb {
-                r: 0,
-                g: 255,
-                b: 255,
-            },
-            Self::DarkCyan => Self::Rgb {
-                r: 0,
-                g: 128,
-                b: 128,
-            },
-            Self::White => Self::Rgb {
-                r: 255,
-                g: 255,
-                b: 255,
-            },
-            Self::Grey => Self::Rgb {
-                r: 192,
-                g: 192,
-                b: 192,
-            },
+            Self::Rgb { r, g, b } => (r, g, b),
+            Self::Black => ANSI16[0],
+            Self::DarkRed => ANSI16[1],
+            Self::DarkGreen => ANSI16[2],
+            Self::DarkYellow => ANSI16[3],
+            Self::DarkBlue => ANSI16[4],
+            Self::DarkMagenta => ANSI16[5],
+            Self::DarkCyan => ANSI16[6],
+            Self::Grey => ANSI16[7],
+            Self::DarkGrey => ANSI16[8],
+            Self::Red => ANSI16[9],
+            Self::Green => ANSI16[10],
+            Self::Yellow => ANSI16[11],
+            Self::Blue => ANSI16[12],
+            Self::Magenta => ANSI16[13],
+            Self::Cyan => ANSI16[14],
+            Self::White => ANSI16[15],
             Self::AnsiValue(n) => ansi_to_rgb(n),
         }
     }
 
     /// Scale brightness by a factor. 0.0 = black, 1.0 = unchanged, 2.0 = double brightness.
     pub fn scale_brightness(self, factor: f32) -> Self {
-        let Self::Rgb { r, g, b } = self.to_rgb() else {
-            unreachable!()
-        };
+        let (r, g, b) = self.rgb();
         let scale = |v: u8| ((v as f32 * factor).clamp(0.0, 255.0)) as u8;
         Self::Rgb {
             r: scale(r),
@@ -179,9 +140,7 @@ impl Color {
 
     /// Adjust saturation. 0.0 = grayscale, 1.0 = unchanged, 2.0 = double saturation.
     pub fn saturation(self, factor: f32) -> Self {
-        let Self::Rgb { r, g, b } = self.to_rgb() else {
-            unreachable!()
-        };
+        let (r, g, b) = self.rgb();
         let (h, s, l) = rgb_to_hsl(r, g, b);
         let new_s = (s * factor).clamp(0.0, 1.0);
         let (nr, ng, nb) = hsl_to_rgb(h, new_s, l);
@@ -194,22 +153,8 @@ impl Color {
 
     /// Blend this color with another. ratio 0.0 = self, 1.0 = other.
     pub fn blend(self, other: Self, ratio: f32) -> Self {
-        let Self::Rgb {
-            r: r1,
-            g: g1,
-            b: b1,
-        } = self.to_rgb()
-        else {
-            unreachable!()
-        };
-        let Self::Rgb {
-            r: r2,
-            g: g2,
-            b: b2,
-        } = other.to_rgb()
-        else {
-            unreachable!()
-        };
+        let (r1, g1, b1) = self.rgb();
+        let (r2, g2, b2) = other.rgb();
         let mix = |a: u8, b: u8| {
             let a = a as f32;
             let b = b as f32;
@@ -224,9 +169,7 @@ impl Color {
 
     /// Invert RGB channels (255 - value for each channel).
     pub fn invert_rgb(self) -> Self {
-        let Self::Rgb { r, g, b } = self.to_rgb() else {
-            unreachable!()
-        };
+        let (r, g, b) = self.rgb();
         Self::Rgb {
             r: 255 - r,
             g: 255 - g,
@@ -236,9 +179,7 @@ impl Color {
 
     /// Shift hue by degrees (0-360).
     pub fn shift_hue(self, degrees: f32) -> Self {
-        let Self::Rgb { r, g, b } = self.to_rgb() else {
-            unreachable!()
-        };
+        let (r, g, b) = self.rgb();
         let (mut h, s, l) = rgb_to_hsl(r, g, b);
         h = (h + degrees).rem_euclid(360.0);
         let (nr, ng, nb) = hsl_to_rgb(h, s, l);
@@ -250,78 +191,20 @@ impl Color {
     }
 }
 
-/// Convert ANSI 256-color to RGB.
-fn ansi_to_rgb(n: u8) -> Color {
+/// Convert an ANSI 256-color index to RGB.
+fn ansi_to_rgb(n: u8) -> (u8, u8, u8) {
     match n {
-        0 => Color::Rgb { r: 0, g: 0, b: 0 },
-        1 => Color::Rgb { r: 128, g: 0, b: 0 },
-        2 => Color::Rgb { r: 0, g: 128, b: 0 },
-        3 => Color::Rgb {
-            r: 128,
-            g: 128,
-            b: 0,
-        },
-        4 => Color::Rgb { r: 0, g: 0, b: 128 },
-        5 => Color::Rgb {
-            r: 128,
-            g: 0,
-            b: 128,
-        },
-        6 => Color::Rgb {
-            r: 0,
-            g: 128,
-            b: 128,
-        },
-        7 => Color::Rgb {
-            r: 192,
-            g: 192,
-            b: 192,
-        },
-        8 => Color::Rgb {
-            r: 128,
-            g: 128,
-            b: 128,
-        },
-        9 => Color::Rgb { r: 255, g: 0, b: 0 },
-        10 => Color::Rgb { r: 0, g: 255, b: 0 },
-        11 => Color::Rgb {
-            r: 255,
-            g: 255,
-            b: 0,
-        },
-        12 => Color::Rgb { r: 0, g: 0, b: 255 },
-        13 => Color::Rgb {
-            r: 255,
-            g: 0,
-            b: 255,
-        },
-        14 => Color::Rgb {
-            r: 0,
-            g: 255,
-            b: 255,
-        },
-        15 => Color::Rgb {
-            r: 255,
-            g: 255,
-            b: 255,
-        },
+        0..=15 => ANSI16[n as usize],
         // 216 color cube (16-231)
         16..=231 => {
             let n = n - 16;
-            let r = (n / 36) % 6;
-            let g = (n / 6) % 6;
-            let b = n % 6;
             let to_val = |v: u8| if v == 0 { 0 } else { 55 + v * 40 };
-            Color::Rgb {
-                r: to_val(r),
-                g: to_val(g),
-                b: to_val(b),
-            }
+            (to_val((n / 36) % 6), to_val((n / 6) % 6), to_val(n % 6))
         }
         // Grayscale (232-255)
         232..=255 => {
             let v = 8 + (n - 232) * 10;
-            Color::Rgb { r: v, g: v, b: v }
+            (v, v, v)
         }
     }
 }
@@ -404,105 +287,47 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_rgb_from_hex() {
-        let test_cases = vec![
-            // (input, expected_r, expected_g, expected_b)
-            ("#FF0000", 255, 0, 0),     // Red
-            ("FF0000", 255, 0, 0),      // Red without #
-            ("#00FF00", 0, 255, 0),     // Green
-            ("00FF00", 0, 255, 0),      // Green without #
-            ("#0000FF", 0, 0, 255),     // Blue
-            ("0000FF", 0, 0, 255),      // Blue without #
-            ("#FFFFFF", 255, 255, 255), // White
-            ("#000000", 0, 0, 0),       // Black
-            ("#123456", 18, 52, 86),    // Random color
-            ("ABCDEF", 171, 205, 239),  // Hex with letters
-            ("abcdef", 171, 205, 239),  // Lowercase hex
-        ];
-
-        for (input, expected_r, expected_g, expected_b) in test_cases {
-            let color = Color::rgb(input);
-            match color {
-                Color::Rgb { r, g, b } => {
-                    assert_eq!(r, expected_r, "Red component mismatch for input: {input}");
-                    assert_eq!(g, expected_g, "Green component mismatch for input: {input}");
-                    assert_eq!(b, expected_b, "Blue component mismatch for input: {input}");
-                }
-                _ => panic!("Expected Color::Rgb variant for input: {input}"),
-            }
-        }
-    }
-
-    #[test]
-    #[should_panic(expected = "Invalid hex color string: expected 6 hex digits")]
-    fn test_rgb_invalid_length() {
-        Color::rgb("#FFF");
-    }
-
-    #[test]
-    #[should_panic(expected = "Invalid hex color: failed to parse")]
-    fn test_rgb_invalid_hex() {
-        Color::rgb("#GGGGGG");
-    }
-
-    #[test]
-    fn test_rgb_macro() {
-        // Test that the macro produces the same results as the function
-        const MACRO_RED: Color = rgb!("#FF0000");
-        const MACRO_GREEN: Color = rgb!("00FF00");
-        const MACRO_BLUE: Color = rgb!("#0000FF");
-
-        let func_red = Color::rgb("#FF0000");
-        assert_eq!(MACRO_RED, func_red);
-
-        let func_green = Color::rgb("00FF00");
-        assert_eq!(MACRO_GREEN, func_green);
-
-        let func_blue = Color::rgb("#0000FF");
-        assert_eq!(MACRO_BLUE, func_blue);
-    }
-
-    #[test]
-    fn test_to_rgb_named_colors() {
-        assert_eq!(Color::Black.to_rgb(), Color::Rgb { r: 0, g: 0, b: 0 });
+    fn rgb_macro_parses_hex_literals() {
+        const RED: Color = rgb!("#FF0000");
+        assert_eq!(RED, Color::Rgb { r: 255, g: 0, b: 0 });
+        assert_eq!(rgb!("00FF00"), Color::Rgb { r: 0, g: 255, b: 0 });
+        assert_eq!(rgb!("#0000FF"), Color::Rgb { r: 0, g: 0, b: 255 });
         assert_eq!(
-            Color::White.to_rgb(),
+            rgb!("#123456"),
             Color::Rgb {
-                r: 255,
-                g: 255,
-                b: 255
+                r: 18,
+                g: 52,
+                b: 86
             }
         );
-        assert_eq!(Color::Red.to_rgb(), Color::Rgb { r: 255, g: 0, b: 0 });
-        assert_eq!(Color::Green.to_rgb(), Color::Rgb { r: 0, g: 255, b: 0 });
-        assert_eq!(Color::Blue.to_rgb(), Color::Rgb { r: 0, g: 0, b: 255 });
+        assert_eq!(
+            rgb!("abcdef"),
+            Color::Rgb {
+                r: 171,
+                g: 205,
+                b: 239
+            }
+        );
     }
 
     #[test]
-    fn test_to_rgb_ansi() {
-        // Test a few ANSI colors
-        assert_eq!(
-            Color::AnsiValue(0).to_rgb(),
-            Color::Rgb { r: 0, g: 0, b: 0 }
-        );
-        assert_eq!(
-            Color::AnsiValue(15).to_rgb(),
-            Color::Rgb {
-                r: 255,
-                g: 255,
-                b: 255
-            }
-        );
-        // Color cube: red at index 196 (5,0,0) should be bright red
-        assert_eq!(
-            Color::AnsiValue(196).to_rgb(),
-            Color::Rgb { r: 255, g: 0, b: 0 }
-        );
-        // Grayscale at 232 should be dark gray
-        assert_eq!(
-            Color::AnsiValue(232).to_rgb(),
-            Color::Rgb { r: 8, g: 8, b: 8 }
-        );
+    fn rgb_maps_named_colors() {
+        assert_eq!(Color::Black.rgb(), (0, 0, 0));
+        assert_eq!(Color::White.rgb(), (255, 255, 255));
+        assert_eq!(Color::Red.rgb(), (255, 0, 0));
+        assert_eq!(Color::Green.rgb(), (0, 255, 0));
+        assert_eq!(Color::Blue.rgb(), (0, 0, 255));
+        assert_eq!(Color::Rgb { r: 1, g: 2, b: 3 }.rgb(), (1, 2, 3));
+    }
+
+    #[test]
+    fn rgb_maps_the_ansi_palette() {
+        assert_eq!(Color::AnsiValue(0).rgb(), (0, 0, 0));
+        assert_eq!(Color::AnsiValue(15).rgb(), (255, 255, 255));
+        // Color cube: index 196 is (5,0,0), bright red.
+        assert_eq!(Color::AnsiValue(196).rgb(), (255, 0, 0));
+        // Grayscale starts at 232.
+        assert_eq!(Color::AnsiValue(232).rgb(), (8, 8, 8));
     }
 
     #[test]

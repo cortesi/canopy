@@ -13,6 +13,7 @@ use canopy::{
     geom,
     layout::{CanvasContext, MeasureConstraints, Measurement, Size},
     render::Render,
+    rgb,
     state::NodeName,
     style::{AttrSet, Color, ResolvedStyle},
 };
@@ -225,25 +226,25 @@ pub struct TerminalColors {
 impl Default for TerminalColors {
     fn default() -> Self {
         Self {
-            black: Color::rgb("#000000"),
-            red: Color::rgb("#cc0000"),
-            green: Color::rgb("#4e9a06"),
-            yellow: Color::rgb("#c4a000"),
-            blue: Color::rgb("#3465a4"),
-            magenta: Color::rgb("#75507b"),
-            cyan: Color::rgb("#06989a"),
-            white: Color::rgb("#d3d7cf"),
-            bright_black: Color::rgb("#555753"),
-            bright_red: Color::rgb("#ef2929"),
-            bright_green: Color::rgb("#8ae234"),
-            bright_yellow: Color::rgb("#fce94f"),
-            bright_blue: Color::rgb("#729fcf"),
-            bright_magenta: Color::rgb("#ad7fa8"),
-            bright_cyan: Color::rgb("#34e2e2"),
-            bright_white: Color::rgb("#eeeeec"),
-            foreground: Color::rgb("#eeeeec"),
-            background: Color::rgb("#000000"),
-            cursor: Color::rgb("#ffffff"),
+            black: rgb!("#000000"),
+            red: rgb!("#cc0000"),
+            green: rgb!("#4e9a06"),
+            yellow: rgb!("#c4a000"),
+            blue: rgb!("#3465a4"),
+            magenta: rgb!("#75507b"),
+            cyan: rgb!("#06989a"),
+            white: rgb!("#d3d7cf"),
+            bright_black: rgb!("#555753"),
+            bright_red: rgb!("#ef2929"),
+            bright_green: rgb!("#8ae234"),
+            bright_yellow: rgb!("#fce94f"),
+            bright_blue: rgb!("#729fcf"),
+            bright_magenta: rgb!("#ad7fa8"),
+            bright_cyan: rgb!("#34e2e2"),
+            bright_white: rgb!("#eeeeec"),
+            foreground: rgb!("#eeeeec"),
+            background: rgb!("#000000"),
+            cursor: rgb!("#ffffff"),
         }
     }
 }
@@ -1004,9 +1005,7 @@ impl Widget for Terminal {
 
 /// Convert a Canopy color into an `itty` hex wrapper.
 fn canopy_hex(color: Color) -> Hex {
-    let Color::Rgb { r, g, b } = color.to_rgb() else {
-        unreachable!("Color::to_rgb always returns Color::Rgb");
-    };
+    let (r, g, b) = color.rgb();
     Hex::from_rgb(itty_core::Rgb { r, g, b })
 }
 
