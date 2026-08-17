@@ -2,8 +2,8 @@
 //!
 //! Based on the Dracula theme: <https://draculatheme.com>
 
-use super::{Attr, Color, StyleMap};
-use crate::{rgb, style::AttrSet};
+use super::{Color, Palette, StyleMap, theme};
+use crate::rgb;
 
 // Dracula background colors
 /// Background.
@@ -41,96 +41,26 @@ pub const ANSI_BLACK: Color = rgb!("#21222c");
 
 /// Build a Dracula style map.
 pub fn dracula() -> StyleMap {
-    use super::StyleBuilder;
-
-    let mut c = StyleMap::new();
-    c.rules()
-        .style(
-            "/",
-            StyleBuilder::new()
-                .fg(FOREGROUND)
-                .bg(BACKGROUND)
-                .attrs(AttrSet::default()),
-        )
-        .fg("/frame", COMMENT)
-        .fg("/frame/focused", PURPLE)
-        .fg("/frame/active", CYAN)
-        .fg("/frame/title", FOREGROUND)
-        .fg("/tab", COMMENT)
-        .style(
-            "/tab/inactive",
-            StyleBuilder::new().fg(FOREGROUND).bg(CURRENT_LINE),
-        )
-        .style("/tab/active", StyleBuilder::new().fg(BACKGROUND).bg(PURPLE))
-        .fg("/blue", CYAN)
-        .fg("/red", RED)
-        .fg("/magenta", PINK)
-        .fg("/violet", PURPLE)
-        .fg("/cyan", CYAN)
-        .fg("/green", GREEN)
-        .fg("/yellow", YELLOW)
-        .fg("/orange", ORANGE)
-        .fg("/black", ANSI_BLACK)
-        .attr("/text/bold", Attr::Bold)
-        .attr("/text/italic", Attr::Italic)
-        .attr("/text/underline", Attr::Underline)
-        .fg("/selector", FOREGROUND)
-        .fg("/selector/selected", PURPLE)
-        .style(
-            "/selector/focus",
-            StyleBuilder::new().fg(BACKGROUND).bg(PURPLE),
-        )
-        .style(
-            "/selector/focus/selected",
-            StyleBuilder::new().fg(BACKGROUND).bg(CYAN),
-        )
-        .fg("/dropdown", FOREGROUND)
-        .fg("/dropdown/selected", PURPLE)
-        .style(
-            "/dropdown/highlight",
-            StyleBuilder::new().fg(BACKGROUND).bg(PURPLE),
-        )
-        .style(
-            "/editor/text",
-            StyleBuilder::new().fg(FOREGROUND).bg(BACKGROUND),
-        )
-        .style(
-            "/editor/selection",
-            StyleBuilder::new().fg(FOREGROUND).bg(SELECTION),
-        )
-        .style(
-            "/editor/search/match",
-            StyleBuilder::new().fg(BACKGROUND).bg(YELLOW),
-        )
-        .style(
-            "/editor/search/current",
-            StyleBuilder::new().fg(BACKGROUND).bg(ORANGE),
-        )
-        .fg("/editor/line-number", COMMENT)
-        .fg("/editor/line-number/current", PURPLE)
-        .style(
-            "/editor/prompt",
-            StyleBuilder::new().fg(FOREGROUND).bg(CURRENT_LINE),
-        )
-        .style(
-            "/help/content",
-            StyleBuilder::new().fg(FOREGROUND).bg(CURRENT_LINE),
-        )
-        .style("/help/frame", StyleBuilder::new().bg(CURRENT_LINE))
-        .style("/help/frame/focused", StyleBuilder::new().bg(CURRENT_LINE))
-        .style("/help/frame/active", StyleBuilder::new().bg(CURRENT_LINE))
-        .style("/help/frame/title", StyleBuilder::new().bg(CURRENT_LINE))
-        .style(
-            "/help/key",
-            StyleBuilder::new()
-                .fg(CYAN)
-                .bg(CURRENT_LINE)
-                .attrs(AttrSet::new(Attr::Bold)),
-        )
-        .style(
-            "/help/label",
-            StyleBuilder::new().fg(FOREGROUND).bg(CURRENT_LINE),
-        )
-        .apply();
-    c
+    theme(&Palette {
+        fg: FOREGROUND,
+        bg: BACKGROUND,
+        frame: COMMENT,
+        frame_active: CYAN,
+        frame_title: FOREGROUND,
+        accent: PURPLE,
+        muted_fg: FOREGROUND,
+        panel_bg: CURRENT_LINE,
+        tab_active_fg: BACKGROUND,
+        selection_bg: SELECTION,
+        line_number: COMMENT,
+        blue: CYAN,
+        red: RED,
+        magenta: PINK,
+        violet: PURPLE,
+        cyan: CYAN,
+        green: GREEN,
+        yellow: YELLOW,
+        orange: ORANGE,
+        black: ANSI_BLACK,
+    })
 }

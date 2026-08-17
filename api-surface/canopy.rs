@@ -5334,6 +5334,57 @@ pub mod canopy {
             fn apply(&self, style: Style) -> Style;
         }
 
+        /// The role colours a theme assigns.
+        ///
+        /// Each field names the role a colour plays, not the colour itself, so the same rule set can
+        /// render a light theme, a dark theme, or any other palette.
+        #[derive(Debug, Clone, Copy)]
+        pub struct Palette {
+            /// Default foreground.
+            pub fg: super::Color,
+            /// Default background, and the foreground drawn on top of `accent`.
+            pub bg: super::Color,
+            /// Inactive frame and tab borders, and the tab bar itself.
+            pub frame: super::Color,
+            /// Border of the frame that owns the active subtree.
+            pub frame_active: super::Color,
+            /// Frame title text.
+            pub frame_title: super::Color,
+            /// Primary accent: focus, selection, and the active tab.
+            pub accent: super::Color,
+            /// Foreground on panel backgrounds, one step away from `fg`.
+            pub muted_fg: super::Color,
+            /// Background of panels such as the help overlay, prompt, and inactive tabs.
+            pub panel_bg: super::Color,
+            /// Foreground of the active tab, drawn on `accent`.
+            pub tab_active_fg: super::Color,
+            /// Editor selection background.
+            pub selection_bg: super::Color,
+            /// Editor line-number gutter.
+            pub line_number: super::Color,
+            /// Named blue.
+            pub blue: super::Color,
+            /// Named red.
+            pub red: super::Color,
+            /// Named magenta.
+            pub magenta: super::Color,
+            /// Named violet.
+            pub violet: super::Color,
+            /// Named cyan, also the help overlay's key colour.
+            pub cyan: super::Color,
+            /// Named green.
+            pub green: super::Color,
+            /// Named yellow, also the search-match background.
+            pub yellow: super::Color,
+            /// Named orange, also the current-search-match background.
+            pub orange: super::Color,
+            /// Named black.
+            pub black: super::Color,
+        }
+
+        /// Build the shared rule set for one palette.
+        pub fn theme(p: &Palette) -> super::StyleMap {}
+
         /// A text attribute.
         #[derive(Debug, StructuralPartialEq, PartialEq, Eq, Clone, Copy)]
         pub enum Attr {

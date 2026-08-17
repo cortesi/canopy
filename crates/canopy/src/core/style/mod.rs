@@ -6,6 +6,8 @@ pub mod dracula;
 pub mod effects;
 /// Gruvbox theme.
 pub mod gruvbox;
+/// Shared theme palette and rule set.
+mod palette;
 /// Solarized theme.
 pub mod solarized;
 
@@ -13,6 +15,7 @@ use std::collections::HashMap;
 
 pub use color::Color;
 pub use effects::{Effect, StyleEffect};
+pub use palette::{Palette, theme};
 
 use crate::geom;
 

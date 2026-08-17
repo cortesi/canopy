@@ -2,8 +2,8 @@
 //!
 //! Based on the gruvbox theme by morhetz: <https://github.com/morhetz/gruvbox>
 
-use super::{Attr, Color, StyleMap};
-use crate::{rgb, style::AttrSet};
+use super::{Color, Palette, StyleMap, theme};
+use crate::rgb;
 
 // Gruvbox dark background colors
 /// Dark background (hard contrast).
@@ -55,78 +55,26 @@ pub const ORANGE: Color = rgb!("#fe8019");
 
 /// Build a dark gruvbox style map.
 pub fn gruvbox_dark() -> StyleMap {
-    use super::StyleBuilder;
-
-    let mut c = StyleMap::new();
-    c.rules()
-        .style(
-            "/",
-            StyleBuilder::new()
-                .fg(LIGHT1)
-                .bg(DARK0)
-                .attrs(AttrSet::default()),
-        )
-        .fg("/frame", DARK4)
-        .fg("/frame/focused", BLUE)
-        .fg("/frame/active", LIGHT3)
-        .fg("/frame/title", LIGHT0)
-        .fg("/tab", DARK4)
-        .style("/tab/inactive", StyleBuilder::new().fg(LIGHT3).bg(DARK1))
-        .style("/tab/active", StyleBuilder::new().fg(LIGHT0).bg(BLUE))
-        .fg("/blue", BLUE)
-        .fg("/red", RED)
-        .fg("/magenta", PURPLE)
-        .fg("/violet", PURPLE)
-        .fg("/cyan", AQUA)
-        .fg("/green", GREEN)
-        .fg("/yellow", YELLOW)
-        .fg("/orange", ORANGE)
-        .fg("/black", DARK0)
-        .attr("/text/bold", Attr::Bold)
-        .attr("/text/italic", Attr::Italic)
-        .attr("/text/underline", Attr::Underline)
-        .fg("/selector", LIGHT1)
-        .fg("/selector/selected", BLUE)
-        .style("/selector/focus", StyleBuilder::new().fg(DARK0).bg(BLUE))
-        .style(
-            "/selector/focus/selected",
-            StyleBuilder::new().fg(DARK0).bg(AQUA),
-        )
-        .fg("/dropdown", LIGHT1)
-        .fg("/dropdown/selected", BLUE)
-        .style(
-            "/dropdown/highlight",
-            StyleBuilder::new().fg(DARK0).bg(BLUE),
-        )
-        .style("/editor/text", StyleBuilder::new().fg(LIGHT1).bg(DARK0))
-        .style(
-            "/editor/selection",
-            StyleBuilder::new().fg(LIGHT1).bg(DARK2),
-        )
-        .style(
-            "/editor/search/match",
-            StyleBuilder::new().fg(DARK0).bg(YELLOW),
-        )
-        .style(
-            "/editor/search/current",
-            StyleBuilder::new().fg(DARK0).bg(ORANGE),
-        )
-        .fg("/editor/line-number", GRAY)
-        .fg("/editor/line-number/current", BLUE)
-        .style("/editor/prompt", StyleBuilder::new().fg(LIGHT1).bg(DARK1))
-        .style("/help/content", StyleBuilder::new().fg(LIGHT1).bg(DARK1))
-        .style("/help/frame", StyleBuilder::new().bg(DARK1))
-        .style("/help/frame/focused", StyleBuilder::new().bg(DARK1))
-        .style("/help/frame/active", StyleBuilder::new().bg(DARK1))
-        .style("/help/frame/title", StyleBuilder::new().bg(DARK1))
-        .style(
-            "/help/key",
-            StyleBuilder::new()
-                .fg(AQUA)
-                .bg(DARK1)
-                .attrs(AttrSet::new(Attr::Bold)),
-        )
-        .style("/help/label", StyleBuilder::new().fg(LIGHT3).bg(DARK1))
-        .apply();
-    c
+    theme(&Palette {
+        fg: LIGHT1,
+        bg: DARK0,
+        frame: DARK4,
+        frame_active: LIGHT3,
+        frame_title: LIGHT0,
+        accent: BLUE,
+        muted_fg: LIGHT3,
+        panel_bg: DARK1,
+        tab_active_fg: LIGHT0,
+        selection_bg: DARK2,
+        line_number: GRAY,
+        blue: BLUE,
+        red: RED,
+        magenta: PURPLE,
+        violet: PURPLE,
+        cyan: AQUA,
+        green: GREEN,
+        yellow: YELLOW,
+        orange: ORANGE,
+        black: DARK0,
+    })
 }

@@ -345,7 +345,7 @@ Independent, low-risk, mostly deletions. Do these first.
   attr_all, attrs_all}` (`:543-556, 638-693`; zero callers, `style_all` stays), `AttrSet::is_empty`,
   and fold test-only `GradientSpec::new` into `with_stops`. About −120 lines.
 
-- [ ] **2.9 Palette-driven themes.** `solarized_dark`, `solarized_light` (`solarized.rs`),
+- [x] **2.9 Palette-driven themes.** `solarized_dark`, `solarized_light` (`solarized.rs`),
   `dracula` (`dracula.rs`), and `gruvbox_dark` (`gruvbox.rs`) build the same rule structure from
   ~15 role colours each, but the rule sets have drifted: both solarized variants define seven
   `/help/*` rules (`solarized.rs:101-113, 179-191`), while dracula and gruvbox stop after
