@@ -6,7 +6,7 @@ use canopy::{
     prelude::*,
     style::{AttrSet, solarized},
 };
-use canopy_widgets::{Box, Center, Frame, List, SINGLE, Selectable, Text, VStack};
+use canopy_widgets::{Border, Center, Frame, List, SINGLE, Selectable, Text, VStack};
 use unicode_width::UnicodeWidthStr;
 
 /// Padding inside each counter entry box.
@@ -108,7 +108,7 @@ impl CounterItem {
 
     /// Update the box layout based on the current label width.
     fn update_box_layout(&self, ctx: &mut dyn Context) -> Result<()> {
-        let Some(box_id) = (ctx as &dyn ViewContext).unique_descendant::<Box>()? else {
+        let Some(box_id) = (ctx as &dyn ViewContext).unique_descendant::<Border>()? else {
             return Ok(());
         };
 
@@ -144,7 +144,7 @@ impl Widget for CounterItem {
     }
 
     fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        let box_id = ctx.add_child(Box::new().with_glyphs(SINGLE).with_fill())?;
+        let box_id = ctx.add_child(Border::new().with_glyphs(SINGLE).with_fill())?;
         let center_id = ctx.add_child_to(box_id, Center::new())?;
         ctx.add_child_to(center_id, Text::new(self.label()))?;
         self.update_box_layout(ctx)?;

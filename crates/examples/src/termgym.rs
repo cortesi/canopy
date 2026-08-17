@@ -7,7 +7,7 @@ use canopy::{
     style::{Attr, AttrSet, solarized},
 };
 use canopy_widgets::{
-    Box, Button, Center, Frame, List, ROUND_THICK, SINGLE, Selectable, Terminal, TerminalConfig,
+    Border, Button, Center, Frame, List, ROUND_THICK, SINGLE, Selectable, Terminal, TerminalConfig,
     Text, VStack,
 };
 use unicode_width::UnicodeWidthStr;
@@ -86,7 +86,7 @@ impl Widget for TermEntry {
     }
 
     fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        let box_id = ctx.add_child(Box::new().with_glyphs(SINGLE).with_fill())?;
+        let box_id = ctx.add_child(Border::new().with_glyphs(SINGLE).with_fill())?;
         let center_id = ctx.add_child_to(box_id, Center::new())?;
         ctx.add_child_to(
             center_id,

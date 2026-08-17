@@ -2,6 +2,7 @@
 
 use std::{
     io::{Result as IoResult, Write},
+    result::Result as StdResult,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -122,10 +123,29 @@ impl Write for LogWriter {
     }
 }
 
+/// Whether this panel owns the process-wide tracing subscriber.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum InstallState {
+    /// Installation has not been attempted yet.
+    Unattempted,
+    /// This panel installed the subscriber and receives events.
+    Active,
+    /// Another subscriber was already installed, with this reason.
+    Unavailable(String),
+}
+
+/// Classify the outcome of one subscriber installation attempt.
+fn after_install(result: StdResult<(), String>) -> InstallState {
+    match result {
+        Ok(()) => InstallState::Active,
+        Err(message) => InstallState::Unavailable(message),
+    }
+}
+
 /// Inspector log panel.
 pub struct Logs {
-    /// Whether logging is initialized.
-    started: bool,
+    /// Whether this panel owns the tracing subscriber.
+    install: InstallState,
     /// Shared log buffer.
     buf: Arc<Mutex<Vec<String>>>,
 }
@@ -155,7 +175,7 @@ impl Widget for Logs {
     fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {
         self.ensure_tree(c).ok()?;
 
-        if !self.started {
+        if self.install == InstallState::Unattempted {
             let format = fmt::format()
                 .with_level(true)
                 .with_line_number(true)
@@ -164,11 +184,18 @@ impl Widget for Logs {
                 .compact();
 
             let buf = self.buf.clone();
-            tracing_subscriber::fmt()
+            let result = tracing_subscriber::fmt()
                 .with_writer(move || -> LogWriter { LogWriter { buf: buf.clone() } })
                 .event_format(format)
-                .init();
-            self.started = true;
+                .try_init()
+                .map_err(|error| error.to_string());
+            self.install = after_install(result);
+            if let InstallState::Unavailable(message) = &self.install {
+                self.buf
+                    .lock()
+                    .unwrap()
+                    .push(format!("inspector logs unavailable: {message}"));
+            }
         }
 
         self.flush_buffer(c).ok();
@@ -185,7 +212,7 @@ impl Logs {
     /// Construct a log panel.
     pub fn new() -> Self {
         Self {
-            started: false,
+            install: InstallState::Unattempted,
             buf: Arc::new(Mutex::new(vec![])),
         }
     }
@@ -300,5 +327,23 @@ impl Loader for Logs {
     fn load(c: &mut Canopy) -> Result<()> {
         c.add_commands::<Self>()?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{InstallState, after_install};
+
+    #[test]
+    fn a_successful_install_takes_ownership() {
+        assert_eq!(after_install(Ok(())), InstallState::Active);
+    }
+
+    #[test]
+    fn a_failed_install_records_the_reason() {
+        assert_eq!(
+            after_install(Err("a global subscriber is already set".to_string())),
+            InstallState::Unavailable("a global subscriber is already set".to_string())
+        );
     }
 }

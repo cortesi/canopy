@@ -509,6 +509,115 @@ pub mod canopy_widgets {
     pub mod inspector {
         //! Experimental inspector overlay internals.
 
+        pub mod logs {
+            //! Log panel widget.
+            //! Log panel for the inspector widget.
+
+            /// Widget for displaying a single log entry.
+            pub struct LogEntry {}
+
+            impl LogEntry {
+                /// Construct a log entry from text.
+                pub fn new(text: impl Into<String>) -> Self {}
+            }
+
+            impl Selectable for LogEntry {
+                fn set_selected(&mut self, selected: bool) {}
+            }
+
+            impl CommandNode for LogEntry {
+                fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
+            }
+
+            impl Widget for LogEntry {
+                fn layout(&self) -> Layout {}
+
+                fn measure(&self, c: MeasureConstraints) -> Measurement {}
+
+                fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
+
+                fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
+
+                fn name(&self) -> NodeName {}
+            }
+
+            /// Inspector log panel.
+            #[derive(Default)]
+            pub struct Logs {}
+
+            impl Logs {
+                /// Construct a log panel.
+                pub fn new() -> Self {}
+
+                /// Clear all items.
+                pub fn clear(&self, c: &mut dyn Context) -> Result<()> {}
+
+                /// Delete the currently selected item.
+                pub fn delete_selected(&self, c: &mut dyn Context) -> Result<()> {}
+
+                /// Move selection to the first item.
+                pub fn select_first(&self, c: &mut dyn Context) -> Result<()> {}
+
+                /// Move selection to the last item.
+                pub fn select_last(&self, c: &mut dyn Context) -> Result<()> {}
+
+                /// Move selection by a signed offset.
+                pub fn select_by(&self, c: &mut dyn Context, delta: i32) -> Result<()> {}
+
+                /// Scroll the view by one line in the specified direction.
+                /// @param dir The direction to scroll.
+                pub fn scroll(&self, c: &mut dyn Context, dir: Direction) {}
+
+                /// Page through the log view.
+                /// Positive values move down; negative values move up.
+                /// @param delta Signed page delta. Positive moves down and negative moves up.
+                pub fn page(&self, c: &mut dyn Context, delta: i32) -> Result<()> {}
+
+                /// Return a typed command reference for this command.
+                pub fn cmd_clear() -> &'static canopy::commands::CommandSpec {}
+
+                /// Return a typed command reference for this command.
+                pub fn cmd_delete_selected() -> &'static canopy::commands::CommandSpec {}
+
+                /// Return a typed command reference for this command.
+                pub fn cmd_select_first() -> &'static canopy::commands::CommandSpec {}
+
+                /// Return a typed command reference for this command.
+                pub fn cmd_select_last() -> &'static canopy::commands::CommandSpec {}
+
+                /// Return a typed command reference for this command.
+                pub fn cmd_select_by() -> &'static canopy::commands::CommandSpec {}
+
+                /// Return a typed command reference for this command.
+                pub fn cmd_scroll() -> &'static canopy::commands::CommandSpec {}
+
+                /// Return a typed command reference for this command.
+                pub fn cmd_page() -> &'static canopy::commands::CommandSpec {}
+            }
+
+            impl Widget for Logs {
+                fn layout(&self) -> Layout {}
+
+                fn render(&mut self, rndr: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
+
+                fn measure(&self, c: MeasureConstraints) -> Measurement {}
+
+                fn canvas(&self, view: Size<u32>, _ctx: &CanvasContext<'_>) -> Size<u32> {}
+
+                fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {}
+
+                fn name(&self) -> NodeName {}
+            }
+
+            impl CommandNode for Logs {
+                fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
+            }
+
+            impl Loader for Logs {
+                fn load(c: &mut Canopy) -> Result<()> {}
+            }
+        }
+
         /// Inspector overlay widget.
         #[derive(Default)]
         pub struct Inspector;
@@ -571,9 +680,9 @@ pub mod canopy_widgets {
 
     /// A simple box container around its children.
     #[derive(Default)]
-    pub struct Box {}
+    pub struct Border {}
 
-    impl Box {
+    impl Border {
         /// Construct a box.
         pub fn new() -> Self {}
 
@@ -593,11 +702,11 @@ pub mod canopy_widgets {
         pub fn with_fill_style(self, style: impl Into<String>) -> Self {}
     }
 
-    impl CommandNode for Box {
+    impl CommandNode for Border {
         fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
     }
 
-    impl Widget for Box {
+    impl Widget for Border {
         fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
 
         fn layout(&self) -> Layout {}

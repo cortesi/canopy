@@ -1,5 +1,5 @@
 /// Log panel widget.
-mod logs;
+pub mod logs;
 /// Inspector view layout.
 mod view;
 

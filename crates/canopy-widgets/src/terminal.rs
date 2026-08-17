@@ -812,20 +812,23 @@ impl Terminal {
     }
 
     /// Sync terminal focus reporting with the backend.
-    fn sync_focus(&self, focused: bool) {
-        let Some(state) = self.state() else {
-            return;
-        };
-        if !state.modes.focus_in_out {
-            return;
-        }
+    /// Return the focus report the terminal expects, if it enabled focus reporting.
+    fn focus_report(&self, focused: bool) -> Option<Vec<u8>> {
+        let state = self.state()?;
+        state.modes.focus_in_out.then(|| {
+            if focused {
+                b"\x1b[I".to_vec()
+            } else {
+                b"\x1b[O".to_vec()
+            }
+        })
+    }
 
-        let bytes = if focused {
-            b"\x1b[I".to_vec()
-        } else {
-            b"\x1b[O".to_vec()
-        };
-        self.queue_input(bytes);
+    /// Forward a focus change to the terminal as a focus report.
+    fn sync_focus(&self, focused: bool) {
+        if let Some(bytes) = self.focus_report(focused) {
+            self.queue_input(bytes);
+        }
     }
 }
 
@@ -1302,11 +1305,30 @@ mod tests {
     }
 
     #[test]
-    fn focus_events_enqueue_focus_reports() {
+    fn focus_reports_follow_the_terminal_mode() {
         let terminal = mounted_terminal();
-        terminal.queue_input(Vec::new());
-        terminal.sync_focus(true);
-        terminal.sync_focus(false);
+        // A fresh terminal has not requested focus reporting.
+        assert_eq!(terminal.focus_report(true), None);
+        assert_eq!(terminal.focus_report(false), None);
+
+        terminal.queue_input(b"\x1b[?1004h".to_vec());
+        let Some(terminal) = wait_for_focus_reporting(terminal) else {
+            return;
+        };
+        assert_eq!(terminal.focus_report(true), Some(b"\x1b[I".to_vec()));
+        assert_eq!(terminal.focus_report(false), Some(b"\x1b[O".to_vec()));
+    }
+
+    /// Poll until the terminal reports focus-reporting mode, or give up.
+    fn wait_for_focus_reporting(mut terminal: Terminal) -> Option<Terminal> {
+        for _ in 0..200 {
+            terminal.poll_driver();
+            if terminal.focus_report(true).is_some() {
+                return Some(terminal);
+            }
+            thread::sleep(Duration::from_millis(5));
+        }
+        None
     }
 
     #[test]

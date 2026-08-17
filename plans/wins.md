@@ -579,7 +579,7 @@ Independent, low-risk, mostly deletions. Do these first.
   This item owns the editor file moves. Proof: `editor/tests.rs` passes unchanged. About −100
   lines and a navigable editor.
 
-- [ ] **4.6 Widget-crate hygiene.** `Logs::poll` (`inspector/logs.rs:159-170`) installs a
+- [x] **4.6 Widget-crate hygiene.** `Logs::poll` (`inspector/logs.rs:159-170`) installs a
   global tracing subscriber with `.init()`, which panics if the app already set one. Replace the
   `started: bool` with `enum InstallState { Unattempted, Active, Unavailable(String) }`; `poll`
   attempts `try_init()` only from `Unattempted`, moves to `Active` on `Ok` and to

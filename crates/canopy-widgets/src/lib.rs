@@ -5,7 +5,7 @@
 
 #![warn(missing_docs)]
 
-/// Box border widget with customizable glyphs.
+/// Border widget with customizable glyphs.
 mod boxed;
 /// Button widget with command dispatch.
 mod button;
@@ -53,7 +53,7 @@ mod text;
 /// Vertical stack container.
 mod vstack;
 
-pub use boxed::{Box, BoxGlyphs, DOUBLE, ROUND, ROUND_THICK, SINGLE, SINGLE_THICK};
+pub use boxed::{Border, BoxGlyphs, DOUBLE, ROUND, ROUND_THICK, SINGLE, SINGLE_THICK};
 pub use button::Button;
 pub use center::Center;
 pub use dropdown::Dropdown;

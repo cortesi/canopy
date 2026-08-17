@@ -13,12 +13,12 @@ use canopy::{
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
-    Box, Center, Selectable, Text,
+    Border, Center, Selectable, Text,
     boxed::{BoxGlyphs, SINGLE},
 };
 
 canopy::key!(LabelSlot: Text);
-canopy::key!(BoxSlot: Box);
+canopy::key!(BoxSlot: Border);
 canopy::key!(CenterSlot: Center);
 
 /// Button widget that triggers a command when clicked.
@@ -129,7 +129,7 @@ impl Button {
     fn sync_label(&mut self, ctx: &mut dyn Context) -> Result<()> {
         let box_id = self
             .box_slot
-            .get_or_create(ctx, || Box::new().with_glyphs(self.glyphs).with_fill())?;
+            .get_or_create(ctx, || Border::new().with_glyphs(self.glyphs).with_fill())?;
         let center_id = self
             .center_slot
             .get_or_create_in(ctx, box_id, Center::new)?;

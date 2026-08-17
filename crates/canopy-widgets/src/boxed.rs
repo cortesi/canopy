@@ -95,7 +95,7 @@ pub const ROUND_THICK: BoxGlyphs = BoxGlyphs {
 };
 
 /// A simple box container around its children.
-pub struct Box {
+pub struct Border {
     /// Glyph set for rendering.
     glyphs: BoxGlyphs,
     /// Style name for the box border.
@@ -105,7 +105,7 @@ pub struct Box {
 }
 
 #[derive_commands]
-impl Box {
+impl Border {
     /// Construct a box.
     pub fn new() -> Self {
         Self {
@@ -145,13 +145,13 @@ impl Box {
     }
 }
 
-impl Default for Box {
+impl Default for Border {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Widget for Box {
+impl Widget for Border {
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let outer = ctx.view().outer_rect_local();
         let frame = geom::FrameRects::new(outer, 1);
