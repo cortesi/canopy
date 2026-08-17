@@ -6,8 +6,11 @@ use std::{
 
 use proptest::{prelude::*, test_runner::TestCaseResult};
 
-use super::test_support::{TestWidget, assert_error_context};
-use super::{layout_driver::refresh_layouts, *};
+use super::{
+    layout_driver::refresh_layouts,
+    test_support::{TestWidget, assert_error_context},
+    *,
+};
 use crate::{
     Context, KeyedChildren, RemovePolicy,
     core::{

@@ -408,6 +408,7 @@ dependencies = [
  "serde",
  "serde_json",
  "slotmap",
+ "tempfile",
  "termcolor",
  "thiserror 2.0.18",
  "tokio",
@@ -455,6 +456,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.18",
  "tmcp",
  "tokio",
@@ -3627,6 +3629,7 @@ dependencies = [
  "canopy-widgets",
  "clap",
  "rusqlite",
+ "tempfile",
  "textwrap",
 ]
 

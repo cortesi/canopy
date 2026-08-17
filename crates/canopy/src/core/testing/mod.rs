@@ -8,6 +8,8 @@ pub mod dummyctx;
 pub mod grid;
 /// Harness for node testing.
 pub mod harness;
+/// Typecheck assertions for tracked Luau sources.
+pub mod luau;
 /// Shared property-model failure diagnostics.
 #[cfg(test)]
 pub(crate) mod model;

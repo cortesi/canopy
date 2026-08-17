@@ -17,6 +17,7 @@ rusqlite = "0.39"
 textwrap.workspace = true
 
 [dev-dependencies]
+tempfile = "3.24.0"
 canopy = { path = "../../crates/canopy", features = ["testing"] }
 canopy-widgets = { path = "../../crates/canopy-widgets" }
 

@@ -5,7 +5,9 @@ use std::sync::{Arc, Mutex};
 use proptest::prelude::*;
 use rand::{RngExt, SeedableRng, rngs::StdRng};
 
-use super::{align_offset, allocate_flex_shares, clamp_outer, clamp_scroll, constraint_for_axis};
+use super::{
+    LayoutPass, align_offset, allocate_flex_shares, clamp_outer, clamp_scroll, constraint_for_axis,
+};
 use crate::{
     NodeId,
     core::world::{
@@ -19,8 +21,6 @@ use crate::{
         MeasureConstraints, Measurement, Sizing,
     },
 };
-
-use super::LayoutPass;
 
 /// Attach one node as the only child of the root.
 fn attach_root_child(core: &mut Core, child: NodeId) -> Result<()> {

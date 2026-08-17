@@ -2,30 +2,16 @@
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        env, fs,
-        path::PathBuf,
-        time::{SystemTime, UNIX_EPOCH},
-    };
+    use std::{fs, path::PathBuf};
 
     use anyhow::Result;
     use canopy_mcp::{Error as McpError, SuiteConfig, run_suite};
     use todo::create_app;
 
-    fn db_path(tag: &str) -> PathBuf {
-        env::temp_dir().join(format!(
-            "todo_smoke_{}_{}.db",
-            tag,
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("system time before epoch")
-                .as_millis(),
-        ))
-    }
-
     #[test]
     fn luau_smoke_suite_passes() -> Result<()> {
-        let db_path = db_path("suite");
+        let dir = tempfile::tempdir()?;
+        let db_path = dir.path().join("todo_smoke.db");
         let suite_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("smoke");
         let result = run_suite(
             move || {

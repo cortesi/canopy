@@ -28,6 +28,7 @@ futures = "0.3.32"
 parking_lot = "0.12.5"
 
 [dev-dependencies]
+tempfile = "3.24.0"
 canopy = { path = ".", features = ["testing"] }
 rand = "0.10.1"
 proptest.workspace = true

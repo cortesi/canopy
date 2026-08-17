@@ -725,7 +725,7 @@ Independent, low-risk, mostly deletions. Do these first.
   blocks (`termbuf.rs` 1,255 test lines, `inputmap.rs` 707, `script/mod.rs` 677, `render.rs` 496)
   to sibling `tests.rs` files, the convention `world/`, `canopy/`, and `editor/` already use.
 
-- [ ] **6.8 Tests that cannot fail.** `examples/todo/tests/basic.rs`: six of ten tests end
+- [x] **6.8 Tests that cannot fail.** `examples/todo/tests/basic.rs`: six of ten tests end
   without an assertion, `add`/`del_first`/`del_no_nav` take an unused `_next` parameter beside
   commented-out `expect_highlight` calls, and `#[should_panic]` has no `expected`. Give each of
   the six tests a `list_len` or `tbuf().contains_text` assertion on the state it drives, delete

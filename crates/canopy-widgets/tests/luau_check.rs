@@ -4,7 +4,7 @@
 mod tests {
     use std::{error::Error, fs, path::PathBuf};
 
-    use canopy::{Canopy, Loader};
+    use canopy::{Canopy, Loader, testing::luau::assert_typechecks};
     use canopy_widgets::{Dropdown, List, Root, Text};
 
     fn finalized_surfaces() -> Result<(Canopy, Canopy, Canopy), Box<dyn Error>> {
@@ -35,22 +35,6 @@ mod tests {
         Ok(scripts)
     }
 
-    fn assert_checks(
-        canopy: &mut Canopy,
-        source_name: &str,
-        source: &str,
-    ) -> Result<(), Box<dyn Error>> {
-        let result = canopy.check_script(source_name, source)?;
-        let diagnostics = result
-            .diagnostics()
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>()
-            .join("\n");
-        assert!(result.is_ok(), "{diagnostics}");
-        Ok(())
-    }
-
     #[test]
     fn tracked_luau_widget_scripts_typecheck() -> Result<(), Box<dyn Error>> {
         let (mut dropdown, mut list, mut root) = finalized_surfaces()?;
@@ -70,7 +54,7 @@ mod tests {
             } else {
                 panic!("tracked widget script has no command-surface owner: {source_name}");
             };
-            assert_checks(canopy, &source_name, &source)?;
+            assert_typechecks(canopy, &source_name, &source)?;
         }
         Ok(())
     }

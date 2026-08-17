@@ -187,19 +187,14 @@ pub fn collect_luau_scripts(root: &Path, output: &mut Vec<PathBuf>) -> Result<()
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        env, fs,
-        time::{SystemTime, UNIX_EPOCH},
-    };
+    use std::fs;
+
+    use tempfile::TempDir;
 
     use super::*;
 
-    fn unique_dir(name: &str) -> PathBuf {
-        let stamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system time before epoch")
-            .as_nanos();
-        env::temp_dir().join(format!("canopy-smoke-{name}-{stamp}"))
+    fn unique_dir() -> TempDir {
+        tempfile::tempdir().expect("create test directory")
     }
 
     fn file_names(paths: &[PathBuf]) -> Vec<String> {
@@ -216,11 +211,12 @@ mod tests {
 
     #[test]
     fn discover_scripts_recurses_and_sorts() -> Result<()> {
-        let root = unique_dir("discover");
+        let dir = unique_dir();
+        let root = dir.path();
         fs::create_dir_all(root.join("nested"))?;
         fs::write(root.join("b.luau"), "return true")?;
         fs::write(root.join("nested").join("a.luau"), "return true")?;
-        let paths = discover_scripts(&SuiteConfig::new(&root))?;
+        let paths = discover_scripts(&SuiteConfig::new(root))?;
         assert_eq!(
             file_names(&paths),
             vec!["b.luau".to_string(), "a.luau".to_string()]
@@ -230,9 +226,9 @@ mod tests {
 
     #[test]
     fn explicit_scripts_keep_their_given_order() -> Result<()> {
-        let root = unique_dir("explicit");
-        fs::create_dir_all(&root)?;
-        let mut config = SuiteConfig::new(&root);
+        let dir = unique_dir();
+        let root = dir.path();
+        let mut config = SuiteConfig::new(root);
         config.scripts = vec![PathBuf::from("z.luau"), PathBuf::from("a.luau")];
         let paths = discover_scripts(&config)?;
         assert_eq!(

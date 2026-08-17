@@ -2,12 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        fs,
-        path::{Path, PathBuf},
-        process,
-        time::{SystemTime, UNIX_EPOCH},
-    };
+    use std::{fs, path::Path};
 
     use canopy::{
         Canopy, CommandArg, Context, EventOutcome, Loader, NodeId, ScriptApiState, ViewContext,
@@ -22,6 +17,7 @@ mod tests {
         testing::{backend::TestRender, harness::Harness},
     };
     use serde::{Deserialize, Serialize};
+    use tempfile::TempDir;
 
     struct ApiLeaf {
         value: i32,
@@ -120,17 +116,9 @@ mod tests {
             .collect()
     }
 
-    fn test_dir(name: &str) -> PathBuf {
-        let started = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system clock is before the Unix epoch");
-        let dir = PathBuf::from("tmp").join(format!(
-            "canopy-script-framework-{name}-{}-{}",
-            process::id(),
-            started.as_nanos()
-        ));
-        fs::create_dir_all(&dir).expect("create test directory");
-        dir
+    /// Return a temporary directory that removes itself when the test ends.
+    fn test_dir() -> TempDir {
+        tempfile::tempdir().expect("create test directory")
     }
 
     fn write_script(path: &Path, source: &str) {
@@ -441,7 +429,8 @@ mod tests {
 
     #[test]
     fn startup_scripts_layer_app_user_and_project_modules() -> Result<()> {
-        let root = test_dir("startup");
+        let dir = test_dir();
+        let root = dir.path();
         let user_root = root.join("user");
         let project_root = root.join("work/.canopy");
         write_script(
@@ -660,7 +649,8 @@ mod tests {
 
     #[test]
     fn script_module_declarations_must_conform() -> Result<()> {
-        let root = test_dir("conformance");
+        let dir = test_dir();
+        let root = dir.path();
         let project_root = root.join("work/.canopy");
         write_script(
             &project_root.join("settings.luau"),
@@ -704,7 +694,8 @@ mod tests {
 
     #[test]
     fn run_config_loads_named_files_with_relative_requires() -> Result<()> {
-        let root = test_dir("config");
+        let dir = test_dir();
+        let root = dir.path();
         let project_root = root.join("work/.canopy");
         write_script(
             &project_root.join("lib.luau"),

@@ -14,6 +14,7 @@ use super::*;
 use crate::{
     Context, ViewContext,
     commands::{CommandNode, CommandSpec},
+    core::world::test_support::assert_error_context,
     derive_commands,
     error::{Error, NodeOperationKind, Result},
     event::{Event, key, mouse},
@@ -28,8 +29,6 @@ use crate::{
     },
     widget::{EventOutcome, Widget},
 };
-
-use crate::core::world::test_support::assert_error_context;
 
 static POLL_COUNT: AtomicUsize = AtomicUsize::new(0);
 

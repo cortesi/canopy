@@ -2,53 +2,27 @@
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        env,
-        path::PathBuf,
-        time::{SystemTime, UNIX_EPOCH},
-    };
-
     use anyhow::Result as AnyResult;
     use canopy::{event::key::KeyCode, prelude::*, testing::harness::Harness};
     use canopy_widgets::List;
+    use tempfile::TempDir;
     use todo::{TodoEntry, create_app, store};
-
-    fn db_path(tag: &str) -> PathBuf {
-        env::temp_dir().join(format!(
-            "todo_test_{}_{}.db",
-            tag,
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_millis(),
-        ))
-    }
 
     fn add(h: &mut Harness, text: &str) -> Result<()> {
         h.key('a')?;
         for ch in text.chars() {
             h.key(ch)?;
         }
-        h.key(KeyCode::Enter)?;
-        // h.expect_highlight(text);
-        Ok(())
+        h.key(KeyCode::Enter)
     }
 
-    fn del_first(h: &mut Harness, _next: Option<&str>) -> Result<()> {
+    fn del_first(h: &mut Harness) -> Result<()> {
         h.key('g')?;
-        h.key('d')?;
-        // if let Some(txt) = next {
-        //     h.expect_highlight(txt);
-        // }
-        Ok(())
+        h.key('d')
     }
 
-    fn del_no_nav(h: &mut Harness, _next: Option<&str>) -> Result<()> {
-        h.key('d')?;
-        // if let Some(txt) = next {
-        //     h.expect_highlight(txt);
-        // }
-        Ok(())
+    fn del_no_nav(h: &mut Harness) -> Result<()> {
+        h.key('d')
     }
 
     fn list_len(h: &mut Harness) -> usize {
@@ -59,17 +33,20 @@ mod tests {
             .expect("list node missing")
     }
 
-    fn app(path: &str) -> AnyResult<Harness> {
-        let db_path = db_path(path);
-        let canopy = create_app(db_path.to_str().unwrap())?;
+    /// Build an app over a fresh database. The returned directory owns the database file and
+    /// removes it when the test ends.
+    fn app() -> AnyResult<(Harness, TempDir)> {
+        let dir = tempfile::tempdir()?;
+        let db_path = dir.path().join("todo.db");
+        let canopy = create_app(db_path.to_str().expect("database path is utf-8"))?;
         let mut h = Harness::from_canopy(canopy, Size::new(100, 100))?;
         h.render()?;
-        Ok(h)
+        Ok((h, dir))
     }
 
     #[test]
     fn add_item_via_script() -> AnyResult<()> {
-        let mut h = app("script")?;
+        let (mut h, _db) = app()?;
 
         h.key('a')?;
         h.key('h')?;
@@ -83,9 +60,9 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "assertion `left == right` failed")]
     fn add_item_with_char_newline() {
-        let mut h = app("charn1").unwrap();
+        let (mut h, _db) = app().expect("app builds");
 
         h.key('a').unwrap();
         h.key('h').unwrap();
@@ -96,53 +73,62 @@ mod tests {
 
     #[test]
     fn add_item_via_pty() -> AnyResult<()> {
-        let mut h = app("pty")?;
+        let (mut h, _db) = app()?;
 
         add(&mut h, "item_one")?;
         add(&mut h, "item_two")?;
         add(&mut h, "item_three")?;
-        del_first(&mut h, Some("item_two"))?;
-        del_first(&mut h, Some("item_three"))?;
-        del_first(&mut h, None)?;
+        assert_eq!(list_len(&mut h), 3);
+        del_first(&mut h)?;
+        assert!(h.tbuf().contains_text("item_two"));
+        del_first(&mut h)?;
+        del_first(&mut h)?;
+        assert_eq!(list_len(&mut h), 0);
         Ok(())
     }
 
     #[test]
     fn delete_reverse_via_pty() -> AnyResult<()> {
-        let mut h = app("rev")?;
+        let (mut h, _db) = app()?;
         add(&mut h, "one")?;
         add(&mut h, "two")?;
         add(&mut h, "three")?;
         h.key('j')?;
         h.key('j')?;
-        del_first(&mut h, Some("two"))?;
-        del_first(&mut h, Some("three"))?;
-        del_first(&mut h, None)?;
+        del_first(&mut h)?;
+        assert_eq!(list_len(&mut h), 2);
+        del_first(&mut h)?;
+        del_first(&mut h)?;
+        assert_eq!(list_len(&mut h), 0);
         Ok(())
     }
 
     #[test]
     fn single_item_add_remove() -> AnyResult<()> {
-        let mut h = app("single")?;
+        let (mut h, _db) = app()?;
 
         add(&mut h, "solo")?;
-        del_first(&mut h, None)?;
+        assert_eq!(list_len(&mut h), 1);
+        del_first(&mut h)?;
+        assert_eq!(list_len(&mut h), 0);
         Ok(())
     }
 
     #[test]
     fn delete_after_moving_focus() -> AnyResult<()> {
-        let mut h = app("move_del")?;
+        let (mut h, _db) = app()?;
         add(&mut h, "first")?;
         add(&mut h, "second")?;
         h.key('j')?;
         h.key('d')?;
+        assert_eq!(list_len(&mut h), 1);
+        assert!(h.tbuf().contains_text("first"));
         Ok(())
     }
 
     #[test]
     fn delete_middle_keeps_rest() -> AnyResult<()> {
-        let mut h = app("del_middle")?;
+        let (mut h, _db) = app()?;
         add(&mut h, "first")?;
         add(&mut h, "second")?;
         add(&mut h, "third")?;
@@ -155,28 +141,36 @@ mod tests {
 
     #[test]
     fn delete_first_without_nav() -> AnyResult<()> {
-        let mut h = app("del_first")?;
+        let (mut h, _db) = app()?;
         add(&mut h, "a1")?;
         add(&mut h, "a2")?;
         add(&mut h, "a3")?;
-        del_no_nav(&mut h, Some("a2"))?;
-        del_no_nav(&mut h, Some("a1"))?;
+        del_no_nav(&mut h)?;
+        del_no_nav(&mut h)?;
+        assert_eq!(list_len(&mut h), 1);
         Ok(())
     }
 
     #[test]
     fn focus_moves_with_navigation() -> AnyResult<()> {
-        let mut h = app("nav")?;
+        let (mut h, _db) = app()?;
         add(&mut h, "one")?;
         add(&mut h, "two")?;
+        // A step down and back up returns the selection to where it started, so the delete
+        // removes the same item it would have without navigating.
         h.key('j')?;
         h.key('k')?;
+        h.key('d')?;
+        assert_eq!(list_len(&mut h), 1);
+        let todos = store::get()?.todos()?;
+        assert_eq!(todos.len(), 1);
+        assert!(todos[0].item.contains("two"));
         Ok(())
     }
 
     #[test]
     fn delete_first_keeps_second_visible() -> AnyResult<()> {
-        let mut h = app("del_first_second")?;
+        let (mut h, _db) = app()?;
         add(&mut h, "first")?;
         add(&mut h, "second")?;
         h.key('g')?; // Go to first item
