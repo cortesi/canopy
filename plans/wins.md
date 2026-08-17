@@ -392,7 +392,7 @@ Independent, low-risk, mostly deletions. Do these first.
 
 ## Stage 3: scripting, commands, input, derive
 
-- [ ] **3.1 Bindings are Luau closures.** `BindingTarget` (`inputmap.rs:93-106`) has five
+- [x] **3.1 Bindings are Luau closures.** `BindingTarget` (`inputmap.rs:93-106`) has five
   variants; production constructs only `LuauFunction` (`script/mod.rs:2531`). `Command` and
   `CommandSequence` have no constructor anywhere; `Script` is built only in tests;
   `SetInputMode` only via `bind_input_mode`, whose callers are two tests. Delete the four

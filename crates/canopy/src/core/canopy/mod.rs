@@ -79,7 +79,7 @@ pub struct Canopy {
     /// Compiled handles retained across filesystem startup retries.
     startup_module_scripts: HashMap<PathBuf, script::ScriptId>,
     /// Binding targets whose release is deferred until a startup attempt commits.
-    deferred_binding_releases: Option<Vec<inputmap::BindingTarget>>,
+    deferred_binding_releases: Option<Vec<script::LuauFunctionId>>,
     /// In-memory journal of script evaluations.
     script_journal: Vec<ScriptJournalEntry>,
     /// Stack of active script dispatch anchors for the current VM invocation.
@@ -680,10 +680,8 @@ impl Canopy {
     /// Commit a startup attempt and release targets it replaced or removed.
     fn commit_startup_attempt(&mut self) {
         let releases = self.deferred_binding_releases.take().unwrap_or_default();
-        for target in releases {
-            if let inputmap::BindingTarget::LuauFunction(id) = target {
-                self.script_host.release_function(id);
-            }
+        for id in releases {
+            self.script_host.release_function(id);
         }
     }
 
@@ -692,10 +690,8 @@ impl Canopy {
         let new_targets = self.keymap.targets_not_in(&attempt.binding_ids);
         self.keymap = attempt.keymap;
         self.deferred_binding_releases = None;
-        for target in new_targets {
-            if let inputmap::BindingTarget::LuauFunction(id) = target {
-                self.script_host.release_function(id);
-            }
+        for id in new_targets {
+            self.script_host.release_function(id);
         }
 
         let baseline_hooks = attempt.hooks.iter().copied().collect::<HashSet<_>>();
@@ -903,7 +899,7 @@ impl Canopy {
             return false;
         }
         for binding in removed {
-            self.release_binding_target(&binding);
+            self.release_binding_target(binding);
         }
         true
     }
@@ -963,18 +959,6 @@ impl Canopy {
     /// Pop the top input mode and return the new active mode.
     pub fn pop_input_mode(&mut self) -> &str {
         self.keymap.pop_mode()
-    }
-
-    /// Bind a key or mouse input to switch the active input mode.
-    pub fn bind_input_mode(
-        &mut self,
-        mode: &str,
-        input: inputmap::InputSpec,
-        path_filter: &str,
-        next_mode: &str,
-    ) -> Result<inputmap::BindingId> {
-        self.keymap
-            .bind_input_mode(mode, input, path_filter, next_mode)
     }
 
     /// Return the most recent key or mouse route trace.
@@ -1401,12 +1385,9 @@ impl Canopy {
                 } else {
                     super::help::BindingKind::PostEventFallback
                 };
-                let label = super::help::binding_label(
-                    mb.info.target,
-                    &self.core.commands,
-                    |sid| self.script_host.script_source(sid),
-                    |id| self.script_host.function_label(id),
-                );
+                let label = super::help::binding_label(mb.info.target, |id| {
+                    self.script_host.function_label(id)
+                });
                 out.push(super::help::HelpBinding {
                     id: mb.info.id,
                     input: mb.info.input,

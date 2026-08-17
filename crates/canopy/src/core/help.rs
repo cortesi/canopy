@@ -5,13 +5,13 @@
 //! command palettes, or discoverable keybinding references.
 
 use crate::{
-    commands::{CommandResolution, CommandSet, CommandSpec},
+    commands::{CommandResolution, CommandSpec},
     core::{
         NodeId,
-        inputmap::{BindingId, BindingTarget, InputSpec},
+        inputmap::{BindingId, InputSpec},
     },
     path::Path,
-    script::{LuauFunctionId, ScriptId},
+    script::LuauFunctionId,
 };
 
 /// Classification of how a binding matched the focus path.
@@ -34,8 +34,8 @@ pub struct HelpBinding<'a> {
     pub mode: &'a str,
     /// The original path filter string.
     pub path_filter: &'a str,
-    /// The binding target (script or command).
-    pub target: &'a BindingTarget,
+    /// The stored Luau closure this binding calls.
+    pub target: LuauFunctionId,
     /// Classification of how this binding matched.
     pub kind: BindingKind,
     /// Human-readable label derived from command docs or script source.
@@ -149,86 +149,14 @@ impl<'a> HelpSnapshot<'a> {
     }
 }
 
-/// Extract a command ID from a script source if it's a simple command call.
+/// Derive a human-readable label for a binding.
 ///
-/// Detects patterns like `owner::command()` or `owner::command(args)`.
-fn extract_command_id(source: &str) -> Option<&str> {
-    let source = source.trim();
-    // Match: identifier::identifier( or identifier(
-    // Stop at the opening paren
-    let paren_pos = source.find('(')?;
-    let candidate = source[..paren_pos].trim();
-
-    // Validate it looks like a command call (alphanumeric + underscores + optional ::)
-    if candidate.is_empty() {
-        return None;
-    }
-    for c in candidate.chars() {
-        if !c.is_alphanumeric() && c != '_' && c != ':' {
-            return None;
-        }
-    }
-    // Must contain :: for namespaced commands
-    if !candidate.contains("::") {
-        return None;
-    }
-    Some(candidate)
-}
-
-/// Derive a human-readable label for a binding target.
-///
-/// For scripts that are simple command calls (e.g., `root::focus_next()`), looks up
-/// the command's documentation. For compound scripts, falls back to the source.
-pub fn binding_label<F, G>(
-    target: &BindingTarget,
-    commands: &CommandSet,
-    script_source: F,
-    luau_label: G,
-) -> String
-where
-    F: Fn(ScriptId) -> Option<String>,
-    G: Fn(LuauFunctionId) -> Option<String>,
-{
-    match target {
-        BindingTarget::Script(sid) => {
-            if let Some(source) = script_source(*sid) {
-                let source = source.trim();
-                // Try to extract a simple command call and use its docs
-                if let Some(cmd_id) = extract_command_id(source)
-                    && let Some(spec) = commands.get(cmd_id)
-                    && let Some(desc) = spec.doc.short
-                {
-                    return desc.to_string();
-                }
-                // Fall back to showing the script source
-                return source.to_string();
-            }
-            "script".to_string()
-        }
-        BindingTarget::Command(inv) => {
-            // Try to get description from command spec
-            if let Some(spec) = commands.get(inv.id.0)
-                && let Some(desc) = spec.doc.short
-            {
-                return desc.to_string();
-            }
-            // Fall back to command ID
-            inv.id.0.to_string()
-        }
-        BindingTarget::CommandSequence(invocations) => invocations
-            .iter()
-            .filter_map(|invocation| {
-                commands
-                    .get(invocation.id.0)
-                    .and_then(|spec| spec.doc.short)
-                    .or(Some(invocation.id.0))
-            })
-            .collect::<Vec<_>>()
-            .join(" -> "),
-        BindingTarget::SetInputMode(mode) if mode.is_empty() => "set input mode: default".into(),
-        BindingTarget::SetInputMode(mode) => format!("set input mode: {mode}"),
-        BindingTarget::LuauFunction(id) => luau_label(*id).unwrap_or_else(|| "script".to_string()),
-    }
+/// Falls back to a generic label when the stored closure carries no label.
+pub fn binding_label(
+    target: LuauFunctionId,
+    luau_label: impl Fn(LuauFunctionId) -> Option<String>,
+) -> String {
+    luau_label(target).unwrap_or_else(|| "script".to_string())
 }
 
 // ============================================================================

@@ -4,14 +4,13 @@ use std::{
 };
 
 use crate::{
-    commands::CommandInvocation,
     error::{Error, Result},
     event::{
         key::Key,
         mouse::{self, Mouse},
     },
     path::*,
-    script,
+    script::LuauFunctionId,
 };
 
 /// Default input mode name.
@@ -50,7 +49,7 @@ struct BoundAction {
     /// Compiled path matcher (includes original filter string).
     pathmatch: PathMatcher,
     /// Action to execute.
-    action: BindingTarget,
+    action: LuauFunctionId,
 }
 
 /// Binding match priority. Higher values win; later insertion wins exact ties.
@@ -79,7 +78,7 @@ impl BindingPriority {
 }
 
 /// Tuple storing a binding match and its score.
-type BindingCandidate = (BindingPriority, BindingTarget, PathMatch);
+type BindingCandidate = (BindingPriority, LuauFunctionId, PathMatch);
 
 /// Binding mode/path filter used when removing or replacing bindings.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -88,21 +87,6 @@ pub struct BindingFilter<'a> {
     pub mode: Option<&'a str>,
     /// Optional exact path filter string to match.
     pub path_filter: Option<&'a str>,
-}
-
-/// A resolved input binding target.
-#[derive(Debug, Clone, PartialEq)]
-pub enum BindingTarget {
-    /// Script identifier to execute.
-    Script(script::ScriptId),
-    /// Direct command invocation.
-    Command(CommandInvocation),
-    /// Sequence of commands executed in order.
-    CommandSequence(Vec<CommandInvocation>),
-    /// Switch to another input mode.
-    SetInputMode(String),
-    /// Stored Luau closure owned by the script host.
-    LuauFunction(script::LuauFunctionId),
 }
 
 /// Input event used for bindings.
@@ -182,7 +166,7 @@ impl InputMode {
         id: BindingId,
         pathmatch: PathMatcher,
         input: InputSpec,
-        action: BindingTarget,
+        action: LuauFunctionId,
     ) {
         let input = input.normalize();
         self.inputs.entry(input).or_default().push(BoundAction {
@@ -199,7 +183,7 @@ impl InputMode {
         &self,
         path: &Path,
         input: &InputSpec,
-    ) -> Option<(BindingTarget, PathMatch)> {
+    ) -> Option<(LuauFunctionId, PathMatch)> {
         let input = input.normalize();
         let mut best: Option<BindingCandidate> = None;
         for (idx, k) in self.inputs.get(&input)?.iter().enumerate() {
@@ -210,7 +194,7 @@ impl InputMode {
                     None => true,
                 };
                 if replace {
-                    best = Some((score, k.action.clone(), m));
+                    best = Some((score, k.action, m));
                 }
             }
         }
@@ -226,7 +210,7 @@ impl InputMode {
                     id: a.id,
                     input: *input,
                     path_filter: a.pathmatch.filter(),
-                    target: &a.action,
+                    target: a.action,
                 });
             }
         }
@@ -251,7 +235,7 @@ impl InputMode {
                             id: a.id,
                             input: *input,
                             path_filter: a.pathmatch.filter(),
-                            target: &a.action,
+                            target: a.action,
                         },
                         m,
                     });
@@ -270,7 +254,7 @@ impl InputMode {
     }
 
     /// Remove a binding by ID and return removed targets.
-    fn unbind_with_targets(&mut self, id: BindingId) -> Vec<BindingTarget> {
+    fn unbind_with_targets(&mut self, id: BindingId) -> Vec<LuauFunctionId> {
         let mut removed = false;
         let mut targets = Vec::new();
         for actions in self.inputs.values_mut() {
@@ -294,7 +278,7 @@ impl InputMode {
         &mut self,
         input: InputSpec,
         path_filter: Option<&str>,
-    ) -> Vec<(BindingId, BindingTarget)> {
+    ) -> Vec<(BindingId, LuauFunctionId)> {
         let input = input.normalize();
         let Some(actions) = self.inputs.get_mut(&input) else {
             return Vec::new();
@@ -304,7 +288,7 @@ impl InputMode {
         actions.retain(|action| {
             let matches = path_filter.is_none_or(|filter| action.pathmatch.filter() == filter);
             if matches {
-                removed.push((action.id, action.action.clone()));
+                removed.push((action.id, action.action));
                 false
             } else {
                 true
@@ -319,7 +303,7 @@ impl InputMode {
     }
 
     /// Remove all bindings from this mode.
-    fn clear(&mut self) -> Vec<(BindingId, BindingTarget)> {
+    fn clear(&mut self) -> Vec<(BindingId, LuauFunctionId)> {
         let mut removed = Vec::new();
         for actions in self.inputs.values_mut() {
             for action in actions.drain(..) {
@@ -331,17 +315,12 @@ impl InputMode {
     }
 
     /// Remove every Luau-backed binding from this mode.
-    fn remove_luau_functions(&mut self) -> Vec<(BindingId, BindingTarget)> {
+    fn remove_luau_functions(&mut self) -> Vec<(BindingId, LuauFunctionId)> {
         let mut removed = Vec::new();
         for actions in self.inputs.values_mut() {
-            actions.retain(|action| {
-                if matches!(action.action, BindingTarget::LuauFunction(_)) {
-                    removed.push((action.id, action.action.clone()));
-                    false
-                } else {
-                    true
-                }
-            });
+            for action in actions.drain(..) {
+                removed.push((action.id, action.action));
+            }
         }
         self.inputs.retain(|_, actions| !actions.is_empty());
         removed
@@ -478,42 +457,22 @@ impl InputMap {
         &self,
         path: &Path,
         input: &InputSpec,
-    ) -> Option<(BindingTarget, PathMatch)> {
+    ) -> Option<(LuauFunctionId, PathMatch)> {
         self.resolve_in_modes(|mode| mode.resolve_match(path, input))
     }
 
-    /// Bind a key or mouse input to switch the active input mode.
-    ///
-    /// The input is normalized before storing.
+    /// Store a binding for a mode and path filter without a live script host.
     ///
     /// Returns the new binding ID.
-    pub fn bind_input_mode(
+    #[cfg(test)]
+    pub(crate) fn bind_test(
         &mut self,
         mode: &str,
         input: InputSpec,
         path_filter: &str,
-        next_mode: &str,
-    ) -> Result<BindingId> {
-        self.bind_action(
-            mode,
-            input,
-            path_filter,
-            BindingTarget::SetInputMode(next_mode.to_string()),
-        )
-    }
-
-    /// Store a key binding action for a mode and path filter.
-    ///
-    /// Returns the new binding ID.
-    fn bind_action(
-        &mut self,
-        mode: &str,
-        input: InputSpec,
-        path_filter: &str,
-        action: BindingTarget,
+        action: LuauFunctionId,
     ) -> Result<BindingId> {
         let pathmatch = PathMatcher::new(path_filter)?;
-        validate_binding_target(&action)?;
         let id = BindingId::next(&mut self.next_id)?;
         self.modes
             .entry(mode.to_string())
@@ -523,7 +482,7 @@ impl InputMap {
     }
 
     /// Remove a binding by ID and return removed targets.
-    pub fn unbind_with_targets(&mut self, id: BindingId) -> Vec<BindingTarget> {
+    pub fn unbind_with_targets(&mut self, id: BindingId) -> Vec<LuauFunctionId> {
         let mut removed = false;
         let mut targets = Vec::new();
         for mode in self.modes.values_mut() {
@@ -541,7 +500,7 @@ impl InputMap {
         &mut self,
         input: InputSpec,
         filter: BindingFilter<'_>,
-    ) -> Vec<(BindingId, BindingTarget)> {
+    ) -> Vec<(BindingId, LuauFunctionId)> {
         let mut removed = Vec::new();
 
         if let Some(mode) = filter.mode {
@@ -565,10 +524,9 @@ impl InputMap {
         mode: &str,
         input: InputSpec,
         path_filter: &str,
-        target: BindingTarget,
-    ) -> Result<(BindingId, Vec<(BindingId, BindingTarget)>)> {
+        target: LuauFunctionId,
+    ) -> Result<(BindingId, Vec<(BindingId, LuauFunctionId)>)> {
         let pathmatch = PathMatcher::new(path_filter)?;
-        validate_binding_target(&target)?;
         let id = BindingId::next(&mut self.next_id)?;
         let removed = self.unbind_input(
             input,
@@ -585,7 +543,7 @@ impl InputMap {
     }
 
     /// Remove every binding from every mode.
-    pub fn clear(&mut self) -> Vec<(BindingId, BindingTarget)> {
+    pub fn clear(&mut self) -> Vec<(BindingId, LuauFunctionId)> {
         let mut removed = Vec::new();
         for mode in self.modes.values_mut() {
             removed.extend(mode.clear());
@@ -597,7 +555,7 @@ impl InputMap {
     }
 
     /// Remove every Luau-backed binding while preserving command and mode bindings.
-    pub(crate) fn remove_luau_functions(&mut self) -> Vec<(BindingId, BindingTarget)> {
+    pub(crate) fn remove_luau_functions(&mut self) -> Vec<(BindingId, LuauFunctionId)> {
         let mut removed = Vec::new();
         for mode in self.modes.values_mut() {
             removed.extend(mode.remove_luau_functions());
@@ -618,13 +576,13 @@ impl InputMap {
     }
 
     /// Clone targets owned by bindings absent from a baseline ID set.
-    pub(crate) fn targets_not_in(&self, baseline: &HashSet<BindingId>) -> Vec<BindingTarget> {
+    pub(crate) fn targets_not_in(&self, baseline: &HashSet<BindingId>) -> Vec<LuauFunctionId> {
         self.modes
             .values()
             .flat_map(|mode| mode.inputs.values())
             .flatten()
             .filter(|action| !baseline.contains(&action.id))
-            .map(|action| action.action.clone())
+            .map(|action| action.action)
             .collect()
     }
 
@@ -663,24 +621,6 @@ impl InputMap {
     }
 }
 
-/// Validate a binding target before mutating the input map.
-fn validate_binding_target(target: &BindingTarget) -> Result<()> {
-    let valid_command = |command: &CommandInvocation| !command.id.0.is_empty();
-    let valid = match target {
-        BindingTarget::Script(id) => *id != 0,
-        BindingTarget::Command(command) => valid_command(command),
-        BindingTarget::CommandSequence(commands) => {
-            !commands.is_empty() && commands.iter().all(valid_command)
-        }
-        BindingTarget::SetInputMode(_) | BindingTarget::LuauFunction(_) => true,
-    };
-    if valid {
-        Ok(())
-    } else {
-        Err(Error::Invalid("invalid input binding target".to_string()))
-    }
-}
-
 /// Metadata about a single input binding.
 #[derive(Debug, Clone)]
 pub struct BindingInfo<'a> {
@@ -691,7 +631,7 @@ pub struct BindingInfo<'a> {
     /// Original path filter string (e.g., "editor/*").
     pub path_filter: &'a str,
     /// Target action (script, command, command sequence, or Luau closure).
-    pub target: &'a BindingTarget,
+    pub target: LuauFunctionId,
 }
 
 /// Binding info with match metadata.
@@ -752,7 +692,7 @@ mod tests {
         mode: String,
         input: InputSpec,
         path: String,
-        target: BindingTarget,
+        target: LuauFunctionId,
     }
 
     #[derive(Debug)]
@@ -824,12 +764,8 @@ mod tests {
         ["", "foo", "foo/**", "invalid-name"][usize::from(index) % 4]
     }
 
-    fn model_target(index: u8) -> BindingTarget {
-        match index % 3 {
-            0 => BindingTarget::Script(u64::from(index) + 1),
-            1 => BindingTarget::SetInputMode(model_mode(index).to_string()),
-            _ => BindingTarget::Script(0),
-        }
+    fn model_target(index: u8) -> LuauFunctionId {
+        LuauFunctionId::for_test(u64::from(index) + 1)
     }
 
     fn registry_signature(map: &InputMap) -> Vec<ModelBinding> {
@@ -841,7 +777,7 @@ mod tests {
                 mode: binding.mode.to_string(),
                 input: binding.info.input,
                 path: binding.info.path_filter.to_string(),
-                target: binding.info.target.clone(),
+                target: binding.info.target,
             })
             .collect::<Vec<_>>();
         bindings.sort_by_key(|binding| binding.id.as_u64());
@@ -877,8 +813,8 @@ mod tests {
                 let input = model_input(key);
                 let path = model_path(path);
                 let target = model_target(target);
-                let result = map.bind_action(mode, input, path, target.clone());
-                let valid = path != "invalid-name" && !matches!(target, BindingTarget::Script(0));
+                let result = map.bind_test(mode, input, path, target);
+                let valid = path != "invalid-name";
                 prop_assert_eq!(result.is_ok(), valid);
                 if let Ok(id) = result {
                     model.bindings.push(ModelBinding {
@@ -901,8 +837,8 @@ mod tests {
                 let input = model_input(key);
                 let path = model_path(path);
                 let target = model_target(target);
-                let result = map.replace_binding(mode, input, path, target.clone());
-                let valid = path != "invalid-name" && !matches!(target, BindingTarget::Script(0));
+                let result = map.replace_binding(mode, input, path, target);
+                let valid = path != "invalid-name";
                 prop_assert_eq!(result.is_ok(), valid);
                 if let Ok((id, _)) = result {
                     model.bindings.retain(|binding| {
@@ -972,8 +908,12 @@ mod tests {
             RegistryOperation::ExhaustIdentifier => {
                 let before = registry_signature(map);
                 map.next_id = u64::MAX;
-                let result =
-                    map.bind_action("", InputSpec::Key('z'.into()), "", BindingTarget::Script(1));
+                let result = map.bind_test(
+                    "",
+                    InputSpec::Key('z'.into()),
+                    "",
+                    LuauFunctionId::for_test(1),
+                );
                 prop_assert!(result.is_err());
                 prop_assert_eq!(registry_signature(map), before);
                 map.next_id = model.next_id;
@@ -998,17 +938,17 @@ mod tests {
     }
 
     trait ResolveTarget {
-        fn resolve(&self, path: &Path, input: &InputSpec) -> Option<BindingTarget>;
+        fn resolve(&self, path: &Path, input: &InputSpec) -> Option<LuauFunctionId>;
     }
 
     impl ResolveTarget for InputMode {
-        fn resolve(&self, path: &Path, input: &InputSpec) -> Option<BindingTarget> {
+        fn resolve(&self, path: &Path, input: &InputSpec) -> Option<LuauFunctionId> {
             self.resolve_match(path, input).map(|(target, _)| target)
         }
     }
 
     impl ResolveTarget for InputMap {
-        fn resolve(&self, path: &Path, input: &InputSpec) -> Option<BindingTarget> {
+        fn resolve(&self, path: &Path, input: &InputSpec) -> Option<LuauFunctionId> {
             self.resolve_match(path, input).map(|(target, _)| target)
         }
     }
@@ -1019,7 +959,7 @@ mod tests {
             mode: &str,
             input: InputSpec,
             path_filter: &str,
-            script: script::ScriptId,
+            function: u64,
         ) -> Result<BindingId>;
     }
 
@@ -1029,9 +969,9 @@ mod tests {
             mode: &str,
             input: InputSpec,
             path_filter: &str,
-            script: script::ScriptId,
+            function: u64,
         ) -> Result<BindingId> {
-            self.bind_action(mode, input, path_filter, BindingTarget::Script(script))
+            self.bind_test(mode, input, path_filter, LuauFunctionId::for_test(function))
         }
     }
 
@@ -1052,32 +992,23 @@ mod tests {
         let original = map.bind("", input, "", 1)?;
 
         assert!(
-            map.replace_binding("", input, "invalid-name", BindingTarget::Script(2))
+            map.replace_binding("", input, "invalid-name", LuauFunctionId::for_test(2))
                 .is_err()
         );
         assert_eq!(
             map.resolve(&Path::empty(), &input),
-            Some(BindingTarget::Script(1))
+            Some(LuauFunctionId::for_test(1))
         );
         assert_eq!(map.bindings()[0].info.id, original);
 
-        assert!(
-            map.replace_binding("", input, "", BindingTarget::Script(0))
-                .is_err()
-        );
-        assert_eq!(
-            map.resolve(&Path::empty(), &input),
-            Some(BindingTarget::Script(1))
-        );
-
         map.next_id = u64::MAX;
         assert!(
-            map.replace_binding("", input, "", BindingTarget::Script(2))
+            map.replace_binding("", input, "", LuauFunctionId::for_test(2))
                 .is_err()
         );
         assert_eq!(
             map.resolve(&Path::empty(), &input),
-            Some(BindingTarget::Script(1))
+            Some(LuauFunctionId::for_test(1))
         );
         Ok(())
     }
@@ -1086,8 +1017,13 @@ mod tests {
     fn binding_views_are_independent_of_insertion_order() -> Result<()> {
         fn build(inputs: [char; 2]) -> Result<InputMap> {
             let mut map = InputMap::new();
-            for input in inputs {
-                map.bind_input_mode("", InputSpec::Key(input.into()), "", &input.to_string())?;
+            for (index, input) in inputs.into_iter().enumerate() {
+                map.bind_test(
+                    "",
+                    InputSpec::Key(input.into()),
+                    "",
+                    LuauFunctionId::for_test(index as u64 + 1),
+                )?;
             }
             Ok(map)
         }
@@ -1129,18 +1065,18 @@ mod tests {
             BindingId(1),
             PathMatcher::new("foo")?,
             InputSpec::Key('A'.into()),
-            BindingTarget::Script(a_foo),
+            LuauFunctionId::for_test(a_foo),
         );
 
         assert_eq!(
             m.resolve(&"foo".into(), &InputSpec::Key(key::Shift + 'A'))
                 .unwrap(),
-            BindingTarget::Script(a_foo)
+            LuauFunctionId::for_test(a_foo)
         );
         assert_eq!(
             m.resolve(&"foo".into(), &InputSpec::Key(key::Shift + 'a'))
                 .unwrap(),
-            BindingTarget::Script(a_foo)
+            LuauFunctionId::for_test(a_foo)
         );
 
         Ok(())
@@ -1158,40 +1094,40 @@ mod tests {
             BindingId(1),
             PathMatcher::new("foo")?,
             InputSpec::Key('a'.into()),
-            BindingTarget::Script(a_foo),
+            LuauFunctionId::for_test(a_foo),
         );
         m.insert(
             BindingId(2),
             PathMatcher::new("bar")?,
             InputSpec::Key('a'.into()),
-            BindingTarget::Script(a_bar),
+            LuauFunctionId::for_test(a_bar),
         );
         m.insert(
             BindingId(3),
             PathMatcher::new("")?,
             InputSpec::Key('b'.into()),
-            BindingTarget::Script(b),
+            LuauFunctionId::for_test(b),
         );
 
         assert_eq!(
             m.resolve(&"foo".into(), &InputSpec::Key('a'.into()))
                 .unwrap(),
-            BindingTarget::Script(a_foo)
+            LuauFunctionId::for_test(a_foo)
         );
         assert_eq!(
             m.resolve(&"bar".into(), &InputSpec::Key('a'.into()))
                 .unwrap(),
-            BindingTarget::Script(a_bar),
+            LuauFunctionId::for_test(a_bar),
         );
         assert_eq!(
             m.resolve(&"bar/foo".into(), &InputSpec::Key('a'.into()))
                 .unwrap(),
-            BindingTarget::Script(a_foo),
+            LuauFunctionId::for_test(a_foo),
         );
         assert_eq!(
             m.resolve(&"foo/bar".into(), &InputSpec::Key('a'.into()))
                 .unwrap(),
-            BindingTarget::Script(a_bar)
+            LuauFunctionId::for_test(a_bar)
         );
         assert!(
             m.resolve(&"foo/bar".into(), &InputSpec::Key('x'.into()))
@@ -1219,13 +1155,13 @@ mod tests {
         assert_eq!(
             m.resolve(&"foo/bar".into(), &InputSpec::Key('a'.into()))
                 .unwrap(),
-            BindingTarget::Script(a_default)
+            LuauFunctionId::for_test(a_default)
         );
         m.set_mode("m")?;
         assert_eq!(
             m.resolve(&"foo/bar".into(), &InputSpec::Key('a'.into()))
                 .unwrap(),
-            BindingTarget::Script(a_m)
+            LuauFunctionId::for_test(a_m)
         );
 
         Ok(())
@@ -1255,30 +1191,30 @@ mod tests {
         assert_eq!(
             m.resolve(&"foo".into(), &InputSpec::Key('a'.into()))
                 .unwrap(),
-            BindingTarget::Script(a_modal)
+            LuauFunctionId::for_test(a_modal)
         );
         assert_eq!(
             m.resolve(&"foo".into(), &InputSpec::Key('b'.into()))
                 .unwrap(),
-            BindingTarget::Script(b_normal)
+            LuauFunctionId::for_test(b_normal)
         );
         assert_eq!(
             m.resolve(&"foo".into(), &InputSpec::Key('c'.into()))
                 .unwrap(),
-            BindingTarget::Script(c_default)
+            LuauFunctionId::for_test(c_default)
         );
 
         assert_eq!(m.pop_mode(), "normal");
         assert_eq!(
             m.resolve(&"foo".into(), &InputSpec::Key('a'.into()))
                 .unwrap(),
-            BindingTarget::Script(a_normal)
+            LuauFunctionId::for_test(a_normal)
         );
         assert_eq!(m.pop_mode(), "");
         assert_eq!(
             m.resolve(&"foo".into(), &InputSpec::Key('a'.into()))
                 .unwrap(),
-            BindingTarget::Script(a_default)
+            LuauFunctionId::for_test(a_default)
         );
 
         Ok(())
@@ -1294,7 +1230,7 @@ mod tests {
         assert_eq!(
             m.resolve(&"foo".into(), &InputSpec::Key('b'.into()))
                 .unwrap(),
-            BindingTarget::Script(a_default)
+            LuauFunctionId::for_test(a_default)
         );
         Ok(())
     }
@@ -1310,7 +1246,7 @@ mod tests {
         assert_eq!(
             m.resolve(&"foo".into(), &InputSpec::Key('b'.into()))
                 .unwrap(),
-            BindingTarget::Script(a_default)
+            LuauFunctionId::for_test(a_default)
         );
         assert!(
             m.resolve_match(&"foo".into(), &InputSpec::Key('x'.into()))
@@ -1346,19 +1282,19 @@ mod tests {
             BindingId(1),
             PathMatcher::new("foo")?,
             InputSpec::Key('a'.into()),
-            BindingTarget::Script(a_loose),
+            LuauFunctionId::for_test(a_loose),
         );
         m.insert(
             BindingId(2),
             PathMatcher::new("bar")?,
             InputSpec::Key('a'.into()),
-            BindingTarget::Script(a_anchor),
+            LuauFunctionId::for_test(a_anchor),
         );
 
         assert_eq!(
             m.resolve(&"/foo/bar".into(), &InputSpec::Key('a'.into()))
                 .unwrap(),
-            BindingTarget::Script(a_anchor)
+            LuauFunctionId::for_test(a_anchor)
         );
         Ok(())
     }
@@ -1374,19 +1310,19 @@ mod tests {
             BindingId(1),
             PathMatcher::new("bar/**")?,
             InputSpec::Key('a'.into()),
-            BindingTarget::Script(a_shallow),
+            LuauFunctionId::for_test(a_shallow),
         );
         m.insert(
             BindingId(2),
             PathMatcher::new("foo/**")?,
             InputSpec::Key('a'.into()),
-            BindingTarget::Script(a_deep),
+            LuauFunctionId::for_test(a_deep),
         );
 
         assert_eq!(
             m.resolve(&"/foo/bar/baz".into(), &InputSpec::Key('a'.into()))
                 .unwrap(),
-            BindingTarget::Script(a_deep)
+            LuauFunctionId::for_test(a_deep)
         );
         Ok(())
     }
@@ -1402,19 +1338,19 @@ mod tests {
             BindingId(1),
             PathMatcher::new("bar/foo")?,
             InputSpec::Key('a'.into()),
-            BindingTarget::Script(a_first),
+            LuauFunctionId::for_test(a_first),
         );
         m.insert(
             BindingId(2),
             PathMatcher::new("bar/foo")?,
             InputSpec::Key('a'.into()),
-            BindingTarget::Script(a_last),
+            LuauFunctionId::for_test(a_last),
         );
 
         assert_eq!(
             m.resolve(&"/root/bar/foo".into(), &InputSpec::Key('a'.into()))
                 .unwrap(),
-            BindingTarget::Script(a_last)
+            LuauFunctionId::for_test(a_last)
         );
         Ok(())
     }

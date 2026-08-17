@@ -97,10 +97,10 @@ Rooted config and startup files keep one source identity through typechecking, c
 loading, diagnostics, and tracebacks. `init.luau` maps to its mount root (`@user` or `@project`),
 matching directory-module resolution.
 
-The three invalidation methods refresh all roots, `@user`, or `@project`. Invalidation also removes
-Luau-backed key and mouse bindings and pending startup hooks because their retained function
-handles belong to the previous source epoch. The next script load prepares dependencies again;
-ordinary Rust command and mode bindings remain installed.
+`Canopy::invalidate_script_modules` refreshes one named root or every root. Invalidation also
+removes every key and mouse binding and every pending startup hook, because their retained
+function handles belong to the previous source epoch. The next script load prepares dependencies
+again, and re-running the startup scripts reinstalls the bindings.
 
 ## Startup Scripts
 

@@ -95,7 +95,9 @@ fn cross_thread_automation_request_completes_via_service_path() -> Result<()> {
 fn canopy_with_binding_order(inputs: [char; 2]) -> Result<Canopy> {
     let mut canopy = Canopy::new();
     for input in inputs {
-        canopy.bind_input_mode("", inputmap::InputSpec::Key(input.into()), "", "next")?;
+        canopy.eval_script(&format!(
+            "canopy.bind_with({input:?}, {{}}, function() canopy.set_mode(\"next\") end)"
+        ))?;
     }
     Ok(canopy)
 }
@@ -461,23 +463,12 @@ fn set_widget_resets_initialization() -> Result<()> {
 #[test]
 fn tbindings() -> Result<()> {
     run_ttree(|c, _, tree| {
-        c.keymap.replace_binding(
-            "",
-            inputmap::InputSpec::Key('a'.into()),
-            "",
-            inputmap::BindingTarget::Script(c.script_host.compile(r#"ba_la.c_leaf()"#)?),
-        )?;
-        c.keymap.replace_binding(
-            "",
-            inputmap::InputSpec::Key('r'.into()),
-            "",
-            inputmap::BindingTarget::Script(c.script_host.compile(r#"r.c_root()"#)?),
-        )?;
-        c.keymap.replace_binding(
-            "",
-            inputmap::InputSpec::Key('x'.into()),
-            "ba/",
-            inputmap::BindingTarget::Script(c.script_host.compile(r#"r.c_root()"#)?),
+        c.eval_script(
+            r#"
+            canopy.bind_with("a", {}, function() ba_la.c_leaf() end)
+            canopy.bind_with("r", {}, function() r.c_root() end)
+            canopy.bind_with("x", { path = "ba/" }, function() r.c_root() end)
+            "#,
         )?;
 
         c.core.set_focus(tree.a_a)?;
@@ -516,7 +507,7 @@ fn tbindings() -> Result<()> {
 #[test]
 fn input_mode_binding_target_switches_modes() -> Result<()> {
     let mut canopy = Canopy::new();
-    canopy.bind_input_mode("", inputmap::InputSpec::Key('i'.into()), "", "insert")?;
+    canopy.eval_script(r#"canopy.bind_with("i", {}, function() canopy.set_mode("insert") end)"#)?;
 
     canopy.key(None, 'i')?;
 

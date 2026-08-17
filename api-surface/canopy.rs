@@ -564,16 +564,6 @@ pub mod canopy {
             /// Pop the top input mode and return the new active mode.
             pub fn pop_input_mode(&mut self) -> &str {}
 
-            /// Bind a key or mouse input to switch the active input mode.
-            pub fn bind_input_mode(
-                &mut self,
-                mode: &str,
-                input: inputmap::InputSpec,
-                path_filter: &str,
-                next_mode: &str,
-            ) -> Result<inputmap::BindingId> {
-            }
-
             /// Return the most recent key or mouse route trace.
             pub fn route_trace(&self) -> &[RouteTraceEntry] {}
 
@@ -2412,16 +2402,6 @@ pub mod canopy {
 
         /// Pop the top input mode and return the new active mode.
         pub fn pop_input_mode(&mut self) -> &str {}
-
-        /// Bind a key or mouse input to switch the active input mode.
-        pub fn bind_input_mode(
-            &mut self,
-            mode: &str,
-            input: inputmap::InputSpec,
-            path_filter: &str,
-            next_mode: &str,
-        ) -> Result<inputmap::BindingId> {
-        }
 
         /// Return the most recent key or mouse route trace.
         pub fn route_trace(&self) -> &[RouteTraceEntry] {}
@@ -4460,8 +4440,8 @@ pub mod canopy {
             pub mode: &'a str,
             /// The original path filter string.
             pub path_filter: &'a str,
-            /// The binding target (script or command).
-            pub target: &'a crate::core::inputmap::BindingTarget,
+            /// The stored Luau closure this binding calls.
+            pub target: crate::script::LuauFunctionId,
             /// Classification of how this binding matched.
             pub kind: BindingKind,
             /// Human-readable label derived from command docs or script source.
@@ -4516,19 +4496,13 @@ pub mod canopy {
             pub fn to_owned(&self) -> OwnedHelpSnapshot {}
         }
 
-        /// Derive a human-readable label for a binding target.
+        /// Derive a human-readable label for a binding.
         ///
-        /// For scripts that are simple command calls (e.g., `root::focus_next()`), looks up
-        /// the command's documentation. For compound scripts, falls back to the source.
-        pub fn binding_label<F, G>(
-            target: &crate::core::inputmap::BindingTarget,
-            commands: &crate::commands::CommandSet,
-            script_source: F,
-            luau_label: G,
-        ) -> String
-        where
-            F: Fn(crate::script::ScriptId) -> Option<String>,
-            G: Fn(crate::script::LuauFunctionId) -> Option<String>, {
+        /// Falls back to a generic label when the stored closure carries no label.
+        pub fn binding_label(
+            target: crate::script::LuauFunctionId,
+            luau_label: impl Fn(crate::script::LuauFunctionId) -> Option<String>,
+        ) -> String {
         }
 
         /// Owned version of [`HelpBinding`] for storage without lifetimes.

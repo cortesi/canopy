@@ -4,12 +4,13 @@ use ruau::vm::Scope;
 
 use super::{AUTOMATION_SERVICE_BUDGET, Canopy, RoutePhase, RouteTraceEntry};
 use crate::{
-    NodeId, commands,
+    NodeId,
     core::{Core, help, inputmap},
     error::Result,
     event::{Event, key, mouse},
     geom::{Point, Size},
     path::Path,
+    script::LuauFunctionId,
     widget::EventOutcome,
 };
 
@@ -194,15 +195,10 @@ impl Canopy {
         node_id: NodeId,
         path: &Path,
         input: RoutedInput,
-        binding: inputmap::BindingTarget,
+        binding: LuauFunctionId,
         scope: Option<&Scope<'_>>,
     ) -> Result<bool> {
-        let label = help::binding_label(
-            &binding,
-            &self.core.commands,
-            |sid| self.script_host.script_source(sid),
-            |id| self.script_host.function_label(id),
-        );
+        let label = help::binding_label(binding, |id| self.script_host.function_label(id));
         self.trace_route(RoutePhase::BindingExecution, Some(node_id), path, label);
 
         let event = input.event_for_node(&self.core, node_id);
@@ -341,65 +337,38 @@ impl Canopy {
         Ok(())
     }
 
-    /// Execute a resolved binding target, re-entering the live scope for scripts.
+    /// Call a bound Luau closure, re-entering the live scope when one is active.
     fn execute_binding_with_scope(
         &mut self,
         node_id: NodeId,
-        binding: inputmap::BindingTarget,
+        binding: LuauFunctionId,
         scope: Option<&Scope<'_>>,
     ) -> Result<()> {
-        match binding {
-            inputmap::BindingTarget::Script(sid) => {
-                if let Some(scope) = scope {
-                    let host = self.script_host.clone();
-                    host.execute_in_scope(scope, node_id, sid)
-                } else {
-                    self.run_script(node_id, sid)
-                }
-            }
-            inputmap::BindingTarget::Command(cmd) => {
-                commands::dispatch(&mut self.core, node_id, &cmd)
-                    .map(|_| ())
-                    .map_err(Into::into)
-            }
-            inputmap::BindingTarget::CommandSequence(sequence) => {
-                for command in sequence {
-                    commands::dispatch(&mut self.core, node_id, &command)?;
-                }
-                Ok(())
-            }
-            inputmap::BindingTarget::SetInputMode(mode) => self.set_input_mode(&mode),
-            inputmap::BindingTarget::LuauFunction(id) => {
-                let host = self.script_host.clone();
-                if let Some(scope) = scope {
-                    host.call_function_in_scope(scope, node_id, id)
-                } else {
-                    host.call_function(self, node_id, id)
-                }
-            }
+        let host = self.script_host.clone();
+        match scope {
+            Some(scope) => host.call_function_in_scope(scope, node_id, binding),
+            None => host.call_function(self, node_id, binding),
         }
     }
 
     /// Release any Luau closures referenced by removed bindings.
     pub(crate) fn release_removed_bindings(
         &mut self,
-        removed: Vec<(inputmap::BindingId, inputmap::BindingTarget)>,
+        removed: Vec<(inputmap::BindingId, LuauFunctionId)>,
     ) -> usize {
         let released = removed.len();
         for (_, binding) in removed {
-            self.release_binding_target(&binding);
+            self.release_binding_target(binding);
         }
         released
     }
 
-    /// Release script-host resources held by a binding target.
-    pub(crate) fn release_binding_target(&mut self, binding: &inputmap::BindingTarget) {
-        if let inputmap::BindingTarget::LuauFunction(id) = binding {
-            if let Some(releases) = &mut self.deferred_binding_releases {
-                releases.push(binding.clone());
-            } else {
-                self.script_host.release_function(*id);
-            }
+    /// Release the script host's reference to a bound closure.
+    pub(crate) fn release_binding_target(&mut self, binding: LuauFunctionId) {
+        if let Some(releases) = &mut self.deferred_binding_releases {
+            releases.push(binding);
+        } else {
+            self.script_host.release_function(binding);
         }
     }
 }

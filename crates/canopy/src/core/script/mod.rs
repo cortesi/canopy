@@ -47,7 +47,7 @@ use crate::{
         Core,
         context::{Context, CoreContext, CoreViewContext, FocusScope, ViewContext},
         help::BindingKind,
-        inputmap::{self, BindingTarget},
+        inputmap,
         termbuf::Cell,
         widget_access,
     },
@@ -93,6 +93,14 @@ pub(crate) enum FinalizeStep {
 /// Stable handle for a stored Luau closure.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct LuauFunctionId(u64);
+
+impl LuauFunctionId {
+    /// Construct an identifier that no live closure owns.
+    #[cfg(test)]
+    pub(crate) fn for_test(id: u64) -> Self {
+        Self(id)
+    }
+}
 
 /// Recorded assertion outcome for a script evaluation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1329,47 +1337,6 @@ fn script_callback_label(scope: &Scope<'_>) -> String {
     }
 }
 
-/// Render a command invocation into a human-readable target string.
-fn invocation_target(invocation: &CommandInvocation) -> String {
-    let (owner, name) = invocation
-        .id
-        .0
-        .split_once("::")
-        .unwrap_or(("", invocation.id.0));
-    let callee = if owner.is_empty() {
-        name.to_string()
-    } else {
-        format!("{}.{}", luau_global_owner_name(owner), name)
-    };
-    match &invocation.args {
-        CommandArgs::Positional(values) if values.is_empty() => format!("{callee}()"),
-        CommandArgs::Named(values) if values.is_empty() => format!("{callee}()"),
-        _ => format!("{callee}(...)"),
-    }
-}
-
-/// Convert a binding target into a discoverable summary string.
-fn binding_target_summary(target: &BindingTarget) -> String {
-    match target {
-        BindingTarget::Script(_) => "script".to_string(),
-        BindingTarget::Command(invocation) => invocation_target(invocation),
-        BindingTarget::CommandSequence(commands) => {
-            format!("[sequence: {} commands]", commands.len())
-        }
-        BindingTarget::SetInputMode(mode) if mode.is_empty() => "canopy.set_mode(\"\")".to_string(),
-        BindingTarget::SetInputMode(mode) => format!("canopy.set_mode({mode:?})"),
-        BindingTarget::LuauFunction(_) => "luau".to_string(),
-    }
-}
-
-/// Extract an optional human-readable binding description.
-fn binding_desc(canopy: &Canopy, target: &BindingTarget) -> Option<String> {
-    match target {
-        BindingTarget::LuauFunction(id) => canopy.script_host.function_label(*id),
-        _ => None,
-    }
-}
-
 /// Convert one binding record into its scripting record.
 fn binding_info_to_arg(
     canopy: &Canopy,
@@ -1394,12 +1361,9 @@ fn binding_info_to_arg(
             "path".to_string(),
             ArgValue::String(binding.path_filter.to_string()),
         ),
-        (
-            "target".to_string(),
-            ArgValue::String(binding_target_summary(binding.target)),
-        ),
+        ("target".to_string(), ArgValue::String("luau".to_string())),
     ]);
-    if let Some(desc) = binding_desc(canopy, binding.target) {
+    if let Some(desc) = canopy.script_host.function_label(binding.target) {
         record.insert("desc".to_string(), ArgValue::String(desc));
     }
     ArgValue::Map(record)
@@ -1656,10 +1620,7 @@ fn help_snapshot_to_arg(canopy: &Canopy) -> ArgValue {
                         .to_string(),
                     ),
                 ),
-                (
-                    "target".to_string(),
-                    ArgValue::String(binding_target_summary(binding.target)),
-                ),
+                ("target".to_string(), ArgValue::String("luau".to_string())),
                 ("label".to_string(), ArgValue::String(binding.label.clone())),
             ]))
         })
@@ -2519,12 +2480,10 @@ fn install_function_binding<'s>(
     );
     with_current_canopy(scope, |canopy, _| {
         let function_id = canopy.script_host.store_function(stashed, label)?;
-        let result = canopy.keymap.replace_binding(
-            &options.mode,
-            input,
-            &options.path,
-            BindingTarget::LuauFunction(function_id),
-        );
+        let result =
+            canopy
+                .keymap
+                .replace_binding(&options.mode, input, &options.path, function_id);
         match result {
             Ok((binding_id, removed)) => {
                 canopy.release_removed_bindings(removed);
