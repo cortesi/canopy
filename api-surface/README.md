@@ -10,31 +10,33 @@ and Todo libraries are included because other workspace targets compile against 
 
 ## Regeneration
 
-Run these commands from the workspace root after a public API change:
+Run this from the workspace root after a public API change:
 
 ```sh
-ruskel crates/canopy > api-surface/canopy.rs
-ruskel crates/canopy-derive > api-surface/canopy-derive.rs
-ruskel crates/canopy-geom > api-surface/canopy-geom.rs
-ruskel crates/canopy-mcp > api-surface/canopy-mcp.rs
-ruskel crates/canopy-widgets > api-surface/canopy-widgets.rs
-ruskel crates/examples > api-surface/canopy-examples.rs
-ruskel examples/todo > api-surface/todo.rs
+cargo xtask api
 ```
+
+The task regenerates every skeleton with the pinned `ruskel` and prints the tracked surface
+sizes. `cargo xtask api --check` verifies the checked-in skeletons without writing them, and
+`cargo xtask ci` runs that check. Install the pinned version
+with `cargo install ruskel --version 0.0.11`; the task refuses to run against any other version,
+because the rendered text is version dependent.
 
 Review the semantic diff. Do not reject a change merely because the generated text changed.
 
 ## Intent-level budgets
 
-The core budgets count methods in deep-path skeletons, avoiding duplicated definitions that
-`ruskel` renders through convenience re-exports such as the prelude.
+The core budgets count the distinct methods of a type's inherent `impl` blocks, or of a trait
+definition. `ruskel` renders a re-exported type once per path, such as through the prelude, so
+the count deduplicates names. `impl dyn Trait` helpers and trait implementations for the type are
+not part of the surface. `cargo xtask api` prints the current counts.
 
-| Surface | Current | Budget | Review rule |
-| --- | ---: | ---: | --- |
-| `Canopy` | 66 methods | 70 | Add only app-lifecycle operations that cannot live on a context. |
-| `ViewContext` | 32 methods | 32 | New queries must replace or generalize an existing query. |
-| `Context` | 48 methods | 48 | New mutations must replace or generalize an existing mutation. |
-| `Editor` | 22 methods | 24 | Keep editing policy on the editor and buffer mechanics on `TextBuffer`. |
+| Surface | Budget | Review rule |
+| --- | ---: | --- |
+| `Canopy` | 70 | Add only app-lifecycle operations that cannot live on a context. |
+| `ViewContext` | 32 | New queries must replace or generalize an existing query. |
+| `Context` | 48 | New mutations must replace or generalize an existing mutation. |
+| `Editor` | 24 | Keep editing policy on the editor and buffer mechanics on `TextBuffer`. |
 
 The small headroom on `Canopy` is for a demonstrated cross-cutting lifecycle operation, not for
 aliases. Exceeding a budget requires an explicit design note explaining why consolidation is not
@@ -44,17 +46,17 @@ clearer.
 
 Generated line counts are coarse complexity signals because documentation and re-export expansion
 affect them. Growth past these ceilings triggers review; shrinkage never requires compatibility
-work.
+work. `cargo xtask api` prints the current line counts.
 
-| Artifact | Current lines | Review ceiling | Intended responsibility |
-| --- | ---: | ---: | --- |
-| `canopy.rs` | 6,384 | 6,500 | Retained tree, layout, input, rendering, scripting, runtime facade. |
-| `canopy-widgets.rs` | 1,954 | 2,050 | Reusable widgets and the experimental editor. |
-| `canopy-mcp.rs` | 1,012 | 1,050 | Automation protocol, evaluation, launch, and smoke helpers. |
-| `canopy-geom.rs` | 536 | 575 | Geometry values and checked operations. |
-| `canopy-examples.rs` | 978 | 1,050 | Demo application APIs used by example tests and binaries. |
-| `todo.rs` | 223 | 225 | Todo example construction and store integration. |
-| `canopy-derive.rs` | 28 | 40 | Command proc macros only. |
+| Artifact | Review ceiling | Intended responsibility |
+| --- | ---: | --- |
+| `canopy.rs` | 6,500 | Retained tree, layout, input, rendering, scripting, runtime facade. |
+| `canopy-widgets.rs` | 2,050 | Reusable widgets and the experimental editor. |
+| `canopy-mcp.rs` | 1,050 | Automation protocol, evaluation, launch, and smoke helpers. |
+| `canopy-geom.rs` | 575 | Geometry values and checked operations. |
+| `canopy-examples.rs` | 1,050 | Demo application APIs used by example tests and binaries. |
+| `todo.rs` | 225 | Todo example construction and store integration. |
+| `canopy-derive.rs` | 40 | Command proc macros only. |
 
 ## Review findings
 

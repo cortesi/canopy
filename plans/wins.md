@@ -132,7 +132,7 @@ Independent, low-risk, mostly deletions. Do these first.
   standard: convert the four to unit tests, set `doctest = false` on all seven `[lib]` targets,
   and delete `run_doctests` from xtask.
 
-- [ ] **0.10 Automate `api-surface/`.** The skeletons are current, but the hand-maintained
+- [x] **0.10 Automate `api-surface/`.** The skeletons are current, but the hand-maintained
   "Current" counts in `api-surface/README.md:31-36` have drifted (`impl Canopy` in the
   checked-in `canopy.rs` skeleton has 69 `pub fn` vs the documented 66, under the README's own
   deep-path metric), and nothing checks either. Add `cargo xtask api` that

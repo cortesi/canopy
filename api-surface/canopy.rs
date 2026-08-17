@@ -5176,6 +5176,32 @@ pub mod canopy {
             fn reset(&mut self) -> Result<()>;
         }
 
+        /// A render backend that discards all output.
+        ///
+        /// Rendering through this backend refreshes the terminal buffer without
+        /// producing user-visible output, so callers can inspect the buffer directly.
+        #[derive(Default)]
+        pub struct NopBackend;
+
+        impl NopBackend {
+            /// Construct a no-op backend.
+            pub fn new() -> Self {}
+        }
+
+        impl RenderBackend for NopBackend {
+            fn style(&mut self, _style: &ResolvedStyle) -> Result<()> {}
+
+            fn text(&mut self, _loc: geom::Point, _txt: &str) -> Result<()> {}
+
+            fn supports_char_shift(&self) -> bool {}
+
+            fn shift_chars(&mut self, _loc: geom::Point, _count: i32) -> Result<()> {}
+
+            fn flush(&mut self) -> Result<()> {}
+
+            fn reset(&mut self) -> Result<()> {}
+        }
+
         /// A renderer that only renders to a specific rectangle within the target terminal buffer.
         pub struct Render<'a> {}
 
