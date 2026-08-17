@@ -635,7 +635,7 @@ mod tests {
             ArgValue::Int(7)
         );
 
-        let (_, mut render) = TestRender::create();
+        let mut render = TestRender::new();
         canopy.set_root_size(Size::new(10, 1))?;
         canopy.render(&mut render)?;
         assert_eq!(

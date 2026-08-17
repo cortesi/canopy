@@ -61,7 +61,7 @@ mod tests {
 
     #[test]
     fn block_renders() -> Result<()> {
-        let (_, mut tr) = TestRender::create();
+        let mut tr = TestRender::new();
         let mut canopy = Canopy::new();
 
         canopy
@@ -84,7 +84,7 @@ mod tests {
 
     #[test]
     fn render_on_focus_change() -> Result<()> {
-        let (_, mut tr) = TestRender::create();
+        let mut tr = TestRender::new();
         let mut canopy = Canopy::new();
 
         canopy
@@ -101,7 +101,7 @@ mod tests {
 
         canopy.set_root_size(Size::new(20, 10))?;
         canopy.render(&mut tr)?;
-        tr.text.lock().unwrap().text.clear();
+        tr.text.clear();
 
         canopy.core.focus_next(canopy.core.root)?;
         canopy.render(&mut tr)?;

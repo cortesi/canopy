@@ -696,7 +696,7 @@ Independent, low-risk, mostly deletions. Do these first.
   `cells_per_side()`, and delete both `attach_grid` copies (`test_focus.rs:46-57`,
   `test_tree.rs:297-308`).
 
-- [ ] **6.4 Testing backends.** `CanvasRender`/`CanvasBuf` (`testing/backend.rs:108-202`) are
+- [x] **6.4 Testing backends.** `CanvasRender`/`CanvasBuf` (`testing/backend.rs:108-202`) are
   constructed once and never read; `TestRender::create` returns an `Arc<Mutex<TestBuf>>` every
   caller discards; `TestRender::{styleman, buf_text, contains_text}` and
   `TestBuf::{is_empty, contains}` have zero callers. Delete `CanvasRender`, make `TestRender` a

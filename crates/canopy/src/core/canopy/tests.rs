@@ -20,10 +20,10 @@ use crate::{
     geom::{Direction, Point, RectI32},
     layout::Layout,
     path::Path,
-    render::Render,
+    render::{NopBackend, Render},
     state::NodeName,
     testing::{
-        backend::{CanvasRender, TestRender},
+        backend::TestRender,
         ttree::{Ba, BaLa, BaLb, OutcomeTarget, R, get_state, reset_state, run_ttree},
     },
     widget::{EventOutcome, Widget},
@@ -339,7 +339,7 @@ fn assert_error_context(error: &Error, operation: &str, node_id: NodeId, path: &
 
 #[test]
 fn render_errors_include_operation_node_and_path() -> Result<()> {
-    let (_, mut render) = TestRender::create();
+    let mut render = TestRender::new();
     let mut canopy = Canopy::new();
     canopy
         .core
@@ -372,7 +372,7 @@ fn mouse_move_does_not_request_render() -> Result<()> {
     canopy.core.set_layout_of(app_id, Layout::fill())?;
     canopy.set_root_size(Size::new(10, 6))?;
 
-    let (_, mut render) = TestRender::create();
+    let mut render = TestRender::new();
     canopy.render(&mut render)?;
     assert!(!canopy.render_if_pending(&mut render)?);
 
@@ -396,7 +396,7 @@ fn mouse_capture_routes_drag_outside() -> Result<()> {
     canopy.core.set_layout_of(app_id, Layout::fill())?;
     canopy.set_root_size(Size::new(10, 6))?;
 
-    let (_, mut render) = TestRender::create();
+    let mut render = TestRender::new();
     canopy.render(&mut render)?;
 
     let down = make_mouse_event(&canopy.core, app_id);
@@ -450,7 +450,7 @@ fn set_widget_resets_initialization() -> Result<()> {
         .add_child_to_boxed(canopy.core.root, Box::new(PollWidget::new()))?;
     canopy.set_root_size(Size::new(10, 10))?;
 
-    let (_, mut render) = TestRender::create();
+    let mut render = TestRender::new();
     render.render(&mut canopy)?;
     assert_eq!(POLL_COUNT.load(Ordering::SeqCst), 1);
 
@@ -977,7 +977,7 @@ fn tkey_no_render() -> Result<()> {
         }
     }
 
-    let (_, mut tr) = TestRender::create();
+    let mut tr = TestRender::new();
     let mut canopy = Canopy::new();
     canopy.add_commands::<N>()?;
     canopy.core.replace_subtree(canopy.core.root, N)?;
@@ -987,7 +987,7 @@ fn tkey_no_render() -> Result<()> {
     canopy.render(&mut tr)?;
     assert!(!tr.buf_empty());
     let prev_buf = canopy.termbuf.clone().expect("missing termbuf");
-    tr.text.lock().unwrap().text.clear();
+    tr.text.clear();
 
     canopy.key(None, 'a')?;
     canopy.render(&mut tr)?;
@@ -1033,7 +1033,7 @@ fn zero_size_child_ok() -> Result<()> {
     }
 
     let size = Size::new(5, 1);
-    let (_, mut cr) = CanvasRender::create(size);
+    let mut cr = NopBackend::new();
     let mut canopy = Canopy::new();
     canopy
         .core
