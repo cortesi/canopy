@@ -6,7 +6,6 @@ mod tests {
         Canopy, FocusScope, NodeId, ViewContext, Widget, derive_commands,
         error::{Error, Result},
         geom::{Direction, Point, Size},
-        layout::{Layout, Sizing},
         path::Path,
         render::Render,
         state::NodeName,
@@ -296,19 +295,6 @@ mod tests {
         Ok(())
     }
 
-    fn attach_grid(canopy: &mut Canopy, grid_root: NodeId, size: Size) -> Result<()> {
-        canopy.with_root_context(|context| {
-            let root = context.root_id();
-            context.set_children_of(root, vec![grid_root])?;
-            context.set_layout_of(root, Layout::fill())?;
-            context.with_layout_of(grid_root, &mut |layout| {
-                layout.width = Sizing::Flex(1);
-                layout.height = Sizing::Flex(1);
-            })
-        })?;
-        canopy.set_root_size(size)
-    }
-
     fn locate_name(canopy: &Canopy, root: NodeId, point: Point) -> Result<Option<String>> {
         canopy.with_root_view(|context| {
             context
@@ -344,7 +330,6 @@ mod tests {
         let grid = Grid::install(&mut canopy, 0, 2)?;
         let grid_size = grid.expected_size();
         assert_eq!(grid_size, Size::new(10, 10));
-        attach_grid(&mut canopy, grid.root, grid_size)?;
 
         let test_points = vec![
             ((5, 5), "cell_0_0"),
@@ -375,7 +360,6 @@ mod tests {
         let grid = Grid::install(&mut canopy, 1, 2)?;
         let grid_size = grid.expected_size();
         assert_eq!(grid_size, Size::new(20, 20));
-        attach_grid(&mut canopy, grid.root, grid_size)?;
 
         let test_points = vec![
             ((5, 5), "cell_0_0"),
@@ -405,7 +389,6 @@ mod tests {
         let grid = Grid::install(&mut canopy, 1, 3)?;
         let grid_size = grid.expected_size();
         assert_eq!(grid_size, Size::new(30, 30));
-        attach_grid(&mut canopy, grid.root, grid_size)?;
 
         for row in 0..3 {
             for col in 0..3 {
@@ -426,7 +409,6 @@ mod tests {
         let grid = Grid::install(&mut canopy, 2, 2)?;
         let grid_size = grid.expected_size();
         assert_eq!(grid_size, Size::new(40, 40));
-        attach_grid(&mut canopy, grid.root, grid_size)?;
 
         let corner_tests = vec![
             (Point { x: 5, y: 5 }, "cell_0_0"),
@@ -447,8 +429,6 @@ mod tests {
     fn test_grid_boundary_conditions() -> Result<()> {
         let mut canopy = Canopy::new();
         let grid = Grid::install(&mut canopy, 1, 2)?;
-        let grid_size = grid.expected_size();
-        attach_grid(&mut canopy, grid.root, grid_size)?;
 
         let result = locate_name(&canopy, grid.root, Point { x: 100, y: 100 })?;
         assert_eq!(result, None);
@@ -460,8 +440,6 @@ mod tests {
     fn test_focus_dir_navigation() -> Result<()> {
         let mut canopy = Canopy::new();
         let grid = Grid::install(&mut canopy, 1, 2)?;
-        let grid_size = grid.expected_size();
-        attach_grid(&mut canopy, grid.root, grid_size)?;
 
         focus_first(&mut canopy, grid.root)?;
         assert_eq!(focused_name(&canopy), Some("cell_0_0".to_string()));

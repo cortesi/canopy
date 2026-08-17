@@ -1,8 +1,12 @@
 //! Grid test utility for creating configurable grid layouts.
 
 use crate::{
-    Canopy, Context, NodeId, ViewContext, derive_commands, error::Result, geom::Size,
-    layout::Layout, state::NodeName, widget::Widget,
+    Canopy, Context, NodeId, ViewContext, derive_commands,
+    error::Result,
+    geom::Size,
+    layout::{Layout, Sizing},
+    state::NodeName,
+    widget::Widget,
 };
 
 /// Grid node kind used for layout selection.
@@ -80,36 +84,45 @@ pub struct Grid {
 }
 
 impl Grid {
-    /// Create a new grid with specified recursion levels and subdivisions per level.
+    /// Build a grid, attach it under the root, and size the root to hold it.
     pub fn install(canopy: &mut Canopy, recursion: usize, divisions: usize) -> Result<Self> {
-        let root =
-            canopy.with_root_context(|context| build_node(context, 0, 0, recursion, divisions))?;
-        Ok(Self {
-            root,
-            recursion,
-            divisions,
-        })
+        let grid = canopy.with_root_context(|context| {
+            let grid_root = build_node(context, 0, 0, recursion, divisions)?;
+            let root = context.root_id();
+            context.set_children_of(root, vec![grid_root])?;
+            context.set_layout_of(root, Layout::fill())?;
+            context.with_layout_of(grid_root, &mut |layout| {
+                layout.width = Sizing::Flex(1);
+                layout.height = Sizing::Flex(1);
+            })?;
+            Ok(Self {
+                root: grid_root,
+                recursion,
+                divisions,
+            })
+        })?;
+        canopy.set_root_size(grid.expected_size())?;
+        Ok(grid)
+    }
+
+    /// Return the number of cells along one side of the grid.
+    fn cells_per_side(&self) -> usize {
+        if self.recursion == 0 {
+            1
+        } else {
+            self.divisions.pow(self.recursion as u32)
+        }
     }
 
     /// Get the expected grid size in cells.
     pub fn expected_size(&self) -> Size {
-        let cells_per_side = if self.recursion == 0 {
-            1
-        } else {
-            self.divisions.pow(self.recursion as u32)
-        };
-        let size = cells_per_side as u32 * 10;
+        let size = self.cells_per_side() as u32 * 10;
         Size::new(size, size)
     }
 
     /// Get the dimensions of the grid (number of cells in x and y).
     pub fn dimensions(&self) -> (usize, usize) {
-        let cells_per_side = if self.recursion == 0 {
-            1
-        } else {
-            self.divisions.pow(self.recursion as u32)
-        };
-        (cells_per_side, cells_per_side)
+        (self.cells_per_side(), self.cells_per_side())
     }
 }
 

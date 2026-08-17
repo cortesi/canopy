@@ -690,7 +690,7 @@ Independent, low-risk, mostly deletions. Do these first.
   tests still run as unit tests), and `cargo test -p canopy --no-run 2>&1 | grep -c 'tests/it'`
   shows exactly one integration binary. About −60 lines and 14 fewer link steps.
 
-- [ ] **6.3 `Grid::install` attaches itself.** Every functional caller (nine sites) follows
+- [x] **6.3 `Grid::install` attaches itself.** Every functional caller (nine sites) follows
   `Grid::install` with the same three lines of attach + root layout + `set_root_size(expected)`;
   move that into `install`, derive `dimensions()` and `expected_size()` from one
   `cells_per_side()`, and delete both `attach_grid` copies (`test_focus.rs:46-57`,

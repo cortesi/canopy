@@ -7,7 +7,7 @@ mod tests {
         commands::{CommandNode, CommandSpec},
         error::{Error, Result},
         geom::{Direction, Size},
-        layout::{Layout, Sizing},
+        layout::Layout,
         render::Render,
         state::NodeName,
         testing::grid::Grid,
@@ -43,19 +43,6 @@ mod tests {
         }
     }
 
-    fn attach_grid(canopy: &mut Canopy, grid_root: NodeId, size: Size) -> Result<()> {
-        canopy.with_root_context(|context| {
-            let root = context.root_id();
-            context.set_children_of(root, vec![grid_root])?;
-            context.set_layout_of(root, Layout::fill())?;
-            context.with_layout_of(grid_root, &mut |layout| {
-                layout.width = Sizing::Flex(1);
-                layout.height = Sizing::Flex(1);
-            })
-        })?;
-        canopy.set_root_size(size)
-    }
-
     fn get_focused_cell(canopy: &Canopy) -> Option<String> {
         canopy.with_root_view(|context| {
             let root = context.root_id();
@@ -77,8 +64,7 @@ mod tests {
         })
     }
 
-    fn test_snake_navigation(grid: &Grid, canopy: &mut Canopy, size: Size) -> Result<()> {
-        attach_grid(canopy, grid.root, size)?;
+    fn test_snake_navigation(grid: &Grid, canopy: &mut Canopy) -> Result<()> {
         let (grid_width, grid_height) = grid.dimensions();
         let total_cells = grid_width * grid_height;
 
@@ -203,7 +189,6 @@ mod tests {
         let grid = Grid::install(&mut canopy, 1, 2)?;
         let grid_size = grid.expected_size();
         assert_eq!(grid_size, Size::new(20, 20));
-        attach_grid(&mut canopy, grid.root, grid_size)?;
 
         focus_first(&mut canopy, grid.root)?;
         assert_eq!(get_focused_cell(&canopy), Some("cell_0_0".to_string()));
@@ -227,16 +212,14 @@ mod tests {
     fn test_focus_snake_navigation_3x3() -> Result<()> {
         let mut canopy = Canopy::new();
         let grid = Grid::install(&mut canopy, 1, 3)?;
-        let grid_size = grid.expected_size();
-        test_snake_navigation(&grid, &mut canopy, grid_size)
+        test_snake_navigation(&grid, &mut canopy)
     }
 
     #[test]
     fn test_focus_snake_navigation_4x4() -> Result<()> {
         let mut canopy = Canopy::new();
         let grid = Grid::install(&mut canopy, 2, 2)?;
-        let grid_size = grid.expected_size();
-        test_snake_navigation(&grid, &mut canopy, grid_size)
+        test_snake_navigation(&grid, &mut canopy)
     }
 
     #[test]
