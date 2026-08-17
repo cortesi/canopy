@@ -702,8 +702,8 @@ Independent, low-risk, mostly deletions. Do these first.
   `TestBuf::{is_empty, contains}` have zero callers. Delete `CanvasRender`, make `TestRender` a
   plain `struct { text: Vec<String> }`. About −140 lines.
 
-- [ ] **6.5 Dead `BufTest`/`Harness` surface.** `BufTest::{with_null, with_any, dump_line,
-  line_text, snapshot}` and `Harness::{with_size, mouse, render_snapshot, find_node}` have no
+- [x] **6.5 Dead `BufTest`/`Harness` surface.** `BufTest::{with_null, with_any, dump_line,
+  line_text, snapshot}` and `Harness::{with_size, render_snapshot, find_node}` have no
   external callers; delete them and their self-tests (`test_contains_functions` duplicates
   `test_buftest_instance_methods`). Make `Harness::new` delegate to `builder(root).build()` so
   both paths apply the root `Flex(1)` layout. About −120 lines.

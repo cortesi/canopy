@@ -13,46 +13,28 @@ macro_rules! buf {
     };
 }
 
-/// A struct for configuring buffer matching behavior. By default, it treats 'X' as a special
-/// marker for NULL cells in the buffer, allowing us to test partial renders.
+/// Marker character that stands for a NULL cell in an expected pattern.
+const NULL_MARKER: char = 'X';
+
+/// A buffer matcher for tests. A NULL cell renders as `X` in the compared text, which lets a
+/// test pin a partial render.
 pub struct BufTest<'a> {
     /// Reference to the buffer under test.
     buf: &'a TermBuf,
-    /// Character used to represent NULL cells.
-    null_char: char,
-    /// Optional wildcard character.
-    any_char: Option<char>,
 }
 
 impl<'a> BufTest<'a> {
     /// Create a new BufTest with a reference to a TermBuf.
     pub fn new(buf: &'a TermBuf) -> Self {
-        Self {
-            buf,
-            null_char: 'X',
-            any_char: None,
-        }
-    }
-    /// Set the character used to match NULL cells in the buffer.
-    /// Default is 'X'.
-    pub fn with_null(mut self, null_char: char) -> Self {
-        self.null_char = null_char;
-        self
+        Self { buf }
     }
 
-    /// Set a character that matches any character in the buffer.
-    /// When set, this character in the expected pattern will match any character in the actual buffer.
-    pub fn with_any(mut self, any_char: char) -> Self {
-        self.any_char = Some(any_char);
-        self
-    }
-
-    /// Return one row as a string, rendering NULL cells as the configured null character.
+    /// Return one row as a string, rendering NULL cells as the NULL marker.
     fn row_string(&self, y: u32) -> String {
         (0..self.buf.size().w)
             .filter_map(|x| self.buf.get(Point { x, y }))
             .map(|cell| match cell.display_char() {
-                '\0' => self.null_char,
+                '\0' => NULL_MARKER,
                 ch => ch,
             })
             .collect()
@@ -71,19 +53,8 @@ impl<'a> BufTest<'a> {
             let expected_trimmed = expected_line.trim_end();
             let actual_trimmed = actual_line.trim_end();
 
-            if expected_trimmed.len() != actual_trimmed.len() {
+            if expected_trimmed != actual_trimmed {
                 return false;
-            }
-
-            for (expected_ch, actual_ch) in expected_trimmed.chars().zip(actual_trimmed.chars()) {
-                if let Some(any) = self.any_char
-                    && expected_ch == any
-                {
-                    continue; // any_char matches anything
-                }
-                if expected_ch != actual_ch {
-                    return false;
-                }
             }
         }
 
@@ -205,51 +176,9 @@ impl<'a> BufTest<'a> {
         println!();
     }
 
-    /// Dumps a single line from the buffer to the terminal for debugging purposes.
-    pub fn dump_line(&self, line_num: u32) {
-        if line_num >= self.buf.size().h {
-            println!(
-                "Error: Line {} is out of bounds (buffer height: {})",
-                line_num,
-                self.buf.size().h
-            );
-            return;
-        }
-
-        let width = self.buf.size().w as usize;
-
-        println!(
-            "\nTermBuf line {} (width: {}):",
-            line_num,
-            self.buf.size().w
-        );
-        println!("┌{}┐", "─".repeat(width));
-
-        println!("│{}│", self.row_string(line_num));
-
-        println!("└{}┘", "─".repeat(width));
-
-        // Bottom ruler
-        print!(" ");
-        for x in 0..width {
-            print!("{}", x % 10);
-        }
-        println!();
-    }
-
-    /// Return the contents of a line as a `String`.
-    pub fn line_text(&self, y: u32) -> Option<String> {
-        (y < self.buf.size().h).then(|| self.row_string(y))
-    }
-
     /// Return the contents of the buffer as lines of text.
     pub fn lines(&self) -> Vec<String> {
         (0..self.buf.size().h).map(|y| self.row_string(y)).collect()
-    }
-
-    /// Return a newline-joined snapshot of the buffer contents.
-    pub fn snapshot(&self) -> String {
-        self.lines().join("\n")
     }
 }
 
@@ -285,72 +214,6 @@ mod tests {
     }
 
     #[test]
-    fn test_bufmatch_custom_null() {
-        let mut buf = TermBuf::new(Size::new(4, 2), '\0', test_style())
-            .expect("test render target should allocate");
-        buf.text(&test_style(), Line::new(0, 0, 2), "ab")
-            .expect("test buffer mutation should succeed");
-
-        let matcher = BufTest::new(&buf).with_null('_');
-        assert!(matcher.matches(&["ab__", "____"]));
-        assert!(!matcher.matches(&["abXX", "XXXX"])); // 'X' is not the null char anymore
-    }
-
-    #[test]
-    fn test_bufmatch_any_char() {
-        let mut buf = TermBuf::new(Size::new(4, 2), ' ', test_style())
-            .expect("test render target should allocate");
-        buf.text(&test_style(), Line::new(0, 0, 4), "test")
-            .expect("test buffer mutation should succeed");
-        buf.text(&test_style(), Line::new(0, 1, 4), "word")
-            .expect("test buffer mutation should succeed");
-
-        let matcher = BufTest::new(&buf).with_any('?');
-        assert!(matcher.matches(&["????", "????"])); // all wildcards
-        assert!(matcher.matches(&["te??", "wo??"])); // partial wildcards
-        assert!(matcher.matches(&["test", "word"])); // exact match still works
-        assert!(!matcher.matches(&["fail", "word"])); // wrong text
-    }
-
-    #[test]
-    fn test_bufmatch_combined() {
-        let mut buf = TermBuf::new(Size::new(6, 2), '\0', test_style())
-            .expect("test render target should allocate");
-        buf.text(&test_style(), Line::new(0, 0, 3), "foo")
-            .expect("test buffer mutation should succeed");
-
-        let matcher = BufTest::new(&buf).with_null('_').with_any('*');
-        assert!(matcher.matches(&["foo___", "______"])); // custom null char
-        assert!(matcher.matches(&["***___", "******"])); // any + null
-        assert!(matcher.matches(&["f**___", "______"])); // mixed
-    }
-
-    #[test]
-    fn test_contains_functions() {
-        let mut buf = TermBuf::new(Size::new(10, 2), ' ', test_style())
-            .expect("test render target should allocate");
-
-        let mut red_style = test_style();
-        red_style.fg = Color::Red;
-
-        buf.text(&test_style(), Line::new(0, 0, 5), "hello")
-            .expect("test buffer mutation should succeed");
-        buf.text(&red_style, Line::new(5, 0, 5), "world")
-            .expect("test buffer mutation should succeed");
-
-        let bt = BufTest::new(&buf);
-        assert!(bt.contains_text("hello"));
-        assert!(bt.contains_text("world"));
-        assert!(!bt.contains_text("goodbye"));
-
-        assert!(bt.contains_text_fg("world", Color::Red));
-        assert!(!bt.contains_text_fg("hello", Color::Red));
-
-        assert!(bt.contains_text_style("world", &PartialStyle::fg(Color::Red)));
-        assert!(bt.contains_text_style("hello", &PartialStyle::fg(Color::White)));
-    }
-
-    #[test]
     fn test_dump() {
         let mut buf = TermBuf::new(Size::new(5, 3), '\0', test_style())
             .expect("test render target should allocate");
@@ -377,25 +240,6 @@ mod tests {
             .expect("test buffer mutation should succeed");
 
         BufTest::new(&buf).dump();
-    }
-
-    #[test]
-    fn test_dump_line() {
-        let mut buf = TermBuf::new(Size::new(20, 5), '\0', test_style())
-            .expect("test render target should allocate");
-        buf.text(&test_style(), Line::new(0, 0, 10), "First line")
-            .expect("test buffer mutation should succeed");
-        buf.text(&test_style(), Line::new(5, 2, 15), "Middle line at 5")
-            .expect("test buffer mutation should succeed");
-        buf.text(&test_style(), Line::new(0, 4, 20), "Last line with text!")
-            .expect("test buffer mutation should succeed");
-
-        // Test dumping various lines
-        let bt = BufTest::new(&buf);
-        bt.dump_line(0); // First line
-        bt.dump_line(2); // Middle line
-        bt.dump_line(4); // Last line
-        bt.dump_line(10); // Out of bounds - should print error
     }
 
     #[test]
@@ -430,8 +274,5 @@ mod tests {
         let lines = bt.lines();
         assert_eq!(lines.len(), 2);
         assert!(lines[0].starts_with("helloworld"));
-
-        // Test line_text
-        assert_eq!(bt.line_text(0).unwrap().trim(), "helloworld");
     }
 }

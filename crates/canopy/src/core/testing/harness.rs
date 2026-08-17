@@ -91,27 +91,9 @@ impl Harness {
         HarnessBuilder::new(root)
     }
 
-    /// Create a harness using `size` for the root layout.
-    pub fn with_size<W: Widget + Loader + 'static>(root: W, size: Size) -> Result<Self> {
-        let render = NopBackend::new();
-        let mut canopy = Canopy::new();
-        <W as Loader>::load(&mut canopy)?;
-        canopy.finalize_api()?;
-        canopy
-            .core
-            .replace_subtree(canopy.core.root, root)
-            .expect("replace root widget");
-        canopy.set_root_size(size)?;
-        Ok(Self {
-            root: canopy.core.root,
-            canopy,
-            backend: render,
-        })
-    }
-
-    /// Create a harness with a default root size of 100x100.
+    /// Create a harness with the builder's default root size.
     pub fn new<W: Widget + Loader + 'static>(root: W) -> Result<Self> {
-        Self::with_size(root, Size::new(100, 100))
+        Self::builder(root).build()
     }
 
     /// Access the current render buffer. Panics if a render has not yet been performed.
@@ -154,12 +136,6 @@ impl Harness {
     /// Render the root node into the harness backend.
     pub fn render(&mut self) -> Result<()> {
         self.canopy.render(&mut self.backend)
-    }
-
-    /// Render and return a snapshot of the buffer contents.
-    pub fn render_snapshot(&mut self) -> Result<String> {
-        self.render()?;
-        Ok(self.tbuf().snapshot())
     }
 
     /// Execute a script on the app under test.
@@ -222,12 +198,6 @@ impl Harness {
         BufTest::new(self.buf())
     }
 
-    /// Find the first node whose path matches the filter, relative to the root.
-    pub fn find_node(&self, path_filter: &str) -> Option<NodeId> {
-        let ctx = CoreViewContext::new(&self.canopy.core, self.root);
-        ctx.find_node(path_filter)
-    }
-
     /// Find all nodes whose paths match the filter, relative to the root.
     pub fn find_nodes(&self, path_filter: &str) -> Vec<NodeId> {
         let ctx = CoreViewContext::new(&self.canopy.core, self.root);
@@ -288,13 +258,6 @@ mod tests {
             .build()
             .unwrap();
 
-        h.render().unwrap();
-        assert!(h.tbuf().contains_text("test"));
-    }
-
-    #[test]
-    fn test_harness_with_size() {
-        let mut h = Harness::with_size(TestNode::new(), Size::new(15, 4)).unwrap();
         h.render().unwrap();
         assert!(h.tbuf().contains_text("test"));
     }
