@@ -518,7 +518,7 @@ Independent, low-risk, mostly deletions. Do these first.
   `(m.score(), idx)` tuples and delete the struct. `NodeHandle` (`script/mod.rs:874-902`) wraps
   `NodeId` for no gain (ruau requires only `T: Send + 'static`); register `NodeId` directly.
 
-- [ ] **3.12 Documentation drift.** `docs/scripting.md`: the preamble is a 20-line comment
+- [x] **3.12 Documentation drift.** `docs/scripting.md`: the preamble is a 20-line comment
   header, not the declaration list the doc describes; owner-name normalization is "suffix Luau
   keywords with `_cmd`", not "replace non-identifier characters"; `check_script` takes
   `(source_name, source)`. Fix after 3.1, 3.2, and 3.9 land.

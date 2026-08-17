@@ -24,8 +24,8 @@ The text and the audited surface therefore cannot drift apart.
 
 Generated widget globals use the widget owner name. For a widget owner named
 `editor`, commands appear as `editor.save(...)`, `editor.move_left(...)`, and so on.
-Owner names are normalized into Luau global names by replacing non-identifier
-characters with `_`.
+An owner name that collides with a Luau keyword takes a `_cmd` suffix; every other name is
+used unchanged.
 
 Canopy renders command signatures from Rust command metadata. Primitive numbers map
 to `number`, booleans to `boolean`, strings to `string`, `Option<T>` to `T?`,
@@ -155,8 +155,9 @@ MCP evaluation returns:
 
 ## Typechecking
 
-`Canopy::check_script(source)` checks Luau source against the finalized canopy API
-using the ruau type checker and returns a `ScriptCheckResult`. Checking is available
+`Canopy::check_script(source_name, source)` checks Luau source against the finalized canopy
+API using the ruau type checker and returns a `ScriptCheckResult`. The source name appears in
+the diagnostics. Checking is available
 unconditionally on every build target.
 
 Diagnostics use `error` or `warning` severities and carry a source name when Ruau associates them
