@@ -797,6 +797,43 @@ mod tests {
         );
     }
 
+    /// Render a theme's complete rule set as sorted `path fg bg attrs` lines.
+    fn dump_theme(name: &str, map: &StyleMap) -> String {
+        let mut lines: Vec<String> = map
+            .styles
+            .iter()
+            .map(|(path, style)| {
+                format!(
+                    "/{} fg={:?} bg={:?} attrs={:?}",
+                    path.join("/"),
+                    style.fg,
+                    style.bg,
+                    style.attrs
+                )
+            })
+            .collect();
+        lines.sort();
+        format!("# {name}\n{}\n", lines.join("\n"))
+    }
+
+    /// Render every built-in theme in a stable order.
+    fn dump_all_themes() -> String {
+        [
+            ("solarized_dark", solarized::solarized_dark()),
+            ("solarized_light", solarized::solarized_light()),
+            ("dracula", dracula::dracula()),
+            ("gruvbox_dark", gruvbox::gruvbox_dark()),
+        ]
+        .iter()
+        .map(|(name, map)| dump_theme(name, map))
+        .collect()
+    }
+
+    #[test]
+    fn built_in_themes_match_the_golden_rule_sets() {
+        assert_eq!(dump_all_themes(), include_str!("themes.golden"));
+    }
+
     fn solid_style(fg: Color, bg: Color) -> Style {
         Style {
             fg: Paint::solid(fg),

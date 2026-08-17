@@ -114,6 +114,19 @@ pub fn gruvbox_dark() -> StyleMap {
         .fg("/editor/line-number", GRAY)
         .fg("/editor/line-number/current", BLUE)
         .style("/editor/prompt", StyleBuilder::new().fg(LIGHT1).bg(DARK1))
+        .style("/help/content", StyleBuilder::new().fg(LIGHT1).bg(DARK1))
+        .style("/help/frame", StyleBuilder::new().bg(DARK1))
+        .style("/help/frame/focused", StyleBuilder::new().bg(DARK1))
+        .style("/help/frame/active", StyleBuilder::new().bg(DARK1))
+        .style("/help/frame/title", StyleBuilder::new().bg(DARK1))
+        .style(
+            "/help/key",
+            StyleBuilder::new()
+                .fg(AQUA)
+                .bg(DARK1)
+                .attrs(AttrSet::new(Attr::Bold)),
+        )
+        .style("/help/label", StyleBuilder::new().fg(LIGHT3).bg(DARK1))
         .apply();
     c
 }

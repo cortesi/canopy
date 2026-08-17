@@ -112,6 +112,25 @@ pub fn dracula() -> StyleMap {
             "/editor/prompt",
             StyleBuilder::new().fg(FOREGROUND).bg(CURRENT_LINE),
         )
+        .style(
+            "/help/content",
+            StyleBuilder::new().fg(FOREGROUND).bg(CURRENT_LINE),
+        )
+        .style("/help/frame", StyleBuilder::new().bg(CURRENT_LINE))
+        .style("/help/frame/focused", StyleBuilder::new().bg(CURRENT_LINE))
+        .style("/help/frame/active", StyleBuilder::new().bg(CURRENT_LINE))
+        .style("/help/frame/title", StyleBuilder::new().bg(CURRENT_LINE))
+        .style(
+            "/help/key",
+            StyleBuilder::new()
+                .fg(CYAN)
+                .bg(CURRENT_LINE)
+                .attrs(AttrSet::new(Attr::Bold)),
+        )
+        .style(
+            "/help/label",
+            StyleBuilder::new().fg(FOREGROUND).bg(CURRENT_LINE),
+        )
         .apply();
     c
 }
