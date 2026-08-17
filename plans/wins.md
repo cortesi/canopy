@@ -337,10 +337,11 @@ Independent, low-risk, mostly deletions. Do these first.
   `parse_spec` and `From<MouseEvent>`, and widgets compare `.action`/`.button` fields. Keep the
   key DSL (`key.rs`), which is used. Rewrite `tmouse` with struct literals. About −130 lines.
 
-- [ ] **2.8 One partial-style builder.** `StyleBuilder` (`style/mod.rs:345-389`) and
+- [x] **2.8 One partial-style builder.** `StyleBuilder` (`style/mod.rs:345-389`) and
   `PartialStyle::{with_fg, with_bg, with_attr, with_attrs}` (`:391-455`) are two builders for the
-  same value; keep `StyleBuilder` (used by themes and examples) and delete the `with_*` set and
-  the static ctors it feeds. Delete `StyleMap::add_attr`, `StyleRules::{fg_all, bg_all,
+  same value; keep `StyleBuilder` (used by themes and examples) and delete the `with_*` set.
+  The `PartialStyle::{fg, bg, attrs}` static constructors stay: `StyleRules` builds every rule
+  through them. Delete `StyleMap::add_attr`, `StyleRules::{fg_all, bg_all,
   attr_all, attrs_all}` (`:543-556, 638-693`; zero callers, `style_all` stays), `AttrSet::is_empty`,
   and fold test-only `GradientSpec::new` into `with_stops`. About −120 lines.
 

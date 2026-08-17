@@ -2068,9 +2068,6 @@ pub mod canopy {
             ///     .apply();
             /// ```
             pub fn rules(&mut self) -> StyleRules<'_> {}
-
-            /// Insert a style attribute at a specified path.
-            pub fn add_attr(&mut self, path: &str, attr: Attr) {}
         }
 
         /// Common result alias for Canopy operations.
@@ -5375,9 +5372,6 @@ pub mod canopy {
             /// Construct a set of text attributes with a single attribute turned on.
             pub fn new(attr: Attr) -> Self {}
 
-            /// Is this attribute set empty?
-            pub fn is_empty(&self) -> bool {}
-
             /// A helper for progressive construction of attribute sets.
             pub fn with(self, attr: Attr) -> Self {}
         }
@@ -5406,9 +5400,6 @@ pub mod canopy {
         }
 
         impl GradientSpec {
-            /// Construct a two-stop gradient.
-            pub fn new(angle_deg: f32, start: Color, end: Color) -> Self {}
-
             /// Construct a gradient from explicit stops.
             pub fn with_stops(angle_deg: f32, stops: Vec<GradientStop>) -> Self {}
 
@@ -5517,18 +5508,6 @@ pub mod canopy {
             /// Resolve the partial style into a full style.
             pub fn resolve(&self) -> Style {}
 
-            /// Set the foreground paint.
-            pub fn with_fg(self, fg: impl Into<Paint>) -> Self {}
-
-            /// Set the background paint.
-            pub fn with_bg(self, bg: impl Into<Paint>) -> Self {}
-
-            /// Add a single attribute.
-            pub fn with_attr(self, attr: Attr) -> Self {}
-
-            /// Replace the attributes set.
-            pub fn with_attrs(self, attrs: AttrSet) -> Self {}
-
             /// Merge two partial styles.
             pub fn join(&self, other: &Self) -> Self {}
 
@@ -5607,9 +5586,6 @@ pub mod canopy {
             ///     .apply();
             /// ```
             pub fn rules(&mut self) -> StyleRules<'_> {}
-
-            /// Insert a style attribute at a specified path.
-            pub fn add_attr(&mut self, path: &str, attr: Attr) {}
         }
 
         /// A fluent builder for adding style rules to a StyleMap.
@@ -5648,36 +5624,6 @@ pub mod canopy {
             /// If a rule already exists for this path, the style is merged
             /// with the existing style (new values take precedence).
             pub fn style(self, path: &str, style: impl Into<PartialStyle>) -> Self {}
-
-            /// Set the foreground paint for multiple paths.
-            ///
-            /// If a rule already exists for any path, the foreground paint is merged
-            /// with the existing style.
-            pub fn fg_all<P>(self, paths: &[&str], paint: P) -> Self
-            where
-                P: Into<Paint>, {
-            }
-
-            /// Set the background paint for multiple paths.
-            ///
-            /// If a rule already exists for any path, the background paint is merged
-            /// with the existing style.
-            pub fn bg_all<P>(self, paths: &[&str], paint: P) -> Self
-            where
-                P: Into<Paint>, {
-            }
-
-            /// Add a single attribute to multiple paths.
-            ///
-            /// If a rule already exists for any path, the attribute is merged
-            /// with the existing style.
-            pub fn attr_all(self, paths: &[&str], attr: Attr) -> Self {}
-
-            /// Set all attributes for multiple paths.
-            ///
-            /// If a rule already exists for any path, the attributes are merged
-            /// with the existing style.
-            pub fn attrs_all(self, paths: &[&str], attrs: AttrSet) -> Self {}
 
             /// Apply a complete style to multiple paths.
             ///

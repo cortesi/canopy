@@ -69,15 +69,6 @@ impl AttrSet {
     pub fn new(attr: Attr) -> Self {
         Self::default().with(attr)
     }
-    /// Is this attribute set empty?
-    pub fn is_empty(&self) -> bool {
-        !(self.bold
-            || self.dim
-            || self.italic
-            || self.crossedout
-            || self.overline
-            || self.underline)
-    }
     /// A helper for progressive construction of attribute sets.
     pub fn with(mut self, attr: Attr) -> Self {
         match attr {
@@ -121,14 +112,6 @@ pub struct GradientSpec {
 }
 
 impl GradientSpec {
-    /// Construct a two-stop gradient.
-    pub fn new(angle_deg: f32, start: Color, end: Color) -> Self {
-        Self::with_stops(
-            angle_deg,
-            vec![GradientStop::new(0.0, start), GradientStop::new(1.0, end)],
-        )
-    }
-
     /// Construct a gradient from explicit stops.
     pub fn with_stops(angle_deg: f32, mut stops: Vec<GradientStop>) -> Self {
         if stops.is_empty() {
@@ -425,34 +408,6 @@ impl PartialStyle {
         }
     }
 
-    /// Set the foreground paint.
-    pub fn with_fg(mut self, fg: impl Into<Paint>) -> Self {
-        self.fg = Some(fg.into());
-        self
-    }
-
-    /// Set the background paint.
-    pub fn with_bg(mut self, bg: impl Into<Paint>) -> Self {
-        self.bg = Some(bg.into());
-        self
-    }
-
-    /// Add a single attribute.
-    pub fn with_attr(mut self, attr: Attr) -> Self {
-        if let Some(attrs) = self.attrs {
-            self.attrs = Some(attrs.with(attr));
-        } else {
-            self.attrs = Some(AttrSet::new(attr));
-        }
-        self
-    }
-
-    /// Replace the attributes set.
-    pub fn with_attrs(mut self, attrs: AttrSet) -> Self {
-        self.attrs = Some(attrs);
-        self
-    }
-
     /// Merge two partial styles.
     pub fn join(&self, other: &Self) -> Self {
         Self {
@@ -539,21 +494,6 @@ impl StyleMap {
         }
     }
 
-    /// Insert a style attribute at a specified path.
-    pub fn add_attr(&mut self, path: &str, attr: Attr) {
-        let parsed = parse_path(path);
-        if let Some(ps) = self.styles.get_mut(&parsed) {
-            if let Some(attrs) = ps.attrs {
-                ps.attrs = Some(attrs.with(attr));
-            } else {
-                ps.attrs = Some(AttrSet::default().with(attr));
-            }
-        } else {
-            self.styles
-                .insert(parsed, PartialStyle::default().with_attr(attr));
-        }
-    }
-
     /// Insert a partial style at a path.
     fn insert_style(&mut self, path: &str, style: PartialStyle) {
         self.styles.insert(parse_path(path), style);
@@ -628,62 +568,6 @@ impl<'a> StyleRules<'a> {
     pub fn style(mut self, path: &str, style: impl Into<PartialStyle>) -> Self {
         let full_path = self.make_path(path);
         self.merge_pending(full_path, style.into());
-        self
-    }
-
-    /// Set the foreground paint for multiple paths.
-    ///
-    /// If a rule already exists for any path, the foreground paint is merged
-    /// with the existing style.
-    pub fn fg_all<P>(mut self, paths: &[&str], paint: P) -> Self
-    where
-        P: Into<Paint>,
-    {
-        let paint: Paint = paint.into();
-        for path in paths {
-            let full_path = self.make_path(path);
-            self.merge_pending(full_path, PartialStyle::fg(paint.clone()));
-        }
-        self
-    }
-
-    /// Set the background paint for multiple paths.
-    ///
-    /// If a rule already exists for any path, the background paint is merged
-    /// with the existing style.
-    pub fn bg_all<P>(mut self, paths: &[&str], paint: P) -> Self
-    where
-        P: Into<Paint>,
-    {
-        let paint: Paint = paint.into();
-        for path in paths {
-            let full_path = self.make_path(path);
-            self.merge_pending(full_path, PartialStyle::bg(paint.clone()));
-        }
-        self
-    }
-
-    /// Add a single attribute to multiple paths.
-    ///
-    /// If a rule already exists for any path, the attribute is merged
-    /// with the existing style.
-    pub fn attr_all(mut self, paths: &[&str], attr: Attr) -> Self {
-        for path in paths {
-            let full_path = self.make_path(path);
-            self.merge_pending(full_path, PartialStyle::attrs(AttrSet::new(attr)));
-        }
-        self
-    }
-
-    /// Set all attributes for multiple paths.
-    ///
-    /// If a rule already exists for any path, the attributes are merged
-    /// with the existing style.
-    pub fn attrs_all(mut self, paths: &[&str], attrs: AttrSet) -> Self {
-        for path in paths {
-            let full_path = self.make_path(path);
-            self.merge_pending(full_path, PartialStyle::attrs(attrs));
-        }
         self
     }
 
@@ -1147,7 +1031,10 @@ mod tests {
             g: 255,
             b: 255,
         };
-        let spec = GradientSpec::new(0.0, start, end);
+        let spec = GradientSpec::with_stops(
+            0.0,
+            vec![GradientStop::new(0.0, start), GradientStop::new(1.0, end)],
+        );
         let rect = geom::Rect::new(0, 0, 10, 1);
 
         let left = spec.color_at(rect, geom::Point { x: 0, y: 0 });
@@ -1165,7 +1052,10 @@ mod tests {
             g: 255,
             b: 255,
         };
-        let spec = GradientSpec::new(90.0, start, end);
+        let spec = GradientSpec::with_stops(
+            90.0,
+            vec![GradientStop::new(0.0, start), GradientStop::new(1.0, end)],
+        );
         let rect = geom::Rect::new(0, 0, 1, 10);
 
         let top = spec.color_at(rect, geom::Point { x: 0, y: 0 });
@@ -1217,8 +1107,20 @@ mod tests {
 
     #[test]
     fn style_resolves_gradient_paints() {
-        let fg_spec = GradientSpec::new(0.0, Color::White, Color::Black);
-        let bg_spec = GradientSpec::new(90.0, Color::Red, Color::Blue);
+        let fg_spec = GradientSpec::with_stops(
+            0.0,
+            vec![
+                GradientStop::new(0.0, Color::White),
+                GradientStop::new(1.0, Color::Black),
+            ],
+        );
+        let bg_spec = GradientSpec::with_stops(
+            90.0,
+            vec![
+                GradientStop::new(0.0, Color::Red),
+                GradientStop::new(1.0, Color::Blue),
+            ],
+        );
         let style = Style {
             fg: Paint::gradient(fg_spec.clone()),
             bg: Paint::gradient(bg_spec.clone()),

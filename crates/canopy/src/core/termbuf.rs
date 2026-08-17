@@ -921,7 +921,7 @@ mod tests {
         buf,
         core::{testing::model::trace_result, text::grapheme_width},
         geom::Line,
-        style::{AttrSet, Color, PartialStyle},
+        style::{AttrSet, Color, PartialStyle, StyleBuilder},
         testing::buf::BufTest,
     };
 
@@ -1988,7 +1988,8 @@ mod tests {
         assert!(BufTest::new(&tb).contains_text_style("test", &partial_any));
 
         // Test with multiple style attributes
-        let partial_white_bg = PartialStyle::fg(Color::White).with_bg(Color::Black);
+        let partial_white_bg =
+            PartialStyle::from(StyleBuilder::new().fg(Color::White).bg(Color::Black));
         assert!(BufTest::new(&tb).contains_text_style("test", &partial_white_bg));
     }
 
@@ -2058,11 +2059,12 @@ mod tests {
         );
 
         // Test chaining
-        let bold_red_style = PartialStyle::fg(Color::Red).with_attrs(AttrSet::new(Attr::Bold));
+        let bold_red_style =
+            PartialStyle::from(StyleBuilder::new().fg(Color::Red).attr(Attr::Bold));
         assert!(BufTest::new(&tb).contains_text_style("bold", &bold_red_style));
 
         // Test that it doesn't match wrong combinations
-        let italic_red = PartialStyle::fg(Color::Red).with_attrs(AttrSet::new(Attr::Italic));
+        let italic_red = PartialStyle::from(StyleBuilder::new().fg(Color::Red).attr(Attr::Italic));
         assert!(!BufTest::new(&tb).contains_text_style("bold", &italic_red));
     }
 }
