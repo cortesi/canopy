@@ -52,6 +52,8 @@ mod terminal;
 mod text;
 /// Vertical stack container.
 mod vstack;
+/// Wrapping an existing node in a container widget.
+mod wrap;
 
 pub use boxed::{Border, BoxGlyphs, DOUBLE, ROUND, ROUND_THICK, SINGLE, SINGLE_THICK};
 pub use button::Button;
@@ -74,6 +76,7 @@ pub use selector::Selector;
 pub use terminal::{Terminal, TerminalColors, TerminalConfig};
 pub use text::{CanvasWidth, Text};
 pub use vstack::VStack;
+pub use wrap::wrap;
 
 #[cfg(test)]
 mod render_tests;

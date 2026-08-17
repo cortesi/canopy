@@ -1096,9 +1096,6 @@ pub mod canopy_widgets {
         /// Return the optional title string.
         pub fn title(&self) -> Option<&str> {}
 
-        /// Wrap an existing child node in a new frame and return the frame node ID.
-        pub fn wrap(c: &mut dyn Context, child: impl Into<NodeId>) -> Result<NodeId> {}
-
         /// Wrap an existing child node in a configured frame and return the frame node ID.
         pub fn wrap_with(
             c: &mut dyn Context,
@@ -1450,14 +1447,6 @@ pub mod canopy_widgets {
 
         /// Create a pad with uniform padding on all sides.
         pub fn uniform(padding: u32) -> Self {}
-
-        /// Wrap an existing child node in a new pad and return the pad node ID.
-        pub fn wrap(
-            c: &mut dyn Context,
-            child: impl Into<NodeId>,
-            padding: Edges<u32>,
-        ) -> Result<NodeId> {
-        }
 
         /// Wrap an existing child node in a configured pad and return the pad node ID.
         pub fn wrap_with(
@@ -1992,5 +1981,16 @@ pub mod canopy_widgets {
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {}
 
         fn name(&self) -> NodeName {}
+    }
+
+    /// Wrap `child` in a new `widget` node and return the wrapper's typed id.
+    ///
+    /// The child keeps its identity: it is detached from its current parent and reattached under
+    /// the wrapper.
+    pub fn wrap<W: Widget + 'static>(
+        c: &mut dyn Context,
+        child: impl Into<canopy::NodeId>,
+        widget: W,
+    ) -> canopy::error::Result<canopy::TypedId<W>> {
     }
 }

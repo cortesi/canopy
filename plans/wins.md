@@ -594,7 +594,7 @@ Independent, low-risk, mostly deletions. Do these first.
   `terminal.rs:1305-1310` `focus_events_enqueue_focus_reports` asserts nothing; assert on the
   enqueued focus report.
 
-- [ ] **4.7 One wrap helper.** `Frame::wrap` (`frame.rs:120-122`) and `Pad::wrap`
+- [x] **4.7 One wrap helper.** `Frame::wrap` (`frame.rs:120-122`) and `Pad::wrap`
   (`pad.rs:30-36`) have zero callers and only forward to `wrap_with`; the two `wrap_with` bodies
   (`frame.rs:118-131`, `pad.rs:31-49`: create the wrapper detached, detach the child, attach it
   under the wrapper) are identical. Delete both `wrap` fns and replace both `wrap_with` bodies

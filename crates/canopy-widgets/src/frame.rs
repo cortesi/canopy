@@ -11,6 +11,7 @@ use canopy::{
 use unicode_width::UnicodeWidthStr;
 
 use super::boxed::{BoxGlyphs, ROUND};
+use crate::wrap::wrap;
 
 /// Defines the set of glyphs used to draw active scroll indicators.
 pub struct ScrollGlyphs {
@@ -117,18 +118,9 @@ impl Frame {
         self.title.as_deref()
     }
 
-    /// Wrap an existing child node in a new frame and return the frame node ID.
-    pub fn wrap(c: &mut dyn Context, child: impl Into<NodeId>) -> Result<NodeId> {
-        Self::wrap_with(c, child, Self::new())
-    }
-
     /// Wrap an existing child node in a configured frame and return the frame node ID.
     pub fn wrap_with(c: &mut dyn Context, child: impl Into<NodeId>, frame: Self) -> Result<NodeId> {
-        let child = child.into();
-        let frame_id = NodeId::from(c.create_detached(frame)?);
-        c.detach(child)?;
-        c.attach(frame_id, child)?;
-        Ok(frame_id)
+        Ok(wrap(c, child, frame)?.into())
     }
 }
 
