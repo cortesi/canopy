@@ -9,19 +9,18 @@ commands, bindings, focus, layout, render buffer, and fixtures that Rust code us
 `Canopy::finalize_api()` seals the command surface and renders the app's `.d.luau`
 definition text. `Canopy::script_api()` returns that text.
 
-The definition file has two parts:
+Canopy renders the file from the same native modules it installs on the script surface, in
+install order:
 
-1. The static `canopy` preamble in `crates/canopy/luau/preamble.d.luau`.
-2. Generated widget command tables, default-binding helpers, and fixture comments.
+1. The header comment in `crates/canopy/luau/preamble.d.luau`.
+2. The base `canopy` module, which declares `NodeId`, `Point`, `Size`, `Rect`, `NodeInfo`,
+   `TreeNode`, `BindOptions`, `MouseSpec`, `FixtureInfo`, `BindingInfo`, `CommandParamInfo`,
+   `CommandInfo`, the `canopy` global, and `fixtures()`.
+3. Each module registered through `Canopy::register_script_module`.
+4. One module per widget owner, carrying its command table and default-binding helper.
+5. Fixture comment lines.
 
-The preamble declares:
-
-- `NodeId`
-- `Point`, `Size`, `Rect`, `NodeInfo`, `TreeNode`
-- `BindOptions`, `MouseSpec`, `FixtureInfo`, `BindingInfo`
-- `CommandParamInfo`, `CommandInfo`
-- `canopy`
-- `fixtures()`
+The text and the audited surface therefore cannot drift apart.
 
 Generated widget globals use the widget owner name. For a widget owner named
 `editor`, commands appear as `editor.save(...)`, `editor.move_left(...)`, and so on.
@@ -169,7 +168,7 @@ builds skip that enforcement.
 ## The VM, sandboxing, and limits
 
 Scripts run on the ruau Luau VM, a pure-Rust implementation. The VM is built once at
-API finalization from a validated surface: the static preamble plus per-owner command
+API finalization from a validated surface: the base module plus per-owner command
 declarations are audited against the host functions actually registered, so the typed
 surface and the runtime surface cannot drift apart. The VM is sandboxed: globals are
 frozen, and each compiled script runs in its own chunk environment, so global writes

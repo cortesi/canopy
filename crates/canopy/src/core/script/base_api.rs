@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use ruau::{
-    declaration::{self, Field, Function, FunctionSignature, Global, Type},
+    declaration::{FunctionSignature, Type},
     module::{self, Binding},
     vm::AsyncHostFunction,
 };
@@ -466,46 +466,6 @@ const ASYNC_CANOPY_FUNCTIONS: &[AsyncBaseFunction] = &[
         handler: wait_for_screen_text_host_fn,
     },
 ];
-
-/// Register the base Luau declarations generated from the native registration table.
-pub(super) fn register_declarations(declaration: &mut declaration::Builder) {
-    declaration.add_global(Global::new(
-        "canopy",
-        Type::table(
-            CANOPY_FUNCTIONS
-                .iter()
-                .map(base_function_field)
-                .chain(ASYNC_CANOPY_FUNCTIONS.iter().map(async_base_function_field)),
-        ),
-    ));
-    declaration.add_function(
-        Function::new(
-            "fixtures",
-            FunctionSignature::new().ret(Type::named("FixtureInfo").array()),
-        )
-        .doc("List all registered fixtures available to the current app."),
-    );
-}
-
-/// Render a sync base function as a declaration table field.
-fn base_function_field(function: &BaseFunction) -> Field {
-    let doc = (!function.docs.is_empty()).then(|| function.docs.join("\n"));
-    let mut field = Field::new(function.name, Type::func((function.signature)()));
-    if let Some(doc) = doc {
-        field = field.doc(doc);
-    }
-    field
-}
-
-/// Render an async base function as a declaration table field.
-fn async_base_function_field(function: &AsyncBaseFunction) -> Field {
-    let doc = (!function.docs.is_empty()).then(|| function.docs.join("\n"));
-    let mut field = Field::new(function.name, Type::func((function.signature)()));
-    if let Some(doc) = doc {
-        field = field.doc(doc);
-    }
-    field
-}
 
 /// Register the base `canopy` table and global helpers.
 pub(super) fn register(builder: &mut module::Builder) {

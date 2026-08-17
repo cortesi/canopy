@@ -3263,13 +3263,10 @@ pub mod canopy {
         pub struct DeclRegistry<'a> {}
 
         impl<'a> DeclRegistry<'a> {
-            /// Wrap a declaration builder.
-            pub fn new(builder: &'a mut declaration::Builder) -> Self {}
-
             /// Claim a type name for registration.
             ///
-            /// Returns false when the name is already present or in progress, in which
-            /// case the caller must skip both recursion and registration.
+            /// Returns false when the name is already in progress, in which case the caller must skip
+            /// both recursion and registration.
             pub fn begin(&mut self, name: &str) -> bool {}
 
             /// Registers an alias declaration.
@@ -4776,14 +4773,6 @@ pub mod canopy {
 
         pub mod defs {
             //! Render Luau definition files from the current command set.
-
-            /// Render the complete Luau definition file for the current command set.
-            pub fn render_definitions(
-                commands: &crate::commands::CommandSet,
-                default_binding_owners: &std::collections::BTreeSet<String>,
-                fixtures: &[crate::FixtureInfo],
-            ) -> String {
-            }
 
             /// Return the Luau type recorded in command metadata.
             pub fn command_type_to_luau(spec: &crate::commands::CommandTypeSpec) -> String {}

@@ -32,6 +32,7 @@ mod tests {
         value: usize,
         payload_value: usize,
         last_payload: Option<Payload>,
+        tree_label: Option<String>,
     }
 
     #[derive_commands]
@@ -41,6 +42,7 @@ mod tests {
                 value: 0,
                 payload_value: 0,
                 last_payload: None,
+                tree_label: None,
             }
         }
 
@@ -59,6 +61,12 @@ mod tests {
             let Payload { count } = payload;
             self.payload_value = count;
             self.last_payload = Some(payload);
+        }
+
+        #[command]
+        fn set_tree(&mut self, tree: TreePayload) {
+            self.value = tree.children.len();
+            self.tree_label = Some(tree.label);
         }
     }
 
@@ -312,16 +320,14 @@ mod tests {
     }
 
     #[test]
-    fn recursive_command_arg_declarations_terminate() {
-        use canopy::commands::{CommandType, DeclRegistry, declaration};
+    fn recursive_command_arg_declarations_terminate() -> Result<()> {
+        let mut canopy = Canopy::new();
+        ScriptTarget::load(&mut canopy)?;
+        canopy.finalize_api()?;
 
-        let mut builder = declaration::Builder::new();
-        let mut registry = DeclRegistry::new(&mut builder);
-        TreePayload::luau_decls(&mut registry);
-        TreePayload::luau_decls(&mut registry);
-
-        let rendered = builder.build().expect("valid declarations").render();
-        assert_eq!(rendered.matches("export type TreePayload").count(), 1);
-        assert!(rendered.contains("children: {TreePayload}"));
+        let api = canopy.script_api()?;
+        assert_eq!(api.matches("export type TreePayload").count(), 1);
+        assert!(api.contains("children: {TreePayload}"));
+        Ok(())
     }
 }

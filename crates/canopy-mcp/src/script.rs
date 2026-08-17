@@ -782,27 +782,23 @@ mod tests {
     fn script_api_generated_tail_matches_snapshot() -> crate::Result<()> {
         let evaluator = AppEvaluator::new(test_factory());
         let api = evaluator.script_api()?;
-        let marker = "-- ===== Fixtures =====";
+        let marker = "export type FocusDirection";
         let (_, tail) = api
             .split_once(marker)
-            .expect("script API should contain generated fixture section");
+            .expect("script API should contain the generated owner module");
         let actual = format!("{marker}{tail}");
-        let expected = r#"-- ===== Fixtures =====
--- seeded: Set script_target to a known value
-
--- ===== Application Commands =====
-
-export type FocusDirection = "Next" | "Prev" | "Up" | "Down" | "Left" | "Right"
-
--- ===== Commands for widget "script_target" =====
+        let expected = r#"export type FocusDirection = "Next" | "Prev" | "Up" | "Down" | "Left" | "Right"
 
 declare script_target: {
     choose: (direction: FocusDirection, count: number?) -> number,
-    get: () -> number,
-    set: (value: number) -> (),
     --- Register this widget's default bindings.
     default_bindings: () -> (),
-}"#;
+    get: () -> number,
+    set: (value: number) -> (),
+}
+
+-- ===== Fixtures =====
+-- seeded: Set script_target to a known value"#;
 
         assert_eq!(actual.trim_end(), expected);
         Ok(())

@@ -41,7 +41,7 @@ thread_local! {
 }
 
 use crate::{
-    Canopy, ChangeOutcome, NodeId,
+    Canopy, ChangeOutcome, FixtureInfo, NodeId,
     commands::{self, ArgValue, CommandArgs, CommandInvocation, CommandSet, CommandSpec},
     core::{
         Core,
@@ -3674,26 +3674,31 @@ impl LuauHost {
     }
 
     /// Audit and stage the command and startup surfaces without publishing a runtime.
+    ///
+    /// Returns the rendered Luau definition file for the installed modules.
     pub(crate) fn prepare_finalize(
         &self,
         commands: &CommandSet,
         default_binding_owners: &BTreeSet<String>,
         extra_modules: &[Arc<dyn NativeModule>],
         module_source: Option<Arc<dyn SourceProvider>>,
-    ) -> Result<()> {
+        fixtures: &[FixtureInfo],
+    ) -> Result<String> {
         if self.is_finalized() || self.state.borrow().surface.is_some() {
             return Err(error::Error::InvalidOperation(
                 "Luau API finalization is already active or complete".into(),
             ));
         }
-        let mut builder = Surface::builder().module(build_base_module()?);
+        let mut modules = vec![build_base_module()?];
+        modules.extend(extra_modules.iter().map(Arc::clone));
+        modules.extend(build_owner_modules(commands, default_binding_owners)?);
+        let definitions = defs::render_definitions(&modules, fixtures);
+
+        let mut builder = Surface::builder();
         if let Some(source) = module_source {
             builder = builder.module_source(source);
         }
-        for module in extra_modules {
-            builder = builder.module(Arc::clone(module));
-        }
-        for module in build_owner_modules(commands, default_binding_owners)? {
+        for module in modules {
             builder = builder.module(module);
         }
         let surface = builder.build().map_err(|err| {
@@ -3711,7 +3716,7 @@ impl LuauHost {
         let mut state = self.state.borrow_mut();
         state.surface = Some(surface);
         state.startup_surface = Some(startup_surface);
-        Ok(())
+        Ok(definitions)
     }
 
     /// Build and publish the retained runtime after every other preparation step succeeds.

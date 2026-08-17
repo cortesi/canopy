@@ -461,6 +461,31 @@ fn set_widget_resets_initialization() -> Result<()> {
 }
 
 #[test]
+fn registered_native_modules_appear_once_in_the_api() -> Result<()> {
+    use ruau::module;
+
+    use crate::commands::declaration;
+
+    let mut builder = module::Builder::new("demo_module");
+    builder.constant(
+        "answer",
+        module::Binding::library("demo_module", declaration::Type::Number)
+            .doc("A registered native constant."),
+        42i64,
+    );
+    let demo = builder.build().expect("demo module builds");
+
+    let mut canopy = Canopy::new();
+    canopy.register_script_module(demo)?;
+    canopy.finalize_api()?;
+
+    let api = canopy.script_api()?;
+    assert_eq!(api.matches("declare demo_module").count(), 1);
+    assert!(api.contains("answer: number"));
+    Ok(())
+}
+
+#[test]
 fn tbindings() -> Result<()> {
     run_ttree(|c, _, tree| {
         c.eval_script(

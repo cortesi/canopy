@@ -1,8 +1,10 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
-use ruau::{declaration, module};
+use ruau::{declaration, module, vm::NativeModule};
 
-use super::{base_api, luau_global_owner_name};
 use crate::{
     FixtureInfo,
     commands::{
@@ -11,26 +13,32 @@ use crate::{
     },
 };
 
-/// Static Luau preamble shared by every canopy app.
+/// Header comment shared by every rendered canopy API surface.
 const PREAMBLE: &str = include_str!("../../../luau/preamble.d.luau");
 
-/// Return the static Luau preamble declaring the base canopy API surface.
-pub(crate) fn preamble() -> String {
+/// Render the Luau definition file from the modules the surface installs.
+///
+/// Modules render in the order `prepare_finalize` installs them, so the text and the audited
+/// surface never drift.
+pub(crate) fn render_definitions(
+    modules: &[Arc<dyn NativeModule>],
+    fixtures: &[FixtureInfo],
+) -> String {
     let mut output = String::from(PREAMBLE);
     if !output.ends_with('\n') {
         output.push('\n');
     }
-    output.push('\n');
-    let mut builder = declaration::Builder::new();
-    builder.add_class(declaration::Class::new("NodeId"));
-    register_framework_declarations(&mut builder);
-    base_api::register_declarations(&mut builder);
-    output.push_str(
-        &builder
-            .build()
-            .expect("framework declarations are statically valid")
-            .render(),
-    );
+    for module in modules {
+        output.push('\n');
+        output.push_str(module.declaration().render().trim_end());
+        output.push('\n');
+    }
+    if !fixtures.is_empty() {
+        output.push_str("\n-- ===== Fixtures =====\n");
+        for fixture in fixtures {
+            output.push_str(&format!("-- {}: {}\n", fixture.name, fixture.description));
+        }
+    }
     output
 }
 
@@ -53,42 +61,6 @@ pub(crate) fn owner_command_specs(
         specs.sort_by_key(|spec| spec.id.0);
     }
     owners
-}
-
-/// Render the complete Luau definition file for the current command set.
-pub fn render_definitions(
-    commands: &CommandSet,
-    default_binding_owners: &BTreeSet<String>,
-    fixtures: &[FixtureInfo],
-) -> String {
-    let owners = owner_command_specs(commands, default_binding_owners);
-
-    let mut output = preamble();
-    if !fixtures.is_empty() {
-        output.push_str("\n-- ===== Fixtures =====\n");
-        for fixture in fixtures {
-            output.push_str(&format!("-- {}: {}\n", fixture.name, fixture.description));
-        }
-    }
-    let mut builder = declaration::Builder::new();
-    builder.add_section("Application Commands");
-    for (owner, specs) in owners {
-        register_owner_declaration(
-            &mut builder,
-            &owner,
-            &specs,
-            default_binding_owners.contains(&owner),
-        );
-    }
-    output.push('\n');
-    output.push_str(
-        &builder
-            .build()
-            .expect("command declarations are statically valid")
-            .render(),
-    );
-
-    output
 }
 
 /// Build a Luau function signature for a command.
@@ -114,7 +86,7 @@ pub fn command_type_to_luau(spec: &CommandTypeSpec) -> String {
 }
 
 /// Register framework-owned record and alias declarations.
-fn register_framework_declarations(builder: &mut impl FrameworkDeclarationSink) {
+fn register_framework_declarations(builder: &mut module::Builder) {
     builder.alias(declaration::Alias::new(
         "Point",
         declaration::Type::table([
@@ -220,26 +192,8 @@ pub(crate) fn register_framework_types(builder: &mut module::Builder) {
     register_framework_declarations(builder);
 }
 
-/// Target supporting Canopy's framework-owned alias and class declarations.
-trait FrameworkDeclarationSink {
-    /// Add one alias.
-    fn alias(&mut self, alias: declaration::Alias);
-}
-
-impl FrameworkDeclarationSink for declaration::Builder {
-    fn alias(&mut self, alias: declaration::Alias) {
-        Self::add_alias(self, alias);
-    }
-}
-
-impl FrameworkDeclarationSink for module::Builder {
-    fn alias(&mut self, alias: declaration::Alias) {
-        Self::alias(self, alias);
-    }
-}
-
 /// Register the active-binding discovery record.
-fn register_binding_info(builder: &mut impl FrameworkDeclarationSink) {
+fn register_binding_info(builder: &mut module::Builder) {
     builder.alias(declaration::Alias::new(
         "BindingInfo",
         declaration::Type::table([
@@ -260,7 +214,7 @@ fn register_binding_info(builder: &mut impl FrameworkDeclarationSink) {
 }
 
 /// Register command discovery records.
-fn register_command_info(builder: &mut impl FrameworkDeclarationSink) {
+fn register_command_info(builder: &mut module::Builder) {
     builder.alias(declaration::Alias::new(
         "CommandParamInfo",
         declaration::Type::table([
@@ -307,7 +261,7 @@ fn register_command_info(builder: &mut impl FrameworkDeclarationSink) {
 }
 
 /// Register observation and diagnostics records.
-fn register_observation_info(builder: &mut impl FrameworkDeclarationSink) {
+fn register_observation_info(builder: &mut module::Builder) {
     builder.alias(declaration::Alias::new(
         "ScreenCell",
         declaration::Type::table([
@@ -397,42 +351,6 @@ fn register_observation_info(builder: &mut impl FrameworkDeclarationSink) {
             declaration::Field::new("duration_ms", declaration::Type::Number)
                 .doc("Wall-clock duration in milliseconds."),
         ]),
-    ));
-}
-
-/// Register one owner command table and all command-owned declaration dependencies.
-fn register_owner_declaration(
-    builder: &mut declaration::Builder,
-    owner: &str,
-    specs: &[&'static CommandSpec],
-    has_default_bindings: bool,
-) {
-    let mut registry = DeclRegistry::new(builder);
-    register_command_deps(&mut registry, specs);
-    builder.add_section(format!("Commands for widget \"{owner}\""));
-    let mut fields = specs
-        .iter()
-        .map(|spec| {
-            let mut field =
-                declaration::Field::new(spec.name, declaration::Type::func(command_fn_sig(spec)));
-            if let Some(doc) = command_doc(spec) {
-                field = field.doc(doc);
-            }
-            field
-        })
-        .collect::<Vec<_>>();
-    if has_default_bindings {
-        fields.push(
-            declaration::Field::new(
-                "default_bindings",
-                declaration::Type::func(declaration::FunctionSignature::new()),
-            )
-            .doc("Register this widget's default bindings."),
-        );
-    }
-    builder.add_global(declaration::Global::new(
-        luau_global_owner_name(owner),
-        declaration::Type::table(fields),
     ));
 }
 

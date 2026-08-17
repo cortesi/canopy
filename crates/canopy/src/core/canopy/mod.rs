@@ -987,11 +987,6 @@ impl Canopy {
             .as_ref()
             .map(|source| Arc::clone(source) as Arc<dyn SourceProvider>);
         let default_binding_owners = self.default_binding_owners();
-        let definitions = script::defs::render_definitions(
-            &self.core.commands,
-            &default_binding_owners,
-            &self.fixture_infos(),
-        );
         let existing_scripts = self.script_host.script_ids();
         let default_script_ids = self
             .default_bindings
@@ -1003,11 +998,12 @@ impl Canopy {
             .iter()
             .map(|script| script.script_id)
             .collect::<Vec<_>>();
-        self.script_host.prepare_finalize(
+        let definitions = self.script_host.prepare_finalize(
             &self.core.commands,
             &default_binding_owners,
             &self.script_native_modules,
             surface_source,
+            &self.fixture_infos(),
         )?;
         let prepared = (|| {
             self.validate_script_module_declarations(module_source.as_ref())?;

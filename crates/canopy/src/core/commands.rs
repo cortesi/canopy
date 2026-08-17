@@ -704,78 +704,42 @@ impl<T: CommandType> CommandType for HashMap<String, T> {
 /// terminate: a type's `luau_decls` claims its name with [`DeclRegistry::begin`]
 /// before recursing into field types.
 pub struct DeclRegistry<'a> {
-    /// Underlying declaration target.
-    target: DeclRegistryTarget<'a>,
+    /// Declaration-coupled native-module builder.
+    builder: &'a mut module::Builder,
     /// Names currently being declared during this registration pass.
     seen: HashSet<declaration::Text>,
 }
 
-/// Declaration target used while collecting command type dependencies.
-enum DeclRegistryTarget<'a> {
-    /// Rendered declaration-file builder.
-    Declaration(&'a mut declaration::Builder),
-    /// Declaration-coupled native-module builder.
-    NativeModule(&'a mut module::Builder),
-}
-
 impl<'a> DeclRegistry<'a> {
-    /// Wrap a declaration builder.
-    pub fn new(builder: &'a mut declaration::Builder) -> Self {
-        Self {
-            target: DeclRegistryTarget::Declaration(builder),
-            seen: HashSet::new(),
-        }
-    }
-
     /// Wrap a declaration-coupled native-module builder.
     pub(crate) fn native_module(builder: &'a mut module::Builder) -> Self {
         Self {
-            target: DeclRegistryTarget::NativeModule(builder),
+            builder,
             seen: HashSet::new(),
         }
     }
 
     /// Claim a type name for registration.
     ///
-    /// Returns false when the name is already present or in progress, in which
-    /// case the caller must skip both recursion and registration.
+    /// Returns false when the name is already in progress, in which case the caller must skip
+    /// both recursion and registration.
     pub fn begin(&mut self, name: &str) -> bool {
-        let absent = match &self.target {
-            DeclRegistryTarget::Declaration(builder) => !builder.contains_name(name),
-            DeclRegistryTarget::NativeModule(_) => true,
-        };
-        absent && self.seen.insert(name.to_string().into())
+        self.seen.insert(name.to_string().into())
     }
 
     /// Registers an alias declaration.
     pub fn alias(&mut self, alias: declaration::Alias) {
-        match &mut self.target {
-            DeclRegistryTarget::Declaration(builder) => builder.add_alias(alias),
-            DeclRegistryTarget::NativeModule(builder) => {
-                builder.alias(alias);
-            }
-        }
+        self.builder.alias(alias);
     }
 
     /// Registers a class declaration.
     pub fn class(&mut self, class: declaration::Class) {
-        match &mut self.target {
-            DeclRegistryTarget::Declaration(builder) => builder.add_class(class),
-            DeclRegistryTarget::NativeModule(builder) => {
-                builder.class(class);
-            }
-        }
+        self.builder.class(class);
     }
 
     /// Registers an external type name.
     pub fn extern_ty(&mut self, name: impl Into<declaration::Text>) {
-        let name = name.into();
-        match &mut self.target {
-            DeclRegistryTarget::Declaration(builder) => builder.add_external_type(name),
-            DeclRegistryTarget::NativeModule(builder) => {
-                builder.extern_ty(name.into_owned());
-            }
-        }
+        self.builder.extern_ty(name.into().into_owned());
     }
 }
 

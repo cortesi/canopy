@@ -412,7 +412,7 @@ Independent, low-risk, mostly deletions. Do these first.
   routing and inputmap tests pass; `grep -rn "BindingTarget::" crates` shows only the closure
   form. About −200 lines.
 
-- [ ] **3.2 One declaration path for the `.d.luau` surface.** Today the API text is rendered by
+- [x] **3.2 One declaration path for the `.d.luau` surface.** Today the API text is rendered by
   a hand-driven `declaration::Builder` (`script/defs.rs:17-35, 116-239, 403-462`,
   `base_api.rs:470-508`, `DeclRegistryTarget` in `commands.rs:706-780`) while the VM audits the
   same surface through the built `NativeModule`s. `NativeModule::declaration().render()` (ruau
