@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    rc::Rc,
-};
+use std::{collections::HashSet, rc::Rc};
 
 use parking_lot::RwLock;
 
@@ -13,7 +10,6 @@ use crate::{
         view::View,
         widget_access::{WidgetSlotPolicy, validate_slot},
     },
-    geom::{Point, Rect, Size},
     layout::Layout,
     path::Path,
     widget::Widget,
@@ -79,30 +75,9 @@ impl MountedWidget {
 impl Core {
     /// Add a boxed widget to the arena and return its node ID.
     pub(super) fn add_boxed(&mut self, widget: Box<dyn Widget>) -> Result<NodeId> {
-        let layout = widget.layout();
-        layout.validate()?;
-        let name = widget.name();
-        let widget_type = widget.as_ref().type_id();
-
-        Ok(self.nodes.insert(Node {
-            widget: Rc::new(RwLock::new(Some(widget))),
-            widget_type,
-            parent: None,
-            children: Vec::new(),
-            child_keys: HashMap::new(),
-            layout,
-            rect: Rect::zero(),
-            content_size: Size::default(),
-            canvas: Size::default(),
-            scroll: Point::zero(),
-            view: View::default(),
-            hidden: false,
-            name,
-            initialized: false,
-            mounted: false,
-            layout_dirty: false,
-            effects: None,
-        }))
+        let node = Node::new(widget);
+        node.layout.validate()?;
+        Ok(self.nodes.insert(node))
     }
 
     /// Update the layout for a node.

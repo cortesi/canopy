@@ -57,33 +57,31 @@ pub struct Node {
 }
 
 impl Node {
-    /// Return the node's widget name.
-    pub(crate) fn name(&self) -> &NodeName {
-        &self.name
-    }
-
-    /// Return the node's children.
-    pub(crate) fn children(&self) -> &[NodeId] {
-        &self.children
-    }
-
-    /// Return the canvas size.
-    pub(crate) fn canvas(&self) -> Size {
-        self.canvas
-    }
-
-    /// Return the scroll offset.
-    pub(crate) fn scroll(&self) -> Point {
-        self.scroll
-    }
-
-    /// Return the view data.
-    pub(crate) fn view(&self) -> View {
-        self.view
-    }
-
-    /// Return true if the node is hidden.
-    pub(crate) fn hidden(&self) -> bool {
-        self.hidden
+    /// Construct a detached node for a boxed widget.
+    ///
+    /// The caller validates the widget's layout before insertion.
+    pub(crate) fn new(widget: Box<dyn Widget>) -> Self {
+        let layout = widget.layout();
+        let name = widget.name();
+        let widget_type = widget.as_ref().type_id();
+        Self {
+            widget: Rc::new(RwLock::new(Some(widget))),
+            widget_type,
+            parent: None,
+            children: Vec::new(),
+            child_keys: HashMap::new(),
+            layout,
+            rect: Rect::zero(),
+            content_size: Size::default(),
+            canvas: Size::default(),
+            scroll: Point::zero(),
+            view: View::default(),
+            hidden: false,
+            name,
+            initialized: false,
+            mounted: false,
+            layout_dirty: false,
+            effects: None,
+        }
     }
 }

@@ -1262,10 +1262,7 @@ fn node_info_to_arg(canopy: &Canopy, node_id: NodeId) -> Result<BTreeMap<String,
     let accept_focus = widget_access::accepts_focus(&canopy.core, node_id);
     Ok(BTreeMap::from([
         ("id".to_string(), node_id_to_arg(node_id)),
-        (
-            "name".to_string(),
-            ArgValue::String(node.name().to_string()),
-        ),
+        ("name".to_string(), ArgValue::String(node.name.to_string())),
         (
             "focused".to_string(),
             ArgValue::Bool(root_ctx.node_is_focused(node_id)),
@@ -1274,16 +1271,16 @@ fn node_info_to_arg(canopy: &Canopy, node_id: NodeId) -> Result<BTreeMap<String,
             "on_focus_path".to_string(),
             ArgValue::Bool(root_ctx.node_is_on_focus_path(node_id)),
         ),
-        ("hidden".to_string(), ArgValue::Bool(node.hidden())),
-        ("visible".to_string(), ArgValue::Bool(!node.hidden())),
+        ("hidden".to_string(), ArgValue::Bool(node.hidden)),
+        ("visible".to_string(), ArgValue::Bool(!node.hidden)),
         (
             "children".to_string(),
-            node_list_to_arg(node.children().iter().copied()),
+            node_list_to_arg(node.children.iter().copied()),
         ),
         ("rect".to_string(), rect),
         ("content_rect".to_string(), content_rect),
-        ("canvas".to_string(), size_to_arg(node.canvas())),
-        ("scroll".to_string(), point_to_arg(node.scroll())),
+        ("canvas".to_string(), size_to_arg(node.canvas)),
+        ("scroll".to_string(), point_to_arg(node.scroll)),
         ("accept_focus".to_string(), ArgValue::Bool(accept_focus)),
     ]))
 }
@@ -1295,7 +1292,7 @@ fn tree_node_to_arg(canopy: &Canopy, node_id: NodeId) -> Result<ArgValue> {
         return Err(error::Error::NotFound(format!("node {node_id:?}")));
     };
     let children = node
-        .children()
+        .children
         .iter()
         .copied()
         .map(|child_id| tree_node_to_arg(canopy, child_id))
@@ -3203,7 +3200,7 @@ fn host_node_region<'s>(
             .core
             .node(node_id)
             .ok_or_else(|| error::Error::from(commands::CommandError::InvalidNode { id: node_id }))?
-            .view();
+            .view;
         screen_text_for_rect(canopy, view.content)
     })
     .map_err(|err| canopy_to_host(&err))?;

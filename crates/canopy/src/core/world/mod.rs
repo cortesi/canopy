@@ -3,12 +3,7 @@
     reason = "Core methods are split by arena, layout, and dispatch concerns."
 )]
 
-use std::{
-    any::TypeId,
-    cell::Cell,
-    collections::{HashMap, HashSet},
-    rc::Rc,
-};
+use std::{cell::Cell, collections::HashSet, rc::Rc};
 
 use parking_lot::RwLock;
 use slotmap::SlotMap;
@@ -21,9 +16,8 @@ use super::{
 use crate::{
     ChangeOutcome, ViewContext,
     commands::{CommandScopeFrame, CommandSet},
-    core::{id::NodeId, node::Node, view::View},
+    core::{id::NodeId, node::Node},
     error::{Error, NodeOperationKind, Result},
-    geom::{Point, Rect, Size},
     layout::Layout,
     render::Render,
     state::NodeName,
@@ -148,7 +142,7 @@ struct TreeStateSnapshot {
 #[derive(Clone, Copy)]
 pub struct WidgetOperation {
     /// Error category used for reporting.
-    kind: WidgetOperationKind,
+    kind: NodeOperationKind,
     /// Short operation name.
     name: &'static str,
 }
@@ -157,7 +151,7 @@ impl WidgetOperation {
     /// Construct a generic widget access operation.
     pub(crate) const fn access(name: &'static str) -> Self {
         Self {
-            kind: WidgetOperationKind::Access,
+            kind: NodeOperationKind::Access,
             name,
         }
     }
@@ -165,7 +159,7 @@ impl WidgetOperation {
     /// Construct a layout-phase widget operation.
     pub(crate) const fn layout(name: &'static str) -> Self {
         Self {
-            kind: WidgetOperationKind::Layout,
+            kind: NodeOperationKind::Layout,
             name,
         }
     }
@@ -173,50 +167,17 @@ impl WidgetOperation {
     /// Construct a render-phase widget operation.
     pub(crate) const fn render(name: &'static str) -> Self {
         Self {
-            kind: WidgetOperationKind::Render,
+            kind: NodeOperationKind::Render,
             name,
         }
     }
-}
-
-/// Error category for contextual widget operation failures.
-#[derive(Clone, Copy)]
-enum WidgetOperationKind {
-    /// Generic widget access failure.
-    Access,
-    /// Layout-phase failure.
-    Layout,
-    /// Render-phase failure.
-    Render,
 }
 
 impl Core {
     /// Create a new Core with a default root node.
     pub fn new() -> Self {
         let mut nodes = SlotMap::with_key();
-        let root_widget = RootContainer;
-        let root_type = TypeId::of::<RootContainer>();
-        let layout = root_widget.layout();
-        let root_name = root_widget.name();
-        let root = nodes.insert(Node {
-            widget: Rc::new(RwLock::new(Some(Box::new(root_widget)))),
-            widget_type: root_type,
-            parent: None,
-            children: Vec::new(),
-            child_keys: HashMap::new(),
-            layout,
-            rect: Rect::zero(),
-            content_size: Size::default(),
-            canvas: Size::default(),
-            scroll: Point::zero(),
-            view: View::default(),
-            hidden: false,
-            name: root_name,
-            initialized: false,
-            mounted: false,
-            layout_dirty: false,
-            effects: None,
-        });
+        let root = nodes.insert(Node::new(Box::new(RootContainer)));
 
         Self {
             nodes,
@@ -364,13 +325,8 @@ impl Core {
         node_id: NodeId,
         source: Error,
     ) -> Error {
-        let kind = match operation.kind {
-            WidgetOperationKind::Access => NodeOperationKind::Access,
-            WidgetOperationKind::Layout => NodeOperationKind::Layout,
-            WidgetOperationKind::Render => NodeOperationKind::Render,
-        };
         Error::NodeOperation {
-            kind,
+            kind: operation.kind,
             operation: operation.name,
             node: node_id,
             path: self.node_path_label(node_id),
