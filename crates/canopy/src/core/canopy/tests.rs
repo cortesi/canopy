@@ -29,6 +29,8 @@ use crate::{
     widget::{EventOutcome, Widget},
 };
 
+use crate::core::world::test_support::assert_error_context;
+
 static POLL_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 #[test]
@@ -318,23 +320,6 @@ fn make_mouse_event(core: &Core, node_id: NodeId) -> mouse::MouseEvent {
         modifiers: key::Empty,
         location: loc,
     }
-}
-
-fn assert_error_context(error: &Error, operation: &str, node_id: NodeId, path: &str) {
-    let Error::NodeOperation {
-        operation: actual_operation,
-        node,
-        path: actual_path,
-        source,
-        ..
-    } = error
-    else {
-        panic!("expected node operation error, got {error:?}");
-    };
-    assert_eq!(*actual_operation, operation);
-    assert_eq!(*node, node_id);
-    assert_eq!(actual_path, path);
-    assert!(!source.to_string().is_empty());
 }
 
 #[test]

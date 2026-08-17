@@ -712,7 +712,7 @@ Independent, low-risk, mostly deletions. Do these first.
   (`testing/ttree.rs:69-290`) define the same handle, `Widget` impl, and `OutcomeTarget` impl three
   times; one `node!(Type [, name] [, command])` macro covers the seven uses. About −110 lines.
 
-- [ ] **6.7 Test placement.** `world/tests.rs` (2,793 lines) mixes layout-engine tests
+- [x] **6.7 Test placement.** `world/tests.rs` (2,793 lines) mixes layout-engine tests
   (`:1208-2249`) that pin nine `layout_driver` internals as `pub(super)` with tree/lifecycle tests;
   move the layout tests beside `layout_driver.rs` so those items become private, add
   `fixed_leaf(core, w, h)`/`wrap_node(core)` helpers, and use `core.set_layout_of(x, L)` instead

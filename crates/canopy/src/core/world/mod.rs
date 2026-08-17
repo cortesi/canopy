@@ -34,6 +34,9 @@ mod dispatch;
 mod focus;
 /// Layout traversal, measurement, and hit-testing.
 pub mod layout_driver;
+/// Widgets and node builders shared by the world test modules.
+#[cfg(test)]
+pub mod test_support;
 #[cfg(test)]
 mod tests;
 /// Arena mutation, structural invariants, and path helpers.

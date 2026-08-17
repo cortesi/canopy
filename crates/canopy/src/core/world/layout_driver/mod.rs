@@ -79,7 +79,7 @@ struct MeasureKey {
 }
 
 /// Layout traversal with per-pass measurement caching.
-pub(super) struct LayoutPass<'a> {
+struct LayoutPass<'a> {
     /// Core state being updated.
     core: &'a mut Core,
     /// Cached measurements for this pass.
@@ -738,7 +738,7 @@ impl<'a> LayoutPass<'a> {
 }
 
 /// Clamp an outer size against min/max constraints.
-pub(super) fn clamp_outer(size: Size<u32>, layout: Layout) -> Size<u32> {
+fn clamp_outer(size: Size<u32>, layout: Layout) -> Size<u32> {
     Size::new(
         clamp_axis(size.w, layout.min_width, layout.max_width),
         clamp_axis(size.h, layout.min_height, layout.max_height),
@@ -762,7 +762,7 @@ fn clamp_axis(value: u32, min: Option<u32>, max: Option<u32>) -> u32 {
 }
 
 /// Build a content-box constraint for a single axis.
-pub(super) fn constraint_for_axis(
+fn constraint_for_axis(
     sizing: Sizing,
     available_content: u32,
     min_outer: Option<u32>,
@@ -810,7 +810,7 @@ pub fn clamp_scroll(scroll: &mut Point, view: Size<u32>, canvas: Size<u32>) {
 }
 
 /// Allocate remaining space proportionally across flex weights.
-pub(super) fn allocate_flex_shares(remaining: u32, weights: &[u32]) -> Vec<u32> {
+fn allocate_flex_shares(remaining: u32, weights: &[u32]) -> Vec<u32> {
     if remaining == 0 || weights.is_empty() {
         return vec![0; weights.len()];
     }
@@ -878,7 +878,7 @@ fn set_cross_sizing(layout: &mut Layout, direction: LayoutDirection, sizing: Siz
 }
 
 /// Calculate the offset for aligning a child within available space.
-pub(super) fn align_offset(child_size: u32, available: u32, align: Align) -> u32 {
+fn align_offset(child_size: u32, available: u32, align: Align) -> u32 {
     match align {
         Align::Start => 0,
         Align::Center => available.saturating_sub(child_size) / 2,
@@ -948,3 +948,7 @@ fn locate_recursive(
 
     Ok(Some(node_id))
 }
+
+/// Tests for the layout driver.
+#[cfg(test)]
+mod tests;
