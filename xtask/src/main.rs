@@ -79,7 +79,6 @@ fn run_ci() -> ExitCode {
         run_clippy_check,
         run_default_check,
         run_all_features_check,
-        run_doctests,
         run_luau_check,
         run_nextest,
         run_bench_check,
@@ -98,11 +97,7 @@ fn run_ci() -> ExitCode {
 
 /// Run the workspace test workflow.
 fn run_test() -> ExitCode {
-    let workspace_root = workspace_root();
-    if !run_nextest(&workspace_root) || !run_doctests(&workspace_root) {
-        return ExitCode::FAILURE;
-    }
-    ExitCode::SUCCESS
+    exit_code(run_nextest(&workspace_root()))
 }
 
 /// Run the targeted deterministic-concurrency and unsafe-code suites.
@@ -277,14 +272,6 @@ fn run_all_features_check(workspace_root: &Path) -> bool {
     run_cargo_command(
         workspace_root,
         &["check", "--workspace", "--all-targets", "--all-features"],
-    )
-}
-
-/// Compile and run documentation examples separately from nextest.
-fn run_doctests(workspace_root: &Path) -> bool {
-    run_cargo_command(
-        workspace_root,
-        &["test", "--doc", "--workspace", "--all-features"],
     )
 }
 

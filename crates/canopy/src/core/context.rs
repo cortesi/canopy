@@ -1704,3 +1704,21 @@ impl<'a> ViewContext for CoreViewContext<'a> {
         snapshot
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{ChildKey, Widget};
+
+    key!(Editor);
+    impl Widget for Editor {}
+
+    pub struct Modal;
+    impl Widget for Modal {}
+    key!(pub ModalSlot: Modal);
+
+    #[test]
+    fn key_macro_names_the_slot_after_the_key_type() {
+        assert_eq!(Editor::KEY, "Editor");
+        assert_eq!(ModalSlot::KEY, "ModalSlot");
+    }
+}

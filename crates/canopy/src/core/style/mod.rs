@@ -869,6 +869,50 @@ mod tests {
     #[allow(unused_imports)]
     use crate::error::Result;
 
+    #[test]
+    fn style_builder_defines_a_reusable_rule() {
+        let selected = StyleBuilder::new()
+            .fg(solarized::BASE3)
+            .bg(solarized::BLUE)
+            .attr(Attr::Bold);
+
+        let mut style_map = StyleMap::new();
+        style_map.rules().style("item/selected", selected).apply();
+
+        let manager = StyleManager::new();
+        let resolved = manager.get(&style_map, "item/selected");
+        assert_eq!(resolved.fg, Paint::solid(solarized::BASE3));
+        assert_eq!(resolved.bg, Paint::solid(solarized::BLUE));
+        assert_eq!(resolved.attrs, AttrSet::new(Attr::Bold));
+    }
+
+    #[test]
+    fn rules_chain_sets_one_path_per_call() {
+        let mut style_map = StyleMap::new();
+        style_map
+            .rules()
+            .style(
+                "",
+                StyleBuilder::new()
+                    .fg(Color::White)
+                    .bg(Color::Black)
+                    .attrs(AttrSet::default()),
+            )
+            .fg("red/text", solarized::RED)
+            .fg("blue/text", solarized::BLUE)
+            .apply();
+
+        let manager = StyleManager::new();
+        assert_eq!(
+            manager.get(&style_map, "red/text"),
+            solid_style(solarized::RED, Color::Black)
+        );
+        assert_eq!(
+            manager.get(&style_map, "blue/text"),
+            solid_style(solarized::BLUE, Color::Black)
+        );
+    }
+
     fn solid_style(fg: Color, bg: Color) -> Style {
         Style {
             fg: Paint::solid(fg),

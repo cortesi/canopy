@@ -126,7 +126,7 @@ Independent, low-risk, mostly deletions. Do these first.
   inherit `edition` and `license` like every other member. Proof: `Cargo.lock` is unchanged
   after `cargo metadata`.
 
-- [ ] **0.9 Stop running doctests.** The workspace has four doctests
+- [x] **0.9 Stop running doctests.** The workspace has four doctests
   (`crates/canopy/src/core/context.rs:35-43,137-149`, `core/style/mod.rs:330-343,524-533`), and
   `xtask test`/`xtask ci` build seven doctest harnesses to run them. Per the adopted nano-rust
   standard: convert the four to unit tests, set `doctest = false` on all seven `[lib]` targets,
