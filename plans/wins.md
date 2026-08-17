@@ -152,7 +152,7 @@ Independent, low-risk, mostly deletions. Do these first.
 
 ## Stage 1: canopy core (arena, contexts, facade)
 
-- [ ] **1.1 One parent-chain walk and one home for focus queries.** Five copies of "walk
+- [x] **1.1 One parent-chain walk and one home for focus queries.** Five copies of "walk
   parents looking for X": `tree.rs` `is_ancestor` (344-354) and `is_attached_to_root` (356-366),
   `focus.rs` `is_on_focus_path` (22-32) and `is_descendant` (437-446), `context.rs`
   `is_descendant` (1193-1203). Keep one `Core::is_ancestor_or_self`; land that part first in

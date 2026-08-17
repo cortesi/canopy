@@ -1141,9 +1141,6 @@ pub mod canopy {
             /// Is the specified node on the focus path?
             fn node_is_on_focus_path(&self, node: NodeId) -> bool;
 
-            /// Return the focus path for the subtree under `root`.
-            fn focus_path(&self, root: NodeId) -> Path;
-
             /// Return the focused leaf under the subtree rooted at `root`.
             fn focused_leaf(&self, root: NodeId) -> Option<NodeId>;
 
@@ -3412,9 +3409,6 @@ pub mod canopy {
 
         /// Is the specified node on the focus path?
         fn node_is_on_focus_path(&self, node: NodeId) -> bool;
-
-        /// Return the focus path for the subtree under `root`.
-        fn focus_path(&self, root: NodeId) -> Path;
 
         /// Return the focused leaf under the subtree rooted at `root`.
         fn focused_leaf(&self, root: NodeId) -> Option<NodeId>;

@@ -1051,7 +1051,7 @@ impl Core {
     }
 
     /// Collect a subtree in pre-order, including the root.
-    fn subtree_pre_order(&self, root: NodeId) -> Vec<NodeId> {
+    pub(crate) fn subtree_pre_order(&self, root: NodeId) -> Vec<NodeId> {
         let mut out = Vec::new();
         let mut stack = vec![root];
         while let Some(node_id) = stack.pop() {

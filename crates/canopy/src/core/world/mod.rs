@@ -13,8 +13,8 @@ use std::{
 use parking_lot::RwLock;
 use slotmap::SlotMap;
 
+use self::focus::FocusRecoveryHint;
 use super::{
-    focus::FocusRecoveryHint,
     help::OwnedHelpSnapshot,
     widget_access::{WidgetMutGuard, WidgetReadGuard, WidgetSlotGuard},
 };
@@ -33,6 +33,8 @@ use crate::{
 
 /// Event dispatch and bubbling helpers.
 mod dispatch;
+/// Focus and mouse-capture management.
+mod focus;
 /// Layout traversal, measurement, and hit-testing.
 mod layout_driver;
 #[cfg(test)]

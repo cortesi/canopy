@@ -43,8 +43,6 @@ pub mod canopy;
 pub mod change;
 /// Core context traits and implementations.
 pub mod context;
-/// Focus management.
-pub mod focus;
 /// Help snapshot API.
 pub mod help;
 /// Node ID types.

@@ -101,10 +101,6 @@ impl ViewContext for DummyContext {
         false
     }
 
-    fn focus_path(&self, _root: NodeId) -> Path {
-        Path::empty()
-    }
-
     fn focused_leaf(&self, _root: NodeId) -> Option<NodeId> {
         None
     }

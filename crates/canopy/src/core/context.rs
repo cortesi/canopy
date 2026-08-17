@@ -10,7 +10,6 @@ use super::{
     id::{NodeId, TypedId},
     style::Effect,
     view::View,
-    widget_access,
     world::Core,
 };
 use crate::{
@@ -236,9 +235,6 @@ pub trait ViewContext {
 
     /// Is the specified node on the focus path?
     fn node_is_on_focus_path(&self, node: NodeId) -> bool;
-
-    /// Return the focus path for the subtree under `root`.
-    fn focus_path(&self, root: NodeId) -> Path;
 
     /// Return the focused leaf under the subtree rooted at `root`.
     fn focused_leaf(&self, root: NodeId) -> Option<NodeId>;
@@ -1185,44 +1181,6 @@ impl dyn Context + '_ {
     }
 }
 
-/// Return whether a node's widget reports it accepts focus.
-fn node_accepts_focus(core: &Core, node_id: NodeId) -> bool {
-    widget_access::accepts_focus(core, node_id)
-}
-
-/// Collect focusable leaves in pre-order for a core subtree.
-fn focusable_leaves_for(core: &Core, root: NodeId) -> Vec<NodeId> {
-    let mut out = Vec::new();
-    let ctx = CoreViewContext::new(core, root);
-    let ctx = &ctx as &dyn ViewContext;
-    for id in ctx.preorder(root) {
-        let Some(node) = core.nodes.get(id) else {
-            continue;
-        };
-        if node.hidden || node.view.is_zero() {
-            continue;
-        }
-        if node_accepts_focus(core, id) {
-            out.push(id);
-        }
-    }
-    out
-}
-
-/// Return the focused leaf within the core subtree rooted at `root`.
-fn focused_leaf_for(core: &Core, root: NodeId) -> Option<NodeId> {
-    let focused = core.focus?;
-    let node = core.nodes.get(focused)?;
-    if node.hidden || node.view.is_zero() || !core.is_ancestor_or_self(root, focused) {
-        return None;
-    }
-    if node_accepts_focus(core, focused) {
-        Some(focused)
-    } else {
-        None
-    }
-}
-
 /// Context implementation bound to a specific node.
 pub struct CoreContext<'a> {
     /// Core state reference.
@@ -1303,16 +1261,12 @@ impl<'a> ViewContext for CoreContext<'a> {
         self.core.is_on_focus_path(node)
     }
 
-    fn focus_path(&self, root: NodeId) -> Path {
-        self.core.focus_path(root)
-    }
-
     fn focused_leaf(&self, root: NodeId) -> Option<NodeId> {
-        focused_leaf_for(self.core, root)
+        self.core.focused_leaf(root)
     }
 
     fn focusable_leaves(&self, root: NodeId) -> Vec<NodeId> {
-        focusable_leaves_for(self.core, root)
+        self.core.focusable_leaves(root)
     }
 
     fn parent_of(&self, node: NodeId) -> Option<NodeId> {
@@ -1648,16 +1602,12 @@ impl<'a> ViewContext for CoreViewContext<'a> {
         self.core.is_on_focus_path(node)
     }
 
-    fn focus_path(&self, root: NodeId) -> Path {
-        self.core.focus_path(root)
-    }
-
     fn focused_leaf(&self, root: NodeId) -> Option<NodeId> {
-        focused_leaf_for(self.core, root)
+        self.core.focused_leaf(root)
     }
 
     fn focusable_leaves(&self, root: NodeId) -> Vec<NodeId> {
-        focusable_leaves_for(self.core, root)
+        self.core.focusable_leaves(root)
     }
 
     fn parent_of(&self, node: NodeId) -> Option<NodeId> {

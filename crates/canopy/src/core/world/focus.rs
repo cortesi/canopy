@@ -1,6 +1,7 @@
+use super::Core;
 use crate::{
-    ChangeOutcome, ViewContext,
-    core::{context::CoreViewContext, id::NodeId, widget_access, world::Core},
+    ChangeOutcome,
+    core::{id::NodeId, widget_access},
     error::{Error, Result},
     geom::{Direction, RectI32},
     path::Path,
@@ -17,7 +18,6 @@ pub struct FocusRecoveryHint {
     pub ancestor: Option<NodeId>,
 }
 
-#[allow(clippy::multiple_inherent_impl)]
 impl Core {
     /// Check whether a node is on the focus path.
     pub fn is_on_focus_path(&self, node: NodeId) -> bool {
@@ -66,23 +66,23 @@ impl Core {
 
     /// Return the focus path for the subtree under `root`.
     pub fn focus_path(&self, root: NodeId) -> Path {
-        let mut parts = Vec::new();
-        let mut current = self.focus;
-        while let Some(id) = current {
-            let Some(node) = self.nodes.get(id) else {
-                return Path::empty();
-            };
-            parts.push(node.name.to_string());
-            if id == root {
-                break;
-            }
-            current = node.parent;
-        }
-        if current != Some(root) {
-            return Path::empty();
-        }
-        parts.reverse();
-        Path::new(parts)
+        self.focus
+            .map_or_else(Path::empty, |focus| self.node_path(root, focus))
+    }
+
+    /// Collect the focusable leaves under `root` in pre-order.
+    pub fn focusable_leaves(&self, root: NodeId) -> Vec<NodeId> {
+        self.subtree_pre_order(root)
+            .into_iter()
+            .filter(|id| is_focus_candidate(self, *id, true))
+            .collect()
+    }
+
+    /// Return the focused node when it is a focusable leaf under `root`.
+    pub fn focused_leaf(&self, root: NodeId) -> Option<NodeId> {
+        let focused = self.focus?;
+        (is_focus_candidate(self, focused, true) && self.is_ancestor_or_self(root, focused))
+            .then_some(focused)
     }
 
     /// Focus the first node that accepts focus in the pre-order traversal of the subtree at root.
@@ -125,14 +125,7 @@ impl Core {
 
     /// Move focus in a specified direction within the subtree at root.
     pub fn focus_dir(&mut self, root: NodeId, dir: Direction) -> Result<ChangeOutcome> {
-        let mut focusables = Vec::new();
-        let ctx = CoreViewContext::new(self, root);
-        let ctx = &ctx as &dyn ViewContext;
-        for id in ctx.preorder(root) {
-            if is_focus_candidate(self, id, true) {
-                focusables.push(id);
-            }
-        }
+        let focusables = self.focusable_leaves(root);
 
         let current = match self.focus {
             Some(id) => id,
@@ -345,9 +338,8 @@ fn first_focusable(core: &Core, root: NodeId) -> Option<NodeId> {
 
 /// Return the first focusable node under `root` with view requirement control.
 fn first_focusable_with(core: &Core, root: NodeId, require_view: bool) -> Option<NodeId> {
-    let ctx = CoreViewContext::new(core, root);
-    let ctx = &ctx as &dyn ViewContext;
-    ctx.preorder(root)
+    core.subtree_pre_order(root)
+        .into_iter()
         .find(|id| is_focus_candidate(core, *id, require_view))
 }
 
@@ -371,10 +363,8 @@ fn find_next_focus_with(
     skip_subtree: bool,
     require_view: bool,
 ) -> Option<NodeId> {
-    let ctx = CoreViewContext::new(core, root);
-    let ctx = &ctx as &dyn ViewContext;
     let mut past_target = false;
-    for id in ctx.preorder(root) {
+    for id in core.subtree_pre_order(root) {
         if id == target {
             past_target = true;
             continue;
@@ -412,9 +402,7 @@ fn find_prev_focus_with(
     require_view: bool,
 ) -> Option<NodeId> {
     let mut prev = None;
-    let ctx = CoreViewContext::new(core, root);
-    let ctx = &ctx as &dyn ViewContext;
-    for id in ctx.preorder(root) {
+    for id in core.subtree_pre_order(root) {
         if let Some(t) = target
             && id == t
         {
