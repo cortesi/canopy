@@ -144,11 +144,11 @@ fn pending_script_finalization_failure_is_atomic_and_retryable() -> Result<()> {
     assert_eq!(canopy.script_api_state(), ScriptApiState::Ready);
     let root = canopy.root_id();
     assert_eq!(
-        host.execute_value(&mut canopy, root, first)?,
+        host.execute(&mut canopy, root, first, None)?,
         commands::ArgValue::Int(1)
     );
     assert_eq!(
-        host.execute_value(&mut canopy, root, second)?,
+        host.execute(&mut canopy, root, second, None)?,
         commands::ArgValue::Int(2)
     );
     Ok(())
@@ -187,11 +187,11 @@ fn every_finalization_checkpoint_is_atomic_and_retryable() -> Result<()> {
         assert_eq!(host.script_ids().len(), 4, "{step:?}");
         let root = canopy.root_id();
         assert_eq!(
-            host.execute_value(&mut canopy, root, first)?,
+            host.execute(&mut canopy, root, first, None)?,
             commands::ArgValue::Int(1)
         );
         assert_eq!(
-            host.execute_value(&mut canopy, root, second)?,
+            host.execute(&mut canopy, root, second, None)?,
             commands::ArgValue::Int(2)
         );
     }

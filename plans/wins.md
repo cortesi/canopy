@@ -216,7 +216,7 @@ Independent, low-risk, mostly deletions. Do these first.
   `clippy::redundant_pub_crate` rejects the `pub(crate)` spelling there. Fix the stray doc line at
   `canopy/mod.rs:1682` ("Validate a child view position..." on `Loader`). About −150 lines.
 
-- [ ] **1.5 One journaled script-eval path.** `eval_script`, `eval_script_value`, and
+- [x] **1.5 One journaled script-eval path.** `eval_script`, `eval_script_value`, and
   `eval_script_value_with_timeout` (`canopy/mod.rs:464-510`) copy the same
   begin-journal / ensure-finalized / compile / run / record block; `run_config` has the same
   shape. Write one private `eval_journaled(origin, source, run)` and a private

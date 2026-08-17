@@ -447,11 +447,9 @@ impl Canopy {
 
     /// Run a compiled script by id on the target node.
     pub fn run_script(&mut self, node_id: impl Into<NodeId>, sid: script::ScriptId) -> Result<()> {
-        if !self.script_host.is_finalized() {
-            self.finalize_api()?;
-        }
+        self.ensure_finalized()?;
         let host = self.script_host.clone();
-        host.execute(self, node_id.into(), sid)
+        host.execute(self, node_id.into(), sid, None).map(|_| ())
     }
 
     /// Compile a script and return its identifier.
@@ -461,31 +459,17 @@ impl Canopy {
 
     /// Evaluate a Luau source string in the current app context.
     pub fn eval_script(&mut self, source: &str) -> Result<()> {
-        let baseline = self.begin_script_journal();
-        let result = (|| {
-            if !self.script_host.is_finalized() {
-                self.finalize_api()?;
-            }
-            let script_id = self.compile_script(source)?;
-            self.run_script(self.core.root_id(), script_id)
-        })();
-        self.record_script_journal("eval", source, baseline, &result);
-        result
+        self.eval_journaled("eval", source, |canopy, script_id, host| {
+            host.execute(canopy, canopy.core.root_id(), script_id, None)
+        })
+        .map(|_| ())
     }
 
     /// Evaluate a Luau source string and return its value.
     pub fn eval_script_value(&mut self, source: &str) -> Result<commands::ArgValue> {
-        let baseline = self.begin_script_journal();
-        let result = (|| {
-            if !self.script_host.is_finalized() {
-                self.finalize_api()?;
-            }
-            let script_id = self.compile_script(source)?;
-            let host = self.script_host.clone();
-            host.execute_value(self, self.core.root_id(), script_id)
-        })();
-        self.record_script_journal("eval", source, baseline, &result);
-        result
+        self.eval_journaled("eval", source, |canopy, script_id, host| {
+            host.execute(canopy, canopy.core.root_id(), script_id, None)
+        })
     }
 
     /// Evaluate a Luau source string with a cooperative timeout.
@@ -494,16 +478,37 @@ impl Canopy {
         source: &str,
         timeout: Duration,
     ) -> Result<commands::ArgValue> {
+        self.eval_journaled("eval", source, move |canopy, script_id, host| {
+            host.execute(canopy, canopy.core.root_id(), script_id, Some(timeout))
+        })
+    }
+
+    /// Finalize the script API surface if an evaluation needs it.
+    fn ensure_finalized(&mut self) -> Result<()> {
+        if self.script_host.is_finalized() {
+            return Ok(());
+        }
+        self.finalize_api()
+    }
+
+    /// Compile and run one source under a journal entry.
+    ///
+    /// `run` receives the compiled script and a clone of the script host, so the caller chooses
+    /// the execution mode without repeating the journal, finalize, and compile prologue.
+    fn eval_journaled(
+        &mut self,
+        origin: impl Into<String>,
+        source: &str,
+        run: impl FnOnce(&mut Self, script::ScriptId, script::LuauHost) -> Result<commands::ArgValue>,
+    ) -> Result<commands::ArgValue> {
         let baseline = self.begin_script_journal();
         let result = (|| {
-            if !self.script_host.is_finalized() {
-                self.finalize_api()?;
-            }
+            self.ensure_finalized()?;
             let script_id = self.compile_script(source)?;
             let host = self.script_host.clone();
-            host.execute_value_with_timeout(self, self.core.root_id(), script_id, timeout)
+            run(self, script_id, host)
         })();
-        self.record_script_journal("eval", source, baseline, &result);
+        self.record_script_journal(origin, source, baseline, &result);
         result
     }
 
@@ -580,9 +585,7 @@ impl Canopy {
 
     /// Run app, user, and project startup scripts once.
     pub fn run_startup_scripts(&mut self) -> Result<usize> {
-        if !self.script_host.is_finalized() {
-            self.finalize_api()?;
-        }
+        self.ensure_finalized()?;
         let host = self.script_host.clone();
         let mut ran = 0;
         let startup_scripts = self
@@ -650,7 +653,9 @@ impl Canopy {
         let attempt = self.begin_startup_attempt();
         let baseline = self.begin_script_journal();
         let host = self.script_host.clone();
-        let result = host.execute(self, self.core.root_id(), script_id);
+        let result = host
+            .execute(self, self.core.root_id(), script_id, None)
+            .map(|_| ());
         self.record_script_journal(origin, source, baseline, &result);
         if result.is_ok() {
             self.commit_startup_attempt();
@@ -823,9 +828,7 @@ impl Canopy {
         source_name: &str,
         source: &str,
     ) -> Result<script::ScriptCheckResult> {
-        if !self.script_host.is_finalized() {
-            self.finalize_api()?;
-        }
+        self.ensure_finalized()?;
         self.script_host.check_script(source_name, source)
     }
 
@@ -863,9 +866,7 @@ impl Canopy {
         let source = fs::read_to_string(path)
             .map_err(|err| error::Error::Invalid(format!("config read failed: {err}")))?;
         let result = (|| {
-            if !self.script_host.is_finalized() {
-                self.finalize_api()?;
-            }
+            self.ensure_finalized()?;
             let mounted_source = match &self.script_module_source {
                 Some(mounts) => match mounts.source_for_path(path) {
                     Ok(source) => Some(source),
@@ -880,10 +881,11 @@ impl Canopy {
             };
             let script_id = match mounted_source {
                 Some(source) => self.script_host.compile_source(source.source())?,
-                None => self.script_host.compile_named(&source, b"canopy")?,
+                None => self.script_host.compile(&source)?,
             };
             let host = self.script_host.clone();
-            host.execute(self, self.core.root_id(), script_id)
+            host.execute(self, self.core.root_id(), script_id, None)
+                .map(|_| ())
         })();
         self.record_script_journal(
             format!("config:{}", path.display()),

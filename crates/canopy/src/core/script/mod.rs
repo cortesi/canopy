@@ -3841,13 +3841,7 @@ impl LuauHost {
 
     /// Compile a script and return its id.
     pub fn compile(&self, source: &str) -> Result<ScriptId> {
-        self.compile_named(source, b"canopy")
-    }
-
-    /// Compile a script with an explicit VM module name.
-    pub fn compile_named(&self, source: &str, module_name: impl AsRef<[u8]>) -> Result<ScriptId> {
-        let module_name = module_name.as_ref().to_vec();
-        self.compile_source(&Source::text(ModuleId::new(module_name), source))
+        self.compile_source(&Source::text(ModuleId::new(b"canopy".to_vec()), source))
     }
 
     /// Compile a source while preserving its module identity and diagnostic metadata.
@@ -3992,35 +3986,26 @@ impl LuauHost {
         self.load_script(sid)
     }
 
-    /// Execute a compiled script.
+    /// Execute a compiled script and return its value.
+    ///
+    /// A `timeout` bounds cooperative execution; `None` runs without one.
     pub fn execute(
         &self,
         canopy: &mut Canopy,
         node_id: impl Into<NodeId>,
         sid: ScriptId,
-    ) -> Result<()> {
-        self.execute_value(canopy, node_id, sid).map(|_| ())
-    }
-
-    /// Execute a compiled script and return its value.
-    pub fn execute_value(
-        &self,
-        canopy: &mut Canopy,
-        node_id: impl Into<NodeId>,
-        sid: ScriptId,
+        timeout: Option<Duration>,
     ) -> Result<ArgValue> {
-        self.execute_value_inner(canopy, node_id.into(), sid, None)
-    }
-
-    /// Execute a compiled script with a cooperative timeout.
-    pub fn execute_value_with_timeout(
-        &self,
-        canopy: &mut Canopy,
-        node_id: impl Into<NodeId>,
-        sid: ScriptId,
-        timeout: Duration,
-    ) -> Result<ArgValue> {
-        self.execute_value_inner(canopy, node_id.into(), sid, Some(timeout))
+        let node_id = node_id.into();
+        let root = self.loaded_root(sid)?;
+        // Diagnostics accumulate per top-level evaluation: a nested run
+        // triggered from inside a live script must not erase the logs and
+        // assertions the outer evaluation has already collected.
+        if !in_live_scope(canopy) {
+            self.clear_diagnostics();
+        }
+        let label = format!("script {sid} on node {node_id:?}");
+        self.run_target(canopy, node_id, &CallTarget::Root(root), &label, timeout)
     }
 
     /// Execute a compiled script inside an existing VM scope.
@@ -4039,25 +4024,6 @@ impl LuauHost {
         let label = format!("script {sid} on node {node_id:?}");
         self.run_target_in_scope(scope, node_id, &CallTarget::Root(root), &label, None)
             .map(|_| ())
-    }
-
-    /// Execute a compiled script and return its value.
-    fn execute_value_inner(
-        &self,
-        canopy: &mut Canopy,
-        node_id: NodeId,
-        sid: ScriptId,
-        timeout: Option<Duration>,
-    ) -> Result<ArgValue> {
-        let root = self.loaded_root(sid)?;
-        // Diagnostics accumulate per top-level evaluation: a nested run
-        // triggered from inside a live script must not erase the logs and
-        // assertions the outer evaluation has already collected.
-        if !in_live_scope(canopy) {
-            self.clear_diagnostics();
-        }
-        let label = format!("script {sid} on node {node_id:?}");
-        self.run_target(canopy, node_id, &CallTarget::Root(root), &label, timeout)
     }
 
     /// Run a script callable through a fresh limited scope step.
@@ -4321,7 +4287,8 @@ mod tests {
 
     fn execute_registry_script(canopy: &mut Canopy, host: &LuauHost, source: &str) -> Result<()> {
         let script = host.compile(source)?;
-        host.execute(canopy, canopy.core.root_id(), script)
+        host.execute(canopy, canopy.core.root_id(), script, None)
+            .map(|_| ())
     }
 
     fn assert_closure_model(
@@ -4679,7 +4646,7 @@ mod tests {
             c.finalize_api()?;
             let scr = c.script_host.compile(r#"print("plain print", 42)"#)?;
             let host = c.script_host.clone();
-            host.execute(c, c.core.root_id(), scr)?;
+            host.execute(c, c.core.root_id(), scr, None)?;
             let logs = host.take_logs();
             assert!(
                 logs.iter().any(|line| line.contains("plain print")),
@@ -4695,7 +4662,7 @@ mod tests {
             c.finalize_api()?;
             let host = c.script_host.clone();
             let noisy = host.compile("for i = 1, 5000 do print(i) end")?;
-            host.execute(c, c.core.root_id(), noisy)?;
+            host.execute(c, c.core.root_id(), noisy, None)?;
             let logs = host.take_logs();
             let marker = String::from_utf8_lossy(SinkQuota::TRUNCATION_MARKER)
                 .trim_end()
@@ -4704,7 +4671,7 @@ mod tests {
             assert!(logs.len() <= 4097, "quota should bound captured calls");
 
             let quiet = host.compile("return true")?;
-            host.execute(c, c.core.root_id(), quiet)?;
+            host.execute(c, c.core.root_id(), quiet, None)?;
             assert!(host.take_logs().is_empty());
             Ok(())
         })
@@ -4772,24 +4739,24 @@ mod tests {
             let install = host.compile(
                 r#"canopy.bind_with("a", { path = "" }, function() local value = true end)"#,
             )?;
-            host.execute(c, c.core.root_id(), install)?;
+            host.execute(c, c.core.root_id(), install, None)?;
             assert_eq!(host.state.borrow().closures.functions.len(), 1);
 
             let replace = host.compile(
                 r#"canopy.bind_with("a", { path = "" }, function() local value = false end)"#,
             )?;
-            host.execute(c, c.core.root_id(), replace)?;
+            host.execute(c, c.core.root_id(), replace, None)?;
             assert_eq!(host.state.borrow().closures.functions.len(), 1);
 
             let invalid = host
                 .compile(r#"canopy.bind_with("a", { path = "invalid-name" }, function() end)"#)?;
-            host.execute(c, c.core.root_id(), invalid)
+            host.execute(c, c.core.root_id(), invalid, None)
                 .expect_err("invalid replacement path should fail");
             assert_eq!(host.state.borrow().closures.functions.len(), 1);
 
             let exhausted = host.compile("canopy.on_start(function() end)")?;
             host.state.borrow_mut().closures.next_function_id = u64::MAX;
-            host.execute(c, c.core.root_id(), exhausted)
+            host.execute(c, c.core.root_id(), exhausted, None)
                 .expect_err("closure identifier exhaustion should fail");
             assert_eq!(host.state.borrow().closures.functions.len(), 1);
             Ok(())
@@ -4841,7 +4808,7 @@ mod tests {
                 .script_host
                 .compile("canopy.bind(\"z\", function() end)")?;
             let host = c.script_host.clone();
-            host.execute(c, c.core.root_id(), scr)?;
+            host.execute(c, c.core.root_id(), scr, None)?;
             let check = c.script_host.compile(
                 r#"
                 for _, binding in canopy.bindings() do
@@ -4857,7 +4824,7 @@ mod tests {
                 canopy.assert(false, "binding for z not found")
                 "#,
             )?;
-            host.execute(c, c.core.root_id(), check)?;
+            host.execute(c, c.core.root_id(), check, None)?;
             Ok(())
         })
     }
@@ -4868,7 +4835,7 @@ mod tests {
             c.finalize_api()?;
             let scr = c.script_host.compile(r#"bb_la.c_leaf()"#)?;
             let host = c.script_host.clone();
-            host.execute(c, tree.b_a, scr)?;
+            host.execute(c, tree.b_a, scr, None)?;
             assert_eq!(get_state().path, ["bb_la.c_leaf()"]);
             Ok(())
         })?;
@@ -4881,7 +4848,7 @@ mod tests {
             c.finalize_api()?;
             let scr = c.script_host.compile(r#"canopy.assert(false, "boom")"#)?;
             let host = c.script_host.clone();
-            let err = host.execute(c, tree.b_a, scr);
+            let err = host.execute(c, tree.b_a, scr, None);
             assert!(matches!(err, Err(error::Error::Script(_))));
             Ok(())
         })
@@ -4893,7 +4860,7 @@ mod tests {
             c.finalize_api()?;
             let scr = c.script_host.compile(r#"error("boom")"#)?;
             let host = c.script_host.clone();
-            let err = host.execute(c, tree.a, scr);
+            let err = host.execute(c, tree.a, scr, None);
             assert!(matches!(err, Err(error::Error::Script(_))));
             assert!(c.script_context_stack.is_empty());
             Ok(())
