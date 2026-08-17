@@ -127,6 +127,7 @@ impl Core {
     }
 
     /// Set the layout for a node.
+    #[cfg(test)]
     pub fn set_layout_of(&mut self, node: impl Into<NodeId>, layout: Layout) -> Result<()> {
         self.with_layout_of(node, |l| *l = layout)
     }
