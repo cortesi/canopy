@@ -86,7 +86,7 @@ Independent, low-risk, mostly deletions. Do these first.
   `color-backtrace` (2.6), `proc-macro-error` and `thiserror` in `canopy-derive` (3.3), and
   `loom` in two crates (6.1).
 
-- [ ] **0.6 Drop the AV1 encoder from `image`.** `canopy-widgets` enables `image` default
+- [x] **0.6 Drop the AV1 encoder from `image`.** `canopy-widgets` enables `image` default
   features. In `image 0.25` the `avif` feature is encoder-only (`dep:ravif`; decoding needs the
   separate `avif-native` feature, which is not enabled), so every app build compiles `rav1e`
   for a capability `ImageView` cannot use (`image_view.rs:340` only calls `image::open`).
