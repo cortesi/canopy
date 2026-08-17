@@ -439,8 +439,6 @@ pub struct Terminal {
     selection_anchor: Option<geom::Point>,
     /// Multi-click tracking state.
     last_click: Option<ClickState>,
-    /// App focus state from Canopy focus events.
-    app_focused: bool,
     /// Last reported terminal title.
     title: Arc<Mutex<Option<String>>>,
     /// Whether the child exit callback has been invoked.
@@ -465,7 +463,6 @@ impl Terminal {
             selection_active: false,
             selection_anchor: None,
             last_click: None,
-            app_focused: true,
             title: Arc::new(Mutex::new(None)),
             exit_notified: false,
             exit_status: None,
@@ -959,12 +956,10 @@ impl Widget for Terminal {
                 Ok(outcome)
             }
             event::Event::FocusGained => {
-                self.app_focused = true;
                 self.sync_focus(true);
                 Ok(EventOutcome::Handle)
             }
             event::Event::FocusLost => {
-                self.app_focused = false;
                 self.sync_focus(false);
                 Ok(EventOutcome::Handle)
             }

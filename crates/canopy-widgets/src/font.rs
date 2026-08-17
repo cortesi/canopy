@@ -2,7 +2,6 @@ use std::{
     cmp::{max, min},
     collections::HashMap,
     io::Read,
-    str::FromStr,
     sync::Arc,
 };
 
@@ -14,32 +13,13 @@ use crate::error::{Error, Result};
 /// Supersampling scale factor used to rasterize glyphs before downsampling.
 const COVERAGE_SCALE: u32 = 8;
 
-/// Policy for handling content overflow.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OverflowPolicy {
-    /// Clip glyphs that exceed the target bounds.
-    Clip,
-}
-
-/// Alignment and overflow configuration for font layouts.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Alignment configuration for font layouts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct LayoutOptions {
     /// Horizontal alignment within the target canvas.
     pub h_align: Align,
     /// Vertical alignment within the target canvas.
     pub v_align: Align,
-    /// Overflow handling policy.
-    pub overflow: OverflowPolicy,
-}
-
-impl Default for LayoutOptions {
-    fn default() -> Self {
-        Self {
-            h_align: Align::Start,
-            v_align: Align::Start,
-            overflow: OverflowPolicy::Clip,
-        }
-    }
 }
 
 /// Rendering effects applied to font output.
@@ -70,8 +50,6 @@ pub struct Glyph {
     pub height: u32,
     /// Horizontal bearing to the left of the glyph origin, in pixels.
     pub bearing_left: i32,
-    /// Horizontal bearing to the right of the glyph advance, in pixels.
-    pub bearing_right: i32,
     /// Vertical bearing to the bottom of the glyph relative to the baseline, in pixels.
     pub bearing_bottom: i32,
     /// Horizontal advance width in pixels.
@@ -235,11 +213,6 @@ impl Font {
         Self::from_bytes(buf)
     }
 
-    /// Parse an ASCII-art font payload.
-    pub fn from_ascii_art(_contents: &str) -> Result<Self> {
-        Err(Error::UnsupportedFormat("ascii-art"))
-    }
-
     /// Adjust spacing added after each glyph.
     pub fn with_spacing(mut self, spacing: f32) -> Self {
         self.spacing = spacing;
@@ -249,14 +222,6 @@ impl Font {
     /// Return the font name, if provided in metadata.
     pub fn name(&self) -> Option<&str> {
         self.font.name()
-    }
-}
-
-impl FromStr for Font {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self> {
-        Self::from_ascii_art(s)
     }
 }
 
@@ -622,16 +587,13 @@ impl FontRenderer {
         let raster = bitmap.to_vec();
 
         let advance = metrics.advance_width;
-        let advance_cells = advance.round() as i32;
         let bearing_left = metrics.xmin;
-        let bearing_right = advance_cells - (metrics.xmin + width as i32);
 
         Glyph {
             bitmap: raster,
             width: width as u32,
             height: height as u32,
             bearing_left,
-            bearing_right,
             bearing_bottom: metrics.ymin,
             advance,
         }
@@ -668,7 +630,7 @@ impl FontRenderer {
 }
 
 /// Compute an offset for aligning content inside a span.
-fn align_offset(content: u32, available: u32, align: Align) -> u32 {
+pub fn align_offset(content: u32, available: u32, align: Align) -> u32 {
     if available <= content {
         return 0;
     }

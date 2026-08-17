@@ -127,7 +127,6 @@ impl Widget for FontDemo {
         let options = LayoutOptions {
             h_align: Align::Center,
             v_align: Align::Center,
-            ..LayoutOptions::default()
         };
         let banner = FontBanner::new(self.text.clone(), self.renderer_for(self.font_index)?)
             .with_style(FONT_STYLE_PATH)

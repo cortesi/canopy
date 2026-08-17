@@ -55,39 +55,13 @@ end)
 "#;
 
 /// Help modal widget displaying contextual bindings and commands.
-pub struct Help {
-    /// Captured help snapshot for display.
-    snapshot: Option<OwnedHelpSnapshot>,
-}
+pub struct Help;
 
 #[derive_commands]
 impl Help {
     /// Create a new Help widget.
     pub fn new() -> Self {
-        Self { snapshot: None }
-    }
-
-    /// Set the help snapshot to display.
-    pub fn set_snapshot(&mut self, snapshot: OwnedHelpSnapshot) {
-        self.snapshot = Some(snapshot);
-    }
-
-    /// Clear the stored snapshot.
-    pub fn clear_snapshot(&mut self) {
-        self.snapshot = None;
-    }
-
-    /// Get the current snapshot, if any.
-    pub fn snapshot(&self) -> Option<&OwnedHelpSnapshot> {
-        self.snapshot.as_ref()
-    }
-
-    /// Set the snapshot on the HelpContent child widget.
-    pub fn set_content_snapshot(c: &mut dyn Context, snapshot: OwnedHelpSnapshot) -> Result<()> {
-        c.with_first_descendant::<HelpContent, _>(|content, _ctx| {
-            content.set_snapshot(snapshot);
-            Ok(())
-        })
+        Self
     }
 
     /// Build the help subtree and return its node id.

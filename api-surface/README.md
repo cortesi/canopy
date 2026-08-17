@@ -81,8 +81,6 @@ run-loop policy and entry points.
 
 - The example libraries are intentionally broad because their public nodes are reused by tests and
   binary wrappers. They are tracked separately so demo growth does not obscure core growth.
-- `Input::text` returns the visible slice while `Input::value` returns the complete value. Their
-  similar signatures represent different state and should retain explicit documentation.
 
 ## Concepts visible in the settled surface
 

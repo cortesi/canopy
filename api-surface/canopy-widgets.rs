@@ -418,27 +418,11 @@ pub mod canopy_widgets {
         pub use canopy::help::OwnedHelpSnapshot;
         /// Help modal widget displaying contextual bindings and commands.
         #[derive(Default)]
-        pub struct Help {}
+        pub struct Help;
 
         impl Help {
             /// Create a new Help widget.
             pub fn new() -> Self {}
-
-            /// Set the help snapshot to display.
-            pub fn set_snapshot(&mut self, snapshot: OwnedHelpSnapshot) {}
-
-            /// Clear the stored snapshot.
-            pub fn clear_snapshot(&mut self) {}
-
-            /// Get the current snapshot, if any.
-            pub fn snapshot(&self) -> Option<&OwnedHelpSnapshot> {}
-
-            /// Set the snapshot on the HelpContent child widget.
-            pub fn set_content_snapshot(
-                c: &mut dyn Context,
-                snapshot: OwnedHelpSnapshot,
-            ) -> Result<()> {
-            }
 
             /// Build the help subtree and return its node id.
             pub fn install(context: &mut dyn Context) -> Result<NodeId> {}
@@ -822,8 +806,6 @@ pub mod canopy_widgets {
         FontLoad(&'static str),
         /// Glyph ramp did not include any characters.
         EmptyGlyphRamp,
-        /// Font format is not supported.
-        UnsupportedFormat(&'static str),
         /// I/O error while reading font bytes.
         Io(std::io::Error),
     }
@@ -836,7 +818,7 @@ pub mod canopy_widgets {
     pub type Result<T> = std::result::Result<T, Error>;
 
     /// Rasterized font data for terminal rendering.
-    #[derive(Clone, FromStr)]
+    #[derive(Clone)]
     pub struct Font {}
 
     impl Font {
@@ -845,9 +827,6 @@ pub mod canopy_widgets {
 
         /// Load a font from a reader.
         pub fn from_reader(reader: impl Read) -> Result<Self> {}
-
-        /// Parse an ASCII-art font payload.
-        pub fn from_ascii_art(_contents: &str) -> Result<Self> {}
 
         /// Adjust spacing added after each glyph.
         pub fn with_spacing(self, spacing: f32) -> Self {}
@@ -919,25 +898,6 @@ pub mod canopy_widgets {
         }
     }
 
-    /// Glyph raster data rendered to pixel coverage.
-    #[derive(Debug, Clone)]
-    pub struct Glyph {
-        /// Rasterized coverage mask, row-major, 0-255 per pixel.
-        pub bitmap: Vec<u8>,
-        /// Glyph width in pixels.
-        pub width: u32,
-        /// Glyph height in pixels.
-        pub height: u32,
-        /// Horizontal bearing to the left of the glyph origin, in pixels.
-        pub bearing_left: i32,
-        /// Horizontal bearing to the right of the glyph advance, in pixels.
-        pub bearing_right: i32,
-        /// Vertical bearing to the bottom of the glyph relative to the baseline, in pixels.
-        pub bearing_bottom: i32,
-        /// Horizontal advance width in pixels.
-        pub advance: f32,
-    }
-
     /// A glyph ramp used to convert coverage regions into terminal glyphs.
     #[derive(Debug, Clone)]
     pub struct GlyphRamp {}
@@ -959,22 +919,13 @@ pub mod canopy_widgets {
         pub fn from_glyphs(glyphs: impl IntoIterator<Item = char>) -> Result<Self> {}
     }
 
-    /// Alignment and overflow configuration for font layouts.
+    /// Alignment configuration for font layouts.
     #[derive(Debug, Clone, Copy, StructuralPartialEq, PartialEq, Eq, Default)]
     pub struct LayoutOptions {
         /// Horizontal alignment within the target canvas.
         pub h_align: canopy::layout::Align,
         /// Vertical alignment within the target canvas.
         pub v_align: canopy::layout::Align,
-        /// Overflow handling policy.
-        pub overflow: OverflowPolicy,
-    }
-
-    /// Policy for handling content overflow.
-    #[derive(Debug, Clone, Copy, StructuralPartialEq, PartialEq, Eq)]
-    pub enum OverflowPolicy {
-        /// Clip glyphs that exceed the target bounds.
-        Clip,
     }
 
     /// Render large ASCII-font text into a bounded region.
@@ -1142,9 +1093,6 @@ pub mod canopy_widgets {
     impl Input {
         /// Construct a new input with initial text.
         pub fn new(txt: impl Into<String>) -> Self {}
-
-        /// Return the currently visible input slice.
-        pub fn text(&self) -> &str {}
 
         /// Return the raw input value without padding.
         pub fn value(&self) -> &str {}

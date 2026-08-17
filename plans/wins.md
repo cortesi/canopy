@@ -537,7 +537,7 @@ Independent, low-risk, mostly deletions. Do these first.
   `grep -n set_layout_of` in `root.rs`, `panes.rs`, `inspector/view.rs` shows no shell node.
   About −5 lines; removes a latent revert.
 
-- [ ] **4.2 Widget dead state and paths.** `Input::text` and its support (`InputBuffer::text`,
+- [x] **4.2 Widget dead state and paths.** `Input::text` and its support (`InputBuffer::text`,
   `visible_range`, `byte_index_for_char`; `input.rs:61-67, 150-168, 211-214, 302-314`) are an
   unreachable second "visible slice" implementation (rendering uses `render_text`; zero
   callers); delete them and remove the `Input::text`/`value` note from

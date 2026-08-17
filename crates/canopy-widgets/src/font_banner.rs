@@ -2,14 +2,14 @@ use canopy::{
     ViewContext, Widget,
     error::Result,
     geom::{Point, Rect, Size},
-    layout::{Align, Layout},
+    layout::Layout,
     render::Render,
     style::ResolvedStyle,
 };
 
 use crate::{
     Selectable,
-    font::{FontEffects, FontLayout, FontRenderer, LayoutOptions},
+    font::{FontEffects, FontLayout, FontRenderer, LayoutOptions, align_offset},
 };
 
 /// Render large ASCII-font text into a bounded region.
@@ -207,16 +207,4 @@ fn content_rect(view_rect: Rect, layout: &FontLayout, options: LayoutOptions) ->
         layout.content_size.w,
         layout.content_size.h,
     )
-}
-
-/// Align content inside an available span.
-fn align_offset(content: u32, available: u32, align: Align) -> u32 {
-    if available <= content {
-        return 0;
-    }
-    match align {
-        Align::Start => 0,
-        Align::Center => (available - content) / 2,
-        Align::End => available - content,
-    }
 }

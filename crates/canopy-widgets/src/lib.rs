@@ -58,10 +58,7 @@ pub use center::Center;
 pub use dropdown::{Dropdown, DropdownItem};
 pub use error::{Error, Result};
 /// Experimental ASCII font rendering API.
-pub use font::{
-    Font, FontCell, FontEffects, FontLayout, FontRenderer, Glyph, GlyphRamp, LayoutOptions,
-    OverflowPolicy,
-};
+pub use font::{Font, FontCell, FontEffects, FontLayout, FontRenderer, GlyphRamp, LayoutOptions};
 pub use font_banner::FontBanner;
 pub use frame::{Frame, SCROLL, ScrollGlyphs};
 pub use image_view::ImageView;

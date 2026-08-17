@@ -11,9 +11,6 @@ pub enum Error {
     /// Glyph ramp did not include any characters.
     #[error("glyph ramp must contain at least one character")]
     EmptyGlyphRamp,
-    /// Font format is not supported.
-    #[error("unsupported font format: {0}")]
-    UnsupportedFormat(&'static str),
     /// I/O error while reading font bytes.
     #[error("font I/O failed: {0}")]
     Io(#[from] IoError),

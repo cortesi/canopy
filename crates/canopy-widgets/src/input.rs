@@ -58,15 +58,6 @@ impl InputBuffer {
         cursor_col.saturating_sub(self.scroll) as u32
     }
 
-    /// Return the visible text slice.
-    fn text(&self) -> &str {
-        if self.view_width == 0 {
-            return "";
-        }
-        let (start, end) = self.visible_range();
-        &self.value[start..end]
-    }
-
     /// Return the raw input value.
     fn value(&self) -> &str {
         &self.value
@@ -148,25 +139,6 @@ impl InputBuffer {
             .column_for_position(TextPosition::new(0, len), self.tab_stop)
     }
 
-    /// Compute the visible byte range for the current scroll state.
-    fn visible_range(&self) -> (usize, usize) {
-        if self.value.is_empty() || self.view_width == 0 {
-            return (0, 0);
-        }
-        let start_pos = self
-            .buffer
-            .position_for_column(0, self.scroll, self.tab_stop);
-        let end_col = self.scroll.saturating_add(self.view_width);
-        let end_pos = self.buffer.position_for_column(0, end_col, self.tab_stop);
-        let start = byte_index_for_char(&self.value, start_pos.column);
-        let end = byte_index_for_char(&self.value, end_pos.column);
-        if start >= end {
-            (start, start)
-        } else {
-            (start, end)
-        }
-    }
-
     /// Ensure the cursor stays within the visible window.
     fn ensure_cursor_visible(&mut self) {
         if self.view_width == 0 {
@@ -206,11 +178,6 @@ impl Input {
         Self {
             buffer: InputBuffer::new(txt),
         }
-    }
-
-    /// Return the currently visible input slice.
-    pub fn text(&self) -> &str {
-        self.buffer.text()
     }
 
     /// Return the raw input value without padding.
@@ -294,20 +261,6 @@ impl Widget for Input {
 /// Replace newlines in single-line input values.
 fn sanitize_single_line(value: &str) -> String {
     value.replace(['\n', '\r'], " ")
-}
-
-/// Convert a char index to a byte index in a string.
-fn byte_index_for_char(text: &str, char_index: usize) -> usize {
-    if char_index == 0 {
-        return 0;
-    }
-    if char_index >= text.chars().count() {
-        return text.len();
-    }
-    text.char_indices()
-        .nth(char_index)
-        .map(|(idx, _)| idx)
-        .unwrap_or(text.len())
 }
 
 #[cfg(test)]

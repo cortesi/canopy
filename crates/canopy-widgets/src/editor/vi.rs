@@ -1,7 +1,5 @@
 use unicode_segmentation::UnicodeSegmentation;
 
-use super::TextPosition;
-
 /// Vi mode state for the editor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ViMode {
@@ -77,8 +75,6 @@ pub struct ViState {
     pending: Option<PendingKey>,
     /// Inserted text during the current insert session.
     insert_text: String,
-    /// Cursor position at the start of the insert session.
-    insert_start: Option<TextPosition>,
     /// Last repeatable edit.
     last_edit: Option<RepeatableEdit>,
 }
@@ -90,7 +86,6 @@ impl ViState {
             mode: ViMode::Normal,
             pending: None,
             insert_text: String::new(),
-            insert_start: None,
             last_edit: None,
         }
     }
@@ -117,10 +112,9 @@ impl ViState {
     }
 
     /// Begin an insert session.
-    pub fn begin_insert(&mut self, start: TextPosition) {
+    pub fn begin_insert(&mut self) {
         self.mode = ViMode::Insert;
         self.insert_text.clear();
-        self.insert_start = Some(start);
         self.pending = None;
     }
 
@@ -149,7 +143,6 @@ impl ViState {
         self.pending = None;
         let insert_text = self.insert_text.clone();
         self.insert_text.clear();
-        self.insert_start = None;
         if insert_text.is_empty() {
             None
         } else {

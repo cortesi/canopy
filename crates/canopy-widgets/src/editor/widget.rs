@@ -909,7 +909,7 @@ impl Editor {
                 ..
             }) => {
                 self.begin_text_entry_transaction();
-                self.vi.begin_insert(self.buffer.cursor());
+                self.vi.begin_insert();
                 EventOutcome::Handle
             }
             Event::Key(key::Key {
@@ -919,7 +919,7 @@ impl Editor {
                 let _ = self.buffer.move_right(self.config.multiline);
                 self.update_preferred_column();
                 self.begin_text_entry_transaction();
-                self.vi.begin_insert(self.buffer.cursor());
+                self.vi.begin_insert();
                 EventOutcome::Handle
             }
             Event::Key(key::Key {
@@ -929,7 +929,7 @@ impl Editor {
                 self.buffer.move_line_start();
                 self.update_preferred_column();
                 self.begin_text_entry_transaction();
-                self.vi.begin_insert(self.buffer.cursor());
+                self.vi.begin_insert();
                 EventOutcome::Handle
             }
             Event::Key(key::Key {
@@ -939,7 +939,7 @@ impl Editor {
                 self.buffer.move_line_end();
                 self.update_preferred_column();
                 self.begin_text_entry_transaction();
-                self.vi.begin_insert(self.buffer.cursor());
+                self.vi.begin_insert();
                 EventOutcome::Handle
             }
             Event::Key(key::Key {
@@ -953,7 +953,7 @@ impl Editor {
                     self.buffer.set_cursor(end);
                     self.handle_insert_text("\n");
                 }
-                self.vi.begin_insert(self.buffer.cursor());
+                self.vi.begin_insert();
                 self.vi.set_last_edit(RepeatableEdit::OpenBelow);
                 EventOutcome::Handle
             }
@@ -969,7 +969,7 @@ impl Editor {
                     self.handle_insert_text("\n");
                     let _ = self.buffer.move_left(true);
                 }
-                self.vi.begin_insert(self.buffer.cursor());
+                self.vi.begin_insert();
                 self.vi.set_last_edit(RepeatableEdit::OpenAbove);
                 EventOutcome::Handle
             }
@@ -1267,7 +1267,7 @@ impl Editor {
                 self.begin_text_entry_transaction();
                 self.delete_to_line_end();
                 self.vi.set_last_edit(RepeatableEdit::ChangeToEnd);
-                self.vi.begin_insert(self.buffer.cursor());
+                self.vi.begin_insert();
                 self.ensure_cursor_visible(ctx);
                 EventOutcome::Handle
             }
@@ -1354,7 +1354,7 @@ impl Editor {
                 self.begin_text_entry_transaction();
                 self.delete_line();
                 self.vi.set_last_edit(RepeatableEdit::ChangeLine);
-                self.vi.begin_insert(self.buffer.cursor());
+                self.vi.begin_insert();
                 self.vi.set_pending(None);
                 self.ensure_cursor_visible(ctx);
                 EventOutcome::Handle
@@ -1546,7 +1546,7 @@ impl Editor {
                 self.set_yank(range, linewise);
                 self.begin_text_entry_transaction();
                 self.buffer.replace_range(range, "");
-                self.vi.begin_insert(self.buffer.cursor());
+                self.vi.begin_insert();
                 self.exit_visual();
                 self.vi.set_last_edit(RepeatableEdit::ChangeLine);
                 EventOutcome::Handle
@@ -1949,7 +1949,7 @@ impl Editor {
             }
             RepeatableEdit::ChangeLine => {
                 self.delete_line();
-                self.vi.begin_insert(self.buffer.cursor());
+                self.vi.begin_insert();
                 self.begin_text_entry_transaction();
             }
             RepeatableEdit::DeleteChar => {
@@ -1960,7 +1960,7 @@ impl Editor {
             }
             RepeatableEdit::ChangeToEnd => {
                 self.delete_to_line_end();
-                self.vi.begin_insert(self.buffer.cursor());
+                self.vi.begin_insert();
                 self.begin_text_entry_transaction();
             }
             RepeatableEdit::OpenBelow => {
@@ -1970,7 +1970,7 @@ impl Editor {
                     self.buffer.set_cursor(end);
                     self.handle_insert_text("\n");
                 }
-                self.vi.begin_insert(self.buffer.cursor());
+                self.vi.begin_insert();
                 self.begin_text_entry_transaction();
             }
             RepeatableEdit::OpenAbove => {
@@ -1981,7 +1981,7 @@ impl Editor {
                     self.handle_insert_text("\n");
                     let _ = self.buffer.move_left(true);
                 }
-                self.vi.begin_insert(self.buffer.cursor());
+                self.vi.begin_insert();
                 self.begin_text_entry_transaction();
             }
         }

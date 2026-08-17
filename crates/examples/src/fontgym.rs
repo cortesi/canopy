@@ -134,7 +134,6 @@ impl Widget for FontGym {
             let centered = LayoutOptions {
                 h_align: Align::Center,
                 v_align: Align::Center,
-                ..LayoutOptions::default()
             };
             let font_a = load_font_bungee();
             let font_a_name = font_label(&font_a);
