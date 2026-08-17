@@ -4,35 +4,6 @@
 pub mod canopy_examples {
     //! Example widgets used by canopy demos.
 
-    pub mod cedit {
-        //! Cedit example nodes.
-
-        /// Simple editor wrapper for the cedit demo.
-        pub struct Ed {}
-
-        impl Ed {
-            /// Construct an editor with initial contents.
-            pub fn new(contents: &str, extension: &str) -> Self {}
-        }
-
-        impl CommandNode for Ed {
-            fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-        }
-
-        impl Widget for Ed {
-            fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
-
-            fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
-        }
-
-        impl Loader for Ed {
-            fn load(c: &mut Canopy) -> Result<()> {}
-        }
-
-        /// Install key bindings for the cedit demo.
-        pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {}
-    }
-
     pub mod chargym {
         //! Char gym example nodes.
         //! Chargym: A Unicode width and wide character demo.
@@ -363,9 +334,6 @@ pub mod canopy_examples {
 
         /// Configure key bindings for the image viewer.
         pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {}
-
-        /// Create a Canopy application for viewing the specified image.
-        pub fn create_app(image_path: &std::path::Path) -> Result<Canopy> {}
     }
 
     pub mod intervals {
@@ -812,6 +780,9 @@ pub mod canopy_examples {
         impl Loader for TextGym {
             fn load(c: &mut Canopy) -> Result<()> {}
         }
+
+        /// Install key bindings for the text gym demo.
+        pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {}
     }
 
     pub mod widget {
@@ -971,8 +942,22 @@ pub mod canopy_examples {
 
         /// Install key bindings for the widget editor example.
         pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {}
+
+        /// Return a lowercase file extension hint for syntax selection.
+        pub fn file_extension(path: &std::path::Path) -> String {}
+
+        /// Return a short title for the editor frame.
+        pub fn file_title(path: &std::path::Path) -> String {}
     }
 
     /// Finalize and print the Luau API definitions for a demo app.
     pub fn print_luau_api(cnpy: &mut canopy::Canopy) -> canopy::error::Result<()> {}
+
+    /// Install one demo app under a root and run the terminal loop.
+    pub fn run_demo<T: Widget + Loader + 'static>(
+        cnpy: canopy::Canopy,
+        app: T,
+        inspector: bool,
+    ) -> canopy::error::Result<i32> {
+    }
 }

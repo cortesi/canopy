@@ -605,7 +605,7 @@ Independent, low-risk, mostly deletions. Do these first.
 
 ## Stage 5: automation, examples, tooling
 
-- [ ] **5.1 One demo binary.** Eight of the launchers in `crates/examples/examples/*.rs`
+- [x] **5.1 One demo binary.** Eight of the launchers in `crates/examples/examples/*.rs`
   (`chargym`, `editorgym`, `focusgym`, `fontgym`, `framegym`, `listgym`, `stylegym`, `termgym`)
   differ only by type name (`diff listgym.rs chargym.rs` shows six substitution lines);
   `intervals`, `textgym`, `pager`, `cedit`, and `imgview` add a small variation (a file argument

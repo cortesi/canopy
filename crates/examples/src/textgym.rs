@@ -146,3 +146,18 @@ impl Loader for TextGym {
         Ok(())
     }
 }
+
+/// Default bindings for the text gym demo.
+const DEFAULT_BINDINGS: &str = r#"
+canopy.bind_with("q", { path = "root", desc = "Quit" }, function()
+    root.quit()
+end)
+canopy.bind_with("r", { path = "text_gym", desc = "Redraw" }, function()
+    text_gym.redraw()
+end)
+"#;
+
+/// Install key bindings for the text gym demo.
+pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
+    cnpy.eval_script(DEFAULT_BINDINGS)
+}

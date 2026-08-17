@@ -1,7 +1,4 @@
-use std::path::Path;
-
 use canopy::prelude::*;
-use canopy_widgets::{ImageView, Root};
 
 /// Default bindings for the image viewer demo.
 const DEFAULT_BINDINGS: &str = r#"
@@ -44,17 +41,4 @@ end)
 pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
     cnpy.eval_script(DEFAULT_BINDINGS)?;
     Ok(())
-}
-
-/// Create a Canopy application for viewing the specified image.
-pub fn create_app(image_path: &Path) -> Result<Canopy> {
-    let mut cnpy = Canopy::new();
-
-    Root::load(&mut cnpy)?;
-    ImageView::load(&mut cnpy)?;
-    setup_bindings(&mut cnpy)?;
-
-    let view = ImageView::from_path(image_path)?;
-    Root::install_app(&mut cnpy, view)?;
-    Ok(cnpy)
 }

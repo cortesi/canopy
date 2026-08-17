@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use canopy::{derive_commands, layout::Edges, prelude::*};
 use canopy_widgets::{
     Frame, Pad,
@@ -71,4 +73,21 @@ impl Loader for WidgetEditor {
 pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
     cnpy.eval_script(DEFAULT_BINDINGS)?;
     Ok(())
+}
+
+/// Return a lowercase file extension hint for syntax selection.
+pub fn file_extension(path: &Path) -> String {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .map(str::to_ascii_lowercase)
+        .filter(|extension| !extension.is_empty())
+        .unwrap_or_else(|| "txt".to_string())
+}
+
+/// Return a short title for the editor frame.
+pub fn file_title(path: &Path) -> String {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .map(str::to_string)
+        .unwrap_or_else(|| path.display().to_string())
 }

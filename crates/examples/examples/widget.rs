@@ -9,9 +9,9 @@ use std::{
 
 use canopy::{prelude::*, terminal::runloop};
 use canopy_examples::{
-    print_luau_api,
+    imgview, print_luau_api,
     widget::{DemoHost, DemoSize, FontDemo, FontSource, ListDemo, TermDemo},
-    widget_editor::{WidgetEditor, setup_bindings},
+    widget_editor::{self, WidgetEditor},
 };
 use canopy_widgets::{FontEffects, ImageView, Root};
 use clap::{Parser, Subcommand};
@@ -185,7 +185,7 @@ fn main() -> Result<()> {
             )
         }
         Command::Image(image_args) => {
-            setup_image_bindings(&mut cnpy)?;
+            imgview::setup_bindings(&mut cnpy)?;
             let view = ImageView::from_path(&image_args.path)?;
             DemoHost::new(view, size, true)
                 .with_inner_padding(0)
@@ -211,10 +211,10 @@ fn main() -> Result<()> {
         Command::Editor(editor_args) => {
             let contents = fs::read_to_string(&editor_args.path)
                 .map_err(|err| error::Error::Internal(err.to_string()))?;
-            let extension = file_extension(&editor_args.path);
-            let title = file_title(&editor_args.path);
+            let extension = widget_editor::file_extension(&editor_args.path);
+            let title = widget_editor::file_title(&editor_args.path);
 
-            setup_bindings(&mut cnpy)?;
+            widget_editor::setup_bindings(&mut cnpy)?;
 
             DemoHost::new(
                 WidgetEditor::new(contents, extension, title),
@@ -291,65 +291,6 @@ fn load_font_sources(path: &Path) -> Result<Vec<FontSource>> {
         )));
     }
     Ok(sources)
-}
-
-/// Return a lowercase file extension hint for syntax selection.
-fn file_extension(path: &Path) -> String {
-    path.extension()
-        .and_then(|extension| extension.to_str())
-        .map(|extension| extension.to_ascii_lowercase())
-        .filter(|extension| !extension.is_empty())
-        .unwrap_or_else(|| "txt".to_string())
-}
-
-/// Return a short title for the editor frame.
-fn file_title(path: &Path) -> String {
-    path.file_name()
-        .and_then(|name| name.to_str())
-        .map(|name| name.to_string())
-        .unwrap_or_else(|| path.display().to_string())
-}
-
-/// Register keybindings for image zooming and panning.
-fn setup_image_bindings(cnpy: &mut Canopy) -> Result<()> {
-    cnpy.eval_script(
-        r#"
-canopy.bind_with("q", { desc = "Quit" }, function()
-    root.quit()
-end)
-canopy.bind_with("i", { path = "image_view/", desc = "Zoom in" }, function()
-    image_view.zoom("In")
-end)
-canopy.bind_with("o", { path = "image_view/", desc = "Zoom out" }, function()
-    image_view.zoom("Out")
-end)
-canopy.bind_with("h", { path = "image_view/", desc = "Pan left" }, function()
-    image_view.pan("Left")
-end)
-canopy.bind_with("j", { path = "image_view/", desc = "Pan down" }, function()
-    image_view.pan("Down")
-end)
-canopy.bind_with("k", { path = "image_view/", desc = "Pan up" }, function()
-    image_view.pan("Up")
-end)
-canopy.bind_with("l", { path = "image_view/", desc = "Pan right" }, function()
-    image_view.pan("Right")
-end)
-canopy.bind_with("Left", { path = "image_view/", desc = "Pan left" }, function()
-    image_view.pan("Left")
-end)
-canopy.bind_with("Right", { path = "image_view/", desc = "Pan right" }, function()
-    image_view.pan("Right")
-end)
-canopy.bind_with("Up", { path = "image_view/", desc = "Pan up" }, function()
-    image_view.pan("Up")
-end)
-canopy.bind_with("Down", { path = "image_view/", desc = "Pan down" }, function()
-    image_view.pan("Down")
-end)
-"#,
-    )?;
-    Ok(())
 }
 
 /// Register keybindings for the terminal demo.

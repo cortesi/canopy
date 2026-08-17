@@ -2,10 +2,9 @@
 #![warn(missing_docs)]
 //! Example widgets used by canopy demos.
 
-use canopy::{Canopy, error::Result};
+use canopy::{Canopy, Loader, Widget, error::Result, terminal::runloop};
+use canopy_widgets::Root;
 
-/// Cedit example nodes.
-pub mod cedit;
 /// Char gym example nodes.
 pub mod chargym;
 /// Editor gym example nodes.
@@ -40,6 +39,16 @@ pub fn print_luau_api(cnpy: &mut Canopy) -> Result<()> {
     cnpy.finalize_api()?;
     print!("{}", cnpy.script_api()?);
     Ok(())
+}
+
+/// Install one demo app under a root and run the terminal loop.
+pub fn run_demo<T: Widget + Loader + 'static>(
+    mut cnpy: Canopy,
+    app: T,
+    inspector: bool,
+) -> Result<i32> {
+    Root::install_app_with_inspector(&mut cnpy, app, inspector)?;
+    runloop(cnpy)
 }
 
 #[cfg(test)]
