@@ -565,7 +565,7 @@ Independent, low-risk, mostly deletions. Do these first.
   re-implement their own `toggle`/`confirm` commands and return a bool the caller discards; call
   the commands. About −50 lines.
 
-- [ ] **4.5 Editor structure.** `EditorController` (`editor/controller.rs`, 46 lines) and
+- [x] **4.5 Editor structure.** `EditorController` (`editor/controller.rs`, 46 lines) and
   `EditorView` (`view.rs`, 53 lines) are single-user indirections with `pub(crate)` fields and
   three delegating wrappers each in `widget.rs`; fold them into `Editor` as fields. `widget.rs`
   (2,570 lines, no inline tests) holds ~1,100 lines of vi handling (`:888-1990`) while `vi.rs`

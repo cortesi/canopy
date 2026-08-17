@@ -1,4 +1,15 @@
-use super::{TextBuffer, TextPosition, TextRange};
+use canopy::{
+    Context, EventOutcome,
+    error::Result,
+    event::{Event, key},
+    geom::{Line, Point, Rect},
+    render::Render,
+};
+
+use super::{
+    Selection, TextBuffer, TextPosition, TextRange,
+    widget::{Editor, prompt_text},
+};
 
 /// Search direction for navigation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -184,5 +195,331 @@ mod tests {
         assert_ne!(first, second);
         let back = state.move_next(&buffer, true).unwrap();
         assert_eq!(back, first);
+    }
+}
+
+/// Prompt modes for search and replace interactions.
+#[derive(Debug, Clone)]
+pub(super) enum PromptState {
+    /// Search query input.
+    Search {
+        /// Search direction.
+        direction: SearchDirection,
+        /// Current query text.
+        query: String,
+    },
+    /// Replace query input.
+    ReplaceQuery {
+        /// Current query text.
+        query: String,
+    },
+    /// Replace replacement input.
+    ReplaceWith {
+        /// Query text.
+        query: String,
+        /// Replacement text.
+        replacement: String,
+    },
+    /// Confirm replacements one by one.
+    ReplaceConfirm {
+        /// Query text.
+        query: String,
+        /// Replacement text.
+        replacement: String,
+        /// Match list.
+        matches: Vec<TextRange>,
+        /// Current match index.
+        index: usize,
+        /// Whether to replace all remaining matches.
+        replace_all: bool,
+    },
+}
+
+impl Editor {
+    /// Start a search prompt in the specified direction.
+    pub(super) fn start_search_prompt(&mut self, direction: SearchDirection) {
+        self.prompt = Some(PromptState::Search {
+            direction,
+            query: String::new(),
+        });
+    }
+
+    /// Start a replace prompt.
+    pub(super) fn start_replace_prompt(&mut self) {
+        self.prompt = Some(PromptState::ReplaceQuery {
+            query: String::new(),
+        });
+    }
+
+    /// Handle prompt input events.
+    pub(super) fn handle_prompt_event(
+        &mut self,
+        event: &Event,
+        ctx: &mut dyn Context,
+    ) -> EventOutcome {
+        let Some(prompt) = self.prompt.clone() else {
+            return EventOutcome::Ignore;
+        };
+
+        match (prompt, event) {
+            (
+                PromptState::Search { direction, query },
+                Event::Key(key::Key {
+                    key: key::KeyCode::Enter,
+                    ..
+                }),
+            ) => {
+                self.search.set_query(&self.buffer, query, direction);
+                if let Some(pos) = self.search.current_match().map(|range| range.start) {
+                    self.buffer.set_cursor(pos);
+                    self.ensure_cursor_visible(ctx);
+                }
+                self.prompt = None;
+                EventOutcome::Handle
+            }
+            (
+                PromptState::Search {
+                    direction,
+                    mut query,
+                },
+                Event::Key(key::Key {
+                    key: key::KeyCode::Backspace,
+                    ..
+                }),
+            ) => {
+                let _ = query.pop();
+                self.prompt = Some(PromptState::Search { direction, query });
+                EventOutcome::Handle
+            }
+            (
+                PromptState::Search {
+                    direction,
+                    mut query,
+                },
+                Event::Key(key::Key {
+                    key: key::KeyCode::Char(c),
+                    mods,
+                }),
+            ) if !mods.ctrl && !mods.alt => {
+                query.push(*c);
+                self.prompt = Some(PromptState::Search { direction, query });
+                EventOutcome::Handle
+            }
+            (
+                PromptState::Search { .. },
+                Event::Key(key::Key {
+                    key: key::KeyCode::Esc,
+                    ..
+                }),
+            ) => {
+                self.prompt = None;
+                EventOutcome::Handle
+            }
+            (
+                PromptState::ReplaceQuery { query },
+                Event::Key(key::Key {
+                    key: key::KeyCode::Enter,
+                    ..
+                }),
+            ) => {
+                self.prompt = Some(PromptState::ReplaceWith {
+                    query,
+                    replacement: String::new(),
+                });
+                EventOutcome::Handle
+            }
+            (
+                PromptState::ReplaceQuery { mut query },
+                Event::Key(key::Key {
+                    key: key::KeyCode::Backspace,
+                    ..
+                }),
+            ) => {
+                let _ = query.pop();
+                self.prompt = Some(PromptState::ReplaceQuery { query });
+                EventOutcome::Handle
+            }
+            (
+                PromptState::ReplaceQuery { mut query },
+                Event::Key(key::Key {
+                    key: key::KeyCode::Char(c),
+                    mods,
+                }),
+            ) if !mods.ctrl && !mods.alt => {
+                query.push(*c);
+                self.prompt = Some(PromptState::ReplaceQuery { query });
+                EventOutcome::Handle
+            }
+            (
+                PromptState::ReplaceQuery { .. },
+                Event::Key(key::Key {
+                    key: key::KeyCode::Esc,
+                    ..
+                }),
+            ) => {
+                self.prompt = None;
+                EventOutcome::Handle
+            }
+            (
+                PromptState::ReplaceWith { query, replacement },
+                Event::Key(key::Key {
+                    key: key::KeyCode::Enter,
+                    ..
+                }),
+            ) => {
+                let matches = find_matches(&self.buffer, &query);
+                self.prompt = Some(PromptState::ReplaceConfirm {
+                    query,
+                    replacement,
+                    matches,
+                    index: 0,
+                    replace_all: false,
+                });
+                EventOutcome::Handle
+            }
+            (
+                PromptState::ReplaceWith {
+                    query,
+                    mut replacement,
+                },
+                Event::Key(key::Key {
+                    key: key::KeyCode::Backspace,
+                    ..
+                }),
+            ) => {
+                let _ = replacement.pop();
+                self.prompt = Some(PromptState::ReplaceWith { query, replacement });
+                EventOutcome::Handle
+            }
+            (
+                PromptState::ReplaceWith {
+                    query,
+                    mut replacement,
+                },
+                Event::Key(key::Key {
+                    key: key::KeyCode::Char(c),
+                    mods,
+                }),
+            ) if !mods.ctrl && !mods.alt => {
+                replacement.push(*c);
+                self.prompt = Some(PromptState::ReplaceWith { query, replacement });
+                EventOutcome::Handle
+            }
+            (
+                PromptState::ReplaceWith { .. },
+                Event::Key(key::Key {
+                    key: key::KeyCode::Esc,
+                    ..
+                }),
+            ) => {
+                self.prompt = None;
+                EventOutcome::Handle
+            }
+            (
+                PromptState::ReplaceConfirm {
+                    query,
+                    replacement,
+                    mut matches,
+                    mut index,
+                    mut replace_all,
+                },
+                Event::Key(key::Key {
+                    key: key::KeyCode::Char(c),
+                    ..
+                }),
+            ) => {
+                match *c {
+                    'y' => {
+                        let (new_matches, next_index) =
+                            self.replace_match(&query, &replacement, matches, index, ctx);
+                        matches = new_matches;
+                        index = next_index;
+                    }
+                    'n' => {
+                        index = index.saturating_add(1);
+                    }
+                    'a' => {
+                        replace_all = true;
+                    }
+                    'q' => {
+                        self.prompt = None;
+                        return EventOutcome::Handle;
+                    }
+                    _ => {}
+                }
+
+                if replace_all {
+                    while index < matches.len() {
+                        let (new_matches, next_index) =
+                            self.replace_match(&query, &replacement, matches, index, ctx);
+                        matches = new_matches;
+                        index = next_index;
+                    }
+                }
+
+                if index >= matches.len() {
+                    self.prompt = None;
+                } else {
+                    self.prompt = Some(PromptState::ReplaceConfirm {
+                        query,
+                        replacement,
+                        matches,
+                        index,
+                        replace_all,
+                    });
+                }
+                EventOutcome::Handle
+            }
+            (
+                PromptState::ReplaceConfirm { .. },
+                Event::Key(key::Key {
+                    key: key::KeyCode::Esc,
+                    ..
+                }),
+            ) => {
+                self.prompt = None;
+                EventOutcome::Handle
+            }
+            _ => EventOutcome::Ignore,
+        }
+    }
+
+    /// Replace a match at an index and return updated matches and next index.
+    pub(super) fn replace_match(
+        &mut self,
+        query: &str,
+        replacement: &str,
+        matches: Vec<TextRange>,
+        index: usize,
+        ctx: &mut dyn Context,
+    ) -> (Vec<TextRange>, usize) {
+        let Some(range) = matches.get(index).copied() else {
+            return (matches, index);
+        };
+        self.buffer
+            .set_selection(Selection::new(range.start, range.end));
+        self.handle_insert_text(replacement);
+        self.ensure_cursor_visible(ctx);
+        let updated = find_matches(&self.buffer, query);
+        let next_index = updated
+            .iter()
+            .position(|candidate| candidate.start > range.start)
+            .unwrap_or(updated.len());
+        (updated, next_index)
+    }
+
+    /// Render the search/replace prompt overlay.
+    pub(super) fn render_prompt(
+        &self,
+        r: &mut Render,
+        view_rect: Rect,
+        origin: Point,
+    ) -> Result<()> {
+        let Some(prompt) = &self.prompt else {
+            return Ok(());
+        };
+        let y = origin.y.saturating_add(view_rect.h.saturating_sub(1));
+        let line = Line::new(origin.x, y, view_rect.w);
+        r.text("editor/prompt", line, &prompt_text(prompt))
     }
 }

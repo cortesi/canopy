@@ -1,9 +1,11 @@
+#![expect(
+    clippy::multiple_inherent_impl,
+    reason = "Editor methods are split by rendering, vi, and prompt concerns."
+)]
 //! Editor widget and supporting types.
 
 /// Text buffer implementation backed by a rope.
 pub(crate) mod buffer;
-/// Editor movement and edit-session control state.
-mod controller;
 /// Undo/redo edit definitions.
 mod edit;
 /// Syntax highlighting helpers.
@@ -20,15 +22,13 @@ pub(crate) mod selection;
 mod util;
 /// Vi mode state helpers.
 mod vi;
-/// Editor view-derived cache state.
-mod view;
 /// Editor widget implementation.
-mod widget;
+pub(crate) mod widget;
 
 pub use buffer::{LineChange, TextBuffer};
 pub use position::{TextPosition, TextRange};
 pub use selection::Selection;
-pub use util::tab_width;
+pub use util::{display_width, tab_width};
 pub use widget::Editor;
 
 #[cfg(test)]
