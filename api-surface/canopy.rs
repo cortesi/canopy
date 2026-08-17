@@ -2007,21 +2007,17 @@ pub mod canopy {
         pub struct Render<'a> {}
 
         impl<'a> Render<'a> {
-            /// Construct a renderer for the given rectangle.
+            /// Construct a renderer that writes into `buf`.
+            ///
+            /// `clip` is the visible rectangle in canvas coordinates, and `screen_origin` is where the
+            /// clip's top-left lands in the buffer.
             pub fn new(
                 stylemap: &'a StyleMap,
                 style: &'a mut StyleManager,
-                rect: geom::Rect,
-            ) -> Result<Self> {
-            }
-
-            /// Construct a renderer with explicit visible render-target limits.
-            pub fn new_with_limits(
-                stylemap: &'a StyleMap,
-                style: &'a mut StyleManager,
-                rect: geom::Rect,
-                limits: RenderLimits,
-            ) -> Result<Self> {
+                buf: &'a mut TermBuf,
+                clip: geom::Rect,
+                screen_origin: geom::Point,
+            ) -> Self {
             }
 
             /// Set the effect stack for this renderer.
@@ -2033,9 +2029,6 @@ pub mod canopy {
 
             /// Resolve a style by name without applying effects.
             pub fn resolve_style_name_raw(&self, name: &str) -> Style {}
-
-            /// Resolve a style by name and apply the current effect stack.
-            pub fn resolve_style_name(&self, name: &str) -> Style {}
 
             /// Resolve a custom style at a point, applying the current effect stack.
             pub fn resolve_style_at(
@@ -2061,10 +2054,6 @@ pub mod canopy {
             /// Fill a rectangle with a specified character. Writes out of bounds will be clipped.
             pub fn fill(&mut self, style: &str, r: geom::Rect, c: char) -> Result<()> {}
 
-            /// Draw a solid frame
-            pub fn solid_frame(&mut self, style: &str, f: geom::FrameRects, c: char) -> Result<()> {
-            }
-
             /// Print text in the specified line. If the text is wider than the
             /// rectangle, it will be truncated; if it is shorter, it will be padded.
             pub fn text(&mut self, style: &str, l: geom::Line, txt: &str) -> Result<()> {}
@@ -2086,9 +2075,6 @@ pub mod canopy {
                 grapheme: &str,
             ) -> Result<()> {
             }
-
-            /// Access the underlying buffer.
-            pub fn buffer(&self) -> &TermBuf {}
         }
 
         /// A node name, which consists of lowercase ASCII alphanumeric characters, plus
@@ -2302,15 +2288,6 @@ pub mod canopy {
 
         /// Overlay a cursor on a cell by adjusting its style.
         pub fn overlay_cursor(&mut self, location: Point, shape: cursor::CursorShape) {}
-
-        /// Fill the frame outline with a glyph and style.
-        pub fn solid_frame(
-            &mut self,
-            style: &ResolvedStyle,
-            f: FrameRects,
-            ch: char,
-        ) -> Result<()> {
-        }
 
         /// Draw text clipped to the given line.
         pub fn text(&mut self, style: &ResolvedStyle, l: Line, txt: &str) -> Result<()> {}
@@ -5040,21 +5017,17 @@ pub mod canopy {
         pub struct Render<'a> {}
 
         impl<'a> Render<'a> {
-            /// Construct a renderer for the given rectangle.
+            /// Construct a renderer that writes into `buf`.
+            ///
+            /// `clip` is the visible rectangle in canvas coordinates, and `screen_origin` is where the
+            /// clip's top-left lands in the buffer.
             pub fn new(
                 stylemap: &'a StyleMap,
                 style: &'a mut StyleManager,
-                rect: geom::Rect,
-            ) -> Result<Self> {
-            }
-
-            /// Construct a renderer with explicit visible render-target limits.
-            pub fn new_with_limits(
-                stylemap: &'a StyleMap,
-                style: &'a mut StyleManager,
-                rect: geom::Rect,
-                limits: RenderLimits,
-            ) -> Result<Self> {
+                buf: &'a mut TermBuf,
+                clip: geom::Rect,
+                screen_origin: geom::Point,
+            ) -> Self {
             }
 
             /// Set the effect stack for this renderer.
@@ -5066,9 +5039,6 @@ pub mod canopy {
 
             /// Resolve a style by name without applying effects.
             pub fn resolve_style_name_raw(&self, name: &str) -> Style {}
-
-            /// Resolve a style by name and apply the current effect stack.
-            pub fn resolve_style_name(&self, name: &str) -> Style {}
 
             /// Resolve a custom style at a point, applying the current effect stack.
             pub fn resolve_style_at(
@@ -5094,10 +5064,6 @@ pub mod canopy {
             /// Fill a rectangle with a specified character. Writes out of bounds will be clipped.
             pub fn fill(&mut self, style: &str, r: geom::Rect, c: char) -> Result<()> {}
 
-            /// Draw a solid frame
-            pub fn solid_frame(&mut self, style: &str, f: geom::FrameRects, c: char) -> Result<()> {
-            }
-
             /// Print text in the specified line. If the text is wider than the
             /// rectangle, it will be truncated; if it is shorter, it will be padded.
             pub fn text(&mut self, style: &str, l: geom::Line, txt: &str) -> Result<()> {}
@@ -5119,9 +5085,6 @@ pub mod canopy {
                 grapheme: &str,
             ) -> Result<()> {
             }
-
-            /// Access the underlying buffer.
-            pub fn buffer(&self) -> &TermBuf {}
         }
     }
 

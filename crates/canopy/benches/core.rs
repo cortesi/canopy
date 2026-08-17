@@ -5,7 +5,7 @@ use std::hint::black_box;
 use canopy::{
     Canopy, Context, NodeId, TermBuf, ViewContext, Widget, command, derive_commands,
     error::Result,
-    geom::{FrameRects, Line, Point, Rect, Size},
+    geom::{Line, Point, Size},
     layout::{Layout, MeasureConstraints, Measurement},
     render::{Render, RenderBackend},
     state::NodeName,
@@ -334,26 +334,6 @@ fn bench_large_tree_render(c: &mut Criterion) {
     });
 }
 
-/// Benchmark frame filling in a terminal buffer.
-fn bench_frame_fill(c: &mut Criterion) {
-    c.bench_function("frame_fill", |b| {
-        let style = style();
-        let frame = FrameRects::new(Rect::new(0, 0, 120, 40), 1);
-        b.iter_batched(
-            || {
-                TermBuf::new((120, 40), ' ', style)
-                    .expect("benchmark render target should allocate")
-            },
-            |mut buf| {
-                buf.solid_frame(&style, frame, '#')
-                    .expect("benchmark frame fill should succeed");
-                black_box(buf)
-            },
-            BatchSize::SmallInput,
-        );
-    });
-}
-
 criterion_group!(
     benches,
     bench_tree_edit,
@@ -362,7 +342,6 @@ criterion_group!(
     bench_command_resolution,
     bench_script_startup,
     bench_text_buffer,
-    bench_large_tree_render,
-    bench_frame_fill
+    bench_large_tree_render
 );
 criterion_main!(benches);

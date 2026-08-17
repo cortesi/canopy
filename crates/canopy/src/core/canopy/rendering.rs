@@ -107,7 +107,7 @@ impl Canopy {
         let local_clip = Self::outer_clip_to_local(view.outer, screen_clip);
         let screen_origin = screen_clip.tl;
 
-        let mut rndr = Render::new_shared(&self.style, styl, dest_buf, local_clip, screen_origin)
+        let mut rndr = Render::new(&self.style, styl, dest_buf, local_clip, screen_origin)
             .with_effects(effect_slice);
 
         let result = self.core.with_widget_render(node_id, |widget, core| {

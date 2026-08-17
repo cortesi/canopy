@@ -1,11 +1,11 @@
 use unicode_segmentation::UnicodeSegmentation;
 
-use super::termbuf::{RenderLimits, TermBuf};
+use super::termbuf::TermBuf;
 use crate::{
     core::text,
     error::Result,
     geom,
-    style::{AttrSet, Color, Effect, ResolvedStyle, Style, StyleManager, StyleMap},
+    style::{Effect, ResolvedStyle, Style, StyleManager, StyleMap},
 };
 
 /// The trait implemented by renderers.
@@ -98,18 +98,10 @@ impl Offset {
     }
 }
 
-/// Buffer target for rendering operations.
-enum RenderTarget<'a> {
-    /// Owned offscreen buffer.
-    Owned(TermBuf),
-    /// Shared destination buffer.
-    Shared(&'a mut TermBuf),
-}
-
 /// A renderer that only renders to a specific rectangle within the target terminal buffer.
 pub struct Render<'a> {
     /// The terminal buffer to render to.
-    target: RenderTarget<'a>,
+    buf: &'a mut TermBuf,
     /// The style manager used to apply styles.
     style: &'a mut StyleManager,
     /// The style map used to resolve style names to styles.
@@ -123,40 +115,11 @@ pub struct Render<'a> {
 }
 
 impl<'a> Render<'a> {
-    /// Construct a renderer for the given rectangle.
+    /// Construct a renderer that writes into `buf`.
+    ///
+    /// `clip` is the visible rectangle in canvas coordinates, and `screen_origin` is where the
+    /// clip's top-left lands in the buffer.
     pub fn new(
-        stylemap: &'a StyleMap,
-        style: &'a mut StyleManager,
-        rect: geom::Rect,
-    ) -> Result<Self> {
-        Self::new_with_limits(stylemap, style, rect, RenderLimits::default())
-    }
-
-    /// Construct a renderer with explicit visible render-target limits.
-    pub fn new_with_limits(
-        stylemap: &'a StyleMap,
-        style: &'a mut StyleManager,
-        rect: geom::Rect,
-        limits: RenderLimits,
-    ) -> Result<Self> {
-        let buf = TermBuf::new_with_limits(
-            (rect.w, rect.h),
-            '\0',
-            ResolvedStyle::new(Color::White, Color::Black, AttrSet::default()),
-            limits,
-        )?;
-        Ok(Render {
-            target: RenderTarget::Owned(buf),
-            style,
-            stylemap,
-            clip: rect,
-            origin: Offset::between(geom::Point::zero(), rect.tl),
-            effects: &[],
-        })
-    }
-
-    /// Construct a renderer that writes directly into a shared buffer.
-    pub(crate) fn new_shared(
         stylemap: &'a StyleMap,
         style: &'a mut StyleManager,
         buf: &'a mut TermBuf,
@@ -164,7 +127,7 @@ impl<'a> Render<'a> {
         screen_origin: geom::Point,
     ) -> Self {
         Render {
-            target: RenderTarget::Shared(buf),
+            buf,
             style,
             stylemap,
             clip,
@@ -200,11 +163,6 @@ impl<'a> Render<'a> {
         self.style.get(self.stylemap, name)
     }
 
-    /// Resolve a style by name and apply the current effect stack.
-    pub fn resolve_style_name(&self, name: &str) -> Style {
-        self.resolve_style(name)
-    }
-
     /// Resolve a custom style at a point, applying the current effect stack.
     pub fn resolve_style_at(
         &self,
@@ -236,7 +194,7 @@ impl<'a> Render<'a> {
             let style = self.resolve_style(style);
             if let Some(resolved) = style.resolve_solid() {
                 let adjusted = self.translate_rect(intersection);
-                self.buffer_mut().fill(&resolved, adjusted, c)?;
+                self.buf.fill(&resolved, adjusted, c)?;
             } else {
                 let max_y = intersection.tl.y.saturating_add(intersection.h);
                 let max_x = intersection.tl.x.saturating_add(intersection.w);
@@ -245,24 +203,11 @@ impl<'a> Render<'a> {
                         let point = geom::Point { x, y };
                         let adjusted = self.translate_point(point);
                         let resolved = style.resolve_at(r, point);
-                        self.buffer_mut().put(adjusted, c, resolved)?;
+                        self.buf.put(adjusted, c, resolved)?;
                     }
                 }
             }
         }
-        Ok(())
-    }
-
-    /// Draw a solid frame
-    pub fn solid_frame(&mut self, style: &str, f: geom::FrameRects, c: char) -> Result<()> {
-        self.fill(style, f.top, c)?;
-        self.fill(style, f.left, c)?;
-        self.fill(style, f.right, c)?;
-        self.fill(style, f.bottom, c)?;
-        self.fill(style, f.topleft, c)?;
-        self.fill(style, f.topright, c)?;
-        self.fill(style, f.bottomleft, c)?;
-        self.fill(style, f.bottomright, c)?;
         Ok(())
     }
 
@@ -282,7 +227,7 @@ impl<'a> Render<'a> {
                     tl: self.translate_point(intersection.tl),
                     w: intersection.w,
                 };
-                self.buffer_mut().text(&resolved, adjusted_line, out)?;
+                self.buf.text(&resolved, adjusted_line, out)?;
                 if out_width < adjusted_line.w as usize {
                     let pad_rect = geom::Rect::new(
                         adjusted_line.tl.x + out_width as u32,
@@ -290,7 +235,7 @@ impl<'a> Render<'a> {
                         adjusted_line.w - out_width as u32,
                         1,
                     );
-                    self.buffer_mut().fill(&resolved, pad_rect, ' ')?;
+                    self.buf.fill(&resolved, pad_rect, ' ')?;
                 }
                 return Ok(());
             }
@@ -312,8 +257,7 @@ impl<'a> Render<'a> {
                 };
                 let adjusted = self.translate_point(point);
                 let resolved = style.resolve_at(line_rect, point);
-                self.buffer_mut()
-                    .put_grapheme(adjusted, grapheme, resolved)?;
+                self.buf.put_grapheme(adjusted, grapheme, resolved)?;
                 x = x.saturating_add(width as u32);
                 col = col.saturating_add(width);
             }
@@ -325,7 +269,7 @@ impl<'a> Render<'a> {
                 };
                 let adjusted = self.translate_point(point);
                 let resolved = style.resolve_at(line_rect, point);
-                self.buffer_mut().put(adjusted, ' ', resolved)?;
+                self.buf.put(adjusted, ' ', resolved)?;
             }
         }
         Ok(())
@@ -335,7 +279,7 @@ impl<'a> Render<'a> {
     pub fn put_cell(&mut self, style: ResolvedStyle, p: geom::Point, ch: char) -> Result<()> {
         if self.clip.contains_point(p) {
             let adjusted = self.translate_point(p);
-            self.buffer_mut().put(adjusted, ch, style)?;
+            self.buf.put(adjusted, ch, style)?;
         }
         Ok(())
     }
@@ -354,25 +298,9 @@ impl<'a> Render<'a> {
         let glyph_rect = geom::Rect::new(p.x, p.y, width as u32, 1);
         if self.clip.contains_rect(glyph_rect) {
             let adjusted = self.translate_point(p);
-            self.buffer_mut().put_grapheme(adjusted, grapheme, style)?;
+            self.buf.put_grapheme(adjusted, grapheme, style)?;
         }
         Ok(())
-    }
-
-    /// Access the underlying buffer.
-    pub fn buffer(&self) -> &TermBuf {
-        match &self.target {
-            RenderTarget::Owned(buf) => buf,
-            RenderTarget::Shared(buf) => buf,
-        }
-    }
-
-    /// Access the underlying buffer mutably.
-    fn buffer_mut(&mut self) -> &mut TermBuf {
-        match &mut self.target {
-            RenderTarget::Owned(buf) => buf,
-            RenderTarget::Shared(buf) => buf,
-        }
     }
 
     /// Translate a point from canvas coordinates to buffer coordinates.
@@ -406,129 +334,158 @@ mod tests {
     use super::*;
     use crate::{
         buf,
-        style::{StyleManager, StyleMap},
+        core::termbuf::RenderLimits,
+        style::{AttrSet, Color, StyleManager, StyleMap},
         testing::buf::BufTest,
     };
 
-    fn assert_buffer_matches(render: &Render, expected: &[&str]) {
-        BufTest::new(render.buffer()).assert_matches(expected);
+    /// Offscreen render target sized to one clip rectangle.
+    struct TestTarget {
+        /// Style rules resolved during rendering.
+        stylemap: StyleMap,
+        /// Layer stack shared across operations.
+        style: StyleManager,
+        /// Destination buffer.
+        buf: TermBuf,
+        /// Visible rectangle in canvas coordinates.
+        clip: geom::Rect,
+    }
+
+    impl TestTarget {
+        fn new(clip: geom::Rect) -> Self {
+            let buf = TermBuf::new_with_limits(
+                (clip.w, clip.h),
+                '\0',
+                ResolvedStyle::new(Color::White, Color::Black, AttrSet::default()),
+                RenderLimits::default(),
+            )
+            .expect("test render target should allocate");
+            Self {
+                stylemap: StyleMap::new(),
+                style: StyleManager::new(),
+                buf,
+                clip,
+            }
+        }
+
+        /// Run one operation against a renderer bound to this target.
+        fn render<R>(&mut self, f: impl FnOnce(&mut Render<'_>) -> R) -> R {
+            let mut render = Render::new(
+                &self.stylemap,
+                &mut self.style,
+                &mut self.buf,
+                self.clip,
+                geom::Point::zero(),
+            );
+            f(&mut render)
+        }
+
+        /// Resolve the default style through this target's style manager.
+        fn default_style(&self) -> ResolvedStyle {
+            self.style
+                .get(&self.stylemap, "")
+                .resolve_solid()
+                .expect("default style resolves to solid colors")
+        }
+
+        fn assert_matches(&self, expected: &[&str]) {
+            BufTest::new(&self.buf).assert_matches(expected);
+        }
     }
 
     #[test]
     fn test_part_render_fill_within_bounds() {
-        let stylemap = StyleMap::new();
-        let mut style_manager = StyleManager::new();
-        let render_rect = geom::Rect::new(5, 5, 10, 10);
-
-        let mut part_render = Render::new(&stylemap, &mut style_manager, render_rect)
-            .expect("test render target should allocate");
+        let mut target = TestTarget::new(geom::Rect::new(5, 5, 10, 10));
 
         // Fill entirely within the render rectangle
-        let result = part_render.fill("default", geom::Rect::new(6, 6, 3, 3), '#');
-        assert!(result.is_ok());
+        target
+            .render(|r| r.fill("default", geom::Rect::new(6, 6, 3, 3), '#'))
+            .unwrap();
 
         // Check that the buffer was filled correctly (adjusted to buffer coordinates)
-        assert_buffer_matches(
-            &part_render,
-            buf!(
-                "XXXXXXXXXX"
-                "X###XXXXXX"
-                "X###XXXXXX"
-                "X###XXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-            ),
-        );
+        target.assert_matches(buf!(
+            "XXXXXXXXXX"
+            "X###XXXXXX"
+            "X###XXXXXX"
+            "X###XXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+        ));
     }
 
     #[test]
     fn test_part_render_fill_partial_overlap() {
-        let stylemap = StyleMap::new();
-        let mut style_manager = StyleManager::new();
-        let render_rect = geom::Rect::new(5, 5, 10, 10);
-
-        let mut part_render = Render::new(&stylemap, &mut style_manager, render_rect)
-            .expect("test render target should allocate");
+        let mut target = TestTarget::new(geom::Rect::new(5, 5, 10, 10));
 
         // Fill that partially overlaps the render rectangle
-        let result = part_render.fill("default", geom::Rect::new(3, 3, 5, 5), '#');
-        assert!(result.is_ok());
+        target
+            .render(|r| r.fill("default", geom::Rect::new(3, 3, 5, 5), '#'))
+            .unwrap();
 
         // Should only show the part that overlaps with render rect
-        assert_buffer_matches(
-            &part_render,
-            buf!(
-                "###XXXXXXX"
-                "###XXXXXXX"
-                "###XXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-            ),
-        );
+        target.assert_matches(buf!(
+            "###XXXXXXX"
+            "###XXXXXXX"
+            "###XXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+        ));
 
         // Fill that starts inside but extends beyond render rect
-        let result = part_render.fill("default", geom::Rect::new(10, 10, 8, 8), 'Y');
-        assert!(result.is_ok());
+        target
+            .render(|r| r.fill("default", geom::Rect::new(10, 10, 8, 8), 'Y'))
+            .unwrap();
 
-        assert_buffer_matches(
-            &part_render,
-            buf!(
-                "###XXXXXXX"
-                "###XXXXXXX"
-                "###XXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXYYYYY"
-                "XXXXXYYYYY"
-                "XXXXXYYYYY"
-                "XXXXXYYYYY"
-                "XXXXXYYYYY"
-            ),
-        );
+        target.assert_matches(buf!(
+            "###XXXXXXX"
+            "###XXXXXXX"
+            "###XXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXYYYYY"
+            "XXXXXYYYYY"
+            "XXXXXYYYYY"
+            "XXXXXYYYYY"
+            "XXXXXYYYYY"
+        ));
     }
 
     #[test]
     fn test_part_render_fill_outside_render_rect() {
-        let stylemap = StyleMap::new();
-        let mut style_manager = StyleManager::new();
-        let render_rect = geom::Rect::new(5, 5, 10, 10);
-
-        let mut part_render = Render::new(&stylemap, &mut style_manager, render_rect)
-            .expect("test render target should allocate");
+        let mut target = TestTarget::new(geom::Rect::new(5, 5, 10, 10));
 
         // Fill completely outside the render rectangle but within canvas
-        let result = part_render.fill("default", geom::Rect::new(0, 0, 3, 3), '#');
-        assert!(result.is_ok()); // Should succeed but not affect the buffer
+        target
+            .render(|r| r.fill("default", geom::Rect::new(0, 0, 3, 3), '#'))
+            .unwrap(); // Should succeed but not affect the buffer
 
         // Another test outside render rect
-        let result = part_render.fill("default", geom::Rect::new(16, 16, 3, 3), 'Y');
-        assert!(result.is_ok());
+        target
+            .render(|r| r.fill("default", geom::Rect::new(16, 16, 3, 3), 'Y'))
+            .unwrap();
 
         // Buffer should remain unchanged (all NULL)
-        assert_buffer_matches(
-            &part_render,
-            buf!(
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-            ),
-        );
+        target.assert_matches(buf!(
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+        ));
     }
 
     #[test]
@@ -545,7 +502,7 @@ mod tests {
         let clip = geom::Rect::new(2, 1, 2, 2);
         let screen_origin = geom::Point { x: 3, y: 0 };
         {
-            let mut render = Render::new_shared(
+            let mut render = Render::new(
                 &stylemap,
                 &mut style_manager,
                 &mut target,
@@ -570,288 +527,385 @@ mod tests {
 
     #[test]
     fn put_grapheme_clips_wide_glyphs_atomically() {
-        let stylemap = StyleMap::new();
-        let mut style_manager = StyleManager::new();
-        let style = style_manager
-            .get(&stylemap, "")
-            .resolve_solid()
-            .expect("default style resolves to solid colors");
-        let mut render = Render::new(&stylemap, &mut style_manager, geom::Rect::new(0, 0, 2, 1))
-            .expect("test render target should allocate");
+        let mut target = TestTarget::new(geom::Rect::new(0, 0, 2, 1));
+        let style = target.default_style();
 
-        render
-            .put_grapheme(style, geom::Point { x: 1, y: 0 }, "界")
+        target
+            .render(|r| r.put_grapheme(style, geom::Point { x: 1, y: 0 }, "界"))
             .unwrap();
-        assert_buffer_matches(&render, buf!("XX"));
+        target.assert_matches(buf!("XX"));
 
-        render
-            .put_grapheme(style, geom::Point { x: 0, y: 0 }, "界")
+        target
+            .render(|r| r.put_grapheme(style, geom::Point { x: 0, y: 0 }, "界"))
             .unwrap();
-        assert_buffer_matches(&render, buf!("界X"));
+        target.assert_matches(buf!("界X"));
     }
 
     #[test]
     fn test_part_render_fill_outside_canvas() {
-        let stylemap = StyleMap::new();
-        let mut style_manager = StyleManager::new();
-        let render_rect = geom::Rect::new(5, 5, 10, 10);
-
-        let mut part_render = Render::new(&stylemap, &mut style_manager, render_rect)
-            .expect("test render target should allocate");
+        let mut target = TestTarget::new(geom::Rect::new(5, 5, 10, 10));
 
         // Fill that extends beyond canvas bounds
-        part_render
-            .fill("default", geom::Rect::new(15, 15, 10, 10), '#')
+        target
+            .render(|r| r.fill("default", geom::Rect::new(15, 15, 10, 10), '#'))
             .unwrap();
 
         // Fill completely outside canvas
-        part_render
-            .fill("default", geom::Rect::new(25, 25, 5, 5), 'Y')
+        target
+            .render(|r| r.fill("default", geom::Rect::new(25, 25, 5, 5), 'Y'))
             .unwrap();
 
         // Fill that starts at edge and extends beyond
-        part_render
-            .fill("default", geom::Rect::new(19, 19, 2, 2), 'Z')
+        target
+            .render(|r| r.fill("default", geom::Rect::new(19, 19, 2, 2), 'Z'))
             .unwrap();
 
         // Buffer should remain unchanged
-        assert_buffer_matches(
-            &part_render,
-            buf!(
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-            ),
-        );
+        target.assert_matches(buf!(
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+        ));
     }
 
     #[test]
     fn test_part_render_text_within_bounds() {
-        let stylemap = StyleMap::new();
-        let mut style_manager = StyleManager::new();
-        let render_rect = geom::Rect::new(5, 5, 10, 10);
-
-        let mut part_render = Render::new(&stylemap, &mut style_manager, render_rect)
-            .expect("test render target should allocate");
+        let mut target = TestTarget::new(geom::Rect::new(5, 5, 10, 10));
 
         // Text entirely within render rectangle
-        let result = part_render.text(
-            "default",
-            geom::Line {
-                tl: geom::Point { x: 6, y: 6 },
-                w: 5,
-            },
-            "Hello",
-        );
-        assert!(result.is_ok());
+        target
+            .render(|r| {
+                r.text(
+                    "default",
+                    geom::Line {
+                        tl: geom::Point { x: 6, y: 6 },
+                        w: 5,
+                    },
+                    "Hello",
+                )
+            })
+            .unwrap();
 
-        assert_buffer_matches(
-            &part_render,
-            buf!(
-                "XXXXXXXXXX"
-                "XHelloXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-            ),
-        );
+        target.assert_matches(buf!(
+            "XXXXXXXXXX"
+            "XHelloXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+        ));
 
         // Text that exactly fits
-        let result = part_render.text(
-            "default",
-            geom::Line {
-                tl: geom::Point { x: 5, y: 5 },
-                w: 10,
-            },
-            "1234567890",
-        );
-        assert!(result.is_ok());
+        target
+            .render(|r| {
+                r.text(
+                    "default",
+                    geom::Line {
+                        tl: geom::Point { x: 5, y: 5 },
+                        w: 10,
+                    },
+                    "1234567890",
+                )
+            })
+            .unwrap();
 
-        assert_buffer_matches(
-            &part_render,
-            buf!(
-                "1234567890"
-                "XHelloXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-            ),
-        );
+        target.assert_matches(buf!(
+            "1234567890"
+            "XHelloXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+        ));
     }
 
     #[test]
     fn test_part_render_text_partial_overlap() {
-        let stylemap = StyleMap::new();
-        let mut style_manager = StyleManager::new();
-        let render_rect = geom::Rect::new(5, 5, 10, 10);
-
-        let mut part_render = Render::new(&stylemap, &mut style_manager, render_rect)
-            .expect("test render target should allocate");
+        let mut target = TestTarget::new(geom::Rect::new(5, 5, 10, 10));
 
         // Text that starts before render rect
-        let result = part_render.text(
-            "default",
-            geom::Line {
-                tl: geom::Point { x: 3, y: 6 },
-                w: 10,
-            },
-            "1234567890",
-        );
-        assert!(result.is_ok());
+        target
+            .render(|r| {
+                r.text(
+                    "default",
+                    geom::Line {
+                        tl: geom::Point { x: 3, y: 6 },
+                        w: 10,
+                    },
+                    "1234567890",
+                )
+            })
+            .unwrap();
 
         // Should show chars starting from index 2 (skip first 2 chars)
-        assert_buffer_matches(
-            &part_render,
-            buf!(
-                "XXXXXXXXXX"
-                "34567890XX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-            ),
-        );
+        target.assert_matches(buf!(
+            "XXXXXXXXXX"
+            "34567890XX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+        ));
 
         // Text that extends beyond render rect
-        let result = part_render.text(
-            "default",
-            geom::Line {
-                tl: geom::Point { x: 10, y: 10 },
-                w: 8,
-            },
-            "LongText",
-        );
-        assert!(result.is_ok());
+        target
+            .render(|r| {
+                r.text(
+                    "default",
+                    geom::Line {
+                        tl: geom::Point { x: 10, y: 10 },
+                        w: 8,
+                    },
+                    "LongText",
+                )
+            })
+            .unwrap();
 
-        assert_buffer_matches(
-            &part_render,
-            buf!(
-                "XXXXXXXXXX"
-                "34567890XX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXLongT"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-            ),
-        );
+        target.assert_matches(buf!(
+            "XXXXXXXXXX"
+            "34567890XX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXLongT"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+        ));
     }
 
     #[test]
     fn test_part_render_text_outside_canvas() {
-        let stylemap = StyleMap::new();
-        let mut style_manager = StyleManager::new();
-        let render_rect = geom::Rect::new(5, 5, 10, 10);
-
-        let mut part_render = Render::new(&stylemap, &mut style_manager, render_rect)
-            .expect("test render target should allocate");
+        let mut target = TestTarget::new(geom::Rect::new(5, 5, 10, 10));
 
         // Text that extends beyond canvas
-        part_render
-            .text(
-                "default",
-                geom::Line {
-                    tl: geom::Point { x: 15, y: 15 },
-                    w: 10,
-                },
-                "Text",
-            )
+        target
+            .render(|r| {
+                r.text(
+                    "default",
+                    geom::Line {
+                        tl: geom::Point { x: 15, y: 15 },
+                        w: 10,
+                    },
+                    "Text",
+                )
+            })
             .unwrap();
 
         // Text completely outside canvas
-        part_render
-            .text(
-                "default",
-                geom::Line {
-                    tl: geom::Point { x: 25, y: 25 },
-                    w: 5,
-                },
-                "Text",
-            )
+        target
+            .render(|r| {
+                r.text(
+                    "default",
+                    geom::Line {
+                        tl: geom::Point { x: 25, y: 25 },
+                        w: 5,
+                    },
+                    "Text",
+                )
+            })
             .unwrap();
 
         // Buffer should remain unchanged
-        assert_buffer_matches(
-            &part_render,
-            buf!(
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-            ),
-        );
+        target.assert_matches(buf!(
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+            "XXXXXXXXXX"
+        ));
     }
 
     #[test]
-    fn test_part_render_solid_frame() {
-        let stylemap = StyleMap::new();
-        let mut style_manager = StyleManager::new();
-        let render_rect = geom::Rect::new(5, 5, 10, 10);
+    fn fill_draws_the_parts_of_a_frame() {
+        let mut target = TestTarget::new(geom::Rect::new(5, 5, 10, 10));
 
-        let mut part_render = Render::new(&stylemap, &mut style_manager, render_rect)
-            .expect("test render target should allocate");
-
-        // Frame within bounds
         let frame = geom::FrameRects::new(geom::Rect::new(6, 6, 8, 8), 1);
-        let result = part_render.solid_frame("default", frame, '#');
-        assert!(result.is_ok());
+        for part in [frame.top, frame.left, frame.right, frame.bottom] {
+            target.render(|r| r.fill("default", part, '#')).unwrap();
+        }
 
-        assert_buffer_matches(
-            &part_render,
-            buf!(
-                "XXXXXXXXXX"
-                "X########X"
-                "X#XXXXXX#X"
-                "X#XXXXXX#X"
-                "X#XXXXXX#X"
-                "X#XXXXXX#X"
-                "X#XXXXXX#X"
-                "X#XXXXXX#X"
-                "X########X"
-                "XXXXXXXXXX"
-            ),
-        );
+        target.assert_matches(buf!(
+            "XXXXXXXXXX"
+            "XX######XX"
+            "X#XXXXXX#X"
+            "X#XXXXXX#X"
+            "X#XXXXXX#X"
+            "X#XXXXXX#X"
+            "X#XXXXXX#X"
+            "X#XXXXXX#X"
+            "XX######XX"
+            "XXXXXXXXXX"
+        ));
+    }
 
-        // Frame that extends outside canvas should fail
-        let frame = geom::FrameRects::new(geom::Rect::new(15, 15, 10, 10), 1);
-        part_render.solid_frame("default", frame, '#').unwrap();
+    /// One text-rendering case: a clip rectangle, a line, and the expected buffer.
+    struct TextCase {
+        /// Case name reported on failure.
+        name: &'static str,
+        /// Visible rectangle in canvas coordinates.
+        clip: geom::Rect,
+        /// Line the text is drawn on, in canvas coordinates.
+        line: geom::Line,
+        /// Text drawn on the line.
+        text: &'static str,
+        /// Expected buffer contents.
+        expected: &'static [&'static str],
+    }
+
+    impl TextCase {
+        fn run(&self) {
+            let mut target = TestTarget::new(self.clip);
+            target
+                .render(|r| r.text("default", self.line, self.text))
+                .unwrap();
+            BufTest::new(&target.buf).assert_matches_with_context(self.expected, Some(self.name));
+        }
+    }
+
+    /// Build a line at `(x, y)` with the given width.
+    fn line(x: u32, y: u32, w: u32) -> geom::Line {
+        geom::Line {
+            tl: geom::Point { x, y },
+            w,
+        }
+    }
+
+    #[test]
+    fn text_truncates_pads_and_clips() {
+        let clip = geom::Rect::new(0, 0, 5, 5);
+        let cases = [
+            TextCase {
+                name: "full line",
+                clip,
+                line: line(0, 1, 5),
+                text: "Hello",
+                expected: buf!("XXXXX" "Hello" "XXXXX" "XXXXX" "XXXXX"),
+            },
+            TextCase {
+                name: "overflow",
+                clip,
+                line: line(0, 0, 5),
+                text: "Hello World",
+                expected: buf!("Hello" "XXXXX" "XXXXX" "XXXXX" "XXXXX"),
+            },
+            TextCase {
+                name: "truncation",
+                clip,
+                line: line(0, 0, 2),
+                text: "Hello World",
+                expected: buf!("HeXXX" "XXXXX" "XXXXX" "XXXXX" "XXXXX"),
+            },
+            TextCase {
+                name: "zero width",
+                clip,
+                line: line(0, 0, 0),
+                text: "Hello World",
+                expected: buf!("XXXXX" "XXXXX" "XXXXX" "XXXXX" "XXXXX"),
+            },
+            TextCase {
+                name: "padding",
+                clip,
+                line: line(0, 2, 5),
+                text: "Hi",
+                expected: buf!("XXXXX" "XXXXX" "Hi   " "XXXXX" "XXXXX"),
+            },
+            TextCase {
+                name: "below the clip",
+                clip,
+                line: line(0, 5, 5),
+                text: "Hi",
+                expected: buf!("XXXXX" "XXXXX" "XXXXX" "XXXXX" "XXXXX"),
+            },
+            TextCase {
+                name: "right of the clip",
+                clip,
+                line: line(10, 0, 5),
+                text: "Hi",
+                expected: buf!("XXXXX" "XXXXX" "XXXXX" "XXXXX" "XXXXX"),
+            },
+        ];
+        for case in &cases {
+            case.run();
+        }
+    }
+
+    #[test]
+    fn text_clips_against_an_offset_clip_rect() {
+        let clip = geom::Rect::new(5, 2, 10, 5);
+        let cases = [
+            TextCase {
+                name: "text starts before the clip",
+                clip,
+                line: line(0, 2, 15),
+                text: "01234567890123456789",
+                expected: buf!(
+                    "5678901234"
+                    "XXXXXXXXXX"
+                    "XXXXXXXXXX"
+                    "XXXXXXXXXX"
+                    "XXXXXXXXXX"
+                ),
+            },
+            TextCase {
+                name: "text extends past the clip",
+                clip,
+                line: line(10, 3, 10),
+                text: "01234567890",
+                expected: buf!(
+                    "XXXXXXXXXX"
+                    "XXXXX01234"
+                    "XXXXXXXXXX"
+                    "XXXXXXXXXX"
+                    "XXXXXXXXXX"
+                ),
+            },
+            TextCase {
+                name: "text inside the clip",
+                clip,
+                line: line(7, 3, 5),
+                text: "Hello",
+                expected: buf!(
+                    "XXXXXXXXXX"
+                    "XXHelloXXX"
+                    "XXXXXXXXXX"
+                    "XXXXXXXXXX"
+                    "XXXXXXXXXX"
+                ),
+            },
+        ];
+        for case in &cases {
+            case.run();
+        }
     }
 
     #[test]
     fn test_part_render_multiple_rectangles() {
-        let stylemap = StyleMap::new();
-        let mut style_manager = StyleManager::new();
-
         // Test with render rect at different positions
         let positions = vec![
             (geom::Rect::new(0, 0, 10, 10), "top-left"), // Top-left corner
@@ -859,41 +913,31 @@ mod tests {
             (geom::Rect::new(20, 20, 10, 10), "bottom-right"), // Bottom-right corner
         ];
 
-        for (render_rect, position) in positions {
-            let mut part_render = Render::new(&stylemap, &mut style_manager, render_rect)
-                .expect("test render target should allocate");
+        for (index, (render_rect, position)) in positions.into_iter().enumerate() {
+            let mut target = TestTarget::new(render_rect);
 
-            // Fill within the specific render rect
+            // Fill within the specific render rect, then outside the canvas.
             let fill_rect = geom::Rect::new(render_rect.tl.x + 1, render_rect.tl.y + 1, 5, 5);
-            let result = part_render.fill("default", fill_rect, '#');
-            assert!(result.is_ok());
-
-            let expected = buf!(
-                "XXXXXXXXXX"
-                "X#####XXXX"
-                "X#####XXXX"
-                "X#####XXXX"
-                "X#####XXXX"
-                "X#####XXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-                "XXXXXXXXXX"
-            );
-
-            match position {
-                "top-left" | "center" | "bottom-right" => {
-                    assert_buffer_matches(&part_render, expected);
-                }
-                _ => panic!("Unknown position: {position}"),
-            }
-
-            // Fill outside canvas should be ignored
-            part_render
-                .fill("default", geom::Rect::new(40, 40, 5, 5), 'Y')
+            target
+                .render(|r| r.fill("default", fill_rect, '#'))
+                .unwrap();
+            target
+                .render(|r| r.fill("default", geom::Rect::new(40, 40, 5, 5), 'Y'))
                 .unwrap();
 
-            assert_buffer_matches(&part_render, expected);
+            assert_eq!(position, ["top-left", "center", "bottom-right"][index]);
+            target.assert_matches(buf!(
+                "XXXXXXXXXX"
+                "X#####XXXX"
+                "X#####XXXX"
+                "X#####XXXX"
+                "X#####XXXX"
+                "X#####XXXX"
+                "XXXXXXXXXX"
+                "XXXXXXXXXX"
+                "XXXXXXXXXX"
+                "XXXXXXXXXX"
+            ));
         }
     }
 }

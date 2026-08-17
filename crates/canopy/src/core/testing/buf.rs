@@ -308,6 +308,13 @@ mod tests {
         style::{AttrSet, Color, ResolvedStyle},
     };
 
+    #[test]
+    fn buf_macro_accepts_any_line_count() {
+        assert_eq!(crate::buf!("ab" "cd"), &["ab", "cd"]);
+        assert_eq!(crate::buf!("test" "more" "text"), &["test", "more", "text"]);
+        assert_eq!(crate::buf!("single line"), &["single line"]);
+    }
+
     fn test_style() -> ResolvedStyle {
         ResolvedStyle::new(Color::White, Color::Black, AttrSet::default())
     }

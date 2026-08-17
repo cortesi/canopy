@@ -6,7 +6,7 @@ use crate::{
     core::text,
     cursor,
     error::{Error, Result},
-    geom::{FrameRects, Line, Point, Rect, Size},
+    geom::{Line, Point, Rect, Size},
     render::RenderBackend,
     style::{Attr, AttrSet, Color, ResolvedStyle},
 };
@@ -410,18 +410,6 @@ impl TermBuf {
                 }
             }
         }
-    }
-
-    /// Fill the frame outline with a glyph and style.
-    pub fn solid_frame(&mut self, style: &ResolvedStyle, f: FrameRects, ch: char) -> Result<()> {
-        self.fill(style, f.top, ch)?;
-        self.fill(style, f.left, ch)?;
-        self.fill(style, f.right, ch)?;
-        self.fill(style, f.bottom, ch)?;
-        self.fill(style, f.topleft, ch)?;
-        self.fill(style, f.topright, ch)?;
-        self.fill(style, f.bottomleft, ch)?;
-        self.fill(style, f.bottomright, ch)
     }
 
     /// Draw text clipped to the given line.
@@ -1113,10 +1101,6 @@ mod tests {
             buf.fill_empty('\u{0301}', &style),
             Err(Error::InvalidCellCharacter { width: 0, .. })
         ));
-        assert!(matches!(
-            buf.solid_frame(&style, FrameRects::new(buf.rect(), 1), '界'),
-            Err(Error::InvalidCellCharacter { width: 2, .. })
-        ));
     }
 
     #[test]
@@ -1241,22 +1225,6 @@ mod tests {
                 );
             }
         }
-    }
-
-    #[test]
-    fn solid_frame_draw() {
-        let mut tb = TermBuf::new(Size::new(4, 4), ' ', def_style())
-            .expect("test render target should allocate");
-        let f = FrameRects::new(Rect::new(0, 0, 4, 4), 1);
-        tb.solid_frame(&def_style(), f, '#')
-            .expect("test buffer mutation should succeed");
-
-        BufTest::new(&tb).assert_matches(buf![
-            "####"
-            "#  #"
-            "#  #"
-            "####"
-        ]);
     }
 
     struct RecBackend {

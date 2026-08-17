@@ -285,7 +285,7 @@ Independent, low-risk, mostly deletions. Do these first.
   `Rect` methods that take `&Copy` (`hslice`, `intersect`, `contains_rect`) take by value like
   their siblings. About −650 lines of the crate's 2,170.
 
-- [ ] **2.2 `Render` has one construction path.** `RenderTarget`, `Render::new`,
+- [x] **2.2 `Render` has one construction path.** `RenderTarget`, `Render::new`,
   `Render::new_with_limits`, and `Render::buffer()` (`render.rs:57-131, 318-331`) exist only for
   tests; production uses `new_shared` once (`canopy/rendering.rs:139`). Make the shared-buffer
   constructor the only one (rename to `new`, field `buf: &mut TermBuf`) and update ~12 test
@@ -715,9 +715,9 @@ Independent, low-risk, mostly deletions. Do these first.
   `fixed_leaf(core, w, h)`/`wrap_node(core)` helpers, and use `core.set_layout_of(x, L)` instead
   of 37 three-line `with_layout_of` closures (about −140 lines). `assert_error_context` is
   duplicated verbatim in `world/tests.rs:389-404` and `canopy/tests.rs:321-336`.
-  `tests/test_render.rs` (527 lines) and the inline tests in `render.rs` (496 lines) cover the
-  same `Render` surface with near-identical tests; keep the inline suite, port unique cases,
-  delete `setup_render_test` (ignores both arguments). `testing/mod.rs:19-113` tests `Canopy`
+  (Item 2.2 landed the `tests/test_render.rs` merge: rewriting the render tests for the single
+  constructor forced it, so the unique cases moved into the inline suite and the file and its
+  `setup_render_test` are gone.) `testing/mod.rs:19-113` tests `Canopy`
   rendering already covered by `canopy/tests.rs::trender`. Move the largest inline `mod tests`
   blocks (`termbuf.rs` 1,255 test lines, `inputmap.rs` 707, `script/mod.rs` 677, `render.rs` 496)
   to sibling `tests.rs` files, the convention `world/`, `canopy/`, and `editor/` already use.
