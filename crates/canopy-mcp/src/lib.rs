@@ -17,9 +17,9 @@ pub mod smoke;
 pub use error::{Error, Result};
 pub use launch::{LaunchMode, launch};
 pub use script::{
-    AppEvaluator, BootstrapCommand, BootstrapJournalEntry, BootstrapResponse, ScriptAssertion,
-    ScriptDiagnostic, ScriptErrorInfo, ScriptEvalOutcome, ScriptEvalRequest, ScriptTaskState,
-    ScriptTiming, app_factory, evaluate_live,
+    AppEvaluator, BootstrapCommand, BootstrapJournalEntry, BootstrapResponse, ScriptErrorInfo,
+    ScriptEvalOutcome, ScriptEvalRequest, ScriptTaskState, ScriptTiming, app_factory,
+    evaluate_live,
 };
 pub use server::{ApplyFixtureRequest, UdsServerHandle, json_tool_result, serve_stdio, serve_uds};
 pub use smoke::{

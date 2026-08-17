@@ -4,9 +4,7 @@
 use std::{path::PathBuf, process};
 
 use anyhow::Result;
-use canopy_mcp::{
-    Error as McpError, LaunchMode, SuiteConfig, app_factory, launch, script::AppFactory,
-};
+use canopy_mcp::{Error as McpError, LaunchMode, app_factory, launch, script::AppFactory};
 use clap::{Parser, Subcommand};
 use todo::create_app_with_config;
 
@@ -45,25 +43,6 @@ enum Command {
         #[clap(short, long)]
         config: Option<PathBuf>,
     },
-    /// Run Luau smoke scripts against fresh headless app instances.
-    Smoke {
-        /// SQLite database path for the todo app.
-        path: String,
-        /// Suite directory to scan when no explicit scripts are provided.
-        #[clap(long, default_value = "examples/todo/smoke")]
-        suite: PathBuf,
-        /// Stop after the first failing script.
-        #[clap(long)]
-        fail_fast: bool,
-        /// Optional timeout per script in milliseconds.
-        #[clap(long)]
-        timeout_ms: Option<u64>,
-        /// Optional Luau config file applied before each script.
-        #[clap(short, long)]
-        config: Option<PathBuf>,
-        /// Explicit subset of smoke scripts to run.
-        scripts: Vec<PathBuf>,
-    },
 }
 
 /// Build an application factory for a database and optional config.
@@ -96,22 +75,6 @@ fn main() -> Result<()> {
         Some(Command::Mcp { path, config }) => {
             launch(make_factory(path, config), LaunchMode::HeadlessMcp)?
         }
-        Some(Command::Smoke {
-            path,
-            suite,
-            fail_fast,
-            timeout_ms,
-            config,
-            scripts,
-        }) => launch(
-            make_factory(path, config),
-            LaunchMode::Smoke(SuiteConfig {
-                suite_dir: suite,
-                scripts,
-                timeout_ms,
-                fail_fast,
-            }),
-        )?,
         None => {
             if let Some(path) = args.path {
                 let mode = args

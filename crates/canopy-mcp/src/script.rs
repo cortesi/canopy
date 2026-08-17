@@ -9,6 +9,7 @@ use canopy::{
     error::{Error as CanopyError, ScriptErrorKind},
     geom::Size,
     render::NopBackend,
+    script::{ScriptAssertion, ScriptCheckDiagnostic},
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -49,28 +50,6 @@ pub struct ScriptEvalRequest {
     /// Optional evaluation timeout in milliseconds.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timeout_ms: Option<u64>,
-}
-
-/// Structured typecheck diagnostic returned by `script_eval`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-pub struct ScriptDiagnostic {
-    /// Diagnostic severity such as `error` or `warning`.
-    pub severity: String,
-    /// One-based line number, or zero when the diagnostic is not source-bound.
-    pub line: usize,
-    /// One-based column number, or zero when the diagnostic is not source-bound.
-    pub column: usize,
-    /// Human-readable diagnostic message.
-    pub message: String,
-}
-
-/// Assertion outcome recorded during script execution.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-pub struct ScriptAssertion {
-    /// Whether the assertion passed.
-    pub passed: bool,
-    /// Assertion message emitted by the runtime.
-    pub message: String,
 }
 
 /// Timing information for a script evaluation.
@@ -145,7 +124,7 @@ pub struct ScriptEvalOutcome {
     pub assertions: Vec<ScriptAssertion>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     /// Typecheck diagnostics captured before execution.
-    pub diagnostics: Vec<ScriptDiagnostic>,
+    pub diagnostics: Vec<ScriptCheckDiagnostic>,
     /// Timing information for the request.
     pub timing: ScriptTiming,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -225,7 +204,7 @@ impl ScriptEvalOutcome {
     pub fn error_only(
         error_type: impl Into<String>,
         message: impl Into<String>,
-        diagnostics: Vec<ScriptDiagnostic>,
+        diagnostics: Vec<ScriptCheckDiagnostic>,
         timing: ScriptTiming,
     ) -> Self {
         let error_type = error_type.into();
@@ -294,7 +273,6 @@ impl AppEvaluator {
     /// Evaluate a Luau script against a fresh headless app.
     pub fn evaluate(&self, request: &ScriptEvalRequest) -> ScriptEvalOutcome {
         let total_start = Instant::now();
-        let build_start = Instant::now();
         let mut session =
             match HeadlessSession::new(&self.factory, self.view_size, request.fixture.as_deref()) {
                 Ok(session) => session,
@@ -307,45 +285,9 @@ impl AppEvaluator {
                     );
                 }
             };
-        let build_ms = build_start.elapsed().as_millis() as u64;
-
-        let diagnostics = match typecheck_for_eval(
-            &mut session.canopy,
-            &request.script,
-            ScriptTiming {
-                build_ms,
-                exec_ms: 0,
-                total_ms: total_start.elapsed().as_millis() as u64,
-            },
-        ) {
-            TypecheckGate::Ready(diagnostics) => diagnostics,
-            TypecheckGate::Failed(outcome) => return *outcome,
-        };
-
-        let exec_start = Instant::now();
-        let eval_result = session.evaluate(&request.script, request.timeout_ms);
-        let exec_ms = exec_start.elapsed().as_millis() as u64;
-        let timing = ScriptTiming {
-            build_ms,
-            exec_ms,
-            total_ms: total_start.elapsed().as_millis() as u64,
-        };
-        let logs = session.take_logs();
-        let assertions = session.take_assertions();
-
-        match eval_result {
-            Ok(value) => ScriptEvalOutcome {
-                success: true,
-                state: ScriptTaskState::Completed,
-                value: Some(value),
-                logs,
-                assertions,
-                diagnostics,
-                timing,
-                error: None,
-            },
-            Err(error) => failure_with_logs(&error, logs, assertions, diagnostics, timing),
-        }
+        let build_ms = total_start.elapsed().as_millis() as u64;
+        let HeadlessSession { canopy, backend } = &mut session;
+        evaluate_in(canopy, request, build_ms, total_start, Some(backend))
     }
 }
 
@@ -424,13 +366,25 @@ pub fn evaluate_live(canopy: &mut Canopy, request: &ScriptEvalRequest) -> Script
             ScriptTiming::zero(),
         );
     }
+    evaluate_in(canopy, request, 0, Instant::now(), None)
+}
 
-    let total_start = Instant::now();
+/// Typecheck, evaluate, and report one script against an already-built canopy app.
+///
+/// `render` is supplied for headless evaluation, where nothing else drives the screen after the
+/// script runs; a live app renders on its own event loop.
+fn evaluate_in(
+    canopy: &mut Canopy,
+    request: &ScriptEvalRequest,
+    build_ms: u64,
+    total_start: Instant,
+    render: Option<&mut NopBackend>,
+) -> ScriptEvalOutcome {
     let diagnostics = match typecheck_for_eval(
         canopy,
         &request.script,
         ScriptTiming {
-            build_ms: 0,
+            build_ms,
             exec_ms: 0,
             total_ms: total_start.elapsed().as_millis() as u64,
         },
@@ -440,44 +394,32 @@ pub fn evaluate_live(canopy: &mut Canopy, request: &ScriptEvalRequest) -> Script
     };
 
     let exec_start = Instant::now();
-    let eval_result = eval_script_value(canopy, &request.script, request.timeout_ms);
+    let eval_result =
+        eval_script_value(canopy, &request.script, request.timeout_ms).and_then(|value| {
+            if let Some(backend) = render {
+                canopy.render(backend)?;
+            }
+            Ok(value.to_external_json_value()?)
+        });
     let exec_ms = exec_start.elapsed().as_millis() as u64;
     let timing = ScriptTiming {
-        build_ms: 0,
+        build_ms,
         exec_ms,
         total_ms: total_start.elapsed().as_millis() as u64,
     };
     let logs = canopy.take_script_logs();
-    let assertions = script_assertions(canopy);
+    let assertions = canopy.take_script_assertions();
 
     match eval_result {
-        Ok(value) => match value.to_external_json_value() {
-            Ok(value) => ScriptEvalOutcome {
-                success: true,
-                state: ScriptTaskState::Completed,
-                value: Some(value),
-                logs,
-                assertions,
-                diagnostics,
-                timing,
-                error: None,
-            },
-            Err(error) => ScriptEvalOutcome {
-                success: false,
-                state: ScriptTaskState::Failed,
-                value: None,
-                logs,
-                assertions,
-                diagnostics,
-                timing,
-                error: Some(ScriptErrorInfo {
-                    error_type: "runtime".to_string(),
-                    kind: None,
-                    command: None,
-                    owner: None,
-                    message: error.to_string(),
-                }),
-            },
+        Ok(value) => ScriptEvalOutcome {
+            success: true,
+            state: ScriptTaskState::Completed,
+            value: Some(value),
+            logs,
+            assertions,
+            diagnostics,
+            timing,
+            error: None,
         },
         Err(error) => failure_with_logs(&error, logs, assertions, diagnostics, timing),
     }
@@ -504,23 +446,6 @@ impl HeadlessSession {
         canopy.render(&mut backend)?;
         Ok(Self { canopy, backend })
     }
-
-    /// Execute a script and return its JSON-serializable result value.
-    fn evaluate(&mut self, script: &str, timeout_ms: Option<u64>) -> Result<JsonValue> {
-        let value = eval_script_value(&mut self.canopy, script, timeout_ms)?;
-        self.canopy.render(&mut self.backend)?;
-        Ok(value.to_external_json_value()?)
-    }
-
-    /// Drain the script log buffer.
-    fn take_logs(&self) -> Vec<String> {
-        self.canopy.take_script_logs()
-    }
-
-    /// Drain recorded assertion results.
-    fn take_assertions(&self) -> Vec<ScriptAssertion> {
-        script_assertions(&self.canopy)
-    }
 }
 
 /// Evaluate a script with an optional cooperative timeout.
@@ -541,15 +466,15 @@ fn eval_script_value(
 /// Result of the shared typecheck gate used by headless and live evaluation.
 enum TypecheckGate {
     /// Typechecking succeeded and evaluation may continue.
-    Ready(Vec<ScriptDiagnostic>),
+    Ready(Vec<ScriptCheckDiagnostic>),
     /// Typechecking failed and evaluation should stop.
     Failed(Box<ScriptEvalOutcome>),
 }
 
 /// Run Luau typechecking and return a failure outcome when evaluation should stop.
 fn typecheck_for_eval(canopy: &mut Canopy, script: &str, timing: ScriptTiming) -> TypecheckGate {
-    let diagnostics = match typecheck_diagnostics(canopy, script) {
-        Ok(diagnostics) => diagnostics,
+    let result = match canopy.check_script("canopy/mcp-eval", script) {
+        Ok(result) => result,
         Err(error) => {
             return TypecheckGate::Failed(Box::new(ScriptEvalOutcome::error_only(
                 "typecheck",
@@ -559,7 +484,9 @@ fn typecheck_for_eval(canopy: &mut Canopy, script: &str, timing: ScriptTiming) -
             )));
         }
     };
-    if diagnostics_have_errors(&diagnostics) {
+    let has_errors = result.has_errors();
+    let diagnostics = result.into_diagnostics();
+    if has_errors {
         return TypecheckGate::Failed(Box::new(ScriptEvalOutcome::error_only(
             "typecheck",
             "script failed Luau type checking",
@@ -570,18 +497,6 @@ fn typecheck_for_eval(canopy: &mut Canopy, script: &str, timing: ScriptTiming) -
     TypecheckGate::Ready(diagnostics)
 }
 
-/// Collect assertion outcomes from the active canopy session.
-fn script_assertions(canopy: &Canopy) -> Vec<ScriptAssertion> {
-    canopy
-        .take_script_assertions()
-        .into_iter()
-        .map(|assertion| ScriptAssertion {
-            passed: assertion.passed,
-            message: assertion.message,
-        })
-        .collect()
-}
-
 /// Map an error category to the corresponding task state.
 fn script_task_state(error_type: &str) -> ScriptTaskState {
     if error_type == "timeout" {
@@ -589,13 +504,6 @@ fn script_task_state(error_type: &str) -> ScriptTaskState {
     } else {
         ScriptTaskState::Failed
     }
-}
-
-/// Return true if typecheck diagnostics should fail evaluation.
-fn diagnostics_have_errors(diagnostics: &[ScriptDiagnostic]) -> bool {
-    diagnostics
-        .iter()
-        .any(|diagnostic| diagnostic.severity == "error")
 }
 
 /// Return the evaluation error category for a runtime error.
@@ -620,7 +528,7 @@ fn failure_with_logs(
     error: &crate::Error,
     logs: Vec<String>,
     assertions: Vec<ScriptAssertion>,
-    diagnostics: Vec<ScriptDiagnostic>,
+    diagnostics: Vec<ScriptCheckDiagnostic>,
     timing: ScriptTiming,
 ) -> ScriptEvalOutcome {
     let info = script_error_info(error);
@@ -669,21 +577,6 @@ fn script_error_info(error: &crate::Error) -> ScriptErrorInfo {
         owner: None,
         message: error.to_string(),
     }
-}
-
-/// Return Luau typecheck diagnostics for a script.
-fn typecheck_diagnostics(canopy: &mut Canopy, script: &str) -> Result<Vec<ScriptDiagnostic>> {
-    let result = canopy.check_script("canopy/mcp-eval", script)?;
-    Ok(result
-        .diagnostics()
-        .iter()
-        .map(|diagnostic| ScriptDiagnostic {
-            severity: diagnostic.severity.clone(),
-            line: diagnostic.line,
-            column: diagnostic.column,
-            message: diagnostic.message.clone(),
-        })
-        .collect())
 }
 
 #[cfg(test)]

@@ -30,6 +30,7 @@ use ruau::{
         classify_marshaled_table,
     },
 };
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tokio::{
     runtime::{Builder as RuntimeBuilder, Handle},
@@ -103,7 +104,7 @@ impl LuauFunctionId {
 }
 
 /// Recorded assertion outcome for a script evaluation.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ScriptAssertion {
     /// Whether the assertion passed.
     pub passed: bool,
@@ -112,7 +113,7 @@ pub struct ScriptAssertion {
 }
 
 /// Structured Luau typecheck diagnostic.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ScriptCheckDiagnostic {
     /// Diagnostic source name, when the diagnostic belongs to a named source.
     pub source: Option<String>,
@@ -168,6 +169,11 @@ impl ScriptCheckResult {
     /// Return all diagnostics.
     pub fn diagnostics(&self) -> &[ScriptCheckDiagnostic] {
         &self.diagnostics
+    }
+
+    /// Consume the result and return its diagnostics.
+    pub fn into_diagnostics(self) -> Vec<ScriptCheckDiagnostic> {
+        self.diagnostics
     }
 
     /// Return true when the result contains failing diagnostics.

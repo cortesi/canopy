@@ -161,7 +161,9 @@ the diagnostics. Checking is available
 unconditionally on every build target.
 
 Diagnostics use `error` or `warning` severities and carry a source name when Ruau associates them
-with a named source. Error diagnostics fail MCP evaluation before execution.
+with a named source. Error diagnostics fail MCP evaluation before execution. MCP evaluation
+reports `ScriptCheckDiagnostic` unchanged, so the `source` field travels with each diagnostic in
+the `diagnostics` array.
 
 Debug builds typecheck scripts before compiling them after API finalization. Release
 builds skip that enforcement.

@@ -4698,8 +4698,20 @@ pub mod canopy {
             pub message: String,
         }
 
+        impl JsonSchema for ScriptAssertion {
+            fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+            fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+            fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
+
+            fn inline_schema() -> bool {}
+        }
+
         /// Structured Luau typecheck diagnostic.
-        #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Eq, Display)]
+        #[derive(
+            Debug, Clone, StructuralPartialEq, PartialEq, Eq, Serialize, Deserialize, Display,
+        )]
         pub struct ScriptCheckDiagnostic {
             /// Diagnostic source name, when the diagnostic belongs to a named source.
             pub source: Option<String>,
@@ -4718,6 +4730,16 @@ pub mod canopy {
             pub fn is_error(&self) -> bool {}
         }
 
+        impl JsonSchema for ScriptCheckDiagnostic {
+            fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+            fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+            fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
+
+            fn inline_schema() -> bool {}
+        }
+
         /// Stable result returned by Luau typechecking APIs.
         #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Eq)]
         pub struct ScriptCheckResult {}
@@ -4731,6 +4753,9 @@ pub mod canopy {
 
             /// Return all diagnostics.
             pub fn diagnostics(&self) -> &[ScriptCheckDiagnostic] {}
+
+            /// Consume the result and return its diagnostics.
+            pub fn into_diagnostics(self) -> Vec<ScriptCheckDiagnostic> {}
 
             /// Return true when the result contains failing diagnostics.
             pub fn has_errors(&self) -> bool {}

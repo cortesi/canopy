@@ -645,7 +645,7 @@ Independent, low-risk, mostly deletions. Do these first.
   lock/ensure preamble repeated in five methods. This item owns the canopyctl file split.
   Proof: `canopyctl` unit tests pass; `cargo xtask smoke` passes. About −120 lines.
 
-- [ ] **5.3 canopy-mcp mirrors canopy types.** `canopy-mcp/src/script.rs:54-74`
+- [x] **5.3 canopy-mcp mirrors canopy types.** `canopy-mcp/src/script.rs:54-74`
   `ScriptDiagnostic` and `ScriptAssertion` mirror `canopy::script::ScriptCheckDiagnostic`
   (`script/mod.rs:106-119`) and `ScriptAssertion` (`:97-104`); canopy already depends on
   `schemars` and derives `JsonSchema` on `FixtureInfo`. Derive `Serialize`, `Deserialize`, and

@@ -74,8 +74,6 @@ pub mod canopy_mcp {
             },
             /// Serve the headless MCP automation server over stdio.
             HeadlessMcp,
-            /// Run a Luau smoke suite against fresh headless app instances.
-            Smoke(crate::SuiteConfig),
             /// Print the generated Luau API and exit.
             Api,
         }
@@ -91,8 +89,8 @@ pub mod canopy_mcp {
         /// Launch a Canopy app in the selected mode.
         ///
         /// The caller owns CLI parsing and app-specific configuration. This function
-        /// owns the repeated framework wiring: API output, headless MCP, smoke suites,
-        /// live MCP, and the terminal runloop.
+        /// owns the repeated framework wiring: API output, headless MCP, live MCP, and
+        /// the terminal runloop.
         pub fn launch(factory: crate::script::AppFactory, mode: LaunchMode) -> crate::Result<i32> {}
     }
 
@@ -121,48 +119,6 @@ pub mod canopy_mcp {
         }
 
         impl JsonSchema for ScriptEvalRequest {
-            fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-
-            fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-
-            fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
-
-            fn inline_schema() -> bool {}
-        }
-
-        /// Structured typecheck diagnostic returned by `script_eval`.
-        #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Eq, Serialize, Deserialize)]
-        pub struct ScriptDiagnostic {
-            /// Diagnostic severity such as `error` or `warning`.
-            pub severity: String,
-            /// One-based line number, or zero when the diagnostic is not source-bound.
-            pub line: usize,
-            /// One-based column number, or zero when the diagnostic is not source-bound.
-            pub column: usize,
-            /// Human-readable diagnostic message.
-            pub message: String,
-        }
-
-        impl JsonSchema for ScriptDiagnostic {
-            fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-
-            fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-
-            fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
-
-            fn inline_schema() -> bool {}
-        }
-
-        /// Assertion outcome recorded during script execution.
-        #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Eq, Serialize, Deserialize)]
-        pub struct ScriptAssertion {
-            /// Whether the assertion passed.
-            pub passed: bool,
-            /// Assertion message emitted by the runtime.
-            pub message: String,
-        }
-
-        impl JsonSchema for ScriptAssertion {
             fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
 
             fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
@@ -259,9 +215,9 @@ pub mod canopy_mcp {
             /// Log lines emitted during evaluation.
             pub logs: Vec<String>,
             /// Assertion outcomes recorded during evaluation.
-            pub assertions: Vec<ScriptAssertion>,
+            pub assertions: Vec<canopy::script::ScriptAssertion>,
             /// Typecheck diagnostics captured before execution.
-            pub diagnostics: Vec<ScriptDiagnostic>,
+            pub diagnostics: Vec<canopy::script::ScriptCheckDiagnostic>,
             /// Timing information for the request.
             pub timing: ScriptTiming,
             /// Error payload when evaluation fails.
@@ -276,7 +232,7 @@ pub mod canopy_mcp {
             pub fn error_only(
                 error_type: impl Into<String>,
                 message: impl Into<String>,
-                diagnostics: Vec<ScriptDiagnostic>,
+                diagnostics: Vec<ScriptCheckDiagnostic>,
                 timing: ScriptTiming,
             ) -> Self {
             }
@@ -610,8 +566,6 @@ pub mod canopy_mcp {
         },
         /// Serve the headless MCP automation server over stdio.
         HeadlessMcp,
-        /// Run a Luau smoke suite against fresh headless app instances.
-        Smoke(crate::SuiteConfig),
         /// Print the generated Luau API and exit.
         Api,
     }
@@ -627,8 +581,8 @@ pub mod canopy_mcp {
     /// Launch a Canopy app in the selected mode.
     ///
     /// The caller owns CLI parsing and app-specific configuration. This function
-    /// owns the repeated framework wiring: API output, headless MCP, smoke suites,
-    /// live MCP, and the terminal runloop.
+    /// owns the repeated framework wiring: API output, headless MCP, live MCP, and
+    /// the terminal runloop.
     pub fn launch(factory: crate::script::AppFactory, mode: LaunchMode) -> crate::Result<i32> {}
 
     /// Headless evaluator that creates a fresh canopy app instance for each request.
@@ -732,48 +686,6 @@ pub mod canopy_mcp {
         fn inline_schema() -> bool {}
     }
 
-    /// Assertion outcome recorded during script execution.
-    #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Eq, Serialize, Deserialize)]
-    pub struct ScriptAssertion {
-        /// Whether the assertion passed.
-        pub passed: bool,
-        /// Assertion message emitted by the runtime.
-        pub message: String,
-    }
-
-    impl JsonSchema for ScriptAssertion {
-        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-
-        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-
-        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
-
-        fn inline_schema() -> bool {}
-    }
-
-    /// Structured typecheck diagnostic returned by `script_eval`.
-    #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Eq, Serialize, Deserialize)]
-    pub struct ScriptDiagnostic {
-        /// Diagnostic severity such as `error` or `warning`.
-        pub severity: String,
-        /// One-based line number, or zero when the diagnostic is not source-bound.
-        pub line: usize,
-        /// One-based column number, or zero when the diagnostic is not source-bound.
-        pub column: usize,
-        /// Human-readable diagnostic message.
-        pub message: String,
-    }
-
-    impl JsonSchema for ScriptDiagnostic {
-        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-
-        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-
-        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
-
-        fn inline_schema() -> bool {}
-    }
-
     /// Error details included in a failed script evaluation.
     #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Serialize, Deserialize)]
     pub struct ScriptErrorInfo {
@@ -812,9 +724,9 @@ pub mod canopy_mcp {
         /// Log lines emitted during evaluation.
         pub logs: Vec<String>,
         /// Assertion outcomes recorded during evaluation.
-        pub assertions: Vec<ScriptAssertion>,
+        pub assertions: Vec<canopy::script::ScriptAssertion>,
         /// Typecheck diagnostics captured before execution.
-        pub diagnostics: Vec<ScriptDiagnostic>,
+        pub diagnostics: Vec<canopy::script::ScriptCheckDiagnostic>,
         /// Timing information for the request.
         pub timing: ScriptTiming,
         /// Error payload when evaluation fails.
@@ -829,7 +741,7 @@ pub mod canopy_mcp {
         pub fn error_only(
             error_type: impl Into<String>,
             message: impl Into<String>,
-            diagnostics: Vec<ScriptDiagnostic>,
+            diagnostics: Vec<ScriptCheckDiagnostic>,
             timing: ScriptTiming,
         ) -> Self {
         }

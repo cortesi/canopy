@@ -3,7 +3,8 @@
 use std::{fs, path::Path};
 
 use anyhow::{Context, Result, anyhow};
-use canopy_mcp::{ScriptAssertion, ScriptEvalOutcome};
+use canopy::script::ScriptAssertion;
+use canopy_mcp::ScriptEvalOutcome;
 use serde::{Deserialize, Serialize};
 
 /// JSON replay journal accepted by `canopyctl replay`.

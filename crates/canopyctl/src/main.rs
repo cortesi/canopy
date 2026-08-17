@@ -507,9 +507,8 @@ fn tool_error(error: impl Display) -> ToolError {
 
 #[cfg(test)]
 mod tests {
-    use crate::replay::ReplayInput;
-
     use super::*;
+    use crate::replay::ReplayInput;
 
     #[test]
     fn replay_input_accepts_object_journal() -> Result<()> {
