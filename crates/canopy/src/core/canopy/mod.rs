@@ -1353,10 +1353,6 @@ impl Canopy {
         let help_commands: Vec<super::help::HelpCommand<'_>> = command_avail
             .into_iter()
             .map(|avail| super::help::HelpCommand {
-                owner: match avail.spec.dispatch {
-                    commands::CommandDispatchKind::Free => None,
-                    commands::CommandDispatchKind::Node { owner } => Some(owner),
-                },
                 spec: avail.spec,
                 resolution: avail.resolution,
             })

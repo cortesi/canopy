@@ -5,7 +5,7 @@
 use std::cell::RefCell;
 
 // Re-export help types for convenience
-pub use canopy::help::{BindingKind, OwnedHelpBinding, OwnedHelpCommand, OwnedHelpSnapshot};
+pub use canopy::help::{BindingKind, OwnedHelpBinding, OwnedHelpSnapshot};
 use canopy::{
     Canopy, Context, EventOutcome, InputSpec, Loader, NodeId, ViewContext, Widget, command,
     derive_commands,

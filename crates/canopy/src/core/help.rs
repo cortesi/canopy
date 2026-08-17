@@ -45,19 +45,10 @@ pub struct HelpBinding<'a> {
 /// A command in the help snapshot.
 #[derive(Debug, Clone)]
 pub struct HelpCommand<'a> {
-    /// Owner type name (`None` for Free commands).
-    pub owner: Option<&'static str>,
     /// Command specification.
     pub spec: &'a CommandSpec,
     /// Resolution if the command has a target, or `None` if no target exists.
     pub resolution: Option<CommandResolution>,
-}
-
-impl<'a> HelpCommand<'a> {
-    /// Returns true if this command can be dispatched from the current context.
-    pub fn is_available(&self) -> bool {
-        self.resolution.is_some()
-    }
 }
 
 /// A contextual help snapshot combining bindings and commands.
@@ -75,68 +66,16 @@ pub struct HelpSnapshot<'a> {
     pub commands: Vec<HelpCommand<'a>>,
 }
 
-impl<'a> HelpSnapshot<'a> {
-    /// Return only bindings that would fire as pre-event overrides.
-    pub fn pre_event_bindings(&self) -> Vec<&HelpBinding<'a>> {
-        self.bindings
-            .iter()
-            .filter(|b| b.kind == BindingKind::PreEventOverride)
-            .collect()
-    }
-
-    /// Return only bindings that would fire as post-event fallbacks.
-    pub fn fallback_bindings(&self) -> Vec<&HelpBinding<'a>> {
-        self.bindings
-            .iter()
-            .filter(|b| b.kind == BindingKind::PostEventFallback)
-            .collect()
-    }
-
-    /// Return only commands that are currently available (have a target).
-    pub fn available_commands(&self) -> Vec<&HelpCommand<'a>> {
-        self.commands.iter().filter(|c| c.is_available()).collect()
-    }
-
-    /// Return only commands that are currently unavailable (no target).
-    pub fn unavailable_commands(&self) -> Vec<&HelpCommand<'a>> {
-        self.commands.iter().filter(|c| !c.is_available()).collect()
-    }
-
+impl HelpSnapshot<'_> {
     /// Convert to an owned version for storage.
     pub fn to_owned(&self) -> OwnedHelpSnapshot {
         let bindings = self
             .bindings
             .iter()
-            .map(|b| {
-                let path_match = PathMatcher::new(b.path_filter)
-                    .ok()
-                    .and_then(|matcher| matcher.check_match(&self.focus_path))
-                    .unwrap_or(PathMatch {
-                        literals: 0,
-                        depth: 0,
-                        anchored_end: false,
-                    });
-                OwnedHelpBinding {
-                    input: b.input,
-                    mode: b.mode.to_string(),
-                    path_filter: b.path_filter.to_string(),
-                    kind: b.kind,
-                    label: b.label.clone(),
-                    path_match,
-                }
-            })
-            .collect();
-
-        let commands = self
-            .commands
-            .iter()
-            .filter(|c| !c.spec.doc.hidden)
-            .map(|c| OwnedHelpCommand {
-                id: c.spec.id.0.to_string(),
-                owner: c.owner.map(|s| s.to_string()),
-                short: c.spec.doc.short.map(|s| s.to_string()),
-                resolution: c.resolution,
-                hidden: c.spec.doc.hidden,
+            .map(|b| OwnedHelpBinding {
+                input: b.input,
+                kind: b.kind,
+                label: b.label.clone(),
             })
             .collect();
 
@@ -144,7 +83,6 @@ impl<'a> HelpSnapshot<'a> {
             focus_path: self.focus_path.clone(),
             input_mode: self.input_mode.to_string(),
             bindings,
-            commands,
         }
     }
 }
@@ -163,45 +101,15 @@ pub fn binding_label(
 // Owned types for storage
 // ============================================================================
 
-use crate::path::{PathMatch, PathMatcher};
-
 /// Owned version of [`HelpBinding`] for storage without lifetimes.
 #[derive(Debug, Clone)]
 pub struct OwnedHelpBinding {
     /// The input (key or mouse) that triggers this binding.
     pub input: InputSpec,
-    /// The mode this binding belongs to.
-    pub mode: String,
-    /// The original path filter string.
-    pub path_filter: String,
     /// Classification of how this binding matched.
     pub kind: BindingKind,
-    /// Human-readable label derived from command docs or script source.
+    /// Human-readable label derived from the stored closure.
     pub label: String,
-    /// Match metadata for sorting.
-    pub path_match: PathMatch,
-}
-
-/// Owned version of [`HelpCommand`] for storage without lifetimes.
-#[derive(Debug, Clone)]
-pub struct OwnedHelpCommand {
-    /// Command identifier.
-    pub id: String,
-    /// Owner type name (None for Free commands).
-    pub owner: Option<String>,
-    /// Short description.
-    pub short: Option<String>,
-    /// Resolution if the command has a target.
-    pub resolution: Option<CommandResolution>,
-    /// Whether this command is hidden from help.
-    pub hidden: bool,
-}
-
-impl OwnedHelpCommand {
-    /// Returns true if this command can be dispatched from the current context.
-    pub fn is_available(&self) -> bool {
-        self.resolution.is_some()
-    }
 }
 
 /// Owned version of [`HelpSnapshot`] for storage without lifetimes.
@@ -213,6 +121,4 @@ pub struct OwnedHelpSnapshot {
     pub input_mode: String,
     /// Bindings that match the current context.
     pub bindings: Vec<OwnedHelpBinding>,
-    /// Commands with their availability status.
-    pub commands: Vec<OwnedHelpCommand>,
 }

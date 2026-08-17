@@ -4460,17 +4460,10 @@ pub mod canopy {
         /// A command in the help snapshot.
         #[derive(Debug, Clone)]
         pub struct HelpCommand<'a> {
-            /// Owner type name (`None` for Free commands).
-            pub owner: Option<&'static str>,
             /// Command specification.
             pub spec: &'a crate::commands::CommandSpec,
             /// Resolution if the command has a target, or `None` if no target exists.
             pub resolution: Option<crate::commands::CommandResolution>,
-        }
-
-        impl<'a> HelpCommand<'a> {
-            /// Returns true if this command can be dispatched from the current context.
-            pub fn is_available(&self) -> bool {}
         }
 
         /// A contextual help snapshot combining bindings and commands.
@@ -4488,19 +4481,7 @@ pub mod canopy {
             pub commands: Vec<HelpCommand<'a>>,
         }
 
-        impl<'a> HelpSnapshot<'a> {
-            /// Return only bindings that would fire as pre-event overrides.
-            pub fn pre_event_bindings(&self) -> Vec<&HelpBinding<'a>> {}
-
-            /// Return only bindings that would fire as post-event fallbacks.
-            pub fn fallback_bindings(&self) -> Vec<&HelpBinding<'a>> {}
-
-            /// Return only commands that are currently available (have a target).
-            pub fn available_commands(&self) -> Vec<&HelpCommand<'a>> {}
-
-            /// Return only commands that are currently unavailable (no target).
-            pub fn unavailable_commands(&self) -> Vec<&HelpCommand<'a>> {}
-
+        impl HelpSnapshot<'_> {
             /// Convert to an owned version for storage.
             pub fn to_owned(&self) -> OwnedHelpSnapshot {}
         }
@@ -4519,36 +4500,10 @@ pub mod canopy {
         pub struct OwnedHelpBinding {
             /// The input (key or mouse) that triggers this binding.
             pub input: crate::core::inputmap::InputSpec,
-            /// The mode this binding belongs to.
-            pub mode: String,
-            /// The original path filter string.
-            pub path_filter: String,
             /// Classification of how this binding matched.
             pub kind: BindingKind,
-            /// Human-readable label derived from command docs or script source.
+            /// Human-readable label derived from the stored closure.
             pub label: String,
-            /// Match metadata for sorting.
-            pub path_match: crate::path::PathMatch,
-        }
-
-        /// Owned version of [`HelpCommand`] for storage without lifetimes.
-        #[derive(Debug, Clone)]
-        pub struct OwnedHelpCommand {
-            /// Command identifier.
-            pub id: String,
-            /// Owner type name (None for Free commands).
-            pub owner: Option<String>,
-            /// Short description.
-            pub short: Option<String>,
-            /// Resolution if the command has a target.
-            pub resolution: Option<crate::commands::CommandResolution>,
-            /// Whether this command is hidden from help.
-            pub hidden: bool,
-        }
-
-        impl OwnedHelpCommand {
-            /// Returns true if this command can be dispatched from the current context.
-            pub fn is_available(&self) -> bool {}
         }
 
         /// Owned version of [`HelpSnapshot`] for storage without lifetimes.
@@ -4560,8 +4515,6 @@ pub mod canopy {
             pub input_mode: String,
             /// Bindings that match the current context.
             pub bindings: Vec<OwnedHelpBinding>,
-            /// Commands with their availability status.
-            pub commands: Vec<OwnedHelpCommand>,
         }
     }
 

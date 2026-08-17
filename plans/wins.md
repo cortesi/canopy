@@ -476,7 +476,7 @@ Independent, low-risk, mostly deletions. Do these first.
   async slot type. Use one struct with `handler: Sync(..) | Async(..)`, one table, one loop.
   About −50 lines.
 
-- [ ] **3.7 `help.rs` unused API.** `HelpCommand::is_available`, `pre_event_bindings`,
+- [x] **3.7 `help.rs` unused API.** `HelpCommand::is_available`, `pre_event_bindings`,
   `fallback_bindings`, `available_commands`, `unavailable_commands`, `OwnedHelpCommand`,
   `OwnedHelpSnapshot.commands`, `OwnedHelpBinding.{path_match, mode, path_filter}`, and
   `HelpCommand.owner` (duplicates `spec.dispatch`) have zero callers; the only consumer of the

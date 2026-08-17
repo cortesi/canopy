@@ -415,7 +415,6 @@ pub mod canopy_widgets {
 
         pub use canopy::help::BindingKind;
         pub use canopy::help::OwnedHelpBinding;
-        pub use canopy::help::OwnedHelpCommand;
         pub use canopy::help::OwnedHelpSnapshot;
         /// Help modal widget displaying contextual bindings and commands.
         #[derive(Default)]
