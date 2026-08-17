@@ -488,7 +488,9 @@ fn is_surface_header(line: &str, surface: &str) -> bool {
     };
     let head = head.trim_end();
     if let Some(ty) = head.strip_prefix("impl ") {
-        return ty.strip_prefix("super::").unwrap_or(ty) == surface;
+        // Ruskel renders an inherent impl under the path the type is defined at, which is
+        // longer than the re-export the budget names.
+        return ty.rsplit("::").next().unwrap_or(ty) == surface;
     }
     if let Some(ty) = head.strip_prefix("pub trait ") {
         return ty.split(':').next().unwrap_or(ty).trim() == surface;
@@ -658,6 +660,14 @@ pub mod canopy {
     impl Widget for Canopy {
         fn name(&self) -> NodeName {}
     }
+
+    pub mod editor {
+        pub struct Editor {}
+
+        impl super::editor::widget::Editor {
+            pub fn insert(&mut self) {}
+        }
+    }
 }
 ";
 
@@ -672,7 +682,12 @@ pub mod canopy {
     }
 
     #[test]
+    fn surface_count_follows_a_nested_definition_path() {
+        assert_eq!(surface_method_count(SKELETON, "Editor"), 1);
+    }
+
+    #[test]
     fn surface_count_ignores_an_unknown_surface() {
-        assert_eq!(surface_method_count(SKELETON, "Editor"), 0);
+        assert_eq!(surface_method_count(SKELETON, "Missing"), 0);
     }
 }

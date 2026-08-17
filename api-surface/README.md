@@ -38,9 +38,8 @@ not part of the surface. `cargo xtask api` prints the current counts.
 | `Context` | 48 | New mutations must replace or generalize an existing mutation. |
 | `Editor` | 24 | Keep editing policy on the editor and buffer mechanics on `TextBuffer`. |
 
-The small headroom on `Canopy` is for a demonstrated cross-cutting lifecycle operation, not for
-aliases. Exceeding a budget requires an explicit design note explaining why consolidation is not
-clearer.
+Headroom is for a demonstrated new capability, not for aliases. Exceeding a budget requires an
+explicit design note explaining why consolidation is not clearer.
 
 ## Crate budgets
 
@@ -71,8 +70,9 @@ run-loop policy and entry points.
 - `Canopy` remains the largest intent-level surface. Its methods fall into runtime, tree setup,
   scripting, fixtures, input modes, and diagnostics. Keep those groups visible in future reviews;
   do not add root/local aliases or expose storage to shorten callers.
-- `Context` and `ViewContext` are at their budgets. Extension behavior should be default methods or
-  free helpers only when it composes existing primitives and does not create another synonym.
+- `Context` and `ViewContext` sit just under their budgets. Extension behavior should be default
+  methods or free helpers only when it composes existing primitives and does not create another
+  synonym.
 - `canopy::commands::declaration` is an intentional narrow Ruau declaration seam required by
   generated command implementations. Native-module registration names the Ruau trait in one method
   but no longer re-exports the embedding namespaces.
