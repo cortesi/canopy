@@ -837,7 +837,7 @@ pub(super) fn constraint_for_axis(
 }
 
 /// Clamp a scroll offset so it stays within view/canvas bounds.
-pub(super) fn clamp_scroll(scroll: &mut Point, view: Size<u32>, canvas: Size<u32>) {
+pub(crate) fn clamp_scroll(scroll: &mut Point, view: Size<u32>, canvas: Size<u32>) {
     let max_x = if view.w == 0 {
         0
     } else {

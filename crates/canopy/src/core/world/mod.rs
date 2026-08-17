@@ -36,7 +36,7 @@ mod dispatch;
 /// Focus and mouse-capture management.
 mod focus;
 /// Layout traversal, measurement, and hit-testing.
-mod layout_driver;
+pub(crate) mod layout_driver;
 #[cfg(test)]
 mod tests;
 /// Arena mutation, structural invariants, and path helpers.

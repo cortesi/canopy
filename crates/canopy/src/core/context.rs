@@ -11,14 +11,14 @@ use super::{
     id::{NodeId, TypedId},
     style::Effect,
     view::View,
-    world::Core,
+    world::{Core, layout_driver::clamp_scroll},
 };
 use crate::{
     ChangeOutcome,
     commands::{ArgValue, CommandError, CommandInvocation, CommandScopeFrame, ListRowContext},
     error::{Error, Result},
     event::{Event, mouse::MouseEvent},
-    geom::{Direction, Point, Rect, Size},
+    geom::{Direction, Point, Rect},
     layout::Layout,
     path::{Path, PathFilter},
     style::StyleMap,
@@ -499,22 +499,6 @@ impl dyn ViewContext + '_ {
         self.preorder(root)
             .find(|id| ViewContext::children_of(self, *id).is_empty())
     }
-}
-
-/// Clamp a scroll offset so it stays within the view/canvas bounds.
-fn clamp_scroll_offset(scroll: &mut Point, view: Size, canvas: Size) {
-    let max_x = if view.w == 0 {
-        0
-    } else {
-        canvas.w.saturating_sub(view.w)
-    };
-    let max_y = if view.h == 0 {
-        0
-    } else {
-        canvas.h.saturating_sub(view.h)
-    };
-    scroll.x = scroll.x.min(max_x);
-    scroll.y = scroll.y.min(max_y);
 }
 
 /// Subtree used by a focus traversal operation.
@@ -1033,7 +1017,7 @@ impl Context for NodeCtx<&mut Core> {
         if let Some(node) = node {
             let before = node.scroll;
             node.scroll = Point { x, y };
-            clamp_scroll_offset(&mut node.scroll, node.content_size, node.canvas);
+            clamp_scroll(&mut node.scroll, node.content_size, node.canvas);
             before != node.scroll
         } else {
             false
@@ -1045,7 +1029,7 @@ impl Context for NodeCtx<&mut Core> {
         if let Some(node) = node {
             let before = node.scroll;
             node.scroll = node.scroll.scroll(x, y);
-            clamp_scroll_offset(&mut node.scroll, node.content_size, node.canvas);
+            clamp_scroll(&mut node.scroll, node.content_size, node.canvas);
             before != node.scroll
         } else {
             false
