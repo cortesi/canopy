@@ -669,7 +669,7 @@ Independent, low-risk, mostly deletions. Do these first.
   tests, the `loom` dev-dep in both crates, and the `test(loom_)` step in `xtask dynamic` (do all
   three together; nextest fails on an empty filter). About −100 lines.
 
-- [ ] **6.2 One integration-test binary for canopy.** `crates/canopy/tests/` has 15 files
+- [x] **6.2 One integration-test binary for canopy.** `crates/canopy/tests/` has 15 files
   (3,419 lines, 67 tests), each linking the Luau-bearing lib (~39 MB per binary). Cargo treats
   every `tests/*.rs` file as its own integration crate, so the single root must be one file with
   its modules in a subdirectory: create `tests/it.rs` containing only `mod` declarations, and

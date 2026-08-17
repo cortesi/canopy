@@ -1,4 +1,4 @@
-//! Integration tests for view scrolling.
+//! Viewport scrolling integration tests.
 
 #[cfg(test)]
 mod tests {

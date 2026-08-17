@@ -1,4 +1,4 @@
-//! Repository-gate checks for Canopy's tracked Luau declarations.
+//! Tracked Luau source typecheck test.
 
 #[cfg(test)]
 mod tests {

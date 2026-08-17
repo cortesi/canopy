@@ -1,11 +1,11 @@
-//! Integration tests for tree traversal.
+//! Tree traversal and hit-testing integration tests.
 
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, FocusScope, NodeId, ViewContext, Widget, derive_commands,
+        Canopy, NodeId, ViewContext, Widget, derive_commands,
         error::{Error, Result},
-        geom::{Direction, Point, Size},
+        geom::{Point, Size},
         path::Path,
         render::Render,
         state::NodeName,
@@ -303,27 +303,6 @@ mod tests {
         })
     }
 
-    fn focused_name(canopy: &Canopy) -> Option<String> {
-        canopy.with_root_view(|context| {
-            let root = context.root_id();
-            context
-                .focused_leaf(root)
-                .map(|node| node_name(context, root, node))
-        })
-    }
-
-    fn focus_first(canopy: &mut Canopy, root: NodeId) -> Result<()> {
-        canopy.with_root_context(|context| context.focus_first(FocusScope::Node(root)).map(|_| ()))
-    }
-
-    fn focus_dir(canopy: &mut Canopy, root: NodeId, direction: Direction) -> Result<()> {
-        canopy.with_root_context(|context| {
-            context
-                .focus_dir(FocusScope::Node(root), direction)
-                .map(|_| ())
-        })
-    }
-
     #[test]
     fn test_locate_single_cell_grid() -> Result<()> {
         let mut canopy = Canopy::new();
@@ -432,29 +411,6 @@ mod tests {
 
         let result = locate_name(&canopy, grid.root, Point { x: 100, y: 100 })?;
         assert_eq!(result, None);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_focus_dir_navigation() -> Result<()> {
-        let mut canopy = Canopy::new();
-        let grid = Grid::install(&mut canopy, 1, 2)?;
-
-        focus_first(&mut canopy, grid.root)?;
-        assert_eq!(focused_name(&canopy), Some("cell_0_0".to_string()));
-
-        focus_dir(&mut canopy, grid.root, Direction::Right)?;
-        assert_eq!(focused_name(&canopy), Some("cell_1_0".to_string()));
-
-        focus_dir(&mut canopy, grid.root, Direction::Down)?;
-        assert_eq!(focused_name(&canopy), Some("cell_1_1".to_string()));
-
-        focus_dir(&mut canopy, grid.root, Direction::Left)?;
-        assert_eq!(focused_name(&canopy), Some("cell_0_1".to_string()));
-
-        focus_dir(&mut canopy, grid.root, Direction::Up)?;
-        assert_eq!(focused_name(&canopy), Some("cell_0_0".to_string()));
 
         Ok(())
     }

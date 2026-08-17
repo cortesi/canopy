@@ -1,4 +1,4 @@
-//! Integration tests for node rendering.
+//! Node render integration tests.
 
 #[cfg(test)]
 mod tests {

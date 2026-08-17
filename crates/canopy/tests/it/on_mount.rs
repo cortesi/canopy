@@ -1,4 +1,4 @@
-//! Integration tests for widget mount hooks.
+//! Mount hook integration tests.
 
 #[cfg(test)]
 mod tests {

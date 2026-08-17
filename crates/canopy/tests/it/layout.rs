@@ -1,4 +1,4 @@
-//! Integration tests for layout behavior.
+//! Layout integration tests.
 
 #[cfg(test)]
 mod tests {

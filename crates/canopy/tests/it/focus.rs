@@ -1,9 +1,9 @@
-//! Integration tests for focus behavior.
+//! Focus traversal integration tests.
 
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, FocusScope, NodeId, ViewContext, Widget,
+        Canopy, ViewContext, Widget,
         commands::{CommandNode, CommandSpec},
         error::{Error, Result},
         geom::{Direction, Size},
@@ -12,6 +12,8 @@ mod tests {
         state::NodeName,
         testing::grid::Grid,
     };
+
+    use crate::common::{focus_dir, focus_first, focused_cell};
 
     struct FocusLeaf {
         name: &'static str,
@@ -43,33 +45,12 @@ mod tests {
         }
     }
 
-    fn get_focused_cell(canopy: &Canopy) -> Option<String> {
-        canopy.with_root_view(|context| {
-            let root = context.root_id();
-            let focused = context.focused_leaf(root)?;
-            let mut path = context.node_path(root, focused);
-            path.pop().filter(|name| name.starts_with("cell_"))
-        })
-    }
-
-    fn focus_first(canopy: &mut Canopy, root: NodeId) -> Result<()> {
-        canopy.with_root_context(|context| context.focus_first(FocusScope::Node(root)).map(|_| ()))
-    }
-
-    fn focus_dir(canopy: &mut Canopy, root: NodeId, direction: Direction) -> Result<()> {
-        canopy.with_root_context(|context| {
-            context
-                .focus_dir(FocusScope::Node(root), direction)
-                .map(|_| ())
-        })
-    }
-
     fn test_snake_navigation(grid: &Grid, canopy: &mut Canopy) -> Result<()> {
         let (grid_width, grid_height) = grid.dimensions();
         let total_cells = grid_width * grid_height;
 
         focus_first(canopy, grid.root)?;
-        let initial = get_focused_cell(canopy);
+        let initial = focused_cell(canopy);
         if initial != Some("cell_0_0".to_string()) {
             return Err(Error::Invariant(format!(
                 "Expected to start at cell_0_0, but started at {initial:?}"
@@ -82,7 +63,7 @@ mod tests {
         for row in 0..grid_height {
             if row % 2 == 0 {
                 for col in 0..grid_width {
-                    let cell = get_focused_cell(canopy);
+                    let cell = focused_cell(canopy);
                     let expected_cell = format!("cell_{col}_{row}");
 
                     match &cell {
@@ -103,9 +84,9 @@ mod tests {
                     }
 
                     if col < grid_width - 1 {
-                        let before = get_focused_cell(canopy);
+                        let before = focused_cell(canopy);
                         focus_dir(canopy, grid.root, Direction::Right)?;
-                        let after = get_focused_cell(canopy);
+                        let after = focused_cell(canopy);
 
                         if before == after {
                             return Err(Error::Invariant(format!(
@@ -116,7 +97,7 @@ mod tests {
                 }
             } else {
                 for col in (0..grid_width).rev() {
-                    let cell = get_focused_cell(canopy);
+                    let cell = focused_cell(canopy);
                     let expected_cell = format!("cell_{col}_{row}");
 
                     match &cell {
@@ -137,9 +118,9 @@ mod tests {
                     }
 
                     if col > 0 {
-                        let before = get_focused_cell(canopy);
+                        let before = focused_cell(canopy);
                         focus_dir(canopy, grid.root, Direction::Left)?;
-                        let after = get_focused_cell(canopy);
+                        let after = focused_cell(canopy);
 
                         if before == after {
                             return Err(Error::Invariant(format!(
@@ -151,9 +132,9 @@ mod tests {
             }
 
             if row < grid_height - 1 {
-                let before = get_focused_cell(canopy);
+                let before = focused_cell(canopy);
                 focus_dir(canopy, grid.root, Direction::Down)?;
-                let after = get_focused_cell(canopy);
+                let after = focused_cell(canopy);
 
                 if before == after {
                     return Err(Error::Invariant(format!(
@@ -191,19 +172,19 @@ mod tests {
         assert_eq!(grid_size, Size::new(20, 20));
 
         focus_first(&mut canopy, grid.root)?;
-        assert_eq!(get_focused_cell(&canopy), Some("cell_0_0".to_string()));
+        assert_eq!(focused_cell(&canopy), Some("cell_0_0".to_string()));
 
         focus_dir(&mut canopy, grid.root, Direction::Right)?;
-        assert_eq!(get_focused_cell(&canopy), Some("cell_1_0".to_string()));
+        assert_eq!(focused_cell(&canopy), Some("cell_1_0".to_string()));
 
         focus_dir(&mut canopy, grid.root, Direction::Down)?;
-        assert_eq!(get_focused_cell(&canopy), Some("cell_1_1".to_string()));
+        assert_eq!(focused_cell(&canopy), Some("cell_1_1".to_string()));
 
         focus_dir(&mut canopy, grid.root, Direction::Left)?;
-        assert_eq!(get_focused_cell(&canopy), Some("cell_0_1".to_string()));
+        assert_eq!(focused_cell(&canopy), Some("cell_0_1".to_string()));
 
         focus_dir(&mut canopy, grid.root, Direction::Up)?;
-        assert_eq!(get_focused_cell(&canopy), Some("cell_0_0".to_string()));
+        assert_eq!(focused_cell(&canopy), Some("cell_0_0".to_string()));
 
         Ok(())
     }
