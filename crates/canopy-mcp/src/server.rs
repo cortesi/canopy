@@ -20,7 +20,7 @@ use crate::{
 };
 
 /// Build an MCP tool result with structured and text JSON payloads.
-fn json_tool_result(value: &serde_json::Value) -> CallToolResult {
+pub fn json_tool_result(value: &serde_json::Value) -> CallToolResult {
     CallToolResult::new()
         .with_structured_content(value.clone())
         .with_text_content(value.to_string())

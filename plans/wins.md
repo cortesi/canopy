@@ -623,7 +623,7 @@ Independent, low-risk, mostly deletions. Do these first.
   Proof: `cargo run --example demo -- --help` lists all 13 demos; each demo's `--api` output is
   unchanged from the old binary. About −600 lines.
 
-- [ ] **5.2 canopyctl reuses canopy-mcp.** `crates/canopyctl/src/main.rs` re-implements the
+- [x] **5.2 canopyctl reuses canopy-mcp.** `crates/canopyctl/src/main.rs` re-implements the
   smoke discovery in `crates/canopy-mcp/src/smoke.rs` with two small semantic differences that
   the merge must settle: `collect_smoke_scripts` (`main.rs:1065-1090`) preserves the order of an
   explicit script list and sorts only discovered files, while `discover_scripts`

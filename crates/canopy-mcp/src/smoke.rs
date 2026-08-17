@@ -1,6 +1,6 @@
 use std::{
     fs,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
 };
 
 use canopy::Canopy;
@@ -126,19 +126,28 @@ pub fn run_suite(
 }
 
 /// Derive a fixture name from the first path component under the suite root.
-fn fixture_for_script(suite_dir: &Path, script: &Path) -> Option<String> {
+///
+/// Only a normal component names a fixture; a root, prefix, or `..` component does not.
+pub fn fixture_for_script(suite_dir: &Path, script: &Path) -> Option<String> {
     let relative = script.strip_prefix(suite_dir).ok()?;
     let mut components = relative.components();
     let first = components.next()?;
     components.next()?;
-    Some(first.as_os_str().to_string_lossy().to_string())
+    match first {
+        Component::Normal(name) => Some(name.to_string_lossy().to_string()),
+        _ => None,
+    }
 }
 
 /// Resolve the ordered list of smoke scripts for a suite run.
-fn discover_scripts(config: &SuiteConfig) -> Result<Vec<PathBuf>> {
-    let mut scripts = if config.scripts.is_empty() {
+///
+/// An explicit script list keeps its given order, because that order decides which script a
+/// fail-fast run stops on. Discovered files are sorted so a directory walk is reproducible.
+pub fn discover_scripts(config: &SuiteConfig) -> Result<Vec<PathBuf>> {
+    let scripts = if config.scripts.is_empty() {
         let mut discovered = Vec::new();
         collect_luau_scripts(&config.suite_dir, &mut discovered)?;
+        discovered.sort();
         discovered
     } else {
         config
@@ -153,7 +162,6 @@ fn discover_scripts(config: &SuiteConfig) -> Result<Vec<PathBuf>> {
             })
             .collect()
     };
-    scripts.sort();
     if scripts.is_empty() {
         return Err(Error::NoScripts(config.suite_dir.clone()));
     }
@@ -161,7 +169,7 @@ fn discover_scripts(config: &SuiteConfig) -> Result<Vec<PathBuf>> {
 }
 
 /// Recursively collect `.luau` scripts under a directory.
-fn collect_luau_scripts(root: &Path, output: &mut Vec<PathBuf>) -> Result<()> {
+pub fn collect_luau_scripts(root: &Path, output: &mut Vec<PathBuf>) -> Result<()> {
     for entry in fs::read_dir(root)? {
         let entry = entry?;
         let path = entry.path();
@@ -194,14 +202,8 @@ mod tests {
         env::temp_dir().join(format!("canopy-smoke-{name}-{stamp}"))
     }
 
-    #[test]
-    fn discover_scripts_recurses_and_sorts() -> Result<()> {
-        let root = unique_dir("discover");
-        fs::create_dir_all(root.join("nested"))?;
-        fs::write(root.join("b.luau"), "return true")?;
-        fs::write(root.join("nested").join("a.luau"), "return true")?;
-        let paths = discover_scripts(&SuiteConfig::new(&root))?;
-        let names = paths
+    fn file_names(paths: &[PathBuf]) -> Vec<String> {
+        paths
             .iter()
             .map(|path| {
                 path.file_name()
@@ -209,8 +211,57 @@ mod tests {
                     .expect("file name")
                     .to_string()
             })
-            .collect::<Vec<_>>();
-        assert_eq!(names, vec!["b.luau".to_string(), "a.luau".to_string()]);
+            .collect()
+    }
+
+    #[test]
+    fn discover_scripts_recurses_and_sorts() -> Result<()> {
+        let root = unique_dir("discover");
+        fs::create_dir_all(root.join("nested"))?;
+        fs::write(root.join("b.luau"), "return true")?;
+        fs::write(root.join("nested").join("a.luau"), "return true")?;
+        let paths = discover_scripts(&SuiteConfig::new(&root))?;
+        assert_eq!(
+            file_names(&paths),
+            vec!["b.luau".to_string(), "a.luau".to_string()]
+        );
         Ok(())
+    }
+
+    #[test]
+    fn explicit_scripts_keep_their_given_order() -> Result<()> {
+        let root = unique_dir("explicit");
+        fs::create_dir_all(&root)?;
+        let mut config = SuiteConfig::new(&root);
+        config.scripts = vec![PathBuf::from("z.luau"), PathBuf::from("a.luau")];
+        let paths = discover_scripts(&config)?;
+        assert_eq!(
+            file_names(&paths),
+            vec!["z.luau".to_string(), "a.luau".to_string()]
+        );
+        assert_eq!(paths[0], root.join("z.luau"));
+        Ok(())
+    }
+
+    #[test]
+    fn fixture_is_the_first_normal_component() {
+        let suite = Path::new("/tmp/smoke");
+        assert_eq!(
+            fixture_for_script(suite, Path::new("/tmp/smoke/with_items/navigation.luau")),
+            Some("with_items".to_string())
+        );
+        assert_eq!(
+            fixture_for_script(suite, Path::new("/tmp/smoke/bootstrap.luau")),
+            None
+        );
+    }
+
+    #[test]
+    fn a_parent_component_does_not_name_a_fixture() {
+        let suite = Path::new("smoke");
+        assert_eq!(
+            fixture_for_script(suite, Path::new("smoke/../outside/navigation.luau")),
+            None
+        );
     }
 }

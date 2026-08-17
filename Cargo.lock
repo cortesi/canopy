@@ -489,6 +489,7 @@ name = "canopyctl"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "canopy",
  "canopy-mcp",
  "clap",
  "serde",

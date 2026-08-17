@@ -110,7 +110,7 @@ pub mod canopy_mcp {
         }
 
         /// Request payload for the `script_eval` tool.
-        #[derive(Deserialize, Debug, Clone, StructuralPartialEq, PartialEq)]
+        #[derive(Deserialize, Debug, Clone, StructuralPartialEq, PartialEq, Serialize)]
         pub struct ScriptEvalRequest {
             /// Luau source code to execute.
             pub script: String,
@@ -410,6 +410,9 @@ pub mod canopy_mcp {
     pub mod server {
         //! Stdio MCP server wrapper for script automation.
 
+        /// Build an MCP tool result with structured and text JSON payloads.
+        pub fn json_tool_result(value: &serde_json::Value) -> tmcp::schema::CallToolResult {}
+
         /// Request payload for applying a named fixture to a live app.
         #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Eq, Deserialize, Serialize)]
         pub struct ApplyFixtureRequest {
@@ -519,6 +522,28 @@ pub mod canopy_mcp {
             factory: impl Fn() -> crate::Result<canopy::Canopy> + Send + Sync + 'static,
             config: &SuiteConfig,
         ) -> crate::Result<SuiteResult> {
+        }
+
+        /// Derive a fixture name from the first path component under the suite root.
+        ///
+        /// Only a normal component names a fixture; a root, prefix, or `..` component does not.
+        pub fn fixture_for_script(
+            suite_dir: &std::path::Path,
+            script: &std::path::Path,
+        ) -> Option<String> {
+        }
+
+        /// Resolve the ordered list of smoke scripts for a suite run.
+        ///
+        /// An explicit script list keeps its given order, because that order decides which script a
+        /// fail-fast run stops on. Discovered files are sorted so a directory walk is reproducible.
+        pub fn discover_scripts(config: &SuiteConfig) -> crate::Result<Vec<std::path::PathBuf>> {}
+
+        /// Recursively collect `.luau` scripts under a directory.
+        pub fn collect_luau_scripts(
+            root: &std::path::Path,
+            output: &mut Vec<std::path::PathBuf>,
+        ) -> crate::Result<()> {
         }
     }
 
@@ -821,7 +846,7 @@ pub mod canopy_mcp {
     }
 
     /// Request payload for the `script_eval` tool.
-    #[derive(Deserialize, Debug, Clone, StructuralPartialEq, PartialEq)]
+    #[derive(Deserialize, Debug, Clone, StructuralPartialEq, PartialEq, Serialize)]
     pub struct ScriptEvalRequest {
         /// Luau source code to execute.
         pub script: String,
@@ -930,6 +955,9 @@ pub mod canopy_mcp {
         fn drop(&mut self) {}
     }
 
+    /// Build an MCP tool result with structured and text JSON payloads.
+    pub fn json_tool_result(value: &serde_json::Value) -> tmcp::schema::CallToolResult {}
+
     /// Serve `script_eval` and `script_api` over stdio for an app factory.
     pub fn serve_stdio(
         factory: impl Fn() -> crate::Result<canopy::Canopy> + Send + Sync + 'static,
@@ -997,6 +1025,21 @@ pub mod canopy_mcp {
     impl SuiteResult {
         /// Return true when all smoke scripts passed.
         pub fn success(&self) -> bool {}
+    }
+
+    /// Resolve the ordered list of smoke scripts for a suite run.
+    ///
+    /// An explicit script list keeps its given order, because that order decides which script a
+    /// fail-fast run stops on. Discovered files are sorted so a directory walk is reproducible.
+    pub fn discover_scripts(config: &SuiteConfig) -> crate::Result<Vec<std::path::PathBuf>> {}
+
+    /// Derive a fixture name from the first path component under the suite root.
+    ///
+    /// Only a normal component names a fixture; a root, prefix, or `..` component does not.
+    pub fn fixture_for_script(
+        suite_dir: &std::path::Path,
+        script: &std::path::Path,
+    ) -> Option<String> {
     }
 
     /// Run a smoke suite against fresh headless app instances.

@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+canopy = { path = "../canopy" }
 canopy-mcp = { version = "0.1.0", path = "../canopy-mcp" }
 clap.workspace = true
 serde.workspace = true

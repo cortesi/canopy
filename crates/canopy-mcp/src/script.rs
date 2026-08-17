@@ -38,7 +38,7 @@ canopy.screen_cells(), canopy.route_trace(), and canopy.script_journal(), and sh
 command calls over coordinate input when possible.";
 
 /// Request payload for the `script_eval` tool.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[tool_params]
 pub struct ScriptEvalRequest {
     /// Luau source code to execute.

@@ -21,5 +21,8 @@ pub use script::{
     ScriptDiagnostic, ScriptErrorInfo, ScriptEvalOutcome, ScriptEvalRequest, ScriptTaskState,
     ScriptTiming, app_factory, evaluate_live,
 };
-pub use server::{ApplyFixtureRequest, UdsServerHandle, serve_stdio, serve_uds};
-pub use smoke::{ScriptResult, ScriptStatus, SuiteConfig, SuiteResult, run_suite};
+pub use server::{ApplyFixtureRequest, UdsServerHandle, json_tool_result, serve_stdio, serve_uds};
+pub use smoke::{
+    ScriptResult, ScriptStatus, SuiteConfig, SuiteResult, discover_scripts, fixture_for_script,
+    run_suite,
+};
