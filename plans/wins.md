@@ -375,7 +375,7 @@ Independent, low-risk, mostly deletions. Do these first.
   Rename the new tuple accessor `rgb()` only after the parser is gone so the two do not collide.
   About −75 lines.
 
-- [ ] **2.11 Effects catalogue.** `dim` and `brighten` (`style/effects.rs:70-78`) are the same
+- [x] **2.11 Effects catalogue.** `dim` and `brighten` (`style/effects.rs:70-78`) are the same
   `ScaleBrightness(f)`; keep one `brightness(f)` and update the callers. `swap_fg_bg`, `tint`,
   `underline`, `attr_dim`, `set_attrs`, `clear_attrs`, and the structs behind them have zero
   callers; delete them (re-add on demand). About −60 lines.

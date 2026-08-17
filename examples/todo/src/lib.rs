@@ -235,7 +235,7 @@ impl Todo {
 
         if self.adder_active {
             self.ensure_modal(c)?;
-            c.push_effect(main_content_node, effects::dim(0.5))?;
+            c.push_effect(main_content_node, effects::brightness(0.5))?;
             c.with_child::<ModalSlot, _>(|_, ctx| {
                 ctx.set_hidden(false)?;
                 Ok(())

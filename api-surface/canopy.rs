@@ -5031,8 +5031,6 @@ pub mod canopy {
                 Saturation(f32),
                 /// Invert RGB channels.
                 Invert,
-                /// Blend toward a target color.
-                Tint(super::Color, f32),
                 /// Shift hue by degrees.
                 HueShift(f32),
             }
@@ -5041,31 +5039,14 @@ pub mod canopy {
                 fn apply(&self, style: Style) -> Style {}
             }
 
-            /// Create a dim effect. Factor 0.0-1.0 dims, >1.0 brightens.
-            pub fn dim(factor: f32) -> Effect {}
-
-            /// Create a brighten effect. Factor > 1.0 brightens.
-            pub fn brighten(factor: f32) -> Effect {}
+            /// Create a brightness effect. Factor below 1.0 dims, above 1.0 brightens.
+            pub fn brightness(factor: f32) -> Effect {}
 
             /// Create a saturation effect. 0.0 = grayscale, 1.0 = unchanged.
             pub fn saturation(factor: f32) -> Effect {}
 
             /// Create an effect that inverts RGB channels (255-value).
             pub fn invert_rgb() -> Effect {}
-
-            /// Swap foreground and background colors.
-            #[derive(Debug, Clone, Copy)]
-            pub struct SwapFgBg;
-
-            impl StyleEffect for SwapFgBg {
-                fn apply(&self, style: Style) -> Style {}
-            }
-
-            /// Create an effect that swaps foreground and background colors.
-            pub fn swap_fg_bg() -> Effect {}
-
-            /// Create a tint effect that blends colors toward a target.
-            pub fn tint(color: super::Color, ratio: f32) -> Effect {}
 
             /// Create a hue shift effect.
             pub fn hue_shift(degrees: f32) -> Effect {}
@@ -5083,34 +5064,6 @@ pub mod canopy {
 
             /// Create an effect that adds italic attribute.
             pub fn italic() -> Effect {}
-
-            /// Create an effect that adds underline attribute.
-            pub fn underline() -> Effect {}
-
-            /// Create an effect that adds the terminal dim attribute.
-            pub fn attr_dim() -> Effect {}
-
-            /// Replace the entire attribute set.
-            #[derive(Debug, Clone, Copy)]
-            pub struct SetAttrs(pub super::AttrSet);
-
-            impl StyleEffect for SetAttrs {
-                fn apply(&self, style: Style) -> Style {}
-            }
-
-            /// Create an effect that replaces all attributes.
-            pub fn set_attrs(attrs: super::AttrSet) -> Effect {}
-
-            /// Clear all attributes.
-            #[derive(Debug, Clone, Copy)]
-            pub struct ClearAttrs;
-
-            impl StyleEffect for ClearAttrs {
-                fn apply(&self, style: Style) -> Style {}
-            }
-
-            /// Create an effect that clears all attributes.
-            pub fn clear_attrs() -> Effect {}
         }
 
         pub mod gruvbox {

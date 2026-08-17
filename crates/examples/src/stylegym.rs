@@ -308,7 +308,7 @@ impl Stylegym {
 
         // Dim the demo content
         self.with_demo_content(c, |_content, ctx| {
-            ctx.push_effect(ctx.node_id(), effects::dim(0.5))
+            ctx.push_effect(ctx.node_id(), effects::brightness(0.5))
         })?;
 
         Ok(())
@@ -373,8 +373,8 @@ impl Stylegym {
             for idx in selected_indices {
                 if let Some(effect_option) = effect_list.get(idx) {
                     let effect = match effect_option.name {
-                        "Dim" => effects::dim(0.5),
-                        "Brighten" => effects::brighten(1.5),
+                        "Dim" => effects::brightness(0.5),
+                        "Brighten" => effects::brightness(1.5),
                         "Grayscale" => effects::saturation(0.0),
                         "Invert" => effects::invert_rgb(),
                         "Hue Shift" => effects::hue_shift(180.0),

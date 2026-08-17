@@ -86,7 +86,7 @@ impl Root {
 
         // Dim effect on main pane when help is visible
         if self.help_active {
-            c.push_effect(main_pane, effects::dim(0.5))?;
+            c.push_effect(main_pane, effects::brightness(0.5))?;
         } else {
             c.clear_effects(main_pane)?;
         }
