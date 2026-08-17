@@ -18,7 +18,7 @@ use canopy_mcp::{
 };
 use clap::{Args, Parser, Subcommand};
 use serde::{Deserialize, Serialize};
-use tmcp::{Client, ToolError, ToolResult, mcp_server, schema::CallToolResult, tool, tool_params};
+use tmcp::{Client, ToolError, ToolResult, mcp_server, schema::CallToolResult, tool_params};
 use tokio::{
     net::UnixStream,
     process::{Child, Command},

@@ -8,7 +8,7 @@ use std::{
 use canopy::{AutomationHandle, Canopy, error::Error as CanopyError};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tmcp::{Server, ToolError, ToolResult, mcp_server, schema::CallToolResult, tool};
+use tmcp::{Server, ToolError, ToolResult, mcp_server, schema::CallToolResult};
 use tokio::{net::UnixListener, runtime::Builder, sync::oneshot, task::block_in_place};
 
 use crate::{
