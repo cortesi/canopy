@@ -13,7 +13,7 @@ pub mod solarized;
 
 use std::collections::HashMap;
 
-pub use color::Color;
+pub use color::{Color, hex_byte};
 pub use effects::{Effect, StyleEffect};
 pub use palette::{Palette, theme};
 

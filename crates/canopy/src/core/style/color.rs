@@ -48,34 +48,36 @@ pub enum Color {
     AnsiValue(u8),
 }
 
-/// Macro to create a Color from a hex string at compile time
+/// Parse one hex byte from its two digits.
+///
+/// This supports the [`rgb!`](crate::rgb) macro and is not part of the stable surface.
+#[doc(hidden)]
+pub const fn hex_byte(high: u8, low: u8) -> u8 {
+    const fn digit(c: u8) -> u8 {
+        match c {
+            b'0'..=b'9' => c - b'0',
+            b'a'..=b'f' => c - b'a' + 10,
+            b'A'..=b'F' => c - b'A' + 10,
+            _ => panic!("invalid hex colour digit"),
+        }
+    }
+    digit(high) * 16 + digit(low)
+}
+
+/// Build a [`Color`](crate::style::Color) from a `#RRGGBB` or `RRGGBB` literal at compile time.
 #[macro_export]
 macro_rules! rgb {
     ($hex:literal) => {{
-        const fn hex_char_to_num(c: u8) -> u8 {
-            match c {
-                b'0'..=b'9' => c - b'0',
-                b'a'..=b'f' => c - b'a' + 10,
-                b'A'..=b'F' => c - b'A' + 10,
-                _ => panic!("Invalid hex character"),
-            }
-        }
-
-        const fn parse_hex_byte(high: u8, low: u8) -> u8 {
-            hex_char_to_num(high) * 16 + hex_char_to_num(low)
-        }
-
-        let bytes = $hex.as_bytes();
-        let start = if bytes[0] == b'#' { 1 } else { 0 };
-
-        if bytes.len() - start != 6 {
-            panic!("Invalid hex color: must be 6 hex digits");
-        }
-
-        Color::Rgb {
-            r: parse_hex_byte(bytes[start], bytes[start + 1]),
-            g: parse_hex_byte(bytes[start + 2], bytes[start + 3]),
-            b: parse_hex_byte(bytes[start + 4], bytes[start + 5]),
+        const BYTES: &[u8] = $hex.as_bytes();
+        const START: usize = if BYTES[0] == b'#' { 1 } else { 0 };
+        const _: () = assert!(
+            BYTES.len() - START == 6,
+            "invalid hex colour: expected six hex digits"
+        );
+        $crate::style::Color::Rgb {
+            r: $crate::style::hex_byte(BYTES[START], BYTES[START + 1]),
+            g: $crate::style::hex_byte(BYTES[START + 2], BYTES[START + 3]),
+            b: $crate::style::hex_byte(BYTES[START + 4], BYTES[START + 5]),
         }
     }};
 }
@@ -141,9 +143,8 @@ impl Color {
     /// Adjust saturation. 0.0 = grayscale, 1.0 = unchanged, 2.0 = double saturation.
     pub fn saturation(self, factor: f32) -> Self {
         let (r, g, b) = self.rgb();
-        let (h, s, l) = rgb_to_hsl(r, g, b);
-        let new_s = (s * factor).clamp(0.0, 1.0);
-        let (nr, ng, nb) = hsl_to_rgb(h, new_s, l);
+        let (hue, sat, light) = rgb_to_hsl(r, g, b);
+        let (nr, ng, nb) = hsl_to_rgb(hue, (sat * factor).clamp(0.0, 1.0), light);
         Self::Rgb {
             r: nr,
             g: ng,
@@ -180,9 +181,8 @@ impl Color {
     /// Shift hue by degrees (0-360).
     pub fn shift_hue(self, degrees: f32) -> Self {
         let (r, g, b) = self.rgb();
-        let (mut h, s, l) = rgb_to_hsl(r, g, b);
-        h = (h + degrees).rem_euclid(360.0);
-        let (nr, ng, nb) = hsl_to_rgb(h, s, l);
+        let (hue, sat, light) = rgb_to_hsl(r, g, b);
+        let (nr, ng, nb) = hsl_to_rgb((hue + degrees).rem_euclid(360.0), sat, light);
         Self::Rgb {
             r: nr,
             g: ng,

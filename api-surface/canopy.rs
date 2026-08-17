@@ -5878,7 +5878,7 @@ pub mod canopy {
     macro_rules! named_args {
     ($($key:ident : $value:expr),* $(,)?) => { ... };
 }
-    /// Macro to create a Color from a hex string at compile time
+    /// Build a [`Color`](crate::style::Color) from a `#RRGGBB` or `RRGGBB` literal at compile time.
     #[macro_export]
     macro_rules! rgb {
     ($hex:literal) => { ... };
