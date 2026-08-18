@@ -84,16 +84,6 @@ pub const ROUND: BoxGlyphs = BoxGlyphs {
     vertical: '│',
 };
 
-/// Round corner thick Unicode box drawing set.
-pub const ROUND_THICK: BoxGlyphs = BoxGlyphs {
-    topleft: '╭',
-    topright: '╮',
-    bottomleft: '╰',
-    bottomright: '╯',
-    horizontal: '━',
-    vertical: '┃',
-};
-
 /// A simple box container around its children.
 pub struct Border {
     /// Glyph set for rendering.

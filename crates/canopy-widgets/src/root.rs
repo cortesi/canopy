@@ -75,8 +75,12 @@ impl Root {
         let help = self.help_id(c)?;
 
         c.set_hidden_of(inspector, !self.inspector_active)?;
-        c.set_layout_of(app, Layout::fill())?;
-        c.set_layout_of(inspector, Layout::fill())?;
+        c.with_layout_of(app, &mut |layout| {
+            *layout = layout.width(Sizing::Flex(1)).height(Sizing::Flex(1));
+        })?;
+        c.with_layout_of(inspector, &mut |layout| {
+            *layout = layout.width(Sizing::Flex(1)).height(Sizing::Flex(1));
+        })?;
 
         // Help overlay
         c.set_hidden_of(help, !self.help_active)?;
@@ -266,13 +270,6 @@ impl Root {
             let help = Help::install(context)?;
             context.attach_keyed(root_id, KEY_MAIN_PANE, main_pane)?;
             context.attach_keyed(root_id, HelpSlot::KEY, help)?;
-
-            context.with_layout_of(app_node, &mut |layout: &mut Layout| {
-                *layout = layout.width(Sizing::Flex(1)).height(Sizing::Flex(1));
-            })?;
-            context.with_layout_of(inspector, &mut |layout: &mut Layout| {
-                *layout = layout.width(Sizing::Flex(1)).height(Sizing::Flex(1));
-            })?;
             Ok(())
         })?;
         canopy.with_root_context(|context| {
@@ -370,6 +367,24 @@ mod tests {
         }
     }
 
+    struct RowApp;
+
+    impl CommandNode for RowApp {
+        fn commands() -> &'static [&'static CommandSpec] {
+            &[]
+        }
+    }
+
+    impl Widget for RowApp {
+        fn layout(&self) -> Layout {
+            Layout::row()
+        }
+
+        fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+            Ok(())
+        }
+    }
+
     struct FocusLeaf {
         name: &'static str,
     }
@@ -424,6 +439,18 @@ mod tests {
     fn run_script(canopy: &mut Canopy, script: &str) -> Result<()> {
         let script_id = canopy.compile_script(script)?;
         canopy.run_script(canopy.root_id(), script_id)?;
+        Ok(())
+    }
+
+    #[test]
+    fn install_app_preserves_app_layout_direction() -> Result<()> {
+        let mut canopy = Canopy::new();
+        Root::load(&mut canopy)?;
+
+        let app = Root::install_app(&mut canopy, RowApp)?;
+        let layout = canopy.with_root_view(|context| context.node_layout(app.into()));
+
+        assert_eq!(layout.map(|layout| layout.direction), Some(Direction::Row));
         Ok(())
     }
 

@@ -7,8 +7,8 @@ use canopy::{
     style::{Attr, AttrSet, solarized},
 };
 use canopy_widgets::{
-    Border, Button, Center, Frame, List, ROUND_THICK, SINGLE, Selectable, Terminal, TerminalConfig,
-    Text, VStack,
+    Border, Button, Center, Frame, List, SINGLE, SINGLE_THICK, Selectable, Terminal,
+    TerminalConfig, Text, VStack,
 };
 use unicode_width::UnicodeWidthStr;
 
@@ -394,6 +394,10 @@ impl Widget for TermGym {
         true
     }
 
+    fn layout(&self) -> Layout {
+        Layout::fill().direction(Direction::Row)
+    }
+
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         let list_id = c.create_detached(
             List::<TermEntry>::new().with_on_activate(Self::cmd_activate_terminal().call()),
@@ -407,11 +411,13 @@ impl Widget for TermGym {
                 .push_flex(list_id, 1),
         )?;
 
-        let term_frame_id =
-            c.add_child(Frame::new().with_glyphs(ROUND_THICK).with_title("terminal"))?;
+        let term_frame_id = c.add_child(
+            Frame::new()
+                .with_glyphs(SINGLE_THICK)
+                .with_title("terminal"),
+        )?;
         c.add_child_to(term_frame_id, TerminalStack::new())?;
 
-        c.set_layout(Layout::fill().direction(Direction::Row))?;
         c.set_layout_of(
             sidebar_id,
             Layout::column().fixed_width(24).flex_vertical(1),

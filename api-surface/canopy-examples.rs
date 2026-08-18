@@ -734,6 +734,8 @@ pub mod canopy_examples {
         impl Widget for TermGym {
             fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
+            fn layout(&self) -> Layout {}
+
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
 
             fn render(&mut self, r: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}

@@ -3,7 +3,7 @@ use canopy::{
     style::{Attr, AttrSet, PartialStyle},
     testing::harness::Harness,
 };
-use canopy_widgets::Selector;
+use canopy_widgets::{Root, Selector};
 
 use crate::stylegym::{EffectOption, Stylegym, setup_bindings};
 
@@ -27,6 +27,30 @@ fn test_stylegym_renders() -> Result<()> {
     let harness = setup_harness(Size::new(80, 24))?;
     // Just check it rendered without panicking.
     let _buf = harness.buf();
+    Ok(())
+}
+
+#[test]
+fn installed_stylegym_keeps_controls_beside_demo() -> Result<()> {
+    let mut canopy = Canopy::new();
+    Stylegym::load(&mut canopy)?;
+    let app = Root::install_app(&mut canopy, Stylegym::new())?;
+    let mut harness = Harness::from_canopy(canopy, Size::new(80, 24))?;
+    harness.render()?;
+
+    harness.canopy.with_root_view(|context| {
+        let children = context.children_of(app.into());
+        let [controls, demo] = children.as_slice() else {
+            panic!("stylegym must have controls and demo children");
+        };
+        let controls = context.node_view(*controls).expect("controls view").outer;
+        let demo = context.node_view(*demo).expect("demo view").outer;
+
+        assert_eq!(controls.top(), demo.top());
+        assert_eq!(controls.h, demo.h);
+        assert_eq!(controls.right(), demo.left());
+    });
+
     Ok(())
 }
 

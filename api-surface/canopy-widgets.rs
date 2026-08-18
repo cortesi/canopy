@@ -737,9 +737,6 @@ pub mod canopy_widgets {
     /// Round corner thin Unicode box drawing set.
     pub const ROUND: BoxGlyphs = _;
 
-    /// Round corner thick Unicode box drawing set.
-    pub const ROUND_THICK: BoxGlyphs = _;
-
     /// Single line thin Unicode box drawing set.
     pub const SINGLE: BoxGlyphs = _;
 

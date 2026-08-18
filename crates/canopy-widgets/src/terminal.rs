@@ -16,6 +16,7 @@ use canopy::{
     rgb,
     state::NodeName,
     style::{AttrSet, Color, ResolvedStyle},
+    text,
 };
 use itty_core::{
     SelectionSnapshot, SelectionSpec, Session,
@@ -28,7 +29,7 @@ use itty_core::{
 };
 use portable_pty::ExitStatus;
 use tokio::runtime::{Builder, Runtime};
-use unicode_width::UnicodeWidthChar;
+use unicode_segmentation::UnicodeSegmentation;
 
 /// Fallback terminal column count before sizing is known.
 const DEFAULT_COLUMNS: usize = 80;
@@ -1110,8 +1111,8 @@ fn render_run(
     default_bg: Color,
 ) -> Result<()> {
     let mut col = run.start_col;
-    for ch in run.text.chars() {
-        let width = UnicodeWidthChar::width(ch).unwrap_or(1).max(1);
+    for grapheme in run.text.graphemes(true) {
+        let width = text::grapheme_width(grapheme);
         let mut fg = Color::Rgb {
             r: run.fg.r(),
             g: run.fg.g(),
@@ -1135,13 +1136,13 @@ fn render_run(
         };
 
         let style = ResolvedStyle::new(fg, bg, attrs);
-        rndr.put_cell(
+        rndr.put_grapheme(
             style,
             geom::Point {
                 x: origin.x.saturating_add(col as u32),
                 y: origin.y.saturating_add(row_idx as u32),
             },
-            ch,
+            grapheme,
         )?;
         col += width;
     }
@@ -1246,7 +1247,12 @@ mod tests {
         thread,
     };
 
-    use canopy::event::{key, mouse};
+    use canopy::{
+        TermBuf,
+        event::{key, mouse},
+        style::{StyleManager, StyleMap},
+    };
+    use itty_core::colors::Rgba8;
     use itty_script::{
         RunMetrics, ScriptExecPolicy, SharedScriptSurfaceFactory, TermModuleBuilder,
         default_script_surface, run_source,
@@ -1272,6 +1278,53 @@ mod tests {
                 Err(TryRecvError::Disconnected) => return None,
             }
         }
+    }
+
+    #[test]
+    fn renders_terminal_graphemes_with_their_cell_widths() {
+        let base_style = ResolvedStyle::new(Color::White, Color::Black, AttrSet::default());
+        let mut buf = TermBuf::new(geom::Size::new(6, 1), '\0', base_style).expect("buffer");
+        let stylemap = StyleMap::new();
+        let mut styles = StyleManager::new();
+        let run = StyledRunPublic {
+            text: "A⚡e\u{301}B".to_string(),
+            fg: Rgba8 {
+                r: 255,
+                g: 255,
+                b: 255,
+                a: 255,
+            },
+            bg: None,
+            italic: false,
+            underline: false,
+            strikethrough: false,
+            bold: false,
+            hyperlink: None,
+            start_col: 0,
+            end_col: 5,
+        };
+
+        {
+            let mut rndr = Render::new(
+                &stylemap,
+                &mut styles,
+                &mut buf,
+                geom::Rect::new(0, 0, 6, 1),
+                geom::Point::default(),
+            );
+            render_run(
+                &mut rndr,
+                geom::Point::default(),
+                0,
+                &run,
+                None,
+                0,
+                Color::Black,
+            )
+            .expect("render terminal run");
+        }
+
+        assert_eq!(buf.rows()[0], ["A", "⚡", "", "e\u{301}", "B", " "]);
     }
 
     #[test]

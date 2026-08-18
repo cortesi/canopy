@@ -55,7 +55,7 @@ mod vstack;
 /// Wrapping an existing node in a container widget.
 mod wrap;
 
-pub use boxed::{Border, BoxGlyphs, DOUBLE, ROUND, ROUND_THICK, SINGLE, SINGLE_THICK};
+pub use boxed::{Border, BoxGlyphs, DOUBLE, ROUND, SINGLE, SINGLE_THICK};
 pub use button::Button;
 pub use center::Center;
 pub use dropdown::Dropdown;

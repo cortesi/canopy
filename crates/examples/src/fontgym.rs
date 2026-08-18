@@ -16,7 +16,7 @@ use canopy::{
 };
 use canopy_widgets::{
     Font, FontBanner, FontEffects, FontRenderer, Frame, GlyphRamp, LayoutOptions, List, Pad,
-    ROUND_THICK, SINGLE_THICK, Selectable, Text, VStack,
+    SINGLE_THICK, Selectable, Text, VStack,
 };
 
 /// Initial text rendered by the banners.
@@ -195,7 +195,7 @@ impl Widget for FontGym {
         })?;
 
         let font_frame_id = ctx.create_detached(FocusFrame::new(
-            Frame::new().with_title("Fonts").with_glyphs(ROUND_THICK),
+            Frame::new().with_title("Fonts").with_glyphs(SINGLE_THICK),
             list_id,
         ))?;
         ctx.set_children_of(font_frame_id.into(), vec![list_id.into()])?;
@@ -210,7 +210,9 @@ impl Widget for FontGym {
         let controls_frame = Frame::wrap_with(
             ctx,
             controls_pad,
-            Frame::new().with_title("Controls").with_glyphs(ROUND_THICK),
+            Frame::new()
+                .with_title("Controls")
+                .with_glyphs(SINGLE_THICK),
         )?;
         ctx.set_layout_of(
             controls_frame,
