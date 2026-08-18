@@ -1,15 +1,16 @@
-use std::{
-    collections::{HashMap, HashSet},
-    fmt, iter,
-};
+#[cfg(test)]
+use std::mem;
+use std::{cmp::Ordering, collections::HashSet, fmt};
 
 use crate::{
+    commands::CommandInvocation,
+    core::NodeId,
     error::{Error, Result},
     event::{
         key::Key,
         mouse::{self, Mouse},
     },
-    path::*,
+    path::{Path, PathMatch, PathMatcher},
     script::LuauFunctionId,
 };
 
@@ -21,15 +22,6 @@ const DEFAULT_MODE: &str = "";
 pub struct BindingId(u64);
 
 impl BindingId {
-    /// Allocate the next binding ID.
-    fn next(next: &mut u64) -> Result<Self> {
-        let id = Self(*next);
-        *next = next.checked_add(1).ok_or_else(|| {
-            Error::InvalidOperation("binding identifier space exhausted".to_string())
-        })?;
-        Ok(id)
-    }
-
     /// Return the numeric binding identifier.
     pub fn as_u64(self) -> u64 {
         self.0
@@ -41,38 +33,163 @@ impl BindingId {
     }
 }
 
-/// An action to be taken in response to an event, if the path matches.
-#[derive(Clone, Debug)]
-struct BoundAction {
-    /// Unique identifier for the binding.
-    id: BindingId,
-    /// Compiled path matcher (includes original filter string).
-    pathmatch: PathMatcher,
-    /// Action to execute.
-    action: LuauFunctionId,
+/// Stable name for one framework-owned binding group.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct FrameworkBindingGroup(&'static str);
+
+impl FrameworkBindingGroup {
+    /// Construct a framework binding group.
+    pub const fn new(name: &'static str) -> Self {
+        Self(name)
+    }
+
+    /// Return the diagnostic group name.
+    pub const fn as_str(self) -> &'static str {
+        self.0
+    }
 }
 
-/// Binding match precedence: the path-match score, then insertion order.
-///
-/// Higher values win, so a later insertion wins an otherwise exact tie.
-type BindingPriority = ((usize, usize, usize), usize);
+impl fmt::Display for FrameworkBindingGroup {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.0)
+    }
+}
 
-/// Tuple storing a binding match and its score.
-type BindingCandidate = (BindingPriority, LuauFunctionId, PathMatch);
+/// Opaque token for one active exclusive binding frame.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ExclusiveFrameToken(u64);
 
-/// Binding mode/path filter used when removing or replacing bindings.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct BindingFilter<'a> {
-    /// Optional mode name to match.
-    pub mode: Option<&'a str>,
+impl ExclusiveFrameToken {
+    /// Construct a placeholder token for test contexts.
+    #[cfg(any(test, feature = "testing"))]
+    pub(crate) const fn for_test(id: u64) -> Self {
+        Self(id)
+    }
+}
+
+/// Owner of one binding record.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum BindingOwner {
+    /// Application-owned binding that script APIs can mutate.
+    Application,
+    /// Framework-owned binding in a private group.
+    Framework(FrameworkBindingGroup),
+}
+
+/// Resolution scope for one binding.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum BindingScope {
+    /// Highest-priority application tier.
+    Global,
+    /// Named application mode.
+    Mode(String),
+    /// Default application mode.
+    Default,
+    /// Framework-only exclusive group.
+    Exclusive(FrameworkBindingGroup),
+}
+
+impl BindingScope {
+    /// Return the named mode, if this is a mode scope.
+    pub fn mode(&self) -> Option<&str> {
+        match self {
+            Self::Mode(mode) => Some(mode),
+            _ => None,
+        }
+    }
+
+    /// Return a stable scripting and diagnostic label.
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Global => "global",
+            Self::Mode(_) => "mode",
+            Self::Default => "default",
+            Self::Exclusive(_) => "exclusive",
+        }
+    }
+}
+
+/// Action executed by a binding.
+#[derive(Clone, Debug, PartialEq)]
+pub enum BindingTarget {
+    /// Stored Luau callback.
+    Script(LuauFunctionId),
+    /// Rust command invocation.
+    Command(CommandInvocation),
+}
+
+impl BindingTarget {
+    /// Return a stable target-kind label.
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Script(_) => "script",
+            Self::Command(_) => "command",
+        }
+    }
+}
+
+/// One complete binding record used by routing and introspection.
+#[derive(Clone, Debug)]
+pub struct BindingRecord {
+    /// Stable binding identifier.
+    pub id: BindingId,
+    /// Normalized input selector.
+    pub input: InputSpec,
+    /// Record owner.
+    pub owner: BindingOwner,
+    /// Resolution scope.
+    pub scope: BindingScope,
+    /// Required user-facing description.
+    pub description: String,
+    /// Optional diagnostic source.
+    pub source: Option<String>,
+    /// Binding target.
+    pub target: BindingTarget,
+    /// Monotonic insertion order.
+    pub insertion_id: u64,
+    /// Compiled path matcher and its original filter.
+    path_matcher: PathMatcher,
+}
+
+impl BindingRecord {
+    /// Return the original path filter.
+    pub fn path_filter(&self) -> &str {
+        self.path_matcher.filter()
+    }
+}
+
+/// Binding phase relative to widget input handling.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BindingPhase {
+    /// Execute before the focused widget.
+    BeforeWidget,
+    /// Execute only after the widget ignores the input.
+    AfterIgnore,
+}
+
+/// Winner returned by the shared resolver.
+#[derive(Clone, Debug)]
+pub struct ResolvedBinding {
+    /// Binding identifier.
+    pub id: BindingId,
+    /// Target to execute.
+    pub target: BindingTarget,
+    /// Routing phase.
+    pub phase: BindingPhase,
+    /// User-facing description.
+    pub description: String,
+}
+
+/// Binding selector used by application mutation APIs.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct BindingSelector<'a> {
+    /// Optional scope to match.
+    pub scope: Option<BindingScope>,
     /// Optional exact path filter string to match.
     pub path_filter: Option<&'a str>,
 }
 
 /// Input event used for bindings.
-///
-/// Key inputs are normalized when stored or matched so bindings are resilient
-/// to terminal differences in Ctrl/Shift representations.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum InputSpec {
     /// Mouse input.
@@ -83,247 +200,80 @@ pub enum InputSpec {
 
 impl InputSpec {
     /// Normalize key variants for matching.
-    fn normalize(&self) -> Self {
-        match *self {
-            Self::Mouse(m) => Self::Mouse(m),
-            Self::Key(k) => Self::Key(k.normalize()),
+    pub fn normalize(self) -> Self {
+        match self {
+            Self::Mouse(mouse) => Self::Mouse(mouse),
+            Self::Key(key) => Self::Key(key.normalize()),
         }
     }
 }
 
 impl fmt::Display for InputSpec {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Key(k) => write!(f, "{k}"),
-            Self::Mouse(m) => {
+            Self::Key(key) => write!(formatter, "{key}"),
+            Self::Mouse(mouse) => {
                 let mut parts = Vec::new();
-                if m.modifiers.ctrl {
+                if mouse.modifiers.ctrl {
                     parts.push("Ctrl");
                 }
-                if m.modifiers.alt {
+                if mouse.modifiers.alt {
                     parts.push("Alt");
                 }
-                if m.modifiers.shift {
+                if mouse.modifiers.shift {
                     parts.push("Shift");
                 }
-                let action = format!("{:?}", m.action);
-                let key_label = if matches!(m.button, mouse::Button::None) {
+                let action = format!("{:?}", mouse.action);
+                let key_label = if matches!(mouse.button, mouse::Button::None) {
                     action
                 } else {
-                    let button = format!("{:?}", m.button);
-                    format!("{button} {action}")
+                    format!("{:?} {action}", mouse.button)
                 };
                 if parts.is_empty() {
-                    write!(f, "{key_label}")
+                    formatter.write_str(&key_label)
                 } else {
-                    write!(f, "{}+{key_label}", parts.join("+"))
+                    write!(formatter, "{}+{key_label}", parts.join("+"))
                 }
             }
         }
     }
 }
 
-/// A InputMode contains a set of bound keys and mouse actions.
+/// Application-owned state restored after a failed startup script.
 #[derive(Clone, Debug)]
-pub struct InputMode {
-    /// Input bindings for this mode.
-    inputs: HashMap<InputSpec, Vec<BoundAction>>,
+pub struct ApplicationBindingSnapshot {
+    /// Application records captured at the start of an attempt.
+    records: Vec<BindingRecord>,
+    /// Application mode stack captured at the start of an attempt.
+    mode_stack: Vec<String>,
 }
 
-impl InputMode {
-    /// Construct an empty input mode.
-    fn new() -> Self {
-        Self {
-            inputs: HashMap::new(),
-        }
-    }
-
-    /// Insert a key binding into this mode.
-    ///
-    /// The input is normalized before storing.
-    fn insert(
-        &mut self,
-        id: BindingId,
-        pathmatch: PathMatcher,
-        input: InputSpec,
-        action: LuauFunctionId,
-    ) {
-        let input = input.normalize();
-        self.inputs.entry(input).or_default().push(BoundAction {
-            id,
-            pathmatch,
-            action,
-        });
-    }
-
-    /// Resolve a key with a given path filter, returning the match metadata.
-    ///
-    /// The input is normalized before matching.
-    pub fn resolve_match(
-        &self,
-        path: &Path,
-        input: &InputSpec,
-    ) -> Option<(LuauFunctionId, PathMatch)> {
-        let input = input.normalize();
-        let mut best: Option<BindingCandidate> = None;
-        for (idx, k) in self.inputs.get(&input)?.iter().enumerate() {
-            if let Some(m) = k.pathmatch.check_match(path) {
-                let score: BindingPriority = (m.score(), idx);
-                let replace = match best {
-                    Some((best_score, _, _)) => score > best_score,
-                    None => true,
-                };
-                if replace {
-                    best = Some((score, k.action, m));
-                }
-            }
-        }
-        best.map(|(_, action, m)| (action, m))
-    }
-
-    /// Return all bindings in this mode.
-    fn bindings(&self) -> Vec<BindingInfo<'_>> {
-        let mut out = Vec::new();
-        for (input, actions) in &self.inputs {
-            for a in actions {
-                out.push(BindingInfo {
-                    id: a.id,
-                    input: *input,
-                    path_filter: a.pathmatch.filter(),
-                    target: a.action,
-                });
-            }
-        }
-        out.sort_by(|left, right| {
-            left.input
-                .to_string()
-                .cmp(&right.input.to_string())
-                .then_with(|| left.path_filter.cmp(right.path_filter))
-                .then_with(|| left.id.0.cmp(&right.id.0))
-        });
-        out
-    }
-
-    /// Return bindings that match a specific path.
-    fn bindings_for_path(&self, path: &Path) -> Vec<MatchedBindingInfo<'_>> {
-        let mut out = Vec::new();
-        for (input, actions) in &self.inputs {
-            for a in actions {
-                if let Some(m) = a.pathmatch.check_match(path) {
-                    out.push(MatchedBindingInfo {
-                        info: BindingInfo {
-                            id: a.id,
-                            input: *input,
-                            path_filter: a.pathmatch.filter(),
-                            target: a.action,
-                        },
-                        m,
-                    });
-                }
-            }
-        }
-        out.sort_by(|left, right| {
-            left.info
-                .input
-                .to_string()
-                .cmp(&right.info.input.to_string())
-                .then_with(|| left.info.path_filter.cmp(right.info.path_filter))
-                .then_with(|| left.info.id.0.cmp(&right.info.id.0))
-        });
-        out
-    }
-
-    /// Remove a binding by ID and return removed targets.
-    fn unbind_with_targets(&mut self, id: BindingId) -> Vec<LuauFunctionId> {
-        let mut removed = false;
-        let mut targets = Vec::new();
-        for actions in self.inputs.values_mut() {
-            let mut retained = Vec::new();
-            for action in actions.drain(..) {
-                if action.id == id {
-                    removed = true;
-                    targets.push(action.action);
-                } else {
-                    retained.push(action);
-                }
-            }
-            *actions = retained;
-        }
-        self.inputs.retain(|_, actions| !actions.is_empty());
-        if removed { targets } else { Vec::new() }
-    }
-
-    /// Remove bindings for an input, optionally filtered by path.
-    fn unbind_input(
-        &mut self,
-        input: InputSpec,
-        path_filter: Option<&str>,
-    ) -> Vec<(BindingId, LuauFunctionId)> {
-        let input = input.normalize();
-        let Some(actions) = self.inputs.get_mut(&input) else {
-            return Vec::new();
-        };
-
-        let mut removed = Vec::new();
-        actions.retain(|action| {
-            let matches = path_filter.is_none_or(|filter| action.pathmatch.filter() == filter);
-            if matches {
-                removed.push((action.id, action.action));
-                false
-            } else {
-                true
-            }
-        });
-
-        if actions.is_empty() {
-            self.inputs.remove(&input);
-        }
-
-        removed
-    }
-
-    /// Remove all bindings from this mode.
-    fn clear(&mut self) -> Vec<(BindingId, LuauFunctionId)> {
-        let mut removed = Vec::new();
-        for actions in self.inputs.values_mut() {
-            for action in actions.drain(..) {
-                removed.push((action.id, action.action));
-            }
-        }
-        self.inputs.clear();
-        removed
-    }
-
-    /// Remove every Luau-backed binding from this mode.
-    fn remove_luau_functions(&mut self) -> Vec<(BindingId, LuauFunctionId)> {
-        let mut removed = Vec::new();
-        for actions in self.inputs.values_mut() {
-            for action in actions.drain(..) {
-                removed.push((action.id, action.action));
-            }
-        }
-        self.inputs.retain(|_, actions| !actions.is_empty());
-        removed
-    }
+/// One active exclusive binding frame.
+#[derive(Clone, Copy, Debug)]
+struct ExclusiveFrame {
+    /// Unique token used for ordered removal.
+    token: ExclusiveFrameToken,
+    /// Framework group admitted by this frame.
+    group: FrameworkBindingGroup,
+    /// Node that owns the frame.
+    owner: NodeId,
 }
 
-/// The InputMap struct manages the global set of key and mouse bindings for the
-/// app.
-///
-/// When a key is pressed, it is first translated through the global key map
-/// into a set of possible action specifications. We then walk the tree of nodes
-/// from the focus to the root, trying each action specification in turn, until
-/// an action is handled by a node. If no action is handled, the key is ignored.
+/// Registry for application bindings, framework controls, and active modes.
 #[derive(Clone, Debug)]
 pub struct InputMap {
-    /// Registered modes and bindings.
-    modes: HashMap<String, InputMode>,
-    /// Current active mode name.
-    current_mode: String,
-    /// Active non-default modes, ordered from oldest to newest.
+    /// Flat application and framework binding records.
+    records: Vec<BindingRecord>,
+    /// Active application modes in push order.
     mode_stack: Vec<String>,
+    /// Active exclusive framework frames in push order.
+    exclusive_frames: Vec<ExclusiveFrame>,
     /// Next binding identifier.
     next_id: u64,
+    /// Next insertion-order identifier.
+    next_insertion_id: u64,
+    /// Next exclusive-frame token.
+    next_token: u64,
 }
 
 impl Default for InputMap {
@@ -333,305 +283,538 @@ impl Default for InputMap {
 }
 
 impl InputMap {
-    /// Construct a new input map with the default mode.
+    /// Construct an empty binding registry.
     pub fn new() -> Self {
-        let default = InputMode::new();
-        let mut modes = HashMap::new();
-        modes.insert(DEFAULT_MODE.to_string(), default);
         Self {
-            current_mode: DEFAULT_MODE.into(),
+            records: Vec::new(),
             mode_stack: Vec::new(),
-            modes,
+            exclusive_frames: Vec::new(),
             next_id: 1,
+            next_insertion_id: 1,
+            next_token: 1,
         }
     }
 
-    /// Set the current input mode.
-    pub fn set_mode(&mut self, mode: &str) -> Result<()> {
-        if mode.is_empty() {
-            self.current_mode = DEFAULT_MODE.into();
-            self.mode_stack.clear();
-            return Ok(());
-        }
-        self.ensure_mode(mode);
-        self.mode_stack.clear();
-        self.mode_stack.push(mode.to_string());
-        self.refresh_current_mode();
-        Ok(())
-    }
-
-    /// Push an input mode on top of the active mode stack.
-    pub fn push_mode(&mut self, mode: &str) -> Result<()> {
-        if mode.is_empty() {
-            return Ok(());
-        }
-        self.ensure_mode(mode);
-        self.mode_stack.push(mode.to_string());
-        self.refresh_current_mode();
-        Ok(())
-    }
-
-    /// Pop the top input mode and return the newly-active mode name.
-    pub fn pop_mode(&mut self) -> &str {
-        self.mode_stack.pop();
-        self.refresh_current_mode();
-        self.current_mode()
-    }
-
-    /// Return active non-default modes from oldest to newest.
-    #[cfg(test)]
-    pub(crate) fn mode_stack(&self) -> &[String] {
-        &self.mode_stack
-    }
-
-    /// Return active mode names in binding-resolution order.
-    pub fn active_modes(&self) -> Vec<&str> {
-        let mut modes = Vec::new();
-        for mode in self.resolution_modes() {
-            if !modes.contains(&mode) {
-                modes.push(mode);
-            }
-        }
-        modes
-    }
-
-    /// Ensure a mode exists in the registry.
-    fn ensure_mode(&mut self, mode: &str) {
-        self.modes
-            .entry(mode.to_string())
-            .or_insert_with(InputMode::new);
-    }
-
-    /// Refresh the cached current mode name from the stack top.
-    fn refresh_current_mode(&mut self) {
-        self.current_mode = self
-            .mode_stack
-            .last()
-            .cloned()
-            .unwrap_or_else(|| DEFAULT_MODE.to_string());
-    }
-
-    /// Return active mode names in resolution order.
-    fn resolution_modes(&self) -> impl Iterator<Item = &str> {
-        self.mode_stack
-            .iter()
-            .rev()
-            .map(String::as_str)
-            .chain(iter::once(DEFAULT_MODE))
-    }
-
-    /// Resolve a binding using a supplied mode sequence.
-    fn resolve_in_modes<R>(&self, mut resolve: impl FnMut(&InputMode) -> Option<R>) -> Option<R> {
-        for mode in self.resolution_modes() {
-            if let Some(result) = self.modes.get(mode).and_then(&mut resolve) {
-                return Some(result);
-            }
-        }
-        None
-    }
-
-    /// Resolve a binding in the current mode, returning match metadata.
-    ///
-    /// The input is normalized before matching.
-    pub fn resolve_match(
-        &self,
-        path: &Path,
-        input: &InputSpec,
-    ) -> Option<(LuauFunctionId, PathMatch)> {
-        self.resolve_in_modes(|mode| mode.resolve_match(path, input))
-    }
-
-    /// Store a binding for a mode and path filter without a live script host.
-    ///
-    /// Returns the new binding ID.
-    #[cfg(test)]
-    pub(crate) fn bind_test(
+    /// Store or replace one application binding.
+    pub fn replace_application_binding(
         &mut self,
-        mode: &str,
+        scope: BindingScope,
         input: InputSpec,
         path_filter: &str,
-        action: LuauFunctionId,
-    ) -> Result<BindingId> {
-        let pathmatch = PathMatcher::new(path_filter)?;
-        let id = BindingId::next(&mut self.next_id)?;
-        self.modes
-            .entry(mode.to_string())
-            .or_insert_with(InputMode::new)
-            .insert(id, pathmatch, input, action);
-        Ok(id)
-    }
-
-    /// Remove a binding by ID and return removed targets.
-    pub fn unbind_with_targets(&mut self, id: BindingId) -> Vec<LuauFunctionId> {
-        let mut removed = false;
-        let mut targets = Vec::new();
-        for mode in self.modes.values_mut() {
-            let removed_targets = mode.unbind_with_targets(id);
-            if !removed_targets.is_empty() {
-                removed = true;
-                targets.extend(removed_targets);
-            }
-        }
-        if removed { targets } else { Vec::new() }
-    }
-
-    /// Remove bindings matching an input/mode/path filter.
-    pub fn unbind_input(
-        &mut self,
-        input: InputSpec,
-        filter: BindingFilter<'_>,
-    ) -> Vec<(BindingId, LuauFunctionId)> {
-        let mut removed = Vec::new();
-
-        if let Some(mode) = filter.mode {
-            if let Some(entry) = self.modes.get_mut(mode) {
-                removed.extend(entry.unbind_input(input, filter.path_filter));
-            }
-        } else {
-            for entry in self.modes.values_mut() {
-                removed.extend(entry.unbind_input(input, filter.path_filter));
-            }
-        }
-
-        self.modes
-            .retain(|mode, actions| mode == DEFAULT_MODE || !actions.inputs.is_empty());
-        removed
-    }
-
-    /// Replace any bindings matching an input/mode/path filter, then insert the new binding.
-    pub fn replace_binding(
-        &mut self,
-        mode: &str,
-        input: InputSpec,
-        path_filter: &str,
+        description: &str,
+        source: Option<String>,
         target: LuauFunctionId,
     ) -> Result<(BindingId, Vec<(BindingId, LuauFunctionId)>)> {
-        let pathmatch = PathMatcher::new(path_filter)?;
-        let id = BindingId::next(&mut self.next_id)?;
+        validate_application_scope(&scope, path_filter)?;
+        validate_description(description)?;
+        let path_matcher = PathMatcher::new(path_filter)?;
+        let id = self.allocate_binding_id()?;
+        let insertion_id = self.allocate_insertion_id()?;
+        let input = input.normalize();
         let removed = self.unbind_input(
             input,
-            BindingFilter {
-                mode: Some(mode),
+            &BindingSelector {
+                scope: Some(scope.clone()),
                 path_filter: Some(path_filter),
             },
         );
-        self.modes
-            .entry(mode.to_string())
-            .or_insert_with(InputMode::new)
-            .insert(id, pathmatch, input, target);
+        self.records.push(BindingRecord {
+            id,
+            input,
+            owner: BindingOwner::Application,
+            scope,
+            description: description.to_string(),
+            source,
+            target: BindingTarget::Script(target),
+            insertion_id,
+            path_matcher,
+        });
         Ok((id, removed))
     }
 
-    /// Remove every binding from every mode.
-    pub fn clear(&mut self) -> Vec<(BindingId, LuauFunctionId)> {
-        let mut removed = Vec::new();
-        for mode in self.modes.values_mut() {
-            removed.extend(mode.clear());
+    /// Store one idempotent framework binding.
+    pub fn bind_framework(
+        &mut self,
+        group: FrameworkBindingGroup,
+        input: InputSpec,
+        path_filter: &str,
+        description: &str,
+        command: CommandInvocation,
+    ) -> Result<BindingId> {
+        validate_description(description)?;
+        let path_matcher = PathMatcher::new(path_filter)?;
+        let input = input.normalize();
+        let scope = BindingScope::Exclusive(group);
+        if let Some(existing) = self.records.iter().find(|record| {
+            record.owner == BindingOwner::Framework(group)
+                && record.input == input
+                && record.path_filter() == path_filter
+        }) {
+            if existing.scope == scope
+                && existing.description == description
+                && existing.target == BindingTarget::Command(command)
+            {
+                return Ok(existing.id);
+            }
+            return Err(Error::InvalidOperation(format!(
+                "conflicting framework binding for {group}, {input}, and {path_filter}"
+            )));
         }
-        self.modes.retain(|mode, _| mode == DEFAULT_MODE);
-        self.current_mode = DEFAULT_MODE.to_string();
+        let id = self.allocate_binding_id()?;
+        let insertion_id = self.allocate_insertion_id()?;
+        self.records.push(BindingRecord {
+            id,
+            input,
+            owner: BindingOwner::Framework(group),
+            scope,
+            description: description.to_string(),
+            source: None,
+            target: BindingTarget::Command(command),
+            insertion_id,
+            path_matcher,
+        });
+        Ok(id)
+    }
+
+    /// Remove one application binding.
+    pub fn unbind(&mut self, id: BindingId) -> Result<Option<LuauFunctionId>> {
+        let Some(index) = self.records.iter().position(|record| record.id == id) else {
+            return Ok(None);
+        };
+        if !matches!(self.records[index].owner, BindingOwner::Application) {
+            return Err(Error::InvalidOperation(format!(
+                "binding {} is framework-owned",
+                id.as_u64()
+            )));
+        }
+        let record = self.records.remove(index);
+        match record.target {
+            BindingTarget::Script(target) => Ok(Some(target)),
+            BindingTarget::Command(_) => Err(Error::Internal(
+                "application binding has a command target".to_string(),
+            )),
+        }
+    }
+
+    /// Remove application bindings for an input and selector.
+    pub fn unbind_input(
+        &mut self,
+        input: InputSpec,
+        selector: &BindingSelector<'_>,
+    ) -> Vec<(BindingId, LuauFunctionId)> {
+        let input = input.normalize();
+        let mut removed = Vec::new();
+        self.records.retain(|record| {
+            let selected = matches!(record.owner, BindingOwner::Application)
+                && record.input == input
+                && selector
+                    .scope
+                    .as_ref()
+                    .is_none_or(|scope| record.scope == *scope)
+                && selector
+                    .path_filter
+                    .is_none_or(|path| record.path_filter() == path);
+            if selected {
+                if let BindingTarget::Script(target) = record.target {
+                    removed.push((record.id, target));
+                }
+                false
+            } else {
+                true
+            }
+        });
+        removed
+    }
+
+    /// Remove all application bindings and reset application modes.
+    pub fn clear_application(&mut self) -> Vec<(BindingId, LuauFunctionId)> {
+        let mut removed = Vec::new();
+        self.records.retain(|record| {
+            if matches!(record.owner, BindingOwner::Application) {
+                if let BindingTarget::Script(target) = record.target {
+                    removed.push((record.id, target));
+                }
+                false
+            } else {
+                true
+            }
+        });
         self.mode_stack.clear();
         removed
     }
 
-    /// Remove every Luau-backed binding while preserving command and mode bindings.
+    /// Remove all script targets and preserve framework bindings and exclusive frames.
     pub(crate) fn remove_luau_functions(&mut self) -> Vec<(BindingId, LuauFunctionId)> {
-        let mut removed = Vec::new();
-        for mode in self.modes.values_mut() {
-            removed.extend(mode.remove_luau_functions());
-        }
-        self.modes
-            .retain(|mode, actions| mode == DEFAULT_MODE || !actions.inputs.is_empty());
-        removed
+        self.clear_application()
     }
 
-    /// Return every binding ID currently stored in the map.
-    pub(crate) fn binding_ids(&self) -> HashSet<BindingId> {
-        self.modes
-            .values()
-            .flat_map(|mode| mode.inputs.values())
-            .flatten()
-            .map(|action| action.id)
-            .collect()
+    /// Return every record in insertion order.
+    pub fn bindings(&self) -> &[BindingRecord] {
+        &self.records
     }
 
-    /// Clone targets owned by bindings absent from a baseline ID set.
-    pub(crate) fn targets_not_in(&self, baseline: &HashSet<BindingId>) -> Vec<LuauFunctionId> {
-        self.modes
-            .values()
-            .flat_map(|mode| mode.inputs.values())
-            .flatten()
-            .filter(|action| !baseline.contains(&action.id))
-            .map(|action| action.action)
-            .collect()
+    /// Return one binding record by ID.
+    pub(crate) fn binding(&self, id: BindingId) -> Option<&BindingRecord> {
+        self.records.iter().find(|record| record.id == id)
     }
 
-    /// Return the name of the current input mode.
-    pub fn current_mode(&self) -> &str {
-        &self.current_mode
+    /// Resolve one input at one route node.
+    pub fn resolve_match(&self, path: &Path, input: InputSpec) -> Option<ResolvedBinding> {
+        let input = input.normalize();
+        let winner = if let Some(frame) = self.exclusive_frames.last() {
+            self.best_in_scope(
+                path,
+                input,
+                &BindingScope::Exclusive(frame.group),
+                Some(frame.group),
+            )
+        } else {
+            self.best_in_scope(path, input, &BindingScope::Global, None)
+                .or_else(|| {
+                    self.mode_stack.iter().rev().find_map(|mode| {
+                        self.best_in_scope(path, input, &BindingScope::Mode(mode.clone()), None)
+                    })
+                })
+                .or_else(|| self.best_in_scope(path, input, &BindingScope::Default, None))
+        }?;
+        Some(ResolvedBinding {
+            id: winner.0.id,
+            target: winner.0.target.clone(),
+            phase: binding_phase(winner.1),
+            description: winner.0.description.clone(),
+        })
     }
 
-    /// Return all bindings across all modes.
-    pub fn bindings(&self) -> Vec<ModeBindingInfo<'_>> {
-        let mut modes = self.modes.iter().collect::<Vec<_>>();
-        modes.sort_by_key(|(left, _)| *left);
-        let mut out = Vec::new();
-        for (mode, bindings) in modes {
-            for info in bindings.bindings() {
-                out.push(ModeBindingInfo { mode, info });
+    /// Return normalized key inputs that can participate in the current scope state.
+    pub(crate) fn eligible_keys(&self) -> Vec<Key> {
+        let active_group = self.active_exclusive_group();
+        let mut keys = HashSet::new();
+        for record in &self.records {
+            let eligible = match active_group {
+                Some(group) => {
+                    record.owner == BindingOwner::Framework(group)
+                        && record.scope == BindingScope::Exclusive(group)
+                }
+                None => matches!(record.owner, BindingOwner::Application),
+            };
+            if eligible && let InputSpec::Key(key) = record.input {
+                keys.insert(key.normalize());
             }
         }
-        out
+        let mut keys = keys.into_iter().collect::<Vec<_>>();
+        keys.sort_by_key(ToString::to_string);
+        keys
     }
 
-    /// Return bindings in a mode that match a specific path.
-    pub fn bindings_matching_path(&self, mode: &str, path: &Path) -> Vec<MatchedBindingInfo<'_>> {
-        self.modes
-            .get(mode)
-            .map(|m| m.bindings_for_path(path))
-            .unwrap_or_default()
+    /// Explain one record's state for a route from the target to the root.
+    pub(crate) fn diagnostic_state(&self, id: BindingId, route: &[Path]) -> String {
+        let Some(record) = self.binding(id) else {
+            return "missing".to_string();
+        };
+        if let Some(group) = self.active_exclusive_group() {
+            if record.owner != BindingOwner::Framework(group)
+                || record.scope != BindingScope::Exclusive(group)
+            {
+                return format!("blocked by exclusive group {group}");
+            }
+        } else {
+            match &record.scope {
+                BindingScope::Exclusive(group) => {
+                    return format!("inactive exclusive group {group}");
+                }
+                BindingScope::Mode(mode)
+                    if !self.mode_stack.iter().any(|active| active == mode) =>
+                {
+                    return format!("inactive mode {mode}");
+                }
+                BindingScope::Global | BindingScope::Mode(_) | BindingScope::Default => {}
+            }
+        }
+
+        let record_route = route
+            .iter()
+            .position(|path| record.path_matcher.check_match(path).is_some());
+        let Some(record_route) = record_route else {
+            return "path does not match route".to_string();
+        };
+        let winner = route.iter().enumerate().find_map(|(index, path)| {
+            self.resolve_match(path, record.input)
+                .map(|winner| (index, winner))
+        });
+        let Some((winner_route, winner)) = winner else {
+            return "not eligible in the active scope".to_string();
+        };
+        if winner.id == id {
+            return "effective".to_string();
+        }
+        if winner_route < record_route {
+            return "shadowed at an earlier route node".to_string();
+        }
+        let winning_record = self
+            .binding(winner.id)
+            .expect("resolved binding record must remain registered");
+        if winning_record.scope != record.scope {
+            return "shadowed by a higher-priority scope".to_string();
+        }
+        let path = &route[winner_route];
+        let record_match = record
+            .path_matcher
+            .check_match(path)
+            .expect("record must match its first route node");
+        let winner_match = winning_record
+            .path_matcher
+            .check_match(path)
+            .expect("winner must match its route node");
+        if winner_match.score() > record_match.score() {
+            "shadowed by a more specific path".to_string()
+        } else {
+            "shadowed by later insertion".to_string()
+        }
+    }
+
+    /// Push one exclusive frame for its owning node.
+    pub fn push_exclusive_bindings(
+        &mut self,
+        group: FrameworkBindingGroup,
+        owner: NodeId,
+    ) -> Result<ExclusiveFrameToken> {
+        let token = ExclusiveFrameToken(self.next_token);
+        self.next_token = self.next_token.checked_add(1).ok_or_else(|| {
+            Error::InvalidOperation("exclusive frame token space exhausted".to_string())
+        })?;
+        self.exclusive_frames.push(ExclusiveFrame {
+            token,
+            group,
+            owner,
+        });
+        Ok(token)
+    }
+
+    /// Remove one exclusive frame without disturbing newer frames.
+    pub fn pop_exclusive_bindings(&mut self, token: ExclusiveFrameToken) -> Result<()> {
+        let Some(index) = self
+            .exclusive_frames
+            .iter()
+            .position(|frame| frame.token == token)
+        else {
+            return Err(Error::InvalidOperation(
+                "exclusive binding frame token is not active".to_string(),
+            ));
+        };
+        self.exclusive_frames.remove(index);
+        Ok(())
+    }
+
+    /// Return the newest active exclusive group.
+    pub fn active_exclusive_group(&self) -> Option<FrameworkBindingGroup> {
+        self.exclusive_frames.last().map(|frame| frame.group)
+    }
+
+    /// Remove frames whose owner is not attached to the active tree.
+    pub(crate) fn retain_exclusive_owners(&mut self, attached: &HashSet<NodeId>) {
+        self.exclusive_frames
+            .retain(|frame| attached.contains(&frame.owner));
+    }
+
+    /// Return active exclusive tokens for a tree-edit baseline.
+    pub(crate) fn exclusive_frame_tokens(&self) -> HashSet<ExclusiveFrameToken> {
+        self.exclusive_frames
+            .iter()
+            .map(|frame| frame.token)
+            .collect()
+    }
+
+    /// Remove pre-edit frames whose owning widget identity was replaced.
+    pub(crate) fn remove_replaced_exclusive_owners(
+        &mut self,
+        owners: &HashSet<NodeId>,
+        before: &HashSet<ExclusiveFrameToken>,
+    ) {
+        self.exclusive_frames
+            .retain(|frame| !before.contains(&frame.token) || !owners.contains(&frame.owner));
+    }
+
+    /// Set the active input mode.
+    pub fn set_mode(&mut self, mode: &str) -> Result<()> {
+        self.mode_stack.clear();
+        if !mode.is_empty() {
+            self.mode_stack.push(mode.to_string());
+        }
+        Ok(())
+    }
+
+    /// Push a named input mode.
+    pub fn push_mode(&mut self, mode: &str) -> Result<()> {
+        if !mode.is_empty() {
+            self.mode_stack.push(mode.to_string());
+        }
+        Ok(())
+    }
+
+    /// Pop the newest input mode and return the active mode.
+    pub fn pop_mode(&mut self) -> &str {
+        self.mode_stack.pop();
+        self.current_mode()
+    }
+
+    /// Return the newest active input mode.
+    pub fn current_mode(&self) -> &str {
+        self.mode_stack.last().map_or(DEFAULT_MODE, String::as_str)
+    }
+
+    /// Return active non-default modes in resolution order.
+    pub fn active_modes(&self) -> Vec<&str> {
+        self.mode_stack.iter().rev().map(String::as_str).collect()
+    }
+
+    /// Snapshot only application-owned registry state.
+    pub(crate) fn snapshot_application(&self) -> ApplicationBindingSnapshot {
+        ApplicationBindingSnapshot {
+            records: self
+                .records
+                .iter()
+                .filter(|record| matches!(record.owner, BindingOwner::Application))
+                .cloned()
+                .collect(),
+            mode_stack: self.mode_stack.clone(),
+        }
+    }
+
+    /// Restore application records without changing framework state.
+    pub(crate) fn restore_application(&mut self, snapshot: ApplicationBindingSnapshot) {
+        self.records
+            .retain(|record| !matches!(record.owner, BindingOwner::Application));
+        self.records.extend(snapshot.records);
+        self.records.sort_by_key(|record| record.insertion_id);
+        self.mode_stack = snapshot.mode_stack;
+    }
+
+    /// Return all application binding IDs.
+    pub(crate) fn binding_ids(&self) -> HashSet<BindingId> {
+        self.records
+            .iter()
+            .filter(|record| matches!(record.owner, BindingOwner::Application))
+            .map(|record| record.id)
+            .collect()
+    }
+
+    /// Return script targets added after a binding-ID baseline.
+    pub(crate) fn targets_not_in(&self, baseline: &HashSet<BindingId>) -> Vec<LuauFunctionId> {
+        self.records
+            .iter()
+            .filter(|record| matches!(record.owner, BindingOwner::Application))
+            .filter(|record| !baseline.contains(&record.id))
+            .filter_map(|record| match record.target {
+                BindingTarget::Script(target) => Some(target),
+                BindingTarget::Command(_) => None,
+            })
+            .collect()
     }
 
     /// Replace the next binding identifier for deterministic exhaustion tests.
     #[cfg(test)]
     pub(crate) fn replace_next_id(&mut self, next_id: u64) -> u64 {
-        let previous = self.next_id;
-        self.next_id = next_id;
-        previous
+        mem::replace(&mut self.next_id, next_id)
+    }
+
+    /// Select the best matching record in one exact scope.
+    fn best_in_scope(
+        &self,
+        path: &Path,
+        input: InputSpec,
+        scope: &BindingScope,
+        framework_group: Option<FrameworkBindingGroup>,
+    ) -> Option<(&BindingRecord, PathMatch)> {
+        self.records
+            .iter()
+            .filter(|record| record.input == input && record.scope == *scope)
+            .filter(|record| match framework_group {
+                Some(group) => record.owner == BindingOwner::Framework(group),
+                None => matches!(record.owner, BindingOwner::Application),
+            })
+            .filter_map(|record| {
+                record
+                    .path_matcher
+                    .check_match(path)
+                    .map(|path_match| (record, path_match))
+            })
+            .max_by(|left, right| compare_candidates(*left, *right))
+    }
+
+    /// Allocate one binding ID without mutating the registry on exhaustion.
+    fn allocate_binding_id(&mut self) -> Result<BindingId> {
+        let id = BindingId(self.next_id);
+        self.next_id = self.next_id.checked_add(1).ok_or_else(|| {
+            Error::InvalidOperation("binding identifier space exhausted".to_string())
+        })?;
+        Ok(id)
+    }
+
+    /// Allocate one insertion ID.
+    fn allocate_insertion_id(&mut self) -> Result<u64> {
+        let id = self.next_insertion_id;
+        self.next_insertion_id = self.next_insertion_id.checked_add(1).ok_or_else(|| {
+            Error::InvalidOperation("binding insertion space exhausted".to_string())
+        })?;
+        Ok(id)
     }
 }
 
-/// Metadata about a single input binding.
-#[derive(Debug, Clone)]
-pub struct BindingInfo<'a> {
-    /// Binding identifier.
-    pub id: BindingId,
-    /// Input that triggers this binding.
-    pub input: InputSpec,
-    /// Original path filter string (e.g., "editor/*").
-    pub path_filter: &'a str,
-    /// Target action (script, command, command sequence, or Luau closure).
-    pub target: LuauFunctionId,
+/// Compare two candidates by path specificity and insertion order.
+fn compare_candidates(
+    left: (&BindingRecord, PathMatch),
+    right: (&BindingRecord, PathMatch),
+) -> Ordering {
+    left.1
+        .score()
+        .cmp(&right.1.score())
+        .then_with(|| left.0.insertion_id.cmp(&right.0.insertion_id))
 }
 
-/// Binding info with match metadata.
-#[derive(Debug, Clone)]
-pub struct MatchedBindingInfo<'a> {
-    /// The binding info.
-    pub info: BindingInfo<'a>,
-    /// Match metadata from the path matcher.
-    pub m: PathMatch,
+/// Classify one path match for routing and help presentation.
+fn binding_phase(path_match: PathMatch) -> BindingPhase {
+    if path_match.anchored_end && path_match.depth > 0 {
+        BindingPhase::BeforeWidget
+    } else {
+        BindingPhase::AfterIgnore
+    }
 }
 
-/// Binding info annotated with the mode it belongs to.
-#[derive(Debug, Clone)]
-pub struct ModeBindingInfo<'a> {
-    /// Input mode name.
-    pub mode: &'a str,
-    /// Binding metadata.
-    pub info: BindingInfo<'a>,
+/// Validate an application binding scope.
+fn validate_application_scope(scope: &BindingScope, path_filter: &str) -> Result<()> {
+    match scope {
+        BindingScope::Global => {
+            if !path_filter.starts_with('/') || !path_filter.ends_with('/') {
+                return Err(Error::InvalidOperation(
+                    "global bindings require a start- and end-anchored path".to_string(),
+                ));
+            }
+        }
+        BindingScope::Mode(mode) if mode.is_empty() => {
+            return Err(Error::InvalidOperation(
+                "named binding mode cannot be empty".to_string(),
+            ));
+        }
+        BindingScope::Default | BindingScope::Mode(_) => {}
+        BindingScope::Exclusive(_) => {
+            return Err(Error::InvalidOperation(
+                "application bindings cannot use an exclusive scope".to_string(),
+            ));
+        }
+    }
+    Ok(())
 }
 
-/// Tests for the input map.
+/// Validate required user-facing binding text.
+fn validate_description(description: &str) -> Result<()> {
+    if description.trim().is_empty() {
+        Err(Error::InvalidOperation(
+            "binding description cannot be empty".to_string(),
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests;

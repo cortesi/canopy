@@ -16,9 +16,10 @@ script-journal summary.
 cargo run -p canopyctl -- bootstrap -- cargo run -p todo -- mcp :memory:
 ```
 
-Inside Luau, use `canopy.api()`, `canopy.commands()`, `fixtures()`, and
-`canopy.help_snapshot()` when a scenario needs to inspect the app from inside
-the same eval that will act on it.
+Inside Luau, use `canopy.api()`, `canopy.commands()`, `canopy.bindings()`,
+`canopy.available_bindings(node?)`, and `fixtures()` when a scenario must inspect the app in the
+same eval that acts on it. `bindings()` returns the complete registry. `available_bindings()`
+returns the effective key-binding snapshot for one focus context.
 
 ## Fixtures
 
@@ -58,8 +59,32 @@ Observation helpers are script-visible:
 - `canopy.screen_cells()` for styled cell assertions.
 - `canopy.screen_region(x, y, w, h)` and `canopy.node_region(node)` for crops.
 - `canopy.route_trace()` for the most recent key or mouse route.
+- `canopy.bindings()` for the complete application and framework binding registry.
+- `canopy.available_bindings(node?)` for effective keys, active modes, and exclusive state.
 - `canopy.diagnostic_dump(node?)` for tree, focus, binding, and route context.
 - `canopy.script_journal()` for recent eval records.
+
+For modal automation, inspect the application snapshot before opening the modal. After opening,
+verify the exclusive group and focused modal node. Then close the modal and verify the exact focus
+before sending the next application input.
+
+```luau
+local origin = canopy.focused()
+canopy.assert(origin ~= nil, "the app must have focus")
+if origin == nil then
+    return
+end
+
+local before = canopy.available_bindings(origin)
+canopy.assert(before.exclusive_group == nil, "the app must not be isolated")
+
+canopy.send_key("?")
+local modal = canopy.available_bindings()
+canopy.assert(modal.exclusive_group == "root.help", "help must isolate its bindings")
+
+canopy.send_key("?")
+canopy.assert(canopy.focused() == origin, "help must restore exact focus")
+```
 
 Async predicate waits run on the Ruau async driver. Use
 `canopy.wait_for(fn, timeout_ms?)`, `canopy.wait_for_node(owner, timeout_ms?)`,

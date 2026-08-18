@@ -10,7 +10,7 @@ use canopy_widgets::{
 const DEFAULT_BINDINGS: &str = r#"
 root.default_bindings()
 
-canopy.bind_with("Tab", { path = "widget_editor/", desc = "Next focus" }, function()
+canopy.bind("Tab", { path = "widget_editor/", description = "Next focus" }, function()
     root.focus("Next")
 end)
 "#;

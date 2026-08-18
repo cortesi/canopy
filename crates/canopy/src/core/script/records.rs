@@ -5,9 +5,9 @@ use std::collections::BTreeMap;
 use ruau::vm::Scope;
 
 use super::{
-    ArgValue, AttrSet, BindingKind, Canopy, Cell, Color, CommandSpec, CoreViewContext, NodeId,
-    Point, RectI32, Result, ViewContext, commands, defs, error, inputmap, node_id_to_arg,
-    node_list_to_arg, point_to_arg, rect_to_arg, size_to_arg, widget_access,
+    ArgValue, AttrSet, Canopy, Cell, Color, CommandSpec, CoreViewContext, NodeId, Point, RectI32,
+    Result, ViewContext, commands, defs, error, inputmap, node_id_to_arg, node_list_to_arg,
+    point_to_arg, rect_to_arg, size_to_arg, widget_access,
 };
 
 /// Convert a node into the `NodeInfo` scripting record.
@@ -100,11 +100,7 @@ pub(super) fn script_callback_label(scope: &Scope<'_>) -> String {
 }
 
 /// Convert one binding record into its scripting record.
-pub(super) fn binding_info_to_arg(
-    canopy: &Canopy,
-    mode: &str,
-    binding: &inputmap::BindingInfo<'_>,
-) -> ArgValue {
+pub(super) fn binding_info_to_arg(binding: &inputmap::BindingRecord) -> ArgValue {
     let input_type = match binding.input {
         inputmap::InputSpec::Key(_) => "key",
         inputmap::InputSpec::Mouse(_) => "mouse",
@@ -118,15 +114,36 @@ pub(super) fn binding_info_to_arg(
             "input_type".to_string(),
             ArgValue::String(input_type.to_string()),
         ),
-        ("mode".to_string(), ArgValue::String(mode.to_string())),
+        ("id".to_string(), ArgValue::UInt(binding.id.as_u64())),
+        (
+            "owner".to_string(),
+            ArgValue::String(match binding.owner {
+                inputmap::BindingOwner::Application => "application".to_string(),
+                inputmap::BindingOwner::Framework(group) => format!("framework:{group}"),
+            }),
+        ),
+        (
+            "scope".to_string(),
+            ArgValue::String(binding.scope.label().to_string()),
+        ),
         (
             "path".to_string(),
-            ArgValue::String(binding.path_filter.to_string()),
+            ArgValue::String(binding.path_filter().to_string()),
         ),
-        ("target".to_string(), ArgValue::String("luau".to_string())),
+        (
+            "description".to_string(),
+            ArgValue::String(binding.description.clone()),
+        ),
+        (
+            "target".to_string(),
+            ArgValue::String(binding.target.label().to_string()),
+        ),
     ]);
-    if let Some(desc) = canopy.script_host.function_label(binding.target) {
-        record.insert("desc".to_string(), ArgValue::String(desc));
+    if let Some(mode) = binding.scope.mode() {
+        record.insert("mode".to_string(), ArgValue::String(mode.to_string()));
+    }
+    if let Some(source) = &binding.source {
+        record.insert("source".to_string(), ArgValue::String(source.clone()));
     }
     ArgValue::Map(record)
 }
@@ -352,59 +369,92 @@ pub(super) fn route_trace_to_arg(canopy: &Canopy) -> ArgValue {
     )
 }
 
-/// Convert the current help snapshot to a scripting record.
-pub(super) fn help_snapshot_to_arg(canopy: &Canopy) -> ArgValue {
-    let snapshot = canopy.help_snapshot();
+/// Convert a contextual binding snapshot to a scripting record.
+pub(super) fn available_bindings_to_arg(
+    canopy: &Canopy,
+    requested: Option<NodeId>,
+) -> Result<ArgValue> {
+    let snapshot = canopy.available_bindings(requested)?;
     let bindings = snapshot
         .bindings
         .iter()
         .map(|binding| {
-            ArgValue::Map(BTreeMap::from([
+            let mut record = BTreeMap::from([
+                ("id".to_string(), ArgValue::UInt(binding.id.as_u64())),
                 (
                     "input".to_string(),
-                    ArgValue::String(binding.input.to_string()),
+                    ArgValue::String(binding.key.to_string()),
                 ),
                 (
-                    "mode".to_string(),
-                    ArgValue::String(binding.mode.to_string()),
+                    "description".to_string(),
+                    ArgValue::String(binding.description.clone()),
+                ),
+                (
+                    "owner".to_string(),
+                    ArgValue::String(match binding.owner {
+                        inputmap::BindingOwner::Application => "application".to_string(),
+                        inputmap::BindingOwner::Framework(group) => {
+                            format!("framework:{group}")
+                        }
+                    }),
+                ),
+                (
+                    "scope".to_string(),
+                    ArgValue::String(binding.scope.label().to_string()),
                 ),
                 (
                     "path".to_string(),
-                    ArgValue::String(binding.path_filter.to_string()),
+                    ArgValue::String(binding.path_filter.clone()),
                 ),
                 (
-                    "kind".to_string(),
+                    "route_path".to_string(),
+                    ArgValue::String(binding.route_path.to_string()),
+                ),
+                (
+                    "phase".to_string(),
                     ArgValue::String(
-                        match binding.kind {
-                            BindingKind::PreEventOverride => "pre",
-                            BindingKind::PostEventFallback => "post",
+                        match binding.phase {
+                            inputmap::BindingPhase::BeforeWidget => "before_widget",
+                            inputmap::BindingPhase::AfterIgnore => "after_ignore",
                         }
                         .to_string(),
                     ),
                 ),
-                ("target".to_string(), ArgValue::String("luau".to_string())),
-                ("label".to_string(), ArgValue::String(binding.label.clone())),
-            ]))
+            ]);
+            if let Some(mode) = binding.scope.mode() {
+                record.insert("mode".to_string(), ArgValue::String(mode.to_string()));
+            }
+            if let Some(source) = &binding.source {
+                record.insert("source".to_string(), ArgValue::String(source.clone()));
+            }
+            ArgValue::Map(record)
         })
         .collect();
-    let commands = snapshot
-        .commands
-        .iter()
-        .map(|command| command_info_to_arg(command.spec, command.resolution))
-        .collect();
-    ArgValue::Map(BTreeMap::from([
+    Ok(ArgValue::Map(BTreeMap::from([
         ("focus".to_string(), node_id_to_arg(snapshot.focus)),
         (
             "focus_path".to_string(),
             ArgValue::String(snapshot.focus_path.to_string()),
         ),
         (
-            "input_mode".to_string(),
-            ArgValue::String(snapshot.input_mode.to_string()),
+            "active_modes".to_string(),
+            ArgValue::Array(
+                snapshot
+                    .active_modes
+                    .iter()
+                    .cloned()
+                    .map(ArgValue::String)
+                    .collect(),
+            ),
         ),
         ("bindings".to_string(), ArgValue::Array(bindings)),
-        ("commands".to_string(), ArgValue::Array(commands)),
-    ]))
+        (
+            "exclusive_group".to_string(),
+            snapshot.exclusive_group.map_or(ArgValue::Null, |group| {
+                ArgValue::String(group.as_str().to_string())
+            }),
+        ),
+    ])))
 }
 
 /// Convert the script journal to scripting records.

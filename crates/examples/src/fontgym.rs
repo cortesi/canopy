@@ -1131,10 +1131,10 @@ fn status_text(height: u32, state: FontStyleState) -> String {
 pub fn setup_bindings(c: &mut Canopy) -> Result<()> {
     c.eval_script(
         r#"
-canopy.bind_with("Tab", { desc = "Next focus" }, function()
+canopy.bind("Tab", { description = "Next focus" }, function()
     root.focus("Next")
 end)
-canopy.bind_with("BackTab", { desc = "Previous focus" }, function()
+canopy.bind("BackTab", { description = "Previous focus" }, function()
     root.focus("Prev")
 end)
 "#,

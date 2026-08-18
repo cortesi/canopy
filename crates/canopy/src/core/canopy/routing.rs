@@ -4,8 +4,8 @@ use ruau::vm::Scope;
 
 use super::{AUTOMATION_SERVICE_BUDGET, Canopy, RoutePhase, RouteTraceEntry};
 use crate::{
-    NodeId,
-    core::{Core, help, inputmap},
+    NodeId, commands,
+    core::{Core, inputmap},
     error::Result,
     event::{Event, key, mouse},
     geom::{Point, Size},
@@ -134,12 +134,9 @@ impl Canopy {
             }
 
             let mut fallback_binding = None;
-            if let Some((binding, path_match)) =
-                self.keymap.resolve_match(&path, &input.input_spec())
-            {
+            if let Some(binding) = self.core.input_map.resolve_match(&path, input.input_spec()) {
                 if input.allows_pre_event_binding()
-                    && path_match.anchored_end
-                    && path_match.depth > 0
+                    && binding.phase == inputmap::BindingPhase::BeforeWidget
                 {
                     self.trace_route(
                         RoutePhase::PreEventBinding,
@@ -195,18 +192,30 @@ impl Canopy {
         node_id: NodeId,
         path: &Path,
         input: RoutedInput,
-        binding: LuauFunctionId,
+        binding: inputmap::ResolvedBinding,
         scope: Option<&Scope<'_>>,
     ) -> Result<bool> {
-        let label = help::binding_label(binding, |id| self.script_host.function_label(id));
-        self.trace_route(RoutePhase::BindingExecution, Some(node_id), path, label);
+        self.trace_route(
+            RoutePhase::BindingExecution,
+            Some(node_id),
+            path,
+            binding.description,
+        );
 
         let event = input.event_for_node(&self.core, node_id);
         let frame = self.core.command_scope_for_event(&event);
         let depth = self.core.push_command_scope(frame);
-        let result = self.execute_binding_with_scope(node_id, binding, scope);
+        let result = match binding.target {
+            inputmap::BindingTarget::Script(binding) => {
+                self.execute_binding_with_scope(node_id, binding, scope)
+            }
+            inputmap::BindingTarget::Command(command) => {
+                commands::dispatch(&mut self.core, node_id, &command)
+                    .map(|_| ())
+                    .map_err(Into::into)
+            }
+        };
         self.core.pop_command_scope(depth);
-        self.fulfill_pending_help_request();
         result?;
 
         self.trace_route(

@@ -5,6 +5,19 @@
 use canopy::{Canopy, Loader, Widget, error::Result, terminal::runloop};
 use canopy_widgets::Root;
 
+/// Shared global contextual-help trigger for Root-based demos.
+const HELP_BINDING: &str = r#"
+function setup()
+    canopy.bind("?", {
+        description = "Show key bindings",
+        path = "/root/**/",
+        tier = "global",
+    }, function()
+        root.toggle_help()
+    end)
+end
+"#;
+
 /// Char gym example nodes.
 pub mod chargym;
 /// Editor gym example nodes.
@@ -41,6 +54,11 @@ pub fn print_luau_api(cnpy: &mut Canopy) -> Result<()> {
     Ok(())
 }
 
+/// Install the global contextual-help binding for one demo launcher.
+pub fn install_help_binding(cnpy: &mut Canopy) -> Result<()> {
+    cnpy.register_startup_script("examples-help", HELP_BINDING)
+}
+
 /// Install one demo app under a root and run the terminal loop.
 pub fn run_demo<T: Widget + Loader + 'static>(
     mut cnpy: Canopy,
@@ -48,6 +66,7 @@ pub fn run_demo<T: Widget + Loader + 'static>(
     inspector: bool,
 ) -> Result<i32> {
     Root::install_app_with_inspector(&mut cnpy, app, inspector)?;
+    cnpy.run_startup_scripts()?;
     runloop(cnpy)
 }
 

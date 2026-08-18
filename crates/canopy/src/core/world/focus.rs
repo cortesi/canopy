@@ -223,7 +223,10 @@ impl Core {
         let hint = self.focus_hint.take();
         if let Some(removed_root) = removed_root {
             let candidate = if let Some(hint) = hint {
-                hint.next.or(hint.prev).or(hint.ancestor)
+                [hint.next, hint.prev, hint.ancestor]
+                    .into_iter()
+                    .flatten()
+                    .find(|candidate| is_focus_candidate(self, *candidate, true))
             } else {
                 self.next_focusable_after_subtree(removed_root)
                     .or_else(|| self.prev_focusable_before_subtree(removed_root))
@@ -263,6 +266,18 @@ impl Core {
     /// Clear mouse capture without a requester.
     pub fn clear_mouse_capture(&mut self) -> Result<ChangeOutcome> {
         self.transition_mouse_capture(None)
+    }
+
+    /// Clear and return the current mouse-capture target.
+    pub fn take_mouse_capture(&mut self) -> Result<Option<NodeId>> {
+        let capture = self.mouse_capture;
+        self.transition_mouse_capture(None)?;
+        Ok(capture)
+    }
+
+    /// Restore mouse capture to an attached node.
+    pub fn restore_mouse_capture(&mut self, node: NodeId) -> Result<ChangeOutcome> {
+        self.transition_mouse_capture(Some(node))
     }
 
     /// Apply one validated mouse-capture transition.

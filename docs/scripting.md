@@ -14,9 +14,10 @@ install order:
 
 1. The header comment in `crates/canopy/luau/preamble.d.luau`.
 2. The base `canopy` module, which declares `NodeId`, `Point`, `Size`, `Rect`, `NodeInfo`,
-   `TreeNode`, `BindOptions`, `MouseSpec`, `FixtureInfo`, `BindingInfo`, `CommandParamInfo`,
-   `CommandInfo`, `ScreenCell`, `RouteTraceEntry`, `HelpBinding`, `HelpSnapshot`,
-   `ScriptAssertionInfo`, `ScriptJournalEntry`, the `canopy` global, and `fixtures()`.
+   `TreeNode`, `BindOptions`, `UnbindSelector`, `MouseSpec`, `FixtureInfo`, `BindingInfo`,
+   `CommandParamInfo`, `CommandInfo`, `ScreenCell`, `RouteTraceEntry`, `AvailableBinding`,
+   `BindingSnapshot`, `ScriptAssertionInfo`, `ScriptJournalEntry`, the `canopy` global, and
+   `fixtures()`.
 3. Each module registered through `Canopy::register_script_module`.
 4. One module per widget owner, carrying its command table and default-binding helper.
 5. Fixture comment lines.
@@ -75,12 +76,35 @@ external data record and does not reconstruct that identity.
 
 ## Bindings
 
-Scripts can create key and mouse bindings with `canopy.bind`, `canopy.bind_with`,
-`canopy.bind_mouse`, and `canopy.bind_mouse_with`. These calls return numeric binding
-IDs.
+Use `canopy.bind(key, options, callback)` for key bindings and
+`canopy.bind_mouse(mouse, options, callback)` for mouse bindings. The options table is required.
+Its `description` field must contain user-facing text. The optional `path` field limits a binding
+to matching route paths. The optional `mode` field puts a binding in a named mode. Set
+`tier = "global"` for a global binding; a global binding cannot also name a mode, and its path must
+be anchored at both ends.
+
+```luau
+canopy.bind("?", {
+    description = "Show key bindings",
+    path = "/root/**/",
+    tier = "global",
+}, function()
+    root.toggle_help()
+end)
+```
+
+The registry keeps one flat record format for application and framework bindings.
+`canopy.bindings()` returns all records, including normalized input, owner, scope, path,
+description, source, and target kind. `canopy.available_bindings(node?)` returns an owned snapshot
+of the effective key bindings for the specified node or current focus. The snapshot contains the
+focus path, active modes, active exclusive framework group, and one winning record per key. Each
+winner includes its route path and whether it runs before the widget or after the widget ignores
+the key. Contextual help and automation use this same resolver as input routing.
 
 `canopy.unbind(id)` removes one binding. `canopy.unbind_key(key, options?)` removes
-matching key bindings. `canopy.clear_bindings()` removes every binding.
+matching application key bindings. Its optional selector has exact `mode` and `path` filters.
+`canopy.clear_bindings()` removes every application binding. Scripts cannot remove or replace
+framework-owned bindings.
 
 Registered widget default bindings appear as `owner.default_bindings()` in the
 generated API. Calling that helper installs the Rust-registered default binding script
@@ -98,9 +122,10 @@ loading, diagnostics, and tracebacks. `init.luau` maps to its mount root (`@user
 matching directory-module resolution.
 
 `Canopy::invalidate_script_modules` refreshes one named root or every root. Invalidation also
-removes every key and mouse binding and every pending startup hook, because their retained
-function handles belong to the previous source epoch. The next script load prepares dependencies
-again, and re-running the startup scripts reinstalls the bindings.
+removes application key and mouse bindings and pending startup hooks because their retained
+function handles belong to the previous source epoch. Framework-owned bindings remain installed.
+The next script load prepares dependencies again, and re-running the startup scripts reinstalls
+the application bindings.
 
 ## Startup Scripts
 
@@ -185,8 +210,8 @@ script allocations. Exhausting either fails the script with a runtime error.
 
 `print(...)` output lands in the evaluation log alongside `canopy.log`, bounded by
 a per-invocation quota; output past the quota is dropped with a truncation marker.
-Script-declared key and mouse bindings record their declaration site (`script:LINE`)
-as the default binding description, visible through `canopy.bindings()`.
+Script-declared key and mouse bindings require an explicit description. They record their
+declaration site (`script:LINE`) separately as the source visible through `canopy.bindings()`.
 
 ## Timeouts
 

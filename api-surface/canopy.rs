@@ -529,28 +529,32 @@ pub mod canopy {
             /// Evaluate a Luau config file from disk.
             pub fn run_config(&mut self, path: &FsPath) -> Result<()> {}
 
-            /// Remove a binding by ID. Returns true if a binding was removed.
-            pub fn unbind(&mut self, id: inputmap::BindingId) -> bool {}
+            /// Install an idempotent framework-owned command binding.
+            pub fn bind_framework(
+                &mut self,
+                group: inputmap::FrameworkBindingGroup,
+                input: inputmap::InputSpec,
+                path: &str,
+                description: &str,
+                command: commands::CommandInvocation,
+            ) -> Result<inputmap::BindingId> {
+            }
+
+            /// Remove an application binding by ID.
+            ///
+            /// A framework-owned ID returns an error.
+            pub fn unbind(&mut self, id: inputmap::BindingId) -> Result<bool> {}
 
             /// Remove bindings for an input, optionally filtered by mode and path.
             pub fn unbind_input(
                 &mut self,
                 input: inputmap::InputSpec,
-                mode: Option<&str>,
-                path_filter: Option<&str>,
+                selector: &inputmap::BindingSelector<'_>,
             ) -> usize {
             }
 
             /// Remove all bindings from all modes.
             pub fn clear_bindings(&mut self) -> usize {}
-
-            /// Return bindings in a mode that match a specific path.
-            pub fn bindings_matching_path(
-                &self,
-                mode: &str,
-                path: &Path,
-            ) -> Vec<inputmap::MatchedBindingInfo<'_>> {
-            }
 
             /// Return the active input mode.
             pub fn input_mode(&self) -> &str {}
@@ -604,12 +608,12 @@ pub mod canopy {
             ) -> Vec<commands::CommandAvailability<'_>> {
             }
 
-            /// Generate a contextual help snapshot for the current focus.
-            ///
-            /// The snapshot includes:
-            /// - Bindings that would match from the focus path
-            /// - Commands with their availability status
-            pub fn help_snapshot(&self) -> super::help::HelpSnapshot<'_> {}
+            /// Return the effective key bindings for a node or the current focus.
+            pub fn available_bindings(
+                &self,
+                focus: Option<NodeId>,
+            ) -> Result<super::help::BindingSnapshot> {
+            }
 
             /// Build a diagnostic dump with tree, focus, and binding details.
             pub fn diagnostic_dump(&self, target: NodeId) -> String {}
@@ -674,6 +678,24 @@ pub mod canopy {
 
             /// Release mouse capture if held by the current node.
             fn release_mouse(&mut self) -> Result<ChangeOutcome>;
+
+            /// Clear and return the current mouse-capture target.
+            fn take_mouse_capture(&mut self) -> Result<Option<NodeId>>;
+
+            /// Restore mouse capture to an attached node.
+            fn restore_mouse_capture(&mut self, node: NodeId) -> Result<ChangeOutcome>;
+
+            /// Return effective key bindings for a node or the current focus.
+            fn available_bindings(&self, node: Option<NodeId>) -> Result<BindingSnapshot>;
+
+            /// Push an exclusive framework binding frame owned by the current node.
+            fn push_exclusive_bindings(
+                &mut self,
+                group: FrameworkBindingGroup,
+            ) -> Result<ExclusiveFrameToken>;
+
+            /// Remove one exclusive binding frame.
+            fn pop_exclusive_bindings(&mut self, token: ExclusiveFrameToken) -> Result<()>;
 
             /// Scroll the view to the specified position. Returns `true` if movement occurred.
             fn scroll_to(&mut self, x: u32, y: u32) -> bool;
@@ -802,20 +824,6 @@ pub mod canopy {
             /// Set the style map to be used for rendering.
             /// The style change will be applied before the next render.
             fn set_style(&mut self, style: StyleMap);
-
-            /// Request a help snapshot to be injected into the specified target node.
-            ///
-            /// This should be called before changing focus or layout, so the snapshot
-            /// captures the pre-help context. After the current command returns, Canopy
-            /// will capture the snapshot and inject it into the target widget.
-            fn request_help_snapshot(&mut self, target: NodeId);
-
-            /// Take the pending help snapshot, if any.
-            ///
-            /// This is called by help widgets to retrieve the snapshot that was
-            /// captured when `request_help_snapshot` was called. Returns `None` if
-            /// no snapshot is pending.
-            fn take_help_snapshot(&mut self) -> Option<OwnedHelpSnapshot>;
 
             /// Request a diagnostic dump for a target node.
             fn request_diagnostic_dump(&mut self, target: NodeId);
@@ -1110,12 +1118,6 @@ pub mod canopy {
 
             /// Find all nodes whose paths match the validated filter.
             fn find_nodes_matching(&self, path_filter: &PathFilter) -> Vec<NodeId> {}
-
-            /// Peek at the pending help snapshot, if any.
-            ///
-            /// This is used by help widgets to check if a snapshot is available
-            /// during render, without consuming it.
-            fn pending_help_snapshot(&self) -> Option<&OwnedHelpSnapshot>;
         }
 
         /// Widgets are the behavior attached to nodes in the Core arena.
@@ -2197,6 +2199,59 @@ pub mod canopy {
         pub fn from_u64(id: u64) -> Self {}
     }
 
+    /// Owner of one binding record.
+    #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq, Hash)]
+    pub enum BindingOwner {
+        /// Application-owned binding that script APIs can mutate.
+        Application,
+        /// Framework-owned binding in a private group.
+        Framework(FrameworkBindingGroup),
+    }
+
+    /// Binding phase relative to widget input handling.
+    #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq)]
+    pub enum BindingPhase {
+        /// Execute before the focused widget.
+        BeforeWidget,
+        /// Execute only after the widget ignores the input.
+        AfterIgnore,
+    }
+
+    /// Resolution scope for one binding.
+    #[derive(Clone, Debug, StructuralPartialEq, PartialEq, Eq, Hash)]
+    pub enum BindingScope {
+        /// Highest-priority application tier.
+        Global,
+        /// Named application mode.
+        Mode(String),
+        /// Default application mode.
+        Default,
+        /// Framework-only exclusive group.
+        Exclusive(FrameworkBindingGroup),
+    }
+
+    impl BindingScope {
+        /// Return the named mode, if this is a mode scope.
+        pub fn mode(&self) -> Option<&str> {}
+
+        /// Return a stable scripting and diagnostic label.
+        pub fn label(&self) -> &'static str {}
+    }
+
+    /// Action executed by a binding.
+    #[derive(Clone, Debug, StructuralPartialEq, PartialEq)]
+    pub enum BindingTarget {
+        /// Stored Luau callback.
+        Script(crate::script::LuauFunctionId),
+        /// Rust command invocation.
+        Command(crate::commands::CommandInvocation),
+    }
+
+    impl BindingTarget {
+        /// Return a stable target-kind label.
+        pub fn label(&self) -> &'static str {}
+    }
+
     /// Application runtime state and renderer coordination.
     pub struct Canopy {}
 
@@ -2373,28 +2428,32 @@ pub mod canopy {
         /// Evaluate a Luau config file from disk.
         pub fn run_config(&mut self, path: &FsPath) -> Result<()> {}
 
-        /// Remove a binding by ID. Returns true if a binding was removed.
-        pub fn unbind(&mut self, id: inputmap::BindingId) -> bool {}
+        /// Install an idempotent framework-owned command binding.
+        pub fn bind_framework(
+            &mut self,
+            group: inputmap::FrameworkBindingGroup,
+            input: inputmap::InputSpec,
+            path: &str,
+            description: &str,
+            command: commands::CommandInvocation,
+        ) -> Result<inputmap::BindingId> {
+        }
+
+        /// Remove an application binding by ID.
+        ///
+        /// A framework-owned ID returns an error.
+        pub fn unbind(&mut self, id: inputmap::BindingId) -> Result<bool> {}
 
         /// Remove bindings for an input, optionally filtered by mode and path.
         pub fn unbind_input(
             &mut self,
             input: inputmap::InputSpec,
-            mode: Option<&str>,
-            path_filter: Option<&str>,
+            selector: &inputmap::BindingSelector<'_>,
         ) -> usize {
         }
 
         /// Remove all bindings from all modes.
         pub fn clear_bindings(&mut self) -> usize {}
-
-        /// Return bindings in a mode that match a specific path.
-        pub fn bindings_matching_path(
-            &self,
-            mode: &str,
-            path: &Path,
-        ) -> Vec<inputmap::MatchedBindingInfo<'_>> {
-        }
 
         /// Return the active input mode.
         pub fn input_mode(&self) -> &str {}
@@ -2445,12 +2504,12 @@ pub mod canopy {
         ) -> Vec<commands::CommandAvailability<'_>> {
         }
 
-        /// Generate a contextual help snapshot for the current focus.
-        ///
-        /// The snapshot includes:
-        /// - Bindings that would match from the focus path
-        /// - Commands with their availability status
-        pub fn help_snapshot(&self) -> super::help::HelpSnapshot<'_> {}
+        /// Return the effective key bindings for a node or the current focus.
+        pub fn available_bindings(
+            &self,
+            focus: Option<NodeId>,
+        ) -> Result<super::help::BindingSnapshot> {
+        }
 
         /// Build a diagnostic dump with tree, focus, and binding details.
         pub fn diagnostic_dump(&self, target: NodeId) -> String {}
@@ -2513,6 +2572,24 @@ pub mod canopy {
 
         /// Release mouse capture if held by the current node.
         fn release_mouse(&mut self) -> Result<ChangeOutcome>;
+
+        /// Clear and return the current mouse-capture target.
+        fn take_mouse_capture(&mut self) -> Result<Option<NodeId>>;
+
+        /// Restore mouse capture to an attached node.
+        fn restore_mouse_capture(&mut self, node: NodeId) -> Result<ChangeOutcome>;
+
+        /// Return effective key bindings for a node or the current focus.
+        fn available_bindings(&self, node: Option<NodeId>) -> Result<BindingSnapshot>;
+
+        /// Push an exclusive framework binding frame owned by the current node.
+        fn push_exclusive_bindings(
+            &mut self,
+            group: FrameworkBindingGroup,
+        ) -> Result<ExclusiveFrameToken>;
+
+        /// Remove one exclusive binding frame.
+        fn pop_exclusive_bindings(&mut self, token: ExclusiveFrameToken) -> Result<()>;
 
         /// Scroll the view to the specified position. Returns `true` if movement occurred.
         fn scroll_to(&mut self, x: u32, y: u32) -> bool;
@@ -2635,23 +2712,13 @@ pub mod canopy {
         /// The style change will be applied before the next render.
         fn set_style(&mut self, style: StyleMap);
 
-        /// Request a help snapshot to be injected into the specified target node.
-        ///
-        /// This should be called before changing focus or layout, so the snapshot
-        /// captures the pre-help context. After the current command returns, Canopy
-        /// will capture the snapshot and inject it into the target widget.
-        fn request_help_snapshot(&mut self, target: NodeId);
-
-        /// Take the pending help snapshot, if any.
-        ///
-        /// This is called by help widgets to retrieve the snapshot that was
-        /// captured when `request_help_snapshot` was called. Returns `None` if
-        /// no snapshot is pending.
-        fn take_help_snapshot(&mut self) -> Option<OwnedHelpSnapshot>;
-
         /// Request a diagnostic dump for a target node.
         fn request_diagnostic_dump(&mut self, target: NodeId);
     }
+
+    /// Opaque token for one active exclusive binding frame.
+    #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq, Hash)]
+    pub struct ExclusiveFrameToken(_);
 
     /// A named, reproducible application state.
     #[derive(Clone)]
@@ -2709,16 +2776,30 @@ pub mod canopy {
         Node(super::id::NodeId),
     }
 
+    /// Stable name for one framework-owned binding group.
+    #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq, Hash, Display)]
+    pub struct FrameworkBindingGroup(_);
+
+    impl FrameworkBindingGroup {
+        /// Construct a framework binding group.
+        pub const fn new(name: &'static str) -> Self {}
+
+        /// Return the diagnostic group name.
+        pub const fn as_str(self) -> &'static str {}
+    }
+
     /// Input event used for bindings.
-    ///
-    /// Key inputs are normalized when stored or matched so bindings are resilient
-    /// to terminal differences in Ctrl/Shift representations.
     #[derive(Debug, Clone, Copy, Hash, StructuralPartialEq, PartialEq, Eq, Display)]
     pub enum InputSpec {
         /// Mouse input.
         Mouse(crate::event::mouse::Mouse),
         /// Keyboard input.
         Key(crate::event::key::Key),
+    }
+
+    impl InputSpec {
+        /// Normalize key variants for matching.
+        pub fn normalize(self) -> Self {}
     }
 
     /// Ordered keyed child collection helper.
@@ -3116,12 +3197,6 @@ pub mod canopy {
 
         /// Find all nodes whose paths match the validated filter.
         fn find_nodes_matching(&self, path_filter: &PathFilter) -> Vec<NodeId> {}
-
-        /// Peek at the pending help snapshot, if any.
-        ///
-        /// This is used by help widgets to check if a snapshot is available
-        /// during render, without consuming it.
-        fn pending_help_snapshot(&self) -> Option<&OwnedHelpSnapshot>;
     }
 
     pub mod commands {
@@ -4338,98 +4413,44 @@ pub mod canopy {
 
     pub mod help {
         //! Help snapshot API.
-        //! Help snapshot API for context-aware help.
-        //!
-        //! This module provides types and functions to generate a snapshot of available bindings and
-        //! commands from a given focus context. The snapshot can be used to build help overlays,
-        //! command palettes, or discoverable keybinding references.
+        //! Contextual binding discovery.
 
-        /// Classification of how a binding matched the focus path.
-        #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq)]
-        pub enum BindingKind {
-            /// Binding matched exactly at the focus path (pre-event override).
-            PreEventOverride,
-            /// Binding matched as a fallback after event bubbling (post-event fallback).
-            PostEventFallback,
-        }
-
-        /// A binding in the help snapshot.
-        #[derive(Debug, Clone)]
-        pub struct HelpBinding<'a> {
-            /// Identifier of the matched binding.
-            pub id: crate::core::inputmap::BindingId,
-            /// The input (key or mouse) that triggers this binding.
-            pub input: crate::core::inputmap::InputSpec,
-            /// The mode this binding belongs to.
-            pub mode: &'a str,
-            /// The original path filter string.
-            pub path_filter: &'a str,
-            /// The stored Luau closure this binding calls.
-            pub target: crate::script::LuauFunctionId,
-            /// Classification of how this binding matched.
-            pub kind: BindingKind,
-            /// Human-readable label derived from command docs or script source.
-            pub label: String,
-        }
-
-        /// A command in the help snapshot.
-        #[derive(Debug, Clone)]
-        pub struct HelpCommand<'a> {
-            /// Command specification.
-            pub spec: &'a crate::commands::CommandSpec,
-            /// Resolution if the command has a target, or `None` if no target exists.
-            pub resolution: Option<crate::commands::CommandResolution>,
-        }
-
-        /// A contextual help snapshot combining bindings and commands.
-        #[derive(Debug)]
-        pub struct HelpSnapshot<'a> {
-            /// Current focus node ID.
+        /// Owned snapshot of the effective key bindings for one focus context.
+        #[derive(Clone, Debug)]
+        pub struct BindingSnapshot {
+            /// Node used as the discovery focus.
             pub focus: crate::core::NodeId,
-            /// Path from root to focus.
+            /// Path from the root to the focus.
             pub focus_path: crate::path::Path,
-            /// Current input mode name.
-            pub input_mode: &'a str,
-            /// Bindings that match the current context.
-            pub bindings: Vec<HelpBinding<'a>>,
-            /// Commands with their availability status.
-            pub commands: Vec<HelpCommand<'a>>,
+            /// Active non-default modes in resolution order.
+            pub active_modes: Vec<String>,
+            /// Newest active exclusive binding group.
+            pub exclusive_group: Option<crate::core::inputmap::FrameworkBindingGroup>,
+            /// Effective key bindings, with one winner per normalized key.
+            pub bindings: Vec<AvailableBinding>,
         }
 
-        impl HelpSnapshot<'_> {
-            /// Convert to an owned version for storage.
-            pub fn to_owned(&self) -> OwnedHelpSnapshot {}
-        }
-
-        /// Derive a human-readable label for a binding.
-        ///
-        /// Falls back to a generic label when the stored closure carries no label.
-        pub fn binding_label(
-            target: crate::script::LuauFunctionId,
-            luau_label: impl Fn(crate::script::LuauFunctionId) -> Option<String>,
-        ) -> String {
-        }
-
-        /// Owned version of [`HelpBinding`] for storage without lifetimes.
-        #[derive(Debug, Clone)]
-        pub struct OwnedHelpBinding {
-            /// The input (key or mouse) that triggers this binding.
-            pub input: crate::core::inputmap::InputSpec,
-            /// Classification of how this binding matched.
-            pub kind: BindingKind,
-            /// Human-readable label derived from the stored closure.
-            pub label: String,
-        }
-
-        /// Owned version of [`HelpSnapshot`] for storage without lifetimes.
-        #[derive(Debug, Clone)]
-        pub struct OwnedHelpSnapshot {
-            /// Path from root to focus.
-            pub focus_path: crate::path::Path,
-            /// Current input mode name.
-            pub input_mode: String,
-            /// Bindings that match the current context.
-            pub bindings: Vec<OwnedHelpBinding>,
+        /// One effective key binding in a contextual snapshot.
+        #[derive(Clone, Debug)]
+        pub struct AvailableBinding {
+            /// Stable binding identifier.
+            pub id: crate::core::inputmap::BindingId,
+            /// Normalized key.
+            pub key: crate::event::key::Key,
+            /// Required user-facing description.
+            pub description: String,
+            /// Binding owner.
+            pub owner: crate::core::inputmap::BindingOwner,
+            /// Resolution scope.
+            pub scope: crate::core::inputmap::BindingScope,
+            /// Original path filter.
+            pub path_filter: String,
+            /// Route path at which this binding wins.
+            pub route_path: crate::path::Path,
+            /// Phase relative to widget input handling.
+            pub phase: crate::core::inputmap::BindingPhase,
+            /// Optional diagnostic source.
+            pub source: Option<String>,
         }
     }
 

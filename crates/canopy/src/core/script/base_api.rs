@@ -19,15 +19,15 @@ use ruau::{
 
 use super::{
     ArgValue, Canopy, ChangeOutcome, CommandSet, Context, CoreContext, CoreViewContext, FocusScope,
-    NodeId, PathFilter, Pin, Point, RectI32, ReentrantCanopyGuard, Result, ViewContext, base_api,
-    binding_info_to_arg, canopy_to_host, command_info_to_arg, commands, defs, dispatch_command,
-    dispatch_command_by_name, error, fixtures_to_arg, help_snapshot_to_arg, host_return,
-    host_value, inputmap, key, luau_global_owner_name, mouse, node_handle_type, node_id_from_value,
-    node_id_to_arg, node_info_to_arg, node_list_to_arg, owned_truthy, owned_value_to_display,
-    ret_arg, ret_none, ret_one, route_trace_to_arg, scoped_value_to_display,
-    scoped_value_to_string, screen_cells_to_arg, screen_text, screen_text_for_rect, screen_to_arg,
-    script_callback_label, script_journal_to_arg, tree_node_to_arg, validate_node_handle,
-    values_to_args, with_current_canopy, yield_now,
+    NodeId, PathFilter, Pin, Point, RectI32, ReentrantCanopyGuard, Result, ViewContext,
+    available_bindings_to_arg, base_api, binding_info_to_arg, canopy_to_host, command_info_to_arg,
+    commands, defs, dispatch_command, dispatch_command_by_name, error, fixtures_to_arg,
+    host_return, host_value, inputmap, key, luau_global_owner_name, mouse, node_handle_type,
+    node_id_from_value, node_id_to_arg, node_info_to_arg, node_list_to_arg, owned_truthy,
+    owned_value_to_display, ret_arg, ret_none, ret_one, route_trace_to_arg,
+    scoped_value_to_display, scoped_value_to_string, screen_cells_to_arg, screen_text,
+    screen_text_for_rect, screen_to_arg, script_callback_label, script_journal_to_arg,
+    tree_node_to_arg, validate_node_handle, values_to_args, with_current_canopy, yield_now,
 };
 
 /// The native implementation behind one base API function.
@@ -317,10 +317,14 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
         handler: Handler::Sync(host_diagnostic_dump),
     },
     BaseFunction {
-        name: "help_snapshot",
-        docs: &["Return the current contextual help snapshot."],
-        signature: || FunctionSignature::new().ret(Type::named("HelpSnapshot")),
-        handler: Handler::Sync(host_help_snapshot),
+        name: "available_bindings",
+        docs: &["Return effective key bindings for a node or the current focus."],
+        signature: || {
+            FunctionSignature::new()
+                .param(("id", Type::named("NodeId").optional()))
+                .ret(Type::named("BindingSnapshot"))
+        },
+        handler: Handler::Sync(host_available_bindings),
     },
     BaseFunction {
         name: "script_journal",
@@ -336,49 +340,27 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "bind",
-        docs: &["Bind a key spec to a Luau callback in the default mode and empty path filter."],
+        docs: &["Bind a key spec with required discovery metadata."],
         signature: || {
             FunctionSignature::new()
                 .param(("key", Type::String))
+                .param(("options", Type::named("BindOptions")))
                 .param(("handler", Type::func(FunctionSignature::new())))
                 .ret(Type::Number)
         },
         handler: Handler::Sync(host_bind),
     },
     BaseFunction {
-        name: "bind_with",
-        docs: &["Bind a key spec with explicit mode/path/description options."],
-        signature: || {
-            FunctionSignature::new()
-                .param(("key", Type::String))
-                .param(("options", Type::named("BindOptions")))
-                .param(("handler", Type::func(FunctionSignature::new())))
-                .ret(Type::Number)
-        },
-        handler: Handler::Sync(host_bind_with),
-    },
-    BaseFunction {
         name: "bind_mouse",
-        docs: &["Bind a mouse spec to a Luau callback in the default mode and empty path filter."],
+        docs: &["Bind a mouse spec with required discovery metadata."],
         signature: || {
             FunctionSignature::new()
                 .param(("mouse", Type::named("MouseSpec")))
+                .param(("options", Type::named("BindOptions")))
                 .param(("handler", Type::func(FunctionSignature::new())))
                 .ret(Type::Number)
         },
         handler: Handler::Sync(host_bind_mouse),
-    },
-    BaseFunction {
-        name: "bind_mouse_with",
-        docs: &["Bind a mouse spec with explicit mode/path/description options."],
-        signature: || {
-            FunctionSignature::new()
-                .param(("mouse", Type::named("MouseSpec")))
-                .param(("options", Type::named("BindOptions")))
-                .param(("handler", Type::func(FunctionSignature::new())))
-                .ret(Type::Number)
-        },
-        handler: Handler::Sync(host_bind_mouse_with),
     },
     BaseFunction {
         name: "unbind",
@@ -396,7 +378,7 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
         signature: || {
             FunctionSignature::new()
                 .param(("key", Type::String))
-                .param(("options", Type::named("BindOptions").optional()))
+                .param(("options", Type::named("UnbindSelector").optional()))
         },
         handler: Handler::Sync(host_unbind_key),
     },
@@ -513,23 +495,32 @@ fn point_from_coords(x: i64, y: i64) -> Result<Point> {
 }
 
 /// Parsed options for script-created bindings.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 struct ScriptBindOptions {
-    /// Optional mode override.
-    mode: String,
+    /// Binding scope.
+    scope: inputmap::BindingScope,
     /// Optional path filter override.
     path: String,
-    /// Optional human-readable description.
-    desc: Option<String>,
+    /// Required human-readable description.
+    description: String,
 }
 
-/// Parse `BindOptions` from an optional script table.
+/// Selector for application binding removal.
+#[derive(Debug, Clone, Default)]
+struct ScriptUnbindSelector {
+    /// Optional named mode to select.
+    mode: Option<String>,
+    /// Optional exact path filter to select.
+    path: Option<String>,
+}
+
+/// Parse `BindOptions` from a required script table.
 fn parse_bind_options<'s>(
     scope: &Scope<'s>,
     options: Option<Table<'s>>,
 ) -> StdResult<ScriptBindOptions, RuntimeError> {
     let Some(options) = options else {
-        return Ok(ScriptBindOptions::default());
+        return Err(RuntimeError::runtime("binding options table is required"));
     };
     let field = |name: &str| -> StdResult<Option<String>, RuntimeError> {
         match options.get::<_, ScopedValue>(scope, name)? {
@@ -539,10 +530,56 @@ fn parse_bind_options<'s>(
                 .map_err(RuntimeError::runtime),
         }
     };
+    let description = field("description")?
+        .ok_or_else(|| RuntimeError::runtime("binding description is required"))?;
+    if description.trim().is_empty() {
+        return Err(RuntimeError::runtime("binding description cannot be empty"));
+    }
+    let mode = field("mode")?.filter(|mode| !mode.is_empty());
+    let tier = field("tier")?;
+    let scope = match tier.as_deref() {
+        None => mode.map_or(
+            inputmap::BindingScope::Default,
+            inputmap::BindingScope::Mode,
+        ),
+        Some("global") if mode.is_none() => inputmap::BindingScope::Global,
+        Some("global") => {
+            return Err(RuntimeError::runtime(
+                "binding tier 'global' cannot be combined with a named mode",
+            ));
+        }
+        Some(other) => {
+            return Err(RuntimeError::runtime(format!(
+                "unknown binding tier: {other}"
+            )));
+        }
+    };
     Ok(ScriptBindOptions {
-        mode: field("mode")?.unwrap_or_default(),
+        scope,
         path: field("path")?.unwrap_or_default(),
-        desc: field("desc")?,
+        description,
+    })
+}
+
+/// Parse an application-only unbind selector.
+fn parse_unbind_selector<'s>(
+    scope: &Scope<'s>,
+    options: Option<Table<'s>>,
+) -> StdResult<ScriptUnbindSelector, RuntimeError> {
+    let Some(options) = options else {
+        return Ok(ScriptUnbindSelector::default());
+    };
+    let field = |name: &str| -> StdResult<Option<String>, RuntimeError> {
+        match options.get::<_, ScopedValue>(scope, name)? {
+            ScopedValue::Nil => Ok(None),
+            value => scoped_value_to_string(scope, value)
+                .map(Some)
+                .map_err(RuntimeError::runtime),
+        }
+    };
+    Ok(ScriptUnbindSelector {
+        mode: field("mode")?.filter(|mode| !mode.is_empty()),
+        path: field("path")?.filter(|path| !path.is_empty()),
     })
 }
 
@@ -852,18 +889,17 @@ fn install_function_binding<'s>(
     options: &ScriptBindOptions,
 ) -> StdResult<i64, RuntimeError> {
     let stashed = scope.stash_function(function)?;
-    let label = Some(
-        options
-            .desc
-            .clone()
-            .unwrap_or_else(|| script_callback_label(scope)),
-    );
+    let source = Some(script_callback_label(scope));
     with_current_canopy(scope, |canopy, _| {
-        let function_id = canopy.script_host.store_function(stashed, label)?;
-        let result =
-            canopy
-                .keymap
-                .replace_binding(&options.mode, input, &options.path, function_id);
+        let function_id = canopy.script_host.store_function(stashed)?;
+        let result = canopy.core.input_map.replace_application_binding(
+            options.scope.clone(),
+            input,
+            &options.path,
+            &options.description,
+            source,
+            function_id,
+        );
         match result {
             Ok((binding_id, removed)) => {
                 canopy.release_removed_bindings(removed);
@@ -1215,10 +1251,11 @@ fn host_bindings<'s>(
     host_value(scope, |canopy, _| {
         Ok(ArgValue::Array(
             canopy
-                .keymap
+                .core
+                .input_map
                 .bindings()
-                .into_iter()
-                .map(|binding| binding_info_to_arg(canopy, binding.mode, &binding.info))
+                .iter()
+                .map(binding_info_to_arg)
                 .collect(),
         ))
     })
@@ -1311,20 +1348,6 @@ fn host_bind<'s>(
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
     let mut args = ArgReader::new(args);
     let key_spec = args.string(scope)?;
-    let function = args.function(scope)?;
-    let input =
-        inputmap::InputSpec::Key(key::Key::parse_spec(&key_spec).map_err(error::Error::Script)?);
-    let id = install_function_binding(scope, function, input, &ScriptBindOptions::default())?;
-    Ok(ret_one(ScopedValue::Number(id as f64)))
-}
-
-/// `canopy.bind_with`: bind a key spec with explicit options.
-fn host_bind_with<'s>(
-    scope: &Scope<'s>,
-    args: MultiValue<'s>,
-) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = ArgReader::new(args);
-    let key_spec = args.string(scope)?;
     let options = parse_bind_options(scope, args.opt_table(scope)?)?;
     let function = args.function(scope)?;
     let input =
@@ -1335,21 +1358,6 @@ fn host_bind_with<'s>(
 
 /// `canopy.bind_mouse`: bind a mouse spec to a Luau callback.
 fn host_bind_mouse<'s>(
-    scope: &Scope<'s>,
-    args: MultiValue<'s>,
-) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = ArgReader::new(args);
-    let mouse_spec = args.string(scope)?;
-    let function = args.function(scope)?;
-    let input = inputmap::InputSpec::Mouse(
-        mouse::Mouse::parse_spec(&mouse_spec).map_err(error::Error::Script)?,
-    );
-    let id = install_function_binding(scope, function, input, &ScriptBindOptions::default())?;
-    Ok(ret_one(ScopedValue::Number(id as f64)))
-}
-
-/// `canopy.bind_mouse_with`: bind a mouse spec with explicit options.
-fn host_bind_mouse_with<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
@@ -1372,7 +1380,7 @@ fn host_unbind<'s>(
     let mut args = ArgReader::new(args);
     let id = args.integer(scope)?;
     let removed = with_current_canopy(scope, |canopy, _| {
-        Ok(canopy.unbind(inputmap::BindingId::from_u64(id as u64)))
+        canopy.unbind(inputmap::BindingId::from_u64(id as u64))
     })?;
     Ok(ret_one(ScopedValue::Boolean(removed)))
 }
@@ -1384,12 +1392,20 @@ fn host_unbind_key<'s>(
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
     let mut args = ArgReader::new(args);
     let key_spec = args.string(scope)?;
-    let options = parse_bind_options(scope, args.opt_table(scope)?)?;
+    let options = parse_unbind_selector(scope, args.opt_table(scope)?)?;
     with_current_canopy(scope, |canopy, _| {
-        let mode = (!options.mode.is_empty()).then_some(options.mode.as_str());
-        let path = (!options.path.is_empty()).then_some(options.path.as_str());
         let key = key::Key::parse_spec(&key_spec).map_err(error::Error::Script)?;
-        let _ = canopy.unbind_input(inputmap::InputSpec::Key(key), mode, path);
+        let scope = options
+            .mode
+            .as_ref()
+            .map(|mode| inputmap::BindingScope::Mode(mode.clone()));
+        let _ = canopy.unbind_input(
+            inputmap::InputSpec::Key(key),
+            &inputmap::BindingSelector {
+                scope,
+                path_filter: options.path.as_deref(),
+            },
+        );
         Ok(())
     })?;
     Ok(ret_none())
@@ -1495,12 +1511,16 @@ fn host_diagnostic_dump<'s>(
     Ok(ret_one(ScopedValue::String(scope.create_string(&dump)?)))
 }
 
-/// `canopy.help_snapshot`: return the current contextual help snapshot.
-fn host_help_snapshot<'s>(
+/// `canopy.available_bindings`: return effective key bindings.
+fn host_available_bindings<'s>(
     scope: &Scope<'s>,
-    _args: MultiValue<'s>,
+    args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    host_value(scope, |canopy, _| Ok(help_snapshot_to_arg(canopy)))
+    let mut args = ArgReader::new(args);
+    let requested = args.opt_node_id(scope)?;
+    host_value(scope, |canopy, _| {
+        available_bindings_to_arg(canopy, requested)
+    })
 }
 
 /// `canopy.script_journal`: return recorded script evaluations.
@@ -1528,9 +1548,8 @@ fn host_on_start<'s>(
     let mut args = ArgReader::new(args);
     let function = args.function(scope)?;
     let stashed = scope.stash_function(function)?;
-    let label = script_callback_label(scope);
     with_current_canopy(scope, |canopy, _| {
-        let function_id = canopy.script_host.store_function(stashed, Some(label))?;
+        let function_id = canopy.script_host.store_function(stashed)?;
         canopy
             .script_host
             .state

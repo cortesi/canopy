@@ -76,7 +76,7 @@ mod tests {
         let mut harness = Harness::builder(ScrollTest::new()).size(30, 10).build()?;
         harness.canopy.eval_script(
             r#"
-canopy.bind_with("Down", { desc = "Scroll down" }, function()
+canopy.bind("Down", { description = "Scroll down" }, function()
     scroll_test.scroll_down()
 end)
 "#,

@@ -67,7 +67,7 @@ layout pass ends with it, so any tree mutation that reaches layout is checked.
 `Core` is crate-private, so only canopy's own tests call it directly.
 
 It checks the root, widget slots, reciprocal links, duplicate children, cycles,
-keys, focus, mouse capture, pending help targets, lifecycle flags, layout caches,
+keys, focus, mouse capture, binding ownership, lifecycle flags, layout caches,
 and computed view caches.
 
 It does not run layout. Run layout before using screen coordinates.
@@ -157,15 +157,31 @@ rendering. Rendering must not rely on stale views.
 
 ## Event Routing
 
-Input arrives as typed events. Keys resolve bindings first, then go to the focused
-node if no binding handles them. Mouse events go to the capture node when capture
-is active; otherwise hit-testing chooses the target.
+Input arrives as typed events. `Core` owns one flat `InputMap` with complete records for
+application and framework bindings. Each record contains its normalized input, owner, scope,
+path matcher, description, source, target, and insertion order. Application targets call Luau
+functions. Framework targets dispatch commands.
+
+The resolver checks the newest exclusive framework frame first. Without an exclusive frame, it
+checks the global scope, active modes from newest to oldest, and then the default scope. Path
+specificity and insertion order select a winner within one scope. A start- and end-anchored path
+runs before the target widget. Other matches run only after the widget ignores the key.
+
+Key routing and `available_bindings` call the same resolver at each node in the focus-to-root
+route. Availability returns an owned snapshot with one effective winner per normalized key. It
+does not include mouse bindings. Diagnostic binding output uses the same registry and reports why
+records are active, shadowed, blocked by an exclusive frame, or unmatched.
+
+Mouse events go to the capture node when capture is active; otherwise hit-testing chooses the
+target.
 
 Widget events bubble from target to root until a widget handles or consumes them.
 Command scopes expose the originating event and target.
 
-Routing is public behavior. Command availability, help, diagnostics, key handling,
-and mouse handling should share one resolver.
+Root captures a help snapshot before it pushes the `root.help` exclusive framework frame. The
+frame admits only Root-owned help controls until the modal closes. Root then removes the exact
+frame token and restores the original focus when that node remains live. Removing or replacing a
+subtree also removes framework groups owned by that subtree.
 
 ## Focus and Mouse Capture
 

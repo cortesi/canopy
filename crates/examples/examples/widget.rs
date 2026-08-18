@@ -151,6 +151,7 @@ fn main() -> Result<()> {
     let args = Args::parse();
     let mut cnpy = Canopy::new();
     Root::load(&mut cnpy)?;
+    canopy_examples::install_help_binding(&mut cnpy)?;
 
     load_widget_api(&mut cnpy, &args.command)?;
 
@@ -225,6 +226,7 @@ fn main() -> Result<()> {
         }
     };
     Root::install_app_with_inspector(&mut cnpy, demo, args.inspector)?;
+    cnpy.run_startup_scripts()?;
     let exit_code = runloop(cnpy)?;
     if exit_code != 0 {
         process::exit(exit_code);
@@ -297,7 +299,7 @@ fn load_font_sources(path: &Path) -> Result<Vec<FontSource>> {
 fn setup_term_bindings(cnpy: &mut Canopy) -> Result<()> {
     cnpy.eval_script(
         r#"
-canopy.bind_with("ctrl-Tab", { path = "term_demo/**/", desc = "Next tab" }, function()
+canopy.bind("ctrl-Tab", { path = "term_demo/**/", description = "Next tab" }, function()
     term_demo.next_tab()
 end)
 "#,

@@ -684,7 +684,7 @@ pub mod canopy_examples {
             /// Switch to the previous terminal while keeping focus on the sidebar.
             pub fn prev_terminal_sidebar(&mut self, c: &mut dyn Context) -> Result<()> {}
 
-            /// Delete the active terminal and keep focus on the sidebar.
+            /// Close the active terminal and keep focus on the sidebar.
             pub fn delete_terminal(&mut self, c: &mut dyn Context) -> Result<()> {}
 
             /// Focus the terminal list sidebar.
@@ -692,6 +692,9 @@ pub mod canopy_examples {
 
             /// Focus the active terminal instance.
             pub fn focus_active_terminal(&mut self, c: &mut dyn Context) -> Result<()> {}
+
+            /// Toggle focus between the terminal list and the active terminal.
+            pub fn toggle_terminal_focus(&mut self, c: &mut dyn Context) -> Result<()> {}
 
             /// Activate a terminal from a sidebar row selection.
             pub fn activate_terminal(&mut self, c: &mut dyn Context, index: usize) -> Result<()> {}
@@ -722,6 +725,9 @@ pub mod canopy_examples {
 
             /// Return a typed command reference for this command.
             pub fn cmd_focus_active_terminal() -> &'static canopy::commands::CommandSpec {}
+
+            /// Return a typed command reference for this command.
+            pub fn cmd_toggle_terminal_focus() -> &'static canopy::commands::CommandSpec {}
 
             /// Return a typed command reference for this command.
             pub fn cmd_activate_terminal() -> &'static canopy::commands::CommandSpec {}
@@ -954,6 +960,9 @@ pub mod canopy_examples {
 
     /// Finalize and print the Luau API definitions for a demo app.
     pub fn print_luau_api(cnpy: &mut canopy::Canopy) -> canopy::error::Result<()> {}
+
+    /// Install the global contextual-help binding for one demo launcher.
+    pub fn install_help_binding(cnpy: &mut canopy::Canopy) -> canopy::error::Result<()> {}
 
     /// Install one demo app under a root and run the terminal loop.
     pub fn run_demo<T: Widget + Loader + 'static>(

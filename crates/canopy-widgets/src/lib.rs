@@ -23,7 +23,7 @@ mod font;
 mod font_banner;
 /// Scrollable frame container.
 mod frame;
-/// Experimental contextual help modal internals.
+/// Contextual key-binding help widgets.
 pub mod help;
 /// Image rendering widget.
 mod image_view;

@@ -14,7 +14,9 @@ use crate::{
 };
 
 impl TreeStateSnapshot {
-    /// Capture all core-owned state that tree hooks can mutate.
+    /// Capture structural state that tree hooks can mutate.
+    ///
+    /// The binding registry is runtime state and is intentionally outside tree-edit rollback.
     fn capture(core: &Core) -> Self {
         Self {
             nodes: core.nodes.clone(),
@@ -26,9 +28,6 @@ impl TreeStateSnapshot {
             focus_hint: core.focus_hint,
             commands: core.commands.clone(),
             command_scope: core.command_scope.clone(),
-            pending_help_request: core.pending_help_request,
-            pending_help_snapshot: core.pending_help_snapshot.clone(),
-            pending_help_snapshot_observed: core.pending_help_snapshot_observed.get(),
             pending_diagnostic_dump: core.pending_diagnostic_dump,
         }
     }
@@ -44,10 +43,6 @@ impl TreeStateSnapshot {
         core.focus_hint = self.focus_hint;
         core.commands = self.commands;
         core.command_scope = self.command_scope;
-        core.pending_help_request = self.pending_help_request;
-        core.pending_help_snapshot = self.pending_help_snapshot;
-        core.pending_help_snapshot_observed
-            .set(self.pending_help_snapshot_observed);
         core.pending_diagnostic_dump = self.pending_diagnostic_dump;
     }
 }
@@ -59,6 +54,8 @@ impl TreeEditJournal {
             before: TreeStateSnapshot::capture(core),
             mounted: Vec::new(),
             unmounted: HashSet::new(),
+            replaced_binding_owners: HashSet::new(),
+            exclusive_frames_before: core.input_map.exclusive_frame_tokens(),
         }
     }
 }
@@ -176,6 +173,11 @@ impl Core {
         }
         self.focus_hint = focus_hint;
         self.ensure_invariants(removed_focus_root)?;
+        self.tree_edit
+            .as_mut()
+            .expect("widget replacement must run inside a tree edit")
+            .replaced_binding_owners
+            .insert(node_id);
         Ok(())
     }
 
@@ -218,9 +220,13 @@ impl Core {
         }
         if self.tree_edit.is_some() {
             let before = TreeStateSnapshot::capture(self);
-            let (mounted_len, unmounted_before) = {
+            let (mounted_len, unmounted_before, replaced_owners_before) = {
                 let journal = self.tree_edit.as_ref().expect("tree edit journal missing");
-                (journal.mounted.len(), journal.unmounted.clone())
+                (
+                    journal.mounted.len(),
+                    journal.unmounted.clone(),
+                    journal.replaced_binding_owners.clone(),
+                )
             };
             let result = f(self);
             return match result {
@@ -231,6 +237,7 @@ impl Core {
                         let mounted = journal.mounted.split_off(mounted_len);
                         let unmounted = journal.unmounted.clone();
                         journal.unmounted = unmounted_before;
+                        journal.replaced_binding_owners = replaced_owners_before;
                         (mounted, unmounted)
                     };
                     self.unwind_mounted_widgets(&mounted, &unmounted);
@@ -245,7 +252,19 @@ impl Core {
         let journal = self.tree_edit.take().expect("tree edit journal missing");
 
         match result {
-            Ok(value) => Ok(value),
+            Ok(value) => {
+                let attached = self
+                    .nodes
+                    .keys()
+                    .filter(|node| self.is_attached_to_root(*node))
+                    .collect();
+                self.input_map.retain_exclusive_owners(&attached);
+                self.input_map.remove_replaced_exclusive_owners(
+                    &journal.replaced_binding_owners,
+                    &journal.exclusive_frames_before,
+                );
+                Ok(value)
+            }
             Err(err) => {
                 self.rollback_tree_edit(journal);
                 Err(err)
@@ -467,20 +486,6 @@ impl Core {
 
     /// Validate pending target references stored by auxiliary runtime features.
     fn validate_pending_targets(&self) -> Result<()> {
-        if let Some((target, pre_focus)) = self.pending_help_request {
-            if !self.nodes.contains_key(target) {
-                return Err(invariant_violation(format!(
-                    "pending help request points at missing target {target:?}"
-                )));
-            }
-            if let Some(pre_focus) = pre_focus
-                && !self.nodes.contains_key(pre_focus)
-            {
-                return Err(invariant_violation(format!(
-                    "pending help request points at missing focus {pre_focus:?}"
-                )));
-            }
-        }
         if let Some(target) = self.pending_diagnostic_dump
             && !self.nodes.contains_key(target)
         {
@@ -980,11 +985,6 @@ impl Core {
 
     /// Clear auxiliary targets that point into a removed set.
     fn clear_removed_targets(&mut self, removed: &HashSet<NodeId>) {
-        if self.pending_help_request.is_some_and(|(target, focus)| {
-            removed.contains(&target) || focus.is_some_and(|id| removed.contains(&id))
-        }) {
-            self.pending_help_request = None;
-        }
         if self
             .pending_diagnostic_dump
             .is_some_and(|target| removed.contains(&target))

@@ -8,8 +8,9 @@ use std::{
 
 use super::{
     commands,
-    help::OwnedHelpSnapshot,
+    help::BindingSnapshot,
     id::{NodeId, TypedId},
+    inputmap::{ExclusiveFrameToken, FrameworkBindingGroup},
     style::Effect,
     view::View,
     world::{Core, layout_driver::clamp_scroll},
@@ -325,12 +326,6 @@ pub trait ViewContext {
 
         out
     }
-
-    /// Peek at the pending help snapshot, if any.
-    ///
-    /// This is used by help widgets to check if a snapshot is available
-    /// during render, without consuming it.
-    fn pending_help_snapshot(&self) -> Option<&OwnedHelpSnapshot>;
 }
 
 /// Validate one raw node ID against a requested widget type.
@@ -530,6 +525,24 @@ pub trait Context: ViewContext {
     /// Release mouse capture if held by the current node.
     fn release_mouse(&mut self) -> Result<ChangeOutcome>;
 
+    /// Clear and return the current mouse-capture target.
+    fn take_mouse_capture(&mut self) -> Result<Option<NodeId>>;
+
+    /// Restore mouse capture to an attached node.
+    fn restore_mouse_capture(&mut self, node: NodeId) -> Result<ChangeOutcome>;
+
+    /// Return effective key bindings for a node or the current focus.
+    fn available_bindings(&self, node: Option<NodeId>) -> Result<BindingSnapshot>;
+
+    /// Push an exclusive framework binding frame owned by the current node.
+    fn push_exclusive_bindings(
+        &mut self,
+        group: FrameworkBindingGroup,
+    ) -> Result<ExclusiveFrameToken>;
+
+    /// Remove one exclusive binding frame.
+    fn pop_exclusive_bindings(&mut self, token: ExclusiveFrameToken) -> Result<()>;
+
     /// Scroll the view to the specified position. Returns `true` if movement occurred.
     fn scroll_to(&mut self, x: u32, y: u32) -> bool;
 
@@ -667,20 +680,6 @@ pub trait Context: ViewContext {
     /// Set the style map to be used for rendering.
     /// The style change will be applied before the next render.
     fn set_style(&mut self, style: StyleMap);
-
-    /// Request a help snapshot to be injected into the specified target node.
-    ///
-    /// This should be called before changing focus or layout, so the snapshot
-    /// captures the pre-help context. After the current command returns, Canopy
-    /// will capture the snapshot and inject it into the target widget.
-    fn request_help_snapshot(&mut self, target: NodeId);
-
-    /// Take the pending help snapshot, if any.
-    ///
-    /// This is called by help widgets to retrieve the snapshot that was
-    /// captured when `request_help_snapshot` was called. Returns `None` if
-    /// no snapshot is pending.
-    fn take_help_snapshot(&mut self) -> Option<OwnedHelpSnapshot>;
 
     /// Request a diagnostic dump for a target node.
     fn request_diagnostic_dump(&mut self, target: NodeId);
@@ -957,14 +956,6 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
     fn child_keyed_in(&self, parent: NodeId, key: &str) -> Option<NodeId> {
         self.core.child_keyed(parent, key)
     }
-
-    fn pending_help_snapshot(&self) -> Option<&OwnedHelpSnapshot> {
-        let snapshot = self.core.pending_help_snapshot.as_ref();
-        if snapshot.is_some() {
-            self.core.mark_help_snapshot_observed();
-        }
-        snapshot
-    }
 }
 
 impl Context for NodeCtx<&mut Core> {
@@ -996,12 +987,38 @@ impl Context for NodeCtx<&mut Core> {
         self.core.release_mouse(self.node_id)
     }
 
+    fn take_mouse_capture(&mut self) -> Result<Option<NodeId>> {
+        self.core.take_mouse_capture()
+    }
+
+    fn restore_mouse_capture(&mut self, node: NodeId) -> Result<ChangeOutcome> {
+        self.core.restore_mouse_capture(node)
+    }
+
+    fn available_bindings(&self, node: Option<NodeId>) -> Result<BindingSnapshot> {
+        self.core.available_bindings(node)
+    }
+
+    fn push_exclusive_bindings(
+        &mut self,
+        group: FrameworkBindingGroup,
+    ) -> Result<ExclusiveFrameToken> {
+        self.core
+            .input_map
+            .push_exclusive_bindings(group, self.node_id)
+    }
+
+    fn pop_exclusive_bindings(&mut self, token: ExclusiveFrameToken) -> Result<()> {
+        self.core.input_map.pop_exclusive_bindings(token)
+    }
+
     fn scroll_to(&mut self, x: u32, y: u32) -> bool {
         let node = self.core.nodes.get_mut(self.node_id);
         if let Some(node) = node {
             let before = node.scroll;
             node.scroll = Point { x, y };
             clamp_scroll(&mut node.scroll, node.content_size, node.canvas);
+            node.view.tl = node.scroll;
             before != node.scroll
         } else {
             false
@@ -1014,6 +1031,7 @@ impl Context for NodeCtx<&mut Core> {
             let before = node.scroll;
             node.scroll = node.scroll.scroll(x, y);
             clamp_scroll(&mut node.scroll, node.content_size, node.canvas);
+            node.view.tl = node.scroll;
             before != node.scroll
         } else {
             false
@@ -1159,15 +1177,6 @@ impl Context for NodeCtx<&mut Core> {
 
     fn set_style(&mut self, style: StyleMap) {
         self.core.pending_style = Some(style);
-    }
-
-    fn request_help_snapshot(&mut self, target: NodeId) {
-        // Store both the target and the current focus (before any changes)
-        self.core.pending_help_request = Some((target, self.core.focus));
-    }
-
-    fn take_help_snapshot(&mut self) -> Option<OwnedHelpSnapshot> {
-        self.core.pending_help_snapshot.take()
     }
 
     fn request_diagnostic_dump(&mut self, target: NodeId) {

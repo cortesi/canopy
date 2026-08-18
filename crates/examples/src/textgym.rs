@@ -149,10 +149,10 @@ impl Loader for TextGym {
 
 /// Default bindings for the text gym demo.
 const DEFAULT_BINDINGS: &str = r#"
-canopy.bind_with("q", { path = "root", desc = "Quit" }, function()
+canopy.bind("q", { path = "root", description = "Quit" }, function()
     root.quit()
 end)
-canopy.bind_with("r", { path = "text_gym", desc = "Redraw" }, function()
+canopy.bind("r", { path = "text_gym", description = "Redraw" }, function()
     text_gym.redraw()
 end)
 "#;

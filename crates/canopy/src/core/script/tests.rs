@@ -74,7 +74,10 @@ fn assert_closure_model(canopy: &Canopy, host: &LuauHost, model: &ClosureModel) 
         state.closures.functions.len(),
         model.bound_keys.len() + model.on_start_hooks
     );
-    prop_assert_eq!(canopy.keymap.bindings().len(), model.bound_keys.len());
+    prop_assert_eq!(
+        canopy.core.input_map.bindings().len(),
+        model.bound_keys.len()
+    );
     Ok(())
 }
 
@@ -90,7 +93,9 @@ fn apply_closure_operation(
             let result = execute_registry_script(
                 canopy,
                 host,
-                &format!(r#"canopy.bind("{key}", function() end)"#),
+                &format!(
+                    r#"canopy.bind("{key}", {{ description = "Test binding" }}, function() end)"#
+                ),
             );
             prop_assert!(result.is_ok(), "{result:?}");
             model.bound_keys.insert(key);
@@ -113,15 +118,18 @@ fn apply_closure_operation(
             model.on_start_hooks += 1;
         }
         ClosureOperation::InvalidKey => {
-            let result =
-                execute_registry_script(canopy, host, r#"canopy.bind("Ctrl+", function() end)"#);
+            let result = execute_registry_script(
+                canopy,
+                host,
+                r#"canopy.bind("Ctrl+", { description = "Invalid key" }, function() end)"#,
+            );
             prop_assert!(result.is_err());
         }
         ClosureOperation::InvalidPath => {
             let result = execute_registry_script(
                 canopy,
                 host,
-                r#"canopy.bind_with("a", { path = "invalid-name" }, function() end)"#,
+                r#"canopy.bind("a", { path = "invalid-name", description = "Invalid path" }, function() end)"#,
             );
             prop_assert!(result.is_err());
         }
@@ -133,11 +141,14 @@ fn apply_closure_operation(
             host.state.borrow_mut().closures.next_function_id = previous;
         }
         ClosureOperation::ExhaustBindingIdentifier => {
-            let previous = canopy.keymap.replace_next_id(u64::MAX);
-            let result =
-                execute_registry_script(canopy, host, r#"canopy.bind("z", function() end)"#);
+            let previous = canopy.core.input_map.replace_next_id(u64::MAX);
+            let result = execute_registry_script(
+                canopy,
+                host,
+                r#"canopy.bind("z", { description = "Test binding" }, function() end)"#,
+            );
             prop_assert!(result.is_err());
-            canopy.keymap.replace_next_id(previous);
+            canopy.core.input_map.replace_next_id(previous);
         }
     }
     assert_closure_model(canopy, host, model)
@@ -496,19 +507,19 @@ fn binding_replacement_releases_old_and_failed_callbacks() -> Result<()> {
         c.finalize_api()?;
         let host = c.script_host.clone();
         let install = host.compile(
-            r#"canopy.bind_with("a", { path = "" }, function() local value = true end)"#,
+            r#"canopy.bind("a", { path = "", description = "First binding" }, function() local value = true end)"#,
         )?;
         host.execute(c, c.core.root_id(), install, None)?;
         assert_eq!(host.state.borrow().closures.functions.len(), 1);
 
         let replace = host.compile(
-            r#"canopy.bind_with("a", { path = "" }, function() local value = false end)"#,
+            r#"canopy.bind("a", { path = "", description = "Second binding" }, function() local value = false end)"#,
         )?;
         host.execute(c, c.core.root_id(), replace, None)?;
         assert_eq!(host.state.borrow().closures.functions.len(), 1);
 
         let invalid =
-            host.compile(r#"canopy.bind_with("a", { path = "invalid-name" }, function() end)"#)?;
+            host.compile(r#"canopy.bind("a", { path = "invalid-name", description = "Invalid path" }, function() end)"#)?;
         host.execute(c, c.core.root_id(), invalid, None)
             .expect_err("invalid replacement path should fail");
         assert_eq!(host.state.borrow().closures.functions.len(), 1);
@@ -565,18 +576,19 @@ fn tscript_bindings_carry_declaration_sites() -> Result<()> {
         c.finalize_api()?;
         let scr = c
             .script_host
-            .compile("canopy.bind(\"z\", function() end)")?;
+            .compile("canopy.bind(\"z\", { description = \"Test binding\" }, function() end)")?;
         let host = c.script_host.clone();
         host.execute(c, c.core.root_id(), scr, None)?;
         let check = c.script_host.compile(
             r#"
             for _, binding in canopy.bindings() do
                 if binding.input == "z" then
-                    local desc = tostring(binding.desc)
+                    local source = tostring(binding.source)
                     canopy.assert(
-                        string.find(desc, "script:", 1, true) ~= nil,
-                        "binding desc should carry the declaration site: " .. desc
+                        string.find(source, "script:", 1, true) ~= nil,
+                        "binding source should carry the declaration site: " .. source
                     )
+                    canopy.assert(binding.description == "Test binding", "description should be preserved")
                     return
                 end
             end

@@ -121,7 +121,8 @@ pub fn theme(p: &Palette) -> StyleMap {
             "/editor/prompt",
             StyleBuilder::new().fg(p.fg).bg(p.panel_bg),
         )
-        .style("/help/content", StyleBuilder::new().fg(p.fg).bg(p.panel_bg))
+        .style("/help/overlay", StyleBuilder::new().fg(p.fg).bg(p.bg))
+        .style("/help/panel", StyleBuilder::new().fg(p.fg).bg(p.panel_bg))
         .style("/help/frame", StyleBuilder::new().bg(p.panel_bg))
         .style("/help/frame/focused", StyleBuilder::new().bg(p.panel_bg))
         .style("/help/frame/active", StyleBuilder::new().bg(p.panel_bg))
@@ -136,6 +137,29 @@ pub fn theme(p: &Palette) -> StyleMap {
         .style(
             "/help/label",
             StyleBuilder::new().fg(p.muted_fg).bg(p.panel_bg),
+        )
+        .style(
+            "/help/fallback",
+            StyleBuilder::new().fg(p.muted_fg).bg(p.panel_bg),
+        )
+        .style(
+            "/help/footer",
+            StyleBuilder::new().fg(p.muted_fg).bg(p.panel_bg),
+        )
+        .style(
+            "/help/footer/key",
+            StyleBuilder::new()
+                .fg(p.cyan)
+                .bg(p.panel_bg)
+                .attrs(AttrSet::new(Attr::Bold)),
+        )
+        .style(
+            "/help/footer/label",
+            StyleBuilder::new().fg(p.muted_fg).bg(p.panel_bg),
+        )
+        .style(
+            "/help/indicator",
+            StyleBuilder::new().fg(p.accent).bg(p.panel_bg),
         )
         .apply();
     c

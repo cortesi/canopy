@@ -34,7 +34,7 @@ const DEFAULT_VIEW_SIZE: Size = Size { w: 120, h: 40 };
 
 /// Short operating guide returned by the bootstrap tool.
 const BOOTSTRAP_GUIDE: &str = "Use script_eval for actions and assertions. Scripts run against \
-the generated Luau API, can call canopy.help_snapshot(), canopy.commands(), canopy.screen_text(), \
+the generated Luau API, can call canopy.available_bindings(), canopy.commands(), canopy.screen_text(), \
 canopy.screen_cells(), canopy.route_trace(), and canopy.script_journal(), and should prefer typed \
 command calls over coordinate input when possible.";
 

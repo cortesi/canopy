@@ -70,7 +70,10 @@ pub use children::{KeyedChildren, RemovePolicy};
 pub use context::{ChildKey, Context, FocusScope, Slot, ViewContext};
 pub use fixture::{Fixture, FixtureInfo};
 pub use id::{NodeId, TypedId};
-pub use inputmap::{BindingId, InputSpec};
+pub use inputmap::{
+    BindingId, BindingOwner, BindingPhase, BindingScope, BindingTarget, ExclusiveFrameToken,
+    FrameworkBindingGroup, InputSpec,
+};
 pub use path::{Path, PathFilter};
 pub use script::ScriptModuleRoots;
 pub use world::Core;

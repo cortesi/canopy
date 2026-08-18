@@ -36,7 +36,6 @@ use crate::{
     core::{
         Core,
         context::{Context, CoreContext, CoreViewContext, FocusScope, ViewContext},
-        help::BindingKind,
         inputmap,
         termbuf::Cell,
         widget_access,
@@ -313,8 +312,6 @@ impl ScriptCache {
 struct StoredFunction {
     /// Pending VM stash or retained generational handle.
     target: StoredFunctionTarget,
-    /// Help/debug label for the closure.
-    label: Option<String>,
 }
 
 /// Callback state before and after promotion into the retained runtime.
@@ -347,7 +344,7 @@ impl ClosureRegistry {
     }
 
     /// Insert a stashed closure and return its stable function id.
-    fn insert(&mut self, stashed: StashedClosure, label: Option<String>) -> Result<LuauFunctionId> {
+    fn insert(&mut self, stashed: StashedClosure) -> Result<LuauFunctionId> {
         let id = LuauFunctionId(self.next_function_id);
         self.next_function_id = self.next_function_id.checked_add(1).ok_or_else(|| {
             error::Error::InvalidOperation("closure identifier space exhausted".to_string())
@@ -356,7 +353,6 @@ impl ClosureRegistry {
             id,
             StoredFunction {
                 target: StoredFunctionTarget::Pending(stashed),
-                label,
             },
         );
         Ok(id)
@@ -367,13 +363,6 @@ impl ClosureRegistry {
         self.functions
             .get(&id)
             .map(|function| function.target.clone())
-    }
-
-    /// Return the help/debug label for a stored function.
-    fn label(&self, id: LuauFunctionId) -> Option<String> {
-        self.functions
-            .get(&id)
-            .and_then(|function| function.label.clone())
     }
 
     /// Remove a stored function and queue its retained handle for release.
@@ -1246,23 +1235,14 @@ impl LuauHost {
     }
 
     /// Store a stashed Luau closure and return a stable host-side id.
-    fn store_function(
-        &self,
-        stashed: StashedClosure,
-        label: Option<String>,
-    ) -> Result<LuauFunctionId> {
-        self.state.borrow_mut().closures.insert(stashed, label)
+    fn store_function(&self, stashed: StashedClosure) -> Result<LuauFunctionId> {
+        self.state.borrow_mut().closures.insert(stashed)
     }
 
     /// Release a stored function reference. The underlying registry pin is
     /// released on the VM's next step.
     pub fn release_function(&self, id: LuauFunctionId) {
         self.state.borrow_mut().closures.remove(id);
-    }
-
-    /// Return the help/debug label for a stored function.
-    pub fn function_label(&self, id: LuauFunctionId) -> Option<String> {
-        self.state.borrow().closures.label(id)
     }
 
     /// Execute a stored Luau closure in the current script context.

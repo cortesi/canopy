@@ -429,7 +429,7 @@ fn binding_precedence_blocks_text_entry() {
         .canopy
         .eval_script(
             r#"
-canopy.bind_with("x", { path = "editor", desc = "Cursor left" }, function()
+canopy.bind("x", { path = "editor", description = "Cursor left" }, function()
     editor.cursor("Left")
 end)
 "#,
@@ -517,7 +517,7 @@ fn root_binding_does_not_override_text_entry() {
         .canopy
         .eval_script(
             r#"
-canopy.bind_with("q", { path = "editor_host", desc = "Record binding" }, function()
+canopy.bind("q", { path = "editor_host", description = "Record binding" }, function()
     editor_host.record_binding()
 end)
 "#,

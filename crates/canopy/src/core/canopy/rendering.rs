@@ -248,16 +248,7 @@ impl Canopy {
                 self.core.update_layout(root_size)?;
             }
 
-            let _ = self.core.take_help_snapshot_observed();
-            let mut next = self.render_pass(root_size)?;
-            if self.core.take_help_snapshot_observed() {
-                self.core.pending_help_snapshot = None;
-                self.core.update_layout(root_size)?;
-                if layout_dirty {
-                    self.core.update_layout(root_size)?;
-                }
-                next = self.render_pass(root_size)?;
-            }
+            let next = self.render_pass(root_size)?;
 
             be.reset()?;
 

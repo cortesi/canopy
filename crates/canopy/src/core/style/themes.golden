@@ -18,13 +18,19 @@
 /frame/focused fg=Some(Solid(Rgb { r: 38, g: 139, b: 210 })) bg=None attrs=None
 /frame/title fg=Some(Solid(Rgb { r: 253, g: 246, b: 227 })) bg=None attrs=None
 /green fg=Some(Solid(Rgb { r: 133, g: 153, b: 0 })) bg=None attrs=None
-/help/content fg=Some(Solid(Rgb { r: 131, g: 148, b: 150 })) bg=Some(Solid(Rgb { r: 7, g: 54, b: 66 })) attrs=None
+/help/fallback fg=Some(Solid(Rgb { r: 147, g: 161, b: 161 })) bg=Some(Solid(Rgb { r: 7, g: 54, b: 66 })) attrs=None
+/help/footer fg=Some(Solid(Rgb { r: 147, g: 161, b: 161 })) bg=Some(Solid(Rgb { r: 7, g: 54, b: 66 })) attrs=None
+/help/footer/key fg=Some(Solid(Rgb { r: 42, g: 161, b: 152 })) bg=Some(Solid(Rgb { r: 7, g: 54, b: 66 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/help/footer/label fg=Some(Solid(Rgb { r: 147, g: 161, b: 161 })) bg=Some(Solid(Rgb { r: 7, g: 54, b: 66 })) attrs=None
 /help/frame fg=None bg=Some(Solid(Rgb { r: 7, g: 54, b: 66 })) attrs=None
 /help/frame/active fg=None bg=Some(Solid(Rgb { r: 7, g: 54, b: 66 })) attrs=None
 /help/frame/focused fg=None bg=Some(Solid(Rgb { r: 7, g: 54, b: 66 })) attrs=None
 /help/frame/title fg=None bg=Some(Solid(Rgb { r: 7, g: 54, b: 66 })) attrs=None
+/help/indicator fg=Some(Solid(Rgb { r: 38, g: 139, b: 210 })) bg=Some(Solid(Rgb { r: 7, g: 54, b: 66 })) attrs=None
 /help/key fg=Some(Solid(Rgb { r: 42, g: 161, b: 152 })) bg=Some(Solid(Rgb { r: 7, g: 54, b: 66 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /help/label fg=Some(Solid(Rgb { r: 147, g: 161, b: 161 })) bg=Some(Solid(Rgb { r: 7, g: 54, b: 66 })) attrs=None
+/help/overlay fg=Some(Solid(Rgb { r: 131, g: 148, b: 150 })) bg=Some(Solid(Rgb { r: 0, g: 43, b: 54 })) attrs=None
+/help/panel fg=Some(Solid(Rgb { r: 131, g: 148, b: 150 })) bg=Some(Solid(Rgb { r: 7, g: 54, b: 66 })) attrs=None
 /magenta fg=Some(Solid(Rgb { r: 211, g: 54, b: 130 })) bg=None attrs=None
 /orange fg=Some(Solid(Rgb { r: 203, g: 75, b: 22 })) bg=None attrs=None
 /red fg=Some(Solid(Rgb { r: 220, g: 50, b: 47 })) bg=None attrs=None
@@ -60,13 +66,19 @@
 /frame/focused fg=Some(Solid(Rgb { r: 38, g: 139, b: 210 })) bg=None attrs=None
 /frame/title fg=Some(Solid(Rgb { r: 0, g: 43, b: 54 })) bg=None attrs=None
 /green fg=Some(Solid(Rgb { r: 133, g: 153, b: 0 })) bg=None attrs=None
-/help/content fg=Some(Solid(Rgb { r: 101, g: 123, b: 131 })) bg=Some(Solid(Rgb { r: 238, g: 232, b: 213 })) attrs=None
+/help/fallback fg=Some(Solid(Rgb { r: 88, g: 110, b: 117 })) bg=Some(Solid(Rgb { r: 238, g: 232, b: 213 })) attrs=None
+/help/footer fg=Some(Solid(Rgb { r: 88, g: 110, b: 117 })) bg=Some(Solid(Rgb { r: 238, g: 232, b: 213 })) attrs=None
+/help/footer/key fg=Some(Solid(Rgb { r: 42, g: 161, b: 152 })) bg=Some(Solid(Rgb { r: 238, g: 232, b: 213 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/help/footer/label fg=Some(Solid(Rgb { r: 88, g: 110, b: 117 })) bg=Some(Solid(Rgb { r: 238, g: 232, b: 213 })) attrs=None
 /help/frame fg=None bg=Some(Solid(Rgb { r: 238, g: 232, b: 213 })) attrs=None
 /help/frame/active fg=None bg=Some(Solid(Rgb { r: 238, g: 232, b: 213 })) attrs=None
 /help/frame/focused fg=None bg=Some(Solid(Rgb { r: 238, g: 232, b: 213 })) attrs=None
 /help/frame/title fg=None bg=Some(Solid(Rgb { r: 238, g: 232, b: 213 })) attrs=None
+/help/indicator fg=Some(Solid(Rgb { r: 38, g: 139, b: 210 })) bg=Some(Solid(Rgb { r: 238, g: 232, b: 213 })) attrs=None
 /help/key fg=Some(Solid(Rgb { r: 42, g: 161, b: 152 })) bg=Some(Solid(Rgb { r: 238, g: 232, b: 213 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /help/label fg=Some(Solid(Rgb { r: 88, g: 110, b: 117 })) bg=Some(Solid(Rgb { r: 238, g: 232, b: 213 })) attrs=None
+/help/overlay fg=Some(Solid(Rgb { r: 101, g: 123, b: 131 })) bg=Some(Solid(Rgb { r: 253, g: 246, b: 227 })) attrs=None
+/help/panel fg=Some(Solid(Rgb { r: 101, g: 123, b: 131 })) bg=Some(Solid(Rgb { r: 238, g: 232, b: 213 })) attrs=None
 /magenta fg=Some(Solid(Rgb { r: 211, g: 54, b: 130 })) bg=None attrs=None
 /orange fg=Some(Solid(Rgb { r: 203, g: 75, b: 22 })) bg=None attrs=None
 /red fg=Some(Solid(Rgb { r: 220, g: 50, b: 47 })) bg=None attrs=None
@@ -102,13 +114,19 @@
 /frame/focused fg=Some(Solid(Rgb { r: 189, g: 147, b: 249 })) bg=None attrs=None
 /frame/title fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=None attrs=None
 /green fg=Some(Solid(Rgb { r: 80, g: 250, b: 123 })) bg=None attrs=None
-/help/content fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=Some(Solid(Rgb { r: 68, g: 71, b: 90 })) attrs=None
+/help/fallback fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=Some(Solid(Rgb { r: 68, g: 71, b: 90 })) attrs=None
+/help/footer fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=Some(Solid(Rgb { r: 68, g: 71, b: 90 })) attrs=None
+/help/footer/key fg=Some(Solid(Rgb { r: 139, g: 233, b: 253 })) bg=Some(Solid(Rgb { r: 68, g: 71, b: 90 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/help/footer/label fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=Some(Solid(Rgb { r: 68, g: 71, b: 90 })) attrs=None
 /help/frame fg=None bg=Some(Solid(Rgb { r: 68, g: 71, b: 90 })) attrs=None
 /help/frame/active fg=None bg=Some(Solid(Rgb { r: 68, g: 71, b: 90 })) attrs=None
 /help/frame/focused fg=None bg=Some(Solid(Rgb { r: 68, g: 71, b: 90 })) attrs=None
 /help/frame/title fg=None bg=Some(Solid(Rgb { r: 68, g: 71, b: 90 })) attrs=None
+/help/indicator fg=Some(Solid(Rgb { r: 189, g: 147, b: 249 })) bg=Some(Solid(Rgb { r: 68, g: 71, b: 90 })) attrs=None
 /help/key fg=Some(Solid(Rgb { r: 139, g: 233, b: 253 })) bg=Some(Solid(Rgb { r: 68, g: 71, b: 90 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /help/label fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=Some(Solid(Rgb { r: 68, g: 71, b: 90 })) attrs=None
+/help/overlay fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=Some(Solid(Rgb { r: 40, g: 42, b: 54 })) attrs=None
+/help/panel fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=Some(Solid(Rgb { r: 68, g: 71, b: 90 })) attrs=None
 /magenta fg=Some(Solid(Rgb { r: 255, g: 121, b: 198 })) bg=None attrs=None
 /orange fg=Some(Solid(Rgb { r: 255, g: 184, b: 108 })) bg=None attrs=None
 /red fg=Some(Solid(Rgb { r: 255, g: 85, b: 85 })) bg=None attrs=None
@@ -144,13 +162,19 @@
 /frame/focused fg=Some(Solid(Rgb { r: 131, g: 165, b: 152 })) bg=None attrs=None
 /frame/title fg=Some(Solid(Rgb { r: 251, g: 241, b: 199 })) bg=None attrs=None
 /green fg=Some(Solid(Rgb { r: 184, g: 187, b: 38 })) bg=None attrs=None
-/help/content fg=Some(Solid(Rgb { r: 235, g: 219, b: 178 })) bg=Some(Solid(Rgb { r: 60, g: 56, b: 54 })) attrs=None
+/help/fallback fg=Some(Solid(Rgb { r: 189, g: 174, b: 147 })) bg=Some(Solid(Rgb { r: 60, g: 56, b: 54 })) attrs=None
+/help/footer fg=Some(Solid(Rgb { r: 189, g: 174, b: 147 })) bg=Some(Solid(Rgb { r: 60, g: 56, b: 54 })) attrs=None
+/help/footer/key fg=Some(Solid(Rgb { r: 142, g: 192, b: 124 })) bg=Some(Solid(Rgb { r: 60, g: 56, b: 54 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/help/footer/label fg=Some(Solid(Rgb { r: 189, g: 174, b: 147 })) bg=Some(Solid(Rgb { r: 60, g: 56, b: 54 })) attrs=None
 /help/frame fg=None bg=Some(Solid(Rgb { r: 60, g: 56, b: 54 })) attrs=None
 /help/frame/active fg=None bg=Some(Solid(Rgb { r: 60, g: 56, b: 54 })) attrs=None
 /help/frame/focused fg=None bg=Some(Solid(Rgb { r: 60, g: 56, b: 54 })) attrs=None
 /help/frame/title fg=None bg=Some(Solid(Rgb { r: 60, g: 56, b: 54 })) attrs=None
+/help/indicator fg=Some(Solid(Rgb { r: 131, g: 165, b: 152 })) bg=Some(Solid(Rgb { r: 60, g: 56, b: 54 })) attrs=None
 /help/key fg=Some(Solid(Rgb { r: 142, g: 192, b: 124 })) bg=Some(Solid(Rgb { r: 60, g: 56, b: 54 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /help/label fg=Some(Solid(Rgb { r: 189, g: 174, b: 147 })) bg=Some(Solid(Rgb { r: 60, g: 56, b: 54 })) attrs=None
+/help/overlay fg=Some(Solid(Rgb { r: 235, g: 219, b: 178 })) bg=Some(Solid(Rgb { r: 40, g: 40, b: 40 })) attrs=None
+/help/panel fg=Some(Solid(Rgb { r: 235, g: 219, b: 178 })) bg=Some(Solid(Rgb { r: 60, g: 56, b: 54 })) attrs=None
 /magenta fg=Some(Solid(Rgb { r: 211, g: 134, b: 155 })) bg=None attrs=None
 /orange fg=Some(Solid(Rgb { r: 254, g: 128, b: 25 })) bg=None attrs=None
 /red fg=Some(Solid(Rgb { r: 251, g: 73, b: 52 })) bg=None attrs=None

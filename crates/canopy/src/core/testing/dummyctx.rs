@@ -5,7 +5,13 @@ use slotmap::Key;
 use crate::{
     ChangeOutcome, Context, FocusScope, ViewContext,
     commands::{ArgValue, CommandError, CommandInvocation, CommandScopeFrame, ListRowContext},
-    core::{NodeId, help::OwnedHelpSnapshot, style::Effect, view::View},
+    core::{
+        NodeId,
+        help::BindingSnapshot,
+        inputmap::{ExclusiveFrameToken, FrameworkBindingGroup},
+        style::Effect,
+        view::View,
+    },
     error::Result,
     event::{Event, mouse::MouseEvent},
     geom::{Direction, Point},
@@ -96,10 +102,6 @@ impl ViewContext for DummyContext {
     fn child_keyed_in(&self, _parent: NodeId, _key: &str) -> Option<NodeId> {
         None
     }
-
-    fn pending_help_snapshot(&self) -> Option<&OwnedHelpSnapshot> {
-        None
-    }
 }
 
 impl Context for DummyContext {
@@ -129,6 +131,35 @@ impl Context for DummyContext {
 
     fn release_mouse(&mut self) -> Result<ChangeOutcome> {
         Ok(ChangeOutcome::Unchanged)
+    }
+
+    fn take_mouse_capture(&mut self) -> Result<Option<NodeId>> {
+        Ok(None)
+    }
+
+    fn restore_mouse_capture(&mut self, _node: NodeId) -> Result<ChangeOutcome> {
+        Ok(ChangeOutcome::Unchanged)
+    }
+
+    fn available_bindings(&self, _node: Option<NodeId>) -> Result<BindingSnapshot> {
+        Ok(BindingSnapshot {
+            focus: self.root_id,
+            focus_path: Path::empty(),
+            active_modes: Vec::new(),
+            exclusive_group: None,
+            bindings: Vec::new(),
+        })
+    }
+
+    fn push_exclusive_bindings(
+        &mut self,
+        _group: FrameworkBindingGroup,
+    ) -> Result<ExclusiveFrameToken> {
+        Ok(ExclusiveFrameToken::for_test(0))
+    }
+
+    fn pop_exclusive_bindings(&mut self, _token: ExclusiveFrameToken) -> Result<()> {
+        Ok(())
     }
 
     fn scroll_to(&mut self, _x: u32, _y: u32) -> bool {
@@ -237,15 +268,6 @@ impl Context for DummyContext {
 
     fn set_style(&mut self, _style: StyleMap) {
         // DummyContext does not track styles
-    }
-
-    fn request_help_snapshot(&mut self, _target: NodeId) {
-        // DummyContext does not track help requests
-    }
-
-    fn take_help_snapshot(&mut self) -> Option<OwnedHelpSnapshot> {
-        // DummyContext does not track help snapshots
-        None
     }
 
     fn request_diagnostic_dump(&mut self, _target: NodeId) {

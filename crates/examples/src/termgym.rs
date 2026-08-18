@@ -19,31 +19,38 @@ const ENTRY_HEIGHT: u32 = 3;
 const DEFAULT_BINDINGS: &str = r#"
 root.default_bindings()
 
-canopy.bind_with("ctrl-a", { path = "term_gym/*/terminal/", desc = "Focus sidebar" }, function()
-    term_gym.focus_sidebar()
-end)
-canopy.bind_with("ctrl-F2", { path = "term_gym", desc = "New terminal" }, function()
-    term_gym.new_terminal()
-end)
-canopy.bind_with("ctrl-F3", { path = "term_gym", desc = "Next terminal" }, function()
-    term_gym.next_terminal()
-end)
-canopy.bind_with("ctrl-F4", { path = "term_gym", desc = "Previous terminal" }, function()
-    term_gym.prev_terminal()
-end)
-canopy.bind_with("n", { path = "term_gym/*/list", desc = "New terminal" }, function()
-    term_gym.new_terminal_sidebar()
-end)
-canopy.bind_with("j", { path = "term_gym/*/list", desc = "Next terminal" }, function()
-    term_gym.next_terminal_sidebar()
-end)
-canopy.bind_with("k", { path = "term_gym/*/list", desc = "Previous terminal" }, function()
-    term_gym.prev_terminal_sidebar()
-end)
-canopy.bind_with("Enter", { path = "term_gym/*/list", desc = "Focus active terminal" }, function()
+canopy.on_start(function()
     term_gym.focus_active_terminal()
 end)
-canopy.bind_with("d", { path = "term_gym/*/list", desc = "Delete terminal" }, function()
+
+canopy.bind("F6", { path = "term_gym/**/", description = "Toggle terminal list" }, function()
+    term_gym.toggle_terminal_focus()
+end)
+canopy.bind("n", { path = "term_gym/**/list/**/", description = "New terminal" }, function()
+    term_gym.new_terminal_sidebar()
+end)
+canopy.bind("Down", { path = "term_gym/**/list/**/", description = "Next terminal" }, function()
+    term_gym.next_terminal_sidebar()
+end)
+canopy.bind("j", { path = "term_gym/**/list/**/", description = "Next terminal" }, function()
+    term_gym.next_terminal_sidebar()
+end)
+canopy.bind("Up", { path = "term_gym/**/list/**/", description = "Previous terminal" }, function()
+    term_gym.prev_terminal_sidebar()
+end)
+canopy.bind("k", { path = "term_gym/**/list/**/", description = "Previous terminal" }, function()
+    term_gym.prev_terminal_sidebar()
+end)
+canopy.bind("Enter", { path = "term_gym/**/list/**/", description = "Focus active terminal" }, function()
+    term_gym.focus_active_terminal()
+end)
+canopy.bind("Right", { path = "term_gym/**/list/**/", description = "Focus active terminal" }, function()
+    term_gym.focus_active_terminal()
+end)
+canopy.bind("Delete", { path = "term_gym/**/list/**/", description = "Close terminal" }, function()
+    term_gym.delete_terminal()
+end)
+canopy.bind("d", { path = "term_gym/**/list/**/", description = "Close terminal" }, function()
     term_gym.delete_terminal()
 end)
 "#;
@@ -350,13 +357,13 @@ impl TermGym {
     }
 
     #[command]
-    /// Delete the active terminal and keep focus on the sidebar.
+    /// Close the active terminal and keep focus on the sidebar.
     pub fn delete_terminal(&mut self, c: &mut dyn Context) -> Result<()> {
-        if self.terminal_ids(c)?.is_empty() {
+        let terminals = self.terminal_ids(c)?;
+        if terminals.len() <= 1 {
             return Ok(());
         }
 
-        let terminals = self.terminal_ids(c)?;
         let target = self.active.min(terminals.len() - 1);
         self.remove_terminal(c, target)?;
         self.focus_sidebar_list(c)?;
@@ -378,6 +385,20 @@ impl TermGym {
             c.set_focus(active_id)?;
         }
         Ok(())
+    }
+
+    #[command]
+    /// Toggle focus between the terminal list and the active terminal.
+    pub fn toggle_terminal_focus(&mut self, c: &mut dyn Context) -> Result<()> {
+        let terminals = self.terminal_ids(c)?;
+        if terminals
+            .iter()
+            .any(|terminal| c.node_is_on_focus_path(*terminal))
+        {
+            self.focus_sidebar_list(c)
+        } else {
+            self.focus_active_terminal(c)
+        }
     }
 
     #[command]

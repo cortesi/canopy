@@ -161,12 +161,23 @@ fn register_framework_declarations(builder: &mut module::Builder) {
     builder.alias(declaration::Alias::new(
         "BindOptions",
         declaration::Type::table([
+            declaration::Field::new("description", declaration::Type::String)
+                .doc("Required user-facing binding description."),
             declaration::Field::new("mode", declaration::Type::String.optional())
                 .doc("Optional input mode. Nil or empty uses the default mode."),
             declaration::Field::new("path", declaration::Type::String.optional())
                 .doc("Optional path filter such as `editor/*`."),
-            declaration::Field::new("desc", declaration::Type::String.optional())
-                .doc("Optional human-readable description used by discovery tooling."),
+            declaration::Field::new("tier", declaration::Type::literals(["global"]).optional())
+                .doc("Use the global tier. A global binding cannot name a mode."),
+        ]),
+    ));
+    builder.alias(declaration::Alias::new(
+        "UnbindSelector",
+        declaration::Type::table([
+            declaration::Field::new("mode", declaration::Type::String.optional())
+                .doc("Optional named mode to match."),
+            declaration::Field::new("path", declaration::Type::String.optional())
+                .doc("Optional exact path filter to match."),
         ]),
     ));
     builder.alias(declaration::Alias::new(
@@ -197,18 +208,29 @@ fn register_binding_info(builder: &mut module::Builder) {
     builder.alias(declaration::Alias::new(
         "BindingInfo",
         declaration::Type::table([
+            declaration::Field::new("id", declaration::Type::Number)
+                .doc("Stable numeric binding identifier."),
             declaration::Field::new("input", declaration::Type::String)
                 .doc("Normalized key or mouse spec string."),
             declaration::Field::new("input_type", declaration::Type::literals(["key", "mouse"]))
                 .doc("Input category."),
-            declaration::Field::new("mode", declaration::Type::String)
-                .doc("Input mode name. The default mode is the empty string."),
+            declaration::Field::new("owner", declaration::Type::String)
+                .doc("Application or framework group owner."),
+            declaration::Field::new(
+                "scope",
+                declaration::Type::literals(["global", "mode", "default", "exclusive"]),
+            )
+            .doc("Binding resolution scope."),
+            declaration::Field::new("mode", declaration::Type::String.optional())
+                .doc("Named input mode, when the scope is mode."),
             declaration::Field::new("path", declaration::Type::String)
                 .doc("Path filter string used when matching the focused path."),
-            declaration::Field::new("desc", declaration::Type::String.optional())
-                .doc("Optional human-readable description when available."),
-            declaration::Field::new("target", declaration::Type::String)
-                .doc("Binding target kind. Always `luau`."),
+            declaration::Field::new("description", declaration::Type::String)
+                .doc("Required user-facing description."),
+            declaration::Field::new("source", declaration::Type::String.optional())
+                .doc("Diagnostic source for application bindings."),
+            declaration::Field::new("target", declaration::Type::literals(["script", "command"]))
+                .doc("Binding target kind."),
         ]),
     ));
 }
@@ -292,33 +314,50 @@ fn register_observation_info(builder: &mut module::Builder) {
         ]),
     ));
     builder.alias(declaration::Alias::new(
-        "HelpBinding",
+        "AvailableBinding",
         declaration::Type::table([
-            declaration::Field::new("input", declaration::Type::String)
-                .doc("Normalized input spec."),
-            declaration::Field::new("mode", declaration::Type::String).doc("Input mode."),
+            declaration::Field::new("id", declaration::Type::Number)
+                .doc("Stable numeric binding identifier."),
+            declaration::Field::new("input", declaration::Type::String).doc("Normalized key spec."),
+            declaration::Field::new("description", declaration::Type::String)
+                .doc("Required user-facing description."),
+            declaration::Field::new("owner", declaration::Type::String)
+                .doc("Application or framework group owner."),
+            declaration::Field::new(
+                "scope",
+                declaration::Type::literals(["global", "mode", "default", "exclusive"]),
+            )
+            .doc("Binding resolution scope."),
+            declaration::Field::new("mode", declaration::Type::String.optional())
+                .doc("Named mode when the scope is mode."),
             declaration::Field::new("path", declaration::Type::String).doc("Path filter."),
-            declaration::Field::new("kind", declaration::Type::literals(["pre", "post"]))
-                .doc("Whether the binding is a pre-event override or post-event fallback."),
-            declaration::Field::new("target", declaration::Type::String)
-                .doc("Human-readable binding target summary."),
-            declaration::Field::new("label", declaration::Type::String)
-                .doc("Help label for display."),
+            declaration::Field::new("route_path", declaration::Type::String)
+                .doc("Route path at which this binding wins."),
+            declaration::Field::new(
+                "phase",
+                declaration::Type::literals(["before_widget", "after_ignore"]),
+            )
+            .doc("Phase relative to widget input handling."),
+            declaration::Field::new("source", declaration::Type::String.optional())
+                .doc("Diagnostic source when available."),
         ]),
     ));
     builder.alias(declaration::Alias::new(
-        "HelpSnapshot",
+        "BindingSnapshot",
         declaration::Type::table([
             declaration::Field::new("focus", declaration::Type::named("NodeId"))
                 .doc("Current focus node."),
             declaration::Field::new("focus_path", declaration::Type::String)
                 .doc("Path from root to focus."),
-            declaration::Field::new("input_mode", declaration::Type::String)
-                .doc("Current input mode."),
-            declaration::Field::new("bindings", declaration::Type::named("HelpBinding").array())
-                .doc("Bindings visible from the current focus context."),
-            declaration::Field::new("commands", declaration::Type::named("CommandInfo").array())
-                .doc("Commands visible from the current focus context."),
+            declaration::Field::new("active_modes", declaration::Type::String.array())
+                .doc("Active modes in resolution order."),
+            declaration::Field::new("exclusive_group", declaration::Type::String.optional())
+                .doc("Active exclusive framework group."),
+            declaration::Field::new(
+                "bindings",
+                declaration::Type::named("AvailableBinding").array(),
+            )
+            .doc("Effective key bindings for the context."),
         ]),
     ));
     builder.alias(declaration::Alias::new(

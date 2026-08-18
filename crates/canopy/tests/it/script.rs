@@ -5,12 +5,12 @@ mod tests {
     use std::{fs, path::Path};
 
     use canopy::{
-        Canopy, CommandArg, Context, EventOutcome, Loader, NodeId, ScriptApiState, ViewContext,
-        Widget, command,
-        commands::ArgValue,
+        Canopy, CommandArg, Context, EventOutcome, FrameworkBindingGroup, InputSpec, Loader,
+        NodeId, ScriptApiState, ViewContext, Widget, command,
+        commands::{ArgValue, CommandArgs, CommandId, CommandInvocation},
         derive_commands,
         error::{Error, Result, ScriptErrorKind},
-        event::{Event, mouse},
+        event::{Event, key::Key, mouse},
         geom::{Line, Size},
         layout::Layout,
         render::Render,
@@ -211,10 +211,10 @@ mod tests {
             local leaves = canopy.find_nodes("api_root/api_leaf")
             canopy.set_focus(leaves[1])
 
-            canopy.bind_with("x", { desc = "old" }, function() api_leaf.set(3) end)
-            canopy.bind_with("x", { desc = "new" }, function() api_leaf.set(7) end)
+            canopy.bind("x", { description = "old" }, function() api_leaf.set(3) end)
+            canopy.bind("x", { description = "new" }, function() api_leaf.set(7) end)
 
-            local transient = canopy.bind("u", function() api_leaf.set(99) end)
+            local transient = canopy.bind("u", { description = "Transient binding" }, function() api_leaf.set(99) end)
             canopy.unbind(transient)
         "#,
         )?;
@@ -227,7 +227,7 @@ mod tests {
 
         harness.canopy.eval_script(
             r#"
-            canopy.bind("z", function() api_leaf.set(15) end)
+            canopy.bind("z", { description = "Set value" }, function() api_leaf.set(15) end)
             canopy.unbind_key("z")
         "#,
         )?;
@@ -236,7 +236,7 @@ mod tests {
 
         harness.canopy.eval_script(
             r#"
-            canopy.bind("c", function() api_leaf.set(21) end)
+            canopy.bind("c", { description = "Set value" }, function() api_leaf.set(21) end)
             canopy.clear_bindings()
         "#,
         )?;
@@ -247,12 +247,72 @@ mod tests {
     }
 
     #[test]
+    fn binding_contract_rejects_missing_or_obsolete_options() -> Result<()> {
+        let mut harness = Harness::builder(ApiRoot).size(20, 5).build()?;
+        harness.render()?;
+        for source in [
+            r#"canopy.bind("a", function() end)"#,
+            r#"canopy.bind("a", {}, function() end)"#,
+            r#"canopy.bind("a", { description = " " }, function() end)"#,
+            r#"canopy.bind("a", { description = "A", mode = "insert", tier = "global" }, function() end)"#,
+            r#"canopy.bind("a", { description = "A", tier = "other" }, function() end)"#,
+            r#"canopy.bind_with("a", {}, function() end)"#,
+            r#"canopy.bind_mouse_with("Left Down", {}, function() end)"#,
+        ] {
+            harness
+                .canopy
+                .eval_script(source)
+                .expect_err("invalid binding contract should fail");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn script_registry_reports_framework_records_but_cannot_remove_them() -> Result<()> {
+        let mut harness = Harness::builder(ApiRoot).size(20, 5).build()?;
+        let group = FrameworkBindingGroup::new("test.framework");
+        let id = harness.canopy.bind_framework(
+            group,
+            InputSpec::Key(Key::parse_spec("F1").map_err(Error::Invalid)?),
+            "/api_root/**/",
+            "Framework action",
+            CommandInvocation {
+                id: CommandId("api_leaf::get"),
+                args: CommandArgs::default(),
+            },
+        )?;
+        harness.render()?;
+
+        harness.canopy.eval_script(&format!(
+            r#"
+            local found = false
+            for _, binding in canopy.bindings() do
+                if binding.id == {} then
+                    found = binding.owner == "framework:test.framework"
+                        and binding.scope == "exclusive"
+                        and binding.target == "command"
+                        and binding.description == "Framework action"
+                end
+            end
+            canopy.assert(found, "framework binding metadata should be complete")
+            "#,
+            id.as_u64()
+        ))?;
+        let error = harness
+            .canopy
+            .eval_script(&format!("canopy.unbind({})", id.as_u64()))
+            .expect_err("scripts must not remove framework records");
+        assert!(error.to_string().contains("framework-owned"));
+        Ok(())
+    }
+
+    #[test]
     fn stored_callback_prints_use_fresh_call_options() -> Result<()> {
         let mut harness = Harness::builder(ApiRoot).size(20, 5).build()?;
         harness.render()?;
         harness
             .canopy
-            .eval_script(r#"canopy.bind("p", function() print("callback print") end)"#)?;
+            .eval_script(r#"canopy.bind("p", { description = "Print callback" }, function() print("callback print") end)"#)?;
         let _ = harness.canopy.take_script_logs();
 
         harness.key('p')?;
@@ -287,13 +347,13 @@ mod tests {
             canopy.set_focus(leaves[1])
 
             local nested = 0
-            nested = canopy.bind("n", function()
+            nested = canopy.bind("n", { description = "Nested callback" }, function()
                 canopy.unbind(nested)
                 canopy.cmd_on(leaves[2], "api_leaf::set", 41)
             end)
 
             local outer = 0
-            outer = canopy.bind("o", function()
+            outer = canopy.bind("o", { description = "Outer callback" }, function()
                 canopy.send_key("n")
                 api_leaf.set(17)
                 canopy.unbind(outer)
@@ -359,9 +419,9 @@ mod tests {
             local dump = canopy.diagnostic_dump(leaves[1])
             canopy.assert(dump:find("node tree") ~= nil, "diagnostic dump should include the tree")
 
-            local help = canopy.help_snapshot()
+            local help = canopy.available_bindings()
             canopy.assert(help.focus ~= nil, "help snapshot should include focus")
-            canopy.assert(#help.commands > 0, "help snapshot should include commands")
+            canopy.assert(type(help.bindings) == "table", "help snapshot should include bindings")
 
             local api = canopy.api()
             canopy.assert(api:find("declare canopy") ~= nil, "api text should be script-visible")
@@ -562,7 +622,7 @@ mod tests {
             "failing",
             r#"
             function setup()
-                canopy.bind("x", function() api_leaf.set(99) end)
+                canopy.bind("x", { description = "Set value" }, function() api_leaf.set(99) end)
                 error("startup failed")
             end
         "#,
@@ -587,7 +647,7 @@ mod tests {
             r#"
             function setup()
                 api_leaf.set(1)
-                canopy.bind("x", function() api_leaf.set(7) end)
+                canopy.bind("x", { description = "Set value" }, function() api_leaf.set(7) end)
             end
         "#,
         )?;
@@ -596,7 +656,7 @@ mod tests {
             r#"
             function setup()
                 api_leaf.set(api_leaf.get() + 10)
-                canopy.bind("x", function() api_leaf.set(99) end)
+                canopy.bind("x", { description = "Set value" }, function() api_leaf.set(99) end)
                 canopy.on_start(function() api_leaf.set(88) end)
                 error("second failed")
             end
@@ -709,7 +769,7 @@ mod tests {
             r#"
             local lib = require("./lib")
             api_leaf.set(lib.value)
-            canopy.bind("x", function() api_leaf.set(99) end)
+            canopy.bind("x", { description = "Set value" }, function() api_leaf.set(99) end)
         "#,
         );
 

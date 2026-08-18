@@ -411,65 +411,37 @@ pub mod canopy_widgets {
     }
 
     pub mod help {
-        //! Experimental contextual help modal internals.
-        //! Contextual help modal widget.
-        //!
-        //! Displays bindings and commands available from the current focus context.
+        //! Contextual key-binding help widgets.
+        //! Contextual key-binding help modal.
 
-        pub use canopy::help::BindingKind;
-        pub use canopy::help::OwnedHelpBinding;
-        pub use canopy::help::OwnedHelpSnapshot;
-        /// Help modal widget displaying contextual bindings and commands.
+        /// Scrollable list of effective key bindings.
         #[derive(Default)]
-        pub struct Help;
+        pub struct BindingList {}
 
-        impl Help {
-            /// Create a new Help widget.
-            pub fn new() -> Self {}
+        impl BindingList {
+            /// Construct an empty list.
+            pub const fn new() -> Self {}
 
-            /// Build the help subtree and return its node id.
-            pub fn install(context: &mut dyn Context) -> Result<NodeId> {}
-        }
-
-        impl CommandNode for Help {
-            fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-        }
-
-        impl Widget for Help {
-            fn render(&mut self, r: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
-
-            fn name(&self) -> NodeName {}
-        }
-
-        impl Loader for Help {
-            fn load(c: &mut Canopy) -> Result<()> {}
-        }
-
-        /// Content widget for the help modal that displays bindings and commands.
-        #[derive(Default)]
-        pub struct HelpContent {}
-
-        impl HelpContent {
-            /// Create a new help content widget.
-            pub fn new() -> Self {}
-
-            /// Set the help snapshot to display.
-            pub fn set_snapshot(&mut self, snapshot: OwnedHelpSnapshot) {}
+            /// Install a captured snapshot.
+            pub fn set_snapshot(&mut self, snapshot: BindingSnapshot) {}
 
             /// Scroll up by one line.
-            pub fn scroll_up(&self, c: &mut dyn Context) {}
+            pub fn scroll_up(&self, context: &mut dyn Context) {}
 
             /// Scroll down by one line.
-            pub fn scroll_down(&self, c: &mut dyn Context) {}
+            pub fn scroll_down(&self, context: &mut dyn Context) {}
 
-            /// Scroll to the top.
-            pub fn scroll_to_top(&self, c: &mut dyn Context) {}
+            /// Scroll up by one viewport.
+            pub fn page_up(&self, context: &mut dyn Context) {}
 
-            /// Scroll to the bottom.
-            pub fn scroll_to_bottom(&self, c: &mut dyn Context) {}
+            /// Scroll down by one viewport.
+            pub fn page_down(&self, context: &mut dyn Context) {}
 
-            /// Page down by one screen.
-            pub fn page_down(&self, c: &mut dyn Context) {}
+            /// Scroll to the first row.
+            pub fn scroll_to_top(&self, context: &mut dyn Context) {}
+
+            /// Scroll to the last row.
+            pub fn scroll_to_bottom(&self, context: &mut dyn Context) {}
 
             /// Return a typed command reference for this command.
             pub fn cmd_scroll_up() -> &'static canopy::commands::CommandSpec {}
@@ -478,31 +450,111 @@ pub mod canopy_widgets {
             pub fn cmd_scroll_down() -> &'static canopy::commands::CommandSpec {}
 
             /// Return a typed command reference for this command.
+            pub fn cmd_page_up() -> &'static canopy::commands::CommandSpec {}
+
+            /// Return a typed command reference for this command.
+            pub fn cmd_page_down() -> &'static canopy::commands::CommandSpec {}
+
+            /// Return a typed command reference for this command.
             pub fn cmd_scroll_to_top() -> &'static canopy::commands::CommandSpec {}
 
             /// Return a typed command reference for this command.
             pub fn cmd_scroll_to_bottom() -> &'static canopy::commands::CommandSpec {}
-
-            /// Return a typed command reference for this command.
-            pub fn cmd_page_down() -> &'static canopy::commands::CommandSpec {}
         }
 
-        impl CommandNode for HelpContent {
+        impl CommandNode for BindingList {
             fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
         }
 
-        impl Widget for HelpContent {
-            fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
+        impl Loader for BindingList {
+            fn load(canopy: &mut Canopy) -> Result<()> {}
+        }
+
+        impl Widget for BindingList {
+            fn accept_focus(&self, _context: &dyn ViewContext) -> bool {}
 
             fn layout(&self) -> Layout {}
 
-            fn canvas(&self, view: Size<u32>, _ctx: &CanvasContext<'_>) -> Size<u32> {}
+            fn canvas(&self, view: Size<u32>, _context: &CanvasContext<'_>) -> Size<u32> {}
 
-            fn on_event(&mut self, _event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {}
+            fn on_event(
+                &mut self,
+                event: &Event,
+                context: &mut dyn Context,
+            ) -> Result<EventOutcome> {
+            }
 
-            fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
+            fn render(&mut self, render: &mut Render<'_>, context: &dyn ViewContext) -> Result<()> {
+            }
 
             fn name(&self) -> NodeName {}
+        }
+
+        /// Fixed help-control summary below the binding list.
+        #[derive(Default)]
+        pub struct ControlFooter;
+
+        impl ControlFooter {
+            /// Construct the control footer.
+            pub const fn new() -> Self {}
+        }
+
+        impl Widget for ControlFooter {
+            fn layout(&self) -> Layout {}
+
+            fn measure(&self, constraints: MeasureConstraints) -> Measurement {}
+
+            fn render(&mut self, render: &mut Render<'_>, context: &dyn ViewContext) -> Result<()> {
+            }
+
+            fn name(&self) -> NodeName {}
+        }
+
+        /// Column container for the scrolling list and fixed footer.
+        #[derive(Default)]
+        pub struct HelpPanel;
+
+        impl HelpPanel {
+            /// Construct an empty help panel.
+            pub const fn new() -> Self {}
+        }
+
+        impl Widget for HelpPanel {
+            fn layout(&self) -> Layout {}
+
+            fn name(&self) -> NodeName {}
+        }
+
+        /// Opaque overlay that owns the help modal subtree.
+        pub struct Help;
+
+        impl Help {
+            /// Build the complete help subtree and return its root.
+            pub fn install(context: &mut dyn Context) -> Result<NodeId> {}
+        }
+
+        impl CommandNode for Help {
+            fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
+        }
+
+        impl Widget for Help {
+            fn layout(&self) -> Layout {}
+
+            fn render(&mut self, render: &mut Render<'_>, context: &dyn ViewContext) -> Result<()> {
+            }
+
+            fn on_event(
+                &mut self,
+                event: &Event,
+                _context: &mut dyn Context,
+            ) -> Result<EventOutcome> {
+            }
+
+            fn name(&self) -> NodeName {}
+        }
+
+        impl Loader for Help {
+            fn load(canopy: &mut Canopy) -> Result<()> {}
         }
     }
 

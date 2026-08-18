@@ -13,7 +13,7 @@ use futures::{StreamExt, executor::block_on};
 use super::*;
 use crate::{
     Context, ViewContext,
-    commands::{CommandNode, CommandSpec},
+    commands::{CommandId, CommandInvocation, CommandNode, CommandSpec},
     core::world::test_support::assert_error_context,
     derive_commands,
     error::{Error, NodeOperationKind, Result},
@@ -97,7 +97,7 @@ fn canopy_with_binding_order(inputs: [char; 2]) -> Result<Canopy> {
     let mut canopy = Canopy::new();
     for input in inputs {
         canopy.eval_script(&format!(
-            "canopy.bind_with({input:?}, {{}}, function() canopy.set_mode(\"next\") end)"
+            "canopy.bind({input:?}, {{ description = \"Change mode\" }}, function() canopy.set_mode(\"next\") end)"
         ))?;
     }
     Ok(canopy)
@@ -109,10 +109,11 @@ fn help_and_diagnostics_use_canonical_binding_order() -> Result<()> {
     let reverse = canopy_with_binding_order(['b', 'a'])?;
     let help_inputs = |canopy: &Canopy| {
         canopy
-            .help_snapshot()
+            .available_bindings(None)
+            .expect("root binding snapshot")
             .bindings
             .iter()
-            .map(|binding| binding.input.to_string())
+            .map(|binding| binding.key.to_string())
             .collect::<Vec<_>>()
     };
     assert_eq!(help_inputs(&forward), ["a", "b"]);
@@ -120,8 +121,8 @@ fn help_and_diagnostics_use_canonical_binding_order() -> Result<()> {
 
     for canopy in [&forward, &reverse] {
         let diagnostics = canopy.diagnostic_dump(canopy.root_id());
-        let a = diagnostics.find(" mode=\"\" a ").expect("a binding");
-        let b = diagnostics.find(" mode=\"\" b ").expect("b binding");
+        let a = diagnostics.find(" a  ->").expect("a binding");
+        let b = diagnostics.find(" b  ->").expect("b binding");
         assert!(a < b);
     }
     Ok(())
@@ -474,9 +475,9 @@ fn tbindings() -> Result<()> {
     run_ttree(|c, _, tree| {
         c.eval_script(
             r#"
-            canopy.bind_with("a", {}, function() ba_la.c_leaf() end)
-            canopy.bind_with("r", {}, function() r.c_root() end)
-            canopy.bind_with("x", { path = "ba/" }, function() r.c_root() end)
+            canopy.bind("a", { description = "Leaf command" }, function() ba_la.c_leaf() end)
+            canopy.bind("r", { description = "Root command" }, function() r.c_root() end)
+            canopy.bind("x", { path = "ba/", description = "Root fallback" }, function() r.c_root() end)
             "#,
         )?;
 
@@ -514,9 +515,43 @@ fn tbindings() -> Result<()> {
 }
 
 #[test]
+fn framework_command_bindings_share_route_resolution_and_command_scope() -> Result<()> {
+    run_ttree(|c, _, tree| {
+        let group = inputmap::FrameworkBindingGroup::new("test.modal");
+        let binding = c.bind_framework(
+            group,
+            inputmap::InputSpec::Key('h'.into()),
+            "/r/**/",
+            "Framework root command",
+            CommandInvocation {
+                id: CommandId("r::c_root"),
+                args: Default::default(),
+            },
+        )?;
+        let token = c.core.input_map.push_exclusive_bindings(group, tree.root)?;
+        c.core.set_focus(tree.a_a)?;
+
+        let snapshot = c.available_bindings(None)?;
+        assert_eq!(snapshot.exclusive_group, Some(group));
+        assert_eq!(snapshot.bindings.len(), 1);
+        assert_eq!(snapshot.bindings[0].id, binding);
+
+        reset_state();
+        c.key(None, 'h')?;
+
+        assert_eq!(get_state().path, ["r.c_root()"]);
+        assert!(c.route_trace().iter().any(|entry| {
+            entry.phase == RoutePhase::BindingExecution && entry.detail == "Framework root command"
+        }));
+        c.core.input_map.pop_exclusive_bindings(token)?;
+        Ok(())
+    })
+}
+
+#[test]
 fn input_mode_binding_target_switches_modes() -> Result<()> {
     let mut canopy = Canopy::new();
-    canopy.eval_script(r#"canopy.bind_with("i", {}, function() canopy.set_mode("insert") end)"#)?;
+    canopy.eval_script(r#"canopy.bind("i", { description = "Insert mode" }, function() canopy.set_mode("insert") end)"#)?;
 
     canopy.key(None, 'i')?;
 

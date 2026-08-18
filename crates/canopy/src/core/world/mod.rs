@@ -3,17 +3,13 @@
     reason = "Core methods are split by arena, layout, and dispatch concerns."
 )]
 
-use std::{
-    cell::{Cell, RefCell},
-    collections::HashSet,
-    rc::Rc,
-};
+use std::{cell::RefCell, collections::HashSet, rc::Rc};
 
 use slotmap::SlotMap;
 
 use self::focus::FocusRecoveryHint;
 use super::{
-    help::OwnedHelpSnapshot,
+    inputmap::{ExclusiveFrameToken, InputMap},
     widget_access::{WidgetMutGuard, WidgetReadGuard, WidgetSlotGuard},
 };
 use crate::{
@@ -64,14 +60,10 @@ pub struct Core {
     rolling_back_tree_edit: bool,
     /// Registered command specs.
     pub(crate) commands: CommandSet,
+    /// Application and framework input bindings.
+    pub(crate) input_map: InputMap,
     /// Command scope stack for injection.
     command_scope: Vec<CommandScopeFrame>,
-    /// Pending help snapshot request - (target node, pre-request focus node).
-    pub(crate) pending_help_request: Option<(NodeId, Option<NodeId>)>,
-    /// Ready help snapshot for widgets to retrieve.
-    pub(crate) pending_help_snapshot: Option<OwnedHelpSnapshot>,
-    /// Tracks whether a pending help snapshot was observed during render.
-    pending_help_snapshot_observed: Cell<bool>,
     /// Pending diagnostic dump request.
     pub(crate) pending_diagnostic_dump: Option<NodeId>,
 }
@@ -84,6 +76,10 @@ struct TreeEditJournal {
     mounted: Vec<MountedWidget>,
     /// Mounted widgets already unmounted by a later nested edit.
     unmounted: HashSet<usize>,
+    /// Node owners whose widget identity was replaced during the edit.
+    replaced_binding_owners: HashSet<NodeId>,
+    /// Exclusive frames that existed before the outer edit.
+    exclusive_frames_before: HashSet<ExclusiveFrameToken>,
 }
 
 /// A successfully mounted widget retained for reverse-order cleanup.
@@ -134,12 +130,6 @@ struct TreeStateSnapshot {
     commands: CommandSet,
     /// Active command-dispatch scopes.
     command_scope: Vec<CommandScopeFrame>,
-    /// Pending help request.
-    pending_help_request: Option<(NodeId, Option<NodeId>)>,
-    /// Pending owned help data.
-    pending_help_snapshot: Option<OwnedHelpSnapshot>,
-    /// Whether pending help was observed.
-    pending_help_snapshot_observed: bool,
     /// Pending diagnostic target.
     pending_diagnostic_dump: Option<NodeId>,
 }
@@ -196,22 +186,10 @@ impl Core {
             tree_edit: None,
             rolling_back_tree_edit: false,
             commands: CommandSet::new(),
+            input_map: InputMap::new(),
             command_scope: Vec::new(),
-            pending_help_request: None,
-            pending_help_snapshot: None,
-            pending_help_snapshot_observed: Cell::new(false),
             pending_diagnostic_dump: None,
         }
-    }
-
-    /// Mark the pending help snapshot as observed during render.
-    pub(crate) fn mark_help_snapshot_observed(&self) {
-        self.pending_help_snapshot_observed.set(true);
-    }
-
-    /// Take and clear the observed flag for a pending help snapshot.
-    pub(crate) fn take_help_snapshot_observed(&self) -> bool {
-        self.pending_help_snapshot_observed.replace(false)
     }
 
     /// Request a cooperative exit with the provided status code.

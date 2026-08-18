@@ -13,11 +13,7 @@ use std::{
 };
 
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender, unbounded};
-use ruau::{
-    filesystem::DirectoryMountsError,
-    source::SourceProvider,
-    vm::NativeModule,
-};
+use ruau::{filesystem::DirectoryMountsError, source::SourceProvider, vm::NativeModule};
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -37,12 +33,10 @@ use crate::{
         Core, NodeId, TypedId,
         dump::dump,
         fixture::{Fixture, FixtureInfo},
-        help,
     },
     error::{self, Result},
     event::Event,
     geom::Size,
-    path::Path,
     script,
     style::{StyleMap, solarized},
     widget::Widget,
@@ -93,8 +87,6 @@ pub struct Canopy {
     default_bindings: HashMap<String, DefaultBindingsScript>,
     /// Registered named fixtures keyed by fixture name.
     fixtures: HashMap<String, Fixture>,
-    /// Input mapping table.
-    pub(crate) keymap: inputmap::InputMap,
     /// Trace for the most recent key or mouse routing pass.
     route_trace: Vec<RouteTraceEntry>,
 
@@ -258,8 +250,8 @@ struct StartupScript {
 
 /// Reversible callback and binding state for one startup script attempt.
 struct StartupAttempt {
-    /// Input map before the script ran.
-    keymap: inputmap::InputMap,
+    /// Application-owned input state before the script ran.
+    application_bindings: inputmap::ApplicationBindingSnapshot,
     /// Binding IDs present before the script ran.
     binding_ids: HashSet<inputmap::BindingId>,
     /// Deferred hook queue before the script ran.
@@ -339,7 +331,6 @@ impl Canopy {
             automation_tx,
             automation_rx,
             ui_thread: thread::current().id(),
-            keymap: inputmap::InputMap::new(),
             route_trace: Vec::new(),
             script_host: script::LuauHost::new(),
             script_api_text: None,
@@ -670,8 +661,8 @@ impl Canopy {
     fn begin_startup_attempt(&mut self) -> StartupAttempt {
         debug_assert!(self.deferred_binding_releases.is_none());
         let attempt = StartupAttempt {
-            keymap: self.keymap.clone(),
-            binding_ids: self.keymap.binding_ids(),
+            application_bindings: self.core.input_map.snapshot_application(),
+            binding_ids: self.core.input_map.binding_ids(),
             hooks: self.script_host.on_start_hooks(),
         };
         self.deferred_binding_releases = Some(Vec::new());
@@ -688,8 +679,10 @@ impl Canopy {
 
     /// Restore registries after a failed startup attempt and release only its callbacks.
     fn rollback_startup_attempt(&mut self, attempt: StartupAttempt) {
-        let new_targets = self.keymap.targets_not_in(&attempt.binding_ids);
-        self.keymap = attempt.keymap;
+        let new_targets = self.core.input_map.targets_not_in(&attempt.binding_ids);
+        self.core
+            .input_map
+            .restore_application(attempt.application_bindings);
         self.deferred_binding_releases = None;
         for id in new_targets {
             self.script_host.release_function(id);
@@ -893,73 +886,74 @@ impl Canopy {
         result
     }
 
-    /// Remove a binding by ID. Returns true if a binding was removed.
-    pub fn unbind(&mut self, id: inputmap::BindingId) -> bool {
-        let removed = self.keymap.unbind_with_targets(id);
-        if removed.is_empty() {
-            return false;
-        }
-        for binding in removed {
-            self.release_binding_target(binding);
-        }
-        true
+    /// Install an idempotent framework-owned command binding.
+    pub fn bind_framework(
+        &mut self,
+        group: inputmap::FrameworkBindingGroup,
+        input: inputmap::InputSpec,
+        path: &str,
+        description: &str,
+        command: commands::CommandInvocation,
+    ) -> Result<inputmap::BindingId> {
+        self.core
+            .input_map
+            .bind_framework(group, input, path, description, command)
+    }
+
+    /// Remove an application binding by ID.
+    ///
+    /// A framework-owned ID returns an error.
+    pub fn unbind(&mut self, id: inputmap::BindingId) -> Result<bool> {
+        let Some(target) = self.core.input_map.unbind(id)? else {
+            return Ok(false);
+        };
+        self.release_binding_target(target);
+        Ok(true)
     }
 
     /// Remove bindings for an input, optionally filtered by mode and path.
     pub fn unbind_input(
         &mut self,
         input: inputmap::InputSpec,
-        mode: Option<&str>,
-        path_filter: Option<&str>,
+        selector: &inputmap::BindingSelector<'_>,
     ) -> usize {
-        let removed = self
-            .keymap
-            .unbind_input(input, inputmap::BindingFilter { mode, path_filter });
+        let removed = self.core.input_map.unbind_input(input, selector);
         self.release_removed_bindings(removed)
     }
 
     /// Remove all bindings from all modes.
     pub fn clear_bindings(&mut self) -> usize {
-        let removed = self.keymap.clear();
+        let removed = self.core.input_map.clear_application();
         self.release_removed_bindings(removed)
     }
 
     /// Remove all callbacks whose VM ownership is tied to the current source epoch.
     fn clear_script_callbacks(&mut self) {
-        let removed = self.keymap.remove_luau_functions();
+        let removed = self.core.input_map.remove_luau_functions();
         self.release_removed_bindings(removed);
         for hook in self.script_host.drain_on_start_hooks() {
             self.script_host.release_function(hook);
         }
     }
 
-    /// Return bindings in a mode that match a specific path.
-    pub fn bindings_matching_path(
-        &self,
-        mode: &str,
-        path: &Path,
-    ) -> Vec<inputmap::MatchedBindingInfo<'_>> {
-        self.keymap.bindings_matching_path(mode, path)
-    }
-
     /// Return the active input mode.
     pub fn input_mode(&self) -> &str {
-        self.keymap.current_mode()
+        self.core.input_map.current_mode()
     }
 
     /// Set the active input mode.
     pub fn set_input_mode(&mut self, mode: &str) -> Result<()> {
-        self.keymap.set_mode(mode)
+        self.core.input_map.set_mode(mode)
     }
 
     /// Push an input mode above the current mode.
     pub fn push_input_mode(&mut self, mode: &str) -> Result<()> {
-        self.keymap.push_mode(mode)
+        self.core.input_map.push_mode(mode)
     }
 
     /// Pop the top input mode and return the new active mode.
     pub fn pop_input_mode(&mut self) -> &str {
-        self.keymap.pop_mode()
+        self.core.input_map.pop_mode()
     }
 
     /// Return the most recent key or mouse route trace.
@@ -1321,87 +1315,19 @@ impl Canopy {
         commands::CommandResolver::new(&self.core, start).availability()
     }
 
-    /// Generate a contextual help snapshot for the current focus.
-    ///
-    /// The snapshot includes:
-    /// - Bindings that would match from the focus path
-    /// - Commands with their availability status
-    pub fn help_snapshot(&self) -> super::help::HelpSnapshot<'_> {
-        self.help_snapshot_for_focus(self.core.focus)
-    }
-
-    /// Fulfill any pending help snapshot request.
-    ///
-    /// If `pending_help_request` is set, capture the help snapshot using the
-    /// pre-request focus and store it in `pending_help_snapshot`.
-    fn fulfill_pending_help_request(&mut self) {
-        if let Some((_target, pre_focus)) = self.core.pending_help_request.take() {
-            let snapshot = self.help_snapshot_for_focus(pre_focus).to_owned();
-            self.core.pending_help_snapshot = Some(snapshot);
-        }
-    }
-
-    /// Generate a help snapshot for a specific focus node.
-    ///
-    /// This is like `help_snapshot` but uses the specified focus instead of
-    /// the current focus. Used to capture pre-help context.
-    fn help_snapshot_for_focus(&self, focus: Option<NodeId>) -> super::help::HelpSnapshot<'_> {
-        let focus = focus.unwrap_or(self.core.root);
-        let focus_path = self.core.node_path(self.core.root, focus);
-        let input_mode = self.keymap.current_mode();
-
-        let command_avail = self.command_availability_from_node(focus);
-        let help_commands: Vec<super::help::HelpCommand<'_>> = command_avail
-            .into_iter()
-            .map(|avail| super::help::HelpCommand {
-                spec: avail.spec,
-                resolution: avail.resolution,
-            })
-            .collect();
-
-        let help_bindings = self.matched_bindings(&focus_path);
-
-        super::help::HelpSnapshot {
-            focus,
-            focus_path,
-            input_mode,
-            bindings: help_bindings,
-            commands: help_commands,
-        }
-    }
-
-    /// Collect every active-mode binding whose filter matches `path`.
-    fn matched_bindings(&self, path: &Path) -> Vec<super::help::HelpBinding<'_>> {
-        let mut out = Vec::new();
-        for mode in self.keymap.active_modes() {
-            for mb in self.keymap.bindings_matching_path(mode, path) {
-                let kind = if mb.m.anchored_end && mb.m.depth > 0 {
-                    super::help::BindingKind::PreEventOverride
-                } else {
-                    super::help::BindingKind::PostEventFallback
-                };
-                let label = super::help::binding_label(mb.info.target, |id| {
-                    self.script_host.function_label(id)
-                });
-                out.push(super::help::HelpBinding {
-                    id: mb.info.id,
-                    input: mb.info.input,
-                    mode,
-                    path_filter: mb.info.path_filter,
-                    target: mb.info.target,
-                    kind,
-                    label,
-                });
-            }
-        }
-        out
+    /// Return the effective key bindings for a node or the current focus.
+    pub fn available_bindings(
+        &self,
+        focus: Option<NodeId>,
+    ) -> Result<super::help::BindingSnapshot> {
+        self.core.available_bindings(focus)
     }
 
     /// Build a diagnostic dump with tree, focus, and binding details.
     pub fn diagnostic_dump(&self, target: NodeId) -> String {
         let mut out = String::new();
         let focus = self.core.focus;
-        let input_mode = self.keymap.current_mode();
+        let input_mode = self.core.input_map.current_mode();
         let target = if self.core.nodes.contains_key(target) {
             target
         } else {
@@ -1416,20 +1342,42 @@ impl Canopy {
         out.push_str(&format!("target: {target:?}\n"));
         out.push_str(&format!("target path: {target_path}\n"));
         out.push_str(&format!("input mode: {input_mode}\n"));
+        let exclusive = self
+            .core
+            .input_map
+            .active_exclusive_group()
+            .map_or("(none)", inputmap::FrameworkBindingGroup::as_str);
+        out.push_str(&format!("exclusive group: {exclusive}\n"));
 
-        let bindings = self.matched_bindings(&target_path);
+        let mut route = Vec::new();
+        let mut route_path = target_path;
+        let mut route_node = Some(target);
+        while let Some(node) = route_node {
+            route.push(route_path.clone());
+            route_node = self.core.nodes.get(node).and_then(|entry| entry.parent);
+            route_path.pop();
+        }
+        let mut bindings = self.core.input_map.bindings().iter().collect::<Vec<_>>();
+        bindings.sort_by(|left, right| {
+            left.input
+                .to_string()
+                .cmp(&right.input.to_string())
+                .then_with(|| left.insertion_id.cmp(&right.insertion_id))
+        });
         if bindings.is_empty() {
             out.push_str("bindings: (none)\n");
         } else {
             out.push_str("bindings:\n");
             for binding in bindings {
-                let kind = match binding.kind {
-                    help::BindingKind::PreEventOverride => "pre",
-                    help::BindingKind::PostEventFallback => "post",
-                };
+                let state = self.core.input_map.diagnostic_state(binding.id, &route);
                 out.push_str(&format!(
-                    "  [{:?}] mode={:?} {} {} ({kind}) -> {}\n",
-                    binding.id, binding.mode, binding.input, binding.path_filter, binding.label
+                    "  [{:?}] owner={:?} scope={:?} {} {} -> {} ({state})\n",
+                    binding.id,
+                    binding.owner,
+                    binding.scope,
+                    binding.input,
+                    binding.path_filter(),
+                    binding.description,
                 ));
             }
         }
