@@ -2841,17 +2841,18 @@ dependencies = [
 name = "ruau"
 version = "0.1.0"
 dependencies = [
+ "blake3",
+ "cap-std",
  "ruau-bytecode",
  "ruau-declaration",
- "ruau-executor",
- "ruau-filesystem",
- "ruau-json-schema",
- "ruau-session",
  "ruau-source",
- "ruau-surface",
  "ruau-syntax",
  "ruau-typecheck",
  "ruau-vm",
+ "same-file",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
 ]
 
 [[package]]
@@ -2871,72 +2872,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "ruau-executor"
-version = "0.1.0"
-dependencies = [
- "blake3",
- "ruau-bytecode",
- "ruau-declaration",
- "ruau-source",
- "ruau-surface",
- "ruau-syntax",
- "ruau-typecheck",
- "ruau-vm",
- "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "ruau-filesystem"
-version = "0.1.0"
-dependencies = [
- "cap-std",
- "ruau-source",
- "ruau-syntax",
- "ruau-typecheck",
- "same-file",
- "serde_json",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "ruau-json-schema"
-version = "0.1.0"
-dependencies = [
- "ruau-declaration",
- "serde_json",
-]
-
-[[package]]
-name = "ruau-session"
-version = "0.1.0"
-dependencies = [
- "ruau-bytecode",
- "ruau-declaration",
- "ruau-source",
- "ruau-surface",
- "ruau-typecheck",
- "ruau-vm",
- "serde_json",
- "tokio",
-]
-
-[[package]]
 name = "ruau-source"
 version = "0.1.0"
-
-[[package]]
-name = "ruau-surface"
-version = "0.1.0"
-dependencies = [
- "blake3",
- "ruau-bytecode",
- "ruau-declaration",
- "ruau-source",
- "ruau-syntax",
- "ruau-typecheck",
- "ruau-vm",
-]
 
 [[package]]
 name = "ruau-syntax"

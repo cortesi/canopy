@@ -14,7 +14,8 @@ use std::{
 
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender, unbounded};
 use ruau::{
-    source::{SourceProvider, fs::DirectoryMountsError},
+    filesystem::DirectoryMountsError,
+    source::SourceProvider,
     vm::NativeModule,
 };
 use serde::{Deserialize, Serialize};

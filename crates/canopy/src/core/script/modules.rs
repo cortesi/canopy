@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use ruau::source::fs::{DirectoryMounts, DirectoryMountsError};
+use ruau::filesystem::{DirectoryMounts, DirectoryMountsError};
 #[cfg(test)]
 use ruau::source::{ModuleId, ReadySourceFutureExt, SourceError, SourceProvider};
 
