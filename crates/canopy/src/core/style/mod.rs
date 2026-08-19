@@ -740,8 +740,6 @@ impl StyleManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[allow(unused_imports)]
-    use crate::error::Result;
 
     #[test]
     fn style_builder_defines_a_reusable_rule() {
@@ -830,17 +828,16 @@ mod tests {
     }
 
     #[test]
-    fn style_canonical_path() -> Result<()> {
+    fn style_canonical_path() {
         assert_eq!(canonical_path("/one/two"), "one/two");
         assert_eq!(canonical_path("one/two"), "one/two");
         assert_eq!(canonical_path("//one///two/"), "one/two");
         assert!(canonical_path("").is_empty());
         assert!(canonical_path("/").is_empty());
-        Ok(())
     }
 
     #[test]
-    fn style_resolve() -> Result<()> {
+    fn style_resolve() {
         let mut smap = StyleMap::new();
         smap.rules()
             .style(
@@ -904,10 +901,9 @@ mod tests {
             c.resolve(&smap, &["frame".to_string()], &["border"]),
             solid_style(Color::Yellow, Color::Black)
         );
-        Ok(())
     }
     #[test]
-    fn style_layers_basic() -> Result<()> {
+    fn style_layers_basic() {
         let mut c = StyleManager::new();
         assert!(c.layers.is_empty());
         assert_eq!(c.layer_levels, vec![0]);
@@ -922,12 +918,10 @@ mod tests {
         assert_eq!(c.level, 1);
         assert_eq!(c.layers, vec!["foo"]);
         assert_eq!(c.layer_levels, vec![0, 1]);
-
-        Ok(())
     }
 
     #[test]
-    fn style_layers_nested() -> Result<()> {
+    fn style_layers_nested() {
         let mut c = StyleManager::new();
         c.push();
         c.push_layer("foo");
@@ -966,12 +960,10 @@ mod tests {
         assert_eq!(c.level, 0);
         assert!(c.layers.is_empty());
         assert_eq!(c.layer_levels, vec![0]);
-
-        Ok(())
     }
 
     #[test]
-    fn style_rules_merge_same_path() -> Result<()> {
+    fn style_rules_merge_same_path() {
         let mut smap = StyleMap::new();
 
         // Setting fg then bg on the same path should merge them
@@ -985,8 +977,6 @@ mod tests {
 
         assert_eq!(resolved.fg.solid_color(), Some(Color::Red));
         assert_eq!(resolved.bg.solid_color(), Some(Color::Blue));
-
-        Ok(())
     }
 
     #[test]
@@ -1004,7 +994,7 @@ mod tests {
     }
 
     #[test]
-    fn style_rules_later_overrides_earlier() -> Result<()> {
+    fn style_rules_later_overrides_earlier() {
         let mut smap = StyleMap::new();
 
         // Later fg call should override earlier fg call
@@ -1017,19 +1007,16 @@ mod tests {
         let resolved = c.resolve(&smap, &[], &["test"]);
 
         assert_eq!(resolved.fg.solid_color(), Some(Color::Green));
-
-        Ok(())
     }
 
     #[test]
-    fn stylemap_default_is_complete() -> Result<()> {
+    fn stylemap_default_is_complete() {
         let smap = StyleMap::default();
         let c = StyleManager::new();
         let resolved = c.get(&smap, "");
         assert_eq!(resolved.fg.solid_color(), Some(Color::White));
         assert_eq!(resolved.bg.solid_color(), Some(Color::Black));
         assert_eq!(resolved.attrs, AttrSet::default());
-        Ok(())
     }
 
     #[test]

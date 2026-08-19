@@ -112,7 +112,7 @@ impl Overflow {
 
 impl<'a> LayoutPass<'a> {
     /// Create a new layout pass with a fresh measurement cache.
-    pub(super) fn new(core: &'a mut Core) -> Self {
+    fn new(core: &'a mut Core) -> Self {
         Self {
             core,
             measure_cache: HashMap::new(),
@@ -583,7 +583,7 @@ impl<'a> LayoutPass<'a> {
     }
 
     /// Compute the scrollable canvas size for a node.
-    pub(super) fn compute_canvas(&self, node_id: NodeId, view_size: Size) -> Result<Size> {
+    fn compute_canvas(&self, node_id: NodeId, view_size: Size) -> Result<Size> {
         let children = self.visible_children(node_id).map_err(|error| {
             self.core
                 .widget_operation_error(WidgetOperation::layout("canvas"), node_id, error)
@@ -656,7 +656,7 @@ impl<'a> LayoutPass<'a> {
     }
 
     /// Get a cached measurement or compute and store it for this pass.
-    pub(super) fn measure_cached(
+    fn measure_cached(
         &mut self,
         node_id: NodeId,
         constraints: MeasureConstraints,

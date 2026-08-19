@@ -8,7 +8,7 @@ use proptest::{prelude::*, test_runner::TestCaseResult};
 
 use super::{
     layout_driver::refresh_layouts,
-    test_support::{TestWidget, assert_error_context},
+    test_support::{TestWidget, assert_error_context, attach_root_child, simple_widget, wrap_node},
     *,
 };
 use crate::{
@@ -280,14 +280,6 @@ enum TreeMutation {
 
 const PROPERTY_NODE_COUNT: usize = 8;
 
-fn attach_root_child(core: &mut Core, child: NodeId) -> Result<()> {
-    core.set_children(core.root, vec![child])
-}
-
-fn simple_widget() -> TestWidget {
-    TestWidget::new(|_constraints| Measurement::Fixed(Size::new(1, 1))).0
-}
-
 #[test]
 fn typed_id_conversion_rejects_wrong_type_and_stale_generation() -> Result<()> {
     let mut core = Core::new();
@@ -350,9 +342,7 @@ fn callback_mutation_tree() -> Result<(Core, CallbackMutationNodes)> {
         focus_fallback,
         mouse_capture,
     ] {
-        core.with_layout_of(node, |layout| {
-            *layout = Layout::fill();
-        })?;
+        core.set_layout_of(node, Layout::fill())?;
     }
     core.update_layout(Size::new(40, 20))?;
     let nodes = CallbackMutationNodes {
@@ -371,12 +361,7 @@ fn with_callback_context(
     node: NodeId,
     f: impl FnOnce(&mut dyn Context) -> Result<()>,
 ) -> Result<Result<()>> {
-    let mut f = Some(f);
-    core.with_widget_mut(node, |_widget, core| {
-        let mut ctx = CoreContext::new(core, node);
-        let f = f.take().expect("callback should run once");
-        f(&mut ctx)
-    })
+    core.with_widget_ctx(node, |_widget, ctx| f(ctx))
 }
 
 fn with_callback_core(
@@ -384,11 +369,7 @@ fn with_callback_core(
     node: NodeId,
     f: impl FnOnce(&mut Core) -> Result<()>,
 ) -> Result<Result<()>> {
-    let mut f = Some(f);
-    core.with_widget_mut(node, |_widget, core| {
-        let f = f.take().expect("callback should run once");
-        f(core)
-    })
+    core.with_widget_mut(node, |_widget, core| f(core))
 }
 
 fn property_nodes(core: &mut Core) -> Result<Vec<Option<NodeId>>> {
@@ -1075,12 +1056,9 @@ fn callback_removing_mouse_capture_node_clears_capture() -> Result<()> {
 #[test]
 fn set_children_detaches_from_previous_parent() -> Result<()> {
     let mut core = Core::new();
-    let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let parent_a = core.create_detached(parent_widget)?;
-    let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let parent_b = core.create_detached(parent_widget)?;
-    let (child_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let child = core.create_detached(child_widget)?;
+    let parent_a = wrap_node(&mut core)?;
+    let parent_b = wrap_node(&mut core)?;
+    let child = wrap_node(&mut core)?;
 
     core.set_children(parent_a, vec![child])?;
     core.set_children(parent_b, vec![child])?;
@@ -1094,10 +1072,8 @@ fn set_children_detaches_from_previous_parent() -> Result<()> {
 #[test]
 fn set_children_rejects_cycles() -> Result<()> {
     let mut core = Core::new();
-    let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let parent = core.create_detached(parent_widget)?;
-    let (child_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let child = core.create_detached(child_widget)?;
+    let parent = wrap_node(&mut core)?;
+    let child = wrap_node(&mut core)?;
     core.set_children(parent, vec![child])?;
 
     let err = core.set_children(child, vec![parent]).unwrap_err();
@@ -1108,10 +1084,8 @@ fn set_children_rejects_cycles() -> Result<()> {
 #[test]
 fn set_children_rejects_duplicates() -> Result<()> {
     let mut core = Core::new();
-    let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let parent = core.create_detached(parent_widget)?;
-    let (child_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let child = core.create_detached(child_widget)?;
+    let parent = wrap_node(&mut core)?;
+    let child = wrap_node(&mut core)?;
 
     let err = core
         .set_children(parent, vec![child, child])
@@ -1129,10 +1103,8 @@ fn set_children_rejects_duplicates() -> Result<()> {
 #[test]
 fn attach_rejects_cycles() -> Result<()> {
     let mut core = Core::new();
-    let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let parent = core.create_detached(parent_widget)?;
-    let (child_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let child = core.create_detached(child_widget)?;
+    let parent = wrap_node(&mut core)?;
+    let child = wrap_node(&mut core)?;
 
     core.attach(parent, child)?;
     let err = core.attach(child, parent).unwrap_err();
@@ -1160,22 +1132,22 @@ fn attach_rejects_root_as_child() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn remove_subtree_recovers_focus_to_next() -> Result<()> {
+/// Build a laid-out core whose root has two focusable children.
+fn two_focusable_root_children() -> Result<(Core, NodeId, NodeId)> {
     let mut core = Core::new();
     let first = core.create_detached(FocusableWidget)?;
     let second = core.create_detached(FocusableWidget)?;
     core.set_children(core.root, vec![first, second])?;
-    core.with_layout_of(core.root, |layout| {
-        *layout = Layout::fill();
-    })?;
-    core.with_layout_of(first, |layout| {
-        *layout = Layout::fill();
-    })?;
-    core.with_layout_of(second, |layout| {
-        *layout = Layout::fill();
-    })?;
+    core.set_layout_of(core.root, Layout::fill())?;
+    core.set_layout_of(first, Layout::fill())?;
+    core.set_layout_of(second, Layout::fill())?;
     core.update_layout(Size::new(10, 10))?;
+    Ok((core, first, second))
+}
+
+#[test]
+fn remove_subtree_recovers_focus_to_next() -> Result<()> {
+    let (mut core, first, second) = two_focusable_root_children()?;
 
     core.set_focus(first)?;
     core.remove_subtree(first)?;
@@ -1186,20 +1158,7 @@ fn remove_subtree_recovers_focus_to_next() -> Result<()> {
 
 #[test]
 fn remove_subtree_recovers_focus_to_prev() -> Result<()> {
-    let mut core = Core::new();
-    let first = core.create_detached(FocusableWidget)?;
-    let second = core.create_detached(FocusableWidget)?;
-    core.set_children(core.root, vec![first, second])?;
-    core.with_layout_of(core.root, |layout| {
-        *layout = Layout::fill();
-    })?;
-    core.with_layout_of(first, |layout| {
-        *layout = Layout::fill();
-    })?;
-    core.with_layout_of(second, |layout| {
-        *layout = Layout::fill();
-    })?;
-    core.update_layout(Size::new(10, 10))?;
+    let (mut core, first, second) = two_focusable_root_children()?;
 
     core.set_focus(second)?;
     core.remove_subtree(second)?;
@@ -1240,8 +1199,7 @@ fn remove_subtree_clears_mouse_capture() -> Result<()> {
 #[test]
 fn keyed_children_require_unique_keys() -> Result<()> {
     let mut core = Core::new();
-    let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let parent = core.create_detached(parent_widget)?;
+    let parent = wrap_node(&mut core)?;
     core.attach(core.root, parent)?;
     let (child_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
     let child = core.add_child_to_keyed_boxed(parent, "slot", Box::new(child_widget))?;
@@ -1261,8 +1219,7 @@ fn keyed_children_require_unique_keys() -> Result<()> {
 #[test]
 fn detach_clears_keyed_mapping() -> Result<()> {
     let mut core = Core::new();
-    let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let parent = core.create_detached(parent_widget)?;
+    let parent = wrap_node(&mut core)?;
     core.attach(core.root, parent)?;
     let (child_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
     let child = core.add_child_to_keyed_boxed(parent, "slot", Box::new(child_widget))?;
@@ -1277,8 +1234,7 @@ fn detach_clears_keyed_mapping() -> Result<()> {
 #[test]
 fn add_child_rolls_back_on_mount_failure() -> Result<()> {
     let mut core = Core::new();
-    let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let parent = core.create_detached(parent_widget)?;
+    let parent = wrap_node(&mut core)?;
     core.attach(core.root, parent)?;
     let node_count = core.nodes.len();
 

@@ -1,4 +1,4 @@
-use canopy::{error::Error, geom::RectI32, prelude::*, testing::harness::Harness};
+use canopy::{TermBuf, error::Error, geom::RectI32, prelude::*, testing::harness::Harness};
 
 use crate::focusgym::{Block, FocusGym, setup_bindings};
 
@@ -40,6 +40,28 @@ fn root_children_pair(harness: &mut Harness) -> Result<(NodeId, NodeId)> {
     Ok((left, right))
 }
 
+/// Return the flex weight of the root block's left child.
+fn left_flex_weight(harness: &mut Harness) -> Result<u32> {
+    let (left, _) = root_children_pair(harness)?;
+    with_root_block(harness, move |ctx, _root| {
+        Ok(match layout_of(ctx, left)?.width {
+            Sizing::Flex(weight) => weight,
+            _ => 1,
+        })
+    })
+}
+
+/// Return the outer view rects of the root block's two children.
+fn outer_pair(harness: &mut Harness) -> Result<(RectI32, RectI32)> {
+    let (left, right) = root_children_pair(harness)?;
+    with_root_block(harness, move |ctx, _root| {
+        Ok((
+            outer_of(ctx, left, "left node")?,
+            outer_of(ctx, right, "right node")?,
+        ))
+    })
+}
+
 fn outer_of(ctx: &dyn Context, node: NodeId, label: &str) -> Result<RectI32> {
     ctx.node_view(node)
         .map(|view| view.outer)
@@ -54,64 +76,38 @@ fn layout_of(ctx: &mut dyn Context, node: NodeId) -> Result<Layout> {
     Ok(layout)
 }
 
-macro_rules! find_separator_column {
-    ($buf:expr, $left_view:expr, $right_view:expr) => {{
-        let buf = $buf;
-        let left_view = $left_view;
-        let right_view = $right_view;
-        let start_x = left_view.tl.x.max(0) as u32;
-        let end_x = right_view.tl.x.max(0) as u32;
-        let mut found = None;
-        for x in start_x..=end_x {
-            let mut all_space = true;
-            let mut has_neighbors = false;
-            for y in 0..buf.size().h {
-                let cell = buf.get(Point { x, y }).unwrap();
-                if cell.ch != ' ' {
-                    all_space = false;
-                    break;
-                }
-                let left_ok = x > 0
-                    && buf
-                        .get(Point { x: x - 1, y })
-                        .is_some_and(|c| c.ch == '\u{2588}');
-                let right_ok = x + 1 < buf.size().w
-                    && buf
-                        .get(Point { x: x + 1, y })
-                        .is_some_and(|c| c.ch == '\u{2588}');
-                if left_ok && right_ok {
-                    has_neighbors = true;
-                }
-            }
-            if all_space && has_neighbors {
-                found = Some(x);
-                break;
-            }
-        }
-        found
-    }};
-}
-
-#[test]
-fn test_initial_render_draws_blocks() -> Result<()> {
-    let harness = setup_harness(Size::new(40, 12))?;
-    let buf = harness.buf();
-    let size = buf.size();
-    let mut found = false;
-    for y in 0..size.h {
-        for x in 0..size.w {
+/// Find the blank column that separates two side-by-side blocks, if one exists.
+fn find_separator_column(buf: &TermBuf, left_view: RectI32, right_view: RectI32) -> Option<u32> {
+    let start_x = left_view.tl.x.max(0) as u32;
+    let end_x = right_view.tl.x.max(0) as u32;
+    let mut found = None;
+    for x in start_x..=end_x {
+        let mut all_space = true;
+        let mut has_neighbors = false;
+        for y in 0..buf.size().h {
             let cell = buf.get(Point { x, y }).unwrap();
-            if cell.ch == '\u{2588}' {
-                found = true;
+            if cell.ch != ' ' {
+                all_space = false;
                 break;
             }
+            let left_ok = x > 0
+                && buf
+                    .get(Point { x: x - 1, y })
+                    .is_some_and(|c| c.ch == '\u{2588}');
+            let right_ok = x + 1 < buf.size().w
+                && buf
+                    .get(Point { x: x + 1, y })
+                    .is_some_and(|c| c.ch == '\u{2588}');
+            if left_ok && right_ok {
+                has_neighbors = true;
+            }
         }
-        if found {
+        if all_space && has_neighbors {
+            found = Some(x);
             break;
         }
     }
-    assert!(found, "expected initial render to draw focus blocks");
-    Ok(())
+    found
 }
 
 #[test]
@@ -167,33 +163,11 @@ fn test_vertical_children_fill_width_and_height() -> Result<()> {
 #[test]
 fn test_flex_grow_commands_update_layout() -> Result<()> {
     let mut harness = setup_harness(Size::new(60, 14))?;
-    let weight_before = with_root_block(&mut harness, |ctx, root| {
-        let left = ctx
-            .children_of(root)
-            .first()
-            .copied()
-            .ok_or_else(|| Error::NotFound("left child".into()))?;
-        let layout = layout_of(ctx, left)?;
-        Ok(match layout.width {
-            Sizing::Flex(weight) => weight,
-            _ => 1,
-        })
-    })?;
+    let weight_before = left_flex_weight(&mut harness)?;
 
     harness.key(']')?;
 
-    let weight_after = with_root_block(&mut harness, |ctx, root| {
-        let left = ctx
-            .children_of(root)
-            .first()
-            .copied()
-            .ok_or_else(|| Error::NotFound("left child".into()))?;
-        let layout = layout_of(ctx, left)?;
-        Ok(match layout.width {
-            Sizing::Flex(weight) => weight,
-            _ => 1,
-        })
-    })?;
+    let weight_after = left_flex_weight(&mut harness)?;
 
     assert!(weight_after > weight_before);
 
@@ -203,38 +177,18 @@ fn test_flex_grow_commands_update_layout() -> Result<()> {
 #[test]
 fn test_flex_grow_affects_layout() -> Result<()> {
     let mut harness = setup_harness(Size::new(60, 14))?;
-    let (left_before, right_before) = with_root_block(&mut harness, |ctx, root| {
-        let children = ctx.children_of(root);
-        let left = children
-            .first()
-            .copied()
-            .ok_or_else(|| Error::NotFound("left child".into()))?;
-        let right = children
-            .get(1)
-            .copied()
-            .ok_or_else(|| Error::NotFound("right child".into()))?;
-        let left_view = outer_of(ctx, left, "left node")?.w;
-        let right_view = outer_of(ctx, right, "right node")?.w;
-        Ok((left_view, right_view))
-    })?;
+    let (left_before, right_before) = {
+        let (left, right) = outer_pair(&mut harness)?;
+        (left.w, right.w)
+    };
     assert!(left_before.abs_diff(right_before) <= 1);
 
     harness.key(']')?;
 
-    let (left_after, right_after) = with_root_block(&mut harness, |ctx, root| {
-        let children = ctx.children_of(root);
-        let left = children
-            .first()
-            .copied()
-            .ok_or_else(|| Error::NotFound("left child".into()))?;
-        let right = children
-            .get(1)
-            .copied()
-            .ok_or_else(|| Error::NotFound("right child".into()))?;
-        let left_view = outer_of(ctx, left, "left node")?.w;
-        let right_view = outer_of(ctx, right, "right node")?.w;
-        Ok((left_view, right_view))
-    })?;
+    let (left_after, right_after) = {
+        let (left, right) = outer_pair(&mut harness)?;
+        (left.w, right.w)
+    };
     assert!(left_after > right_after);
     Ok(())
 }
@@ -242,38 +196,21 @@ fn test_flex_grow_affects_layout() -> Result<()> {
 #[test]
 fn test_flex_adjust_refuses_at_min_size() -> Result<()> {
     let mut harness = setup_harness(Size::new(2, 2))?;
-    let (view, weight_before) = with_root_block(&mut harness, |ctx, root| {
-        let left = ctx
-            .children_of(root)
-            .first()
-            .copied()
-            .ok_or_else(|| Error::NotFound("left child".into()))?;
-        let view = outer_of(ctx, left, "left node")?;
-        let layout = layout_of(ctx, left)?;
-        let weight = match layout.width {
-            Sizing::Flex(weight) => weight,
-            _ => 1,
-        };
-        Ok((view, weight))
-    })?;
-
+    let (view, _) = outer_pair(&mut harness)?;
     assert!(view.w <= 1 || view.h <= 1);
 
-    harness.key('[')?;
+    // Grow first, so a refused shrink is distinguishable from the `.max(1)` clamp.
+    let weight_before = left_flex_weight(&mut harness)?;
+    harness.key(']')?;
+    let grown = left_flex_weight(&mut harness)?;
+    assert_eq!(grown, weight_before + 1);
 
-    let weight_after = with_root_block(&mut harness, |ctx, root| {
-        let left = ctx
-            .children_of(root)
-            .first()
-            .copied()
-            .ok_or_else(|| Error::NotFound("left child".into()))?;
-        let layout = layout_of(ctx, left)?;
-        Ok(match layout.width {
-            Sizing::Flex(weight) => weight,
-            _ => 1,
-        })
-    })?;
-    assert!(weight_after >= weight_before);
+    harness.key('[')?;
+    assert_eq!(
+        left_flex_weight(&mut harness)?,
+        grown,
+        "shrink must be refused while the block is at its minimum size"
+    );
 
     Ok(())
 }
@@ -289,24 +226,11 @@ fn test_screen_edge_is_flush() -> Result<()> {
 #[test]
 fn test_single_separator_between_root_children() -> Result<()> {
     let mut harness = setup_harness(Size::new(40, 12))?;
-    let (left_view, right_view) = with_root_block(&mut harness, |ctx, root| {
-        let children = ctx.children_of(root);
-        let left = children
-            .first()
-            .copied()
-            .ok_or_else(|| Error::NotFound("left child".into()))?;
-        let right = children
-            .get(1)
-            .copied()
-            .ok_or_else(|| Error::NotFound("right child".into()))?;
-        let left_view = outer_of(ctx, left, "left node")?;
-        let right_view = outer_of(ctx, right, "right node")?;
-        Ok((left_view, right_view))
-    })?;
+    let (left_view, right_view) = outer_pair(&mut harness)?;
 
     harness.render()?;
     let buf = harness.buf();
-    let separator = find_separator_column!(&buf, left_view, right_view);
+    let separator = find_separator_column(buf, left_view, right_view);
     assert!(
         separator.is_some(),
         "expected a single-column separator between root children"
@@ -361,7 +285,7 @@ fn test_separators_remain_continuous_after_nested_splits() -> Result<()> {
 
     harness.render()?;
     let buf = harness.buf();
-    let boundary_x = find_separator_column!(&buf, left_view, right_view)
+    let boundary_x = find_separator_column(buf, left_view, right_view)
         .expect("expected a separator column for nested splits");
     for y in 0..buf.size().h {
         let cell = buf.get(Point { x: boundary_x, y }).unwrap();

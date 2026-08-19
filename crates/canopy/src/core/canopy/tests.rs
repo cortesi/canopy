@@ -682,15 +682,6 @@ fn tkey() -> Result<()> {
     })?;
 
     run_ttree(|c, _, tree| {
-        c.core.set_focus(tree.a_a)?;
-        set_outcome::<BaLa>(&mut c.core, tree.a_a, EventOutcome::Handle);
-        c.key(None, 'a')?;
-        let s = get_state();
-        assert_eq!(s.path, vec!["ba_la@key->handle"]);
-        Ok(())
-    })?;
-
-    run_ttree(|c, _, tree| {
         c.core.set_focus(tree.a_b)?;
         set_outcome::<Ba>(&mut c.core, tree.a, EventOutcome::Handle);
         c.key(None, 'a')?;
@@ -734,26 +725,6 @@ fn tmouse() -> Result<()> {
             s.path,
             vec!["ba_la@mouse->ignore", "ba@mouse->ignore", "r@mouse->handle"]
         );
-        Ok(())
-    })?;
-
-    run_ttree(|c, mut tr, tree| {
-        set_outcome::<BaLa>(&mut c.core, tree.a_a, EventOutcome::Handle);
-        tr.render(c)?;
-        let evt = make_mouse_event(&c.core, tree.a_a);
-        c.mouse(None, evt)?;
-        let s = get_state();
-        assert_eq!(s.path, vec!["ba_la@mouse->handle"]);
-        Ok(())
-    })?;
-
-    run_ttree(|c, mut tr, tree| {
-        set_outcome::<BaLa>(&mut c.core, tree.a_a, EventOutcome::Handle);
-        tr.render(c)?;
-        let evt = make_mouse_event(&c.core, tree.a_a);
-        c.mouse(None, evt)?;
-        let s = get_state();
-        assert_eq!(s.path, vec!["ba_la@mouse->handle"]);
         Ok(())
     })?;
 

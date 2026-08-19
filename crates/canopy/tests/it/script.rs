@@ -569,7 +569,6 @@ mod tests {
         );
         assert_eq!(canopy.run_startup_scripts()?, 0);
 
-        let _removed = fs::remove_dir_all(root);
         Ok(())
     }
 
@@ -746,7 +745,6 @@ mod tests {
         canopy.finalize_api()?;
         assert!(canopy.script_api().is_ok());
 
-        let _removed = fs::remove_dir_all(root);
         Ok(())
     }
 
@@ -793,7 +791,6 @@ mod tests {
             ArgValue::Int(45)
         );
 
-        let _removed = fs::remove_dir_all(root);
         Ok(())
     }
 

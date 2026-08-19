@@ -3455,7 +3455,6 @@ dependencies = [
  "canopy-widgets",
  "clap",
  "rusqlite",
- "tempfile",
  "textwrap",
 ]
 

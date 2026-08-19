@@ -15,7 +15,6 @@ mod tests {
         testing::dummyctx::DummyContext,
     };
     use canopy_derive::{command, derive_commands};
-    #[cfg(test)]
     use pretty_assertions::assert_eq;
 
     struct Opaque {}
@@ -133,6 +132,7 @@ mod tests {
     fn assert_cmd_a_metadata() {
         let cmd_a = Foo::cmd_a();
         assert_eq!(cmd_a.id.0, "foo::a");
+        assert_eq!(cmd_a.name, "a");
         assert!(matches!(
             cmd_a.dispatch,
             CommandDispatchKind::Node { owner } if owner == "foo"

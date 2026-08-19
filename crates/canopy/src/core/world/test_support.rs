@@ -78,6 +78,16 @@ impl Widget for LayoutWidget {
     }
 }
 
+/// Create a detached leaf that measures to one cell.
+pub(super) fn simple_widget() -> TestWidget {
+    TestWidget::new(|_constraints| Measurement::Fixed(Size::new(1, 1))).0
+}
+
+/// Attach a node as the root's only child.
+pub(super) fn attach_root_child(core: &mut Core, child: NodeId) -> Result<()> {
+    core.set_children(core.root, vec![child])
+}
+
 /// Create a detached node that measures to a fixed size.
 pub(super) fn fixed_leaf(core: &mut Core, width: u32, height: u32) -> Result<NodeId> {
     let (widget, _) = TestWidget::new(move |_c| Measurement::Fixed(Size::new(width, height)));

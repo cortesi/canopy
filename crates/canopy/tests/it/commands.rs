@@ -8,7 +8,7 @@ mod tests {
         Canopy, CommandArg, CommandEnum, Context, ViewContext, Widget, command,
         commands::{
             ArgValue, CommandArgs, CommandDispatchKind, CommandError, CommandInvocation,
-            CommandNode, CommandResolution, FromArgValue, SerdeArg, ToArgValue,
+            CommandResolution, FromArgValue, SerdeArg, ToArgValue,
         },
         derive_commands,
         error::Result,
@@ -179,50 +179,6 @@ mod tests {
                 target: branch_id.into()
             })
         );
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_load_commands() -> Result<()> {
-        struct Foo {
-            a_triggered: bool,
-            b_triggered: bool,
-        }
-
-        #[derive_commands]
-        impl Foo {
-            #[command]
-            /// This is a comment.
-            /// Multiline too!
-            fn a(&mut self, _core: &mut dyn Context) -> Result<()> {
-                self.a_triggered = true;
-                Ok(())
-            }
-
-            #[command]
-            fn b(&mut self, _core: &mut dyn Context) -> Result<()> {
-                self.b_triggered = true;
-                Ok(())
-            }
-        }
-
-        impl Widget for Foo {
-            fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-                Ok(())
-            }
-        }
-
-        let commands = Foo::commands();
-        assert_eq!(commands.len(), 2);
-
-        // Check that commands are properly loaded
-        assert!(commands.iter().any(|c| c.name == "a"));
-        assert!(commands.iter().any(|c| c.name == "b"));
-
-        let cmd_a = Foo::cmd_a();
-        assert_eq!(cmd_a.id.0, "foo::a");
-        assert!(cmd_a.params.is_empty());
 
         Ok(())
     }

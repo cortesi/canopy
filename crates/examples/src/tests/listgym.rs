@@ -41,24 +41,6 @@ fn focused_list_index(harness: &mut Harness) -> Result<Option<usize>> {
     })
 }
 
-fn create_test_harness() -> Result<Harness> {
-    let root = ListGym::new();
-    let harness = Harness::new(root)?;
-
-    Ok(harness)
-}
-
-#[test]
-fn test_listgym_creates_and_renders() -> Result<()> {
-    let root = ListGym::new();
-    let mut harness = Harness::new(root)?;
-
-    // Test that we can render without crashing.
-    harness.render()?;
-
-    Ok(())
-}
-
 #[test]
 fn test_listgym_initial_state() -> Result<()> {
     let root = ListGym::new();
@@ -72,32 +54,8 @@ fn test_listgym_initial_state() -> Result<()> {
 }
 
 #[test]
-fn test_listgym_with_harness() -> Result<()> {
-    let mut harness = Harness::builder(ListGym::new()).size(80, 20).build()?;
-
-    // Test that we can render with a specific size.
-    harness.render()?;
-
-    // The harness should have created a render buffer.
-    let _buf = harness.buf();
-
-    Ok(())
-}
-
-#[test]
-fn test_harness_script_method() -> Result<()> {
-    let mut harness = create_test_harness()?;
-    harness.render()?;
-
-    // Test that we can execute a simple print script.
-    harness.script("canopy.log(\"Hello from script\")")?;
-
-    Ok(())
-}
-
-#[test]
 fn test_harness_script_with_list_navigation() -> Result<()> {
-    let mut harness = create_test_harness()?;
+    let mut harness = Harness::new(ListGym::new())?;
     harness.render()?;
 
     let initial_selected = list_selected_index(&mut harness)?;
@@ -114,7 +72,7 @@ fn test_harness_script_with_list_navigation() -> Result<()> {
 
 #[test]
 fn test_listgym_adds_and_deletes_columns() -> Result<()> {
-    let mut harness = create_test_harness()?;
+    let mut harness = Harness::new(ListGym::new())?;
     harness.render()?;
 
     let initial_cols = panes_column_count(&mut harness)?;
@@ -132,10 +90,13 @@ fn test_listgym_adds_and_deletes_columns() -> Result<()> {
 
 #[test]
 fn test_listgym_add_item_command() -> Result<()> {
-    let mut harness = create_test_harness()?;
+    let mut harness = Harness::new(ListGym::new())?;
     harness.render()?;
 
+    let before = list_len(&mut harness)?;
     harness.script("list_gym.add_item()")?;
+    assert_eq!(list_len(&mut harness)?, before + 1);
+
     harness.script("list_gym.add_column()")?;
     harness.script("list_gym.add_item()")?;
 
@@ -144,7 +105,7 @@ fn test_listgym_add_item_command() -> Result<()> {
 
 #[test]
 fn test_listgym_tabs_between_columns() -> Result<()> {
-    let mut harness = create_test_harness()?;
+    let mut harness = Harness::new(ListGym::new())?;
     harness.render()?;
 
     harness.script("list_gym.add_column()")?;

@@ -5,7 +5,6 @@ mod tests {
     use anyhow::Result as AnyResult;
     use canopy::{event::key::KeyCode, prelude::*, testing::harness::Harness};
     use canopy_widgets::List;
-    use tempfile::TempDir;
     use todo::{TodoEntry, create_app, store};
 
     fn add(h: &mut Harness, text: &str) -> Result<()> {
@@ -33,20 +32,17 @@ mod tests {
             .expect("list node missing")
     }
 
-    /// Build an app over a fresh database. The returned directory owns the database file and
-    /// removes it when the test ends.
-    fn app() -> AnyResult<(Harness, TempDir)> {
-        let dir = tempfile::tempdir()?;
-        let db_path = dir.path().join("todo.db");
-        let canopy = create_app(db_path.to_str().expect("database path is utf-8"))?;
+    /// Build an app over a fresh in-memory database.
+    fn app() -> AnyResult<Harness> {
+        let canopy = create_app(":memory:")?;
         let mut h = Harness::from_canopy(canopy, Size::new(100, 100))?;
         h.render()?;
-        Ok((h, dir))
+        Ok(h)
     }
 
     #[test]
     fn add_item_via_script() -> AnyResult<()> {
-        let (mut h, _db) = app()?;
+        let mut h = app()?;
 
         h.key('a')?;
         h.key('h')?;
@@ -60,20 +56,21 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "assertion `left == right` failed")]
-    fn add_item_with_char_newline() {
-        let (mut h, _db) = app().expect("app builds");
+    fn add_item_with_char_newline() -> AnyResult<()> {
+        let mut h = app()?;
 
-        h.key('a').unwrap();
-        h.key('h').unwrap();
-        h.key('i').unwrap();
-        h.key('\n').unwrap();
-        assert_eq!(list_len(&mut h), 1);
+        h.key('a')?;
+        h.key('h')?;
+        h.key('i')?;
+        // A raw newline is not the modal's confirm key, so nothing is added.
+        h.key('\n')?;
+        assert_eq!(list_len(&mut h), 0);
+        Ok(())
     }
 
     #[test]
     fn add_item_via_pty() -> AnyResult<()> {
-        let (mut h, _db) = app()?;
+        let mut h = app()?;
 
         add(&mut h, "item_one")?;
         add(&mut h, "item_two")?;
@@ -88,24 +85,8 @@ mod tests {
     }
 
     #[test]
-    fn delete_reverse_via_pty() -> AnyResult<()> {
-        let (mut h, _db) = app()?;
-        add(&mut h, "one")?;
-        add(&mut h, "two")?;
-        add(&mut h, "three")?;
-        h.key('j')?;
-        h.key('j')?;
-        del_first(&mut h)?;
-        assert_eq!(list_len(&mut h), 2);
-        del_first(&mut h)?;
-        del_first(&mut h)?;
-        assert_eq!(list_len(&mut h), 0);
-        Ok(())
-    }
-
-    #[test]
     fn single_item_add_remove() -> AnyResult<()> {
-        let (mut h, _db) = app()?;
+        let mut h = app()?;
 
         add(&mut h, "solo")?;
         assert_eq!(list_len(&mut h), 1);
@@ -116,7 +97,7 @@ mod tests {
 
     #[test]
     fn delete_after_moving_focus() -> AnyResult<()> {
-        let (mut h, _db) = app()?;
+        let mut h = app()?;
         add(&mut h, "first")?;
         add(&mut h, "second")?;
         h.key('j')?;
@@ -128,7 +109,7 @@ mod tests {
 
     #[test]
     fn delete_middle_keeps_rest() -> AnyResult<()> {
-        let (mut h, _db) = app()?;
+        let mut h = app()?;
         add(&mut h, "first")?;
         add(&mut h, "second")?;
         add(&mut h, "third")?;
@@ -141,7 +122,7 @@ mod tests {
 
     #[test]
     fn delete_first_without_nav() -> AnyResult<()> {
-        let (mut h, _db) = app()?;
+        let mut h = app()?;
         add(&mut h, "a1")?;
         add(&mut h, "a2")?;
         add(&mut h, "a3")?;
@@ -153,7 +134,7 @@ mod tests {
 
     #[test]
     fn focus_moves_with_navigation() -> AnyResult<()> {
-        let (mut h, _db) = app()?;
+        let mut h = app()?;
         add(&mut h, "one")?;
         add(&mut h, "two")?;
         // A step down and back up returns the selection to where it started, so the delete
@@ -170,7 +151,7 @@ mod tests {
 
     #[test]
     fn delete_first_keeps_second_visible() -> AnyResult<()> {
-        let (mut h, _db) = app()?;
+        let mut h = app()?;
         add(&mut h, "first")?;
         add(&mut h, "second")?;
         h.key('g')?; // Go to first item

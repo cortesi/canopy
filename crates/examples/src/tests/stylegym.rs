@@ -17,20 +17,6 @@ fn setup_harness(size: Size) -> Result<Harness> {
 }
 
 #[test]
-fn test_stylegym_creates() -> Result<()> {
-    let _harness = setup_harness(Size::new(80, 24))?;
-    Ok(())
-}
-
-#[test]
-fn test_stylegym_renders() -> Result<()> {
-    let harness = setup_harness(Size::new(80, 24))?;
-    // Just check it rendered without panicking.
-    let _buf = harness.buf();
-    Ok(())
-}
-
-#[test]
 fn installed_stylegym_keeps_controls_beside_demo() -> Result<()> {
     let mut canopy = Canopy::new();
     Stylegym::load(&mut canopy)?;

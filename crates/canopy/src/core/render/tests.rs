@@ -3,7 +3,6 @@
 use super::*;
 use crate::{
     buf,
-    core::termbuf::RenderLimits,
     style::{AttrSet, Color, StyleManager, StyleMap},
     testing::buf::BufTest,
 };
@@ -22,11 +21,10 @@ struct TestTarget {
 
 impl TestTarget {
     fn new(clip: geom::Rect) -> Self {
-        let buf = TermBuf::new_with_limits(
+        let buf = TermBuf::new(
             (clip.w, clip.h),
             '\0',
             ResolvedStyle::new(Color::White, Color::Black, AttrSet::default()),
-            RenderLimits::default(),
         )
         .expect("test render target should allocate");
         Self {
@@ -211,206 +209,6 @@ fn put_grapheme_clips_wide_glyphs_atomically() {
 }
 
 #[test]
-fn test_part_render_fill_outside_canvas() {
-    let mut target = TestTarget::new(geom::Rect::new(5, 5, 10, 10));
-
-    // Fill that extends beyond canvas bounds
-    target
-        .render(|r| r.fill("default", geom::Rect::new(15, 15, 10, 10), '#'))
-        .unwrap();
-
-    // Fill completely outside canvas
-    target
-        .render(|r| r.fill("default", geom::Rect::new(25, 25, 5, 5), 'Y'))
-        .unwrap();
-
-    // Fill that starts at edge and extends beyond
-    target
-        .render(|r| r.fill("default", geom::Rect::new(19, 19, 2, 2), 'Z'))
-        .unwrap();
-
-    // Buffer should remain unchanged
-    target.assert_matches(buf!(
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-    ));
-}
-
-#[test]
-fn test_part_render_text_within_bounds() {
-    let mut target = TestTarget::new(geom::Rect::new(5, 5, 10, 10));
-
-    // Text entirely within render rectangle
-    target
-        .render(|r| {
-            r.text(
-                "default",
-                geom::Line {
-                    tl: geom::Point { x: 6, y: 6 },
-                    w: 5,
-                },
-                "Hello",
-            )
-        })
-        .unwrap();
-
-    target.assert_matches(buf!(
-        "XXXXXXXXXX"
-        "XHelloXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-    ));
-
-    // Text that exactly fits
-    target
-        .render(|r| {
-            r.text(
-                "default",
-                geom::Line {
-                    tl: geom::Point { x: 5, y: 5 },
-                    w: 10,
-                },
-                "1234567890",
-            )
-        })
-        .unwrap();
-
-    target.assert_matches(buf!(
-        "1234567890"
-        "XHelloXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-    ));
-}
-
-#[test]
-fn test_part_render_text_partial_overlap() {
-    let mut target = TestTarget::new(geom::Rect::new(5, 5, 10, 10));
-
-    // Text that starts before render rect
-    target
-        .render(|r| {
-            r.text(
-                "default",
-                geom::Line {
-                    tl: geom::Point { x: 3, y: 6 },
-                    w: 10,
-                },
-                "1234567890",
-            )
-        })
-        .unwrap();
-
-    // Should show chars starting from index 2 (skip first 2 chars)
-    target.assert_matches(buf!(
-        "XXXXXXXXXX"
-        "34567890XX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-    ));
-
-    // Text that extends beyond render rect
-    target
-        .render(|r| {
-            r.text(
-                "default",
-                geom::Line {
-                    tl: geom::Point { x: 10, y: 10 },
-                    w: 8,
-                },
-                "LongText",
-            )
-        })
-        .unwrap();
-
-    target.assert_matches(buf!(
-        "XXXXXXXXXX"
-        "34567890XX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXLongT"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-    ));
-}
-
-#[test]
-fn test_part_render_text_outside_canvas() {
-    let mut target = TestTarget::new(geom::Rect::new(5, 5, 10, 10));
-
-    // Text that extends beyond canvas
-    target
-        .render(|r| {
-            r.text(
-                "default",
-                geom::Line {
-                    tl: geom::Point { x: 15, y: 15 },
-                    w: 10,
-                },
-                "Text",
-            )
-        })
-        .unwrap();
-
-    // Text completely outside canvas
-    target
-        .render(|r| {
-            r.text(
-                "default",
-                geom::Line {
-                    tl: geom::Point { x: 25, y: 25 },
-                    w: 5,
-                },
-                "Text",
-            )
-        })
-        .unwrap();
-
-    // Buffer should remain unchanged
-    target.assert_matches(buf!(
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-        "XXXXXXXXXX"
-    ));
-}
-
-#[test]
 fn fill_draws_the_parts_of_a_frame() {
     let mut target = TestTarget::new(geom::Rect::new(5, 5, 10, 10));
 
@@ -575,14 +373,14 @@ fn text_clips_against_an_offset_clip_rect() {
 
 #[test]
 fn test_part_render_multiple_rectangles() {
-    // Test with render rect at different positions
-    let positions = vec![
-        (geom::Rect::new(0, 0, 10, 10), "top-left"), // Top-left corner
-        (geom::Rect::new(10, 10, 10, 10), "center"), // Center
-        (geom::Rect::new(20, 20, 10, 10), "bottom-right"), // Bottom-right corner
+    // Clipping is relative to the render rect, wherever it sits on the canvas.
+    let positions = [
+        geom::Rect::new(0, 0, 10, 10),
+        geom::Rect::new(10, 10, 10, 10),
+        geom::Rect::new(20, 20, 10, 10),
     ];
 
-    for (index, (render_rect, position)) in positions.into_iter().enumerate() {
+    for render_rect in positions {
         let mut target = TestTarget::new(render_rect);
 
         // Fill within the specific render rect, then outside the canvas.
@@ -594,7 +392,6 @@ fn test_part_render_multiple_rectangles() {
             .render(|r| r.fill("default", geom::Rect::new(40, 40, 5, 5), 'Y'))
             .unwrap();
 
-        assert_eq!(position, ["top-left", "center", "bottom-right"][index]);
         target.assert_matches(buf!(
             "XXXXXXXXXX"
             "X#####XXXX"

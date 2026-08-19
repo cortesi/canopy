@@ -12,7 +12,10 @@ use crate::{
     NodeId,
     core::world::{
         Core,
-        test_support::{LayoutWidget, TestWidget, assert_error_context, fixed_leaf, wrap_node},
+        test_support::{
+            LayoutWidget, TestWidget, assert_error_context, attach_root_child, fixed_leaf,
+            wrap_node,
+        },
     },
     error::{Error, NodeOperationKind, Result},
     geom::{Point, Size},
@@ -23,15 +26,7 @@ use crate::{
 };
 
 /// Attach one node as the only child of the root.
-fn attach_root_child(core: &mut Core, child: NodeId) -> Result<()> {
-    core.set_children(core.root, vec![child])
-}
-
 /// A widget that always measures to one cell.
-fn simple_widget() -> TestWidget {
-    TestWidget::new(|_constraints| Measurement::Fixed(Size::new(1, 1))).0
-}
-
 #[test]
 fn clamp_outer_no_bounds() {
     let layout = Layout::column();
@@ -179,12 +174,9 @@ fn wrap_no_children() -> Result<()> {
 fn wrap_sum_main_max_cross() -> Result<()> {
     let mut core = Core::new();
     let parent = wrap_node(&mut core)?;
-    let (c1, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(2, 1)));
-    let (c2, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(4, 3)));
-    let (c3, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(3, 2)));
-    let child1 = core.create_detached(c1)?;
-    let child2 = core.create_detached(c2)?;
-    let child3 = core.create_detached(c3)?;
+    let child1 = fixed_leaf(&mut core, 2, 1)?;
+    let child2 = fixed_leaf(&mut core, 4, 3)?;
+    let child3 = fixed_leaf(&mut core, 3, 2)?;
     core.set_children(parent, vec![child1, child2, child3])?;
     attach_root_child(&mut core, parent)?;
     core.set_layout_of(parent, Layout::column().gap(1))?;
@@ -271,12 +263,9 @@ fn wrap_flex_child_behaves_as_flex_when_parent_exact() -> Result<()> {
 fn wrap_gap_counts_only_visible_children() -> Result<()> {
     let mut core = Core::new();
     let parent = wrap_node(&mut core)?;
-    let (c1, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(1, 1)));
-    let (c2, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(1, 1)));
-    let (c3, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(1, 1)));
-    let child1 = core.create_detached(c1)?;
-    let child2 = core.create_detached(c2)?;
-    let child3 = core.create_detached(c3)?;
+    let child1 = fixed_leaf(&mut core, 1, 1)?;
+    let child2 = fixed_leaf(&mut core, 1, 1)?;
+    let child3 = fixed_leaf(&mut core, 1, 1)?;
     core.set_children(parent, vec![child1, child2, child3])?;
     attach_root_child(&mut core, parent)?;
     core.set_layout_of(parent, Layout::column().gap(2))?;
@@ -437,12 +426,9 @@ proptest! {
 
         let mut core = Core::new();
         let parent = wrap_node(&mut core)?;
-        let (first_widget, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(3, 2)));
-        let (second_widget, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(5, 4)));
-        let (last_widget, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(2, 1)));
-        let first = core.create_detached(first_widget)?;
-        let second = core.create_detached(second_widget)?;
-        let last = core.create_detached(last_widget)?;
+        let first = fixed_leaf(&mut core, 3, 2)?;
+        let second = fixed_leaf(&mut core, 5, 4)?;
+        let last = fixed_leaf(&mut core, 2, 1)?;
         core.set_children(parent, vec![first, second, last])?;
         attach_root_child(&mut core, parent)?;
         core.set_layout_of(parent, layout)?;
@@ -555,12 +541,9 @@ fn invalid_widget_layouts_are_rejected_before_publication() -> Result<()> {
 fn positions_monotonic_main() -> Result<()> {
     let mut core = Core::new();
     let parent = wrap_node(&mut core)?;
-    let (c1, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(2, 1)));
-    let (c2, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(2, 1)));
-    let (c3, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(2, 1)));
-    let child1 = core.create_detached(c1)?;
-    let child2 = core.create_detached(c2)?;
-    let child3 = core.create_detached(c3)?;
+    let child1 = fixed_leaf(&mut core, 2, 1)?;
+    let child2 = fixed_leaf(&mut core, 2, 1)?;
+    let child3 = fixed_leaf(&mut core, 2, 1)?;
     core.set_children(parent, vec![child1, child2, child3])?;
     attach_root_child(&mut core, parent)?;
     core.set_layout_of(parent, Layout::row().flex_horizontal(1).gap(1))?;
@@ -576,10 +559,8 @@ fn positions_monotonic_main() -> Result<()> {
 fn no_overlaps_with_min_expansion() -> Result<()> {
     let mut core = Core::new();
     let parent = wrap_node(&mut core)?;
-    let (c1, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(1, 1)));
-    let (c2, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(1, 1)));
-    let child1 = core.create_detached(c1)?;
-    let child2 = core.create_detached(c2)?;
+    let child1 = fixed_leaf(&mut core, 1, 1)?;
+    let child2 = fixed_leaf(&mut core, 1, 1)?;
     core.set_children(parent, vec![child1, child2])?;
     attach_root_child(&mut core, parent)?;
     core.set_layout_of(parent, Layout::row().flex_horizontal(1))?;
@@ -602,10 +583,8 @@ fn no_overlaps_with_min_expansion() -> Result<()> {
 fn overflow_positions_consistent() -> Result<()> {
     let mut core = Core::new();
     let parent = wrap_node(&mut core)?;
-    let (c1, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(4, 1)));
-    let (c2, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(4, 1)));
-    let child1 = core.create_detached(c1)?;
-    let child2 = core.create_detached(c2)?;
+    let child1 = fixed_leaf(&mut core, 4, 1)?;
+    let child2 = fixed_leaf(&mut core, 4, 1)?;
     core.set_children(parent, vec![child1, child2])?;
     attach_root_child(&mut core, parent)?;
     core.set_layout_of(parent, Layout::row().flex_horizontal(1).gap(1))?;
@@ -841,10 +820,8 @@ fn build_random_tree(core: &mut Core, rng: &mut StdRng, depth: usize) -> Result<
 fn stack_children_overlap() -> Result<()> {
     let mut core = Core::new();
     let parent = wrap_node(&mut core)?;
-    let (c1, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(10, 10)));
-    let (c2, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(5, 5)));
-    let child1 = core.create_detached(c1)?;
-    let child2 = core.create_detached(c2)?;
+    let child1 = fixed_leaf(&mut core, 10, 10)?;
+    let child2 = fixed_leaf(&mut core, 5, 5)?;
     core.set_children(parent, vec![child1, child2])?;
     attach_root_child(&mut core, parent)?;
     core.set_layout_of(parent, Layout::column().direction(Direction::Stack))?;
@@ -878,10 +855,8 @@ fn sequential_alignment_controls_group_and_cross_axes() -> Result<()> {
     ] {
         let mut core = Core::new();
         let parent = wrap_node(&mut core)?;
-        let (first_widget, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(3, 2)));
-        let (second_widget, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(5, 4)));
-        let first = core.create_detached(first_widget)?;
-        let second = core.create_detached(second_widget)?;
+        let first = fixed_leaf(&mut core, 3, 2)?;
+        let second = fixed_leaf(&mut core, 5, 4)?;
         core.set_children(parent, vec![first, second])?;
         attach_root_child(&mut core, parent)?;
         core.set_layout_of(
@@ -912,10 +887,8 @@ fn sequential_alignment_controls_group_and_cross_axes() -> Result<()> {
 fn locate_node_prefers_topmost_stack_child() -> Result<()> {
     let mut core = Core::new();
     let parent = wrap_node(&mut core)?;
-    let (c1, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(10, 10)));
-    let (c2, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(10, 10)));
-    let child1 = core.create_detached(c1)?;
-    let child2 = core.create_detached(c2)?;
+    let child1 = fixed_leaf(&mut core, 10, 10)?;
+    let child2 = fixed_leaf(&mut core, 10, 10)?;
     core.set_children(parent, vec![child1, child2])?;
     attach_root_child(&mut core, parent)?;
     core.set_layout_of(parent, Layout::column().direction(Direction::Stack))?;
@@ -973,10 +946,8 @@ fn stack_with_end_alignment() -> Result<()> {
 fn stack_multiple_children_centered() -> Result<()> {
     let mut core = Core::new();
     let parent = wrap_node(&mut core)?;
-    let (c1, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(20, 20)));
-    let (c2, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(10, 10)));
-    let child1 = core.create_detached(c1)?;
-    let child2 = core.create_detached(c2)?;
+    let child1 = fixed_leaf(&mut core, 20, 20)?;
+    let child2 = fixed_leaf(&mut core, 10, 10)?;
     core.set_children(parent, vec![child1, child2])?;
     attach_root_child(&mut core, parent)?;
     core.set_layout_of(
@@ -998,7 +969,7 @@ fn stack_multiple_children_centered() -> Result<()> {
 #[test]
 fn measure_errors_include_operation_node_and_path() -> Result<()> {
     let mut core = Core::new();
-    let child = core.create_detached(simple_widget())?;
+    let child = fixed_leaf(&mut core, 1, 1)?;
     attach_root_child(&mut core, child)?;
     let path = core.node_path(core.root, child).to_string();
     let constraints = MeasureConstraints {
@@ -1027,7 +998,7 @@ fn measure_errors_include_operation_node_and_path() -> Result<()> {
 #[test]
 fn canvas_errors_include_operation_node_and_path() -> Result<()> {
     let mut core = Core::new();
-    let child = core.create_detached(simple_widget())?;
+    let child = fixed_leaf(&mut core, 1, 1)?;
     attach_root_child(&mut core, child)?;
     let path = core.node_path(core.root, child).to_string();
 

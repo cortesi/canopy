@@ -239,20 +239,20 @@ full evidence, change, and proof for each entry.
 - [x] W174: Collapse the mirrored row loops in `test_snake_navigation`
 - [x] W175: Drop redundant relayout calls and one overwrite-style `with_layout_of` in `tests/it`
 - [x] W176: Cover the shift paths in the replay proptest and delete the dead test backends
-- [ ] W177: Delete the duplicated render tests left from the test merge
-- [ ] W178: Drop the no-op `Result` plumbing and the duplicate assertion in the style tests
-- [ ] W179: Remove duplicated blocks in `tkey` and `tmouse`
-- [ ] W180: Finish landed item 6.7 in the layout-driver tests
-- [ ] W181: Finish sharing test helpers between `world/tests.rs` and `layout_driver/tests.rs`
-- [ ] W182: Drop the `Option::take` dance in `with_callback_context` and `with_callback_core`
-- [ ] W183: Delete three redundant `fs::remove_dir_all` calls in `tests/it/script.rs`
-- [ ] W184: Delete the duplicated derive test `test_load_commands`
-- [ ] W185: `tests/focusgym.rs`: use the existing helpers, add two, and turn the macro into a function
-- [ ] W186: Make `test_flex_adjust_refuses_at_min_size` able to fail
-- [ ] W187: Delete example tests that assert nothing or are subsumed, and give `add_item` an assertion
-- [ ] W188: Run the todo tests against `:memory:` and drop the tempdir plumbing
-- [ ] W189: Replace the `#[should_panic]` newline test with a positive assertion
-- [ ] W190: Delete `delete_reverse_via_pty`, a weaker copy of `add_item_via_pty`
+- [x] W177: Delete the duplicated render tests left from the test merge
+- [x] W178: Drop the no-op `Result` plumbing and the duplicate assertion in the style tests
+- [x] W179: Remove duplicated blocks in `tkey` and `tmouse`
+- [x] W180: Finish landed item 6.7 in the layout-driver tests
+- [x] W181: Finish sharing test helpers between `world/tests.rs` and `layout_driver/tests.rs`
+- [x] W182: Drop the `Option::take` dance in `with_callback_context` and `with_callback_core`
+- [x] W183: Delete three redundant `fs::remove_dir_all` calls in `tests/it/script.rs`
+- [x] W184: Delete the duplicated derive test `test_load_commands`
+- [x] W185: `tests/focusgym.rs`: use the existing helpers, add two, and turn the macro into a function
+- [x] W186: Make `test_flex_adjust_refuses_at_min_size` able to fail
+- [x] W187: Delete example tests that assert nothing or are subsumed, and give `add_item` an assertion
+- [x] W188: Run the todo tests against `:memory:` and drop the tempdir plumbing
+- [x] W189: Replace the `#[should_panic]` newline test with a positive assertion
+- [x] W190: Delete `delete_reverse_via_pty`, a weaker copy of `add_item_via_pty`
 
 **Docs, manifests, and tooling**
 
