@@ -927,7 +927,6 @@ fn font_styles(phase: f32) -> StyleMap {
     style
 }
 
-/// Build the controls help text.
 /// Build the status text for the current state.
 fn status_text(height: u32, state: FontEffects) -> String {
     let flag = |enabled: bool| if enabled { "on " } else { "off" };

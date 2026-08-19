@@ -795,7 +795,6 @@ pub mod canopy {
             Node(super::id::NodeId),
         }
 
-        /// Render script diagnostics for an error message.
         /// A trait that allows widgets to perform recursive initialization of themselves and their
         /// children.
         pub trait Loader {
@@ -1090,7 +1089,6 @@ pub mod canopy {
                 Canopy,
                 /// Unknown command identifier.
                 UnknownCommand,
-                /// Duplicate command identifier.
                 /// Conflicting command definition.
                 ConflictingCommand,
                 /// Invalid command definition.
@@ -1317,7 +1315,6 @@ pub mod canopy {
         }
 
         /// A keystroke along with modifiers.
-        /// A keystroke along with modifiers.
         #[derive(
             Debug, StructuralPartialEq, PartialEq, Eq, Clone, Copy, Hash, PartialEq, Display,
         )]
@@ -1337,8 +1334,9 @@ pub mod canopy {
             ///   canonical printable equivalents (e.g. 0x01 → `A`, 0x1B → `[`, 0x7F → `?`).
             ///   Some terminals emit control codes without setting the Ctrl modifier, so
             ///   these codes are treated as Ctrl-combinations even if Ctrl isn't reported.
-            ///   We also map Ctrl+`_`, Ctrl+`?`, and Ctrl+`7` to `/` to align with common
-            ///   `Ctrl+/` help bindings across keyboard layouts and terminal encodings.
+            ///   Ctrl+`_`, Ctrl+`?`, and Ctrl+`7` then alias to `/` to align with common
+            ///   `Ctrl+/` help bindings, and Ctrl+`4`, Ctrl+`5`, Ctrl+`6` alias to `\`, `]`,
+            ///   and `^`.
             /// - **Shift handling** is applied after Ctrl canonicalization.
             ///
             /// Handling of the shift key is the most intricate part of this module.
@@ -1370,9 +1368,8 @@ pub mod canopy {
             /// | shift + enter     | shift + enter    |
             /// | shift + ctrl + A  | ctrl + A         |
             ///
-            /// `normalize` must be called explicitly when needed - all comparison and
-            /// conversion methods are literal and stright-forward, and don't perform
-            /// normalization automatically.
+            /// `normalize` must be called explicitly when needed. Comparison is literal and
+            /// straightforward and does not normalize. `parse_spec` normalizes its result.
             pub fn normalize(&self) -> Self {}
 
             /// Parse a key specification such as `ctrl-s`, `PageDown`, or `A`.
@@ -2683,7 +2680,6 @@ pub mod canopy {
         }
     }
 
-    /// Render script diagnostics for an error message.
     /// A trait that allows widgets to perform recursive initialization of themselves and their
     /// children.
     pub trait Loader {
@@ -3476,7 +3472,6 @@ pub mod canopy {
             Canopy,
             /// Unknown command identifier.
             UnknownCommand,
-            /// Duplicate command identifier.
             /// Conflicting command definition.
             ConflictingCommand,
             /// Invalid command definition.
@@ -3841,11 +3836,11 @@ pub mod canopy {
                 KeypadBegin,
                 /// F key.
                 ///
-                /// `KeyEvent::F(1)` represents F1 key, etc.
+                /// `KeyCode::F(1)` represents the F1 key, and so on.
                 F(u8),
                 /// A character.
                 ///
-                /// `KeyEvent::Char('c')` represents `c` character, etc.
+                /// `KeyCode::Char('c')` represents the `c` character, and so on.
                 Char(char),
                 /// Media key code.
                 Media(MediaKeyCode),
@@ -3867,7 +3862,6 @@ pub mod canopy {
             }
 
             /// A keystroke along with modifiers.
-            /// A keystroke along with modifiers.
             #[derive(
                 Debug, StructuralPartialEq, PartialEq, Eq, Clone, Copy, Hash, PartialEq, Display,
             )]
@@ -3887,8 +3881,9 @@ pub mod canopy {
                 ///   canonical printable equivalents (e.g. 0x01 → `A`, 0x1B → `[`, 0x7F → `?`).
                 ///   Some terminals emit control codes without setting the Ctrl modifier, so
                 ///   these codes are treated as Ctrl-combinations even if Ctrl isn't reported.
-                ///   We also map Ctrl+`_`, Ctrl+`?`, and Ctrl+`7` to `/` to align with common
-                ///   `Ctrl+/` help bindings across keyboard layouts and terminal encodings.
+                ///   Ctrl+`_`, Ctrl+`?`, and Ctrl+`7` then alias to `/` to align with common
+                ///   `Ctrl+/` help bindings, and Ctrl+`4`, Ctrl+`5`, Ctrl+`6` alias to `\`, `]`,
+                ///   and `^`.
                 /// - **Shift handling** is applied after Ctrl canonicalization.
                 ///
                 /// Handling of the shift key is the most intricate part of this module.
@@ -3920,9 +3915,8 @@ pub mod canopy {
                 /// | shift + enter     | shift + enter    |
                 /// | shift + ctrl + A  | ctrl + A         |
                 ///
-                /// `normalize` must be called explicitly when needed - all comparison and
-                /// conversion methods are literal and stright-forward, and don't perform
-                /// normalization automatically.
+                /// `normalize` must be called explicitly when needed. Comparison is literal and
+                /// straightforward and does not normalize. `parse_spec` normalizes its result.
                 pub fn normalize(&self) -> Self {}
 
                 /// Parse a key specification such as `ctrl-s`, `PageDown`, or `A`.
@@ -5134,7 +5128,7 @@ pub mod canopy {
             /// Local outer rectangle with origin at (0,0).
             pub fn outer_rect_local(&self) -> Rect {}
 
-            /// Build a view from signed outer/content rects and content/canvas sizes.
+            /// Build a view from signed outer and content rects, a scroll offset, and a canvas size.
             pub fn new(outer: RectI32, content: RectI32, tl: Point, canvas: Size) -> Self {}
 
             /// Calculates the (pre, active, post) rectangles needed to draw a vertical

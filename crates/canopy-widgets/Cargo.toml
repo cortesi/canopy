@@ -41,7 +41,6 @@ tokio = { workspace = true, features = ["rt-multi-thread", "time", "sync"] }
 itty-core.workspace = true
 
 [dev-dependencies]
-tracing-subscriber.workspace = true
 canopy = { path = "../canopy", features = ["testing"] }
 criterion.workspace = true
 itty-script.workspace = true

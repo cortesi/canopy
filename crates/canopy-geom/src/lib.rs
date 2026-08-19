@@ -1,5 +1,4 @@
 #![deny(unsafe_code)]
-#![warn(missing_docs)]
 //! Geometry primitives used across canopy.
 //!
 //! Rectangles and line segments use half-open bounds: their near edge is
@@ -12,8 +11,7 @@
 //! Unsigned coordinates and sizes use saturating arithmetic unless an
 //! operation is explicitly fallible. Edge calculations widen before adding so
 //! rectangles extending beyond `u32::MAX` retain their full mathematical
-//! extent. Conversions to signed coordinates clamp values that cannot be
-//! represented.
+//! extent. Signed-to-unsigned conversions clamp to `0..=u32::MAX`.
 
 /// Error types for geometry operations.
 mod error;

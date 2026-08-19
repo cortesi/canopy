@@ -9,7 +9,6 @@ use ruau::vm::{
 
 use super::{ArgValue, NodeId, Point, RectI32, Size, node_id_to_arg};
 
-/// Return a display name for a scoped value's type.
 /// Copy the text behind a scoped string value.
 pub(super) fn scoped_value_to_string<'s>(
     scope: &Scope<'s>,

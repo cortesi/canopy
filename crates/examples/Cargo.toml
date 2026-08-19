@@ -10,13 +10,12 @@ doctest = false
 [dependencies]
 canopy = { path = "../canopy" }
 canopy-widgets = { path = "../canopy-widgets" }
-clap.workspace = true
 rand = "0.10.1"
 unicode-width.workspace = true
 
 [dev-dependencies]
 canopy = { path = "../canopy", features = ["testing"] }
-canopy-widgets = { path = "../canopy-widgets" }
+clap.workspace = true
 
 [lints]
 workspace = true

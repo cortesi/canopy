@@ -1386,7 +1386,6 @@ fn implementation_path_for_declaration(path: &FsPath) -> Option<PathBuf> {
     Some(path.with_file_name(format!("{stem}.luau")))
 }
 
-/// Render script diagnostics for an error message.
 /// A trait that allows widgets to perform recursive initialization of themselves and their
 /// children.
 pub trait Loader {

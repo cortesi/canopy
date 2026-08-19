@@ -256,12 +256,12 @@ full evidence, change, and proof for each entry.
 
 **Docs, manifests, and tooling**
 
-- [ ] W191: Fix stale doc comments that describe removed or different behavior
-- [ ] W192: Fix `key.rs` doc drift and the tautological `normalize` assertion
-- [ ] W193: Manifest hygiene
-- [ ] W194: Drop the redundant `#![warn(missing_docs)]` crate attributes
-- [ ] W195: One tool-version gate in xtask that reports the installed version
-- [ ] W196: Give every xtask task the `fn(&Path) -> bool` shape
+- [x] W191: Fix stale doc comments that describe removed or different behavior
+- [x] W192: Fix `key.rs` doc drift and the tautological `normalize` assertion
+- [x] W193: Manifest hygiene
+- [x] W194: Drop the redundant `#![warn(missing_docs)]` crate attributes
+- [x] W195: One tool-version gate in xtask that reports the installed version
+- [x] W196: Give every xtask task the `fn(&Path) -> bool` shape
 
 ## Items
 

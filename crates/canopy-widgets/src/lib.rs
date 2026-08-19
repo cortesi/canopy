@@ -3,8 +3,6 @@
 //! This crate provides a collection of reusable widgets for building terminal
 //! user interfaces with canopy.
 
-#![warn(missing_docs)]
-
 /// Border widget with customizable glyphs.
 mod boxed;
 /// Button widget with command dispatch.

@@ -190,11 +190,11 @@ pub enum KeyCode {
     KeypadBegin,
     /// F key.
     ///
-    /// `KeyEvent::F(1)` represents F1 key, etc.
+    /// `KeyCode::F(1)` represents the F1 key, and so on.
     F(u8),
     /// A character.
     ///
-    /// `KeyEvent::Char('c')` represents `c` character, etc.
+    /// `KeyCode::Char('c')` represents the `c` character, and so on.
     Char(char),
     /// Media key code.
     Media(MediaKeyCode),
@@ -208,7 +208,6 @@ impl From<char> for KeyCode {
     }
 }
 
-/// A keystroke along with modifiers.
 /// A keystroke along with modifiers.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Key {
@@ -227,8 +226,9 @@ impl Key {
     ///   canonical printable equivalents (e.g. 0x01 → `A`, 0x1B → `[`, 0x7F → `?`).
     ///   Some terminals emit control codes without setting the Ctrl modifier, so
     ///   these codes are treated as Ctrl-combinations even if Ctrl isn't reported.
-    ///   We also map Ctrl+`_`, Ctrl+`?`, and Ctrl+`7` to `/` to align with common
-    ///   `Ctrl+/` help bindings across keyboard layouts and terminal encodings.
+    ///   Ctrl+`_`, Ctrl+`?`, and Ctrl+`7` then alias to `/` to align with common
+    ///   `Ctrl+/` help bindings, and Ctrl+`4`, Ctrl+`5`, Ctrl+`6` alias to `\`, `]`,
+    ///   and `^`.
     /// - **Shift handling** is applied after Ctrl canonicalization.
     ///
     /// Handling of the shift key is the most intricate part of this module.
@@ -260,9 +260,8 @@ impl Key {
     /// | shift + enter     | shift + enter    |
     /// | shift + ctrl + A  | ctrl + A         |
     ///
-    /// `normalize` must be called explicitly when needed - all comparison and
-    /// conversion methods are literal and stright-forward, and don't perform
-    /// normalization automatically.
+    /// `normalize` must be called explicitly when needed. Comparison is literal and
+    /// straightforward and does not normalize. `parse_spec` normalizes its result.
     pub fn normalize(&self) -> Self {
         let mut normalized = *self;
         if let KeyCode::Char(c) = normalized.key {
@@ -520,24 +519,6 @@ mod tests {
         assert_eq!(Key::from('\u{1}').normalize(), Ctrl + 'A');
         assert_eq!(Key::from('\u{1F}').normalize(), Ctrl + '/');
         assert_eq!(Key::from('\u{7F}').normalize(), Ctrl + '/');
-        assert_eq!(
-            Key {
-                mods: Mods {
-                    shift: false,
-                    alt: false,
-                    ctrl: false
-                },
-                key: KeyCode::Char('c')
-            },
-            Key {
-                mods: Mods {
-                    shift: false,
-                    alt: false,
-                    ctrl: false
-                },
-                key: KeyCode::Char('c')
-            }
-        );
         Ok(())
     }
 

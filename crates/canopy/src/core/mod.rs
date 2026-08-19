@@ -1,7 +1,6 @@
 #![allow(clippy::new_without_default)]
 //! Core types and traits for the Canopy terminal UI library.
 
-// Core modules - public
 /// Backend implementations.
 pub mod backend;
 /// Keyed child collection helpers.
@@ -36,7 +35,6 @@ pub mod testing;
 /// View management.
 pub mod view;
 
-// Core modules - internal
 /// Core Canopy application implementation.
 pub mod canopy;
 /// Accepted mutation outcomes.

@@ -96,7 +96,6 @@ pub enum ScriptErrorKind {
     Canopy,
     /// Unknown command identifier.
     UnknownCommand,
-    /// Duplicate command identifier.
     /// Conflicting command definition.
     ConflictingCommand,
     /// Invalid command definition.

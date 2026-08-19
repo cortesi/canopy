@@ -44,22 +44,17 @@ enum Task {
 
 /// Run the `cargo xtask` entry point.
 fn main() -> ExitCode {
-    match Cli::parse().task {
-        Task::Tidy => run_tidy(),
-        Task::Ci => run_ci(),
-        Task::Test => run_test(),
-        Task::Luau => exit_code(run_luau_check(&workspace_root())),
-        Task::Dynamic => run_dynamic(),
-        Task::Smoke => run_smoke(),
-        Task::Api { check } => {
-            let root = workspace_root();
-            exit_code(if check {
-                run_api_check(&root)
-            } else {
-                run_api(&root)
-            })
-        }
-    }
+    let root = workspace_root();
+    exit_code(match Cli::parse().task {
+        Task::Tidy => run_tidy(&root),
+        Task::Ci => run_ci(&root),
+        Task::Test => run_nextest(&root),
+        Task::Luau => run_luau_check(&root),
+        Task::Dynamic => run_dynamic(&root),
+        Task::Smoke => run_smoke(&root),
+        Task::Api { check: true } => run_api_check(&root),
+        Task::Api { check: false } => run_api(&root),
+    })
 }
 
 /// Rust nightly used only for deterministic formatting.
@@ -94,23 +89,12 @@ const INTENT_SURFACES: &[(&str, &str)] = &[
 ];
 
 /// Run the workspace tidy workflow.
-fn run_tidy() -> ExitCode {
-    let workspace_root = workspace_root();
-
-    if !run_fmt(&workspace_root) {
-        return ExitCode::FAILURE;
-    }
-
-    if !run_clippy(&workspace_root) {
-        return ExitCode::FAILURE;
-    }
-
-    ExitCode::SUCCESS
+fn run_tidy(workspace_root: &Path) -> bool {
+    run_fmt(workspace_root) && run_clippy(workspace_root)
 }
 
 /// Run every required repository check without modifying source files.
-fn run_ci() -> ExitCode {
-    let workspace_root = workspace_root();
+fn run_ci(workspace_root: &Path) -> bool {
     let checks: &[fn(&Path) -> bool] = &[
         run_fmt_check,
         run_clippy_check,
@@ -120,34 +104,21 @@ fn run_ci() -> ExitCode {
         run_luau_check,
         run_nextest,
         run_bench_check,
+        run_smoke,
     ];
 
-    for check in checks {
-        if !check(&workspace_root) {
-            return ExitCode::FAILURE;
-        }
-    }
-    if run_smoke() == ExitCode::FAILURE {
-        return ExitCode::FAILURE;
-    }
-    ExitCode::SUCCESS
-}
-
-/// Run the workspace test workflow.
-fn run_test() -> ExitCode {
-    exit_code(run_nextest(&workspace_root()))
+    checks.iter().all(|check| check(workspace_root))
 }
 
 /// Run the targeted unsafe-code suites under Miri.
-fn run_dynamic() -> ExitCode {
-    let workspace_root = workspace_root();
+fn run_dynamic(workspace_root: &Path) -> bool {
     for filter in [
         "widget_slot_restores",
         "core::backend::tests",
         "reentrant_canopy_guard_restores_nested_stack",
     ] {
         if !run_cargo_command(
-            &workspace_root,
+            workspace_root,
             &[
                 MIRI_TOOLCHAIN,
                 "miri",
@@ -159,31 +130,30 @@ fn run_dynamic() -> ExitCode {
                 filter,
             ],
         ) {
-            return ExitCode::FAILURE;
+            return false;
         }
     }
-    ExitCode::SUCCESS
+    true
 }
 
 /// Run the workspace smoke-test workflow.
-fn run_smoke() -> ExitCode {
-    let workspace_root = workspace_root();
-    let suites = match discover_smoke_suites(&workspace_root) {
+fn run_smoke(workspace_root: &Path) -> bool {
+    let suites = match discover_smoke_suites(workspace_root) {
         Ok(suites) => suites,
         Err(error) => {
             eprintln!("{error}");
-            return ExitCode::FAILURE;
+            return false;
         }
     };
 
     if suites.is_empty() {
         eprintln!("No smoke suites found under {}", workspace_root.display());
-        return ExitCode::FAILURE;
+        return false;
     }
 
     for suite in suites {
         let label = suite
-            .strip_prefix(&workspace_root)
+            .strip_prefix(workspace_root)
             .unwrap_or(&suite)
             .display()
             .to_string();
@@ -192,11 +162,11 @@ fn run_smoke() -> ExitCode {
             &suite,
             &["run", "--quiet", "-p", "canopyctl", "--", "smoke"],
         ) {
-            return ExitCode::FAILURE;
+            return false;
         }
     }
 
-    ExitCode::SUCCESS
+    true
 }
 
 /// Return the workspace root for the xtask crate.
@@ -284,8 +254,12 @@ fn run_luau_check(workspace_root: &Path) -> bool {
         eprintln!("{error}");
         return false;
     }
-    if installed_nextest_version(workspace_root).as_deref() != Some(NEXTEST_VERSION) {
-        eprintln!("cargo-nextest {NEXTEST_VERSION} is required for the Luau gate");
+    if !require_tool(
+        "cargo-nextest",
+        installed_nextest_version(workspace_root),
+        NEXTEST_VERSION,
+        "install it before running this gate",
+    ) {
         return false;
     }
     run_cargo_command(
@@ -391,13 +365,13 @@ fn run_api_check(workspace_root: &Path) -> bool {
 
 /// Render every API skeleton with the pinned ruskel.
 fn render_api_surfaces(workspace_root: &Path) -> Result<Vec<(&'static str, String)>, String> {
-    match installed_ruskel_version() {
-        Some(version) if version == RUSKEL_VERSION => {}
-        _ => {
-            return Err(format!(
-                "ruskel {RUSKEL_VERSION} is required; run `cargo install ruskel --version {RUSKEL_VERSION}`"
-            ));
-        }
+    if !require_tool(
+        "ruskel",
+        installed_ruskel_version(),
+        RUSKEL_VERSION,
+        &format!("run `cargo install ruskel --version {RUSKEL_VERSION}`"),
+    ) {
+        return Err("the pinned ruskel is not installed".to_string());
     }
 
     API_SURFACES
@@ -528,24 +502,34 @@ fn installed_nextest_version(workspace_root: &Path) -> Option<String> {
     stdout.split_whitespace().nth(1).map(str::to_string)
 }
 
-/// Run the pinned nextest suite or report the exact installation requirement.
-fn run_nextest(workspace_root: &Path) -> bool {
-    match installed_nextest_version(workspace_root) {
-        Some(version) if version == NEXTEST_VERSION => run_cargo_command(
-            workspace_root,
-            &["nextest", "run", "--workspace", "--all-features"],
-        ),
+/// Report whether the installed tool matches its repository pin.
+///
+/// A mismatch names the installed version so the reader can see what to change.
+fn require_tool(tool: &str, installed: Option<String>, required: &str, hint: &str) -> bool {
+    match installed {
+        Some(version) if version == required => true,
         Some(version) => {
-            eprintln!("cargo-nextest {NEXTEST_VERSION} is required, but {version} is installed");
+            eprintln!("{tool} {required} is required, but {version} is installed; {hint}");
             false
         }
         None => {
-            eprintln!(
-                "cargo-nextest {NEXTEST_VERSION} is required; install it before running this gate"
-            );
+            eprintln!("{tool} {required} is required; {hint}");
             false
         }
     }
+}
+
+/// Run the pinned nextest suite or report the exact installation requirement.
+fn run_nextest(workspace_root: &Path) -> bool {
+    require_tool(
+        "cargo-nextest",
+        installed_nextest_version(workspace_root),
+        NEXTEST_VERSION,
+        "install it before running this gate",
+    ) && run_cargo_command(
+        workspace_root,
+        &["nextest", "run", "--workspace", "--all-features"],
+    )
 }
 
 /// Discover directories that define smoke suites via `.canopyctl.toml`.

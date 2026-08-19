@@ -1091,7 +1091,7 @@ impl Editor {
         }
     }
 
-    /// Move to the start of the next word on the current line.
+    /// Move to the start of the next word crossing line boundaries.
     pub(super) fn move_word_forward(&mut self) {
         let mut line = self.buffer.cursor().line;
         let mut column = self.buffer.cursor().column;
@@ -1140,7 +1140,7 @@ impl Editor {
         }
     }
 
-    /// Move to the start of the previous word on the current line.
+    /// Move to the start of the previous word crossing line boundaries.
     pub(super) fn move_word_backward(&mut self) {
         let mut line = self.buffer.cursor().line;
         let mut column = self.buffer.cursor().column;
@@ -1187,7 +1187,7 @@ impl Editor {
         }
     }
 
-    /// Move to the end of the current word on the current line.
+    /// Move to the end of the current word crossing line boundaries.
     pub(super) fn move_word_end(&mut self) {
         let mut line = self.buffer.cursor().line;
         let mut column = self.buffer.cursor().column;

@@ -14,8 +14,7 @@ pub mod canopy_geom {
     //! Unsigned coordinates and sizes use saturating arithmetic unless an
     //! operation is explicitly fallible. Edge calculations widen before adding so
     //! rectangles extending beyond `u32::MAX` retain their full mathematical
-    //! extent. Conversions to signed coordinates clamp values that cannot be
-    //! represented.
+    //! extent. Signed-to-unsigned conversions clamp to `0..=u32::MAX`.
 
     /// Geometry error type.
     #[derive(Debug, Clone, Error, Display, StructuralPartialEq, PartialEq, Eq)]

@@ -55,7 +55,7 @@ impl View {
         Rect::new(0, 0, self.outer.w, self.outer.h)
     }
 
-    /// Build a view from signed outer/content rects and content/canvas sizes.
+    /// Build a view from signed outer and content rects, a scroll offset, and a canvas size.
     pub fn new(outer: RectI32, content: RectI32, tl: Point, canvas: Size) -> Self {
         Self {
             outer,

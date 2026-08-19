@@ -18,7 +18,6 @@ textwrap.workspace = true
 
 [dev-dependencies]
 canopy = { path = "../../crates/canopy", features = ["testing"] }
-canopy-widgets = { path = "../../crates/canopy-widgets" }
 
 [lints]
 workspace = true

@@ -14,7 +14,7 @@ use ruau::{
 
 use super::{ScriptCheckResult, commands, error, module_diagnostic_to_script};
 
-/// Convert an Ruau compile error to Canopy's parse error shape.
+/// Convert a Ruau compile error to Canopy's parse error shape.
 pub(super) fn compile_error_to_canopy(err: &CompileError) -> error::Error {
     let begin = err.location().map(|location| location.begin);
     error::Error::Parse(error::ParseError::with_position(

@@ -15,15 +15,13 @@
 //!
 //! - [`geom`] - Geometry primitives (Rect, Point, Size, etc.)
 
-#![warn(missing_docs)]
-
 // Allow derive macros to reference `canopy::` from within this crate
 extern crate self as canopy;
 
 // Internal core module - re-export specific items below
 mod core;
 
-// Public modules - re-export canopy-geom as geom for backwards compatibility
+// `canopy::geom` is the app-facing path to the geometry crate.
 pub use canopy_geom as geom;
 pub mod layout;
 pub mod prelude;
