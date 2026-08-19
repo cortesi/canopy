@@ -122,6 +122,22 @@ impl LayoutCache {
         self.revision = revision;
     }
 
+    /// Return the cached `(total_lines, max_line_width)` when every cache key matches the supplied
+    /// parameters. A stale cache returns `None` so the caller can fall back to a direct scan.
+    pub fn metrics_for(
+        &self,
+        buffer: &TextBuffer,
+        wrap_width: usize,
+        wrap_mode: WrapMode,
+        tab_stop: usize,
+    ) -> Option<(usize, usize)> {
+        (self.wrap_width == wrap_width.max(1)
+            && self.wrap_mode == wrap_mode
+            && self.tab_stop == tab_stop
+            && self.revision == buffer.revision())
+        .then_some((self.total_lines, self.max_line_width))
+    }
+
     /// Return the total number of display lines.
     pub fn total_lines(&self) -> usize {
         self.total_lines

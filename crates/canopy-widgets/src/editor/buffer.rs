@@ -6,6 +6,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use super::{
     Selection, TextPosition, TextRange, display_width,
     edit::{Edit, Transaction},
+    util::{next_grapheme_boundary, prev_grapheme_boundary},
 };
 
 /// Information about how an edit changed logical line counts.
@@ -362,13 +363,8 @@ impl TextBuffer {
 
     /// Return the closest position for a display column within a line.
     pub fn position_for_column(&self, line: usize, column: usize, tab_stop: usize) -> TextPosition {
-        let line_text = self.line_text(line);
-        let column = column.min(column_for_char(
-            &line_text,
-            self.line_char_len(line),
-            tab_stop,
-        ));
-        let char_index = char_for_column(&line_text, column, tab_stop);
+        // `char_for_column` already stops at the end of the line, so no pre-clamp is needed.
+        let char_index = char_for_column(&self.line_text(line), column, tab_stop);
         TextPosition::new(line, char_index)
     }
 
@@ -548,36 +544,6 @@ fn advance_position(start: TextPosition, text: &str) -> TextPosition {
         }
     }
     TextPosition::new(line, column)
-}
-
-/// Find the previous grapheme boundary before a column.
-fn prev_grapheme_boundary(line: &str, column: usize) -> usize {
-    let boundaries = grapheme_boundaries(line);
-    match boundaries.binary_search(&column) {
-        Ok(idx) => boundaries.get(idx.saturating_sub(1)).copied().unwrap_or(0),
-        Err(idx) => boundaries.get(idx.saturating_sub(1)).copied().unwrap_or(0),
-    }
-}
-
-/// Find the next grapheme boundary after a column.
-fn next_grapheme_boundary(line: &str, column: usize) -> usize {
-    let boundaries = grapheme_boundaries(line);
-    match boundaries.binary_search(&column) {
-        Ok(idx) => boundaries.get(idx + 1).copied().unwrap_or(column),
-        Err(idx) => boundaries.get(idx).copied().unwrap_or(column),
-    }
-}
-
-/// Collect grapheme boundary indices for a line.
-fn grapheme_boundaries(line: &str) -> Vec<usize> {
-    let mut boundaries = Vec::new();
-    boundaries.push(0);
-    let mut count = 0usize;
-    for grapheme in line.graphemes(true) {
-        count = count.saturating_add(grapheme.chars().count());
-        boundaries.push(count);
-    }
-    boundaries
 }
 
 /// Convert a char index to a display column.

@@ -1,6 +1,7 @@
 use std::cmp;
 
 use canopy::text::grapheme_width;
+use unicode_segmentation::UnicodeSegmentation;
 
 /// Compute tab expansion width for a column.
 pub fn tab_width(column: usize, tab_stop: usize) -> usize {
@@ -20,4 +21,31 @@ pub fn display_width(grapheme: &str, column: usize, tab_stop: usize) -> usize {
     } else {
         grapheme_width(grapheme)
     }
+}
+
+/// Return the grapheme boundary immediately before a char column, or 0.
+pub fn prev_grapheme_boundary(line: &str, column: usize) -> usize {
+    let mut previous = 0usize;
+    let mut count = 0usize;
+    for grapheme in line.graphemes(true) {
+        if count >= column {
+            break;
+        }
+        previous = count;
+        count = count.saturating_add(grapheme.chars().count());
+    }
+    if count < column { count } else { previous }
+}
+
+/// Return the grapheme boundary immediately after a char column, or the column itself.
+pub fn next_grapheme_boundary(line: &str, column: usize) -> usize {
+    let mut count = 0usize;
+    for grapheme in line.graphemes(true) {
+        let next = count.saturating_add(grapheme.chars().count());
+        if column < next {
+            return next;
+        }
+        count = next;
+    }
+    column
 }

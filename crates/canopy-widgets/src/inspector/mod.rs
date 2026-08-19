@@ -70,7 +70,6 @@ impl Inspector {
 
         let inspector_id = context.create_detached(Self::new())?;
         context.set_children_of(inspector_id.into(), vec![frame_id.into()])?;
-        context.set_layout_of(inspector_id, Layout::fill())?;
 
         Ok(inspector_id.into())
     }
@@ -83,6 +82,10 @@ impl Default for Inspector {
 }
 
 impl Widget for Inspector {
+    fn layout(&self) -> Layout {
+        Layout::fill()
+    }
+
     fn render(&mut self, r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         r.push_layer("inspector");
         Ok(())

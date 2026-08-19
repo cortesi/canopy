@@ -687,6 +687,8 @@ pub mod canopy_widgets {
         }
 
         impl Widget for Inspector {
+            fn layout(&self) -> Layout {}
+
             fn render(&mut self, r: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
 
             fn name(&self) -> NodeName {}

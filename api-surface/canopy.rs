@@ -2042,7 +2042,7 @@ pub mod canopy {
             fn from(s: StyleBuilder) -> Self {}
         }
 
-        /// Map of style paths to partial styles.
+        /// Map of style paths to partial styles, keyed by canonical path.
         #[derive(Clone, Debug, Default)]
         pub struct StyleMap {}
 
@@ -5391,7 +5391,7 @@ pub mod canopy {
             /// Resolve the partial style into a full style.
             pub fn resolve(&self) -> Style {}
 
-            /// Merge two partial styles.
+            /// Merge two partial styles. Components set on `self` win.
             pub fn join(&self, other: &Self) -> Self {}
 
             /// Return true if all components are set.
@@ -5446,7 +5446,7 @@ pub mod canopy {
             fn from(s: StyleBuilder) -> Self {}
         }
 
-        /// Map of style paths to partial styles.
+        /// Map of style paths to partial styles, keyed by canonical path.
         #[derive(Clone, Debug, Default)]
         pub struct StyleMap {}
 
@@ -5536,14 +5536,14 @@ pub mod canopy {
         ///   /frame/selected -> blue, None
         ///
         /// The first entry with the empty path is the global default. Every
-        /// `StyleManager` is guaranteed to have a default Style object with non-None
+        /// `StyleMap` is guaranteed to have a default Style object with non-None
         /// foreground and background colors, so style resolution always succeeds.
         ///
         /// `Style` objects also contain text attributes.
         ///
         /// During rendering, a node may push a name onto the stack of layers tracked by
         /// the `Style` object. Layers are maintained for a node and all its
-        /// descendants, and `Canopy` manages poppping layers back off the stack at the
+        /// descendants, and `Canopy` manages popping layers back off the stack at the
         /// appropriate time during rendering.
         ///
         /// When a colour is resolved, we first try to find the specified path under
@@ -5552,7 +5552,7 @@ pub mod canopy {
         ///
         /// So given a layer stack ["foo"], and an attempt to look up "frame/selected",
         /// we try the following lookups in order: ["foo/frame/selected",
-        /// "/frame/selected", "foo", ""].
+        /// "frame/selected", "foo/frame", "frame", "foo", ""].
         #[derive(Debug, StructuralPartialEq, PartialEq, Eq, Clone, Default)]
         pub struct StyleManager {}
 

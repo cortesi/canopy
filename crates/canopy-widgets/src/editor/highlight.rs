@@ -79,18 +79,16 @@ impl SyntectHighlighter {
     }
 
     /// Resolve the syntax definition for the configured extension.
-    fn syntax(&self) -> SyntaxReference {
+    fn syntax(&self) -> &SyntaxReference {
         self.syntax_set
             .find_syntax_by_extension(&self.extension)
             .unwrap_or_else(|| self.syntax_set.find_syntax_plain_text())
-            .clone()
     }
 }
 
 impl Highlighter for SyntectHighlighter {
     fn highlight_line(&self, _line: usize, text: &str) -> Vec<HighlightSpan> {
-        let syntax = self.syntax();
-        let mut highlighter = HighlightLines::new(&syntax, &self.theme);
+        let mut highlighter = HighlightLines::new(self.syntax(), &self.theme);
         let ranges = highlighter
             .highlight_line(text, &self.syntax_set)
             .unwrap_or_default();

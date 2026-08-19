@@ -57,16 +57,16 @@ full evidence, change, and proof for each entry.
 
 **Hot paths**
 
-- [ ] W13: Stop re-laying-out the whole editor buffer in `canvas` and `measure`
-- [ ] W14: Resolve the editor's named styles once per render, not once per cell
-- [ ] W15: Resolve style names without cloning the layer and path vectors
-- [ ] W16: Stop allocating a `String` per cell in `Cell::rendered_width`
-- [ ] W17: Let Root, Inspector, and Help shells own their layout in `layout()`
-- [ ] W18: Stop cloning the whole `SyntaxReference` for every highlighted line
-- [ ] W19: Return cached highlight spans by reference and render only the segment's text
-- [ ] W20: Drop the per-keystroke grapheme-boundary `Vec` and the duplicate boundary helper
-- [ ] W21: Remove the redundant clamp in `TextBuffer::position_for_column`
-- [ ] W22: Render the tree with `&self` and no per-node children clone
+- [x] W13: Stop re-laying-out the whole editor buffer in `canvas` and `measure`
+- [x] W14: Resolve the editor's named styles once per render, not once per cell
+- [x] W15: Resolve style names without cloning the layer and path vectors
+- [x] W16: Stop allocating a `String` per cell in `Cell::rendered_width`
+- [x] W17: Let Root, Inspector, and Help shells own their layout in `layout()`
+- [x] W18: Stop cloning the whole `SyntaxReference` for every highlighted line
+- [x] W19: Return cached highlight spans by reference and render only the segment's text
+- [x] W20: Drop the per-keystroke grapheme-boundary `Vec` and the duplicate boundary helper
+- [x] W21: Remove the redundant clamp in `TextBuffer::position_for_column`
+- [x] W22: Render the tree with `&self` and no per-node children clone
 - [ ] W23: Fetch each node once in the layout view and canvas passes
 - [ ] W24: Iterate children in `locate_recursive` without cloning
 - [ ] W25: Drop the redundant `Cancel` round trip from `Poller::schedule`

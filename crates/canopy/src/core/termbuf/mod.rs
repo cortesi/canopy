@@ -164,6 +164,10 @@ impl Cell {
         if self.is_empty() {
             return 1;
         }
+        if self.suffix.is_empty() {
+            let mut encoded = [0; 4];
+            return text::grapheme_width(self.ch.encode_utf8(&mut encoded));
+        }
 
         text::grapheme_width(&self.rendered_text())
     }

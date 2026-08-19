@@ -11,6 +11,7 @@ use canopy::{
     layout::{CanvasContext, Constraint, MeasureConstraints, Measurement, Size},
     render::Render,
     state::NodeName,
+    style::Style,
 };
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -20,6 +21,7 @@ use super::{
     highlight::{HighlightSpan, Highlighter},
     layout::{LayoutCache, WrapSegment, layout_line},
     search::{PromptState, SearchDirection, SearchState},
+    util::next_grapheme_boundary,
     vi::{ViMode, ViState},
 };
 
@@ -94,16 +96,39 @@ struct RenderLineContext<'a, 'b> {
     origin: Point,
     /// Width of the line-number gutter.
     gutter_width: u32,
+    /// Cell styles for plain text, selection, the current search match, and other matches. The
+    /// effect stack is constant for one widget render, so these resolve once per frame.
+    styles: CellStyles,
+}
+
+/// The four effect-applied cell styles a display line draws with.
+struct CellStyles {
+    /// Style for unhighlighted text.
+    text: Style,
+    /// Style for selected text.
+    selection: Style,
+    /// Style for the current search match.
+    search_current: Style,
+    /// Style for other search matches.
+    search_match: Style,
 }
 
 impl<'a, 'b> RenderLineContext<'a, 'b> {
-    /// Construct a new render context.
+    /// Construct a new render context, resolving the fixed cell styles once.
     fn new(r: &'a mut Render<'b>, view_rect: Rect, origin: Point, gutter_width: u32) -> Self {
+        let resolve = |name| r.apply_effects(r.resolve_style_name_raw(name));
+        let styles = CellStyles {
+            text: resolve("editor/text"),
+            selection: resolve("editor/selection"),
+            search_current: resolve("editor/search/current"),
+            search_match: resolve("editor/search/match"),
+        };
         Self {
             r,
             view_rect,
             origin,
             gutter_width,
+            styles,
         }
     }
 }
@@ -144,13 +169,8 @@ impl HighlightCache {
         &mut self,
         line: usize,
         compute: impl FnOnce() -> Vec<HighlightSpan>,
-    ) -> Vec<HighlightSpan> {
-        if let Some(spans) = self.lines.get(&line) {
-            return spans.clone();
-        }
-        let spans = compute();
-        self.lines.insert(line, spans.clone());
-        spans
+    ) -> &[HighlightSpan] {
+        self.lines.entry(line).or_insert_with(compute)
     }
 }
 
@@ -243,6 +263,29 @@ impl Editor {
                 digits.saturating_add(1)
             }
         }
+    }
+
+    /// Return `(display_line_count, max_line_width)` for a wrap width. The layout cache serves the
+    /// answer when it is current; otherwise the buffer is scanned directly.
+    fn display_metrics(&self, wrap_width: usize) -> (usize, usize) {
+        self.layout
+            .metrics_for(
+                &self.buffer,
+                wrap_width,
+                self.config.wrap,
+                self.config.tab_stop,
+            )
+            .unwrap_or_else(|| {
+                (
+                    display_line_count(
+                        &self.buffer,
+                        self.config.wrap,
+                        wrap_width,
+                        self.config.tab_stop,
+                    ),
+                    display_line_width(&self.buffer, self.config.tab_stop),
+                )
+            })
     }
 
     /// Synchronize layout and cached cursor position.
@@ -669,8 +712,6 @@ impl Editor {
         let line_rect = Rect::new(ctx.origin.x, line_y, ctx.view_rect.w, 1);
         ctx.r.fill("editor/text", line_rect, ' ')?;
 
-        let base_text_style = ctx.r.resolve_style_name_raw("editor/text");
-
         if ctx.gutter_width > 0 {
             let gutter_line = Line::new(ctx.origin.x, line_y, ctx.gutter_width);
             let number_text = line_number_text(
@@ -687,7 +728,6 @@ impl Editor {
             ctx.r.text(style, gutter_line, &number_text)?;
         }
 
-        let line_text = self.buffer.line_text(line_idx);
         let selection = self.buffer.selection();
         let selection_range = selection.range();
         let selection_active = !selection.is_empty();
@@ -705,14 +745,18 @@ impl Editor {
             self.buffer.line_char_len(line_idx)
         };
 
-        let mut highlight_spans = Vec::new();
-        if let Some(highlighter) = &self.highlighter {
-            highlight_spans = self.highlight_cache.spans_for_line(line_idx, || {
-                highlighter.highlight_line(line_idx, &line_text)
-            });
-        }
+        let highlight_spans: &[HighlightSpan] = match &self.highlighter {
+            Some(highlighter) => {
+                let buffer = &self.buffer;
+                self.highlight_cache.spans_for_line(line_idx, || {
+                    highlighter.highlight_line(line_idx, &buffer.line_text(line_idx))
+                })
+            }
+            None => &[],
+        };
 
         let mut span_idx = 0usize;
+        let mut span_style: Option<Style> = None;
         let search_ranges = self.search.matches_for_line(line_idx);
         let current_search = self
             .search
@@ -720,22 +764,19 @@ impl Editor {
             .filter(|r| r.start.line == line_idx);
         let current_search_range = current_search.map(|r| (r.start.column, r.end.column));
 
-        let mut col = 0usize;
-        let mut char_index = 0usize;
-        for grapheme in line_text.graphemes(true) {
+        let segment_text = self.buffer.range_text(TextRange::new(
+            TextPosition::new(line_idx, segment.start_char),
+            TextPosition::new(line_idx, segment.end_char),
+        ));
+
+        let mut col = segment.start_col;
+        let mut char_index = segment.start_char;
+        for grapheme in segment_text.graphemes(true) {
             let grapheme_chars = grapheme.chars().count();
             let width = display_width(grapheme, col, self.config.tab_stop);
 
             let g_start = char_index;
             let g_end = char_index.saturating_add(grapheme_chars);
-            if g_end <= segment.start_char {
-                col = col.saturating_add(width);
-                char_index = g_end;
-                continue;
-            }
-            if g_start >= segment.end_char {
-                break;
-            }
 
             let draw_col = col
                 .saturating_sub(segment.start_col)
@@ -751,30 +792,33 @@ impl Editor {
                 break;
             }
 
-            let mut style_name = "editor/text";
-            let mut style = None;
+            let mut style = &ctx.styles.text;
 
             if selection_on_line && g_start < line_end_sel && g_end > line_start_sel {
-                style_name = "editor/selection";
+                style = &ctx.styles.selection;
             } else if let Some((start, end)) = current_search_range {
                 if g_start < end && g_end > start {
-                    style_name = "editor/search/current";
+                    style = &ctx.styles.search_current;
                 }
             } else if search_ranges
                 .iter()
                 .any(|(start, end)| g_start < *end && g_end > *start)
             {
-                style_name = "editor/search/match";
+                style = &ctx.styles.search_match;
             } else {
                 while let Some(span) = highlight_spans.get(span_idx) {
                     if span.range.end <= g_start {
                         span_idx = span_idx.saturating_add(1);
+                        span_style = None;
                         continue;
                     }
                     if span.range.start < g_end && span.range.end > g_start {
-                        let mut span_style = span.style.clone();
-                        span_style.bg = base_text_style.bg.clone();
-                        style = Some(span_style);
+                        let resolved = span_style.get_or_insert_with(|| {
+                            let mut merged = span.style.clone();
+                            merged.bg = ctx.styles.text.bg.clone();
+                            ctx.r.apply_effects(merged)
+                        });
+                        style = resolved;
                     }
                     break;
                 }
@@ -789,11 +833,7 @@ impl Editor {
                         x: ctx.origin.x.saturating_add(x),
                         y: line_y,
                     };
-                    let resolved = match style.as_ref() {
-                        Some(custom) => ctx.r.resolve_style_at(custom.clone(), line_rect, p),
-                        None => ctx.r.resolve_style_name_at(style_name, line_rect, p),
-                    };
-                    ctx.r.put_cell(resolved, p, ' ')?;
+                    ctx.r.put_cell(style.resolve_at(line_rect, p), p, ' ')?;
                 }
             } else {
                 let x = draw_col.saturating_sub(view_start) as u32;
@@ -801,11 +841,8 @@ impl Editor {
                     x: ctx.origin.x.saturating_add(x),
                     y: line_y,
                 };
-                let resolved = match style.as_ref() {
-                    Some(custom) => ctx.r.resolve_style_at(custom.clone(), line_rect, p),
-                    None => ctx.r.resolve_style_name_at(style_name, line_rect, p),
-                };
-                ctx.r.put_grapheme(resolved, p, grapheme)?;
+                ctx.r
+                    .put_grapheme(style.resolve_at(line_rect, p), p, grapheme)?;
             }
 
             col = col.saturating_add(width);
@@ -915,12 +952,7 @@ impl Widget for Editor {
         let wrap_width = width.saturating_sub(gutter).max(1) as usize;
 
         let mut height = if self.config.auto_grow {
-            display_line_count(
-                &self.buffer,
-                self.config.wrap,
-                wrap_width,
-                self.config.tab_stop,
-            ) as u32
+            self.display_metrics(wrap_width).0 as u32
         } else {
             self.config.min_height.max(1)
         };
@@ -934,20 +966,14 @@ impl Widget for Editor {
     fn canvas(&self, view: Size<u32>, _ctx: &CanvasContext) -> Size<u32> {
         let gutter = self.gutter_width();
         let wrap_width = view.w.saturating_sub(gutter).max(1) as usize;
-        let height = display_line_count(
-            &self.buffer,
-            self.config.wrap,
-            wrap_width,
-            self.config.tab_stop,
-        ) as u32;
+        let (line_count, max_line_width) = self.display_metrics(wrap_width);
         let width = match self.config.wrap {
-            WrapMode::None => {
-                let max_width = display_line_width(&self.buffer, self.config.tab_stop) as u32;
-                max_width.saturating_add(gutter).max(view.w.max(1))
-            }
+            WrapMode::None => (max_line_width as u32)
+                .saturating_add(gutter)
+                .max(view.w.max(1)),
             WrapMode::Soft => view.w.max(1),
         };
-        Size::new(width.max(1), height.max(1))
+        Size::new(width.max(1), (line_count as u32).max(1))
     }
 
     fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
@@ -1086,6 +1112,10 @@ fn display_line_count(
     wrap_width: usize,
     tab_stop: usize,
 ) -> usize {
+    if wrap_mode == WrapMode::None {
+        // An unwrapped logical line always yields exactly one display line.
+        return buffer.line_count().max(1);
+    }
     let mut total = 0usize;
     for line in 0..buffer.line_count().max(1) {
         let text = buffer.line_text(line);
@@ -1109,19 +1139,6 @@ fn display_line_width(buffer: &TextBuffer, tab_stop: usize) -> usize {
 /// Determine if a character counts as a word constituent.
 pub(super) fn is_word_char(ch: char) -> bool {
     ch.is_alphanumeric() || ch == '_'
-}
-
-/// Find the next grapheme boundary after a column.
-fn next_grapheme_boundary(line: &str, column: usize) -> usize {
-    let mut count = 0usize;
-    for grapheme in line.graphemes(true) {
-        let next = count.saturating_add(grapheme.chars().count());
-        if column < next {
-            return next;
-        }
-        count = next;
-    }
-    column
 }
 
 /// Compute the word range at a position.

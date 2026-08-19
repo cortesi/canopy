@@ -122,29 +122,27 @@ impl Canopy {
 
     /// Recursively render a node subtree.
     fn render_recursive(
-        &mut self,
+        &self,
         traversal: &mut RenderTraversal<'_>,
         node_id: NodeId,
         parent_clip: Rect,
         active_start: usize,
         active_len: usize,
     ) -> Result<()> {
-        let (hidden, layout, view, children) = {
-            let node = &self.core.nodes[node_id];
-            (node.hidden, node.layout, node.view, node.children.clone())
-        };
+        let node = &self.core.nodes[node_id];
 
-        if hidden || layout.display == Display::None {
+        if node.hidden || node.layout.display == Display::None {
             return Ok(());
         }
 
+        let view = node.view;
         let Some(screen_clip) = view.outer.intersect_rect(parent_clip) else {
             return Ok(());
         };
 
         let saved_len = traversal.effect_stack.len();
 
-        if let Some(local) = self.core.nodes[node_id].effects.as_ref() {
+        if let Some(local) = node.effects.as_ref() {
             traversal.effect_stack.extend(local.iter().cloned());
         }
 
@@ -165,8 +163,8 @@ impl Canopy {
         }
 
         if let Some(children_clip) = view.content.intersect_rect(parent_clip) {
-            for child in children {
-                self.render_recursive(traversal, child, children_clip, active_start, current_len)?;
+            for child in &node.children {
+                self.render_recursive(traversal, *child, children_clip, active_start, current_len)?;
             }
         }
 
@@ -177,7 +175,7 @@ impl Canopy {
     }
 
     /// Render the tree into an offscreen buffer.
-    fn render_pass(&mut self, root_size: Size) -> Result<TermBuf> {
+    fn render_pass(&self, root_size: Size) -> Result<TermBuf> {
         let mut styl = StyleManager::default();
 
         let def_style = styl

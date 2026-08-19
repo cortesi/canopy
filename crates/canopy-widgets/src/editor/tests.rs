@@ -170,6 +170,14 @@ fn render_with_line_numbers() {
 }
 
 #[test]
+fn soft_wrap_renders_each_segment_once() {
+    let config = EditorConfig::new().with_wrap(WrapMode::Soft);
+    let mut harness = build_harness("abcdefghij", config, 4, 3);
+    harness.render().unwrap();
+    harness.tbuf().assert_matches(buf!["abcd" "efgh" "ij  "]);
+}
+
+#[test]
 fn set_text_rebuilds_the_layout_cache() {
     let mut harness = build_harness("a", EditorConfig::new(), 10, 4);
     harness.render().unwrap();

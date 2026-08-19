@@ -411,24 +411,12 @@ impl PartialStyle {
         }
     }
 
-    /// Merge two partial styles.
+    /// Merge two partial styles. Components set on `self` win.
     pub fn join(&self, other: &Self) -> Self {
         Self {
-            fg: if self.fg.is_some() {
-                self.fg.clone()
-            } else {
-                other.fg.clone()
-            },
-            bg: if self.bg.is_some() {
-                self.bg.clone()
-            } else {
-                other.bg.clone()
-            },
-            attrs: if self.attrs.is_some() {
-                self.attrs
-            } else {
-                other.attrs
-            },
+            fg: self.fg.clone().or_else(|| other.fg.clone()),
+            bg: self.bg.clone().or_else(|| other.bg.clone()),
+            attrs: self.attrs.or(other.attrs),
         }
     }
 
@@ -438,24 +426,28 @@ impl PartialStyle {
     }
 }
 
-/// Split a style path into components.
-fn parse_path(path: &str) -> Vec<String> {
-    path.split('/')
-        .filter_map(|s| {
-            if !s.is_empty() {
-                Some(s.to_owned())
-            } else {
-                None
-            }
-        })
-        .collect()
+/// Split a style path into its non-empty components.
+fn path_segments(path: &str) -> impl Iterator<Item = &str> {
+    path.split('/').filter(|part| !part.is_empty())
 }
 
-/// Map of style paths to partial styles.
+/// Return the canonical map key for a style path: non-empty components joined by `/`.
+fn canonical_path(path: &str) -> String {
+    let mut key = String::with_capacity(path.len());
+    for part in path_segments(path) {
+        if !key.is_empty() {
+            key.push('/');
+        }
+        key.push_str(part);
+    }
+    key
+}
+
+/// Map of style paths to partial styles, keyed by canonical path.
 #[derive(Clone, Debug)]
 pub struct StyleMap {
     /// Path-to-style map.
-    styles: HashMap<Vec<String>, PartialStyle>,
+    styles: HashMap<String, PartialStyle>,
 }
 
 impl StyleMap {
@@ -499,7 +491,7 @@ impl StyleMap {
 
     /// Insert a partial style at a path.
     fn insert_style(&mut self, path: &str, style: PartialStyle) {
-        self.styles.insert(parse_path(path), style);
+        self.styles.insert(canonical_path(path), style);
     }
 }
 
@@ -642,14 +634,14 @@ impl<'a> StyleRules<'a> {
 ///   /frame/selected -> blue, None
 ///
 /// The first entry with the empty path is the global default. Every
-/// `StyleManager` is guaranteed to have a default Style object with non-None
+/// `StyleMap` is guaranteed to have a default Style object with non-None
 /// foreground and background colors, so style resolution always succeeds.
 ///
 /// `Style` objects also contain text attributes.
 ///
 /// During rendering, a node may push a name onto the stack of layers tracked by
 /// the `Style` object. Layers are maintained for a node and all its
-/// descendants, and `Canopy` manages poppping layers back off the stack at the
+/// descendants, and `Canopy` manages popping layers back off the stack at the
 /// appropriate time during rendering.
 ///
 /// When a colour is resolved, we first try to find the specified path under
@@ -658,7 +650,7 @@ impl<'a> StyleRules<'a> {
 ///
 /// So given a layer stack ["foo"], and an attempt to look up "frame/selected",
 /// we try the following lookups in order: ["foo/frame/selected",
-/// "/frame/selected", "foo", ""].
+/// "frame/selected", "foo/frame", "frame", "foo", ""].
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct StyleManager {
     /// Current render level.
@@ -714,34 +706,36 @@ impl StyleManager {
 
     /// Resolve a style path.
     pub fn get(&self, smap: &StyleMap, path: &str) -> Style {
-        self.resolve(smap, &self.layers, &parse_path(path))
+        let path: Vec<&str> = path_segments(path).collect();
+        self.resolve(smap, &self.layers, &path)
     }
 
-    /// Look up one suffix along a layer chain.
-    fn lookup(&self, smap: &StyleMap, layers: &[String], suffix: &[String]) -> PartialStyle {
+    /// Resolve a style using a path and a layer specification, ignoring `self.layers`.
+    ///
+    /// Probes path prefixes from longest to shortest, and within each, layer prefixes from the
+    /// deepest layer to the root. The first probe that sets a component wins.
+    fn resolve(&self, smap: &StyleMap, layers: &[String], path: &[&str]) -> Style {
         let mut ret = PartialStyle::default();
-        // Look up the path on all layers to the root.
-        for i in 0..layers.len() + 1 {
-            let mut v = layers[0..layers.len() - i].to_vec();
-            v.extend(suffix.to_vec());
-            if let Some(c) = smap.styles.get(&v) {
-                ret = ret.join(c);
-                if ret.is_complete() {
-                    break;
+        let mut key = String::new();
+        for suffix in (0..=path.len()).rev() {
+            for depth in (0..=layers.len()).rev() {
+                key.clear();
+                let parts = layers[..depth]
+                    .iter()
+                    .map(String::as_str)
+                    .chain(path[..suffix].iter().copied());
+                for part in parts {
+                    if !key.is_empty() {
+                        key.push('/');
+                    }
+                    key.push_str(part);
                 }
-            }
-        }
-        ret
-    }
-
-    /// Directly resolve a style using a path and a layer specification,
-    /// ignoring `self.layers`.
-    pub(crate) fn resolve(&self, smap: &StyleMap, layers: &[String], path: &[String]) -> Style {
-        let mut ret = PartialStyle::default();
-        for i in 0..path.len() + 1 {
-            ret = ret.join(&self.lookup(smap, layers, &path[0..path.len() - i]));
-            if ret.is_complete() {
-                break;
+                if let Some(c) = smap.styles.get(key.as_str()) {
+                    ret = ret.join(c);
+                    if ret.is_complete() {
+                        return ret.resolve();
+                    }
+                }
             }
         }
         ret.resolve()
@@ -805,11 +799,8 @@ mod tests {
             .iter()
             .map(|(path, style)| {
                 format!(
-                    "/{} fg={:?} bg={:?} attrs={:?}",
-                    path.join("/"),
-                    style.fg,
-                    style.bg,
-                    style.attrs
+                    "/{path} fg={:?} bg={:?} attrs={:?}",
+                    style.fg, style.bg, style.attrs
                 )
             })
             .collect();
@@ -844,10 +835,12 @@ mod tests {
     }
 
     #[test]
-    fn style_parse_path() -> Result<()> {
-        assert_eq!(parse_path("/one/two"), vec!["one", "two"]);
-        assert_eq!(parse_path("one/two"), vec!["one", "two"]);
-        assert!(parse_path("").is_empty());
+    fn style_canonical_path() -> Result<()> {
+        assert_eq!(canonical_path("/one/two"), "one/two");
+        assert_eq!(canonical_path("one/two"), "one/two");
+        assert_eq!(canonical_path("//one///two/"), "one/two");
+        assert!(canonical_path("").is_empty());
+        assert!(canonical_path("/").is_empty());
         Ok(())
     }
 
@@ -874,7 +867,7 @@ mod tests {
             c.resolve(
                 &smap,
                 &["one".to_string(), "two".to_string()],
-                &["target".to_string(), "voing".to_string()],
+                &["target", "voing"]
             ),
             solid_style(Color::Green, Color::Black)
         );
@@ -883,53 +876,37 @@ mod tests {
             c.resolve(
                 &smap,
                 &["one".to_string(), "two".to_string()],
-                &["two".to_string(), "voing".to_string()],
+                &["two", "voing"]
             ),
             solid_style(Color::Blue, Color::Black)
         );
 
         assert_eq!(
-            c.resolve(
-                &smap,
-                &["one".to_string(), "two".to_string()],
-                &["target".to_string()],
-            ),
+            c.resolve(&smap, &["one".to_string(), "two".to_string()], &["target"]),
             solid_style(Color::Green, Color::Black)
         );
         assert_eq!(
             c.resolve(
                 &smap,
                 &["one".to_string(), "two".to_string()],
-                &["nonexistent".to_string()],
+                &["nonexistent"]
             ),
             solid_style(Color::Blue, Color::Black)
         );
         assert_eq!(
-            c.resolve(
-                &smap,
-                &["somelayer".to_string()],
-                &["nonexistent".to_string()],
-            ),
+            c.resolve(&smap, &["somelayer".to_string()], &["nonexistent"]),
             solid_style(Color::White, Color::Black)
         );
         assert_eq!(
             c.resolve(
                 &smap,
                 &["one".to_string(), "two".to_string()],
-                &["frame".to_string(), "border".to_string()],
+                &["frame", "border"]
             ),
             solid_style(Color::Yellow, Color::Black)
         );
         assert_eq!(
-            c.resolve(
-                &smap,
-                &["one".to_string(), "two".to_string()],
-                &["frame".to_string(), "border".to_string()],
-            ),
-            solid_style(Color::Yellow, Color::Black)
-        );
-        assert_eq!(
-            c.resolve(&smap, &["frame".to_string()], &["border".to_string()],),
+            c.resolve(&smap, &["frame".to_string()], &["border"]),
             solid_style(Color::Yellow, Color::Black)
         );
         Ok(())
@@ -1009,7 +986,7 @@ mod tests {
             .apply();
 
         let c = StyleManager::new();
-        let resolved = c.resolve(&smap, &[], &["test".to_string(), "path".to_string()]);
+        let resolved = c.resolve(&smap, &[], &["test", "path"]);
 
         assert_eq!(resolved.fg.solid_color(), Some(Color::Red));
         assert_eq!(resolved.bg.solid_color(), Some(Color::Blue));
@@ -1043,7 +1020,7 @@ mod tests {
             .apply();
 
         let c = StyleManager::new();
-        let resolved = c.resolve(&smap, &[], &["test".to_string()]);
+        let resolved = c.resolve(&smap, &[], &["test"]);
 
         assert_eq!(resolved.fg.solid_color(), Some(Color::Green));
 

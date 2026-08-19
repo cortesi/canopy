@@ -105,13 +105,9 @@ impl Root {
         c.with_layout_of(app, &mut |layout| {
             *layout = layout.width(Sizing::Flex(1)).height(Sizing::Flex(1));
         })?;
-        c.with_layout_of(inspector, &mut |layout| {
-            *layout = layout.width(Sizing::Flex(1)).height(Sizing::Flex(1));
-        })?;
 
         // Help overlay
         c.set_hidden_of(help, !self.help_state.is_open())?;
-        c.set_layout_of(help, Layout::fill())?;
 
         // Dim effect on main pane when help is visible
         if self.help_state.is_open() {
@@ -119,9 +115,6 @@ impl Root {
         } else {
             c.clear_effects(main_pane)?;
         }
-
-        // Root uses Stack layout so help overlays main pane
-        c.set_layout(Layout::fill().direction(Direction::Stack))?;
 
         Ok(())
     }
@@ -418,7 +411,8 @@ impl Widget for Root {
     }
 
     fn layout(&self) -> Layout {
-        Layout::fill()
+        // Stack layout so the help modal overlays the main pane.
+        Layout::fill().direction(Direction::Stack)
     }
 
     fn name(&self) -> NodeName {

@@ -60,7 +60,6 @@ impl Help {
 
         let help = context.create_detached(Self)?;
         context.attach_keyed(help.into(), ModalSlot::KEY, modal.into())?;
-        context.set_layout_of(help, Layout::fill())?;
         Ok(help.into())
     }
 
