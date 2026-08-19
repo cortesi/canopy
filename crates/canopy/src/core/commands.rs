@@ -125,7 +125,7 @@ impl ArgValue {
 
     /// Convert this dynamic value into JSON for external automation APIs.
     pub fn to_json_value(&self) -> Result<JsonValue, CommandError> {
-        arg_value_to_json(self.clone(), NodeJson::Reject)
+        arg_value_to_json(self, NodeJson::Reject)
     }
 
     /// Convert this dynamic value into external automation JSON.
@@ -133,7 +133,7 @@ impl ArgValue {
     /// Opaque `NodeId` values become descriptive tokens for reporting, but those
     /// tokens are not accepted by [`ArgValue::from_json_value`].
     pub fn to_external_json_value(&self) -> Result<JsonValue, CommandError> {
-        arg_value_to_json(self.clone(), NodeJson::Token)
+        arg_value_to_json(self, NodeJson::Token)
     }
 
     /// Convert JSON into an `ArgValue` for external automation APIs.
@@ -698,19 +698,19 @@ impl<'a> DeclRegistry<'a> {
 pub struct SerdeArg<T>(pub T);
 
 /// Convert ArgValue into a JSON value for serde interop.
-fn arg_value_to_json(value: ArgValue, node_json: NodeJson) -> Result<JsonValue, CommandError> {
+fn arg_value_to_json(value: &ArgValue, node_json: NodeJson) -> Result<JsonValue, CommandError> {
     Ok(match value {
         ArgValue::Null => JsonValue::Null,
-        ArgValue::Bool(value) => JsonValue::Bool(value),
-        ArgValue::Int(value) => JsonValue::Number(JsonNumber::from(value)),
-        ArgValue::UInt(value) => JsonValue::Number(JsonNumber::from(value)),
+        ArgValue::Bool(value) => JsonValue::Bool(*value),
+        ArgValue::Int(value) => JsonValue::Number(JsonNumber::from(*value)),
+        ArgValue::UInt(value) => JsonValue::Number(JsonNumber::from(*value)),
         ArgValue::Float(value) => {
-            let Some(num) = serde_json::Number::from_f64(value) else {
+            let Some(num) = serde_json::Number::from_f64(*value) else {
                 return Err(CommandError::conversion("float value is not finite"));
             };
             JsonValue::Number(num)
         }
-        ArgValue::String(value) => JsonValue::String(value),
+        ArgValue::String(value) => JsonValue::String(value.clone()),
         ArgValue::Node(id) => match node_json {
             NodeJson::Reject => {
                 return Err(CommandError::conversion(
@@ -724,14 +724,14 @@ fn arg_value_to_json(value: ArgValue, node_json: NodeJson) -> Result<JsonValue, 
         },
         ArgValue::Array(values) => JsonValue::Array(
             values
-                .into_iter()
+                .iter()
                 .map(|value| arg_value_to_json(value, node_json))
                 .collect::<Result<Vec<_>, _>>()?,
         ),
         ArgValue::Map(values) => {
             let mut map = JsonMap::new();
             for (key, value) in values {
-                map.insert(key, arg_value_to_json(value, node_json)?);
+                map.insert(key.clone(), arg_value_to_json(value, node_json)?);
             }
             JsonValue::Object(map)
         }
@@ -797,7 +797,7 @@ where
     T: CommandArg,
 {
     fn from_arg_value(v: &ArgValue) -> Result<Self, CommandError> {
-        let json = arg_value_to_json(v.clone(), NodeJson::Reject)?;
+        let json = arg_value_to_json(v, NodeJson::Reject)?;
         serde_json::from_value(json).map_err(|err| CommandError::conversion(err.to_string()))
     }
 }

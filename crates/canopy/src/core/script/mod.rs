@@ -904,7 +904,6 @@ impl LuauHost {
                 source.display_name()
             ))
         })?;
-        let original = original.to_string();
         let runtime_source = strict_named_source(source)?;
         let prepared = if let Some(surface) = self.state.borrow().surface.clone() {
             Some(
@@ -922,7 +921,7 @@ impl LuauHost {
             .state
             .borrow_mut()
             .scripts
-            .insert(&original, runtime_source, prepared)?;
+            .insert(original, runtime_source, prepared)?;
         if self.is_finalized() {
             self.load_script(sid)?;
         }
@@ -949,9 +948,8 @@ impl LuauHost {
                 source.display_name()
             ))
         })?;
-        let original = original.to_string();
         self.typecheck_startup_source(&strict_named_source(source)?)?;
-        let runtime_source = source_with_text(source, startup_runtime_source(&original));
+        let runtime_source = source_with_text(source, startup_runtime_source(original));
         let runtime_source = strict_named_source(&runtime_source)?;
         let surface = self.state.borrow().surface.clone().ok_or_else(|| {
             error::Error::InvalidOperation(
@@ -965,7 +963,7 @@ impl LuauHost {
             self.state
                 .borrow_mut()
                 .scripts
-                .insert(&original, runtime_source, Some(prepared))?;
+                .insert(original, runtime_source, Some(prepared))?;
         if self.is_finalized() {
             self.load_script(sid)?;
         }

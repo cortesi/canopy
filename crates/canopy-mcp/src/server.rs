@@ -20,10 +20,11 @@ use crate::{
 };
 
 /// Build an MCP tool result with structured and text JSON payloads.
-pub fn json_tool_result(value: &serde_json::Value) -> CallToolResult {
+pub fn json_tool_result(value: serde_json::Value) -> CallToolResult {
+    let text = value.to_string();
     CallToolResult::new()
-        .with_structured_content(value.clone())
-        .with_text_content(value.to_string())
+        .with_structured_content(value)
+        .with_text_content(text)
 }
 
 /// Minimal stdio MCP server for canopy automation.
@@ -70,7 +71,7 @@ impl CanopyMcpServer {
             .map_err(|error| ToolError::internal(error.to_string()))?;
         let value = serde_json::to_value(bootstrap)
             .map_err(|error| ToolError::internal(error.to_string()))?;
-        Ok(json_tool_result(&value))
+        Ok(json_tool_result(value))
     }
 
     #[tool]
@@ -98,7 +99,7 @@ impl CanopyMcpServer {
             .map_err(|error| ToolError::internal(error.to_string()))?;
         let value = serde_json::to_value(fixtures)
             .map_err(|error| ToolError::internal(error.to_string()))?;
-        Ok(json_tool_result(&value))
+        Ok(json_tool_result(value))
     }
 }
 
@@ -118,7 +119,7 @@ impl LiveCanopyMcpServer {
         .map_err(|error| ToolError::internal(error.to_string()))?;
         let value = serde_json::to_value(bootstrap)
             .map_err(|error| ToolError::internal(error.to_string()))?;
-        Ok(json_tool_result(&value))
+        Ok(json_tool_result(value))
     }
 
     #[tool]
@@ -152,7 +153,7 @@ impl LiveCanopyMcpServer {
                 .map_err(|error| ToolError::internal(error.to_string()))?;
         let value = serde_json::to_value(fixtures)
             .map_err(|error| ToolError::internal(error.to_string()))?;
-        Ok(json_tool_result(&value))
+        Ok(json_tool_result(value))
     }
 
     #[tool]
@@ -169,7 +170,7 @@ impl LiveCanopyMcpServer {
         })
         .map_err(|error| ToolError::internal(error.to_string()))?;
         let value = json!({ "applied": applied_name });
-        Ok(json_tool_result(&value))
+        Ok(json_tool_result(value))
     }
 }
 

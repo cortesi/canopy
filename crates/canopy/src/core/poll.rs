@@ -83,11 +83,6 @@ impl PendingHeap {
         self.nodes.push(PendingNode { deadline, node_id });
     }
 
-    /// Cancel a pending node callback.
-    fn cancel(&mut self, node_id: NodeId) {
-        self.deadlines.remove(&node_id);
-    }
-
     /// Discard heap entries superseded by a reschedule or cancellation.
     fn discard_stale(&mut self) {
         while self
@@ -137,8 +132,6 @@ enum SchedulerCommand {
         /// Absolute monotonic deadline.
         deadline: Instant,
     },
-    /// Cancel a node's pending callback.
-    Cancel(NodeId),
     /// Stop the worker.
     Shutdown,
 }
@@ -148,10 +141,6 @@ fn apply_command(command: SchedulerCommand, pending: &mut PendingHeap) -> bool {
     match command {
         SchedulerCommand::Schedule { node_id, deadline } => {
             pending.schedule(node_id, deadline);
-            true
-        }
-        SchedulerCommand::Cancel(node_id) => {
-            pending.cancel(node_id);
             true
         }
         SchedulerCommand::Shutdown => false,
@@ -244,13 +233,9 @@ impl Poller {
             .now()
             .checked_add(duration)
             .ok_or_else(|| Error::RunLoop("poll deadline overflow".into()))?;
-        self.cancel(node_id)?;
+        // `PendingHeap::schedule` overwrites the deadline and `discard_stale` drops the
+        // superseded heap entry, so no cancellation is needed first.
         self.send(SchedulerCommand::Schedule { node_id, deadline })
-    }
-
-    /// Cancel a node's pending callback.
-    fn cancel(&self, node_id: impl Into<NodeId>) -> Result<()> {
-        self.send(SchedulerCommand::Cancel(node_id.into()))
     }
 
     /// Stop and join the scheduler worker.
@@ -314,7 +299,7 @@ mod tests {
     }
 
     #[test]
-    fn pending_heap_reschedules_and_cancels_deterministically() {
+    fn pending_heap_reschedules_deterministically() {
         let now = Instant::now();
         let (first, second) = node_ids();
         let mut pending = PendingHeap::default();
@@ -324,8 +309,11 @@ mod tests {
         pending.schedule(second, now + Duration::from_secs(15));
         assert_eq!(pending.collect(now + Duration::from_secs(11)), Vec::new());
         assert_eq!(pending.collect(now + Duration::from_secs(16)), vec![second]);
-        pending.cancel(first);
-        assert_eq!(pending.current_wait(now), None);
+        assert_eq!(
+            pending.current_wait(now),
+            Some(Duration::from_secs(20)),
+            "the second schedule for the first node supersedes the first"
+        );
     }
 
     #[test]

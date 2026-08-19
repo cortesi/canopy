@@ -106,25 +106,13 @@ impl BindingList {
 
     /// Build the exact vertical canvas for one viewport width.
     pub(super) fn display_lines(&self, width: u32) -> Vec<DisplayLine> {
-        let Some(snapshot) = &self.snapshot else {
-            return vec![DisplayLine {
-                key: None,
-                text: "No key bindings in this context".to_string(),
-                style: "help/label",
-            }];
-        };
-        let mut primary = snapshot
-            .bindings
+        let bindings = self
+            .snapshot
+            .as_ref()
+            .map_or(&[][..], |snapshot| snapshot.bindings.as_slice());
+        let (mut primary, mut fallback): (Vec<_>, Vec<_>) = bindings
             .iter()
-            .filter(|binding| binding.phase == BindingPhase::BeforeWidget)
-            .collect::<Vec<_>>();
-        let mut fallback = snapshot
-            .bindings
-            .iter()
-            .filter(|binding| binding.phase == BindingPhase::AfterIgnore)
-            .collect::<Vec<_>>();
-        primary.sort_by_key(|left| binding_sort_key(left));
-        fallback.sort_by_key(|left| binding_sort_key(left));
+            .partition(|binding| binding.phase == BindingPhase::BeforeWidget);
 
         if primary.is_empty() && fallback.is_empty() {
             return vec![DisplayLine {
@@ -133,6 +121,9 @@ impl BindingList {
                 style: "help/label",
             }];
         }
+
+        primary.sort_by_cached_key(|left| binding_sort_key(left));
+        fallback.sort_by_cached_key(|left| binding_sort_key(left));
 
         let max_key_width = primary
             .iter()

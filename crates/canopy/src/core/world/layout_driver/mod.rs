@@ -162,57 +162,41 @@ impl<'a> LayoutPass<'a> {
 
     /// Update view rectangles for a subtree based on parent view data.
     fn update_views(&mut self, node_id: NodeId, parent_view: View) -> Result<()> {
-        let (layout, hidden, rect, content_size, canvas, scroll, children) = {
-            let node = self
-                .core
-                .nodes
-                .get(node_id)
-                .ok_or(Error::NodeNotFound(node_id))?;
-            (
-                node.layout,
-                node.hidden,
-                node.rect,
-                node.content_size,
-                node.canvas,
-                node.scroll,
-                node.children.clone(),
-            )
-        };
+        let node = self
+            .core
+            .nodes
+            .get_mut(node_id)
+            .ok_or(Error::NodeNotFound(node_id))?;
 
-        if hidden || layout.display == Display::None {
-            if let Some(node) = self.core.nodes.get_mut(node_id) {
-                node.view = View::default();
-            }
+        if node.hidden || node.layout.display == Display::None {
+            node.view = View::default();
             return Ok(());
         }
 
-        let outer_x = i64::from(parent_view.content.tl.x) + i64::from(rect.tl.x)
+        let outer_x = i64::from(parent_view.content.tl.x) + i64::from(node.rect.tl.x)
             - i64::from(parent_view.tl.x);
-        let outer_y = i64::from(parent_view.content.tl.y) + i64::from(rect.tl.y)
+        let outer_y = i64::from(parent_view.content.tl.y) + i64::from(node.rect.tl.y)
             - i64::from(parent_view.tl.y);
 
         let outer = RectI32::new(
             clamp_i64_to_i32(outer_x),
             clamp_i64_to_i32(outer_y),
-            rect.w,
-            rect.h,
+            node.rect.w,
+            node.rect.h,
         );
 
-        let content_x = i64::from(outer.tl.x) + i64::from(layout.padding.left);
-        let content_y = i64::from(outer.tl.y) + i64::from(layout.padding.top);
+        let content_x = i64::from(outer.tl.x) + i64::from(node.layout.padding.left);
+        let content_y = i64::from(outer.tl.y) + i64::from(node.layout.padding.top);
         let content = RectI32::new(
             clamp_i64_to_i32(content_x),
             clamp_i64_to_i32(content_y),
-            content_size.w,
-            content_size.h,
+            node.content_size.w,
+            node.content_size.h,
         );
 
-        let view = View::new(outer, content, scroll, canvas);
-        if let Some(node) = self.core.nodes.get_mut(node_id) {
-            node.view = view;
-        } else {
-            return Err(Error::NodeNotFound(node_id));
-        }
+        let view = View::new(outer, content, node.scroll, node.canvas);
+        node.view = view;
+        let children = node.children.clone();
 
         for child in children {
             self.update_views(child, view)?;
@@ -472,10 +456,10 @@ impl<'a> LayoutPass<'a> {
                 // Stack: all children get full content area, positioned according to alignment
                 for child in &children {
                     // First, layout the child to determine its size
-                    self.layout_node(*child, content, Point::zero(), parent_overflow)?;
+                    let child_size =
+                        self.layout_node(*child, content, Point::zero(), parent_overflow)?;
 
                     // Then apply alignment to position the child within content area
-                    let child_size = self.node_size(*child)?;
                     let offset_x = align_offset(child_size.w, content.w, layout.align_horizontal);
                     let offset_y = align_offset(child_size.h, content.h, layout.align_vertical);
                     self.set_node_position(
@@ -591,15 +575,6 @@ impl<'a> LayoutPass<'a> {
         Ok(())
     }
 
-    /// Get a node's outer size.
-    fn node_size(&self, node_id: NodeId) -> Result<Size<u32>> {
-        self.core
-            .nodes
-            .get(node_id)
-            .map(|n| Size::new(n.rect.w, n.rect.h))
-            .ok_or(Error::NodeNotFound(node_id))
-    }
-
     /// Set a node's position within its parent's content area.
     fn set_node_position(&mut self, node_id: NodeId, position: Point) -> Result<()> {
         let node = self
@@ -653,9 +628,7 @@ impl<'a> LayoutPass<'a> {
     /// Store the canvas size compute_canvas returned and clamp the scroll offset.
     fn update_canvas(&mut self, node_id: NodeId, view_size: Size<u32>, canvas: Size<u32>) {
         if let Some(node) = self.core.nodes.get_mut(node_id) {
-            let mut scroll = node.scroll;
-            clamp_scroll(&mut scroll, view_size, canvas);
-            node.scroll = scroll;
+            clamp_scroll(&mut node.scroll, view_size, canvas);
             node.canvas = canvas;
         }
     }
@@ -724,12 +697,7 @@ impl<'a> LayoutPass<'a> {
         node.canvas = Size::default();
         node.scroll = Point::zero();
         node.view = View::default();
-        let children = self
-            .core
-            .nodes
-            .get(node_id)
-            .map(|node| node.children.clone())
-            .ok_or(Error::NodeNotFound(node_id))?;
+        let children = node.children.clone();
         for child in children {
             self.clear_layout(child, Point::zero())?;
         }
@@ -939,9 +907,8 @@ fn locate_recursive(
     let Some(child_clip) = node.view.content.intersect_rect(parent_clip) else {
         return Ok(Some(node_id));
     };
-    let children = node.children.clone();
-    for child in children.into_iter().rev() {
-        if let Some(hit) = locate_recursive(core, child, point, child_clip)? {
+    for child in node.children.iter().rev() {
+        if let Some(hit) = locate_recursive(core, *child, point, child_clip)? {
             return Ok(Some(hit));
         }
     }

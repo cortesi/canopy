@@ -139,6 +139,15 @@ impl Text {
         }
     }
 
+    /// Return the widest unwrapped line, with tabs expanded.
+    fn raw_width(&self) -> u32 {
+        text::expand_tabs(&self.raw, self.tab_stop)
+            .lines()
+            .map(UnicodeWidthStr::width)
+            .max()
+            .unwrap_or(0) as u32
+    }
+
     /// Determine the wrapping width for the given available space.
     fn wrap_width_for(&self, available_width: u32) -> usize {
         let width = self.wrap_width.unwrap_or(available_width).max(1);
@@ -212,24 +221,11 @@ impl Widget for Text {
     }
 
     fn measure(&self, c: MeasureConstraints) -> Measurement {
-        let expanded = text::expand_tabs(&self.raw, self.tab_stop);
-        let raw_width = expanded
-            .lines()
-            .map(UnicodeWidthStr::width)
-            .max()
-            .unwrap_or(0) as u32;
-
-        let max_width = match c.width {
-            Constraint::Exact(n) | Constraint::AtMost(n) => n,
-            Constraint::Unbounded => self.wrap_width.unwrap_or(raw_width),
-        };
-
         let wrap_width = match c.width {
-            Constraint::Unbounded => self.wrap_width.unwrap_or(raw_width),
-            _ => self
-                .wrap_width
-                .map(|w| w.min(max_width))
-                .unwrap_or(max_width),
+            Constraint::Exact(n) | Constraint::AtMost(n) => {
+                self.wrap_width.map_or(n, |wrap| wrap.min(n))
+            }
+            Constraint::Unbounded => self.wrap_width.unwrap_or_else(|| self.raw_width()),
         }
         .max(1);
 

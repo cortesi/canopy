@@ -60,20 +60,17 @@ fn benchmark_text_rendering(c: &mut Criterion) {
                           Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.\n\
                           Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.";
 
+        let wrapper = BenchmarkTextWrapper::new(sample_text);
+        let mut harness = Harness::builder(wrapper)
+            .size(80, 24)
+            .build()
+            .expect("Failed to create harness");
+        // The first render also runs the on-start hooks, so warm up outside the measured loop.
+        harness.render().expect("Failed to render");
+
         b.iter(|| {
-            // Create a new Text node wrapped in our benchmark wrapper
-            let wrapper = BenchmarkTextWrapper::new(sample_text);
-            let mut harness = Harness::builder(wrapper)
-                .size(80, 24)
-                .build()
-                .expect("Failed to create harness");
-
-            // Perform the render
             harness.render().expect("Failed to render");
-
-            // Access the buffer to ensure the render is complete
-            let buf = harness.buf();
-            black_box(buf);
+            black_box(harness.buf());
         });
     });
 }

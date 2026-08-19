@@ -67,19 +67,19 @@ full evidence, change, and proof for each entry.
 - [x] W20: Drop the per-keystroke grapheme-boundary `Vec` and the duplicate boundary helper
 - [x] W21: Remove the redundant clamp in `TextBuffer::position_for_column`
 - [x] W22: Render the tree with `&self` and no per-node children clone
-- [ ] W23: Fetch each node once in the layout view and canvas passes
-- [ ] W24: Iterate children in `locate_recursive` without cloning
-- [ ] W25: Drop the redundant `Cancel` round trip from `Poller::schedule`
-- [ ] W26: Stop deep-cloning every MCP tool-result payload
-- [ ] W27: Borrow in `arg_value_to_json` instead of cloning at every call site
-- [ ] W28: Simplify `Text::measure` and stop expanding tabs when the width is bounded
-- [ ] W29: Simplify the `Logs` buffer plumbing
-- [ ] W30: Tighten `BindingList::display_lines`
-- [ ] W31: Stop cloning the whole `Fixture` in `apply_fixture`
-- [ ] W32: Consume the owned binding snapshot and share the owner label in `records.rs`
-- [ ] W33: Drop the two whole-source copies in `compile_source` and `compile_startup_source`
-- [ ] W34: Use `FnOnce` closures and owned iteration in the todo widget
-- [ ] W35: Fix the `benches` that measure harness construction instead of rendering
+- [x] W23: Fetch each node once in the layout view and canvas passes
+- [x] W24: Iterate children in `locate_recursive` without cloning
+- [x] W25: Drop the redundant `Cancel` round trip from `Poller::schedule`
+- [x] W26: Stop deep-cloning every MCP tool-result payload
+- [x] W27: Borrow in `arg_value_to_json` instead of cloning at every call site
+- [x] W28: Simplify `Text::measure` and stop expanding tabs when the width is bounded
+- [x] W29: Simplify the `Logs` buffer plumbing
+- [x] W30: Tighten `BindingList::display_lines`
+- [x] W31: Stop cloning the whole `Fixture` in `apply_fixture`
+- [x] W32: Consume the owned binding snapshot and share the owner label in `records.rs`
+- [x] W33: Drop the two whole-source copies in `compile_source` and `compile_startup_source`
+- [x] W34: Use `FnOnce` closures and owned iteration in the todo widget
+- [x] W35: Fix the `benches` that measure harness construction instead of rendering
 
 **Core structure and dead machinery**
 

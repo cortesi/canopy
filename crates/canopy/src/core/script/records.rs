@@ -117,10 +117,7 @@ pub(super) fn binding_info_to_arg(binding: &inputmap::BindingRecord) -> ArgValue
         ("id".to_string(), ArgValue::UInt(binding.id.as_u64())),
         (
             "owner".to_string(),
-            ArgValue::String(match binding.owner {
-                inputmap::BindingOwner::Application => "application".to_string(),
-                inputmap::BindingOwner::Framework(group) => format!("framework:{group}"),
-            }),
+            ArgValue::String(owner_label(binding.owner)),
         ),
         (
             "scope".to_string(),
@@ -369,6 +366,14 @@ pub(super) fn route_trace_to_arg(canopy: &Canopy) -> ArgValue {
     )
 }
 
+/// Render a binding owner as its script-visible label.
+fn owner_label(owner: inputmap::BindingOwner) -> String {
+    match owner {
+        inputmap::BindingOwner::Application => "application".to_string(),
+        inputmap::BindingOwner::Framework(group) => format!("framework:{group}"),
+    }
+}
+
 /// Convert a contextual binding snapshot to a scripting record.
 pub(super) fn available_bindings_to_arg(
     canopy: &Canopy,
@@ -377,7 +382,7 @@ pub(super) fn available_bindings_to_arg(
     let snapshot = canopy.available_bindings(requested)?;
     let bindings = snapshot
         .bindings
-        .iter()
+        .into_iter()
         .map(|binding| {
             let mut record = BTreeMap::from([
                 ("id".to_string(), ArgValue::UInt(binding.id.as_u64())),
@@ -387,25 +392,17 @@ pub(super) fn available_bindings_to_arg(
                 ),
                 (
                     "description".to_string(),
-                    ArgValue::String(binding.description.clone()),
+                    ArgValue::String(binding.description),
                 ),
                 (
                     "owner".to_string(),
-                    ArgValue::String(match binding.owner {
-                        inputmap::BindingOwner::Application => "application".to_string(),
-                        inputmap::BindingOwner::Framework(group) => {
-                            format!("framework:{group}")
-                        }
-                    }),
+                    ArgValue::String(owner_label(binding.owner)),
                 ),
                 (
                     "scope".to_string(),
                     ArgValue::String(binding.scope.label().to_string()),
                 ),
-                (
-                    "path".to_string(),
-                    ArgValue::String(binding.path_filter.clone()),
-                ),
+                ("path".to_string(), ArgValue::String(binding.path_filter)),
                 (
                     "route_path".to_string(),
                     ArgValue::String(binding.route_path.to_string()),
@@ -424,8 +421,8 @@ pub(super) fn available_bindings_to_arg(
             if let Some(mode) = binding.scope.mode() {
                 record.insert("mode".to_string(), ArgValue::String(mode.to_string()));
             }
-            if let Some(source) = &binding.source {
-                record.insert("source".to_string(), ArgValue::String(source.clone()));
+            if let Some(source) = binding.source {
+                record.insert("source".to_string(), ArgValue::String(source));
             }
             ArgValue::Map(record)
         })
@@ -441,8 +438,7 @@ pub(super) fn available_bindings_to_arg(
             ArgValue::Array(
                 snapshot
                     .active_modes
-                    .iter()
-                    .cloned()
+                    .into_iter()
                     .map(ArgValue::String)
                     .collect(),
             ),

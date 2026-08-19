@@ -760,12 +760,12 @@ impl Canopy {
 
     /// Apply a named fixture to the current app instance.
     pub fn apply_fixture(&mut self, name: &str) -> Result<()> {
-        let fixture = self
+        let setup = self
             .fixtures
             .get(name)
-            .cloned()
+            .map(|fixture| Arc::clone(&fixture.setup))
             .ok_or_else(|| error::Error::NotFound(format!("fixture {name}")))?;
-        (fixture.setup)(self)?;
+        setup(self)?;
         self.render_pending = true;
         Ok(())
     }

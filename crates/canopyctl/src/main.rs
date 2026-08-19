@@ -203,7 +203,7 @@ impl CanopyctlMcpServer {
         self.touch().await;
         let bootstrap = self.sessions.bootstrap().await.map_err(tool_error)?;
         let value = serde_json::to_value(bootstrap).map_err(tool_error)?;
-        Ok(json_tool_result(&value))
+        Ok(json_tool_result(value))
     }
 
     #[tool]
@@ -215,7 +215,7 @@ impl CanopyctlMcpServer {
             .await
             .map_err(tool_error)?;
         let value = serde_json::json!({ "applied": params.name });
-        Ok(json_tool_result(&value))
+        Ok(json_tool_result(value))
     }
 
     #[tool]
@@ -232,7 +232,7 @@ impl CanopyctlMcpServer {
         self.touch().await;
         let fixtures = self.sessions.fixtures().await.map_err(tool_error)?;
         let value = serde_json::to_value(fixtures).map_err(tool_error)?;
-        Ok(json_tool_result(&value))
+        Ok(json_tool_result(value))
     }
 }
 

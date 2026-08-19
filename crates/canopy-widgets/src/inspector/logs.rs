@@ -2,6 +2,7 @@
 
 use std::{
     io::{Result as IoResult, Write},
+    mem,
     result::Result as StdResult,
     sync::{Arc, Mutex},
     time::Duration,
@@ -114,7 +115,7 @@ impl Write for LogWriter {
         self.buf
             .lock()
             .unwrap()
-            .push(String::from_utf8_lossy(buf).to_string().trim().to_string());
+            .push(String::from_utf8_lossy(buf).trim().to_string());
         Ok(buf.len())
     }
 
@@ -231,7 +232,7 @@ impl Logs {
     /// Execute a closure with the list widget.
     fn with_list<F, R>(&self, c: &mut dyn Context, f: F) -> Result<R>
     where
-        F: FnMut(&mut List<LogEntry>, &mut dyn Context) -> Result<R>,
+        F: FnOnce(&mut List<LogEntry>, &mut dyn Context) -> Result<R>,
     {
         if !c.has_child::<ListSlot>()? {
             return Err(Error::Internal("logs list not initialized".into()));
@@ -241,25 +242,17 @@ impl Logs {
 
     /// Drain buffered log lines into the list.
     fn flush_buffer(&self, c: &mut dyn Context) -> Result<()> {
-        let buf = self.buf.clone();
-        let mut b = buf.lock().unwrap();
-        let vals: Vec<String> = b.drain(..).collect();
-        drop(b);
-
-        if !c.has_child::<ListSlot>()? {
+        let lines = mem::take(&mut *self.buf.lock().unwrap());
+        if lines.is_empty() {
             return Ok(());
         }
 
-        for line in vals {
-            let mut entry = Some(LogEntry::new(line));
-            c.with_child::<ListSlot, _>(|list, ctx| {
-                if let Some(e) = entry.take() {
-                    list.append(ctx, e)?;
-                }
-                Ok(())
-            })?;
-        }
-        Ok(())
+        self.with_list(c, |list, ctx| {
+            for line in lines {
+                list.append(ctx, LogEntry::new(line))?;
+            }
+            Ok(())
+        })
     }
 
     #[command]

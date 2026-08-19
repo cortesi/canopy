@@ -185,9 +185,10 @@ impl ScriptEvalOutcome {
     pub fn to_tool_result(&self) -> CallToolResult {
         match serde_json::to_value(self) {
             Ok(value) => {
+                let text = value.to_string();
                 let mut result = CallToolResult::new()
-                    .with_structured_content(value.clone())
-                    .with_text_content(value.to_string());
+                    .with_structured_content(value)
+                    .with_text_content(text);
                 if !self.success {
                     result = result.with_is_error(true);
                 }

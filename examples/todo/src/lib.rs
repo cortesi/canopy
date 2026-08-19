@@ -193,7 +193,7 @@ impl Todo {
         if !self.pending.is_empty() {
             let pending = mem::take(&mut self.pending);
             c.with_widget(list_id, |list: &mut List<TodoEntry>, ctx| {
-                for item in pending.iter().cloned() {
+                for item in pending {
                     list.append(ctx, TodoEntry::new(item))?;
                 }
                 Ok(())
@@ -252,39 +252,38 @@ impl Todo {
     }
 
     /// Run a mutation against the unique todo list.
-    fn with_list<F>(&self, c: &mut dyn Context, mut f: F) -> Result<()>
+    fn with_list<F, R>(&self, c: &mut dyn Context, f: F) -> Result<R>
     where
-        F: FnMut(&mut List<TodoEntry>, &mut dyn Context) -> Result<()>,
+        F: FnOnce(&mut List<TodoEntry>, &mut dyn Context) -> Result<R>,
     {
-        c.with_unique_descendant::<List<TodoEntry>, _>(|list, ctx| f(list, ctx))?;
-        Ok(())
+        c.with_unique_descendant::<List<TodoEntry>, _>(f)
     }
 
     /// Run a mutation against the unique modal input.
-    fn with_input<F>(&self, c: &mut dyn Context, mut f: F) -> Result<()>
+    fn with_input<F, R>(&self, c: &mut dyn Context, f: F) -> Result<R>
     where
-        F: FnMut(&mut Input) -> Result<()>,
+        F: FnOnce(&mut Input) -> Result<R>,
     {
         c.with_child::<ModalSlot, _>(|_, ctx| {
             ctx.with_unique_descendant::<Input, _>(|input, _| f(input))
-        })?;
-        Ok(())
+        })
     }
 
     /// Replace list state and set the requested modal state for a fixture.
     fn apply_items_fixture(
         &mut self,
         c: &mut dyn Context,
-        items: &[store::Todo],
+        items: Vec<store::Todo>,
         modal_open: bool,
     ) -> Result<()> {
         self.ensure_tree(c)?;
+        let empty = items.is_empty();
         self.with_list(c, |list, ctx| {
             list.clear(ctx)?;
-            for item in items.iter().cloned() {
+            for item in items {
                 list.append(ctx, TodoEntry::new(item))?;
             }
-            if !items.is_empty() {
+            if !empty {
                 list.select_first(ctx)?;
             }
             Ok(())
@@ -300,7 +299,7 @@ impl Todo {
             if let Some(input_id) = (c as &dyn ViewContext).unique_descendant::<Input>()? {
                 c.set_focus(NodeId::from(input_id))?;
             }
-        } else if items.is_empty() {
+        } else if empty {
             c.set_focus(c.node_id())?;
         }
         Ok(())
@@ -326,18 +325,16 @@ impl Todo {
     #[command]
     /// Delete the selected todo entry.
     pub fn delete_item(&mut self, c: &mut dyn Context) -> Result<()> {
-        // Get the selected item's todo id before deleting
-        let mut to_delete = None;
-
-        self.with_list(c, |list, ctx| {
-            if let Some(item_id) = list.selected_item() {
-                ctx.with_widget(item_id, |entry: &mut TodoEntry, _| {
-                    to_delete = Some(entry.todo.id);
-                    Ok(())
-                })?;
-            }
+        // Read the selected item's todo id before deleting it.
+        let to_delete = self.with_list(c, |list, ctx| {
+            let id = match list.selected_item() {
+                Some(item_id) => {
+                    Some(ctx.with_widget(item_id, |entry: &mut TodoEntry, _| Ok(entry.todo.id))?)
+                }
+                None => None,
+            };
             let _ = list.delete_selected(ctx)?;
-            Ok(())
+            Ok(id)
         })?;
 
         if let Some(id) = to_delete {
@@ -349,16 +346,12 @@ impl Todo {
     #[command]
     /// Store the pending input and close the add-item modal.
     pub fn accept_add(&mut self, c: &mut dyn Context) -> Result<()> {
-        let mut value = String::new();
-        self.with_input(c, |input| {
-            value = input.value().to_string();
-            Ok(())
-        })?;
+        let value = self.with_input(c, |input| Ok(input.value().to_string()))?;
 
         if !value.is_empty() {
             let item = current_store()?.add_todo(&value).map_err(store_error)?;
             self.with_list(c, |list, ctx| {
-                list.append(ctx, TodoEntry::new(item.clone()))?;
+                list.append(ctx, TodoEntry::new(item))?;
                 list.select_last(ctx)?;
                 Ok(())
             })?;
@@ -523,7 +516,7 @@ fn register_fixtures(cnpy: &mut Canopy) -> Result<()> {
         |cnpy| {
             let items = store_fixture_items(&[])?;
             with_todo(cnpy, |todo, ctx| {
-                todo.apply_items_fixture(ctx, &items, false)
+                todo.apply_items_fixture(ctx, items, false)
             })
         },
     ))?;
@@ -533,7 +526,7 @@ fn register_fixtures(cnpy: &mut Canopy) -> Result<()> {
         |cnpy| {
             let items = store_fixture_items(FIXTURE_WITH_ITEMS)?;
             with_todo(cnpy, |todo, ctx| {
-                todo.apply_items_fixture(ctx, &items, false)
+                todo.apply_items_fixture(ctx, items, false)
             })
         },
     ))?;
@@ -542,9 +535,7 @@ fn register_fixtures(cnpy: &mut Canopy) -> Result<()> {
         "App with the add-item modal open and ready for typing",
         |cnpy| {
             let items = store_fixture_items(FIXTURE_WITH_ITEMS)?;
-            with_todo(cnpy, |todo, ctx| {
-                todo.apply_items_fixture(ctx, &items, true)
-            })
+            with_todo(cnpy, |todo, ctx| todo.apply_items_fixture(ctx, items, true))
         },
     ))?;
     Ok(())

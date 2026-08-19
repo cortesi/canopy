@@ -70,16 +70,17 @@ fn benchmark_editor_rendering(c: &mut Criterion) {
         Duis aute irure dolor in reprehenderit in voluptate velit esse cillum.";
 
     c.bench_function("editor_render", |b| {
-        b.iter(|| {
-            let wrapper = BenchmarkEditorWrapper::new(sample_text);
-            let mut harness = Harness::builder(wrapper)
-                .size(80, 24)
-                .build()
-                .expect("Failed to create harness");
+        let wrapper = BenchmarkEditorWrapper::new(sample_text);
+        let mut harness = Harness::builder(wrapper)
+            .size(80, 24)
+            .build()
+            .expect("Failed to create harness");
+        // The first render also runs the on-start hooks, so warm up outside the measured loop.
+        harness.render().expect("Failed to render");
 
+        b.iter(|| {
             harness.render().expect("Failed to render");
-            let buf = harness.buf();
-            black_box(buf);
+            black_box(harness.buf());
         });
     });
 }

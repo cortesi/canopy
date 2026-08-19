@@ -367,7 +367,7 @@ pub mod canopy_mcp {
         //! Stdio MCP server wrapper for script automation.
 
         /// Build an MCP tool result with structured and text JSON payloads.
-        pub fn json_tool_result(value: &serde_json::Value) -> tmcp::schema::CallToolResult {}
+        pub fn json_tool_result(value: serde_json::Value) -> tmcp::schema::CallToolResult {}
 
         /// Request payload for applying a named fixture to a live app.
         #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Eq, Deserialize, Serialize)]
@@ -868,7 +868,7 @@ pub mod canopy_mcp {
     }
 
     /// Build an MCP tool result with structured and text JSON payloads.
-    pub fn json_tool_result(value: &serde_json::Value) -> tmcp::schema::CallToolResult {}
+    pub fn json_tool_result(value: serde_json::Value) -> tmcp::schema::CallToolResult {}
 
     /// Serve `script_eval` and `script_api` over stdio for an app factory.
     pub fn serve_stdio(
