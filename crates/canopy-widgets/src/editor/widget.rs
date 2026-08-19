@@ -207,6 +207,8 @@ impl Editor {
         self.buffer.set_cursor(TextPosition::new(0, 0));
         self.update_preferred_column();
         self.highlight_cache.clear();
+        self.layout = LayoutCache::new();
+        self.search = SearchState::new();
     }
 
     /// Return the current selection.

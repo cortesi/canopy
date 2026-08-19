@@ -420,12 +420,12 @@ fn forget_removed_nodes(nodes: &mut [Option<NodeId>], core: &Core) {
 fn tree_mutation_strategy() -> impl Strategy<Value = Vec<TreeMutation>> {
     prop::collection::vec(
         prop_oneof![
-            (0usize..=PROPERTY_NODE_COUNT, 0usize..PROPERTY_NODE_COUNT)
+            (0usize..=PROPERTY_NODE_COUNT, 0usize..=PROPERTY_NODE_COUNT)
                 .prop_map(|(parent, child)| TreeMutation::Attach { parent, child }),
             (0usize..PROPERTY_NODE_COUNT).prop_map(|child| TreeMutation::Detach { child }),
             (
                 0usize..=PROPERTY_NODE_COUNT,
-                prop::collection::vec(0usize..PROPERTY_NODE_COUNT, 0..=4),
+                prop::collection::vec(0usize..=PROPERTY_NODE_COUNT, 0..=4),
             )
                 .prop_map(|(parent, children)| TreeMutation::SetChildren { parent, children }),
             (0usize..PROPERTY_NODE_COUNT).prop_map(|node| TreeMutation::Remove { node }),
@@ -442,9 +442,10 @@ fn apply_tree_mutation(
 ) -> TestCaseResult {
     match mutation {
         TreeMutation::Attach { parent, child } => {
-            if let (Some(parent_id), Some(child_id)) =
-                (target_node(core, nodes, *parent), child_node(nodes, *child))
-            {
+            if let (Some(parent_id), Some(child_id)) = (
+                target_node(core, nodes, *parent),
+                target_node(core, nodes, *child),
+            ) {
                 drop(core.attach(parent_id, child_id));
             }
         }
@@ -457,7 +458,7 @@ fn apply_tree_mutation(
             if let Some(parent_id) = target_node(core, nodes, *parent) {
                 let child_ids = children
                     .iter()
-                    .filter_map(|child| child_node(nodes, *child))
+                    .filter_map(|child| target_node(core, nodes, *child))
                     .collect();
                 drop(core.set_children(parent_id, child_ids));
             }
@@ -756,6 +757,10 @@ fn visibility_transition_reports_changes_and_missing_nodes() -> Result<()> {
     core.remove_subtree(node)?;
     assert!(matches!(
         core.set_hidden(node, true),
+        Err(Error::NodeNotFound(id)) if id == node
+    ));
+    assert!(matches!(
+        core.with_layout_of(node, |_| {}),
         Err(Error::NodeNotFound(id)) if id == node
     ));
     Ok(())
@@ -1132,6 +1137,26 @@ fn attach_rejects_cycles() -> Result<()> {
     core.attach(parent, child)?;
     let err = core.attach(child, parent).unwrap_err();
     assert!(matches!(err, Error::WouldCreateCycle { .. }));
+    Ok(())
+}
+
+#[test]
+fn attach_rejects_root_as_child() -> Result<()> {
+    let mut core = Core::new();
+    let root = core.root;
+    let parent = core.create_detached(simple_widget())?;
+
+    assert!(matches!(
+        core.attach(parent, root).unwrap_err(),
+        Error::InvalidOperation(_)
+    ));
+    assert!(matches!(
+        core.set_children(parent, vec![root]).unwrap_err(),
+        Error::InvalidOperation(_)
+    ));
+
+    assert!(core.nodes[root].parent.is_none());
+    assert!(core.validate_invariants().is_ok());
     Ok(())
 }
 

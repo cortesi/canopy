@@ -170,6 +170,17 @@ fn render_with_line_numbers() {
 }
 
 #[test]
+fn set_text_rebuilds_the_layout_cache() {
+    let mut harness = build_harness("a", EditorConfig::new(), 10, 4);
+    harness.render().unwrap();
+    with_editor(&mut harness, |editor| editor.set_text("one\ntwo\nthree"));
+    harness.render().unwrap();
+    harness
+        .tbuf()
+        .assert_matches(buf!["one       " "two       " "three     " "          "]);
+}
+
+#[test]
 fn text_entry_inserts_and_backspaces() {
     let config = EditorConfig::new().with_mode(EditMode::Text);
     let mut harness = build_harness("", config, 10, 2);

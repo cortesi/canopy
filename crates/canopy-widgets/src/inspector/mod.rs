@@ -67,7 +67,6 @@ impl Inspector {
         let (view_id, _tabs, _logs) = view::View::install(context)?;
         let frame_id = context.create_detached(frame::Frame::new())?;
         context.set_children_of(frame_id.into(), vec![view_id])?;
-        context.set_layout_of(frame_id, Layout::fill())?;
 
         let inspector_id = context.create_detached(Self::new())?;
         context.set_children_of(inspector_id.into(), vec![frame_id.into()])?;

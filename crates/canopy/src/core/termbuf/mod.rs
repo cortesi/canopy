@@ -680,6 +680,9 @@ fn detect_inner_shift(current: &TermBuf, prev: &TermBuf, max_shift: usize) -> Op
     if !borders_match(current, prev) {
         return None;
     }
+    if !side_columns_are_uniform(current) {
+        return None;
+    }
 
     let rect = Rect::new(1, 1, current.size.w - 2, current.size.h - 2);
     let shift = detect_row_shift_in_rect(current, prev, rect, max_shift)?;
@@ -728,6 +731,20 @@ fn borders_match(current: &TermBuf, prev: &TermBuf) -> bool {
     true
 }
 
+/// Check that every interior row shares one first cell and one last cell. The production backend
+/// scrolls the full terminal width, so an interior shift is only safe when the side columns look
+/// the same after the scroll moves them.
+fn side_columns_are_uniform(buf: &TermBuf) -> bool {
+    let width = buf.size.w as usize;
+    let height = buf.size.h as usize;
+    let first = &buf.cells[width];
+    let last = &buf.cells[2 * width - 1];
+    (1..height - 1).all(|row| {
+        let row_start = row * width;
+        &buf.cells[row_start] == first && &buf.cells[row_start + width - 1] == last
+    })
+}
+
 /// Check whether two buffers are identical up to a vertical shift within a rect.
 fn detect_row_shift_in_rect(
     current: &TermBuf,
@@ -772,10 +789,11 @@ fn render_shifted_rect<R: RenderBackend>(
     } else {
         rect.tl.y + rect.h - count..rect.tl.y + rect.h
     };
+    // The backend scrolls the full terminal width, so repaint the whole exposed row.
     for y in exposed {
         let row_start = y as usize * width;
         let row = &buf.cells[row_start..row_start + width];
-        render_line_range(backend, row, y, rect.tl.x as usize, rect.w as usize)?;
+        render_line_range(backend, row, y, 0, width)?;
     }
     backend.flush()
 }

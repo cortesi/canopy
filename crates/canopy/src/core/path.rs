@@ -158,7 +158,7 @@ pub struct PathMatch {
     pub literals: usize,
     /// Number of path components matched.
     pub depth: usize,
-    /// Whether the match ends at the end of the path.
+    /// Whether the match ends at the end of the path and consumed at least one component.
     pub anchored_end: bool,
 }
 

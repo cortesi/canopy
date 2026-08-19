@@ -897,6 +897,26 @@ fn diff_vertical_shift_uses_scroll_interior() {
 }
 
 #[test]
+fn diff_interior_shift_replays_to_the_full_repaint() {
+    let prev = buf_from_rows(&["#####", "#abc#", "#def#", "#ghi#", "#####"]);
+    let cur = buf_from_rows(&["#####", "#xxx#", "#abc#", "#def#", "#####"]);
+    let mut backend = ReplayBackend::blank(Size::new(5, 5));
+    prev.render(&mut backend).unwrap();
+    cur.diff(&prev, &mut backend).unwrap();
+    assert_eq!(backend.screen_text(), cur.screen_text());
+}
+
+#[test]
+fn diff_skips_the_interior_shift_when_a_side_column_varies() {
+    let prev = buf_from_rows(&["#####", "1abc#", "2def#", "3ghi#", "#####"]);
+    let cur = buf_from_rows(&["#####", "1xxx#", "2abc#", "3def#", "#####"]);
+    let mut backend = ReplayBackend::blank(Size::new(5, 5));
+    prev.render(&mut backend).unwrap();
+    cur.diff(&prev, &mut backend).unwrap();
+    assert_eq!(backend.screen_text(), cur.screen_text());
+}
+
+#[test]
 fn diff_single_run() {
     let style = def_style();
     let prev =

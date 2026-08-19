@@ -773,7 +773,7 @@ fn compare_candidates(
 
 /// Classify one path match for routing and help presentation.
 fn binding_phase(path_match: PathMatch) -> BindingPhase {
-    if path_match.anchored_end && path_match.depth > 0 {
+    if path_match.anchored_end {
         BindingPhase::BeforeWidget
     } else {
         BindingPhase::AfterIgnore

@@ -1,8 +1,9 @@
 # Canopy Architecture
 
-Canopy is a terminal UI runtime. `Core` owns the node arena, layout, rendering,
-focus, commands, polling, and scripting. Widgets own local state. They use context
-traits; they do not keep arena references.
+Canopy is a terminal UI runtime. `Core` owns the node arena, layout, focus, mouse
+capture, commands, and input bindings. `Canopy` owns `Core`, the style map,
+rendering, polling, scripting, and fixtures. Widgets own local state. They use
+context traits; they do not keep arena references.
 
 Treat this file as the current contract. If it disagrees with code, fix one before
 adding behavior.
@@ -52,13 +53,15 @@ unmounted nodes in pre-order.
 Removing a subtree runs `pre_remove` in pre-order, runs `on_unmount` in
 post-order, then deletes the nodes. Every `NodeId` in the subtree becomes invalid.
 
-Replacing a widget keeps the node ID and children, but resets mount and polling
-state. Replacing a subtree deletes descendants first, then replaces the target
-widget.
+Replacing a subtree deletes descendants first, then replaces the target widget.
+The node keeps its ID and resets mount and polling state.
 
 Detaching clears the parent link but leaves the subtree in the arena. Detached
 nodes may keep stale lifecycle and layout caches until code attaches and lays
 them out again.
+
+A successful tree edit drops exclusive binding frames whose owner is no longer
+attached.
 
 ## Invariants
 
@@ -67,8 +70,8 @@ layout pass ends with it, so any tree mutation that reaches layout is checked.
 `Core` is crate-private, so only canopy's own tests call it directly.
 
 It checks the root, widget slots, reciprocal links, duplicate children, cycles,
-keys, focus, mouse capture, binding ownership, lifecycle flags, layout caches,
-and computed view caches.
+keys, focus, mouse capture, lifecycle flags, layout caches, and computed view
+caches.
 
 It does not run layout. Run layout before using screen coordinates.
 
@@ -164,8 +167,9 @@ functions. Framework targets dispatch commands.
 
 The resolver checks the newest exclusive framework frame first. Without an exclusive frame, it
 checks the global scope, active modes from newest to oldest, and then the default scope. Path
-specificity and insertion order select a winner within one scope. A start- and end-anchored path
-runs before the target widget. Other matches run only after the widget ignores the key.
+specificity and insertion order select a winner within one scope. A match that is end-anchored at
+the route node (the filter ends with `/` and consumes at least one component) runs before the
+target widget. Other matches run after the widget ignores the input.
 
 Key routing and `available_bindings` call the same resolver at each node in the focus-to-root
 route. Availability returns an owned snapshot with one effective winner per normalized key. It

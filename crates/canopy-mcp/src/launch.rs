@@ -4,7 +4,7 @@ use canopy::terminal::runloop;
 
 use crate::{
     Result,
-    script::AppFactory,
+    script::{AppEvaluator, AppFactory},
     server::{serve_stdio, serve_uds},
 };
 
@@ -48,8 +48,7 @@ pub fn launch(factory: AppFactory, mode: LaunchMode) -> Result<i32> {
             Ok(0)
         }
         LaunchMode::Api => {
-            let canopy = (factory.as_ref())()?;
-            print!("{}", canopy.script_api()?);
+            print!("{}", AppEvaluator::new(factory).script_api()?);
             Ok(0)
         }
     }

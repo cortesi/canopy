@@ -75,16 +75,14 @@ impl Core {
         f: impl FnOnce(&mut Layout),
     ) -> Result<()> {
         let node = node.into();
-        let node_ref = self
+        let mut layout = self
             .nodes
             .get(node)
-            .ok_or_else(|| Error::Internal("missing node".into()))?;
-        let mut layout = node_ref.layout;
+            .ok_or(Error::NodeNotFound(node))?
+            .layout;
         f(&mut layout);
         layout.validate()?;
-        if let Some(node) = self.nodes.get_mut(node) {
-            node.layout = layout;
-        }
+        self.nodes[node].layout = layout;
         Ok(())
     }
 
@@ -661,6 +659,11 @@ impl Core {
         if child_parent.is_some() {
             return Err(Error::AlreadyAttached(child));
         }
+        if child == self.root {
+            return Err(Error::InvalidOperation(
+                "cannot attach root as a child".into(),
+            ));
+        }
         if self.is_ancestor_or_self(child, parent) {
             return Err(Error::WouldCreateCycle { parent, child });
         }
@@ -790,6 +793,11 @@ impl Core {
             }
             if !self.nodes.contains_key(*child) {
                 return Err(Error::NodeNotFound(*child));
+            }
+            if *child == self.root {
+                return Err(Error::InvalidOperation(
+                    "cannot attach root as a child".into(),
+                ));
             }
         }
 

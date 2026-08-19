@@ -42,18 +42,18 @@ full evidence, change, and proof for each entry.
 
 **Correctness**
 
-- [ ] W1: Restore the inspector's frame border
-- [ ] W2: Repaint the full row width after an interior line shift
-- [ ] W3: Reject attaching the root under another node
-- [ ] W4: Reset the editor's layout and search caches in `Editor::set_text`
-- [ ] W5: Ignore Ctrl and Alt chords in `Input::on_event`
-- [ ] W6: Report `NodeNotFound` from `Core::with_layout_of`
-- [ ] W7: Rename `ParseError.offset` to `column`
-- [ ] W8: Make the phase rule in the docs match the resolver
-- [ ] W9: Correct three contract claims in `docs/architecture.md`
-- [ ] W10: Correct the typecheck claim in `docs/scripting.md` and delete `maybe_typecheck`
-- [ ] W11: Update the fixture inventory in `docs/fixtures.md`
-- [ ] W12: Route `LaunchMode::Api` through `AppEvaluator::script_api`
+- [x] W1: Restore the inspector's frame border
+- [x] W2: Repaint the full row width after an interior line shift
+- [x] W3: Reject attaching the root under another node
+- [x] W4: Reset the editor's layout and search caches in `Editor::set_text`
+- [x] W5: Ignore Ctrl and Alt chords in `Input::on_event`
+- [x] W6: Report `NodeNotFound` from `Core::with_layout_of`
+- [x] W7: Rename `ParseError.offset` to `column`
+- [x] W8: Make the phase rule in the docs match the resolver
+- [x] W9: Correct three contract claims in `docs/architecture.md`
+- [x] W10: Correct the typecheck claim in `docs/scripting.md` and delete `maybe_typecheck`
+- [x] W11: Update the fixture inventory in `docs/fixtures.md`
+- [x] W12: Route `LaunchMode::Api` through `AppEvaluator::script_api`
 
 **Hot paths**
 

@@ -238,8 +238,8 @@ impl Widget for Input {
         let outcome = match event {
             Event::Key(key::Key {
                 key: key::KeyCode::Char(c),
-                ..
-            }) => {
+                mods,
+            }) if !mods.ctrl && !mods.alt => {
                 self.buffer.insert(*c);
                 EventOutcome::Handle
             }
@@ -265,9 +265,14 @@ fn sanitize_single_line(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use canopy::{
+        EventOutcome, Widget,
+        event::{Event, key},
+        testing::dummyctx::DummyContext,
+    };
     use unicode_width::UnicodeWidthStr;
 
-    use super::InputBuffer;
+    use super::{Input, InputBuffer};
 
     #[test]
     fn input_buffer_handles_multibyte_chars() {
@@ -285,6 +290,33 @@ mod tests {
         assert_eq!(buf.cursor_display(), UnicodeWidthStr::width("a") as u32);
         buf.backspace();
         assert_eq!(buf.value(), accent.to_string());
+    }
+
+    #[test]
+    fn input_ignores_ctrl_and_alt_chords() {
+        let mut input = Input::new("");
+        let mut ctx = DummyContext::default();
+        for mods in [key::Ctrl, key::Alt] {
+            let event = Event::Key(key::Key {
+                key: key::KeyCode::Char('a'),
+                mods,
+            });
+            assert_eq!(
+                input.on_event(&event, &mut ctx).unwrap(),
+                EventOutcome::Ignore
+            );
+            assert_eq!(input.value(), "");
+        }
+
+        let event = Event::Key(key::Key {
+            key: key::KeyCode::Char('a'),
+            mods: key::Empty,
+        });
+        assert_eq!(
+            input.on_event(&event, &mut ctx).unwrap(),
+            EventOutcome::Handle
+        );
+        assert_eq!(input.value(), "a");
     }
 
     #[test]

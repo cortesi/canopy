@@ -1188,19 +1188,19 @@ pub mod canopy {
                 pub message: String,
                 /// One-based source line, when known.
                 pub line: Option<usize>,
-                /// Source byte offset, when known.
-                pub offset: Option<usize>,
+                /// One-based source column, when known.
+                pub column: Option<usize>,
             }
 
             impl ParseError {
                 /// Construct a parse error from a message.
                 pub fn new(message: impl Into<String>) -> Self {}
 
-                /// Construct a parse error with optional line/offset information.
+                /// Construct a parse error with optional line and column information.
                 pub fn with_position(
                     message: impl Into<String>,
                     line: Option<usize>,
-                    offset: Option<usize>,
+                    column: Option<usize>,
                 ) -> Self {
                 }
             }
@@ -3772,19 +3772,19 @@ pub mod canopy {
             pub message: String,
             /// One-based source line, when known.
             pub line: Option<usize>,
-            /// Source byte offset, when known.
-            pub offset: Option<usize>,
+            /// One-based source column, when known.
+            pub column: Option<usize>,
         }
 
         impl ParseError {
             /// Construct a parse error from a message.
             pub fn new(message: impl Into<String>) -> Self {}
 
-            /// Construct a parse error with optional line/offset information.
+            /// Construct a parse error with optional line and column information.
             pub fn with_position(
                 message: impl Into<String>,
                 line: Option<usize>,
-                offset: Option<usize>,
+                column: Option<usize>,
             ) -> Self {
             }
         }
@@ -4537,7 +4537,7 @@ pub mod canopy {
             pub literals: usize,
             /// Number of path components matched.
             pub depth: usize,
-            /// Whether the match ends at the end of the path.
+            /// Whether the match ends at the end of the path and consumed at least one component.
             pub anchored_end: bool,
         }
     }

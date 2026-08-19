@@ -701,21 +701,6 @@ impl LuauHost {
         }
     }
 
-    /// Enforce Luau type checking for finalized APIs in debug builds.
-    fn maybe_typecheck(&self, source: &str) -> Result<()> {
-        if !cfg!(debug_assertions) || !self.is_finalized() {
-            return Ok(());
-        }
-        let result = self.check_script("canopy/eval", source)?;
-        if result.is_ok() {
-            Ok(())
-        } else {
-            Err(error::Error::Parse(error::ParseError::new(
-                result.format_diagnostics(),
-            )))
-        }
-    }
-
     /// Clear recorded logs and assertions for the next script evaluation.
     fn clear_diagnostics(&self) {
         let mut state = self.state.borrow_mut();
@@ -928,7 +913,6 @@ impl LuauHost {
                     .map_err(|error| prepare_graph_error_to_canopy(&error))?,
             )
         } else {
-            self.maybe_typecheck(&original)?;
             // Compiling before finalization proves the source is well formed; the retained
             // runtime recompiles it from the prepared graph.
             compile_chunk(runtime_source.as_str().expect("strict source is UTF-8"))?;

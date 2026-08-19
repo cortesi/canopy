@@ -191,8 +191,9 @@ with a named source. Error diagnostics fail MCP evaluation before execution. MCP
 reports `ScriptCheckDiagnostic` unchanged, so the `source` field travels with each diagnostic in
 the `diagnostics` array.
 
-Debug builds typecheck scripts before compiling them after API finalization. Release
-builds skip that enforcement.
+After `finalize_api()`, every compile typechecks the source against the finalized surface in
+every build. Error diagnostics fail compilation with a parse error. Scripts compiled before
+finalization are only syntax-checked.
 
 ## The VM, sandboxing, and limits
 

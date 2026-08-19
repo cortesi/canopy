@@ -14,8 +14,8 @@ pub struct ParseError {
     pub message: String,
     /// One-based source line, when known.
     pub line: Option<usize>,
-    /// Source byte offset, when known.
-    pub offset: Option<usize>,
+    /// One-based source column, when known.
+    pub column: Option<usize>,
 }
 
 impl ParseError {
@@ -24,20 +24,20 @@ impl ParseError {
         Self {
             message: message.into(),
             line: None,
-            offset: None,
+            column: None,
         }
     }
 
-    /// Construct a parse error with optional line/offset information.
+    /// Construct a parse error with optional line and column information.
     pub fn with_position(
         message: impl Into<String>,
         line: Option<usize>,
-        offset: Option<usize>,
+        column: Option<usize>,
     ) -> Self {
         Self {
             message: message.into(),
             line,
-            offset,
+            column,
         }
     }
 }
@@ -45,10 +45,10 @@ impl ParseError {
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.message)?;
-        match (self.line, self.offset) {
-            (Some(line), Some(offset)) => write!(f, " (line {line}, offset {offset})"),
+        match (self.line, self.column) {
+            (Some(line), Some(column)) => write!(f, " (line {line}, column {column})"),
             (Some(line), None) => write!(f, " (line {line})"),
-            (None, Some(offset)) => write!(f, " (offset {offset})"),
+            (None, Some(column)) => write!(f, " (column {column})"),
             (None, None) => Ok(()),
         }
     }
@@ -354,7 +354,7 @@ mod tests {
 
         assert_eq!(error.message, "unexpected token");
         assert_eq!(error.line, Some(3));
-        assert_eq!(error.offset, Some(17));
-        assert_eq!(error.to_string(), "unexpected token (line 3, offset 17)");
+        assert_eq!(error.column, Some(17));
+        assert_eq!(error.to_string(), "unexpected token (line 3, column 17)");
     }
 }

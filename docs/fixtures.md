@@ -14,7 +14,7 @@ The todo example is the reference workflow suite for CLI, MCP, and widget smoke 
 | --- | --- | --- |
 | `empty` | Fresh store with no todo items. | Add an item through the input widget and verify the list updates. |
 | `with_items` | Store seeded with representative todo items. | Navigate the list and delete an item. |
-| `modal_open` | Store seeded with items and the new-item modal open. | Verify modal input focus and editing behavior. |
+| `modal_open` | Store seeded with items and the new-item modal open. | Verify the modal is visible and its input has focus. |
 
 Root-level smoke scripts run without a fixture:
 
@@ -22,6 +22,7 @@ Root-level smoke scripts run without a fixture:
 | --- | --- |
 | `bootstrap.luau` | Verify the app starts, renders, mounts the todo tree, and takes focus. |
 | `fixtures.luau` | Verify the fixture catalog is visible to Luau automation. |
+| `help_modal.luau` | Verify the global help binding isolates application bindings, focuses the binding list, pages, and restores exact focus on close. |
 
 Fixture directories map directly to fixture names. For example,
 `examples/todo/smoke/with_items/navigation.luau` runs after applying the `with_items`

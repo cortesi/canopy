@@ -489,6 +489,7 @@ mod tests {
         layout::Layout,
         render::{NopBackend, Render},
         state::NodeName,
+        testing::harness::Harness,
     };
 
     use super::*;
@@ -642,6 +643,28 @@ mod tests {
         let layout = canopy.with_root_view(|context| context.node_layout(app.into()));
 
         assert_eq!(layout.map(|layout| layout.direction), Some(Direction::Row));
+        Ok(())
+    }
+
+    #[test]
+    fn inspector_pane_draws_its_frame() -> Result<()> {
+        let mut canopy = Canopy::new();
+        Root::load(&mut canopy)?;
+        Root::install_app_with_inspector(&mut canopy, App, true)?;
+        canopy.finalize_api()?;
+
+        let mut harness = Harness::from_canopy(canopy, Size::new(40, 8))?;
+        harness.render()?;
+
+        let lines = harness.tbuf().lines();
+        assert!(
+            lines[0].contains('\u{256d}'),
+            "inspector frame top corner missing: {lines:?}"
+        );
+        assert!(
+            lines[7].contains('\u{2570}'),
+            "inspector frame bottom corner missing: {lines:?}"
+        );
         Ok(())
     }
 
