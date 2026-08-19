@@ -45,7 +45,7 @@ mod root;
 /// Selection widget.
 mod selector;
 /// Experimental tab container API.
-pub mod tabs;
+mod tabs;
 /// Terminal emulation widget.
 mod terminal;
 /// Multiline text widget.
@@ -63,11 +63,11 @@ pub use error::{Error, Result};
 /// Experimental ASCII font rendering API.
 pub use font::{Font, FontCell, FontEffects, FontLayout, FontRenderer, GlyphRamp, LayoutOptions};
 pub use font_banner::FontBanner;
-pub use frame::{Frame, SCROLL, ScrollGlyphs};
+pub use frame::Frame;
 pub use image_view::ImageView;
 pub use input::Input;
 pub use label::Label;
-pub use list::{List, ListActivateConfig, Selectable};
+pub use list::{List, Selectable};
 pub use modal::Modal;
 pub use pad::Pad;
 pub use panes::Panes;
@@ -76,7 +76,6 @@ pub use selector::Selector;
 pub use terminal::{Terminal, TerminalColors, TerminalConfig};
 pub use text::{CanvasWidth, Text};
 pub use vstack::VStack;
-pub use wrap::wrap;
 
 #[cfg(test)]
 mod render_tests;

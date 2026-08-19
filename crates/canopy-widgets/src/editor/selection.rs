@@ -38,16 +38,6 @@ impl Selection {
         self.head = head;
     }
 
-    /// Update the anchor position.
-    pub fn set_anchor(&mut self, anchor: TextPosition) {
-        self.anchor = anchor;
-    }
-
-    /// Collapse the selection to a caret at the head position.
-    pub fn collapse_to_head(&mut self) {
-        self.anchor = self.head;
-    }
-
     /// Return the selection range as a normalized text range.
     pub fn range(self) -> TextRange {
         TextRange::new(self.anchor, self.head).normalized()

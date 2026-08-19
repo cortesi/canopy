@@ -74,7 +74,7 @@ impl InputBuffer {
     }
 
     /// Insert a character at the cursor position.
-    fn insert(&mut self, c: char) -> bool {
+    fn insert(&mut self, c: char) {
         let insert = match c {
             '\n' | '\r' => ' ',
             _ => c,
@@ -82,37 +82,27 @@ impl InputBuffer {
         self.buffer.insert_text(&insert.to_string());
         self.sync_value();
         self.ensure_cursor_visible();
-        true
     }
 
     /// Delete the character before the cursor.
-    fn backspace(&mut self) -> bool {
+    fn backspace(&mut self) {
         if self.buffer.delete_backward(false) {
             self.sync_value();
             self.ensure_cursor_visible();
-            true
-        } else {
-            false
         }
     }
 
     /// Move the cursor left by one character.
-    fn left(&mut self) -> bool {
+    fn left(&mut self) {
         if self.buffer.move_left(false) {
             self.ensure_cursor_visible();
-            true
-        } else {
-            false
         }
     }
 
     /// Move the cursor right by one character.
-    fn right(&mut self) -> bool {
+    fn right(&mut self) {
         if self.buffer.move_right(false) {
             self.ensure_cursor_visible();
-            true
-        } else {
-            false
         }
     }
 
@@ -193,19 +183,19 @@ impl Input {
     /// Move the cursor left.
     #[command]
     fn left(&mut self, _c: &mut dyn Context) {
-        let _ = self.buffer.left();
+        self.buffer.left();
     }
 
     /// Move the cursor right.
     #[command]
     fn right(&mut self, _c: &mut dyn Context) {
-        let _ = self.buffer.right();
+        self.buffer.right();
     }
 
     /// Delete a character at the input location.
     #[command]
     fn backspace(&mut self, _c: &mut dyn Context) {
-        let _ = self.buffer.backspace();
+        self.buffer.backspace();
     }
 }
 

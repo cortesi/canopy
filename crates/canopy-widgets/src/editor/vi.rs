@@ -1,3 +1,5 @@
+use std::mem;
+
 use canopy::{
     Context, EventOutcome,
     event::{Event, key},
@@ -148,17 +150,12 @@ impl ViState {
     }
 
     /// Finish the insert session and return a repeatable edit.
-    pub fn end_insert(&mut self) -> Option<RepeatableEdit> {
+    pub fn end_insert(&mut self) {
         self.mode = ViMode::Normal;
         self.pending = None;
-        let insert_text = self.insert_text.clone();
-        self.insert_text.clear();
-        if insert_text.is_empty() {
-            None
-        } else {
-            let edit = RepeatableEdit::Insert { text: insert_text };
-            self.last_edit = Some(edit.clone());
-            Some(edit)
+        let text = mem::take(&mut self.insert_text);
+        if !text.is_empty() {
+            self.last_edit = Some(RepeatableEdit::Insert { text });
         }
     }
 
@@ -170,12 +167,6 @@ impl ViState {
     /// Return the last repeatable edit.
     pub fn last_edit(&self) -> Option<RepeatableEdit> {
         self.last_edit.clone()
-    }
-}
-
-impl Default for ViState {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -282,7 +273,7 @@ impl Editor {
                 self.begin_text_entry_transaction();
                 if self.config.multiline {
                     let cursor = self.buffer.cursor();
-                    let start = self.buffer.line_start_position(cursor.line);
+                    let start = TextPosition::new(cursor.line, 0);
                     self.buffer.set_cursor(start);
                     self.handle_insert_text("\n");
                     let _ = self.buffer.move_left(true);
@@ -295,11 +286,7 @@ impl Editor {
                 key: key::KeyCode::Char('v'),
                 ..
             }) => {
-                if let ViMode::Visual(_) = self.vi.mode() {
-                    self.exit_visual();
-                } else {
-                    self.enter_visual(VisualMode::Character);
-                }
+                self.enter_visual(VisualMode::Character);
                 EventOutcome::Handle
             }
             Event::Key(key::Key {
@@ -707,7 +694,7 @@ impl Editor {
                 ..
             }) => {
                 self.commit_text_entry_transaction();
-                let _ = self.vi.end_insert();
+                self.vi.end_insert();
                 self.ensure_cursor_visible(ctx);
                 EventOutcome::Handle
             }
@@ -715,8 +702,9 @@ impl Editor {
                 key: key::KeyCode::Char(c),
                 mods,
             }) if !mods.ctrl && !mods.alt => {
-                self.handle_insert_text(&c.to_string());
-                self.vi.push_inserted(&c.to_string());
+                let text = c.encode_utf8(&mut [0; 4]).to_string();
+                self.handle_insert_text(&text);
+                self.vi.push_inserted(&text);
                 self.ensure_cursor_visible(ctx);
                 EventOutcome::Handle
             }
@@ -1003,8 +991,7 @@ impl Editor {
         self.buffer.replace_range(delete_range, "");
         if cursor.line + 1 == line_count && cursor.line > 0 {
             let prev_line = cursor.line.saturating_sub(1);
-            self.buffer
-                .set_cursor(self.buffer.line_start_position(prev_line));
+            self.buffer.set_cursor(TextPosition::new(prev_line, 0));
         }
         self.update_preferred_column();
     }
@@ -1045,8 +1032,7 @@ impl Editor {
         if self.config.read_only || self.yank.is_empty() {
             return;
         }
-        let yank = self.yank.clone();
-        let content = self.normalize_insert_text(&yank);
+        let content = self.normalize_insert_text(&self.yank);
         let multiline = self.config.multiline;
         let linewise = self.yank_linewise;
         {
@@ -1054,7 +1040,7 @@ impl Editor {
             if linewise {
                 let cursor = transaction.cursor();
                 let target = if before {
-                    transaction.line_start_position(cursor.line)
+                    TextPosition::new(cursor.line, 0)
                 } else {
                     transaction.line_end_position(cursor.line, true)
                 };
@@ -1298,7 +1284,7 @@ impl Editor {
             RepeatableEdit::OpenAbove => {
                 if self.config.multiline {
                     let cursor = self.buffer.cursor();
-                    let start = self.buffer.line_start_position(cursor.line);
+                    let start = TextPosition::new(cursor.line, 0);
                     self.buffer.set_cursor(start);
                     self.handle_insert_text("\n");
                     let _ = self.buffer.move_left(true);

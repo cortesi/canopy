@@ -13,7 +13,7 @@ use canopy::{
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
-    Border, Center, Selectable, Text,
+    Border, Center, Text,
     boxed::{BoxGlyphs, SINGLE},
 };
 
@@ -31,20 +31,12 @@ pub struct Button {
     glyphs: BoxGlyphs,
     /// Active state for the button.
     active: bool,
-    /// Selection state for use in lists.
-    selected: bool,
     /// Slot for the box container.
     box_slot: Slot<BoxSlot>,
     /// Slot for the centered label container.
     center_slot: Slot<CenterSlot>,
     /// Slot for the label text.
     label_slot: Slot<LabelSlot>,
-}
-
-impl Selectable for Button {
-    fn set_selected(&mut self, selected: bool) {
-        self.selected = selected;
-    }
 }
 
 #[derive_commands]
@@ -56,7 +48,6 @@ impl Button {
             command: None,
             glyphs: SINGLE,
             active: false,
-            selected: false,
             box_slot: Slot::new(),
             center_slot: Slot::new(),
             label_slot: Slot::new(),
@@ -75,26 +66,9 @@ impl Button {
         self
     }
 
-    /// Build a button with an active state.
-    pub fn with_active(mut self, active: bool) -> Self {
-        self.active = active;
-        self
-    }
-
-    /// Return the button label.
-    pub fn label(&self) -> &str {
-        &self.label
-    }
-
     /// Set whether the button is active.
     pub fn set_active(&mut self, active: bool) {
         self.active = active;
-    }
-
-    /// Replace the button label.
-    pub fn set_label(&mut self, ctx: &mut dyn Context, label: impl Into<String>) -> Result<()> {
-        self.label = label.into();
-        self.sync_label(ctx)
     }
 
     /// Trigger the button action.
@@ -145,12 +119,6 @@ impl Button {
     }
 }
 
-impl Default for Button {
-    fn default() -> Self {
-        Self::new("")
-    }
-}
-
 impl Widget for Button {
     fn layout(&self) -> Layout {
         Layout::fill()
@@ -162,9 +130,6 @@ impl Widget for Button {
 
     fn render(&mut self, rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         rndr.push_layer("button");
-        if self.selected {
-            rndr.push_layer("selected");
-        }
         if self.active {
             rndr.push_layer("active");
         } else {

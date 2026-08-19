@@ -48,11 +48,6 @@ impl BindingList {
         Self { snapshot: None }
     }
 
-    /// Install a captured snapshot.
-    pub fn set_snapshot(&mut self, snapshot: BindingSnapshot) {
-        self.snapshot = Some(snapshot);
-    }
-
     /// Replace the captured snapshot and return the prior value.
     pub(crate) fn replace_snapshot(
         &mut self,

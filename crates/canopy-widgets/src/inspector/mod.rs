@@ -58,13 +58,13 @@ pub struct Inspector;
 #[derive_commands]
 impl Inspector {
     /// Construct a new inspector.
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self
     }
 
     /// Build the inspector subtree and return its node id.
-    pub fn install(context: &mut dyn Context) -> Result<NodeId> {
-        let (view_id, _tabs, _logs) = view::View::install(context)?;
+    pub(crate) fn install(context: &mut dyn Context) -> Result<NodeId> {
+        let view_id = view::View::install(context)?;
         let frame_id = context.create_detached(frame::Frame::new())?;
         context.set_children_of(frame_id.into(), vec![view_id])?;
 

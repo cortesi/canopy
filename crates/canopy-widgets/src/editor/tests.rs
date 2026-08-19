@@ -170,6 +170,16 @@ fn render_with_line_numbers() {
 }
 
 #[test]
+fn vi_x_deletes_forward_and_yanks_for_put() {
+    let config = EditorConfig::new().with_mode(EditMode::Vi);
+    let mut harness = build_harness("abc", config, 10, 2);
+    harness.key('x').unwrap();
+    assert_eq!(editor_text(&mut harness), "bc");
+    harness.key('p').unwrap();
+    assert_eq!(editor_text(&mut harness), "bac");
+}
+
+#[test]
 fn soft_wrap_renders_each_segment_once() {
     let config = EditorConfig::new().with_wrap(WrapMode::Soft);
     let mut harness = build_harness("abcdefghij", config, 4, 3);

@@ -294,11 +294,11 @@ impl Logs {
     /// Scroll the view by one line in the specified direction.
     /// @param dir The direction to scroll.
     #[command]
-    pub fn scroll(&self, c: &mut dyn Context, dir: Direction) {
-        drop(self.with_list(c, |list, ctx| {
+    pub fn scroll(&self, c: &mut dyn Context, dir: Direction) -> Result<()> {
+        self.with_list(c, |list, ctx| {
             list.scroll(ctx, dir);
             Ok(())
-        }));
+        })
     }
 
     /// Page through the log view.

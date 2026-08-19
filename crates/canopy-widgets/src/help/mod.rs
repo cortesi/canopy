@@ -15,7 +15,7 @@ use canopy::{
     render::Render,
     state::NodeName,
 };
-pub use panel::{ControlFooter, HelpPanel};
+pub(crate) use panel::{ControlFooter, HelpPanel};
 
 use crate::{frame::Frame, modal::Modal};
 
@@ -31,7 +31,7 @@ pub struct Help;
 #[derive_commands]
 impl Help {
     /// Build the complete help subtree and return its root.
-    pub fn install(context: &mut dyn Context) -> Result<NodeId> {
+    pub(crate) fn install(context: &mut dyn Context) -> Result<NodeId> {
         let bindings = context.create_detached(BindingList::new())?;
         let footer = context.create_detached(ControlFooter::new())?;
 

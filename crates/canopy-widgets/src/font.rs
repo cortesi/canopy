@@ -1,7 +1,6 @@
 use std::{
     cmp::{max, min},
     collections::HashMap,
-    io::Read,
     sync::Arc,
 };
 
@@ -66,27 +65,10 @@ struct GlyphSample {
 }
 
 impl GlyphSample {
-    /// Build a sample with uniform coverage across quadrants.
-    fn uniform(ch: char, coverage: u8) -> Self {
-        Self {
-            ch,
-            mask: [coverage; 4],
-        }
-    }
-
     /// Build a sample with an explicit mask.
     fn mask(ch: char, mask: [u8; 4]) -> Self {
         Self { ch, mask }
     }
-}
-
-/// Selected glyph choice with its mask.
-#[derive(Debug, Clone, Copy)]
-struct GlyphChoice {
-    /// Chosen character.
-    ch: char,
-    /// Mask for the chosen glyph.
-    mask: [u8; 4],
 }
 
 /// A glyph ramp used to convert coverage regions into terminal glyphs.
@@ -97,20 +79,6 @@ pub struct GlyphRamp {
 }
 
 impl GlyphRamp {
-    /// Default ASCII ramp.
-    pub fn ascii() -> Self {
-        Self::from_chars(" .:-=+*#%@").expect("ascii ramp is non-empty")
-    }
-
-    /// Nerd Font ramp using private-use glyphs.
-    pub fn nerd_font() -> Self {
-        let glyphs = [
-            ' ', '\u{f10c}', '\u{f111}', '\u{f0c8}', '\u{f0c8}', '\u{f0c8}', '\u{f0c8}',
-            '\u{f0c8}', '\u{f0c8}', '\u{f0c8}',
-        ];
-        Self::from_glyphs(glyphs).expect("nerd font ramp is non-empty")
-    }
-
     /// Block-element ramp that matches 2x2 quadrant coverage.
     pub fn blocks() -> Self {
         let on = 255;
@@ -136,56 +104,21 @@ impl GlyphRamp {
         Self { glyphs }
     }
 
-    /// Construct a ramp from a set of characters.
-    pub fn from_chars(chars: impl AsRef<str>) -> Result<Self> {
-        let glyphs: Vec<char> = chars.as_ref().chars().collect();
-        Self::from_glyphs(glyphs)
-    }
-
-    /// Construct a ramp from explicit glyph characters.
-    pub fn from_glyphs(glyphs: impl IntoIterator<Item = char>) -> Result<Self> {
-        let glyphs: Vec<char> = glyphs.into_iter().collect();
-        if glyphs.is_empty() {
-            return Err(Error::EmptyGlyphRamp);
-        }
-        let len = glyphs.len();
-        let samples = if len == 1 {
-            vec![GlyphSample::uniform(glyphs[0], 255)]
-        } else {
-            glyphs
-                .into_iter()
-                .enumerate()
-                .map(|(idx, ch)| {
-                    let coverage = ((idx as u32 * 255) / (len.saturating_sub(1) as u32)) as u8;
-                    GlyphSample::uniform(ch, coverage)
-                })
-                .collect()
-        };
-        Ok(Self { glyphs: samples })
-    }
-
-    /// Convert per-quadrant coverage into a glyph choice.
-    fn sample(&self, coverage: [u8; 4]) -> GlyphChoice {
-        let mut best = GlyphChoice {
-            ch: ' ',
-            mask: [0; 4],
-        };
-        let mut best_error = u32::MAX;
-        for sample in &self.glyphs {
-            let mut error = 0u32;
-            for (value, expected) in coverage.iter().zip(sample.mask.iter()) {
-                let diff = value.abs_diff(*expected) as u32;
-                error = error.saturating_add(diff.saturating_mul(diff));
-            }
-            if error < best_error {
-                best_error = error;
-                best = GlyphChoice {
-                    ch: sample.ch,
-                    mask: sample.mask,
-                };
-            }
-        }
-        best
+    /// Convert per-quadrant coverage into the closest glyph sample.
+    fn sample(&self, coverage: [u8; 4]) -> GlyphSample {
+        self.glyphs
+            .iter()
+            .copied()
+            .min_by_key(|sample| {
+                coverage
+                    .iter()
+                    .zip(sample.mask.iter())
+                    .fold(0u32, |error, (value, expected)| {
+                        let diff = value.abs_diff(*expected) as u32;
+                        error.saturating_add(diff.saturating_mul(diff))
+                    })
+            })
+            .unwrap_or(GlyphSample::mask(' ', [0; 4]))
     }
 }
 
@@ -194,8 +127,6 @@ impl GlyphRamp {
 pub struct Font {
     /// Parsed font data.
     font: FontdueFont,
-    /// Extra spacing added after each glyph.
-    spacing: f32,
 }
 
 impl Font {
@@ -203,20 +134,7 @@ impl Font {
     pub fn from_bytes(data: impl AsRef<[u8]>) -> Result<Self> {
         let font = FontdueFont::from_bytes(data.as_ref(), FontSettings::default())
             .map_err(Error::FontLoad)?;
-        Ok(Self { font, spacing: 0.0 })
-    }
-
-    /// Load a font from a reader.
-    pub fn from_reader(mut reader: impl Read) -> Result<Self> {
-        let mut buf = Vec::new();
-        reader.read_to_end(&mut buf)?;
-        Self::from_bytes(buf)
-    }
-
-    /// Adjust spacing added after each glyph.
-    pub fn with_spacing(mut self, spacing: f32) -> Self {
-        self.spacing = spacing;
-        self
+        Ok(Self { font })
     }
 
     /// Return the font name, if provided in metadata.
@@ -333,7 +251,7 @@ impl FontRenderer {
         }
 
         let lines: Vec<&str> = text.split('\n').collect();
-        let line_count = max(lines.len(), 1);
+        let line_count = lines.len();
         let px = self.scale_for_height(size.h, line_count, COVERAGE_SCALE);
         let metrics = self.line_metrics(px);
         let ascent = metrics.ascent.round() as i32;
@@ -368,8 +286,8 @@ impl FontRenderer {
             }
         }
 
-        let content_width = div_ceil(content_width_px, COVERAGE_SCALE);
-        let content_height = div_ceil(content_height_px, COVERAGE_SCALE);
+        let content_width = content_width_px.div_ceil(COVERAGE_SCALE);
+        let content_height = content_height_px.div_ceil(COVERAGE_SCALE);
         let offset_x = align_offset(content_width, size.w, options.h_align) as i32;
         let offset_y = align_offset(content_height, size.h, options.v_align) as i32;
 
@@ -527,7 +445,7 @@ impl FontRenderer {
                 y,
                 glyph: Arc::clone(&glyph),
             });
-            cursor_x += advance + self.font.spacing;
+            cursor_x += advance;
         }
 
         let cursor_end = cursor_x.round() as i32;
@@ -575,28 +493,9 @@ impl FontRenderer {
             return Arc::clone(cached);
         }
         let (metrics, bitmap) = self.font.font.rasterize(ch, px);
-        let glyph = Arc::new(self.rasterize_glyph(metrics, &bitmap));
+        let glyph = Arc::new(rasterize_glyph(metrics, bitmap));
         self.cache.insert(key, Arc::clone(&glyph));
         glyph
-    }
-
-    /// Convert a font raster into a glyph.
-    fn rasterize_glyph(&self, metrics: Metrics, bitmap: &[u8]) -> Glyph {
-        let width = metrics.width;
-        let height = metrics.height;
-        let raster = bitmap.to_vec();
-
-        let advance = metrics.advance_width;
-        let bearing_left = metrics.xmin;
-
-        Glyph {
-            bitmap: raster,
-            width: width as u32,
-            height: height as u32,
-            bearing_left,
-            bearing_bottom: metrics.ymin,
-            advance,
-        }
     }
 
     /// Compute a scale in pixels that fits the target height.
@@ -641,12 +540,16 @@ pub fn align_offset(content: u32, available: u32, align: Align) -> u32 {
     }
 }
 
-/// Integer division with rounding up.
-fn div_ceil(value: u32, divisor: u32) -> u32 {
-    if divisor == 0 {
-        return 0;
+/// Convert a font raster into a glyph.
+fn rasterize_glyph(metrics: Metrics, bitmap: Vec<u8>) -> Glyph {
+    Glyph {
+        bitmap,
+        width: metrics.width as u32,
+        height: metrics.height as u32,
+        bearing_left: metrics.xmin,
+        bearing_bottom: metrics.ymin,
+        advance: metrics.advance_width,
     }
-    value.saturating_add(divisor - 1) / divisor
 }
 
 /// Compute foreground/background coverage weights from quadrant coverage.

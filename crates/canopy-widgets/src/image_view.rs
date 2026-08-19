@@ -274,9 +274,6 @@ impl ImageView {
         }
 
         let area = (right_clamped - left_clamped) as u64 * (bottom_clamped - top_clamped) as u64;
-        if area == 0 {
-            return None;
-        }
         let (red_total, green_total, blue_total) =
             self.integral
                 .sum_rgb(left_clamped, top_clamped, right_clamped, bottom_clamped);
@@ -341,12 +338,6 @@ impl ImageView {
             .map_err(|err| canopy_error::Error::Invalid(format!("image error: {err}")))?;
         let rgba = image.to_rgba8();
         Ok(Self::new(&rgba))
-    }
-
-    /// Configure whether the image auto-fits to the view.
-    pub fn with_auto_fit(mut self, auto_fit: bool) -> Self {
-        self.auto_fit = auto_fit;
-        self
     }
 
     /// Zoom around the view center.

@@ -30,25 +30,12 @@ pub mod canopy_widgets {
             }
 
             /// A basic syntect-backed highlighter.
-            #[derive(Debug, Clone, Default)]
+            #[derive(Debug, Clone)]
             pub struct SyntectHighlighter {}
 
             impl SyntectHighlighter {
                 /// Construct a new syntect highlighter for the provided extension.
                 pub fn new(extension: impl Into<String>) -> Self {}
-
-                /// Construct a syntect highlighter with a named theme.
-                pub fn with_theme_name(
-                    extension: impl Into<String>,
-                    theme_name: impl AsRef<str>,
-                ) -> Self {
-                }
-
-                /// Construct a syntect highlighter using a specific theme.
-                pub fn with_theme(extension: impl Into<String>, theme: Theme) -> Self {}
-
-                /// Construct a highlighter using the plain text syntax.
-                pub fn plain() -> Self {}
             }
 
             impl Highlighter for SyntectHighlighter {
@@ -99,14 +86,8 @@ pub mod canopy_widgets {
             /// Return the line length in chars, excluding any trailing newline.
             pub fn line_char_len(&self, line: usize) -> usize {}
 
-            /// Return the line length in chars, or `None` when the line is out of bounds.
-            pub fn try_line_char_len(&self, line: usize) -> Option<usize> {}
-
             /// Return the text of a logical line without a trailing newline.
             pub fn line_text(&self, line: usize) -> String {}
-
-            /// Return the text of a logical line, or `None` when the line is out of bounds.
-            pub fn try_line_text(&self, line: usize) -> Option<String> {}
 
             /// Take the pending line change, if any.
             pub fn take_change(&mut self) -> Option<LineChange> {}
@@ -134,6 +115,17 @@ pub mod canopy_widgets {
 
             /// Delete the selection or the grapheme before the cursor.
             pub fn delete_backward(&mut self, allow_line_wrap: bool) -> bool {}
+
+            /// Return the range a forward delete at `from` would remove.
+            ///
+            /// At the end of a line the range joins the next line when `allow_line_wrap` is set.
+            /// Returns `None` when there is nothing after the position to delete.
+            pub fn forward_delete_range(
+                &self,
+                from: TextPosition,
+                allow_line_wrap: bool,
+            ) -> Option<TextRange> {
+            }
 
             /// Delete the selection or the grapheme after the cursor.
             pub fn delete_forward(&mut self, allow_line_wrap: bool) -> bool {}
@@ -168,17 +160,8 @@ pub mod canopy_widgets {
             /// Return the end position for a line, optionally including the newline.
             pub fn line_end_position(&self, line: usize, include_newline: bool) -> TextPosition {}
 
-            /// Return the start position for a line.
-            pub fn line_start_position(&self, line: usize) -> TextPosition {}
-
             /// Return the text in a range.
             pub fn range_text(&self, range: TextRange) -> String {}
-
-            /// Return the text in a range, or `None` if either endpoint is out of bounds.
-            pub fn try_range_text(&self, range: TextRange) -> Option<String> {}
-
-            /// Convert a text position to a rope char index, or `None` if it is out of bounds.
-            pub fn try_position_to_char(&self, pos: TextPosition) -> Option<usize> {}
         }
 
         /// A position in the text buffer expressed as a logical line and a char index.
@@ -213,9 +196,6 @@ pub mod canopy_widgets {
 
             /// Return true if the range is empty.
             pub fn is_empty(self) -> bool {}
-
-            /// Return the range start and end ordered.
-            pub fn ordered(self) -> (TextPosition, TextPosition) {}
         }
 
         /// A text selection expressed as an anchor and head position.
@@ -238,21 +218,12 @@ pub mod canopy_widgets {
             /// Update the head position.
             pub fn set_head(&mut self, head: TextPosition) {}
 
-            /// Update the anchor position.
-            pub fn set_anchor(&mut self, anchor: TextPosition) {}
-
-            /// Collapse the selection to a caret at the head position.
-            pub fn collapse_to_head(&mut self) {}
-
             /// Return the selection range as a normalized text range.
             pub fn range(self) -> TextRange {}
 
             /// Return true if the selection is empty.
             pub fn is_empty(self) -> bool {}
         }
-
-        /// Return the display width of one grapheme at a column, expanding tabs.
-        pub fn display_width(grapheme: &str, column: usize, tab_stop: usize) -> usize {}
 
         /// Editor widget implementation.
         pub struct Editor {}
@@ -419,9 +390,6 @@ pub mod canopy_widgets {
             /// Construct an empty list.
             pub const fn new() -> Self {}
 
-            /// Install a captured snapshot.
-            pub fn set_snapshot(&mut self, snapshot: BindingSnapshot) {}
-
             /// Scroll up by one line.
             pub fn scroll_up(&self, context: &mut dyn Context) {}
 
@@ -487,48 +455,8 @@ pub mod canopy_widgets {
             fn name(&self) -> NodeName {}
         }
 
-        /// Fixed help-control summary below the binding list.
-        #[derive(Default)]
-        pub struct ControlFooter;
-
-        impl ControlFooter {
-            /// Construct the control footer.
-            pub const fn new() -> Self {}
-        }
-
-        impl Widget for ControlFooter {
-            fn layout(&self) -> Layout {}
-
-            fn measure(&self, constraints: MeasureConstraints) -> Measurement {}
-
-            fn render(&mut self, render: &mut Render<'_>, context: &dyn ViewContext) -> Result<()> {
-            }
-
-            fn name(&self) -> NodeName {}
-        }
-
-        /// Column container for the scrolling list and fixed footer.
-        #[derive(Default)]
-        pub struct HelpPanel;
-
-        impl HelpPanel {
-            /// Construct an empty help panel.
-            pub const fn new() -> Self {}
-        }
-
-        impl Widget for HelpPanel {
-            fn layout(&self) -> Layout {}
-
-            fn name(&self) -> NodeName {}
-        }
-
         /// Opaque overlay that owns the help modal subtree.
         pub struct Help;
-
-        impl Help {
-            /// Build the complete help subtree and return its root.
-            pub fn install(context: &mut dyn Context) -> Result<NodeId> {}
-        }
 
         impl CommandNode for Help {
             fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
@@ -615,7 +543,7 @@ pub mod canopy_widgets {
 
                 /// Scroll the view by one line in the specified direction.
                 /// @param dir The direction to scroll.
-                pub fn scroll(&self, c: &mut dyn Context, dir: Direction) {}
+                pub fn scroll(&self, c: &mut dyn Context, dir: Direction) -> Result<()> {}
 
                 /// Page through the log view.
                 /// Positive values move down; negative values move up.
@@ -671,14 +599,6 @@ pub mod canopy_widgets {
         #[derive(Default)]
         pub struct Inspector;
 
-        impl Inspector {
-            /// Construct a new inspector.
-            pub fn new() -> Self {}
-
-            /// Build the inspector subtree and return its node id.
-            pub fn install(context: &mut dyn Context) -> Result<NodeId> {}
-        }
-
         impl CommandNode for Inspector {
             fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
         }
@@ -696,39 +616,6 @@ pub mod canopy_widgets {
         }
     }
 
-    pub mod tabs {
-        //! Experimental tab container API.
-
-        /// A tab control managing a set of nodes with titles.
-        pub struct Tabs {}
-
-        impl Tabs {
-            /// Construct tabs with the provided titles.
-            pub fn new<I>(tabs: I) -> Self
-            where
-                I: IntoIterator,
-                I::Item: AsRef<str>, {
-            }
-
-            /// Select a tab by signed offset.
-            /// @param delta Signed tab delta. Positive moves forward and negative moves backward.
-            pub fn select_by(&mut self, _c: &mut dyn Context, delta: i32) {}
-
-            /// Return a typed command reference for this command.
-            pub fn cmd_select_by() -> &'static canopy::commands::CommandSpec {}
-        }
-
-        impl CommandNode for Tabs {
-            fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-        }
-
-        impl Widget for Tabs {
-            fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
-
-            fn name(&self) -> NodeName {}
-        }
-    }
-
     /// A simple box container around its children.
     #[derive(Default)]
     pub struct Border {}
@@ -740,17 +627,8 @@ pub mod canopy_widgets {
         /// Build a box with a specified glyph set.
         pub fn with_glyphs(self, glyphs: BoxGlyphs) -> Self {}
 
-        /// Build a box with a specified border style name.
-        pub fn with_border_style(self, style: impl Into<String>) -> Self {}
-
-        /// Update the border style name.
-        pub fn set_border_style(&mut self, style: impl Into<String>) {}
-
         /// Enable interior fill using the default fill style name.
         pub fn with_fill(self) -> Self {}
-
-        /// Enable interior fill using a specified style name.
-        pub fn with_fill_style(self, style: impl Into<String>) -> Self {}
     }
 
     impl CommandNode for Border {
@@ -795,7 +673,6 @@ pub mod canopy_widgets {
     pub const SINGLE_THICK: BoxGlyphs = _;
 
     /// Button widget that triggers a command when clicked.
-    #[derive(Default)]
     pub struct Button {}
 
     impl Button {
@@ -808,28 +685,14 @@ pub mod canopy_widgets {
         /// Build a button that dispatches a command when clicked.
         pub fn with_command(self, command: CommandCall) -> Self {}
 
-        /// Build a button with an active state.
-        pub fn with_active(self, active: bool) -> Self {}
-
-        /// Return the button label.
-        pub fn label(&self) -> &str {}
-
         /// Set whether the button is active.
         pub fn set_active(&mut self, active: bool) {}
-
-        /// Replace the button label.
-        pub fn set_label(&mut self, ctx: &mut dyn Context, label: impl Into<String>) -> Result<()> {
-        }
 
         /// Trigger the button action.
         pub fn press(&mut self, ctx: &mut dyn Context) -> Result<()> {}
 
         /// Return a typed command reference for this command.
         pub fn cmd_press() -> &'static canopy::commands::CommandSpec {}
-    }
-
-    impl Selectable for Button {
-        fn set_selected(&mut self, selected: bool) {}
     }
 
     impl CommandNode for Button {
@@ -910,12 +773,6 @@ pub mod canopy_widgets {
         /// Collapse without changing selection.
         pub fn cancel(&mut self, c: &mut dyn Context) -> Result<()> {}
 
-        /// Get the number of items.
-        pub fn len(&self) -> usize {}
-
-        /// Check if the dropdown is empty.
-        pub fn is_empty(&self) -> bool {}
-
         /// Return a typed command reference for this command.
         pub fn cmd_toggle() -> &'static canopy::commands::CommandSpec {}
 
@@ -958,14 +815,6 @@ pub mod canopy_widgets {
     pub enum Error {
         /// Font parsing failed.
         FontLoad(&'static str),
-        /// Glyph ramp did not include any characters.
-        EmptyGlyphRamp,
-        /// I/O error while reading font bytes.
-        Io(std::io::Error),
-    }
-
-    impl From<Error> for Error {
-        fn from(source: IoError) -> Self {}
     }
 
     /// Result type for canopy-widgets helpers.
@@ -978,12 +827,6 @@ pub mod canopy_widgets {
     impl Font {
         /// Load a font from in-memory bytes.
         pub fn from_bytes(data: impl AsRef<[u8]>) -> Result<Self> {}
-
-        /// Load a font from a reader.
-        pub fn from_reader(reader: impl Read) -> Result<Self> {}
-
-        /// Adjust spacing added after each glyph.
-        pub fn with_spacing(self, spacing: f32) -> Self {}
 
         /// Return the font name, if provided in metadata.
         pub fn name(&self) -> Option<&str> {}
@@ -1057,20 +900,8 @@ pub mod canopy_widgets {
     pub struct GlyphRamp {}
 
     impl GlyphRamp {
-        /// Default ASCII ramp.
-        pub fn ascii() -> Self {}
-
-        /// Nerd Font ramp using private-use glyphs.
-        pub fn nerd_font() -> Self {}
-
         /// Block-element ramp that matches 2x2 quadrant coverage.
         pub fn blocks() -> Self {}
-
-        /// Construct a ramp from a set of characters.
-        pub fn from_chars(chars: impl AsRef<str>) -> Result<Self> {}
-
-        /// Construct a ramp from explicit glyph characters.
-        pub fn from_glyphs(glyphs: impl IntoIterator<Item = char>) -> Result<Self> {}
     }
 
     /// Alignment configuration for font layouts.
@@ -1098,9 +929,6 @@ pub mod canopy_widgets {
         /// Configure the banner style path.
         pub fn with_style(self, style: impl Into<String>) -> Self {}
 
-        /// Configure the banner style when selected.
-        pub fn with_selected_style(self, style: impl Into<String>) -> Self {}
-
         /// Configure layout options for the banner.
         pub fn with_layout_options(self, options: LayoutOptions) -> Self {}
 
@@ -1109,10 +937,6 @@ pub mod canopy_widgets {
 
         /// Update rendering effects for the banner.
         pub fn set_effects(&mut self, effects: FontEffects) {}
-    }
-
-    impl Selectable for FontBanner {
-        fn set_selected(&mut self, selected: bool) {}
     }
 
     impl Widget for FontBanner {
@@ -1132,17 +956,11 @@ pub mod canopy_widgets {
         /// Build a frame with a specified glyph set.
         pub fn with_glyphs(self, glyphs: BoxGlyphs) -> Self {}
 
-        /// Build a frame with a specified scroll glyph set.
-        pub fn with_scroll_glyphs(self, glyphs: ScrollGlyphs) -> Self {}
-
         /// Build a frame with a specified title.
         pub fn with_title(self, title: impl Into<String>) -> Self {}
 
         /// Return the glyph set used by the frame.
         pub fn glyphs(&self) -> &BoxGlyphs {}
-
-        /// Return the optional title string.
-        pub fn title(&self) -> Option<&str> {}
 
         /// Wrap an existing child node in a configured frame and return the frame node ID.
         pub fn wrap_with(
@@ -1167,17 +985,6 @@ pub mod canopy_widgets {
         fn name(&self) -> NodeName {}
     }
 
-    /// Active scroll indicator glyph set.
-    pub const SCROLL: ScrollGlyphs = _;
-
-    /// Defines the set of glyphs used to draw active scroll indicators.
-    pub struct ScrollGlyphs {
-        /// Active vertical indicator glyph.
-        pub vertical_active: char,
-        /// Active horizontal indicator glyph.
-        pub horizontal_active: char,
-    }
-
     /// Widget that renders an image into terminal cells.
     pub struct ImageView {}
 
@@ -1187,9 +994,6 @@ pub mod canopy_widgets {
 
         /// Create a new image view widget from a file path.
         pub fn from_path(path: impl AsRef<Path>) -> canopy_error::Result<Self> {}
-
-        /// Configure whether the image auto-fits to the view.
-        pub fn with_auto_fit(self, auto_fit: bool) -> Self {}
 
         /// Zoom around the view center.
         /// @param dir The zoom direction.
@@ -1309,24 +1113,8 @@ pub mod canopy_widgets {
         ) -> Self {
         }
 
-        /// Set a list-level selection indicator.
-        /// Repeat controls whether the indicator renders on every visible line.
-        pub fn set_selection_indicator(
-            &mut self,
-            style: impl Into<String>,
-            text: impl Into<String>,
-            repeat: bool,
-        ) {
-        }
-
-        /// Clear the list-level selection indicator.
-        pub fn clear_selection_indicator(&mut self) {}
-
         /// Build a list that dispatches a command when a row is activated.
         pub fn with_on_activate(self, command: CommandCall) -> Self {}
-
-        /// Configure an activation command for row clicks.
-        pub fn set_on_activate(&mut self, config: Option<ListActivateConfig>) {}
 
         /// Returns true if the list is empty.
         pub fn is_empty(&self) -> bool {}
@@ -1362,9 +1150,6 @@ pub mod canopy_widgets {
 
         /// Remove the item at the specified index.
         pub fn remove(&mut self, ctx: &mut dyn Context, index: usize) -> Result<bool> {}
-
-        /// Detach the item at the specified index.
-        pub fn take(&mut self, ctx: &mut dyn Context, index: usize) -> Result<Option<TypedId<W>>> {}
 
         /// Clear all items from the list.
         pub fn clear(&mut self, ctx: &mut dyn Context) -> Result<()> {}
@@ -1433,18 +1218,6 @@ pub mod canopy_widgets {
         fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
         fn name(&self) -> NodeName {}
-    }
-
-    /// Activation configuration for list row clicks.
-    #[derive(Debug, Clone)]
-    pub struct ListActivateConfig {}
-
-    impl ListActivateConfig {
-        /// Build a new activation config using the default drag threshold.
-        pub fn new(command: CommandCall) -> Self {}
-
-        /// Set the drag threshold in cells.
-        pub fn with_drag_threshold(self, drag_threshold: u32) -> Self {}
     }
 
     /// Trait for widgets that can be selected in a list.
@@ -1525,26 +1298,11 @@ pub mod canopy_widgets {
         /// Construct panes with no children.
         pub fn new() -> Self {}
 
-        /// Construct panes with a single child.
-        pub fn with_child(child: impl Into<NodeId>) -> Self {}
-
-        /// Return the active column container node IDs in order.
-        pub fn column_nodes(&self) -> Vec<NodeId> {}
-
-        /// Return the focused column index, if any.
-        pub fn focused_column_index(&self, c: &dyn Context) -> Option<usize> {}
-
         /// Move focus by a signed column offset (wraps around).
         pub fn focus_column(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {}
 
-        /// Get the offset of the current focus in the children vector.
-        pub fn focus_coords(&self, c: &dyn Context) -> Option<(usize, usize)> {}
-
         /// Delete the focus node. If a column ends up empty, it is removed.
         pub fn delete_focus(&mut self, c: &mut dyn Context) -> Result<()> {}
-
-        /// Insert a node, splitting vertically.
-        pub fn insert_row(&mut self, c: &mut dyn Context, n: impl Into<NodeId>) -> Result<()> {}
 
         /// Insert a node in a new column.
         pub fn insert_col(&mut self, c: &mut dyn Context, n: impl Into<NodeId>) -> Result<()> {}
@@ -1571,16 +1329,9 @@ pub mod canopy_widgets {
     }
 
     /// A Root widget that lives at the base of a Canopy app.
-    #[derive(Default)]
     pub struct Root {}
 
     impl Root {
-        /// Construct a root widget wrapping the application and inspector nodes.
-        pub fn new() -> Self {}
-
-        /// Start with the inspector open.
-        pub fn with_inspector(self, state: bool) -> Self {}
-
         /// Exit from the program, restoring terminal state. If help or inspector is
         /// open, close them first.
         pub fn quit(&mut self, c: &mut dyn Context) -> Result<()> {}
@@ -1785,15 +1536,6 @@ pub mod canopy_widgets {
         /// Construct a new terminal widget with the provided configuration.
         pub fn new(config: TerminalConfig) -> Self {}
 
-        /// Return the exit status of the child process, if it has exited.
-        pub fn exit_status(&self) -> Option<i32> {}
-
-        /// Return true if the child process is still running.
-        pub fn is_running(&self) -> bool {}
-
-        /// Return the most recent terminal title, if any.
-        pub fn title(&self) -> Option<String> {}
-
         /// Return the attached `itty` driver handle for scripting integrations.
         pub fn driver_handle(&self) -> Option<Arc<DriverHandle>> {}
     }
@@ -1888,36 +1630,6 @@ pub mod canopy_widgets {
         /// Configure the working directory for the terminal process.
         pub fn with_cwd(self, cwd: impl Into<PathBuf>) -> Self {}
 
-        /// Add an environment variable for the terminal process.
-        pub fn with_env(self, key: impl Into<String>, value: impl Into<String>) -> Self {}
-
-        /// Configure the number of scrollback lines to keep.
-        pub fn with_scrollback_lines(self, scrollback_lines: usize) -> Self {}
-
-        /// Configure terminal mouse reporting.
-        pub fn with_mouse_reporting(self, mouse_reporting: bool) -> Self {}
-
-        /// Configure bracketed paste support.
-        pub fn with_bracketed_paste(self, bracketed_paste: bool) -> Self {}
-
-        /// Configure kitty keyboard protocol support.
-        pub fn with_kitty_keyboard(self, kitty_keyboard: bool) -> Self {}
-
-        /// Configure the terminal color palette.
-        pub fn with_colors(self, colors: TerminalColors) -> Self {}
-
-        /// Configure the clipboard store callback.
-        pub fn with_clipboard_store<F>(self, store: F) -> Self
-        where
-            F: Fn(String) + Send + Sync + 'static, {
-        }
-
-        /// Configure the clipboard load callback.
-        pub fn with_clipboard_load<F>(self, load: F) -> Self
-        where
-            F: Fn() -> String + Send + Sync + 'static, {
-        }
-
         /// Configure the child exit callback.
         pub fn with_on_exit<F>(self, on_exit: F) -> Self
         where
@@ -1957,9 +1669,6 @@ pub mod canopy_widgets {
 
         /// Set the tab stop width for tab expansion.
         pub fn with_tab_stop(self, tab_stop: usize) -> Self {}
-
-        /// Return the raw text content.
-        pub fn raw(&self) -> &str {}
 
         /// Replace the raw text content.
         pub fn set_raw(&mut self, raw: impl Into<String>) {}
@@ -2029,16 +1738,5 @@ pub mod canopy_widgets {
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {}
 
         fn name(&self) -> NodeName {}
-    }
-
-    /// Wrap `child` in a new `widget` node and return the wrapper's typed id.
-    ///
-    /// The child keeps its identity: it is detached from its current parent and reattached under
-    /// the wrapper.
-    pub fn wrap<W: Widget + 'static>(
-        c: &mut dyn Context,
-        child: impl Into<canopy::NodeId>,
-        widget: W,
-    ) -> canopy::error::Result<canopy::TypedId<W>> {
     }
 }

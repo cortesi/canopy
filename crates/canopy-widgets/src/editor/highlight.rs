@@ -47,37 +47,6 @@ impl SyntectHighlighter {
         }
     }
 
-    /// Construct a syntect highlighter with a named theme.
-    pub fn with_theme_name(extension: impl Into<String>, theme_name: impl AsRef<str>) -> Self {
-        let syntax_set = SyntaxSet::load_defaults_newlines();
-        let themes = ThemeSet::load_defaults();
-        let theme = themes
-            .themes
-            .get(theme_name.as_ref())
-            .cloned()
-            .unwrap_or_else(|| default_theme(&themes));
-        Self {
-            syntax_set,
-            theme,
-            extension: extension.into(),
-        }
-    }
-
-    /// Construct a syntect highlighter using a specific theme.
-    pub fn with_theme(extension: impl Into<String>, theme: Theme) -> Self {
-        let syntax_set = SyntaxSet::load_defaults_newlines();
-        Self {
-            syntax_set,
-            theme,
-            extension: extension.into(),
-        }
-    }
-
-    /// Construct a highlighter using the plain text syntax.
-    pub fn plain() -> Self {
-        Self::new("txt")
-    }
-
     /// Resolve the syntax definition for the configured extension.
     fn syntax(&self) -> &SyntaxReference {
         self.syntax_set
@@ -104,12 +73,6 @@ impl Highlighter for SyntectHighlighter {
             });
         }
         spans
-    }
-}
-
-impl Default for SyntectHighlighter {
-    fn default() -> Self {
-        Self::plain()
     }
 }
 

@@ -28,7 +28,7 @@ pub(crate) mod widget;
 pub use buffer::{LineChange, TextBuffer};
 pub use position::{TextPosition, TextRange};
 pub use selection::Selection;
-pub use util::display_width;
+pub(crate) use util::display_width;
 pub use widget::Editor;
 
 #[cfg(test)]

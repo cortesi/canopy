@@ -21,7 +21,6 @@ use super::{
     highlight::{HighlightSpan, Highlighter},
     layout::{LayoutCache, WrapSegment, layout_line},
     search::{PromptState, SearchDirection, SearchState},
-    util::next_grapheme_boundary,
     vi::{ViMode, ViState},
 };
 
@@ -447,22 +446,12 @@ impl Editor {
             return false;
         }
         let cursor = self.buffer.cursor();
-        let line_len = self.buffer.line_char_len(cursor.line);
-        if cursor.column >= line_len {
-            if !self.config.multiline || cursor.line + 1 >= self.buffer.line_count() {
-                return false;
-            }
-            let end = TextPosition::new(cursor.line + 1, 0);
-            let range = TextRange::new(cursor, end);
-            self.set_yank(range, false);
-            self.buffer.replace_range(range, "");
-            self.update_preferred_column();
-            return true;
-        }
-
-        let line_text = self.buffer.line_text(cursor.line);
-        let next = next_grapheme_boundary(&line_text, cursor.column);
-        let range = TextRange::new(cursor, TextPosition::new(cursor.line, next));
+        let Some(range) = self
+            .buffer
+            .forward_delete_range(cursor, self.config.multiline)
+        else {
+            return false;
+        };
         self.set_yank(range, false);
         self.buffer.replace_range(range, "");
         self.update_preferred_column();
@@ -504,7 +493,7 @@ impl Editor {
                 mods,
             }) if !mods.ctrl && !mods.alt => {
                 self.begin_text_entry_transaction();
-                self.handle_insert_text(&c.to_string());
+                self.handle_insert_text(c.encode_utf8(&mut [0; 4]));
                 self.ensure_cursor_visible(ctx);
                 EventOutcome::Handle
             }
@@ -646,11 +635,7 @@ impl Editor {
             y: view.tl.y.saturating_add(local.y),
         };
         let mut text_point = content_point;
-        if text_point.x > gutter_width {
-            text_point.x = text_point.x.saturating_sub(gutter_width);
-        } else {
-            text_point.x = 0;
-        }
+        text_point.x = text_point.x.saturating_sub(gutter_width);
         let pos = self
             .layout
             .position_for_point(&self.buffer, text_point, self.config.tab_stop);
@@ -715,7 +700,7 @@ impl Editor {
         if ctx.gutter_width > 0 {
             let gutter_line = Line::new(ctx.origin.x, line_y, ctx.gutter_width);
             let number_text = line_number_text(
-                self.config.line_numbers,
+                self.config.line_numbers == LineNumbers::Relative,
                 line_idx,
                 self.buffer.cursor().line,
                 ctx.gutter_width,
@@ -1081,26 +1066,16 @@ pub(super) fn prompt_text(prompt: &PromptState) -> String {
 }
 
 /// Format a line number gutter entry.
-fn line_number_text(mode: LineNumbers, line: usize, cursor_line: usize, width: u32) -> String {
-    let number = match mode {
-        LineNumbers::None => 0,
-        LineNumbers::Absolute => line + 1,
-        LineNumbers::Relative => {
-            if line == cursor_line {
-                line + 1
-            } else {
-                line.max(cursor_line) - line.min(cursor_line)
-            }
-        }
-    };
-    let content = if mode == LineNumbers::None {
-        "".to_string()
+///
+/// A relative gutter shows the distance to the cursor line, and the cursor line's own number.
+fn line_number_text(relative: bool, line: usize, cursor_line: usize, width: u32) -> String {
+    let number = if relative && line != cursor_line {
+        line.abs_diff(cursor_line)
     } else {
-        number.to_string()
+        line + 1
     };
     format!(
-        "{:>width$} ",
-        content,
+        "{number:>width$} ",
         width = width.saturating_sub(1) as usize
     )
 }

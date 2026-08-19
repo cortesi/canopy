@@ -81,7 +81,7 @@ impl HelpState {
 #[derive_commands]
 impl Root {
     /// Construct a root widget wrapping the application and inspector nodes.
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             inspector_active: false,
             help_state: HelpState::Closed,
@@ -89,7 +89,7 @@ impl Root {
     }
 
     /// Start with the inspector open.
-    pub fn with_inspector(mut self, state: bool) -> Self {
+    fn with_inspector(mut self, state: bool) -> Self {
         self.inspector_active = state;
         self
     }
@@ -417,12 +417,6 @@ impl Widget for Root {
 
     fn name(&self) -> NodeName {
         NodeName::convert("root")
-    }
-}
-
-impl Default for Root {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

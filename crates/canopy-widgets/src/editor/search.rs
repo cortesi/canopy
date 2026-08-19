@@ -141,12 +141,6 @@ impl SearchState {
     }
 }
 
-impl Default for SearchState {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 /// Find text matches for a query within the buffer.
 pub fn find_matches(buffer: &TextBuffer, query: &str) -> Vec<TextRange> {
     if query.is_empty() || query.contains('\n') {

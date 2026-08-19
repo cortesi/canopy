@@ -301,12 +301,6 @@ impl LayoutCache {
     }
 }
 
-impl Default for LayoutCache {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 /// Build layout segments for a single logical line.
 pub fn layout_line(
     text: &str,

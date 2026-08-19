@@ -25,7 +25,6 @@ use itty_core::{
     driver::{self, DriverHandle, DriverHost},
     inspect::{StyledRunPublic, TerminalState},
     key::{Key as IttyKey, KeyCode as IttyKeyCode, Modifiers as IttyModifiers},
-    title::TitleHook,
 };
 use tokio::runtime::{Builder, Runtime};
 use unicode_segmentation::UnicodeSegmentation;
@@ -91,12 +90,6 @@ impl ClipboardHandler for SharedClipboard {
     }
 }
 
-/// Shared title hook used to surface title updates from `itty`.
-struct SharedTitle {
-    /// Most recent title emitted by the backend.
-    title: Arc<Mutex<Option<String>>>,
-}
-
 /// Send wrapper around the thread-affine driver host.
 struct DriverPortal {
     /// Host polled from the UI thread.
@@ -150,14 +143,6 @@ impl DriverRuntime {
         mem::drop(self.runtime.spawn(async move {
             drop(handle.send_input(bytes).await);
         }));
-    }
-}
-
-impl TitleHook for SharedTitle {
-    fn set_title(&self, title: &str) {
-        if let Ok(mut guard) = self.title.lock() {
-            *guard = Some(title.to_string());
-        }
     }
 }
 
@@ -357,60 +342,6 @@ impl TerminalConfig {
         self
     }
 
-    /// Add an environment variable for the terminal process.
-    pub fn with_env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        self.env.push((key.into(), value.into()));
-        self
-    }
-
-    /// Configure the number of scrollback lines to keep.
-    pub fn with_scrollback_lines(mut self, scrollback_lines: usize) -> Self {
-        self.scrollback_lines = scrollback_lines;
-        self
-    }
-
-    /// Configure terminal mouse reporting.
-    pub fn with_mouse_reporting(mut self, mouse_reporting: bool) -> Self {
-        self.mouse_reporting = mouse_reporting;
-        self
-    }
-
-    /// Configure bracketed paste support.
-    pub fn with_bracketed_paste(mut self, bracketed_paste: bool) -> Self {
-        self.bracketed_paste = bracketed_paste;
-        self
-    }
-
-    /// Configure kitty keyboard protocol support.
-    pub fn with_kitty_keyboard(mut self, kitty_keyboard: bool) -> Self {
-        self.kitty_keyboard = kitty_keyboard;
-        self
-    }
-
-    /// Configure the terminal color palette.
-    pub fn with_colors(mut self, colors: TerminalColors) -> Self {
-        self.colors = colors;
-        self
-    }
-
-    /// Configure the clipboard store callback.
-    pub fn with_clipboard_store<F>(mut self, store: F) -> Self
-    where
-        F: Fn(String) + Send + Sync + 'static,
-    {
-        self.clipboard_store = Some(Arc::new(store));
-        self
-    }
-
-    /// Configure the clipboard load callback.
-    pub fn with_clipboard_load<F>(mut self, load: F) -> Self
-    where
-        F: Fn() -> String + Send + Sync + 'static,
-    {
-        self.clipboard_load = Some(Arc::new(load));
-        self
-    }
-
     /// Configure the child exit callback.
     pub fn with_on_exit<F>(mut self, on_exit: F) -> Self
     where
@@ -439,12 +370,8 @@ pub struct Terminal {
     selection_anchor: Option<geom::Point>,
     /// Multi-click tracking state.
     last_click: Option<ClickState>,
-    /// Last reported terminal title.
-    title: Arc<Mutex<Option<String>>>,
     /// Whether the child exit callback has been invoked.
     exit_notified: bool,
-    /// Cached child exit status.
-    exit_status: Option<i32>,
 }
 
 #[derive_commands]
@@ -463,27 +390,8 @@ impl Terminal {
             selection_active: false,
             selection_anchor: None,
             last_click: None,
-            title: Arc::new(Mutex::new(None)),
             exit_notified: false,
-            exit_status: None,
         }
-    }
-
-    /// Return the exit status of the child process, if it has exited.
-    pub fn exit_status(&self) -> Option<i32> {
-        self.exit_status
-    }
-
-    /// Return true if the child process is still running.
-    pub fn is_running(&self) -> bool {
-        self.session
-            .as_ref()
-            .is_some_and(|session| !session.child_exited())
-    }
-
-    /// Return the most recent terminal title, if any.
-    pub fn title(&self) -> Option<String> {
-        self.title.lock().ok().and_then(|guard| guard.clone())
     }
 
     /// Return the attached `itty` driver handle for scripting integrations.
@@ -501,14 +409,9 @@ impl Terminal {
         let mut session =
             Session::from_config(&cfg).map_err(|error| Error::Internal(error.to_string()))?;
         session.set_clipboard_handler(SharedClipboard::new(&self.config));
-        session.set_title_hook(Arc::new(SharedTitle {
-            title: Arc::clone(&self.title),
-        }));
-
         let driver = DriverRuntime::attach(&mut session)?;
 
         self.exit_notified = false;
-        self.exit_status = None;
         self.session = Some(session);
         self.driver = Some(driver);
         Ok(())
@@ -539,9 +442,9 @@ impl Terminal {
         }
 
         self.last_size = size;
-        if let Some(session) = self.session.as_mut()
-            && let Err(_error) = session.resize_grid_and_pty(size.columns, size.rows, 1.0)
-        {}
+        if let Some(session) = self.session.as_mut() {
+            drop(session.resize_grid_and_pty(size.columns, size.rows, 1.0));
+        }
     }
 
     /// Return the current backend state snapshot.
@@ -618,7 +521,7 @@ impl Terminal {
     fn select_word(&mut self, point: geom::Point) -> bool {
         let Some(line) = self
             .session()
-            .and_then(|session| session.visible_text().get(point.y as usize).cloned())
+            .and_then(|session| session.line_text(point.y as usize))
         else {
             return false;
         };
@@ -803,14 +706,12 @@ impl Terminal {
         }
 
         let code = session.child_exit_code().unwrap_or(1);
-        self.exit_status = Some(code);
         self.exit_notified = true;
         if let Some(callback) = &self.config.on_exit {
             callback(code);
         }
     }
 
-    /// Sync terminal focus reporting with the backend.
     /// Return the focus report the terminal expects, if it enabled focus reporting.
     fn focus_report(&self, focused: bool) -> Option<Vec<u8>> {
         let state = self.state()?;
@@ -868,8 +769,7 @@ impl Widget for Terminal {
         }
 
         if child_exited {
-            let status = child_exit_code;
-            let message = format!("Process exited (status {status})");
+            let message = format!("Process exited (status {child_exit_code})");
             let width = message.chars().count() as u32;
             if width > 0 && content_size.w > 0 && content_size.h > 0 {
                 let x = (content_size.w.saturating_sub(width)) / 2;
@@ -1108,32 +1008,35 @@ fn render_run(
     display_offset: usize,
     default_bg: Color,
 ) -> Result<()> {
-    let mut col = run.start_col;
-    for grapheme in run.text.graphemes(true) {
-        let width = text::grapheme_width(grapheme);
-        let mut fg = Color::Rgb {
+    // Only the selection swap varies per cell, so the run's style resolves once.
+    let base = ResolvedStyle::new(
+        Color::Rgb {
             r: run.fg.r(),
             g: run.fg.g(),
             b: run.fg.b(),
-        };
-        let mut bg = run.bg.map_or(default_bg, |color| Color::Rgb {
+        },
+        run.bg.map_or(default_bg, |color| Color::Rgb {
             r: color.r(),
             g: color.g(),
             b: color.b(),
-        });
-        if selection_contains(selection, row_idx, col, display_offset) {
-            mem::swap(&mut fg, &mut bg);
-        }
-
-        let attrs = AttrSet {
+        }),
+        AttrSet {
             bold: run.bold,
             italic: run.italic,
             underline: run.underline,
             crossedout: run.strikethrough,
             ..AttrSet::default()
-        };
+        },
+    );
 
-        let style = ResolvedStyle::new(fg, bg, attrs);
+    let mut col = run.start_col;
+    for grapheme in run.text.graphemes(true) {
+        let width = text::grapheme_width(grapheme);
+        let style = if selection_contains(selection, row_idx, col, display_offset) {
+            ResolvedStyle::new(base.bg, base.fg, base.attrs)
+        } else {
+            base
+        };
         rndr.put_grapheme(
             style,
             geom::Point {

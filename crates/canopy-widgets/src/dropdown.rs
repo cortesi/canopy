@@ -86,17 +86,14 @@ where
     /// Move highlight by a signed offset (when expanded).
     #[command]
     pub fn select_by(&mut self, _c: &mut dyn Context, delta: i32) -> Result<()> {
-        if !self.expanded || self.items.is_empty() {
+        if !self.expanded {
             return Ok(());
         }
 
-        let next = if delta.is_negative() {
-            self.highlighted
-                .saturating_sub(delta.unsigned_abs() as usize)
-        } else {
-            self.highlighted.saturating_add(delta as usize)
-        };
-        self.highlighted = next.min(self.items.len() - 1);
+        self.highlighted = self
+            .highlighted
+            .saturating_add_signed(delta as isize)
+            .min(self.items.len() - 1);
         debug_assert!(self.selection_invariant_holds());
         Ok(())
     }
@@ -139,16 +136,6 @@ where
         }
         debug_assert!(self.selection_invariant_holds());
         Ok(())
-    }
-
-    /// Get the number of items.
-    pub fn len(&self) -> usize {
-        self.items.len()
-    }
-
-    /// Check if the dropdown is empty.
-    pub fn is_empty(&self) -> bool {
-        self.items.is_empty()
     }
 
     /// Return the unclamped size required to render the current dropdown state.

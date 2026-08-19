@@ -90,12 +90,10 @@ where
             return Ok(());
         }
 
-        let next = if delta.is_negative() {
-            self.focused.saturating_sub(delta.unsigned_abs() as usize)
-        } else {
-            self.focused.saturating_add(delta as usize)
-        };
-        self.focused = next.min(self.items.len() - 1);
+        self.focused = self
+            .focused
+            .saturating_add_signed(delta as isize)
+            .min(self.items.len() - 1);
         debug_assert!(self.selection_invariant_holds());
         Ok(())
     }

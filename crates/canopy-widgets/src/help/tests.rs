@@ -44,7 +44,7 @@ fn snapshot(focus: NodeId, bindings: Vec<AvailableBinding>) -> BindingSnapshot {
 fn list_with(bindings: Vec<AvailableBinding>) -> BindingList {
     let mut list = BindingList::new();
     let focus = canopy::Canopy::new().root_id();
-    list.set_snapshot(snapshot(focus, bindings));
+    drop(list.replace_snapshot(Some(snapshot(focus, bindings))));
     list
 }
 
@@ -54,7 +54,7 @@ fn harness_with(width: u32, height: u32, bindings: Vec<AvailableBinding>) -> Res
         .build()?;
     let focus = harness.root;
     harness.with_root_widget::<BindingList, _>(|list| {
-        list.set_snapshot(snapshot(focus, bindings));
+        drop(list.replace_snapshot(Some(snapshot(focus, bindings))));
     });
     harness.render()?;
     Ok(harness)

@@ -14,15 +14,15 @@ use super::boxed::{BoxGlyphs, ROUND};
 use crate::wrap::wrap;
 
 /// Defines the set of glyphs used to draw active scroll indicators.
-pub struct ScrollGlyphs {
+struct ScrollGlyphs {
     /// Active vertical indicator glyph.
-    pub vertical_active: char,
+    vertical_active: char,
     /// Active horizontal indicator glyph.
-    pub horizontal_active: char,
+    horizontal_active: char,
 }
 
 /// Active scroll indicator glyph set.
-pub const SCROLL: ScrollGlyphs = ScrollGlyphs {
+const SCROLL: ScrollGlyphs = ScrollGlyphs {
     horizontal_active: '▄',
     vertical_active: '█',
 };
@@ -96,12 +96,6 @@ impl Frame {
         self
     }
 
-    /// Build a frame with a specified scroll glyph set.
-    pub fn with_scroll_glyphs(mut self, glyphs: ScrollGlyphs) -> Self {
-        self.scroll_glyphs = glyphs;
-        self
-    }
-
     /// Build a frame with a specified title.
     pub fn with_title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
@@ -111,11 +105,6 @@ impl Frame {
     /// Return the glyph set used by the frame.
     pub fn glyphs(&self) -> &BoxGlyphs {
         &self.box_glyphs
-    }
-
-    /// Return the optional title string.
-    pub fn title(&self) -> Option<&str> {
-        self.title.as_deref()
     }
 
     /// Wrap an existing child node in a configured frame and return the frame node ID.

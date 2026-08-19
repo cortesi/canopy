@@ -7,10 +7,7 @@ use canopy::{
     style::ResolvedStyle,
 };
 
-use crate::{
-    Selectable,
-    font::{FontEffects, FontLayout, FontRenderer, LayoutOptions, align_offset},
-};
+use crate::font::{FontEffects, FontLayout, FontRenderer, LayoutOptions, align_offset};
 
 /// Render large ASCII-font text into a bounded region.
 pub struct FontBanner {
@@ -20,10 +17,6 @@ pub struct FontBanner {
     renderer: FontRenderer,
     /// Style path for text rendering.
     style: String,
-    /// Optional style path when selected.
-    selected_style: Option<String>,
-    /// Selection state for list integration.
-    selected: bool,
     /// Layout configuration for the banner.
     options: LayoutOptions,
     /// Rendering effects for the banner.
@@ -53,8 +46,6 @@ impl FontBanner {
             text: text.into(),
             renderer,
             style: String::from("text"),
-            selected_style: None,
-            selected: false,
             options: LayoutOptions::default(),
             effects: FontEffects::default(),
             cache: None,
@@ -64,7 +55,6 @@ impl FontBanner {
     /// Update the banner text.
     pub fn set_text(&mut self, text: impl Into<String>) {
         self.text = text.into();
-        self.cache = None;
     }
 
     /// Update the banner renderer.
@@ -79,16 +69,9 @@ impl FontBanner {
         self
     }
 
-    /// Configure the banner style when selected.
-    pub fn with_selected_style(mut self, style: impl Into<String>) -> Self {
-        self.selected_style = Some(style.into());
-        self
-    }
-
     /// Configure layout options for the banner.
     pub fn with_layout_options(mut self, options: LayoutOptions) -> Self {
         self.options = options;
-        self.cache = None;
         self
     }
 
@@ -130,12 +113,6 @@ impl FontBanner {
     }
 }
 
-impl Selectable for FontBanner {
-    fn set_selected(&mut self, selected: bool) {
-        self.selected = selected;
-    }
-}
-
 impl Widget for FontBanner {
     fn layout(&self) -> Layout {
         Layout::fill()
@@ -148,15 +125,8 @@ impl Widget for FontBanner {
             return Ok(());
         }
         let size = Size::new(view_rect.w, view_rect.h);
-        let style = if self.selected {
-            self.selected_style
-                .as_deref()
-                .unwrap_or(&self.style)
-                .to_string()
-        } else {
-            self.style.clone()
-        };
         let options = self.options;
+        let style = self.style.clone();
         let layout = self.layout_for(size);
 
         let bounds = content_rect(view_rect, layout, options);

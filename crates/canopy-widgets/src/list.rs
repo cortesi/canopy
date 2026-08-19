@@ -34,48 +34,23 @@ struct SelectionIndicator {
 /// Default drag threshold in cells before cancelling activation.
 const DEFAULT_ACTIVATE_DRAG_THRESHOLD: u32 = 4;
 
-/// Activation configuration for list row clicks.
-#[derive(Debug, Clone)]
-pub struct ListActivateConfig {
-    /// Command invocation to dispatch on activation.
-    command: CommandInvocation,
-    /// Drag threshold in cells before cancelling activation.
-    drag_threshold: u32,
-}
-
-impl ListActivateConfig {
-    /// Build a new activation config using the default drag threshold.
-    pub fn new(command: CommandCall) -> Self {
-        Self {
-            command: command.invocation(),
-            drag_threshold: DEFAULT_ACTIVATE_DRAG_THRESHOLD,
+/// Build an activation invocation that appends the row index to a stored command.
+fn invocation_with_index(command: &CommandInvocation, index: usize) -> CommandInvocation {
+    let args = match &command.args {
+        CommandArgs::Positional(values) => {
+            let mut out = values.clone();
+            out.push(index.to_arg_value());
+            CommandArgs::Positional(out)
         }
-    }
-
-    /// Set the drag threshold in cells.
-    pub fn with_drag_threshold(mut self, drag_threshold: u32) -> Self {
-        self.drag_threshold = drag_threshold;
-        self
-    }
-
-    /// Build an activation invocation that includes the row index.
-    fn invocation_with_index(&self, index: usize) -> CommandInvocation {
-        let args = match &self.command.args {
-            CommandArgs::Positional(values) => {
-                let mut out = values.clone();
-                out.push(index.to_arg_value());
-                CommandArgs::Positional(out)
-            }
-            CommandArgs::Named(values) => {
-                let mut out = values.clone();
-                out.insert("index".to_string(), index.to_arg_value());
-                CommandArgs::Named(out)
-            }
-        };
-        CommandInvocation {
-            id: self.command.id,
-            args,
+        CommandArgs::Named(values) => {
+            let mut out = values.clone();
+            out.insert("index".to_string(), index.to_arg_value());
+            CommandArgs::Named(out)
         }
+    };
+    CommandInvocation {
+        id: command.id,
+        args,
     }
 }
 
@@ -121,7 +96,7 @@ pub struct List<W: Selectable> {
     /// Optional list-level selection indicator.
     selection_indicator: Option<SelectionIndicator>,
     /// Optional activation command configuration.
-    on_activate: Option<ListActivateConfig>,
+    on_activate: Option<CommandInvocation>,
     /// Pending activation state while handling clicks.
     pending_activate: Option<PendingActivate>,
 }
@@ -154,18 +129,6 @@ impl<W: Selectable> List<W> {
         text: impl Into<String>,
         repeat: bool,
     ) -> Self {
-        self.set_selection_indicator(style, text, repeat);
-        self
-    }
-
-    /// Set a list-level selection indicator.
-    /// Repeat controls whether the indicator renders on every visible line.
-    pub fn set_selection_indicator(
-        &mut self,
-        style: impl Into<String>,
-        text: impl Into<String>,
-        repeat: bool,
-    ) {
         let text = text.into();
         let width = indicator_width(&text);
         self.selection_indicator = Some(SelectionIndicator {
@@ -174,22 +137,13 @@ impl<W: Selectable> List<W> {
             width,
             repeat,
         });
-    }
-
-    /// Clear the list-level selection indicator.
-    pub fn clear_selection_indicator(&mut self) {
-        self.selection_indicator = None;
+        self
     }
 
     /// Build a list that dispatches a command when a row is activated.
     pub fn with_on_activate(mut self, command: CommandCall) -> Self {
-        self.set_on_activate(Some(ListActivateConfig::new(command)));
+        self.on_activate = Some(command.invocation());
         self
-    }
-
-    /// Configure an activation command for row clicks.
-    pub fn set_on_activate(&mut self, config: Option<ListActivateConfig>) {
-        self.on_activate = config;
     }
 
     /// Returns true if the list is empty.
@@ -222,31 +176,7 @@ impl<W: Selectable> List<W> {
     where
         W: 'static,
     {
-        let key = self.next_key();
-        let mut desired = self.items.keys().to_vec();
-        desired.push(key);
-        let previous_focus = ctx.focused_leaf(ctx.root_id());
-
-        let ordered =
-            self.reconcile_with_widget(ctx, desired, key, widget, RemovePolicy::RemoveSubtree)?;
-        let id = ordered
-            .last()
-            .copied()
-            .ok_or_else(|| Error::Internal("list append did not return the new item".into()))?;
-
-        // Auto-select and focus if this is the first item
-        if self.selected.is_none() {
-            self.update_selection(ctx, Some(self.items.len() - 1))?;
-            if ctx.node_is_attached(id.into()) {
-                ctx.set_focus(id.into())?;
-            }
-        } else if let Some(previous_focus) = previous_focus {
-            ctx.set_focus(previous_focus)?;
-        } else {
-            self.focus_selected(ctx)?;
-        }
-
-        Ok(id)
+        self.insert(ctx, self.items.len(), widget)
     }
 
     /// Insert an item widget at the specified index.
@@ -302,22 +232,6 @@ impl<W: Selectable> List<W> {
         self.reconcile_order(ctx, desired, RemovePolicy::RemoveSubtree)?;
         self.repair_selection_after_remove(ctx, index)?;
         Ok(true)
-    }
-
-    /// Detach the item at the specified index.
-    pub fn take(&mut self, ctx: &mut dyn Context, index: usize) -> Result<Option<TypedId<W>>> {
-        let mut desired = self.items.keys().to_vec();
-        if index >= desired.len() {
-            return Ok(None);
-        }
-        let removed = self
-            .items
-            .id_at(index)
-            .ok_or_else(|| Error::Internal("list take missing node id".into()))?;
-        desired.remove(index);
-        self.reconcile_order(ctx, desired, RemovePolicy::Detach)?;
-        self.repair_selection_after_remove(ctx, index)?;
-        Ok(Some(removed))
     }
 
     /// Clear all items from the list.
@@ -428,46 +342,39 @@ impl<W: Selectable> List<W> {
         Ok(())
     }
 
-    /// Move selection to the first item.
-    #[command]
-    pub fn select_first(&mut self, c: &mut dyn Context) -> Result<()> {
+    /// Select an item by index, focus it, and scroll it into view.
+    ///
+    /// The index is clamped to the last item. An empty list is a no-op.
+    fn select_and_reveal(&mut self, c: &mut dyn Context, index: usize) -> Result<()> {
         if self.items.is_empty() {
             return Ok(());
         }
-        self.update_selection(c, Some(0))?;
+        self.update_selection(c, Some(index.min(self.items.len() - 1)))?;
         self.focus_selected(c)?;
         self.ensure_selected_visible(c);
         Ok(())
+    }
+
+    /// Move selection to the first item.
+    #[command]
+    pub fn select_first(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.select_and_reveal(c, 0)
     }
 
     /// Move selection to the last item.
     #[command]
     pub fn select_last(&mut self, c: &mut dyn Context) -> Result<()> {
-        if self.items.is_empty() {
-            return Ok(());
-        }
-        self.update_selection(c, Some(self.items.len() - 1))?;
-        self.focus_selected(c)?;
-        self.ensure_selected_visible(c);
-        Ok(())
+        self.select_and_reveal(c, self.items.len().saturating_sub(1))
     }
 
     /// Move selection by a signed offset.
     #[command]
     pub fn select_by(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {
-        if self.items.is_empty() {
-            return Ok(());
-        }
-        let current = self.selected.unwrap_or(0);
-        let next = if delta.is_negative() {
-            current.saturating_sub(delta.unsigned_abs() as usize)
-        } else {
-            current.saturating_add(delta as usize)
-        };
-        self.update_selection(c, Some(next.min(self.items.len() - 1)))?;
-        self.focus_selected(c)?;
-        self.ensure_selected_visible(c);
-        Ok(())
+        let next = self
+            .selected
+            .unwrap_or(0)
+            .saturating_add_signed(delta as isize);
+        self.select_and_reveal(c, next)
     }
 
     /// Handle a mouse click within the list.
@@ -477,9 +384,7 @@ impl<W: Selectable> List<W> {
                 let Some(index) = self.index_at_location(c, event.location) else {
                     return Ok(false);
                 };
-                self.select(c, index)?;
-                self.focus_selected(c)?;
-                self.ensure_selected_visible(c);
+                self.select_and_reveal(c, index)?;
                 if self.on_activate.is_some() {
                     self.pending_activate = Some(PendingActivate {
                         index,
@@ -492,9 +397,13 @@ impl<W: Selectable> List<W> {
             }
             mouse::Action::Drag if event.button == mouse::Button::Left => {
                 if let Some(pending) = self.pending_activate.as_mut()
-                    && let Some(config) = self.on_activate.as_ref()
+                    && self.on_activate.is_some()
                 {
-                    if drag_exceeded(pending.origin, event.location, config.drag_threshold) {
+                    if drag_exceeded(
+                        pending.origin,
+                        event.location,
+                        DEFAULT_ACTIVATE_DRAG_THRESHOLD,
+                    ) {
                         pending.dragged = true;
                     }
                     return Ok(true);
@@ -542,7 +451,7 @@ impl<W: Selectable> List<W> {
                 index,
             }),
         };
-        let invocation = config.invocation_with_index(index);
+        let invocation = invocation_with_index(config, index);
         c.dispatch_command_scoped(frame, &invocation).is_ok()
     }
 
@@ -624,9 +533,7 @@ impl<W: Selectable> List<W> {
         };
 
         if let Some(target_idx) = Self::index_at_y(&metrics, target_y) {
-            self.select(c, target_idx)?;
-            self.focus_selected(c)?;
-            self.ensure_selected_visible(c);
+            self.select_and_reveal(c, target_idx)?;
         }
         Ok(())
     }
@@ -640,24 +547,17 @@ impl<W: Selectable> List<W> {
         Self::index_at_y(&metrics, content_y)
     }
 
-    /// Build (start_y, height) tuples for each item.
+    /// Build (start_y, height) tuples for each item, one per keyed child.
+    ///
+    /// An item that has not been laid out yet counts as one row high.
     fn item_metrics(&self, c: &dyn ViewContext) -> Vec<(u32, u32)> {
         let mut metrics = Vec::with_capacity(self.items.len());
         let mut y_offset = 0u32;
 
         for id in self.items.iter_ids() {
-            // Get the child's layout and compute its height
             let height = c.node_view(id.into()).map(|v| v.outer.h).unwrap_or(1);
-
             metrics.push((y_offset, height));
             y_offset = y_offset.saturating_add(height);
-        }
-
-        // If no layout data yet, estimate with 1-height items
-        if metrics.is_empty() && !self.items.is_empty() {
-            for i in 0..self.items.len() {
-                metrics.push((i as u32, 1));
-            }
         }
 
         metrics

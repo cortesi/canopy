@@ -106,14 +106,6 @@ impl TextBuffer {
         self.line_char_len_at(line)
     }
 
-    /// Return the line length in chars, or `None` when the line is out of bounds.
-    pub fn try_line_char_len(&self, line: usize) -> Option<usize> {
-        if line >= self.line_count() {
-            return None;
-        }
-        Some(self.line_char_len_at(line))
-    }
-
     /// Return the line length in chars without clamping the line index.
     fn line_char_len_at(&self, line: usize) -> usize {
         let slice = self.rope.line(line);
@@ -128,14 +120,6 @@ impl TextBuffer {
     pub fn line_text(&self, line: usize) -> String {
         let line = line.min(self.line_count().saturating_sub(1));
         self.line_text_at(line)
-    }
-
-    /// Return the text of a logical line, or `None` when the line is out of bounds.
-    pub fn try_line_text(&self, line: usize) -> Option<String> {
-        if line >= self.line_count() {
-            return None;
-        }
-        Some(self.line_text_at(line))
     }
 
     /// Return the text of a logical line without clamping the line index.
@@ -210,13 +194,7 @@ impl TextBuffer {
 
     /// Insert text at the cursor, replacing any selection.
     pub fn insert_text(&mut self, text: &str) {
-        let range = self.selection.range();
-        let range = if range.is_empty() {
-            TextRange::new(range.start, range.start)
-        } else {
-            range
-        };
-        self.replace_range(range, text);
+        self.replace_range(self.selection.range(), text);
     }
 
     /// Replace a range with the provided text.
@@ -265,6 +243,25 @@ impl TextBuffer {
         true
     }
 
+    /// Return the range a forward delete at `from` would remove.
+    ///
+    /// At the end of a line the range joins the next line when `allow_line_wrap` is set.
+    /// Returns `None` when there is nothing after the position to delete.
+    pub fn forward_delete_range(
+        &self,
+        from: TextPosition,
+        allow_line_wrap: bool,
+    ) -> Option<TextRange> {
+        if from.column >= self.line_char_len(from.line) {
+            if !allow_line_wrap || from.line + 1 >= self.line_count() {
+                return None;
+            }
+            return Some(TextRange::new(from, TextPosition::new(from.line + 1, 0)));
+        }
+        let next = next_grapheme_boundary(&self.line_text(from.line), from.column);
+        Some(TextRange::new(from, TextPosition::new(from.line, next)))
+    }
+
     /// Delete the selection or the grapheme after the cursor.
     pub fn delete_forward(&mut self, allow_line_wrap: bool) -> bool {
         if !self.selection.is_empty() {
@@ -273,23 +270,10 @@ impl TextBuffer {
             return true;
         }
 
-        let cursor = self.selection.head();
-        let line_len = self.line_char_len(cursor.line);
-        if cursor.column >= line_len {
-            if !allow_line_wrap || cursor.line + 1 >= self.line_count() {
-                return false;
-            }
-            let start = cursor;
-            let end = TextPosition::new(cursor.line + 1, 0);
-            self.replace_range(TextRange::new(start, end), "");
-            return true;
-        }
-
-        let line_text = self.line_text(cursor.line);
-        let next = next_grapheme_boundary(&line_text, cursor.column);
-        let start = cursor;
-        let end = TextPosition::new(cursor.line, next);
-        self.replace_range(TextRange::new(start, end), "");
+        let Some(range) = self.forward_delete_range(self.selection.head(), allow_line_wrap) else {
+            return false;
+        };
+        self.replace_range(range, "");
         true
     }
 
@@ -344,14 +328,11 @@ impl TextBuffer {
     /// Move the cursor to the first non-whitespace character in the line.
     pub fn move_line_first_non_ws(&mut self) {
         let cursor = self.selection.head();
-        let line_text = self.line_text(cursor.line);
-        let mut column = 0usize;
-        for ch in line_text.chars() {
-            if !ch.is_whitespace() {
-                break;
-            }
-            column = column.saturating_add(1);
-        }
+        let column = self
+            .line_text(cursor.line)
+            .chars()
+            .take_while(|ch| ch.is_whitespace())
+            .count();
         self.selection = Selection::caret(TextPosition::new(cursor.line, column));
     }
 
@@ -379,25 +360,12 @@ impl TextBuffer {
         }
     }
 
-    /// Return the start position for a line.
-    pub fn line_start_position(&self, line: usize) -> TextPosition {
-        TextPosition::new(line, 0)
-    }
-
     /// Return the text in a range.
     pub fn range_text(&self, range: TextRange) -> String {
         let range = self.normalize_range(range);
         let start_char = self.position_to_char(range.start);
         let end_char = self.position_to_char(range.end);
         self.rope.slice(start_char..end_char).to_string()
-    }
-
-    /// Return the text in a range, or `None` if either endpoint is out of bounds.
-    pub fn try_range_text(&self, range: TextRange) -> Option<String> {
-        let range = range.normalized();
-        let start_char = self.try_position_to_char(range.start)?;
-        let end_char = self.try_position_to_char(range.end)?;
-        Some(self.rope.slice(start_char..end_char).to_string())
     }
 
     /// Record an edit into the active transaction or history.
@@ -433,15 +401,6 @@ impl TextBuffer {
         let pos = self.clamp_position(pos);
         let line_start = self.rope.line_to_char(pos.line);
         line_start.saturating_add(pos.column)
-    }
-
-    /// Convert a text position to a rope char index, or `None` if it is out of bounds.
-    pub fn try_position_to_char(&self, pos: TextPosition) -> Option<usize> {
-        if pos.line >= self.line_count() || pos.column > self.line_char_len_at(pos.line) {
-            return None;
-        }
-        let line_start = self.rope.line_to_char(pos.line);
-        Some(line_start.saturating_add(pos.column))
     }
 
     /// Update revision tracking and pending line-change metadata.
@@ -488,16 +447,6 @@ pub struct TextTransaction<'a> {
     buffer: &'a mut TextBuffer,
     /// Whether the transaction should commit on drop.
     active: bool,
-}
-
-impl TextTransaction<'_> {
-    /// Commit the transaction before the guard is dropped.
-    pub fn commit(mut self) {
-        if self.active {
-            self.buffer.commit_transaction();
-            self.active = false;
-        }
-    }
 }
 
 impl Deref for TextTransaction<'_> {
@@ -640,24 +589,6 @@ mod tests {
         assert_eq!(buf.text(), "abc");
         assert!(buf.redo());
         assert_eq!(buf.text(), "abcd");
-    }
-
-    #[test]
-    fn strict_accessors_reject_out_of_bounds_positions() {
-        let buf = TextBuffer::new("ab\ncd");
-
-        assert_eq!(buf.try_line_char_len(0), Some(2));
-        assert_eq!(buf.try_line_text(1).as_deref(), Some("cd"));
-        assert_eq!(buf.try_line_char_len(2), None);
-        assert_eq!(buf.try_line_text(2), None);
-        assert_eq!(buf.try_position_to_char(TextPosition::new(0, 2)), Some(2));
-        assert_eq!(buf.try_position_to_char(TextPosition::new(0, 3)), None);
-        assert_eq!(buf.try_position_to_char(TextPosition::new(2, 0)), None);
-
-        let range = TextRange::new(TextPosition::new(0, 1), TextPosition::new(1, 1));
-        assert_eq!(buf.try_range_text(range).as_deref(), Some("b\nc"));
-        let invalid = TextRange::new(TextPosition::new(0, 0), TextPosition::new(2, 0));
-        assert_eq!(buf.try_range_text(invalid), None);
     }
 
     #[test]

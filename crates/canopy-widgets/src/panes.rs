@@ -48,16 +48,8 @@ impl Panes {
         }
     }
 
-    /// Construct panes with a single child.
-    pub fn with_child(child: impl Into<NodeId>) -> Self {
-        Self {
-            columns: vec![vec![child.into()]],
-            column_nodes: Vec::new(),
-        }
-    }
-
     /// Return the active column container node IDs in order.
-    pub fn column_nodes(&self) -> Vec<NodeId> {
+    fn column_nodes(&self) -> Vec<NodeId> {
         self.column_nodes
             .iter()
             .copied()
@@ -66,7 +58,7 @@ impl Panes {
     }
 
     /// Return the focused column index, if any.
-    pub fn focused_column_index(&self, c: &dyn Context) -> Option<usize> {
+    fn focused_column_index(&self, c: &dyn Context) -> Option<usize> {
         self.focus_coords(c).map(|(x, _)| x)
     }
 
@@ -85,7 +77,7 @@ impl Panes {
     }
 
     /// Get the offset of the current focus in the children vector.
-    pub fn focus_coords(&self, c: &dyn Context) -> Option<(usize, usize)> {
+    fn focus_coords(&self, c: &dyn Context) -> Option<(usize, usize)> {
         for (x, col) in self.columns.iter().enumerate() {
             for (y, row) in col.iter().enumerate() {
                 if c.node_is_on_focus_path(*row) {
@@ -116,17 +108,6 @@ impl Panes {
             }
         }
         Ok(())
-    }
-
-    /// Insert a node, splitting vertically.
-    pub fn insert_row(&mut self, c: &mut dyn Context, n: impl Into<NodeId>) -> Result<()> {
-        let n = n.into();
-        if let Some((x, y)) = self.focus_coords(c) {
-            self.columns[x].insert(y, n);
-        } else {
-            self.columns.push(vec![n]);
-        }
-        self.sync_layout(c)
     }
 
     /// Insert a node in a new column.

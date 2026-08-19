@@ -11,7 +11,7 @@ mod tests {
         testing::harness::Harness,
     };
 
-    use crate::{BoxGlyphs, Button, Frame, List, ScrollGlyphs, Text};
+    use crate::{BoxGlyphs, Button, Frame, List, Text};
 
     const ASCII_BOX: BoxGlyphs = BoxGlyphs {
         topleft: '+',
@@ -20,11 +20,6 @@ mod tests {
         bottomright: '+',
         horizontal: '-',
         vertical: '|',
-    };
-
-    const ASCII_SCROLL: ScrollGlyphs = ScrollGlyphs {
-        horizontal_active: '-',
-        vertical_active: '|',
     };
 
     struct SnapshotRoot<W> {
@@ -87,9 +82,7 @@ mod tests {
 
     #[test]
     fn empty_frame_renders_its_border() -> Result<()> {
-        let frame = Frame::new()
-            .with_glyphs(ASCII_BOX)
-            .with_scroll_glyphs(ASCII_SCROLL);
+        let frame = Frame::new().with_glyphs(ASCII_BOX);
         let root = SnapshotRoot::new(frame);
         let mut harness = Harness::builder(root).size(10, 4).build()?;
         harness.render()?;

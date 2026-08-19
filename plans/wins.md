@@ -184,23 +184,23 @@ full evidence, change, and proof for each entry.
 
 **Widgets**
 
-- [ ] W128: Make `List::append` delegate to `List::insert`
-- [ ] W129: Collapse the five `List` "select, focus, reveal" sequences into one helper
-- [ ] W130: Use `usize::saturating_add_signed` in `Dropdown::select_by` and `Selector::select_by`
-- [ ] W131: Delete unreachable defensive branches in the leaf widgets
-- [ ] W132: Drop the discarded `bool` returns from `InputBuffer` edit methods
-- [ ] W133: `font.rs` cleanups: redundant bitmap copy, local `div_ceil`, duplicate `GlyphChoice`
-- [ ] W134: Remove `List` public surface with zero callers — `Capability`
-- [ ] W135: Remove leaf-widget accessors and builders with zero callers — `Capability`
-- [ ] W136: Remove font public surface with zero callers — `Capability`
-- [ ] W137: Remove `Selectable` impls that no list hosts — `Capability`
-- [ ] W138: Return only the view id from inspector `View::install`
-- [ ] W139: Let `Logs::scroll` propagate its `Result`
-- [ ] W140: Small `terminal.rs` leftovers
-- [ ] W141: Trim the canopy-widgets shell surface with zero tree-wide callers — `Capability` for the
-- [ ] W142: One forward-delete algorithm for `TextBuffer::delete_forward` and `Editor::delete_char_forward`
-- [ ] W143: Small editor handler cleanups
-- [ ] W144: Delete public editor API with zero callers — `Capability` on the highlighter constructors
+- [x] W128: Make `List::append` delegate to `List::insert`
+- [x] W129: Collapse the five `List` "select, focus, reveal" sequences into one helper
+- [x] W130: Use `usize::saturating_add_signed` in `Dropdown::select_by` and `Selector::select_by`
+- [x] W131: Delete unreachable defensive branches in the leaf widgets
+- [x] W132: Drop the discarded `bool` returns from `InputBuffer` edit methods
+- [x] W133: `font.rs` cleanups: redundant bitmap copy, local `div_ceil`, duplicate `GlyphChoice`
+- [x] W134: Remove `List` public surface with zero callers — `Capability`
+- [x] W135: Remove leaf-widget accessors and builders with zero callers — `Capability`
+- [x] W136: Remove font public surface with zero callers — `Capability`
+- [x] W137: Remove `Selectable` impls that no list hosts — `Capability`
+- [x] W138: Return only the view id from inspector `View::install`
+- [x] W139: Let `Logs::scroll` propagate its `Result`
+- [x] W140: Small `terminal.rs` leftovers
+- [x] W141: Trim the canopy-widgets shell surface with zero tree-wide callers — `Capability` for the
+- [x] W142: One forward-delete algorithm for `TextBuffer::delete_forward` and `Editor::delete_char_forward`
+- [x] W143: Small editor handler cleanups
+- [x] W144: Delete public editor API with zero callers — `Capability` on the highlighter constructors
 
 **Examples and todo**
 

@@ -98,11 +98,6 @@ impl Text {
         self
     }
 
-    /// Return the raw text content.
-    pub fn raw(&self) -> &str {
-        &self.raw
-    }
-
     /// Replace the raw text content.
     pub fn set_raw(&mut self, raw: impl Into<String>) {
         self.raw = raw.into();

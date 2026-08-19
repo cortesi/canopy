@@ -62,10 +62,4 @@ impl TextRange {
     pub fn is_empty(self) -> bool {
         self.start == self.end
     }
-
-    /// Return the range start and end ordered.
-    pub fn ordered(self) -> (TextPosition, TextPosition) {
-        let normalized = self.normalized();
-        (normalized.start, normalized.end)
-    }
 }
