@@ -4,25 +4,25 @@
 //! MCP and smoke-test helpers for canopy applications.
 
 /// Error types shared across the automation helpers.
-pub mod error;
+mod error;
 /// Shared executable launch harness for app binaries.
-pub mod launch;
+mod launch;
 /// Headless script-evaluation types and helpers.
-pub mod script;
+mod script;
 /// Stdio MCP server wrapper for script automation.
-pub mod server;
+mod server;
 /// Smoke-suite discovery and execution helpers.
-pub mod smoke;
+mod smoke;
 
 pub use error::{Error, Result};
 pub use launch::{LaunchMode, launch};
 pub use script::{
-    AppEvaluator, BootstrapCommand, BootstrapJournalEntry, BootstrapResponse, ScriptErrorInfo,
-    ScriptEvalOutcome, ScriptEvalRequest, ScriptTaskState, ScriptTiming, app_factory,
-    evaluate_live,
+    AppEvaluator, AppFactory, BootstrapCommand, BootstrapJournalEntry, BootstrapResponse,
+    ScriptErrorInfo, ScriptEvalOutcome, ScriptEvalRequest, ScriptTaskState, ScriptTiming,
+    app_factory, evaluate_live,
 };
 pub use server::{ApplyFixtureRequest, UdsServerHandle, json_tool_result, serve_stdio, serve_uds};
 pub use smoke::{
-    ScriptResult, ScriptStatus, SuiteConfig, SuiteResult, discover_scripts, fixture_for_script,
-    run_suite,
+    ScriptResult, SuiteConfig, SuiteResult, collect_luau_scripts, discover_scripts,
+    fixture_for_script, run_suite,
 };

@@ -75,6 +75,5 @@ pub fn gruvbox_dark() -> StyleMap {
         green: GREEN,
         yellow: YELLOW,
         orange: ORANGE,
-        black: DARK0,
     })
 }

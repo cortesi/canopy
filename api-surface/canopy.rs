@@ -1779,9 +1779,6 @@ pub mod canopy {
             ) -> Self {
             }
 
-            /// Set the effect stack for this renderer.
-            pub fn with_effects(self, effects: &'a [Effect]) -> Self {}
-
             /// Apply the current effect stack to a style.
             /// Use this when you have a Style from a source other than the style manager.
             pub fn apply_effects(&self, style: Style) -> Style {}
@@ -1936,6 +1933,24 @@ pub mod canopy {
     }
 
     pub use canopy_geom as geom;
+    /// A terminal cell with glyph and style.
+    #[derive(Clone, Debug, StructuralPartialEq, PartialEq)]
+    pub struct Cell {
+        /// Base glyph character.
+        pub ch: char,
+        /// Additional grapheme characters stored with the base glyph.
+        pub suffix: String,
+        /// ResolvedStyle applied to the cell.
+        pub style: crate::style::ResolvedStyle,
+        /// True when this cell continues a wide glyph from the previous column.
+        pub continuation: bool,
+    }
+
+    impl Cell {
+        /// Return this cell's rendered text.
+        pub fn rendered_text(&self) -> String {}
+    }
+
     /// Limits for a materialized visible render target.
     #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq, Default)]
     pub struct RenderLimits {
@@ -2778,30 +2793,6 @@ pub mod canopy {
         pub assertions: Vec<script::ScriptAssertion>,
         /// Wall-clock duration in milliseconds.
         pub duration_ms: u64,
-    }
-
-    /// Filesystem roots used by Canopy's persistent Luau module source.
-    #[derive(Clone, Debug, Default, StructuralPartialEq, PartialEq, Eq)]
-    pub struct ScriptModuleRoots {}
-
-    impl ScriptModuleRoots {
-        /// Construct an empty root set.
-        pub fn new() -> Self {}
-
-        /// Return the configured `@user` root.
-        pub fn user_root(&self) -> Option<&Path> {}
-
-        /// Return the configured `@project` root.
-        pub fn project_root(&self) -> Option<&Path> {}
-
-        /// Mount `@user` at `root`.
-        pub fn set_user_root(&mut self, root: impl Into<PathBuf>) {}
-
-        /// Mount `@project` at `root`.
-        pub fn set_project_root(&mut self, root: impl Into<PathBuf>) {}
-
-        /// Locate the nearest `.canopy` directory at or above `start`.
-        pub fn discover_project_root(start: impl AsRef<Path>) -> Option<PathBuf> {}
     }
 
     /// Slot helper that resolves a keyed child, creating it on first use.
@@ -4222,9 +4213,6 @@ pub mod canopy {
             ) -> Self {
             }
 
-            /// Set the effect stack for this renderer.
-            pub fn with_effects(self, effects: &'a [Effect]) -> Self {}
-
             /// Apply the current effect stack to a style.
             /// Use this when you have a Style from a source other than the style manager.
             pub fn apply_effects(&self, style: Style) -> Style {}
@@ -4282,37 +4270,6 @@ pub mod canopy {
 
     pub mod script {
         //! Scripting support.
-
-        pub mod defs {
-            //! Render Luau definition files from the current command set.
-
-            /// Return the Luau type recorded in command metadata.
-            pub fn command_type_to_luau(spec: &crate::commands::CommandTypeSpec) -> String {}
-        }
-
-        /// Filesystem roots used by Canopy's persistent Luau module source.
-        #[derive(Clone, Debug, Default, StructuralPartialEq, PartialEq, Eq)]
-        pub struct ScriptModuleRoots {}
-
-        impl ScriptModuleRoots {
-            /// Construct an empty root set.
-            pub fn new() -> Self {}
-
-            /// Return the configured `@user` root.
-            pub fn user_root(&self) -> Option<&Path> {}
-
-            /// Return the configured `@project` root.
-            pub fn project_root(&self) -> Option<&Path> {}
-
-            /// Mount `@user` at `root`.
-            pub fn set_user_root(&mut self, root: impl Into<PathBuf>) {}
-
-            /// Mount `@project` at `root`.
-            pub fn set_project_root(&mut self, root: impl Into<PathBuf>) {}
-
-            /// Locate the nearest `.canopy` directory at or above `start`.
-            pub fn discover_project_root(start: impl AsRef<Path>) -> Option<PathBuf> {}
-        }
 
         /// Script identifier.
         pub type ScriptId = u64;
@@ -4392,9 +4349,6 @@ pub mod canopy {
             /// Return true when the result contains failing diagnostics.
             pub fn has_errors(&self) -> bool {}
 
-            /// Return failing diagnostics.
-            pub fn errors(&self) -> impl Iterator<Item = &ScriptCheckDiagnostic> {}
-
             /// Render the failing diagnostics one per line.
             pub fn format_diagnostics(&self) -> String {}
         }
@@ -4465,9 +4419,6 @@ pub mod canopy {
             /// Pink.
             pub const PINK: super::Color = _;
 
-            /// ANSI black.
-            pub const ANSI_BLACK: super::Color = _;
-
             /// Build a Dracula style map.
             pub fn dracula() -> super::StyleMap {}
         }
@@ -4491,23 +4442,6 @@ pub mod canopy {
             /// Shared handle for effects stored on nodes and stacked during rendering.
             pub type Effect = std::sync::Arc<dyn StyleEffect>;
 
-            /// A built-in effect that maps colors.
-            #[derive(Debug, Clone, Copy)]
-            pub enum ColorEffect {
-                /// Scale brightness by a factor.
-                ScaleBrightness(f32),
-                /// Adjust saturation.
-                Saturation(f32),
-                /// Invert RGB channels.
-                Invert,
-                /// Shift hue by degrees.
-                HueShift(f32),
-            }
-
-            impl StyleEffect for ColorEffect {
-                fn apply(&self, style: Style) -> Style {}
-            }
-
             /// Create a brightness effect. Factor below 1.0 dims, above 1.0 brightens.
             pub fn brightness(factor: f32) -> Effect {}
 
@@ -4519,14 +4453,6 @@ pub mod canopy {
 
             /// Create a hue shift effect.
             pub fn hue_shift(degrees: f32) -> Effect {}
-
-            /// Add a single attribute.
-            #[derive(Debug, Clone, Copy)]
-            pub struct AddAttr(pub super::Attr);
-
-            impl StyleEffect for AddAttr {
-                fn apply(&self, style: Style) -> Style {}
-            }
 
             /// Create an effect that adds bold attribute.
             pub fn bold() -> Effect {}
@@ -4655,9 +4581,6 @@ pub mod canopy {
 
             /// Solarized green.
             pub const GREEN: super::Color = _;
-
-            /// Black.
-            pub const BLACK: super::Color = _;
 
             /// Build a dark solarized style map.
             pub fn solarized_dark() -> super::StyleMap {}
@@ -4797,8 +4720,6 @@ pub mod canopy {
             pub yellow: super::Color,
             /// Named orange, also the current-search-match background.
             pub orange: super::Color,
-            /// Named black.
-            pub black: super::Color,
         }
 
         /// Build the shared rule set for one palette.
@@ -5146,9 +5067,6 @@ pub mod canopy {
         impl StyleManager {
             /// Construct a style manager in the reset state.
             pub fn new() -> Self {}
-
-            /// Reset all layers and levels.
-            pub fn reset(&mut self) {}
 
             /// Increment the render level.
             pub fn push(&mut self) {}

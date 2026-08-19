@@ -74,5 +74,4 @@ pub use inputmap::{
     BindingId, BindingOwner, BindingPhase, BindingScope, BindingTarget, ExclusiveFrameToken,
     FrameworkBindingGroup, InputSpec,
 };
-pub use script::ScriptModuleRoots;
 pub use world::Core;

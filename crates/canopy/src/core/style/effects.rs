@@ -25,7 +25,7 @@ pub type Effect = Arc<dyn StyleEffect>;
 
 /// A built-in effect that maps colors.
 #[derive(Debug, Clone, Copy)]
-pub enum ColorEffect {
+enum ColorEffect {
     /// Scale brightness by a factor.
     ScaleBrightness(f32),
     /// Adjust saturation.
@@ -86,7 +86,7 @@ pub fn hue_shift(degrees: f32) -> Effect {
 
 /// Add a single attribute.
 #[derive(Debug, Clone, Copy)]
-pub struct AddAttr(pub Attr);
+struct AddAttr(Attr);
 
 impl StyleEffect for AddAttr {
     fn apply(&self, mut style: Style) -> Style {

@@ -139,7 +139,7 @@ impl<'a> Render<'a> {
     }
 
     /// Set the effect stack for this renderer.
-    pub fn with_effects(mut self, effects: &'a [Effect]) -> Self {
+    pub(crate) fn with_effects(mut self, effects: &'a [Effect]) -> Self {
         self.effects = effects;
         self
     }

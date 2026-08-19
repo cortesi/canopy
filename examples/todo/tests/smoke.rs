@@ -18,8 +18,7 @@ mod tests {
                 if db_path.exists() {
                     fs::remove_file(&db_path)?;
                 }
-                create_app(db_path.to_str().expect("utf-8 db path"))
-                    .map_err(|error| McpError::app_boxed(error.into_boxed_dyn_error()))
+                create_app(db_path.to_str().expect("utf-8 db path")).map_err(McpError::app)
             },
             &SuiteConfig::new(suite_dir),
         )?;

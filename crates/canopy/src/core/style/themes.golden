@@ -1,6 +1,5 @@
 # solarized_dark
 / fg=Some(Solid(Rgb { r: 131, g: 148, b: 150 })) bg=Some(Solid(Rgb { r: 0, g: 43, b: 54 })) attrs=Some(AttrSet { bold: false, crossedout: false, dim: false, italic: false, overline: false, underline: false })
-/black fg=Some(Solid(Rgb { r: 0, g: 0, b: 0 })) bg=None attrs=None
 /blue fg=Some(Solid(Rgb { r: 38, g: 139, b: 210 })) bg=None attrs=None
 /cyan fg=Some(Solid(Rgb { r: 42, g: 161, b: 152 })) bg=None attrs=None
 /dropdown fg=Some(Solid(Rgb { r: 131, g: 148, b: 150 })) bg=None attrs=None
@@ -48,7 +47,6 @@
 /yellow fg=Some(Solid(Rgb { r: 181, g: 137, b: 0 })) bg=None attrs=None
 # solarized_light
 / fg=Some(Solid(Rgb { r: 101, g: 123, b: 131 })) bg=Some(Solid(Rgb { r: 253, g: 246, b: 227 })) attrs=Some(AttrSet { bold: false, crossedout: false, dim: false, italic: false, overline: false, underline: false })
-/black fg=Some(Solid(Rgb { r: 0, g: 0, b: 0 })) bg=None attrs=None
 /blue fg=Some(Solid(Rgb { r: 38, g: 139, b: 210 })) bg=None attrs=None
 /cyan fg=Some(Solid(Rgb { r: 42, g: 161, b: 152 })) bg=None attrs=None
 /dropdown fg=Some(Solid(Rgb { r: 101, g: 123, b: 131 })) bg=None attrs=None
@@ -96,7 +94,6 @@
 /yellow fg=Some(Solid(Rgb { r: 181, g: 137, b: 0 })) bg=None attrs=None
 # dracula
 / fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=Some(Solid(Rgb { r: 40, g: 42, b: 54 })) attrs=Some(AttrSet { bold: false, crossedout: false, dim: false, italic: false, overline: false, underline: false })
-/black fg=Some(Solid(Rgb { r: 33, g: 34, b: 44 })) bg=None attrs=None
 /blue fg=Some(Solid(Rgb { r: 139, g: 233, b: 253 })) bg=None attrs=None
 /cyan fg=Some(Solid(Rgb { r: 139, g: 233, b: 253 })) bg=None attrs=None
 /dropdown fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=None attrs=None
@@ -144,7 +141,6 @@
 /yellow fg=Some(Solid(Rgb { r: 241, g: 250, b: 140 })) bg=None attrs=None
 # gruvbox_dark
 / fg=Some(Solid(Rgb { r: 235, g: 219, b: 178 })) bg=Some(Solid(Rgb { r: 40, g: 40, b: 40 })) attrs=Some(AttrSet { bold: false, crossedout: false, dim: false, italic: false, overline: false, underline: false })
-/black fg=Some(Solid(Rgb { r: 40, g: 40, b: 40 })) bg=None attrs=None
 /blue fg=Some(Solid(Rgb { r: 131, g: 165, b: 152 })) bg=None attrs=None
 /cyan fg=Some(Solid(Rgb { r: 142, g: 192, b: 124 })) bg=None attrs=None
 /dropdown fg=Some(Solid(Rgb { r: 235, g: 219, b: 178 })) bg=None attrs=None

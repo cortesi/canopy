@@ -18,10 +18,6 @@ pub struct SuiteConfig {
     pub suite_dir: PathBuf,
     /// Optional subset of scripts to run. Relative paths are resolved against `suite_dir`.
     pub scripts: Vec<PathBuf>,
-    /// Optional timeout per script in milliseconds.
-    pub timeout_ms: Option<u64>,
-    /// Stop after the first failing script when true.
-    pub fail_fast: bool,
 }
 
 impl SuiteConfig {
@@ -30,19 +26,8 @@ impl SuiteConfig {
         Self {
             suite_dir: suite_dir.into(),
             scripts: Vec::new(),
-            timeout_ms: None,
-            fail_fast: false,
         }
     }
-}
-
-/// Final status for a smoke script.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ScriptStatus {
-    /// The script passed.
-    Passed,
-    /// The script failed.
-    Failed,
 }
 
 /// Result of running one smoke script.
@@ -52,13 +37,7 @@ pub struct ScriptResult {
     pub path: PathBuf,
     /// Fixture derived for this script, if any.
     pub fixture: Option<String>,
-    /// Pass or fail status.
-    pub status: ScriptStatus,
-    /// Total script duration in milliseconds.
-    pub elapsed_ms: u64,
-    /// Optional summary message.
-    pub message: Option<String>,
-    /// Structured script outcome.
+    /// Structured script outcome, carrying success, timing, and error details.
     pub outcome: ScriptEvalOutcome,
 }
 
@@ -72,9 +51,7 @@ pub struct SuiteResult {
 impl SuiteResult {
     /// Return true when all smoke scripts passed.
     pub fn success(&self) -> bool {
-        self.scripts
-            .iter()
-            .all(|script| script.status == ScriptStatus::Passed)
+        self.scripts.iter().all(|script| script.outcome.success)
     }
 }
 
@@ -92,35 +69,13 @@ pub fn run_suite(
         let outcome = evaluator.evaluate(&ScriptEvalRequest {
             script: source,
             fixture: fixture.clone(),
-            timeout_ms: config.timeout_ms,
+            timeout_ms: None,
         });
-        let message = outcome
-            .error
-            .as_ref()
-            .map(|error| error.message.clone())
-            .or_else(|| {
-                outcome
-                    .assertions
-                    .iter()
-                    .find(|assertion| !assertion.passed)
-                    .map(|assertion| assertion.message.clone())
-            });
-        let status = if outcome.success {
-            ScriptStatus::Passed
-        } else {
-            ScriptStatus::Failed
-        };
         results.push(ScriptResult {
             path,
             fixture,
-            status,
-            elapsed_ms: outcome.timing.total_ms,
-            message,
             outcome,
         });
-        if config.fail_fast && results.last().is_some_and(|result| !result.outcome.success) {
-            break;
-        }
     }
     Ok(SuiteResult { scripts: results })
 }

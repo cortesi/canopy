@@ -4,7 +4,7 @@
 use std::{path::PathBuf, process};
 
 use anyhow::Result;
-use canopy_mcp::{Error as McpError, LaunchMode, app_factory, launch, script::AppFactory};
+use canopy_mcp::{AppFactory, Error as McpError, LaunchMode, app_factory, launch};
 use clap::{Parser, Subcommand};
 use todo::create_app_with_config;
 
@@ -47,10 +47,7 @@ enum Command {
 
 /// Build an application factory for a database and optional config.
 fn make_factory(path: String, config: Option<PathBuf>) -> AppFactory {
-    app_factory(move || {
-        create_app_with_config(&path, config.as_deref())
-            .map_err(|error| McpError::app_boxed(error.into_boxed_dyn_error()))
-    })
+    app_factory(move || create_app_with_config(&path, config.as_deref()).map_err(McpError::app))
 }
 
 fn main() -> Result<()> {
@@ -60,7 +57,7 @@ fn main() -> Result<()> {
         let code = launch(
             app_factory(|| {
                 let mut cnpy = canopy::Canopy::new();
-                todo::setup_app(&mut cnpy).map_err(McpError::app)?;
+                todo::setup_app(&mut cnpy)?;
                 Ok(cnpy)
             }),
             LaunchMode::Api,
@@ -77,9 +74,9 @@ fn main() -> Result<()> {
         }
         None => {
             if let Some(path) = args.path {
-                let mode = args
-                    .mcp
-                    .map_or_else(LaunchMode::run, LaunchMode::run_with_mcp);
+                let mode = LaunchMode::Run {
+                    mcp_socket: args.mcp,
+                };
                 launch(make_factory(path, args.config), mode)?
             } else {
                 println!("Specify a file path");

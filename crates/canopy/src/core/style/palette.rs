@@ -49,8 +49,6 @@ pub struct Palette {
     pub yellow: Color,
     /// Named orange, also the current-search-match background.
     pub orange: Color,
-    /// Named black.
-    pub black: Color,
 }
 
 /// Build the shared rule set for one palette.
@@ -85,7 +83,6 @@ pub fn theme(p: &Palette) -> StyleMap {
         .fg("/green", p.green)
         .fg("/yellow", p.yellow)
         .fg("/orange", p.orange)
-        .fg("/black", p.black)
         .attr("/text/bold", Attr::Bold)
         .attr("/text/italic", Attr::Italic)
         .attr("/text/underline", Attr::Underline)

@@ -6,7 +6,7 @@ use std::{
 use canopy::{
     Canopy, FixtureInfo,
     commands::{ArgValue, CommandDispatchKind, CommandResolution},
-    error::{Error as CanopyError, ScriptErrorKind},
+    error::{Error as CanopyError, Result as CanopyResult, ScriptErrorKind},
     geom::Size,
     render::NopBackend,
     script::{ScriptAssertion, ScriptCheckDiagnostic},
@@ -53,7 +53,7 @@ pub struct ScriptEvalRequest {
 }
 
 /// Timing information for a script evaluation.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ScriptTiming {
     /// Time spent constructing and rendering the headless app.
     pub build_ms: u64,
@@ -73,17 +73,6 @@ pub enum ScriptTaskState {
     Failed,
     /// Evaluation stopped at the cooperative timeout boundary.
     TimedOut,
-}
-
-impl ScriptTiming {
-    /// Zeroed timing information for early errors.
-    pub fn zero() -> Self {
-        Self {
-            build_ms: 0,
-            exec_ms: 0,
-            total_ms: 0,
-        }
-    }
 }
 
 /// Error details included in a failed script evaluation.
@@ -202,7 +191,7 @@ impl ScriptEvalOutcome {
     }
 
     /// Build a failure payload with no result value.
-    pub fn error_only(
+    pub(crate) fn error_only(
         error_type: impl Into<String>,
         message: impl Into<String>,
         diagnostics: Vec<ScriptCheckDiagnostic>,
@@ -233,23 +222,12 @@ impl ScriptEvalOutcome {
 pub struct AppEvaluator {
     /// Factory that builds a fresh canopy app for each request.
     factory: AppFactory,
-    /// Headless viewport used during rendering and event simulation.
-    view_size: Size,
 }
 
 impl AppEvaluator {
     /// Construct an evaluator with a default headless viewport size.
     pub fn new(factory: AppFactory) -> Self {
-        Self {
-            factory,
-            view_size: DEFAULT_VIEW_SIZE,
-        }
-    }
-
-    /// Override the headless viewport size used for evaluations.
-    pub fn with_view_size(mut self, width: u32, height: u32) -> Self {
-        self.view_size = Size::new(width, height);
-        self
+        Self { factory }
     }
 
     /// Render and return the app's Luau API definition.
@@ -267,25 +245,28 @@ impl AppEvaluator {
 
     /// Return bootstrap information for a fresh headless app instance.
     pub fn bootstrap(&self) -> Result<BootstrapResponse> {
-        let mut session = HeadlessSession::new(&self.factory, self.view_size, None)?;
-        bootstrap_for_canopy(&mut session.canopy)
+        let session = HeadlessSession::new(&self.factory, DEFAULT_VIEW_SIZE, None)?;
+        Ok(bootstrap_for_canopy(&session.canopy)?)
     }
 
     /// Evaluate a Luau script against a fresh headless app.
     pub fn evaluate(&self, request: &ScriptEvalRequest) -> ScriptEvalOutcome {
         let total_start = Instant::now();
-        let mut session =
-            match HeadlessSession::new(&self.factory, self.view_size, request.fixture.as_deref()) {
-                Ok(session) => session,
-                Err(error) => {
-                    return ScriptEvalOutcome::error_only(
-                        "build",
-                        error.to_string(),
-                        Vec::new(),
-                        ScriptTiming::zero(),
-                    );
-                }
-            };
+        let mut session = match HeadlessSession::new(
+            &self.factory,
+            DEFAULT_VIEW_SIZE,
+            request.fixture.as_deref(),
+        ) {
+            Ok(session) => session,
+            Err(error) => {
+                return ScriptEvalOutcome::error_only(
+                    "build",
+                    error.to_string(),
+                    Vec::new(),
+                    ScriptTiming::default(),
+                );
+            }
+        };
         let build_ms = total_start.elapsed().as_millis() as u64;
         let HeadlessSession { canopy, backend } = &mut session;
         evaluate_in(canopy, request, build_ms, total_start, Some(backend))
@@ -293,7 +274,7 @@ impl AppEvaluator {
 }
 
 /// Build a bootstrap payload from a finalized app.
-pub fn bootstrap_for_canopy(canopy: &mut Canopy) -> Result<BootstrapResponse> {
+pub fn bootstrap_for_canopy(canopy: &Canopy) -> CanopyResult<BootstrapResponse> {
     let api = canopy.script_api()?.to_string();
     Ok(BootstrapResponse {
         guide: BOOTSTRAP_GUIDE.to_string(),
@@ -364,7 +345,7 @@ pub fn evaluate_live(canopy: &mut Canopy, request: &ScriptEvalRequest) -> Script
             "invalid",
             "live sessions do not support eval(fixture=...); use apply_fixture instead",
             Vec::new(),
-            ScriptTiming::zero(),
+            ScriptTiming::default(),
         );
     }
     evaluate_in(canopy, request, 0, Instant::now(), None)

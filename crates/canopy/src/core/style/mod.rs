@@ -677,11 +677,6 @@ impl StyleManager {
         }
     }
 
-    /// Reset all layers and levels.
-    pub fn reset(&mut self) {
-        *self = Self::new();
-    }
-
     /// Increment the render level.
     pub fn push(&mut self) {
         self.level += 1
@@ -997,7 +992,6 @@ mod tests {
     #[test]
     fn pop_pops_all_layers_at_level() {
         let mut sm = StyleManager::default();
-        sm.reset();
         sm.push();
 
         sm.push_layer("button");

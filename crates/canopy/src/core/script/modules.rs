@@ -50,25 +50,6 @@ impl ScriptModuleRoots {
         self.project = Some(root.into());
     }
 
-    /// Locate the nearest `.canopy` directory at or above `start`.
-    #[must_use]
-    pub fn discover_project_root(start: impl AsRef<Path>) -> Option<PathBuf> {
-        let mut current = start.as_ref();
-        if current.is_file() {
-            current = current.parent()?;
-        }
-        let mut current = current.to_path_buf();
-        loop {
-            let candidate = current.join(".canopy");
-            if candidate.is_dir() {
-                return Some(candidate);
-            }
-            if !current.pop() {
-                return None;
-            }
-        }
-    }
-
     /// Return the startup modules that exist for the configured roots, in layer order.
     pub(crate) fn startup_modules(&self) -> Vec<StartupModule> {
         self.roots()

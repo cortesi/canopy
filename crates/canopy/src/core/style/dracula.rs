@@ -35,10 +35,6 @@ pub const PURPLE: Color = rgb!("#bd93f9");
 /// Pink.
 pub const PINK: Color = rgb!("#ff79c6");
 
-// ANSI colors for terminal compatibility
-/// ANSI black.
-pub const ANSI_BLACK: Color = rgb!("#21222c");
-
 /// Build a Dracula style map.
 pub fn dracula() -> StyleMap {
     theme(&Palette {
@@ -61,6 +57,5 @@ pub fn dracula() -> StyleMap {
         green: GREEN,
         yellow: YELLOW,
         orange: ORANGE,
-        black: ANSI_BLACK,
     })
 }

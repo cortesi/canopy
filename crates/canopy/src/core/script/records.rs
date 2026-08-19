@@ -6,8 +6,8 @@ use ruau::vm::Scope;
 
 use super::{
     ArgValue, AttrSet, Canopy, Cell, Color, CommandSpec, CoreViewContext, NodeId, Point, RectI32,
-    Result, ViewContext, commands, defs, error, inputmap, node_id_to_arg, node_list_to_arg,
-    point_to_arg, rect_to_arg, size_to_arg, widget_access,
+    Result, ViewContext, commands, error, inputmap, node_id_to_arg, node_list_to_arg, point_to_arg,
+    rect_to_arg, size_to_arg, widget_access,
 };
 use crate::core::termbuf::TermBuf;
 
@@ -166,7 +166,7 @@ fn command_param_to_arg(param: &commands::CommandParamSpec) -> ArgValue {
         ),
         (
             "luau_type".to_string(),
-            ArgValue::String(defs::command_type_to_luau(&param.ty)),
+            ArgValue::String(param.ty.luau_ty().render()),
         ),
         ("optional".to_string(), ArgValue::Bool(param.optional)),
     ]);
@@ -199,7 +199,7 @@ pub(super) fn command_info_to_arg(
             "ret".to_string(),
             ArgValue::String(match spec.ret {
                 commands::CommandReturnSpec::Unit => "()".to_string(),
-                commands::CommandReturnSpec::Value(ty) => defs::command_type_to_luau(&ty),
+                commands::CommandReturnSpec::Value(ty) => ty.luau_ty().render(),
             }),
         ),
         (

@@ -5,7 +5,7 @@ mod tests {
     use std::{error::Error, fs, path::Path};
 
     use canopy::{Canopy, testing::luau::assert_typechecks};
-    use canopy_mcp::smoke::collect_luau_scripts;
+    use canopy_mcp::collect_luau_scripts;
 
     #[test]
     fn tracked_luau_todo_scripts_typecheck() -> Result<(), Box<dyn Error>> {

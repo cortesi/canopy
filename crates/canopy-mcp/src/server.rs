@@ -5,7 +5,7 @@ use std::{
     thread,
 };
 
-use canopy::{AutomationHandle, Canopy, error::Error as CanopyError};
+use canopy::AutomationHandle;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tmcp::{Server, ToolError, ToolResult, mcp_server, schema::CallToolResult};
@@ -13,10 +13,7 @@ use tokio::{net::UnixListener, runtime::Builder, sync::oneshot, task::block_in_p
 
 use crate::{
     Error, Result,
-    script::{
-        AppEvaluator, AppFactory, ScriptEvalRequest, app_factory, bootstrap_for_canopy,
-        evaluate_live,
-    },
+    script::{AppEvaluator, AppFactory, ScriptEvalRequest, bootstrap_for_canopy, evaluate_live},
 };
 
 /// Build an MCP tool result with structured and text JSON payloads.
@@ -113,7 +110,6 @@ impl LiveCanopyMcpServer {
             automation.request(|canopy| {
                 canopy.finalize_api()?;
                 bootstrap_for_canopy(canopy)
-                    .map_err(|error| CanopyError::Internal(error.to_string()))
             })
         })
         .map_err(|error| ToolError::internal(error.to_string()))?;
@@ -174,9 +170,8 @@ impl LiveCanopyMcpServer {
     }
 }
 
-/// Serve `script_eval` and `script_api` over stdio for an app factory.
-pub fn serve_stdio(factory: impl Fn() -> Result<Canopy> + Send + Sync + 'static) -> Result<()> {
-    let factory = app_factory(factory);
+/// Serve `bootstrap`, `script_eval`, `script_api`, and `fixtures` over stdio for an app factory.
+pub fn serve_stdio(factory: AppFactory) -> Result<()> {
     Server::new(move || canopy_mcp_server(factory.clone()))
         .serve_stdio_blocking()
         .map_err(Error::from)
@@ -195,6 +190,11 @@ pub struct UdsServerHandle {
 impl UdsServerHandle {
     /// Stop the listener and remove the socket path.
     pub fn stop(mut self) -> Result<()> {
+        self.shutdown()
+    }
+
+    /// Signal the listener, join its thread, and remove the socket file.
+    fn shutdown(&mut self) -> Result<()> {
         if let Some(shutdown_tx) = self.shutdown_tx.take() {
             let _ignored = shutdown_tx.send(());
         }
@@ -210,13 +210,7 @@ impl UdsServerHandle {
 
 impl Drop for UdsServerHandle {
     fn drop(&mut self) {
-        if let Some(shutdown_tx) = self.shutdown_tx.take() {
-            let _ignored = shutdown_tx.send(());
-        }
-        if let Some(thread) = self.thread.take() {
-            let _ignored = thread.join();
-        }
-        let _ignored = fs::remove_file(&self.socket_path);
+        let _ignored = self.shutdown();
     }
 }
 
@@ -288,6 +282,7 @@ mod tests {
     };
 
     use super::*;
+    use crate::script::app_factory;
 
     struct EchoNode {
         value: i32,

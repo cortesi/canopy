@@ -21,20 +21,6 @@ pub enum LaunchMode {
     Api,
 }
 
-impl LaunchMode {
-    /// Run the interactive terminal UI.
-    pub fn run() -> Self {
-        Self::Run { mcp_socket: None }
-    }
-
-    /// Run the interactive terminal UI with a live MCP socket.
-    pub fn run_with_mcp(socket_path: PathBuf) -> Self {
-        Self::Run {
-            mcp_socket: Some(socket_path),
-        }
-    }
-}
-
 /// Launch a Canopy app in the selected mode.
 ///
 /// The caller owns CLI parsing and app-specific configuration. This function
@@ -44,7 +30,7 @@ pub fn launch(factory: AppFactory, mode: LaunchMode) -> Result<i32> {
     match mode {
         LaunchMode::Run { mcp_socket } => run_interactive(&factory, mcp_socket.as_deref()),
         LaunchMode::HeadlessMcp => {
-            serve_stdio(move || (factory.as_ref())())?;
+            serve_stdio(factory)?;
             Ok(0)
         }
         LaunchMode::Api => {

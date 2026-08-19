@@ -9,7 +9,7 @@ use crate::{
     FixtureInfo,
     commands::{
         CommandDispatchKind, CommandParamKind, CommandReturnSpec, CommandSet, CommandSpec,
-        CommandTypeSpec, DeclRegistry,
+        DeclRegistry,
     },
 };
 
@@ -20,7 +20,7 @@ const PREAMBLE: &str = include_str!("../../../luau/preamble.d.luau");
 ///
 /// Modules render in the order `prepare_finalize` installs them, so the text and the audited
 /// surface never drift.
-pub(crate) fn render_definitions(
+pub(super) fn render_definitions(
     modules: &[Arc<dyn NativeModule>],
     fixtures: &[FixtureInfo],
 ) -> String {
@@ -43,7 +43,7 @@ pub(crate) fn render_definitions(
 }
 
 /// Group node-dispatched command specs by owner, including default-binding owners.
-pub(crate) fn owner_command_specs(
+pub(super) fn owner_command_specs(
     commands: &CommandSet,
     default_binding_owners: &BTreeSet<String>,
 ) -> BTreeMap<String, Vec<&'static CommandSpec>> {
@@ -64,7 +64,7 @@ pub(crate) fn owner_command_specs(
 }
 
 /// Build a Luau function signature for a command.
-pub(crate) fn command_fn_sig(spec: &CommandSpec) -> declaration::FunctionSignature {
+pub(super) fn command_fn_sig(spec: &CommandSpec) -> declaration::FunctionSignature {
     let params = spec
         .params
         .iter()
@@ -80,13 +80,8 @@ pub(crate) fn command_fn_sig(spec: &CommandSpec) -> declaration::FunctionSignatu
     }
 }
 
-/// Return the Luau type recorded in command metadata.
-pub fn command_type_to_luau(spec: &CommandTypeSpec) -> String {
-    spec.luau_ty().render()
-}
-
 /// Register framework-owned record and alias declarations.
-pub(crate) fn register_framework_declarations(builder: &mut module::Builder) {
+pub(super) fn register_framework_declarations(builder: &mut module::Builder) {
     builder.alias(declaration::Alias::new(
         "Point",
         declaration::Type::table([
@@ -389,7 +384,7 @@ fn register_observation_info(builder: &mut module::Builder) {
 }
 
 /// Add command-owned declaration dependencies to a generated owner module.
-pub(crate) fn register_owner_dependencies(
+pub(super) fn register_owner_dependencies(
     builder: &mut module::Builder,
     specs: &[&'static CommandSpec],
 ) {
@@ -409,7 +404,7 @@ pub(crate) fn register_owner_dependencies(
 }
 
 /// Compose command docs and parameter tags for a command table field.
-pub(crate) fn command_doc(spec: &CommandSpec) -> Option<String> {
+pub(super) fn command_doc(spec: &CommandSpec) -> Option<String> {
     let mut lines = Vec::new();
     if let Some(long) = spec.doc {
         for line in long.lines().filter(|line| !line.trim().is_empty()) {

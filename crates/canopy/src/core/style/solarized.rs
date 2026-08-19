@@ -34,9 +34,6 @@ pub const BLUE: Color = rgb!("#268bd2");
 pub const CYAN: Color = rgb!("#2aa198");
 /// Solarized green.
 pub const GREEN: Color = rgb!("#859900");
-/// Black.
-pub const BLACK: Color = rgb!("#000000");
-
 /// Build a dark solarized style map.
 pub fn solarized_dark() -> StyleMap {
     theme(&Palette {
@@ -59,7 +56,6 @@ pub fn solarized_dark() -> StyleMap {
         green: GREEN,
         yellow: YELLOW,
         orange: ORANGE,
-        black: BLACK,
     })
 }
 
@@ -85,6 +81,5 @@ pub fn solarized_light() -> StyleMap {
         green: GREEN,
         yellow: YELLOW,
         orange: ORANGE,
-        black: BLACK,
     })
 }

@@ -30,7 +30,7 @@ pub mod prelude;
 pub(crate) mod widget;
 
 pub(crate) use core::backend;
-pub use core::termbuf::{RenderLimits, TermBuf};
+pub use core::termbuf::{Cell, RenderLimits, TermBuf};
 #[cfg(any(test, feature = "testing"))]
 pub use core::testing;
 // Stable app-author surface.
@@ -38,8 +38,7 @@ pub use core::{
     AutomationCallback, AutomationHandle, BindingId, BindingOwner, BindingPhase, BindingScope,
     BindingTarget, Canopy, ChangeOutcome, ChildKey, Context, ExclusiveFrameToken, Fixture,
     FixtureInfo, FocusScope, FrameworkBindingGroup, InputSpec, KeyedChildren, Loader, NodeId,
-    RemovePolicy, RoutePhase, RouteTraceEntry, ScriptJournalEntry, ScriptModuleRoots, Slot,
-    TypedId, ViewContext,
+    RemovePolicy, RoutePhase, RouteTraceEntry, ScriptJournalEntry, Slot, TypedId, ViewContext,
 };
 // App-author modules used by widget implementations and derive output.
 pub use core::{

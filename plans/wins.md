@@ -165,18 +165,18 @@ full evidence, change, and proof for each entry.
 - [x] W109: Give `Path` and `PathFilter` one public path
 - [x] W110: Remove the unused `Layout` builders `stack()` and `measured()`
 - [x] W111: Trim dead `Key` comparison impls
-- [ ] W112: Trim the zero-consumer public surface of `script` — `Capability` on `ScriptModuleRoots`
-- [ ] W113: Delete `StyleManager::reset` and narrow the render and effects surface — `Capability` on
-- [ ] W114: Make `Cell` nameable from outside the crate
-- [ ] W115: Remove the unused `/black` theme rule — `Capability`
-- [ ] W116: Give canopy-mcp items one public path and hide its crate-internal helpers
-- [ ] W117: Delete the dead `AppEvaluator::with_view_size` and its always-default field
-- [ ] W118: Remove two forwarding layers in the launch path
-- [ ] W119: Trim canopy-mcp `Error`
-- [ ] W120: Let `bootstrap_for_canopy` return the canopy error it produces
-- [ ] W121: Share the UDS shutdown sequence between `stop` and `Drop`
-- [ ] W122: Shrink `ScriptResult` to the fields that are not derivable from `outcome`
-- [ ] W123: Drop the never-written `SuiteConfig.timeout_ms` and `fail_fast` — `Capability`
+- [x] W112: Trim the zero-consumer public surface of `script` — `Capability` on `ScriptModuleRoots`
+- [x] W113: Delete `StyleManager::reset` and narrow the render and effects surface — `Capability` on
+- [x] W114: Make `Cell` nameable from outside the crate
+- [x] W115: Remove the unused `/black` theme rule — `Capability`
+- [x] W116: Give canopy-mcp items one public path and hide its crate-internal helpers
+- [x] W117: Delete the dead `AppEvaluator::with_view_size` and its always-default field
+- [x] W118: Remove two forwarding layers in the launch path
+- [x] W119: Trim canopy-mcp `Error`
+- [x] W120: Let `bootstrap_for_canopy` return the canopy error it produces
+- [x] W121: Share the UDS shutdown sequence between `stop` and `Drop`
+- [x] W122: Shrink `ScriptResult` to the fields that are not derivable from `outcome`
+- [x] W123: Drop the never-written `SuiteConfig.timeout_ms` and `fail_fast` — `Capability`
 - [ ] W124: Read the eval script before spawning and drop the duplicated usage check
 - [ ] W125: Remove the unreferenced `script-eval` and `script-api` subcommand aliases — `Capability`
 - [ ] W126: Remove `#[arg(default = ..)]` support — `Capability`

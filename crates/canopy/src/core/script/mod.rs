@@ -52,7 +52,7 @@ mod base_api;
 /// Guards and the bridge between a running script scope and the live `Canopy`.
 mod bridge;
 /// Render Luau definition files from the current command set.
-pub mod defs;
+mod defs;
 /// Command dispatch and call-into-Luau helpers.
 mod dispatch;
 /// Conversions between Luau host errors and canopy errors.
@@ -69,8 +69,7 @@ use bridge::*;
 pub(crate) use bridge::{in_live_scope, validate_node_handle};
 use dispatch::*;
 use errors::*;
-pub use modules::ScriptModuleRoots;
-pub(crate) use modules::ScriptModuleSource;
+pub(crate) use modules::{ScriptModuleRoots, ScriptModuleSource};
 use records::*;
 use value::*;
 
@@ -186,16 +185,11 @@ impl ScriptCheckResult {
         self.diagnostics.iter().any(ScriptCheckDiagnostic::is_error)
     }
 
-    /// Return failing diagnostics.
-    pub fn errors(&self) -> impl Iterator<Item = &ScriptCheckDiagnostic> {
+    /// Render the failing diagnostics one per line.
+    pub fn format_diagnostics(&self) -> String {
         self.diagnostics
             .iter()
             .filter(|diagnostic| diagnostic.is_error())
-    }
-
-    /// Render the failing diagnostics one per line.
-    pub fn format_diagnostics(&self) -> String {
-        self.errors()
             .map(ToString::to_string)
             .collect::<Vec<_>>()
             .join("\n")
@@ -556,7 +550,7 @@ fn check_source_with_surface(surface: &Surface, source: &Source) -> ScriptCheckR
 }
 
 /// Return the Luau-safe global name for a command owner.
-pub(crate) fn luau_global_owner_name(owner: &str) -> String {
+fn luau_global_owner_name(owner: &str) -> String {
     const KEYWORDS: &[&str] = &[
         "and", "break", "continue", "do", "else", "elseif", "end", "export", "false", "for",
         "function", "if", "in", "local", "nil", "not", "or", "repeat", "return", "then", "true",
@@ -1028,7 +1022,7 @@ impl LuauHost {
     }
 
     /// Execute a compiled script inside an existing VM scope.
-    pub(crate) fn execute_in_scope(
+    fn execute_in_scope(
         &self,
         scope: &Scope<'_>,
         node_id: impl Into<NodeId>,

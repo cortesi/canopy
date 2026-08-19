@@ -18,9 +18,6 @@ pub enum Error {
     /// An I/O error.
     #[error(transparent)]
     Io(#[from] io::Error),
-    /// A JSON encoding or decoding error.
-    #[error(transparent)]
-    Json(#[from] serde_json::Error),
     /// An MCP transport or protocol error.
     #[error(transparent)]
     Tmcp(#[from] tmcp::Error),
@@ -40,13 +37,8 @@ pub enum Error {
 
 impl Error {
     /// Wrap an application-specific setup error.
-    pub fn app(error: impl StdError + Send + Sync + 'static) -> Self {
-        Self::App(Box::new(error))
-    }
-
-    /// Wrap an already type-erased application setup error.
-    pub fn app_boxed(error: Box<dyn StdError + Send + Sync>) -> Self {
-        Self::App(error)
+    pub fn app(error: impl Into<Box<dyn StdError + Send + Sync>>) -> Self {
+        Self::App(error.into())
     }
 }
 
