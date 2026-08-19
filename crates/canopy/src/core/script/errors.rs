@@ -1,6 +1,6 @@
 //! Conversions between Luau host errors and canopy errors.
 
-use std::{fmt, time::Duration};
+use std::time::Duration;
 
 use ruau::{
     bytecode::CompileError,
@@ -8,14 +8,11 @@ use ruau::{
     surface::PrepareGraphError,
     vm::{
         ExecError, MarshaledScriptError, RuntimeError, RuntimeErrorKind, Scope, ScriptError,
-        ScriptErrorField,
+        ScriptErrorField, VmErrorInfo,
     },
 };
 
-use super::{
-    ScriptCheckResult, commands, error, marshaled_value_to_display, module_diagnostic_to_script,
-    scoped_value_to_display,
-};
+use super::{ScriptCheckResult, commands, error, module_diagnostic_to_script};
 
 /// Convert an Ruau compile error to Canopy's parse error shape.
 pub(super) fn compile_error_to_canopy(err: &CompileError) -> error::Error {
@@ -46,29 +43,19 @@ pub(super) fn prepare_graph_error_to_canopy(error: &PrepareGraphError) -> error:
     error::Error::Script(format!("preparing script graph failed: {error}"))
 }
 
-/// Convert a displayable error into a canopy script error.
-pub(super) fn lua_to_canopy(err: impl fmt::Display) -> error::Error {
-    error::Error::Script(err.to_string())
-}
-
-/// Convert a canopy error into a host-call error.
+/// Convert a canopy error into a structured Ruau runtime error.
 impl From<error::Error> for RuntimeError {
     fn from(error: error::Error) -> Self {
-        canopy_to_host(&error)
+        let payload = CanopyErrorPayload::from(&error);
+        let mut fields = vec![ScriptErrorField::new("kind", payload.kind.as_str())];
+        if let Some(command) = payload.command.clone() {
+            fields.push(ScriptErrorField::new("command", command));
+        }
+        if let Some(owner) = payload.owner.clone() {
+            fields.push(ScriptErrorField::new("owner", owner));
+        }
+        Self::structured(payload.message.clone(), fields).with_payload(payload)
     }
-}
-
-/// Convert a canopy error into a structured Ruau runtime error.
-pub(super) fn canopy_to_host(err: &error::Error) -> RuntimeError {
-    let payload = CanopyErrorPayload::from(err);
-    let mut fields = vec![ScriptErrorField::new("kind", payload.kind.as_str())];
-    if let Some(command) = payload.command.clone() {
-        fields.push(ScriptErrorField::new("command", command));
-    }
-    if let Some(owner) = payload.owner.clone() {
-        fields.push(ScriptErrorField::new("owner", owner));
-    }
-    RuntimeError::structured(payload.message.clone(), fields).with_payload(payload)
 }
 
 /// Normalized cloneable canopy error payload carried through Ruau errors.
@@ -212,21 +199,43 @@ impl CanopyErrorPayload {
     }
 
     /// Convert this host payload into a core error while preserving traceback context.
-    pub(super) fn to_canopy_error(&self, label: &str, traceback: Option<&str>) -> error::Error {
+    fn to_canopy_error(&self, label: &str, traceback: Option<&str>) -> error::Error {
         if let Some(timeout_ms) = self.timeout_ms {
             return error::Error::ScriptTimeout { timeout_ms };
         }
-        let message = match traceback {
-            Some(traceback) => format!("{label} failed: {}\n{traceback}", self.message),
-            None => format!("{label} failed: {}", self.message),
-        };
         error::Error::ScriptStructured {
             kind: self.kind,
             command: self.command.clone(),
             owner: self.owner.clone(),
-            message,
+            message: labelled_failure(label, &self.message, traceback),
         }
     }
+}
+
+/// Render one `{label} failed: {message}` line, appending a traceback when one was captured.
+fn labelled_failure(label: &str, message: &str, traceback: Option<&str>) -> String {
+    match traceback {
+        Some(traceback) => format!("{label} failed: {message}\n{traceback}"),
+        None => format!("{label} failed: {message}"),
+    }
+}
+
+/// Convert any VM error surface into a canopy error.
+///
+/// Timeouts win, then a structured canopy payload, then the caller's message.
+fn vm_error_to_canopy<E: VmErrorInfo>(
+    error: &E,
+    label: &str,
+    timeout: Option<Duration>,
+    message: impl FnOnce() -> String,
+) -> error::Error {
+    if let Some(timeout_error) = timeout_error(error.kind(), timeout) {
+        return timeout_error;
+    }
+    if let Some(payload) = error.payload_ref::<CanopyErrorPayload>() {
+        return payload.to_canopy_error(label, error.traceback());
+    }
+    error::Error::Script(labelled_failure(label, &message(), error.traceback()))
 }
 
 /// Convert a caught script error into a canopy error.
@@ -236,17 +245,7 @@ pub(super) fn script_error_to_canopy<'s>(
     label: &str,
     timeout: Option<Duration>,
 ) -> error::Error {
-    if let Some(timeout_error) = timeout_error(error.kind(), timeout) {
-        return timeout_error;
-    }
-    if let Some(payload) = error.payload_ref::<CanopyErrorPayload>() {
-        return payload.to_canopy_error(label, error.traceback());
-    }
-    let message = scoped_value_to_display(scope, error.value());
-    match error.traceback() {
-        Some(traceback) => error::Error::Script(format!("{label} failed: {message}\n{traceback}")),
-        None => error::Error::Script(format!("{label} failed: {message}")),
-    }
+    vm_error_to_canopy(error, label, timeout, || error.value().display(scope))
 }
 
 /// Convert a fatal VM error into a canopy error.
@@ -255,25 +254,14 @@ pub(super) fn runtime_error_to_canopy(
     label: &str,
     timeout: Option<Duration>,
 ) -> error::Error {
-    if let Some(timeout_error) = timeout_error(error.kind(), timeout) {
-        return timeout_error;
-    }
-    if let Some(payload) = error.payload_ref::<CanopyErrorPayload>() {
-        return payload.to_canopy_error(label, None);
-    }
-    error::Error::Script(format!("{label} failed: {error}"))
+    vm_error_to_canopy(error, label, timeout, || error.to_string())
 }
 
 /// Convert an async owned-entry execution error into a canopy error.
 fn exec_error_to_canopy(error: &ExecError, label: &str, timeout: Option<Duration>) -> error::Error {
-    if let Some(timeout_error) = timeout_error(error.kind(), timeout) {
-        return timeout_error;
-    }
     match error {
         ExecError::Script(error) => marshaled_script_error_to_canopy(error, label, timeout),
-        ExecError::Stopped(_) => timeout_error(error.kind(), timeout).unwrap_or_else(|| {
-            error::Error::Script(format!("{label} failed: script evaluation was cancelled"))
-        }),
+        ExecError::Stopped(_) => script_timeout(timeout),
         ExecError::PanicPoison => error::Error::Script(format!(
             "{label} failed: script VM is poisoned and refuses further work"
         )),
@@ -310,29 +298,22 @@ fn marshaled_script_error_to_canopy(
     label: &str,
     timeout: Option<Duration>,
 ) -> error::Error {
-    if let Some(timeout_error) = timeout_error(error.kind(), timeout) {
-        return timeout_error;
-    }
-    if let Some(payload) = error.payload_ref::<CanopyErrorPayload>() {
-        return payload.to_canopy_error(label, error.traceback());
-    }
-    let message = marshaled_value_to_display(error.value());
-    match error.traceback() {
-        Some(traceback) => error::Error::Script(format!("{label} failed: {message}\n{traceback}")),
-        None => error::Error::Script(format!("{label} failed: {message}")),
-    }
+    vm_error_to_canopy(error, label, timeout, || error.value().display_lua())
+}
+
+/// Build the cooperative-timeout error for a run that stopped early.
+fn script_timeout(timeout: Option<Duration>) -> error::Error {
+    let timeout_ms = timeout
+        .map(|timeout| u64::try_from(timeout.as_millis()).unwrap_or(u64::MAX))
+        .unwrap_or(0);
+    error::Error::ScriptTimeout { timeout_ms }
 }
 
 /// Build the cooperative-timeout error for a cancelled or deadlined run.
 fn timeout_error(kind: RuntimeErrorKind, timeout: Option<Duration>) -> Option<error::Error> {
-    if !matches!(
+    matches!(
         kind,
         RuntimeErrorKind::Cancelled | RuntimeErrorKind::Deadline
-    ) {
-        return None;
-    }
-    let timeout_ms = timeout
-        .map(|timeout| u64::try_from(timeout.as_millis()).unwrap_or(u64::MAX))
-        .unwrap_or(0);
-    Some(error::Error::ScriptTimeout { timeout_ms })
+    )
+    .then(|| script_timeout(timeout))
 }

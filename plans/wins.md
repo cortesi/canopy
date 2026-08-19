@@ -131,21 +131,21 @@ full evidence, change, and proof for each entry.
 
 **Script host**
 
-- [ ] W81: Drop the never-failing `Result` and the always-derived flag from script command dispatch
-- [ ] W82: Remove the unreachable "script evaluation was cancelled" branch
-- [ ] W83: Give the pending-stash resolve failure its label and delete `lua_to_canopy`
-- [ ] W84: Replace the three hand-rolled value display helpers with ruau's `display`
-- [ ] W85: Collapse the three VM-error adapters onto ruau's `VmErrorInfo`
-- [ ] W86: Finish landed item 3.4: delete `canopy_to_host`
-- [ ] W87: Make `ValuePath` and the `*_at` converters private to `value.rs`
+- [x] W81: Drop the never-failing `Result` and the always-derived flag from script command dispatch
+- [x] W82: Remove the unreachable "script evaluation was cancelled" branch
+- [x] W83: Give the pending-stash resolve failure its label and delete `lua_to_canopy`
+- [x] W84: Replace the three hand-rolled value display helpers with ruau's `display`
+- [x] W85: Collapse the three VM-error adapters onto ruau's `VmErrorInfo`
+- [x] W86: Finish landed item 3.4: delete `canopy_to_host`
+- [x] W87: Make `ValuePath` and the `*_at` converters private to `value.rs`
 - [ ] W88: Replace the bespoke `ArgReader` with ruau's `HostArgCursor`
-- [ ] W89: Deduplicate the retained-runtime borrow and call plumbing in `LuauHost`
-- [ ] W90: One `rendered_buffer` helper for the four screen readers in `records.rs`
-- [ ] W91: Make `BaseFunction.docs` a single `&'static str`
-- [ ] W92: Delete the `StoredFunction` newtype
-- [ ] W93: Use `tempfile` in the `modules.rs` tests and keep one source for the mount prefixes
-- [ ] W94: Flatten the one-caller forwarders in `defs.rs`
-- [ ] W95: Share the bind-option field reader and drop the duplicated description check
+- [x] W89: Deduplicate the retained-runtime borrow and call plumbing in `LuauHost`
+- [x] W90: One `rendered_buffer` helper for the four screen readers in `records.rs`
+- [x] W91: Make `BaseFunction.docs` a single `&'static str`
+- [x] W92: Delete the `StoredFunction` newtype
+- [x] W93: Use `tempfile` in the `modules.rs` tests and keep one source for the mount prefixes
+- [x] W94: Flatten the one-caller forwarders in `defs.rs`
+- [x] W95: Share the bind-option field reader and drop the duplicated description check
 
 **Public surface**
 

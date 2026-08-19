@@ -348,12 +348,10 @@ fn live_and_marshaled_value_policy_agree_without_erasing_node_identity() {
         let ordinary = scope.create_table()?;
         ordinary.set_index(scope, 2, "two")?;
         ordinary.set_index(scope, 1, true)?;
-        let path = ValuePath::root("value");
-        let live = scoped_to_arg_value_at(scope, ScopedValue::Table(ordinary), &path)
+        let live = scoped_to_arg_value(scope, ScopedValue::Table(ordinary))
             .expect("ordinary live value converts");
         let marshaled = scope.marshal(ScopedValue::Table(ordinary))?;
-        let owned = marshaled_to_arg_value_at(&marshaled, &path)
-            .expect("ordinary marshaled value converts");
+        let owned = marshaled_to_arg_value(&marshaled).expect("ordinary marshaled value converts");
         assert_eq!(live, owned);
 
         let node_id = NodeId::default();

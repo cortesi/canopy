@@ -1,5 +1,5 @@
 use std::{
-    cell::RefCell,
+    cell::{RefCell, RefMut},
     collections::{BTreeSet, HashMap, HashSet},
     fmt, mem,
     pin::Pin,
@@ -298,14 +298,8 @@ impl ScriptCache {
     }
 }
 
-/// Stored Luau closure with a stable host-side id. The stash pins the closure
-/// in the VM registry; dropping it queues the release for the VM's next step.
-struct StoredFunction {
-    /// Pending VM stash or retained generational handle.
-    target: StoredFunctionTarget,
-}
-
-/// Callback state before and after promotion into the retained runtime.
+/// Stored Luau closure state before and after promotion into the retained runtime. The stash pins
+/// the closure in the VM registry; dropping it queues the release for the VM's next step.
 #[derive(Clone)]
 enum StoredFunctionTarget {
     /// Stash created during the currently active VM invocation.
@@ -318,7 +312,7 @@ enum StoredFunctionTarget {
 #[derive(Default)]
 struct ClosureRegistry {
     /// Stored Luau closures keyed by stable id.
-    functions: HashMap<LuauFunctionId, StoredFunction>,
+    functions: HashMap<LuauFunctionId, StoredFunctionTarget>,
     /// Next stored function identifier.
     next_function_id: u64,
     /// Retained handles queued for release after the current VM invocation.
@@ -340,27 +334,19 @@ impl ClosureRegistry {
         self.next_function_id = self.next_function_id.checked_add(1).ok_or_else(|| {
             error::Error::InvalidOperation("closure identifier space exhausted".to_string())
         })?;
-        self.functions.insert(
-            id,
-            StoredFunction {
-                target: StoredFunctionTarget::Pending(stashed),
-            },
-        );
+        self.functions
+            .insert(id, StoredFunctionTarget::Pending(stashed));
         Ok(id)
     }
 
     /// Return a stored function target.
     fn target(&self, id: LuauFunctionId) -> Option<StoredFunctionTarget> {
-        self.functions
-            .get(&id)
-            .map(|function| function.target.clone())
+        self.functions.get(&id).cloned()
     }
 
     /// Remove a stored function and queue its retained handle for release.
     fn remove(&mut self, id: LuauFunctionId) {
-        if let Some(function) = self.functions.remove(&id)
-            && let StoredFunctionTarget::Retained(handle) = function.target
-        {
+        if let Some(StoredFunctionTarget::Retained(handle)) = self.functions.remove(&id) {
             self.released.push(handle);
         }
     }
@@ -373,9 +359,9 @@ impl ClosureRegistry {
                 Err(error) => return Err(error),
             }
         }
-        for function in self.functions.values_mut() {
-            if let StoredFunctionTarget::Pending(stash) = &function.target {
-                function.target = StoredFunctionTarget::Retained(runtime.retain(stash.clone()));
+        for target in self.functions.values_mut() {
+            if let StoredFunctionTarget::Pending(stash) = target {
+                *target = StoredFunctionTarget::Retained(runtime.retain(stash.clone()));
             }
         }
         Ok(())
@@ -1000,17 +986,11 @@ impl LuauHost {
 
     /// Return the loaded root for a script, reloading after source invalidation.
     fn loaded_root(&self, sid: ScriptId) -> Result<RootHandle> {
-        let invalidated = {
-            let mut runtime = self.runtime.try_borrow_mut().map_err(|_| {
-                error::Error::Script(
-                    "cannot inspect scripts while the script VM is executing".into(),
-                )
-            })?;
-            runtime
-                .as_mut()
-                .and_then(Runtime::invalidate_if_source_changed)
-                .is_some()
-        };
+        let invalidated = self
+            .runtime_mut("cannot inspect scripts while the script VM is executing")
+            .ok()
+            .and_then(|mut runtime| Runtime::invalidate_if_source_changed(&mut runtime))
+            .is_some();
         if invalidated {
             let mut state = self.state.borrow_mut();
             state.scripts.clear_roots();
@@ -1044,7 +1024,7 @@ impl LuauHost {
             self.clear_diagnostics();
         }
         let label = format!("script {sid} on node {node_id:?}");
-        self.run_target(canopy, node_id, &CallTarget::Root(root), &label, timeout)
+        self.run_root_async(canopy, node_id, &root, &label, timeout)
     }
 
     /// Execute a compiled script inside an existing VM scope.
@@ -1065,44 +1045,39 @@ impl LuauHost {
             .map(|_| ())
     }
 
-    /// Run a script callable through a fresh limited scope step.
+    /// Borrow the finalized retained runtime, reporting `busy` when a scope is live.
+    fn runtime_mut(&self, busy: &str) -> Result<RefMut<'_, Runtime>> {
+        let runtime = self
+            .runtime
+            .try_borrow_mut()
+            .map_err(|_| error::Error::Script(busy.to_string()))?;
+        RefMut::filter_map(runtime, Option::as_mut).map_err(|_| {
+            error::Error::InvalidOperation(
+                "cannot execute scripts before finalize_api()".to_string(),
+            )
+        })
+    }
+
+    /// Run a stored callback through a fresh limited scope step.
     fn run_target(
         &self,
         canopy: &mut Canopy,
         node_id: NodeId,
-        target: &CallTarget,
+        target: StoredFunctionTarget,
         label: &str,
         timeout: Option<Duration>,
     ) -> Result<ArgValue> {
-        if let CallTarget::Root(root) = target {
-            return self.run_root_async(canopy, node_id, root, label, timeout);
-        }
         let _active_eval = self.begin_active_eval()?;
-        let runtime = self.runtime.clone();
-        let mut runtime_cell = runtime.try_borrow_mut().map_err(|_| {
-            error::Error::Script("script VM re-entered without a live scope".into())
-        })?;
-        let runtime = runtime_cell.as_mut().ok_or_else(|| {
-            error::Error::InvalidOperation(
-                "cannot execute scripts before finalize_api()".to_string(),
-            )
-        })?;
+        let mut runtime = self.runtime_mut("script VM re-entered without a live scope")?;
+        let target = CallTarget::Stored(target);
         let print_lines = Arc::new(Mutex::new(Vec::new()));
         let options = invocation_options(timeout, &print_lines);
         let mut outcome: Option<Result<ArgValue>> = None;
         let step = runtime.step_with_context(canopy, &options, |scope| {
-            let _guard = match ScriptAnchorGuard::push(scope, node_id) {
-                Ok(guard) => guard,
-                Err(error) => return Err(error),
-            };
-            let result = match target.resolve(scope, label, timeout) {
-                Ok(function) => call_in_scope(scope, function, label, timeout),
-                Err(err) => Err(err),
-            };
-            outcome = Some(result);
+            outcome = Some(self.run_target_in_scope(scope, node_id, &target, label, timeout));
             Ok(())
         });
-        let synchronized = self.synchronize_closures(runtime, label, timeout);
+        let synchronized = self.synchronize_closures(&mut runtime, label, timeout);
         self.push_print_lines(&print_lines);
         match step {
             Ok(()) => {
@@ -1125,15 +1100,7 @@ impl LuauHost {
         timeout: Option<Duration>,
     ) -> Result<ArgValue> {
         let _active_eval = self.begin_active_eval()?;
-        let runtime = self.runtime.clone();
-        let mut runtime_cell = runtime.try_borrow_mut().map_err(|_| {
-            error::Error::Script("script VM re-entered without a live scope".into())
-        })?;
-        let runtime = runtime_cell.as_mut().ok_or_else(|| {
-            error::Error::InvalidOperation(
-                "cannot execute scripts before finalize_api()".to_string(),
-            )
-        })?;
+        let mut runtime = self.runtime_mut("script VM re-entered without a live scope")?;
         let print_lines = Arc::new(Mutex::new(Vec::new()));
         let options = invocation_options(timeout, &print_lines);
         canopy.script_context_stack.push(node_id);
@@ -1151,7 +1118,7 @@ impl LuauHost {
         };
         let popped = canopy.script_context_stack.pop();
         debug_assert_eq!(popped, Some(node_id));
-        let synchronized = self.synchronize_closures(runtime, label, timeout);
+        let synchronized = self.synchronize_closures(&mut runtime, label, timeout);
         self.push_print_lines(&print_lines);
         match outcome {
             Ok(values) => {
@@ -1227,7 +1194,7 @@ impl LuauHost {
             .target(id)
             .ok_or_else(|| error::Error::Script(format!("Luau function {id:?} not found")))?;
         let label = format!("Luau binding on node {node_id:?}");
-        self.run_target(canopy, node_id, &CallTarget::Stored(target), &label, None)
+        self.run_target(canopy, node_id, target, &label, None)
             .map(|_| ())
     }
 

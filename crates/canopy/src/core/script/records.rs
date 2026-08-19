@@ -9,6 +9,7 @@ use super::{
     Result, ViewContext, commands, defs, error, inputmap, node_id_to_arg, node_list_to_arg,
     point_to_arg, rect_to_arg, size_to_arg, widget_access,
 };
+use crate::core::termbuf::TermBuf;
 
 /// Convert a node into the `NodeInfo` scripting record.
 pub(super) fn node_info_to_arg(
@@ -220,14 +221,17 @@ pub(super) fn command_info_to_arg(
     ArgValue::Map(record)
 }
 
+/// Refresh the app snapshot and borrow its rendered buffer.
+fn rendered_buffer(canopy: &mut Canopy) -> Result<&TermBuf> {
+    canopy.refresh_snapshot()?;
+    canopy
+        .buf()
+        .ok_or_else(|| error::Error::Script("screen unavailable before render".into()))
+}
+
 /// Convert the current rendered screen buffer into its scripting record.
 pub(super) fn screen_to_arg(canopy: &mut Canopy) -> Result<ArgValue> {
-    canopy.refresh_snapshot()?;
-    let Some(buffer) = canopy.buf() else {
-        return Err(error::Error::Script(
-            "screen unavailable before render".into(),
-        ));
-    };
+    let buffer = rendered_buffer(canopy)?;
     Ok(ArgValue::Array(
         buffer
             .rows()
@@ -239,12 +243,7 @@ pub(super) fn screen_to_arg(canopy: &mut Canopy) -> Result<ArgValue> {
 
 /// Convert the current rendered screen buffer into styled cell records.
 pub(super) fn screen_cells_to_arg(canopy: &mut Canopy) -> Result<ArgValue> {
-    canopy.refresh_snapshot()?;
-    let Some(buffer) = canopy.buf() else {
-        return Err(error::Error::Script(
-            "screen unavailable before render".into(),
-        ));
-    };
+    let buffer = rendered_buffer(canopy)?;
     let size = buffer.size();
     let mut rows = Vec::with_capacity(size.h as usize);
     for y in 0..size.h {
@@ -308,12 +307,7 @@ fn attrs_to_arg(attrs: AttrSet) -> ArgValue {
 
 /// Return the rendered screen text inside a signed rectangle, clipped to the screen.
 pub(super) fn screen_text_for_rect(canopy: &mut Canopy, rect: RectI32) -> Result<String> {
-    canopy.refresh_snapshot()?;
-    let Some(buffer) = canopy.buf() else {
-        return Err(error::Error::Script(
-            "screen unavailable before render".into(),
-        ));
-    };
+    let buffer = rendered_buffer(canopy)?;
     let Some(rect) = rect.intersect_rect(buffer.rect()) else {
         return Ok(String::new());
     };
@@ -333,12 +327,7 @@ pub(super) fn screen_text_for_rect(canopy: &mut Canopy, rect: RectI32) -> Result
 
 /// Return the rendered screen as plain text.
 pub(super) fn screen_text(canopy: &mut Canopy) -> Result<String> {
-    canopy.refresh_snapshot()?;
-    let Some(buffer) = canopy.buf() else {
-        return Err(error::Error::Script(
-            "screen unavailable before render".into(),
-        ));
-    };
+    let buffer = rendered_buffer(canopy)?;
     Ok(buffer.screen_text())
 }
 

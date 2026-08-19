@@ -13,9 +13,8 @@ use ruau::{
 
 use super::{
     ArgValue, Canopy, CommandArgs, CommandInvocation, CommandSpec, NodeId, Result,
-    StoredFunctionTarget, arg_value_to_scoped, commands, error, lua_to_canopy,
-    retained_runtime_error_to_canopy, runtime_error_to_canopy, scoped_to_arg_value,
-    script_error_to_canopy, with_current_canopy,
+    StoredFunctionTarget, arg_value_to_scoped, commands, error, retained_runtime_error_to_canopy,
+    runtime_error_to_canopy, scoped_to_arg_value, script_error_to_canopy, with_current_canopy,
 };
 
 /// Determine whether a map matches a command's named parameters.
@@ -42,22 +41,18 @@ fn map_matches_named(spec: &CommandSpec, map: &BTreeMap<String, ArgValue>) -> bo
 }
 
 /// Build command arguments from converted script values.
-fn build_args_from_values(
-    spec: &CommandSpec,
-    mut values: Vec<ArgValue>,
-    allow_map_named: bool,
-) -> StdResult<CommandArgs, String> {
-    if allow_map_named && values.len() == 1 {
-        let arg = values.pop().expect("single argument checked above");
-        if let ArgValue::Map(map) = arg {
-            if map_matches_named(spec, &map) {
-                return Ok(CommandArgs::Named(map));
-            }
-            return Ok(CommandArgs::Positional(vec![ArgValue::Map(map)]));
-        }
-        return Ok(CommandArgs::Positional(vec![arg]));
+///
+/// A single map argument whose keys name the command's parameters binds by name; every other
+/// shape binds positionally.
+fn build_args_from_values(spec: &CommandSpec, mut values: Vec<ArgValue>) -> CommandArgs {
+    if values.len() != 1 {
+        return CommandArgs::Positional(values);
     }
-    Ok(CommandArgs::Positional(values))
+    let arg = values.pop().expect("single argument checked above");
+    match arg {
+        ArgValue::Map(map) if map_matches_named(spec, &map) => CommandArgs::Named(map),
+        arg => CommandArgs::Positional(vec![arg]),
+    }
 }
 
 /// Dispatch a command using the active script context.
@@ -66,16 +61,12 @@ pub(super) fn dispatch_command(
     spec: &'static CommandSpec,
     node_id: NodeId,
     values: Vec<ArgValue>,
-    allow_map_named: bool,
 ) -> Result<ArgValue> {
     with_current_canopy(scope, |canopy, _| {
-        let args = build_args_from_values(spec, values, allow_map_named).map_err(|message| {
-            error::Error::from(commands::CommandError::conversion(format!(
-                "command {}: {message}",
-                spec.id.0
-            )))
-        })?;
-        let invocation = CommandInvocation { id: spec.id, args };
+        let invocation = CommandInvocation {
+            id: spec.id,
+            args: build_args_from_values(spec, values),
+        };
         commands::dispatch(&mut canopy.core, node_id, &invocation).map_err(error::Error::from)
     })
 }
@@ -87,7 +78,6 @@ pub(super) fn dispatch_command_by_name(
     node_id: Option<NodeId>,
     values: Vec<ArgValue>,
 ) -> Result<ArgValue> {
-    let allow_map_named = values.len() == 1;
     let (anchor, spec) = with_current_canopy(scope, |canopy, anchor| {
         let spec = canopy.core.commands.get(name).ok_or_else(|| {
             error::Error::from(commands::CommandError::UnknownCommand {
@@ -96,13 +86,7 @@ pub(super) fn dispatch_command_by_name(
         })?;
         Ok((anchor, spec))
     })?;
-    dispatch_command(
-        scope,
-        spec,
-        node_id.unwrap_or(anchor),
-        values,
-        allow_map_named,
-    )
+    dispatch_command(scope, spec, node_id.unwrap_or(anchor), values)
 }
 
 /// Convert the remaining host-call values into command arguments.
@@ -158,18 +142,6 @@ pub(super) fn owned_truthy(value: Option<&OwnedValue>) -> bool {
     )
 }
 
-/// Display an owned async host value in an error message.
-pub(super) fn owned_value_to_display(value: &OwnedValue) -> String {
-    match value {
-        OwnedValue::Nil => "nil".to_string(),
-        OwnedValue::Boolean(value) => value.to_string(),
-        OwnedValue::Integer(value) => value.to_string(),
-        OwnedValue::Number(value) => value.to_string(),
-        OwnedValue::Bytes(bytes) => String::from_utf8_lossy(bytes).into_owned(),
-        other => format!("{other:?}"),
-    }
-}
-
 /// A retained script root or stored callback resolvable inside a live VM scope.
 pub(super) enum CallTarget {
     /// A compiled script root owned by the retained runtime.
@@ -190,9 +162,9 @@ impl CallTarget {
             Self::Root(root) => root
                 .resolve(scope)
                 .map_err(|error| retained_runtime_error_to_canopy(&error, label, timeout)),
-            Self::Stored(StoredFunctionTarget::Pending(stashed)) => {
-                scope.fetch_function(stashed).map_err(lua_to_canopy)
-            }
+            Self::Stored(StoredFunctionTarget::Pending(stashed)) => scope
+                .fetch_function(stashed)
+                .map_err(|error| runtime_error_to_canopy(&error, label, timeout)),
             Self::Stored(StoredFunctionTarget::Retained(handle)) => handle
                 .resolve(scope)
                 .map_err(|error| retained_runtime_error_to_canopy(&error, label, timeout)),

@@ -7,10 +7,6 @@ use ruau::filesystem::{DirectoryMounts, DirectoryMountsError};
 #[cfg(test)]
 use ruau::source::{ModuleId, ReadySourceFutureExt, SourceError, SourceProvider};
 
-/// Module id prefix for the per-user script root.
-const USER_PREFIX: &str = "@user";
-/// Module id prefix for the per-project script root.
-const PROJECT_PREFIX: &str = "@project";
 /// Conventional startup module name under each script root.
 const INIT_MODULE: &str = "init";
 /// Luau source file extension used by filesystem module ids.
@@ -75,10 +71,8 @@ impl ScriptModuleRoots {
 
     /// Return the startup modules that exist for the configured roots, in layer order.
     pub(crate) fn startup_modules(&self) -> Vec<StartupModule> {
-        [Namespace::User, Namespace::Project]
-            .into_iter()
-            .filter_map(|namespace| {
-                let root = self.root_for(namespace)?;
+        self.roots()
+            .filter_map(|(namespace, root)| {
                 let path = root.join(format!("{INIT_MODULE}{LUAU_EXTENSION}"));
                 path.is_file().then_some(StartupModule { namespace, path })
             })
@@ -93,21 +87,20 @@ impl ScriptModuleRoots {
             return Ok(None);
         }
         let mut builder = DirectoryMounts::builder();
-        if let Some(root) = &self.user {
-            builder = builder.mount(USER_PREFIX, root);
-        }
-        if let Some(root) = &self.project {
-            builder = builder.mount(PROJECT_PREFIX, root);
+        for (namespace, root) in self.roots() {
+            builder = builder.mount(namespace.name(), root);
         }
         builder.build().map(Arc::new).map(Some)
     }
 
-    /// Return the configured root for a namespace.
-    fn root_for(&self, namespace: Namespace) -> Option<&Path> {
-        match namespace {
-            Namespace::User => self.user.as_deref(),
-            Namespace::Project => self.project.as_deref(),
-        }
+    /// Iterate the configured roots in layer order.
+    fn roots(&self) -> impl Iterator<Item = (Namespace, &Path)> {
+        [
+            (Namespace::User, self.user.as_deref()),
+            (Namespace::Project, self.project.as_deref()),
+        ]
+        .into_iter()
+        .filter_map(|(namespace, root)| root.map(|root| (namespace, root)))
     }
 }
 
@@ -144,21 +137,9 @@ pub struct StartupModule {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, process, thread};
+    use std::fs;
 
     use super::*;
-
-    /// Create an isolated repository-local filesystem fixture.
-    fn fixture_root(label: &str) -> PathBuf {
-        let thread = thread::current();
-        let name = thread.name().unwrap_or("test");
-        let root = Path::new("tmp").join(format!("modules-{}-{name}-{label}", process::id()));
-        if root.exists() {
-            fs::remove_dir_all(&root).expect("stale fixture removes");
-        }
-        fs::create_dir_all(&root).expect("fixture root creates");
-        root
-    }
 
     /// Write one fixture file, creating its parent directories.
     fn write(path: &Path, source: &str) {
@@ -169,7 +150,8 @@ mod tests {
 
     #[test]
     fn module_id_for_path_maps_configured_roots() {
-        let base = fixture_root("reverse");
+        let base = tempfile::tempdir().expect("fixture root creates");
+        let base = base.path();
         let user = base.join("user");
         let project = base.join("project");
         let user_file = user.join("keymap.luau");
@@ -192,14 +174,13 @@ mod tests {
             source.module_id_for_path(&project_file),
             Ok(ModuleId::canonicalized("@project/nested"))
         );
-        fs::remove_dir_all(base).expect("fixture removes");
     }
 
     #[test]
     fn composite_source_requires_explicit_roots_for_root_imports() {
-        let user = fixture_root("explicit");
+        let user = tempfile::tempdir().expect("fixture root creates");
         let mut roots = ScriptModuleRoots::new();
-        roots.set_user_root(&user);
+        roots.set_user_root(user.path());
         let source = roots
             .module_source()
             .expect("mounts build")
@@ -210,6 +191,5 @@ mod tests {
             .ready_only("resolving")
             .expect_err("bare root imports are rejected");
         assert!(matches!(error, SourceError::MissingModule { .. }));
-        fs::remove_dir_all(user).expect("fixture removes");
     }
 }

@@ -24,38 +24,23 @@ pub(super) fn scoped_value_to_string<'s>(
     }
 }
 
-/// Convert a scoped value into a displayable string for diagnostics.
-pub(super) fn scoped_value_to_display<'s>(scope: &Scope<'s>, value: ScopedValue<'s>) -> String {
-    match value {
-        ScopedValue::Nil => "nil".to_string(),
-        ScopedValue::Boolean(value) => value.to_string(),
-        ScopedValue::Integer(value) => value.to_string(),
-        ScopedValue::Number(value) => value.to_string(),
-        ScopedValue::String(text) => scope
-            .string_bytes(text)
-            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
-            .unwrap_or_else(|_| "<string>".to_string()),
-        other => format!("<{}>", other.type_name()),
-    }
-}
-
 /// Canopy-owned location within a nested command value.
 #[derive(Clone)]
-pub(super) struct ValuePath(String);
+struct ValuePath(String);
 
 impl ValuePath {
     /// Start a value path at a named boundary.
-    pub(super) fn root(name: &str) -> Self {
+    fn root(name: &str) -> Self {
         Self(name.to_string())
     }
 
     /// Extend this path with a one-based sequence index.
-    pub(super) fn index(&self, index: usize) -> Self {
+    fn index(&self, index: usize) -> Self {
         Self(format!("{}[{index}]", self.0))
     }
 
     /// Extend this path with a string map field.
-    pub(super) fn field(&self, field: &str) -> Self {
+    fn field(&self, field: &str) -> Self {
         if is_luau_identifier(field) {
             Self(format!("{}.{field}", self.0))
         } else {
@@ -65,7 +50,7 @@ impl ValuePath {
     }
 
     /// Prefix a conversion failure with this path.
-    pub(super) fn error(&self, message: impl fmt::Display) -> String {
+    fn error(&self, message: impl fmt::Display) -> String {
         format!("{}: {message}", self.0)
     }
 }
@@ -163,7 +148,7 @@ pub(super) fn scoped_to_arg_value<'s>(
 }
 
 /// Convert a scoped value at one nested command-value path.
-pub(super) fn scoped_to_arg_value_at<'s>(
+fn scoped_to_arg_value_at<'s>(
     scope: &Scope<'s>,
     value: ScopedValue<'s>,
     path: &ValuePath,
@@ -315,7 +300,7 @@ pub(super) fn marshaled_to_arg_value(value: &ValueSnapshot) -> StdResult<ArgValu
 }
 
 /// Convert a marshaled value at one nested command-value path.
-pub(super) fn marshaled_to_arg_value_at(
+fn marshaled_to_arg_value_at(
     value: &ValueSnapshot,
     path: &ValuePath,
 ) -> StdResult<ArgValue, String> {
@@ -401,16 +386,4 @@ fn marshaled_table_key(key: &ValueSnapshot, path: &ValuePath) -> StdResult<Strin
     };
     String::from_utf8(bytes.clone())
         .map_err(|error| path.error(format!("invalid UTF-8 key: {error}")))
-}
-
-/// Display an owned async-driver value in an error message.
-pub(super) fn marshaled_value_to_display(value: &ValueSnapshot) -> String {
-    match value {
-        ValueSnapshot::Nil => "nil".to_string(),
-        ValueSnapshot::Boolean(value) => value.to_string(),
-        ValueSnapshot::Integer(value) => value.to_string(),
-        ValueSnapshot::Number(value) => value.to_string(),
-        ValueSnapshot::String(bytes) => String::from_utf8_lossy(bytes).into_owned(),
-        other => format!("<{}>", other.type_name()),
-    }
 }

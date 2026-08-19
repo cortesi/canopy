@@ -86,7 +86,7 @@ pub fn command_type_to_luau(spec: &CommandTypeSpec) -> String {
 }
 
 /// Register framework-owned record and alias declarations.
-fn register_framework_declarations(builder: &mut module::Builder) {
+pub(crate) fn register_framework_declarations(builder: &mut module::Builder) {
     builder.alias(declaration::Alias::new(
         "Point",
         declaration::Type::table([
@@ -196,11 +196,6 @@ fn register_framework_declarations(builder: &mut module::Builder) {
     register_binding_info(builder);
     register_command_info(builder);
     register_observation_info(builder);
-}
-
-/// Add framework-owned aliases to a generated native module.
-pub(crate) fn register_framework_types(builder: &mut module::Builder) {
-    register_framework_declarations(builder);
 }
 
 /// Register the active-binding discovery record.
@@ -393,29 +388,24 @@ fn register_observation_info(builder: &mut module::Builder) {
     ));
 }
 
-/// Register declaration dependencies for command parameters and returns.
-fn register_command_deps(registry: &mut DeclRegistry<'_>, specs: &[&'static CommandSpec]) {
-    for spec in specs {
-        for param in spec
-            .params
-            .iter()
-            .filter(|param| param.kind == CommandParamKind::User)
-        {
-            param.ty.luau_decls(registry);
-        }
-        if let CommandReturnSpec::Value(ty) = spec.ret {
-            ty.luau_decls(registry);
-        }
-    }
-}
-
 /// Add command-owned declaration dependencies to a generated owner module.
 pub(crate) fn register_owner_dependencies(
     builder: &mut module::Builder,
     specs: &[&'static CommandSpec],
 ) {
     let mut registry = DeclRegistry::native_module(builder);
-    register_command_deps(&mut registry, specs);
+    for spec in specs {
+        for param in spec
+            .params
+            .iter()
+            .filter(|param| param.kind == CommandParamKind::User)
+        {
+            param.ty.luau_decls(&mut registry);
+        }
+        if let CommandReturnSpec::Value(ty) = spec.ret {
+            ty.luau_decls(&mut registry);
+        }
+    }
 }
 
 /// Compose command docs and parameter tags for a command table field.

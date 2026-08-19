@@ -1413,7 +1413,7 @@ pub mod canopy {
                 fn from(e: mpsc::RecvError) -> Self {}
             }
 
-            /// Convert a canopy error into a host-call error.
+            /// Convert a canopy error into a structured Ruau runtime error.
             impl From<Error> for ruau::vm::RuntimeError {
                 fn from(error: error::Error) -> Self {}
             }
@@ -3976,7 +3976,7 @@ pub mod canopy {
             fn from(e: mpsc::RecvError) -> Self {}
         }
 
-        /// Convert a canopy error into a host-call error.
+        /// Convert a canopy error into a structured Ruau runtime error.
         impl From<Error> for ruau::vm::RuntimeError {
             fn from(error: error::Error) -> Self {}
         }
