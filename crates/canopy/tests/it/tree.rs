@@ -4,53 +4,13 @@
 mod tests {
     use canopy::{
         Canopy, NodeId, ViewContext, Widget, derive_commands,
-        error::{Error, Result},
+        error::Result,
         geom::{Point, Size},
         path::Path,
         render::Render,
         state::NodeName,
         testing::grid::Grid,
     };
-
-    #[derive(Debug, Clone, PartialEq)]
-    enum Walk<T> {
-        Skip,
-        Handle(T),
-        Continue,
-    }
-
-    #[derive(Clone, Copy)]
-    enum TriggerOutcome {
-        Skip,
-        Handle,
-        NoResult,
-    }
-
-    fn outcome_result(outcome: TriggerOutcome) -> Result<Walk<()>> {
-        match outcome {
-            TriggerOutcome::Skip => Ok(Walk::Skip),
-            TriggerOutcome::Handle => Ok(Walk::Handle(())),
-            TriggerOutcome::NoResult => Err(Error::Internal("no result".into())),
-        }
-    }
-
-    fn assert_walk_result(actual: Result<Walk<()>>, expected: Result<Walk<()>>) {
-        match (actual, expected) {
-            (Ok(actual), Ok(expected)) => assert_eq!(actual, expected),
-            (Err(Error::Internal(actual)), Err(Error::Internal(expected))) => {
-                assert_eq!(actual, expected);
-            }
-            (Err(actual), Err(expected)) => {
-                panic!("expected Err({expected}), got Err({actual})");
-            }
-            (Ok(actual), Err(expected)) => {
-                panic!("expected Err({expected}), got Ok({actual:?})");
-            }
-            (Err(actual), Ok(expected)) => {
-                panic!("expected Ok({expected:?}), got Err({actual})");
-            }
-        }
-    }
 
     struct TreeWidget {
         name: String,
@@ -93,54 +53,19 @@ mod tests {
         })
     }
 
-    fn preorder<T>(
-        core: &dyn ViewContext,
-        root: NodeId,
-        f: &mut dyn FnMut(NodeId) -> Result<Walk<T>>,
-    ) -> Result<Walk<T>> {
-        let mut stack = vec![root];
-        while let Some(id) = stack.pop() {
-            match f(id)? {
-                Walk::Handle(v) => return Ok(Walk::Handle(v)),
-                Walk::Skip => continue,
-                Walk::Continue => {}
-            }
-            for child in core.children_of(id).into_iter().rev() {
-                stack.push(child);
-            }
-        }
-        Ok(Walk::Continue)
-    }
+    #[test]
+    fn preorder_yields_the_tree_in_declaration_order() -> Result<()> {
+        let mut canopy = Canopy::new();
+        let (root, ..) = build_tree(&mut canopy)?;
 
-    fn postorder_visit<T>(
-        core: &dyn ViewContext,
-        node_id: NodeId,
-        f: &mut dyn FnMut(NodeId) -> Result<Walk<T>>,
-    ) -> Result<Walk<T>> {
-        let mut skip_branch = false;
-        for child in core.children_of(node_id) {
-            match postorder_visit(core, child, f)? {
-                Walk::Continue => {}
-                Walk::Handle(v) => return Ok(Walk::Handle(v)),
-                Walk::Skip => {
-                    skip_branch = true;
-                    break;
-                }
-            }
-        }
-
-        match f(node_id)? {
-            Walk::Continue if skip_branch => Ok(Walk::Skip),
-            res => Ok(res),
-        }
-    }
-
-    fn postorder<T>(
-        core: &dyn ViewContext,
-        root: NodeId,
-        f: &mut dyn FnMut(NodeId) -> Result<Walk<T>>,
-    ) -> Result<Walk<T>> {
-        postorder_visit(core, root, f)
+        let names = canopy.with_root_view(|context| {
+            context
+                .preorder(root)
+                .map(|node| node_name(context, root, node))
+                .collect::<Vec<_>>()
+        });
+        assert_eq!(names, ["r", "ba", "ba_la", "ba_lb", "bb", "bb_la", "bb_lb"]);
+        Ok(())
     }
 
     #[test]
@@ -159,140 +84,11 @@ mod tests {
         Ok(())
     }
 
-    fn vc(a: &[&str]) -> Vec<String> {
-        a.iter().map(|x| x.to_string()).collect()
-    }
-
     fn node_name(context: &dyn ViewContext, root: NodeId, node: NodeId) -> String {
         context
             .node_path(root, node)
             .pop()
             .expect("node path should contain a name")
-    }
-
-    #[test]
-    fn test_preorder() -> Result<()> {
-        fn trigger(name: &str, outcome: TriggerOutcome) -> (Vec<String>, Result<Walk<()>>) {
-            let mut canopy = Canopy::new();
-            let (root, _ba, _bb, _ba_la, _ba_lb, _bb_la, _bb_lb) = build_tree(&mut canopy).unwrap();
-            let mut v = Vec::new();
-            let res = canopy.with_root_view(|context| {
-                preorder(context, root, &mut |id| -> Result<Walk<()>> {
-                    let name_str = node_name(context, root, id);
-                    v.push(name_str.clone());
-                    if name_str == name {
-                        outcome_result(outcome)
-                    } else {
-                        Ok(Walk::Continue)
-                    }
-                })
-            });
-            (v, res)
-        }
-
-        let (visited, result) = trigger("never", TriggerOutcome::Skip);
-        assert_eq!(
-            visited,
-            vc(&["r", "ba", "ba_la", "ba_lb", "bb", "bb_la", "bb_lb"])
-        );
-        assert_walk_result(result, Ok(Walk::Continue));
-
-        let (visited, result) = trigger("ba", TriggerOutcome::Skip);
-        assert_eq!(visited, vc(&["r", "ba", "bb", "bb_la", "bb_lb"]));
-        assert_walk_result(result, Ok(Walk::Continue));
-
-        let (visited, result) = trigger("r", TriggerOutcome::Skip);
-        assert_eq!(visited, vc(&["r"]));
-        assert_walk_result(result, Ok(Walk::Continue));
-
-        let (visited, result) = trigger("ba", TriggerOutcome::Handle);
-        assert_eq!(visited, vc(&["r", "ba"]));
-        assert_walk_result(result, Ok(Walk::Handle(())));
-
-        let (visited, result) = trigger("ba_la", TriggerOutcome::Handle);
-        assert_eq!(visited, vc(&["r", "ba", "ba_la"]));
-        assert_walk_result(result, Ok(Walk::Handle(())));
-
-        let (visited, result) = trigger("ba_la", TriggerOutcome::NoResult);
-        assert_eq!(visited, vc(&["r", "ba", "ba_la"]));
-        assert_walk_result(result, Err(Error::Internal("no result".into())));
-
-        let (visited, result) = trigger("r", TriggerOutcome::NoResult);
-        assert_eq!(visited, vc(&["r"]));
-        assert_walk_result(result, Err(Error::Internal("no result".into())));
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_postorder() -> Result<()> {
-        fn trigger(name: &str, outcome: TriggerOutcome) -> (Vec<String>, Result<Walk<()>>) {
-            let mut canopy = Canopy::new();
-            let (root, _ba, _bb, _ba_la, _ba_lb, _bb_la, _bb_lb) = build_tree(&mut canopy).unwrap();
-            let mut v = Vec::new();
-            let res = canopy.with_root_view(|context| {
-                postorder(context, root, &mut |id| -> Result<Walk<()>> {
-                    let name_str = node_name(context, root, id);
-                    v.push(name_str.clone());
-                    if name_str == name {
-                        outcome_result(outcome)
-                    } else {
-                        Ok(Walk::Continue)
-                    }
-                })
-            });
-            (v, res)
-        }
-
-        let (visited, result) = trigger("ba_la", TriggerOutcome::Skip);
-        assert_eq!(visited, vc(&["ba_la", "ba", "r"]));
-        assert_walk_result(result, Ok(Walk::Skip));
-
-        let (visited, result) = trigger("ba_lb", TriggerOutcome::Skip);
-        assert_eq!(visited, vc(&["ba_la", "ba_lb", "ba", "r"]));
-        assert_walk_result(result, Ok(Walk::Skip));
-
-        let (visited, result) = trigger("r", TriggerOutcome::Skip);
-        assert_eq!(
-            visited,
-            vc(&["ba_la", "ba_lb", "ba", "bb_la", "bb_lb", "bb", "r"])
-        );
-        assert_walk_result(result, Ok(Walk::Skip));
-
-        let (visited, result) = trigger("bb", TriggerOutcome::Skip);
-        assert_eq!(
-            visited,
-            vc(&["ba_la", "ba_lb", "ba", "bb_la", "bb_lb", "bb", "r"])
-        );
-        assert_walk_result(result, Ok(Walk::Skip));
-
-        let (visited, result) = trigger("ba", TriggerOutcome::Skip);
-        assert_eq!(visited, vc(&["ba_la", "ba_lb", "ba", "r"]));
-        assert_walk_result(result, Ok(Walk::Skip));
-
-        let (visited, result) = trigger("ba_la", TriggerOutcome::Handle);
-        assert_eq!(visited, vc(&["ba_la"]));
-        assert_walk_result(result, Ok(Walk::Handle(())));
-
-        let (visited, result) = trigger("bb", TriggerOutcome::Handle);
-        assert_eq!(
-            visited,
-            vc(&["ba_la", "ba_lb", "ba", "bb_la", "bb_lb", "bb"])
-        );
-        assert_walk_result(result, Ok(Walk::Handle(())));
-
-        let (visited, result) = trigger("ba_la", TriggerOutcome::NoResult);
-        assert_eq!(visited, vc(&["ba_la"]));
-        assert_walk_result(result, Err(Error::Internal("no result".into())));
-
-        let (visited, result) = trigger("bb", TriggerOutcome::NoResult);
-        assert_eq!(
-            visited,
-            vc(&["ba_la", "ba_lb", "ba", "bb_la", "bb_lb", "bb"])
-        );
-        assert_walk_result(result, Err(Error::Internal("no result".into())));
-
-        Ok(())
     }
 
     fn locate_name(canopy: &Canopy, root: NodeId, point: Point) -> Result<Option<String>> {

@@ -14,4 +14,5 @@ pub mod luau;
 #[cfg(test)]
 pub(crate) mod model;
 /// Test tree helpers.
-pub mod ttree;
+#[cfg(test)]
+pub(crate) mod ttree;

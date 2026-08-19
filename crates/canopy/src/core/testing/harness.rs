@@ -1,12 +1,7 @@
-use std::any::Any;
-
 use super::buf::BufTest;
 use crate::{
-    Canopy, Context, Loader, NodeId, ViewContext,
-    core::{
-        context::{CoreContext, CoreViewContext},
-        termbuf::TermBuf,
-    },
+    Canopy, Context, Loader, NodeId,
+    core::termbuf::TermBuf,
     error::Result,
     event::{key, mouse},
     geom::Size,
@@ -22,7 +17,7 @@ pub struct Harness {
     /// The Canopy instance that manages the node tree and rendering.
     pub canopy: Canopy,
     /// The backend used for rendering. In tests, this is a no-op backend.
-    pub backend: NopBackend,
+    backend: NopBackend,
     /// The root node of the UI under test.
     pub root: NodeId,
 }
@@ -57,10 +52,7 @@ impl<W: Widget + Loader + 'static> HarnessBuilder<W> {
 
         <W as Loader>::load(&mut canopy)?;
         canopy.finalize_api()?;
-        canopy
-            .core
-            .replace_subtree(canopy.core.root, self.root)
-            .expect("replace root widget");
+        canopy.replace_root(self.root)?;
         canopy.core.with_layout_of(canopy.core.root, |layout| {
             *layout = layout.width(Sizing::Flex(1)).height(Sizing::Flex(1));
         })?;
@@ -155,11 +147,8 @@ impl Harness {
     {
         let node_id = node_id.into();
         self.canopy
-            .core
-            .with_widget_mut(node_id, |widget, _| {
-                let any = widget as &mut dyn Any;
-                let widget = any.downcast_mut::<W>().expect("widget type mismatch");
-                f(widget)
+            .with_context(node_id, |ctx| {
+                ctx.with_node(node_id, |widget, _| Ok(f(widget)))
             })
             .expect("with_widget failed")
     }
@@ -176,20 +165,13 @@ impl Harness {
     /// Execute a closure with mutable access to the root widget and a context.
     pub fn with_root_context<W, R>(
         &mut self,
-        mut f: impl FnMut(&mut W, &mut dyn Context) -> Result<R>,
+        f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
     ) -> Result<R>
     where
         W: Widget + 'static,
     {
         let root = self.root;
-        self.canopy.core.with_widget_mut(root, |widget, core| {
-            let mut ctx = CoreContext::new(core, root);
-            let any = widget as &mut dyn Any;
-            let widget = any
-                .downcast_mut::<W>()
-                .expect("with_root_context: widget type mismatch");
-            f(widget, &mut ctx)
-        })?
+        self.canopy.with_root_context(|ctx| ctx.with_node(root, f))
     }
 
     /// Get a BufTest instance that references the current buffer.
@@ -199,8 +181,8 @@ impl Harness {
 
     /// Find all nodes whose paths match the filter, relative to the root.
     pub fn find_nodes(&self, path_filter: &str) -> Vec<NodeId> {
-        let ctx = CoreViewContext::new(&self.canopy.core, self.root);
-        ctx.find_nodes(path_filter)
+        self.canopy
+            .with_root_view(|context| context.find_nodes(path_filter))
     }
 }
 
@@ -237,18 +219,6 @@ mod tests {
     }
 
     impl Loader for TestNode {}
-
-    #[test]
-    fn test_harness_dump() {
-        let mut h = Harness::builder(TestNode::new())
-            .size(10, 3)
-            .build()
-            .unwrap();
-        h.render().unwrap();
-
-        h.tbuf().dump();
-        assert!(h.tbuf().contains_text("test"));
-    }
 
     #[test]
     fn test_harness_builder() {

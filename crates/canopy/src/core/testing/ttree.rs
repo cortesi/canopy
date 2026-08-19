@@ -47,7 +47,7 @@ impl State {
 }
 
 thread_local! {
-    pub(crate) static TSTATE: RefCell<State> = RefCell::new(State::new());
+    static TSTATE: RefCell<State> = RefCell::new(State::new());
 }
 
 /// Clear the global test state.

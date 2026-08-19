@@ -229,16 +229,16 @@ full evidence, change, and proof for each entry.
 
 **Tests and test infrastructure**
 
-- [ ] W167: Delete the test-local traversal machinery in `tests/it/tree.rs`
-- [ ] W168: Route `Harness` through the public context API and accept `FnOnce`
-- [ ] W169: Trim the `BufTest` surface and consolidate its scattered tests
-- [ ] W170: Delete the two dump tests that assert nothing and the harness duplicate
-- [ ] W171: Fold `tests/it/common.rs` into `focus.rs`
-- [ ] W172: Derive `Default` for `DummyContext`
-- [ ] W173: Gate `ttree` behind `#[cfg(test)]` like `model` — `Capability`
-- [ ] W174: Collapse the mirrored row loops in `test_snake_navigation`
-- [ ] W175: Drop redundant relayout calls and one overwrite-style `with_layout_of` in `tests/it`
-- [ ] W176: Cover the shift paths in the replay proptest and delete the dead test backends
+- [x] W167: Delete the test-local traversal machinery in `tests/it/tree.rs`
+- [x] W168: Route `Harness` through the public context API and accept `FnOnce`
+- [x] W169: Trim the `BufTest` surface and consolidate its scattered tests
+- [x] W170: Delete the two dump tests that assert nothing and the harness duplicate
+- [x] W171: Fold `tests/it/common.rs` into `focus.rs`
+- [x] W172: Derive `Default` for `DummyContext`
+- [x] W173: Gate `ttree` behind `#[cfg(test)]` like `model` — `Capability`
+- [x] W174: Collapse the mirrored row loops in `test_snake_navigation`
+- [x] W175: Drop redundant relayout calls and one overwrite-style `with_layout_of` in `tests/it`
+- [x] W176: Cover the shift paths in the replay proptest and delete the dead test backends
 - [ ] W177: Delete the duplicated render tests left from the test merge
 - [ ] W178: Drop the no-op `Result` plumbing and the duplicate assertion in the style tests
 - [ ] W179: Remove duplicated blocks in `tkey` and `tmouse`

@@ -2,7 +2,7 @@
 use crate::{
     core::termbuf::TermBuf,
     geom::Point,
-    style::{Color, Paint, PartialStyle},
+    style::{Paint, PartialStyle},
 };
 
 /// A helper macro to create buffers for the termbuf match assertions.
@@ -41,24 +41,12 @@ impl<'a> BufTest<'a> {
     }
 
     /// Returns true if the buffer content matches the expected lines.
-    pub fn matches(&self, expected: &[&str]) -> bool {
-        if expected.len() != self.buf.size().h as usize {
-            return false;
-        }
-
-        for (y, expected_line) in expected.iter().enumerate() {
-            let actual_line = self.row_string(y as u32);
-
-            // Compare lines character by character to handle any_char
-            let expected_trimmed = expected_line.trim_end();
-            let actual_trimmed = actual_line.trim_end();
-
-            if expected_trimmed != actual_trimmed {
-                return false;
-            }
-        }
-
-        true
+    fn matches(&self, expected: &[&str]) -> bool {
+        expected.len() == self.buf.size().h as usize
+            && expected
+                .iter()
+                .enumerate()
+                .all(|(y, line)| self.row_string(y as u32).trim_end() == line.trim_end())
     }
 
     /// Assert that the buffer matches the expected lines with pretty printed output on failure.
@@ -98,11 +86,6 @@ impl<'a> BufTest<'a> {
     /// Does the buffer contain the supplied substring?
     pub fn contains_text(&self, txt: &str) -> bool {
         self.lines().iter().any(|l| l.contains(txt))
-    }
-
-    /// Does the buffer contain the supplied substring in the given foreground colour?
-    pub fn contains_text_fg(&self, txt: &str, fg: Color) -> bool {
-        self.contains_text_style(txt, &PartialStyle::fg(fg))
     }
 
     /// Does the buffer contain the supplied substring with the given style?
@@ -187,7 +170,7 @@ mod tests {
     use super::*;
     use crate::{
         geom::{Line, Size},
-        style::{AttrSet, Color, ResolvedStyle},
+        style::{Attr, AttrSet, Color, ResolvedStyle, StyleBuilder},
     };
 
     #[test]
@@ -228,21 +211,6 @@ mod tests {
     }
 
     #[test]
-    fn test_dump_with_larger_buffer() {
-        // Test with a larger buffer to see the ruler wrap around
-        let mut buf = TermBuf::new(Size::new(25, 15), '\0', test_style())
-            .expect("test render target should allocate");
-        buf.text(&test_style(), Line::new(0, 0, 10), "0123456789")
-            .expect("test buffer mutation should succeed");
-        buf.text(&test_style(), Line::new(10, 5, 15), "Offset at (10,5)")
-            .expect("test buffer mutation should succeed");
-        buf.text(&test_style(), Line::new(5, 10, 10), "Row 10 test")
-            .expect("test buffer mutation should succeed");
-
-        BufTest::new(&buf).dump();
-    }
-
-    #[test]
     fn test_buftest_instance_methods() {
         let mut buf = TermBuf::new(Size::new(10, 2), ' ', test_style())
             .expect("test render target should allocate");
@@ -262,10 +230,6 @@ mod tests {
         assert!(bt.contains_text("world"));
         assert!(!bt.contains_text("goodbye"));
 
-        // Test contains_text_fg
-        assert!(bt.contains_text_fg("world", Color::Red));
-        assert!(!bt.contains_text_fg("hello", Color::Red));
-
         // Test contains_text_style
         assert!(bt.contains_text_style("world", &PartialStyle::fg(Color::Red)));
         assert!(bt.contains_text_style("hello", &PartialStyle::fg(Color::White)));
@@ -274,5 +238,35 @@ mod tests {
         let lines = bt.lines();
         assert_eq!(lines.len(), 2);
         assert!(lines[0].starts_with("helloworld"));
+    }
+
+    #[test]
+    fn contains_text_style_matches_attributes_and_combinations() {
+        let mut buf = TermBuf::new(Size::new(10, 2), ' ', test_style())
+            .expect("test render target should allocate");
+
+        let mut bold_red = test_style();
+        bold_red.fg = Color::Red;
+        bold_red.attrs = AttrSet::new(Attr::Bold);
+        let mut italic_blue = test_style();
+        italic_blue.fg = Color::Blue;
+        italic_blue.attrs = AttrSet::new(Attr::Italic);
+
+        buf.text(&bold_red, Line::new(0, 0, 4), "bold")
+            .expect("test buffer mutation should succeed");
+        buf.text(&italic_blue, Line::new(0, 1, 6), "italic")
+            .expect("test buffer mutation should succeed");
+
+        let bt = BufTest::new(&buf);
+        assert!(bt.contains_text_style("bold", &PartialStyle::attrs(AttrSet::new(Attr::Bold))));
+        assert!(bt.contains_text_style("italic", &PartialStyle::attrs(AttrSet::new(Attr::Italic))));
+        assert!(bt.contains_text_style(
+            "bold",
+            &PartialStyle::from(StyleBuilder::new().fg(Color::Red).attr(Attr::Bold))
+        ));
+        assert!(!bt.contains_text_style(
+            "bold",
+            &PartialStyle::from(StyleBuilder::new().fg(Color::Red).attr(Attr::Italic))
+        ));
     }
 }

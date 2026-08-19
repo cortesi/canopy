@@ -22,20 +22,12 @@ use crate::{
 };
 
 /// Dummy context for tests.
+#[derive(Default)]
 pub struct DummyContext {
     /// Current node identifier.
     node_id: NodeId,
     /// Root node identifier.
     root_id: NodeId,
-}
-
-impl Default for DummyContext {
-    fn default() -> Self {
-        Self {
-            node_id: NodeId::null(),
-            root_id: NodeId::null(),
-        }
-    }
 }
 
 impl ViewContext for DummyContext {

@@ -243,44 +243,6 @@ impl RenderBackend for RecBackend {
     }
 }
 
-struct ShiftBackend {
-    shift: Option<i32>,
-    text_ops: usize,
-}
-
-impl ShiftBackend {
-    fn new() -> Self {
-        Self {
-            shift: None,
-            text_ops: 0,
-        }
-    }
-}
-
-impl RenderBackend for ShiftBackend {
-    fn style(&mut self, _s: &ResolvedStyle) -> Result<()> {
-        Ok(())
-    }
-
-    fn text(&mut self, _loc: Point, _txt: &str) -> Result<()> {
-        self.text_ops += 1;
-        Ok(())
-    }
-
-    fn supports_line_shift(&self) -> bool {
-        true
-    }
-
-    fn shift_lines(&mut self, _top: u32, _bottom: u32, count: i32) -> Result<()> {
-        self.shift = Some(count);
-        Ok(())
-    }
-
-    fn flush(&mut self) -> Result<()> {
-        Ok(())
-    }
-}
-
 #[derive(Default)]
 struct RegionShiftBackend {
     shift: Option<(u32, u32, i32)>,
@@ -314,8 +276,6 @@ impl RenderBackend for RegionShiftBackend {
 struct ReplayBackend {
     size: Size,
     rows: Vec<Vec<char>>,
-    char_shift: bool,
-    line_shift: bool,
     wide_as_narrow: bool,
 }
 
@@ -324,8 +284,6 @@ impl ReplayBackend {
         Self {
             size,
             rows: vec![vec![' '; size.w as usize]; size.h as usize],
-            char_shift: true,
-            line_shift: true,
             wide_as_narrow: false,
         }
     }
@@ -373,7 +331,7 @@ impl RenderBackend for ReplayBackend {
     }
 
     fn supports_char_shift(&self) -> bool {
-        self.char_shift
+        true
     }
 
     fn shift_chars(&mut self, loc: Point, count: i32) -> Result<()> {
@@ -407,7 +365,7 @@ impl RenderBackend for ReplayBackend {
     }
 
     fn supports_line_shift(&self) -> bool {
-        self.line_shift
+        true
     }
 
     fn shift_lines(&mut self, top: u32, bottom: u32, count: i32) -> Result<()> {
@@ -637,6 +595,73 @@ impl ModelBuffer {
         }
     }
 
+    /// Shift one row's cells horizontally, blank-filling the vacated columns.
+    fn shift_chars(&mut self, location: Point, count: i32, style: ResolvedStyle) {
+        let (Ok(width), Ok(row)) = (usize::try_from(self.size.w), usize::try_from(location.y))
+        else {
+            return;
+        };
+        if location.y >= self.size.h || width == 0 {
+            return;
+        }
+        let start = usize::try_from(location.x).unwrap_or(width).min(width);
+        let row_start = row * width;
+        let gap = count.unsigned_abs() as usize;
+        let blank = ModelCell::space(style);
+        let mut row_cells = self.cells[row_start..row_start + width].to_vec();
+        if count > 0 {
+            for x in (start..width).rev() {
+                row_cells[x] = x
+                    .checked_sub(gap)
+                    .filter(|source| *source >= start)
+                    .map_or_else(|| blank.clone(), |source| row_cells[source].clone());
+            }
+        } else if count < 0 {
+            for x in start..width {
+                row_cells[x] = row_cells
+                    .get(x.saturating_add(gap))
+                    .cloned()
+                    .unwrap_or_else(|| blank.clone());
+            }
+        }
+        self.cells[row_start..row_start + width].clone_from_slice(&row_cells);
+    }
+
+    /// Shift rows within `top..=bottom`, blank-filling the vacated rows.
+    fn shift_lines(&mut self, top: u32, bottom: u32, count: i32, style: ResolvedStyle) {
+        let Ok(width) = usize::try_from(self.size.w) else {
+            return;
+        };
+        let top = usize::try_from(top).unwrap_or(0);
+        let bottom = usize::try_from(bottom.min(self.size.h.saturating_sub(1))).unwrap_or(0);
+        if top > bottom || count == 0 || width == 0 {
+            return;
+        }
+        let gap = count.unsigned_abs() as usize;
+        let blank_row = vec![ModelCell::space(style); width];
+        let original = self.cells.clone();
+        let row = |index: usize| &original[index * width..(index + 1) * width];
+        if count > 0 {
+            for y in (top..=bottom).rev() {
+                let source = y
+                    .checked_sub(gap)
+                    .filter(|source| *source >= top)
+                    .map(row)
+                    .unwrap_or(&blank_row);
+                self.cells[y * width..(y + 1) * width].clone_from_slice(source);
+            }
+        } else {
+            for y in top..=bottom {
+                let source = y
+                    .checked_add(gap)
+                    .filter(|source| *source <= bottom)
+                    .map(row)
+                    .unwrap_or(&blank_row);
+                self.cells[y * width..(y + 1) * width].clone_from_slice(source);
+            }
+        }
+    }
+
     fn assert_matches(&self, actual: &TermBuf) -> TestCaseResult {
         prop_assert_eq!(actual.size(), self.size);
         prop_assert_eq!(actual.cells.len(), self.cells.len());
@@ -671,10 +696,22 @@ impl RenderBackend for ModelBackend {
         Ok(())
     }
 
-    fn shift_chars(&mut self, _location: Point, _count: i32) -> Result<()> {
-        Err(Error::Invariant(
-            "model backend does not support character shifts".into(),
-        ))
+    fn supports_char_shift(&self) -> bool {
+        true
+    }
+
+    fn shift_chars(&mut self, location: Point, count: i32) -> Result<()> {
+        self.model.shift_chars(location, count, self.style);
+        Ok(())
+    }
+
+    fn supports_line_shift(&self) -> bool {
+        true
+    }
+
+    fn shift_lines(&mut self, top: u32, bottom: u32, count: i32) -> Result<()> {
+        self.model.shift_lines(top, bottom, count, self.style);
+        Ok(())
     }
 
     fn flush(&mut self) -> Result<()> {
@@ -880,9 +917,9 @@ proptest! {
 fn diff_vertical_shift_uses_scroll() {
     let prev = buf_from_rows(&["aaa", "bbb", "ccc"]);
     let cur = buf_from_rows(&["xxx", "aaa", "bbb"]);
-    let mut be = ShiftBackend::new();
+    let mut be = RegionShiftBackend::default();
     cur.diff(&prev, &mut be).unwrap();
-    assert_eq!(be.shift, Some(1));
+    assert_eq!(be.shift, Some((0, 2, 1)));
     assert_eq!(be.text_ops, 1);
 }
 
@@ -1049,21 +1086,6 @@ fn diff_size_change_rerender() {
 }
 
 #[test]
-fn contains_text() {
-    let mut tb = TermBuf::new(Size::new(10, 3), ' ', def_style())
-        .expect("test render target should allocate");
-    tb.text(&def_style(), Line::new(0, 0, 10), "hello")
-        .expect("test buffer mutation should succeed");
-    tb.text(&def_style(), Line::new(0, 1, 10), "world")
-        .expect("test buffer mutation should succeed");
-
-    let bt = BufTest::new(&tb);
-    assert!(bt.contains_text("hello"));
-    assert!(bt.contains_text("world"));
-    assert!(!bt.contains_text("goodbye"));
-}
-
-#[test]
 fn contains_text_style() {
     let mut tb = TermBuf::new(Size::new(10, 3), ' ', def_style())
         .expect("test render target should allocate");
@@ -1102,25 +1124,6 @@ fn contains_text_style() {
 }
 
 #[test]
-fn contains_text_fg_compat() {
-    use crate::style::solarized;
-    let mut tb = TermBuf::new(Size::new(10, 1), ' ', def_style())
-        .expect("test render target should allocate");
-
-    let mut blue_style = def_style();
-    blue_style.fg = solarized::BLUE;
-
-    tb.text(&blue_style, Line::new(0, 0, 3), "two")
-        .expect("test buffer mutation should succeed");
-
-    // Test the old method
-    assert!(BufTest::new(&tb).contains_text_fg("two", solarized::BLUE));
-
-    // Test that it works the same as contains_text_style
-    assert!(BufTest::new(&tb).contains_text_style("two", &PartialStyle::fg(solarized::BLUE)));
-}
-
-#[test]
 fn empty_constructor_uses_canonical_empty_cells() {
     let empty = TermBuf::new(Size::new(5, 3), '\0', def_style())
         .expect("test render target should allocate");
@@ -1130,47 +1133,4 @@ fn empty_constructor_uses_canonical_empty_cells() {
         "XXXXX"
         "XXXXX"
     ]);
-}
-
-#[test]
-fn contains_text_style_builders() {
-    use crate::style::Attr;
-    let mut tb = TermBuf::new(Size::new(10, 2), ' ', def_style())
-        .expect("test render target should allocate");
-
-    // Create styles with different attributes
-    let mut bold_red = def_style();
-    bold_red.fg = Color::Red;
-    bold_red.attrs = AttrSet::new(Attr::Bold);
-
-    let mut italic_blue = def_style();
-    italic_blue.fg = Color::Blue;
-    italic_blue.attrs = AttrSet::new(Attr::Italic);
-
-    tb.text(&bold_red, Line::new(0, 0, 4), "bold")
-        .expect("test buffer mutation should succeed");
-    tb.text(&italic_blue, Line::new(0, 1, 6), "italic")
-        .expect("test buffer mutation should succeed");
-
-    // Test using builder methods
-    assert!(BufTest::new(&tb).contains_text_style("bold", &PartialStyle::fg(Color::Red)));
-    assert!(BufTest::new(&tb).contains_text_style("italic", &PartialStyle::fg(Color::Blue)));
-
-    // Test with attributes
-    assert!(
-        BufTest::new(&tb)
-            .contains_text_style("bold", &PartialStyle::attrs(AttrSet::new(Attr::Bold)))
-    );
-    assert!(
-        BufTest::new(&tb)
-            .contains_text_style("italic", &PartialStyle::attrs(AttrSet::new(Attr::Italic)))
-    );
-
-    // Test chaining
-    let bold_red_style = PartialStyle::from(StyleBuilder::new().fg(Color::Red).attr(Attr::Bold));
-    assert!(BufTest::new(&tb).contains_text_style("bold", &bold_red_style));
-
-    // Test that it doesn't match wrong combinations
-    let italic_red = PartialStyle::from(StyleBuilder::new().fg(Color::Red).attr(Attr::Italic));
-    assert!(!BufTest::new(&tb).contains_text_style("bold", &italic_red));
 }

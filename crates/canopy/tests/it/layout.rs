@@ -109,7 +109,6 @@ mod tests {
             Ok((container, child))
         })?;
 
-        h.canopy.set_root_size(Size::new(20, 20))?;
         h.render()?;
 
         let (container_view, child_view) = h.canopy.with_root_view(|context| {

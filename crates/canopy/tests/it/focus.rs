@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, ViewContext, Widget,
+        Canopy, FocusScope, NodeId, ViewContext, Widget,
         commands::{CommandNode, CommandSpec},
         error::{Error, Result},
         geom::{Direction, Size},
@@ -13,7 +13,29 @@ mod tests {
         testing::grid::Grid,
     };
 
-    use crate::common::{focus_dir, focus_first, focused_cell};
+    /// Return the name of the focused grid cell, if a cell holds focus.
+    fn focused_cell(canopy: &Canopy) -> Option<String> {
+        canopy.with_root_view(|context| {
+            let root = context.root_id();
+            let focused = context.focused_leaf(root)?;
+            let mut path = context.node_path(root, focused);
+            path.pop().filter(|name| name.starts_with("cell_"))
+        })
+    }
+
+    /// Focus the first focusable node in a subtree.
+    fn focus_first(canopy: &mut Canopy, root: NodeId) -> Result<()> {
+        canopy.with_root_context(|context| context.focus_first(FocusScope::Node(root)).map(|_| ()))
+    }
+
+    /// Move focus one step in a direction within a subtree.
+    fn focus_dir(canopy: &mut Canopy, root: NodeId, direction: Direction) -> Result<()> {
+        canopy.with_root_context(|context| {
+            context
+                .focus_dir(FocusScope::Node(root), direction)
+                .map(|_| ())
+        })
+    }
 
     struct FocusLeaf {
         name: &'static str,
@@ -61,72 +83,49 @@ mod tests {
         let mut position_errors: Vec<String> = Vec::new();
 
         for row in 0..grid_height {
-            if row % 2 == 0 {
-                for col in 0..grid_width {
-                    let cell = focused_cell(canopy);
-                    let expected_cell = format!("cell_{col}_{row}");
+            // Rows alternate direction, so even rows run left to right and odd rows right to left.
+            let forward = row % 2 == 0;
+            let step = if forward {
+                Direction::Right
+            } else {
+                Direction::Left
+            };
+            let cols: Vec<usize> = if forward {
+                (0..grid_width).collect()
+            } else {
+                (0..grid_width).rev().collect()
+            };
 
-                    match &cell {
-                        Some(actual_cell) => {
-                            if !visited_cells.contains(actual_cell) {
-                                visited_cells.push(actual_cell.clone());
-                            }
-                            if actual_cell != &expected_cell {
-                                position_errors.push(format!(
-                                    "Row {row}, col {col}: expected {expected_cell}, got {actual_cell}"
-                                ));
-                            }
+            for (index, col) in cols.iter().copied().enumerate() {
+                let cell = focused_cell(canopy);
+                let expected_cell = format!("cell_{col}_{row}");
+
+                match &cell {
+                    Some(actual_cell) => {
+                        if !visited_cells.contains(actual_cell) {
+                            visited_cells.push(actual_cell.clone());
                         }
-                        None => {
-                            position_errors
-                                .push(format!("Row {row}, col {col}: no focused cell found"));
+                        if actual_cell != &expected_cell {
+                            position_errors.push(format!(
+                                "Row {row}, col {col}: expected {expected_cell}, got {actual_cell}"
+                            ));
                         }
                     }
-
-                    if col < grid_width - 1 {
-                        let before = focused_cell(canopy);
-                        focus_dir(canopy, grid.root, Direction::Right)?;
-                        let after = focused_cell(canopy);
-
-                        if before == after {
-                            return Err(Error::Invariant(format!(
-                                "Failed to move right from row {row}, col {col} (stuck at {before:?})"
-                            )));
-                        }
+                    None => {
+                        position_errors
+                            .push(format!("Row {row}, col {col}: no focused cell found"));
                     }
                 }
-            } else {
-                for col in (0..grid_width).rev() {
-                    let cell = focused_cell(canopy);
-                    let expected_cell = format!("cell_{col}_{row}");
 
-                    match &cell {
-                        Some(actual_cell) => {
-                            if !visited_cells.contains(actual_cell) {
-                                visited_cells.push(actual_cell.clone());
-                            }
-                            if actual_cell != &expected_cell {
-                                position_errors.push(format!(
-                                    "Row {row}, col {col}: expected {expected_cell}, got {actual_cell}"
-                                ));
-                            }
-                        }
-                        None => {
-                            position_errors
-                                .push(format!("Row {row}, col {col}: no focused cell found"));
-                        }
-                    }
+                if index + 1 < cols.len() {
+                    let before = focused_cell(canopy);
+                    focus_dir(canopy, grid.root, step)?;
+                    let after = focused_cell(canopy);
 
-                    if col > 0 {
-                        let before = focused_cell(canopy);
-                        focus_dir(canopy, grid.root, Direction::Left)?;
-                        let after = focused_cell(canopy);
-
-                        if before == after {
-                            return Err(Error::Invariant(format!(
-                                "Failed to move left from row {row}, col {col} (stuck at {before:?})"
-                            )));
-                        }
+                    if before == after {
+                        return Err(Error::Invariant(format!(
+                            "Failed to move {step:?} from row {row}, col {col} (stuck at {before:?})"
+                        )));
                     }
                 }
             }

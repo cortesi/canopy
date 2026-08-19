@@ -88,14 +88,12 @@ mod tests {
 
     fn build_split_tree(core: &mut dyn Context, depth: usize, horizontal: bool) -> Result<NodeId> {
         let node: NodeId = core.create_detached(NodeA::new())?.into();
-        core.with_layout_of(node, &mut |layout| {
-            let base = if horizontal {
-                Layout::row()
-            } else {
-                Layout::column()
-            };
-            *layout = base.min_width(1).min_height(1);
-        })?;
+        let base = if horizontal {
+            Layout::row()
+        } else {
+            Layout::column()
+        };
+        core.set_layout_of(node, base.min_width(1).min_height(1))?;
         if depth == 0 {
             return Ok(node);
         }
@@ -122,7 +120,6 @@ mod tests {
             context.set_layout_of(node_b, Layout::fill())
         })?;
 
-        h.canopy.set_root_size(Size::new(30, 10))?;
         h.render()?;
         h.tbuf().assert_matches(buf![
             "BBBBBBBBBB                    "
@@ -156,7 +153,6 @@ mod tests {
             Ok(bottom)
         })?;
 
-        h.canopy.set_root_size(Size::new(10, 10))?;
         h.render()?;
 
         let bottom_view = h

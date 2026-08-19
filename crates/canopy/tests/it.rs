@@ -7,9 +7,6 @@
 /// Command dispatch, argument, and error integration tests.
 #[path = "it/commands.rs"]
 mod commands;
-/// Helpers shared by more than one integration module.
-#[path = "it/common.rs"]
-mod common;
 /// Focus traversal integration tests.
 #[path = "it/focus.rs"]
 mod focus;

@@ -100,10 +100,8 @@ fn build_harness(text: &str, config: EditorConfig, width: u32, height: u32) -> H
 }
 
 fn with_editor<R>(harness: &mut Harness, f: impl FnOnce(&mut Editor) -> R) -> R {
-    let mut f = Some(f);
     harness
         .with_root_context(|_root: &mut EditorHost, ctx| {
-            let f = f.take().expect("editor closure already consumed");
             ctx.with_child::<EditorSlot, _>(|editor, _| Ok(f(editor)))
         })
         .expect("editor missing")
