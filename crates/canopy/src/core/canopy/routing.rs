@@ -283,16 +283,16 @@ impl Canopy {
 
     /// Service a bounded batch of callbacks marshalled onto the UI thread.
     ///
-    /// Custom run loops should call this after receiving [`Event::Wake`]. The return value is the
+    /// The in-crate run loop calls this after receiving [`Event::Wake`]. The return value is the
     /// number of callbacks executed during this turn.
-    pub fn service_automation(&mut self) -> usize {
+    pub(crate) fn service_automation(&mut self) -> usize {
         let mut serviced = 0;
         while serviced < AUTOMATION_SERVICE_BUDGET {
             let Ok(callback) = self.automation_rx.try_recv() else {
                 break;
             };
             callback(self);
-            self.request_redraw();
+            self.render_pending = true;
             serviced += 1;
         }
         if serviced == AUTOMATION_SERVICE_BUDGET {

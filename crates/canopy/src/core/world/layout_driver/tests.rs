@@ -847,7 +847,7 @@ fn stack_children_overlap() -> Result<()> {
     let child2 = core.create_detached(c2)?;
     core.set_children(parent, vec![child1, child2])?;
     attach_root_child(&mut core, parent)?;
-    core.set_layout_of(parent, Layout::stack())?;
+    core.set_layout_of(parent, Layout::column().direction(Direction::Stack))?;
     core.update_layout(Size::new(50, 50))?;
 
     // Both children should be at the same position (0, 0) by default
@@ -918,7 +918,7 @@ fn locate_node_prefers_topmost_stack_child() -> Result<()> {
     let child2 = core.create_detached(c2)?;
     core.set_children(parent, vec![child1, child2])?;
     attach_root_child(&mut core, parent)?;
-    core.set_layout_of(parent, Layout::stack())?;
+    core.set_layout_of(parent, Layout::column().direction(Direction::Stack))?;
     core.update_layout(Size::new(50, 50))?;
 
     let hit = core.locate_node(core.root, Point { x: 1, y: 1 })?;

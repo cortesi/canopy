@@ -131,7 +131,6 @@ fn help_and_diagnostics_use_canonical_binding_order() -> Result<()> {
 #[test]
 fn pending_script_finalization_failure_is_atomic_and_retryable() -> Result<()> {
     let mut canopy = Canopy::new();
-    assert_eq!(canopy.script_api_state(), ScriptApiState::Open);
     assert!(canopy.script_api().is_err());
     let host = canopy.script_host.clone();
     let first = host.compile("return 1")?;
@@ -141,11 +140,10 @@ fn pending_script_finalization_failure_is_atomic_and_retryable() -> Result<()> {
     canopy
         .finalize_api()
         .expect_err("pending script load should fail");
-    assert_eq!(canopy.script_api_state(), ScriptApiState::Open);
     assert!(canopy.script_api().is_err());
 
     canopy.finalize_api()?;
-    assert_eq!(canopy.script_api_state(), ScriptApiState::Ready);
+    assert!(canopy.script_api().is_ok());
     let root = canopy.root_id();
     assert_eq!(
         host.execute(&mut canopy, root, first, None)?,
@@ -182,12 +180,11 @@ fn every_finalization_checkpoint_is_atomic_and_retryable() -> Result<()> {
         canopy
             .finalize_api()
             .expect_err(&format!("{step:?} should fail"));
-        assert_eq!(canopy.script_api_state(), ScriptApiState::Open, "{step:?}");
         assert!(canopy.script_api().is_err(), "{step:?}");
         assert_eq!(host.script_ids().len(), 2, "{step:?}");
 
         canopy.finalize_api()?;
-        assert_eq!(canopy.script_api_state(), ScriptApiState::Ready, "{step:?}");
+        assert!(canopy.script_api().is_ok(), "{step:?}");
         assert_eq!(host.script_ids().len(), 4, "{step:?}");
         let root = canopy.root_id();
         assert_eq!(

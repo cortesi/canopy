@@ -106,17 +106,6 @@ pub struct Canopy {
     style: StyleMap,
 }
 
-/// Script API finalization state.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ScriptApiState {
-    /// Registrations remain open and no surface is staged.
-    Open,
-    /// The surface is staged but the runtime has not been published.
-    Preparing,
-    /// The runtime, definitions, and module source are ready.
-    Ready,
-}
-
 /// A phase in key or mouse event routing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RoutePhase {
@@ -359,11 +348,6 @@ impl Canopy {
         }
     }
 
-    /// Mark the visible application state for redraw.
-    pub fn request_redraw(&mut self) {
-        self.render_pending = true;
-    }
-
     /// Return the root node ID.
     pub fn root_id(&self) -> NodeId {
         self.core.root_id()
@@ -384,12 +368,6 @@ impl Canopy {
         W: Widget + 'static,
     {
         Ok(TypedId::new(self.core.create_detached(widget)?))
-    }
-
-    /// Replace the root's children with a single node.
-    pub fn set_root_child(&mut self, child: impl Into<NodeId>) -> Result<()> {
-        let root = self.root_id();
-        self.core.set_children(root, vec![child.into()])
     }
 
     /// Replace the root widget while preserving its stable node ID.
@@ -414,27 +392,9 @@ impl Canopy {
         &mut self.style
     }
 
-    /// Replace the active style map before the next render.
-    pub fn set_style(&mut self, style: StyleMap) {
-        self.style = style;
-        self.render_pending = true;
-    }
-
     /// Get a reference to the current render buffer, if any.
     pub fn buf(&self) -> Option<&TermBuf> {
         self.termbuf.as_ref()
-    }
-
-    /// Run a compiled script by id on the target node.
-    pub fn run_script(&mut self, node_id: impl Into<NodeId>, sid: script::ScriptId) -> Result<()> {
-        self.ensure_finalized()?;
-        let host = self.script_host.clone();
-        host.execute(self, node_id.into(), sid, None).map(|_| ())
-    }
-
-    /// Compile a script and return its identifier.
-    pub fn compile_script(&mut self, source: &str) -> Result<script::ScriptId> {
-        self.script_host.compile(source)
     }
 
     /// Evaluate a Luau source string in the current app context.
@@ -484,7 +444,7 @@ impl Canopy {
         let baseline = self.begin_script_journal();
         let result = (|| {
             self.ensure_finalized()?;
-            let script_id = self.compile_script(source)?;
+            let script_id = self.script_host.compile(source)?;
             let host = self.script_host.clone();
             run(self, script_id, host)
         })();
@@ -784,22 +744,8 @@ impl Canopy {
 
     /// Run a closure against an immutable view of the root context.
     pub fn with_root_view<R>(&self, f: impl FnOnce(&dyn crate::ViewContext) -> R) -> R {
-        self.with_view(self.core.root_id(), f)
-            .expect("root context should always exist")
-    }
-
-    /// Run a closure against an immutable view context bound to a node.
-    pub fn with_view<R>(
-        &self,
-        node: impl Into<NodeId>,
-        f: impl FnOnce(&dyn crate::ViewContext) -> R,
-    ) -> Result<R> {
-        let node = node.into();
-        if !self.core.nodes.contains_key(node) {
-            return Err(error::Error::NodeNotFound(node));
-        }
-        let context = crate::core::context::CoreViewContext::new(&self.core, node);
-        Ok(f(&context))
+        let context = crate::core::context::CoreViewContext::new(&self.core, self.core.root_id());
+        f(&context)
     }
 
     /// Type-check a named Luau source against the finalized app API.
@@ -1015,17 +961,6 @@ impl Canopy {
         self.script_module_source = module_source;
         self.script_api_text = Some(definitions);
         Ok(())
-    }
-
-    /// Return the current script API finalization state.
-    pub fn script_api_state(&self) -> ScriptApiState {
-        if self.script_host.is_finalized() {
-            ScriptApiState::Ready
-        } else if self.script_host.surface().is_some() {
-            ScriptApiState::Preparing
-        } else {
-            ScriptApiState::Open
-        }
     }
 
     /// Return the rendered Luau definition file for a ready app.

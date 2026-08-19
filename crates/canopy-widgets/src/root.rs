@@ -623,9 +623,7 @@ mod tests {
     }
 
     fn run_script(canopy: &mut Canopy, script: &str) -> Result<()> {
-        let script_id = canopy.compile_script(script)?;
-        canopy.run_script(canopy.root_id(), script_id)?;
-        Ok(())
+        canopy.eval_script(script)
     }
 
     #[test]

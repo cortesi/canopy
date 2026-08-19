@@ -63,7 +63,7 @@ pub mod world;
 // Public exports from internal modules
 pub use canopy::{
     AutomationCallback, AutomationHandle, Canopy, Loader, RoutePhase, RouteTraceEntry,
-    ScriptApiState, ScriptJournalEntry,
+    ScriptJournalEntry,
 };
 pub use change::ChangeOutcome;
 pub use children::{KeyedChildren, RemovePolicy};
@@ -74,6 +74,5 @@ pub use inputmap::{
     BindingId, BindingOwner, BindingPhase, BindingScope, BindingTarget, ExclusiveFrameToken,
     FrameworkBindingGroup, InputSpec,
 };
-pub use path::{Path, PathFilter};
 pub use script::ScriptModuleRoots;
 pub use world::Core;

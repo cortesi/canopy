@@ -6,7 +6,7 @@ mod tests {
 
     use canopy::{
         Canopy, CommandArg, Context, EventOutcome, FrameworkBindingGroup, InputSpec, Loader,
-        NodeId, ScriptApiState, ViewContext, Widget, command,
+        NodeId, ViewContext, Widget, command,
         commands::{ArgValue, CommandArgs, CommandId, CommandInvocation},
         derive_commands,
         error::{Error, Result, ScriptErrorKind},
@@ -132,7 +132,7 @@ mod tests {
         let mut canopy = Canopy::new();
         ApiLeaf::load(&mut canopy)?;
         let leaf = canopy.create_detached(ApiLeaf::new())?;
-        canopy.set_root_child(leaf)?;
+        canopy.with_root_context(|context| context.set_children(vec![leaf.into()]))?;
         Ok(canopy)
     }
 
@@ -733,7 +733,6 @@ mod tests {
             .finalize_api()
             .expect_err("mismatched declaration should fail finalization");
         assert!(err.to_string().contains("settings.d.luau"));
-        assert_eq!(canopy.script_api_state(), ScriptApiState::Open);
         assert!(canopy.script_api().is_err());
 
         write_script(
@@ -745,7 +744,6 @@ mod tests {
         "#,
         );
         canopy.finalize_api()?;
-        assert_eq!(canopy.script_api_state(), ScriptApiState::Ready);
         assert!(canopy.script_api().is_ok());
 
         let _removed = fs::remove_dir_all(root);

@@ -140,8 +140,7 @@ impl Harness {
 
     /// Execute a script on the app under test.
     pub fn script(&mut self, script: &str) -> Result<()> {
-        let script_id = self.canopy.script_host.compile(script)?;
-        self.canopy.run_script(self.root, script_id)?;
+        self.canopy.eval_script(script)?;
         self.canopy.render(&mut self.backend)
     }
 

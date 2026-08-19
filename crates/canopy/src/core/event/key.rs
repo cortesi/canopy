@@ -402,25 +402,10 @@ fn ctrl_alias_char(c: char) -> Option<char> {
     }
 }
 
-impl PartialEq<KeyCode> for Key {
-    fn eq(&self, c: &KeyCode) -> bool {
-        // If there are modifiers, we never match.
-        if self.mods != Empty {
-            return false;
-        }
-        *c == self.key
-    }
-}
-
 impl PartialEq<char> for Key {
+    /// An unmodified key matches the character it produces.
     fn eq(&self, c: &char) -> bool {
-        *self == KeyCode::Char(*c)
-    }
-}
-
-impl PartialEq<Key> for char {
-    fn eq(&self, k: &Key) -> bool {
-        *k == KeyCode::Char(*self)
+        self.mods == Empty && self.key == KeyCode::Char(*c)
     }
 }
 

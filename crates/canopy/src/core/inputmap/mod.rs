@@ -7,7 +7,7 @@ use crate::{
     core::NodeId,
     error::{Error, Result},
     event::{key::Key, mouse::Mouse},
-    path::{Path, PathMatch, PathMatcher},
+    path::{Path, PathFilter, PathMatch},
     script::LuauFunctionId,
 };
 
@@ -145,13 +145,13 @@ pub struct BindingRecord {
     /// Monotonic insertion order.
     pub insertion_id: u64,
     /// Compiled path matcher and its original filter.
-    path_matcher: PathMatcher,
+    path_matcher: PathFilter,
 }
 
 impl BindingRecord {
     /// Return the original path filter.
     pub fn path_filter(&self) -> &str {
-        self.path_matcher.filter()
+        self.path_matcher.as_str()
     }
 }
 
@@ -282,7 +282,7 @@ impl InputMap {
     ) -> Result<(BindingId, Vec<(BindingId, LuauFunctionId)>)> {
         validate_application_scope(&scope, path_filter)?;
         validate_description(description)?;
-        let path_matcher = PathMatcher::new(path_filter)?;
+        let path_matcher = PathFilter::new(path_filter)?;
         let id = self.allocate_binding_id()?;
         let insertion_id = self.allocate_insertion_id()?;
         let input = input.normalize();
@@ -317,7 +317,7 @@ impl InputMap {
         command: CommandInvocation,
     ) -> Result<BindingId> {
         validate_description(description)?;
-        let path_matcher = PathMatcher::new(path_filter)?;
+        let path_matcher = PathFilter::new(path_filter)?;
         let input = input.normalize();
         let scope = BindingScope::Exclusive(group);
         if let Some(existing) = self.records.iter().find(|record| {

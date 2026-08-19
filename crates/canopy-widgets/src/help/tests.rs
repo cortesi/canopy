@@ -1,9 +1,10 @@
 use canopy::{
-    BindingId, BindingOwner, BindingPhase, BindingScope, Loader, NodeId, Path, buf,
+    BindingId, BindingOwner, BindingPhase, BindingScope, Loader, NodeId, buf,
     error::Result,
     event::{key, mouse},
     geom::{Point, Size},
     help::{AvailableBinding, BindingSnapshot},
+    path::Path,
     testing::harness::Harness,
 };
 

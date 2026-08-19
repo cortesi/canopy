@@ -12,13 +12,6 @@ pub struct Path {
     path: Vec<String>,
 }
 
-impl FromStr for Path {
-    type Err = error::Error;
-    fn from_str(s: &str) -> Result<Self> {
-        Self::parse(s)
-    }
-}
-
 impl fmt::Display for Path {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "/{}", self.path.join("/"))
@@ -29,16 +22,6 @@ impl Path {
     /// Construct an empty path.
     pub fn empty() -> Self {
         Self { path: vec![] }
-    }
-
-    /// Parse and validate a path from a slash-separated string.
-    pub fn parse(path: &str) -> Result<Self> {
-        let mut components = Vec::new();
-        for component in path.split('/').filter(|component| !component.is_empty()) {
-            NodeName::new(component)?;
-            components.push(component.to_string());
-        }
-        Ok(Self { path: components })
     }
 
     /// Pop an item off the end of the path, modifying it in place. Return None
@@ -59,43 +42,9 @@ impl Path {
     }
 }
 
-impl From<Vec<String>> for Path {
-    fn from(path: Vec<String>) -> Self {
-        Self { path }
-    }
-}
-
-impl From<&[&str]> for Path {
-    fn from(v: &[&str]) -> Self {
-        Self {
-            path: v
-                .iter()
-                .filter_map(|x| {
-                    if x.is_empty() {
-                        None
-                    } else {
-                        Some(x.to_string())
-                    }
-                })
-                .collect(),
-        }
-    }
-}
-
 impl From<&str> for Path {
     fn from(v: &str) -> Self {
-        Self {
-            path: v
-                .split('/')
-                .filter_map(|x| {
-                    if x.is_empty() {
-                        None
-                    } else {
-                        Some(x.to_string())
-                    }
-                })
-                .collect(),
-        }
+        Self::new(v.split('/').filter(|part| !part.is_empty()))
     }
 }
 
@@ -105,32 +54,10 @@ impl From<&str> for Path {
 /// Literal components must be valid [`NodeName`] values.
 #[derive(Debug, Clone)]
 pub struct PathFilter {
-    /// Compiled matcher.
-    matcher: PathMatcher,
-}
-
-impl PathFilter {
-    /// Compile a validated path filter.
-    pub fn new(filter: &str) -> Result<Self> {
-        Ok(Self {
-            matcher: PathMatcher::new(filter)?,
-        })
-    }
-
-    /// Compile a filter after normalizing it to a full-path match.
-    pub fn normalized(filter: &str) -> Result<Self> {
-        Self::new(&normalize_filter(filter))
-    }
-
-    /// Return the original filter string.
-    pub fn as_str(&self) -> &str {
-        self.matcher.filter()
-    }
-
-    /// Return the compiled matcher.
-    pub(crate) fn matcher(&self) -> &PathMatcher {
-        &self.matcher
-    }
+    /// Original filter string used to construct the filter.
+    filter: Box<str>,
+    /// Parsed path pattern.
+    pattern: PathPattern,
 }
 
 impl FromStr for PathFilter {
@@ -141,19 +68,9 @@ impl FromStr for PathFilter {
     }
 }
 
-/// A match expression that can be applied to paths.
-/// The matcher supports `*` (one component), `**` (zero or more), and optional anchors.
-#[derive(Debug, Clone)]
-pub struct PathMatcher {
-    /// Original filter string used to construct the matcher.
-    filter: Box<str>,
-    /// Parsed path pattern.
-    pattern: PathPattern,
-}
-
 /// Path match metadata used for input precedence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PathMatch {
+pub(crate) struct PathMatch {
     /// Count of literal segments in the pattern.
     pub literals: usize,
     /// Number of path components matched.
@@ -193,8 +110,11 @@ enum Segment {
     AnyDeep,
 }
 
-impl PathMatcher {
-    /// Compile a path matcher from a filter string.
+impl PathFilter {
+    /// Compile a validated path filter.
+    ///
+    /// Filters support `*` for one component and `**` for zero or more components. Literal
+    /// components must be valid [`NodeName`] values.
     pub fn new(path: &str) -> Result<Self> {
         let anchor_start = path.starts_with('/');
         let anchor_end = path.ends_with('/');
@@ -226,19 +146,24 @@ impl PathMatcher {
         })
     }
 
-    /// Return the original filter string used to construct this matcher.
-    pub fn filter(&self) -> &str {
+    /// Compile a filter after normalizing it to a full-path match.
+    pub fn normalized(filter: &str) -> Result<Self> {
+        Self::new(&normalize_filter(filter))
+    }
+
+    /// Return the original filter string.
+    pub fn as_str(&self) -> &str {
         &self.filter
     }
 
     /// Check whether the path filter matches a given path.
     /// Returns the matched depth for use in quick checks.
-    pub fn check(&self, path: &Path) -> Option<usize> {
+    pub(crate) fn check(&self, path: &Path) -> Option<usize> {
         self.check_match(path).map(|m| m.depth)
     }
 
     /// Check whether the path filter matches a given path, returning match metadata.
-    pub fn check_match(&self, path: &Path) -> Option<PathMatch> {
+    pub(crate) fn check_match(&self, path: &Path) -> Option<PathMatch> {
         let parts = &path.path;
         let mut best: Option<PathMatch> = None;
         let starts = if self.pattern.anchor_start {
@@ -329,38 +254,38 @@ mod tests {
 
     #[test]
     fn pathfilter() -> Result<()> {
-        let v = PathMatcher::new("")?;
+        let v = PathFilter::new("")?;
         assert!(v.check(&"/any/thing".into()).is_some());
         assert!(v.check(&"/".into()).is_some());
 
-        let v = PathMatcher::new("bar")?;
+        let v = PathFilter::new("bar")?;
         assert!(v.check(&"/foo/bar".into()).is_some());
         assert!(v.check(&"/bar/foo".into()).is_some());
         assert!(v.check(&"/foo/foo".into()).is_none());
 
-        let v = PathMatcher::new("foo/*/bar")?;
+        let v = PathFilter::new("foo/*/bar")?;
         assert!(v.check(&"/foo/oink/bar".into()).is_some());
         assert!(v.check(&"/oink/foo/oink/bar/oink".into()).is_some());
         assert!(v.check(&"/foo/bar".into()).is_none());
         assert!(v.check(&"/foo/oink/oink/bar".into()).is_none());
 
-        let v = PathMatcher::new("/foo")?;
+        let v = PathFilter::new("/foo")?;
         assert!(v.check(&"/foo".into()).is_some());
         assert!(v.check(&"/foo/bar".into()).is_some());
         assert!(v.check(&"/bar/foo/bar".into()).is_none());
 
-        let v = PathMatcher::new("foo/")?;
+        let v = PathFilter::new("foo/")?;
         assert!(v.check(&"/foo".into()).is_some());
         assert!(v.check(&"/bar/foo".into()).is_some());
         assert!(v.check(&"/foo/bar".into()).is_none());
 
-        let v = PathMatcher::new("foo/**/bar")?;
+        let v = PathFilter::new("foo/**/bar")?;
         assert!(v.check(&"/foo/bar".into()).is_some());
         assert!(v.check(&"/foo/x/bar".into()).is_some());
         assert!(v.check(&"/foo/x/y/bar".into()).is_some());
         assert!(v.check(&"/bar/foo/x/bar/x".into()).is_some());
 
-        let v = PathMatcher::new("foo/**/bar/")?;
+        let v = PathFilter::new("foo/**/bar/")?;
         assert!(v.check(&"/foo/bar".into()).is_some());
         assert!(v.check(&"/foo/x/bar".into()).is_some());
         assert!(v.check(&"/foo/x/bar/x".into()).is_none());
@@ -375,20 +300,11 @@ mod tests {
         assert!(PathFilter::new("InvalidName").is_err());
     }
 
-    #[test]
-    fn parsed_paths_validate_components() {
-        assert_eq!(
-            Path::parse("/valid_name/node").unwrap(),
-            Path::new(["valid_name", "node"])
-        );
-        assert!(Path::parse("/invalid-name").is_err());
-    }
-
     proptest! {
         #[test]
         fn literal_path_matches_when_anchored(components in prop::collection::vec("[a-z]{1,8}", 1..6)) {
             let join = components.join("/");
-            let matcher = PathMatcher::new(&format!("/{join}/")).expect("matcher");
+            let matcher = PathFilter::new(&format!("/{join}/")).expect("matcher");
             let path = Path::new(&components);
             let m = matcher.check_match(&path).expect("match");
             prop_assert_eq!(m.literals, components.len());
@@ -398,7 +314,7 @@ mod tests {
 
         #[test]
         fn any_deep_matches_all_paths(components in prop::collection::vec("[a-z]{1,8}", 0..6)) {
-            let matcher = PathMatcher::new("**").expect("matcher");
+            let matcher = PathFilter::new("**").expect("matcher");
             let path = Path::new(&components);
             let m = matcher.check_match(&path).expect("match");
             prop_assert_eq!(m.depth, components.len());

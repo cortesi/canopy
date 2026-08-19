@@ -123,22 +123,11 @@ impl ArgValue {
         }
     }
 
-    /// Convert this dynamic value into JSON for external automation APIs.
-    pub fn to_json_value(&self) -> Result<JsonValue, CommandError> {
-        arg_value_to_json(self, NodeJson::Reject)
-    }
-
     /// Convert this dynamic value into external automation JSON.
     ///
-    /// Opaque `NodeId` values become descriptive tokens for reporting, but those
-    /// tokens are not accepted by [`ArgValue::from_json_value`].
+    /// Opaque `NodeId` values become descriptive tokens for reporting.
     pub fn to_external_json_value(&self) -> Result<JsonValue, CommandError> {
         arg_value_to_json(self, NodeJson::Token)
-    }
-
-    /// Convert JSON into an `ArgValue` for external automation APIs.
-    pub fn from_json_value(value: JsonValue) -> Result<Self, CommandError> {
-        json_to_arg_value(value)
     }
 }
 
@@ -667,11 +656,6 @@ impl<'a> DeclRegistry<'a> {
         self.builder.alias(alias);
     }
 
-    /// Registers a class declaration.
-    pub fn class(&mut self, class: declaration::Class) {
-        self.builder.class(class);
-    }
-
     /// Registers an external type name.
     pub fn extern_ty(&mut self, name: impl Into<declaration::Text>) {
         self.builder.extern_ty(name.into().into_owned());
@@ -1115,21 +1099,9 @@ impl CommandCall {
     }
 }
 
-impl From<CommandCall> for CommandInvocation {
-    fn from(call: CommandCall) -> Self {
-        call.invocation()
-    }
-}
-
-impl From<&'static CommandSpec> for CommandInvocation {
-    fn from(spec: &'static CommandSpec) -> Self {
-        spec.call().invocation()
-    }
-}
-
 /// Collection of available commands keyed by id.
 #[derive(Clone, Debug, Default)]
-pub struct CommandSet {
+pub(crate) struct CommandSet {
     /// Registry of command specs by id.
     commands: BTreeMap<&'static str, &'static CommandSpec>,
 }
@@ -1671,7 +1643,7 @@ mod tests {
     #[test]
     fn uint_arg_round_trip() {
         let value = ArgValue::UInt(u64::MAX);
-        let json = value.to_json_value().unwrap();
+        let json = arg_value_to_json(&value, NodeJson::Reject).unwrap();
         let out = json_to_arg_value(json).unwrap();
         assert_eq!(out, value);
     }
@@ -1680,7 +1652,7 @@ mod tests {
     fn node_arg_json_requires_external_mode() {
         let value = ArgValue::Node(NodeId::default());
 
-        assert!(value.to_json_value().is_err());
+        assert!(arg_value_to_json(&value, NodeJson::Reject).is_err());
 
         let json = value.to_external_json_value().unwrap();
         assert_eq!(json["type"], JsonValue::String("NodeId".to_string()));

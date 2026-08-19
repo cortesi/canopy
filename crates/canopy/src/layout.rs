@@ -242,14 +242,6 @@ impl Layout {
         }
     }
 
-    /// Stack layout where children overlap in the same space.
-    pub fn stack() -> Self {
-        Self {
-            direction: Direction::Stack,
-            ..Self::column()
-        }
-    }
-
     /// Fill available space with flex sizing on both axes.
     pub fn fill() -> Self {
         Self {
@@ -381,11 +373,6 @@ impl Layout {
     pub fn height(mut self, sizing: Sizing) -> Self {
         self.height = sizing;
         self
-    }
-
-    /// Set both axes to Measure sizing.
-    pub fn measured(self) -> Self {
-        self.width(Sizing::Measure).height(Sizing::Measure)
     }
 
     /// Validate this layout configuration.
@@ -634,13 +621,6 @@ mod tests {
         let layout = Layout::fill().width(Sizing::Measure);
         assert_eq!(layout.width, Sizing::Measure);
         assert_eq!(layout.height, Sizing::Flex(1));
-    }
-
-    #[test]
-    fn layout_measured_resets_both_axes() {
-        let layout = Layout::fill().measured();
-        assert_eq!(layout.width, Sizing::Measure);
-        assert_eq!(layout.height, Sizing::Measure);
     }
 
     #[test]

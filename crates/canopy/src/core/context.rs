@@ -50,33 +50,25 @@ pub trait ChildKey {
     const KEY: &'static str;
 }
 
-/// Slot helper for keyed children that caches the resolved typed ID.
+/// Slot helper that resolves a keyed child, creating it on first use.
 #[derive(Debug)]
 pub struct Slot<K: ChildKey> {
-    /// Cached typed ID for the slot widget.
-    id: Option<TypedId<K::Widget>>,
     /// Marker for the key type.
     _marker: PhantomData<K>,
 }
 
 impl<K: ChildKey> Default for Slot<K> {
     fn default() -> Self {
-        Self {
-            id: None,
-            _marker: PhantomData,
-        }
+        Self::new()
     }
 }
 
 impl<K: ChildKey> Slot<K> {
     /// Construct an empty slot.
     pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Clear any cached typed ID.
-    pub fn clear(&mut self) {
-        self.id = None;
+        Self {
+            _marker: PhantomData,
+        }
     }
 
     /// Get or create the keyed child under the current node.
@@ -98,37 +90,9 @@ impl<K: ChildKey> Slot<K> {
     ) -> Result<TypedId<K::Widget>> {
         let parent = parent.into();
         if let Some(id) = ctx.get_child_in::<K>(parent)? {
-            self.id = Some(id);
             return Ok(id);
         }
-        let id = ctx.add_keyed_to(parent, K::KEY, make())?;
-        self.id = Some(id);
-        Ok(id)
-    }
-
-    /// Execute a closure with a keyed child under the current node.
-    pub fn with<R>(
-        &mut self,
-        ctx: &mut dyn Context,
-        f: impl FnOnce(&mut K::Widget, &mut dyn Context) -> Result<R>,
-    ) -> Result<R> {
-        let parent = ctx.node_id();
-        self.with_in(ctx, parent, f)
-    }
-
-    /// Execute a closure with a keyed child under a specific parent node.
-    pub fn with_in<R>(
-        &mut self,
-        ctx: &mut dyn Context,
-        parent: impl Into<NodeId>,
-        f: impl FnOnce(&mut K::Widget, &mut dyn Context) -> Result<R>,
-    ) -> Result<R> {
-        let parent = parent.into();
-        let id = ctx
-            .get_child_in::<K>(parent)?
-            .ok_or_else(|| Error::NotFound(K::KEY.to_string()))?;
-        self.id = Some(id);
-        ctx.with_widget(id, f)
+        ctx.add_keyed_to(parent, K::KEY, make())
     }
 }
 
@@ -268,14 +232,6 @@ pub trait ViewContext {
     /// Return a keyed child relative to a specific parent node.
     fn child_keyed_in(&self, parent: NodeId, key: &str) -> Option<NodeId>;
 
-    /// Find the first node whose path matches the filter, relative to the current node.
-    ///
-    /// The filter is normalized to match full paths.
-    fn find_node(&self, path_filter: &str) -> Option<NodeId> {
-        let filter = PathFilter::normalized(path_filter).ok()?;
-        self.find_node_matching(&filter)
-    }
-
     /// Find the first node whose path matches the validated filter.
     fn find_node_matching(&self, path_filter: &PathFilter) -> Option<NodeId> {
         matching_nodes(self, path_filter).next()
@@ -318,12 +274,8 @@ fn matching_nodes<'a, C: ViewContext + ?Sized>(
     path_filter: &'a PathFilter,
 ) -> impl Iterator<Item = NodeId> + 'a {
     let root = ctx.node_id();
-    preorder_from(ctx, root).filter(move |id| {
-        path_filter
-            .matcher()
-            .check(&ctx.node_path(root, *id))
-            .is_some()
-    })
+    preorder_from(ctx, root)
+        .filter(move |id| path_filter.check(&ctx.node_path(root, *id)).is_some())
 }
 
 /// Apply a scroll transform to a node, clamp it to the canvas, and report whether it moved.
@@ -403,14 +355,6 @@ impl dyn ViewContext + '_ {
             .filter(|id| self.node_matches_type::<W>(*id))
             .map(TypedId::new)
             .collect()
-    }
-
-    /// Return the first descendant of type `W` (excluding self).
-    pub fn first_descendant<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
-        self.preorder(self.node_id())
-            .skip(1)
-            .find(|id| self.node_matches_type::<W>(*id))
-            .map(TypedId::new)
     }
 
     /// Return the unique descendant of type `W`, or error if more than one exists.
@@ -827,17 +771,6 @@ impl dyn Context + '_ {
             return Ok(None);
         };
         self.with_node(node, f).map(Some)
-    }
-
-    /// Execute a closure with the first descendant of type `W`.
-    pub fn with_first_descendant<W: Widget + 'static, R>(
-        &mut self,
-        f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
-    ) -> Result<R> {
-        let node = (self as &dyn ViewContext)
-            .first_descendant::<W>()
-            .ok_or_else(|| Error::NotFound(type_name::<W>().to_string()))?;
-        self.with_widget(node, f)
     }
 
     /// Execute a closure with the unique descendant of type `W`.

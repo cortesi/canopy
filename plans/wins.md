@@ -149,22 +149,22 @@ full evidence, change, and proof for each entry.
 
 **Public surface**
 
-- [ ] W96: Delete `ScriptApiState` and `Canopy::script_api_state` — `Capability`
-- [ ] W97: Prune facade methods with no external callers — `Capability`
-- [ ] W98: Replace the hand-rolled compile-and-run helpers with `eval_script`, then prune
-- [ ] W99: Delete `ViewContext::find_node` — `Capability`
-- [ ] W100: Delete `first_descendant` and `with_first_descendant`
-- [ ] W101: Remove `Slot`'s write-only cache and unused methods
-- [ ] W102: Delete `ArgValue::{to_json_value, from_json_value}`
-- [ ] W103: Delete the two dead `From` impls for `CommandInvocation`
-- [ ] W104: Delete `DeclRegistry::class`
-- [ ] W105: Make `CommandSet` crate-private
-- [ ] W106: Delete the four dead `Path` constructors
-- [ ] W107: Fold `PathMatcher` into `PathFilter`
-- [ ] W108: Trim `NodeName`'s unused conversions and helpers
-- [ ] W109: Give `Path` and `PathFilter` one public path
-- [ ] W110: Remove the unused `Layout` builders `stack()` and `measured()`
-- [ ] W111: Trim dead `Key` comparison impls
+- [x] W96: Delete `ScriptApiState` and `Canopy::script_api_state` — `Capability`
+- [x] W97: Prune facade methods with no external callers — `Capability`
+- [x] W98: Replace the hand-rolled compile-and-run helpers with `eval_script`, then prune
+- [x] W99: Delete `ViewContext::find_node` — `Capability`
+- [x] W100: Delete `first_descendant` and `with_first_descendant`
+- [x] W101: Remove `Slot`'s write-only cache and unused methods
+- [x] W102: Delete `ArgValue::{to_json_value, from_json_value}`
+- [x] W103: Delete the two dead `From` impls for `CommandInvocation`
+- [x] W104: Delete `DeclRegistry::class`
+- [x] W105: Make `CommandSet` crate-private
+- [x] W106: Delete the four dead `Path` constructors
+- [x] W107: Fold `PathMatcher` into `PathFilter`
+- [x] W108: Trim `NodeName`'s unused conversions and helpers
+- [x] W109: Give `Path` and `PathFilter` one public path
+- [x] W110: Remove the unused `Layout` builders `stack()` and `measured()`
+- [x] W111: Trim dead `Key` comparison impls
 - [ ] W112: Trim the zero-consumer public surface of `script` — `Capability` on `ScriptModuleRoots`
 - [ ] W113: Delete `StyleManager::reset` and narrow the render and effects surface — `Capability` on
 - [ ] W114: Make `Cell` nameable from outside the crate

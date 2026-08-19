@@ -180,9 +180,6 @@ pub mod canopy {
             /// Row layout with measured sizing on both axes.
             pub fn row() -> Self {}
 
-            /// Stack layout where children overlap in the same space.
-            pub fn stack() -> Self {}
-
             /// Fill available space with flex sizing on both axes.
             pub fn fill() -> Self {}
 
@@ -246,9 +243,6 @@ pub mod canopy {
 
             /// Set height sizing strategy directly.
             pub fn height(self, sizing: Sizing) -> Self {}
-
-            /// Set both axes to Measure sizing.
-            pub fn measured(self) -> Self {}
 
             /// Validate this layout configuration.
             pub fn validate(&self) -> Result<(), LayoutValidationError> {}
@@ -347,12 +341,6 @@ pub mod canopy {
             /// Render the widget tree. All visible nodes are rendered.
             pub fn render<R: RenderBackend>(&mut self, be: &mut R) -> Result<()> {}
 
-            /// Service a bounded batch of callbacks marshalled onto the UI thread.
-            ///
-            /// Custom run loops should call this after receiving [`Event::Wake`]. The return value is the
-            /// number of callbacks executed during this turn.
-            pub fn service_automation(&mut self) -> usize {}
-
             /// Set the size on the root node.
             pub fn set_root_size(&mut self, size: Size) -> Result<()> {}
 
@@ -361,9 +349,6 @@ pub mod canopy {
 
             /// Return a handle for submitting automation work to this app's UI thread.
             pub fn automation_handle(&self) -> AutomationHandle {}
-
-            /// Mark the visible application state for redraw.
-            pub fn request_redraw(&mut self) {}
 
             /// Return the root node ID.
             pub fn root_id(&self) -> NodeId {}
@@ -377,9 +362,6 @@ pub mod canopy {
                 W: Widget + 'static, {
             }
 
-            /// Replace the root's children with a single node.
-            pub fn set_root_child(&mut self, child: impl Into<NodeId>) -> Result<()> {}
-
             /// Replace the root widget while preserving its stable node ID.
             pub fn replace_root<W>(&mut self, widget: W) -> Result<TypedId<W>>
             where
@@ -392,22 +374,8 @@ pub mod canopy {
             /// Mutate the active style map before the next render.
             pub fn style_mut(&mut self) -> &mut StyleMap {}
 
-            /// Replace the active style map before the next render.
-            pub fn set_style(&mut self, style: StyleMap) {}
-
             /// Get a reference to the current render buffer, if any.
             pub fn buf(&self) -> Option<&TermBuf> {}
-
-            /// Run a compiled script by id on the target node.
-            pub fn run_script(
-                &mut self,
-                node_id: impl Into<NodeId>,
-                sid: script::ScriptId,
-            ) -> Result<()> {
-            }
-
-            /// Compile a script and return its identifier.
-            pub fn compile_script(&mut self, source: &str) -> Result<script::ScriptId> {}
 
             /// Evaluate a Luau source string in the current app context.
             pub fn eval_script(&mut self, source: &str) -> Result<()> {}
@@ -477,14 +445,6 @@ pub mod canopy {
 
             /// Run a closure against an immutable view of the root context.
             pub fn with_root_view<R>(&self, f: impl FnOnce(&dyn crate::ViewContext) -> R) -> R {}
-
-            /// Run a closure against an immutable view context bound to a node.
-            pub fn with_view<R>(
-                &self,
-                node: impl Into<NodeId>,
-                f: impl FnOnce(&dyn crate::ViewContext) -> R,
-            ) -> Result<R> {
-            }
 
             /// Type-check a named Luau source against the finalized app API.
             pub fn check_script(
@@ -564,9 +524,6 @@ pub mod canopy {
 
             /// Finalize the script API surface for this app.
             pub fn finalize_api(&mut self) -> Result<()> {}
-
-            /// Return the current script API finalization state.
-            pub fn script_api_state(&self) -> ScriptApiState {}
 
             /// Return the rendered Luau definition file for a ready app.
             pub fn script_api(&self) -> Result<&str> {}
@@ -879,59 +836,6 @@ pub mod canopy {
             fn from(value: TypedId<T>) -> Self {}
         }
 
-        /// A path of node name components.
-        #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Eq, FromStr, Display)]
-        pub struct Path {}
-
-        impl Path {
-            /// Construct an empty path.
-            pub fn empty() -> Self {}
-
-            /// Parse and validate a path from a slash-separated string.
-            pub fn parse(path: &str) -> Result<Self> {}
-
-            /// Pop an item off the end of the path, modifying it in place. Return None
-            /// if the path is empty.
-            pub fn pop(&mut self) -> Option<String> {}
-
-            /// Construct a path from a slice of components.
-            pub fn new<I>(v: I) -> Self
-            where
-                I: IntoIterator,
-                I::Item: AsRef<str>, {
-            }
-        }
-
-        impl From<Vec<String>> for Path {
-            fn from(path: Vec<String>) -> Self {}
-        }
-
-        impl From<&[&str]> for Path {
-            fn from(v: &[&str]) -> Self {}
-        }
-
-        impl From<&str> for Path {
-            fn from(v: &str) -> Self {}
-        }
-
-        /// A validated path filter used to search node paths.
-        ///
-        /// Filters support `*` for one component and `**` for zero or more components.
-        /// Literal components must be valid [`NodeName`] values.
-        #[derive(Debug, Clone, FromStr)]
-        pub struct PathFilter {}
-
-        impl PathFilter {
-            /// Compile a validated path filter.
-            pub fn new(filter: &str) -> Result<Self> {}
-
-            /// Compile a filter after normalizing it to a full-path match.
-            pub fn normalized(filter: &str) -> Result<Self> {}
-
-            /// Return the original filter string.
-            pub fn as_str(&self) -> &str {}
-        }
-
         /// Limits for a materialized visible render target.
         #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq, Default)]
         pub struct RenderLimits {
@@ -948,27 +852,13 @@ pub mod canopy {
             pub const fn new(max_width: u32, max_height: u32, max_cells: usize) -> Self {}
         }
 
-        /// Script API finalization state.
-        #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq)]
-        pub enum ScriptApiState {
-            /// Registrations remain open and no surface is staged.
-            Open,
-            /// The surface is staged but the runtime has not been published.
-            Preparing,
-            /// The runtime, definitions, and module source are ready.
-            Ready,
-        }
-
-        /// Slot helper for keyed children that caches the resolved typed ID.
+        /// Slot helper that resolves a keyed child, creating it on first use.
         #[derive(Debug, Default)]
         pub struct Slot<K: ChildKey> {}
 
         impl<K: ChildKey> Slot<K> {
             /// Construct an empty slot.
             pub fn new() -> Self {}
-
-            /// Clear any cached typed ID.
-            pub fn clear(&mut self) {}
 
             /// Get or create the keyed child under the current node.
             pub fn get_or_create(
@@ -985,23 +875,6 @@ pub mod canopy {
                 parent: impl Into<NodeId>,
                 make: impl FnOnce() -> K::Widget,
             ) -> Result<TypedId<K::Widget>> {
-            }
-
-            /// Execute a closure with a keyed child under the current node.
-            pub fn with<R>(
-                &mut self,
-                ctx: &mut dyn Context,
-                f: impl FnOnce(&mut K::Widget, &mut dyn Context) -> Result<R>,
-            ) -> Result<R> {
-            }
-
-            /// Execute a closure with a keyed child under a specific parent node.
-            pub fn with_in<R>(
-                &mut self,
-                ctx: &mut dyn Context,
-                parent: impl Into<NodeId>,
-                f: impl FnOnce(&mut K::Widget, &mut dyn Context) -> Result<R>,
-            ) -> Result<R> {
             }
         }
 
@@ -1089,11 +962,6 @@ pub mod canopy {
 
             /// Return a keyed child relative to a specific parent node.
             fn child_keyed_in(&self, parent: NodeId, key: &str) -> Option<NodeId>;
-
-            /// Find the first node whose path matches the filter, relative to the current node.
-            ///
-            /// The filter is normalized to match full paths.
-            fn find_node(&self, path_filter: &str) -> Option<NodeId> {}
 
             /// Find the first node whose path matches the validated filter.
             fn find_node_matching(&self, path_filter: &PathFilter) -> Option<NodeId> {}
@@ -1451,17 +1319,7 @@ pub mod canopy {
         /// A keystroke along with modifiers.
         /// A keystroke along with modifiers.
         #[derive(
-            Debug,
-            StructuralPartialEq,
-            PartialEq,
-            Eq,
-            Clone,
-            Copy,
-            Hash,
-            PartialEq,
-            PartialEq,
-            PartialEq,
-            Display,
+            Debug, StructuralPartialEq, PartialEq, Eq, Clone, Copy, Hash, PartialEq, Display,
         )]
         pub struct Key {
             /// Modifier state.
@@ -1747,9 +1605,6 @@ pub mod canopy {
             /// Row layout with measured sizing on both axes.
             pub fn row() -> Self {}
 
-            /// Stack layout where children overlap in the same space.
-            pub fn stack() -> Self {}
-
             /// Fill available space with flex sizing on both axes.
             pub fn fill() -> Self {}
 
@@ -1814,9 +1669,6 @@ pub mod canopy {
             /// Set height sizing strategy directly.
             pub fn height(self, sizing: Sizing) -> Self {}
 
-            /// Set both axes to Measure sizing.
-            pub fn measured(self) -> Self {}
-
             /// Validate this layout configuration.
             pub fn validate(&self) -> Result<(), LayoutValidationError> {}
         }
@@ -1863,6 +1715,51 @@ pub mod canopy {
             Measure,
             /// Weighted share of remaining space along the axis.
             Flex(u32),
+        }
+
+        /// A path of node name components.
+        #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Eq, Display)]
+        pub struct Path {}
+
+        impl Path {
+            /// Construct an empty path.
+            pub fn empty() -> Self {}
+
+            /// Pop an item off the end of the path, modifying it in place. Return None
+            /// if the path is empty.
+            pub fn pop(&mut self) -> Option<String> {}
+
+            /// Construct a path from a slice of components.
+            pub fn new<I>(v: I) -> Self
+            where
+                I: IntoIterator,
+                I::Item: AsRef<str>, {
+            }
+        }
+
+        impl From<&str> for Path {
+            fn from(v: &str) -> Self {}
+        }
+
+        /// A validated path filter used to search node paths.
+        ///
+        /// Filters support `*` for one component and `**` for zero or more components.
+        /// Literal components must be valid [`NodeName`] values.
+        #[derive(Debug, Clone, FromStr)]
+        pub struct PathFilter {}
+
+        impl PathFilter {
+            /// Compile a validated path filter.
+            ///
+            /// Filters support `*` for one component and `**` for zero or more components. Literal
+            /// components must be valid [`NodeName`] values.
+            pub fn new(path: &str) -> Result<Self> {}
+
+            /// Compile a filter after normalizing it to a full-path match.
+            pub fn normalized(filter: &str) -> Result<Self> {}
+
+            /// Return the original filter string.
+            pub fn as_str(&self) -> &str {}
         }
 
         /// A renderer that only renders to a specific rectangle within the target terminal buffer.
@@ -1941,18 +1838,7 @@ pub mod canopy {
 
         /// A node name, which consists of lowercase ASCII alphanumeric characters, plus
         /// underscores.
-        #[derive(
-            Debug,
-            Clone,
-            StructuralPartialEq,
-            PartialEq,
-            Eq,
-            Hash,
-            FromStr,
-            Display,
-            PartialEq,
-            PartialEq,
-        )]
+        #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Eq, Hash, Display, PartialEq)]
         pub struct NodeName {}
 
         impl NodeName {
@@ -1964,13 +1850,6 @@ pub mod canopy {
             /// first converting the string to snake case, then removing all invalid
             /// characters.
             pub fn convert(name: &str) -> Self {}
-        }
-
-        /// Converts a string into the standard node name format, and errors if it
-        /// doesn't comply to the node name standard.
-        impl TryFrom<&str> for NodeName {
-            type Error = Error;
-            fn try_from(name: &str) -> Result<Self> {}
         }
 
         /// A builder for creating reusable style specifications.
@@ -2234,12 +2113,6 @@ pub mod canopy {
         /// Render the widget tree. All visible nodes are rendered.
         pub fn render<R: RenderBackend>(&mut self, be: &mut R) -> Result<()> {}
 
-        /// Service a bounded batch of callbacks marshalled onto the UI thread.
-        ///
-        /// Custom run loops should call this after receiving [`Event::Wake`]. The return value is the
-        /// number of callbacks executed during this turn.
-        pub fn service_automation(&mut self) -> usize {}
-
         /// Set the size on the root node.
         pub fn set_root_size(&mut self, size: Size) -> Result<()> {}
 
@@ -2248,9 +2121,6 @@ pub mod canopy {
 
         /// Return a handle for submitting automation work to this app's UI thread.
         pub fn automation_handle(&self) -> AutomationHandle {}
-
-        /// Mark the visible application state for redraw.
-        pub fn request_redraw(&mut self) {}
 
         /// Return the root node ID.
         pub fn root_id(&self) -> NodeId {}
@@ -2264,9 +2134,6 @@ pub mod canopy {
             W: Widget + 'static, {
         }
 
-        /// Replace the root's children with a single node.
-        pub fn set_root_child(&mut self, child: impl Into<NodeId>) -> Result<()> {}
-
         /// Replace the root widget while preserving its stable node ID.
         pub fn replace_root<W>(&mut self, widget: W) -> Result<TypedId<W>>
         where
@@ -2279,22 +2146,8 @@ pub mod canopy {
         /// Mutate the active style map before the next render.
         pub fn style_mut(&mut self) -> &mut StyleMap {}
 
-        /// Replace the active style map before the next render.
-        pub fn set_style(&mut self, style: StyleMap) {}
-
         /// Get a reference to the current render buffer, if any.
         pub fn buf(&self) -> Option<&TermBuf> {}
-
-        /// Run a compiled script by id on the target node.
-        pub fn run_script(
-            &mut self,
-            node_id: impl Into<NodeId>,
-            sid: script::ScriptId,
-        ) -> Result<()> {
-        }
-
-        /// Compile a script and return its identifier.
-        pub fn compile_script(&mut self, source: &str) -> Result<script::ScriptId> {}
 
         /// Evaluate a Luau source string in the current app context.
         pub fn eval_script(&mut self, source: &str) -> Result<()> {}
@@ -2364,14 +2217,6 @@ pub mod canopy {
 
         /// Run a closure against an immutable view of the root context.
         pub fn with_root_view<R>(&self, f: impl FnOnce(&dyn crate::ViewContext) -> R) -> R {}
-
-        /// Run a closure against an immutable view context bound to a node.
-        pub fn with_view<R>(
-            &self,
-            node: impl Into<NodeId>,
-            f: impl FnOnce(&dyn crate::ViewContext) -> R,
-        ) -> Result<R> {
-        }
 
         /// Type-check a named Luau source against the finalized app API.
         pub fn check_script(
@@ -2451,9 +2296,6 @@ pub mod canopy {
 
         /// Finalize the script API surface for this app.
         pub fn finalize_api(&mut self) -> Result<()> {}
-
-        /// Return the current script API finalization state.
-        pub fn script_api_state(&self) -> ScriptApiState {}
 
         /// Return the rendered Luau definition file for a ready app.
         pub fn script_api(&self) -> Result<&str> {}
@@ -2867,59 +2709,6 @@ pub mod canopy {
         fn from(value: TypedId<T>) -> Self {}
     }
 
-    /// A path of node name components.
-    #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Eq, FromStr, Display)]
-    pub struct Path {}
-
-    impl Path {
-        /// Construct an empty path.
-        pub fn empty() -> Self {}
-
-        /// Parse and validate a path from a slash-separated string.
-        pub fn parse(path: &str) -> Result<Self> {}
-
-        /// Pop an item off the end of the path, modifying it in place. Return None
-        /// if the path is empty.
-        pub fn pop(&mut self) -> Option<String> {}
-
-        /// Construct a path from a slice of components.
-        pub fn new<I>(v: I) -> Self
-        where
-            I: IntoIterator,
-            I::Item: AsRef<str>, {
-        }
-    }
-
-    impl From<Vec<String>> for Path {
-        fn from(path: Vec<String>) -> Self {}
-    }
-
-    impl From<&[&str]> for Path {
-        fn from(v: &[&str]) -> Self {}
-    }
-
-    impl From<&str> for Path {
-        fn from(v: &str) -> Self {}
-    }
-
-    /// A validated path filter used to search node paths.
-    ///
-    /// Filters support `*` for one component and `**` for zero or more components.
-    /// Literal components must be valid [`NodeName`] values.
-    #[derive(Debug, Clone, FromStr)]
-    pub struct PathFilter {}
-
-    impl PathFilter {
-        /// Compile a validated path filter.
-        pub fn new(filter: &str) -> Result<Self> {}
-
-        /// Compile a filter after normalizing it to a full-path match.
-        pub fn normalized(filter: &str) -> Result<Self> {}
-
-        /// Return the original filter string.
-        pub fn as_str(&self) -> &str {}
-    }
-
     /// Policy for removing children that are no longer desired.
     #[derive(Debug, Clone, Copy, StructuralPartialEq, PartialEq, Eq)]
     pub enum RemovePolicy {
@@ -2970,17 +2759,6 @@ pub mod canopy {
         pub detail: String,
     }
 
-    /// Script API finalization state.
-    #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq)]
-    pub enum ScriptApiState {
-        /// Registrations remain open and no surface is staged.
-        Open,
-        /// The surface is staged but the runtime has not been published.
-        Preparing,
-        /// The runtime, definitions, and module source are ready.
-        Ready,
-    }
-
     /// Replayable record of one script evaluation.
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct ScriptJournalEntry {
@@ -3026,16 +2804,13 @@ pub mod canopy {
         pub fn discover_project_root(start: impl AsRef<Path>) -> Option<PathBuf> {}
     }
 
-    /// Slot helper for keyed children that caches the resolved typed ID.
+    /// Slot helper that resolves a keyed child, creating it on first use.
     #[derive(Debug, Default)]
     pub struct Slot<K: ChildKey> {}
 
     impl<K: ChildKey> Slot<K> {
         /// Construct an empty slot.
         pub fn new() -> Self {}
-
-        /// Clear any cached typed ID.
-        pub fn clear(&mut self) {}
 
         /// Get or create the keyed child under the current node.
         pub fn get_or_create(
@@ -3052,23 +2827,6 @@ pub mod canopy {
             parent: impl Into<NodeId>,
             make: impl FnOnce() -> K::Widget,
         ) -> Result<TypedId<K::Widget>> {
-        }
-
-        /// Execute a closure with a keyed child under the current node.
-        pub fn with<R>(
-            &mut self,
-            ctx: &mut dyn Context,
-            f: impl FnOnce(&mut K::Widget, &mut dyn Context) -> Result<R>,
-        ) -> Result<R> {
-        }
-
-        /// Execute a closure with a keyed child under a specific parent node.
-        pub fn with_in<R>(
-            &mut self,
-            ctx: &mut dyn Context,
-            parent: impl Into<NodeId>,
-            f: impl FnOnce(&mut K::Widget, &mut dyn Context) -> Result<R>,
-        ) -> Result<R> {
         }
     }
 
@@ -3157,11 +2915,6 @@ pub mod canopy {
         /// Return a keyed child relative to a specific parent node.
         fn child_keyed_in(&self, parent: NodeId, key: &str) -> Option<NodeId>;
 
-        /// Find the first node whose path matches the filter, relative to the current node.
-        ///
-        /// The filter is normalized to match full paths.
-        fn find_node(&self, path_filter: &str) -> Option<NodeId> {}
-
         /// Find the first node whose path matches the validated filter.
         fn find_node_matching(&self, path_filter: &PathFilter) -> Option<NodeId> {}
 
@@ -3202,17 +2955,10 @@ pub mod canopy {
         }
 
         impl ArgValue {
-            /// Convert this dynamic value into JSON for external automation APIs.
-            pub fn to_json_value(&self) -> Result<JsonValue, CommandError> {}
-
             /// Convert this dynamic value into external automation JSON.
             ///
-            /// Opaque `NodeId` values become descriptive tokens for reporting, but those
-            /// tokens are not accepted by [`ArgValue::from_json_value`].
+            /// Opaque `NodeId` values become descriptive tokens for reporting.
             pub fn to_external_json_value(&self) -> Result<JsonValue, CommandError> {}
-
-            /// Convert JSON into an `ArgValue` for external automation APIs.
-            pub fn from_json_value(value: JsonValue) -> Result<Self, CommandError> {}
         }
 
         impl ToArgValue for ArgValue {
@@ -3328,9 +3074,6 @@ pub mod canopy {
             /// Registers an alias declaration.
             pub fn alias(&mut self, alias: declaration::Alias) {}
 
-            /// Registers a class declaration.
-            pub fn class(&mut self, class: declaration::Class) {}
-
             /// Registers an external type name.
             pub fn extern_ty(&mut self, name: impl Into<declaration::Text>) {}
         }
@@ -3391,14 +3134,6 @@ pub mod canopy {
             pub id: CommandId,
             /// Invocation arguments.
             pub args: CommandArgs,
-        }
-
-        impl From<CommandCall> for CommandInvocation {
-            fn from(call: CommandCall) -> Self {}
-        }
-
-        impl From<&'static CommandSpec> for CommandInvocation {
-            fn from(spec: &'static CommandSpec) -> Self {}
         }
 
         /// Identifies how a command parameter is provided.
@@ -3501,10 +3236,6 @@ pub mod canopy {
             pub fn call_with(&self, args: impl Into<CommandArgs>) -> CommandCall {}
         }
 
-        impl From<&'static CommandSpec> for CommandInvocation {
-            fn from(spec: &'static CommandSpec) -> Self {}
-        }
-
         /// Resolution of a command dispatch target.
         #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq)]
         pub enum CommandResolution {
@@ -3551,35 +3282,6 @@ pub mod canopy {
         impl CommandCall {
             /// Convert into an invocation.
             pub fn invocation(self) -> CommandInvocation {}
-        }
-
-        impl From<CommandCall> for CommandInvocation {
-            fn from(call: CommandCall) -> Self {}
-        }
-
-        /// Collection of available commands keyed by id.
-        #[derive(Clone, Debug, Default)]
-        pub struct CommandSet {}
-
-        impl CommandSet {
-            /// Construct an empty command set.
-            pub fn new() -> Self {}
-
-            /// Add a command batch atomically.
-            ///
-            /// Repeating an equivalent definition is idempotent. A conflicting definition or invalid
-            /// batch leaves the set unchanged.
-            pub fn add(
-                &mut self,
-                specs: &'static [&'static CommandSpec],
-            ) -> Result<(), CommandError> {
-            }
-
-            /// Get a command by id.
-            pub fn get(&self, id: &str) -> Option<&'static CommandSpec> {}
-
-            /// Iterate over all command specs.
-            pub fn iter(&self) -> impl Iterator<Item = (&'static str, &'static CommandSpec)> + '_ {}
         }
 
         /// Error type for command dispatch and conversion.
@@ -4099,16 +3801,7 @@ pub mod canopy {
 
             /// Logical key codes.
             #[derive(
-                Debug,
-                PartialOrd,
-                StructuralPartialEq,
-                PartialEq,
-                Hash,
-                Eq,
-                Clone,
-                Copy,
-                PartialEq,
-                Display,
+                Debug, PartialOrd, StructuralPartialEq, PartialEq, Hash, Eq, Clone, Copy, Display,
             )]
             pub enum KeyCode {
                 /// Backspace key.
@@ -4187,17 +3880,7 @@ pub mod canopy {
             /// A keystroke along with modifiers.
             /// A keystroke along with modifiers.
             #[derive(
-                Debug,
-                StructuralPartialEq,
-                PartialEq,
-                Eq,
-                Clone,
-                Copy,
-                Hash,
-                PartialEq,
-                PartialEq,
-                PartialEq,
-                Display,
+                Debug, StructuralPartialEq, PartialEq, Eq, Clone, Copy, Hash, PartialEq, Display,
             )]
             pub struct Key {
                 /// Modifier state.
@@ -4425,15 +4108,12 @@ pub mod canopy {
         //! Path and traversal helpers.
 
         /// A path of node name components.
-        #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Eq, FromStr, Display)]
+        #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Eq, Display)]
         pub struct Path {}
 
         impl Path {
             /// Construct an empty path.
             pub fn empty() -> Self {}
-
-            /// Parse and validate a path from a slash-separated string.
-            pub fn parse(path: &str) -> Result<Self> {}
 
             /// Pop an item off the end of the path, modifying it in place. Return None
             /// if the path is empty.
@@ -4445,14 +4125,6 @@ pub mod canopy {
                 I: IntoIterator,
                 I::Item: AsRef<str>, {
             }
-        }
-
-        impl From<Vec<String>> for Path {
-            fn from(path: Vec<String>) -> Self {}
-        }
-
-        impl From<&[&str]> for Path {
-            fn from(v: &[&str]) -> Self {}
         }
 
         impl From<&str> for Path {
@@ -4468,44 +4140,16 @@ pub mod canopy {
 
         impl PathFilter {
             /// Compile a validated path filter.
-            pub fn new(filter: &str) -> Result<Self> {}
+            ///
+            /// Filters support `*` for one component and `**` for zero or more components. Literal
+            /// components must be valid [`NodeName`] values.
+            pub fn new(path: &str) -> Result<Self> {}
 
             /// Compile a filter after normalizing it to a full-path match.
             pub fn normalized(filter: &str) -> Result<Self> {}
 
             /// Return the original filter string.
             pub fn as_str(&self) -> &str {}
-        }
-
-        /// A match expression that can be applied to paths.
-        /// The matcher supports `*` (one component), `**` (zero or more), and optional anchors.
-        #[derive(Debug, Clone)]
-        pub struct PathMatcher {}
-
-        impl PathMatcher {
-            /// Compile a path matcher from a filter string.
-            pub fn new(path: &str) -> Result<Self> {}
-
-            /// Return the original filter string used to construct this matcher.
-            pub fn filter(&self) -> &str {}
-
-            /// Check whether the path filter matches a given path.
-            /// Returns the matched depth for use in quick checks.
-            pub fn check(&self, path: &Path) -> Option<usize> {}
-
-            /// Check whether the path filter matches a given path, returning match metadata.
-            pub fn check_match(&self, path: &Path) -> Option<PathMatch> {}
-        }
-
-        /// Path match metadata used for input precedence.
-        #[derive(Debug, Clone, Copy, StructuralPartialEq, PartialEq, Eq)]
-        pub struct PathMatch {
-            /// Count of literal segments in the pattern.
-            pub literals: usize,
-            /// Number of path components matched.
-            pub depth: usize,
-            /// Whether the match ends at the end of the path and consumed at least one component.
-            pub anchored_end: bool,
         }
     }
 
@@ -4759,26 +4403,9 @@ pub mod canopy {
     pub mod state {
         //! Shared node name types.
 
-        /// Return true if the character is valid in a node name.
-        pub fn valid_nodename_char(c: char) -> bool {}
-
-        /// Return true if the full name is valid.
-        pub fn valid_nodename(name: &str) -> bool {}
-
         /// A node name, which consists of lowercase ASCII alphanumeric characters, plus
         /// underscores.
-        #[derive(
-            Debug,
-            Clone,
-            StructuralPartialEq,
-            PartialEq,
-            Eq,
-            Hash,
-            FromStr,
-            Display,
-            PartialEq,
-            PartialEq,
-        )]
+        #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Eq, Hash, Display, PartialEq)]
         pub struct NodeName {}
 
         impl NodeName {
@@ -4790,13 +4417,6 @@ pub mod canopy {
             /// first converting the string to snake case, then removing all invalid
             /// characters.
             pub fn convert(name: &str) -> Self {}
-        }
-
-        /// Converts a string into the standard node name format, and errors if it
-        /// doesn't comply to the node name standard.
-        impl TryFrom<&str> for NodeName {
-            type Error = Error;
-            fn try_from(name: &str) -> Result<Self> {}
         }
     }
 
