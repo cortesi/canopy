@@ -1,7 +1,7 @@
 use std::{f32::consts::TAU, time::Duration};
 
 use canopy::{
-    Canopy, Context, EventOutcome, Loader, ViewContext, Widget, command,
+    Canopy, Context, EventOutcome, Loader, NodeId, ViewContext, Widget,
     cursor::{Cursor, CursorShape},
     derive_commands,
     error::Result,
@@ -11,12 +11,12 @@ use canopy::{
     render::Render,
     rgb,
     state::NodeName,
-    style::{AttrSet, Color, GradientSpec, GradientStop, Paint, StyleMap},
+    style::{Attr, Color, StyleMap},
     text,
 };
 use canopy_widgets::{
-    Font, FontBanner, FontEffects, FontRenderer, Frame, GlyphRamp, LayoutOptions, List, Pad,
-    SINGLE_THICK, Selectable, Text, VStack,
+    Font, FontBanner, FontEffects, FontRenderer, Frame, LayoutOptions, List, Pad, SINGLE_THICK,
+    Selectable, Text, VStack,
 };
 
 /// Initial text rendered by the banners.
@@ -51,45 +51,65 @@ const GRADIENT_PHASE_STEP: f32 = 0.01;
 const GRADIENT_BASE_ANGLE: f32 = 25.0;
 /// Hue sweep amplitude for animated palettes.
 const HUE_SWEEP_DEG: f32 = 60.0;
-/// Angle offset for the solar gradient.
-const SOLAR_ANGLE_OFFSET: f32 = 0.0;
-/// Angle offset for the ocean gradient.
-const OCEAN_ANGLE_OFFSET: f32 = 120.0;
-/// Angle offset for the ember gradient.
-const EMBER_ANGLE_OFFSET: f32 = 240.0;
-/// Angle offset for the violet gradient.
-const VIOLET_ANGLE_OFFSET: f32 = 300.0;
-
-/// Toggle state for banner font styles.
-#[derive(Debug, Clone, Copy, Default)]
-struct FontStyleState {
-    /// Bold attribute.
-    bold: bool,
-    /// Italic attribute.
-    italic: bool,
-    /// Underline attribute.
-    underline: bool,
-    /// Dim attribute.
-    dim: bool,
-    /// Overline attribute.
-    overline: bool,
-    /// Crossed out attribute.
-    crossed_out: bool,
+/// One banner: its style path, gradient angle and palette, and font bytes.
+struct BannerSpec {
+    /// Style path the banner renders through.
+    style: &'static str,
+    /// Gradient angle offset from `GRADIENT_BASE_ANGLE`.
+    angle_offset: f32,
+    /// Four-stop gradient palette before the animated hue shift.
+    palette: [Color; 4],
+    /// Embedded font bytes.
+    font: &'static [u8],
 }
 
-impl FontStyleState {
-    /// Build font effects from the toggles.
-    fn effects(&self) -> FontEffects {
-        FontEffects {
-            bold: self.bold,
-            italic: self.italic,
-            underline: self.underline,
-            dim: self.dim,
-            overline: self.overline,
-            strike: self.crossed_out,
-        }
-    }
-}
+/// The banners the demo renders, in display order.
+const BANNERS: [BannerSpec; 4] = [
+    BannerSpec {
+        style: "font/banner/solar",
+        angle_offset: 0.0,
+        palette: [
+            rgb!("#FFF200"),
+            rgb!("#FF9F00"),
+            rgb!("#FF003C"),
+            rgb!("#7A00FF"),
+        ],
+        font: include_bytes!("../../canopy-widgets/assets/fonts/Bungee-Regular.ttf"),
+    },
+    BannerSpec {
+        style: "font/banner/ocean",
+        angle_offset: 120.0,
+        palette: [
+            rgb!("#00F5FF"),
+            rgb!("#0084FF"),
+            rgb!("#003BFF"),
+            rgb!("#00FF9D"),
+        ],
+        font: include_bytes!("../../canopy-widgets/assets/fonts/FiraMono-Regular.ttf"),
+    },
+    BannerSpec {
+        style: "font/banner/ember",
+        angle_offset: 240.0,
+        palette: [
+            rgb!("#FFD000"),
+            rgb!("#FF7A00"),
+            rgb!("#FF1F00"),
+            rgb!("#B00000"),
+        ],
+        font: include_bytes!("../../canopy-widgets/assets/fonts/FiraMono-Regular.ttf"),
+    },
+    BannerSpec {
+        style: "font/banner/violet",
+        angle_offset: 300.0,
+        palette: [
+            rgb!("#FFD6FF"),
+            rgb!("#B5179E"),
+            rgb!("#7209B7"),
+            rgb!("#4361EE"),
+        ],
+        font: include_bytes!("../../canopy-widgets/assets/fonts/Tangerine-Regular.ttf"),
+    },
+];
 
 /// Demo node that renders ASCII font banners.
 pub struct FontGym {
@@ -111,10 +131,6 @@ impl FontGym {
             gradient_phase: 0.0,
         }
     }
-
-    #[command]
-    /// Trigger a redraw.
-    pub fn redraw(&mut self, _ctx: &mut dyn Context) {}
 }
 
 impl Widget for FontGym {
@@ -123,7 +139,7 @@ impl Widget for FontGym {
     }
 
     fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        let style_state = FontStyleState::default();
+        let style_state = FontEffects::default();
         ctx.set_style(font_styles(self.gradient_phase));
 
         let list_id = ctx.create_detached(List::new())?;
@@ -135,57 +151,14 @@ impl Widget for FontGym {
                 h_align: Align::Center,
                 v_align: Align::Center,
             };
-            let font_a = load_font_bungee();
-            let font_a_name = font_label(&font_a);
-            let banner_a = FontBanner::new(
-                DEFAULT_TEXT,
-                FontRenderer::new(font_a)
-                    .with_ramp(GlyphRamp::blocks())
-                    .with_fallback('?'),
-            )
-            .with_effects(style_state.effects())
-            .with_style("font/banner/solar")
-            .with_layout_options(centered);
-            let font_b = load_font_fira();
-            let font_b_name = font_label(&font_b);
-            let banner_b = FontBanner::new(
-                DEFAULT_TEXT,
-                FontRenderer::new(font_b)
-                    .with_ramp(GlyphRamp::blocks())
-                    .with_fallback('?'),
-            )
-            .with_effects(style_state.effects())
-            .with_style("font/banner/ocean")
-            .with_layout_options(centered);
-            let font_c = load_font_fira();
-            let font_c_name = font_label(&font_c);
-            let banner_c = FontBanner::new(
-                DEFAULT_TEXT,
-                FontRenderer::new(font_c)
-                    .with_ramp(GlyphRamp::blocks())
-                    .with_fallback('?'),
-            )
-            .with_effects(style_state.effects())
-            .with_style("font/banner/ember")
-            .with_layout_options(centered);
-            let font_d = load_font_tangerine();
-            let font_d_name = font_label(&font_d);
-            let banner_d = FontBanner::new(
-                DEFAULT_TEXT,
-                FontRenderer::new(font_d)
-                    .with_ramp(GlyphRamp::blocks())
-                    .with_fallback('?'),
-            )
-            .with_effects(style_state.effects())
-            .with_style("font/banner/violet")
-            .with_layout_options(centered);
-
-            for (banner, label) in [
-                (banner_a, font_a_name),
-                (banner_b, font_b_name),
-                (banner_c, font_c_name),
-                (banner_d, font_d_name),
-            ] {
+            for spec in &BANNERS {
+                let font = Font::from_bytes(spec.font).expect("embedded font loads");
+                let label = font_label(&font);
+                let banner =
+                    FontBanner::new(DEFAULT_TEXT, FontRenderer::new(font).with_fallback('?'))
+                        .with_effects(style_state)
+                        .with_style(spec.style)
+                        .with_layout_options(centered);
                 let id = list.append(ctx, FontBlock::new(banner, label, BANNER_HEIGHT))?;
                 ctx.set_layout_of(id, block_layout(BANNER_HEIGHT))?;
                 ids.push(id);
@@ -202,48 +175,14 @@ impl Widget for FontGym {
         ctx.set_layout_of(font_frame_id, Layout::fill().padding(Edges::all(1)))?;
 
         let controls_id = ctx.create_detached(ControlsLegend)?;
-        let controls_pad = Pad::wrap_with(
-            ctx,
-            controls_id,
-            Pad::new(Edges::symmetric(PANEL_PADDING_V, PANEL_PADDING_H)),
-        )?;
-        let controls_frame = Frame::wrap_with(
-            ctx,
-            controls_pad,
-            Frame::new()
-                .with_title("Controls")
-                .with_glyphs(SINGLE_THICK),
-        )?;
-        ctx.set_layout_of(
-            controls_frame,
-            Layout::column()
-                .flex_horizontal(1)
-                .min_width(CONTROLS_PANEL_WIDTH)
-                .padding(Edges::all(1)),
-        )?;
+        let controls_frame = panel(ctx, controls_id, "Controls", CONTROLS_PANEL_WIDTH)?;
 
         let status_id = ctx.create_detached(
             Text::new(status_text(BANNER_HEIGHT, style_state))
                 .with_style("fontgym/legend")
                 .with_wrap_width(STATUS_WRAP_WIDTH),
         )?;
-        let status_pad = Pad::wrap_with(
-            ctx,
-            status_id,
-            Pad::new(Edges::symmetric(PANEL_PADDING_V, PANEL_PADDING_H)),
-        )?;
-        let status_frame = Frame::wrap_with(
-            ctx,
-            status_pad,
-            Frame::new().with_title("Status").with_glyphs(SINGLE_THICK),
-        )?;
-        ctx.set_layout_of(
-            status_frame,
-            Layout::column()
-                .flex_horizontal(1)
-                .min_width(STATUS_PANEL_WIDTH)
-                .padding(Edges::all(1)),
-        )?;
+        let status_frame = panel(ctx, status_id, "Status", STATUS_PANEL_WIDTH)?;
 
         let status_row_id = ctx.create_detached(StatusRow)?;
         ctx.set_children_of(status_row_id.into(), vec![controls_frame, status_frame])?;
@@ -351,8 +290,6 @@ struct FontBlock {
     banner_id: Option<canopy::TypedId<FontBanner>>,
     /// Label text shown beneath the banner.
     label: String,
-    /// Mounted label node ID.
-    label_id: Option<canopy::TypedId<FontLabel>>,
     /// Current banner height in rows.
     banner_height: u32,
 }
@@ -364,7 +301,6 @@ impl FontBlock {
             banner: Some(banner),
             banner_id: None,
             label: label.into(),
-            label_id: None,
             banner_height,
         }
     }
@@ -424,7 +360,6 @@ impl Widget for FontBlock {
 
         ctx.set_children(vec![banner_id.into(), label_id.into()])?;
         self.banner_id = Some(banner_id);
-        self.label_id = Some(label_id);
         Ok(())
     }
 
@@ -500,7 +435,7 @@ struct FontGymInput {
     /// Current banner height.
     banner_height: u32,
     /// Active style toggles.
-    style_state: FontStyleState,
+    style_state: FontEffects,
     /// Status text widget to update.
     status_text: canopy::TypedId<Text>,
 }
@@ -511,7 +446,7 @@ impl FontGymInput {
         text: impl Into<String>,
         targets: Vec<canopy::TypedId<FontBlock>>,
         banner_height: u32,
-        style_state: FontStyleState,
+        style_state: FontEffects,
         status_text: canopy::TypedId<Text>,
     ) -> Self {
         let text = text.into();
@@ -587,7 +522,7 @@ impl FontGymInput {
 
     /// Apply the current style toggles to the banners.
     fn sync_effects(&self, ctx: &mut dyn Context) -> Result<()> {
-        let effects = self.style_state.effects();
+        let effects = self.style_state;
         for target in &self.targets {
             ctx.with_widget(*target, |block, ctx| block.set_effects(ctx, effects))?;
         }
@@ -609,39 +544,19 @@ impl FontGymInput {
 
     /// Toggle a style attribute and refresh styles.
     fn toggle_style(&mut self, ctx: &mut dyn Context, key: char) -> Result<bool> {
-        let handled = match key.to_ascii_lowercase() {
-            'b' => {
-                self.style_state.bold = !self.style_state.bold;
-                true
-            }
-            'i' => {
-                self.style_state.italic = !self.style_state.italic;
-                true
-            }
-            'u' => {
-                self.style_state.underline = !self.style_state.underline;
-                true
-            }
-            'd' => {
-                self.style_state.dim = !self.style_state.dim;
-                true
-            }
-            'o' => {
-                self.style_state.overline = !self.style_state.overline;
-                true
-            }
-            'x' => {
-                self.style_state.crossed_out = !self.style_state.crossed_out;
-                true
-            }
-            _ => false,
+        let flag = match key.to_ascii_lowercase() {
+            'b' => &mut self.style_state.bold,
+            'i' => &mut self.style_state.italic,
+            'u' => &mut self.style_state.underline,
+            'd' => &mut self.style_state.dim,
+            'o' => &mut self.style_state.overline,
+            'x' => &mut self.style_state.strike,
+            _ => return Ok(false),
         };
-
-        if handled {
-            self.sync_effects(ctx)?;
-            self.sync_status(ctx)?;
-        }
-        Ok(handled)
+        *flag = !*flag;
+        self.sync_effects(ctx)?;
+        self.sync_status(ctx)?;
+        Ok(true)
     }
 
     /// Update the status panel contents.
@@ -795,9 +710,61 @@ struct LegendSegment {
     text: &'static str,
 }
 
+/// The Controls legend, one entry per rendered row.
+const CONTROLS_LEGEND: &[&[LegendSegment]] = &[
+    &[
+        LegendSegment::title("Focus"),
+        LegendSegment::text(" : "),
+        LegendSegment::key("Tab"),
+        LegendSegment::text(" / "),
+        LegendSegment::key("Shift+Tab"),
+    ],
+    &[
+        LegendSegment::title("Scroll"),
+        LegendSegment::text(" : "),
+        LegendSegment::key("PgUp"),
+        LegendSegment::text(" / "),
+        LegendSegment::key("PgDn"),
+    ],
+    &[
+        LegendSegment::title("Height"),
+        LegendSegment::text(" : "),
+        LegendSegment::key("Ctrl+Up"),
+        LegendSegment::text(" / "),
+        LegendSegment::key("Ctrl+Down"),
+    ],
+    &[
+        LegendSegment::title("Styles"),
+        LegendSegment::text(" : "),
+        LegendSegment::key("Ctrl+B"),
+        LegendSegment::text(" Bold  "),
+        LegendSegment::key("Ctrl+I"),
+        LegendSegment::text(" Italic"),
+    ],
+    &[
+        LegendSegment::text("         "),
+        LegendSegment::key("Ctrl+U"),
+        LegendSegment::text(" Underline  "),
+        LegendSegment::key("Ctrl+D"),
+        LegendSegment::text(" Dim"),
+    ],
+    &[
+        LegendSegment::text("         "),
+        LegendSegment::key("Ctrl+O"),
+        LegendSegment::text(" Overline   "),
+        LegendSegment::key("Ctrl+X"),
+        LegendSegment::text(" Strike"),
+    ],
+    &[
+        LegendSegment::title("Input"),
+        LegendSegment::text(" : "),
+        LegendSegment::text("Type to edit text"),
+    ],
+];
+
 impl LegendSegment {
     /// Create a segment styled as a key.
-    fn key(text: &'static str) -> Self {
+    const fn key(text: &'static str) -> Self {
         Self {
             style: "fontgym/key",
             text,
@@ -805,7 +772,7 @@ impl LegendSegment {
     }
 
     /// Create a segment styled as a title.
-    fn title(text: &'static str) -> Self {
+    const fn title(text: &'static str) -> Self {
         Self {
             style: "fontgym/legend/title",
             text,
@@ -813,7 +780,7 @@ impl LegendSegment {
     }
 
     /// Create a segment styled as body text.
-    fn text(text: &'static str) -> Self {
+    const fn text(text: &'static str) -> Self {
         Self {
             style: "fontgym/legend",
             text,
@@ -832,15 +799,13 @@ impl Widget for ControlsLegend {
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
         let view_rect = view.view_rect_local();
-        let lines = controls_legend_lines();
-
-        for (row_idx, segments) in lines.iter().enumerate() {
+        for (row_idx, segments) in CONTROLS_LEGEND.iter().enumerate() {
             let y = view_rect.tl.y.saturating_add(row_idx as u32);
             if y >= view_rect.tl.y.saturating_add(view_rect.h) {
                 break;
             }
             let mut x = view_rect.tl.x;
-            for segment in segments {
+            for segment in *segments {
                 if segment.text.is_empty() {
                     continue;
                 }
@@ -858,77 +823,24 @@ impl Widget for ControlsLegend {
     }
 
     fn measure(&self, c: MeasureConstraints) -> Measurement {
-        let lines = controls_legend_lines();
-        let mut max_width = 1u32;
-        for segments in &lines {
-            let width = segments
-                .iter()
-                .map(|segment| segment.text.len() as u32)
-                .sum();
-            max_width = max_width.max(width);
-        }
-        let height = lines.len().max(1) as u32;
+        let max_width = CONTROLS_LEGEND
+            .iter()
+            .map(|segments| {
+                segments
+                    .iter()
+                    .map(|segment| segment.text.len() as u32)
+                    .sum()
+            })
+            .max()
+            .unwrap_or(1)
+            .max(1);
+        let height = CONTROLS_LEGEND.len().max(1) as u32;
         c.clamp(Size::new(max_width, height))
     }
 
     fn name(&self) -> NodeName {
         NodeName::convert("fontgym-controls-legend")
     }
-}
-
-/// Build legend lines with styled segments.
-fn controls_legend_lines() -> Vec<Vec<LegendSegment>> {
-    let indent = "         ";
-    vec![
-        vec![
-            LegendSegment::title("Focus"),
-            LegendSegment::text(" : "),
-            LegendSegment::key("Tab"),
-            LegendSegment::text(" / "),
-            LegendSegment::key("Shift+Tab"),
-        ],
-        vec![
-            LegendSegment::title("Scroll"),
-            LegendSegment::text(" : "),
-            LegendSegment::key("PgUp"),
-            LegendSegment::text(" / "),
-            LegendSegment::key("PgDn"),
-        ],
-        vec![
-            LegendSegment::title("Height"),
-            LegendSegment::text(" : "),
-            LegendSegment::key("Ctrl+Up"),
-            LegendSegment::text(" / "),
-            LegendSegment::key("Ctrl+Down"),
-        ],
-        vec![
-            LegendSegment::title("Styles"),
-            LegendSegment::text(" : "),
-            LegendSegment::key("Ctrl+B"),
-            LegendSegment::text(" Bold  "),
-            LegendSegment::key("Ctrl+I"),
-            LegendSegment::text(" Italic"),
-        ],
-        vec![
-            LegendSegment::text(indent),
-            LegendSegment::key("Ctrl+U"),
-            LegendSegment::text(" Underline  "),
-            LegendSegment::key("Ctrl+D"),
-            LegendSegment::text(" Dim"),
-        ],
-        vec![
-            LegendSegment::text(indent),
-            LegendSegment::key("Ctrl+O"),
-            LegendSegment::text(" Overline   "),
-            LegendSegment::key("Ctrl+X"),
-            LegendSegment::text(" Strike"),
-        ],
-        vec![
-            LegendSegment::title("Input"),
-            LegendSegment::text(" : "),
-            LegendSegment::text("Type to edit text"),
-        ],
-    ]
 }
 
 /// Convert a char index into a byte offset.
@@ -942,28 +854,31 @@ fn byte_index_for_char(text: &str, char_index: usize) -> usize {
         .unwrap_or(text.len())
 }
 
-/// Load the Bungee display font.
-fn load_font_bungee() -> Font {
-    Font::from_bytes(include_bytes!(
-        "../../canopy-widgets/assets/fonts/Bungee-Regular.ttf"
-    ))
-    .expect("bungee font loads")
-}
-
-/// Load the Fira Mono font.
-fn load_font_fira() -> Font {
-    Font::from_bytes(include_bytes!(
-        "../../canopy-widgets/assets/fonts/FiraMono-Regular.ttf"
-    ))
-    .expect("fira mono font loads")
-}
-
-/// Load the Tangerine calligraphic font.
-fn load_font_tangerine() -> Font {
-    Font::from_bytes(include_bytes!(
-        "../../canopy-widgets/assets/fonts/Tangerine-Regular.ttf"
-    ))
-    .expect("tangerine font loads")
+/// Wrap a detached child in a padded, titled panel frame of a minimum width.
+fn panel(
+    ctx: &mut dyn Context,
+    child: impl Into<NodeId>,
+    title: &str,
+    min_width: u32,
+) -> Result<NodeId> {
+    let pad = Pad::wrap_with(
+        ctx,
+        child,
+        Pad::new(Edges::symmetric(PANEL_PADDING_V, PANEL_PADDING_H)),
+    )?;
+    let frame = Frame::wrap_with(
+        ctx,
+        pad,
+        Frame::new().with_title(title).with_glyphs(SINGLE_THICK),
+    )?;
+    ctx.set_layout_of(
+        frame,
+        Layout::column()
+            .flex_horizontal(1)
+            .min_width(min_width)
+            .padding(Edges::all(1)),
+    )?;
+    Ok(frame)
 }
 
 /// Build a label string for a font.
@@ -991,123 +906,30 @@ fn block_layout(banner_height: u32) -> Layout {
 fn font_styles(phase: f32) -> StyleMap {
     let mut style = StyleMap::new();
     let hue = (phase * TAU).sin() * HUE_SWEEP_DEG;
-    let solar = shift_palette(
-        [
-            rgb!("#FFF200"),
-            rgb!("#FF9F00"),
-            rgb!("#FF003C"),
-            rgb!("#7A00FF"),
-        ],
-        hue,
-    );
-    let ocean = shift_palette(
-        [
-            rgb!("#00F5FF"),
-            rgb!("#0084FF"),
-            rgb!("#003BFF"),
-            rgb!("#00FF9D"),
-        ],
-        hue,
-    );
-    let ember = shift_palette(
-        [
-            rgb!("#FFD000"),
-            rgb!("#FF7A00"),
-            rgb!("#FF1F00"),
-            rgb!("#B00000"),
-        ],
-        hue,
-    );
-    let violet = shift_palette(
-        [
-            rgb!("#FFD6FF"),
-            rgb!("#B5179E"),
-            rgb!("#7209B7"),
-            rgb!("#4361EE"),
-        ],
-        hue,
-    );
-    style
+    let mut rules = style
         .rules()
-        .attrs(
-            "fontgym/legend",
-            AttrSet {
-                dim: true,
-                ..AttrSet::default()
-            },
-        )
-        .attrs(
-            "fontgym/legend/title",
-            AttrSet {
-                bold: true,
-                ..AttrSet::default()
-            },
-        )
-        .attrs(
-            "fontgym/key",
-            AttrSet {
-                bold: true,
-                ..AttrSet::default()
-            },
-        )
+        .attr("fontgym/legend", Attr::Dim)
+        .attr("fontgym/legend/title", Attr::Bold)
+        .attr("fontgym/key", Attr::Bold)
         .fg("fontgym/legend/title", rgb!("#E9ECEF"))
         .fg("fontgym/key", rgb!("#FFD166"))
-        .fg("fontgym/label", rgb!("#A3B1C2"))
-        .fg(
-            "font/banner/solar",
-            Paint::gradient(GradientSpec::with_stops(
-                GRADIENT_BASE_ANGLE + SOLAR_ANGLE_OFFSET,
-                gradient_stops(solar),
-            )),
-        )
-        .fg(
-            "font/banner/ocean",
-            Paint::gradient(GradientSpec::with_stops(
-                GRADIENT_BASE_ANGLE + OCEAN_ANGLE_OFFSET,
-                gradient_stops(ocean),
-            )),
-        )
-        .fg(
-            "font/banner/ember",
-            Paint::gradient(GradientSpec::with_stops(
-                GRADIENT_BASE_ANGLE + EMBER_ANGLE_OFFSET,
-                gradient_stops(ember),
-            )),
-        )
-        .fg(
-            "font/banner/violet",
-            Paint::gradient(GradientSpec::with_stops(
-                GRADIENT_BASE_ANGLE + VIOLET_ANGLE_OFFSET,
-                gradient_stops(violet),
-            )),
-        )
-        .apply();
+        .fg("fontgym/label", rgb!("#A3B1C2"));
+    for spec in &BANNERS {
+        rules = rules.fg(
+            spec.style,
+            crate::banner_gradient(
+                GRADIENT_BASE_ANGLE + spec.angle_offset,
+                spec.palette.map(|color| color.shift_hue(hue)),
+            ),
+        );
+    }
+    rules.apply();
     style
-}
-
-/// Shift a palette by the provided hue delta in degrees.
-fn shift_palette(colors: [Color; 4], hue_deg: f32) -> [Color; 4] {
-    [
-        colors[0].shift_hue(hue_deg),
-        colors[1].shift_hue(hue_deg),
-        colors[2].shift_hue(hue_deg),
-        colors[3].shift_hue(hue_deg),
-    ]
-}
-
-/// Build gradient stops from a four-color palette.
-fn gradient_stops(colors: [Color; 4]) -> Vec<GradientStop> {
-    vec![
-        GradientStop::new(0.0, colors[0]),
-        GradientStop::new(0.35, colors[1]),
-        GradientStop::new(0.7, colors[2]),
-        GradientStop::new(1.0, colors[3]),
-    ]
 }
 
 /// Build the controls help text.
 /// Build the status text for the current state.
-fn status_text(height: u32, state: FontStyleState) -> String {
+fn status_text(height: u32, state: FontEffects) -> String {
     let flag = |enabled: bool| if enabled { "on " } else { "off" };
     [
         format!("Height : {}", height),
@@ -1121,7 +943,7 @@ fn status_text(height: u32, state: FontStyleState) -> String {
             "Dim : {}  Overline: {}  Strike: {}",
             flag(state.dim),
             flag(state.overline),
-            flag(state.crossed_out)
+            flag(state.strike)
         ),
     ]
     .join("\n")

@@ -23,8 +23,6 @@ pub use term::TermDemo;
 const LIST_STYLE_PATH: &str = "widget/list/item";
 /// Style path used for selected list items.
 const LIST_SELECTED_STYLE_PATH: &str = "widget/list/selected";
-/// Default list advance interval in milliseconds.
-const DEFAULT_LIST_INTERVAL_MS: u64 = 500;
 /// Empty boundary around demo content.
 const DEMO_PADDING: u32 = 1;
 
@@ -115,7 +113,7 @@ impl Widget for DemoHost {
         let pad_id = ctx.add_child_to(parent_id, Pad::uniform(self.inner_padding))?;
         let sized_id: NodeId = if self.frame {
             let frame_id = ctx.add_child_to(pad_id, Frame::new())?;
-            let _child_id = ctx.add_child_to_boxed(frame_id.into(), child)?;
+            ctx.add_child_to_boxed(frame_id.into(), child)?;
             frame_id.into()
         } else {
             ctx.add_child_to_boxed(pad_id.into(), child)?
@@ -143,6 +141,15 @@ impl Widget for DemoHost {
     }
 }
 
+/// Items shown by the list demo.
+const LIST_ITEMS: [&str; 5] = [
+    "Item One",
+    "Item Two",
+    "Item Three",
+    "Item Four",
+    "Item Five",
+];
+
 /// List widget configuration.
 pub struct ListDemo {
     /// Poll interval for list selection updates.
@@ -162,11 +169,16 @@ impl ListDemo {
             list_id: None,
         }
     }
-}
 
-impl Default for ListDemo {
-    fn default() -> Self {
-        Self::new(Duration::from_millis(DEFAULT_LIST_INTERVAL_MS))
+    /// Return the width and height that exactly fit the demo's items.
+    pub fn natural_size() -> (u32, u32) {
+        let width = LIST_ITEMS
+            .iter()
+            .map(|item| UnicodeWidthStr::width(*item) as u32 + 1)
+            .max()
+            .unwrap_or(1)
+            .max(1);
+        (width, LIST_ITEMS.len() as u32)
     }
 }
 
@@ -183,20 +195,8 @@ impl Widget for ListDemo {
             .apply();
         ctx.set_style(style);
 
-        let items = [
-            "Item One",
-            "Item Two",
-            "Item Three",
-            "Item Four",
-            "Item Five",
-        ];
-        let item_texts: Vec<String> = items.iter().map(|item| format!(" {item}")).collect();
-        let max_width = item_texts
-            .iter()
-            .map(|item| UnicodeWidthStr::width(item.as_str()) as u32)
-            .max()
-            .unwrap_or(1)
-            .max(1);
+        let item_texts: Vec<String> = LIST_ITEMS.iter().map(|item| format!(" {item}")).collect();
+        let max_width = Self::natural_size().0;
 
         let center_id = ctx.add_child(Center::new())?;
         let list_id = ctx.add_child_to(center_id, List::<Text>::new())?;
@@ -223,24 +223,17 @@ impl Widget for ListDemo {
             self.started = true;
             return Some(interval);
         }
-        if ctx
-            .with_widget(list_id, |list: &mut List<Text>, ctx| {
-                let len = list.len();
-                if len == 0 {
-                    return Ok(());
-                }
-                let last = len.saturating_sub(1);
-                match list.selected_index() {
-                    Some(idx) if idx < last => list.select_by(ctx, 1)?,
-                    Some(_) => list.select_first(ctx)?,
-                    None => list.select_first(ctx)?,
-                }
-                Ok(())
-            })
-            .is_err()
-        {
-            return Some(interval);
-        }
+        ctx.with_widget(list_id, |list: &mut List<Text>, ctx| {
+            let len = list.len();
+            if len == 0 {
+                return Ok(());
+            }
+            match list.selected_index() {
+                Some(idx) if idx + 1 < len => list.select_by(ctx, 1),
+                _ => list.select_first(ctx),
+            }
+        })
+        .ok();
         Some(interval)
     }
 

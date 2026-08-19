@@ -49,49 +49,21 @@ pub mod canopy_examples {
             pub fn new() -> Self {}
 
             /// Scroll the outer pane by one line in the specified direction.
+            /// @param dir The direction to scroll.
             pub fn scroll(&mut self, c: &mut dyn Context, dir: geom::Direction) {}
 
-            /// Page in the outer pane.
-            pub fn page(&mut self, c: &mut dyn Context, dir: geom::Direction) {}
-
-            /// Scroll up by one line.
-            pub fn scroll_up(&mut self, c: &mut dyn Context) {}
-
-            /// Scroll down by one line.
-            pub fn scroll_down(&mut self, c: &mut dyn Context) {}
-
-            /// Scroll left by one column.
-            pub fn scroll_left(&mut self, c: &mut dyn Context) {}
-
-            /// Scroll right by one column.
-            pub fn scroll_right(&mut self, c: &mut dyn Context) {}
-
-            /// Page up by one screen.
-            pub fn page_up(&mut self, c: &mut dyn Context) {}
-
-            /// Page down by one screen.
-            pub fn page_down(&mut self, c: &mut dyn Context) {}
+            /// Page the outer pane. Negative values move up; positive values move down.
+            /// @param delta Signed page delta.
+            pub fn page(&mut self, c: &mut dyn Context, delta: i32) {}
 
             /// Scroll the outer pane to an absolute content position.
             pub fn scroll_to(&mut self, c: &mut dyn Context, x: u32, y: u32) {}
 
             /// Return a typed command reference for this command.
-            pub fn cmd_scroll_up() -> &'static canopy::commands::CommandSpec {}
+            pub fn cmd_scroll() -> &'static canopy::commands::CommandSpec {}
 
             /// Return a typed command reference for this command.
-            pub fn cmd_scroll_down() -> &'static canopy::commands::CommandSpec {}
-
-            /// Return a typed command reference for this command.
-            pub fn cmd_scroll_left() -> &'static canopy::commands::CommandSpec {}
-
-            /// Return a typed command reference for this command.
-            pub fn cmd_scroll_right() -> &'static canopy::commands::CommandSpec {}
-
-            /// Return a typed command reference for this command.
-            pub fn cmd_page_up() -> &'static canopy::commands::CommandSpec {}
-
-            /// Return a typed command reference for this command.
-            pub fn cmd_page_down() -> &'static canopy::commands::CommandSpec {}
+            pub fn cmd_page() -> &'static canopy::commands::CommandSpec {}
 
             /// Return a typed command reference for this command.
             pub fn cmd_scroll_to() -> &'static canopy::commands::CommandSpec {}
@@ -135,12 +107,6 @@ pub mod canopy_examples {
 
             /// Return a typed command reference for this command.
             pub fn cmd_flex_grow_dec() -> &'static canopy::commands::CommandSpec {}
-
-            /// Return a typed command reference for this command.
-            pub fn cmd_flex_shrink_inc() -> &'static canopy::commands::CommandSpec {}
-
-            /// Return a typed command reference for this command.
-            pub fn cmd_flex_shrink_dec() -> &'static canopy::commands::CommandSpec {}
 
             /// Return a typed command reference for this command.
             pub fn cmd_focus() -> &'static canopy::commands::CommandSpec {}
@@ -198,12 +164,6 @@ pub mod canopy_examples {
         impl FontGym {
             /// Construct a new font gym demo.
             pub fn new() -> Self {}
-
-            /// Trigger a redraw.
-            pub fn redraw(&mut self, _ctx: &mut dyn Context) {}
-
-            /// Return a typed command reference for this command.
-            pub fn cmd_redraw() -> &'static canopy::commands::CommandSpec {}
         }
 
         impl CommandNode for FontGym {
@@ -241,49 +201,21 @@ pub mod canopy_examples {
             pub fn scroll_to(&mut self, c: &mut dyn Context, x: u32, y: u32) {}
 
             /// Scroll by one line in the specified direction.
+            /// @param dir The direction to scroll.
             pub fn scroll(&mut self, c: &mut dyn Context, dir: Direction) {}
 
-            /// Page in the specified direction.
-            pub fn page(&mut self, c: &mut dyn Context, dir: Direction) {}
-
-            /// Scroll up by one line.
-            pub fn scroll_up(&mut self, c: &mut dyn Context) {}
-
-            /// Scroll down by one line.
-            pub fn scroll_down(&mut self, c: &mut dyn Context) {}
-
-            /// Scroll left by one column.
-            pub fn scroll_left(&mut self, c: &mut dyn Context) {}
-
-            /// Scroll right by one column.
-            pub fn scroll_right(&mut self, c: &mut dyn Context) {}
-
-            /// Page up by one screen.
-            pub fn page_up(&mut self, c: &mut dyn Context) {}
-
-            /// Page down by one screen.
-            pub fn page_down(&mut self, c: &mut dyn Context) {}
+            /// Page the view. Negative values move up; positive values move down.
+            /// @param delta Signed page delta.
+            pub fn page(&mut self, c: &mut dyn Context, delta: i32) {}
 
             /// Return a typed command reference for this command.
             pub fn cmd_scroll_to() -> &'static canopy::commands::CommandSpec {}
 
             /// Return a typed command reference for this command.
-            pub fn cmd_scroll_up() -> &'static canopy::commands::CommandSpec {}
+            pub fn cmd_scroll() -> &'static canopy::commands::CommandSpec {}
 
             /// Return a typed command reference for this command.
-            pub fn cmd_scroll_down() -> &'static canopy::commands::CommandSpec {}
-
-            /// Return a typed command reference for this command.
-            pub fn cmd_scroll_left() -> &'static canopy::commands::CommandSpec {}
-
-            /// Return a typed command reference for this command.
-            pub fn cmd_scroll_right() -> &'static canopy::commands::CommandSpec {}
-
-            /// Return a typed command reference for this command.
-            pub fn cmd_page_up() -> &'static canopy::commands::CommandSpec {}
-
-            /// Return a typed command reference for this command.
-            pub fn cmd_page_down() -> &'static canopy::commands::CommandSpec {}
+            pub fn cmd_page() -> &'static canopy::commands::CommandSpec {}
         }
 
         impl CommandNode for TestPattern {
@@ -583,6 +515,8 @@ pub mod canopy_examples {
         pub struct EffectOption {
             /// Effect display name.
             pub name: &'static str,
+            /// Style effect applied when this option is selected.
+            pub effect: canopy::style::effects::Effect,
         }
 
         impl Label for EffectOption {
@@ -672,12 +606,6 @@ pub mod canopy_examples {
             /// Create a new terminal instance while keeping focus on the sidebar.
             pub fn new_terminal_sidebar(&mut self, c: &mut dyn Context) -> Result<()> {}
 
-            /// Switch to the next terminal instance.
-            pub fn next_terminal(&mut self, c: &mut dyn Context) -> Result<()> {}
-
-            /// Switch to the previous terminal instance.
-            pub fn prev_terminal(&mut self, c: &mut dyn Context) -> Result<()> {}
-
             /// Switch to the next terminal while keeping focus on the sidebar.
             pub fn next_terminal_sidebar(&mut self, c: &mut dyn Context) -> Result<()> {}
 
@@ -686,9 +614,6 @@ pub mod canopy_examples {
 
             /// Close the active terminal and keep focus on the sidebar.
             pub fn delete_terminal(&mut self, c: &mut dyn Context) -> Result<()> {}
-
-            /// Focus the terminal list sidebar.
-            pub fn focus_sidebar(&mut self, c: &mut dyn Context) -> Result<()> {}
 
             /// Focus the active terminal instance.
             pub fn focus_active_terminal(&mut self, c: &mut dyn Context) -> Result<()> {}
@@ -706,12 +631,6 @@ pub mod canopy_examples {
             pub fn cmd_new_terminal_sidebar() -> &'static canopy::commands::CommandSpec {}
 
             /// Return a typed command reference for this command.
-            pub fn cmd_next_terminal() -> &'static canopy::commands::CommandSpec {}
-
-            /// Return a typed command reference for this command.
-            pub fn cmd_prev_terminal() -> &'static canopy::commands::CommandSpec {}
-
-            /// Return a typed command reference for this command.
             pub fn cmd_next_terminal_sidebar() -> &'static canopy::commands::CommandSpec {}
 
             /// Return a typed command reference for this command.
@@ -719,9 +638,6 @@ pub mod canopy_examples {
 
             /// Return a typed command reference for this command.
             pub fn cmd_delete_terminal() -> &'static canopy::commands::CommandSpec {}
-
-            /// Return a typed command reference for this command.
-            pub fn cmd_focus_sidebar() -> &'static canopy::commands::CommandSpec {}
 
             /// Return a typed command reference for this command.
             pub fn cmd_focus_active_terminal() -> &'static canopy::commands::CommandSpec {}
@@ -765,12 +681,6 @@ pub mod canopy_examples {
         impl TextGym {
             /// Construct a new text gym demo.
             pub fn new() -> Self {}
-
-            /// Trigger a redraw.
-            pub fn redraw(&mut self, _ctx: &mut dyn Context) {}
-
-            /// Return a typed command reference for this command.
-            pub fn cmd_redraw() -> &'static canopy::commands::CommandSpec {}
         }
 
         impl CommandNode for TextGym {
@@ -901,12 +811,14 @@ pub mod canopy_examples {
         }
 
         /// List widget configuration.
-        #[derive(Default)]
         pub struct ListDemo {}
 
         impl ListDemo {
             /// Build a list demo widget.
             pub fn new(interval: Duration) -> Self {}
+
+            /// Return the width and height that exactly fit the demo's items.
+            pub fn natural_size() -> (u32, u32) {}
         }
 
         impl Widget for ListDemo {
@@ -961,11 +873,14 @@ pub mod canopy_examples {
     /// Finalize and print the Luau API definitions for a demo app.
     pub fn print_luau_api(cnpy: &mut canopy::Canopy) -> canopy::error::Result<()> {}
 
-    /// Install the global contextual-help binding for one demo launcher.
-    pub fn install_help_binding(cnpy: &mut canopy::Canopy) -> canopy::error::Result<()> {}
+    /// Render the shared `Text` scroll bindings for one demo node path.
+    pub fn text_scroll_bindings(path: &str) -> String {}
+
+    /// Build a `Canopy` for a demo launcher, with `Root` loaded and the help binding installed.
+    pub fn demo_canopy() -> canopy::error::Result<canopy::Canopy> {}
 
     /// Install one demo app under a root and run the terminal loop.
-    pub fn run_demo<T: Widget + Loader + 'static>(
+    pub fn run_demo<T: Widget + 'static>(
         cnpy: canopy::Canopy,
         app: T,
         inspector: bool,

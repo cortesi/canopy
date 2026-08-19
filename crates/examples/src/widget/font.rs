@@ -9,7 +9,7 @@ use canopy::{
     render::Render,
     rgb,
     state::NodeName,
-    style::{Color, GradientSpec, GradientStop, Paint, StyleMap},
+    style::StyleMap,
 };
 use canopy_widgets::{Font, FontBanner, FontEffects, FontRenderer, GlyphRamp, LayoutOptions};
 
@@ -183,26 +183,16 @@ fn font_gradient_style() -> StyleMap {
         .rules()
         .fg(
             FONT_STYLE_PATH,
-            Paint::gradient(GradientSpec::with_stops(
+            crate::banner_gradient(
                 25.0,
-                gradient_stops([
+                [
                     rgb!("#00E5FF"),
                     rgb!("#008CFF"),
                     rgb!("#6A2DFF"),
                     rgb!("#FF2D2D"),
-                ]),
-            )),
+                ],
+            ),
         )
         .apply();
     style
-}
-
-/// Build gradient stops for a four-color palette.
-fn gradient_stops(colors: [Color; 4]) -> Vec<GradientStop> {
-    vec![
-        GradientStop::new(0.0, colors[0]),
-        GradientStop::new(0.35, colors[1]),
-        GradientStop::new(0.7, colors[2]),
-        GradientStop::new(1.0, colors[3]),
-    ]
 }

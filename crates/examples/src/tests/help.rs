@@ -4,16 +4,14 @@ use canopy::{
 };
 use canopy_widgets::Root;
 
-use crate::{install_help_binding, termgym, widget_editor};
+use crate::{demo_canopy, termgym, widget_editor};
 
 fn root_harness<W>(app: W, setup: fn(&mut canopy::Canopy) -> Result<()>) -> Result<Harness>
 where
     W: Widget + Loader + 'static,
 {
-    let mut canopy = canopy::Canopy::new();
-    Root::load(&mut canopy)?;
+    let mut canopy = demo_canopy()?;
     W::load(&mut canopy)?;
-    install_help_binding(&mut canopy)?;
     canopy.finalize_api()?;
     setup(&mut canopy)?;
     Root::install_app(&mut canopy, app)?;

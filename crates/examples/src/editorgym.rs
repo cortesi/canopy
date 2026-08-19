@@ -21,19 +21,19 @@ canopy.bind("BackTab", { path = "editor_gym", description = "Previous focus" }, 
     root.focus("Prev")
 end)
 canopy.bind("PageDown", { path = "editor_gym", description = "Page down" }, function()
-    editor_gym.page_down()
+    editor_gym.page(1)
 end)
 canopy.bind("PageUp", { path = "editor_gym", description = "Page up" }, function()
-    editor_gym.page_up()
+    editor_gym.page(-1)
 end)
 canopy.bind("Home", { path = "editor_gym", description = "Top" }, function()
     editor_gym.scroll_to(0, 0)
 end)
 canopy.bind_mouse("ScrollDown", { path = "editor_gym", description = "Scroll down" }, function()
-    editor_gym.scroll_down()
+    editor_gym.scroll("Down")
 end)
 canopy.bind_mouse("ScrollUp", { path = "editor_gym", description = "Scroll up" }, function()
-    editor_gym.scroll_up()
+    editor_gym.scroll("Up")
 end)
 canopy.bind("q", { path = "root", description = "Quit" }, function()
     root.quit()
@@ -140,7 +140,9 @@ impl EditorGym {
         Self
     }
 
+    #[command]
     /// Scroll the outer pane by one line in the specified direction.
+    /// @param dir The direction to scroll.
     pub fn scroll(&mut self, c: &mut dyn Context, dir: geom::Direction) {
         match dir {
             geom::Direction::Up => c.scroll_up(),
@@ -150,53 +152,15 @@ impl EditorGym {
         };
     }
 
-    /// Page in the outer pane.
-    pub fn page(&mut self, c: &mut dyn Context, dir: geom::Direction) {
-        match dir {
-            geom::Direction::Up => {
-                c.page_up();
-            }
-            geom::Direction::Down => {
-                c.page_down();
-            }
-            _ => {}
-        };
-    }
-
     #[command]
-    /// Scroll up by one line.
-    pub fn scroll_up(&mut self, c: &mut dyn Context) {
-        self.scroll(c, geom::Direction::Up);
-    }
-
-    #[command]
-    /// Scroll down by one line.
-    pub fn scroll_down(&mut self, c: &mut dyn Context) {
-        self.scroll(c, geom::Direction::Down);
-    }
-
-    #[command]
-    /// Scroll left by one column.
-    pub fn scroll_left(&mut self, c: &mut dyn Context) {
-        self.scroll(c, geom::Direction::Left);
-    }
-
-    #[command]
-    /// Scroll right by one column.
-    pub fn scroll_right(&mut self, c: &mut dyn Context) {
-        self.scroll(c, geom::Direction::Right);
-    }
-
-    #[command]
-    /// Page up by one screen.
-    pub fn page_up(&mut self, c: &mut dyn Context) {
-        self.page(c, geom::Direction::Up);
-    }
-
-    #[command]
-    /// Page down by one screen.
-    pub fn page_down(&mut self, c: &mut dyn Context) {
-        self.page(c, geom::Direction::Down);
+    /// Page the outer pane. Negative values move up; positive values move down.
+    /// @param delta Signed page delta.
+    pub fn page(&mut self, c: &mut dyn Context, delta: i32) {
+        if delta < 0 {
+            c.page_up();
+        } else if delta > 0 {
+            c.page_down();
+        }
     }
 
     #[command]

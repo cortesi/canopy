@@ -20,37 +20,37 @@ canopy.bind("g", { path = "frame_gym", description = "Top" }, function()
     test_pattern.scroll_to(0, 0)
 end)
 canopy.bind("Down", { path = "frame_gym", description = "Scroll down" }, function()
-    test_pattern.scroll_down()
+    test_pattern.scroll("Down")
 end)
 canopy.bind("Up", { path = "frame_gym", description = "Scroll up" }, function()
-    test_pattern.scroll_up()
+    test_pattern.scroll("Up")
 end)
 canopy.bind("Left", { path = "frame_gym", description = "Scroll left" }, function()
-    test_pattern.scroll_left()
+    test_pattern.scroll("Left")
 end)
 canopy.bind("Right", { path = "frame_gym", description = "Scroll right" }, function()
-    test_pattern.scroll_right()
+    test_pattern.scroll("Right")
 end)
 canopy.bind("j", { path = "frame_gym", description = "Scroll down" }, function()
-    test_pattern.scroll_down()
+    test_pattern.scroll("Down")
 end)
 canopy.bind("k", { path = "frame_gym", description = "Scroll up" }, function()
-    test_pattern.scroll_up()
+    test_pattern.scroll("Up")
 end)
 canopy.bind("h", { path = "frame_gym", description = "Scroll left" }, function()
-    test_pattern.scroll_left()
+    test_pattern.scroll("Left")
 end)
 canopy.bind("l", { path = "frame_gym", description = "Scroll right" }, function()
-    test_pattern.scroll_right()
+    test_pattern.scroll("Right")
 end)
 canopy.bind("PageDown", { path = "frame_gym", description = "Page down" }, function()
-    test_pattern.page_down()
+    test_pattern.page(1)
 end)
 canopy.bind("Space", { path = "frame_gym", description = "Page down" }, function()
-    test_pattern.page_down()
+    test_pattern.page(1)
 end)
 canopy.bind("PageUp", { path = "frame_gym", description = "Page up" }, function()
-    test_pattern.page_up()
+    test_pattern.page(-1)
 end)
 canopy.bind("q", { path = "root", description = "Quit" }, function()
     root.quit()
@@ -88,7 +88,9 @@ impl TestPattern {
         c.scroll_to(x, y);
     }
 
+    #[command]
     /// Scroll by one line in the specified direction.
+    /// @param dir The direction to scroll.
     pub fn scroll(&mut self, c: &mut dyn Context, dir: Direction) {
         match dir {
             Direction::Up => c.scroll_up(),
@@ -98,53 +100,15 @@ impl TestPattern {
         };
     }
 
-    /// Page in the specified direction.
-    pub fn page(&mut self, c: &mut dyn Context, dir: Direction) {
-        match dir {
-            Direction::Up => {
-                c.page_up();
-            }
-            Direction::Down => {
-                c.page_down();
-            }
-            _ => {}
-        };
-    }
-
     #[command]
-    /// Scroll up by one line.
-    pub fn scroll_up(&mut self, c: &mut dyn Context) {
-        self.scroll(c, Direction::Up);
-    }
-
-    #[command]
-    /// Scroll down by one line.
-    pub fn scroll_down(&mut self, c: &mut dyn Context) {
-        self.scroll(c, Direction::Down);
-    }
-
-    #[command]
-    /// Scroll left by one column.
-    pub fn scroll_left(&mut self, c: &mut dyn Context) {
-        self.scroll(c, Direction::Left);
-    }
-
-    #[command]
-    /// Scroll right by one column.
-    pub fn scroll_right(&mut self, c: &mut dyn Context) {
-        self.scroll(c, Direction::Right);
-    }
-
-    #[command]
-    /// Page up by one screen.
-    pub fn page_up(&mut self, c: &mut dyn Context) {
-        self.page(c, Direction::Up);
-    }
-
-    #[command]
-    /// Page down by one screen.
-    pub fn page_down(&mut self, c: &mut dyn Context) {
-        self.page(c, Direction::Down);
+    /// Page the view. Negative values move up; positive values move down.
+    /// @param delta Signed page delta.
+    pub fn page(&mut self, c: &mut dyn Context, delta: i32) {
+        if delta < 0 {
+            c.page_up();
+        } else if delta > 0 {
+            c.page_down();
+        }
     }
 
     /// Return the character for the test pattern at a position.

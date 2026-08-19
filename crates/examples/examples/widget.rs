@@ -7,15 +7,14 @@ use std::{
     time::Duration,
 };
 
-use canopy::{prelude::*, terminal::runloop};
+use canopy::prelude::*;
 use canopy_examples::{
     imgview, print_luau_api,
     widget::{DemoHost, DemoSize, FontDemo, FontSource, ListDemo, TermDemo},
     widget_editor::{self, WidgetEditor},
 };
-use canopy_widgets::{FontEffects, ImageView, Root};
+use canopy_widgets::{FontEffects, ImageView};
 use clap::{Parser, Subcommand};
-use unicode_width::UnicodeWidthStr;
 
 /// Default text for the font demo.
 const DEFAULT_TEXT: &str = "Canopy";
@@ -29,15 +28,6 @@ const DEFAULT_IMAGE_PATH: &str = "assets/tiger.jpg";
 const DEFAULT_LIST_INTERVAL_MS: u64 = 500;
 /// Default Rust file to open in the widget editor.
 const DEFAULT_SOURCE_PATH: &str = "crates/canopy-widgets/src/button.rs";
-/// Items used in the list demo.
-const LIST_ITEMS: [&str; 5] = [
-    "Item One",
-    "Item Two",
-    "Item Three",
-    "Item Four",
-    "Item Five",
-];
-
 /// CLI flags for the widget demo.
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -149,9 +139,7 @@ struct EditorArgs {
 /// Run the widget demo.
 fn main() -> Result<()> {
     let args = Args::parse();
-    let mut cnpy = Canopy::new();
-    Root::load(&mut cnpy)?;
-    canopy_examples::install_help_binding(&mut cnpy)?;
+    let mut cnpy = canopy_examples::demo_canopy()?;
 
     load_widget_api(&mut cnpy, &args.command)?;
 
@@ -195,7 +183,7 @@ fn main() -> Result<()> {
         Command::List(list_args) => {
             let interval = Duration::from_millis(list_args.interval_ms.max(1));
             let size = if args.frame {
-                let (list_width, list_height) = list_demo_size();
+                let (list_width, list_height) = ListDemo::natural_size();
                 DemoSize::new(
                     args.width.or(Some(list_width)),
                     args.height.or(Some(list_height)),
@@ -225,9 +213,7 @@ fn main() -> Result<()> {
             .with_inner_padding(0)
         }
     };
-    Root::install_app_with_inspector(&mut cnpy, demo, args.inspector)?;
-    cnpy.run_startup_scripts()?;
-    let exit_code = runloop(cnpy)?;
+    let exit_code = canopy_examples::run_demo(cnpy, demo, args.inspector)?;
     if exit_code != 0 {
         process::exit(exit_code);
     }
@@ -242,17 +228,6 @@ fn load_widget_api(cnpy: &mut Canopy, command: &Command) -> Result<()> {
         Command::Term => cnpy.add_commands::<TermDemo>(),
         Command::Editor(_) => WidgetEditor::load(cnpy),
     }
-}
-
-/// Compute the list demo width and height.
-fn list_demo_size() -> (u32, u32) {
-    let mut max_width = 1u32;
-    for item in LIST_ITEMS {
-        let width = UnicodeWidthStr::width(item) as u32 + 1;
-        max_width = max_width.max(width);
-    }
-    let height = LIST_ITEMS.len().max(1) as u32;
-    (max_width, height)
 }
 
 /// Load fonts from a directory, returning stable ordering by filename.

@@ -15,55 +15,6 @@ const RULER_PREFIX_LEN: usize = LABEL_WIDTH + LABEL_SEPARATOR.len();
 /// Column count for the ruler lines, aligned with the sample text start.
 const RULER_COLUMNS: usize = WRAP_WIDTH as usize - RULER_PREFIX_LEN;
 
-/// Default bindings for the chargym demo.
-const DEFAULT_BINDINGS: &str = r#"
-canopy.bind("g", { path = "char_gym", description = "Top" }, function()
-    text.scroll_to(0, 0)
-end)
-canopy.bind("j", { path = "char_gym", description = "Scroll down" }, function()
-    text.scroll("Down")
-end)
-canopy.bind("Down", { path = "char_gym", description = "Scroll down" }, function()
-    text.scroll("Down")
-end)
-canopy.bind_mouse("ScrollDown", { path = "char_gym", description = "Scroll down" }, function()
-    text.scroll("Down")
-end)
-canopy.bind("k", { path = "char_gym", description = "Scroll up" }, function()
-    text.scroll("Up")
-end)
-canopy.bind("Up", { path = "char_gym", description = "Scroll up" }, function()
-    text.scroll("Up")
-end)
-canopy.bind_mouse("ScrollUp", { path = "char_gym", description = "Scroll up" }, function()
-    text.scroll("Up")
-end)
-canopy.bind("h", { path = "char_gym", description = "Scroll left" }, function()
-    text.scroll("Left")
-end)
-canopy.bind("Left", { path = "char_gym", description = "Scroll left" }, function()
-    text.scroll("Left")
-end)
-canopy.bind("l", { path = "char_gym", description = "Scroll right" }, function()
-    text.scroll("Right")
-end)
-canopy.bind("Right", { path = "char_gym", description = "Scroll right" }, function()
-    text.scroll("Right")
-end)
-canopy.bind("PageDown", { path = "char_gym", description = "Page down" }, function()
-    text.page(1)
-end)
-canopy.bind("Space", { path = "char_gym", description = "Page down" }, function()
-    text.page(1)
-end)
-canopy.bind("PageUp", { path = "char_gym", description = "Page up" }, function()
-    text.page(-1)
-end)
-canopy.bind("q", { path = "root", description = "Quit" }, function()
-    root.quit()
-end)
-"#;
-
 /// ASCII-only sample text.
 const SAMPLE_ASCII: &str =
     "The quick brown fox jumps over 13 lazy dogs, testing plain ASCII width.";
@@ -101,40 +52,6 @@ struct SampleSpec {
     text: &'static str,
     /// Short note describing the sample.
     note: &'static str,
-}
-
-/// Prepared sample with computed width metrics.
-struct SampleLine {
-    /// Label used in the display.
-    label: &'static str,
-    /// Text content for the sample.
-    text: String,
-    /// Unicode column width of the text.
-    width: usize,
-    /// Count of Unicode scalar values.
-    chars: usize,
-    /// UTF-8 byte length of the text.
-    bytes: usize,
-    /// Short note describing the sample.
-    note: &'static str,
-}
-
-impl SampleLine {
-    /// Build a sample line from a spec, computing width metrics.
-    fn from_spec(spec: &SampleSpec) -> Self {
-        let text = spec.text.to_string();
-        let width = UnicodeWidthStr::width(text.as_str());
-        let chars = text.chars().count();
-        let bytes = text.len();
-        Self {
-            label: spec.label,
-            text,
-            width,
-            chars,
-            bytes,
-            note: spec.note,
-        }
-    }
 }
 
 /// All unicode sample definitions used by the demo.
@@ -176,11 +93,6 @@ const SAMPLE_SPECS: &[SampleSpec] = &[
     },
 ];
 
-/// Build the sample lines with computed metrics.
-fn sample_lines() -> Vec<SampleLine> {
-    SAMPLE_SPECS.iter().map(SampleLine::from_spec).collect()
-}
-
 /// Build ruler lines for column alignment.
 fn build_ruler_lines(width: usize) -> (String, String) {
     let mut tens = String::with_capacity(width);
@@ -203,7 +115,6 @@ fn build_ruler_lines(width: usize) -> (String, String) {
 
 /// Build the full text content for the demo.
 fn build_content() -> String {
-    let samples = sample_lines();
     let mut lines = Vec::new();
 
     lines.push("chargym: unicode and wide character samples".to_string());
@@ -222,7 +133,7 @@ fn build_content() -> String {
     lines.push(format!("{ruler_prefix}{ones}"));
     lines.push(String::new());
 
-    for sample in samples {
+    for sample in SAMPLE_SPECS {
         lines.push(format!(
             "{label: <label_width$}{sep}{text}",
             label = sample.label,
@@ -235,9 +146,9 @@ fn build_content() -> String {
             "",
             label_width = LABEL_WIDTH,
             sep = LABEL_SEPARATOR,
-            width = sample.width,
-            chars = sample.chars,
-            bytes = sample.bytes,
+            width = UnicodeWidthStr::width(sample.text),
+            chars = sample.text.chars().count(),
+            bytes = sample.text.len(),
             note = sample.note,
         ));
         lines.push(String::new());
@@ -305,6 +216,6 @@ impl Loader for CharGym {
 
 /// Install key bindings for the chargym demo.
 pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
-    cnpy.eval_script(DEFAULT_BINDINGS)?;
+    cnpy.eval_script(&crate::text_scroll_bindings("char_gym"))?;
     Ok(())
 }

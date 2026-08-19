@@ -204,28 +204,28 @@ full evidence, change, and proof for each entry.
 
 **Examples and todo**
 
-- [ ] W145: Drop the unused `Loader` bound from `run_demo` and route `widget.rs` through it
-- [ ] W146: One `demo_canopy()` constructor instead of repeating `Root::load` and the help install
-- [ ] W147: Delete the `flex_shrink_*` commands in focusgym
-- [ ] W148: Collapse the six directional scroll wrappers in `EditorGym` and `TestPattern`
-- [ ] W149: stylegym reads the selection from the widgets instead of keeping parallel lists
-- [ ] W150: textgym: delete the section height plumbing that `VStack::push_fixed` overwrites
-- [ ] W151: One source for the list demo's items and natural size
-- [ ] W152: Share the identical `Text` scroll bindings between chargym and pager
-- [ ] W153: chargym: compute sample metrics inline instead of through `SampleLine`
-- [ ] W154: Remove the two no-op `redraw` commands
-- [ ] W155: fontgym: replace `FontStyleState` with `canopy_widgets::FontEffects`
-- [ ] W156: fontgym: one banner table drives fonts, style paths, and gradients
-- [ ] W157: fontgym: delete the write-only `FontBlock.label_id`
-- [ ] W158: termgym: remove three commands with zero callers — `Capability`
-- [ ] W159: widget/mod.rs: delete the dead `impl Default for ListDemo` and simplify `ListDemo::poll`
-- [ ] W160: Share `gradient_stops` between fontgym and `widget/font.rs`
-- [ ] W161: fontgym: make the controls legend a `const` table
-- [ ] W162: fontgym: one `panel` helper for the Controls and Status frames
-- [ ] W163: One `open_adder` for the todo add-item modal
-- [ ] W164: Delete the `open_store` forwarding wrapper
-- [ ] W165: Simplify `Store::open` with `CREATE TABLE IF NOT EXISTS`
-- [ ] W166: Narrow the todo library surface to what its binary and tests use — `Capability`
+- [x] W145: Drop the unused `Loader` bound from `run_demo` and route `widget.rs` through it
+- [x] W146: One `demo_canopy()` constructor instead of repeating `Root::load` and the help install
+- [x] W147: Delete the `flex_shrink_*` commands in focusgym
+- [x] W148: Collapse the six directional scroll wrappers in `EditorGym` and `TestPattern`
+- [x] W149: stylegym reads the selection from the widgets instead of keeping parallel lists
+- [x] W150: textgym: delete the section height plumbing that `VStack::push_fixed` overwrites
+- [x] W151: One source for the list demo's items and natural size
+- [x] W152: Share the identical `Text` scroll bindings between chargym and pager
+- [x] W153: chargym: compute sample metrics inline instead of through `SampleLine`
+- [x] W154: Remove the two no-op `redraw` commands
+- [x] W155: fontgym: replace `FontStyleState` with `canopy_widgets::FontEffects`
+- [x] W156: fontgym: one banner table drives fonts, style paths, and gradients
+- [x] W157: fontgym: delete the write-only `FontBlock.label_id`
+- [x] W158: termgym: remove three commands with zero callers — `Capability`
+- [x] W159: widget/mod.rs: delete the dead `impl Default for ListDemo` and simplify `ListDemo::poll`
+- [x] W160: Share `gradient_stops` between fontgym and `widget/font.rs`
+- [x] W161: fontgym: make the controls legend a `const` table
+- [x] W162: fontgym: one `panel` helper for the Controls and Status frames
+- [x] W163: One `open_adder` for the todo add-item modal
+- [x] W164: Delete the `open_store` forwarding wrapper
+- [x] W165: Simplify `Store::open` with `CREATE TABLE IF NOT EXISTS`
+- [x] W166: Narrow the todo library surface to what its binary and tests use — `Capability`
 
 **Tests and test infrastructure**
 

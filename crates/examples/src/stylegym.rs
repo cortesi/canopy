@@ -6,7 +6,7 @@ use canopy::{
     command, derive_commands,
     layout::Edges,
     prelude::*,
-    style::{StyleMap, dracula, effects, gruvbox, solarized},
+    style::{StyleMap, dracula, effects, effects::Effect, gruvbox, solarized},
 };
 use canopy_widgets::{Dropdown, Frame, Label, Modal, Root, Selector};
 
@@ -92,6 +92,8 @@ impl Label for ThemeOption {
 pub struct EffectOption {
     /// Effect display name.
     pub name: &'static str,
+    /// Style effect applied when this option is selected.
+    pub effect: Effect,
 }
 
 impl Label for EffectOption {
@@ -125,13 +127,34 @@ fn available_themes() -> Vec<ThemeOption> {
 /// Available effects.
 fn available_effects() -> Vec<EffectOption> {
     vec![
-        EffectOption { name: "Dim" },
-        EffectOption { name: "Brighten" },
-        EffectOption { name: "Grayscale" },
-        EffectOption { name: "Invert" },
-        EffectOption { name: "Hue Shift" },
-        EffectOption { name: "Bold" },
-        EffectOption { name: "Italic" },
+        EffectOption {
+            name: "Dim",
+            effect: effects::brightness(0.5),
+        },
+        EffectOption {
+            name: "Brighten",
+            effect: effects::brightness(1.5),
+        },
+        EffectOption {
+            name: "Grayscale",
+            effect: effects::saturation(0.0),
+        },
+        EffectOption {
+            name: "Invert",
+            effect: effects::invert_rgb(),
+        },
+        EffectOption {
+            name: "Hue Shift",
+            effect: effects::hue_shift(180.0),
+        },
+        EffectOption {
+            name: "Bold",
+            effect: effects::bold(),
+        },
+        EffectOption {
+            name: "Italic",
+            effect: effects::italic(),
+        },
     ]
 }
 
@@ -242,8 +265,6 @@ pub struct Stylegym {
     modal_visible: bool,
     /// Current theme index.
     current_theme: usize,
-    /// Available themes.
-    themes: Vec<ThemeOption>,
 }
 
 impl Default for Stylegym {
@@ -259,7 +280,6 @@ impl Stylegym {
         Self {
             modal_visible: false,
             current_theme: 0,
-            themes: available_themes(),
         }
     }
 
@@ -346,11 +366,15 @@ impl Stylegym {
             return Ok(());
         };
 
-        if selected_idx != self.current_theme && selected_idx < self.themes.len() {
+        if selected_idx != self.current_theme {
             self.current_theme = selected_idx;
-            let theme_builder = self.themes[selected_idx].builder;
-            let new_style = theme_builder();
-            c.set_style(new_style);
+            let builder =
+                c.try_with_unique_descendant::<Dropdown<ThemeOption>, _>(|dropdown, _ctx| {
+                    Ok(dropdown.selected().builder)
+                })?;
+            if let Some(builder) = builder {
+                c.set_style(builder());
+            }
         }
         Ok(())
     }
@@ -358,32 +382,20 @@ impl Stylegym {
     /// Apply the selected effects from the selector to the demo pane.
     #[command]
     pub fn apply_effects(&mut self, c: &mut dyn Context) -> Result<()> {
-        let selected_indices = c
+        let selected = c
             .try_with_unique_descendant::<Selector<EffectOption>, _>(|selector, _ctx| {
-                Ok(selector.selected_indices().to_vec())
+                Ok(selector
+                    .selected_items()
+                    .into_iter()
+                    .map(|option| option.effect.clone())
+                    .collect::<Vec<_>>())
             })?
             .unwrap_or_default();
 
         self.with_demo_content(c, |_content, ctx| {
-            // Clear all existing effects on demo pane
             ctx.clear_effects(ctx.node_id())?;
-
-            // Apply effects in selection order
-            let effect_list = available_effects();
-            for idx in selected_indices {
-                if let Some(effect_option) = effect_list.get(idx) {
-                    let effect = match effect_option.name {
-                        "Dim" => effects::brightness(0.5),
-                        "Brighten" => effects::brightness(1.5),
-                        "Grayscale" => effects::saturation(0.0),
-                        "Invert" => effects::invert_rgb(),
-                        "Hue Shift" => effects::hue_shift(180.0),
-                        "Bold" => effects::bold(),
-                        "Italic" => effects::italic(),
-                        _ => continue,
-                    };
-                    ctx.push_effect(ctx.node_id(), effect)?;
-                }
+            for effect in selected {
+                ctx.push_effect(ctx.node_id(), effect)?;
             }
             Ok(())
         })?;

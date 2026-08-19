@@ -22,43 +22,16 @@ pub mod todo {
         pub struct Store {}
 
         impl Store {
-            /// Insert a todo and return its persisted record.
-            pub fn add_todo(&self, item: &str) -> Result<Todo> {}
-
-            /// Delete a todo by database identifier.
-            pub fn delete_todo(&self, id: i64) -> Result<()> {}
-
-            /// Delete every todo in the store.
-            pub fn clear_todos(&self) -> Result<()> {}
-
-            /// Replace all todos and return their new persisted records.
-            pub fn replace_todos<'a>(
-                &self,
-                items: impl IntoIterator<Item = &'a str>,
-            ) -> Result<Vec<Todo>> {
-            }
-
             /// Load every persisted todo.
             pub fn todos(&self) -> Result<Vec<Todo>> {}
         }
-
-        /// Open a store for the current thread.
-        pub fn open(path: &str) -> anyhow::Result<()> {}
 
         /// Return the store opened for the current thread.
         pub fn get() -> anyhow::Result<Store> {}
     }
 
     /// Widget for a todo entry.
-    pub struct TodoEntry {
-        /// Stored todo.
-        pub todo: store::Todo,
-    }
-
-    impl TodoEntry {
-        /// Create a new todo entry widget.
-        pub fn new(t: store::Todo) -> Self {}
-    }
+    pub struct TodoEntry {}
 
     impl Selectable for TodoEntry {
         fn set_selected(&mut self, selected: bool) {}
@@ -80,141 +53,8 @@ pub mod todo {
         fn name(&self) -> NodeName {}
     }
 
-    /// Status bar widget for the todo demo.
-    pub struct StatusBar;
-
-    impl CommandNode for StatusBar {
-        fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-    }
-
-    impl Widget for StatusBar {
-        fn render(&mut self, r: &mut Render<'_>, ctx: &dyn canopy::ViewContext) -> Result<()> {}
-    }
-
-    /// Root node for the todo demo.
-    pub struct Todo {}
-
-    impl Todo {
-        /// Load a todo widget from the current store.
-        pub fn new() -> AnyResult<Self> {}
-
-        /// Open the add-item modal and focus its input.
-        pub fn enter_item(&mut self, c: &mut dyn Context) -> Result<()> {}
-
-        /// Delete the selected todo entry.
-        pub fn delete_item(&mut self, c: &mut dyn Context) -> Result<()> {}
-
-        /// Store the pending input and close the add-item modal.
-        pub fn accept_add(&mut self, c: &mut dyn Context) -> Result<()> {}
-
-        /// Discard pending input and close the add-item modal.
-        pub fn cancel_add(&mut self, c: &mut dyn Context) -> Result<()> {}
-
-        /// Select the first todo entry.
-        pub fn select_first(&mut self, c: &mut dyn Context) -> Result<()> {}
-
-        /// Move the todo selection by a signed number of entries.
-        pub fn select_by(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {}
-
-        /// Move the todo selection by a signed number of pages.
-        pub fn page(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {}
-
-        /// Return a typed command reference for this command.
-        pub fn cmd_enter_item() -> &'static canopy::commands::CommandSpec {}
-
-        /// Return a typed command reference for this command.
-        pub fn cmd_delete_item() -> &'static canopy::commands::CommandSpec {}
-
-        /// Return a typed command reference for this command.
-        pub fn cmd_accept_add() -> &'static canopy::commands::CommandSpec {}
-
-        /// Return a typed command reference for this command.
-        pub fn cmd_cancel_add() -> &'static canopy::commands::CommandSpec {}
-
-        /// Return a typed command reference for this command.
-        pub fn cmd_select_first() -> &'static canopy::commands::CommandSpec {}
-
-        /// Return a typed command reference for this command.
-        pub fn cmd_select_by() -> &'static canopy::commands::CommandSpec {}
-
-        /// Return a typed command reference for this command.
-        pub fn cmd_page() -> &'static canopy::commands::CommandSpec {}
-    }
-
-    impl CommandNode for Todo {
-        fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-    }
-
-    impl Widget for Todo {
-        fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
-
-        fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
-
-        fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn canopy::ViewContext) -> Result<()> {}
-    }
-
-    impl Loader for Todo {
-        fn load(c: &mut Canopy) -> Result<()> {}
-    }
-
-    /// Default Luau bindings for the todo app.
-    pub const DEFAULT_BINDINGS: &str = r#"
-canopy.bind("?", {
-    description = "Show key bindings",
-    path = "/root/**/",
-    tier = "global",
-}, function() root.toggle_help() end)
-canopy.bind("q", { description = "Quit" }, function() root.quit() end)
-canopy.bind("d", { description = "Delete item" }, function() todo.delete_item() end)
-canopy.bind("a", { description = "Add item" }, function() todo.enter_item() end)
-canopy.bind("g", { description = "First item" }, function() todo.select_first() end)
-canopy.bind("j", { description = "Next item" }, function() todo.select_by(1) end)
-canopy.bind("Down", { description = "Next item" }, function() todo.select_by(1) end)
-canopy.bind("k", { description = "Previous item" }, function() todo.select_by(-1) end)
-canopy.bind("Up", { description = "Previous item" }, function() todo.select_by(-1) end)
-canopy.bind("Space", { description = "Page down" }, function() todo.page(1) end)
-canopy.bind("PageDown", { description = "Page down" }, function() todo.page(1) end)
-canopy.bind("PageUp", { description = "Page up" }, function() todo.page(-1) end)
-
-canopy.bind_mouse("ScrollUp", { description = "Previous item" }, function()
-    todo.select_by(-1)
-end)
-canopy.bind_mouse("ScrollDown", { description = "Next item" }, function()
-    todo.select_by(1)
-end)
-
-canopy.bind("Left", { path = "input", description = "Cursor left" }, function()
-    input.left()
-end)
-canopy.bind("Right", { path = "input", description = "Cursor right" }, function()
-    input.right()
-end)
-canopy.bind("Backspace", { path = "input", description = "Delete char" }, function()
-    input.backspace()
-end)
-canopy.bind("Enter", { path = "input", description = "Confirm new item" }, function()
-    todo.accept_add()
-end)
-canopy.bind("Escape", { path = "input", description = "Cancel add" }, function()
-    todo.cancel_add()
-end)
-"#;
-
-    /// Install the todo application's style rules.
-    pub fn style(cnpy: &mut Canopy) {}
-
-    /// Open the todo store at `path` for the current thread.
-    pub fn open_store(path: &str) -> anyhow::Result<()> {}
-
     /// Register and finalize the todo application API with default bindings.
     pub fn setup_app(cnpy: &mut Canopy) -> Result<()> {}
-
-    /// Register commands, finalize the Luau API, and apply default/user bindings.
-    pub fn setup_app_with_config(
-        cnpy: &mut Canopy,
-        config: Option<&std::path::Path>,
-    ) -> Result<()> {
-    }
 
     /// Create a fully configured todo application backed by `db_path`.
     pub fn create_app(db_path: &str) -> anyhow::Result<Canopy> {}

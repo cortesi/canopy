@@ -4,10 +4,10 @@ use std::{error::Error, fs, path::PathBuf, process, result::Result as StdResult}
 
 use canopy::prelude::*;
 use canopy_examples::{
-    chargym, editorgym, focusgym, fontgym, framegym, imgview, install_help_binding, intervals,
-    listgym, pager, print_luau_api, run_demo, stylegym, termgym, textgym, widget_editor,
+    chargym, demo_canopy, editorgym, focusgym, fontgym, framegym, imgview, intervals, listgym,
+    pager, print_luau_api, run_demo, stylegym, termgym, textgym, widget_editor,
 };
-use canopy_widgets::{ImageView, Root};
+use canopy_widgets::ImageView;
 use clap::{Parser, Subcommand};
 
 /// Shared CLI flags for every demo.
@@ -70,9 +70,7 @@ enum Demo {
 /// Run one demo.
 fn main() -> StdResult<(), Box<dyn Error>> {
     let args = Args::parse();
-    let mut cnpy = Canopy::new();
-    Root::load(&mut cnpy)?;
-    install_help_binding(&mut cnpy)?;
+    let mut cnpy = demo_canopy()?;
     args.demo.load(&mut cnpy)?;
 
     if args.api {

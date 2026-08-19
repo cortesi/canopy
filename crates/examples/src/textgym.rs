@@ -1,4 +1,4 @@
-use canopy::{command, derive_commands, layout::Edges, prelude::*};
+use canopy::{derive_commands, layout::Edges, prelude::*};
 use canopy_widgets::{CanvasWidth, Frame, Pad, Selectable, Text, VStack};
 
 /// Text sample using the default tab stop.
@@ -44,10 +44,6 @@ impl TextGym {
     pub fn new() -> Self {
         Self
     }
-
-    #[command]
-    /// Trigger a redraw.
-    pub fn redraw(&mut self, _ctx: &mut dyn Context) {}
 }
 
 impl Widget for TextGym {
@@ -60,7 +56,7 @@ impl Widget for TextGym {
             c,
             "Default (tab stop 4)",
             Text::new(DEFAULT_TEXT).with_canvas_width(CanvasWidth::View),
-            Layout::fill().fixed_width(34).fixed_height(6),
+            34,
         )?;
 
         let wrap_id = section(
@@ -69,7 +65,7 @@ impl Widget for TextGym {
             Text::new(WRAP_TEXT)
                 .with_wrap_width(24)
                 .with_style("text/italic"),
-            Layout::fill().fixed_width(34).fixed_height(7),
+            34,
         )?;
 
         let intrinsic_id = section(
@@ -79,19 +75,14 @@ impl Widget for TextGym {
                 .with_canvas_width(CanvasWidth::Intrinsic)
                 .with_tab_stop(8)
                 .with_wrap_width(32),
-            Layout::fill().fixed_width(26).fixed_height(6),
+            26,
         )?;
 
         let mut fixed_text = Text::new(FIXED_TEXT)
             .with_canvas_width(CanvasWidth::Fixed(40))
             .with_selected_style("text/underline");
         fixed_text.set_selected(true);
-        let fixed_id = section(
-            c,
-            "Fixed canvas 40 + selected",
-            fixed_text,
-            Layout::fill().fixed_width(26).fixed_height(6),
-        )?;
+        let fixed_id = section(c, "Fixed canvas 40 + selected", fixed_text, 26)?;
 
         let stack = VStack::new()
             .push_fixed(default_id, 6)
@@ -111,33 +102,20 @@ impl Widget for TextGym {
 }
 
 /// Wrap a text widget in a titled frame.
-fn section(c: &mut dyn Context, title: &str, text: Text, layout: Layout) -> Result<NodeId> {
+///
+/// `VStack::push_fixed` sets the row height, so `section` sets only the width it controls.
+fn section(c: &mut dyn Context, title: &str, text: Text, width: u32) -> Result<NodeId> {
     let text_id = c.create_detached(text)?;
     c.set_layout_of(text_id, Layout::fill())?;
     let frame_id = Frame::wrap_with(c, text_id, Frame::new().with_title(title))?;
     let pad_id = Pad::wrap_with(c, frame_id, Pad::uniform(OUTER_PADDING))?;
-    let padded_layout = outer_layout(layout, OUTER_PADDING);
-    c.set_layout_of(pad_id, padded_layout)?;
+    c.set_layout_of(
+        pad_id,
+        Layout::fill()
+            .fixed_width(width.saturating_add(2 * OUTER_PADDING))
+            .padding(Edges::all(OUTER_PADDING)),
+    )?;
     Ok(pad_id)
-}
-
-/// Convert a frame layout into a padded container layout.
-fn outer_layout(layout: Layout, padding: u32) -> Layout {
-    let mut layout = layout.padding(Edges::all(padding));
-    let bump = padding.saturating_mul(2);
-    if let Some(min_width) = layout.min_width {
-        layout.min_width = Some(min_width.saturating_add(bump));
-    }
-    if let Some(max_width) = layout.max_width {
-        layout.max_width = Some(max_width.saturating_add(bump));
-    }
-    if let Some(min_height) = layout.min_height {
-        layout.min_height = Some(min_height.saturating_add(bump));
-    }
-    if let Some(max_height) = layout.max_height {
-        layout.max_height = Some(max_height.saturating_add(bump));
-    }
-    layout
 }
 
 impl Loader for TextGym {
@@ -151,9 +129,6 @@ impl Loader for TextGym {
 const DEFAULT_BINDINGS: &str = r#"
 canopy.bind("q", { path = "root", description = "Quit" }, function()
     root.quit()
-end)
-canopy.bind("r", { path = "text_gym", description = "Redraw" }, function()
-    text_gym.redraw()
 end)
 "#;
 

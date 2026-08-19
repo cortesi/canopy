@@ -30,7 +30,7 @@ const FIXTURE_WITH_ITEMS: &[&str] = &[
 /// Widget for a todo entry.
 pub struct TodoEntry {
     /// Stored todo.
-    pub todo: store::Todo,
+    pub(crate) todo: store::Todo,
     /// Selection state.
     selected: bool,
 }
@@ -44,7 +44,7 @@ impl Selectable for TodoEntry {
 #[derive_commands]
 impl TodoEntry {
     /// Create a new todo entry widget.
-    pub fn new(t: store::Todo) -> Self {
+    pub(crate) fn new(t: store::Todo) -> Self {
         Self {
             todo: t,
             selected: false,
@@ -116,7 +116,7 @@ impl Widget for TodoEntry {
 }
 
 /// Status bar widget for the todo demo.
-pub struct StatusBar;
+pub(crate) struct StatusBar;
 
 #[derive_commands]
 impl StatusBar {}
@@ -146,7 +146,7 @@ impl Widget for MainContent {
 }
 
 /// Root node for the todo demo.
-pub struct Todo {
+pub(crate) struct Todo {
     /// Entries waiting for the widget tree to mount.
     pending: Vec<store::Todo>,
     /// Whether the add-item modal is active.
@@ -156,7 +156,7 @@ pub struct Todo {
 #[derive_commands]
 impl Todo {
     /// Load a todo widget from the current store.
-    pub fn new() -> AnyResult<Self> {
+    pub(crate) fn new() -> AnyResult<Self> {
         let pending = store::get()?.todos()?;
         Ok(Self {
             pending,
@@ -289,18 +289,14 @@ impl Todo {
             Ok(())
         })?;
 
-        self.adder_active = modal_open;
-        self.sync_modal_state(c)?;
         if modal_open {
-            self.with_input(c, |input| {
-                input.set_value("");
-                Ok(())
-            })?;
-            if let Some(input_id) = (c as &dyn ViewContext).unique_descendant::<Input>()? {
-                c.set_focus(NodeId::from(input_id))?;
+            self.open_adder(c)?;
+        } else {
+            self.adder_active = false;
+            self.sync_modal_state(c)?;
+            if empty {
+                c.set_focus(c.node_id())?;
             }
-        } else if empty {
-            c.set_focus(c.node_id())?;
         }
         Ok(())
     }
@@ -309,7 +305,11 @@ impl Todo {
     /// Open the add-item modal and focus its input.
     pub fn enter_item(&mut self, c: &mut dyn Context) -> Result<()> {
         self.ensure_tree(c)?;
-        self.ensure_modal(c)?;
+        self.open_adder(c)
+    }
+
+    /// Show the add-item modal with an empty input and focus it.
+    fn open_adder(&mut self, c: &mut dyn Context) -> Result<()> {
         self.adder_active = true;
         self.sync_modal_state(c)?;
         self.with_input(c, |input| {
@@ -324,7 +324,7 @@ impl Todo {
 
     #[command]
     /// Delete the selected todo entry.
-    pub fn delete_item(&mut self, c: &mut dyn Context) -> Result<()> {
+    pub fn delete_item(&self, c: &mut dyn Context) -> Result<()> {
         // Read the selected item's todo id before deleting it.
         let to_delete = self.with_list(c, |list, ctx| {
             let id = match list.selected_item() {
@@ -374,19 +374,19 @@ impl Todo {
 
     #[command]
     /// Select the first todo entry.
-    pub fn select_first(&mut self, c: &mut dyn Context) -> Result<()> {
+    pub fn select_first(&self, c: &mut dyn Context) -> Result<()> {
         self.with_list(c, |list, ctx| list.select_first(ctx))
     }
 
     #[command]
     /// Move the todo selection by a signed number of entries.
-    pub fn select_by(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {
+    pub fn select_by(&self, c: &mut dyn Context, delta: i32) -> Result<()> {
         self.with_list(c, |list, ctx| list.select_by(ctx, delta))
     }
 
     #[command]
     /// Move the todo selection by a signed number of pages.
-    pub fn page(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {
+    pub fn page(&self, c: &mut dyn Context, delta: i32) -> Result<()> {
         self.with_list(c, |list, ctx| list.page(ctx, delta))
     }
 }
@@ -415,7 +415,7 @@ impl Loader for Todo {
 }
 
 /// Default Luau bindings for the todo app.
-pub const DEFAULT_BINDINGS: &str = r#"
+pub(crate) const DEFAULT_BINDINGS: &str = r#"
 canopy.bind("?", {
     description = "Show key bindings",
     path = "/root/**/",
@@ -458,7 +458,7 @@ end)
 "#;
 
 /// Install the todo application's style rules.
-pub fn style(cnpy: &mut Canopy) {
+pub(crate) fn style(cnpy: &mut Canopy) {
     use canopy::style::StyleBuilder;
 
     cnpy.style_mut()
@@ -471,11 +471,6 @@ pub fn style(cnpy: &mut Canopy) {
         )
         .fg("list/selected", solarized::BLUE)
         .apply();
-}
-
-/// Open the todo store at `path` for the current thread.
-pub fn open_store(path: &str) -> AnyResult<()> {
-    store::open(path)
 }
 
 /// Convert persistence failures into application errors.
@@ -542,7 +537,7 @@ fn register_fixtures(cnpy: &mut Canopy) -> Result<()> {
 }
 
 /// Register commands, finalize the Luau API, and apply default/user bindings.
-pub fn setup_app_with_config(cnpy: &mut Canopy, config: Option<&Path>) -> Result<()> {
+pub(crate) fn setup_app_with_config(cnpy: &mut Canopy, config: Option<&Path>) -> Result<()> {
     Root::load(cnpy)?;
     <Todo as Loader>::load(cnpy)?;
     style(cnpy);
@@ -562,7 +557,7 @@ pub fn create_app(db_path: &str) -> AnyResult<Canopy> {
 
 /// Create a todo canopy app with optional user config.
 pub fn create_app_with_config(db_path: &str, config: Option<&Path>) -> AnyResult<Canopy> {
-    open_store(db_path)?;
+    store::open(db_path)?;
 
     let mut cnpy = Canopy::new();
     setup_app_with_config(&mut cnpy, config)?;

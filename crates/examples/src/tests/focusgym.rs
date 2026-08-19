@@ -167,7 +167,7 @@ fn test_vertical_children_fill_width_and_height() -> Result<()> {
 }
 
 #[test]
-fn test_flex_grow_and_shrink_commands_update_style() -> Result<()> {
+fn test_flex_grow_commands_update_layout() -> Result<()> {
     let mut harness = setup_harness(Size::new(60, 14))?;
     let weight_before = with_root_block(&mut harness, |ctx, root| {
         let left = ctx
@@ -183,7 +183,6 @@ fn test_flex_grow_and_shrink_commands_update_style() -> Result<()> {
     })?;
 
     harness.key(']')?;
-    harness.key('}')?;
 
     let weight_after = with_root_block(&mut harness, |ctx, root| {
         let left = ctx
@@ -263,7 +262,6 @@ fn test_flex_adjust_refuses_at_min_size() -> Result<()> {
     assert!(view.w <= 1 || view.h <= 1);
 
     harness.key('[')?;
-    harness.key('}')?;
 
     let weight_after = with_root_block(&mut harness, |ctx, root| {
         let left = ctx

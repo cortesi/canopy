@@ -333,18 +333,6 @@ impl TermGym {
     }
 
     #[command]
-    /// Switch to the next terminal instance.
-    pub fn next_terminal(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.shift_terminal(c, true)
-    }
-
-    #[command]
-    /// Switch to the previous terminal instance.
-    pub fn prev_terminal(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.shift_terminal(c, false)
-    }
-
-    #[command]
     /// Switch to the next terminal while keeping focus on the sidebar.
     pub fn next_terminal_sidebar(&mut self, c: &mut dyn Context) -> Result<()> {
         self.shift_terminal_in_sidebar(c, true)
@@ -366,13 +354,6 @@ impl TermGym {
 
         let target = self.active.min(terminals.len() - 1);
         self.remove_terminal(c, target)?;
-        self.focus_sidebar_list(c)?;
-        Ok(())
-    }
-
-    #[command]
-    /// Focus the terminal list sidebar.
-    pub fn focus_sidebar(&mut self, c: &mut dyn Context) -> Result<()> {
         self.focus_sidebar_list(c)?;
         Ok(())
     }

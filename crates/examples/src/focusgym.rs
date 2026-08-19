@@ -56,12 +56,6 @@ end)
 canopy.bind("]", { path = "block", description = "Increase grow" }, function()
     block.flex_grow_inc()
 end)
-canopy.bind("{", { path = "block", description = "Decrease shrink" }, function()
-    block.flex_shrink_dec()
-end)
-canopy.bind("}", { path = "block", description = "Increase shrink" }, function()
-    block.flex_shrink_inc()
-end)
 canopy.bind_mouse("LeftDown", { path = "block", description = "Focus block" }, function()
     block.focus()
 end)
@@ -175,18 +169,6 @@ impl Block {
     #[command]
     /// Decrease this block's flex grow coefficient.
     fn flex_grow_dec(&self, c: &mut dyn Context) -> Result<()> {
-        self.adjust_flex(c, -1)
-    }
-
-    #[command]
-    /// Increase this block's flex shrink coefficient.
-    fn flex_shrink_inc(&self, c: &mut dyn Context) -> Result<()> {
-        self.adjust_flex(c, 1)
-    }
-
-    #[command]
-    /// Decrease this block's flex shrink coefficient.
-    fn flex_shrink_dec(&self, c: &mut dyn Context) -> Result<()> {
         self.adjust_flex(c, -1)
     }
 

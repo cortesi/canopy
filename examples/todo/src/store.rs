@@ -1,6 +1,6 @@
 //! Thread-local SQLite storage for the todo example.
 
-use std::{cell::RefCell, path::Path, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
 use anyhow::{Result, anyhow};
 use rusqlite::Connection;
@@ -28,26 +28,21 @@ pub struct Store {
 impl Store {
     /// Open or initialize a SQLite store.
     fn open(path: &str) -> Result<Self> {
-        let conn = if Path::new(path).is_file() {
-            Connection::open(path)?
-        } else {
-            let conn = Connection::open(path)?;
-            conn.execute(
-                "CREATE TABLE todo (
-                    id INTEGER PRIMARY KEY,
-                    item TEXT NOT NULL
-                );",
-                rusqlite::params![],
-            )?;
-            conn
-        };
+        let conn = Connection::open(path)?;
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS todo (
+                id INTEGER PRIMARY KEY,
+                item TEXT NOT NULL
+            );",
+            rusqlite::params![],
+        )?;
         Ok(Self {
             conn: Rc::new(conn),
         })
     }
 
     /// Insert a todo and return its persisted record.
-    pub fn add_todo(&self, item: &str) -> Result<Todo> {
+    pub(crate) fn add_todo(&self, item: &str) -> Result<Todo> {
         self.conn.execute(
             "INSERT INTO todo (item) VALUES (?1);",
             rusqlite::params![item],
@@ -59,21 +54,24 @@ impl Store {
     }
 
     /// Delete a todo by database identifier.
-    pub fn delete_todo(&self, id: i64) -> Result<()> {
+    pub(crate) fn delete_todo(&self, id: i64) -> Result<()> {
         self.conn
             .execute("DELETE FROM todo WHERE id=?1;", rusqlite::params![id])?;
         Ok(())
     }
 
     /// Delete every todo in the store.
-    pub fn clear_todos(&self) -> Result<()> {
+    pub(crate) fn clear_todos(&self) -> Result<()> {
         self.conn
             .execute("DELETE FROM todo;", rusqlite::params![])?;
         Ok(())
     }
 
     /// Replace all todos and return their new persisted records.
-    pub fn replace_todos<'a>(&self, items: impl IntoIterator<Item = &'a str>) -> Result<Vec<Todo>> {
+    pub(crate) fn replace_todos<'a>(
+        &self,
+        items: impl IntoIterator<Item = &'a str>,
+    ) -> Result<Vec<Todo>> {
         self.clear_todos()?;
         let mut todos = Vec::new();
         for item in items {
@@ -98,7 +96,7 @@ impl Store {
 }
 
 /// Open a store for the current thread.
-pub fn open(path: &str) -> Result<()> {
+pub(crate) fn open(path: &str) -> Result<()> {
     let s = Store::open(path)?;
     STORE.with(|store| {
         *store.borrow_mut() = Some(s);
