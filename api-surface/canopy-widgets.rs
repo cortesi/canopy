@@ -1786,7 +1786,7 @@ pub mod canopy_widgets {
         pub fn new(config: TerminalConfig) -> Self {}
 
         /// Return the exit status of the child process, if it has exited.
-        pub fn exit_status(&self) -> Option<ExitStatus> {}
+        pub fn exit_status(&self) -> Option<i32> {}
 
         /// Return true if the child process is still running.
         pub fn is_running(&self) -> bool {}
@@ -1921,7 +1921,7 @@ pub mod canopy_widgets {
         /// Configure the child exit callback.
         pub fn with_on_exit<F>(self, on_exit: F) -> Self
         where
-            F: Fn(ExitStatus) + Send + Sync + 'static, {
+            F: Fn(i32) + Send + Sync + 'static, {
         }
     }
 

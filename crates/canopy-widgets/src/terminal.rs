@@ -27,7 +27,6 @@ use itty_core::{
     key::{Key as IttyKey, KeyCode as IttyKeyCode, Modifiers as IttyModifiers},
     title::TitleHook,
 };
-use portable_pty::ExitStatus;
 use tokio::runtime::{Builder, Runtime};
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -315,7 +314,7 @@ pub struct TerminalConfig {
     /// Optional callback used to fetch clipboard contents.
     clipboard_load: Option<Arc<dyn Fn() -> String + Send + Sync>>,
     /// Optional callback invoked when the child process exits.
-    on_exit: Option<Arc<dyn Fn(ExitStatus) + Send + Sync>>,
+    on_exit: Option<Arc<dyn Fn(i32) + Send + Sync>>,
 }
 
 impl Default for TerminalConfig {
@@ -415,7 +414,7 @@ impl TerminalConfig {
     /// Configure the child exit callback.
     pub fn with_on_exit<F>(mut self, on_exit: F) -> Self
     where
-        F: Fn(ExitStatus) + Send + Sync + 'static,
+        F: Fn(i32) + Send + Sync + 'static,
     {
         self.on_exit = Some(Arc::new(on_exit));
         self
@@ -445,7 +444,7 @@ pub struct Terminal {
     /// Whether the child exit callback has been invoked.
     exit_notified: bool,
     /// Cached child exit status.
-    exit_status: Option<ExitStatus>,
+    exit_status: Option<i32>,
 }
 
 #[derive_commands]
@@ -471,8 +470,8 @@ impl Terminal {
     }
 
     /// Return the exit status of the child process, if it has exited.
-    pub fn exit_status(&self) -> Option<ExitStatus> {
-        self.exit_status.clone()
+    pub fn exit_status(&self) -> Option<i32> {
+        self.exit_status
     }
 
     /// Return true if the child process is still running.
@@ -803,12 +802,11 @@ impl Terminal {
             return;
         }
 
-        let code = session.child_exit_code().unwrap_or(1).max(0) as u32;
-        let status = ExitStatus::with_exit_code(code);
-        self.exit_status = Some(status.clone());
+        let code = session.child_exit_code().unwrap_or(1);
+        self.exit_status = Some(code);
         self.exit_notified = true;
         if let Some(callback) = &self.config.on_exit {
-            callback(status);
+            callback(code);
         }
     }
 

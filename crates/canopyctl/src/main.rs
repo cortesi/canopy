@@ -57,10 +57,8 @@ enum Commands {
     /// List registered fixtures from a headless app instance.
     Fixtures(SpawnArgs),
     /// Evaluate one Luau script against a headless app instance.
-    #[command(alias = "script-eval")]
     Eval(EvalArgs),
     /// Print the rendered `.d.luau` API from a headless app instance.
-    #[command(alias = "script-api")]
     Api(SpawnArgs),
 }
 
@@ -411,12 +409,9 @@ async fn fixtures_command(config: LoadedConfig, args: SpawnArgs) -> Result<()> {
 
 /// Execute `canopyctl eval`.
 async fn eval_command(config: LoadedConfig, args: EvalArgs) -> Result<()> {
-    if args.file.is_some() == args.script.is_some() {
-        bail!("pass exactly one of -f/--file or an inline SCRIPT");
-    }
+    let script = read_eval_script(args.file.as_deref(), args.script.as_deref())?;
     let command = config.headless_command(&args.command)?;
     let session = Session::spawn_headless(&command).await?;
-    let script = read_eval_script(args.file.as_deref(), args.script.as_deref())?;
     let outcome = session
         .eval(ScriptEvalRequest {
             script: script.clone(),

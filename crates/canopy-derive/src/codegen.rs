@@ -28,11 +28,6 @@ impl ParamMeta {
         syn::LitStr::new(&self.ty_str, proc_macro2::Span::call_site())
     }
 
-    /// True when the caller may omit this parameter.
-    fn is_optional_for_dispatch(&self) -> bool {
-        self.is_option || self.default.is_some()
-    }
-
     /// Render command metadata for this parameter when it is externally visible.
     fn spec_tokens(&self) -> Option<proc_macro2::TokenStream> {
         let (kind_tokens, ty_tokens, decls_tokens) = match self.kind {
@@ -53,9 +48,8 @@ impl ParamMeta {
         };
         let name = self.name_lit();
         let ty = self.ty_lit();
-        let optional = self.is_optional_for_dispatch();
+        let optional = self.is_option;
         let doc = opt_str_tokens(self.doc.as_deref());
-        let default = opt_str_tokens(self.default.as_ref().map(|value| value.display.as_str()));
 
         Some(quote! {
             canopy::commands::CommandParamSpec {
@@ -68,7 +62,6 @@ impl ParamMeta {
                     doc: #doc,
                 },
                 optional: #optional,
-                default: #default,
             }
         })
     }
@@ -111,10 +104,6 @@ impl ParamMeta {
 
     /// Render the value used when this argument is omitted.
     fn missing_value_tokens(&self, source: UserBindingSource) -> proc_macro2::TokenStream {
-        if let Some(default) = &self.default {
-            let expr = &default.expr;
-            return quote! { #expr };
-        }
         if self.is_option {
             return quote! { None };
         }
@@ -294,7 +283,7 @@ impl CommandMeta {
         let max_allowed = user_params.len();
         let min_required = user_params
             .iter()
-            .rposition(|param| !param.is_optional_for_dispatch())
+            .rposition(|param| !param.is_option)
             .map_or(0, |idx| idx + 1);
         (min_required, max_allowed)
     }
@@ -504,13 +493,13 @@ impl CommandMeta {
 }
 
 /// Generate command metadata and wrappers for `#[command]` methods in an impl block.
-pub fn expand_derive_commands(mut input: ItemImpl) -> syn::Result<proc_macro2::TokenStream> {
-    let owner = owner_name(&input)?;
+pub fn expand_derive_commands(input: &ItemImpl) -> syn::Result<proc_macro2::TokenStream> {
+    let owner = owner_name(input)?;
     let name = input.self_ty.clone();
     let (impl_generics, _, where_clause) = input.generics.split_for_impl();
 
     let mut commands = Vec::new();
-    for item in &mut input.items {
+    for item in &input.items {
         if let ImplItem::Fn(method) = item
             && let Some(command) = parse_command_method(&owner, method)?
         {

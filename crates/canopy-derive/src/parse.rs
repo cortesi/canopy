@@ -7,9 +7,7 @@ use syn::{
     Type, TypeParamBound,
 };
 
-use crate::model::{
-    CommandMeta, DefaultValue, MacroArgs, ParamKind, ParamMeta, ReturnKind, ReturnMeta,
-};
+use crate::model::{CommandMeta, MacroArgs, ParamKind, ParamMeta, ReturnKind, ReturnMeta};
 
 /// Extract normalized documentation text from `#[doc = "..."]` attributes.
 pub fn doc_string(attrs: &[Attribute]) -> Option<String> {
@@ -127,48 +125,6 @@ fn is_builtin_injected(ty: &Type) -> bool {
     )
 }
 
-/// Parse an `#[arg(default = ...)]` attribute.
-fn parse_arg_default(attrs: &[Attribute]) -> Result<Option<DefaultValue>> {
-    let mut default = None;
-    for attr in attrs {
-        if !attr.path().is_ident("arg") {
-            continue;
-        }
-
-        match &attr.meta {
-            Meta::List(_) => {
-                attr.parse_nested_meta(|meta| {
-                    if meta.path.is_ident("default") {
-                        if default.is_some() {
-                            return Err(syn::Error::new_spanned(
-                                meta.path,
-                                "duplicate default attribute",
-                            ));
-                        }
-                        if meta.input.is_empty() {
-                            default = Some(DefaultValue {
-                                expr: syn::parse_quote!(Default::default()),
-                                display: "Default::default()".to_string(),
-                            });
-                            return Ok(());
-                        }
-                        let value = meta.value()?;
-                        let expr: syn::Expr = value.parse()?;
-                        let display = expr.to_token_stream().to_string();
-                        default = Some(DefaultValue { expr, display });
-                        return Ok(());
-                    }
-                    Err(syn::Error::new_spanned(meta.path, "unknown arg attribute"))
-                })?;
-            }
-            _ => {
-                return Err(syn::Error::new_spanned(attr, "invalid arg attribute"));
-            }
-        }
-    }
-    Ok(default)
-}
-
 /// Parse command return metadata from a signature.
 fn parse_return_type(output: &ReturnType, doc: Option<String>) -> ReturnMeta {
     let ReturnType::Type(_, ty) = output else {
@@ -255,7 +211,7 @@ fn parse_param_ident(pat: &Pat) -> Result<syn::Ident> {
 }
 
 /// Classify a non-context value parameter and validate its shape.
-fn classify_value_param(ty: &Type, default: Option<&DefaultValue>) -> Result<(ParamKind, bool)> {
+fn classify_value_param(ty: &Type) -> Result<(ParamKind, bool)> {
     let (inner, is_option) = if let Some(inner) = extract_single_generic(ty, "Option") {
         (inner, true)
     } else {
@@ -275,40 +231,17 @@ fn classify_value_param(ty: &Type, default: Option<&DefaultValue>) -> Result<(Pa
         ParamKind::User
     };
 
-    if kind != ParamKind::User && default.is_some() {
-        return Err(syn::Error::new_spanned(
-            ty,
-            "only user arguments may have defaults",
-        ));
-    }
-
-    if kind == ParamKind::User && is_option && default.is_some() {
-        return Err(syn::Error::new_spanned(
-            ty,
-            "Option parameters cannot have defaults",
-        ));
-    }
-
     Ok((kind, is_option))
 }
 
 /// Parse a typed argument from a command method signature.
-fn parse_command_param(pat: &mut syn::PatType) -> Result<ParamMeta> {
+fn parse_command_param(pat: &syn::PatType) -> Result<ParamMeta> {
     let ident = parse_param_ident(&pat.pat)?;
     let name = ident.to_string();
-    let default = parse_arg_default(&pat.attrs)?;
-    pat.attrs.retain(|attr| !attr.path().is_ident("arg"));
     let ty = (*pat.ty).clone();
     let ty_str = type_to_string(&ty);
 
     if let Some(mutable) = is_context_ref(&ty) {
-        if default.is_some() {
-            return Err(syn::Error::new_spanned(
-                &ty,
-                "context parameters cannot have defaults",
-            ));
-        }
-
         return Ok(ParamMeta {
             ident,
             name,
@@ -316,12 +249,11 @@ fn parse_command_param(pat: &mut syn::PatType) -> Result<ParamMeta> {
             ty_str,
             kind: ParamKind::Context { mutable },
             is_option: false,
-            default: None,
             doc: None,
         });
     }
 
-    let (kind, is_option) = classify_value_param(&ty, default.as_ref())?;
+    let (kind, is_option) = classify_value_param(&ty)?;
 
     Ok(ParamMeta {
         ident,
@@ -330,13 +262,12 @@ fn parse_command_param(pat: &mut syn::PatType) -> Result<ParamMeta> {
         ty_str,
         kind,
         is_option,
-        default,
         doc: None,
     })
 }
 
 /// Parse an impl method annotated with `#[command]`.
-pub fn parse_command_method(owner: &str, method: &mut ImplItemFn) -> Result<Option<CommandMeta>> {
+pub fn parse_command_method(owner: &str, method: &ImplItemFn) -> Result<Option<CommandMeta>> {
     let Some(macro_args) = parse_command_macro_args(&method.attrs)? else {
         return Ok(None);
     };
@@ -345,7 +276,7 @@ pub fn parse_command_method(owner: &str, method: &mut ImplItemFn) -> Result<Opti
     let mut params = Vec::new();
     let mut has_receiver = false;
 
-    for input in &mut method.sig.inputs {
+    for input in &method.sig.inputs {
         match input {
             syn::FnArg::Receiver(receiver) => {
                 has_receiver = true;
@@ -409,24 +340,24 @@ mod tests {
 
     #[test]
     fn ignore_result_preserves_result_flag() {
-        let mut method: syn::ImplItemFn = parse_quote! {
+        let method: syn::ImplItemFn = parse_quote! {
             #[command(ignore_result)]
             fn ignored(&mut self, _core: &mut dyn canopy::Context) -> Result<String> {
                 Ok("ok".into())
             }
         };
-        let cmd = parse_command_method("foo", &mut method).unwrap().unwrap();
+        let cmd = parse_command_method("foo", &method).unwrap().unwrap();
         assert!(cmd.ignore_result);
         assert!(cmd.ret.is_result);
     }
 
     #[test]
     fn rejects_unsupported_reference_args() {
-        let mut method: syn::ImplItemFn = parse_quote! {
+        let method: syn::ImplItemFn = parse_quote! {
             #[command]
             fn bad_ref(&mut self, _core: &mut dyn canopy::Context, name: &str) {}
         };
-        let err = parse_command_method("foo", &mut method).unwrap_err();
+        let err = parse_command_method("foo", &method).unwrap_err();
         assert_eq!(err.to_string(), "reference arguments are not supported");
     }
 }

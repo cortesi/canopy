@@ -7,15 +7,6 @@ pub struct MacroArgs {
     pub(crate) ignore_result: bool,
 }
 
-/// Parsed default argument value.
-#[derive(Debug, Clone)]
-pub struct DefaultValue {
-    /// Parsed expression for the default.
-    pub(crate) expr: syn::Expr,
-    /// String rendering for diagnostics.
-    pub(crate) display: String,
-}
-
 /// Classification of command parameter sources.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParamKind {
@@ -45,8 +36,6 @@ pub struct ParamMeta {
     pub(crate) kind: ParamKind,
     /// Whether the parameter is optional.
     pub(crate) is_option: bool,
-    /// Optional default value.
-    pub(crate) default: Option<DefaultValue>,
     /// Optional parameter documentation from `@param` tags.
     pub(crate) doc: Option<String>,
 }

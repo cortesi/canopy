@@ -34,7 +34,6 @@ image = { version = "0.25.10", default-features = false, features = [
 ] }
 ropey = "1.6.1"
 syntect = "5.3.0"
-portable-pty = "0.9.0"
 tracing-subscriber.workspace = true
 fontdue = "0.9.3"
 thiserror.workspace = true

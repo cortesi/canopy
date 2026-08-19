@@ -177,10 +177,10 @@ full evidence, change, and proof for each entry.
 - [x] W121: Share the UDS shutdown sequence between `stop` and `Drop`
 - [x] W122: Shrink `ScriptResult` to the fields that are not derivable from `outcome`
 - [x] W123: Drop the never-written `SuiteConfig.timeout_ms` and `fail_fast` — `Capability`
-- [ ] W124: Read the eval script before spawning and drop the duplicated usage check
-- [ ] W125: Remove the unreferenced `script-eval` and `script-api` subcommand aliases — `Capability`
-- [ ] W126: Remove `#[arg(default = ..)]` support — `Capability`
-- [ ] W127: Drop `portable-pty` and carry the terminal child's exit code as `i32`
+- [x] W124: Read the eval script before spawning and drop the duplicated usage check
+- [x] W125: Remove the unreferenced `script-eval` and `script-api` subcommand aliases — `Capability`
+- [x] W126: Remove `#[arg(default = ..)]` support — `Capability`
+- [x] W127: Drop `portable-pty` and carry the terminal child's exit code as `i32`
 
 **Widgets**
 

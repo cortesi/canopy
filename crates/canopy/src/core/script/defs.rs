@@ -242,8 +242,6 @@ fn register_command_info(builder: &mut module::Builder) {
                 .doc("Optional parameter documentation."),
             declaration::Field::new("optional", declaration::Type::Boolean)
                 .doc("True when the caller may omit the parameter."),
-            declaration::Field::new("default", declaration::Type::String.optional())
-                .doc("Default expression string, when one exists."),
         ]),
     ));
     builder.alias(declaration::Alias::new(

@@ -3168,8 +3168,6 @@ pub mod canopy {
             pub ty: CommandTypeSpec,
             /// Whether the parameter is optional.
             pub optional: bool,
-            /// Optional default expression string.
-            pub default: Option<&'static str>,
         }
 
         /// Static metadata for a command return type.

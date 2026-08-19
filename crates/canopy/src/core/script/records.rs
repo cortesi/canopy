@@ -173,9 +173,6 @@ fn command_param_to_arg(param: &commands::CommandParamSpec) -> ArgValue {
     if let Some(doc) = param.ty.doc {
         record.insert("doc".to_string(), ArgValue::String(doc.to_string()));
     }
-    if let Some(default) = param.default {
-        record.insert("default".to_string(), ArgValue::String(default.to_string()));
-    }
     ArgValue::Map(record)
 }
 

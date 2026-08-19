@@ -19,7 +19,7 @@ pub fn derive_commands(
     input: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as ItemImpl);
-    match codegen::expand_derive_commands(input) {
+    match codegen::expand_derive_commands(&input) {
         Ok(tokens) => tokens.into(),
         Err(error) => error.to_compile_error().into(),
     }
