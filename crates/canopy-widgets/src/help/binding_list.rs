@@ -178,7 +178,7 @@ impl Widget for BindingList {
         Layout::fill().overflow_y()
     }
 
-    fn canvas(&self, view: Size<u32>, _context: &CanvasContext) -> Size<u32> {
+    fn canvas(&self, view: Size, _context: &CanvasContext) -> Size {
         let lines = self.display_lines(view.w);
         Size::new(view.w, u32::try_from(lines.len()).unwrap_or(u32::MAX))
     }

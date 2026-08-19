@@ -8,12 +8,12 @@ use crate::{
     error::{Error, Result},
 };
 
-/// Traverses a tree of nodes and returns a string showing the node names and
-/// views for each node for visual display, marking `focus` when it is set.
+/// Traverses the node tree and returns a string showing the node names and
+/// views for each node for visual display, marking the focused node when it is set.
 /// This is a debug function.
-pub fn dump(core: &Core, root: impl Into<NodeId>, focus: Option<NodeId>) -> Result<String> {
+pub fn dump(core: &Core) -> Result<String> {
     let mut buffer = Buffer::ansi();
-    dump_node(&mut buffer, core, root.into(), 0, focus)?;
+    dump_node(&mut buffer, core, core.root, 0, core.focus)?;
     Ok(String::from_utf8_lossy(buffer.as_slice()).into_owned())
 }
 

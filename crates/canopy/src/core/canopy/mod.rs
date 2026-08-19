@@ -49,9 +49,9 @@ pub struct Canopy {
     poller: Poller,
 
     /// Root window size.
-    pub(crate) root_size: Option<Size>,
+    root_size: Option<Size>,
     /// Limits for the materialized visible render target.
-    pub(crate) render_limits: RenderLimits,
+    render_limits: RenderLimits,
 
     /// Script execution host.
     pub(crate) script_host: script::LuauHost,
@@ -92,7 +92,7 @@ pub struct Canopy {
     render_pending: bool,
 
     /// Event sender channel.
-    pub(crate) event_tx: UnboundedSender<Event>,
+    event_tx: UnboundedSender<Event>,
     /// Event receiver channel.
     pub(crate) event_rx: Option<UnboundedReceiver<Event>>,
     /// Cross-thread automation callback sender.
@@ -248,8 +248,6 @@ struct StartupScript {
 struct StartupAttempt {
     /// Application-owned input state before the script ran.
     application_bindings: inputmap::ApplicationBindingSnapshot,
-    /// Binding IDs present before the script ran.
-    binding_ids: HashSet<inputmap::BindingId>,
     /// Deferred hook queue before the script ran.
     hooks: Vec<script::LuauFunctionId>,
 }
@@ -441,17 +439,12 @@ impl Canopy {
 
     /// Evaluate a Luau source string in the current app context.
     pub fn eval_script(&mut self, source: &str) -> Result<()> {
-        self.eval_journaled("eval", source, |canopy, script_id, host| {
-            host.execute(canopy, canopy.core.root_id(), script_id, None)
-        })
-        .map(|_| ())
+        self.eval_root(source, None).map(|_| ())
     }
 
     /// Evaluate a Luau source string and return its value.
     pub fn eval_script_value(&mut self, source: &str) -> Result<commands::ArgValue> {
-        self.eval_journaled("eval", source, |canopy, script_id, host| {
-            host.execute(canopy, canopy.core.root_id(), script_id, None)
-        })
+        self.eval_root(source, None)
     }
 
     /// Evaluate a Luau source string with a cooperative timeout.
@@ -460,8 +453,13 @@ impl Canopy {
         source: &str,
         timeout: Duration,
     ) -> Result<commands::ArgValue> {
+        self.eval_root(source, Some(timeout))
+    }
+
+    /// Evaluate one source against the root node under a journal entry.
+    fn eval_root(&mut self, source: &str, timeout: Option<Duration>) -> Result<commands::ArgValue> {
         self.eval_journaled("eval", source, move |canopy, script_id, host| {
-            host.execute(canopy, canopy.core.root_id(), script_id, Some(timeout))
+            host.execute(canopy, canopy.core.root_id(), script_id, timeout)
         })
     }
 
@@ -652,7 +650,6 @@ impl Canopy {
         debug_assert!(self.deferred_binding_releases.is_none());
         let attempt = StartupAttempt {
             application_bindings: self.core.input_map.snapshot_application(),
-            binding_ids: self.core.input_map.binding_ids(),
             hooks: self.script_host.on_start_hooks(),
         };
         self.deferred_binding_releases = Some(Vec::new());
@@ -669,7 +666,10 @@ impl Canopy {
 
     /// Restore registries after a failed startup attempt and release only its callbacks.
     fn rollback_startup_attempt(&mut self, attempt: StartupAttempt) {
-        let new_targets = self.core.input_map.targets_not_in(&attempt.binding_ids);
+        let new_targets = self
+            .core
+            .input_map
+            .targets_not_in(&attempt.application_bindings);
         self.core
             .input_map
             .restore_application(attempt.application_bindings);
@@ -1040,15 +1040,14 @@ impl Canopy {
         &self,
         owner: &str,
     ) -> Result<DefaultBindingsRun> {
-        let script_id = self
-            .default_bindings
-            .get(owner)
-            .and_then(|script| script.script_id)
-            .ok_or_else(|| {
-                error::Error::NotFound(format!("default bindings not registered for owner {owner}"))
-            })?;
+        let script = self.default_bindings.get(owner).ok_or_else(|| {
+            error::Error::NotFound(format!("default bindings not registered for owner {owner}"))
+        })?;
+        let script_id = script.script_id.ok_or_else(|| {
+            error::Error::NotFound(format!("default bindings not compiled for owner {owner}"))
+        })?;
+        let source = script.source.clone();
         let host = self.script_host.clone();
-        let source = host.script_source(script_id).unwrap_or_default();
         let baseline = self.begin_script_journal();
         Ok(DefaultBindingsRun {
             host,
@@ -1316,7 +1315,6 @@ impl Canopy {
     /// Build a diagnostic dump with tree, focus, and binding details.
     pub fn diagnostic_dump(&self, target: NodeId) -> String {
         let mut out = String::new();
-        let focus = self.core.focus;
         let input_mode = self.core.input_map.current_mode();
         let target = if self.core.nodes.contains_key(target) {
             target
@@ -1327,7 +1325,7 @@ impl Canopy {
         let target_path = self.core.node_path(self.core.root, target);
 
         out.push_str("Canopy diagnostics\n");
-        out.push_str(&format!("focus: {focus:?}\n"));
+        out.push_str(&format!("focus: {:?}\n", self.core.focus));
         out.push_str(&format!("focus path: {focus_path}\n"));
         out.push_str(&format!("target: {target:?}\n"));
         out.push_str(&format!("target path: {target_path}\n"));
@@ -1388,7 +1386,7 @@ impl Canopy {
         }
 
         out.push_str("\nnode tree:\n");
-        match dump(&self.core, self.core.root, focus) {
+        match dump(&self.core) {
             Ok(tree) => {
                 out.push_str(&tree);
                 if !tree.ends_with('\n') {

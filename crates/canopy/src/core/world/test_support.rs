@@ -14,7 +14,7 @@ use crate::{
 /// Measurement hook installed on a [`TestWidget`].
 pub(super) type MeasureFn = dyn Fn(MeasureConstraints) -> Measurement + Send + Sync;
 /// Canvas hook installed on a [`TestWidget`].
-pub(super) type CanvasFn = dyn Fn(Size<u32>, &CanvasContext) -> Size<u32> + Send + Sync;
+pub(super) type CanvasFn = dyn Fn(Size, &CanvasContext) -> Size + Send + Sync;
 
 /// A widget whose measure and canvas behavior a test supplies, recording every measure call.
 pub(super) struct TestWidget {
@@ -40,7 +40,7 @@ impl TestWidget {
     ) -> (Self, Arc<Mutex<Vec<MeasureConstraints>>>)
     where
         F: Fn(MeasureConstraints) -> Measurement + Send + Sync + 'static,
-        C: Fn(Size<u32>, &CanvasContext) -> Size<u32> + Send + Sync + 'static,
+        C: Fn(Size, &CanvasContext) -> Size + Send + Sync + 'static,
     {
         let calls = Arc::new(Mutex::new(Vec::new()));
         let calls_clone = Arc::clone(&calls);
@@ -64,7 +64,7 @@ impl Widget for TestWidget {
         (self.measure_fn)(c)
     }
 
-    fn canvas(&self, view: Size<u32>, ctx: &CanvasContext) -> Size<u32> {
+    fn canvas(&self, view: Size, ctx: &CanvasContext) -> Size {
         (self.canvas_fn)(view, ctx)
     }
 }

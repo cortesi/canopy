@@ -2,23 +2,21 @@ use super::{Point, Rect};
 
 /// Size with width and height.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub struct Size<T = u32> {
+pub struct Size {
     /// Width component.
-    pub w: T,
+    pub w: u32,
     /// Height component.
-    pub h: T,
+    pub h: u32,
 }
 
-impl<T> Size<T> {
-    /// Create a new size with the given width and height.
-    pub fn new(w: T, h: T) -> Self {
-        Self { w, h }
-    }
-}
-
-impl Size<u32> {
+impl Size {
     /// Zero size.
     pub const ZERO: Self = Self { w: 0, h: 0 };
+
+    /// Create a new size with the given width and height.
+    pub fn new(w: u32, h: u32) -> Self {
+        Self { w, h }
+    }
 
     /// Return a `Rect` with the same dimensions as the `Size`, but a location at (0, 0).
     pub fn rect(&self) -> Rect {
@@ -30,13 +28,7 @@ impl Size<u32> {
     }
 }
 
-impl From<Rect> for Size<u32> {
-    fn from(r: Rect) -> Self {
-        Self { w: r.w, h: r.h }
-    }
-}
-
-impl From<(u32, u32)> for Size<u32> {
+impl From<(u32, u32)> for Size {
     fn from(v: (u32, u32)) -> Self {
         Self { w: v.0, h: v.1 }
     }

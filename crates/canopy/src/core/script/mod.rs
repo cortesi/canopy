@@ -204,8 +204,6 @@ impl ScriptCheckResult {
 
 /// Cached compiled script and its retained root once the host is finalized.
 struct Script {
-    /// Original source text.
-    source: String,
     /// Strict source executed at runtime, including identity and diagnostic metadata.
     runtime_source: Source,
     /// Checked graph artifact used to produce the chunk, when the surface is finalized.
@@ -235,7 +233,6 @@ impl ScriptCache {
     /// Insert a compiled script and return its id.
     fn insert(
         &mut self,
-        source: &str,
         runtime_source: Source,
         prepared: Option<PreparedGraph>,
     ) -> Result<ScriptId> {
@@ -246,7 +243,6 @@ impl ScriptCache {
         self.scripts.insert(
             id,
             Script {
-                source: source.to_string(),
                 runtime_source,
                 prepared,
                 root: None,
@@ -292,11 +288,6 @@ impl ScriptCache {
             script.root = None;
             script.prepared = None;
         }
-    }
-
-    /// Return the original source for a script.
-    fn source(&self, id: ScriptId) -> Option<String> {
-        self.scripts.get(&id).map(|script| script.source.clone())
     }
 
     /// Return the source executed for a script.
@@ -898,7 +889,7 @@ impl LuauHost {
 
     /// Compile a source while preserving its module identity and diagnostic metadata.
     pub(crate) fn compile_source(&self, source: &Source) -> Result<ScriptId> {
-        let original = source.as_str().ok_or_else(|| {
+        source.as_str().ok_or_else(|| {
             error::Error::Invalid(format!(
                 "script source {} is not valid UTF-8",
                 source.display_name()
@@ -921,7 +912,7 @@ impl LuauHost {
             .state
             .borrow_mut()
             .scripts
-            .insert(original, runtime_source, prepared)?;
+            .insert(runtime_source, prepared)?;
         if self.is_finalized() {
             self.load_script(sid)?;
         }
@@ -959,11 +950,11 @@ impl LuauHost {
         let prepared = surface
             .prepare_graph_ready(runtime_source.clone())
             .map_err(|error| prepare_graph_error_to_canopy(&error))?;
-        let sid =
-            self.state
-                .borrow_mut()
-                .scripts
-                .insert(original, runtime_source, Some(prepared))?;
+        let sid = self
+            .state
+            .borrow_mut()
+            .scripts
+            .insert(runtime_source, Some(prepared))?;
         if self.is_finalized() {
             self.load_script(sid)?;
         }
@@ -1209,11 +1200,6 @@ impl LuauHost {
                 self.push_log(line);
             }
         }
-    }
-
-    /// Return the source for a cached script.
-    pub fn script_source(&self, sid: ScriptId) -> Option<String> {
-        self.state.borrow().scripts.source(sid)
     }
 
     /// Store a stashed Luau closure and return a stable host-side id.

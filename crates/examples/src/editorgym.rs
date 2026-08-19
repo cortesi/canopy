@@ -341,7 +341,7 @@ impl Widget for EditorGym {
         Layout::fill().direction(Direction::Row).gap(1).overflow_y()
     }
 
-    fn canvas(&self, view: Size<u32>, ctx: &CanvasContext) -> Size<u32> {
+    fn canvas(&self, view: Size, ctx: &CanvasContext) -> Size {
         let extent = ctx.children_extent();
         Size::new(view.w.max(extent.w), view.h.max(extent.h))
     }

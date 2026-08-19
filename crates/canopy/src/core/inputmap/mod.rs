@@ -6,10 +6,7 @@ use crate::{
     commands::CommandInvocation,
     core::NodeId,
     error::{Error, Result},
-    event::{
-        key::Key,
-        mouse::{self, Mouse},
-    },
+    event::{key::Key, mouse::Mouse},
     path::{Path, PathMatch, PathMatcher},
     script::LuauFunctionId,
 };
@@ -212,29 +209,7 @@ impl fmt::Display for InputSpec {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Key(key) => write!(formatter, "{key}"),
-            Self::Mouse(mouse) => {
-                let mut parts = Vec::new();
-                if mouse.modifiers.ctrl {
-                    parts.push("Ctrl");
-                }
-                if mouse.modifiers.alt {
-                    parts.push("Alt");
-                }
-                if mouse.modifiers.shift {
-                    parts.push("Shift");
-                }
-                let action = format!("{:?}", mouse.action);
-                let key_label = if matches!(mouse.button, mouse::Button::None) {
-                    action
-                } else {
-                    format!("{:?} {action}", mouse.button)
-                };
-                if parts.is_empty() {
-                    formatter.write_str(&key_label)
-                } else {
-                    write!(formatter, "{}+{key_label}", parts.join("+"))
-                }
-            }
+            Self::Mouse(mouse) => write!(formatter, "{mouse}"),
         }
     }
 }
@@ -403,43 +378,40 @@ impl InputMap {
         selector: &BindingSelector<'_>,
     ) -> Vec<(BindingId, LuauFunctionId)> {
         let input = input.normalize();
-        let mut removed = Vec::new();
-        self.records.retain(|record| {
-            let selected = matches!(record.owner, BindingOwner::Application)
-                && record.input == input
+        self.remove_application_records(|record| {
+            record.input == input
                 && selector
                     .scope
                     .as_ref()
                     .is_none_or(|scope| record.scope == *scope)
                 && selector
                     .path_filter
-                    .is_none_or(|path| record.path_filter() == path);
-            if selected {
-                if let BindingTarget::Script(target) = record.target {
-                    removed.push((record.id, target));
-                }
-                false
-            } else {
-                true
-            }
-        });
-        removed
+                    .is_none_or(|path| record.path_filter() == path)
+        })
     }
 
     /// Remove all application bindings and reset application modes.
     pub fn clear_application(&mut self) -> Vec<(BindingId, LuauFunctionId)> {
+        let removed = self.remove_application_records(|_| true);
+        self.mode_stack.clear();
+        removed
+    }
+
+    /// Drop the selected application records and report their script targets in registry order.
+    fn remove_application_records(
+        &mut self,
+        selected: impl Fn(&BindingRecord) -> bool,
+    ) -> Vec<(BindingId, LuauFunctionId)> {
         let mut removed = Vec::new();
         self.records.retain(|record| {
-            if matches!(record.owner, BindingOwner::Application) {
-                if let BindingTarget::Script(target) = record.target {
-                    removed.push((record.id, target));
-                }
-                false
-            } else {
-                true
+            if !matches!(record.owner, BindingOwner::Application) || !selected(record) {
+                return true;
             }
+            if let BindingTarget::Script(target) = record.target {
+                removed.push((record.id, target));
+            }
+            false
         });
-        self.mode_stack.clear();
         removed
     }
 
@@ -684,17 +656,13 @@ impl InputMap {
         self.mode_stack = snapshot.mode_stack;
     }
 
-    /// Return all application binding IDs.
-    pub(crate) fn binding_ids(&self) -> HashSet<BindingId> {
-        self.records
-            .iter()
-            .filter(|record| matches!(record.owner, BindingOwner::Application))
-            .map(|record| record.id)
-            .collect()
-    }
-
-    /// Return script targets added after a binding-ID baseline.
-    pub(crate) fn targets_not_in(&self, baseline: &HashSet<BindingId>) -> Vec<LuauFunctionId> {
+    /// Return script targets added after an application snapshot was captured.
+    pub(crate) fn targets_not_in(
+        &self,
+        baseline: &ApplicationBindingSnapshot,
+    ) -> Vec<LuauFunctionId> {
+        let baseline: HashSet<BindingId> =
+            baseline.records.iter().map(|record| record.id).collect();
         self.records
             .iter()
             .filter(|record| matches!(record.owner, BindingOwner::Application))

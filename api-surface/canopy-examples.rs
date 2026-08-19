@@ -104,7 +104,7 @@ pub mod canopy_examples {
         impl Widget for EditorGym {
             fn layout(&self) -> Layout {}
 
-            fn canvas(&self, view: Size<u32>, ctx: &CanvasContext<'_>) -> Size<u32> {}
+            fn canvas(&self, view: Size, ctx: &CanvasContext<'_>) -> Size {}
 
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
         }
@@ -297,7 +297,7 @@ pub mod canopy_examples {
 
             fn measure(&self, c: MeasureConstraints) -> Measurement {}
 
-            fn canvas(&self, _view: Size<u32>, _ctx: &CanvasContext<'_>) -> Size<u32> {}
+            fn canvas(&self, _view: Size, _ctx: &CanvasContext<'_>) -> Size {}
 
             fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
         }
@@ -445,7 +445,7 @@ pub mod canopy_examples {
 
             fn measure(&self, c: MeasureConstraints) -> Measurement {}
 
-            fn canvas(&self, view: Size<u32>, ctx: &CanvasContext<'_>) -> Size<u32> {}
+            fn canvas(&self, view: Size, ctx: &CanvasContext<'_>) -> Size {}
 
             fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 

@@ -5,7 +5,7 @@ use super::Rect;
 /// This struct represents the decomposition of a rectangle into its border
 /// regions: top, bottom, left, right, and corner rectangles. It's useful for
 /// drawing box borders or frame decorations.
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, Hash, PartialEq, Eq)]
 pub struct FrameRects {
     /// The top of the frame, not including corners
     pub top: Rect,
@@ -23,112 +23,70 @@ pub struct FrameRects {
     pub bottomleft: Rect,
     /// The bottom right corner
     pub bottomright: Rect,
-    /// The original outer rect
-    outer_rect: Rect,
-    /// The border width
-    border: u32,
+    /// The space inside the frame
+    pub inner: Rect,
 }
 
 impl FrameRects {
     /// Construct a new frame. If the rect is too small to fit the specified
-    /// frame, we return a zero FrameRects.
+    /// frame, we return an all-zero FrameRects.
     pub fn new(rect: Rect, border: u32) -> Self {
         let Some(border_width) = border.checked_mul(2) else {
-            let mut frame = Self::zero();
-            frame.outer_rect = rect;
-            frame.border = border;
-            return frame;
+            return Self::default();
         };
         if rect.w <= border_width || rect.h <= border_width {
-            let mut f = Self::zero();
-            f.outer_rect = rect;
-            f.border = border;
-            f
-        } else {
-            Self {
-                top: Rect::new(
-                    rect.tl.x.saturating_add(border),
-                    rect.tl.y,
-                    rect.w - border_width,
-                    border,
-                ),
-                bottom: Rect::new(
-                    rect.tl.x.saturating_add(border),
-                    rect.tl.y.saturating_add(rect.h).saturating_sub(border),
-                    rect.w - border_width,
-                    border,
-                ),
-                left: Rect::new(
-                    rect.tl.x,
-                    rect.tl.y.saturating_add(border),
-                    border,
-                    rect.h - border_width,
-                ),
-                right: Rect::new(
-                    rect.tl.x.saturating_add(rect.w).saturating_sub(border),
-                    rect.tl.y.saturating_add(border),
-                    border,
-                    rect.h - border_width,
-                ),
-                topleft: Rect::new(rect.tl.x, rect.tl.y, border, border),
-                topright: Rect::new(
-                    rect.tl.x.saturating_add(rect.w).saturating_sub(border),
-                    rect.tl.y,
-                    border,
-                    border,
-                ),
-                bottomleft: Rect::new(
-                    rect.tl.x,
-                    rect.tl.y.saturating_add(rect.h).saturating_sub(border),
-                    border,
-                    border,
-                ),
-                bottomright: Rect::new(
-                    rect.tl.x.saturating_add(rect.w).saturating_sub(border),
-                    rect.tl.y.saturating_add(rect.h).saturating_sub(border),
-                    border,
-                    border,
-                ),
-                outer_rect: rect,
-                border,
-            }
+            return Self::default();
         }
-    }
-
-    /// Get the inner rect of the frame (the space inside the frame)
-    pub fn inner(&self) -> Rect {
-        let Some(border_width) = self.border.checked_mul(2) else {
-            return Rect::zero();
-        };
-        if self.outer_rect.w <= border_width || self.outer_rect.h <= border_width {
-            Rect::zero()
-        } else {
-            Rect::new(
-                self.outer_rect.tl.x.saturating_add(self.border),
-                self.outer_rect.tl.y.saturating_add(self.border),
-                self.outer_rect.w - border_width,
-                self.outer_rect.h - border_width,
-            )
-        }
-    }
-
-    /// Get the outer rect of the frame (the original rect passed to FrameRects::new())
-    pub fn outer(&self) -> Rect {
-        self.outer_rect
-    }
-    /// Return a zero-sized frame.
-    pub fn zero() -> Self {
         Self {
-            top: Rect::zero(),
-            bottom: Rect::zero(),
-            left: Rect::zero(),
-            right: Rect::zero(),
-            topleft: Rect::zero(),
-            topright: Rect::zero(),
-            bottomleft: Rect::zero(),
-            bottomright: Rect::zero(),
-            outer_rect: Rect::zero(),
-            border: 0,
+            top: Rect::new(
+                rect.tl.x.saturating_add(border),
+                rect.tl.y,
+                rect.w - border_width,
+                border,
+            ),
+            bottom: Rect::new(
+                rect.tl.x.saturating_add(border),
+                rect.tl.y.saturating_add(rect.h).saturating_sub(border),
+                rect.w - border_width,
+                border,
+            ),
+            left: Rect::new(
+                rect.tl.x,
+                rect.tl.y.saturating_add(border),
+                border,
+                rect.h - border_width,
+            ),
+            right: Rect::new(
+                rect.tl.x.saturating_add(rect.w).saturating_sub(border),
+                rect.tl.y.saturating_add(border),
+                border,
+                rect.h - border_width,
+            ),
+            topleft: Rect::new(rect.tl.x, rect.tl.y, border, border),
+            topright: Rect::new(
+                rect.tl.x.saturating_add(rect.w).saturating_sub(border),
+                rect.tl.y,
+                border,
+                border,
+            ),
+            bottomleft: Rect::new(
+                rect.tl.x,
+                rect.tl.y.saturating_add(rect.h).saturating_sub(border),
+                border,
+                border,
+            ),
+            bottomright: Rect::new(
+                rect.tl.x.saturating_add(rect.w).saturating_sub(border),
+                rect.tl.y.saturating_add(rect.h).saturating_sub(border),
+                border,
+                border,
+            ),
+            inner: Rect::new(
+                rect.tl.x.saturating_add(border),
+                rect.tl.y.saturating_add(border),
+                rect.w - border_width,
+                rect.h - border_width,
+            ),
         }
     }
 }
@@ -152,38 +110,23 @@ mod tests {
                 topright: Rect::new(19, 10, 1, 1),
                 bottomleft: Rect::new(10, 19, 1, 1),
                 bottomright: Rect::new(19, 19, 1, 1),
-                outer_rect: r,
-                border: 1,
+                inner: Rect::new(11, 11, 8, 8),
             }
         );
         Ok(())
     }
 
     #[test]
-    fn test_inner_outer() -> Result<()> {
+    fn frames_too_small_for_their_border_are_all_zero() -> Result<()> {
         let r = Rect::new(10, 10, 10, 10);
-        let frame = FrameRects::new(r, 1);
+        assert_eq!(FrameRects::new(r, 2).inner, Rect::new(12, 12, 6, 6));
 
-        // Test outer rect
-        assert_eq!(frame.outer(), r);
-
-        // Test inner rect
-        assert_eq!(frame.inner(), Rect::new(11, 11, 8, 8));
-
-        // Test with larger border
-        let frame2 = FrameRects::new(r, 2);
-        assert_eq!(frame2.outer(), r);
-        assert_eq!(frame2.inner(), Rect::new(12, 12, 6, 6));
-
-        // Test with border too large (zero frame)
-        let frame3 = FrameRects::new(r, 5);
-        assert_eq!(frame3.outer(), r); // outer rect is preserved
-        assert_eq!(frame3.inner(), Rect::zero());
-
-        // Test with exact fit (border * 2 == dimensions)
-        let frame4 = FrameRects::new(r, 5);
-        assert_eq!(frame4.outer(), r); // outer rect is preserved
-        assert_eq!(frame4.inner(), Rect::zero());
+        // An exact fit leaves no inner space.
+        assert_eq!(FrameRects::new(r, 5), FrameRects::default());
+        // A border wider than the rect leaves no frame at all.
+        assert_eq!(FrameRects::new(r, 6), FrameRects::default());
+        // A border whose doubled width overflows is also rejected.
+        assert_eq!(FrameRects::new(r, u32::MAX), FrameRects::default());
 
         Ok(())
     }

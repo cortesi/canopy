@@ -167,7 +167,7 @@ impl Widget for TestPattern {
         c.clamp(Size::new(self.size.w, self.size.h))
     }
 
-    fn canvas(&self, _view: Size<u32>, _ctx: &CanvasContext) -> Size<u32> {
+    fn canvas(&self, _view: Size, _ctx: &CanvasContext) -> Size {
         Size::new(self.size.w, self.size.h)
     }
 

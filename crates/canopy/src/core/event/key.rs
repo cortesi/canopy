@@ -208,9 +208,6 @@ impl From<char> for KeyCode {
     }
 }
 
-/// Keys that should be preserved verbatim in text input.
-const LEAVE_INTACT: &[KeyCode] = &[KeyCode::Enter, KeyCode::Char(' ')];
-
 /// A keystroke along with modifiers.
 /// A keystroke along with modifiers.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
@@ -252,8 +249,7 @@ impl Key {
     /// - If shift is present:
     ///     - If the key is ascii lowercase, convert it to uppercase and remove
     ///       shift
-    ///     - If the key is one of a special class of characters that commonly
-    ///       don't have a shift conversion (space, enter), leave shift intact
+    ///     - If the key is space, leave shift intact
     ///     - in all other cases, just remove shift
     ///
     /// | input             | normalization    |
@@ -282,50 +278,53 @@ impl Key {
             }
         }
 
-        // Shift is folded into the character it produced, except for the keys that keep it.
-        if !normalized.mods.shift
-            || !matches!(normalized.key, KeyCode::Char(_))
-            || LEAVE_INTACT.contains(&normalized.key)
+        // Shift is folded into the character it produced, except for space, which keeps it.
+        if normalized.mods.shift
+            && let KeyCode::Char(c) = normalized.key
+            && c != ' '
         {
-            return normalized;
-        }
-        if let KeyCode::Char(c) = normalized.key {
             normalized.key = KeyCode::Char(c.to_ascii_uppercase());
+            normalized.mods.shift = false;
         }
-        normalized.mods.shift = false;
         normalized
     }
 
     /// Parse a key specification such as `ctrl-s`, `PageDown`, or `A`.
     pub fn parse_spec(spec: &str) -> Result<Self, String> {
-        let spec = spec.trim();
-        if spec.is_empty() {
-            return Err("key specification cannot be empty".into());
-        }
-
-        let parts = spec
-            .split(['-', '+'])
-            .filter(|part| !part.is_empty())
-            .collect::<Vec<_>>();
-        let Some((key_part, modifier_parts)) = parts.split_last() else {
-            return Err("key specification cannot be empty".into());
-        };
-
-        let mut mods = Empty;
-        for part in modifier_parts {
-            if part.eq_ignore_ascii_case("ctrl") || part.eq_ignore_ascii_case("control") {
-                mods.ctrl = true;
-            } else if part.eq_ignore_ascii_case("alt") {
-                mods.alt = true;
-            } else if part.eq_ignore_ascii_case("shift") {
-                mods.shift = true;
-            } else {
-                return Err(format!("unknown key modifier: {part}"));
-            }
-        }
-
+        let (mods, key_part) = parse_spec_parts(spec, &['-', '+'])?;
         Ok((mods + parse_key_code(key_part)?).normalize())
     }
+}
+
+/// Split an input specification into its modifier set and its trailing body.
+///
+/// The separators differ per input kind: key specs accept `-` and `+`, mouse specs only `-`.
+pub(crate) fn parse_spec_parts<'a>(
+    spec: &'a str,
+    separators: &[char],
+) -> Result<(Mods, &'a str), String> {
+    let parts = spec
+        .trim()
+        .split(separators)
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>();
+    let Some((body, modifier_parts)) = parts.split_last() else {
+        return Err("input specification cannot be empty".into());
+    };
+
+    let mut mods = Empty;
+    for part in modifier_parts {
+        if part.eq_ignore_ascii_case("ctrl") || part.eq_ignore_ascii_case("control") {
+            mods.ctrl = true;
+        } else if part.eq_ignore_ascii_case("alt") {
+            mods.alt = true;
+        } else if part.eq_ignore_ascii_case("shift") {
+            mods.shift = true;
+        } else {
+            return Err(format!("unknown modifier: {part}"));
+        }
+    }
+    Ok((mods, body))
 }
 
 /// Parse a single key name into a key code.
@@ -478,22 +477,30 @@ impl fmt::Display for KeyCode {
     }
 }
 
+impl fmt::Display for Mods {
+    /// Write the active modifiers as `Ctrl+Alt+Shift`, or nothing when none are set.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut separator = "";
+        for (active, name) in [
+            (self.ctrl, "Ctrl"),
+            (self.alt, "Alt"),
+            (self.shift, "Shift"),
+        ] {
+            if active {
+                write!(f, "{separator}{name}")?;
+                separator = "+";
+            }
+        }
+        Ok(())
+    }
+}
+
 impl fmt::Display for Key {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut parts = Vec::new();
-        if self.mods.ctrl {
-            parts.push("Ctrl");
-        }
-        if self.mods.alt {
-            parts.push("Alt");
-        }
-        if self.mods.shift {
-            parts.push("Shift");
-        }
-        if parts.is_empty() {
+        if self.mods == Empty {
             write!(f, "{}", self.key)
         } else {
-            write!(f, "{}+{}", parts.join("+"), self.key)
+            write!(f, "{}+{}", self.mods, self.key)
         }
     }
 }

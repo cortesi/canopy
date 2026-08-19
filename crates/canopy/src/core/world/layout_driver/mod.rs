@@ -16,7 +16,7 @@ impl Core {
         refresh_layouts(self)?;
         let root = self.root;
         let mut pass = LayoutPass::new(self);
-        pass.layout_node(root, screen_size, Point::zero(), Overflow::none())?;
+        pass.layout_node(root, screen_size, Overflow::none())?;
         let screen_view = View::new(
             RectI32::new(0, 0, screen_size.w, screen_size.h),
             RectI32::new(0, 0, screen_size.w, screen_size.h),
@@ -124,12 +124,11 @@ impl<'a> LayoutPass<'a> {
         &mut self,
         node_id: NodeId,
         available_outer: Size,
-        position: Point,
         parent_overflow: Overflow,
-    ) -> Result<Size<u32>> {
+    ) -> Result<Size> {
         let (layout, hidden) = self.node_layout_snapshot(node_id)?;
         if hidden || layout.display == Display::None {
-            self.clear_layout(node_id, position)?;
+            self.clear_layout(node_id)?;
             return Ok(Size::ZERO);
         }
 
@@ -148,7 +147,7 @@ impl<'a> LayoutPass<'a> {
                 .nodes
                 .get_mut(node_id)
                 .ok_or(Error::NodeNotFound(node_id))?;
-            node.rect = Rect::new(position.x, position.y, outer.w, outer.h);
+            node.rect = Rect::new(0, 0, outer.w, outer.h);
             node.content_size = content_size;
         }
 
@@ -211,8 +210,8 @@ impl<'a> LayoutPass<'a> {
         node_id: NodeId,
         layout: Layout,
         available_outer: Size,
-    ) -> Result<Size<u32>> {
-        let available: Size<u32> = available_outer;
+    ) -> Result<Size> {
+        let available: Size = available_outer;
         let pad_x = layout.padding.horizontal();
         let pad_y = layout.padding.vertical();
         let available_content_w = available.w.saturating_sub(pad_x);
@@ -242,12 +241,7 @@ impl<'a> LayoutPass<'a> {
 
         let mut measured_content = Size::ZERO;
         if did_measure {
-            let m0 = self.measure_cached(node_id, c0)?;
-            let raw0 = match m0 {
-                Measurement::Fixed(content) => content,
-                Measurement::Wrap => self.measure_wrap_content(node_id, layout, c0)?,
-            };
-            measured_content = c0.clamp_size(raw0);
+            measured_content = self.measure_content(node_id, layout, c0)?;
         }
 
         let outer_w0 = match layout.width {
@@ -275,12 +269,7 @@ impl<'a> LayoutPass<'a> {
                     width: Constraint::Exact(content.w),
                     height: c0.height,
                 };
-                let m1 = self.measure_cached(node_id, c1)?;
-                let raw1 = match m1 {
-                    Measurement::Fixed(content) => content,
-                    Measurement::Wrap => self.measure_wrap_content(node_id, layout, c1)?,
-                };
-                let content1 = c1.clamp_size(raw1);
+                let content1 = self.measure_content(node_id, layout, c1)?;
 
                 if matches!(layout.height, Sizing::Measure) {
                     let outer_h1 = content1.h.saturating_add(pad_y);
@@ -301,13 +290,28 @@ impl<'a> LayoutPass<'a> {
         Ok(outer)
     }
 
+    /// Measure a node's content size under one constraint, wrapping children when the widget
+    /// defers, then clamp the result to the constraint.
+    fn measure_content(
+        &mut self,
+        node_id: NodeId,
+        layout: Layout,
+        constraints: MeasureConstraints,
+    ) -> Result<Size> {
+        let raw = match self.measure_cached(node_id, constraints)? {
+            Measurement::Fixed(content) => content,
+            Measurement::Wrap => self.measure_wrap_content(node_id, layout, constraints)?,
+        };
+        Ok(constraints.clamp_size(raw))
+    }
+
     /// Measure content size by wrapping children when requested.
     fn measure_wrap_content(
         &mut self,
         node_id: NodeId,
         layout: Layout,
         constraints: MeasureConstraints,
-    ) -> Result<Size<u32>> {
+    ) -> Result<Size> {
         let children = self.visible_children(node_id)?;
         if children.is_empty() {
             return Ok(Size::ZERO);
@@ -318,10 +322,12 @@ impl<'a> LayoutPass<'a> {
             return self.measure_wrap_content_stack(layout, constraints, &children);
         }
 
-        let main_fixed = constraints.main_is_exact(layout.direction);
-        let cross_fixed = constraints.cross_is_exact(layout.direction);
-        let avail_main = constraints.main(layout.direction).max_bound();
-        let avail_cross = constraints.cross(layout.direction).max_bound();
+        let main = constraints.main(layout.direction);
+        let cross = constraints.cross(layout.direction);
+        let main_fixed = main.is_exact();
+        let cross_fixed = cross.is_exact();
+        let avail_main = main.max_bound();
+        let avail_cross = cross.max_bound();
         let avail = layout
             .direction
             .size_from_main_cross(avail_main, avail_cross);
@@ -403,7 +409,7 @@ impl<'a> LayoutPass<'a> {
         layout: Layout,
         constraints: MeasureConstraints,
         children: &[NodeId],
-    ) -> Result<Size<u32>> {
+    ) -> Result<Size> {
         let avail_w = constraints.width.max_bound();
         let avail_h = constraints.height.max_bound();
         let avail = Size::new(avail_w, avail_h);
@@ -439,12 +445,7 @@ impl<'a> LayoutPass<'a> {
     }
 
     /// Lay out visible children inside the provided content box.
-    fn layout_children(
-        &mut self,
-        node_id: NodeId,
-        layout: Layout,
-        content: Size<u32>,
-    ) -> Result<()> {
+    fn layout_children(&mut self, node_id: NodeId, layout: Layout, content: Size) -> Result<()> {
         let children = self.visible_children(node_id)?;
         if children.is_empty() {
             return Ok(());
@@ -456,8 +457,7 @@ impl<'a> LayoutPass<'a> {
                 // Stack: all children get full content area, positioned according to alignment
                 for child in &children {
                     // First, layout the child to determine its size
-                    let child_size =
-                        self.layout_node(*child, content, Point::zero(), parent_overflow)?;
+                    let child_size = self.layout_node(*child, content, parent_overflow)?;
 
                     // Then apply alignment to position the child within content area
                     let offset_x = align_offset(child_size.w, content.w, layout.align_horizontal);
@@ -482,19 +482,19 @@ impl<'a> LayoutPass<'a> {
     fn layout_children_sequential(
         &mut self,
         layout: Layout,
-        content: Size<u32>,
+        content: Size,
         children: &[NodeId],
         parent_overflow: Overflow,
     ) -> Result<()> {
         let mut fixed_main_total = 0u32;
-        let mut flex_children: Vec<(usize, u32)> = Vec::new();
+        let mut flex_weights: Vec<u32> = Vec::new();
         let mut pre_sizes = vec![Size::ZERO; children.len()];
 
         for (i, child) in children.iter().enumerate() {
             let child_layout = self.node_layout_snapshot(*child)?.0;
             let main = main_sizing(child_layout, layout.direction);
             if let Sizing::Flex(w) = main {
-                flex_children.push((i, w));
+                flex_weights.push(w);
                 continue;
             }
 
@@ -515,17 +515,14 @@ impl<'a> LayoutPass<'a> {
             .main_size(content)
             .saturating_sub(fixed_main_total.saturating_add(gap_total));
 
-        let weights: Vec<u32> = flex_children.iter().map(|(_, w)| *w).collect();
-        let shares = allocate_flex_shares(remaining, &weights);
+        let shares = allocate_flex_shares(remaining, &flex_weights);
 
         let mut flex_idx = 0usize;
         let mut actual_sizes = Vec::with_capacity(children.len());
         for (i, child) in children.iter().enumerate() {
             let child_layout = self.node_layout_snapshot(*child)?.0;
-            let mut effective = child_layout;
-            effective.inherit_overflow(parent_overflow.x, parent_overflow.y);
 
-            let main = match main_sizing(effective, layout.direction) {
+            let main = match main_sizing(child_layout, layout.direction) {
                 Sizing::Flex(_) => {
                     let share = shares[flex_idx];
                     flex_idx += 1;
@@ -537,8 +534,7 @@ impl<'a> LayoutPass<'a> {
             let child_available = layout
                 .direction
                 .size_from_main_cross(main, layout.direction.cross_size(content));
-            let actual =
-                self.layout_node(*child, child_available, Point::zero(), parent_overflow)?;
+            let actual = self.layout_node(*child, child_available, parent_overflow)?;
             actual_sizes.push(actual);
         }
 
@@ -587,11 +583,7 @@ impl<'a> LayoutPass<'a> {
     }
 
     /// Compute the scrollable canvas size for a node.
-    pub(super) fn compute_canvas(
-        &self,
-        node_id: NodeId,
-        view_size: Size<u32>,
-    ) -> Result<Size<u32>> {
+    pub(super) fn compute_canvas(&self, node_id: NodeId, view_size: Size) -> Result<Size> {
         let children = self.visible_children(node_id).map_err(|error| {
             self.core
                 .widget_operation_error(WidgetOperation::layout("canvas"), node_id, error)
@@ -610,7 +602,7 @@ impl<'a> LayoutPass<'a> {
                         error,
                     )
                 })?;
-            let child_canvas: Size<u32> = node.canvas;
+            let child_canvas: Size = node.canvas;
             canvas_children.push(CanvasChild::new(node.rect, child_canvas));
         }
         let ctx = CanvasContext::new(&canvas_children);
@@ -626,7 +618,7 @@ impl<'a> LayoutPass<'a> {
     }
 
     /// Store the canvas size compute_canvas returned and clamp the scroll offset.
-    fn update_canvas(&mut self, node_id: NodeId, view_size: Size<u32>, canvas: Size<u32>) {
+    fn update_canvas(&mut self, node_id: NodeId, view_size: Size, canvas: Size) {
         if let Some(node) = self.core.nodes.get_mut(node_id) {
             clamp_scroll(&mut node.scroll, view_size, canvas);
             node.canvas = canvas;
@@ -686,27 +678,27 @@ impl<'a> LayoutPass<'a> {
     }
 
     /// Reset layout data for a hidden subtree.
-    fn clear_layout(&mut self, node_id: NodeId, position: Point) -> Result<()> {
+    fn clear_layout(&mut self, node_id: NodeId) -> Result<()> {
         let node = self
             .core
             .nodes
             .get_mut(node_id)
             .ok_or(Error::NodeNotFound(node_id))?;
-        node.rect = Rect::new(position.x, position.y, 0, 0);
+        node.rect = Rect::zero();
         node.content_size = Size::default();
         node.canvas = Size::default();
         node.scroll = Point::zero();
         node.view = View::default();
         let children = node.children.clone();
         for child in children {
-            self.clear_layout(child, Point::zero())?;
+            self.clear_layout(child)?;
         }
         Ok(())
     }
 }
 
 /// Clamp an outer size against min/max constraints.
-fn clamp_outer(size: Size<u32>, layout: Layout) -> Size<u32> {
+fn clamp_outer(size: Size, layout: Layout) -> Size {
     Size::new(
         clamp_axis(size.w, layout.min_width, layout.max_width),
         clamp_axis(size.h, layout.min_height, layout.max_height),
@@ -762,7 +754,7 @@ fn constraint_for_axis(
 }
 
 /// Clamp a scroll offset so it stays within view/canvas bounds.
-pub fn clamp_scroll(scroll: &mut Point, view: Size<u32>, canvas: Size<u32>) {
+pub fn clamp_scroll(scroll: &mut Point, view: Size, canvas: Size) {
     let max_x = if view.w == 0 {
         0
     } else {

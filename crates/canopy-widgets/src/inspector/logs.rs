@@ -169,7 +169,7 @@ impl Widget for Logs {
         c.clamp(Size::new(available_width, 10))
     }
 
-    fn canvas(&self, view: Size<u32>, _ctx: &CanvasContext) -> Size<u32> {
+    fn canvas(&self, view: Size, _ctx: &CanvasContext) -> Size {
         view
     }
 

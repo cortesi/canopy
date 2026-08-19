@@ -15,32 +15,6 @@ impl LineSegment {
         u64::from(self.off) + u64::from(self.len)
     }
 
-    /// Carve off a fixed-size portion from the start of this LineSegment,
-    /// returning a (head, tail) tuple. If the segment is too short to carve out
-    /// the width specified, the length of the head will be zero.
-    pub fn carve_start(&self, n: u32) -> (Self, Self) {
-        if self.len < n {
-            (
-                Self {
-                    off: self.off,
-                    len: 0,
-                },
-                *self,
-            )
-        } else {
-            (
-                Self {
-                    off: self.off,
-                    len: n,
-                },
-                Self {
-                    off: self.off.saturating_add(n),
-                    len: self.len - n,
-                },
-            )
-        }
-    }
-
     /// Carve off a fixed-size portion from the end of this LineSegment,
     /// returning a (head, tail) tuple. If the segment is too short to carve out
     /// the width specified, the length of the tail will be zero.
@@ -69,18 +43,18 @@ impl LineSegment {
     }
 
     /// Does other lie completely within this extent.
-    pub fn contains(&self, other: &Self) -> bool {
+    pub fn contains(&self, other: Self) -> bool {
         self.off <= other.off && self.end() >= other.end()
     }
 
     /// Return the intersection between this line segment and other. The line
     /// segment returned will always have a non-zero length.
-    pub fn intersection(&self, other: &Self) -> Option<Self> {
+    pub fn intersection(&self, other: Self) -> Option<Self> {
         if self.len == 0 || other.len == 0 {
             None
         } else if self.contains(other) {
-            Some(*other)
-        } else if other.contains(self) {
+            Some(other)
+        } else if other.contains(*self) {
             Some(*self)
         } else if self.off <= other.off && u64::from(other.off) < self.end() {
             Some(Self {
@@ -103,7 +77,7 @@ impl LineSegment {
     pub fn split_active(&self, window: Self, view: Self) -> Result<(Self, Self, Self)> {
         if window.len == 0 {
             Err(Error::ZeroLengthWindow)
-        } else if !view.contains(&window) {
+        } else if !view.contains(window) {
             Err(Error::WindowOutsideView { window, view })
         } else {
             let track_len = u64::from(self.len);
@@ -166,22 +140,21 @@ mod tests {
     proptest! {
         #[test]
         fn intersection_is_commutative_and_contained(a in segment_strategy(), b in segment_strategy()) {
-            let ab = a.intersection(&b);
-            let ba = b.intersection(&a);
+            let ab = a.intersection(b);
+            let ba = b.intersection(a);
             prop_assert_eq!(ab, ba);
             if let Some(intersection) = ab {
-                prop_assert!(a.contains(&intersection));
-                prop_assert!(b.contains(&intersection));
+                prop_assert!(a.contains(intersection));
+                prop_assert!(b.contains(intersection));
                 prop_assert!(intersection.len > 0);
             }
         }
 
         #[test]
-        fn carve_start_preserves_original_extent(segment in segment_strategy(), n in 0u32..150) {
-            let (head, tail) = segment.carve_start(n);
+        fn carve_end_preserves_original_extent(segment in segment_strategy(), n in 0u32..150) {
+            let (head, tail) = segment.carve_end(n);
             prop_assert_eq!(head.off, segment.off);
-            prop_assert!(segment.contains(&head));
-            prop_assert!(segment.contains(&tail));
+            prop_assert!(segment.contains(head));
             prop_assert_eq!(head.len.saturating_add(tail.len), segment.len);
         }
     }
@@ -189,21 +162,6 @@ mod tests {
     #[test]
     fn carve() -> Result<()> {
         let s = LineSegment { off: 5, len: 5 };
-        assert_eq!(
-            s.carve_start(2),
-            (
-                LineSegment { off: 5, len: 2 },
-                LineSegment { off: 7, len: 3 }
-            )
-        );
-        assert_eq!(
-            s.carve_start(10),
-            (
-                LineSegment { off: 5, len: 0 },
-                LineSegment { off: 5, len: 5 }
-            )
-        );
-
         assert_eq!(
             s.carve_end(2),
             (
@@ -227,33 +185,33 @@ mod tests {
         let l = LineSegment { off: 5, len: 5 };
 
         assert_eq!(
-            l.intersection(&LineSegment { off: 6, len: 2 }),
+            l.intersection(LineSegment { off: 6, len: 2 }),
             Some(LineSegment { off: 6, len: 2 })
         );
-        assert_eq!(l.intersection(&LineSegment { off: 1, len: 10 }), Some(l));
+        assert_eq!(l.intersection(LineSegment { off: 1, len: 10 }), Some(l));
         assert_eq!(
-            l.intersection(&LineSegment { off: 6, len: 8 }),
+            l.intersection(LineSegment { off: 6, len: 8 }),
             Some(LineSegment { off: 6, len: 4 })
         );
         assert_eq!(
-            l.intersection(&LineSegment { off: 0, len: 8 }),
+            l.intersection(LineSegment { off: 0, len: 8 }),
             Some(LineSegment { off: 5, len: 3 })
         );
-        assert_eq!(l.intersection(&l), Some(l));
-        assert_eq!(l.intersection(&LineSegment { off: 0, len: 2 }), None);
-        assert_eq!(l.intersection(&LineSegment { off: 10, len: 2 }), None);
-        assert_eq!(l.intersection(&LineSegment { off: 5, len: 0 }), None);
-        assert_eq!(l.intersection(&LineSegment { off: 0, len: 5 }), None);
+        assert_eq!(l.intersection(l), Some(l));
+        assert_eq!(l.intersection(LineSegment { off: 0, len: 2 }), None);
+        assert_eq!(l.intersection(LineSegment { off: 10, len: 2 }), None);
+        assert_eq!(l.intersection(LineSegment { off: 5, len: 0 }), None);
+        assert_eq!(l.intersection(LineSegment { off: 0, len: 5 }), None);
         Ok(())
     }
 
     #[test]
     fn contains() -> Result<()> {
         let v = LineSegment { off: 1, len: 3 };
-        assert!(v.contains(&LineSegment { off: 1, len: 3 }));
-        assert!(!v.contains(&LineSegment { off: 1, len: 4 }));
-        assert!(!v.contains(&LineSegment { off: 2, len: 3 }));
-        assert!(!v.contains(&LineSegment { off: 0, len: 2 }));
+        assert!(v.contains(LineSegment { off: 1, len: 3 }));
+        assert!(!v.contains(LineSegment { off: 1, len: 4 }));
+        assert!(!v.contains(LineSegment { off: 2, len: 3 }));
+        assert!(!v.contains(LineSegment { off: 0, len: 2 }));
 
         Ok(())
     }

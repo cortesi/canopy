@@ -1,4 +1,4 @@
-use super::{PointI32, Rect};
+use super::{Point, PointI32, Rect};
 
 /// A half-open rectangle with a signed origin and unsigned size.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Default)]
@@ -26,31 +26,14 @@ impl RectI32 {
         self.w == 0 || self.h == 0
     }
 
-    /// Check if the rectangle contains a point.
-    pub fn contains_point(&self, p: super::Point) -> bool {
-        if self.is_zero() {
-            return false;
-        }
-        let px = i64::from(p.x);
-        let py = i64::from(p.y);
-        let left = i64::from(self.tl.x);
-        let top = i64::from(self.tl.y);
-        let right = left + i64::from(self.w);
-        let bottom = top + i64::from(self.h);
-
-        px >= left && px < right && py >= top && py < bottom
-    }
-
     /// Convert a screen point to local coordinates relative to this rect.
     /// If the point is to the left/top of the rect, the result clamps to 0.
-    pub fn to_local_point(&self, p: super::Point) -> super::Point {
-        let px = i64::from(p.x);
-        let py = i64::from(p.y);
-        let left = i64::from(self.tl.x);
-        let top = i64::from(self.tl.y);
-        super::Point {
-            x: u32::try_from((px - left).clamp(0, i64::from(u32::MAX))).unwrap_or(u32::MAX),
-            y: u32::try_from((py - top).clamp(0, i64::from(u32::MAX))).unwrap_or(u32::MAX),
+    pub fn to_local_point(&self, p: Point) -> Point {
+        let dx = i64::from(p.x) - self.left();
+        let dy = i64::from(p.y) - self.top();
+        Point {
+            x: u32::try_from(dx.clamp(0, i64::from(u32::MAX))).unwrap_or(u32::MAX),
+            y: u32::try_from(dy.clamp(0, i64::from(u32::MAX))).unwrap_or(u32::MAX),
         }
     }
 
@@ -59,20 +42,13 @@ impl RectI32 {
         if self.is_zero() || other.is_zero() {
             return None;
         }
-        let left = i64::from(self.tl.x);
-        let top = i64::from(self.tl.y);
-        let right = left + i64::from(self.w);
-        let bottom = top + i64::from(self.h);
-
         let other_left = i64::from(other.tl.x);
         let other_top = i64::from(other.tl.y);
-        let other_right = other_left + i64::from(other.w);
-        let other_bottom = other_top + i64::from(other.h);
 
-        let inter_left = left.max(other_left);
-        let inter_top = top.max(other_top);
-        let inter_right = right.min(other_right);
-        let inter_bottom = bottom.min(other_bottom);
+        let inter_left = self.left().max(other_left);
+        let inter_top = self.top().max(other_top);
+        let inter_right = self.right().min(other_left + i64::from(other.w));
+        let inter_bottom = self.bottom().min(other_top + i64::from(other.h));
 
         if inter_right <= inter_left || inter_bottom <= inter_top {
             return None;
@@ -182,7 +158,10 @@ mod tests {
             if let Some(intersection) = signed.intersect_rect(other) {
                 prop_assert!(!intersection.is_zero());
                 prop_assert!(other.contains_rect(intersection));
-                prop_assert!(signed.contains_point(intersection.tl));
+                let x = i64::from(intersection.tl.x);
+                let y = i64::from(intersection.tl.y);
+                prop_assert!(x >= signed.left() && x < signed.right());
+                prop_assert!(y >= signed.top() && y < signed.bottom());
             }
         }
     }

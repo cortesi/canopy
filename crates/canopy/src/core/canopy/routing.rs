@@ -314,19 +314,10 @@ impl Canopy {
                 self.render_pending = true;
                 self.poll(&ids)
             }
-            Event::Paste(content) => {
-                self.render_pending = true;
-                let event = Event::Paste(content);
-                self.dispatch_focus_event(&event)
-            }
             Event::Wake => Ok(()),
-            Event::FocusGained => {
+            Event::Paste(_) | Event::FocusGained | Event::FocusLost => {
                 self.render_pending = true;
-                self.dispatch_focus_event(&Event::FocusGained)
-            }
-            Event::FocusLost => {
-                self.render_pending = true;
-                self.dispatch_focus_event(&Event::FocusLost)
+                self.dispatch_focus_event(&e)
             }
         }
     }

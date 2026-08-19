@@ -975,7 +975,7 @@ impl Widget for Terminal {
         c.wrap()
     }
 
-    fn canvas(&self, view: Size<u32>, _ctx: &CanvasContext) -> Size<u32> {
+    fn canvas(&self, view: Size, _ctx: &CanvasContext) -> Size {
         view
     }
 

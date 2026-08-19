@@ -55,7 +55,7 @@ pub mod canopy_geom {
     /// This struct represents the decomposition of a rectangle into its border
     /// regions: top, bottom, left, right, and corner rectangles. It's useful for
     /// drawing box borders or frame decorations.
-    #[derive(Debug, Clone, Copy, Hash, StructuralPartialEq, PartialEq, Eq)]
+    #[derive(Debug, Clone, Copy, Default, Hash, StructuralPartialEq, PartialEq, Eq)]
     pub struct FrameRects {
         /// The top of the frame, not including corners
         pub top: super::Rect,
@@ -73,25 +73,18 @@ pub mod canopy_geom {
         pub bottomleft: super::Rect,
         /// The bottom right corner
         pub bottomright: super::Rect,
+        /// The space inside the frame
+        pub inner: super::Rect,
     }
 
     impl FrameRects {
         /// Construct a new frame. If the rect is too small to fit the specified
-        /// frame, we return a zero FrameRects.
+        /// frame, we return an all-zero FrameRects.
         pub fn new(rect: Rect, border: u32) -> Self {}
-
-        /// Get the inner rect of the frame (the space inside the frame)
-        pub fn inner(&self) -> Rect {}
-
-        /// Get the outer rect of the frame (the original rect passed to FrameRects::new())
-        pub fn outer(&self) -> Rect {}
-
-        /// Return a zero-sized frame.
-        pub fn zero() -> Self {}
     }
 
     /// A horizontal line, one character high - essentially a Rect with height 1.
-    #[derive(Debug, Clone, Copy, Hash, StructuralPartialEq, PartialEq, Eq, Default)]
+    #[derive(Debug, Clone, Copy, Default, Hash, StructuralPartialEq, PartialEq, Eq)]
     pub struct Line {
         /// Top-left point for the line.
         pub tl: super::Point,
@@ -124,22 +117,17 @@ pub mod canopy_geom {
         /// The exclusive far edge of the extent using widened arithmetic.
         pub fn end(&self) -> u64 {}
 
-        /// Carve off a fixed-size portion from the start of this LineSegment,
-        /// returning a (head, tail) tuple. If the segment is too short to carve out
-        /// the width specified, the length of the head will be zero.
-        pub fn carve_start(&self, n: u32) -> (Self, Self) {}
-
         /// Carve off a fixed-size portion from the end of this LineSegment,
         /// returning a (head, tail) tuple. If the segment is too short to carve out
         /// the width specified, the length of the tail will be zero.
         pub fn carve_end(&self, n: u32) -> (Self, Self) {}
 
         /// Does other lie completely within this extent.
-        pub fn contains(&self, other: &Self) -> bool {}
+        pub fn contains(&self, other: Self) -> bool {}
 
         /// Return the intersection between this line segment and other. The line
         /// segment returned will always have a non-zero length.
-        pub fn intersection(&self, other: &Self) -> Option<Self> {}
+        pub fn intersection(&self, other: Self) -> Option<Self> {}
 
         /// Split this extent into (pre, active, post) extents, based on the
         /// position of a window within a view. The main use for this function is
@@ -159,9 +147,6 @@ pub mod canopy_geom {
     impl Point {
         /// Return the origin point.
         pub fn zero() -> Self {}
-
-        /// Return true when both coordinates are zero.
-        pub fn is_zero(&self) -> bool {}
 
         /// Shift the point by an offset, avoiding under- or overflow.
         pub fn scroll(&self, x: i32, y: i32) -> Self {}
@@ -186,7 +171,7 @@ pub mod canopy_geom {
     }
 
     /// A half-open rectangle with an unsigned origin and size.
-    #[derive(Debug, Clone, Copy, Hash, StructuralPartialEq, PartialEq, Eq, Default)]
+    #[derive(Debug, Clone, Copy, Default, Hash, StructuralPartialEq, PartialEq, Eq)]
     pub struct Rect {
         /// Top-left corner
         pub tl: super::Point,
@@ -254,20 +239,8 @@ pub mod canopy_geom {
         pub fn expanse(&self) -> Size {}
     }
 
-    impl From<Size> for Rect {
-        fn from(s: Size) -> Self {}
-    }
-
     impl From<Line> for Rect {
         fn from(l: Line) -> Self {}
-    }
-
-    impl From<(u32, u32, u32, u32)> for Rect {
-        fn from(v: (u32, u32, u32, u32)) -> Self {}
-    }
-
-    impl From<Rect> for Size<u32> {
-        fn from(r: Rect) -> Self {}
     }
 
     /// A half-open rectangle with a signed origin and unsigned size.
@@ -288,12 +261,9 @@ pub mod canopy_geom {
         /// Does this rect have a zero size?
         pub fn is_zero(&self) -> bool {}
 
-        /// Check if the rectangle contains a point.
-        pub fn contains_point(&self, p: super::Point) -> bool {}
-
         /// Convert a screen point to local coordinates relative to this rect.
         /// If the point is to the left/top of the rect, the result clamps to 0.
-        pub fn to_local_point(&self, p: super::Point) -> super::Point {}
+        pub fn to_local_point(&self, p: Point) -> Point {}
 
         /// Intersect this signed rect with an unsigned rect in the same coordinate space.
         pub fn intersect_rect(&self, other: Rect) -> Option<Rect> {}
@@ -322,32 +292,22 @@ pub mod canopy_geom {
 
     /// Size with width and height.
     #[derive(Clone, Copy, Debug, Default, StructuralPartialEq, PartialEq, Eq, Hash)]
-    pub struct Size<T = u32> {
+    pub struct Size {
         /// Width component.
-        pub w: T,
+        pub w: u32,
         /// Height component.
-        pub h: T,
+        pub h: u32,
     }
 
-    impl<T> Size<T> {
+    impl Size {
         /// Create a new size with the given width and height.
-        pub fn new(w: T, h: T) -> Self {}
-    }
+        pub fn new(w: u32, h: u32) -> Self {}
 
-    impl Size<u32> {
         /// Return a `Rect` with the same dimensions as the `Size`, but a location at (0, 0).
         pub fn rect(&self) -> Rect {}
     }
 
-    impl From<Size> for Rect {
-        fn from(s: Size) -> Self {}
-    }
-
-    impl From<Rect> for Size<u32> {
-        fn from(r: Rect) -> Self {}
-    }
-
-    impl From<(u32, u32)> for Size<u32> {
+    impl From<(u32, u32)> for Size {
         fn from(v: (u32, u32)) -> Self {}
     }
 

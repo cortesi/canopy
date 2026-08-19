@@ -51,7 +51,7 @@ impl Canopy {
     }
 
     /// Pre-render sweep of the tree.
-    pub(crate) fn pre_render(&mut self) -> Result<bool> {
+    fn pre_render(&mut self) -> Result<bool> {
         let root = self.core.root;
         let mut focus_seen = false;
         let mut layout_dirty = false;
@@ -203,7 +203,7 @@ impl Canopy {
     }
 
     /// Post-render sweep of the tree.
-    pub(crate) fn post_render(&self, buf: &mut TermBuf) -> Result<()> {
+    fn post_render(&self, buf: &mut TermBuf) -> Result<()> {
         let mut current = self.core.focus;
         let mut cursor_spec: Option<(NodeId, View, cursor::Cursor)> = None;
         while let Some(id) = current {

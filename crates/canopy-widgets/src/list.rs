@@ -815,7 +815,7 @@ impl<W: Selectable + Send + 'static> Widget for List<W> {
         c.clamp(Size::new(available_width, height.max(1)))
     }
 
-    fn canvas(&self, view: Size<u32>, ctx: &CanvasContext<'_>) -> Size<u32> {
+    fn canvas(&self, view: Size, ctx: &CanvasContext<'_>) -> Size {
         // Sum child canvas heights and find max canvas width for scrolling
         let mut total_height = 0u32;
         let mut max_width = view.w;

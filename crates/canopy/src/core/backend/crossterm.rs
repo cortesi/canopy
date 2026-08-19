@@ -691,7 +691,7 @@ fn stop_and_dump(session: &mut TerminalSession, core: &Core, heading: &str) {
         eprintln!("terminal restore failed: {error}");
     }
     eprintln!("{heading}");
-    match dump(core, core.root, core.focus) {
+    match dump(core) {
         Ok(dump_str) => eprintln!("{dump_str}"),
         Err(dump_err) => eprintln!("Failed to dump node tree: {dump_err}"),
     }

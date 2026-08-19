@@ -318,7 +318,7 @@ pub mod canopy_widgets {
 
             fn measure(&self, c: MeasureConstraints) -> Measurement {}
 
-            fn canvas(&self, view: Size<u32>, _ctx: &CanvasContext<'_>) -> Size<u32> {}
+            fn canvas(&self, view: Size, _ctx: &CanvasContext<'_>) -> Size {}
 
             fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {}
 
@@ -475,7 +475,7 @@ pub mod canopy_widgets {
 
             fn layout(&self) -> Layout {}
 
-            fn canvas(&self, view: Size<u32>, _context: &CanvasContext<'_>) -> Size<u32> {}
+            fn canvas(&self, view: Size, _context: &CanvasContext<'_>) -> Size {}
 
             fn on_event(
                 &mut self,
@@ -654,7 +654,7 @@ pub mod canopy_widgets {
 
                 fn measure(&self, c: MeasureConstraints) -> Measurement {}
 
-                fn canvas(&self, view: Size<u32>, _ctx: &CanvasContext<'_>) -> Size<u32> {}
+                fn canvas(&self, view: Size, _ctx: &CanvasContext<'_>) -> Size {}
 
                 fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {}
 
@@ -949,7 +949,7 @@ pub mod canopy_widgets {
 
         fn measure(&self, c: MeasureConstraints) -> Measurement {}
 
-        fn canvas(&self, _view: Size<u32>, _ctx: &canopy::layout::CanvasContext<'_>) -> Size<u32> {}
+        fn canvas(&self, _view: Size, _ctx: &canopy::layout::CanvasContext<'_>) -> Size {}
 
         fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
@@ -1222,7 +1222,7 @@ pub mod canopy_widgets {
         /// Fill the available space in the terminal view.
         fn layout(&self) -> Layout {}
 
-        fn canvas(&self, view: Size<u32>, _ctx: &CanvasContext<'_>) -> Size<u32> {}
+        fn canvas(&self, view: Size, _ctx: &CanvasContext<'_>) -> Size {}
 
         /// Render the current image view into the terminal buffer.
         fn render(
@@ -1431,7 +1431,7 @@ pub mod canopy_widgets {
 
         fn measure(&self, c: MeasureConstraints) -> Measurement {}
 
-        fn canvas(&self, view: Size<u32>, ctx: &CanvasContext<'_>) -> Size<u32> {}
+        fn canvas(&self, view: Size, ctx: &CanvasContext<'_>) -> Size {}
 
         fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
@@ -1494,7 +1494,7 @@ pub mod canopy_widgets {
 
     impl Pad {
         /// Create a pad with the provided edge padding.
-        pub fn new(padding: Edges<u32>) -> Self {}
+        pub fn new(padding: Edges) -> Self {}
 
         /// Create a pad with uniform padding on all sides.
         pub fn uniform(padding: u32) -> Self {}
@@ -1774,7 +1774,7 @@ pub mod canopy_widgets {
 
         fn measure(&self, c: MeasureConstraints) -> Measurement {}
 
-        fn canvas(&self, _view: Size<u32>, _ctx: &canopy::layout::CanvasContext<'_>) -> Size<u32> {}
+        fn canvas(&self, _view: Size, _ctx: &canopy::layout::CanvasContext<'_>) -> Size {}
 
         fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
@@ -1817,7 +1817,7 @@ pub mod canopy_widgets {
 
         fn measure(&self, c: MeasureConstraints) -> Measurement {}
 
-        fn canvas(&self, view: Size<u32>, _ctx: &CanvasContext<'_>) -> Size<u32> {}
+        fn canvas(&self, view: Size, _ctx: &CanvasContext<'_>) -> Size {}
 
         fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
@@ -2002,7 +2002,7 @@ pub mod canopy_widgets {
 
         fn measure(&self, c: MeasureConstraints) -> Measurement {}
 
-        fn canvas(&self, view: Size<u32>, _ctx: &canopy::layout::CanvasContext<'_>) -> Size<u32> {}
+        fn canvas(&self, view: Size, _ctx: &canopy::layout::CanvasContext<'_>) -> Size {}
 
         fn name(&self) -> NodeName {}
     }

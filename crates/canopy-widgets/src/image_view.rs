@@ -395,7 +395,7 @@ impl Widget for ImageView {
         Layout::fill()
     }
 
-    fn canvas(&self, view: Size<u32>, _ctx: &CanvasContext) -> Size<u32> {
+    fn canvas(&self, view: Size, _ctx: &CanvasContext) -> Size {
         let view_size = Size::new(view.w, view.h);
         let zoom = self.effective_zoom(view_size);
         let width = (self.image_width_f32() * zoom).ceil() as u32;

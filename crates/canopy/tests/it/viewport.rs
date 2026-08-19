@@ -55,7 +55,7 @@ mod tests {
         }
 
         /// Canvas is larger than view to enable scrolling.
-        fn canvas(&self, _view: Size<u32>, _ctx: &CanvasContext) -> Size<u32> {
+        fn canvas(&self, _view: Size, _ctx: &CanvasContext) -> Size {
             Size::new(100, 100)
         }
 

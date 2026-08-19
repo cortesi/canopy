@@ -165,7 +165,7 @@ where
     }
 
     /// Return the unclamped size required to render all selector items.
-    fn content_size(&self) -> Size<u32> {
+    fn content_size(&self) -> Size {
         let max_label_width = self
             .items
             .iter()
@@ -246,7 +246,7 @@ where
         c.clamp(self.content_size())
     }
 
-    fn canvas(&self, _view: Size<u32>, _ctx: &canopy::layout::CanvasContext) -> Size<u32> {
+    fn canvas(&self, _view: Size, _ctx: &canopy::layout::CanvasContext) -> Size {
         self.content_size()
     }
 

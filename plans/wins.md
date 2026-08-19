@@ -97,26 +97,26 @@ full evidence, change, and proof for each entry.
 - [x] W47: One stop-and-dump path in `runloop` that reports terminal-restore failures
 - [x] W48: Let `translate_result` and `CrosstermRender::flush` forward directly
 - [x] W49: Delete `InputMap::remove_luau_functions`
-- [ ] W50: One "remove application records" helper behind `unbind_input` and `clear_application`
-- [ ] W51: Derive the startup baseline from the application snapshot
-- [ ] W52: Share one modifier and spec parser between `Key::parse_spec` and `Mouse::parse_spec`
-- [ ] W53: One modifier-prefix formatter (`Display for Mods`) and `Display for Mouse`
-- [ ] W54: Simplify the shift fold in `Key::normalize` and drop the dead `LEAVE_INTACT` entry
-- [ ] W55: Use the stored default-bindings source instead of a host lookup
-- [ ] W56: Collapse the three root-eval wrappers onto one private helper
-- [ ] W57: Merge the three identical focus-event arms in `Canopy::event`
-- [ ] W58: Simplify `dump(core, root, focus)` to `dump(core)`
-- [ ] W59: Tighten facade-internal visibility
-- [ ] W60: Trim engine-only helpers from the public layout surface
-- [ ] W61: Remove dead inputs in the layout pass
-- [ ] W62: Fold the duplicated measure-or-wrap-then-clamp block into one helper
-- [ ] W63: Make `Edges` non-generic
-- [ ] W64: Compute `FrameRects.inner` once and drop the dead `outer()`, `zero()`, and private state
-- [ ] W65: Derive `Default` for `Rect` and `Line`
-- [ ] W66: Use the `RectI32` edge accessors instead of re-deriving edges inline
-- [ ] W67: Drop the unused type parameter on `Size<T = u32>`
-- [ ] W68: Delete geometry methods with zero callers
-- [ ] W69: Remove the three `From` conversions on `Rect` and `Size` with no callers
+- [x] W50: One "remove application records" helper behind `unbind_input` and `clear_application`
+- [x] W51: Derive the startup baseline from the application snapshot
+- [x] W52: Share one modifier and spec parser between `Key::parse_spec` and `Mouse::parse_spec`
+- [x] W53: One modifier-prefix formatter (`Display for Mods`) and `Display for Mouse`
+- [x] W54: Simplify the shift fold in `Key::normalize` and drop the dead `LEAVE_INTACT` entry
+- [x] W55: Use the stored default-bindings source instead of a host lookup
+- [x] W56: Collapse the three root-eval wrappers onto one private helper
+- [x] W57: Merge the three identical focus-event arms in `Canopy::event`
+- [x] W58: Simplify `dump(core, root, focus)` to `dump(core)`
+- [x] W59: Tighten facade-internal visibility
+- [x] W60: Trim engine-only helpers from the public layout surface
+- [x] W61: Remove dead inputs in the layout pass
+- [x] W62: Fold the duplicated measure-or-wrap-then-clamp block into one helper
+- [x] W63: Make `Edges` non-generic
+- [x] W64: Compute `FrameRects.inner` once and drop the dead `outer()`, `zero()`, and private state
+- [x] W65: Derive `Default` for `Rect` and `Line`
+- [x] W66: Use the `RectI32` edge accessors instead of re-deriving edges inline
+- [x] W67: Drop the unused type parameter on `Size<T = u32>`
+- [x] W68: Delete geometry methods with zero callers
+- [x] W69: Remove the three `From` conversions on `Rect` and `Size` with no callers
 - [ ] W70: Flatten the one-field doc wrappers `DocMeta` and `CommandDocSpec`
 - [ ] W71: Simplify `parse_return_type`
 - [ ] W72: Remove the dead `Type::Path` arm in `is_context_ref`

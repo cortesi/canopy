@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::{event::key, geom::Point};
 
 /// An abstract specification for a mouse action.
@@ -74,31 +76,7 @@ impl From<MouseEvent> for Mouse {
 impl Mouse {
     /// Parse a mouse specification such as `ScrollUp` or `ctrl-LeftDown`.
     pub fn parse_spec(spec: &str) -> Result<Self, String> {
-        let spec = spec.trim();
-        if spec.is_empty() {
-            return Err("mouse specification cannot be empty".into());
-        }
-
-        let parts = spec
-            .split('-')
-            .filter(|part| !part.is_empty())
-            .collect::<Vec<_>>();
-        let Some((body, modifier_parts)) = parts.split_last() else {
-            return Err("mouse specification cannot be empty".into());
-        };
-
-        let mut modifiers = key::Empty;
-        for part in modifier_parts {
-            if part.eq_ignore_ascii_case("ctrl") || part.eq_ignore_ascii_case("control") {
-                modifiers.ctrl = true;
-            } else if part.eq_ignore_ascii_case("alt") {
-                modifiers.alt = true;
-            } else if part.eq_ignore_ascii_case("shift") {
-                modifiers.shift = true;
-            } else {
-                return Err(format!("unknown mouse modifier: {part}"));
-            }
-        }
+        let (modifiers, body) = key::parse_spec_parts(spec, &['-'])?;
 
         let lower = body.to_ascii_lowercase();
         let action = [
@@ -134,6 +112,19 @@ impl Mouse {
             button,
             modifiers,
         })
+    }
+}
+
+impl fmt::Display for Mouse {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.modifiers != key::Empty {
+            write!(f, "{}+", self.modifiers)?;
+        }
+        if matches!(self.button, Button::None) {
+            write!(f, "{:?}", self.action)
+        } else {
+            write!(f, "{:?} {:?}", self.button, self.action)
+        }
     }
 }
 

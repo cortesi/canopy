@@ -35,13 +35,13 @@ pub mod canopy {
 
         impl Direction {
             /// Size along the main axis.
-            pub fn main_size(&self, size: Size<u32>) -> u32 {}
+            pub fn main_size(&self, size: Size) -> u32 {}
 
             /// Size along the cross axis.
-            pub fn cross_size(&self, size: Size<u32>) -> u32 {}
+            pub fn cross_size(&self, size: Size) -> u32 {}
 
             /// Construct a size from main and cross axis values.
-            pub fn size_from_main_cross(&self, main: u32, cross: u32) -> Size<u32> {}
+            pub fn size_from_main_cross(&self, main: u32, cross: u32) -> Size {}
         }
 
         /// Alignment along an axis.
@@ -103,29 +103,27 @@ pub mod canopy {
 
         /// Edge insets for padding.
         #[derive(Clone, Copy, Debug, Default, StructuralPartialEq, PartialEq, Eq)]
-        pub struct Edges<T> {
+        pub struct Edges {
             /// Top edge.
-            pub top: T,
+            pub top: u32,
             /// Right edge.
-            pub right: T,
+            pub right: u32,
             /// Bottom edge.
-            pub bottom: T,
+            pub bottom: u32,
             /// Left edge.
-            pub left: T,
+            pub left: u32,
         }
 
-        impl<T: Copy> Edges<T> {
+        impl Edges {
             /// Create edges with uniform length on all sides.
-            pub fn all(v: T) -> Self {}
+            pub fn all(v: u32) -> Self {}
 
             /// Create edges with symmetric vertical and horizontal lengths.
-            pub fn symmetric(vertical: T, horizontal: T) -> Self {}
+            pub fn symmetric(vertical: u32, horizontal: u32) -> Self {}
 
             /// Create edges from individual values.
-            pub fn new(top: T, right: T, bottom: T, left: T) -> Self {}
-        }
+            pub fn new(top: u32, right: u32, bottom: u32, left: u32) -> Self {}
 
-        impl Edges<u32> {
             /// Total horizontal padding.
             pub fn horizontal(&self) -> u32 {}
 
@@ -134,7 +132,7 @@ pub mod canopy {
         }
 
         /// Size with width and height.
-        pub type Size<T = u32> = crate::geom::Size<T>;
+        pub type Size = crate::geom::Size;
 
         /// Layout configuration for a node.
         #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq, Default)]
@@ -160,7 +158,7 @@ pub mod canopy {
             /// Allow vertical overflow during measurement.
             pub overflow_y: bool,
             /// Structural padding inside the widget (cells).
-            pub padding: Edges<u32>,
+            pub padding: Edges,
             /// Gap between children along the main axis (cells).
             pub gap: u32,
             /// Horizontal alignment of children within the content area.
@@ -219,11 +217,6 @@ pub mod canopy {
             /// Allow vertical overflow during measurement.
             pub fn overflow_y(self) -> Self {}
 
-            /// Inherit overflow permission from an enclosing layout.
-            ///
-            /// Overflow only widens: a layout that already allows overflow on an axis keeps it.
-            pub fn inherit_overflow(&mut self, x: bool, y: bool) {}
-
             /// Convenience: fixed outer width without a `Fixed` enum.
             pub fn fixed_width(self, n: u32) -> Self {}
 
@@ -231,7 +224,7 @@ pub mod canopy {
             pub fn fixed_height(self, n: u32) -> Self {}
 
             /// Set padding edges.
-            pub fn padding(self, edges: Edges<u32>) -> Self {}
+            pub fn padding(self, edges: Edges) -> Self {}
 
             /// Set the main-axis gap between children.
             pub fn gap(self, n: u32) -> Self {}
@@ -291,19 +284,13 @@ pub mod canopy {
 
         impl MeasureConstraints {
             /// Leaf widgets: clamp a content size to these constraints and return Fixed.
-            pub fn clamp(&self, content: Size<u32>) -> Measurement {}
+            pub fn clamp(&self, content: Size) -> Measurement {}
 
             /// Containers: request wrapping.
             pub fn wrap(&self) -> Measurement {}
 
             /// Clamp a size to these constraints.
-            pub fn clamp_size(&self, content: Size<u32>) -> Size<u32> {}
-
-            /// True if the main axis is exact.
-            pub fn main_is_exact(&self, direction: Direction) -> bool {}
-
-            /// True if the cross axis is exact.
-            pub fn cross_is_exact(&self, direction: Direction) -> bool {}
+            pub fn clamp_size(&self, content: Size) -> Size {}
 
             /// Return the main axis constraint.
             pub fn main(&self, direction: Direction) -> Constraint {}
@@ -316,7 +303,7 @@ pub mod canopy {
         #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq)]
         pub enum Measurement {
             /// Fixed content size for leaf widgets.
-            Fixed(Size<u32>),
+            Fixed(Size),
             /// Wrap children: engine computes content size from children.
             Wrap,
         }
@@ -332,7 +319,7 @@ pub mod canopy {
             pub fn children(&self) -> &[CanvasChild] {}
 
             /// Extent of children outer rects.
-            pub fn children_extent(&self) -> Size<u32> {}
+            pub fn children_extent(&self) -> Size {}
         }
 
         /// Child layout results for canvas computations.
@@ -341,12 +328,12 @@ pub mod canopy {
             /// Child outer rect relative to this node's content origin.
             pub rect: crate::geom::Rect,
             /// Child canvas size in the child's content coordinates.
-            pub canvas: Size<u32>,
+            pub canvas: Size,
         }
 
         impl CanvasChild {
             /// Construct a new canvas child.
-            pub fn new(rect: Rect, canvas: Size<u32>) -> Self {}
+            pub fn new(rect: Rect, canvas: Size) -> Self {}
         }
     }
 
@@ -1131,7 +1118,7 @@ pub mod canopy {
             /// Canvas size in content coordinates (for scrolling).
             ///
             /// `view` is this node's content size (outer minus padding).
-            fn canvas(&self, view: Size<u32>, _ctx: &CanvasContext<'_>) -> Size<u32> {}
+            fn canvas(&self, view: Size, _ctx: &CanvasContext<'_>) -> Size {}
 
             /// Render this widget's own content. Does not render children.
             fn render(&mut self, _frame: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
@@ -1514,8 +1501,7 @@ pub mod canopy {
             /// - If shift is present:
             ///     - If the key is ascii lowercase, convert it to uppercase and remove
             ///       shift
-            ///     - If the key is one of a special class of characters that commonly
-            ///       don't have a shift conversion (space, enter), leave shift intact
+            ///     - If the key is space, leave shift intact
             ///     - in all other cases, just remove shift
             ///
             /// | input             | normalization    |
@@ -1547,7 +1533,7 @@ pub mod canopy {
             //! Mouse event types.
 
             /// An abstract specification for a mouse action.
-            #[derive(Debug, Clone, Copy, Hash, StructuralPartialEq, PartialEq, Eq)]
+            #[derive(Debug, Clone, Copy, Hash, StructuralPartialEq, PartialEq, Eq, Display)]
             pub struct Mouse {
                 /// Mouse action type.
                 pub action: Action,
@@ -1697,13 +1683,13 @@ pub mod canopy {
 
         impl Direction {
             /// Size along the main axis.
-            pub fn main_size(&self, size: Size<u32>) -> u32 {}
+            pub fn main_size(&self, size: Size) -> u32 {}
 
             /// Size along the cross axis.
-            pub fn cross_size(&self, size: Size<u32>) -> u32 {}
+            pub fn cross_size(&self, size: Size) -> u32 {}
 
             /// Construct a size from main and cross axis values.
-            pub fn size_from_main_cross(&self, main: u32, cross: u32) -> Size<u32> {}
+            pub fn size_from_main_cross(&self, main: u32, cross: u32) -> Size {}
         }
 
         /// Display mode for layout participation.
@@ -1739,7 +1725,7 @@ pub mod canopy {
             /// Allow vertical overflow during measurement.
             pub overflow_y: bool,
             /// Structural padding inside the widget (cells).
-            pub padding: Edges<u32>,
+            pub padding: Edges,
             /// Gap between children along the main axis (cells).
             pub gap: u32,
             /// Horizontal alignment of children within the content area.
@@ -1798,11 +1784,6 @@ pub mod canopy {
             /// Allow vertical overflow during measurement.
             pub fn overflow_y(self) -> Self {}
 
-            /// Inherit overflow permission from an enclosing layout.
-            ///
-            /// Overflow only widens: a layout that already allows overflow on an axis keeps it.
-            pub fn inherit_overflow(&mut self, x: bool, y: bool) {}
-
             /// Convenience: fixed outer width without a `Fixed` enum.
             pub fn fixed_width(self, n: u32) -> Self {}
 
@@ -1810,7 +1791,7 @@ pub mod canopy {
             pub fn fixed_height(self, n: u32) -> Self {}
 
             /// Set padding edges.
-            pub fn padding(self, edges: Edges<u32>) -> Self {}
+            pub fn padding(self, edges: Edges) -> Self {}
 
             /// Set the main-axis gap between children.
             pub fn gap(self, n: u32) -> Self {}
@@ -1851,19 +1832,13 @@ pub mod canopy {
 
         impl MeasureConstraints {
             /// Leaf widgets: clamp a content size to these constraints and return Fixed.
-            pub fn clamp(&self, content: Size<u32>) -> Measurement {}
+            pub fn clamp(&self, content: Size) -> Measurement {}
 
             /// Containers: request wrapping.
             pub fn wrap(&self) -> Measurement {}
 
             /// Clamp a size to these constraints.
-            pub fn clamp_size(&self, content: Size<u32>) -> Size<u32> {}
-
-            /// True if the main axis is exact.
-            pub fn main_is_exact(&self, direction: Direction) -> bool {}
-
-            /// True if the cross axis is exact.
-            pub fn cross_is_exact(&self, direction: Direction) -> bool {}
+            pub fn clamp_size(&self, content: Size) -> Size {}
 
             /// Return the main axis constraint.
             pub fn main(&self, direction: Direction) -> Constraint {}
@@ -1876,7 +1851,7 @@ pub mod canopy {
         #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq)]
         pub enum Measurement {
             /// Fixed content size for leaf widgets.
-            Fixed(Size<u32>),
+            Fixed(Size),
             /// Wrap children: engine computes content size from children.
             Wrap,
         }
@@ -4028,7 +4003,9 @@ pub mod canopy {
             //! This module contains the core primitives to represent keyboard input.
 
             /// Modifier key state.
-            #[derive(Default, Debug, StructuralPartialEq, PartialEq, Eq, Clone, Copy, Hash)]
+            #[derive(
+                Default, Debug, StructuralPartialEq, PartialEq, Eq, Clone, Copy, Hash, Display,
+            )]
             pub struct Mods {
                 /// Shift is active.
                 pub shift: bool,
@@ -4269,8 +4246,7 @@ pub mod canopy {
                 /// - If shift is present:
                 ///     - If the key is ascii lowercase, convert it to uppercase and remove
                 ///       shift
-                ///     - If the key is one of a special class of characters that commonly
-                ///       don't have a shift conversion (space, enter), leave shift intact
+                ///     - If the key is space, leave shift intact
                 ///     - in all other cases, just remove shift
                 ///
                 /// | input             | normalization    |
@@ -4303,7 +4279,7 @@ pub mod canopy {
             //! Mouse event types.
 
             /// An abstract specification for a mouse action.
-            #[derive(Debug, Clone, Copy, Hash, StructuralPartialEq, PartialEq, Eq)]
+            #[derive(Debug, Clone, Copy, Hash, StructuralPartialEq, PartialEq, Eq, Display)]
             pub struct Mouse {
                 /// Mouse action type.
                 pub action: Action,
@@ -5667,7 +5643,7 @@ pub mod canopy {
         /// Canvas size in content coordinates (for scrolling).
         ///
         /// `view` is this node's content size (outer minus padding).
-        fn canvas(&self, view: Size<u32>, _ctx: &CanvasContext<'_>) -> Size<u32> {}
+        fn canvas(&self, view: Size, _ctx: &CanvasContext<'_>) -> Size {}
 
         /// Render this widget's own content. Does not render children.
         fn render(&mut self, _frame: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}

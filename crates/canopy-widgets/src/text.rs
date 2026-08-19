@@ -233,7 +233,7 @@ impl Widget for Text {
         c.clamp(Size::new(wrap_width, height))
     }
 
-    fn canvas(&self, view: Size<u32>, _ctx: &canopy::layout::CanvasContext) -> Size<u32> {
+    fn canvas(&self, view: Size, _ctx: &canopy::layout::CanvasContext) -> Size {
         let wrap_width = self.wrap_width_for(view.w.max(1));
         let wrapped_width = self
             .with_wrap_cache(wrap_width, |cache| cache.max_width)

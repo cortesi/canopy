@@ -1,7 +1,7 @@
 use super::{Error, Line, LineSegment, Point, Result, Size};
 
 /// A half-open rectangle with an unsigned origin and size.
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, Hash, PartialEq, Eq)]
 pub struct Rect {
     /// Top-left corner
     pub tl: Point,
@@ -9,12 +9,6 @@ pub struct Rect {
     pub w: u32,
     /// Height
     pub h: u32,
-}
-
-impl Default for Rect {
-    fn default() -> Self {
-        Self::zero()
-    }
 }
 
 impl Rect {
@@ -78,7 +72,7 @@ impl Rect {
 
     /// Extract a horizontal section of this rect based on an extent.
     pub fn hslice(&self, e: LineSegment) -> Result<Self> {
-        if !self.hextent().contains(&e) {
+        if !self.hextent().contains(e) {
             Err(Error::ExtentOutsideRect {
                 extent: e,
                 rect: *self,
@@ -98,8 +92,8 @@ impl Rect {
 
     /// Calculate the intersection of this rectangle and another.
     pub fn intersect(&self, other: Self) -> Option<Self> {
-        let h = self.hextent().intersection(&other.hextent())?;
-        let v = self.vextent().intersection(&other.vextent())?;
+        let h = self.hextent().intersection(other.hextent())?;
+        let v = self.vextent().intersection(other.vextent())?;
         Some(Self::new(h.off, v.off, h.len, v.len))
     }
 
@@ -118,7 +112,7 @@ impl Rect {
 
     /// Extract a slice of this rect based on a vertical extent.
     pub fn vslice(&self, e: LineSegment) -> Result<Self> {
-        if !self.vextent().contains(&e) {
+        if !self.vextent().contains(e) {
             Err(Error::ExtentOutsideRect {
                 extent: e,
                 rect: *self,
@@ -158,17 +152,7 @@ impl Rect {
     /// Return the `Size` of this rectangle, which has the same size as the
     /// `Rect` but no location.
     pub fn expanse(&self) -> Size {
-        (*self).into()
-    }
-}
-
-impl From<Size> for Rect {
-    fn from(s: Size) -> Self {
-        Self {
-            tl: Point::default(),
-            w: s.w,
-            h: s.h,
-        }
+        Size::new(self.w, self.h)
     }
 }
 
@@ -178,17 +162,6 @@ impl From<Line> for Rect {
             tl: l.tl,
             w: l.w,
             h: 1,
-        }
-    }
-}
-
-impl From<(u32, u32, u32, u32)> for Rect {
-    fn from(v: (u32, u32, u32, u32)) -> Self {
-        let (x_pos, y_pos, width, height) = v;
-        Self {
-            tl: (x_pos, y_pos).into(),
-            w: width,
-            h: height,
         }
     }
 }

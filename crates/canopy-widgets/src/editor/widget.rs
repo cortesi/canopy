@@ -963,7 +963,7 @@ impl Widget for Editor {
         c.clamp(Size::new(width, height))
     }
 
-    fn canvas(&self, view: Size<u32>, _ctx: &CanvasContext) -> Size<u32> {
+    fn canvas(&self, view: Size, _ctx: &CanvasContext) -> Size {
         let gutter = self.gutter_width();
         let wrap_width = view.w.saturating_sub(gutter).max(1) as usize;
         let (line_count, max_line_width) = self.display_metrics(wrap_width);

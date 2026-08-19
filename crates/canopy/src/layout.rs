@@ -77,20 +77,20 @@ pub enum LayoutValidationError {
 
 /// Edge insets for padding.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Edges<T> {
+pub struct Edges {
     /// Top edge.
-    pub top: T,
+    pub top: u32,
     /// Right edge.
-    pub right: T,
+    pub right: u32,
     /// Bottom edge.
-    pub bottom: T,
+    pub bottom: u32,
     /// Left edge.
-    pub left: T,
+    pub left: u32,
 }
 
-impl<T: Copy> Edges<T> {
+impl Edges {
     /// Create edges with uniform length on all sides.
-    pub fn all(v: T) -> Self {
+    pub fn all(v: u32) -> Self {
         Self {
             top: v,
             right: v,
@@ -100,7 +100,7 @@ impl<T: Copy> Edges<T> {
     }
 
     /// Create edges with symmetric vertical and horizontal lengths.
-    pub fn symmetric(vertical: T, horizontal: T) -> Self {
+    pub fn symmetric(vertical: u32, horizontal: u32) -> Self {
         Self {
             top: vertical,
             right: horizontal,
@@ -110,7 +110,7 @@ impl<T: Copy> Edges<T> {
     }
 
     /// Create edges from individual values.
-    pub fn new(top: T, right: T, bottom: T, left: T) -> Self {
+    pub fn new(top: u32, right: u32, bottom: u32, left: u32) -> Self {
         Self {
             top,
             right,
@@ -118,9 +118,7 @@ impl<T: Copy> Edges<T> {
             left,
         }
     }
-}
 
-impl Edges<u32> {
     /// Total horizontal padding.
     pub fn horizontal(&self) -> u32 {
         self.left.saturating_add(self.right)
@@ -133,11 +131,11 @@ impl Edges<u32> {
 }
 
 /// Size with width and height.
-pub type Size<T = u32> = GeomSize<T>;
+pub type Size = GeomSize;
 
 impl Direction {
     /// Size along the main axis.
-    pub fn main_size(&self, size: Size<u32>) -> u32 {
+    pub fn main_size(&self, size: Size) -> u32 {
         match self {
             Self::Column | Self::Stack => size.h,
             Self::Row => size.w,
@@ -145,7 +143,7 @@ impl Direction {
     }
 
     /// Size along the cross axis.
-    pub fn cross_size(&self, size: Size<u32>) -> u32 {
+    pub fn cross_size(&self, size: Size) -> u32 {
         match self {
             Self::Column | Self::Stack => size.w,
             Self::Row => size.h,
@@ -153,7 +151,7 @@ impl Direction {
     }
 
     /// Construct a size from main and cross axis values.
-    pub fn size_from_main_cross(&self, main: u32, cross: u32) -> Size<u32> {
+    pub fn size_from_main_cross(&self, main: u32, cross: u32) -> Size {
         match self {
             Self::Column | Self::Stack => Size::new(cross, main),
             Self::Row => Size::new(main, cross),
@@ -191,7 +189,7 @@ pub struct Layout {
     pub overflow_y: bool,
 
     /// Structural padding inside the widget (cells).
-    pub padding: Edges<u32>,
+    pub padding: Edges,
 
     /// Gap between children along the main axis (cells).
     pub gap: u32,
@@ -322,7 +320,7 @@ impl Layout {
     /// Inherit overflow permission from an enclosing layout.
     ///
     /// Overflow only widens: a layout that already allows overflow on an axis keeps it.
-    pub fn inherit_overflow(&mut self, x: bool, y: bool) {
+    pub(crate) fn inherit_overflow(&mut self, x: bool, y: bool) {
         self.overflow_x |= x;
         self.overflow_y |= y;
     }
@@ -338,7 +336,7 @@ impl Layout {
     }
 
     /// Set padding edges.
-    pub fn padding(mut self, edges: Edges<u32>) -> Self {
+    pub fn padding(mut self, edges: Edges) -> Self {
         self.padding = edges;
         self
     }
@@ -482,7 +480,7 @@ pub struct MeasureConstraints {
 
 impl MeasureConstraints {
     /// Leaf widgets: clamp a content size to these constraints and return Fixed.
-    pub fn clamp(&self, content: Size<u32>) -> Measurement {
+    pub fn clamp(&self, content: Size) -> Measurement {
         Measurement::Fixed(self.clamp_size(content))
     }
 
@@ -492,24 +490,8 @@ impl MeasureConstraints {
     }
 
     /// Clamp a size to these constraints.
-    pub fn clamp_size(&self, content: Size<u32>) -> Size<u32> {
+    pub fn clamp_size(&self, content: Size) -> Size {
         Size::new(self.width.clamp(content.w), self.height.clamp(content.h))
-    }
-
-    /// True if the main axis is exact.
-    pub fn main_is_exact(&self, direction: Direction) -> bool {
-        match direction {
-            Direction::Column | Direction::Stack => self.height.is_exact(),
-            Direction::Row => self.width.is_exact(),
-        }
-    }
-
-    /// True if the cross axis is exact.
-    pub fn cross_is_exact(&self, direction: Direction) -> bool {
-        match direction {
-            Direction::Column | Direction::Stack => self.width.is_exact(),
-            Direction::Row => self.height.is_exact(),
-        }
     }
 
     /// Return the main axis constraint.
@@ -533,7 +515,7 @@ impl MeasureConstraints {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Measurement {
     /// Fixed content size for leaf widgets.
-    Fixed(Size<u32>),
+    Fixed(Size),
     /// Wrap children: engine computes content size from children.
     Wrap,
 }
@@ -556,7 +538,7 @@ impl<'a> CanvasContext<'a> {
     }
 
     /// Extent of children outer rects.
-    pub fn children_extent(&self) -> Size<u32> {
+    pub fn children_extent(&self) -> Size {
         let mut max_x = 0u32;
         let mut max_y = 0u32;
         for child in self.children {
@@ -573,12 +555,12 @@ pub struct CanvasChild {
     /// Child outer rect relative to this node's content origin.
     pub rect: Rect,
     /// Child canvas size in the child's content coordinates.
-    pub canvas: Size<u32>,
+    pub canvas: Size,
 }
 
 impl CanvasChild {
     /// Construct a new canvas child.
-    pub fn new(rect: Rect, canvas: Size<u32>) -> Self {
+    pub fn new(rect: Rect, canvas: Size) -> Self {
         Self { rect, canvas }
     }
 }

@@ -130,7 +130,7 @@ impl Widget for ListEntry {
         self.text.measure(c)
     }
 
-    fn canvas(&self, view: Size<u32>, ctx: &CanvasContext<'_>) -> Size<u32> {
+    fn canvas(&self, view: Size, ctx: &CanvasContext<'_>) -> Size {
         self.text.canvas(view, ctx)
     }
 

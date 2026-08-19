@@ -146,7 +146,7 @@ impl Widget for Border {
         let outer = ctx.view().outer_rect_local();
         let frame = geom::FrameRects::new(outer, 1);
         if let Some(style) = &self.fill_style {
-            let inner = frame.inner();
+            let inner = frame.inner;
             if inner.w > 0 && inner.h > 0 {
                 rndr.fill(style, inner, ' ')?;
             }

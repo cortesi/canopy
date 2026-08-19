@@ -42,7 +42,7 @@ pub trait Widget: Any + Send {
     /// Canvas size in content coordinates (for scrolling).
     ///
     /// `view` is this node's content size (outer minus padding).
-    fn canvas(&self, view: Size<u32>, _ctx: &CanvasContext) -> Size<u32> {
+    fn canvas(&self, view: Size, _ctx: &CanvasContext) -> Size {
         view
     }
 

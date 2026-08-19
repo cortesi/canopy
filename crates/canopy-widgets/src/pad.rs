@@ -13,13 +13,13 @@ use crate::wrap::wrap;
 /// Container that adds padding around its child.
 pub struct Pad {
     /// Padding applied around the child.
-    padding: Edges<u32>,
+    padding: Edges,
 }
 
 #[derive_commands]
 impl Pad {
     /// Create a pad with the provided edge padding.
-    pub fn new(padding: Edges<u32>) -> Self {
+    pub fn new(padding: Edges) -> Self {
         Self { padding }
     }
 
