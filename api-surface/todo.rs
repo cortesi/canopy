@@ -5,7 +5,6 @@ pub mod todo {
     //! Todo application used as Canopy's end-to-end example and smoke-test target.
 
     pub mod store {
-        //! SQLite persistence for todo entries.
         //! Thread-local SQLite storage for the todo example.
 
         /// A persisted todo record.

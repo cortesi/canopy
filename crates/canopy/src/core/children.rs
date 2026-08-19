@@ -14,8 +14,6 @@ use crate::{
 /// Policy for removing children that are no longer desired.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RemovePolicy {
-    /// Detach nodes from the tree but keep them alive.
-    Detach,
     /// Remove nodes and their descendants from the arena.
     RemoveSubtree,
     /// Hide nodes and keep them available for reuse.
@@ -190,10 +188,6 @@ where
                     continue;
                 }
                 match remove {
-                    RemovePolicy::Detach => {
-                        ctx.detach(node_id)?;
-                        working_map.remove(key);
-                    }
                     RemovePolicy::RemoveSubtree => {
                         ctx.remove_subtree(node_id)?;
                         working_map.remove(key);

@@ -3633,7 +3633,41 @@ Decisions` or the `Watch List` instead.
 
 ## Watch List
 
-Open defects and leads the sweep observed. None is a clear win as stated.
+Open defects and leads the sweep observed. None was a clear win as first stated.
+
+### Resolved by this sweep
+
+These entries no longer apply. The 196 items either fixed them directly or made the fix
+unambiguous, and the follow-up pass landed the rest.
+
+- `core/children.rs:17-18`: `RemovePolicy::Detach` lost its last construction site with W134.
+  The variant and its `reconcile` arm are deleted.
+- `widgets/error.rs:11-16`: `EmptyGlyphRamp` and `Io` died with W136 and are deleted, leaving
+  `FontLoad`.
+- `examples/fontgym.rs:151, 162`: the duplicated `load_font_fira()` call is gone with W156's
+  banner table.
+- `core/style/color.rs:56-63`: the nested `const fn digit` is hoisted to a private
+  `hex_digit`.
+- `core/script/mod.rs:11`: the vestigial `use std::vec` is deleted.
+- `core/canopy/mod.rs:915-921`: `Canopy::unbind_input` is `pub(crate)`, so it no longer names an
+  unexported `BindingSelector` from the public surface.
+- `core/poll.rs:232-234`: `Poller::send` now performs one liveness check, so the unreachable
+  "poll scheduler is shut down" message is gone.
+- `docs/architecture.md:22-25`: the paragraph now says the lower-level state is crate-private,
+  which is what the code does.
+- `widgets/editor/widget.rs:230-233`: `view_wrap_width` ignored `self` and, after W13, had one
+  caller. It is inlined.
+- `widgets/font_banner.rs:151-158`: `render` splits the cache refresh from the read, so the
+  style path is no longer cloned per frame.
+- `crates/canopyctl/src/main.rs:297, 390`: `smoke_test_name` takes the fixture its caller
+  already computed, so each smoke script derives it once.
+- `todo/src/lib.rs:20-21`: the outer `///` on `pub mod store` is deleted; `store.rs`'s own
+  `//!` remains.
+- `api-surface/todo.rs` was 228 lines against a 225 ceiling and `canopy-widgets.rs` 2045 of
+  2050. W166 and W141 bring them to 68 and 1742. Intent-level counts are now Canopy 50 of 70,
+  ViewContext 28 of 32, Context 46 of 48, Editor 14 of 24. Nothing enforces the ceilings yet.
+
+### Still open
 
 - `core/world/focus.rs:218`: `ensure_focus_valid` treats a focused node with a zero
   (not-yet-laid-out) view as invalid, so `set_focus(x)` followed by a tree edit in the same
@@ -3657,9 +3691,6 @@ Open defects and leads the sweep observed. None is a clear win as stated.
   ("Left Down") does not round-trip through `Mouse::parse_spec` ("LeftDown"), while
   `core/script/defs.rs:214` documents `BindingInfo.input` as a spec string. Key specs accept `+`
   separators, mouse specs only `-`. Canonical spec text is a product decision.
-- `core/canopy/mod.rs:915-921`: `Canopy::unbind_input` is `pub` but its `BindingSelector`
-  parameter is not re-exported (`api-surface/canopy.rs:552` shows no reachable path). Only
-  caller `core/script/base_api.rs:1402`. Make it `pub(crate)` or re-export the type.
 - `core/canopy/mod.rs:379-386`: `set_render_limits` has only its own unit test as caller
   (`tests.rs:1081-1092`), and `RenderLimits` is in the prelude. Product call whether the knob
   stays.
@@ -3667,8 +3698,6 @@ Open defects and leads the sweep observed. None is a clear win as stated.
   per comparison. `sort_by_cached_key` would cut it. Diagnostic path only.
 - `core/canopy/rendering.rs:49-82`: `pre_render` looks up the same node three times before
   mounting.
-- `core/poll.rs:232-234`: the "poll scheduler is shut down" branch is unreachable because
-  `shutdown` clears `command_tx` and `worker` together and the `:225-231` check fires first.
 - `core/backend/crossterm.rs:564-569`: `shift_lines(_top, _bottom, ..)` uses underscore-prefixed
   parameters. `:761-767`: Ctrl+C is detected on the raw key, not the normalized one.
 - `core/termbuf/mod.rs:517-518`: `diff` validates `prev` every frame although the stored buffer
@@ -3679,15 +3708,13 @@ Open defects and leads the sweep observed. None is a clear win as stated.
   text. `core/render/mod.rs:236-252`: `Render::put_grapheme` discards the width
   `TermBuf::put_grapheme` returns, and `widgets/terminal.rs:1115` and
   `widgets/editor/widget.rs:806` recompute it per cell.
-- `core/style/color.rs:56-63`: `hex_byte` contains a nested `const fn digit` (project rule: no
-  nested functions). Trivial hoist. `core/style/mod.rs:1106-1144`:
-  `gradient_interpolates_multiple_stops` recomputes the expected value with the algorithm under
-  test.
+- `core/style/mod.rs:1106-1144`: `gradient_interpolates_multiple_stops` recomputes the expected
+  value with the algorithm under test.
 - `core/script/base_api.rs:118-133, 263-267, 416-450`: `canopy.tree`, `canopy.node_at`,
   `canopy.screen` have 0 callers in tests, smoke scripts, and docs. `wait_for_node` and
   `wait_for_screen_text` are documented in `docs/agent-loop.md:90-91` but have 0 test callers.
   `core/script/mod.rs:582-593`: the `_cmd` keyword suffix has no test. `records.rs:45`: `visible`
-  is always `!hidden` with 0 consumers. `mod.rs:11`: `use std::vec` is vestigial.
+  is always `!hidden` with 0 consumers.
   `mod.rs:1008-1012, 1030-1045`: the invalidate-then-clear-roots block appears twice.
   `dispatch.rs:64-81` plus `base_api.rs:1610`: `dispatch_command` could take `Option<NodeId>` and
   drop one `with_current_canopy` round-trip per owner-command call. `dispatch.rs:109-117`: a
@@ -3712,8 +3739,7 @@ Open defects and leads the sweep observed. None is a clear win as stated.
   `::` segment, so a generic `Foo<Bar>` yields "bar" (latent, all generic widgets override).
   `core/node.rs:53-54`: the comment says `Option<Vec<Effect>>` "avoids per-node Vec allocation",
   but `Vec::new()` does not allocate. `core/children.rs:140-150`: `removed` is computed with a
-  nested `find` per child. `core/children.rs:17-18`: `RemovePolicy::Detach` becomes unused if
-  W134 lands. `core/view.rs:37-38`: `content_origin` uses unchecked `i32` subtraction (unreachable
+  nested `find` per child. `core/view.rs:37-38`: `content_origin` uses unchecked `i32` subtraction (unreachable
   in practice, contradicts the no-panic wording at `docs/architecture.md:118-120`).
   `core/world/layout_driver/mod.rs:42-45`: `locate_node` clips the subtree root against
   `Rect::new(0, 0, outer.w, outer.h)`, which is right only at the origin. `ViewContext::locate`
@@ -3731,8 +3757,7 @@ Open defects and leads the sweep observed. None is a clear win as stated.
   ignored (only Esc exits). The dead toggle in the normal-mode `'v'` arm looks intended for
   here. `search.rs:260`: `handle_prompt_event` clones the whole `PromptState` per prompt
   keystroke. `highlight.rs:91-96`: each line gets a fresh `HighlightLines`, so multi-line
-  constructs highlight per line only. `widget.rs:230-233, 913, 934`: `view_wrap_width(&self,
-  ..)` ignores `self` and the expression is repeated. `widget.rs:166-168, 205-208`:
+  constructs highlight per line only. `widget.rs:166-168, 205-208`:
   `with_config`/`set_text` compute `preferred_column` for `(0,0)`. `widgets/terminal.rs:45-53,
   591-670`: `ClickState` and the word/line selection re-implement itty's
   `update_click_selection_state`/`apply_multi_click_selection` (about 110 lines) with different
@@ -3749,15 +3774,13 @@ Open defects and leads the sweep observed. None is a clear win as stated.
   `mod label;` is the only undocumented module declaration. `widgets/list.rs:954-973`:
   `test_list_navigation` asserts only after the final `select_first`. `list.rs:573-575`,
   `text.rs:134-140`: `page(delta)` uses only the sign of `delta` although the doc says "Signed
-  page delta". `widgets/font_banner.rs:151-158`: one `String` clone of the style path per
-  render. `widgets/help/panel.rs:108`: `Layout::row().height(Sizing::Measure)` is a no-op.
-  `widgets/error.rs:11-16`: `EmptyGlyphRamp` and `Io` become dead if W136 lands.
+  page delta". `widgets/help/panel.rs:108`: `Layout::row().height(Sizing::Measure)` is a no-op.
+
 - Examples and todo: `examples/textgym.rs:96-100`: pad rows are 6/7/6/6 tall, so each `Text`
   shows 2/3/2/2 lines while `DEFAULT_TEXT` has 4 lines. The demo probably intends `push_fixed(id,
   h + 2 * OUTER_PADDING)`. Visual call. `examples/fontgym.rs:143-144, 154-155, 165-166,
   176-177` and `examples/widget/font.rs:97-98`: `.with_ramp(GlyphRamp::blocks()).with_fallback('?')`
-  set the `FontRenderer::new` defaults. `fontgym.rs:151, 162`: `load_font_fira()` is called twice
-  (W156 subsumes). `fontgym.rs:1131-1143`: `setup_bindings` omits `root.default_bindings()`
+  set the `FontRenderer::new` defaults. `fontgym.rs:1131-1143`: `setup_bindings` omits `root.default_bindings()`
   unlike 8 other gyms (possibly deliberate). `fontgym.rs:850, 866`: legend widths use
   `str::len()` (ASCII today). `examples/termgym.rs:488-506`: `termgym/button/selected/*` styles
   are never applied. `crates/examples/examples/widget.rs:191`: `Command::Image` always frames,
@@ -3765,25 +3788,20 @@ Open defects and leads the sweep observed. None is a clear win as stated.
   begin with `root.default_bindings()` but their `Loader`s do not load `Root`, unlike
   focusgym/stylegym. A Harness test calling their `setup_bindings` would fail (none exists).
   `todo/src/main.rs:84-87`: a missing DB path prints to stdout and exits 0, and `:68-70` and
-  `:90-92` duplicate the exit-code check. `todo/src/lib.rs:20-21` plus `store.rs:1`: `pub mod
-  store` carries both an outer `///` and an inner `//!` doc (both render in the skeleton).
+  `:90-92` duplicate the exit-code check.
 - Automation: `crates/canopy-mcp/src/lib.rs:19-24`: `AppEvaluator`, `evaluate_live`,
   `serve_stdio`, `serve_uds`, `UdsServerHandle` have 0 consumers outside canopy-mcp. Hiding them
   behind `launch()` is an open decision about apps that own their run loop. `server.rs:135-144`:
   live `script_api` does not `finalize_api()` while live `bootstrap` (`:113`) does.
   `crates/canopyctl/src/main.rs:508-534`: the only canopyctl unit tests test `replay::ReplayInput`
-  but live in `main.rs`. `main.rs:297, 390`: `fixture_for_script` is computed twice per smoke
-  script. `config.rs:238-250`: `discover_config_path` returns `Result<Option<PathBuf>>` with no
+  but live in `main.rs`. `config.rs:238-250`: `discover_config_path` returns `Result<Option<PathBuf>>` with no
   error path.
-- Tooling: `api-surface/todo.rs` is 228 lines against the 225 ceiling and `canopy-widgets.rs`
-  is 2045 of 2050. Nothing enforces ceilings (`cargo xtask api` prints counts). Intent-level
-  counts: Canopy 58 of 70, ViewContext 29 of 32, Context 46 of 48, Editor 14 of 24. Tool pins
+- Tooling: nothing enforces the skeleton ceilings (`cargo xtask api` only prints counts). Tool pins
   live in several places (nextest, ruskel, the format nightly, and `1.96.1` in both
   `rust-toolchain.toml:2` and `ci.yml:25`, though `ci.yml:21` says the pin comes from
   `rust-toolchain.toml`). `xtask/src/main.rs:306-313` discards `git ls-files` stderr, and
   `collect_smoke_suites` (`:554, 561`) loses the directory path on io errors.
-  `docs/architecture.md:22-25` calls `Core`/`inputmap` "hidden escape hatches for internal
-  crates" though they are crate-private (line 67 states it correctly). `docs/scripting.md:28`
+  `docs/scripting.md:28`
   illustrates generated globals with `editor.save`/`editor.move_left`, while the real `editor`
   owner exposes `cursor`, `undo`, `redo` (`widgets/editor/widget.rs:818-851`). The sentence is an
   illustration, not a claim, but a real name would read better.

@@ -492,14 +492,6 @@ pub mod canopy {
             /// A framework-owned ID returns an error.
             pub fn unbind(&mut self, id: inputmap::BindingId) -> Result<bool> {}
 
-            /// Remove bindings for an input, optionally filtered by mode and path.
-            pub fn unbind_input(
-                &mut self,
-                input: inputmap::InputSpec,
-                selector: &inputmap::BindingSelector<'_>,
-            ) -> usize {
-            }
-
             /// Remove all bindings from all modes.
             pub fn clear_bindings(&mut self) -> usize {}
 
@@ -2276,14 +2268,6 @@ pub mod canopy {
         /// A framework-owned ID returns an error.
         pub fn unbind(&mut self, id: inputmap::BindingId) -> Result<bool> {}
 
-        /// Remove bindings for an input, optionally filtered by mode and path.
-        pub fn unbind_input(
-            &mut self,
-            input: inputmap::InputSpec,
-            selector: &inputmap::BindingSelector<'_>,
-        ) -> usize {
-        }
-
         /// Remove all bindings from all modes.
         pub fn clear_bindings(&mut self) -> usize {}
 
@@ -2723,8 +2707,6 @@ pub mod canopy {
     /// Policy for removing children that are no longer desired.
     #[derive(Debug, Clone, Copy, StructuralPartialEq, PartialEq, Eq)]
     pub enum RemovePolicy {
-        /// Detach nodes from the tree but keep them alive.
-        Detach,
         /// Remove nodes and their descendants from the arena.
         RemoveSubtree,
         /// Hide nodes and keep them available for reuse.

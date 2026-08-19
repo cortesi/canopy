@@ -48,20 +48,22 @@ pub enum Color {
     AnsiValue(u8),
 }
 
+/// Parse one hex digit.
+const fn hex_digit(c: u8) -> u8 {
+    match c {
+        b'0'..=b'9' => c - b'0',
+        b'a'..=b'f' => c - b'a' + 10,
+        b'A'..=b'F' => c - b'A' + 10,
+        _ => panic!("invalid hex colour digit"),
+    }
+}
+
 /// Parse one hex byte from its two digits.
 ///
 /// This supports the [`rgb!`](crate::rgb) macro and is not part of the stable surface.
 #[doc(hidden)]
 pub const fn hex_byte(high: u8, low: u8) -> u8 {
-    const fn digit(c: u8) -> u8 {
-        match c {
-            b'0'..=b'9' => c - b'0',
-            b'a'..=b'f' => c - b'a' + 10,
-            b'A'..=b'F' => c - b'A' + 10,
-            _ => panic!("invalid hex colour digit"),
-        }
-    }
-    digit(high) * 16 + digit(low)
+    hex_digit(high) * 16 + hex_digit(low)
 }
 
 /// Build a [`Color`](crate::style::Color) from a `#RRGGBB` or `RRGGBB` literal at compile time.

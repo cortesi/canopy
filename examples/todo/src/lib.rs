@@ -16,7 +16,6 @@ use canopy_widgets::{Frame, Input, List, Modal, Root, Selectable};
 canopy::key!(MainSlot: MainContent);
 canopy::key!(ModalSlot: Modal);
 
-/// SQLite persistence for todo entries.
 pub mod store;
 
 /// Stable sample data used by automation fixtures.

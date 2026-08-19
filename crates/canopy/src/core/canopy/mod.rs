@@ -848,7 +848,7 @@ impl Canopy {
     }
 
     /// Remove bindings for an input, optionally filtered by mode and path.
-    pub fn unbind_input(
+    pub(crate) fn unbind_input(
         &mut self,
         input: inputmap::InputSpec,
         selector: &inputmap::BindingSelector<'_>,

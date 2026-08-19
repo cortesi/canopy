@@ -86,8 +86,8 @@ impl FontBanner {
         self.effects = effects;
     }
 
-    /// Return a cached layout for the provided size.
-    fn layout_for(&mut self, size: Size) -> &FontLayout {
+    /// Rebuild the cached layout when the text, size, options, or effects changed.
+    fn refresh_layout(&mut self, size: Size) {
         let rebuild = match &self.cache {
             Some(cache) => {
                 cache.text != self.text
@@ -109,7 +109,6 @@ impl FontBanner {
                 layout,
             });
         }
-        &self.cache.as_ref().expect("layout cached").layout
     }
 }
 
@@ -125,9 +124,10 @@ impl Widget for FontBanner {
             return Ok(());
         }
         let size = Size::new(view_rect.w, view_rect.h);
+        self.refresh_layout(size);
         let options = self.options;
-        let style = self.style.clone();
-        let layout = self.layout_for(size);
+        let style = &self.style;
+        let layout = &self.cache.as_ref().expect("layout cached").layout;
 
         let bounds = content_rect(view_rect, layout, options);
         for (row_idx, row) in layout.cells.iter().enumerate() {
@@ -144,7 +144,7 @@ impl Widget for FontBanner {
                     continue;
                 }
                 let point = Point { x, y };
-                let resolved = rndr.resolve_style_name_at(&style, bounds, point);
+                let resolved = rndr.resolve_style_name_at(style, bounds, point);
                 let blended = blend_style(resolved, cell.fg_coverage, cell.bg_coverage);
                 rndr.put_cell(blended, point, cell.ch)?;
             }

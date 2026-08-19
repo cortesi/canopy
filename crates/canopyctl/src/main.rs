@@ -303,7 +303,7 @@ async fn smoke_command(config: LoadedConfig, args: SmokeArgs) -> Result<()> {
             .await?;
         let elapsed = started.elapsed().as_millis();
         let fixture = script_fixture.as_deref().unwrap_or("-");
-        let test_name = smoke_test_name(&suite_dir, &path);
+        let test_name = smoke_test_name(&suite_dir, &path, script_fixture.as_deref());
         if outcome.success {
             println!("PASS fixture={fixture} test={test_name} ({elapsed}ms)");
         } else {
@@ -379,13 +379,12 @@ async fn bootstrap_command(config: LoadedConfig, args: SpawnArgs) -> Result<()> 
     Ok(())
 }
 
-/// Format a smoke script path relative to the suite root and fixture.
-fn smoke_test_name(suite_dir: &Path, script_path: &Path) -> String {
+/// Format a smoke script path relative to the suite root and its fixture directory.
+fn smoke_test_name(suite_dir: &Path, script_path: &Path, fixture: Option<&str>) -> String {
     let relative = script_path
         .strip_prefix(suite_dir)
         .unwrap_or(script_path)
         .to_path_buf();
-    let fixture = fixture_for_script(suite_dir, script_path);
 
     if let Some(fixture) = fixture {
         let fixture_path = Path::new(&fixture);

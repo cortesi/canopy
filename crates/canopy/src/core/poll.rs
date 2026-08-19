@@ -210,17 +210,17 @@ impl Poller {
     }
 
     /// Send a command unless the scheduler has already stopped.
+    ///
+    /// `shutdown` clears the sender and the worker together, so one liveness check covers both.
     fn send(&self, command: SchedulerCommand) -> Result<()> {
-        if self
+        let running = self
             .worker
             .as_ref()
-            .is_none_or(thread::JoinHandle::is_finished)
-        {
+            .is_some_and(|worker| !worker.is_finished());
+        let Some(sender) = self.command_tx.as_ref().filter(|_| running) else {
             return Err(Error::RunLoop("poll scheduler is not running".into()));
-        }
-        self.command_tx
-            .as_ref()
-            .ok_or_else(|| Error::RunLoop("poll scheduler is shut down".into()))?
+        };
+        sender
             .send(command)
             .map_err(|_| Error::RunLoop("poll scheduler command channel closed".into()))
     }

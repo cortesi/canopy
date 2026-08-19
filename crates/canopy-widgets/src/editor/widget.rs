@@ -247,12 +247,6 @@ impl Editor {
         &self.buffer
     }
 
-    /// Compute the wrap width available for text content.
-    pub(super) fn view_wrap_width(&self, view_rect: Rect, gutter_width: u32) -> usize {
-        let available = view_rect.w.saturating_sub(gutter_width).max(1);
-        available as usize
-    }
-
     /// Compute the line-number gutter width.
     pub(super) fn gutter_width(&self) -> u32 {
         match self.config.line_numbers {
@@ -289,7 +283,7 @@ impl Editor {
 
     /// Synchronize layout and cached cursor position.
     pub(super) fn update_layout(&mut self, view_rect: Rect, gutter_width: u32) {
-        let wrap_width = self.view_wrap_width(view_rect, gutter_width);
+        let wrap_width = view_rect.w.saturating_sub(gutter_width).max(1) as usize;
         self.layout.sync(
             &mut self.buffer,
             wrap_width,

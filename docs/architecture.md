@@ -20,10 +20,9 @@ widgets with helpers such as `Root::install_app`, mutate styles through
 `Canopy::style_mut()`, and use `Canopy` methods for scripting, fixtures, input
 modes, rendering, and automation.
 
-Lower-level runtime modules remain available only as hidden escape hatches for
-internal crates, diagnostics, and tests. App authors should not depend on `Core`,
-`inputmap`, `script`, `view`, backend internals, or raw arena mutation unless a
-future API explicitly promotes that use.
+Lower-level runtime state is crate-private. `Core`, `inputmap`, and raw arena
+mutation are not reachable from app code, and `script`, `view`, and the backend
+modules expose only what the stable surface above needs.
 
 Path-oriented APIs use `Path`, `PathFilter`, and `NodeName`. Literal path
 components must be valid node names. Raw script path strings are validated at the

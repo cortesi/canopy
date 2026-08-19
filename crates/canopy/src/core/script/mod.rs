@@ -8,7 +8,6 @@ use std::{
     result::Result as StdResult,
     sync::{Arc, Mutex},
     time::Duration,
-    vec,
 };
 
 use futures::executor;
