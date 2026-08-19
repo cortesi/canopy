@@ -443,11 +443,6 @@ impl InputMap {
         removed
     }
 
-    /// Remove all script targets and preserve framework bindings and exclusive frames.
-    pub(crate) fn remove_luau_functions(&mut self) -> Vec<(BindingId, LuauFunctionId)> {
-        self.clear_application()
-    }
-
     /// Return every record in insertion order.
     pub fn bindings(&self) -> &[BindingRecord] {
         &self.records

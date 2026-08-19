@@ -148,10 +148,7 @@ fn translate_color(c: Color) -> style::Color {
 
 /// Map IO results into canopy errors.
 fn translate_result<T>(e: io::Result<T>) -> Result<T> {
-    match e {
-        Ok(t) => Ok(t),
-        Err(error) => Err(error::Error::TerminalIo(error)),
-    }
+    e.map_err(error::Error::TerminalIo)
 }
 
 /// Terminal operations needed to acquire and restore a session.
@@ -254,7 +251,6 @@ impl TerminalCapabilities {
 fn acquire_terminal(
     terminal: &mut impl TerminalOperations,
     capabilities: &mut TerminalCapabilities,
-    keyboard_enhancements: bool,
 ) -> io::Result<()> {
     terminal.enable_raw_mode()?;
     capabilities.raw_mode_enabled = true;
@@ -264,10 +260,8 @@ fn acquire_terminal(
     capabilities.mouse_capture_enabled = true;
     terminal.hide_cursor()?;
     capabilities.cursor_hidden = true;
-    if keyboard_enhancements {
-        terminal.push_keyboard_enhancements()?;
-        capabilities.keyboard_enhancements_pushed = true;
-    }
+    terminal.push_keyboard_enhancements()?;
+    capabilities.keyboard_enhancements_pushed = true;
     Ok(())
 }
 
@@ -331,17 +325,14 @@ pub struct CrosstermControl {
     terminal: Stderr,
     /// Capabilities currently owned by the controller.
     capabilities: TerminalCapabilities,
-    /// Whether to enable keyboard enhancement flags on startup.
-    enable_keyboard_enhancements: bool,
 }
 
 impl CrosstermControl {
-    /// Build a crossterm controller with keyboard enhancements enabled or disabled.
-    pub fn new(enable_keyboard_enhancements: bool) -> Self {
+    /// Build a crossterm controller.
+    pub fn new() -> Self {
         Self {
             terminal: io::stderr(),
             capabilities: TerminalCapabilities::default(),
-            enable_keyboard_enhancements,
         }
     }
 
@@ -353,11 +344,7 @@ impl CrosstermControl {
                 "terminal backend is already active",
             ));
         }
-        if let Err(error) = acquire_terminal(
-            &mut self.terminal,
-            &mut self.capabilities,
-            self.enable_keyboard_enhancements,
-        ) {
+        if let Err(error) = acquire_terminal(&mut self.terminal, &mut self.capabilities) {
             drop(release_terminal(&mut self.terminal, &mut self.capabilities));
             return Err(error);
         }
@@ -367,12 +354,6 @@ impl CrosstermControl {
     /// Leave alternate screen and restore terminal state.
     fn exit(&mut self) -> io::Result<()> {
         release_terminal(&mut self.terminal, &mut self.capabilities)
-    }
-}
-
-impl Default for CrosstermControl {
-    fn default() -> Self {
-        Self::new(true)
     }
 }
 
@@ -400,8 +381,7 @@ pub struct CrosstermRender {
 impl CrosstermRender {
     /// Flush pending output.
     fn flush(&mut self) -> io::Result<()> {
-        self.fp.flush()?;
-        Ok(())
+        self.fp.flush()
     }
 
     /// Apply a style to subsequent output.
@@ -705,23 +685,26 @@ fn translate_event(e: cevent::Event) -> Event {
     }
 }
 
-/// Helper function to handle render errors by exiting alternate screen mode
-/// and displaying the error with a node tree dump
-fn handle_render_error(
-    error: error::Error,
-    core: &Core,
-    session: &TerminalSession,
-) -> error::Error {
-    drop(session.stop());
-
-    // Print error and node dump
-    eprintln!("Render error: {error}");
-    eprintln!("\nNode tree dump:");
+/// Restore the terminal, then print a heading and a node tree dump to stderr.
+fn stop_and_dump(session: &mut TerminalSession, core: &Core, heading: &str) {
+    if let Err(error) = session.stop() {
+        eprintln!("terminal restore failed: {error}");
+    }
+    eprintln!("{heading}");
     match dump(core, core.root, core.focus) {
         Ok(dump_str) => eprintln!("{dump_str}"),
         Err(dump_err) => eprintln!("Failed to dump node tree: {dump_err}"),
     }
+}
 
+/// Handle a render error by restoring the terminal and dumping the node tree.
+fn handle_render_error(
+    error: error::Error,
+    core: &Core,
+    session: &mut TerminalSession,
+) -> error::Error {
+    eprintln!("Render error: {error}");
+    stop_and_dump(session, core, "\nNode tree dump:");
     error
 }
 
@@ -731,12 +714,7 @@ fn handle_render_error(
 /// are enabled so escape codes are unambiguous.
 pub fn runloop(mut cnpy: Canopy) -> Result<i32> {
     let mut be = CrosstermRender::default();
-    cnpy.register_backend(CrosstermControl::new(true));
-    let backend = cnpy
-        .backend
-        .take()
-        .ok_or_else(|| error::Error::Internal("backend not set".into()))?;
-    let session = TerminalSession::new(backend)?;
+    let mut session = TerminalSession::new(Box::new(CrosstermControl::new()))?;
 
     let rx = cnpy
         .event_rx
@@ -748,7 +726,7 @@ pub fn runloop(mut cnpy: Canopy) -> Result<i32> {
     cnpy.set_root_size(Size::new(size.0.into(), size.1.into()))?;
 
     if let Err(e) = cnpy.render(&mut be) {
-        return Err(handle_render_error(e, &cnpy.core, &session));
+        return Err(handle_render_error(e, &cnpy.core, &mut session));
     }
     translate_result(be.flush())?;
     if let Some(code) = cnpy.core.take_exit_request() {
@@ -765,12 +743,11 @@ pub fn runloop(mut cnpy: Canopy) -> Result<i32> {
                 mods: key::Mods { ctrl: true, .. },
             })
         ) {
-            drop(session.stop());
-            eprintln!("\nCtrl+C pressed - Node tree dump:");
-            match dump(&cnpy.core, cnpy.core.root, cnpy.core.focus) {
-                Ok(dump_str) => eprintln!("{dump_str}"),
-                Err(dump_err) => eprintln!("Failed to dump node tree: {dump_err}"),
-            }
+            stop_and_dump(
+                &mut session,
+                &cnpy.core,
+                "\nCtrl+C pressed - Node tree dump:",
+            );
             return Ok(130);
         }
 
@@ -782,11 +759,11 @@ pub fn runloop(mut cnpy: Canopy) -> Result<i32> {
         match cnpy.render_if_pending(&mut be) {
             Ok(rendered) => {
                 if rendered && let Err(e) = translate_result(be.flush()) {
-                    return Err(handle_render_error(e, &cnpy.core, &session));
+                    return Err(handle_render_error(e, &cnpy.core, &mut session));
                 }
             }
             Err(e) => {
-                return Err(handle_render_error(e, &cnpy.core, &session));
+                return Err(handle_render_error(e, &cnpy.core, &mut session));
             }
         }
     }
@@ -931,7 +908,7 @@ mod tests {
         let mut terminal = FakeTerminal::default();
         let mut capabilities = TerminalCapabilities::default();
 
-        acquire_terminal(&mut terminal, &mut capabilities, true)?;
+        acquire_terminal(&mut terminal, &mut capabilities)?;
         release_terminal(&mut terminal, &mut capabilities)?;
 
         assert_eq!(
@@ -962,7 +939,7 @@ mod tests {
             };
             let mut capabilities = TerminalCapabilities::default();
 
-            acquire_terminal(&mut terminal, &mut capabilities, true)
+            acquire_terminal(&mut terminal, &mut capabilities)
                 .expect_err("configured acquisition should fail");
             release_terminal(&mut terminal, &mut capabilities)
                 .expect("rollback should release every acquired capability");

@@ -705,8 +705,8 @@ fn focus_transition_reports_changes_and_rejects_invalid_targets() -> Result<()> 
     core.attach(core.root, child)?;
     assert_eq!(core.set_focus(child)?, ChangeOutcome::Changed);
     assert_eq!(core.set_focus(child)?, ChangeOutcome::Unchanged);
-    assert_eq!(core.clear_focus()?, ChangeOutcome::Changed);
-    assert_eq!(core.clear_focus()?, ChangeOutcome::Unchanged);
+    assert_eq!(core.transition_focus(None)?, ChangeOutcome::Changed);
+    assert_eq!(core.transition_focus(None)?, ChangeOutcome::Unchanged);
 
     core.remove_subtree(child)?;
     assert!(matches!(core.set_focus(child), Err(Error::NodeNotFound(id)) if id == child));

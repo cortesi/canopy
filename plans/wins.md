@@ -83,20 +83,20 @@ full evidence, change, and proof for each entry.
 
 **Core structure and dead machinery**
 
-- [ ] W36: Extract one `poll_node` helper on `Core::with_widget_ctx`
-- [ ] W37: Delete the dead keep-children replacement path
-- [ ] W38: One slot-availability check, applied once per traversal
-- [ ] W39: Drop the per-removal `HashSet`s and the `planned` vector
-- [ ] W40: Use `transition_focus` for every "focus candidate or clear" tail
-- [ ] W41: Remove the unreachable arms in `focus_dir`'s candidate filter
-- [ ] W42: Remove single-caller forwarders on `Core` that duplicate an existing path
-- [ ] W43: Drop guards that the callee already performs in tree edit paths
-- [ ] W44: Remove the `Canopy.backend` hand-off slot
-- [ ] W45: Remove the always-true keyboard-enhancement flag on `CrosstermControl`
-- [ ] W46: Drop the panic-hook leftovers from `TerminalSession`
-- [ ] W47: One stop-and-dump path in `runloop` that reports terminal-restore failures
-- [ ] W48: Let `translate_result` and `CrosstermRender::flush` forward directly
-- [ ] W49: Delete `InputMap::remove_luau_functions`
+- [x] W36: Extract one `poll_node` helper on `Core::with_widget_ctx`
+- [x] W37: Delete the dead keep-children replacement path
+- [x] W38: One slot-availability check, applied once per traversal
+- [x] W39: Drop the per-removal `HashSet`s and the `planned` vector
+- [x] W40: Use `transition_focus` for every "focus candidate or clear" tail
+- [x] W41: Remove the unreachable arms in `focus_dir`'s candidate filter
+- [x] W42: Remove single-caller forwarders on `Core` that duplicate an existing path
+- [x] W43: Drop guards that the callee already performs in tree edit paths
+- [x] W44: Remove the `Canopy.backend` hand-off slot
+- [x] W45: Remove the always-true keyboard-enhancement flag on `CrosstermControl`
+- [x] W46: Drop the panic-hook leftovers from `TerminalSession`
+- [x] W47: One stop-and-dump path in `runloop` that reports terminal-restore failures
+- [x] W48: Let `translate_result` and `CrosstermRender::flush` forward directly
+- [x] W49: Delete `InputMap::remove_luau_functions`
 - [ ] W50: One "remove application records" helper behind `unbind_input` and `clear_application`
 - [ ] W51: Derive the startup baseline from the application snapshot
 - [ ] W52: Share one modifier and spec parser between `Key::parse_spec` and `Mouse::parse_spec`

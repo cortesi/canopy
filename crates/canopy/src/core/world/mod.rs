@@ -98,8 +98,6 @@ struct RemovalPlan {
     pre_order: Vec<RemovalEntry>,
     /// Nodes in deterministic post-order.
     post_order: Vec<NodeId>,
-    /// Whether the plan covers the root's complete subtree.
-    covers_subtree: bool,
 }
 
 /// One node expected to survive unchanged until a removal plan commits.
@@ -241,11 +239,6 @@ impl Core {
         self.focus
     }
 
-    /// Return a reference to a node by id.
-    pub fn node(&self, node_id: impl Into<NodeId>) -> Option<&Node> {
-        self.nodes.get(node_id.into())
-    }
-
     /// Take a mutable reference to a widget for a single call.
     pub(crate) fn with_widget_mut<R>(
         &mut self,
@@ -344,7 +337,6 @@ impl Core {
     }
 }
 
-#[derive(Default)]
 /// Root widget container used for the implicit root node.
 struct RootContainer;
 

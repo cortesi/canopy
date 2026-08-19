@@ -27,7 +27,6 @@ mod routing;
 #[cfg(test)]
 mod tests;
 use crate::{
-    backend::BackendControl,
     commands::{self, CommandDispatchKind},
     core::{
         Core, NodeId, TypedId,
@@ -46,9 +45,6 @@ use crate::{
 pub struct Canopy {
     /// Core state.
     pub(super) core: Core,
-    /// Backend controller waiting to be acquired by a terminal session.
-    pub(crate) backend: Option<Box<dyn BackendControl>>,
-
     /// The poller is responsible for tracking nodes that have pending poll events.
     poller: Poller,
 
@@ -352,7 +348,6 @@ impl Canopy {
             render_limits: RenderLimits::default(),
             termbuf: None,
             render_pending: true,
-            backend: None,
             core,
         }
     }
@@ -425,11 +420,6 @@ impl Canopy {
     pub fn set_style(&mut self, style: StyleMap) {
         self.style = style;
         self.render_pending = true;
-    }
-
-    /// Register a backend controller.
-    pub(crate) fn register_backend<T: BackendControl + 'static>(&mut self, be: T) {
-        self.backend = Some(Box::new(be));
     }
 
     /// Get a reference to the current render buffer, if any.
@@ -929,7 +919,7 @@ impl Canopy {
 
     /// Remove all callbacks whose VM ownership is tied to the current source epoch.
     fn clear_script_callbacks(&mut self) {
-        let removed = self.core.input_map.remove_luau_functions();
+        let removed = self.core.input_map.clear_application();
         self.release_removed_bindings(removed);
         for hook in self.script_host.drain_on_start_hooks() {
             self.script_host.release_function(hook);

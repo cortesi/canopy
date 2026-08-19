@@ -1481,7 +1481,8 @@ fn host_node_region<'s>(
         canopy.refresh_snapshot()?;
         let view = canopy
             .core
-            .node(node_id)
+            .nodes
+            .get(node_id)
             .ok_or_else(|| error::Error::from(commands::CommandError::InvalidNode { id: node_id }))?
             .view;
         screen_text_for_rect(canopy, view.content)

@@ -260,8 +260,9 @@ impl Drop for Poller {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+
     use futures::{StreamExt, channel::mpsc::unbounded, executor::block_on};
-    use parking_lot::Mutex;
     use slotmap::SlotMap;
 
     use super::*;
@@ -282,14 +283,14 @@ mod tests {
 
         /// Advance the clock without waiting for wall time.
         fn advance(&self, duration: Duration) {
-            let mut now = self.now.lock();
+            let mut now = self.now.lock().unwrap();
             *now = now.checked_add(duration).expect("test clock overflow");
         }
     }
 
     impl Clock for ManualClock {
         fn now(&self) -> Instant {
-            *self.now.lock()
+            *self.now.lock().unwrap()
         }
     }
 

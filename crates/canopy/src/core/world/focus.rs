@@ -35,13 +35,8 @@ impl Core {
         self.transition_focus(Some(node))
     }
 
-    /// Clear focus.
-    pub fn clear_focus(&mut self) -> Result<ChangeOutcome> {
-        self.transition_focus(None)
-    }
-
-    /// Apply one validated focus transition.
-    fn transition_focus(&mut self, target: Option<NodeId>) -> Result<ChangeOutcome> {
+    /// Apply one validated focus transition. `None` clears focus.
+    pub(crate) fn transition_focus(&mut self, target: Option<NodeId>) -> Result<ChangeOutcome> {
         if let Some(node) = target {
             self.validate_attached_node(node)?;
         }
@@ -101,11 +96,7 @@ impl Core {
         {
             return self.set_focus(target);
         }
-        if let Some(target) = first_focusable(self, root) {
-            self.set_focus(target)
-        } else {
-            self.clear_focus()
-        }
+        self.transition_focus(first_focusable(self, root))
     }
 
     /// Focus the previous node in the pre-order traversal of `root`.
@@ -116,11 +107,7 @@ impl Core {
             return self.set_focus(target);
         }
 
-        if let Some(last) = find_last_focusable(self, root) {
-            self.set_focus(last)
-        } else {
-            self.clear_focus()
-        }
+        self.transition_focus(find_last_focusable(self, root))
     }
 
     /// Move focus in a specified direction within the subtree at root.
@@ -153,23 +140,17 @@ impl Core {
         candidates.retain(|(_, rect)| {
             let center = rect.center();
             match dir {
-                Direction::Right | Direction::Left => {
-                    let center_ok = match dir {
-                        Direction::Right => center.0 > current_center.0,
-                        Direction::Left => center.0 < current_center.0,
-                        _ => false,
-                    };
-                    let vertical_overlap = rect.overlaps_vertical(current_rect);
-                    center_ok && vertical_overlap
+                Direction::Right => {
+                    center.0 > current_center.0 && rect.overlaps_vertical(current_rect)
                 }
-                Direction::Down | Direction::Up => {
-                    let center_ok = match dir {
-                        Direction::Down => center.1 > current_center.1,
-                        Direction::Up => center.1 < current_center.1,
-                        _ => false,
-                    };
-                    let horizontal_overlap = rect.overlaps_horizontal(current_rect);
-                    center_ok && horizontal_overlap
+                Direction::Left => {
+                    center.0 < current_center.0 && rect.overlaps_vertical(current_rect)
+                }
+                Direction::Down => {
+                    center.1 > current_center.1 && rect.overlaps_horizontal(current_rect)
+                }
+                Direction::Up => {
+                    center.1 < current_center.1 && rect.overlaps_horizontal(current_rect)
                 }
             }
         });
@@ -221,8 +202,8 @@ impl Core {
         }
 
         let hint = self.focus_hint.take();
-        if let Some(removed_root) = removed_root {
-            let candidate = if let Some(hint) = hint {
+        let candidate = if let Some(removed_root) = removed_root {
+            if let Some(hint) = hint {
                 [hint.next, hint.prev, hint.ancestor]
                     .into_iter()
                     .flatten()
@@ -231,21 +212,12 @@ impl Core {
                 self.next_focusable_after_subtree(removed_root)
                     .or_else(|| self.prev_focusable_before_subtree(removed_root))
                     .or_else(|| self.nearest_focusable_ancestor(removed_root))
-            };
-            if let Some(target) = candidate {
-                self.set_focus(target)
-            } else {
-                self.clear_focus()
             }
         } else {
-            let candidate = find_next_focus(self, self.root, focus, false)
-                .or_else(|| first_focusable(self, self.root));
-            if let Some(target) = candidate {
-                self.set_focus(target)
-            } else {
-                self.clear_focus()
-            }
-        }
+            find_next_focus(self, self.root, focus, false)
+                .or_else(|| first_focusable(self, self.root))
+        };
+        self.transition_focus(candidate)
     }
 
     /// Capture mouse events for an attached node.
@@ -275,11 +247,6 @@ impl Core {
         Ok(capture)
     }
 
-    /// Restore mouse capture to an attached node.
-    pub fn restore_mouse_capture(&mut self, node: NodeId) -> Result<ChangeOutcome> {
-        self.transition_mouse_capture(Some(node))
-    }
-
     /// Apply one validated mouse-capture transition.
     fn transition_mouse_capture(&mut self, target: Option<NodeId>) -> Result<ChangeOutcome> {
         if let Some(node) = target {
@@ -295,8 +262,9 @@ impl Core {
 
     /// Ensure mouse capture only points at attached nodes.
     pub fn ensure_mouse_capture_valid(&mut self) -> Result<ChangeOutcome> {
+        // `is_attached_to_root` is already false for a missing id.
         if let Some(capture) = self.mouse_capture
-            && (!self.nodes.contains_key(capture) || !self.is_attached_to_root(capture))
+            && !self.is_attached_to_root(capture)
         {
             self.clear_mouse_capture()
         } else {

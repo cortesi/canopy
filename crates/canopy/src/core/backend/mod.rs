@@ -1,8 +1,6 @@
 /// Crossterm backend implementation.
 pub mod crossterm;
-use std::{fmt::Debug, sync::Arc};
-
-use parking_lot::Mutex;
+use std::fmt::Debug;
 
 use crate::error::Result;
 
@@ -20,35 +18,10 @@ pub trait BackendControl: Debug + Send {
 
 /// Guard that ensures backend start/stop are paired for a terminal session.
 pub struct TerminalSession {
-    /// Shared session state used by normal exit, panic cleanup, and drop.
-    state: Arc<Mutex<TerminalState>>,
-}
-
-/// Mutable state behind every terminal cleanup path.
-struct TerminalState {
     /// Backend controller owned for the complete session lifetime.
     backend: Box<dyn BackendControl>,
     /// Whether the session has an active backend start.
     active: bool,
-}
-
-/// Cloneable cleanup capability for a panic hook.
-#[derive(Clone)]
-pub struct TerminalCleanup {
-    /// Shared terminal state.
-    state: Arc<Mutex<TerminalState>>,
-}
-
-impl TerminalCleanup {
-    /// Stop the backend if the session is active.
-    pub(crate) fn stop(&self) -> Result<()> {
-        let mut state = self.state.lock();
-        if state.active {
-            state.backend.stop()?;
-            state.active = false;
-        }
-        Ok(())
-    }
 }
 
 impl TerminalSession {
@@ -56,37 +29,30 @@ impl TerminalSession {
     pub(crate) fn new(mut backend: Box<dyn BackendControl>) -> Result<Self> {
         backend.start()?;
         Ok(Self {
-            state: Arc::new(Mutex::new(TerminalState {
-                backend,
-                active: true,
-            })),
+            backend,
+            active: true,
         })
     }
 
-    /// Return a cleanup capability suitable for a panic hook.
-    pub(crate) fn cleanup(&self) -> TerminalCleanup {
-        TerminalCleanup {
-            state: Arc::clone(&self.state),
-        }
-    }
-
     /// Stop the backend if the session is active.
-    pub(crate) fn stop(&self) -> Result<()> {
-        self.cleanup().stop()
+    pub(crate) fn stop(&mut self) -> Result<()> {
+        if self.active {
+            self.backend.stop()?;
+            self.active = false;
+        }
+        Ok(())
     }
 }
 
 impl Drop for TerminalSession {
     fn drop(&mut self) {
-        drop(self.cleanup().stop());
+        drop(self.stop());
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
-    use parking_lot::Mutex;
+    use std::sync::{Arc, Mutex};
 
     use super::*;
     use crate::error::Error;
@@ -107,7 +73,7 @@ mod tests {
 
     impl BackendControl for RecordingControl {
         fn start(&mut self) -> Result<()> {
-            self.lifecycle.lock().starts += 1;
+            self.lifecycle.lock().unwrap().starts += 1;
             if self.fail_start {
                 return Err(Error::Internal("injected start failure".into()));
             }
@@ -115,7 +81,7 @@ mod tests {
         }
 
         fn stop(&mut self) -> Result<()> {
-            self.lifecycle.lock().stops += 1;
+            self.lifecycle.lock().unwrap().stops += 1;
             Ok(())
         }
     }
@@ -130,7 +96,7 @@ mod tests {
 
         drop(TerminalSession::new(backend)?);
 
-        let lifecycle = lifecycle.lock();
+        let lifecycle = lifecycle.lock().unwrap();
         assert_eq!(lifecycle.starts, 1);
         assert_eq!(lifecycle.stops, 1);
         Ok(())
@@ -143,28 +109,12 @@ mod tests {
             lifecycle: Arc::clone(&lifecycle),
             fail_start: false,
         });
-        let session = TerminalSession::new(backend)?;
+        let mut session = TerminalSession::new(backend)?;
 
         session.stop()?;
         drop(session);
 
-        assert_eq!(lifecycle.lock().stops, 1);
-        Ok(())
-    }
-
-    #[test]
-    fn panic_cleanup_and_session_drop_share_one_stop_state() -> Result<()> {
-        let lifecycle = Arc::new(Mutex::new(Lifecycle::default()));
-        let backend = Box::new(RecordingControl {
-            lifecycle: Arc::clone(&lifecycle),
-            fail_start: false,
-        });
-        let session = TerminalSession::new(backend)?;
-
-        session.cleanup().stop()?;
-        drop(session);
-
-        assert_eq!(lifecycle.lock().stops, 1);
+        assert_eq!(lifecycle.lock().unwrap().stops, 1);
         Ok(())
     }
 
@@ -178,7 +128,7 @@ mod tests {
 
         assert!(TerminalSession::new(backend).is_err());
 
-        let lifecycle = lifecycle.lock();
+        let lifecycle = lifecycle.lock().unwrap();
         assert_eq!(lifecycle.starts, 1);
         assert_eq!(lifecycle.stops, 0);
     }

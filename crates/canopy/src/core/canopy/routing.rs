@@ -275,13 +275,7 @@ impl Canopy {
     fn poll(&mut self, ids: &[NodeId]) -> Result<()> {
         for id in ids {
             if self.core.nodes.contains_key(*id) {
-                let next = self.core.with_widget_mut(*id, |w, core| {
-                    let mut ctx = crate::core::context::CoreContext::new(core, *id);
-                    w.poll(&mut ctx)
-                })?;
-                if let Some(d) = next {
-                    self.poller.schedule(*id, d)?;
-                }
+                self.poll_node(*id)?;
             }
         }
         Ok(())

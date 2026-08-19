@@ -99,17 +99,12 @@ impl Core {
     {
         let node_id = node_id.into();
         self.with_tree_edit("replace subtree", move |core| {
-            core.replace_widget_inner(node_id, Box::new(widget), true)
+            core.replace_subtree_inner(node_id, Box::new(widget))
         })
     }
 
-    /// Replace one widget inside an active tree edit.
-    fn replace_widget_inner(
-        &mut self,
-        node_id: NodeId,
-        widget: Box<dyn Widget>,
-        remove_descendants: bool,
-    ) -> Result<()> {
+    /// Replace one subtree's widget inside an active tree edit.
+    fn replace_subtree_inner(&mut self, node_id: NodeId, widget: Box<dyn Widget>) -> Result<()> {
         if !self.nodes.contains_key(node_id) {
             return Err(Error::NodeNotFound(node_id));
         }
@@ -118,42 +113,26 @@ impl Core {
         layout.validate()?;
         let widget_type = widget.as_ref().type_id();
 
-        let plan = if remove_descendants {
-            self.plan_subtree_removal(node_id, "replace subtree")?
-        } else {
-            self.plan_widget_replacement(node_id, "replace widget")?
-        };
-        let removed_focus_root = if remove_descendants {
-            self.removed_focus_root(&plan)
-        } else {
-            None
-        };
+        let plan = self.plan_subtree_removal(node_id, "replace subtree")?;
+        let removed_focus_root = self.removed_focus_root(&plan);
         let focus_hint = removed_focus_root.map(|root| self.focus_recovery_hint(root));
         self.run_pre_remove_plan(&plan)?;
         self.validate_removal_plan(&plan)?;
         self.run_unmount_plan(&plan)?;
         self.validate_removal_plan(&plan)?;
 
-        if remove_descendants {
-            let removed: HashSet<NodeId> = plan
-                .pre_order
-                .iter()
-                .skip(1)
-                .map(|entry| entry.node_id)
-                .collect();
-            for removed_node in plan.post_order.iter().copied() {
-                if removed_node != plan.root {
-                    self.nodes.remove(removed_node);
-                }
+        for removed_node in plan.post_order.iter().copied() {
+            if removed_node != plan.root {
+                self.nodes.remove(removed_node);
             }
-            let node = self
-                .nodes
-                .get_mut(node_id)
-                .ok_or(Error::NodeNotFound(node_id))?;
-            node.children.clear();
-            node.child_keys.clear();
-            self.clear_removed_targets(&removed);
         }
+        let node = self
+            .nodes
+            .get_mut(node_id)
+            .ok_or(Error::NodeNotFound(node_id))?;
+        node.children.clear();
+        node.child_keys.clear();
+        self.clear_removed_targets(&plan.pre_order[1..]);
 
         let node = self
             .nodes
@@ -676,7 +655,8 @@ impl Core {
             return Err(Error::DuplicateChildKey(key.to_string()));
         }
 
-        if self.is_attached_to_root(parent) {
+        let parent_attached = self.is_attached_to_root(parent);
+        if parent_attached {
             self.ensure_unmounted_widget_slots_available(child, "attach")?;
         }
 
@@ -693,7 +673,7 @@ impl Core {
             node.children.push(child);
         }
 
-        if self.is_attached_to_root(parent) {
+        if parent_attached {
             self.mount_subtree_pre_order(child)?;
         }
 
@@ -735,10 +715,8 @@ impl Core {
             if !self.nodes.contains_key(node_id) {
                 continue;
             }
-            let should_mount = self.nodes.get(node_id).is_some_and(|node| !node.mounted);
-            if should_mount {
-                self.mount_node(node_id)?;
-            }
+            // `mount_node` returns early for nodes that are already mounted.
+            self.mount_node(node_id)?;
             let children = self
                 .nodes
                 .get(node_id)
@@ -883,12 +861,11 @@ impl Core {
             node.child_keys.retain(|_, id| *id != root_id);
         }
 
-        let removed: HashSet<NodeId> = plan.pre_order.iter().map(|entry| entry.node_id).collect();
-        for node_id in plan.post_order {
-            self.nodes.remove(node_id);
+        for node_id in &plan.post_order {
+            self.nodes.remove(*node_id);
         }
 
-        self.clear_removed_targets(&removed);
+        self.clear_removed_targets(&plan.pre_order);
         self.focus_hint = hint;
         self.ensure_invariants(Some(root_id))?;
         Ok(())
@@ -896,11 +873,11 @@ impl Core {
 
     /// Build a stable plan for removing a complete subtree.
     fn plan_subtree_removal(&self, root: NodeId, operation: &'static str) -> Result<RemovalPlan> {
-        self.ensure_subtree_widget_slots_available(root, operation)?;
         let pre_order = self
             .subtree_pre_order(root)
             .into_iter()
             .map(|node_id| {
+                self.ensure_widget_slot_available(node_id, operation)?;
                 let node = self
                     .nodes
                     .get(node_id)
@@ -915,29 +892,6 @@ impl Core {
             root,
             pre_order,
             post_order: self.subtree_post_order(root),
-            covers_subtree: true,
-        })
-    }
-
-    /// Build a stable lifecycle plan for replacing one widget in place.
-    fn plan_widget_replacement(
-        &self,
-        node_id: NodeId,
-        operation: &'static str,
-    ) -> Result<RemovalPlan> {
-        self.ensure_widget_slot_available(node_id, operation)?;
-        let node = self
-            .nodes
-            .get(node_id)
-            .ok_or(Error::NodeNotFound(node_id))?;
-        Ok(RemovalPlan {
-            root: node_id,
-            pre_order: vec![RemovalEntry {
-                node_id,
-                widget: Rc::clone(&node.widget),
-            }],
-            post_order: vec![node_id],
-            covers_subtree: false,
         })
     }
 
@@ -959,13 +913,14 @@ impl Core {
 
     /// Confirm lifecycle hooks did not replace or reshape the planned removal target.
     fn validate_removal_plan(&self, plan: &RemovalPlan) -> Result<()> {
-        if plan.covers_subtree {
-            let planned: Vec<NodeId> = plan.pre_order.iter().map(|entry| entry.node_id).collect();
-            if self.subtree_pre_order(plan.root) != planned {
-                return Err(Error::InvalidOperation(
-                    "removal target changed during lifecycle hooks".into(),
-                ));
-            }
+        if !self
+            .subtree_pre_order(plan.root)
+            .iter()
+            .eq(plan.pre_order.iter().map(|entry| &entry.node_id))
+        {
+            return Err(Error::InvalidOperation(
+                "removal target changed during lifecycle hooks".into(),
+            ));
         }
         for entry in &plan.pre_order {
             let node = self
@@ -992,10 +947,10 @@ impl Core {
     }
 
     /// Clear auxiliary targets that point into a removed set.
-    fn clear_removed_targets(&mut self, removed: &HashSet<NodeId>) {
+    fn clear_removed_targets(&mut self, removed: &[RemovalEntry]) {
         if self
             .pending_diagnostic_dump
-            .is_some_and(|target| removed.contains(&target))
+            .is_some_and(|target| removed.iter().any(|entry| entry.node_id == target))
         {
             self.pending_diagnostic_dump = None;
         }
@@ -1017,18 +972,6 @@ impl Core {
         out
     }
 
-    /// Ensure a structural edit will not delete a widget currently owned by a callback guard.
-    fn ensure_subtree_widget_slots_available(
-        &self,
-        root: NodeId,
-        operation: &'static str,
-    ) -> Result<()> {
-        for node_id in self.subtree_pre_order(root) {
-            self.ensure_widget_slot_available(node_id, operation)?;
-        }
-        Ok(())
-    }
-
     /// Ensure every unmounted widget in a subtree is available before topology publication.
     fn ensure_unmounted_widget_slots_available(
         &self,
@@ -1045,25 +988,11 @@ impl Core {
 
     /// Ensure one widget slot is present and not held by a callback.
     fn ensure_widget_slot_available(&self, node_id: NodeId, operation: &'static str) -> Result<()> {
-        let node = self
-            .nodes
-            .get(node_id)
-            .ok_or(Error::NodeNotFound(node_id))?;
-        let Ok(widget) = node.widget.try_borrow() else {
-            return Err(self.widget_operation_error(
-                WidgetOperation::access(operation),
-                node_id,
-                Error::ReentrantWidgetBorrow(node_id),
-            ));
-        };
-        if widget.is_some() {
-            return Ok(());
-        }
-        Err(self.widget_operation_error(
-            WidgetOperation::access(operation),
+        self.with_widget_read(
             node_id,
-            Error::ReentrantWidgetBorrow(node_id),
-        ))
+            WidgetOperation::access(operation),
+            |_widget, _core| (),
+        )
     }
 
     /// Collect a subtree in post-order, including the root.

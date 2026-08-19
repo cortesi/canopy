@@ -39,6 +39,17 @@ impl Canopy {
         Ok(())
     }
 
+    /// Poll one node and schedule its next callback.
+    pub(crate) fn poll_node(&mut self, node_id: NodeId) -> Result<()> {
+        if let Some(next) = self
+            .core
+            .with_widget_ctx(node_id, |widget, ctx| widget.poll(ctx))?
+        {
+            self.poller.schedule(node_id, next)?;
+        }
+        Ok(())
+    }
+
     /// Pre-render sweep of the tree.
     pub(crate) fn pre_render(&mut self) -> Result<bool> {
         let root = self.core.root;
@@ -69,13 +80,7 @@ impl Canopy {
                 .unwrap_or(false);
             if !initialized {
                 layout_dirty = true;
-                let next = self.core.with_widget_mut(id, |w, core| {
-                    let mut ctx = crate::core::context::CoreContext::new(core, id);
-                    w.poll(&mut ctx)
-                })?;
-                if let Some(d) = next {
-                    self.poller.schedule(id, d)?;
-                }
+                self.poll_node(id)?;
                 if let Some(node) = self.core.nodes.get_mut(id) {
                     node.initialized = true;
                 }

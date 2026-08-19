@@ -992,7 +992,7 @@ impl Context for NodeCtx<&mut Core> {
     }
 
     fn restore_mouse_capture(&mut self, node: NodeId) -> Result<ChangeOutcome> {
-        self.core.restore_mouse_capture(node)
+        self.core.capture_mouse(node)
     }
 
     fn available_bindings(&self, node: Option<NodeId>) -> Result<BindingSnapshot> {
