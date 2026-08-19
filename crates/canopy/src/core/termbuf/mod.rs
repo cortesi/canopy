@@ -108,16 +108,6 @@ impl Cell {
         }
     }
 
-    /// Construct an empty cell.
-    fn empty(style: ResolvedStyle) -> Self {
-        Self {
-            ch: NULL,
-            suffix: String::new(),
-            style,
-            continuation: false,
-        }
-    }
-
     /// Construct a continuation cell for a wide glyph.
     fn continuation(style: ResolvedStyle) -> Self {
         Self {
@@ -217,11 +207,7 @@ impl TermBuf {
     ) -> Result<Self> {
         let size = size.into();
         validate_cell_character(ch)?;
-        let cell = if ch == NULL {
-            Cell::empty(style)
-        } else {
-            Cell::new(ch, style)
-        };
+        let cell = Cell::new(ch, style);
         let count = limits.cell_count(size)?;
         let mut cells = Vec::new();
         cells
@@ -265,7 +251,7 @@ impl TermBuf {
         let x = index - row_start;
         let range = grapheme_range(&self.cells[row_start..row_end], x, 1);
         if let Some((start, end)) = range {
-            self.cells[row_start + start..row_start + end].fill(Cell::empty(style));
+            self.cells[row_start + start..row_start + end].fill(Cell::new(NULL, style));
         }
     }
 
@@ -283,11 +269,7 @@ impl TermBuf {
             return Ok(());
         };
         self.clear_grapheme_at(index, style);
-        self.cells[index] = if ch == NULL {
-            Cell::empty(style)
-        } else {
-            Cell::new(ch, style)
-        };
+        self.cells[index] = Cell::new(ch, style);
         Ok(())
     }
 
@@ -548,22 +530,17 @@ impl TermBuf {
             if can_shift
                 && let Some(shift) = detect_line_shift(current_row, prev_row, MAX_LINE_SHIFT)
             {
-                let gap = if shift > 0 {
-                    shift as usize
+                // `detect_line_shift` only reports shifts inside the row width.
+                let gap = shift.unsigned_abs() as usize;
+                backend.shift_chars(Point { x: 0, y }, shift)?;
+                if shift > 0 {
+                    render_line_range(backend, current_row, y, 0, gap)?;
                 } else {
-                    (-shift) as usize
-                };
-                if gap > 0 && gap < width {
-                    backend.shift_chars(Point { x: 0, y }, shift)?;
-                    if shift > 0 {
-                        render_line_range(backend, current_row, y, 0, gap)?;
-                    } else {
-                        let start = width.saturating_sub(gap);
-                        render_line_range(backend, current_row, y, start, gap)?;
-                    }
-                    wrote = true;
-                    continue;
+                    let start = width.saturating_sub(gap);
+                    render_line_range(backend, current_row, y, start, gap)?;
                 }
+                wrote = true;
+                continue;
             }
 
             let mut x = 0usize;

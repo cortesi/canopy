@@ -3438,9 +3438,7 @@ pub mod canopy {
             pub name: &'static str,
             /// Parameter kind.
             pub kind: CommandParamKind,
-            /// Optional parameter documentation.
-            pub doc: Option<&'static str>,
-            /// Type metadata.
+            /// Type metadata, including the parameter's documentation.
             pub ty: CommandTypeSpec,
             /// Whether the parameter is optional.
             pub optional: bool,
@@ -3476,13 +3474,6 @@ pub mod canopy {
             },
         }
 
-        /// Documentation metadata for a command.
-        #[derive(Clone, Copy, Debug, Default, StructuralPartialEq, PartialEq, Eq)]
-        pub struct CommandDocSpec {
-            /// Command documentation, taken from the method's doc comment.
-            pub long: Option<&'static str>,
-        }
-
         /// Static metadata for a command.
         #[derive(Clone, Copy, Debug)]
         pub struct CommandSpec {
@@ -3497,7 +3488,7 @@ pub mod canopy {
             /// Return spec.
             pub ret: CommandReturnSpec,
             /// Documentation metadata.
-            pub doc: CommandDocSpec,
+            pub doc: Option<&'static str>,
             /// Erased invoke entrypoint.
             pub invoke: InvokeFn,
         }
@@ -3725,7 +3716,7 @@ pub mod canopy {
         }
 
         /// Cursor position and shape.
-        #[derive(Debug, Clone, Hash, StructuralPartialEq, PartialEq, Eq)]
+        #[derive(Debug, Clone, Copy, Hash, StructuralPartialEq, PartialEq, Eq)]
         pub struct Cursor {
             /// Location of the cursor, relative to (0, 0) in the node view rect.
             pub location: geom::Point,
@@ -5564,6 +5555,9 @@ pub mod canopy {
 
         /// Expand tabs into spaces using the configured tab stop.
         pub fn expand_tabs(s: &str, tab_stop: usize) -> String {}
+
+        /// Compute the width of the next tab from the provided column.
+        pub fn tab_width(column: usize, tab_stop: usize) -> usize {}
     }
 
     pub mod view {

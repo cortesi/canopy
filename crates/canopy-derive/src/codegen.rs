@@ -61,7 +61,6 @@ impl ParamMeta {
             canopy::commands::CommandParamSpec {
                 name: #name,
                 kind: #kind_tokens,
-                doc: #doc,
                 ty: canopy::commands::CommandTypeSpec {
                     rust: #ty,
                     ty: #ty_tokens,
@@ -460,7 +459,7 @@ impl CommandMeta {
         let name = &self.name;
         let owner = &self.owner;
         let ret = self.ret.spec_tokens(self.ignore_result);
-        let long = opt_str_tokens(self.doc.long.as_deref());
+        let doc = opt_str_tokens(self.doc.as_deref());
 
         quote! {
             const #spec_const_ident: canopy::commands::CommandSpec = canopy::commands::CommandSpec {
@@ -469,9 +468,7 @@ impl CommandMeta {
                 dispatch: canopy::commands::CommandDispatchKind::Node { owner: #owner },
                 params: Self::#params_const_ident,
                 ret: #ret,
-                doc: canopy::commands::CommandDocSpec {
-                    long: #long,
-                },
+                doc: #doc,
                 invoke: Self::#invoke_ident,
             };
         }

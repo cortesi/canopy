@@ -117,17 +117,17 @@ full evidence, change, and proof for each entry.
 - [x] W67: Drop the unused type parameter on `Size<T = u32>`
 - [x] W68: Delete geometry methods with zero callers
 - [x] W69: Remove the three `From` conversions on `Rect` and `Size` with no callers
-- [ ] W70: Flatten the one-field doc wrappers `DocMeta` and `CommandDocSpec`
-- [ ] W71: Simplify `parse_return_type`
-- [ ] W72: Remove the dead `Type::Path` arm in `is_context_ref`
-- [ ] W73: Emit each parameter doc once
-- [ ] W74: One `out_of_range` helper instead of three
-- [ ] W75: Share one scroll update between `scroll_to` and `scroll_by`
-- [ ] W76: One pre-order walker for `preorder`, `find_node_matching`, and `find_nodes_matching`
-- [ ] W77: Share the "at most one match" loop in `unique_child` and `unique_descendant`
-- [ ] W78: Export `text::tab_width` and delete the widgets copy
-- [ ] W79: Small std and derive simplifications in core
-- [ ] W80: Simplify two redundant branches in `termbuf/mod.rs`
+- [x] W70: Flatten the one-field doc wrappers `DocMeta` and `CommandDocSpec`
+- [x] W71: Simplify `parse_return_type`
+- [x] W72: Remove the dead `Type::Path` arm in `is_context_ref`
+- [x] W73: Emit each parameter doc once
+- [x] W74: One `out_of_range` helper instead of three
+- [x] W75: Share one scroll update between `scroll_to` and `scroll_by`
+- [x] W76: One pre-order walker for `preorder`, `find_node_matching`, and `find_nodes_matching`
+- [x] W77: Share the "at most one match" loop in `unique_child` and `unique_descendant`
+- [x] W78: Export `text::tab_width` and delete the widgets copy
+- [x] W79: Small std and derive simplifications in core
+- [x] W80: Simplify two redundant branches in `termbuf/mod.rs`
 
 **Script host**
 

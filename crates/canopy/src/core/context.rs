@@ -278,22 +278,7 @@ pub trait ViewContext {
 
     /// Find the first node whose path matches the validated filter.
     fn find_node_matching(&self, path_filter: &PathFilter) -> Option<NodeId> {
-        let root = self.node_id();
-        let mut stack = vec![root];
-
-        while let Some(id) = stack.pop() {
-            let path = self.node_path(root, id);
-            if path_filter.matcher().check(&path).is_some() {
-                return Some(id);
-            }
-
-            let children = ViewContext::children_of(self, id);
-            for child in children.into_iter().rev() {
-                stack.push(child);
-            }
-        }
-
-        None
+        matching_nodes(self, path_filter).next()
     }
 
     /// Find all nodes whose paths match the filter, relative to the current node.
@@ -308,24 +293,49 @@ pub trait ViewContext {
 
     /// Find all nodes whose paths match the validated filter.
     fn find_nodes_matching(&self, path_filter: &PathFilter) -> Vec<NodeId> {
-        let root = self.node_id();
-        let mut out = Vec::new();
-        let mut stack = vec![root];
-
-        while let Some(id) = stack.pop() {
-            let path = self.node_path(root, id);
-            if path_filter.matcher().check(&path).is_some() {
-                out.push(id);
-            }
-
-            let children = ViewContext::children_of(self, id);
-            for child in children.into_iter().rev() {
-                stack.push(child);
-            }
-        }
-
-        out
+        matching_nodes(self, path_filter).collect()
     }
+}
+
+/// Walk a subtree in pre-order, root first, children in declaration order.
+fn preorder_from<C: ViewContext + ?Sized>(
+    ctx: &C,
+    root: NodeId,
+) -> impl Iterator<Item = NodeId> + '_ {
+    let mut stack = vec![root];
+    iter::from_fn(move || {
+        let id = stack.pop()?;
+        for child in ViewContext::children_of(ctx, id).into_iter().rev() {
+            stack.push(child);
+        }
+        Some(id)
+    })
+}
+
+/// Walk the current node's subtree, yielding nodes whose path matches the filter.
+fn matching_nodes<'a, C: ViewContext + ?Sized>(
+    ctx: &'a C,
+    path_filter: &'a PathFilter,
+) -> impl Iterator<Item = NodeId> + 'a {
+    let root = ctx.node_id();
+    preorder_from(ctx, root).filter(move |id| {
+        path_filter
+            .matcher()
+            .check(&ctx.node_path(root, *id))
+            .is_some()
+    })
+}
+
+/// Apply a scroll transform to a node, clamp it to the canvas, and report whether it moved.
+fn update_scroll(core: &mut Core, node_id: NodeId, f: impl FnOnce(Point) -> Point) -> bool {
+    let Some(node) = core.nodes.get_mut(node_id) else {
+        return false;
+    };
+    let before = node.scroll;
+    node.scroll = f(before);
+    clamp_scroll(&mut node.scroll, node.content_size, node.canvas);
+    node.view.tl = node.scroll;
+    before != node.scroll
 }
 
 /// Validate one raw node ID against a requested widget type.
@@ -352,14 +362,7 @@ impl dyn ViewContext + '_ {
 
     /// Pre-order traversal of the subtree rooted at `root`.
     pub fn preorder(&self, root: impl Into<NodeId>) -> impl Iterator<Item = NodeId> + '_ {
-        let mut stack = vec![root.into()];
-        iter::from_fn(move || {
-            let id = stack.pop()?;
-            for child in ViewContext::children_of(self, id).into_iter().rev() {
-                stack.push(child);
-            }
-            Some(id)
-        })
+        preorder_from(self, root.into())
     }
 
     /// Return the first widget of type `W` anywhere in the tree, including the root.
@@ -390,17 +393,7 @@ impl dyn ViewContext + '_ {
 
     /// Return the unique child of type `W`, or error if more than one exists.
     pub fn unique_child<W: Widget + 'static>(&self) -> Result<Option<TypedId<W>>> {
-        let mut found = None;
-        for child in self.children() {
-            if !self.node_matches_type::<W>(child) {
-                continue;
-            }
-            if found.is_some() {
-                return Err(Error::MultipleMatches);
-            }
-            found = Some(TypedId::new(child));
-        }
-        Ok(found)
+        self.unique_typed(self.children().into_iter())
     }
 
     /// Return all direct children of type `W`.
@@ -422,27 +415,16 @@ impl dyn ViewContext + '_ {
 
     /// Return the unique descendant of type `W`, or error if more than one exists.
     pub fn unique_descendant<W: Widget + 'static>(&self) -> Result<Option<TypedId<W>>> {
-        let mut found = None;
-        for id in self.preorder(self.node_id()).skip(1) {
-            if self.node_matches_type::<W>(id) {
-                if found.is_some() {
-                    return Err(Error::MultipleMatches);
-                }
-                found = Some(TypedId::new(id));
-            }
-        }
-        Ok(found)
+        self.unique_typed(self.preorder(self.node_id()).skip(1))
     }
 
     /// Return all descendants of type `W` (excluding self).
     pub fn descendants_of_type<W: Widget + 'static>(&self) -> Vec<TypedId<W>> {
-        let mut out = Vec::new();
-        for id in self.preorder(self.node_id()).skip(1) {
-            if self.node_matches_type::<W>(id) {
-                out.push(TypedId::new(id));
-            }
-        }
-        out
+        self.preorder(self.node_id())
+            .skip(1)
+            .filter(|id| self.node_matches_type::<W>(*id))
+            .map(TypedId::new)
+            .collect()
     }
 
     /// Return the descendant of type `W` that is on the focus path, if any.
@@ -468,6 +450,21 @@ impl dyn ViewContext + '_ {
     /// Return true if the node's widget type matches `W`.
     fn node_matches_type<W: Widget + 'static>(&self, node: NodeId) -> bool {
         ViewContext::node_type_id(self, node) == Some(TypeId::of::<W>())
+    }
+
+    /// Return the single node of type `W` among `ids`, or error when more than one matches.
+    fn unique_typed<W: Widget + 'static>(
+        &self,
+        ids: impl Iterator<Item = NodeId>,
+    ) -> Result<Option<TypedId<W>>> {
+        let mut found = None;
+        for id in ids.filter(|id| self.node_matches_type::<W>(*id)) {
+            if found.is_some() {
+                return Err(Error::MultipleMatches);
+            }
+            found = Some(TypedId::new(id));
+        }
+        Ok(found)
     }
 
     /// Return the first leaf node under `root` using pre-order traversal.
@@ -1013,29 +1010,11 @@ impl Context for NodeCtx<&mut Core> {
     }
 
     fn scroll_to(&mut self, x: u32, y: u32) -> bool {
-        let node = self.core.nodes.get_mut(self.node_id);
-        if let Some(node) = node {
-            let before = node.scroll;
-            node.scroll = Point { x, y };
-            clamp_scroll(&mut node.scroll, node.content_size, node.canvas);
-            node.view.tl = node.scroll;
-            before != node.scroll
-        } else {
-            false
-        }
+        update_scroll(self.core, self.node_id, |_| Point { x, y })
     }
 
     fn scroll_by(&mut self, x: i32, y: i32) -> bool {
-        let node = self.core.nodes.get_mut(self.node_id);
-        if let Some(node) = node {
-            let before = node.scroll;
-            node.scroll = node.scroll.scroll(x, y);
-            clamp_scroll(&mut node.scroll, node.content_size, node.canvas);
-            node.view.tl = node.scroll;
-            before != node.scroll
-        } else {
-            false
-        }
+        update_scroll(self.core, self.node_id, |scroll| scroll.scroll(x, y))
     }
 
     fn invalidate_layout(&mut self) {
@@ -1157,11 +1136,7 @@ impl Context for NodeCtx<&mut Core> {
             .nodes
             .get_mut(node)
             .ok_or(Error::NodeNotFound(node))?;
-        if let Some(ref mut effects) = node.effects {
-            effects.push(effect);
-        } else {
-            node.effects = Some(vec![effect]);
-        }
+        node.effects.get_or_insert_with(Vec::new).push(effect);
         Ok(())
     }
 

@@ -254,9 +254,6 @@ pub mod canopy_widgets {
         /// Return the display width of one grapheme at a column, expanding tabs.
         pub fn display_width(grapheme: &str, column: usize, tab_stop: usize) -> usize {}
 
-        /// Compute tab expansion width for a column.
-        pub fn tab_width(column: usize, tab_stop: usize) -> usize {}
-
         /// Editor widget implementation.
         pub struct Editor {}
 

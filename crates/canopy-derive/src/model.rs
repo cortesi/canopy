@@ -76,13 +76,6 @@ pub struct ReturnMeta {
     pub(crate) doc: Option<String>,
 }
 
-/// Extracted documentation from a method.
-#[derive(Debug, Clone, Default)]
-pub struct DocMeta {
-    /// Full description (all doc comments joined).
-    pub(crate) long: Option<String>,
-}
-
 /// Parsed metadata describing a command.
 #[derive(Debug, Clone)]
 pub struct CommandMeta {
@@ -96,8 +89,8 @@ pub struct CommandMeta {
     pub(crate) ignore_result: bool,
     /// Return type metadata.
     pub(crate) ret: ReturnMeta,
-    /// Documentation metadata.
-    pub(crate) doc: DocMeta,
+    /// Command documentation, taken from the method's doc comment.
+    pub(crate) doc: Option<String>,
 }
 
 /// The source used to bind a user-supplied command argument.

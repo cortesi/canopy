@@ -984,7 +984,7 @@ impl Widget for Terminal {
     }
 
     fn cursor(&self) -> Option<cursor::Cursor> {
-        self.cursor.clone()
+        self.cursor
     }
 
     fn poll(&mut self, _ctx: &mut dyn Context) -> Option<Duration> {

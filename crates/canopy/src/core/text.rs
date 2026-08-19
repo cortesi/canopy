@@ -29,14 +29,11 @@ pub fn slice_by_columns(s: &str, start: usize, max: usize) -> (&str, usize) {
             end_byte = idx;
         }
 
-        if started {
-            if out_cols + g_width <= max {
-                out_cols += g_width;
-                end_byte = idx + grapheme.len();
-            } else {
-                break;
-            }
+        if out_cols + g_width > max {
+            break;
         }
+        out_cols += g_width;
+        end_byte = idx + grapheme.len();
 
         col += g_width;
         if out_cols >= max {
@@ -61,7 +58,6 @@ pub fn grapheme_width(grapheme: &str) -> usize {
 
 /// Expand tabs into spaces using the configured tab stop.
 pub fn expand_tabs(s: &str, tab_stop: usize) -> String {
-    let tab_stop = tab_stop.max(1);
     let mut out = String::new();
     let mut col = 0usize;
     for grapheme in s.graphemes(true) {
@@ -83,7 +79,7 @@ pub fn expand_tabs(s: &str, tab_stop: usize) -> String {
 }
 
 /// Compute the width of the next tab from the provided column.
-fn tab_width(column: usize, tab_stop: usize) -> usize {
+pub fn tab_width(column: usize, tab_stop: usize) -> usize {
     let tab_stop = tab_stop.max(1);
     let offset = column % tab_stop;
     if offset == 0 {

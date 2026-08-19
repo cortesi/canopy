@@ -8,7 +8,7 @@ use syn::{
 };
 
 use crate::model::{
-    CommandMeta, DefaultValue, DocMeta, MacroArgs, ParamKind, ParamMeta, ReturnKind, ReturnMeta,
+    CommandMeta, DefaultValue, MacroArgs, ParamKind, ParamMeta, ReturnKind, ReturnMeta,
 };
 
 /// Extract normalized documentation text from `#[doc = "..."]` attributes.
@@ -100,27 +100,17 @@ fn is_context_ref(ty: &Type) -> Option<bool> {
     let Type::Reference(reference) = ty else {
         return None;
     };
-    let mutable = reference.mutability.is_some();
-    match &*reference.elem {
-        Type::TraitObject(obj) => {
-            for bound in &obj.bounds {
-                if let TypeParamBound::Trait(trait_bound) = bound
-                    && trait_bound.path.segments.last()?.ident == "Context"
-                {
-                    return Some(mutable);
-                }
-            }
-            None
+    let Type::TraitObject(obj) = &*reference.elem else {
+        return None;
+    };
+    for bound in &obj.bounds {
+        if let TypeParamBound::Trait(trait_bound) = bound
+            && trait_bound.path.segments.last()?.ident == "Context"
+        {
+            return Some(reference.mutability.is_some());
         }
-        Type::Path(path) => {
-            if path.path.segments.last()?.ident == "Context" {
-                Some(mutable)
-            } else {
-                None
-            }
-        }
-        _ => None,
     }
+    None
 }
 
 /// True when a type is a builtin injected parameter.
@@ -180,42 +170,29 @@ fn parse_arg_default(attrs: &[Attribute]) -> Result<Option<DefaultValue>> {
 }
 
 /// Parse command return metadata from a signature.
-fn parse_return_type(output: &ReturnType) -> Result<ReturnMeta> {
-    match output {
-        ReturnType::Default => Ok(ReturnMeta {
+fn parse_return_type(output: &ReturnType, doc: Option<String>) -> ReturnMeta {
+    let ReturnType::Type(_, ty) = output else {
+        return ReturnMeta {
             is_result: false,
             kind: ReturnKind::Unit,
-            doc: None,
-        }),
-        ReturnType::Type(_, ty) => {
-            if let Some(inner) = extract_single_generic(ty, "Result") {
-                let kind = match inner {
-                    Type::Tuple(tuple) if tuple.elems.is_empty() => ReturnKind::Unit,
-                    _ => ReturnKind::Value {
-                        ty: Box::new((*inner).clone()),
-                        ty_str: type_to_string(inner),
-                    },
-                };
-                Ok(ReturnMeta {
-                    is_result: true,
-                    kind,
-                    doc: None,
-                })
-            } else {
-                let kind = match &**ty {
-                    Type::Tuple(tuple) if tuple.elems.is_empty() => ReturnKind::Unit,
-                    _ => ReturnKind::Value {
-                        ty: Box::new((**ty).clone()),
-                        ty_str: type_to_string(ty),
-                    },
-                };
-                Ok(ReturnMeta {
-                    is_result: false,
-                    kind,
-                    doc: None,
-                })
-            }
-        }
+            doc,
+        };
+    };
+    let (inner, is_result) = match extract_single_generic(ty, "Result") {
+        Some(inner) => (inner, true),
+        None => (&**ty, false),
+    };
+    let kind = match inner {
+        Type::Tuple(tuple) if tuple.elems.is_empty() => ReturnKind::Unit,
+        _ => ReturnKind::Value {
+            ty: Box::new(inner.clone()),
+            ty_str: type_to_string(inner),
+        },
+    };
+    ReturnMeta {
+        is_result,
+        kind,
+        doc,
     }
 }
 
@@ -252,12 +229,6 @@ fn parse_command_macro_args(attrs: &[Attribute]) -> Result<Option<MacroArgs>> {
     }
 
     Ok(macro_args)
-}
-
-/// Build documentation metadata for a parsed command method.
-fn build_doc_meta(attrs: &[Attribute]) -> (DocMeta, HashMap<String, String>, Option<String>) {
-    let (long, param_docs, return_doc) = extract_doc_comments(attrs);
-    (DocMeta { long }, param_docs, return_doc)
 }
 
 /// Ensure a command receiver is borrowed.
@@ -369,7 +340,7 @@ pub fn parse_command_method(owner: &str, method: &mut ImplItemFn) -> Result<Opti
     let Some(macro_args) = parse_command_macro_args(&method.attrs)? else {
         return Ok(None);
     };
-    let (doc, param_docs, return_doc) = build_doc_meta(&method.attrs);
+    let (doc, param_docs, return_doc) = extract_doc_comments(&method.attrs);
 
     let mut params = Vec::new();
     let mut has_receiver = false;
@@ -395,8 +366,7 @@ pub fn parse_command_method(owner: &str, method: &mut ImplItemFn) -> Result<Opti
         param.doc = param_docs.get(&param.name).cloned();
     }
 
-    let mut ret = parse_return_type(&method.sig.output)?;
-    ret.doc = return_doc;
+    let ret = parse_return_type(&method.sig.output, return_doc);
 
     Ok(Some(CommandMeta {
         name: method.sig.ident.to_string(),

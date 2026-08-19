@@ -169,7 +169,7 @@ fn command_param_to_arg(param: &commands::CommandParamSpec) -> ArgValue {
         ),
         ("optional".to_string(), ArgValue::Bool(param.optional)),
     ]);
-    if let Some(doc) = param.doc {
+    if let Some(doc) = param.ty.doc {
         record.insert("doc".to_string(), ArgValue::String(doc.to_string()));
     }
     if let Some(default) = param.default {
@@ -206,7 +206,7 @@ pub(super) fn command_info_to_arg(
             ArgValue::Bool(resolution.is_some()),
         ),
     ]);
-    if let Some(doc) = spec.doc.long {
+    if let Some(doc) = spec.doc {
         record.insert("doc".to_string(), ArgValue::String(doc.to_string()));
     }
     if let commands::CommandReturnSpec::Value(ty) = spec.ret

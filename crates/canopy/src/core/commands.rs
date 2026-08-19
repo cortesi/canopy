@@ -283,11 +283,11 @@ where
     T: ToArgValue,
 {
     fn to_arg_value(self) -> ArgValue {
-        let mut out = BTreeMap::new();
-        for (key, value) in self {
-            out.insert(key, value.to_arg_value());
-        }
-        ArgValue::Map(out)
+        ArgValue::Map(
+            self.into_iter()
+                .map(|(k, v)| (k, v.to_arg_value()))
+                .collect(),
+        )
     }
 }
 
@@ -351,24 +351,8 @@ impl FromArgValue for NodeId {
     }
 }
 
-/// Build a conversion error for out-of-range integers.
-fn int_out_of_range<T>(value: i64) -> CommandError {
-    CommandError::conversion(format!(
-        "value {value} out of range for {}",
-        type_name::<T>()
-    ))
-}
-
-/// Build a conversion error for out-of-range unsigned integers.
-fn uint_out_of_range<T>(value: u64) -> CommandError {
-    CommandError::conversion(format!(
-        "value {value} out of range for {}",
-        type_name::<T>()
-    ))
-}
-
-/// Build a conversion error for out-of-range floats.
-fn float_out_of_range<T>(value: f64) -> CommandError {
+/// Build a conversion error for a numeric value outside the target type's range.
+fn out_of_range<T>(value: impl fmt::Display) -> CommandError {
     CommandError::conversion(format!(
         "value {value} out of range for {}",
         type_name::<T>()
@@ -383,9 +367,9 @@ macro_rules! impl_int_from_arg_value {
                 fn from_arg_value(v: &ArgValue) -> Result<Self, CommandError> {
                     match v {
                         ArgValue::Int(value) => <$ty>::try_from(*value)
-                            .map_err(|_| int_out_of_range::<$ty>(*value)),
+                            .map_err(|_| out_of_range::<$ty>(*value)),
                         ArgValue::UInt(value) => <$ty>::try_from(*value)
-                            .map_err(|_| uint_out_of_range::<$ty>(*value)),
+                            .map_err(|_| out_of_range::<$ty>(*value)),
                         other => Err(CommandError::type_mismatch(stringify!($ty), other)),
                     }
                 }
@@ -407,7 +391,7 @@ impl FromArgValue for f32 {
         if value.is_finite() && value >= f64::from(Self::MIN) && value <= f64::from(Self::MAX) {
             Ok(value as Self)
         } else {
-            Err(float_out_of_range::<Self>(value))
+            Err(out_of_range::<Self>(value))
         }
     }
 }
@@ -923,9 +907,7 @@ pub struct CommandParamSpec {
     pub name: &'static str,
     /// Parameter kind.
     pub kind: CommandParamKind,
-    /// Optional parameter documentation.
-    pub doc: Option<&'static str>,
-    /// Type metadata.
+    /// Type metadata, including the parameter's documentation.
     pub ty: CommandTypeSpec,
     /// Whether the parameter is optional.
     pub optional: bool,
@@ -961,13 +943,6 @@ pub enum CommandDispatchKind {
     },
 }
 
-/// Documentation metadata for a command.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct CommandDocSpec {
-    /// Command documentation, taken from the method's doc comment.
-    pub long: Option<&'static str>,
-}
-
 /// Static metadata for a command.
 #[derive(Clone, Copy, Debug)]
 pub struct CommandSpec {
@@ -982,7 +957,7 @@ pub struct CommandSpec {
     /// Return spec.
     pub ret: CommandReturnSpec,
     /// Documentation metadata.
-    pub doc: CommandDocSpec,
+    pub doc: Option<&'static str>,
     /// Erased invoke entrypoint.
     pub invoke: InvokeFn,
 }
@@ -1578,7 +1553,7 @@ mod tests {
         dispatch: CommandDispatchKind::Free,
         params: &[],
         ret: CommandReturnSpec::Unit,
-        doc: CommandDocSpec { long: Some("a") },
+        doc: Some("a"),
         invoke: registry_invoke,
     };
     static REGISTRY_A_CONFLICT: CommandSpec = CommandSpec {
@@ -1587,9 +1562,7 @@ mod tests {
         dispatch: CommandDispatchKind::Free,
         params: &[],
         ret: CommandReturnSpec::Unit,
-        doc: CommandDocSpec {
-            long: Some("conflict"),
-        },
+        doc: Some("conflict"),
         invoke: registry_invoke,
     };
     static REGISTRY_B: CommandSpec = CommandSpec {
@@ -1598,7 +1571,7 @@ mod tests {
         dispatch: CommandDispatchKind::Free,
         params: &[],
         ret: CommandReturnSpec::Unit,
-        doc: CommandDocSpec { long: None },
+        doc: None,
         invoke: registry_invoke,
     };
     static REGISTRY_A_BATCH: &[&CommandSpec] = &[&REGISTRY_A];

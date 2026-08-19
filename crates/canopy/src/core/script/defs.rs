@@ -421,7 +421,7 @@ pub(crate) fn register_owner_dependencies(
 /// Compose command docs and parameter tags for a command table field.
 pub(crate) fn command_doc(spec: &CommandSpec) -> Option<String> {
     let mut lines = Vec::new();
-    if let Some(long) = spec.doc.long {
+    if let Some(long) = spec.doc {
         for line in long.lines().filter(|line| !line.trim().is_empty()) {
             lines.push(line.trim().to_string());
         }
@@ -431,7 +431,7 @@ pub(crate) fn command_doc(spec: &CommandSpec) -> Option<String> {
         .iter()
         .filter(|param| param.kind == CommandParamKind::User)
     {
-        if let Some(doc) = param.doc {
+        if let Some(doc) = param.ty.doc {
             lines.push(format!("@param {} {doc}", param.name));
         }
     }
