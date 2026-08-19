@@ -138,7 +138,7 @@ full evidence, change, and proof for each entry.
 - [x] W85: Collapse the three VM-error adapters onto ruau's `VmErrorInfo`
 - [x] W86: Finish landed item 3.4: delete `canopy_to_host`
 - [x] W87: Make `ValuePath` and the `*_at` converters private to `value.rs`
-- [ ] W88: Replace the bespoke `ArgReader` with ruau's `HostArgCursor`
+- [x] W88: Replace the bespoke `ArgReader` with ruau's `HostArgCursor`
 - [x] W89: Deduplicate the retained-runtime borrow and call plumbing in `LuauHost`
 - [x] W90: One `rendered_buffer` helper for the four screen readers in `records.rs`
 - [x] W91: Make `BaseFunction.docs` a single `&'static str`

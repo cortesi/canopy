@@ -6,9 +6,9 @@ use proptest::{
     prelude::*,
     test_runner::{TestCaseError, TestCaseResult},
 };
-use ruau::vm::{MarshaledPair, MultiValue, OwnedValue, ScopedValue};
+use ruau::vm::{HostArgCursor, MarshaledPair, MultiValue, OwnedValue, ScopedValue};
 
-use super::{base_api::ArgReader, bridge::REENTRANT_CANOPY, *};
+use super::{base_api::read_node_id, bridge::REENTRANT_CANOPY, *};
 use crate::{
     core::testing::model::trace_result,
     testing::ttree::{get_state, run_ttree},
@@ -484,8 +484,8 @@ fn retained_node_handle_is_rejected_after_removal() -> Result<()> {
             .step_with_context(c, &CallOptions::new(), |scope| {
                 let handle = scope.create_userdata(tree.a)?;
                 let values = MultiValue::from_values(vec![ScopedValue::Userdata(handle)]);
-                let error = ArgReader::new(values)
-                    .node_id(scope)
+                let mut args = HostArgCursor::new(scope, values);
+                let error = read_node_id(scope, &mut args, "id")
                     .expect_err("removed node handle should be rejected");
                 assert!(error.script_fields().iter().any(|field| {
                     field.name == "kind"

@@ -2,18 +2,19 @@
 
 use std::{
     collections::BTreeSet,
+    iter,
     result::Result as StdResult,
     sync::Arc,
     time::{Duration, Instant},
-    vec,
 };
 
 use ruau::{
     declaration::{FunctionSignature, Type},
     module::{self, Binding},
     vm::{
-        AsyncHostContext, AsyncHostFunction, FromLuaMulti, Function, HostReturn, MultiValue,
-        NativeModule, RuntimeError, Scope, ScopedValue, StashedClosure, Table, async_host_fn,
+        AsyncHostContext, AsyncHostFunction, FromLuaMulti, Function, HostArgCursor, HostReturn,
+        MultiValue, NativeModule, RuntimeError, Scope, ScopedValue, StashedClosure, Table,
+        async_host_fn,
     },
 };
 
@@ -471,15 +472,6 @@ pub(super) fn register(builder: &mut module::Builder) {
     );
 }
 
-/// Convert raw integer coordinates into a canopy point.
-fn point_from_coords(x: i64, y: i64) -> Result<Point> {
-    let x = u32::try_from(x)
-        .map_err(|_| error::Error::Script(format!("x coordinate must be >= 0, got {x}")))?;
-    let y = u32::try_from(y)
-        .map_err(|_| error::Error::Script(format!("y coordinate must be >= 0, got {y}")))?;
-    Ok(Point { x, y })
-}
-
 /// Parsed options for script-created bindings.
 #[derive(Debug, Clone)]
 struct ScriptBindOptions {
@@ -567,104 +559,36 @@ fn parse_unbind_selector<'s>(
     })
 }
 
-/// Positional argument reader over a host call's values.
-pub(super) struct ArgReader<'s> {
-    /// Remaining argument values, in order.
-    values: vec::IntoIter<ScopedValue<'s>>,
-    /// One-based index of the next argument, for error messages.
-    index: usize,
+/// Read a required node-id argument, validating the handle against the live tree.
+pub(super) fn read_node_id<'s>(
+    scope: &Scope<'s>,
+    args: &mut HostArgCursor<'_, 's>,
+    name: &str,
+) -> StdResult<NodeId, RuntimeError> {
+    let value = args
+        .raw()
+        .ok_or_else(|| RuntimeError::runtime(format!("argument `{name}` is required")))?;
+    let node_id = node_id_from_value(scope, value)?;
+    with_current_canopy(scope, |canopy, _| {
+        validate_node_handle(&canopy.core, node_id).map(|()| node_id)
+    })
+    .map_err(RuntimeError::from)
 }
 
-impl<'s> ArgReader<'s> {
-    /// Wrap a host call's arguments.
-    pub(super) fn new(args: MultiValue<'s>) -> Self {
-        Self {
-            values: args.into_vec().into_iter(),
-            index: 0,
-        }
-    }
-
-    /// Take the next argument, `Nil` when exhausted.
-    pub(super) fn next_value(&mut self) -> ScopedValue<'s> {
-        self.index += 1;
-        self.values.next().unwrap_or(ScopedValue::Nil)
-    }
-
-    /// Take the remaining arguments.
-    pub(super) fn rest(self) -> Vec<ScopedValue<'s>> {
-        self.values.collect()
-    }
-
-    /// Take a required string argument.
-    pub(super) fn string(&mut self, scope: &Scope<'s>) -> StdResult<String, RuntimeError> {
-        let index = self.index + 1;
-        scoped_value_to_string(scope, self.next_value())
-            .map_err(|message| RuntimeError::runtime(format!("argument {index}: {message}")))
-    }
-
-    /// Take a required integer argument.
-    pub(super) fn integer(&mut self, _scope: &Scope<'s>) -> StdResult<i64, RuntimeError> {
-        let index = self.index + 1;
-        match self.next_value() {
-            ScopedValue::Integer(value) => Ok(value),
-            ScopedValue::Number(value) if value.fract() == 0.0 => Ok(value as i64),
-            other => Err(RuntimeError::runtime(format!(
-                "argument {index}: expected integer, got {}",
-                other.type_name()
-            ))),
-        }
-    }
-
-    /// Take a required node id argument.
-    pub(super) fn node_id(&mut self, scope: &Scope<'s>) -> StdResult<NodeId, RuntimeError> {
-        let node_id = node_id_from_value(scope, self.next_value())?;
-        with_current_canopy(scope, |canopy, _| {
-            validate_node_handle(&canopy.core, node_id).map(|()| node_id)
-        })
-        .map_err(RuntimeError::from)
-    }
-
-    /// Take an optional node id argument.
-    pub(super) fn opt_node_id(
-        &mut self,
-        scope: &Scope<'s>,
-    ) -> StdResult<Option<NodeId>, RuntimeError> {
-        let next = self.next_value();
-        if matches!(next, ScopedValue::Nil) {
-            return Ok(None);
-        }
-        let node_id = node_id_from_value(scope, next)?;
-        with_current_canopy(scope, |canopy, _| {
-            validate_node_handle(&canopy.core, node_id).map(|()| Some(node_id))
-        })
-        .map_err(RuntimeError::from)
-    }
-
-    /// Take a required function argument.
-    pub(super) fn function(&mut self, _scope: &Scope<'s>) -> StdResult<Function<'s>, RuntimeError> {
-        let index = self.index + 1;
-        match self.next_value() {
-            ScopedValue::Function(function) => Ok(function),
-            other => Err(RuntimeError::runtime(format!(
-                "argument {index}: expected function, got {}",
-                other.type_name()
-            ))),
-        }
-    }
-
-    /// Take an optional table argument.
-    pub(super) fn opt_table(
-        &mut self,
-        _scope: &Scope<'s>,
-    ) -> StdResult<Option<Table<'s>>, RuntimeError> {
-        let index = self.index + 1;
-        match self.next_value() {
-            ScopedValue::Nil => Ok(None),
-            ScopedValue::Table(table) => Ok(Some(table)),
-            other => Err(RuntimeError::runtime(format!(
-                "argument {index}: expected table, got {}",
-                other.type_name()
-            ))),
+/// Read an optional node-id argument, validating a present handle against the live tree.
+fn read_opt_node_id<'s>(
+    scope: &Scope<'s>,
+    args: &mut HostArgCursor<'_, 's>,
+    _name: &str,
+) -> StdResult<Option<NodeId>, RuntimeError> {
+    match args.raw() {
+        None | Some(ScopedValue::Nil) => Ok(None),
+        Some(value) => {
+            let node_id = node_id_from_value(scope, value)?;
+            with_current_canopy(scope, |canopy, _| {
+                validate_node_handle(&canopy.core, node_id).map(|()| Some(node_id))
+            })
+            .map_err(RuntimeError::from)
         }
     }
 }
@@ -679,9 +603,9 @@ struct WaitForArgs {
 
 impl<'s> FromLuaMulti<'s> for WaitForArgs {
     fn from_lua_multi(values: MultiValue<'s>, scope: &Scope<'s>) -> StdResult<Self, RuntimeError> {
-        let mut args = ArgReader::new(values);
-        let predicate = scope.stash_function(args.function(scope)?)?;
-        let timeout_ms = optional_timeout_ms(args.next_value())?;
+        let mut args = HostArgCursor::new(scope, values);
+        let predicate = scope.stash_function(args.required::<Function<'_>>("predicate")?)?;
+        let timeout_ms = args.optional::<u64>("timeout_ms")?;
         Ok(Self {
             predicate,
             timeout_ms,
@@ -699,9 +623,9 @@ struct WaitForNodeArgs {
 
 impl<'s> FromLuaMulti<'s> for WaitForNodeArgs {
     fn from_lua_multi(values: MultiValue<'s>, scope: &Scope<'s>) -> StdResult<Self, RuntimeError> {
-        let mut args = ArgReader::new(values);
-        let owner = args.string(scope)?;
-        let timeout_ms = optional_timeout_ms(args.next_value())?;
+        let mut args = HostArgCursor::new(scope, values);
+        let owner = args.required::<String>("owner")?;
+        let timeout_ms = args.optional::<u64>("timeout_ms")?;
         Ok(Self { owner, timeout_ms })
     }
 }
@@ -716,25 +640,10 @@ struct WaitForScreenTextArgs {
 
 impl<'s> FromLuaMulti<'s> for WaitForScreenTextArgs {
     fn from_lua_multi(values: MultiValue<'s>, scope: &Scope<'s>) -> StdResult<Self, RuntimeError> {
-        let mut args = ArgReader::new(values);
-        let text = args.string(scope)?;
-        let timeout_ms = optional_timeout_ms(args.next_value())?;
+        let mut args = HostArgCursor::new(scope, values);
+        let text = args.required::<String>("text")?;
+        let timeout_ms = args.optional::<u64>("timeout_ms")?;
         Ok(Self { text, timeout_ms })
-    }
-}
-
-/// Parse an optional millisecond timeout from a script argument.
-fn optional_timeout_ms(value: ScopedValue<'_>) -> StdResult<Option<u64>, RuntimeError> {
-    match value {
-        ScopedValue::Nil => Ok(None),
-        ScopedValue::Integer(value) if value >= 0 => Ok(Some(value as u64)),
-        ScopedValue::Number(value) if value.fract() == 0.0 && value >= 0.0 => {
-            Ok(Some(value as u64))
-        }
-        other => Err(RuntimeError::runtime(format!(
-            "expected non-negative timeout milliseconds, got {}",
-            other.type_name()
-        ))),
     }
 }
 
@@ -903,9 +812,9 @@ fn host_cmd<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = ArgReader::new(args);
-    let name = args.string(scope)?;
-    let values = values_to_args(scope, args.rest())?;
+    let mut args = HostArgCursor::new(scope, args);
+    let name = args.required::<String>("name")?;
+    let values = values_to_args(scope, iter::from_fn(|| args.raw()).collect())?;
     let result = dispatch_command_by_name(scope, &name, None, values)?;
     ret_arg(scope, &result)
 }
@@ -915,10 +824,10 @@ fn host_cmd_on<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = ArgReader::new(args);
-    let node_id = args.node_id(scope)?;
-    let name = args.string(scope)?;
-    let values = values_to_args(scope, args.rest())?;
+    let mut args = HostArgCursor::new(scope, args);
+    let node_id = read_node_id(scope, &mut args, "id")?;
+    let name = args.required::<String>("name")?;
+    let values = values_to_args(scope, iter::from_fn(|| args.raw()).collect())?;
     let result = dispatch_command_by_name(scope, &name, Some(node_id), values)?;
     ret_arg(scope, &result)
 }
@@ -928,8 +837,8 @@ fn host_log<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = ArgReader::new(args);
-    let message = args.next_value().display(scope);
+    let mut args = HostArgCursor::new(scope, args);
+    let message = args.raw().unwrap_or(ScopedValue::Nil).display(scope);
     tracing::info!("{message}");
     with_current_canopy(scope, |canopy, _| {
         canopy.script_host.push_log(message);
@@ -943,12 +852,12 @@ fn host_assert<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = ArgReader::new(args);
+    let mut args = HostArgCursor::new(scope, args);
     let condition = !matches!(
-        args.next_value(),
+        args.raw().unwrap_or(ScopedValue::Nil),
         ScopedValue::Nil | ScopedValue::Boolean(false)
     );
-    let message = match args.next_value() {
+    let message = match args.raw().unwrap_or(ScopedValue::Nil) {
         ScopedValue::Nil => "assertion failed".to_string(),
         value => scoped_value_to_string(scope, value).map_err(RuntimeError::runtime)?,
     };
@@ -992,8 +901,8 @@ fn host_node_info<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = ArgReader::new(args);
-    let node_id = args.node_id(scope)?;
+    let mut args = HostArgCursor::new(scope, args);
+    let node_id = read_node_id(scope, &mut args, "id")?;
     host_value(scope, |canopy, _| {
         node_info_to_arg(canopy, node_id).map(ArgValue::Map)
     })
@@ -1004,8 +913,8 @@ fn host_find_node<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = ArgReader::new(args);
-    let pattern = args.string(scope)?;
+    let mut args = HostArgCursor::new(scope, args);
+    let pattern = args.required::<String>("pattern")?;
     host_value(scope, |canopy, _| {
         let filter = PathFilter::normalized(&pattern)?;
         let root_ctx = CoreViewContext::new(&canopy.core, canopy.core.root_id());
@@ -1021,8 +930,8 @@ fn host_find_nodes<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = ArgReader::new(args);
-    let pattern = args.string(scope)?;
+    let mut args = HostArgCursor::new(scope, args);
+    let pattern = args.required::<String>("pattern")?;
     host_value(scope, |canopy, _| {
         let filter = PathFilter::normalized(&pattern)?;
         let root_ctx = CoreViewContext::new(&canopy.core, canopy.core.root_id());
@@ -1035,8 +944,8 @@ fn host_parent<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = ArgReader::new(args);
-    let node_id = args.node_id(scope)?;
+    let mut args = HostArgCursor::new(scope, args);
+    let node_id = read_node_id(scope, &mut args, "id")?;
     host_value(scope, |canopy, _| {
         let root_ctx = CoreViewContext::new(&canopy.core, canopy.core.root_id());
         Ok(root_ctx
@@ -1051,8 +960,8 @@ fn host_children<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = ArgReader::new(args);
-    let node_id = args.node_id(scope)?;
+    let mut args = HostArgCursor::new(scope, args);
+    let node_id = read_node_id(scope, &mut args, "id")?;
     host_value(scope, |canopy, _| {
         let root_ctx = CoreViewContext::new(&canopy.core, canopy.core.root_id());
         Ok(node_list_to_arg(root_ctx.children_of(node_id)))
@@ -1074,8 +983,8 @@ fn host_set_focus<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = ArgReader::new(args);
-    let node_id = args.node_id(scope)?;
+    let mut args = HostArgCursor::new(scope, args);
+    let node_id = read_node_id(scope, &mut args, "id")?;
     let focused = with_current_canopy(scope, |canopy, _| {
         let root_id = canopy.core.root_id();
         let mut ctx = CoreContext::new(&mut canopy.core, root_id);
@@ -1089,13 +998,13 @@ fn host_node_at<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = ArgReader::new(args);
-    let x = args.integer(scope)?;
-    let y = args.integer(scope)?;
+    let mut args = HostArgCursor::new(scope, args);
+    let x = args.required::<u32>("x")?;
+    let y = args.required::<u32>("y")?;
     host_value(scope, |canopy, _| {
         Ok(canopy
             .core
-            .locate_node(canopy.core.root_id(), point_from_coords(x, y)?)?
+            .locate_node(canopy.core.root_id(), Point { x, y })?
             .map(node_id_to_arg)
             .unwrap_or(ArgValue::Null))
     })
@@ -1134,8 +1043,8 @@ fn host_focus_dir<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = ArgReader::new(args);
-    let dir = args.string(scope)?;
+    let mut args = HostArgCursor::new(scope, args);
+    let dir = args.required::<String>("dir")?;
     with_current_canopy(scope, |canopy, _| {
         let dir = commands::FromArgValue::from_arg_value(&ArgValue::String(dir))
             .map_err(error::Error::from)?;
@@ -1152,8 +1061,8 @@ fn host_send_key<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = ArgReader::new(args);
-    let key_spec = args.string(scope)?;
+    let mut args = HostArgCursor::new(scope, args);
+    let key_spec = args.required::<String>("key")?;
     with_current_canopy(scope, |canopy, _| {
         let key = key::Key::parse_spec(&key_spec).map_err(error::Error::Script)?;
         let _reentrant = ReentrantCanopyGuard::push(canopy);
@@ -1167,11 +1076,10 @@ fn host_send_click<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = ArgReader::new(args);
-    let x = args.integer(scope)?;
-    let y = args.integer(scope)?;
+    let mut args = HostArgCursor::new(scope, args);
+    let x = args.required::<u32>("x")?;
+    let y = args.required::<u32>("y")?;
     with_current_canopy(scope, |canopy, _| {
-        let location = point_from_coords(x, y)?;
         let _reentrant = ReentrantCanopyGuard::push(canopy);
         canopy.mouse(
             Some(scope),
@@ -1179,7 +1087,7 @@ fn host_send_click<'s>(
                 action: mouse::Action::Down,
                 button: mouse::Button::Left,
                 modifiers: key::Empty,
-                location,
+                location: Point { x, y },
             },
         )?;
         canopy.mouse(
@@ -1188,7 +1096,7 @@ fn host_send_click<'s>(
                 action: mouse::Action::Up,
                 button: mouse::Button::Left,
                 modifiers: key::Empty,
-                location,
+                location: Point { x, y },
             },
         )
     })?;
@@ -1200,10 +1108,10 @@ fn host_send_scroll<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = ArgReader::new(args);
-    let dir = args.string(scope)?;
-    let x = args.integer(scope)?;
-    let y = args.integer(scope)?;
+    let mut args = HostArgCursor::new(scope, args);
+    let dir = args.required::<String>("direction")?;
+    let x = args.required::<u32>("x")?;
+    let y = args.required::<u32>("y")?;
     with_current_canopy(scope, |canopy, _| {
         let action = if dir.eq_ignore_ascii_case("up") {
             mouse::Action::ScrollUp
@@ -1221,7 +1129,7 @@ fn host_send_scroll<'s>(
                 action,
                 button: mouse::Button::None,
                 modifiers: key::Empty,
-                location: point_from_coords(x, y)?,
+                location: Point { x, y },
             },
         )
     })?;
@@ -1268,8 +1176,8 @@ fn host_resolve<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = ArgReader::new(args);
-    let owner = args.string(scope)?;
+    let mut args = HostArgCursor::new(scope, args);
+    let owner = args.required::<String>("owner")?;
     host_value(scope, |canopy, node_id| {
         let resolver = commands::CommandResolver::new(&canopy.core, node_id);
         Ok(resolver
@@ -1293,8 +1201,8 @@ fn host_set_mode<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = ArgReader::new(args);
-    let mode = args.string(scope)?;
+    let mut args = HostArgCursor::new(scope, args);
+    let mode = args.required::<String>("mode")?;
     with_current_canopy(scope, |canopy, _| {
         canopy.set_input_mode(&mode)?;
         Ok(())
@@ -1307,8 +1215,8 @@ fn host_push_mode<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = ArgReader::new(args);
-    let mode = args.string(scope)?;
+    let mut args = HostArgCursor::new(scope, args);
+    let mode = args.required::<String>("mode")?;
     with_current_canopy(scope, |canopy, _| {
         canopy.push_input_mode(&mode)?;
         Ok(())
@@ -1330,10 +1238,10 @@ fn host_bind<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = ArgReader::new(args);
-    let key_spec = args.string(scope)?;
-    let options = parse_bind_options(scope, args.opt_table(scope)?)?;
-    let function = args.function(scope)?;
+    let mut args = HostArgCursor::new(scope, args);
+    let key_spec = args.required::<String>("key")?;
+    let options = parse_bind_options(scope, args.optional::<Table<'_>>("options")?)?;
+    let function = args.required::<Function<'_>>("handler")?;
     let input =
         inputmap::InputSpec::Key(key::Key::parse_spec(&key_spec).map_err(error::Error::Script)?);
     let id = install_function_binding(scope, function, input, &options)?;
@@ -1345,10 +1253,10 @@ fn host_bind_mouse<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = ArgReader::new(args);
-    let mouse_spec = args.string(scope)?;
-    let options = parse_bind_options(scope, args.opt_table(scope)?)?;
-    let function = args.function(scope)?;
+    let mut args = HostArgCursor::new(scope, args);
+    let mouse_spec = args.required::<String>("mouse")?;
+    let options = parse_bind_options(scope, args.optional::<Table<'_>>("options")?)?;
+    let function = args.required::<Function<'_>>("handler")?;
     let input = inputmap::InputSpec::Mouse(
         mouse::Mouse::parse_spec(&mouse_spec).map_err(error::Error::Script)?,
     );
@@ -1361,10 +1269,10 @@ fn host_unbind<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = ArgReader::new(args);
-    let id = args.integer(scope)?;
+    let mut args = HostArgCursor::new(scope, args);
+    let id = args.required::<u64>("id")?;
     let removed = with_current_canopy(scope, |canopy, _| {
-        canopy.unbind(inputmap::BindingId::from_u64(id as u64))
+        canopy.unbind(inputmap::BindingId::from_u64(id))
     })?;
     Ok(ret_one(ScopedValue::Boolean(removed)))
 }
@@ -1374,9 +1282,9 @@ fn host_unbind_key<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = ArgReader::new(args);
-    let key_spec = args.string(scope)?;
-    let options = parse_unbind_selector(scope, args.opt_table(scope)?)?;
+    let mut args = HostArgCursor::new(scope, args);
+    let key_spec = args.required::<String>("key")?;
+    let options = parse_unbind_selector(scope, args.optional::<Table<'_>>("options")?)?;
     with_current_canopy(scope, |canopy, _| {
         let key = key::Key::parse_spec(&key_spec).map_err(error::Error::Script)?;
         let scope = options
@@ -1439,16 +1347,17 @@ fn host_screen_region<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = ArgReader::new(args);
-    let x = args.integer(scope)?;
-    let y = args.integer(scope)?;
-    let w = args.integer(scope)?;
-    let h = args.integer(scope)?;
+    let mut args = HostArgCursor::new(scope, args);
+    let x = args.required::<i64>("x")?;
+    let y = args.required::<i64>("y")?;
+    let w = args.required::<i64>("w")?;
+    let h = args.required::<i64>("h")?;
+    // Out-of-range coordinates clamp to the screen bounds rather than failing.
     let rect = RectI32::new(
         i32::try_from(x).unwrap_or(if x < 0 { i32::MIN } else { i32::MAX }),
         i32::try_from(y).unwrap_or(if y < 0 { i32::MIN } else { i32::MAX }),
-        u32::try_from(w.max(0)).unwrap_or(u32::MAX),
-        u32::try_from(h.max(0)).unwrap_or(u32::MAX),
+        u32::try_from(w).unwrap_or(u32::MAX),
+        u32::try_from(h).unwrap_or(u32::MAX),
     );
     let text = with_current_canopy(scope, |canopy, _| screen_text_for_rect(canopy, rect))?;
     Ok(ret_one(ScopedValue::String(scope.create_string(&text)?)))
@@ -1459,8 +1368,8 @@ fn host_node_region<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = ArgReader::new(args);
-    let node_id = args.node_id(scope)?;
+    let mut args = HostArgCursor::new(scope, args);
+    let node_id = read_node_id(scope, &mut args, "id")?;
     let text = with_current_canopy(scope, |canopy, _| {
         canopy.refresh_snapshot()?;
         let view = canopy
@@ -1487,8 +1396,8 @@ fn host_diagnostic_dump<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = ArgReader::new(args);
-    let requested = args.opt_node_id(scope)?;
+    let mut args = HostArgCursor::new(scope, args);
+    let requested = read_opt_node_id(scope, &mut args, "id")?;
     let dump = with_current_canopy(scope, |canopy, node_id| {
         let target = requested.unwrap_or(node_id);
         Ok(canopy.diagnostic_dump(target))
@@ -1501,8 +1410,8 @@ fn host_available_bindings<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = ArgReader::new(args);
-    let requested = args.opt_node_id(scope)?;
+    let mut args = HostArgCursor::new(scope, args);
+    let requested = read_opt_node_id(scope, &mut args, "id")?;
     host_value(scope, |canopy, _| {
         available_bindings_to_arg(canopy, requested)
     })
@@ -1530,8 +1439,8 @@ fn host_on_start<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = ArgReader::new(args);
-    let function = args.function(scope)?;
+    let mut args = HostArgCursor::new(scope, args);
+    let function = args.required::<Function<'_>>("handler")?;
     let stashed = scope.stash_function(function)?;
     with_current_canopy(scope, |canopy, _| {
         let function_id = canopy.script_host.store_function(stashed)?;
@@ -1590,7 +1499,8 @@ pub(super) fn build_owner_modules(
                 spec.name,
                 binding,
                 move |scope: &Scope<'_>, args: MultiValue<'_>| {
-                    let values = values_to_args(scope, ArgReader::new(args).rest())?;
+                    let mut args = HostArgCursor::new(scope, args);
+                    let values = values_to_args(scope, iter::from_fn(|| args.raw()).collect())?;
                     let node_id = with_current_canopy(scope, |_, node_id| Ok(node_id))?;
                     let result = dispatch_command(scope, spec, node_id, values)?;
                     ret_arg(scope, &result)
