@@ -8,7 +8,6 @@ mod tests {
         error::{Error, Result},
         geom::{Direction, Size},
         layout::Layout,
-        render::Render,
         state::NodeName,
         testing::grid::Grid,
     };
@@ -56,10 +55,6 @@ mod tests {
     impl Widget for FocusLeaf {
         fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
             true
-        }
-
-        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-            Ok(())
         }
 
         fn name(&self) -> NodeName {

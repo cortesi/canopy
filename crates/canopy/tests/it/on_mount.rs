@@ -3,10 +3,9 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Context, Loader, NodeId, TypedId, ViewContext, Widget,
+        Context, Loader, NodeId, TypedId, Widget,
         commands::{CommandNode, CommandSpec},
         error::Result,
-        render::Render,
         state::NodeName,
         testing::harness::Harness,
     };
@@ -36,10 +35,6 @@ mod tests {
     }
 
     impl Widget for MountProbe {
-        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-            Ok(())
-        }
-
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
             self.mount_calls += 1;
             self.mounted_id = Some(ctx.node_id());
@@ -77,10 +72,6 @@ mod tests {
     }
 
     impl Widget for ChildProbe {
-        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-            Ok(())
-        }
-
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
             self.mount_calls += 1;
             self.mounted_id = Some(ctx.node_id());

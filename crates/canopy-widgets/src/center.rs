@@ -1,10 +1,8 @@
 //! Center widget for centering content.
 
 use canopy::{
-    ViewContext, Widget, derive_commands,
-    error::Result,
+    Widget, derive_commands,
     layout::{Align, Direction, Layout},
-    render::Render,
     state::NodeName,
 };
 
@@ -37,10 +35,6 @@ impl Widget for Center {
             .direction(Direction::Stack)
             .align_horizontal(Align::Center)
             .align_vertical(Align::Center)
-    }
-
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-        Ok(())
     }
 
     fn name(&self) -> NodeName {

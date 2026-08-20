@@ -564,8 +564,8 @@ fn script_error_info(error: &crate::Error) -> ScriptErrorInfo {
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Fixture, ViewContext, command, commands::FocusDirection, derive_commands,
-        error::Result as CanopyResult, prelude::*,
+        Fixture, command, commands::FocusDirection, derive_commands, error::Result as CanopyResult,
+        prelude::*,
     };
 
     use super::*;
@@ -606,10 +606,6 @@ mod tests {
     }
 
     impl Widget for ScriptTarget {
-        fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> CanopyResult<()> {
-            Ok(())
-        }
-
         fn name(&self) -> NodeName {
             NodeName::convert("script_target")
         }

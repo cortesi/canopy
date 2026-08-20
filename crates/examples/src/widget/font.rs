@@ -3,10 +3,9 @@
 use std::time::Duration;
 
 use canopy::{
-    Context, TypedId, ViewContext, Widget,
+    Context, TypedId, Widget,
     error::{Error, Result},
     layout::{Align, Layout},
-    render::Render,
     rgb,
     state::NodeName,
     style::StyleMap,
@@ -163,10 +162,6 @@ impl Widget for FontDemo {
             self.pending_exit = true;
         }
         Some(interval)
-    }
-
-    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-        Ok(())
     }
 
     fn name(&self) -> NodeName {

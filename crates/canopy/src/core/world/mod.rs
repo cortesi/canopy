@@ -13,12 +13,11 @@ use super::{
     widget_access::{WidgetMutGuard, WidgetReadGuard, WidgetSlotGuard},
 };
 use crate::{
-    ChangeOutcome, ViewContext,
+    ChangeOutcome,
     commands::{CommandScopeFrame, CommandSet},
     core::{context::CoreContext, id::NodeId, node::Node},
     error::{Error, NodeOperationKind, Result},
     layout::Layout,
-    render::Render,
     state::NodeName,
     style::StyleMap,
     widget::Widget,
@@ -343,10 +342,6 @@ struct RootContainer;
 impl Widget for RootContainer {
     fn layout(&self) -> Layout {
         Layout::fill()
-    }
-
-    fn render(&mut self, _frame: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-        Ok(())
     }
 
     fn name(&self) -> NodeName {

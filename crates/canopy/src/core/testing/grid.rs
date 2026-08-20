@@ -64,10 +64,6 @@ impl Widget for GridNode {
         }
     }
 
-    fn render(&mut self, _r: &mut crate::render::Render, _ctx: &dyn ViewContext) -> Result<()> {
-        Ok(())
-    }
-
     fn name(&self) -> NodeName {
         NodeName::convert(&self.name)
     }

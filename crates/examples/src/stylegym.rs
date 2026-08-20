@@ -410,20 +410,12 @@ struct Container;
 impl Container {}
 
 impl Widget for Container {
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-        Ok(())
-    }
-
     fn layout(&self) -> Layout {
         Layout::fill()
     }
 }
 
 impl Widget for Stylegym {
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-        Ok(())
-    }
-
     fn layout(&self) -> Layout {
         Layout::fill().direction(Direction::Row)
     }

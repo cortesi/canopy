@@ -7,7 +7,6 @@ mod tests {
         error::Result,
         geom::{Point, Size},
         path::Path,
-        render::Render,
         state::NodeName,
         testing::grid::Grid,
     };
@@ -26,10 +25,6 @@ mod tests {
     }
 
     impl Widget for TreeWidget {
-        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-            Ok(())
-        }
-
         fn name(&self) -> NodeName {
             NodeName::convert(&self.name)
         }

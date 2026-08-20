@@ -201,10 +201,6 @@ impl Widget for CharGym {
         c.set_layout(Layout::fill())?;
         Ok(())
     }
-
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-        Ok(())
-    }
 }
 
 impl Loader for CharGym {

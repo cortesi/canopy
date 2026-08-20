@@ -199,10 +199,6 @@ impl Widget for FrameGym {
         c.set_layout_of(pattern_id, Layout::fill())?;
         Ok(())
     }
-
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-        Ok(())
-    }
 }
 
 impl Loader for FrameGym {

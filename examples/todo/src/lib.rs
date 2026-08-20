@@ -137,11 +137,7 @@ struct MainContent;
 #[derive_commands]
 impl MainContent {}
 
-impl Widget for MainContent {
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-        Ok(())
-    }
-}
+impl Widget for MainContent {}
 
 /// Root node for the todo demo.
 pub(crate) struct Todo {
@@ -396,10 +392,6 @@ impl Widget for Todo {
 
     fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
-    }
-
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn canopy::ViewContext) -> Result<()> {
-        Ok(())
     }
 }
 

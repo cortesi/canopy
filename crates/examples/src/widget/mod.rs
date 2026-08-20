@@ -3,10 +3,9 @@
 use std::time::Duration;
 
 use canopy::{
-    Context, NodeId, TypedId, ViewContext, Widget,
+    Context, NodeId, TypedId, Widget,
     error::{Error, Result},
     layout::{Edges, Layout},
-    render::Render,
     state::NodeName,
     style::{Color, Paint, StyleMap},
 };
@@ -129,10 +128,6 @@ impl Widget for DemoHost {
         if !self.frame {
             ctx.set_layout_of(sized_id, Layout::fill())?;
         }
-        Ok(())
-    }
-
-    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 

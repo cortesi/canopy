@@ -21,10 +21,6 @@ impl Widget for PaneColumn {
         Layout::fill()
     }
 
-    fn render(&mut self, _rndr: &mut canopy::render::Render, _ctx: &dyn ViewContext) -> Result<()> {
-        Ok(())
-    }
-
     fn name(&self) -> NodeName {
         NodeName::convert("pane_column")
     }
@@ -187,10 +183,6 @@ impl Default for Panes {
 }
 
 impl Widget for Panes {
-    fn render(&mut self, _rndr: &mut canopy::render::Render, _ctx: &dyn ViewContext) -> Result<()> {
-        Ok(())
-    }
-
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         self.sync_layout(c)
     }

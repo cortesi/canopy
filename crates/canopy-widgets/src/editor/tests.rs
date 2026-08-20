@@ -1,25 +1,23 @@
 use std::sync::{
-    atomic::{AtomicUsize, Ordering},
     Arc,
+    atomic::{AtomicUsize, Ordering},
 };
 
 use canopy::{
-    buf, command, derive_commands,
+    Canopy, Context, FocusScope, Loader, Widget, buf, command, derive_commands,
     error::Result,
     event::{key, mouse},
     geom::Point,
     layout::Layout,
-    render::Render,
     state::NodeName,
     style::{AttrSet, Color, Paint, PartialStyle, Style, StyleManager},
     testing::harness::Harness,
-    Canopy, Context, FocusScope, Loader, ViewContext, Widget,
 };
 
 use super::{Selection, TextPosition, TextRange};
 use crate::editor::{
-    highlight::{HighlightSpan, Highlighter},
     EditMode, Editor, EditorConfig, LineNumbers, WrapMode,
+    highlight::{HighlightSpan, Highlighter},
 };
 
 canopy::key!(EditorSlot: Editor);
@@ -58,10 +56,6 @@ impl EditorHost {
 }
 
 impl Widget for EditorHost {
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-        Ok(())
-    }
-
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         let editor = Editor::with_config(self.text.clone(), self.config.clone());
         let editor_id = c.add_keyed::<EditorSlot>(editor)?;

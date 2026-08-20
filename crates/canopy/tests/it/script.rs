@@ -85,10 +85,6 @@ mod tests {
             Layout::row()
         }
 
-        fn render(&mut self, _frame: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-            Ok(())
-        }
-
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
             let left = ctx.add_child(ApiLeaf::new())?;
             let right = ctx.add_child(ApiLeaf::new())?;
@@ -852,11 +848,7 @@ mod tests {
         }
     }
 
-    impl Widget for ScriptTarget {
-        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-            Ok(())
-        }
-    }
+    impl Widget for ScriptTarget {}
 
     impl Loader for ScriptTarget {
         fn load(c: &mut Canopy) -> Result<()> {

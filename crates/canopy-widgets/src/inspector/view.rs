@@ -1,6 +1,5 @@
 use canopy::{
-    Context, NodeId, ViewContext, Widget, derive_commands, error::Result, layout::Layout,
-    state::NodeName,
+    Context, NodeId, Widget, derive_commands, error::Result, layout::Layout, state::NodeName,
 };
 
 /// View contains the body of the inspector.
@@ -9,10 +8,6 @@ pub struct View;
 impl Widget for View {
     fn layout(&self) -> Layout {
         Layout::fill()
-    }
-
-    fn render(&mut self, _rndr: &mut canopy::render::Render, _ctx: &dyn ViewContext) -> Result<()> {
-        Ok(())
     }
 
     fn name(&self) -> NodeName {

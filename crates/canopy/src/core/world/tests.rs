@@ -12,7 +12,7 @@ use super::{
     *,
 };
 use crate::{
-    Context, KeyedChildren,
+    Context, KeyedChildren, ViewContext,
     core::{
         context::{CoreContext, CoreViewContext},
         inputmap::FrameworkBindingGroup,

@@ -5,7 +5,7 @@ mod tests {
     use std::{any::Any, cell::RefCell, collections::BTreeMap};
 
     use canopy::{
-        Canopy, CommandArg, CommandEnum, Context, ViewContext, Widget, command,
+        Canopy, CommandArg, CommandEnum, Context, Widget, command,
         commands::{
             ArgValue, CommandArgs, CommandDispatchKind, CommandError, CommandInvocation,
             CommandResolution, FromArgValue, SerdeArg, ToArgValue,
@@ -13,7 +13,6 @@ mod tests {
         derive_commands,
         error::Result,
         event::Event,
-        render::Render,
         testing::dummyctx::DummyContext,
     };
     use serde::{Deserialize, Serialize};
@@ -43,11 +42,7 @@ mod tests {
         }
     }
 
-    impl Widget for TestLeaf {
-        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-            Ok(())
-        }
-    }
+    impl Widget for TestLeaf {}
 
     struct TestBranch;
 
@@ -61,11 +56,7 @@ mod tests {
         }
     }
 
-    impl Widget for TestBranch {
-        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-            Ok(())
-        }
-    }
+    impl Widget for TestBranch {}
 
     #[test]
     fn test_command_dispatch() -> Result<()> {

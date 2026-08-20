@@ -95,10 +95,6 @@ impl Widget for TextGym {
         c.set_layout_of(stack_id, Layout::fill())?;
         Ok(())
     }
-
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-        Ok(())
-    }
 }
 
 /// Wrap a text widget in a titled frame.

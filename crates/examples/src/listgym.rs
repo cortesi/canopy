@@ -320,10 +320,6 @@ impl Widget for ListGym {
         })?;
         Ok(())
     }
-
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-        Ok(())
-    }
 }
 
 impl Loader for ListGym {

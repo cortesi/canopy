@@ -240,10 +240,6 @@ impl FocusGym {
 }
 
 impl Widget for FocusGym {
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-        Ok(())
-    }
-
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         c.set_layout(Layout::fill())?;
         let root_block = c.add_child(Block::new(true))?;

@@ -142,10 +142,6 @@ impl Widget for TerminalStack {
     fn layout(&self) -> Layout {
         Layout::fill().direction(Direction::Stack)
     }
-
-    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-        Ok(())
-    }
 }
 
 /// Multi-terminal demo widget.

@@ -224,11 +224,7 @@ impl StaticWidget {
     }
 }
 
-impl Widget for StaticWidget {
-    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-        Ok(())
-    }
-}
+impl Widget for StaticWidget {}
 
 pub struct FailRenderWidget;
 
@@ -991,10 +987,6 @@ fn zero_size_child_ok() -> Result<()> {
     impl Child {}
 
     impl Widget for Child {
-        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-            Ok(())
-        }
-
         fn name(&self) -> NodeName {
             NodeName::convert("child")
         }
@@ -1010,10 +1002,6 @@ fn zero_size_child_ok() -> Result<()> {
     }
 
     impl Widget for Parent {
-        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-            Ok(())
-        }
-
         fn name(&self) -> NodeName {
             NodeName::convert("parent")
         }

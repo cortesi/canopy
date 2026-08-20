@@ -29,10 +29,6 @@ impl Widget for Pager {
         c.set_layout(Layout::fill())?;
         Ok(())
     }
-
-    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-        Ok(())
-    }
 }
 
 impl Loader for Pager {

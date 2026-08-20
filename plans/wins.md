@@ -52,7 +52,7 @@ full evidence, change, and proof.
 
 **Duplication and line count**
 
-- [ ] W21: Delete forty-one empty `render` overrides
+- [x] W21: Delete forty-one empty `render` overrides
 - [ ] W22: Remove no-op command machinery on command-less widgets
 - [ ] W23: Delete dead `CommandNode` impls in integration tests
 - [ ] W24: Deduplicate `handle_prompt_event` arms
@@ -131,6 +131,9 @@ Record rejections, modifications, and proof commands here as items land.
 - W19: Deleted the unused Selector and Dropdown getters. Tests assert
   through fields.
 - W20: `with_node` uses `checked_typed_id`. Deleted `Error::TypeMismatch`.
+- W21: Deleted every empty `render` override, including a few extra
+  identical ones (inspector view, panes, MCP test widgets, grid). Trait
+  default remains.
 
 ## Items
 

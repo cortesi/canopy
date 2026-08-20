@@ -3,8 +3,8 @@
 use std::hint::black_box;
 
 use canopy::{
-    Context, Loader, ViewContext, Widget, derive_commands, error::Result, layout::Layout,
-    render::Render, testing::harness::Harness,
+    Context, Loader, Widget, derive_commands, error::Result, layout::Layout,
+    testing::harness::Harness,
 };
 use canopy_widgets::Text;
 use criterion::{Criterion, criterion_group, criterion_main};
@@ -28,10 +28,6 @@ impl BenchmarkTextWrapper {
 }
 
 impl Widget for BenchmarkTextWrapper {
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-        Ok(())
-    }
-
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         let text_id = c
             .add_keyed::<TextSlot>(Text::new(self.content.clone()))

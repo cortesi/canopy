@@ -5,13 +5,12 @@ mod tests {
     use std::{any::Any, marker::PhantomData};
 
     use canopy::{
-        self, ViewContext, Widget,
+        self, Widget,
         commands::{
             ArgValue, CommandDispatchKind, CommandError, CommandNode, CommandParamKind,
             CommandReturnSpec,
         },
         error::{Error, Result},
-        render::Render,
         testing::dummyctx::DummyContext,
     };
     use canopy_derive::{command, derive_commands};
@@ -94,11 +93,7 @@ mod tests {
         }
     }
 
-    impl Widget for Foo {
-        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-            Ok(())
-        }
-    }
+    impl Widget for Foo {}
 
     struct Bar<N>
     where
@@ -120,14 +115,7 @@ mod tests {
         }
     }
 
-    impl<N> Widget for Bar<N>
-    where
-        N: Widget,
-    {
-        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-            Ok(())
-        }
-    }
+    impl<N> Widget for Bar<N> where N: Widget {}
 
     fn assert_cmd_a_metadata() {
         let cmd_a = Foo::cmd_a();

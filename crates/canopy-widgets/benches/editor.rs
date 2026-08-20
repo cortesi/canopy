@@ -3,8 +3,8 @@
 use std::hint::black_box;
 
 use canopy::{
-    Canopy, Context, Loader, ViewContext, Widget, derive_commands, error::Result, layout::Layout,
-    render::Render, testing::harness::Harness,
+    Canopy, Context, Loader, Widget, derive_commands, error::Result, layout::Layout,
+    testing::harness::Harness,
 };
 use canopy_widgets::editor::{EditMode, Editor, EditorConfig, LineNumbers, WrapMode};
 use criterion::{Criterion, criterion_group, criterion_main};
@@ -28,10 +28,6 @@ impl BenchmarkEditorWrapper {
 }
 
 impl Widget for BenchmarkEditorWrapper {
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-        Ok(())
-    }
-
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         let config = EditorConfig::new()
             .with_mode(EditMode::Text)

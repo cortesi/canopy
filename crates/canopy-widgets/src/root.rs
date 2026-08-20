@@ -2,7 +2,7 @@ use std::mem;
 
 use canopy::{
     Canopy, ChildKey, Context, ExclusiveFrameToken, FocusScope, FrameworkBindingGroup, InputSpec,
-    Loader, NodeId, TypedId, ViewContext, Widget, command,
+    Loader, NodeId, TypedId, Widget, command,
     commands::{
         CommandArgs, CommandId, CommandInvocation, CommandNode, CommandSpec, FocusDirection,
     },
@@ -11,7 +11,6 @@ use canopy::{
     event::key::Key,
     geom,
     layout::{Direction, Layout, Sizing},
-    render::Render,
     state::NodeName,
     style::effects,
 };
@@ -390,10 +389,6 @@ impl Widget for MainPane {
         Layout::fill().direction(Direction::Row)
     }
 
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-        Ok(())
-    }
-
     fn name(&self) -> NodeName {
         NodeName::convert("main_pane")
     }
@@ -406,10 +401,6 @@ impl CommandNode for MainPane {
 }
 
 impl Widget for Root {
-    fn render(&mut self, _rndr: &mut canopy::render::Render, _ctx: &dyn ViewContext) -> Result<()> {
-        Ok(())
-    }
-
     fn layout(&self) -> Layout {
         // Stack layout so the help modal overlays the main pane.
         Layout::fill().direction(Direction::Stack)
@@ -475,7 +466,7 @@ mod tests {
         geom::Size,
         help::BindingSnapshot,
         layout::Layout,
-        render::{NopBackend, Render},
+        render::NopBackend,
         state::NodeName,
         testing::harness::Harness,
     };
@@ -494,10 +485,6 @@ mod tests {
     }
 
     impl Widget for App {
-        fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-            Ok(())
-        }
-
         fn name(&self) -> NodeName {
             NodeName::convert("app")
         }
@@ -514,10 +501,6 @@ mod tests {
     impl Widget for RowApp {
         fn layout(&self) -> Layout {
             Layout::row()
-        }
-
-        fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-            Ok(())
         }
     }
 
@@ -540,10 +523,6 @@ mod tests {
     impl Widget for FocusLeaf {
         fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
             true
-        }
-
-        fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-            Ok(())
         }
 
         fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {

@@ -38,10 +38,6 @@ impl Widget for TabBar {
             .fixed_height(TAB_HEIGHT)
     }
 
-    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-        Ok(())
-    }
-
     fn name(&self) -> NodeName {
         NodeName::convert("term_tab_bar")
     }
@@ -60,10 +56,6 @@ impl TerminalStack {
 impl Widget for TerminalStack {
     fn layout(&self) -> Layout {
         Layout::fill().direction(Direction::Stack)
-    }
-
-    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-        Ok(())
     }
 
     fn name(&self) -> NodeName {

@@ -42,10 +42,6 @@ mod tests {
     }
 
     impl Widget for NodeA {
-        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-            Ok(())
-        }
-
         fn name(&self) -> NodeName {
             NodeName::convert("node_a")
         }
@@ -61,10 +57,6 @@ mod tests {
     }
 
     impl Widget for Root {
-        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-            Ok(())
-        }
-
         fn name(&self) -> NodeName {
             NodeName::convert("root")
         }
