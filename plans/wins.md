@@ -43,7 +43,7 @@ full evidence, change, and proof.
 - [x] W12: Make the `help` module crate-private
 - [x] W13: Drop the canopy-widgets error module
 - [x] W14: Font-renderer configuration can only restate defaults
-- [ ] W15: Dissolve `RemovePolicy`
+- [x] W15: Dissolve `RemovePolicy`
 - [ ] W16: Dead and hand-recomposed `Render` style methods
 - [ ] W17: Delete unused `StyleRules::attrs`
 - [ ] W18: Make `PartialStyle::{resolve, join, is_complete}` private
@@ -122,6 +122,8 @@ Record rejections, modifications, and proof commands here as items land.
 - W14: Deleted `with_ramp` and `with_fallback`. `GlyphRamp` is private.
   `FontCell`/`FontLayout` stay crate-internal for FontBanner. Ruskel
   still names `FontLayout` as the `layout` return type.
+- W15: Deleted `RemovePolicy` and the Hide branch. Reconcile always
+  removes the subtree. Deleted `keyed_reconcile_prunes_removed_hidden_nodes`.
 
 ## Items
 

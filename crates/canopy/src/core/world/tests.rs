@@ -12,7 +12,7 @@ use super::{
     *,
 };
 use crate::{
-    Context, KeyedChildren, RemovePolicy,
+    Context, KeyedChildren,
     core::{
         context::{CoreContext, CoreViewContext},
         inputmap::FrameworkBindingGroup,
@@ -1507,7 +1507,6 @@ fn keyed_reconcile_update_failure_preserves_core_and_helper_state() -> Result<()
                         Err(Error::Invalid("reconcile update failure".into()))
                     }
                 },
-                RemovePolicy::RemoveSubtree,
             )
             .expect_err("update failure should abort reconcile")
     };
@@ -1540,7 +1539,6 @@ fn keyed_reconcile_mount_failure_preserves_core_and_helper_state() -> Result<()>
                     })
                 },
                 |_key, _id, _ctx| Ok(()),
-                RemovePolicy::RemoveSubtree,
             )
             .expect_err("mount failure should abort reconcile")
     };
@@ -1548,59 +1546,6 @@ fn keyed_reconcile_mount_failure_preserves_core_and_helper_state() -> Result<()>
     assert!(matches!(error, Error::Invalid(_)));
     assert_eq!(StructuralSnapshot::capture(&core), before);
     assert!(keyed.is_empty());
-    core.validate_invariants()
-}
-
-#[test]
-fn keyed_reconcile_prunes_removed_hidden_nodes() -> Result<()> {
-    let mut core = Core::new();
-    let parent = core.create_detached(simple_widget())?;
-    core.attach(core.root, parent)?;
-    let mut keyed = KeyedChildren::<&'static str, ReconcileWidget>::new();
-
-    {
-        let mut ctx = CoreContext::new(&mut core, parent);
-        keyed.reconcile(
-            &mut ctx,
-            ["a", "b"],
-            |_key| Ok(ReconcileWidget::succeeds()),
-            |_key, _id, _ctx| Ok(()),
-            RemovePolicy::Hide,
-        )?;
-    }
-    let removed = keyed.id_for(&"b").expect("b should exist");
-    {
-        let mut ctx = CoreContext::new(&mut core, parent);
-        keyed.reconcile(
-            &mut ctx,
-            ["a"],
-            |_key| Ok(ReconcileWidget::succeeds()),
-            |_key, _id, _ctx| Ok(()),
-            RemovePolicy::Hide,
-        )?;
-    }
-    assert!(core.nodes[removed.into()].parent.is_none());
-    assert!(core.nodes[removed.into()].hidden);
-    core.remove_subtree(removed)?;
-
-    {
-        let mut ctx = CoreContext::new(&mut core, parent);
-        keyed.reconcile(
-            &mut ctx,
-            ["a", "b"],
-            |_key| Ok(ReconcileWidget::succeeds()),
-            |_key, _id, _ctx| Ok(()),
-            RemovePolicy::Hide,
-        )?;
-    }
-
-    let replacement = keyed.id_for(&"b").expect("b should be recreated");
-    assert_ne!(replacement, removed);
-    assert_eq!(keyed.keys(), &["a", "b"]);
-    assert_eq!(
-        core.nodes[parent].children,
-        vec![keyed.id_for(&"a").unwrap().into(), replacement.into()]
-    );
     core.validate_invariants()
 }
 
@@ -1617,7 +1562,6 @@ fn keyed_reconcile_defers_removal_until_updates_succeed() -> Result<()> {
             ["a", "b"],
             |_key| Ok(ReconcileWidget::succeeds()),
             |_key, _id, _ctx| Ok(()),
-            RemovePolicy::RemoveSubtree,
         )?;
     }
     let before = StructuralSnapshot::capture(&core);
@@ -1637,7 +1581,6 @@ fn keyed_reconcile_defers_removal_until_updates_succeed() -> Result<()> {
                         Ok(())
                     }
                 },
-                RemovePolicy::RemoveSubtree,
             )
             .expect_err("late update failure should abort reconcile");
     }

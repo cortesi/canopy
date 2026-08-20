@@ -11,15 +11,6 @@ use crate::{
     error::{Error, Result},
 };
 
-/// Policy for removing children that are no longer desired.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RemovePolicy {
-    /// Remove nodes and their descendants from the arena.
-    RemoveSubtree,
-    /// Hide nodes and keep them available for reuse.
-    Hide,
-}
-
 /// Ordered keyed child collection helper.
 ///
 /// Stores a stable mapping from keys to node IDs plus a current order. Use
@@ -90,7 +81,6 @@ where
         desired: I,
         mut create: C,
         mut update: U,
-        remove: RemovePolicy,
     ) -> Result<Vec<TypedId<W>>>
     where
         I: IntoIterator<Item = K>,
@@ -120,9 +110,7 @@ where
                     "keyed child points to a different widget type".into(),
                 ));
             }
-            let retained_hidden =
-                matches!(remove, RemovePolicy::Hide) && ctx.parent_of(node_id).is_none();
-            if direct_children.contains(&node_id) || retained_hidden {
+            if direct_children.contains(&node_id) {
                 planned_map.insert(key.clone(), *typed_id);
             }
         }
@@ -187,15 +175,8 @@ where
                     working_map.remove(key);
                     continue;
                 }
-                match remove {
-                    RemovePolicy::RemoveSubtree => {
-                        ctx.remove_subtree(node_id)?;
-                        working_map.remove(key);
-                    }
-                    RemovePolicy::Hide => {
-                        ctx.set_hidden_of(node_id, true)?;
-                    }
-                }
+                ctx.remove_subtree(node_id)?;
+                working_map.remove(key);
             }
 
             for typed_id in &ordered {
@@ -204,9 +185,6 @@ where
                     return Err(Error::Invalid(
                         "keyed child became stale before commit".into(),
                     ));
-                }
-                if matches!(remove, RemovePolicy::Hide) {
-                    ctx.set_hidden_of(node_id, false)?;
                 }
             }
 

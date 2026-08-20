@@ -2629,7 +2629,6 @@ pub mod canopy {
             desired: I,
             create: C,
             update: U,
-            remove: RemovePolicy,
         ) -> Result<Vec<TypedId<W>>>
         where
             I: IntoIterator<Item = K>,
@@ -2676,15 +2675,6 @@ pub mod canopy {
 
     impl<T> From<TypedId<T>> for NodeId {
         fn from(value: TypedId<T>) -> Self {}
-    }
-
-    /// Policy for removing children that are no longer desired.
-    #[derive(Debug, Clone, Copy, StructuralPartialEq, PartialEq, Eq)]
-    pub enum RemovePolicy {
-        /// Remove nodes and their descendants from the arena.
-        RemoveSubtree,
-        /// Hide nodes and keep them available for reuse.
-        Hide,
     }
 
     /// A phase in key or mouse event routing.

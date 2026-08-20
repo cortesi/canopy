@@ -64,7 +64,7 @@ pub use canopy::{
     ScriptJournalEntry,
 };
 pub use change::ChangeOutcome;
-pub use children::{KeyedChildren, RemovePolicy};
+pub use children::KeyedChildren;
 pub use context::{ChildKey, Context, FocusScope, ViewContext};
 pub use fixture::{Fixture, FixtureInfo};
 pub use id::{NodeId, TypedId};

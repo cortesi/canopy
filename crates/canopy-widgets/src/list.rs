@@ -4,7 +4,7 @@
 //! Items participate in focus management and can be composed from other widgets.
 
 use canopy::{
-    Context, EventOutcome, KeyedChildren, NodeId, RemovePolicy, TypedId, ViewContext, Widget,
+    Context, EventOutcome, KeyedChildren, NodeId, TypedId, ViewContext, Widget,
     command,
     commands::{
         CommandArgs, CommandCall, CommandInvocation, CommandScopeFrame, ListRowContext, ToArgValue,
@@ -191,7 +191,7 @@ impl<W: Selectable> List<W> {
         let mut desired = self.items.keys().to_vec();
         desired.insert(clamped, key);
         let ordered =
-            self.reconcile_with_widget(ctx, desired, key, widget, RemovePolicy::RemoveSubtree)?;
+            self.reconcile_with_widget(ctx, desired, key, widget)?;
         let id = ordered
             .get(clamped)
             .copied()
@@ -229,7 +229,7 @@ impl<W: Selectable> List<W> {
             return Ok(false);
         }
         desired.remove(index);
-        self.reconcile_order(ctx, desired, RemovePolicy::RemoveSubtree)?;
+        self.reconcile_order(ctx, desired)?;
         self.repair_selection_after_remove(ctx, index)?;
         Ok(true)
     }
@@ -237,7 +237,7 @@ impl<W: Selectable> List<W> {
     /// Clear all items from the list.
     #[command(ignore_result)]
     pub fn clear(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        self.reconcile_order(ctx, Vec::new(), RemovePolicy::RemoveSubtree)?;
+        self.reconcile_order(ctx, Vec::new())?;
         self.selected = None;
         Ok(())
     }
@@ -590,7 +590,6 @@ impl<W: Selectable> List<W> {
         desired: Vec<ListKey>,
         key: ListKey,
         widget: W,
-        remove: RemovePolicy,
     ) -> Result<Vec<TypedId<W>>>
     where
         W: 'static,
@@ -613,7 +612,6 @@ impl<W: Selectable> List<W> {
                     .ok_or_else(|| Error::Internal("list widget already consumed".into()))
             },
             |_, _, _| Ok(()),
-            remove,
         )
     }
 
@@ -622,7 +620,6 @@ impl<W: Selectable> List<W> {
         &mut self,
         ctx: &mut dyn Context,
         desired: Vec<ListKey>,
-        remove: RemovePolicy,
     ) -> Result<Vec<TypedId<W>>> {
         self.items.reconcile(
             ctx,
@@ -633,7 +630,6 @@ impl<W: Selectable> List<W> {
                 )))
             },
             |_, _, _| Ok(()),
-            remove,
         )
     }
 }

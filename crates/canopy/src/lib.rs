@@ -36,7 +36,7 @@ pub use core::{
     AutomationCallback, AutomationHandle, BindingId, BindingOwner, BindingPhase, BindingScope,
     BindingTarget, Canopy, ChangeOutcome, ChildKey, Context, ExclusiveFrameToken, Fixture,
     FixtureInfo, FocusScope, FrameworkBindingGroup, InputSpec, KeyedChildren, Loader, NodeId,
-    RemovePolicy, RoutePhase, RouteTraceEntry, ScriptJournalEntry, TypedId, ViewContext,
+    RoutePhase, RouteTraceEntry, ScriptJournalEntry, TypedId, ViewContext,
 };
 // App-author modules used by widget implementations and derive output.
 pub use core::{
