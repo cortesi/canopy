@@ -575,7 +575,7 @@ impl Core {
         let parent = parent.into();
         self.with_tree_edit("add child", |core| {
             let child = core.create_detached_boxed(widget)?;
-            core.attach(parent, child)?;
+            core.attach_inner(parent, child, None)?;
             Ok(child)
         })
     }
@@ -593,7 +593,7 @@ impl Core {
                 return Err(Error::DuplicateChildKey(key.to_string()));
             }
             let child = core.create_detached_boxed(widget)?;
-            core.attach_keyed(parent, key, child)?;
+            core.attach_inner(parent, child, Some(key))?;
             Ok(child)
         })
     }

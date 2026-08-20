@@ -28,8 +28,8 @@ full evidence, change, and proof.
 
 **Performance**
 
-- [ ] W5: Every `add_child` captures a redundant full-arena snapshot
-- [ ] W6: `TermBuf::screen_text` allocates per cell on the script poll path
+- [x] W5: Every `add_child` captures a redundant full-arena snapshot
+- [x] W6: `TermBuf::screen_text` allocates per cell on the script poll path
 
 **API surface**
 
@@ -95,6 +95,11 @@ Record rejections, modifications, and proof commands here as items land.
   `cargo xtask api`.
 - W4: Added `invalid` to the `ScriptErrorInfo.error_type` doc. Proof:
   `cargo xtask api`.
+- W5: `add_child_to_boxed` and `add_child_to_keyed_boxed` call `attach_inner`
+  so they no longer nest a second arena snapshot. Proof: the four named
+  rollback tests in `cargo nextest run -p canopy`.
+- W6: `screen_text` writes into one String via `Cell::push_text`. Proof:
+  `cargo nextest run -p canopy -E 'test(termbuf)'`.
 
 ## Items
 
