@@ -715,6 +715,12 @@ pub mod canopy_widgets {
     }
 
     /// Container that centers its child within available space.
+    ///
+    /// For a dimmed overlay, push an effect on the background content with
+    /// `c.push_effect(background_id, effects::brightness(0.5))`. This container
+    /// stays at full brightness because it is a sibling of the dimmed content, not
+    /// a descendant. Insert it as a sibling inside a parent that uses `Stack`
+    /// layout so it can overlay the existing view.
     #[derive(Default)]
     pub struct Center;
 
@@ -1231,34 +1237,6 @@ pub mod canopy_widgets {
     pub trait Selectable: Widget {
         /// Set the selection state of this item.
         fn set_selected(&mut self, selected: bool);
-    }
-
-    /// A modal container that centers its content.
-    ///
-    /// For the dimming effect, the parent should push an effect on the background content
-    /// using `c.push_effect(background_id, effects::brightness(0.5))`. The Modal itself renders
-    /// at full brightness since it's a sibling to the dimmed content, not a descendant.
-    ///
-    /// This widget is typically inserted as a sibling to the background content inside
-    /// a parent configured with `Stack` layout so it can overlay the existing view.
-    #[derive(Default)]
-    pub struct Modal;
-
-    impl Modal {
-        /// Create a new Modal widget.
-        pub fn new() -> Self {}
-    }
-
-    impl CommandNode for Modal {
-        fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-    }
-
-    impl Widget for Modal {
-        fn layout(&self) -> Layout {}
-
-        fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
-
-        fn name(&self) -> NodeName {}
     }
 
     /// Container that adds padding around its child.

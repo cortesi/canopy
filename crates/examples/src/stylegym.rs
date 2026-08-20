@@ -8,7 +8,7 @@ use canopy::{
     prelude::*,
     style::{StyleMap, dracula, effects, effects::Effect, gruvbox, solarized},
 };
-use canopy_widgets::{Dropdown, Frame, Label, Modal, Root, Selector};
+use canopy_widgets::{Center, Dropdown, Frame, Label, Root, Selector};
 
 /// Default bindings for the style gym demo.
 const DEFAULT_BINDINGS: &str = r#"
@@ -167,7 +167,7 @@ canopy::key!(EffectsSelectorSlot: Selector<EffectOption>);
 canopy::key!(RightContainerSlot: Container);
 canopy::key!(DemoFrameSlot: Frame);
 canopy::key!(DemoContentSlot: DemoContent);
-canopy::key!(ModalSlot: Modal);
+canopy::key!(ModalSlot: Center);
 
 /// The demo content pane showing styled samples.
 pub struct DemoContent;
@@ -313,7 +313,7 @@ impl Stylegym {
             if ctx.has_child::<ModalSlot>()? {
                 return Ok(());
             }
-            let modal_id = ctx.add_keyed::<ModalSlot>(Modal::new())?;
+            let modal_id = ctx.add_keyed::<ModalSlot>(Center::new())?;
             let frame_id = ctx.add_child_to(modal_id, Frame::new().with_title("Demo Modal"))?;
             ctx.add_child_to(frame_id, ModalContent)?;
 

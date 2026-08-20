@@ -36,7 +36,7 @@ full evidence, change, and proof.
 - [x] W3: Inspector advertises a phantom Stats tab
 - [x] W4: Script-error schema omits `invalid`
 - [x] W7: Drop the unused `Send` supertrait on `Widget`
-- [ ] W8: `Modal` is a byte-for-byte duplicate of `Center`
+- [x] W8: `Modal` is a byte-for-byte duplicate of `Center`
 - [ ] W9: `TerminalConfig` carries seven frozen fields
 - [ ] W10: `commands.rs` carries conversion impls the type system cannot express
 - [ ] W11: Dissolve `Slot<K>`

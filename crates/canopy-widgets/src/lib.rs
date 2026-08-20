@@ -32,8 +32,6 @@ pub mod inspector;
 mod label;
 /// Typed list container with selection.
 mod list;
-/// Modal overlay container.
-mod modal;
 /// Padding container widget.
 mod pad;
 /// 2D grid layout of panes.
@@ -64,7 +62,6 @@ pub use image_view::ImageView;
 pub use input::Input;
 pub use label::Label;
 pub use list::{List, Selectable};
-pub use modal::Modal;
 pub use pad::Pad;
 pub use panes::Panes;
 pub use root::Root;

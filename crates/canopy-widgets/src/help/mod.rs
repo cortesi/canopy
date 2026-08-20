@@ -17,9 +17,9 @@ use canopy::{
 };
 pub(crate) use panel::{ControlFooter, HelpPanel};
 
-use crate::{frame::Frame, modal::Modal};
+use crate::{center::Center, frame::Frame};
 
-canopy::key!(pub(crate) ModalSlot: Modal);
+canopy::key!(pub(crate) ModalSlot: Center);
 canopy::key!(pub(crate) FrameSlot: Frame);
 canopy::key!(pub(crate) PanelSlot: HelpPanel);
 canopy::key!(pub(crate) BindingListSlot: BindingList);
@@ -48,7 +48,7 @@ impl Help {
                 .padding(Edges::all(1));
         })?;
 
-        let modal = context.create_detached(Modal::new())?;
+        let modal = context.create_detached(Center::new())?;
         context.attach_keyed(modal.into(), FrameSlot::KEY, frame.into())?;
         context.with_layout_of(modal.into(), &mut |layout| {
             *layout = Layout::fill()

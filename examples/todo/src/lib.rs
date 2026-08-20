@@ -10,11 +10,11 @@ use canopy::{
     prelude::*,
     style::{effects, solarized},
 };
-use canopy_widgets::{Frame, Input, List, Modal, Root, Selectable};
+use canopy_widgets::{Center, Frame, Input, List, Root, Selectable};
 
 // Typed keys for keyed children
 canopy::key!(MainSlot: MainContent);
-canopy::key!(ModalSlot: Modal);
+canopy::key!(ModalSlot: Center);
 
 pub mod store;
 
@@ -208,7 +208,7 @@ impl Todo {
         }
 
         // Create the modal with an input frame
-        let modal_id = c.add_keyed::<ModalSlot>(Modal::new())?;
+        let modal_id = c.add_keyed::<ModalSlot>(Center::new())?;
         let adder_frame_id = c.add_child_to(modal_id, Frame::new())?;
         let input_id = c.add_child_to(adder_frame_id, Input::new(""))?;
 
