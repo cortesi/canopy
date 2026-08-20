@@ -58,23 +58,23 @@ full evidence, change, and proof.
 - [x] W24: Deduplicate `handle_prompt_event` arms
 - [x] W25: Share the two click-count state machines
 - [x] W26: Parameterize the shared scroll-binding table
-- [ ] W27: Collapse `focus_dir` direction dispatch
-- [ ] W28: Delete unused `PathFilter::check` depth payload and `match_end`
-- [ ] W29: Drop the `Option` wrapper on `Node.effects`
-- [ ] W30: Share panes column-node bookkeeping
-- [ ] W31: Inline Frame's invariant `ScrollGlyphs` field
-- [ ] W32: Drop the duplicate UTF-8 check in `compile_source`
-- [ ] W33: Route `outer_clip_to_local` through `RectI32::to_local_point`
-- [ ] W34: Stop threading unused `NodeId` through `post_render`
-- [ ] W35: Read MCP structured content directly in the test
-- [ ] W36: Correct two wrong comments
+- [x] W27: Collapse `focus_dir` direction dispatch
+- [x] W28: Delete unused `PathFilter::check` depth payload and `match_end`
+- [x] W29: Drop the `Option` wrapper on `Node.effects`
+- [x] W30: Share panes column-node bookkeeping
+- [x] W31: Inline Frame's invariant `ScrollGlyphs` field
+- [x] W32: Drop the duplicate UTF-8 check in `compile_source`
+- [x] W33: Route `outer_clip_to_local` through `RectI32::to_local_point`
+- [x] W34: Stop threading unused `NodeId` through `post_render`
+- [x] W35: Read MCP structured content directly in the test
+- [x] W36: Correct two wrong comments
 
-**Open decisions (not implemented unless decided during the pass)**
+**Open decisions (left open)**
 
-- [ ] OD1: canopy-mcp embedding re-exports
-- [ ] OD2: `root.dump_diagnostics` half-wired command
-- [ ] OD3: Terminal Ctrl+Shift+C copy binding
-- [ ] OD4: Collapse `Input` onto single-line `Editor`
+- [ ] OD1: canopy-mcp embedding re-exports — kept; f85a0e83 narrowed this list on purpose
+- [ ] OD2: `root.dump_diagnostics` half-wired command — product call
+- [ ] OD3: Terminal Ctrl+Shift+C copy binding — W9 kept the swallow
+- [ ] OD4: Collapse `Input` onto single-line `Editor` — design decision
 
 ## Implementation notes
 
@@ -144,6 +144,19 @@ Record rejections, modifications, and proof commands here as items land.
 - W26: `text_scroll_bindings(receiver, path)`. Framegym keeps its
   prefix and now installs those bindings in tests. `j` drives scroll.
   Rider: framegym gained mouse ScrollUp/ScrollDown.
+- W27: `focus_dir` uses one key helper and `min_by_key`.
+- W28: Deleted `PathFilter::check` and `match_end`. Callers use
+  `check_match`.
+- W29: `Node.effects` is `Vec<Effect>`.
+- W30: `ensure_column_nodes` is shared. `sync_layout` uses
+  `column_nodes()`.
+- W31: Frame uses two char consts for scroll indicators.
+- W32: `compile_source` relies on `strict_named_source` for UTF-8.
+- W33: `render_node` uses `RectI32::to_local_point`.
+- W34: `post_render` no longer stores `NodeId`.
+- W35: MCP test reads `structured_content` directly.
+- W36: Removed stale layout-driver docs; corrected `carve_hend`.
+- Open decisions OD1-OD4 left open.
 
 ## Items
 

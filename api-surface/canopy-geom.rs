@@ -188,8 +188,8 @@ pub mod canopy_geom {
         pub fn zero() -> Self {}
 
         /// Carve a rectangle with a fixed width out of the end of the horizontal
-        /// extent of this rect. Returns a [left, right] array. Right is either
-        /// empty or has the exact width specified.
+        /// extent of this rect. Returns `(left, right)`. Right is either empty or
+        /// has the exact width specified.
         pub fn carve_hend(&self, width: u32) -> (Self, Self) {}
 
         /// Return the exclusive right edge using widened arithmetic.

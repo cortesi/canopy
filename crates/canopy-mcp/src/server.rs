@@ -373,15 +373,7 @@ mod tests {
             })
             .await
             .expect("script_eval");
-        let payload = serde_json::from_str::<serde_json::Value>(
-            result
-                .structured_content
-                .as_ref()
-                .expect("structured content")
-                .to_string()
-                .as_str(),
-        )
-        .expect("json payload");
+        let payload = result.structured_content.expect("structured content");
         assert_eq!(payload["success"], serde_json::Value::Bool(true));
         assert_eq!(
             payload["value"],

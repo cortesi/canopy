@@ -25,8 +25,6 @@ use crate::{
     },
 };
 
-/// Attach one node as the only child of the root.
-/// A widget that always measures to one cell.
 #[test]
 fn clamp_outer_no_bounds() {
     let layout = Layout::column();
