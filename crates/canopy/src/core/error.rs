@@ -247,14 +247,6 @@ pub enum Error {
     /// Requested item was not found.
     #[error("not found: {0}")]
     NotFound(String),
-    /// Widget type mismatch.
-    #[error("type mismatch: expected {expected}, got {actual}")]
-    TypeMismatch {
-        /// Expected widget type name.
-        expected: String,
-        /// Actual widget type name.
-        actual: String,
-    },
     /// A live node stores a different widget type than requested.
     #[error("node {node:?} does not store {expected}")]
     NodeTypeMismatch {

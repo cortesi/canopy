@@ -89,7 +89,7 @@ impl From<&error::Error> for CanopyErrorPayload {
                 Self::new(error::ScriptErrorKind::NodeDetached, err.to_string())
                     .with_owner(format!("{node:?}"))
             }
-            error::Error::TypeMismatch { .. } | error::Error::NodeTypeMismatch { .. } => {
+            error::Error::NodeTypeMismatch { .. } => {
                 Self::new(error::ScriptErrorKind::TypeMismatch, err.to_string())
             }
             error::Error::NotFound(_) => {

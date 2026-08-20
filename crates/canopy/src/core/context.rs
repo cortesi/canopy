@@ -1,5 +1,5 @@
 use std::{
-    any::{Any, TypeId, type_name, type_name_of_val},
+    any::{Any, TypeId, type_name},
     iter,
     ops::Deref,
     result::Result as StdResult,
@@ -612,17 +612,10 @@ impl dyn Context + '_ {
         W: Widget + 'static,
     {
         let node = node.into();
+        checked_typed_id::<W, _>(&*self, node)?;
         let mut output = None;
         let mut f = Some(f);
-        let expected = TypeId::of::<W>();
         self.with_widget_mut(node, &mut |widget, ctx| {
-            let actual = ViewContext::node_type_id(ctx, node).ok_or(Error::NodeNotFound(node))?;
-            if actual != expected {
-                return Err(Error::TypeMismatch {
-                    expected: type_name::<W>().to_string(),
-                    actual: type_name_of_val(widget).to_string(),
-                });
-            }
             let any = widget as &mut dyn Any;
             let widget = any
                 .downcast_mut::<W>()

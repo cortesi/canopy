@@ -1160,13 +1160,6 @@ pub mod canopy {
                 Invalid(String),
                 /// Requested item was not found.
                 NotFound(String),
-                /// Widget type mismatch.
-                TypeMismatch {
-                    /// Expected widget type name.
-                    expected: String,
-                    /// Actual widget type name.
-                    actual: String,
-                },
                 /// A live node stores a different widget type than requested.
                 NodeTypeMismatch {
                     /// Node whose widget type was checked.
@@ -3467,13 +3460,6 @@ pub mod canopy {
             Invalid(String),
             /// Requested item was not found.
             NotFound(String),
-            /// Widget type mismatch.
-            TypeMismatch {
-                /// Expected widget type name.
-                expected: String,
-                /// Actual widget type name.
-                actual: String,
-            },
             /// A live node stores a different widget type than requested.
             NodeTypeMismatch {
                 /// Node whose widget type was checked.

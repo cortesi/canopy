@@ -48,7 +48,7 @@ full evidence, change, and proof.
 - [x] W17: Delete unused `StyleRules::attrs`
 - [x] W18: Make `PartialStyle::{resolve, join, is_complete}` private
 - [x] W19: Delete unused Selector and Dropdown getters
-- [ ] W20: Collapse two node-type mismatch error variants
+- [x] W20: Collapse two node-type mismatch error variants
 
 **Duplication and line count**
 
@@ -130,6 +130,7 @@ Record rejections, modifications, and proof commands here as items land.
   in W3 when tab rules left).
 - W19: Deleted the unused Selector and Dropdown getters. Tests assert
   through fields.
+- W20: `with_node` uses `checked_typed_id`. Deleted `Error::TypeMismatch`.
 
 ## Items
 
