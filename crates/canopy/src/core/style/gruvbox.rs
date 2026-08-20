@@ -2,7 +2,7 @@
 //!
 //! Based on the gruvbox theme by morhetz: <https://github.com/morhetz/gruvbox>
 
-use super::{Color, Palette, StyleMap, theme};
+use super::{theme, Color, Palette, StyleMap};
 use crate::rgb;
 
 // Gruvbox dark background colors
@@ -64,7 +64,6 @@ pub fn gruvbox_dark() -> StyleMap {
         accent: BLUE,
         muted_fg: LIGHT3,
         panel_bg: DARK1,
-        tab_active_fg: LIGHT0,
         selection_bg: DARK2,
         line_number: GRAY,
         blue: BLUE,

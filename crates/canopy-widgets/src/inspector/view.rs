@@ -3,8 +3,6 @@ use canopy::{
     state::NodeName,
 };
 
-use crate::tabs::Tabs;
-
 /// View contains the body of the inspector.
 pub struct View;
 
@@ -31,11 +29,9 @@ impl View {
 
     /// Build the inspector view subtree and return its node id.
     pub fn install(context: &mut dyn Context) -> Result<NodeId> {
-        let tabs = context.create_detached(Tabs::new(vec!["Stats", "Logs"]))?;
         let logs = context.create_detached(super::logs::Logs::new())?;
         let view_id = context.create_detached(Self::new())?;
-        context.set_children_of(view_id.into(), vec![tabs.into(), logs.into()])?;
-        context.set_layout_of(tabs, Layout::column().flex_horizontal(1).fixed_height(1))?;
+        context.set_children_of(view_id.into(), vec![logs.into()])?;
         context.set_layout_of(logs, Layout::fill())?;
         Ok(view_id.into())
     }

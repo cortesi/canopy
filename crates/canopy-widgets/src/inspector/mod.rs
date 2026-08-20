@@ -9,14 +9,10 @@ use canopy::{
 };
 use logs::Logs;
 
-use crate::{frame, tabs};
+use crate::frame;
 
 /// Default inspector bindings exposed through `inspector.default_bindings()`.
 const DEFAULT_BINDINGS: &str = r#"
-canopy.bind("Tab", { path = "inspector/", description = "Next tab" }, function()
-    tabs.select_by(1)
-end)
-
 canopy.bind("C", { path = "logs", description = "Clear log entry" }, function()
     logs.clear()
 end)
@@ -99,7 +95,6 @@ impl Widget for Inspector {
 impl Loader for Inspector {
     fn load(c: &mut Canopy) -> Result<()> {
         c.add_commands::<Self>()?;
-        c.add_commands::<tabs::Tabs>()?;
         c.register_default_bindings("inspector", DEFAULT_BINDINGS)?;
         Logs::load(c)?;
         Ok(())

@@ -2,7 +2,7 @@
 //!
 //! Based on the Dracula theme: <https://draculatheme.com>
 
-use super::{Color, Palette, StyleMap, theme};
+use super::{theme, Color, Palette, StyleMap};
 use crate::rgb;
 
 // Dracula background colors
@@ -46,7 +46,6 @@ pub fn dracula() -> StyleMap {
         accent: PURPLE,
         muted_fg: FOREGROUND,
         panel_bg: CURRENT_LINE,
-        tab_active_fg: BACKGROUND,
         selection_bg: SELECTION,
         line_number: COMMENT,
         blue: CYAN,

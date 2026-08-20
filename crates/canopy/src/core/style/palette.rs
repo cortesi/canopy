@@ -15,20 +15,18 @@ pub struct Palette {
     pub fg: Color,
     /// Default background, and the foreground drawn on top of `accent`.
     pub bg: Color,
-    /// Inactive frame and tab borders, and the tab bar itself.
+    /// Inactive frame borders.
     pub frame: Color,
     /// Border of the frame that owns the active subtree.
     pub frame_active: Color,
     /// Frame title text.
     pub frame_title: Color,
-    /// Primary accent: focus, selection, and the active tab.
+    /// Primary accent: focus and selection.
     pub accent: Color,
     /// Foreground on panel backgrounds, one step away from `fg`.
     pub muted_fg: Color,
-    /// Background of panels such as the help overlay, prompt, and inactive tabs.
+    /// Background of panels such as the help overlay and prompt.
     pub panel_bg: Color,
-    /// Foreground of the active tab, drawn on `accent`.
-    pub tab_active_fg: Color,
     /// Editor selection background.
     pub selection_bg: Color,
     /// Editor line-number gutter.
@@ -66,15 +64,6 @@ pub fn theme(p: &Palette) -> StyleMap {
         .fg("/frame/focused", p.accent)
         .fg("/frame/active", p.frame_active)
         .fg("/frame/title", p.frame_title)
-        .fg("/tab", p.frame)
-        .style(
-            "/tab/inactive",
-            StyleBuilder::new().fg(p.muted_fg).bg(p.panel_bg),
-        )
-        .style(
-            "/tab/active",
-            StyleBuilder::new().fg(p.tab_active_fg).bg(p.accent),
-        )
         .fg("/blue", p.blue)
         .fg("/red", p.red)
         .fg("/magenta", p.magenta)

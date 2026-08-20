@@ -33,7 +33,7 @@ full evidence, change, and proof.
 
 **API surface**
 
-- [ ] W3: Inspector advertises a phantom Stats tab
+- [x] W3: Inspector advertises a phantom Stats tab
 - [ ] W4: Script-error schema omits `invalid`
 - [ ] W7: Drop the unused `Send` supertrait on `Widget`
 - [ ] W8: `Modal` is a byte-for-byte duplicate of `Center`
@@ -89,6 +89,10 @@ Record rejections, modifications, and proof commands here as items land.
   separators, so a trailing `+`/`-` key with modifiers still fails. Left
   as a follow-up; this win only names the bare keys. Proof:
   `cargo nextest run -p canopy -E 'test(parse_specs)'`.
+- W3: Implemented, with one adjacent deletion: `tab_active_fg` and the
+  parent `/tab` rule left the palette because they had no remaining
+  consumers. Proof: `cargo nextest run -p canopy-widgets -E 'test(inspector_pane_draws_its_frame)'`,
+  `cargo xtask api`.
 
 ## Items
 

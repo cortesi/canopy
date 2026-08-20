@@ -4660,20 +4660,18 @@ pub mod canopy {
             pub fg: super::Color,
             /// Default background, and the foreground drawn on top of `accent`.
             pub bg: super::Color,
-            /// Inactive frame and tab borders, and the tab bar itself.
+            /// Inactive frame borders.
             pub frame: super::Color,
             /// Border of the frame that owns the active subtree.
             pub frame_active: super::Color,
             /// Frame title text.
             pub frame_title: super::Color,
-            /// Primary accent: focus, selection, and the active tab.
+            /// Primary accent: focus and selection.
             pub accent: super::Color,
             /// Foreground on panel backgrounds, one step away from `fg`.
             pub muted_fg: super::Color,
-            /// Background of panels such as the help overlay, prompt, and inactive tabs.
+            /// Background of panels such as the help overlay and prompt.
             pub panel_bg: super::Color,
-            /// Foreground of the active tab, drawn on `accent`.
-            pub tab_active_fg: super::Color,
             /// Editor selection background.
             pub selection_bg: super::Color,
             /// Editor line-number gutter.

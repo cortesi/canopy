@@ -90,6 +90,9 @@ pub mod canopy_widgets {
             pub fn line_text(&self, line: usize) -> String {}
 
             /// Take the pending line change, if any.
+            ///
+            /// Returns `Some` only when exactly one edit has landed since the last
+            /// sync. Multiple edits drain as `None` so the layout cache rebuilds.
             pub fn take_change(&mut self) -> Option<LineChange> {}
 
             /// Begin a grouped transaction.

@@ -42,8 +42,6 @@ mod panes;
 mod root;
 /// Selection widget.
 mod selector;
-/// Experimental tab container API.
-mod tabs;
 /// Terminal emulation widget.
 mod terminal;
 /// Multiline text widget.

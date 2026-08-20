@@ -1,4 +1,4 @@
-use super::{Color, Palette, StyleMap, theme};
+use super::{theme, Color, Palette, StyleMap};
 use crate::rgb;
 
 // Solarized color constants using the new hex constructor.
@@ -45,7 +45,6 @@ pub fn solarized_dark() -> StyleMap {
         accent: BLUE,
         muted_fg: BASE1,
         panel_bg: BASE02,
-        tab_active_fg: BASE3,
         selection_bg: BASE02,
         line_number: BASE01,
         blue: BLUE,
@@ -70,7 +69,6 @@ pub fn solarized_light() -> StyleMap {
         accent: BLUE,
         muted_fg: BASE01,
         panel_bg: BASE2,
-        tab_active_fg: BASE3,
         selection_bg: BASE2,
         line_number: BASE1,
         blue: BLUE,
