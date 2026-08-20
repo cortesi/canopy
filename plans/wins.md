@@ -55,7 +55,7 @@ full evidence, change, and proof.
 - [x] W21: Delete forty-one empty `render` overrides
 - [x] W22: Remove no-op command machinery on command-less widgets
 - [x] W23: Delete dead `CommandNode` impls in integration tests
-- [ ] W24: Deduplicate `handle_prompt_event` arms
+- [x] W24: Deduplicate `handle_prompt_event` arms
 - [ ] W25: Share the two click-count state machines
 - [ ] W26: Parameterize the shared scroll-binding table
 - [ ] W27: Collapse `focus_dir` direction dispatch
@@ -138,6 +138,8 @@ Record rejections, modifications, and proof commands here as items land.
   no `#[command]` methods. Empty Loader impls use the default.
 - W23: Deleted empty `CommandNode` impls in layout, on_mount, and
   focus tests. Root's Loader in layout.rs is now the default.
+- W24: Esc is handled once. Search/replace query text edits the
+  active String in place. Enter takes the prompt only to transition.
 
 ## Items
 

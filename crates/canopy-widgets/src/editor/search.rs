@@ -245,122 +245,78 @@ impl Editor {
         });
     }
 
+    /// Return the string field the current prompt is editing, if any.
+    fn prompt_edit_field(prompt: &mut PromptState) -> Option<&mut String> {
+        match prompt {
+            PromptState::Search { query, .. } | PromptState::ReplaceQuery { query } => Some(query),
+            PromptState::ReplaceWith { replacement, .. } => Some(replacement),
+            PromptState::ReplaceConfirm { .. } => None,
+        }
+    }
+
     /// Handle prompt input events.
     pub(super) fn handle_prompt_event(
         &mut self,
         event: &Event,
         ctx: &mut dyn Context,
     ) -> EventOutcome {
-        let Some(prompt) = self.prompt.clone() else {
+        let Event::Key(key) = event else {
             return EventOutcome::Ignore;
         };
+        if self.prompt.is_none() {
+            return EventOutcome::Ignore;
+        }
 
-        match (prompt, event) {
-            (
-                PromptState::Search { direction, query },
-                Event::Key(key::Key {
-                    key: key::KeyCode::Enter,
-                    ..
-                }),
-            ) => {
+        if matches!(key.key, key::KeyCode::Esc) {
+            self.prompt = None;
+            return EventOutcome::Handle;
+        }
+
+        if let Some(field) = self.prompt.as_mut().and_then(Self::prompt_edit_field) {
+            match key.key {
+                key::KeyCode::Backspace => {
+                    let _ = field.pop();
+                    return EventOutcome::Handle;
+                }
+                key::KeyCode::Char(c) if !key.mods.ctrl && !key.mods.alt => {
+                    field.push(c);
+                    return EventOutcome::Handle;
+                }
+                _ => {}
+            }
+        }
+
+        if matches!(key.key, key::KeyCode::Enter) {
+            return self.handle_prompt_enter(ctx);
+        }
+
+        if let key::KeyCode::Char(c) = key.key {
+            return self.handle_replace_confirm(c, ctx);
+        }
+
+        EventOutcome::Ignore
+    }
+
+    /// Advance a search or replace prompt on Enter.
+    fn handle_prompt_enter(&mut self, ctx: &mut dyn Context) -> EventOutcome {
+        let Some(prompt) = self.prompt.take() else {
+            return EventOutcome::Ignore;
+        };
+        match prompt {
+            PromptState::Search { direction, query } => {
                 self.search.set_query(&self.buffer, query, direction);
                 if let Some(pos) = self.search.current_match().map(|range| range.start) {
                     self.buffer.set_cursor(pos);
                     self.ensure_cursor_visible(ctx);
                 }
-                self.prompt = None;
-                EventOutcome::Handle
             }
-            (
-                PromptState::Search {
-                    direction,
-                    mut query,
-                },
-                Event::Key(key::Key {
-                    key: key::KeyCode::Backspace,
-                    ..
-                }),
-            ) => {
-                let _ = query.pop();
-                self.prompt = Some(PromptState::Search { direction, query });
-                EventOutcome::Handle
-            }
-            (
-                PromptState::Search {
-                    direction,
-                    mut query,
-                },
-                Event::Key(key::Key {
-                    key: key::KeyCode::Char(c),
-                    mods,
-                }),
-            ) if !mods.ctrl && !mods.alt => {
-                query.push(*c);
-                self.prompt = Some(PromptState::Search { direction, query });
-                EventOutcome::Handle
-            }
-            (
-                PromptState::Search { .. },
-                Event::Key(key::Key {
-                    key: key::KeyCode::Esc,
-                    ..
-                }),
-            ) => {
-                self.prompt = None;
-                EventOutcome::Handle
-            }
-            (
-                PromptState::ReplaceQuery { query },
-                Event::Key(key::Key {
-                    key: key::KeyCode::Enter,
-                    ..
-                }),
-            ) => {
+            PromptState::ReplaceQuery { query } => {
                 self.prompt = Some(PromptState::ReplaceWith {
                     query,
                     replacement: String::new(),
                 });
-                EventOutcome::Handle
             }
-            (
-                PromptState::ReplaceQuery { mut query },
-                Event::Key(key::Key {
-                    key: key::KeyCode::Backspace,
-                    ..
-                }),
-            ) => {
-                let _ = query.pop();
-                self.prompt = Some(PromptState::ReplaceQuery { query });
-                EventOutcome::Handle
-            }
-            (
-                PromptState::ReplaceQuery { mut query },
-                Event::Key(key::Key {
-                    key: key::KeyCode::Char(c),
-                    mods,
-                }),
-            ) if !mods.ctrl && !mods.alt => {
-                query.push(*c);
-                self.prompt = Some(PromptState::ReplaceQuery { query });
-                EventOutcome::Handle
-            }
-            (
-                PromptState::ReplaceQuery { .. },
-                Event::Key(key::Key {
-                    key: key::KeyCode::Esc,
-                    ..
-                }),
-            ) => {
-                self.prompt = None;
-                EventOutcome::Handle
-            }
-            (
-                PromptState::ReplaceWith { query, replacement },
-                Event::Key(key::Key {
-                    key: key::KeyCode::Enter,
-                    ..
-                }),
-            ) => {
+            PromptState::ReplaceWith { query, replacement } => {
                 let matches = find_matches(&self.buffer, &query);
                 self.prompt = Some(PromptState::ReplaceConfirm {
                     query,
@@ -369,113 +325,87 @@ impl Editor {
                     index: 0,
                     replace_all: false,
                 });
-                EventOutcome::Handle
             }
-            (
-                PromptState::ReplaceWith {
-                    query,
-                    mut replacement,
-                },
-                Event::Key(key::Key {
-                    key: key::KeyCode::Backspace,
-                    ..
-                }),
-            ) => {
-                let _ = replacement.pop();
-                self.prompt = Some(PromptState::ReplaceWith { query, replacement });
-                EventOutcome::Handle
+            prompt => {
+                self.prompt = Some(prompt);
+                return EventOutcome::Ignore;
             }
-            (
-                PromptState::ReplaceWith {
-                    query,
-                    mut replacement,
-                },
-                Event::Key(key::Key {
-                    key: key::KeyCode::Char(c),
-                    mods,
-                }),
-            ) if !mods.ctrl && !mods.alt => {
-                replacement.push(*c);
-                self.prompt = Some(PromptState::ReplaceWith { query, replacement });
-                EventOutcome::Handle
-            }
-            (
-                PromptState::ReplaceWith { .. },
-                Event::Key(key::Key {
-                    key: key::KeyCode::Esc,
-                    ..
-                }),
-            ) => {
-                self.prompt = None;
-                EventOutcome::Handle
-            }
-            (
-                PromptState::ReplaceConfirm {
-                    query,
-                    replacement,
-                    mut matches,
-                    mut index,
-                    mut replace_all,
-                },
-                Event::Key(key::Key {
-                    key: key::KeyCode::Char(c),
-                    ..
-                }),
-            ) => {
-                match *c {
-                    'y' => {
-                        let (new_matches, next_index) =
-                            self.replace_match(&query, &replacement, matches, index, ctx);
-                        matches = new_matches;
-                        index = next_index;
-                    }
-                    'n' => {
-                        index = index.saturating_add(1);
-                    }
-                    'a' => {
-                        replace_all = true;
-                    }
-                    'q' => {
-                        self.prompt = None;
-                        return EventOutcome::Handle;
-                    }
-                    _ => {}
-                }
-
-                if replace_all {
-                    while index < matches.len() {
-                        let (new_matches, next_index) =
-                            self.replace_match(&query, &replacement, matches, index, ctx);
-                        matches = new_matches;
-                        index = next_index;
-                    }
-                }
-
-                if index >= matches.len() {
-                    self.prompt = None;
-                } else {
-                    self.prompt = Some(PromptState::ReplaceConfirm {
-                        query,
-                        replacement,
-                        matches,
-                        index,
-                        replace_all,
-                    });
-                }
-                EventOutcome::Handle
-            }
-            (
-                PromptState::ReplaceConfirm { .. },
-                Event::Key(key::Key {
-                    key: key::KeyCode::Esc,
-                    ..
-                }),
-            ) => {
-                self.prompt = None;
-                EventOutcome::Handle
-            }
-            _ => EventOutcome::Ignore,
         }
+        EventOutcome::Handle
+    }
+
+    /// Handle y/n/a/q during replace confirmation.
+    fn handle_replace_confirm(&mut self, c: char, ctx: &mut dyn Context) -> EventOutcome {
+        let Some(PromptState::ReplaceConfirm {
+            query,
+            replacement,
+            matches,
+            index,
+            replace_all,
+        }) = self.prompt.as_mut()
+        else {
+            return EventOutcome::Ignore;
+        };
+
+        match c {
+            'y' => {
+                let query = query.clone();
+                let replacement = replacement.clone();
+                let matches = std::mem::take(matches);
+                let index = *index;
+                let (new_matches, next_index) =
+                    self.replace_match(&query, &replacement, matches, index, ctx);
+                if let Some(PromptState::ReplaceConfirm {
+                    matches, index, ..
+                }) = self.prompt.as_mut()
+                {
+                    *matches = new_matches;
+                    *index = next_index;
+                }
+            }
+            'n' => {
+                *index = index.saturating_add(1);
+            }
+            'a' => {
+                *replace_all = true;
+            }
+            'q' => {
+                self.prompt = None;
+                return EventOutcome::Handle;
+            }
+            _ => {}
+        }
+
+        let Some(PromptState::ReplaceConfirm {
+            query,
+            replacement,
+            matches,
+            index,
+            replace_all,
+        }) = self.prompt.as_mut()
+        else {
+            return EventOutcome::Handle;
+        };
+
+        if *replace_all {
+            let query = query.clone();
+            let replacement = replacement.clone();
+            let mut matches = std::mem::take(matches);
+            let mut index = *index;
+            while index < matches.len() {
+                let (new_matches, next_index) =
+                    self.replace_match(&query, &replacement, matches, index, ctx);
+                matches = new_matches;
+                index = next_index;
+            }
+            self.prompt = None;
+            return EventOutcome::Handle;
+        }
+
+        if *index >= matches.len() {
+            self.prompt = None;
+        }
+        EventOutcome::Handle
     }
 
     /// Replace a match at an index and return updated matches and next index.
