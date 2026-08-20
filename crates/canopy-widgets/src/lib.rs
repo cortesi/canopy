@@ -22,7 +22,7 @@ mod font_banner;
 /// Scrollable frame container.
 mod frame;
 /// Contextual key-binding help widgets.
-pub mod help;
+mod help;
 /// Image rendering widget.
 mod image_view;
 /// Text input widget.

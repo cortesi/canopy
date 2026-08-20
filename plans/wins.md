@@ -40,7 +40,7 @@ full evidence, change, and proof.
 - [x] W9: `TerminalConfig` carries seven frozen fields
 - [x] W10: `commands.rs` carries conversion impls the type system cannot express
 - [x] W11: Dissolve `Slot<K>`
-- [ ] W12: Make the `help` module crate-private
+- [x] W12: Make the `help` module crate-private
 - [ ] W13: Drop the canopy-widgets error module
 - [ ] W14: Font-renderer configuration can only restate defaults
 - [ ] W15: Dissolve `RemovePolicy`
@@ -115,6 +115,8 @@ Record rejections, modifications, and proof commands here as items land.
   --all-targets --all-features`, `cargo xtask api`.
 - W11: Moved get-or-create onto `impl dyn Context`. Button no longer
   stores zero-sized Slot fields. Context method budget unchanged.
+- W12: `pub mod help` is now crate-private. BindingList stays reachable
+  inside the crate.
 
 ## Items
 

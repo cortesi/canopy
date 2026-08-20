@@ -15,7 +15,7 @@ use canopy::{
     render::Render,
     state::NodeName,
 };
-pub(crate) use panel::{ControlFooter, HelpPanel};
+use panel::{ControlFooter, HelpPanel};
 
 use crate::{center::Center, frame::Frame};
 
