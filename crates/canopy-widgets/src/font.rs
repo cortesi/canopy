@@ -75,14 +75,14 @@ impl GlyphSample {
 
 /// A glyph ramp used to convert coverage regions into terminal glyphs.
 #[derive(Debug, Clone)]
-pub struct GlyphRamp {
+struct GlyphRamp {
     /// Candidate glyph samples used for coverage matching.
     glyphs: Vec<GlyphSample>,
 }
 
 impl GlyphRamp {
     /// Block-element ramp that matches 2x2 quadrant coverage.
-    pub fn blocks() -> Self {
+    fn blocks() -> Self {
         let on = 255;
         let off = 0;
         let glyphs = vec![
@@ -221,19 +221,6 @@ impl FontRenderer {
             fallback: '?',
             cache: HashMap::new(),
         }
-    }
-
-    /// Configure the glyph ramp for this renderer.
-    pub fn with_ramp(mut self, ramp: GlyphRamp) -> Self {
-        self.ramp = ramp;
-        self
-    }
-
-    /// Configure the fallback glyph used for missing characters.
-    pub fn with_fallback(mut self, fallback: char) -> Self {
-        self.fallback = fallback;
-        self.cache.clear();
-        self
     }
 
     /// Render text into a layout that fits within the target canvas.

@@ -52,7 +52,7 @@ pub use button::Button;
 pub use center::Center;
 pub use dropdown::Dropdown;
 /// Experimental ASCII font rendering API.
-pub use font::{Font, FontCell, FontEffects, FontLayout, FontRenderer, GlyphRamp, LayoutOptions};
+pub use font::{Font, FontEffects, FontRenderer, LayoutOptions};
 pub use font_banner::FontBanner;
 pub use frame::Frame;
 pub use image_view::ImageView;

@@ -42,7 +42,7 @@ full evidence, change, and proof.
 - [x] W11: Dissolve `Slot<K>`
 - [x] W12: Make the `help` module crate-private
 - [x] W13: Drop the canopy-widgets error module
-- [ ] W14: Font-renderer configuration can only restate defaults
+- [x] W14: Font-renderer configuration can only restate defaults
 - [ ] W15: Dissolve `RemovePolicy`
 - [ ] W16: Dead and hand-recomposed `Render` style methods
 - [ ] W17: Delete unused `StyleRules::attrs`
@@ -119,6 +119,9 @@ Record rejections, modifications, and proof commands here as items land.
   inside the crate.
 - W13: `Font::from_bytes` returns `canopy::error::Result`. Deleted
   error.rs and the thiserror dependency.
+- W14: Deleted `with_ramp` and `with_fallback`. `GlyphRamp` is private.
+  `FontCell`/`FontLayout` stay crate-internal for FontBanner. Ruskel
+  still names `FontLayout` as the `layout` return type.
 
 ## Items
 

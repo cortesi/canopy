@@ -11,7 +11,7 @@ use canopy::{
     state::NodeName,
     style::StyleMap,
 };
-use canopy_widgets::{Font, FontBanner, FontEffects, FontRenderer, GlyphRamp, LayoutOptions};
+use canopy_widgets::{Font, FontBanner, FontEffects, FontRenderer, LayoutOptions};
 
 /// Style path used for widget demo text.
 const FONT_STYLE_PATH: &str = "widget/font";
@@ -94,8 +94,6 @@ impl FontDemo {
     /// Build a renderer with demo glyph settings.
     fn renderer_from_font(font: Font) -> FontRenderer {
         FontRenderer::new(font)
-            .with_ramp(GlyphRamp::blocks())
-            .with_fallback('?')
     }
 
     /// Swap the font renderer used by the banner.

@@ -726,17 +726,6 @@ pub mod canopy_widgets {
         pub fn name(&self) -> Option<&str> {}
     }
 
-    /// A rendered font cell with coverage weights for foreground and background.
-    #[derive(Debug, Clone, Copy, StructuralPartialEq, PartialEq)]
-    pub struct FontCell {
-        /// Rendered character for this cell.
-        pub ch: char,
-        /// Foreground coverage weight (0-255).
-        pub fg_coverage: u8,
-        /// Background coverage weight (0-255).
-        pub bg_coverage: u8,
-    }
-
     /// Rendering effects applied to font output.
     #[derive(Debug, Clone, Copy, StructuralPartialEq, PartialEq, Eq, Default)]
     pub struct FontEffects {
@@ -754,29 +743,12 @@ pub mod canopy_widgets {
         pub strike: bool,
     }
 
-    /// Cached layout for rasterized font text.
-    #[derive(Debug, Clone)]
-    pub struct FontLayout {
-        /// Target canvas size.
-        pub size: canopy::geom::Size,
-        /// Size of the rendered content before clipping.
-        pub content_size: canopy::geom::Size,
-        /// Rendered cell data for each row.
-        pub cells: Vec<Vec<FontCell>>,
-    }
-
     /// Renderer that converts fonts into terminal text.
     pub struct FontRenderer {}
 
     impl FontRenderer {
         /// Create a renderer for the provided font.
         pub fn new(font: Font) -> Self {}
-
-        /// Configure the glyph ramp for this renderer.
-        pub fn with_ramp(self, ramp: GlyphRamp) -> Self {}
-
-        /// Configure the fallback glyph used for missing characters.
-        pub fn with_fallback(self, fallback: char) -> Self {}
 
         /// Render text into a layout that fits within the target canvas.
         pub fn layout(
@@ -787,15 +759,6 @@ pub mod canopy_widgets {
             effects: FontEffects,
         ) -> FontLayout {
         }
-    }
-
-    /// A glyph ramp used to convert coverage regions into terminal glyphs.
-    #[derive(Debug, Clone)]
-    pub struct GlyphRamp {}
-
-    impl GlyphRamp {
-        /// Block-element ramp that matches 2x2 quadrant coverage.
-        pub fn blocks() -> Self {}
     }
 
     /// Alignment configuration for font layouts.
