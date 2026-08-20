@@ -50,61 +50,38 @@ struct ClickState {
     count: u8,
 }
 
-/// Shared clipboard shim that bridges Canopy callbacks into `itty`.
+/// Shared clipboard shim that `itty` requires.
 struct SharedClipboard {
-    /// Stored clipboard contents when no external callback is installed.
+    /// Stored clipboard contents.
     text: Mutex<String>,
-    /// Optional callback invoked when text is stored.
-    store: Option<Arc<dyn Fn(String) + Send + Sync>>,
-    /// Optional callback invoked when text is loaded.
-    load: Option<Arc<dyn Fn() -> String + Send + Sync>>,
 }
 
 impl SharedClipboard {
-    /// Construct a clipboard bridge from the widget config.
-    fn new(config: &TerminalConfig) -> Arc<Self> {
+    /// Construct an empty clipboard bridge.
+    fn new() -> Arc<Self> {
         Arc::new(Self {
             text: Mutex::new(String::new()),
-            store: config.clipboard_store.clone(),
-            load: config.clipboard_load.clone(),
         })
     }
 }
 
 impl ClipboardHandler for SharedClipboard {
     fn set_text(&self, text: &str) -> StdResult<(), String> {
-        if let Some(store) = &self.store {
-            store(text.to_string());
-        }
         let mut guard = self.text.lock().map_err(|error| error.to_string())?;
         *guard = text.to_string();
         Ok(())
     }
 
     fn get_text(&self) -> StdResult<String, String> {
-        if let Some(load) = &self.load {
-            return Ok(load());
-        }
         let guard = self.text.lock().map_err(|error| error.to_string())?;
         Ok(guard.clone())
     }
 }
 
-/// Send wrapper around the thread-affine driver host.
-struct DriverPortal {
-    /// Host polled from the UI thread.
-    host: DriverHost,
-}
-
-// SAFETY: `DriverHost` already records and asserts the thread it is polled on.
-// Canopy requires widgets to be `Send`, but this wrapper does not relax the
-// actual thread-affinity checks enforced by the host itself.
-unsafe impl Send for DriverPortal {}
-
 /// Runtime and handles required to drive an attached terminal session.
 struct DriverRuntime {
     /// Driver host polled from Canopy's UI loop.
-    portal: DriverPortal,
+    host: DriverHost,
     /// Cloneable driver handle exposed to integrations.
     handle: Arc<DriverHandle>,
     /// Runtime used to enqueue async driver operations without blocking UI events.
@@ -121,7 +98,7 @@ impl DriverRuntime {
             .build()
             .map_err(|error| Error::Internal(error.to_string()))?;
         Ok(Self {
-            portal: DriverPortal { host },
+            host,
             handle: Arc::new(handle),
             runtime,
         })
@@ -134,7 +111,7 @@ impl DriverRuntime {
 
     /// Drive any pending backend work once from Canopy's poll loop.
     fn poll(&mut self, session: &mut Session) {
-        let _ = self.portal.host.poll_nonblocking(session);
+        let _ = self.host.poll_nonblocking(session);
     }
 
     /// Queue raw input bytes through the attached driver.
@@ -165,9 +142,9 @@ impl TerminalSize {
     }
 }
 
-/// Terminal color palette.
+/// Default terminal color palette.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct TerminalColors {
+struct TerminalColors {
     /// ANSI black (0).
     pub black: Color,
     /// ANSI red (1).
@@ -282,22 +259,6 @@ pub struct TerminalConfig {
     command: Option<Vec<String>>,
     /// Working directory for the terminal process.
     cwd: Option<PathBuf>,
-    /// Environment variables to inject into the terminal process.
-    env: Vec<(String, String)>,
-    /// Number of scrollback lines to keep.
-    scrollback_lines: usize,
-    /// Enable mouse reporting to the terminal when requested by the app.
-    mouse_reporting: bool,
-    /// Enable bracketed paste when requested by the app.
-    bracketed_paste: bool,
-    /// Enable kitty keyboard protocol support.
-    kitty_keyboard: bool,
-    /// Color palette for the terminal.
-    colors: TerminalColors,
-    /// Optional callback invoked when the clipboard is updated.
-    clipboard_store: Option<Arc<dyn Fn(String) + Send + Sync>>,
-    /// Optional callback used to fetch clipboard contents.
-    clipboard_load: Option<Arc<dyn Fn() -> String + Send + Sync>>,
     /// Optional callback invoked when the child process exits.
     on_exit: Option<Arc<dyn Fn(i32) + Send + Sync>>,
 }
@@ -307,14 +268,6 @@ impl Default for TerminalConfig {
         Self {
             command: None,
             cwd: None,
-            env: Vec::new(),
-            scrollback_lines: DEFAULT_SCROLLBACK,
-            mouse_reporting: true,
-            bracketed_paste: true,
-            kitty_keyboard: true,
-            colors: TerminalColors::default(),
-            clipboard_store: None,
-            clipboard_load: None,
             on_exit: None,
         }
     }
@@ -408,7 +361,7 @@ impl Terminal {
         let cfg = terminal_config(&self.config, self.last_size);
         let mut session =
             Session::from_config(&cfg).map_err(|error| Error::Internal(error.to_string()))?;
-        session.set_clipboard_handler(SharedClipboard::new(&self.config));
+        session.set_clipboard_handler(SharedClipboard::new());
         let driver = DriverRuntime::attach(&mut session)?;
 
         self.exit_notified = false;
@@ -635,28 +588,17 @@ impl Terminal {
         }
     }
 
-    /// Copy the current selection to the configured clipboard callback.
+    /// Swallow Ctrl+Shift+C so the chord does not reach the PTY.
     fn copy_selection(&self) {
-        let Some(text) = self.session().and_then(Session::copy_selection) else {
-            return;
-        };
-        if let Some(store) = &self.config.clipboard_store {
-            store(text);
-        }
+        let _ = self.session().and_then(Session::copy_selection);
     }
 
-    /// Send pasted content to the PTY, optionally bypassing bracketed paste.
+    /// Send pasted content to the PTY.
     fn handle_paste(&self, content: &str) {
         let Some(session) = self.session() else {
             return;
         };
-
-        if self.config.bracketed_paste {
-            drop(session.paste(content));
-            return;
-        }
-
-        self.queue_input(content.as_bytes().to_vec());
+        drop(session.paste(content));
     }
 
     /// Encode and send a keyboard event to the backend session.
@@ -751,7 +693,7 @@ impl Widget for Terminal {
         let selection = session.selection();
         let child_exited = session.child_exited();
         let child_exit_code = session.child_exit_code().unwrap_or(1);
-        let default_bg = self.config.colors.background;
+        let default_bg = TerminalColors::default().background;
         self.cursor = cursor_from_state(&state);
 
         for (row_idx, line) in runs.iter().enumerate() {
@@ -810,10 +752,9 @@ impl Widget for Terminal {
                     return Ok(EventOutcome::Ignore);
                 };
 
-                let mouse_reporting = self.config.mouse_reporting
-                    && (state.modes.mouse_report_click
-                        || state.modes.mouse_drag
-                        || state.modes.mouse_motion);
+                let mouse_reporting = state.modes.mouse_report_click
+                    || state.modes.mouse_drag
+                    || state.modes.mouse_motion;
                 if mouse_reporting {
                     self.send_mouse_sequence(mouse_event, &state);
                     return Ok(EventOutcome::Handle);
@@ -910,9 +851,9 @@ fn canopy_hex(color: Color) -> Hex {
 fn terminal_config(config: &TerminalConfig, size: TerminalSize) -> EguiTTYConfig {
     let mut builder = EguiTTYConfigBuilder::new()
         .grid_fixed(size.columns, size.rows)
-        .scrollback_lines(config.scrollback_lines)
-        .kitty_keyboard(config.kitty_keyboard)
-        .palette_inline(config.colors.palette_config());
+        .scrollback_lines(DEFAULT_SCROLLBACK)
+        .kitty_keyboard(true)
+        .palette_inline(TerminalColors::default().palette_config());
 
     if let Some(argv) = &config.command
         && let Some((program, args)) = argv.split_first()
@@ -923,9 +864,6 @@ fn terminal_config(config: &TerminalConfig, size: TerminalSize) -> EguiTTYConfig
     }
     if let Some(cwd) = &config.cwd {
         builder = builder.pty_working_dir(cwd.display().to_string());
-    }
-    for (key, value) in &config.env {
-        builder = builder.pty_env_var(key.clone(), value.clone());
     }
     builder.build()
 }

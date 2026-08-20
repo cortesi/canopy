@@ -37,7 +37,7 @@ full evidence, change, and proof.
 - [x] W4: Script-error schema omits `invalid`
 - [x] W7: Drop the unused `Send` supertrait on `Widget`
 - [x] W8: `Modal` is a byte-for-byte duplicate of `Center`
-- [ ] W9: `TerminalConfig` carries seven frozen fields
+- [x] W9: `TerminalConfig` carries seven frozen fields
 - [ ] W10: `commands.rs` carries conversion impls the type system cannot express
 - [ ] W11: Dissolve `Slot<K>`
 - [ ] W12: Make the `help` module crate-private
@@ -102,6 +102,13 @@ Record rejections, modifications, and proof commands here as items land.
   `cargo nextest run -p canopy -E 'test(termbuf)'`.
 - W7: Dropped `Send` from `Widget` and all four propagated bounds. All four
   compiled. Proof: `cargo check --workspace --all-targets --all-features`,
+  `cargo xtask api`.
+- W8: Deleted `Modal` and pointed help, todo, and stylegym at `Center`.
+  Slot names stay `ModalSlot` because they name the overlay role.
+- W9: Removed the seven frozen fields and the dead branches. `TerminalColors`
+  is now a private defaults type. `SharedClipboard` is a `Mutex<String>`.
+  Dropped `DriverPortal` and its `unsafe impl Send` because W7 made the
+  Widget `Send` requirement go away. Proof: terminal tests;
   `cargo xtask api`.
 
 ## Items

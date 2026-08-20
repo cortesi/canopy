@@ -66,7 +66,7 @@ pub use pad::Pad;
 pub use panes::Panes;
 pub use root::Root;
 pub use selector::Selector;
-pub use terminal::{Terminal, TerminalColors, TerminalConfig};
+pub use terminal::{Terminal, TerminalConfig};
 pub use text::{CanvasWidth, Text};
 pub use vstack::VStack;
 

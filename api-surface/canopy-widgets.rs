@@ -1550,49 +1550,6 @@ pub mod canopy_widgets {
         fn name(&self) -> NodeName {}
     }
 
-    /// Terminal color palette.
-    #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq, Default)]
-    pub struct TerminalColors {
-        /// ANSI black (0).
-        pub black: canopy::style::Color,
-        /// ANSI red (1).
-        pub red: canopy::style::Color,
-        /// ANSI green (2).
-        pub green: canopy::style::Color,
-        /// ANSI yellow (3).
-        pub yellow: canopy::style::Color,
-        /// ANSI blue (4).
-        pub blue: canopy::style::Color,
-        /// ANSI magenta (5).
-        pub magenta: canopy::style::Color,
-        /// ANSI cyan (6).
-        pub cyan: canopy::style::Color,
-        /// ANSI white (7).
-        pub white: canopy::style::Color,
-        /// ANSI bright black (8).
-        pub bright_black: canopy::style::Color,
-        /// ANSI bright red (9).
-        pub bright_red: canopy::style::Color,
-        /// ANSI bright green (10).
-        pub bright_green: canopy::style::Color,
-        /// ANSI bright yellow (11).
-        pub bright_yellow: canopy::style::Color,
-        /// ANSI bright blue (12).
-        pub bright_blue: canopy::style::Color,
-        /// ANSI bright magenta (13).
-        pub bright_magenta: canopy::style::Color,
-        /// ANSI bright cyan (14).
-        pub bright_cyan: canopy::style::Color,
-        /// ANSI bright white (15).
-        pub bright_white: canopy::style::Color,
-        /// Default foreground color.
-        pub foreground: canopy::style::Color,
-        /// Default background color.
-        pub background: canopy::style::Color,
-        /// Cursor color.
-        pub cursor: canopy::style::Color,
-    }
-
     /// Terminal widget configuration.
     #[derive(Default)]
     pub struct TerminalConfig {}
