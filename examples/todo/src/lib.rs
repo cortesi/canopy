@@ -116,8 +116,6 @@ impl Widget for TodoEntry {
 /// Status bar widget for the todo demo.
 pub(crate) struct StatusBar;
 
-
-
 impl Widget for StatusBar {
     fn render(&mut self, r: &mut Render, ctx: &dyn canopy::ViewContext) -> Result<()> {
         r.push_layer("statusbar");
@@ -132,8 +130,6 @@ impl Widget for StatusBar {
 
 /// Container for main content (list frame + status bar).
 struct MainContent;
-
-
 
 impl Widget for MainContent {}
 

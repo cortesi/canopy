@@ -3,9 +3,7 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Context, Loader, NodeId, TypedId, Widget,
-        error::Result,
-        state::NodeName,
+        Context, Loader, NodeId, TypedId, Widget, error::Result, state::NodeName,
         testing::harness::Harness,
     };
 

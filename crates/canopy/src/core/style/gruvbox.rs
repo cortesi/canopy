@@ -2,7 +2,7 @@
 //!
 //! Based on the gruvbox theme by morhetz: <https://github.com/morhetz/gruvbox>
 
-use super::{theme, Color, Palette, StyleMap};
+use super::{Color, Palette, StyleMap, theme};
 use crate::rgb;
 
 // Gruvbox dark background colors

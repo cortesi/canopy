@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap,
-    time::Duration,
-};
+use std::{collections::HashMap, time::Duration};
 
 use canopy::{
     Context, EventOutcome, ViewContext, Widget, command, cursor, derive_commands,
@@ -23,6 +20,7 @@ use super::{
     search::{PromptState, SearchDirection, SearchState},
     vi::{ViMode, ViState},
 };
+use crate::click::ClickTracker;
 
 /// Maximum delay between clicks to count as multi-click selection.
 const DOUBLE_CLICK_MS: u64 = 500;
@@ -71,7 +69,7 @@ pub(super) struct MouseState {
     /// Anchor position for the selection.
     anchor: Option<TextPosition>,
     /// Multi-click tracking state.
-    click_state: crate::click::ClickTracker,
+    click_state: ClickTracker,
 }
 
 /// Render context for a single editor line.
@@ -985,7 +983,7 @@ impl MouseState {
         Self {
             selecting: false,
             anchor: None,
-            click_state: crate::click::ClickTracker::new(Duration::from_millis(DOUBLE_CLICK_MS)),
+            click_state: ClickTracker::new(Duration::from_millis(DOUBLE_CLICK_MS)),
         }
     }
 

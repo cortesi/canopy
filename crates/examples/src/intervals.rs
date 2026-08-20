@@ -175,8 +175,6 @@ impl Widget for CounterItem {
 /// Status bar widget for the intervals demo.
 pub struct StatusBar;
 
-
-
 impl Widget for StatusBar {
     fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         r.push_layer("statusbar");

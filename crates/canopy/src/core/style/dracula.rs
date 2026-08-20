@@ -2,7 +2,7 @@
 //!
 //! Based on the Dracula theme: <https://draculatheme.com>
 
-use super::{theme, Color, Palette, StyleMap};
+use super::{Color, Palette, StyleMap, theme};
 use crate::rgb;
 
 // Dracula background colors

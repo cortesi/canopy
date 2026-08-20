@@ -395,33 +395,29 @@ fn focus_dir_key(
 ) -> Option<u64> {
     let center = rect.center();
     match dir {
-        Direction::Right => {
-            (center.0 > current_center.0 && rect.overlaps_vertical(current_rect)).then(|| {
+        Direction::Right => (center.0 > current_center.0 && rect.overlaps_vertical(current_rect))
+            .then(|| {
                 let edge_dist = (rect.left() - current_rect.right()).max(0) as u64;
                 let vert_center_dist = current_center.1.abs_diff(center.1);
                 edge_dist * 10000 + vert_center_dist
-            })
-        }
-        Direction::Left => {
-            (center.0 < current_center.0 && rect.overlaps_vertical(current_rect)).then(|| {
+            }),
+        Direction::Left => (center.0 < current_center.0 && rect.overlaps_vertical(current_rect))
+            .then(|| {
                 let edge_dist = (current_rect.left() - rect.right()).max(0) as u64;
                 let vert_center_dist = current_center.1.abs_diff(center.1);
                 edge_dist * 10000 + vert_center_dist
-            })
-        }
-        Direction::Down => {
-            (center.1 > current_center.1 && rect.overlaps_horizontal(current_rect)).then(|| {
+            }),
+        Direction::Down => (center.1 > current_center.1 && rect.overlaps_horizontal(current_rect))
+            .then(|| {
                 let edge_dist = (rect.top() - current_rect.bottom()).max(0) as u64;
                 let horiz_center_dist = current_center.0.abs_diff(center.0);
                 edge_dist * 10000 + horiz_center_dist
-            })
-        }
-        Direction::Up => {
-            (center.1 < current_center.1 && rect.overlaps_horizontal(current_rect)).then(|| {
+            }),
+        Direction::Up => (center.1 < current_center.1 && rect.overlaps_horizontal(current_rect))
+            .then(|| {
                 let edge_dist = (current_rect.top() - rect.bottom()).max(0) as u64;
                 let horiz_center_dist = current_center.0.abs_diff(center.0);
                 edge_dist * 10000 + horiz_center_dist
-            })
-        }
+            }),
     }
 }

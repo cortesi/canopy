@@ -152,11 +152,10 @@ impl Widget for FontGym {
             for spec in &BANNERS {
                 let font = Font::from_bytes(spec.font).expect("embedded font loads");
                 let label = font_label(&font);
-                let banner =
-                    FontBanner::new(DEFAULT_TEXT, FontRenderer::new(font))
-                        .with_effects(style_state)
-                        .with_style(spec.style)
-                        .with_layout_options(centered);
+                let banner = FontBanner::new(DEFAULT_TEXT, FontRenderer::new(font))
+                    .with_effects(style_state)
+                    .with_style(spec.style)
+                    .with_layout_options(centered);
                 let id = list.append(ctx, FontBlock::new(banner, label, BANNER_HEIGHT))?;
                 ctx.set_layout_of(id, block_layout(BANNER_HEIGHT))?;
                 ids.push(id);

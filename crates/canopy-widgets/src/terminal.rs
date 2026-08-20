@@ -29,6 +29,8 @@ use itty_core::{
 use tokio::runtime::{Builder, Runtime};
 use unicode_segmentation::UnicodeSegmentation;
 
+use crate::click::ClickTracker;
+
 /// Fallback terminal column count before sizing is known.
 const DEFAULT_COLUMNS: usize = 80;
 /// Fallback terminal line count before sizing is known.
@@ -244,6 +246,7 @@ impl TerminalColors {
 }
 
 /// Terminal widget configuration.
+#[derive(Default)]
 pub struct TerminalConfig {
     /// Optional command argv to run instead of the default shell.
     command: Option<Vec<String>>,
@@ -251,16 +254,6 @@ pub struct TerminalConfig {
     cwd: Option<PathBuf>,
     /// Optional callback invoked when the child process exits.
     on_exit: Option<Arc<dyn Fn(i32) + Send + Sync>>,
-}
-
-impl Default for TerminalConfig {
-    fn default() -> Self {
-        Self {
-            command: None,
-            cwd: None,
-            on_exit: None,
-        }
-    }
 }
 
 impl TerminalConfig {
@@ -312,7 +305,7 @@ pub struct Terminal {
     /// Selection anchor in viewport coordinates.
     selection_anchor: Option<geom::Point>,
     /// Multi-click tracking state.
-    last_click: crate::click::ClickTracker,
+    last_click: ClickTracker,
     /// Whether the child exit callback has been invoked.
     exit_notified: bool,
 }
@@ -332,7 +325,7 @@ impl Terminal {
             cursor: None,
             selection_active: false,
             selection_anchor: None,
-            last_click: crate::click::ClickTracker::new(Duration::from_millis(DOUBLE_CLICK_MS)),
+            last_click: ClickTracker::new(Duration::from_millis(DOUBLE_CLICK_MS)),
             exit_notified: false,
         }
     }

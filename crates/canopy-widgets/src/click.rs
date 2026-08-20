@@ -15,7 +15,7 @@ struct ClickRecord {
 
 /// Counts same-location clicks that arrive within a threshold, up to 3.
 #[derive(Clone, Debug)]
-pub(crate) struct ClickTracker {
+pub struct ClickTracker {
     /// Maximum delay between clicks that still increment the count.
     threshold: Duration,
     /// Previous click in the sequence, if any.

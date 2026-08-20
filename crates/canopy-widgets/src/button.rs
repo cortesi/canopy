@@ -91,10 +91,9 @@ impl Button {
     }
 
     /// Sync the label text widget to the current label.
-    fn sync_label(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        let box_id = ctx.get_or_create::<BoxSlot>(|| {
-            Border::new().with_glyphs(self.glyphs).with_fill()
-        })?;
+    fn sync_label(&self, ctx: &mut dyn Context) -> Result<()> {
+        let box_id =
+            ctx.get_or_create::<BoxSlot>(|| Border::new().with_glyphs(self.glyphs).with_fill())?;
         let center_id = ctx.get_or_create_in::<CenterSlot>(box_id, Center::new)?;
         let label_id =
             ctx.get_or_create_in::<LabelSlot>(center_id, || Text::new(self.label.clone()))?;

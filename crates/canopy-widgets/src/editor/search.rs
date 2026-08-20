@@ -1,3 +1,5 @@
+use std::mem;
+
 use canopy::{
     Context, EventOutcome,
     error::Result,
@@ -351,13 +353,12 @@ impl Editor {
             'y' => {
                 let query = query.clone();
                 let replacement = replacement.clone();
-                let matches = std::mem::take(matches);
+                let matches = mem::take(matches);
                 let index = *index;
                 let (new_matches, next_index) =
                     self.replace_match(&query, &replacement, matches, index, ctx);
-                if let Some(PromptState::ReplaceConfirm {
-                    matches, index, ..
-                }) = self.prompt.as_mut()
+                if let Some(PromptState::ReplaceConfirm { matches, index, .. }) =
+                    self.prompt.as_mut()
                 {
                     *matches = new_matches;
                     *index = next_index;
@@ -390,7 +391,7 @@ impl Editor {
         if *replace_all {
             let query = query.clone();
             let replacement = replacement.clone();
-            let mut matches = std::mem::take(matches);
+            let mut matches = mem::take(matches);
             let mut index = *index;
             while index < matches.len() {
                 let (new_matches, next_index) =

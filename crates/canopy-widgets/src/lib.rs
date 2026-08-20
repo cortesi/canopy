@@ -5,12 +5,12 @@
 
 /// Border widget with customizable glyphs.
 mod boxed;
-/// Multi-click tracker shared by editor and terminal.
-mod click;
 /// Button widget with command dispatch.
 mod button;
 /// Content centering container.
 mod center;
+/// Multi-click tracker shared by editor and terminal.
+mod click;
 /// Dropdown selection widget.
 mod dropdown;
 /// Experimental editor API with syntax highlighting and vi mode.

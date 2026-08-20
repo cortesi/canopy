@@ -1,7 +1,7 @@
 use canopy::geom::Point;
 use unicode_segmentation::UnicodeSegmentation;
 
-use super::{display_width, LineChange, TextBuffer, TextPosition, WrapMode};
+use super::{LineChange, TextBuffer, TextPosition, WrapMode, display_width};
 
 /// A wrapped segment of a logical line.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -4,8 +4,7 @@
 //! Items participate in focus management and can be composed from other widgets.
 
 use canopy::{
-    Context, EventOutcome, KeyedChildren, NodeId, TypedId, ViewContext, Widget,
-    command,
+    Context, EventOutcome, KeyedChildren, NodeId, TypedId, ViewContext, Widget, command,
     commands::{
         CommandArgs, CommandCall, CommandInvocation, CommandScopeFrame, ListRowContext, ToArgValue,
     },
@@ -190,8 +189,7 @@ impl<W: Selectable> List<W> {
         let previous_focus = ctx.focused_leaf(ctx.root_id());
         let mut desired = self.items.keys().to_vec();
         desired.insert(clamped, key);
-        let ordered =
-            self.reconcile_with_widget(ctx, desired, key, widget)?;
+        let ordered = self.reconcile_with_widget(ctx, desired, key, widget)?;
         let id = ordered
             .get(clamped)
             .copied()

@@ -1,4 +1,4 @@
-use super::{theme, Color, Palette, StyleMap};
+use super::{Color, Palette, StyleMap, theme};
 use crate::rgb;
 
 // Solarized color constants using the new hex constructor.

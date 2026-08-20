@@ -7,10 +7,9 @@ use ropey::Rope;
 use unicode_segmentation::UnicodeSegmentation;
 
 use super::{
-    display_width,
+    Selection, TextPosition, TextRange, display_width,
     edit::{Edit, Transaction},
     util::{next_grapheme_boundary, prev_grapheme_boundary},
-    Selection, TextPosition, TextRange,
 };
 
 /// Information about how an edit changed logical line counts.
