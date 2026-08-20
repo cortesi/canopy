@@ -490,11 +490,19 @@ impl TermBuf {
 
     /// Return the rendered screen as newline-joined plain text.
     pub fn screen_text(&self) -> String {
-        self.rows()
-            .into_iter()
-            .map(|row| row.concat())
-            .collect::<Vec<_>>()
-            .join("\n")
+        let mut out = String::new();
+        for y in 0..self.size.h {
+            if y > 0 {
+                out.push('\n');
+            }
+            for x in 0..self.size.w {
+                let cell = self
+                    .get(Point { x, y })
+                    .expect("buffer coordinates should always be valid");
+                cell.push_text(&mut out);
+            }
+        }
+        out
     }
 
     /// Diff this terminal buffer against a previous state, emitting changes
