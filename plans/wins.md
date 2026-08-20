@@ -34,7 +34,7 @@ full evidence, change, and proof.
 **API surface**
 
 - [x] W3: Inspector advertises a phantom Stats tab
-- [ ] W4: Script-error schema omits `invalid`
+- [x] W4: Script-error schema omits `invalid`
 - [ ] W7: Drop the unused `Send` supertrait on `Widget`
 - [ ] W8: `Modal` is a byte-for-byte duplicate of `Center`
 - [ ] W9: `TerminalConfig` carries seven frozen fields
@@ -92,6 +92,8 @@ Record rejections, modifications, and proof commands here as items land.
 - W3: Implemented, with one adjacent deletion: `tab_active_fg` and the
   parent `/tab` rule left the palette because they had no remaining
   consumers. Proof: `cargo nextest run -p canopy-widgets -E 'test(inspector_pane_draws_its_frame)'`,
+  `cargo xtask api`.
+- W4: Added `invalid` to the `ScriptErrorInfo.error_type` doc. Proof:
   `cargo xtask api`.
 
 ## Items

@@ -173,7 +173,7 @@ pub mod canopy_mcp {
     /// Error details included in a failed script evaluation.
     #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Serialize, Deserialize)]
     pub struct ScriptErrorInfo {
-        /// Pipeline stage that failed: `build`, `typecheck`, `timeout`, or `runtime`.
+        /// Pipeline stage that failed: `build`, `typecheck`, `timeout`, `runtime`, or `invalid`.
         pub error_type: String,
         /// Stable host error category such as `no_target` or `unknown_command`,
         /// when the failure carried structured fields.

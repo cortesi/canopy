@@ -79,7 +79,7 @@ pub enum ScriptTaskState {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ScriptErrorInfo {
     #[serde(rename = "type")]
-    /// Pipeline stage that failed: `build`, `typecheck`, `timeout`, or `runtime`.
+    /// Pipeline stage that failed: `build`, `typecheck`, `timeout`, `runtime`, or `invalid`.
     pub error_type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     /// Stable host error category such as `no_target` or `unknown_command`,
