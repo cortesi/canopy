@@ -156,12 +156,6 @@ impl PathFilter {
         &self.filter
     }
 
-    /// Check whether the path filter matches a given path.
-    /// Returns the matched depth for use in quick checks.
-    pub(crate) fn check(&self, path: &Path) -> Option<usize> {
-        self.check_match(path).map(|m| m.depth)
-    }
-
     /// Check whether the path filter matches a given path, returning match metadata.
     pub(crate) fn check_match(&self, path: &Path) -> Option<PathMatch> {
         let parts = &path.path;
@@ -172,7 +166,7 @@ impl PathFilter {
             0..=parts.len()
         };
         for start in starts {
-            if let Some(end) = match_end(&self.pattern.segments, parts, start) {
+            if let Some(end) = walk_match_end(&self.pattern.segments, parts, 0, start) {
                 if self.pattern.anchor_end && end != parts.len() {
                     continue;
                 }
@@ -199,14 +193,6 @@ pub(crate) fn normalize_filter(path_filter: &str) -> String {
     } else {
         format!("/{trimmed}/")
     }
-}
-
-/// Return the furthest end index for a match starting at `start`.
-fn match_end(segments: &[Segment], parts: &[String], start: usize) -> Option<usize> {
-    if segments.is_empty() {
-        return Some(start);
-    }
-    walk_match_end(segments, parts, 0, start)
 }
 
 /// Recursively resolve the furthest matching end index for a segment sequence.
@@ -255,40 +241,40 @@ mod tests {
     #[test]
     fn pathfilter() -> Result<()> {
         let v = PathFilter::new("")?;
-        assert!(v.check(&"/any/thing".into()).is_some());
-        assert!(v.check(&"/".into()).is_some());
+        assert!(v.check_match(&"/any/thing".into()).is_some());
+        assert!(v.check_match(&"/".into()).is_some());
 
         let v = PathFilter::new("bar")?;
-        assert!(v.check(&"/foo/bar".into()).is_some());
-        assert!(v.check(&"/bar/foo".into()).is_some());
-        assert!(v.check(&"/foo/foo".into()).is_none());
+        assert!(v.check_match(&"/foo/bar".into()).is_some());
+        assert!(v.check_match(&"/bar/foo".into()).is_some());
+        assert!(v.check_match(&"/foo/foo".into()).is_none());
 
         let v = PathFilter::new("foo/*/bar")?;
-        assert!(v.check(&"/foo/oink/bar".into()).is_some());
-        assert!(v.check(&"/oink/foo/oink/bar/oink".into()).is_some());
-        assert!(v.check(&"/foo/bar".into()).is_none());
-        assert!(v.check(&"/foo/oink/oink/bar".into()).is_none());
+        assert!(v.check_match(&"/foo/oink/bar".into()).is_some());
+        assert!(v.check_match(&"/oink/foo/oink/bar/oink".into()).is_some());
+        assert!(v.check_match(&"/foo/bar".into()).is_none());
+        assert!(v.check_match(&"/foo/oink/oink/bar".into()).is_none());
 
         let v = PathFilter::new("/foo")?;
-        assert!(v.check(&"/foo".into()).is_some());
-        assert!(v.check(&"/foo/bar".into()).is_some());
-        assert!(v.check(&"/bar/foo/bar".into()).is_none());
+        assert!(v.check_match(&"/foo".into()).is_some());
+        assert!(v.check_match(&"/foo/bar".into()).is_some());
+        assert!(v.check_match(&"/bar/foo/bar".into()).is_none());
 
         let v = PathFilter::new("foo/")?;
-        assert!(v.check(&"/foo".into()).is_some());
-        assert!(v.check(&"/bar/foo".into()).is_some());
-        assert!(v.check(&"/foo/bar".into()).is_none());
+        assert!(v.check_match(&"/foo".into()).is_some());
+        assert!(v.check_match(&"/bar/foo".into()).is_some());
+        assert!(v.check_match(&"/foo/bar".into()).is_none());
 
         let v = PathFilter::new("foo/**/bar")?;
-        assert!(v.check(&"/foo/bar".into()).is_some());
-        assert!(v.check(&"/foo/x/bar".into()).is_some());
-        assert!(v.check(&"/foo/x/y/bar".into()).is_some());
-        assert!(v.check(&"/bar/foo/x/bar/x".into()).is_some());
+        assert!(v.check_match(&"/foo/bar".into()).is_some());
+        assert!(v.check_match(&"/foo/x/bar".into()).is_some());
+        assert!(v.check_match(&"/foo/x/y/bar".into()).is_some());
+        assert!(v.check_match(&"/bar/foo/x/bar/x".into()).is_some());
 
         let v = PathFilter::new("foo/**/bar/")?;
-        assert!(v.check(&"/foo/bar".into()).is_some());
-        assert!(v.check(&"/foo/x/bar".into()).is_some());
-        assert!(v.check(&"/foo/x/bar/x".into()).is_none());
+        assert!(v.check_match(&"/foo/bar".into()).is_some());
+        assert!(v.check_match(&"/foo/x/bar".into()).is_some());
+        assert!(v.check_match(&"/foo/x/bar/x".into()).is_none());
 
         Ok(())
     }

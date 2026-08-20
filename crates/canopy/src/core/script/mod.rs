@@ -868,12 +868,6 @@ impl LuauHost {
 
     /// Compile a source while preserving its module identity and diagnostic metadata.
     pub(crate) fn compile_source(&self, source: &Source) -> Result<ScriptId> {
-        source.as_str().ok_or_else(|| {
-            error::Error::Invalid(format!(
-                "script source {} is not valid UTF-8",
-                source.display_name()
-            ))
-        })?;
         let runtime_source = strict_named_source(source)?;
         let prepared = if let Some(surface) = self.state.borrow().surface.clone() {
             Some(

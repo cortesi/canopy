@@ -50,8 +50,8 @@ pub struct Node {
     pub(crate) layout_dirty: bool,
 
     /// Effects to apply to this node and descendants during rendering.
-    /// None for the common case of no effects (avoids per-node Vec allocation).
-    pub(crate) effects: Option<Vec<Effect>>,
+    /// Empty until an effect is pushed; `Vec::new()` does not allocate.
+    pub(crate) effects: Vec<Effect>,
 }
 
 impl Node {
@@ -79,7 +79,7 @@ impl Node {
             initialized: false,
             mounted: false,
             layout_dirty: false,
-            effects: None,
+            effects: Vec::new(),
         }
     }
 }

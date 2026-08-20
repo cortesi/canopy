@@ -228,7 +228,7 @@ fn matching_nodes<'a, C: ViewContext + ?Sized>(
 ) -> impl Iterator<Item = NodeId> + 'a {
     let root = ctx.node_id();
     preorder_from(ctx, root)
-        .filter(move |id| path_filter.check(&ctx.node_path(root, *id)).is_some())
+        .filter(move |id| path_filter.check_match(&ctx.node_path(root, *id)).is_some())
 }
 
 /// Apply a scroll transform to a node, clamp it to the canvas, and report whether it moved.
@@ -1037,7 +1037,7 @@ impl Context for NodeCtx<&mut Core> {
             .nodes
             .get_mut(node)
             .ok_or(Error::NodeNotFound(node))?;
-        node.effects.get_or_insert_with(Vec::new).push(effect);
+        node.effects.push(effect);
         Ok(())
     }
 
@@ -1047,7 +1047,7 @@ impl Context for NodeCtx<&mut Core> {
             .nodes
             .get_mut(node)
             .ok_or(Error::NodeNotFound(node))?;
-        node.effects = None;
+        node.effects = Vec::new();
         Ok(())
     }
 

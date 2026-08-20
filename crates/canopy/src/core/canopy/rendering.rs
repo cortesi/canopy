@@ -6,7 +6,7 @@ use crate::{
     core::{context::CoreViewContext, termbuf::TermBuf, view::View, world::WidgetOperation},
     cursor,
     error::Result,
-    geom::{Point, Rect, RectI32, Size},
+    geom::{Point, Rect, Size},
     layout::Display,
     render::{NopBackend, Render, RenderBackend},
     style::{Effect, StyleManager},
@@ -109,7 +109,8 @@ impl Canopy {
         screen_clip: Rect,
         effect_slice: &[Effect],
     ) -> Result<()> {
-        let local_clip = Self::outer_clip_to_local(view.outer, screen_clip);
+        let local = view.outer.to_local_point(screen_clip.tl);
+        let local_clip = Rect::new(local.x, local.y, screen_clip.w, screen_clip.h);
         let screen_origin = screen_clip.tl;
 
         let mut rndr = Render::new(&self.style, styl, dest_buf, local_clip, screen_origin)
@@ -147,9 +148,7 @@ impl Canopy {
 
         let saved_len = traversal.effect_stack.len();
 
-        if let Some(local) = node.effects.as_ref() {
-            traversal.effect_stack.extend(local.iter().cloned());
-        }
+        traversal.effect_stack.extend(node.effects.iter().cloned());
 
         let current_len = active_len + traversal.effect_stack.len() - saved_len;
 
@@ -205,7 +204,7 @@ impl Canopy {
     /// Post-render sweep of the tree.
     fn post_render(&self, buf: &mut TermBuf) -> Result<()> {
         let mut current = self.core.focus;
-        let mut cursor_spec: Option<(NodeId, View, cursor::Cursor)> = None;
+        let mut cursor_spec: Option<(View, cursor::Cursor)> = None;
         while let Some(id) = current {
             let cursor =
                 self.core
@@ -213,13 +212,13 @@ impl Canopy {
             if let Some(node_cursor) = cursor
                 && let Some(node) = self.core.nodes.get(id)
             {
-                cursor_spec = Some((id, node.view, node_cursor));
+                cursor_spec = Some((node.view, node_cursor));
                 break;
             }
             current = self.core.nodes.get(id).and_then(|n| n.parent);
         }
 
-        if let Some((_nid, view, c)) = cursor_spec {
+        if let Some((view, c)) = cursor_spec {
             let view_rect = Rect::new(0, 0, view.content.w, view.content.h);
             if view_rect.contains_point(c.location) {
                 let screen_x = i64::from(view.content.tl.x) + i64::from(c.location.x);
@@ -274,14 +273,5 @@ impl Canopy {
         }
 
         Ok(())
-    }
-
-    /// Convert a screen-space clip rect into local outer coordinates.
-    fn outer_clip_to_local(outer: RectI32, clip: Rect) -> Rect {
-        let dx = i64::from(clip.tl.x) - i64::from(outer.tl.x);
-        let dy = i64::from(clip.tl.y) - i64::from(outer.tl.y);
-        let dx = u32::try_from(dx.clamp(0, i64::from(u32::MAX))).unwrap_or(u32::MAX);
-        let dy = u32::try_from(dy.clamp(0, i64::from(u32::MAX))).unwrap_or(u32::MAX);
-        Rect::new(dx, dy, clip.w, clip.h)
     }
 }
