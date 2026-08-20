@@ -38,7 +38,7 @@ full evidence, change, and proof.
 - [x] W7: Drop the unused `Send` supertrait on `Widget`
 - [x] W8: `Modal` is a byte-for-byte duplicate of `Center`
 - [x] W9: `TerminalConfig` carries seven frozen fields
-- [ ] W10: `commands.rs` carries conversion impls the type system cannot express
+- [x] W10: `commands.rs` carries conversion impls the type system cannot express
 - [ ] W11: Dissolve `Slot<K>`
 - [ ] W12: Make the `help` module crate-private
 - [ ] W13: Drop the canopy-widgets error module
@@ -110,6 +110,9 @@ Record rejections, modifications, and proof commands here as items land.
   Dropped `DriverPortal` and its `unsafe impl Send` because W7 made the
   Widget `Send` requirement go away. Proof: terminal tests;
   `cargo xtask api`.
+- W10: Deleted tuple/`()` ToArgValue and FromArgValue impls, the unused
+  CommandArgs From impls, and the self-test. Proof: `cargo check --workspace
+  --all-targets --all-features`, `cargo xtask api`.
 
 ## Items
 

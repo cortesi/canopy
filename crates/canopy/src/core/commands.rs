@@ -280,39 +280,6 @@ where
     }
 }
 
-impl<A> ToArgValue for (A,)
-where
-    A: ToArgValue,
-{
-    fn to_arg_value(self) -> ArgValue {
-        ArgValue::Array(vec![self.0.to_arg_value()])
-    }
-}
-
-/// Implement `ToArgValue` for tuple arities.
-macro_rules! impl_tuple_to_arg_value {
-    ($($idx:tt : $name:ident),+ $(,)?) => {
-        impl<$($name),+> ToArgValue for ($($name,)+)
-        where
-            $($name: ToArgValue,)+
-        {
-            fn to_arg_value(self) -> ArgValue {
-                ArgValue::Array(vec![$(self.$idx.to_arg_value(),)+])
-            }
-        }
-    };
-}
-
-impl_tuple_to_arg_value!(0: T1, 1: T2);
-impl_tuple_to_arg_value!(0: T1, 1: T2, 2: T3);
-impl_tuple_to_arg_value!(0: T1, 1: T2, 2: T3, 3: T4);
-
-impl ToArgValue for () {
-    fn to_arg_value(self) -> ArgValue {
-        ArgValue::Null
-    }
-}
-
 impl FromArgValue for bool {
     fn from_arg_value(v: &ArgValue) -> Result<Self, CommandError> {
         match v {
@@ -453,65 +420,9 @@ where
     }
 }
 
-impl<A> FromArgValue for (A,)
-where
-    A: FromArgValue,
-{
-    fn from_arg_value(v: &ArgValue) -> Result<Self, CommandError> {
-        match v {
-            ArgValue::Array(values) if values.len() == 1 => Ok((A::from_arg_value(&values[0])?,)),
-            ArgValue::Array(values) => Err(CommandError::conversion(format!(
-                "expected 1 element, got {}",
-                values.len()
-            ))),
-            other => Err(CommandError::type_mismatch("tuple", other)),
-        }
-    }
-}
-
-/// Implement `FromArgValue` for tuple arities.
-macro_rules! impl_tuple_from_arg_value {
-    ($len:literal, $($name:ident),+ $(,)?) => {
-        impl<$($name),+> FromArgValue for ($($name,)+)
-        where
-            $($name: FromArgValue,)+
-        {
-            fn from_arg_value(v: &ArgValue) -> Result<Self, CommandError> {
-                match v {
-                    ArgValue::Array(values) if values.len() == $len => {
-                        let mut iter = values.iter();
-                        Ok((
-                            $($name::from_arg_value(iter.next().unwrap())?,)+
-                        ))
-                    }
-                    ArgValue::Array(values) => Err(CommandError::conversion(format!(
-                        "expected {} elements, got {}",
-                        $len,
-                        values.len()
-                    ))),
-                    other => Err(CommandError::type_mismatch("tuple", other)),
-                }
-            }
-        }
-    };
-}
-
-impl_tuple_from_arg_value!(2, T1, T2);
-impl_tuple_from_arg_value!(3, T1, T2, T3);
-impl_tuple_from_arg_value!(4, T1, T2, T3, T4);
-
 impl FromArgValue for ArgValue {
     fn from_arg_value(v: &ArgValue) -> Result<Self, CommandError> {
         Ok(v.clone())
-    }
-}
-
-impl FromArgValue for () {
-    fn from_arg_value(v: &ArgValue) -> Result<Self, CommandError> {
-        match v {
-            ArgValue::Null => Ok(()),
-            other => Err(CommandError::type_mismatch("()", other)),
-        }
     }
 }
 
@@ -798,38 +709,6 @@ impl Default for CommandArgs {
 impl From<()> for CommandArgs {
     fn from(_: ()) -> Self {
         Self::Positional(Vec::new())
-    }
-}
-
-impl<T, const N: usize> From<[T; N]> for CommandArgs
-where
-    T: ToArgValue,
-{
-    fn from(values: [T; N]) -> Self {
-        Self::Positional(values.into_iter().map(ToArgValue::to_arg_value).collect())
-    }
-}
-
-impl<T> From<Vec<T>> for CommandArgs
-where
-    T: ToArgValue,
-{
-    fn from(values: Vec<T>) -> Self {
-        Self::Positional(values.into_iter().map(ToArgValue::to_arg_value).collect())
-    }
-}
-
-impl<T> From<BTreeMap<String, T>> for CommandArgs
-where
-    T: ToArgValue,
-{
-    fn from(values: BTreeMap<String, T>) -> Self {
-        Self::Named(
-            values
-                .into_iter()
-                .map(|(k, v)| (k, v.to_arg_value()))
-                .collect(),
-        )
     }
 }
 
@@ -1610,15 +1489,6 @@ mod tests {
         let value = ArgValue::Null;
         let out: Option<i32> = Option::from_arg_value(&value).unwrap();
         assert!(out.is_none());
-    }
-
-    #[test]
-    fn tuple_lengths_validate() {
-        let value = ArgValue::Array(vec![ArgValue::Int(1), ArgValue::Int(2)]);
-        let out: (i32, i32) = FromArgValue::from_arg_value(&value).unwrap();
-        assert_eq!(out, (1, 2));
-        let err: Result<(i32, i32), _> = FromArgValue::from_arg_value(&ArgValue::Array(vec![]));
-        assert!(err.is_err());
     }
 
     #[test]

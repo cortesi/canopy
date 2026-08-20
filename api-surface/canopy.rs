@@ -3075,27 +3075,6 @@ pub mod canopy {
             fn from(_: ()) -> Self {}
         }
 
-        impl<T, const N: usize> From<[T; N]> for CommandArgs
-        where
-            T: ToArgValue,
-        {
-            fn from(values: [T; N]) -> Self {}
-        }
-
-        impl<T> From<Vec<T>> for CommandArgs
-        where
-            T: ToArgValue,
-        {
-            fn from(values: Vec<T>) -> Self {}
-        }
-
-        impl<T> From<BTreeMap<String, T>> for CommandArgs
-        where
-            T: ToArgValue,
-        {
-            fn from(values: BTreeMap<String, T>) -> Self {}
-        }
-
         /// A command invocation with encoded arguments.
         #[derive(Clone, Debug, StructuralPartialEq, PartialEq)]
         pub struct CommandInvocation {
