@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, Context, Loader, NodeId, ViewContext, Widget, buf, derive_commands,
+        Context, Loader, NodeId, ViewContext, Widget, buf,
         error::Result,
         geom::Size,
         layout::{Layout, Sizing},
@@ -14,7 +14,6 @@ mod tests {
 
     struct NodeB;
 
-    #[derive_commands]
     impl NodeB {
         fn new() -> Self {
             Self
@@ -34,7 +33,6 @@ mod tests {
 
     struct NodeA;
 
-    #[derive_commands]
     impl NodeA {
         fn new() -> Self {
             Self
@@ -49,7 +47,6 @@ mod tests {
 
     struct Root;
 
-    #[derive_commands]
     impl Root {
         fn new() -> Self {
             Self
@@ -62,14 +59,7 @@ mod tests {
         }
     }
 
-    impl Loader for Root {
-        fn load(c: &mut Canopy) -> Result<()> {
-            c.add_commands::<Self>()?;
-            c.add_commands::<NodeA>()?;
-            c.add_commands::<NodeB>()?;
-            Ok(())
-        }
-    }
+    impl Loader for Root {}
 
     fn style_flex_child(core: &mut dyn Context, id: NodeId) -> Result<()> {
         core.with_layout_of(id, &mut |layout| {

@@ -172,9 +172,6 @@ canopy::key!(ModalSlot: Center);
 /// The demo content pane showing styled samples.
 pub struct DemoContent;
 
-#[derive_commands]
-impl DemoContent {}
-
 impl Widget for DemoContent {
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
@@ -236,9 +233,6 @@ impl Widget for DemoContent {
 
 /// Modal content widget.
 struct ModalContent;
-
-#[derive_commands]
-impl ModalContent {}
 
 impl Widget for ModalContent {
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
@@ -406,9 +400,6 @@ impl Stylegym {
 /// A simple container widget that just renders its children.
 struct Container;
 
-#[derive_commands]
-impl Container {}
-
 impl Widget for Container {
     fn layout(&self) -> Layout {
         Layout::fill()
@@ -484,9 +475,6 @@ impl Loader for Stylegym {
     fn load(c: &mut Canopy) -> Result<()> {
         Root::load(c)?;
         c.add_commands::<Self>()?;
-        c.add_commands::<DemoContent>()?;
-        c.add_commands::<ModalContent>()?;
-        c.add_commands::<Container>()?;
         c.add_commands::<Dropdown<ThemeOption>>()?;
         c.add_commands::<Selector<EffectOption>>()?;
         Ok(())

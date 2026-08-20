@@ -63,7 +63,6 @@ struct TermEntry {
     selected: bool,
 }
 
-#[derive_commands]
 impl TermEntry {
     /// Construct a new terminal entry.
     fn new(label: impl Into<String>) -> Self {
@@ -130,7 +129,6 @@ impl Widget for TermEntry {
 /// Stack container for terminal widgets.
 struct TerminalStack;
 
-#[derive_commands]
 impl TerminalStack {
     /// Construct a terminal stack container.
     fn new() -> Self {

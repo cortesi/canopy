@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, NodeId, ViewContext, Widget, derive_commands,
+        Canopy, NodeId, ViewContext, Widget,
         error::Result,
         geom::{Point, Size},
         path::Path,
@@ -15,7 +15,6 @@ mod tests {
         name: String,
     }
 
-    #[derive_commands]
     impl TreeWidget {
         fn new(name: &str) -> Self {
             Self {

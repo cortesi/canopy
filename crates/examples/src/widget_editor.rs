@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use canopy::{derive_commands, layout::Edges, prelude::*};
+use canopy::{layout::Edges, prelude::*};
 use canopy_widgets::{
     Frame, Pad,
     editor::{EditMode, Editor, EditorConfig, WrapMode, highlight::SyntectHighlighter},
@@ -25,7 +25,6 @@ pub struct WidgetEditor {
     title: String,
 }
 
-#[derive_commands]
 impl WidgetEditor {
     /// Construct a widget editor from file contents and metadata.
     pub fn new(
@@ -63,7 +62,6 @@ impl Widget for WidgetEditor {
 
 impl Loader for WidgetEditor {
     fn load(c: &mut Canopy) -> Result<()> {
-        c.add_commands::<Self>()?;
         c.add_commands::<Editor>()?;
         Ok(())
     }

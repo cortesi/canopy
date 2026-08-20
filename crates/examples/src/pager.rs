@@ -1,4 +1,4 @@
-use canopy::{derive_commands, prelude::*};
+use canopy::prelude::*;
 use canopy_widgets::{Frame, Text};
 
 /// Simple pager widget for file contents.
@@ -7,7 +7,6 @@ pub struct Pager {
     contents: String,
 }
 
-#[derive_commands]
 impl Pager {
     /// Construct a pager with initial contents.
     pub fn new(contents: &str) -> Self {

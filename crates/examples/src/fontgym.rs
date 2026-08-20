@@ -3,7 +3,6 @@ use std::{f32::consts::TAU, time::Duration};
 use canopy::{
     Canopy, Context, EventOutcome, Loader, NodeId, ViewContext, Widget,
     cursor::{Cursor, CursorShape},
-    derive_commands,
     error::Result,
     event::{Event, key},
     geom::{Line, Point},
@@ -123,7 +122,6 @@ impl Default for FontGym {
     }
 }
 
-#[derive_commands]
 impl FontGym {
     /// Construct a new font gym demo.
     pub fn new() -> Self {
@@ -214,12 +212,7 @@ impl Widget for FontGym {
     }
 }
 
-impl Loader for FontGym {
-    fn load(c: &mut Canopy) -> Result<()> {
-        c.add_commands::<Self>()?;
-        Ok(())
-    }
-}
+impl Loader for FontGym {}
 
 /// Focusable frame wrapper that delegates rendering and handles keyboard scroll.
 struct FocusFrame {

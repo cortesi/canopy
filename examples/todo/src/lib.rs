@@ -116,8 +116,7 @@ impl Widget for TodoEntry {
 /// Status bar widget for the todo demo.
 pub(crate) struct StatusBar;
 
-#[derive_commands]
-impl StatusBar {}
+
 
 impl Widget for StatusBar {
     fn render(&mut self, r: &mut Render, ctx: &dyn canopy::ViewContext) -> Result<()> {
@@ -134,8 +133,7 @@ impl Widget for StatusBar {
 /// Container for main content (list frame + status bar).
 struct MainContent;
 
-#[derive_commands]
-impl MainContent {}
+
 
 impl Widget for MainContent {}
 

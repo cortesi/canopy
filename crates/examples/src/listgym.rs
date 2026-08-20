@@ -107,7 +107,6 @@ pub struct ListEntry {
     text: Text,
 }
 
-#[derive_commands]
 impl ListEntry {
     /// Construct a new list entry from a text widget.
     pub fn new(text: Text) -> Self {
@@ -160,7 +159,6 @@ fn list_item(index: usize) -> ListEntry {
 /// Status bar widget for the list gym demo.
 pub struct StatusBar;
 
-#[derive_commands]
 impl StatusBar {
     /// Construct a status bar.
     pub fn new() -> Self {

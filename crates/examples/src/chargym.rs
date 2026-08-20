@@ -1,6 +1,6 @@
 //! Chargym: A Unicode width and wide character demo.
 
-use canopy::{derive_commands, prelude::*};
+use canopy::prelude::*;
 use canopy_widgets::{CanvasWidth, Frame, Text};
 use unicode_width::UnicodeWidthStr;
 
@@ -174,7 +174,6 @@ impl Default for CharGym {
     }
 }
 
-#[derive_commands]
 impl CharGym {
     /// Construct a new chargym demo.
     pub fn new() -> Self {

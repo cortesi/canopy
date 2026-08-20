@@ -182,7 +182,6 @@ impl Default for FrameGym {
     }
 }
 
-#[derive_commands]
 impl FrameGym {
     /// Construct a new frame gym.
     pub fn new() -> Self {
@@ -203,7 +202,6 @@ impl Widget for FrameGym {
 
 impl Loader for FrameGym {
     fn load(c: &mut Canopy) -> Result<()> {
-        c.add_commands::<Self>()?;
         c.add_commands::<TestPattern>()?;
         Ok(())
     }

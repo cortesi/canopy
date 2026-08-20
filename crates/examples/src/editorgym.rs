@@ -110,7 +110,6 @@ fn add_editor_frame(
 /// Column container for editor frames.
 struct EditorColumn;
 
-#[derive_commands]
 impl EditorColumn {
     /// Construct an editor column container.
     fn new() -> Self {
@@ -320,7 +319,6 @@ impl Widget for EditorGym {
 impl Loader for EditorGym {
     fn load(c: &mut Canopy) -> Result<()> {
         c.add_commands::<Self>()?;
-        c.add_commands::<EditorColumn>()?;
         c.add_commands::<Editor>()?;
         Ok(())
     }

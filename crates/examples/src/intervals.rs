@@ -77,7 +77,6 @@ impl Default for CounterItem {
     }
 }
 
-#[derive_commands]
 impl CounterItem {
     /// Construct a new counter item.
     pub fn new() -> Self {
@@ -176,8 +175,7 @@ impl Widget for CounterItem {
 /// Status bar widget for the intervals demo.
 pub struct StatusBar;
 
-#[derive_commands]
-impl StatusBar {}
+
 
 impl Widget for StatusBar {
     fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {

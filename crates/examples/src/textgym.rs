@@ -1,4 +1,4 @@
-use canopy::{derive_commands, layout::Edges, prelude::*};
+use canopy::{layout::Edges, prelude::*};
 use canopy_widgets::{CanvasWidth, Frame, Pad, Selectable, Text, VStack};
 
 /// Text sample using the default tab stop.
@@ -38,7 +38,6 @@ impl Default for TextGym {
     }
 }
 
-#[derive_commands]
 impl TextGym {
     /// Construct a new text gym demo.
     pub fn new() -> Self {
@@ -114,12 +113,7 @@ fn section(c: &mut dyn Context, title: &str, text: Text, width: u32) -> Result<N
     Ok(pad_id)
 }
 
-impl Loader for TextGym {
-    fn load(c: &mut Canopy) -> Result<()> {
-        c.add_commands::<Self>()?;
-        Ok(())
-    }
-}
+impl Loader for TextGym {}
 
 /// Default bindings for the text gym demo.
 const DEFAULT_BINDINGS: &str = r#"
