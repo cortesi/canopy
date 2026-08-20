@@ -631,8 +631,6 @@ pub mod canopy_widgets {
     impl Widget for Center {
         fn layout(&self) -> Layout {}
 
-        fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
-
         fn name(&self) -> NodeName {}
     }
 
@@ -1108,8 +1106,6 @@ pub mod canopy_widgets {
     impl Widget for Pad {
         fn layout(&self) -> Layout {}
 
-        fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
-
         fn name(&self) -> NodeName {}
     }
 
@@ -1139,13 +1135,6 @@ pub mod canopy_widgets {
     }
 
     impl Widget for Panes {
-        fn render(
-            &mut self,
-            _rndr: &mut canopy::render::Render<'_>,
-            _ctx: &dyn ViewContext,
-        ) -> Result<()> {
-        }
-
         fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
 
         fn name(&self) -> NodeName {}
@@ -1239,13 +1228,6 @@ pub mod canopy_widgets {
     }
 
     impl Widget for Root {
-        fn render(
-            &mut self,
-            _rndr: &mut canopy::render::Render<'_>,
-            _ctx: &dyn ViewContext,
-        ) -> Result<()> {
-        }
-
         fn layout(&self) -> Layout {}
 
         fn name(&self) -> NodeName {}

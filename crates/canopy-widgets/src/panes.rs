@@ -53,6 +53,15 @@ impl Panes {
             .collect()
     }
 
+    /// Ensure one column node exists for each column.
+    fn ensure_column_nodes(&mut self, c: &mut dyn Context) -> Result<()> {
+        while self.column_nodes.len() < self.columns.len() {
+            let column_node = NodeId::from(c.create_detached(PaneColumn)?);
+            self.column_nodes.push(column_node);
+        }
+        Ok(())
+    }
+
     /// Return the focused column index, if any.
     fn focused_column_index(&self, c: &dyn Context) -> Option<usize> {
         self.focus_coords(c).map(|(x, _)| x)
@@ -111,10 +120,7 @@ impl Panes {
         let n = n.into();
         let coords = self.focus_coords(c);
         let target_idx = if let Some((x, _)) = coords {
-            while self.column_nodes.len() < self.columns.len() {
-                let column_node = NodeId::from(c.create_detached(PaneColumn)?);
-                self.column_nodes.push(column_node);
-            }
+            self.ensure_column_nodes(c)?;
             self.columns.insert(x + 1, vec![n]);
             let column_node = NodeId::from(c.create_detached(PaneColumn)?);
             self.column_nodes.insert(x + 1, column_node);
@@ -132,17 +138,9 @@ impl Panes {
 
     /// Sync child layout and grid placement styles.
     fn sync_layout(&mut self, c: &mut dyn Context) -> Result<()> {
-        while self.column_nodes.len() < self.columns.len() {
-            let column_node = NodeId::from(c.create_detached(PaneColumn)?);
-            self.column_nodes.push(column_node);
-        }
+        self.ensure_column_nodes(c)?;
 
-        let active_columns: Vec<NodeId> = self
-            .column_nodes
-            .iter()
-            .copied()
-            .take(self.columns.len())
-            .collect();
+        let active_columns = self.column_nodes();
 
         c.set_children(active_columns.clone())?;
 

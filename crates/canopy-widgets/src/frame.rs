@@ -13,19 +13,10 @@ use unicode_width::UnicodeWidthStr;
 use super::boxed::{BoxGlyphs, ROUND};
 use crate::wrap::wrap;
 
-/// Defines the set of glyphs used to draw active scroll indicators.
-struct ScrollGlyphs {
-    /// Active vertical indicator glyph.
-    vertical_active: char,
-    /// Active horizontal indicator glyph.
-    horizontal_active: char,
-}
-
-/// Active scroll indicator glyph set.
-const SCROLL: ScrollGlyphs = ScrollGlyphs {
-    horizontal_active: '▄',
-    vertical_active: '█',
-};
+/// Active vertical scrollbar indicator.
+const SCROLL_VERTICAL: char = '█';
+/// Active horizontal scrollbar indicator.
+const SCROLL_HORIZONTAL: char = '▄';
 
 /// Lines to scroll per mouse wheel tick within a frame.
 const WHEEL_SCROLL_LINES: i32 = 3;
@@ -70,8 +61,6 @@ impl ScrollDrag {
 pub struct Frame {
     /// Glyph set for rendering the box border.
     box_glyphs: BoxGlyphs,
-    /// Glyph set for rendering scroll indicators.
-    scroll_glyphs: ScrollGlyphs,
     /// Optional title string.
     title: Option<String>,
     /// Active scrollbar drag state.
@@ -84,7 +73,6 @@ impl Frame {
     pub fn new() -> Self {
         Self {
             box_glyphs: ROUND,
-            scroll_glyphs: SCROLL,
             title: None,
             scroll_drag: None,
         }
@@ -150,11 +138,11 @@ impl Widget for Frame {
             && let Some(child_view) = ctx.node_view(child_id)
         {
             if let Some((_, active, _)) = child_view.vactive(f.right)? {
-                rndr.fill("frame/active", active, self.scroll_glyphs.vertical_active)?;
+                rndr.fill("frame/active", active, SCROLL_VERTICAL)?;
             }
 
             if let Some((_, active, _)) = child_view.hactive(f.bottom)? {
-                rndr.fill("frame/active", active, self.scroll_glyphs.horizontal_active)?;
+                rndr.fill("frame/active", active, SCROLL_HORIZONTAL)?;
             }
         }
 
