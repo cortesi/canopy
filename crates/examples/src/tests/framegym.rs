@@ -1,6 +1,7 @@
 use canopy::{geom, layout::Edges, prelude::*, testing::harness::Harness};
+use canopy_widgets::Root;
 
-use crate::framegym::{FrameGym, TestPattern};
+use crate::framegym::{FrameGym, TestPattern, setup_bindings};
 
 struct ViewMetrics {
     outer: geom::RectI32,
@@ -15,6 +16,18 @@ fn metrics(ctx: &dyn ViewContext) -> ViewMetrics {
         content: view.content,
         canvas: view.canvas,
     }
+}
+
+fn framegym_harness() -> Result<Harness> {
+    let mut canopy = Canopy::new();
+    Root::load(&mut canopy)?;
+    FrameGym::load(&mut canopy)?;
+    setup_bindings(&mut canopy)?;
+    canopy.finalize_api()?;
+    canopy.replace_root(FrameGym::new())?;
+    let mut harness = Harness::from_canopy(canopy, Size::new(20, 20))?;
+    harness.render()?;
+    Ok(harness)
 }
 
 fn frame_views(harness: &mut Harness) -> Result<(ViewMetrics, ViewMetrics, Layout)> {
@@ -43,8 +56,7 @@ fn pattern_scroll(harness: &mut Harness) -> Result<geom::Point> {
 
 #[test]
 fn test_framegym_basic() -> Result<()> {
-    let mut harness = Harness::builder(FrameGym::new()).size(20, 20).build()?;
-    harness.render()?;
+    let mut harness = framegym_harness()?;
 
     let (frame_view, pattern_view, frame_layout) = frame_views(&mut harness)?;
 
@@ -73,11 +85,10 @@ fn test_framegym_basic() -> Result<()> {
 
 #[test]
 fn framegym_scroll_commands_update_vertical_scroll() -> Result<()> {
-    let mut harness = Harness::builder(FrameGym::new()).size(20, 20).build()?;
-    harness.render()?;
+    let mut harness = framegym_harness()?;
 
     let initial_scroll = pattern_scroll(&mut harness)?.y;
-    harness.script(r#"test_pattern.scroll("Down")"#)?;
+    harness.key('j')?;
     let updated_scroll = pattern_scroll(&mut harness)?.y;
     assert!(updated_scroll > initial_scroll);
 
@@ -86,7 +97,7 @@ fn framegym_scroll_commands_update_vertical_scroll() -> Result<()> {
 
 #[test]
 fn framegym_scroll_commands_update_horizontal_scroll() -> Result<()> {
-    let mut harness = Harness::builder(FrameGym::new()).size(20, 20).build()?;
+    let mut harness = framegym_harness()?;
     harness.render()?;
 
     let initial_scroll = pattern_scroll(&mut harness)?.x;

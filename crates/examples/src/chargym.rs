@@ -211,6 +211,6 @@ impl Loader for CharGym {
 
 /// Install key bindings for the chargym demo.
 pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
-    cnpy.eval_script(&crate::text_scroll_bindings("char_gym"))?;
+    cnpy.eval_script(&crate::text_scroll_bindings("text", "char_gym"))?;
     Ok(())
 }

@@ -17,16 +17,10 @@ pub mod canopy_examples {
             pub fn new() -> Self {}
         }
 
-        impl CommandNode for CharGym {
-            fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-        }
-
         impl Widget for CharGym {
             fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
-
-            fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
         }
 
         impl Loader for CharGym {
@@ -141,8 +135,6 @@ pub mod canopy_examples {
         }
 
         impl Widget for FocusGym {
-            fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
-
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
         }
 
@@ -166,20 +158,12 @@ pub mod canopy_examples {
             pub fn new() -> Self {}
         }
 
-        impl CommandNode for FontGym {
-            fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-        }
-
         impl Widget for FontGym {
             fn layout(&self) -> Layout {}
 
             fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {}
 
             fn poll(&mut self, ctx: &mut dyn Context) -> Option<Duration> {}
-        }
-
-        impl Loader for FontGym {
-            fn load(c: &mut Canopy) -> Result<()> {}
         }
 
         /// Install key bindings for focus navigation.
@@ -243,14 +227,8 @@ pub mod canopy_examples {
             pub fn new() -> Self {}
         }
 
-        impl CommandNode for FrameGym {
-            fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-        }
-
         impl Widget for FrameGym {
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
-
-            fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
         }
 
         impl Loader for FrameGym {
@@ -287,10 +265,6 @@ pub mod canopy_examples {
             fn set_selected(&mut self, selected: bool) {}
         }
 
-        impl CommandNode for CounterItem {
-            fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-        }
-
         impl Widget for CounterItem {
             fn layout(&self) -> Layout {}
 
@@ -307,10 +281,6 @@ pub mod canopy_examples {
 
         /// Status bar widget for the intervals demo.
         pub struct StatusBar;
-
-        impl CommandNode for StatusBar {
-            fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-        }
 
         impl Widget for StatusBar {
             fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
@@ -364,10 +334,6 @@ pub mod canopy_examples {
             pub fn new(text: Text) -> Self {}
         }
 
-        impl CommandNode for ListEntry {
-            fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-        }
-
         impl Selectable for ListEntry {
             fn set_selected(&mut self, selected: bool) {}
         }
@@ -391,10 +357,6 @@ pub mod canopy_examples {
         impl StatusBar {
             /// Construct a status bar.
             pub fn new() -> Self {}
-        }
-
-        impl CommandNode for StatusBar {
-            fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
         }
 
         impl Widget for StatusBar {
@@ -448,8 +410,6 @@ pub mod canopy_examples {
             fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
-
-            fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
         }
 
         impl Loader for ListGym {
@@ -471,16 +431,10 @@ pub mod canopy_examples {
             pub fn new(contents: &str) -> Self {}
         }
 
-        impl CommandNode for Pager {
-            fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-        }
-
         impl Widget for Pager {
             fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
-
-            fn render(&mut self, _rndr: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
         }
 
         impl Loader for Pager {
@@ -526,10 +480,6 @@ pub mod canopy_examples {
         /// The demo content pane showing styled samples.
         pub struct DemoContent;
 
-        impl CommandNode for DemoContent {
-            fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-        }
-
         impl Widget for DemoContent {
             fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
 
@@ -574,8 +524,6 @@ pub mod canopy_examples {
         }
 
         impl Widget for Stylegym {
-            fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
-
             fn layout(&self) -> Layout {}
 
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
@@ -683,20 +631,10 @@ pub mod canopy_examples {
             pub fn new() -> Self {}
         }
 
-        impl CommandNode for TextGym {
-            fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-        }
-
         impl Widget for TextGym {
             fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
-
-            fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
-        }
-
-        impl Loader for TextGym {
-            fn load(c: &mut Canopy) -> Result<()> {}
         }
 
         /// Install key bindings for the text gym demo.
@@ -728,8 +666,6 @@ pub mod canopy_examples {
             fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {}
 
             fn poll(&mut self, ctx: &mut dyn Context) -> Option<Duration> {}
-
-            fn render(&mut self, _rndr: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
 
             fn name(&self) -> NodeName {}
         }
@@ -805,8 +741,6 @@ pub mod canopy_examples {
 
             fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {}
 
-            fn render(&mut self, _rndr: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
-
             fn name(&self) -> NodeName {}
         }
 
@@ -848,10 +782,6 @@ pub mod canopy_examples {
             }
         }
 
-        impl CommandNode for WidgetEditor {
-            fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-        }
-
         impl Widget for WidgetEditor {
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
         }
@@ -873,8 +803,8 @@ pub mod canopy_examples {
     /// Finalize and print the Luau API definitions for a demo app.
     pub fn print_luau_api(cnpy: &mut canopy::Canopy) -> canopy::error::Result<()> {}
 
-    /// Render the shared `Text` scroll bindings for one demo node path.
-    pub fn text_scroll_bindings(path: &str) -> String {}
+    /// Render the shared scroll bindings for one receiver and binding path.
+    pub fn text_scroll_bindings(receiver: &str, path: &str) -> String {}
 
     /// Build a `Canopy` for a demo launcher, with `Root` loaded and the help binding installed.
     pub fn demo_canopy() -> canopy::error::Result<canopy::Canopy> {}

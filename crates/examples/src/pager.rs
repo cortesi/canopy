@@ -39,6 +39,6 @@ impl Loader for Pager {
 
 /// Install key bindings for the pager demo.
 pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
-    cnpy.eval_script(&crate::text_scroll_bindings("pager"))?;
+    cnpy.eval_script(&crate::text_scroll_bindings("text", "pager"))?;
     Ok(())
 }

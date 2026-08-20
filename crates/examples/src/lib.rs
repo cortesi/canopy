@@ -71,58 +71,62 @@ pub(crate) fn banner_gradient(angle_deg: f32, colors: [Color; 4]) -> Paint {
     ))
 }
 
-/// Binding template for a full-window `Text` demo, parameterized by the text node's path.
+/// Binding template for a full-window scrollable demo.
+///
+/// `{receiver}` is the Luau command owner. `{path}` is the binding path.
 const TEXT_SCROLL_BINDINGS: &str = r#"
 canopy.bind("g", { path = "{path}", description = "Top" }, function()
-    text.scroll_to(0, 0)
+    {receiver}.scroll_to(0, 0)
 end)
 canopy.bind("j", { path = "{path}", description = "Scroll down" }, function()
-    text.scroll("Down")
+    {receiver}.scroll("Down")
 end)
 canopy.bind("Down", { path = "{path}", description = "Scroll down" }, function()
-    text.scroll("Down")
+    {receiver}.scroll("Down")
 end)
 canopy.bind_mouse("ScrollDown", { path = "{path}", description = "Scroll down" }, function()
-    text.scroll("Down")
+    {receiver}.scroll("Down")
 end)
 canopy.bind("k", { path = "{path}", description = "Scroll up" }, function()
-    text.scroll("Up")
+    {receiver}.scroll("Up")
 end)
 canopy.bind("Up", { path = "{path}", description = "Scroll up" }, function()
-    text.scroll("Up")
+    {receiver}.scroll("Up")
 end)
 canopy.bind_mouse("ScrollUp", { path = "{path}", description = "Scroll up" }, function()
-    text.scroll("Up")
+    {receiver}.scroll("Up")
 end)
 canopy.bind("h", { path = "{path}", description = "Scroll left" }, function()
-    text.scroll("Left")
+    {receiver}.scroll("Left")
 end)
 canopy.bind("Left", { path = "{path}", description = "Scroll left" }, function()
-    text.scroll("Left")
+    {receiver}.scroll("Left")
 end)
 canopy.bind("l", { path = "{path}", description = "Scroll right" }, function()
-    text.scroll("Right")
+    {receiver}.scroll("Right")
 end)
 canopy.bind("Right", { path = "{path}", description = "Scroll right" }, function()
-    text.scroll("Right")
+    {receiver}.scroll("Right")
 end)
 canopy.bind("PageDown", { path = "{path}", description = "Page down" }, function()
-    text.page(1)
+    {receiver}.page(1)
 end)
 canopy.bind("Space", { path = "{path}", description = "Page down" }, function()
-    text.page(1)
+    {receiver}.page(1)
 end)
 canopy.bind("PageUp", { path = "{path}", description = "Page up" }, function()
-    text.page(-1)
+    {receiver}.page(-1)
 end)
 canopy.bind("q", { path = "root", description = "Quit" }, function()
     root.quit()
 end)
 "#;
 
-/// Render the shared `Text` scroll bindings for one demo node path.
-pub fn text_scroll_bindings(path: &str) -> String {
-    TEXT_SCROLL_BINDINGS.replace("{path}", path)
+/// Render the shared scroll bindings for one receiver and binding path.
+pub fn text_scroll_bindings(receiver: &str, path: &str) -> String {
+    TEXT_SCROLL_BINDINGS
+        .replace("{receiver}", receiver)
+        .replace("{path}", path)
 }
 
 /// Build a `Canopy` for a demo launcher, with `Root` loaded and the help binding installed.

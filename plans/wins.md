@@ -57,7 +57,7 @@ full evidence, change, and proof.
 - [x] W23: Delete dead `CommandNode` impls in integration tests
 - [x] W24: Deduplicate `handle_prompt_event` arms
 - [x] W25: Share the two click-count state machines
-- [ ] W26: Parameterize the shared scroll-binding table
+- [x] W26: Parameterize the shared scroll-binding table
 - [ ] W27: Collapse `focus_dir` direction dispatch
 - [ ] W28: Delete unused `PathFilter::check` depth payload and `match_end`
 - [ ] W29: Drop the `Option` wrapper on `Node.effects`
@@ -141,6 +141,9 @@ Record rejections, modifications, and proof commands here as items land.
 - W24: Esc is handled once. Search/replace query text edits the
   active String in place. Enter takes the prompt only to transition.
 - W25: `ClickTracker` is crate-private. Terminal uses 400ms, editor 500ms.
+- W26: `text_scroll_bindings(receiver, path)`. Framegym keeps its
+  prefix and now installs those bindings in tests. `j` drives scroll.
+  Rider: framegym gained mouse ScrollUp/ScrollDown.
 
 ## Items
 

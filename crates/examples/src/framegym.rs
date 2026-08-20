@@ -9,51 +9,12 @@ use canopy_widgets::Frame;
 /// Base characters used to generate the test pattern.
 const PATTERN: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
 
-/// Default bindings for the frame gym demo.
-const DEFAULT_BINDINGS: &str = r#"
+/// Frame-gym bindings that wrap the shared scroll table.
+const FRAMEGYM_PREFIX: &str = r#"
 root.default_bindings()
 
 canopy.bind("Tab", { path = "frame_gym", description = "Next focus" }, function()
     root.focus("Next")
-end)
-canopy.bind("g", { path = "frame_gym", description = "Top" }, function()
-    test_pattern.scroll_to(0, 0)
-end)
-canopy.bind("Down", { path = "frame_gym", description = "Scroll down" }, function()
-    test_pattern.scroll("Down")
-end)
-canopy.bind("Up", { path = "frame_gym", description = "Scroll up" }, function()
-    test_pattern.scroll("Up")
-end)
-canopy.bind("Left", { path = "frame_gym", description = "Scroll left" }, function()
-    test_pattern.scroll("Left")
-end)
-canopy.bind("Right", { path = "frame_gym", description = "Scroll right" }, function()
-    test_pattern.scroll("Right")
-end)
-canopy.bind("j", { path = "frame_gym", description = "Scroll down" }, function()
-    test_pattern.scroll("Down")
-end)
-canopy.bind("k", { path = "frame_gym", description = "Scroll up" }, function()
-    test_pattern.scroll("Up")
-end)
-canopy.bind("h", { path = "frame_gym", description = "Scroll left" }, function()
-    test_pattern.scroll("Left")
-end)
-canopy.bind("l", { path = "frame_gym", description = "Scroll right" }, function()
-    test_pattern.scroll("Right")
-end)
-canopy.bind("PageDown", { path = "frame_gym", description = "Page down" }, function()
-    test_pattern.page(1)
-end)
-canopy.bind("Space", { path = "frame_gym", description = "Page down" }, function()
-    test_pattern.page(1)
-end)
-canopy.bind("PageUp", { path = "frame_gym", description = "Page up" }, function()
-    test_pattern.page(-1)
-end)
-canopy.bind("q", { path = "root", description = "Quit" }, function()
-    root.quit()
 end)
 "#;
 
@@ -209,6 +170,7 @@ impl Loader for FrameGym {
 
 /// Install key bindings for the frame gym demo.
 pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
-    cnpy.eval_script(DEFAULT_BINDINGS)?;
+    cnpy.eval_script(FRAMEGYM_PREFIX)?;
+    cnpy.eval_script(&crate::text_scroll_bindings("test_pattern", "frame_gym"))?;
     Ok(())
 }
