@@ -1,7 +1,7 @@
 //! Button widget.
 
 use canopy::{
-    Context, EventOutcome, Slot, ViewContext, Widget, command,
+    Context, EventOutcome, ViewContext, Widget, command,
     commands::{CommandCall, CommandInvocation},
     derive_commands,
     error::Result,
@@ -31,12 +31,6 @@ pub struct Button {
     glyphs: BoxGlyphs,
     /// Active state for the button.
     active: bool,
-    /// Slot for the box container.
-    box_slot: Slot<BoxSlot>,
-    /// Slot for the centered label container.
-    center_slot: Slot<CenterSlot>,
-    /// Slot for the label text.
-    label_slot: Slot<LabelSlot>,
 }
 
 #[derive_commands]
@@ -48,9 +42,6 @@ impl Button {
             command: None,
             glyphs: SINGLE,
             active: false,
-            box_slot: Slot::new(),
-            center_slot: Slot::new(),
-            label_slot: Slot::new(),
         }
     }
 
@@ -101,15 +92,12 @@ impl Button {
 
     /// Sync the label text widget to the current label.
     fn sync_label(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        let box_id = self
-            .box_slot
-            .get_or_create(ctx, || Border::new().with_glyphs(self.glyphs).with_fill())?;
-        let center_id = self
-            .center_slot
-            .get_or_create_in(ctx, box_id, Center::new)?;
-        let label_id = self
-            .label_slot
-            .get_or_create_in(ctx, center_id, || Text::new(self.label.clone()))?;
+        let box_id = ctx.get_or_create::<BoxSlot>(|| {
+            Border::new().with_glyphs(self.glyphs).with_fill()
+        })?;
+        let center_id = ctx.get_or_create_in::<CenterSlot>(box_id, Center::new)?;
+        let label_id =
+            ctx.get_or_create_in::<LabelSlot>(center_id, || Text::new(self.label.clone()))?;
         ctx.with_widget(label_id, |text, _| {
             text.set_raw(self.label.clone());
             Ok(())

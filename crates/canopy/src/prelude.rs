@@ -2,7 +2,7 @@
 
 pub use crate::{
     Canopy, ChangeOutcome, ChildKey, CommandArg, CommandEnum, Context, EventOutcome, FocusScope,
-    Loader, NodeId, RenderLimits, Slot, TypedId, ViewContext, Widget, command, derive_commands,
+    Loader, NodeId, RenderLimits, TypedId, ViewContext, Widget, command, derive_commands,
     error,
     event::{Event, key::Key, mouse},
     geom::{Point, Rect, Size},

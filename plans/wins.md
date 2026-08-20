@@ -39,7 +39,7 @@ full evidence, change, and proof.
 - [x] W8: `Modal` is a byte-for-byte duplicate of `Center`
 - [x] W9: `TerminalConfig` carries seven frozen fields
 - [x] W10: `commands.rs` carries conversion impls the type system cannot express
-- [ ] W11: Dissolve `Slot<K>`
+- [x] W11: Dissolve `Slot<K>`
 - [ ] W12: Make the `help` module crate-private
 - [ ] W13: Drop the canopy-widgets error module
 - [ ] W14: Font-renderer configuration can only restate defaults
@@ -113,6 +113,8 @@ Record rejections, modifications, and proof commands here as items land.
 - W10: Deleted tuple/`()` ToArgValue and FromArgValue impls, the unused
   CommandArgs From impls, and the self-test. Proof: `cargo check --workspace
   --all-targets --all-features`, `cargo xtask api`.
+- W11: Moved get-or-create onto `impl dyn Context`. Button no longer
+  stores zero-sized Slot fields. Context method budget unchanged.
 
 ## Items
 

@@ -1,7 +1,6 @@
 use std::{
     any::{Any, TypeId, type_name, type_name_of_val},
     iter,
-    marker::PhantomData,
     ops::Deref,
     result::Result as StdResult,
 };
@@ -48,52 +47,6 @@ pub trait ChildKey {
     type Widget: Widget + 'static;
     /// The string key used for storage.
     const KEY: &'static str;
-}
-
-/// Slot helper that resolves a keyed child, creating it on first use.
-#[derive(Debug)]
-pub struct Slot<K: ChildKey> {
-    /// Marker for the key type.
-    _marker: PhantomData<K>,
-}
-
-impl<K: ChildKey> Default for Slot<K> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<K: ChildKey> Slot<K> {
-    /// Construct an empty slot.
-    pub fn new() -> Self {
-        Self {
-            _marker: PhantomData,
-        }
-    }
-
-    /// Get or create the keyed child under the current node.
-    pub fn get_or_create(
-        &mut self,
-        ctx: &mut dyn Context,
-        make: impl FnOnce() -> K::Widget,
-    ) -> Result<TypedId<K::Widget>> {
-        let parent = ctx.node_id();
-        self.get_or_create_in(ctx, parent, make)
-    }
-
-    /// Get or create the keyed child under a specific parent node.
-    pub fn get_or_create_in(
-        &mut self,
-        ctx: &mut dyn Context,
-        parent: impl Into<NodeId>,
-        make: impl FnOnce() -> K::Widget,
-    ) -> Result<TypedId<K::Widget>> {
-        let parent = parent.into();
-        if let Some(id) = ctx.get_child_in::<K>(parent)? {
-            return Ok(id);
-        }
-        ctx.add_keyed_to(parent, K::KEY, make())
-    }
 }
 
 /// Define a typed key for keyed children.
@@ -736,6 +689,28 @@ impl dyn Context + '_ {
         ViewContext::child_keyed_in(self, parent.into(), K::KEY)
             .map(|node| checked_typed_id(self, node))
             .transpose()
+    }
+
+    /// Get or create the keyed child under the current node.
+    pub fn get_or_create<K: ChildKey>(
+        &mut self,
+        make: impl FnOnce() -> K::Widget,
+    ) -> Result<TypedId<K::Widget>> {
+        let parent = self.node_id();
+        self.get_or_create_in::<K>(parent, make)
+    }
+
+    /// Get or create the keyed child under a specific parent node.
+    pub fn get_or_create_in<K: ChildKey>(
+        &mut self,
+        parent: impl Into<NodeId>,
+        make: impl FnOnce() -> K::Widget,
+    ) -> Result<TypedId<K::Widget>> {
+        let parent = parent.into();
+        if let Some(id) = self.get_child_in::<K>(parent)? {
+            return Ok(id);
+        }
+        self.add_keyed_to(parent, K::KEY, make())
     }
 
     /// Add a typed keyed child to the current node and return its typed node ID.

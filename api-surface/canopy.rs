@@ -843,32 +843,6 @@ pub mod canopy {
             pub const fn new(max_width: u32, max_height: u32, max_cells: usize) -> Self {}
         }
 
-        /// Slot helper that resolves a keyed child, creating it on first use.
-        #[derive(Debug, Default)]
-        pub struct Slot<K: ChildKey> {}
-
-        impl<K: ChildKey> Slot<K> {
-            /// Construct an empty slot.
-            pub fn new() -> Self {}
-
-            /// Get or create the keyed child under the current node.
-            pub fn get_or_create(
-                &mut self,
-                ctx: &mut dyn Context,
-                make: impl FnOnce() -> K::Widget,
-            ) -> Result<TypedId<K::Widget>> {
-            }
-
-            /// Get or create the keyed child under a specific parent node.
-            pub fn get_or_create_in(
-                &mut self,
-                ctx: &mut dyn Context,
-                parent: impl Into<NodeId>,
-                make: impl FnOnce() -> K::Widget,
-            ) -> Result<TypedId<K::Widget>> {
-            }
-        }
-
         /// Type-safe wrapper around a node identifier tied to a widget type.
         #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
         pub struct TypedId<T> {}
@@ -2771,32 +2745,6 @@ pub mod canopy {
         pub assertions: Vec<script::ScriptAssertion>,
         /// Wall-clock duration in milliseconds.
         pub duration_ms: u64,
-    }
-
-    /// Slot helper that resolves a keyed child, creating it on first use.
-    #[derive(Debug, Default)]
-    pub struct Slot<K: ChildKey> {}
-
-    impl<K: ChildKey> Slot<K> {
-        /// Construct an empty slot.
-        pub fn new() -> Self {}
-
-        /// Get or create the keyed child under the current node.
-        pub fn get_or_create(
-            &mut self,
-            ctx: &mut dyn Context,
-            make: impl FnOnce() -> K::Widget,
-        ) -> Result<TypedId<K::Widget>> {
-        }
-
-        /// Get or create the keyed child under a specific parent node.
-        pub fn get_or_create_in(
-            &mut self,
-            ctx: &mut dyn Context,
-            parent: impl Into<NodeId>,
-            make: impl FnOnce() -> K::Widget,
-        ) -> Result<TypedId<K::Widget>> {
-        }
     }
 
     /// Type-safe wrapper around a node identifier tied to a widget type.
