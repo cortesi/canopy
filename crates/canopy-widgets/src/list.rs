@@ -638,7 +638,7 @@ impl<W: Selectable> List<W> {
     }
 }
 
-impl<W: Selectable + Send + 'static> Widget for List<W> {
+impl<W: Selectable + 'static> Widget for List<W> {
     fn layout(&self) -> Layout {
         let mut layout = Layout::fill().overflow_x();
         if let Some(indicator) = &self.selection_indicator

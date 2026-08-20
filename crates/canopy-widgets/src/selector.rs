@@ -190,7 +190,7 @@ where
 
 impl<T> Widget for Selector<T>
 where
-    T: Label + Send + 'static,
+    T: Label + 'static,
 {
     fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
         if let Event::Mouse(mouse_event) = event {

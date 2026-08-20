@@ -35,7 +35,7 @@ full evidence, change, and proof.
 
 - [x] W3: Inspector advertises a phantom Stats tab
 - [x] W4: Script-error schema omits `invalid`
-- [ ] W7: Drop the unused `Send` supertrait on `Widget`
+- [x] W7: Drop the unused `Send` supertrait on `Widget`
 - [ ] W8: `Modal` is a byte-for-byte duplicate of `Center`
 - [ ] W9: `TerminalConfig` carries seven frozen fields
 - [ ] W10: `commands.rs` carries conversion impls the type system cannot express
@@ -100,6 +100,9 @@ Record rejections, modifications, and proof commands here as items land.
   rollback tests in `cargo nextest run -p canopy`.
 - W6: `screen_text` writes into one String via `Cell::push_text`. Proof:
   `cargo nextest run -p canopy -E 'test(termbuf)'`.
+- W7: Dropped `Send` from `Widget` and all four propagated bounds. All four
+  compiled. Proof: `cargo check --workspace --all-targets --all-features`,
+  `cargo xtask api`.
 
 ## Items
 

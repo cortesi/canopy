@@ -18,7 +18,7 @@ pub struct HighlightSpan {
 }
 
 /// Trait for providing syntax highlighting spans.
-pub trait Highlighter: Send {
+pub trait Highlighter {
     /// Return highlight spans for a line of text.
     fn highlight_line(&self, line: usize, text: &str) -> Vec<HighlightSpan>;
 }

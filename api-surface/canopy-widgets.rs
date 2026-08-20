@@ -24,7 +24,7 @@ pub mod canopy_widgets {
             }
 
             /// Trait for providing syntax highlighting spans.
-            pub trait Highlighter: Send {
+            pub trait Highlighter {
                 /// Return highlight spans for a line of text.
                 fn highlight_line(&self, line: usize, text: &str) -> Vec<HighlightSpan>;
             }
@@ -798,7 +798,7 @@ pub mod canopy_widgets {
 
     impl<T> Widget for Dropdown<T>
     where
-        T: Label + Send + 'static,
+        T: Label + 'static,
     {
         fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {}
 
@@ -1207,7 +1207,7 @@ pub mod canopy_widgets {
         fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
     }
 
-    impl<W: Selectable + Send + 'static> Widget for List<W> {
+    impl<W: Selectable + 'static> Widget for List<W> {
         fn layout(&self) -> Layout {}
 
         fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {}
@@ -1517,7 +1517,7 @@ pub mod canopy_widgets {
 
     impl<T> Widget for Selector<T>
     where
-        T: Label + Send + 'static,
+        T: Label + 'static,
     {
         fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {}
 

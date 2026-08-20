@@ -967,7 +967,7 @@ pub mod canopy {
         }
 
         /// Widgets are the behavior attached to nodes in the Core arena.
-        pub trait Widget: Any + Send {
+        pub trait Widget: Any {
             /// Layout configuration for this widget.
             fn layout(&self) -> Layout {}
 
@@ -5137,7 +5137,7 @@ pub mod canopy {
     }
 
     /// Widgets are the behavior attached to nodes in the Core arena.
-    pub trait Widget: Any + Send {
+    pub trait Widget: Any {
         /// Layout configuration for this widget.
         fn layout(&self) -> Layout {}
 
