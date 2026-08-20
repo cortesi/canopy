@@ -1,10 +1,10 @@
 use canopy::geom::Point;
 use unicode_segmentation::UnicodeSegmentation;
 
-use super::{LineChange, TextBuffer, TextPosition, WrapMode, display_width};
+use super::{display_width, LineChange, TextBuffer, TextPosition, WrapMode};
 
 /// A wrapped segment of a logical line.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WrapSegment {
     /// Starting char index of this segment.
     pub start_char: usize,
@@ -24,7 +24,7 @@ impl WrapSegment {
 }
 
 /// Layout information for a single logical line.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LineLayout {
     /// Wrapped segments that make up the line.
     pub segments: Vec<WrapSegment>,
@@ -104,6 +104,7 @@ impl LayoutCache {
             || self.tab_stop != tab_stop;
 
         if needs_rebuild {
+            let _ = buffer.take_change();
             self.rebuild_all(buffer, wrap_width, wrap_mode, tab_stop);
             return;
         }
@@ -366,6 +367,7 @@ pub fn layout_line(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::editor::TextRange;
 
     #[test]
     fn wrap_layout_splits_lines() {
@@ -405,5 +407,26 @@ mod tests {
         let point = Point { x: 10, y: 0 };
         let pos = cache.position_for_point(&buffer, point, 4);
         assert_eq!(pos, TextPosition::new(0, 3));
+    }
+
+    #[test]
+    fn sync_rebuilds_after_three_edits_between_syncs() {
+        let mut buffer = TextBuffer::new("aaaa\nbbbb\ncccc");
+        let mut cache = LayoutCache::new();
+        cache.sync(&mut buffer, 4, WrapMode::Soft, 4);
+
+        for line in 0..3 {
+            let at = TextPosition::new(line, 0);
+            buffer.replace_range(TextRange::new(at, at), "X");
+        }
+        cache.sync(&mut buffer, 4, WrapMode::Soft, 4);
+
+        let mut rebuilt = LayoutCache::new();
+        rebuilt.sync(&mut buffer, 4, WrapMode::Soft, 4);
+        assert_eq!(cache.total_lines(), rebuilt.total_lines());
+        assert_eq!(cache.max_line_width(), rebuilt.max_line_width());
+        for i in 0..buffer.line_count() {
+            assert_eq!(cache.line(i), rebuilt.line(i), "line {i}");
+        }
     }
 }

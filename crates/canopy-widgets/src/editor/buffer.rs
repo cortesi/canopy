@@ -1,12 +1,16 @@
-use std::ops::{Deref, DerefMut};
+use std::{
+    mem,
+    ops::{Deref, DerefMut},
+};
 
 use ropey::Rope;
 use unicode_segmentation::UnicodeSegmentation;
 
 use super::{
-    Selection, TextPosition, TextRange, display_width,
+    display_width,
     edit::{Edit, Transaction},
     util::{next_grapheme_boundary, prev_grapheme_boundary},
+    Selection, TextPosition, TextRange,
 };
 
 /// Information about how an edit changed logical line counts.
@@ -20,6 +24,17 @@ pub struct LineChange {
     pub new_line_count: usize,
 }
 
+/// Un-synced line-change state for the layout cache.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PendingChange {
+    /// No un-synced edit.
+    None,
+    /// One incremental change since the last sync.
+    One(LineChange),
+    /// Two or more un-synced edits; the cache must rebuild.
+    Dirty,
+}
+
 /// Rope-backed text buffer with selection and undo/redo support.
 #[derive(Debug, Clone)]
 pub struct TextBuffer {
@@ -30,7 +45,7 @@ pub struct TextBuffer {
     /// Monotonic revision for cache invalidation.
     revision: u64,
     /// Latest line change since the last sync.
-    pending_change: Option<LineChange>,
+    pending_change: PendingChange,
     /// Undo history.
     undo: Vec<Transaction>,
     /// Redo history.
@@ -55,7 +70,7 @@ impl TextBuffer {
             rope,
             selection,
             revision: 0,
-            pending_change: None,
+            pending_change: PendingChange::None,
             undo: Vec::new(),
             redo: Vec::new(),
             transaction: None,
@@ -133,8 +148,14 @@ impl TextBuffer {
     }
 
     /// Take the pending line change, if any.
+    ///
+    /// Returns `Some` only when exactly one edit has landed since the last
+    /// sync. Multiple edits drain as `None` so the layout cache rebuilds.
     pub fn take_change(&mut self) -> Option<LineChange> {
-        self.pending_change.take()
+        match mem::replace(&mut self.pending_change, PendingChange::None) {
+            PendingChange::One(change) => Some(change),
+            PendingChange::None | PendingChange::Dirty => None,
+        }
     }
 
     /// Begin a grouped transaction.
@@ -416,11 +437,10 @@ impl TextBuffer {
             old_line_count,
             new_line_count,
         };
-        if self.pending_change.is_some() {
-            self.pending_change = None;
-        } else {
-            self.pending_change = Some(change);
-        }
+        self.pending_change = match self.pending_change {
+            PendingChange::None => PendingChange::One(change),
+            PendingChange::One(_) | PendingChange::Dirty => PendingChange::Dirty,
+        };
     }
 
     /// Apply an edit in the specified direction.
@@ -437,7 +457,7 @@ impl TextBuffer {
         self.rope.remove(start_char..end_char);
         self.rope.insert(start_char, insert_text);
         self.revision = self.revision.saturating_add(1);
-        self.pending_change = None;
+        self.pending_change = PendingChange::Dirty;
     }
 }
 

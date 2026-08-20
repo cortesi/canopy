@@ -1,10 +1,10 @@
 use std::sync::{
-    Arc,
     atomic::{AtomicUsize, Ordering},
+    Arc,
 };
 
 use canopy::{
-    Canopy, Context, FocusScope, Loader, ViewContext, Widget, buf, command, derive_commands,
+    buf, command, derive_commands,
     error::Result,
     event::{key, mouse},
     geom::Point,
@@ -13,12 +13,13 @@ use canopy::{
     state::NodeName,
     style::{AttrSet, Color, Paint, PartialStyle, Style, StyleManager},
     testing::harness::Harness,
+    Canopy, Context, FocusScope, Loader, ViewContext, Widget,
 };
 
 use super::{Selection, TextPosition, TextRange};
 use crate::editor::{
-    EditMode, Editor, EditorConfig, LineNumbers, WrapMode,
     highlight::{HighlightSpan, Highlighter},
+    EditMode, Editor, EditorConfig, LineNumbers, WrapMode,
 };
 
 canopy::key!(EditorSlot: Editor);
@@ -183,6 +184,24 @@ fn soft_wrap_renders_each_segment_once() {
     let mut harness = build_harness("abcdefghij", config, 4, 3);
     harness.render().unwrap();
     harness.tbuf().assert_matches(buf!["abcd" "efgh" "ij  "]);
+}
+
+#[test]
+fn visual_indent_of_three_wrapped_lines_keeps_layout() {
+    let config = EditorConfig::new()
+        .with_mode(EditMode::Vi)
+        .with_wrap(WrapMode::Soft);
+    let mut harness = build_harness("aaaaaa\nbbbbbb\ncccccc", config, 6, 6);
+    harness.keys(['V', 'j', 'j', '>']).unwrap();
+    harness.render().unwrap();
+    harness.tbuf().assert_matches(buf![
+        "    aa"
+        "aaaa  "
+        "    bb"
+        "bbbb  "
+        "    cc"
+        "cccc  "
+    ]);
 }
 
 #[test]
