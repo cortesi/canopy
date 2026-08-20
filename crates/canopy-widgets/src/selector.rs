@@ -42,27 +42,12 @@ where
         }
     }
 
-    /// Get the selected indices in selection order.
-    pub fn selected_indices(&self) -> &[usize] {
-        &self.selected
-    }
-
     /// Get references to the selected items in selection order.
     pub fn selected_items(&self) -> Vec<&T> {
         self.selected
             .iter()
             .filter_map(|&idx| self.items.get(idx))
             .collect()
-    }
-
-    /// Check if an index is selected.
-    pub fn is_selected(&self, index: usize) -> bool {
-        self.selected.contains(&index)
-    }
-
-    /// Get the currently focused index.
-    pub fn focused_index(&self) -> usize {
-        self.focused
     }
 
     /// Toggle selection of the focused item.
@@ -145,21 +130,6 @@ where
         self.selected = (0..self.items.len()).collect();
         debug_assert!(self.selection_invariant_holds());
         Ok(())
-    }
-
-    /// Get the number of items.
-    pub fn len(&self) -> usize {
-        self.items.len()
-    }
-
-    /// Check if the selector is empty.
-    pub fn is_empty(&self) -> bool {
-        self.items.is_empty()
-    }
-
-    /// Get the number of selected items.
-    pub fn selected_count(&self) -> usize {
-        self.selected.len()
     }
 
     /// Return the unclamped size required to render all selector items.
@@ -267,9 +237,9 @@ mod tests {
     fn test_selector_creation() {
         let items = vec!["Option 1".to_string(), "Option 2".to_string()];
         let selector = Selector::new(items);
-        assert_eq!(selector.len(), 2);
-        assert_eq!(selector.selected_count(), 0);
-        assert_eq!(selector.focused_index(), 0);
+        assert_eq!(selector.items.len(), 2);
+        assert!(selector.selected.is_empty());
+        assert_eq!(selector.focused, 0);
     }
 
     #[test]
@@ -282,31 +252,31 @@ mod tests {
         let mut selector = Selector::new(items);
 
         // Initially nothing selected
-        assert!(!selector.is_selected(0));
-        assert_eq!(selector.selected_count(), 0);
+        assert!(!selector.selected.contains(&0));
+        assert!(selector.selected.is_empty());
 
         // Toggle focused item (index 0)
         // Note: We can't easily call commands without a Context, so test the logic directly
         selector.selected.push(0);
-        assert!(selector.is_selected(0));
-        assert_eq!(selector.selected_count(), 1);
+        assert!(selector.selected.contains(&0));
+        assert_eq!(selector.selected.len(), 1);
 
         // Add another selection
         selector.focused = 2;
         selector.selected.push(2);
-        assert!(selector.is_selected(2));
-        assert_eq!(selector.selected_count(), 2);
+        assert!(selector.selected.contains(&2));
+        assert_eq!(selector.selected.len(), 2);
 
         // Check selection order is preserved
-        assert_eq!(selector.selected_indices(), &[0, 2]);
+        assert_eq!(selector.selected.as_slice(), &[0, 2]);
     }
 
     #[test]
     fn test_selector_empty() {
         let items: Vec<String> = vec![];
         let selector = Selector::new(items);
-        assert!(selector.is_empty());
-        assert_eq!(selector.selected_count(), 0);
+        assert!(selector.items.is_empty());
+        assert!(selector.selected.is_empty());
     }
 
     #[test]
@@ -326,14 +296,14 @@ mod tests {
         selector.select_by(&mut ctx, 99)?;
         selector.toggle(&mut ctx)?;
         selector.select_all(&mut ctx)?;
-        assert_eq!(selector.focused_index(), 2);
-        assert_eq!(selector.selected_indices(), &[0, 1, 2]);
+        assert_eq!(selector.focused, 2);
+        assert_eq!(selector.selected.as_slice(), &[0, 1, 2]);
         assert!(selector.selection_invariant_holds());
 
         selector.clear(&mut ctx)?;
         selector.select_by(&mut ctx, -99)?;
-        assert_eq!(selector.focused_index(), 0);
-        assert_eq!(selector.selected_count(), 0);
+        assert_eq!(selector.focused, 0);
+        assert!(selector.selected.is_empty());
         assert!(selector.selection_invariant_holds());
         Ok(())
     }
@@ -351,8 +321,8 @@ mod tests {
         selector.clear(&mut ctx)?;
 
         assert!(selector.selection_invariant_holds());
-        assert_eq!(selector.focused_index(), 0);
-        assert_eq!(selector.selected_count(), 0);
+        assert_eq!(selector.focused, 0);
+        assert!(selector.selected.is_empty());
         Ok(())
     }
 }

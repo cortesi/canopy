@@ -58,20 +58,6 @@ where
         self.selected
     }
 
-    /// Set the selected index.
-    pub fn set_selected(&mut self, index: usize) {
-        if index < self.items.len() {
-            self.selected = index;
-            self.highlighted = index;
-        }
-        debug_assert!(self.selection_invariant_holds());
-    }
-
-    /// Check if the dropdown is expanded.
-    pub fn is_expanded(&self) -> bool {
-        self.expanded
-    }
-
     /// Toggle the dropdown expanded state.
     #[command]
     pub fn toggle(&mut self, c: &mut dyn Context) -> Result<()> {
@@ -256,7 +242,7 @@ mod tests {
         let items = vec!["Option 1".to_string(), "Option 2".to_string()];
         let dropdown = Dropdown::new(items);
         assert_eq!(dropdown.selected_index(), 0);
-        assert!(!dropdown.is_expanded());
+        assert!(!dropdown.expanded);
     }
 
     #[test]
@@ -267,7 +253,8 @@ mod tests {
             "Option 3".to_string(),
         ];
         let mut dropdown = Dropdown::new(items);
-        dropdown.set_selected(1);
+        dropdown.selected = 1;
+        dropdown.highlighted = 1;
         assert_eq!(dropdown.selected_index(), 1);
         assert_eq!(dropdown.selected().label(), "Option 2");
     }
@@ -292,7 +279,7 @@ mod tests {
         harness.script(include_str!("../tests/luau/dropdown_select_second.luau"))?;
         harness.with_root_widget::<Dropdown<String>, _>(|dropdown| {
             assert_eq!(dropdown.selected_index(), 1);
-            assert!(!dropdown.is_expanded());
+            assert!(!dropdown.expanded);
         });
         Ok(())
     }
@@ -308,20 +295,20 @@ mod tests {
         let mut ctx = DummyContext::default();
 
         assert!(dropdown.selection_invariant_holds());
-        dropdown.set_selected(1);
-        dropdown.set_selected(99);
+        dropdown.selected = 1;
+        dropdown.highlighted = 1;
         dropdown.toggle(&mut ctx)?;
         dropdown.select_by(&mut ctx, 99)?;
         dropdown.confirm(&mut ctx)?;
         assert_eq!(dropdown.selected_index(), 2);
-        assert!(!dropdown.is_expanded());
+        assert!(!dropdown.expanded);
         assert!(dropdown.selection_invariant_holds());
 
         dropdown.toggle(&mut ctx)?;
         dropdown.select_by(&mut ctx, -99)?;
         dropdown.cancel(&mut ctx)?;
         assert_eq!(dropdown.selected_index(), 2);
-        assert!(!dropdown.is_expanded());
+        assert!(!dropdown.expanded);
         assert!(dropdown.selection_invariant_holds());
         Ok(())
     }

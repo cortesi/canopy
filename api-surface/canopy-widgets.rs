@@ -659,12 +659,6 @@ pub mod canopy_widgets {
         /// Get the currently selected index.
         pub fn selected_index(&self) -> usize {}
 
-        /// Set the selected index.
-        pub fn set_selected(&mut self, index: usize) {}
-
-        /// Check if the dropdown is expanded.
-        pub fn is_expanded(&self) -> bool {}
-
         /// Toggle the dropdown expanded state.
         pub fn toggle(&mut self, c: &mut dyn Context) -> Result<()> {}
 
@@ -1276,17 +1270,8 @@ pub mod canopy_widgets {
         /// Create a new selector with the given items.
         pub fn new(items: Vec<T>) -> Self {}
 
-        /// Get the selected indices in selection order.
-        pub fn selected_indices(&self) -> &[usize] {}
-
         /// Get references to the selected items in selection order.
         pub fn selected_items(&self) -> Vec<&T> {}
-
-        /// Check if an index is selected.
-        pub fn is_selected(&self, index: usize) -> bool {}
-
-        /// Get the currently focused index.
-        pub fn focused_index(&self) -> usize {}
 
         /// Toggle selection of the focused item.
         pub fn toggle(&mut self, _c: &mut dyn Context) -> Result<()> {}
@@ -1305,15 +1290,6 @@ pub mod canopy_widgets {
 
         /// Select all items.
         pub fn select_all(&mut self, _c: &mut dyn Context) -> Result<()> {}
-
-        /// Get the number of items.
-        pub fn len(&self) -> usize {}
-
-        /// Check if the selector is empty.
-        pub fn is_empty(&self) -> bool {}
-
-        /// Get the number of selected items.
-        pub fn selected_count(&self) -> usize {}
 
         /// Return a typed command reference for this command.
         pub fn cmd_toggle() -> &'static canopy::commands::CommandSpec {}
