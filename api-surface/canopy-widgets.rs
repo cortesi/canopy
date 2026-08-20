@@ -714,16 +714,6 @@ pub mod canopy_widgets {
         fn name(&self) -> NodeName {}
     }
 
-    /// Errors emitted by canopy-widgets helpers.
-    #[derive(Debug, Error, Display)]
-    pub enum Error {
-        /// Font parsing failed.
-        FontLoad(&'static str),
-    }
-
-    /// Result type for canopy-widgets helpers.
-    pub type Result<T> = std::result::Result<T, Error>;
-
     /// Rasterized font data for terminal rendering.
     #[derive(Clone)]
     pub struct Font {}

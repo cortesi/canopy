@@ -41,7 +41,7 @@ full evidence, change, and proof.
 - [x] W10: `commands.rs` carries conversion impls the type system cannot express
 - [x] W11: Dissolve `Slot<K>`
 - [x] W12: Make the `help` module crate-private
-- [ ] W13: Drop the canopy-widgets error module
+- [x] W13: Drop the canopy-widgets error module
 - [ ] W14: Font-renderer configuration can only restate defaults
 - [ ] W15: Dissolve `RemovePolicy`
 - [ ] W16: Dead and hand-recomposed `Render` style methods
@@ -117,6 +117,8 @@ Record rejections, modifications, and proof commands here as items land.
   stores zero-sized Slot fields. Context method budget unchanged.
 - W12: `pub mod help` is now crate-private. BindingList stays reachable
   inside the crate.
+- W13: `Font::from_bytes` returns `canopy::error::Result`. Deleted
+  error.rs and the thiserror dependency.
 
 ## Items
 

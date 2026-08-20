@@ -13,8 +13,6 @@ mod center;
 mod dropdown;
 /// Experimental editor API with syntax highlighting and vi mode.
 pub mod editor;
-/// Widget-specific error types.
-mod error;
 /// ASCII font rasterization helpers.
 mod font;
 /// Banner widget that renders ASCII fonts.
@@ -53,7 +51,6 @@ pub use boxed::{Border, BoxGlyphs, DOUBLE, ROUND, SINGLE, SINGLE_THICK};
 pub use button::Button;
 pub use center::Center;
 pub use dropdown::Dropdown;
-pub use error::{Error, Result};
 /// Experimental ASCII font rendering API.
 pub use font::{Font, FontCell, FontEffects, FontLayout, FontRenderer, GlyphRamp, LayoutOptions};
 pub use font_banner::FontBanner;

@@ -4,10 +4,12 @@ use std::{
     sync::Arc,
 };
 
-use canopy::{geom::Size, layout::Align};
+use canopy::{
+    error::{Error, Result},
+    geom::Size,
+    layout::Align,
+};
 use fontdue::{Font as FontdueFont, FontSettings, LineMetrics, Metrics};
-
-use crate::error::{Error, Result};
 
 /// Supersampling scale factor used to rasterize glyphs before downsampling.
 const COVERAGE_SCALE: u32 = 8;
@@ -133,7 +135,7 @@ impl Font {
     /// Load a font from in-memory bytes.
     pub fn from_bytes(data: impl AsRef<[u8]>) -> Result<Self> {
         let font = FontdueFont::from_bytes(data.as_ref(), FontSettings::default())
-            .map_err(Error::FontLoad)?;
+            .map_err(|e| Error::Invalid(format!("font loading failed: {e}")))?;
         Ok(Self { font })
     }
 

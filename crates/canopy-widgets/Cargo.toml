@@ -36,7 +36,6 @@ ropey = "1.6.1"
 syntect = "5.3.0"
 tracing-subscriber.workspace = true
 fontdue = "0.9.3"
-thiserror.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "time", "sync"] }
 itty-core.workspace = true
 
