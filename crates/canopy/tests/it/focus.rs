@@ -4,7 +4,6 @@
 mod tests {
     use canopy::{
         Canopy, FocusScope, NodeId, ViewContext, Widget,
-        commands::{CommandNode, CommandSpec},
         error::{Error, Result},
         geom::{Direction, Size},
         layout::Layout,
@@ -43,12 +42,6 @@ mod tests {
     impl FocusLeaf {
         fn new(name: &'static str) -> Self {
             Self { name }
-        }
-    }
-
-    impl CommandNode for FocusLeaf {
-        fn commands() -> &'static [&'static CommandSpec] {
-            &[]
         }
     }
 

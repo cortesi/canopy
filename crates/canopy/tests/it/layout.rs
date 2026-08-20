@@ -3,8 +3,7 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, Loader, NodeId, ViewContext, Widget,
-        commands::{CommandNode, CommandSpec},
+        Loader, NodeId, ViewContext, Widget,
         error::Result,
         geom::Size,
         layout::{Edges, Layout, MeasureConstraints, Measurement},
@@ -18,12 +17,6 @@ mod tests {
     impl Container {
         fn new() -> Self {
             Self
-        }
-    }
-
-    impl CommandNode for Container {
-        fn commands() -> &'static [&'static CommandSpec] {
-            &[]
         }
     }
 
@@ -42,12 +35,6 @@ mod tests {
     impl Huge {
         fn new() -> Self {
             Self
-        }
-    }
-
-    impl CommandNode for Huge {
-        fn commands() -> &'static [&'static CommandSpec] {
-            &[]
         }
     }
 
@@ -73,12 +60,6 @@ mod tests {
         }
     }
 
-    impl CommandNode for Root {
-        fn commands() -> &'static [&'static CommandSpec] {
-            &[]
-        }
-    }
-
     impl Widget for Root {
         fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
             r.fill("", ctx.view().outer_rect_local(), ' ')
@@ -89,11 +70,7 @@ mod tests {
         }
     }
 
-    impl Loader for Root {
-        fn load(_c: &mut Canopy) -> Result<()> {
-            Ok(())
-        }
-    }
+    impl Loader for Root {}
 
     #[test]
     fn child_respects_parent_padding() -> Result<()> {

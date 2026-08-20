@@ -4,7 +4,6 @@
 mod tests {
     use canopy::{
         Context, Loader, NodeId, TypedId, Widget,
-        commands::{CommandNode, CommandSpec},
         error::Result,
         state::NodeName,
         testing::harness::Harness,
@@ -25,12 +24,6 @@ mod tests {
                 mounted_root: None,
                 child_id: None,
             }
-        }
-    }
-
-    impl CommandNode for MountProbe {
-        fn commands() -> &'static [&'static CommandSpec] {
-            &[]
         }
     }
 
@@ -62,12 +55,6 @@ mod tests {
                 mount_calls: 0,
                 mounted_id: None,
             }
-        }
-    }
-
-    impl CommandNode for ChildProbe {
-        fn commands() -> &'static [&'static CommandSpec] {
-            &[]
         }
     }
 

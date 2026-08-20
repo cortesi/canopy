@@ -53,8 +53,8 @@ full evidence, change, and proof.
 **Duplication and line count**
 
 - [x] W21: Delete forty-one empty `render` overrides
-- [ ] W22: Remove no-op command machinery on command-less widgets
-- [ ] W23: Delete dead `CommandNode` impls in integration tests
+- [x] W22: Remove no-op command machinery on command-less widgets
+- [x] W23: Delete dead `CommandNode` impls in integration tests
 - [ ] W24: Deduplicate `handle_prompt_event` arms
 - [ ] W25: Share the two click-count state machines
 - [ ] W26: Parameterize the shared scroll-binding table
@@ -134,6 +134,10 @@ Record rejections, modifications, and proof commands here as items land.
 - W21: Deleted every empty `render` override, including a few extra
   identical ones (inspector view, panes, MCP test widgets, grid). Trait
   default remains.
+- W22: Removed `derive_commands` and `add_commands` from widgets with
+  no `#[command]` methods. Empty Loader impls use the default.
+- W23: Deleted empty `CommandNode` impls in layout, on_mount, and
+  focus tests. Root's Loader in layout.rs is now the default.
 
 ## Items
 
