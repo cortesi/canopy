@@ -1,7 +1,7 @@
 local focused = canopy.focused()
 canopy.assert(focused ~= nil, "modal_open should focus a node")
 
-local modal = canopy.find_node("root/main_pane/todo/modal")
+local modal = canopy.find_node("root/main_pane/todo/center")
 canopy.assert(modal ~= nil, "modal fixture should create the modal subtree")
 if modal == nil then
     return

@@ -104,7 +104,10 @@ Record rejections, modifications, and proof commands here as items land.
   compiled. Proof: `cargo check --workspace --all-targets --all-features`,
   `cargo xtask api`.
 - W8: Deleted `Modal` and pointed help, todo, and stylegym at `Center`.
-  Slot names stay `ModalSlot` because they name the overlay role.
+  Slot names stay `ModalSlot` because they name the overlay role. The
+  claim that no path depends on the node name "modal" was false: the
+  todo smoke script looked up `root/main_pane/todo/modal`. Updated it
+  to `.../center`.
 - W9: Removed the seven frozen fields and the dead branches. `TerminalColors`
   is now a private defaults type. `SharedClipboard` is a `Mutex<String>`.
   Dropped `DriverPortal` and its `unsafe impl Send` because W7 made the
