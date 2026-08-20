@@ -3,7 +3,7 @@ use std::{
     path::PathBuf,
     result::Result as StdResult,
     sync::{Arc, Mutex},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use canopy::{
@@ -39,16 +39,6 @@ const DEFAULT_SCROLLBACK: usize = 10_000;
 const POLL_INTERVAL_MS: u64 = 16;
 /// Maximum delay between clicks to count as a multi-click selection.
 const DOUBLE_CLICK_MS: u64 = 400;
-
-/// Track click timing for selection behavior.
-struct ClickState {
-    /// Last click location.
-    location: geom::Point,
-    /// Last click timestamp.
-    last_click: Instant,
-    /// Number of clicks in the current multi-click sequence.
-    count: u8,
-}
 
 /// Shared clipboard shim that `itty` requires.
 struct SharedClipboard {
@@ -322,7 +312,7 @@ pub struct Terminal {
     /// Selection anchor in viewport coordinates.
     selection_anchor: Option<geom::Point>,
     /// Multi-click tracking state.
-    last_click: Option<ClickState>,
+    last_click: crate::click::ClickTracker,
     /// Whether the child exit callback has been invoked.
     exit_notified: bool,
 }
@@ -342,7 +332,7 @@ impl Terminal {
             cursor: None,
             selection_active: false,
             selection_anchor: None,
-            last_click: None,
+            last_click: crate::click::ClickTracker::new(Duration::from_millis(DOUBLE_CLICK_MS)),
             exit_notified: false,
         }
     }
@@ -445,29 +435,7 @@ impl Terminal {
 
     /// Determine the selection mode based on click timing.
     fn selection_type_for_click(&mut self, location: geom::Point) -> u8 {
-        let now = Instant::now();
-        let threshold = Duration::from_millis(DOUBLE_CLICK_MS);
-        let mut count = 1;
-
-        if let Some(state) = self.last_click.as_mut() {
-            if state.location == location && now.duration_since(state.last_click) <= threshold {
-                state.count = state.count.saturating_add(1).min(3);
-                state.last_click = now;
-                count = state.count;
-            } else {
-                state.location = location;
-                state.count = 1;
-                state.last_click = now;
-            }
-        } else {
-            self.last_click = Some(ClickState {
-                location,
-                last_click: now,
-                count: 1,
-            });
-        }
-
-        count
+        self.last_click.count(location)
     }
 
     /// Select a single semantic word around the provided viewport point.

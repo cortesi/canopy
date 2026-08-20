@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use canopy::{
@@ -71,18 +71,7 @@ pub(super) struct MouseState {
     /// Anchor position for the selection.
     anchor: Option<TextPosition>,
     /// Multi-click tracking state.
-    click_state: Option<ClickState>,
-}
-
-/// Multi-click tracking details.
-#[derive(Debug, Clone)]
-struct ClickState {
-    /// Last click location.
-    location: Point,
-    /// Last click timestamp.
-    last_click: Instant,
-    /// Click count in the sequence.
-    count: u8,
+    click_state: crate::click::ClickTracker,
 }
 
 /// Render context for a single editor line.
@@ -996,35 +985,13 @@ impl MouseState {
         Self {
             selecting: false,
             anchor: None,
-            click_state: None,
+            click_state: crate::click::ClickTracker::new(Duration::from_millis(DOUBLE_CLICK_MS)),
         }
     }
 
     /// Determine click type based on click timing.
     fn click_type(&mut self, location: Point) -> ClickType {
-        let now = Instant::now();
-        let threshold = Duration::from_millis(DOUBLE_CLICK_MS);
-        let mut count = 1u8;
-
-        if let Some(state) = self.click_state.as_mut() {
-            if state.location == location && now.duration_since(state.last_click) <= threshold {
-                state.count = state.count.saturating_add(1).min(3);
-                state.last_click = now;
-                count = state.count;
-            } else {
-                state.location = location;
-                state.count = 1;
-                state.last_click = now;
-            }
-        } else {
-            self.click_state = Some(ClickState {
-                location,
-                last_click: now,
-                count: 1,
-            });
-        }
-
-        match count {
+        match self.click_state.count(location) {
             2 => ClickType::Double,
             3 => ClickType::Triple,
             _ => ClickType::Single,

@@ -5,6 +5,8 @@
 
 /// Border widget with customizable glyphs.
 mod boxed;
+/// Multi-click tracker shared by editor and terminal.
+mod click;
 /// Button widget with command dispatch.
 mod button;
 /// Content centering container.

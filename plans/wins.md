@@ -56,7 +56,7 @@ full evidence, change, and proof.
 - [x] W22: Remove no-op command machinery on command-less widgets
 - [x] W23: Delete dead `CommandNode` impls in integration tests
 - [x] W24: Deduplicate `handle_prompt_event` arms
-- [ ] W25: Share the two click-count state machines
+- [x] W25: Share the two click-count state machines
 - [ ] W26: Parameterize the shared scroll-binding table
 - [ ] W27: Collapse `focus_dir` direction dispatch
 - [ ] W28: Delete unused `PathFilter::check` depth payload and `match_end`
@@ -140,6 +140,7 @@ Record rejections, modifications, and proof commands here as items land.
   focus tests. Root's Loader in layout.rs is now the default.
 - W24: Esc is handled once. Search/replace query text edits the
   active String in place. Enter takes the prompt only to transition.
+- W25: `ClickTracker` is crate-private. Terminal uses 400ms, editor 500ms.
 
 ## Items
 
