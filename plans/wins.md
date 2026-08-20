@@ -24,7 +24,7 @@ full evidence, change, and proof.
 **Correctness**
 
 - [x] W1: Layout cache drops line changes after three or more edits between syncs
-- [ ] W2: Key spec cannot name the bare `+` and `-` keys
+- [x] W2: Key spec cannot name the bare `+` and `-` keys
 
 **Performance**
 
@@ -84,6 +84,11 @@ Record rejections, modifications, and proof commands here as items land.
   `buffer.rs`. `take_change` drains every state and returns `Some` only for
   `One`. `apply_edit` marks `Dirty`. `LayoutCache::sync` drains on rebuild.
   Proof: `cargo nextest run -p canopy-widgets -E 'test(sync_rebuilds_after_three_edits_between_syncs) or test(visual_indent_of_three_wrapped_lines_keeps_layout)'`.
+- W2: Implemented as specified (single-character spec before split). The
+  evidence that `ctrl-+` already worked is false: `+` and `-` are
+  separators, so a trailing `+`/`-` key with modifiers still fails. Left
+  as a follow-up; this win only names the bare keys. Proof:
+  `cargo nextest run -p canopy -E 'test(parse_specs)'`.
 
 ## Items
 
@@ -394,6 +399,7 @@ Core:
 - inputmap/mod.rs:543-558 — `push_exclusive_bindings` accepts a detached or missing owner until the next tree edit prunes it.
 - inputmap/mod.rs:511-513 — the "not eligible in the active scope" diagnostic arm is unreachable.
 - inputmap/mod.rs:128-148 — `BindingRecord.owner` is fully determined by `scope`; collapsing changes the Luau `owner` field.
+- event/key.rs parse_spec — modifier forms with a trailing `+`/`-` key (`ctrl-+`) still fail because those characters are separators. W2 only names the bare keys.
 - event/mouse.rs:118-129 — `Mouse`'s Display output does not round-trip `parse_spec`.
 - widget/mod.rs:99-103 — default `Widget::name` on `Foo<Bar>` yields "bar"; every live generic widget overrides.
 - commands.rs:688-691 vs script/bridge.rs:183-188 — the NodeId token record shape is duplicated in two encodings.

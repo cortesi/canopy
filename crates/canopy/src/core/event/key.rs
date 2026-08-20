@@ -290,6 +290,10 @@ impl Key {
 
     /// Parse a key specification such as `ctrl-s`, `PageDown`, or `A`.
     pub fn parse_spec(spec: &str) -> Result<Self, String> {
+        let spec = spec.trim();
+        if spec.chars().count() == 1 {
+            return Ok(Self::from(parse_key_code(spec)?).normalize());
+        }
         let (mods, key_part) = parse_spec_parts(spec, &['-', '+'])?;
         Ok((mods + parse_key_code(key_part)?).normalize())
     }
@@ -529,6 +533,8 @@ mod tests {
         assert_eq!(Key::parse_spec("ArrowUp"), Ok(KeyCode::Up.into()));
         assert_eq!(Key::parse_spec("A"), Ok('A'.into()));
         assert_eq!(Key::parse_spec("Space"), Ok(' '.into()));
+        assert_eq!(Key::parse_spec("+"), Ok('+'.into()));
+        assert_eq!(Key::parse_spec("-"), Ok('-'.into()));
         assert!(Key::parse_spec("ctrl-what").is_err());
         Ok(())
     }
