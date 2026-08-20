@@ -403,7 +403,7 @@ impl PartialStyle {
     }
 
     /// Resolve the partial style into a full style.
-    pub fn resolve(&self) -> Style {
+    fn resolve(&self) -> Style {
         Style {
             fg: self.fg.clone().expect("foreground paint is set"),
             bg: self.bg.clone().expect("background paint is set"),
@@ -412,7 +412,7 @@ impl PartialStyle {
     }
 
     /// Merge two partial styles. Components set on `self` win.
-    pub fn join(&self, other: &Self) -> Self {
+    fn join(&self, other: &Self) -> Self {
         Self {
             fg: self.fg.clone().or_else(|| other.fg.clone()),
             bg: self.bg.clone().or_else(|| other.bg.clone()),
@@ -421,7 +421,7 @@ impl PartialStyle {
     }
 
     /// Return true if all components are set.
-    pub fn is_complete(&self) -> bool {
+    fn is_complete(&self) -> bool {
         self.fg.is_some() && self.bg.is_some() && self.attrs.is_some()
     }
 }
@@ -543,16 +543,6 @@ impl<'a> StyleRules<'a> {
     pub fn attr(mut self, path: &str, attr: Attr) -> Self {
         let full_path = self.make_path(path);
         self.merge_pending(full_path, PartialStyle::attrs(AttrSet::new(attr)));
-        self
-    }
-
-    /// Set all attributes for a path.
-    ///
-    /// If a rule already exists for this path, the attributes are merged
-    /// with the existing style.
-    pub fn attrs(mut self, path: &str, attrs: AttrSet) -> Self {
-        let full_path = self.make_path(path);
-        self.merge_pending(full_path, PartialStyle::attrs(attrs));
         self
     }
 

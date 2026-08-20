@@ -1746,17 +1746,8 @@ pub mod canopy {
             /// Use this when you have a Style from a source other than the style manager.
             pub fn apply_effects(&self, style: Style) -> Style {}
 
-            /// Resolve a style by name without applying effects.
-            pub fn resolve_style_name_raw(&self, name: &str) -> Style {}
-
-            /// Resolve a custom style at a point, applying the current effect stack.
-            pub fn resolve_style_at(
-                &self,
-                style: Style,
-                bounds: geom::Rect,
-                point: geom::Point,
-            ) -> ResolvedStyle {
-            }
+            /// Resolve a style by name and apply the current effect stack.
+            pub fn resolve_style(&self, name: &str) -> Style {}
 
             /// Resolve a style by name at a point within bounds.
             pub fn resolve_style_name_at(
@@ -4108,17 +4099,8 @@ pub mod canopy {
             /// Use this when you have a Style from a source other than the style manager.
             pub fn apply_effects(&self, style: Style) -> Style {}
 
-            /// Resolve a style by name without applying effects.
-            pub fn resolve_style_name_raw(&self, name: &str) -> Style {}
-
-            /// Resolve a custom style at a point, applying the current effect stack.
-            pub fn resolve_style_at(
-                &self,
-                style: Style,
-                bounds: geom::Rect,
-                point: geom::Point,
-            ) -> ResolvedStyle {
-            }
+            /// Resolve a style by name and apply the current effect stack.
+            pub fn resolve_style(&self, name: &str) -> Style {}
 
             /// Resolve a style by name at a point within bounds.
             pub fn resolve_style_name_at(
@@ -4784,15 +4766,6 @@ pub mod canopy {
 
             /// Create a new PartialStyle with only attributes.
             pub fn attrs(attrs: AttrSet) -> Self {}
-
-            /// Resolve the partial style into a full style.
-            pub fn resolve(&self) -> Style {}
-
-            /// Merge two partial styles. Components set on `self` win.
-            pub fn join(&self, other: &Self) -> Self {}
-
-            /// Return true if all components are set.
-            pub fn is_complete(&self) -> bool {}
         }
 
         impl From<StyleBuilder> for PartialStyle {
@@ -4892,12 +4865,6 @@ pub mod canopy {
             /// If a rule already exists for this path, the attribute is merged
             /// with the existing style.
             pub fn attr(self, path: &str, attr: Attr) -> Self {}
-
-            /// Set all attributes for a path.
-            ///
-            /// If a rule already exists for this path, the attributes are merged
-            /// with the existing style.
-            pub fn attrs(self, path: &str, attrs: AttrSet) -> Self {}
 
             /// Apply a complete style to a path.
             ///

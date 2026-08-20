@@ -155,24 +155,9 @@ impl<'a> Render<'a> {
     }
 
     /// Resolve a style by name and apply the current effect stack.
-    fn resolve_style(&self, name: &str) -> Style {
+    pub fn resolve_style(&self, name: &str) -> Style {
         let base = self.style.get(self.stylemap, name);
         self.apply_effects(base)
-    }
-
-    /// Resolve a style by name without applying effects.
-    pub fn resolve_style_name_raw(&self, name: &str) -> Style {
-        self.style.get(self.stylemap, name)
-    }
-
-    /// Resolve a custom style at a point, applying the current effect stack.
-    pub fn resolve_style_at(
-        &self,
-        style: Style,
-        bounds: geom::Rect,
-        point: geom::Point,
-    ) -> ResolvedStyle {
-        self.apply_effects(style).resolve_at(bounds, point)
     }
 
     /// Resolve a style by name at a point within bounds.

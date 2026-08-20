@@ -44,10 +44,10 @@ full evidence, change, and proof.
 - [x] W13: Drop the canopy-widgets error module
 - [x] W14: Font-renderer configuration can only restate defaults
 - [x] W15: Dissolve `RemovePolicy`
-- [ ] W16: Dead and hand-recomposed `Render` style methods
-- [ ] W17: Delete unused `StyleRules::attrs`
-- [ ] W18: Make `PartialStyle::{resolve, join, is_complete}` private
-- [ ] W19: Delete unused Selector and Dropdown getters
+- [x] W16: Dead and hand-recomposed `Render` style methods
+- [x] W17: Delete unused `StyleRules::attrs`
+- [x] W18: Make `PartialStyle::{resolve, join, is_complete}` private
+- [x] W19: Delete unused Selector and Dropdown getters
 - [ ] W20: Collapse two node-type mismatch error variants
 
 **Duplication and line count**
@@ -124,6 +124,12 @@ Record rejections, modifications, and proof commands here as items land.
   still names `FontLayout` as the `layout` return type.
 - W15: Deleted `RemovePolicy` and the Hide branch. Reconcile always
   removes the subtree. Deleted `keyed_reconcile_prunes_removed_hidden_nodes`.
+- W16-W18: `resolve_style` is pub. Deleted `resolve_style_at`,
+  `resolve_style_name_raw`, and unused `StyleRules::attrs`. PartialStyle
+  resolve/join/is_complete are private. Updated `themes.golden` (missed
+  in W3 when tab rules left).
+- W19: Deleted the unused Selector and Dropdown getters. Tests assert
+  through fields.
 
 ## Items
 

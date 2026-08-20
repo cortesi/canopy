@@ -115,12 +115,11 @@ struct CellStyles {
 impl<'a, 'b> RenderLineContext<'a, 'b> {
     /// Construct a new render context, resolving the fixed cell styles once.
     fn new(r: &'a mut Render<'b>, view_rect: Rect, origin: Point, gutter_width: u32) -> Self {
-        let resolve = |name| r.apply_effects(r.resolve_style_name_raw(name));
         let styles = CellStyles {
-            text: resolve("editor/text"),
-            selection: resolve("editor/selection"),
-            search_current: resolve("editor/search/current"),
-            search_match: resolve("editor/search/match"),
+            text: r.resolve_style("editor/text"),
+            selection: r.resolve_style("editor/selection"),
+            search_current: r.resolve_style("editor/search/current"),
+            search_match: r.resolve_style("editor/search/match"),
         };
         Self {
             r,
