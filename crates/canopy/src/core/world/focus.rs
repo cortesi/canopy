@@ -129,60 +129,18 @@ impl Core {
             None => return Ok(ChangeOutcome::Unchanged),
         };
 
-        let mut candidates: Vec<(NodeId, RectI32)> = focusables
+        let current_center = current_rect.center();
+        let target = focusables
             .into_iter()
             .filter(|id| *id != current)
             .filter_map(|id| self.nodes.get(id).map(|n| (id, n.view.outer)))
-            .collect();
+            .filter_map(|(id, rect)| {
+                focus_dir_key(dir, current_rect, current_center, rect).map(|key| (id, key))
+            })
+            .min_by_key(|(_, key)| *key)
+            .map(|(id, _)| id);
 
-        let current_center = current_rect.center();
-
-        candidates.retain(|(_, rect)| {
-            let center = rect.center();
-            match dir {
-                Direction::Right => {
-                    center.0 > current_center.0 && rect.overlaps_vertical(current_rect)
-                }
-                Direction::Left => {
-                    center.0 < current_center.0 && rect.overlaps_vertical(current_rect)
-                }
-                Direction::Down => {
-                    center.1 > current_center.1 && rect.overlaps_horizontal(current_rect)
-                }
-                Direction::Up => {
-                    center.1 < current_center.1 && rect.overlaps_horizontal(current_rect)
-                }
-            }
-        });
-
-        if candidates.is_empty() {
-            return Ok(ChangeOutcome::Unchanged);
-        }
-
-        candidates.sort_by_key(|(_, rect)| match dir {
-            Direction::Right => {
-                let edge_dist = (rect.left() - current_rect.right()).max(0) as u64;
-                let vert_center_dist = current_center.1.abs_diff(rect.center().1);
-                edge_dist * 10000 + vert_center_dist
-            }
-            Direction::Left => {
-                let edge_dist = (current_rect.left() - rect.right()).max(0) as u64;
-                let vert_center_dist = current_center.1.abs_diff(rect.center().1);
-                edge_dist * 10000 + vert_center_dist
-            }
-            Direction::Down => {
-                let edge_dist = (rect.top() - current_rect.bottom()).max(0) as u64;
-                let horiz_center_dist = current_center.0.abs_diff(rect.center().0);
-                edge_dist * 10000 + horiz_center_dist
-            }
-            Direction::Up => {
-                let edge_dist = (current_rect.top() - rect.bottom()).max(0) as u64;
-                let horiz_center_dist = current_center.0.abs_diff(rect.center().0);
-                edge_dist * 10000 + horiz_center_dist
-            }
-        });
-
-        if let Some((target, _)) = candidates.first().copied() {
+        if let Some(target) = target {
             self.set_focus(target)
         } else {
             Ok(ChangeOutcome::Unchanged)
@@ -426,4 +384,44 @@ fn is_focus_candidate(core: &Core, node_id: NodeId, require_view: bool) -> bool 
         return false;
     }
     widget_access::accepts_focus(core, node_id)
+}
+
+/// Return the focus sort key for a candidate, or `None` if it is not in `dir`.
+fn focus_dir_key(
+    dir: Direction,
+    current_rect: RectI32,
+    current_center: (i64, i64),
+    rect: RectI32,
+) -> Option<u64> {
+    let center = rect.center();
+    match dir {
+        Direction::Right => {
+            (center.0 > current_center.0 && rect.overlaps_vertical(current_rect)).then(|| {
+                let edge_dist = (rect.left() - current_rect.right()).max(0) as u64;
+                let vert_center_dist = current_center.1.abs_diff(center.1);
+                edge_dist * 10000 + vert_center_dist
+            })
+        }
+        Direction::Left => {
+            (center.0 < current_center.0 && rect.overlaps_vertical(current_rect)).then(|| {
+                let edge_dist = (current_rect.left() - rect.right()).max(0) as u64;
+                let vert_center_dist = current_center.1.abs_diff(center.1);
+                edge_dist * 10000 + vert_center_dist
+            })
+        }
+        Direction::Down => {
+            (center.1 > current_center.1 && rect.overlaps_horizontal(current_rect)).then(|| {
+                let edge_dist = (rect.top() - current_rect.bottom()).max(0) as u64;
+                let horiz_center_dist = current_center.0.abs_diff(center.0);
+                edge_dist * 10000 + horiz_center_dist
+            })
+        }
+        Direction::Up => {
+            (center.1 < current_center.1 && rect.overlaps_horizontal(current_rect)).then(|| {
+                let edge_dist = (current_rect.top() - rect.bottom()).max(0) as u64;
+                let horiz_center_dist = current_center.0.abs_diff(center.0);
+                edge_dist * 10000 + horiz_center_dist
+            })
+        }
+    }
 }
