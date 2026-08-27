@@ -15,6 +15,7 @@ itty-core = { version = "0.1.0", path = "../itty/crates/itty-core" }
 itty-script = { version = "0.1.0", path = "../itty/crates/itty-script" }
 proptest = "1.11.0"
 ruau = { version = "0.1.0", path = "../../private/ruau/crates/ruau", default-features = false }
+ruau-script-api = { path = "../../private/ruau/crates/ruau-script-api" }
 schemars = "1.2.1"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"

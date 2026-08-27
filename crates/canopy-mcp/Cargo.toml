@@ -9,6 +9,7 @@ doctest = false
 
 [dependencies]
 canopy = { version = "0.0.1", path = "../canopy" }
+ruau-script-api = { workspace = true, features = ["schema"] }
 schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true

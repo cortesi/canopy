@@ -1,4 +1,5 @@
 use std::{
+    result,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -10,6 +11,11 @@ use canopy::{
     geom::Size,
     render::NopBackend,
     script::{ScriptAssertion, ScriptCheckDiagnostic},
+};
+use ruau_script_api::{
+    ScriptApiAvailability, ScriptApiCatalog, ScriptApiEntry, ScriptApiError, ScriptApiGuide,
+    ScriptApiLoad, ScriptApiQuery, ScriptApiResolution, ScriptApiResponse, ScriptApiSource,
+    ScriptApiTask,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -157,10 +163,10 @@ pub struct BootstrapJournalEntry {
 pub struct BootstrapResponse {
     /// Operating guide for the automation surface.
     pub guide: String,
-    /// Full generated Luau API definition.
-    pub api: String,
-    /// Stable FNV-1a digest of `api`.
+    /// Stable FNV-1a digest of the generated API.
     pub api_digest: String,
+    /// Compact discovery inventory for the generated API.
+    pub api_sources: Vec<ScriptApiEntry>,
     /// Registered fixtures.
     pub fixtures: Vec<FixtureInfo>,
     /// Current command availability.
@@ -276,14 +282,66 @@ impl AppEvaluator {
 /// Build a bootstrap payload from a finalized app.
 pub fn bootstrap_for_canopy(canopy: &Canopy) -> CanopyResult<BootstrapResponse> {
     let api = canopy.script_api()?.to_string();
+    let catalog =
+        script_api_catalog(api.clone()).map_err(|error| CanopyError::Invalid(error.to_string()))?;
+    let ScriptApiResolution::Response(overview) = catalog
+        .query(&ScriptApiQuery::default())
+        .map_err(|error| CanopyError::Invalid(error.to_string()))?
+    else {
+        unreachable!("Canopy declarations are ready")
+    };
     Ok(BootstrapResponse {
-        guide: BOOTSTRAP_GUIDE.to_string(),
+        guide: format!("{BOOTSTRAP_GUIDE} Call script_api for declarations."),
         api_digest: stable_digest(&api),
-        api,
+        api_sources: overview.entries,
         fixtures: canopy.fixture_infos(),
         commands: bootstrap_commands(canopy),
         journal: bootstrap_journal(canopy),
     })
+}
+
+/// Build one request-scoped catalog from a finalized app declaration.
+pub fn script_api_catalog(api: String) -> result::Result<ScriptApiCatalog, ScriptApiError> {
+    ScriptApiCatalog::new(
+        ScriptApiGuide {
+            introduction: "Discover the generated Canopy API before you automate an app. `canopy` and app-owned command tables are globals; do not call require().".to_owned(),
+            tasks: vec![
+                ScriptApiTask {
+                    name: "Inspect the app".to_owned(),
+                    instruction: "Request canopy.screen_text, canopy.screen_cells, or canopy.route_trace.".to_owned(),
+                },
+                ScriptApiTask {
+                    name: "Run commands".to_owned(),
+                    instruction: "Request canopy.commands or one app-owned command path.".to_owned(),
+                },
+                ScriptApiTask {
+                    name: "Use fixtures".to_owned(),
+                    instruction: "Request canopy.fixtures and apply a named fixture before evaluation.".to_owned(),
+                },
+            ],
+        },
+        vec![ScriptApiSource {
+            id: "canopy".to_owned(),
+            description: "Generated globals for the active Canopy application.".to_owned(),
+            load: ScriptApiLoad::Global {
+                roots: vec!["canopy".to_owned()],
+            },
+            availability: ScriptApiAvailability::Ready,
+            declaration: Some(api),
+            example: Some("return canopy.screen_text()".to_owned()),
+        }],
+    )
+}
+
+/// Resolve one query against a generated declaration.
+pub fn query_script_api(
+    api: String,
+    query: &ScriptApiQuery,
+) -> result::Result<ScriptApiResponse, ScriptApiError> {
+    match script_api_catalog(api)?.query(query)? {
+        ScriptApiResolution::Response(response) => Ok(response),
+        ScriptApiResolution::SourceRequired(_) => unreachable!("Canopy declarations are ready"),
+    }
 }
 
 /// Return command availability records.

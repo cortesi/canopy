@@ -23,6 +23,7 @@ use canopy_mcp::{
     json_tool_result,
 };
 use clap::{Args, Parser, Subcommand};
+use ruau_script_api::{ScriptApiQuery, ScriptApiResponse};
 use tmcp::{ToolError, ToolResult, mcp_server, schema::CallToolResult, tool_params};
 use tokio::{net::UnixStream, sync::Mutex, time::sleep};
 
@@ -58,8 +59,8 @@ enum Commands {
     Fixtures(SpawnArgs),
     /// Evaluate one Luau script against a headless app instance.
     Eval(EvalArgs),
-    /// Print the rendered `.d.luau` API from a headless app instance.
-    Api(SpawnArgs),
+    /// Discover the checked Luau API of a headless app instance.
+    Api(ApiArgs),
 }
 
 /// Arguments for `canopyctl run`.
@@ -76,6 +77,20 @@ struct RunArgs {
 /// Shared arguments for subcommands that only need an optional command override.
 #[derive(Args)]
 struct SpawnArgs {
+    /// Command override passed after `--`.
+    #[arg(last = true)]
+    command: Vec<String>,
+}
+
+/// Arguments for checked Luau API discovery.
+#[derive(Args)]
+struct ApiArgs {
+    /// List canonical public paths.
+    #[arg(long)]
+    list: bool,
+    /// Show one exact or unambiguous source or item.
+    #[arg(long)]
+    filter: Option<String>,
     /// Command override passed after `--`.
     #[arg(last = true)]
     command: Vec<String>,
@@ -216,12 +231,11 @@ impl CanopyctlMcpServer {
         Ok(json_tool_result(value))
     }
 
-    #[tool]
-    /// Return the rendered `.d.luau` API for the active session.
-    async fn script_api(&self) -> ToolResult<CallToolResult> {
+    #[tool(read_only, output_schema = ScriptApiResponse)]
+    /// Return shared API discovery for the active session.
+    async fn script_api(&self, params: ScriptApiQuery) -> ToolResult<CallToolResult> {
         self.touch().await;
-        let api = self.sessions.api().await.map_err(tool_error)?;
-        Ok(CallToolResult::new().with_text_content(api))
+        self.sessions.api(&params).await.map_err(tool_error)
     }
 
     #[tool]
@@ -429,10 +443,29 @@ async fn eval_command(config: LoadedConfig, args: EvalArgs) -> Result<()> {
 }
 
 /// Execute `canopyctl api`.
-async fn api_command(config: LoadedConfig, args: SpawnArgs) -> Result<()> {
+async fn api_command(config: LoadedConfig, args: ApiArgs) -> Result<()> {
     let command = config.headless_command(&args.command)?;
     let session = Session::spawn_headless(&command).await?;
-    print!("{}", session.api().await?);
+    let result = session
+        .api(&ScriptApiQuery {
+            list: args.list,
+            filter: args.filter,
+        })
+        .await?;
+    if result.is_error() {
+        bail!(
+            "{}",
+            result
+                .error_message()
+                .unwrap_or_else(|| "script_api failed".to_owned())
+        );
+    }
+    print!(
+        "{}",
+        result
+            .text()
+            .ok_or_else(|| anyhow::anyhow!("script_api returned no text"))?
+    );
     Ok(())
 }
 
@@ -524,5 +557,25 @@ mod tests {
         assert_eq!(entries[0].origin(), "manual");
         assert_eq!(entries[0].source()?, "canopy.assert(true, \"ok\")");
         Ok(())
+    }
+
+    #[test]
+    fn api_command_accepts_shared_query_forms() {
+        let cli = Cli::try_parse_from([
+            "canopyctl",
+            "api",
+            "--filter",
+            "canopy.screen_text",
+            "--",
+            "todo",
+            "mcp",
+        ])
+        .expect("API query");
+        let Commands::Api(args) = cli.command else {
+            panic!("API command");
+        };
+        assert_eq!(args.filter.as_deref(), Some("canopy.screen_text"));
+        assert!(!args.list);
+        assert_eq!(args.command, ["todo", "mcp"]);
     }
 }

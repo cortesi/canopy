@@ -2,10 +2,11 @@
 
 use std::path::Path;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result};
 use canopy::FixtureInfo;
 use canopy_mcp::{ApplyFixtureRequest, BootstrapResponse, ScriptEvalOutcome, ScriptEvalRequest};
-use tmcp::Client;
+use ruau_script_api::ScriptApiQuery;
+use tmcp::{Client, schema::CallToolResult};
 use tokio::{
     net::UnixStream,
     process::Child,
@@ -88,13 +89,9 @@ impl Session {
             .await?)
     }
 
-    /// Request the rendered `.d.luau` API text.
-    pub async fn api(&self) -> Result<String> {
-        let result = self.client.call_tool("script_api", ()).await?;
-        result
-            .text()
-            .map(ToOwned::to_owned)
-            .ok_or_else(|| anyhow!("script_api returned no text"))
+    /// Request shared API discovery.
+    pub async fn api(&self, query: &ScriptApiQuery) -> Result<CallToolResult> {
+        Ok(self.client.call_tool("script_api", query).await?)
     }
 
     /// Request bootstrap information.
@@ -165,9 +162,9 @@ impl SessionManager {
         self.session().await?.eval(request).await
     }
 
-    /// Request the API text on the active session.
-    pub async fn api(&self) -> Result<String> {
-        self.session().await?.api().await
+    /// Request API discovery on the active session.
+    pub async fn api(&self, query: &ScriptApiQuery) -> Result<CallToolResult> {
+        self.session().await?.api(query).await
     }
 
     /// Request bootstrap information on the active session.

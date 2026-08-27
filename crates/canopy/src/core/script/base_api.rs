@@ -42,8 +42,8 @@ enum Handler {
 struct BaseFunction {
     /// Function name inside the `canopy` table.
     name: &'static str,
-    /// Luau doc comment rendered above the declaration.
-    docs: &'static str,
+    /// Luau doc comment rendered above the declaration, when it adds semantics.
+    docs: Option<&'static str>,
     /// Luau function type signature.
     signature: fn() -> FunctionSignature,
     /// Native host implementation.
@@ -54,19 +54,19 @@ struct BaseFunction {
 const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     BaseFunction {
         name: "root",
-        docs: "Return the root node.",
+        docs: None,
         signature: || FunctionSignature::new().ret(Type::named("NodeId")),
         handler: Handler::Sync(host_root),
     },
     BaseFunction {
         name: "focused",
-        docs: "Return the currently focused node, or nil when nothing is focused.",
+        docs: Some("Return the currently focused node, or nil when nothing is focused."),
         signature: || FunctionSignature::new().ret(Type::named("NodeId").optional()),
         handler: Handler::Sync(host_focused),
     },
     BaseFunction {
         name: "node_info",
-        docs: "Return structured information about a node.",
+        docs: None,
         signature: || {
             FunctionSignature::new()
                 .param(("id", Type::named("NodeId")))
@@ -76,7 +76,7 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "find_node",
-        docs: "Find the first node whose path matches a canopy path pattern.",
+        docs: Some("Find the first node whose path matches a canopy path pattern."),
         signature: || {
             FunctionSignature::new()
                 .param(("pattern", Type::String))
@@ -86,7 +86,7 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "find_nodes",
-        docs: "Find every node whose path matches a canopy path pattern.",
+        docs: Some("Find every node whose path matches a canopy path pattern."),
         signature: || {
             FunctionSignature::new()
                 .param(("pattern", Type::String))
@@ -96,7 +96,7 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "parent",
-        docs: "Return the parent of a node, or nil at the root.",
+        docs: Some("Return the parent of a node, or nil at the root."),
         signature: || {
             FunctionSignature::new()
                 .param(("id", Type::named("NodeId")))
@@ -106,7 +106,7 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "children",
-        docs: "Return the direct children of a node.",
+        docs: None,
         signature: || {
             FunctionSignature::new()
                 .param(("id", Type::named("NodeId")))
@@ -116,13 +116,15 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "tree",
-        docs: "Return a recursive snapshot of the entire tree rooted at `canopy.root()`.",
+        docs: Some("Return a recursive snapshot of the entire tree rooted at `canopy.root()`."),
         signature: || FunctionSignature::new().ret(Type::named("TreeNode")),
         handler: Handler::Sync(host_tree),
     },
     BaseFunction {
         name: "node_at",
-        docs: "Hit-test a screen coordinate and return the deepest visible node at that point.",
+        docs: Some(
+            "Hit-test a screen coordinate and return the deepest visible node at that point.",
+        ),
         signature: || {
             FunctionSignature::new()
                 .param(("x", Type::Number))
@@ -133,7 +135,7 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "set_focus",
-        docs: "Attempt to move focus directly to a node.",
+        docs: Some("Attempt to move focus directly to a node."),
         signature: || {
             FunctionSignature::new()
                 .param(("id", Type::named("NodeId")))
@@ -143,19 +145,19 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "focus_next",
-        docs: "Move focus to the next focusable node in global focus order.",
+        docs: Some("Move focus to the next focusable node in global focus order."),
         signature: FunctionSignature::new,
         handler: Handler::Sync(host_focus_next),
     },
     BaseFunction {
         name: "focus_prev",
-        docs: "Move focus to the previous focusable node in global focus order.",
+        docs: Some("Move focus to the previous focusable node in global focus order."),
         signature: FunctionSignature::new,
         handler: Handler::Sync(host_focus_prev),
     },
     BaseFunction {
         name: "focus_dir",
-        docs: "Move focus in a geometric direction.",
+        docs: None,
         signature: || {
             FunctionSignature::new().param(("dir", Type::literals(["Up", "Down", "Left", "Right"])))
         },
@@ -163,13 +165,15 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "send_key",
-        docs: "Inject a key event using a canopy key spec string such as `ctrl-c` or `PageDown`.",
+        docs: Some(
+            "Inject a key event using a canopy key spec string such as `ctrl-c` or `PageDown`.",
+        ),
         signature: || FunctionSignature::new().param(("key", Type::String)),
         handler: Handler::Sync(host_send_key),
     },
     BaseFunction {
         name: "send_click",
-        docs: "Inject a left click at screen coordinates.",
+        docs: None,
         signature: || {
             FunctionSignature::new()
                 .param(("x", Type::Number))
@@ -179,7 +183,7 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "send_scroll",
-        docs: "Inject a scroll event at screen coordinates.",
+        docs: None,
         signature: || {
             FunctionSignature::new()
                 .param(("direction", Type::literals(["Up", "Down"])))
@@ -190,7 +194,7 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "cmd",
-        docs: "Dispatch a command by fully-qualified command id such as `root::quit`.",
+        docs: Some("Dispatch a command by fully-qualified command id such as `root::quit`."),
         signature: || {
             FunctionSignature::new()
                 .param(("name", Type::String))
@@ -201,7 +205,7 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "cmd_on",
-        docs: "Dispatch a command against a specific node.",
+        docs: Some("Dispatch a command against a specific node."),
         signature: || {
             FunctionSignature::new()
                 .param(("id", Type::named("NodeId")))
@@ -213,7 +217,7 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "resolve",
-        docs: "Return the command dispatch target for an owner, or nil if none is mounted.",
+        docs: Some("Return the command dispatch target for an owner, or nil if none is mounted."),
         signature: || {
             FunctionSignature::new()
                 .param(("owner", Type::String))
@@ -223,61 +227,63 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "bindings",
-        docs: "Return the active binding table across all modes.",
+        docs: Some("Return the active binding table across all modes."),
         signature: || FunctionSignature::new().ret(Type::named("BindingInfo").array()),
         handler: Handler::Sync(host_bindings),
     },
     BaseFunction {
         name: "commands",
-        docs: "Return structured metadata for all registered commands.",
+        docs: Some("Return structured metadata for all registered commands."),
         signature: || FunctionSignature::new().ret(Type::named("CommandInfo").array()),
         handler: Handler::Sync(host_commands),
     },
     BaseFunction {
         name: "input_mode",
-        docs: "Return the active input mode. The default mode is the empty string.",
+        docs: Some("Return the active input mode. The default mode is the empty string."),
         signature: || FunctionSignature::new().ret(Type::String),
         handler: Handler::Sync(host_input_mode),
     },
     BaseFunction {
         name: "set_mode",
-        docs: "Switch the active input mode. Passing the empty string returns to default mode.",
+        docs: Some(
+            "Switch the active input mode. Passing the empty string returns to default mode.",
+        ),
         signature: || FunctionSignature::new().param(("mode", Type::String)),
         handler: Handler::Sync(host_set_mode),
     },
     BaseFunction {
         name: "push_mode",
-        docs: "Push an input mode above the current mode.",
+        docs: None,
         signature: || FunctionSignature::new().param(("mode", Type::String)),
         handler: Handler::Sync(host_push_mode),
     },
     BaseFunction {
         name: "pop_mode",
-        docs: "Pop the top input mode and return the active mode after the pop.",
+        docs: Some("Pop the top input mode and return the active mode after the pop."),
         signature: || FunctionSignature::new().ret(Type::String),
         handler: Handler::Sync(host_pop_mode),
     },
     BaseFunction {
         name: "screen",
-        docs: "Return the rendered screen as rows of cell strings.",
+        docs: Some("Return the rendered screen as rows of cell strings."),
         signature: || FunctionSignature::new().ret(Type::String.array().array()),
         handler: Handler::Sync(host_screen),
     },
     BaseFunction {
         name: "screen_cells",
-        docs: "Return the rendered screen as rows of styled cell records.",
+        docs: Some("Return the rendered screen as rows of styled cell records."),
         signature: || FunctionSignature::new().ret(Type::named("ScreenCell").array().array()),
         handler: Handler::Sync(host_screen_cells),
     },
     BaseFunction {
         name: "screen_text",
-        docs: "Return the rendered screen as newline-joined plain text.",
+        docs: Some("Return the rendered screen as newline-joined plain text."),
         signature: || FunctionSignature::new().ret(Type::String),
         handler: Handler::Sync(host_screen_text),
     },
     BaseFunction {
         name: "screen_region",
-        docs: "Return rendered plain text inside a screen rectangle.",
+        docs: Some("Return rendered plain text inside a screen rectangle."),
         signature: || {
             FunctionSignature::new()
                 .param(("x", Type::Number))
@@ -290,7 +296,7 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "node_region",
-        docs: "Return rendered plain text inside a node's content rectangle.",
+        docs: Some("Return rendered plain text inside a node's content rectangle."),
         signature: || {
             FunctionSignature::new()
                 .param(("id", Type::named("NodeId")))
@@ -300,13 +306,13 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "route_trace",
-        docs: "Return the most recent input route trace.",
+        docs: Some("Return the most recent input route trace."),
         signature: || FunctionSignature::new().ret(Type::named("RouteTraceEntry").array()),
         handler: Handler::Sync(host_route_trace),
     },
     BaseFunction {
         name: "diagnostic_dump",
-        docs: "Return a diagnostic dump for a node, or the current script anchor.",
+        docs: Some("Return a diagnostic dump for a node, or the current script anchor."),
         signature: || {
             FunctionSignature::new()
                 .param(("id", Type::named("NodeId").optional()))
@@ -316,7 +322,7 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "available_bindings",
-        docs: "Return effective key bindings for a node or the current focus.",
+        docs: Some("Return effective key bindings for a node or the current focus."),
         signature: || {
             FunctionSignature::new()
                 .param(("id", Type::named("NodeId").optional()))
@@ -326,19 +332,19 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "script_journal",
-        docs: "Return recorded script evaluations for replay and diagnostics.",
+        docs: Some("Return recorded script evaluations for replay and diagnostics."),
         signature: || FunctionSignature::new().ret(Type::named("ScriptJournalEntry").array()),
         handler: Handler::Sync(host_script_journal),
     },
     BaseFunction {
         name: "api",
-        docs: "Return the generated Luau API definition for this app.",
+        docs: Some("Return the generated Luau API definition for this app."),
         signature: || FunctionSignature::new().ret(Type::String),
         handler: Handler::Sync(host_api),
     },
     BaseFunction {
         name: "bind",
-        docs: "Bind a key spec with required discovery metadata.",
+        docs: Some("Bind a key spec with required discovery metadata."),
         signature: || {
             FunctionSignature::new()
                 .param(("key", Type::String))
@@ -350,7 +356,7 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "bind_mouse",
-        docs: "Bind a mouse spec with required discovery metadata.",
+        docs: Some("Bind a mouse spec with required discovery metadata."),
         signature: || {
             FunctionSignature::new()
                 .param(("mouse", Type::named("MouseSpec")))
@@ -362,7 +368,7 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "unbind",
-        docs: "Remove a binding by numeric id.",
+        docs: None,
         signature: || {
             FunctionSignature::new()
                 .param(("id", Type::Number))
@@ -372,7 +378,7 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "unbind_key",
-        docs: "Remove key bindings matching the key spec and optional mode/path filter.",
+        docs: Some("Remove key bindings matching the key spec and optional mode/path filter."),
         signature: || {
             FunctionSignature::new()
                 .param(("key", Type::String))
@@ -382,13 +388,13 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "clear_bindings",
-        docs: "Remove every binding from every mode.",
+        docs: Some("Remove every binding from every mode."),
         signature: FunctionSignature::new,
         handler: Handler::Sync(host_clear_bindings),
     },
     BaseFunction {
         name: "on_start",
-        docs: "Register a callback that runs after the first live render.",
+        docs: Some("Register a callback that runs after the first live render."),
         signature: || {
             FunctionSignature::new().param(("handler", Type::func(FunctionSignature::new())))
         },
@@ -396,13 +402,13 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "log",
-        docs: "Append a log line to the evaluation result.",
+        docs: Some("Append a log line to the evaluation result."),
         signature: || FunctionSignature::new().param(("message", Type::Any)),
         handler: Handler::Sync(host_log),
     },
     BaseFunction {
         name: "assert",
-        docs: "Fail the script when the condition is false.",
+        docs: None,
         signature: || {
             FunctionSignature::new()
                 .param(("condition", Type::Boolean))
@@ -412,7 +418,7 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "wait_for",
-        docs: "Wait until a predicate returns a truthy value.",
+        docs: Some("Wait until a predicate returns a truthy value."),
         signature: || {
             FunctionSignature::new()
                 .param((
@@ -426,7 +432,7 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "wait_for_node",
-        docs: "Wait until a command owner resolves to a mounted node.",
+        docs: Some("Wait until a command owner resolves to a mounted node."),
         signature: || {
             FunctionSignature::new()
                 .param(("owner", Type::String))
@@ -437,7 +443,7 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "wait_for_screen_text",
-        docs: "Wait until the rendered screen contains text.",
+        docs: Some("Wait until the rendered screen contains text."),
         signature: || {
             FunctionSignature::new()
                 .param(("text", Type::String))
@@ -451,8 +457,10 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
 /// Register the base `canopy` table and global helpers.
 pub(super) fn register(builder: &mut module::Builder) {
     for function in CANOPY_FUNCTIONS {
-        let binding =
-            Binding::library("canopy", Type::func((function.signature)())).doc(function.docs);
+        let mut binding = Binding::library("canopy", Type::func((function.signature)()));
+        if let Some(docs) = function.docs {
+            binding = binding.doc(docs);
+        }
         match function.handler {
             Handler::Sync(handler) => {
                 builder.borrowed_function(function.name, binding, handler);
@@ -466,8 +474,7 @@ pub(super) fn register(builder: &mut module::Builder) {
         "fixtures",
         Binding::global(Type::func(
             FunctionSignature::new().ret(Type::named("FixtureInfo").array()),
-        ))
-        .doc("List all registered fixtures available to the current app."),
+        )),
         host_fixtures,
     );
 }

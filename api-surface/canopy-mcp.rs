@@ -148,10 +148,10 @@ pub mod canopy_mcp {
     pub struct BootstrapResponse {
         /// Operating guide for the automation surface.
         pub guide: String,
-        /// Full generated Luau API definition.
-        pub api: String,
-        /// Stable FNV-1a digest of `api`.
+        /// Stable FNV-1a digest of the generated API.
         pub api_digest: String,
+        /// Compact discovery inventory for the generated API.
+        pub api_sources: Vec<ruau_script_api::ScriptApiEntry>,
         /// Registered fixtures.
         pub fixtures: Vec<canopy::FixtureInfo>,
         /// Current command availability.

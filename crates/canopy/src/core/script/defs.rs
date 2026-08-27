@@ -85,8 +85,8 @@ pub(super) fn register_framework_declarations(builder: &mut module::Builder) {
     builder.alias(declaration::Alias::new(
         "Point",
         declaration::Type::table([
-            declaration::Field::new("x", declaration::Type::Number).doc("Horizontal position."),
-            declaration::Field::new("y", declaration::Type::Number).doc("Vertical position."),
+            declaration::Field::new("x", declaration::Type::Number),
+            declaration::Field::new("y", declaration::Type::Number),
         ]),
     ));
     builder.alias(declaration::Alias::new(
@@ -202,15 +202,13 @@ fn register_binding_info(builder: &mut module::Builder) {
                 .doc("Stable numeric binding identifier."),
             declaration::Field::new("input", declaration::Type::String)
                 .doc("Normalized key or mouse spec string."),
-            declaration::Field::new("input_type", declaration::Type::literals(["key", "mouse"]))
-                .doc("Input category."),
+            declaration::Field::new("input_type", declaration::Type::literals(["key", "mouse"])),
             declaration::Field::new("owner", declaration::Type::String)
                 .doc("Application or framework group owner."),
             declaration::Field::new(
                 "scope",
                 declaration::Type::literals(["global", "mode", "default", "exclusive"]),
-            )
-            .doc("Binding resolution scope."),
+            ),
             declaration::Field::new("mode", declaration::Type::String.optional())
                 .doc("Named input mode, when the scope is mode."),
             declaration::Field::new("path", declaration::Type::String)
@@ -219,8 +217,7 @@ fn register_binding_info(builder: &mut module::Builder) {
                 .doc("Required user-facing description."),
             declaration::Field::new("source", declaration::Type::String.optional())
                 .doc("Diagnostic source for application bindings."),
-            declaration::Field::new("target", declaration::Type::literals(["script", "command"]))
-                .doc("Binding target kind."),
+            declaration::Field::new("target", declaration::Type::literals(["script", "command"])),
         ]),
     ));
 }
@@ -238,8 +235,7 @@ fn register_command_info(builder: &mut module::Builder) {
                 .doc("Rust type name from command metadata."),
             declaration::Field::new("luau_type", declaration::Type::String)
                 .doc("Luau type rendered for this parameter."),
-            declaration::Field::new("doc", declaration::Type::String.optional())
-                .doc("Optional parameter documentation."),
+            declaration::Field::new("doc", declaration::Type::String.optional()),
             declaration::Field::new("optional", declaration::Type::Boolean)
                 .doc("True when the caller may omit the parameter."),
         ]),
@@ -251,8 +247,7 @@ fn register_command_info(builder: &mut module::Builder) {
                 .doc("Command name relative to its owner table."),
             declaration::Field::new("owner", declaration::Type::String)
                 .doc("Widget owner name, or the empty string for free commands."),
-            declaration::Field::new("doc", declaration::Type::String.optional())
-                .doc("Optional command documentation."),
+            declaration::Field::new("doc", declaration::Type::String.optional()),
             declaration::Field::new(
                 "params",
                 declaration::Type::named("CommandParamInfo").array(),
@@ -260,8 +255,7 @@ fn register_command_info(builder: &mut module::Builder) {
             .doc("Parameter metadata in declaration order."),
             declaration::Field::new("ret", declaration::Type::String)
                 .doc("Luau return type rendered for this command."),
-            declaration::Field::new("ret_doc", declaration::Type::String.optional())
-                .doc("Optional return documentation."),
+            declaration::Field::new("ret_doc", declaration::Type::String.optional()),
             declaration::Field::new("available", declaration::Type::Boolean)
                 .doc("True when the command can resolve from the current script anchor."),
             declaration::Field::new("target", declaration::Type::named("NodeId").optional())
@@ -275,8 +269,8 @@ fn register_observation_info(builder: &mut module::Builder) {
     builder.alias(declaration::Alias::new(
         "ScreenCell",
         declaration::Type::table([
-            declaration::Field::new("x", declaration::Type::Number).doc("Screen column."),
-            declaration::Field::new("y", declaration::Type::Number).doc("Screen row."),
+            declaration::Field::new("x", declaration::Type::Number),
+            declaration::Field::new("y", declaration::Type::Number),
             declaration::Field::new("text", declaration::Type::String)
                 .doc("Rendered grapheme text for this cell."),
             declaration::Field::new("fg", declaration::Type::String)
@@ -292,13 +286,11 @@ fn register_observation_info(builder: &mut module::Builder) {
     builder.alias(declaration::Alias::new(
         "RouteTraceEntry",
         declaration::Type::table([
-            declaration::Field::new("phase", declaration::Type::String).doc("Routing phase label."),
-            declaration::Field::new("node", declaration::Type::named("NodeId").optional())
-                .doc("Node associated with this route step."),
+            declaration::Field::new("phase", declaration::Type::String),
+            declaration::Field::new("node", declaration::Type::named("NodeId").optional()),
             declaration::Field::new("path", declaration::Type::String)
                 .doc("Focused path visible to this step."),
-            declaration::Field::new("detail", declaration::Type::String)
-                .doc("Human-readable route detail."),
+            declaration::Field::new("detail", declaration::Type::String),
         ]),
     ));
     builder.alias(declaration::Alias::new(
@@ -307,18 +299,16 @@ fn register_observation_info(builder: &mut module::Builder) {
             declaration::Field::new("id", declaration::Type::Number)
                 .doc("Stable numeric binding identifier."),
             declaration::Field::new("input", declaration::Type::String).doc("Normalized key spec."),
-            declaration::Field::new("description", declaration::Type::String)
-                .doc("Required user-facing description."),
+            declaration::Field::new("description", declaration::Type::String),
             declaration::Field::new("owner", declaration::Type::String)
                 .doc("Application or framework group owner."),
             declaration::Field::new(
                 "scope",
                 declaration::Type::literals(["global", "mode", "default", "exclusive"]),
-            )
-            .doc("Binding resolution scope."),
+            ),
             declaration::Field::new("mode", declaration::Type::String.optional())
                 .doc("Named mode when the scope is mode."),
-            declaration::Field::new("path", declaration::Type::String).doc("Path filter."),
+            declaration::Field::new("path", declaration::Type::String),
             declaration::Field::new("route_path", declaration::Type::String)
                 .doc("Route path at which this binding wins."),
             declaration::Field::new(
@@ -333,8 +323,7 @@ fn register_observation_info(builder: &mut module::Builder) {
     builder.alias(declaration::Alias::new(
         "BindingSnapshot",
         declaration::Type::table([
-            declaration::Field::new("focus", declaration::Type::named("NodeId"))
-                .doc("Current focus node."),
+            declaration::Field::new("focus", declaration::Type::named("NodeId")),
             declaration::Field::new("focus_path", declaration::Type::String)
                 .doc("Path from root to focus."),
             declaration::Field::new("active_modes", declaration::Type::String.array())
@@ -351,9 +340,8 @@ fn register_observation_info(builder: &mut module::Builder) {
     builder.alias(declaration::Alias::new(
         "ScriptAssertionInfo",
         declaration::Type::table([
-            declaration::Field::new("passed", declaration::Type::Boolean)
-                .doc("Whether the assertion passed."),
-            declaration::Field::new("message", declaration::Type::String).doc("Assertion message."),
+            declaration::Field::new("passed", declaration::Type::Boolean),
+            declaration::Field::new("message", declaration::Type::String),
         ]),
     ));
     builder.alias(declaration::Alias::new(
@@ -362,19 +350,16 @@ fn register_observation_info(builder: &mut module::Builder) {
             declaration::Field::new("id", declaration::Type::Number).doc("Monotonic journal id."),
             declaration::Field::new("origin", declaration::Type::String)
                 .doc("Script origin such as eval, config, or startup."),
-            declaration::Field::new("source", declaration::Type::String)
-                .doc("Evaluated source text."),
+            declaration::Field::new("source", declaration::Type::String),
             declaration::Field::new("ok", declaration::Type::Boolean)
                 .doc("True when evaluation completed successfully."),
             declaration::Field::new("error", declaration::Type::String.optional())
                 .doc("Error message when evaluation failed."),
-            declaration::Field::new("logs", declaration::Type::String.array())
-                .doc("Logs emitted by the script."),
+            declaration::Field::new("logs", declaration::Type::String.array()),
             declaration::Field::new(
                 "assertions",
                 declaration::Type::named("ScriptAssertionInfo").array(),
-            )
-            .doc("Assertions emitted by the script."),
+            ),
             declaration::Field::new("duration_ms", declaration::Type::Number)
                 .doc("Wall-clock duration in milliseconds."),
         ]),

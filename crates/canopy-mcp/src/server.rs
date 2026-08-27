@@ -1,11 +1,13 @@
 use std::{
     fs,
     path::{Path, PathBuf},
+    result,
     sync::mpsc,
     thread,
 };
 
 use canopy::AutomationHandle;
+use ruau_script_api::{ScriptApiError, ScriptApiQuery, ScriptApiResponse};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tmcp::{Server, ToolError, ToolResult, mcp_server, schema::CallToolResult};
@@ -13,7 +15,10 @@ use tokio::{net::UnixListener, runtime::Builder, sync::oneshot, task::block_in_p
 
 use crate::{
     Error, Result,
-    script::{AppEvaluator, AppFactory, ScriptEvalRequest, bootstrap_for_canopy, evaluate_live},
+    script::{
+        AppEvaluator, AppFactory, ScriptEvalRequest, bootstrap_for_canopy, evaluate_live,
+        query_script_api,
+    },
 };
 
 /// Build an MCP tool result with structured and text JSON payloads.
@@ -77,14 +82,14 @@ impl CanopyMcpServer {
         Ok(self.evaluator.evaluate(&params).to_tool_result())
     }
 
-    #[tool]
-    /// Return the rendered Luau API definition for the app.
-    async fn script_api(&self) -> ToolResult<CallToolResult> {
+    #[tool(read_only, output_schema = ScriptApiResponse)]
+    /// Return shared discovery for the generated app API.
+    async fn script_api(&self, params: ScriptApiQuery) -> ToolResult<CallToolResult> {
         let api = self
             .evaluator
             .script_api()
             .map_err(|error| ToolError::internal(error.to_string()))?;
-        Ok(CallToolResult::new().with_text_content(api))
+        script_api_tool_result(query_script_api(api, &params))
     }
 
     #[tool]
@@ -129,15 +134,15 @@ impl LiveCanopyMcpServer {
         Ok(outcome.to_tool_result())
     }
 
-    #[tool]
-    /// Return the rendered Luau API definition for the running app.
-    async fn script_api(&self) -> ToolResult<CallToolResult> {
+    #[tool(read_only, output_schema = ScriptApiResponse)]
+    /// Return shared discovery for the generated running-app API.
+    async fn script_api(&self, params: ScriptApiQuery) -> ToolResult<CallToolResult> {
         let automation = self.automation.clone();
         let api = block_in_place(move || {
             automation.request(|canopy| canopy.script_api().map(str::to_string))
         })
         .map_err(|error| ToolError::internal(error.to_string()))?;
-        Ok(CallToolResult::new().with_text_content(api))
+        script_api_tool_result(query_script_api(api, &params))
     }
 
     #[tool]
@@ -167,6 +172,29 @@ impl LiveCanopyMcpServer {
         .map_err(|error| ToolError::internal(error.to_string()))?;
         let value = json!({ "applied": applied_name });
         Ok(json_tool_result(value))
+    }
+}
+
+/// Map shared discovery to one tmcp result envelope.
+fn script_api_tool_result(
+    result: result::Result<ScriptApiResponse, ScriptApiError>,
+) -> ToolResult<CallToolResult> {
+    match result {
+        Ok(response) => {
+            let structured = serde_json::to_value(&response)
+                .map_err(|error| ToolError::internal(error.to_string()))?;
+            Ok(CallToolResult::new()
+                .with_structured_content(structured)
+                .with_text_content(response.content))
+        }
+        Err(error) => {
+            let structured = serde_json::to_value(&error)
+                .map_err(|error| ToolError::internal(error.to_string()))?;
+            Ok(CallToolResult::new()
+                .with_is_error(true)
+                .with_structured_content(structured)
+                .with_text_content(error.message))
+        }
     }
 }
 
@@ -336,23 +364,50 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn script_api_returns_definition_text() {
-        let result = server().script_api().await.expect("script_api");
-        let text = result.text().expect("text response");
-        assert!(text.contains("declare echo_node"));
+    async fn script_api_returns_shared_dynamic_discovery() {
+        let server = server();
+        let overview = server
+            .script_api(ScriptApiQuery::default())
+            .await
+            .expect("overview");
+        assert_eq!(overview.structured_content.unwrap()["mode"], "overview");
+
+        let listed = server
+            .script_api(ScriptApiQuery {
+                list: true,
+                filter: None,
+            })
+            .await
+            .expect("list");
+        assert!(listed.text().unwrap().contains("echo_node.ping"));
+
+        let detail = server
+            .script_api(ScriptApiQuery {
+                list: false,
+                filter: Some("echo_node.ping".to_owned()),
+            })
+            .await
+            .expect("detail");
+        assert_eq!(detail.structured_content.unwrap()["mode"], "detail");
+
+        let missing = server
+            .script_api(ScriptApiQuery {
+                list: false,
+                filter: Some("missing-path".to_owned()),
+            })
+            .await
+            .expect("missing result");
+        assert!(missing.is_error());
+        assert_eq!(missing.structured_content.unwrap()["kind"], "not_found");
     }
 
     #[tokio::test]
-    async fn bootstrap_returns_api_and_availability() {
+    async fn bootstrap_returns_digest_inventory_and_availability() {
         let result = server().bootstrap().await.expect("bootstrap");
         let payload = result.structured_content.expect("structured content");
-        assert!(
-            payload["api"]
-                .as_str()
-                .expect("api")
-                .contains("declare echo_node")
-        );
+        assert!(payload.get("api").is_none());
         assert!(!payload["api_digest"].as_str().expect("digest").is_empty());
+        assert_eq!(payload["api_sources"][0]["source"], "canopy");
         assert!(
             payload["commands"]
                 .as_array()

@@ -446,6 +446,7 @@ name = "canopy-mcp"
 version = "0.1.0"
 dependencies = [
  "canopy",
+ "ruau-script-api",
  "schemars",
  "serde",
  "serde_json",
@@ -469,7 +470,6 @@ dependencies = [
  "ropey",
  "syntect",
  "textwrap",
- "thiserror",
  "tokio",
  "tracing-subscriber",
  "unicode-segmentation",
@@ -484,6 +484,7 @@ dependencies = [
  "canopy",
  "canopy-mcp",
  "clap",
+ "ruau-script-api",
  "serde",
  "serde_json",
  "tmcp",
@@ -2779,6 +2780,7 @@ version = "0.1.0"
 dependencies = [
  "blake3",
  "cap-std",
+ "libc",
  "ruau-bytecode",
  "ruau-declaration",
  "ruau-source",
@@ -2808,6 +2810,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ruau-script-api"
+version = "0.1.0"
+dependencies = [
+ "ruau-declaration",
+ "schemars",
+ "serde",
+]
+
+[[package]]
 name = "ruau-source"
 version = "0.1.0"
 
@@ -2817,6 +2828,7 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+ "stacker",
  "strum",
 ]
 
@@ -2829,6 +2841,7 @@ dependencies = [
  "ruau-syntax",
  "serde",
  "serde_json",
+ "stacker",
 ]
 
 [[package]]
