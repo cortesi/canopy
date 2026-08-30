@@ -1,7 +1,7 @@
 //! Style effects system for transforming styles during rendering.
 //!
-//! Effects are transformations applied to styles that inherit through the node tree.
-//! They can modify colors, attributes, or both.
+//! Effects are transformations applied to styles that inherit through the node
+//! tree. They can modify colors, attributes, or both.
 
 use std::{fmt::Debug, sync::Arc};
 

@@ -22,19 +22,18 @@ struct Cli {
 /// Supported xtask commands.
 #[derive(Subcommand)]
 enum Task {
-    /// Run formatting and clippy fixes.
-    Tidy,
-    /// Run the complete non-mutating repository gate.
-    Ci,
-    /// Run the workspace test suite.
-    Test,
-    /// Type-check every tracked Luau source against its owning app surface.
-    Luau,
+    /// Build all workspace targets with default features.
+    FeatureCheck,
+    /// Check API skeletons and tracked Luau sources.
+    Checks,
+    /// Compile every benchmark target without running benchmarks.
+    BenchCheck,
     /// Run targeted Miri checks for unsafe code.
     Dynamic,
     /// Run all smoke-test integration targets.
     Smoke,
-    /// Regenerate the public API skeletons and report the tracked surface sizes.
+    /// Regenerate the public API skeletons and report the tracked surface
+    /// sizes.
     Api {
         /// Verify the checked-in skeletons instead of rewriting them.
         #[arg(long)]
@@ -46,22 +45,15 @@ enum Task {
 fn main() -> ExitCode {
     let root = workspace_root();
     exit_code(match Cli::parse().task {
-        Task::Tidy => run_tidy(&root),
-        Task::Ci => run_ci(&root),
-        Task::Test => run_nextest(&root),
-        Task::Luau => run_luau_check(&root),
+        Task::FeatureCheck => run_default_check(&root),
+        Task::Checks => run_api_check(&root) && run_luau_check(&root),
+        Task::BenchCheck => run_bench_check(&root),
         Task::Dynamic => run_dynamic(&root),
         Task::Smoke => run_smoke(&root),
         Task::Api { check: true } => run_api_check(&root),
         Task::Api { check: false } => run_api(&root),
     })
 }
-
-/// Rust nightly used only for deterministic formatting.
-const FORMAT_TOOLCHAIN: &str = "+nightly-2026-07-01";
-
-/// Cargo-nextest version required locally and in CI.
-const NEXTEST_VERSION: &str = "0.9.99";
 
 /// Rust nightly used for the repository's Miri checks.
 const MIRI_TOOLCHAIN: &str = "+nightly-2026-07-01";
@@ -87,28 +79,6 @@ const INTENT_SURFACES: &[(&str, &str)] = &[
     ("Context", "api-surface/canopy.rs"),
     ("Editor", "api-surface/canopy-widgets.rs"),
 ];
-
-/// Run the workspace tidy workflow.
-fn run_tidy(workspace_root: &Path) -> bool {
-    run_fmt(workspace_root) && run_clippy(workspace_root)
-}
-
-/// Run every required repository check without modifying source files.
-fn run_ci(workspace_root: &Path) -> bool {
-    let checks: &[fn(&Path) -> bool] = &[
-        run_fmt_check,
-        run_clippy_check,
-        run_default_check,
-        run_all_features_check,
-        run_api_check,
-        run_luau_check,
-        run_nextest,
-        run_bench_check,
-        run_smoke,
-    ];
-
-    checks.iter().all(|check| check(workspace_root))
-}
 
 /// Run the targeted unsafe-code suites under Miri.
 fn run_dynamic(workspace_root: &Path) -> bool {
@@ -177,89 +147,15 @@ fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
-/// Return the cargo arguments that format the workspace.
-fn fmt_args(check: bool) -> Vec<&'static str> {
-    let mut args = vec![
-        FORMAT_TOOLCHAIN,
-        "fmt",
-        "--all",
-        "--",
-        "--config-path",
-        "./rustfmt-nightly.toml",
-    ];
-    if check {
-        args.push("--check");
-    }
-    args
-}
-
-/// Run cargo fmt for the workspace.
-fn run_fmt(workspace_root: &Path) -> bool {
-    run_cargo_command(workspace_root, &fmt_args(false))
-}
-
-/// Verify workspace formatting without modifying files.
-fn run_fmt_check(workspace_root: &Path) -> bool {
-    run_cargo_command(workspace_root, &fmt_args(true))
-}
-
-/// Run clippy with workspace fixes enabled.
-fn run_clippy(workspace_root: &Path) -> bool {
-    run_cargo_command(
-        workspace_root,
-        &[
-            "clippy",
-            "-q",
-            "--fix",
-            "--workspace",
-            "--all-targets",
-            "--all-features",
-            "--allow-dirty",
-        ],
-    )
-}
-
-/// Run Clippy without edits and deny every warning.
-fn run_clippy_check(workspace_root: &Path) -> bool {
-    run_cargo_command(
-        workspace_root,
-        &[
-            "clippy",
-            "--workspace",
-            "--all-targets",
-            "--all-features",
-            "--",
-            "-D",
-            "warnings",
-        ],
-    )
-}
-
 /// Build all workspace targets with default features.
 fn run_default_check(workspace_root: &Path) -> bool {
     run_cargo_command(workspace_root, &["check", "--workspace", "--all-targets"])
-}
-
-/// Build all workspace targets with every feature.
-fn run_all_features_check(workspace_root: &Path) -> bool {
-    run_cargo_command(
-        workspace_root,
-        &["check", "--workspace", "--all-targets", "--all-features"],
-    )
 }
 
 /// Type-check every tracked Luau source under its owning application surface.
 fn run_luau_check(workspace_root: &Path) -> bool {
     if let Err(error) = validate_luau_inventory(workspace_root) {
         eprintln!("{error}");
-        return false;
-    }
-    if !require_tool(
-        "cargo-nextest",
-        installed_nextest_version(workspace_root),
-        NEXTEST_VERSION,
-        "install it before running this gate",
-    ) {
         return false;
     }
     run_cargo_command(
@@ -275,7 +171,8 @@ fn run_luau_check(workspace_root: &Path) -> bool {
     )
 }
 
-/// Reject tracked Luau files outside a directory with an explicit checker owner.
+/// Reject tracked Luau files outside a directory with an explicit checker
+/// owner.
 fn validate_luau_inventory(workspace_root: &Path) -> Result<(), String> {
     let output = Command::new("git")
         .args(["ls-files", "--", "*.luau"])
@@ -429,9 +326,10 @@ fn installed_ruskel_version() -> Option<String> {
 
 /// Count the distinct methods a skeleton declares for one intent-level surface.
 ///
-/// A surface is the inherent `impl` blocks of a type or the trait definition itself. Ruskel
-/// renders a re-exported type once per path, so names are deduplicated; `impl dyn Trait` helpers
-/// and trait implementations for the type are not part of the surface.
+/// A surface is the inherent `impl` blocks of a type or the trait definition
+/// itself. Ruskel renders a re-exported type once per path, so names are
+/// deduplicated; `impl dyn Trait` helpers and trait implementations for the
+/// type are not part of the surface.
 fn surface_method_count(skeleton: &str, surface: &str) -> usize {
     let mut names = BTreeSet::new();
     let mut lines = skeleton.lines().peekable();
@@ -455,15 +353,16 @@ fn surface_method_count(skeleton: &str, surface: &str) -> usize {
     names.len()
 }
 
-/// Return true when the line opens an inherent impl block or trait definition for the surface.
+/// Return true when the line opens an inherent impl block or trait definition
+/// for the surface.
 fn is_surface_header(line: &str, surface: &str) -> bool {
     let Some(head) = line.strip_suffix('{') else {
         return false;
     };
     let head = head.trim_end();
     if let Some(ty) = head.strip_prefix("impl ") {
-        // Ruskel renders an inherent impl under the path the type is defined at, which is
-        // longer than the re-export the budget names.
+        // Ruskel renders an inherent impl under the path the type is defined at, which
+        // is longer than the re-export the budget names.
         return ty.rsplit("::").next().unwrap_or(ty) == surface;
     }
     if let Some(ty) = head.strip_prefix("pub trait ") {
@@ -488,20 +387,6 @@ fn indent_of(line: &str) -> usize {
     line.len() - line.trim_start().len()
 }
 
-/// Return the installed cargo-nextest version.
-fn installed_nextest_version(workspace_root: &Path) -> Option<String> {
-    let output = Command::new("cargo")
-        .args(["nextest", "--version"])
-        .current_dir(workspace_root)
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let stdout = String::from_utf8(output.stdout).ok()?;
-    stdout.split_whitespace().nth(1).map(str::to_string)
-}
-
 /// Report whether the installed tool matches its repository pin.
 ///
 /// A mismatch names the installed version so the reader can see what to change.
@@ -517,19 +402,6 @@ fn require_tool(tool: &str, installed: Option<String>, required: &str, hint: &st
             false
         }
     }
-}
-
-/// Run the pinned nextest suite or report the exact installation requirement.
-fn run_nextest(workspace_root: &Path) -> bool {
-    require_tool(
-        "cargo-nextest",
-        installed_nextest_version(workspace_root),
-        NEXTEST_VERSION,
-        "install it before running this gate",
-    ) && run_cargo_command(
-        workspace_root,
-        &["nextest", "run", "--workspace", "--all-features"],
-    )
 }
 
 /// Discover directories that define smoke suites via `.canopyctl.toml`.
@@ -604,14 +476,6 @@ fn exit_code(success: bool) -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn installed_nextest_matches_repository_pin() {
-        assert_eq!(
-            installed_nextest_version(&workspace_root()).as_deref(),
-            Some(NEXTEST_VERSION)
-        );
-    }
 
     const SKELETON: &str = "\
 pub mod canopy {

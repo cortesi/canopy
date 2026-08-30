@@ -82,8 +82,9 @@ struct RenderLineContext<'a, 'b> {
     origin: Point,
     /// Width of the line-number gutter.
     gutter_width: u32,
-    /// Cell styles for plain text, selection, the current search match, and other matches. The
-    /// effect stack is constant for one widget render, so these resolve once per frame.
+    /// Cell styles for plain text, selection, the current search match, and
+    /// other matches. The effect stack is constant for one widget render,
+    /// so these resolve once per frame.
     styles: CellStyles,
 }
 
@@ -244,8 +245,9 @@ impl Editor {
         }
     }
 
-    /// Return `(display_line_count, max_line_width)` for a wrap width. The layout cache serves the
-    /// answer when it is current; otherwise the buffer is scanned directly.
+    /// Return `(display_line_count, max_line_width)` for a wrap width. The
+    /// layout cache serves the answer when it is current; otherwise the
+    /// buffer is scanned directly.
     fn display_metrics(&self, wrap_width: usize) -> (usize, usize) {
         self.layout
             .metrics_for(
@@ -1025,7 +1027,8 @@ pub(super) fn prompt_text(prompt: &PromptState) -> String {
 
 /// Format a line number gutter entry.
 ///
-/// A relative gutter shows the distance to the cursor line, and the cursor line's own number.
+/// A relative gutter shows the distance to the cursor line, and the cursor
+/// line's own number.
 fn line_number_text(relative: bool, line: usize, cursor_line: usize, width: u32) -> String {
     let number = if relative && line != cursor_line {
         line.abs_diff(cursor_line)

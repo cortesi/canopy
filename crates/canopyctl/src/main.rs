@@ -74,7 +74,8 @@ struct RunArgs {
     command: Vec<String>,
 }
 
-/// Shared arguments for subcommands that only need an optional command override.
+/// Shared arguments for subcommands that only need an optional command
+/// override.
 #[derive(Args)]
 struct SpawnArgs {
     /// Command override passed after `--`.
@@ -393,7 +394,8 @@ async fn bootstrap_command(config: LoadedConfig, args: SpawnArgs) -> Result<()> 
     Ok(())
 }
 
-/// Format a smoke script path relative to the suite root and its fixture directory.
+/// Format a smoke script path relative to the suite root and its fixture
+/// directory.
 fn smoke_test_name(suite_dir: &Path, script_path: &Path, fixture: Option<&str>) -> String {
     let relative = script_path
         .strip_prefix(suite_dir)

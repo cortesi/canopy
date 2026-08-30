@@ -123,8 +123,9 @@ impl LayoutCache {
         self.revision = revision;
     }
 
-    /// Return the cached `(total_lines, max_line_width)` when every cache key matches the supplied
-    /// parameters. A stale cache returns `None` so the caller can fall back to a direct scan.
+    /// Return the cached `(total_lines, max_line_width)` when every cache key
+    /// matches the supplied parameters. A stale cache returns `None` so the
+    /// caller can fall back to a direct scan.
     pub fn metrics_for(
         &self,
         buffer: &TextBuffer,

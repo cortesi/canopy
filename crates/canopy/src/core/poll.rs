@@ -67,7 +67,8 @@ impl Ord for PendingNode {
     }
 }
 
-/// Pending deadlines, with stale heap entries removed lazily after rescheduling.
+/// Pending deadlines, with stale heap entries removed lazily after
+/// rescheduling.
 #[derive(Default, Debug)]
 struct PendingHeap {
     /// Deadline-ordered callback entries.
@@ -211,7 +212,8 @@ impl Poller {
 
     /// Send a command unless the scheduler has already stopped.
     ///
-    /// `shutdown` clears the sender and the worker together, so one liveness check covers both.
+    /// `shutdown` clears the sender and the worker together, so one liveness
+    /// check covers both.
     fn send(&self, command: SchedulerCommand) -> Result<()> {
         let running = self
             .worker

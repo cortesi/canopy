@@ -1,6 +1,7 @@
 //! Stylegym: A demonstration app for Canopy's styling features.
 //!
-//! This example showcases themes, effects, and modal overlays in a two-pane layout.
+//! This example showcases themes, effects, and modal overlays in a two-pane
+//! layout.
 
 use canopy::{
     command, derive_commands,

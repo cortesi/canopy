@@ -75,7 +75,8 @@ impl Widget for BenchNode {
     }
 }
 
-/// Command target placed after the synthetic tree to exercise full subtree resolution.
+/// Command target placed after the synthetic tree to exercise full subtree
+/// resolution.
 struct CommandLeaf;
 
 #[derive_commands]
@@ -139,7 +140,8 @@ fn build_tree() -> Result<Canopy> {
     Ok(app)
 }
 
-/// Populate an app with the deterministic benchmark tree and return its top node.
+/// Populate an app with the deterministic benchmark tree and return its top
+/// node.
 fn populate_tree(app: &mut Canopy) -> Result<NodeId> {
     let mut next_index = 1;
     app.with_root_context(|context| {
@@ -150,7 +152,8 @@ fn populate_tree(app: &mut Canopy) -> Result<NodeId> {
     })
 }
 
-/// Build a benchmark tree whose command target is visited after the main subtree.
+/// Build a benchmark tree whose command target is visited after the main
+/// subtree.
 fn build_command_tree() -> Result<Canopy> {
     let mut app = Canopy::new();
     app.add_commands::<CommandLeaf>()?;

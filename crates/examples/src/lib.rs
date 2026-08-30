@@ -58,7 +58,8 @@ pub fn print_luau_api(cnpy: &mut Canopy) -> Result<()> {
     Ok(())
 }
 
-/// Build a four-stop gradient paint at a fixed angle, evenly weighted toward the tail.
+/// Build a four-stop gradient paint at a fixed angle, evenly weighted toward
+/// the tail.
 pub(crate) fn banner_gradient(angle_deg: f32, colors: [Color; 4]) -> Paint {
     Paint::gradient(GradientSpec::with_stops(
         angle_deg,
@@ -129,7 +130,8 @@ pub fn text_scroll_bindings(receiver: &str, path: &str) -> String {
         .replace("{path}", path)
 }
 
-/// Build a `Canopy` for a demo launcher, with `Root` loaded and the help binding installed.
+/// Build a `Canopy` for a demo launcher, with `Root` loaded and the help
+/// binding installed.
 pub fn demo_canopy() -> Result<Canopy> {
     let mut cnpy = Canopy::new();
     Root::load(&mut cnpy)?;

@@ -124,7 +124,8 @@ impl Text {
 
     /// Page vertically through the text.
     /// Positive values move down; negative values move up.
-    /// @param delta Signed page delta. Positive moves down and negative moves up.
+    /// @param delta Signed page delta. Positive moves down and negative moves
+    /// up.
     #[command]
     pub fn page(&mut self, c: &mut dyn Context, delta: i32) {
         if delta < 0 {

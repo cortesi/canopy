@@ -24,7 +24,8 @@ pub fn prev_grapheme_boundary(line: &str, column: usize) -> usize {
     if count < column { count } else { previous }
 }
 
-/// Return the grapheme boundary immediately after a char column, or the column itself.
+/// Return the grapheme boundary immediately after a char column, or the column
+/// itself.
 pub fn next_grapheme_boundary(line: &str, column: usize) -> usize {
     let mut count = 0usize;
     for grapheme in line.graphemes(true) {

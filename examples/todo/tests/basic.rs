@@ -137,8 +137,8 @@ mod tests {
         let mut h = app()?;
         add(&mut h, "one")?;
         add(&mut h, "two")?;
-        // A step down and back up returns the selection to where it started, so the delete
-        // removes the same item it would have without navigating.
+        // A step down and back up returns the selection to where it started, so the
+        // delete removes the same item it would have without navigating.
         h.key('j')?;
         h.key('k')?;
         h.key('d')?;

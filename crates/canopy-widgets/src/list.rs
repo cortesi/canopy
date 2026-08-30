@@ -1,7 +1,8 @@
 //! Widget-based list container.
 //!
 //! A typed list container where items are actual widgets in the tree.
-//! Items participate in focus management and can be composed from other widgets.
+//! Items participate in focus management and can be composed from other
+//! widgets.
 
 use canopy::{
     Context, EventOutcome, KeyedChildren, NodeId, TypedId, ViewContext, Widget, command,
@@ -33,7 +34,8 @@ struct SelectionIndicator {
 /// Default drag threshold in cells before cancelling activation.
 const DEFAULT_ACTIVATE_DRAG_THRESHOLD: u32 = 4;
 
-/// Build an activation invocation that appends the row index to a stored command.
+/// Build an activation invocation that appends the row index to a stored
+/// command.
 fn invocation_with_index(command: &CommandInvocation, index: usize) -> CommandInvocation {
     let args = match &command.args {
         CommandArgs::Positional(values) => {
@@ -80,8 +82,8 @@ pub trait Selectable: Widget {
 
 /// A typed list container for widget items.
 ///
-/// List items are actual widgets in the tree, enabling composition and focus management.
-/// The list arranges items vertically and supports scrolling.
+/// List items are actual widgets in the tree, enabling composition and focus
+/// management. The list arranges items vertically and supports scrolling.
 ///
 /// Items must implement the [`Selectable`] trait so the list can manage their
 /// selection state independently of focus.
@@ -300,7 +302,8 @@ impl<W: Selectable> List<W> {
         Ok(())
     }
 
-    /// Return a selected item ID or an error when the list invariants are broken.
+    /// Return a selected item ID or an error when the list invariants are
+    /// broken.
     fn selection_id(&self, index: Option<usize>, message: &str) -> Result<Option<TypedId<W>>> {
         let Some(index) = index else {
             return Ok(None);
@@ -475,7 +478,8 @@ impl<W: Selectable> List<W> {
 
     /// Move selection by pages.
     /// Positive values move down; negative values move up.
-    /// @param delta Signed page delta. Positive moves down and negative moves up.
+    /// @param delta Signed page delta. Positive moves down and negative moves
+    /// up.
     #[command]
     pub fn page(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {
         self.page_shift(c, delta >= 0)

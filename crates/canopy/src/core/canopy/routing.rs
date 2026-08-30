@@ -40,7 +40,8 @@ impl RoutedInput {
         }
     }
 
-    /// Return true when an anchored binding may run before widget event dispatch.
+    /// Return true when an anchored binding may run before widget event
+    /// dispatch.
     fn allows_pre_event_binding(self) -> bool {
         matches!(self, Self::Key(_))
     }
@@ -186,7 +187,8 @@ impl Canopy {
         Ok(false)
     }
 
-    /// Execute a binding after route resolution, preserving an active script scope.
+    /// Execute a binding after route resolution, preserving an active script
+    /// scope.
     fn execute_routed_binding_with_scope(
         &mut self,
         node_id: NodeId,
@@ -227,7 +229,8 @@ impl Canopy {
         Ok(true)
     }
 
-    /// Propagate a mouse event through the node under the event and all its ancestors.
+    /// Propagate a mouse event through the node under the event and all its
+    /// ancestors.
     ///
     /// `scope` carries an active script scope for a script-originated event.
     pub(crate) fn mouse(&mut self, scope: Option<&Scope<'_>>, m: mouse::MouseEvent) -> Result<()> {
@@ -256,7 +259,8 @@ impl Canopy {
         Ok(())
     }
 
-    /// Return the focused node, focusing the first candidate when nothing holds focus.
+    /// Return the focused node, focusing the first candidate when nothing holds
+    /// focus.
     fn focus_or_root(&mut self) -> Result<NodeId> {
         if self.core.focus.is_none() {
             self.core.focus_first(self.core.root)?;
@@ -283,8 +287,8 @@ impl Canopy {
 
     /// Service a bounded batch of callbacks marshalled onto the UI thread.
     ///
-    /// The in-crate run loop calls this after receiving [`Event::Wake`]. The return value is the
-    /// number of callbacks executed during this turn.
+    /// The in-crate run loop calls this after receiving [`Event::Wake`]. The
+    /// return value is the number of callbacks executed during this turn.
     pub(crate) fn service_automation(&mut self) -> usize {
         let mut serviced = 0;
         while serviced < AUTOMATION_SERVICE_BUDGET {
@@ -331,7 +335,8 @@ impl Canopy {
         Ok(())
     }
 
-    /// Call a bound Luau closure, re-entering the live scope when one is active.
+    /// Call a bound Luau closure, re-entering the live scope when one is
+    /// active.
     fn execute_binding_with_scope(
         &mut self,
         node_id: NodeId,

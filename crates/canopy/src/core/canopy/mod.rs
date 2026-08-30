@@ -45,7 +45,8 @@ use crate::{
 pub struct Canopy {
     /// Core state.
     pub(super) core: Core,
-    /// The poller is responsible for tracking nodes that have pending poll events.
+    /// The poller is responsible for tracking nodes that have pending poll
+    /// events.
     poller: Poller,
 
     /// Root window size.
@@ -69,7 +70,8 @@ pub struct Canopy {
     completed_startup_modules: HashSet<PathBuf>,
     /// Compiled handles retained across filesystem startup retries.
     startup_module_scripts: HashMap<PathBuf, script::ScriptId>,
-    /// Binding targets whose release is deferred until a startup attempt commits.
+    /// Binding targets whose release is deferred until a startup attempt
+    /// commits.
     deferred_binding_releases: Option<Vec<script::LuauFunctionId>>,
     /// In-memory journal of script evaluations.
     script_journal: Vec<ScriptJournalEntry>,
@@ -266,7 +268,8 @@ pub struct ScriptJournalBaseline {
     assertions: usize,
 }
 
-/// Data needed to run a default-bindings script after dropping the Canopy borrow.
+/// Data needed to run a default-bindings script after dropping the Canopy
+/// borrow.
 pub struct DefaultBindingsRun {
     /// Script host that owns the retained runtime.
     pub(crate) host: script::LuauHost,
@@ -433,8 +436,9 @@ impl Canopy {
 
     /// Compile and run one source under a journal entry.
     ///
-    /// `run` receives the compiled script and a clone of the script host, so the caller chooses
-    /// the execution mode without repeating the journal, finalize, and compile prologue.
+    /// `run` receives the compiled script and a clone of the script host, so
+    /// the caller chooses the execution mode without repeating the journal,
+    /// finalize, and compile prologue.
     fn eval_journaled(
         &mut self,
         origin: impl Into<String>,
@@ -468,9 +472,10 @@ impl Canopy {
 
     /// Invalidate cached exports from persistent script modules.
     ///
-    /// Pass a root such as `@user` or `@project` to invalidate one root, or `None` to
-    /// invalidate every root. Returns the new source epoch, or `None` when no module source
-    /// is configured or the named root is unknown.
+    /// Pass a root such as `@user` or `@project` to invalidate one root, or
+    /// `None` to invalidate every root. Returns the new source epoch, or
+    /// `None` when no module source is configured or the named root is
+    /// unknown.
     pub fn invalidate_script_modules(&mut self, root: Option<&str>) -> Option<u64> {
         let source = self.script_module_source.as_ref()?;
         let epoch = match root {
@@ -481,7 +486,8 @@ impl Canopy {
         Some(epoch)
     }
 
-    /// Register an audited Ruau native module on the same surface as Canopy commands.
+    /// Register an audited Ruau native module on the same surface as Canopy
+    /// commands.
     pub fn register_script_module(&mut self, module: Arc<dyn NativeModule>) -> Result<()> {
         self.ensure_api_unfinalized("script native module registration")?;
         self.script_native_modules.push(module);
@@ -624,7 +630,8 @@ impl Canopy {
         }
     }
 
-    /// Restore registries after a failed startup attempt and release only its callbacks.
+    /// Restore registries after a failed startup attempt and release only its
+    /// callbacks.
     fn rollback_startup_attempt(&mut self, attempt: StartupAttempt) {
         let new_targets = self
             .core
@@ -758,12 +765,14 @@ impl Canopy {
         self.script_host.check_script(source_name, source)
     }
 
-    /// Drain and return log lines recorded by the most recent script evaluation.
+    /// Drain and return log lines recorded by the most recent script
+    /// evaluation.
     pub fn take_script_logs(&self) -> Vec<String> {
         self.script_host.take_logs()
     }
 
-    /// Drain and return assertion outcomes from the most recent script evaluation.
+    /// Drain and return assertion outcomes from the most recent script
+    /// evaluation.
     pub fn take_script_assertions(&self) -> Vec<script::ScriptAssertion> {
         self.script_host.take_assertions()
     }
@@ -863,7 +872,8 @@ impl Canopy {
         self.release_removed_bindings(removed)
     }
 
-    /// Remove all callbacks whose VM ownership is tied to the current source epoch.
+    /// Remove all callbacks whose VM ownership is tied to the current source
+    /// epoch.
     fn clear_script_callbacks(&mut self) {
         let removed = self.core.input_map.clear_application();
         self.release_removed_bindings(removed);
@@ -1008,7 +1018,8 @@ impl Canopy {
         );
     }
 
-    /// Return true if the named owner already exports a `default_bindings` command.
+    /// Return true if the named owner already exports a `default_bindings`
+    /// command.
     fn owner_has_default_bindings_command(&self, owner: &str) -> bool {
         self.core.commands.iter().any(|(_, spec)| {
             matches!(spec.dispatch, CommandDispatchKind::Node { owner: spec_owner } if spec_owner == owner)
@@ -1100,7 +1111,8 @@ impl Canopy {
         Ok(pairs)
     }
 
-    /// Begin a journaled script evaluation and capture its diagnostics baseline.
+    /// Begin a journaled script evaluation and capture its diagnostics
+    /// baseline.
     fn begin_script_journal(&self) -> ScriptJournalBaseline {
         // Top-level evaluations clear diagnostics on entry, so their baseline
         // is empty; nested evaluations record only what they add.
@@ -1216,11 +1228,11 @@ impl Canopy {
 
     /// Return command availability from the current focus position.
     ///
-    /// This computes which commands would resolve to a target if dispatched from the current
-    /// focus. For each command:
+    /// This computes which commands would resolve to a target if dispatched
+    /// from the current focus. For each command:
     /// - Free commands always have `resolution = Some(Free)`
-    /// - Node-routed commands have `resolution = Some(Subtree{..})` or `Some(Ancestor{..})`
-    ///   if a matching node exists, `None` otherwise
+    /// - Node-routed commands have `resolution = Some(Subtree{..})` or
+    ///   `Some(Ancestor{..})` if a matching node exists, `None` otherwise
     pub fn command_availability_from_focus(&self) -> Vec<commands::CommandAvailability<'_>> {
         let start = self.core.focus.unwrap_or(self.core.root);
         self.command_availability_from_node(start)
@@ -1228,8 +1240,8 @@ impl Canopy {
 
     /// Return command availability from a specific node.
     ///
-    /// Computes which commands would dispatch to a target, using the same resolution logic
-    /// as `commands::dispatch`:
+    /// Computes which commands would dispatch to a target, using the same
+    /// resolution logic as `commands::dispatch`:
     /// 1. First search the subtree rooted at `start` in pre-order
     /// 2. Then walk ancestors
     pub fn command_availability_from_node(
@@ -1386,8 +1398,8 @@ fn implementation_path_for_declaration(path: &FsPath) -> Option<PathBuf> {
     Some(path.with_file_name(format!("{stem}.luau")))
 }
 
-/// A trait that allows widgets to perform recursive initialization of themselves and their
-/// children.
+/// A trait that allows widgets to perform recursive initialization of
+/// themselves and their children.
 pub trait Loader {
     /// Load commands or resources into the canopy instance.
     /// Returns an error if loading fails.

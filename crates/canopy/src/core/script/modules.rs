@@ -50,7 +50,8 @@ impl ScriptModuleRoots {
         self.project = Some(root.into());
     }
 
-    /// Return the startup modules that exist for the configured roots, in layer order.
+    /// Return the startup modules that exist for the configured roots, in layer
+    /// order.
     pub(crate) fn startup_modules(&self) -> Vec<StartupModule> {
         self.roots()
             .filter_map(|(namespace, root)| {

@@ -16,7 +16,8 @@ use crate::{
 impl TreeStateSnapshot {
     /// Capture structural state that tree hooks can mutate.
     ///
-    /// The binding registry is runtime state and is intentionally outside tree-edit rollback.
+    /// The binding registry is runtime state and is intentionally outside
+    /// tree-edit rollback.
     fn capture(core: &Core) -> Self {
         Self {
             nodes: core.nodes.clone(),
@@ -186,7 +187,8 @@ impl Core {
         Ok(())
     }
 
-    /// Run a tree edit, joining an active journal or rolling back the outermost edit on failure.
+    /// Run a tree edit, joining an active journal or rolling back the outermost
+    /// edit on failure.
     pub(crate) fn with_tree_edit<R>(
         &mut self,
         operation: &'static str,
@@ -297,7 +299,8 @@ impl Core {
         Ok(())
     }
 
-    /// Return true if `ancestor` is `node` or appears in the parent chain of `node`.
+    /// Return true if `ancestor` is `node` or appears in the parent chain of
+    /// `node`.
     pub(crate) fn is_ancestor_or_self(&self, ancestor: NodeId, node: NodeId) -> bool {
         let mut current = Some(node);
         while let Some(id) = current {
@@ -566,7 +569,8 @@ impl Core {
         Ok(self.nodes.insert(node))
     }
 
-    /// Add a boxed widget as a child of a specific parent and return the new node ID.
+    /// Add a boxed widget as a child of a specific parent and return the new
+    /// node ID.
     pub fn add_child_to_boxed(
         &mut self,
         parent: impl Into<NodeId>,
@@ -580,7 +584,8 @@ impl Core {
         })
     }
 
-    /// Add a boxed widget as a keyed child of a specific parent and return the new node ID.
+    /// Add a boxed widget as a keyed child of a specific parent and return the
+    /// new node ID.
     pub fn add_child_to_keyed_boxed(
         &mut self,
         parent: impl Into<NodeId>,
@@ -911,7 +916,8 @@ impl Core {
         Ok(())
     }
 
-    /// Confirm lifecycle hooks did not replace or reshape the planned removal target.
+    /// Confirm lifecycle hooks did not replace or reshape the planned removal
+    /// target.
     fn validate_removal_plan(&self, plan: &RemovalPlan) -> Result<()> {
         if !self
             .subtree_pre_order(plan.root)
@@ -972,7 +978,8 @@ impl Core {
         out
     }
 
-    /// Ensure every unmounted widget in a subtree is available before topology publication.
+    /// Ensure every unmounted widget in a subtree is available before topology
+    /// publication.
     fn ensure_unmounted_widget_slots_available(
         &self,
         root: NodeId,

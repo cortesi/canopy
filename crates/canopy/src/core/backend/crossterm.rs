@@ -25,7 +25,8 @@ use crate::{
 };
 /// Simple event source wrapper for receiving events.
 ///
-/// This coalesces consecutive mouse-move events so clicks are not delayed by move bursts.
+/// This coalesces consecutive mouse-move events so clicks are not delayed by
+/// move bursts.
 struct EventSource<S> {
     /// Cancellable terminal event stream owned by the run loop.
     terminal: S,
@@ -386,8 +387,9 @@ impl CrosstermRender {
 
     /// Apply a style to subsequent output.
     fn apply_style(&mut self, s: &ResolvedStyle) -> io::Result<()> {
-        // Always reset first to clear any previous attributes, then set colors and attrs.
-        // Order is important: reset clears everything, so we must set colors after.
+        // Always reset first to clear any previous attributes, then set colors and
+        // attrs. Order is important: reset clears everything, so we must set
+        // colors after.
         self.fp
             .queue(style::SetAttribute(style::Attribute::Reset))?;
         self.fp
@@ -710,8 +712,8 @@ fn handle_render_error(
 
 /// Run the main render/event loop using the crossterm backend.
 ///
-/// Ctrl+C dumps the node tree and stops the loop with status 130. Keyboard enhancement flags
-/// are enabled so escape codes are unambiguous.
+/// Ctrl+C dumps the node tree and stops the loop with status 130. Keyboard
+/// enhancement flags are enabled so escape codes are unambiguous.
 pub fn runloop(mut cnpy: Canopy) -> Result<i32> {
     let mut be = CrosstermRender::default();
     let mut session = TerminalSession::new(Box::new(CrosstermControl::new()))?;

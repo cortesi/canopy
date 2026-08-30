@@ -522,7 +522,8 @@ fn parse_bind_options<'s>(
         return Err(RuntimeError::runtime("binding options table is required"));
     };
     let field = |name: &str| optional_string_field(scope, &options, name);
-    // `InputMap::replace_application_binding` rejects a blank description on the next step.
+    // `InputMap::replace_application_binding` rejects a blank description on the
+    // next step.
     let description = field("description")?
         .ok_or_else(|| RuntimeError::runtime("binding description is required"))?;
     let mode = field("mode")?.filter(|mode| !mode.is_empty());
@@ -566,7 +567,8 @@ fn parse_unbind_selector<'s>(
     })
 }
 
-/// Read a required node-id argument, validating the handle against the live tree.
+/// Read a required node-id argument, validating the handle against the live
+/// tree.
 pub(super) fn read_node_id<'s>(
     scope: &Scope<'s>,
     args: &mut HostArgCursor<'_, 's>,
@@ -582,7 +584,8 @@ pub(super) fn read_node_id<'s>(
     .map_err(RuntimeError::from)
 }
 
-/// Read an optional node-id argument, validating a present handle against the live tree.
+/// Read an optional node-id argument, validating a present handle against the
+/// live tree.
 fn read_opt_node_id<'s>(
     scope: &Scope<'s>,
     args: &mut HostArgCursor<'_, 's>,
@@ -1349,7 +1352,8 @@ fn host_screen_text<'s>(
     Ok(ret_one(ScopedValue::String(scope.create_string(&text)?)))
 }
 
-/// `canopy.screen_region`: return rendered plain text inside a screen rectangle.
+/// `canopy.screen_region`: return rendered plain text inside a screen
+/// rectangle.
 fn host_screen_region<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
@@ -1370,7 +1374,8 @@ fn host_screen_region<'s>(
     Ok(ret_one(ScopedValue::String(scope.create_string(&text)?)))
 }
 
-/// `canopy.node_region`: return rendered plain text inside a node's content rect.
+/// `canopy.node_region`: return rendered plain text inside a node's content
+/// rect.
 fn host_node_region<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,

@@ -80,7 +80,8 @@ impl Core {
             .then_some(focused)
     }
 
-    /// Focus the first node that accepts focus in the pre-order traversal of the subtree at root.
+    /// Focus the first node that accepts focus in the pre-order traversal of
+    /// the subtree at root.
     pub fn focus_first(&mut self, root: NodeId) -> Result<ChangeOutcome> {
         if let Some(target) = first_focusable(self, root) {
             self.set_focus(target)
@@ -247,7 +248,8 @@ impl Core {
         }
     }
 
-    /// Return the next focusable node after the subtree rooted at `removed_root`.
+    /// Return the next focusable node after the subtree rooted at
+    /// `removed_root`.
     pub fn next_focusable_after_subtree(&self, removed_root: NodeId) -> Option<NodeId> {
         if !self.is_attached_to_root(removed_root) {
             return None;
@@ -255,7 +257,8 @@ impl Core {
         find_next_focus(self, self.root, removed_root, true)
     }
 
-    /// Return the previous focusable node before the subtree rooted at `removed_root`.
+    /// Return the previous focusable node before the subtree rooted at
+    /// `removed_root`.
     pub fn prev_focusable_before_subtree(&self, removed_root: NodeId) -> Option<NodeId> {
         if !self.is_attached_to_root(removed_root) {
             return None;
@@ -356,7 +359,8 @@ fn find_prev_focus_with(
     prev
 }
 
-/// Return the nearest focusable ancestor of `start` with optional view requirement.
+/// Return the nearest focusable ancestor of `start` with optional view
+/// requirement.
 fn nearest_focusable_ancestor_with(
     core: &Core,
     start: NodeId,
@@ -372,7 +376,8 @@ fn nearest_focusable_ancestor_with(
     None
 }
 
-/// Return whether the node is focusable, respecting hidden and view requirements.
+/// Return whether the node is focusable, respecting hidden and view
+/// requirements.
 fn is_focus_candidate(core: &Core, node_id: NodeId, require_view: bool) -> bool {
     let Some(node) = core.nodes.get(node_id) else {
         return false;

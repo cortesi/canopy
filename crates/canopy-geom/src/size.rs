@@ -18,7 +18,8 @@ impl Size {
         Self { w, h }
     }
 
-    /// Return a `Rect` with the same dimensions as the `Size`, but a location at (0, 0).
+    /// Return a `Rect` with the same dimensions as the `Size`, but a location
+    /// at (0, 0).
     pub fn rect(&self) -> Rect {
         Rect {
             tl: Point::default(),

@@ -16,8 +16,8 @@ macro_rules! buf {
 /// Marker character that stands for a NULL cell in an expected pattern.
 const NULL_MARKER: char = 'X';
 
-/// A buffer matcher for tests. A NULL cell renders as `X` in the compared text, which lets a
-/// test pin a partial render.
+/// A buffer matcher for tests. A NULL cell renders as `X` in the compared text,
+/// which lets a test pin a partial render.
 pub struct BufTest<'a> {
     /// Reference to the buffer under test.
     buf: &'a TermBuf,
@@ -49,13 +49,14 @@ impl<'a> BufTest<'a> {
                 .all(|(y, line)| self.row_string(y as u32).trim_end() == line.trim_end())
     }
 
-    /// Assert that the buffer matches the expected lines with pretty printed output on failure.
+    /// Assert that the buffer matches the expected lines with pretty printed
+    /// output on failure.
     pub fn assert_matches(&self, expected: &[&str]) {
         self.assert_matches_with_context(expected, None);
     }
 
-    /// Assert that the buffer matches the expected lines with pretty printed output on failure,
-    /// with optional context information.
+    /// Assert that the buffer matches the expected lines with pretty printed
+    /// output on failure, with optional context information.
     pub fn assert_matches_with_context(&self, expected: &[&str], context: Option<&str>) {
         if !self.matches(expected) {
             let actual_lines = self.lines();

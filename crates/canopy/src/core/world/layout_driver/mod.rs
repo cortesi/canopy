@@ -290,8 +290,8 @@ impl<'a> LayoutPass<'a> {
         Ok(outer)
     }
 
-    /// Measure a node's content size under one constraint, wrapping children when the widget
-    /// defers, then clamp the result to the constraint.
+    /// Measure a node's content size under one constraint, wrapping children
+    /// when the widget defers, then clamp the result to the constraint.
     fn measure_content(
         &mut self,
         node_id: NodeId,
@@ -617,7 +617,8 @@ impl<'a> LayoutPass<'a> {
         ))
     }
 
-    /// Store the canvas size compute_canvas returned and clamp the scroll offset.
+    /// Store the canvas size compute_canvas returned and clamp the scroll
+    /// offset.
     fn update_canvas(&mut self, node_id: NodeId, view_size: Size, canvas: Size) {
         if let Some(node) = self.core.nodes.get_mut(node_id) {
             clamp_scroll(&mut node.scroll, view_size, canvas);

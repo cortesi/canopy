@@ -307,7 +307,8 @@ impl FromArgValue for NodeId {
     }
 }
 
-/// Build a conversion error for a numeric value outside the target type's range.
+/// Build a conversion error for a numeric value outside the target type's
+/// range.
 fn out_of_range<T>(value: impl fmt::Display) -> CommandError {
     CommandError::conversion(format!(
         "value {value} out of range for {}",
@@ -533,11 +534,12 @@ impl<T: CommandType> CommandType for HashMap<String, T> {
     }
 }
 
-/// Registry for declaration items required by command argument and return types.
+/// Registry for declaration items required by command argument and return
+/// types.
 ///
 /// Tracks in-flight named registrations so recursive and shared types
-/// terminate: a type's `luau_decls` claims its name with [`DeclRegistry::begin`]
-/// before recursing into field types.
+/// terminate: a type's `luau_decls` claims its name with
+/// [`DeclRegistry::begin`] before recursing into field types.
 pub struct DeclRegistry<'a> {
     /// Declaration-coupled native-module builder.
     builder: &'a mut module::Builder,
@@ -556,8 +558,8 @@ impl<'a> DeclRegistry<'a> {
 
     /// Claim a type name for registration.
     ///
-    /// Returns false when the name is already in progress, in which case the caller must skip
-    /// both recursion and registration.
+    /// Returns false when the name is already in progress, in which case the
+    /// caller must skip both recursion and registration.
     pub fn begin(&mut self, name: &str) -> bool {
         self.seen.insert(name.to_string().into())
     }
@@ -993,8 +995,8 @@ impl CommandSet {
 
     /// Add a command batch atomically.
     ///
-    /// Repeating an equivalent definition is idempotent. A conflicting definition or invalid
-    /// batch leaves the set unchanged.
+    /// Repeating an equivalent definition is idempotent. A conflicting
+    /// definition or invalid batch leaves the set unchanged.
     pub fn add(&mut self, specs: &'static [&'static CommandSpec]) -> Result<(), CommandError> {
         let mut batch = HashMap::with_capacity(specs.len());
         for spec in specs {
@@ -1157,7 +1159,8 @@ pub enum CommandError {
 }
 
 impl CommandError {
-    /// Preserve a command implementation's concrete error as the execution source.
+    /// Preserve a command implementation's concrete error as the execution
+    /// source.
     #[doc(hidden)]
     pub fn execution(error: impl StdError + Send + Sync + 'static) -> Self {
         Self::Exec(Box::new(error))
@@ -1343,7 +1346,8 @@ fn dispatch_on_node(
     .map_err(CommandError::execution)?
 }
 
-/// Validate every node handle carried by an invocation before command code sees it.
+/// Validate every node handle carried by an invocation before command code sees
+/// it.
 fn validate_node_args(core: &Core, args: &CommandArgs) -> Result<(), CommandError> {
     match args {
         CommandArgs::Positional(values) => {

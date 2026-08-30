@@ -322,10 +322,7 @@ pub struct PartialStyle {
 ///     .attr(Attr::Bold);
 ///
 /// let mut style_map = StyleMap::new();
-/// style_map
-///     .rules()
-///     .style("item/selected", selected)
-///     .apply();
+/// style_map.rules().style("item/selected", selected).apply();
 /// ```
 #[derive(Clone, Default, Debug, PartialEq)]
 pub struct StyleBuilder {
@@ -431,7 +428,8 @@ fn path_segments(path: &str) -> impl Iterator<Item = &str> {
     path.split('/').filter(|part| !part.is_empty())
 }
 
-/// Return the canonical map key for a style path: non-empty components joined by `/`.
+/// Return the canonical map key for a style path: non-empty components joined
+/// by `/`.
 fn canonical_path(path: &str) -> String {
     let mut key = String::with_capacity(path.len());
     for part in path_segments(path) {
@@ -695,10 +693,12 @@ impl StyleManager {
         self.resolve(smap, &self.layers, &path)
     }
 
-    /// Resolve a style using a path and a layer specification, ignoring `self.layers`.
+    /// Resolve a style using a path and a layer specification, ignoring
+    /// `self.layers`.
     ///
-    /// Probes path prefixes from longest to shortest, and within each, layer prefixes from the
-    /// deepest layer to the root. The first probe that sets a component wins.
+    /// Probes path prefixes from longest to shortest, and within each, layer
+    /// prefixes from the deepest layer to the root. The first probe that
+    /// sets a component wins.
     fn resolve(&self, smap: &StyleMap, layers: &[String], path: &[&str]) -> Style {
         let mut ret = PartialStyle::default();
         let mut key = String::new();

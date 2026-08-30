@@ -32,7 +32,8 @@ impl Canopy {
         Ok(true)
     }
 
-    /// Refresh the cached terminal buffer without producing user-visible output.
+    /// Refresh the cached terminal buffer without producing user-visible
+    /// output.
     pub(crate) fn refresh_snapshot(&mut self) -> Result<()> {
         let mut backend = NopBackend;
         let _ignored = self.render_if_pending(&mut backend)?;

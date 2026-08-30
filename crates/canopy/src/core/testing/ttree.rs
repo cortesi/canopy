@@ -70,8 +70,9 @@ pub trait OutcomeTarget {
 
 /// Define an instrumented test node.
 ///
-/// `node!(Type)` names the node after its type; `node!(Type, "name")` overrides that name. A
-/// trailing identifier adds a `#[command]` method of that name which records its own call.
+/// `node!(Type)` names the node after its type; `node!(Type, "name")` overrides
+/// that name. A trailing identifier adds a `#[command]` method of that name
+/// which records its own call.
 macro_rules! node {
     ($type:ident) => {
         node!(@node $type, stringify!($type), {});

@@ -1,7 +1,8 @@
-//! The inspector log panel must not panic when another subscriber owns the process.
+//! The inspector log panel must not panic when another subscriber owns the
+//! process.
 //!
-//! Installing a global tracing subscriber is a one-shot, process-wide action, so this check
-//! runs in its own test binary with one test.
+//! Installing a global tracing subscriber is a one-shot, process-wide action,
+//! so this check runs in its own test binary with one test.
 
 #[cfg(test)]
 mod tests {

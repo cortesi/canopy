@@ -2,6 +2,23 @@
 resolver = "2"
 members = ["crates/*", "examples/*", "xtask"]
 
+[workspace.metadata.nanocode]
+schema-version = 1
+requires-nanocode = ">=0.1, <0.2"
+features = "all"
+tidy-hooks = [
+    ["cargo", "xtask", "feature-check"],
+    ["cargo", "xtask", "checks"],
+    ["cargo", "xtask", "bench-check"],
+]
+smoke-hooks = [["cargo", "xtask", "smoke"]]
+
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
 [workspace.package]
 edition = "2024"
 license = "MIT"

@@ -302,7 +302,8 @@ fn attrs_to_arg(attrs: AttrSet) -> ArgValue {
     ArgValue::Array(names)
 }
 
-/// Return the rendered screen text inside a signed rectangle, clipped to the screen.
+/// Return the rendered screen text inside a signed rectangle, clipped to the
+/// screen.
 pub(super) fn screen_text_for_rect(canopy: &mut Canopy, rect: RectI32) -> Result<String> {
     let buffer = rendered_buffer(canopy)?;
     let Some(rect) = rect.intersect_rect(buffer.rect()) else {

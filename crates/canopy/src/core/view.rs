@@ -32,7 +32,8 @@ impl View {
         self.outer.w == 0 || self.outer.h == 0
     }
 
-    /// Offset from the outer origin to the content origin, in local coordinates.
+    /// Offset from the outer origin to the content origin, in local
+    /// coordinates.
     pub fn content_origin(&self) -> Point {
         let dx = (self.content.tl.x - self.outer.tl.x).max(0) as u32;
         let dy = (self.content.tl.y - self.outer.tl.y).max(0) as u32;
@@ -55,7 +56,8 @@ impl View {
         Rect::new(0, 0, self.outer.w, self.outer.h)
     }
 
-    /// Build a view from signed outer and content rects, a scroll offset, and a canvas size.
+    /// Build a view from signed outer and content rects, a scroll offset, and a
+    /// canvas size.
     pub fn new(outer: RectI32, content: RectI32, tl: Point, canvas: Size) -> Self {
         Self {
             outer,
@@ -83,8 +85,8 @@ impl View {
         }
     }
 
-    /// Calculates the (pre, active, post) rectangles needed to draw a horizontal
-    /// scroll bar for this view in the specified margin rect.
+    /// Calculates the (pre, active, post) rectangles needed to draw a
+    /// horizontal scroll bar for this view in the specified margin rect.
     pub fn hactive(&self, margin: Rect) -> Result<Option<(Rect, Rect, Rect)>> {
         let view = self.view_rect();
         if view.w == self.canvas.w {

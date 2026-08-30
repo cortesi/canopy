@@ -72,7 +72,8 @@ impl<'a> WidgetMutGuard<'a> {
     }
 }
 
-/// Temporary widget extraction guard for callbacks that need mutable core access.
+/// Temporary widget extraction guard for callbacks that need mutable core
+/// access.
 pub struct WidgetSlotGuard {
     /// Owned reference to the extracted widget slot.
     slot: Rc<RefCell<Option<Box<dyn Widget>>>>,
@@ -134,7 +135,8 @@ pub fn validate_slot(node_id: NodeId, node: &Node, policy: WidgetSlotPolicy) -> 
     )))
 }
 
-/// Return whether a widget accepts focus, treating unavailable slots as not focusable.
+/// Return whether a widget accepts focus, treating unavailable slots as not
+/// focusable.
 pub fn accepts_focus(core: &Core, node_id: NodeId) -> bool {
     let Some(node) = core.nodes.get(node_id) else {
         return false;

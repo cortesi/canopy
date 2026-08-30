@@ -65,7 +65,8 @@ fn live_canopy_mcp_server(automation: AutomationHandle) -> LiveCanopyMcpServer {
 #[mcp_server]
 impl CanopyMcpServer {
     #[tool]
-    /// Return the operating guide, generated API, fixtures, availability, and journal summary.
+    /// Return the operating guide, generated API, fixtures, availability, and
+    /// journal summary.
     async fn bootstrap(&self) -> ToolResult<CallToolResult> {
         let bootstrap = self
             .evaluator
@@ -108,7 +109,8 @@ impl CanopyMcpServer {
 #[mcp_server]
 impl LiveCanopyMcpServer {
     #[tool]
-    /// Return the operating guide, generated API, fixtures, availability, and journal summary.
+    /// Return the operating guide, generated API, fixtures, availability, and
+    /// journal summary.
     async fn bootstrap(&self) -> ToolResult<CallToolResult> {
         let automation = self.automation.clone();
         let bootstrap = block_in_place(move || {
@@ -198,7 +200,8 @@ fn script_api_tool_result(
     }
 }
 
-/// Serve `bootstrap`, `script_eval`, `script_api`, and `fixtures` over stdio for an app factory.
+/// Serve `bootstrap`, `script_eval`, `script_api`, and `fixtures` over stdio
+/// for an app factory.
 pub fn serve_stdio(factory: AppFactory) -> Result<()> {
     Server::new(move || canopy_mcp_server(factory.clone()))
         .serve_stdio_blocking()
@@ -242,7 +245,8 @@ impl Drop for UdsServerHandle {
     }
 }
 
-/// Serve live MCP automation for a running canopy app over a Unix-domain socket.
+/// Serve live MCP automation for a running canopy app over a Unix-domain
+/// socket.
 pub fn serve_uds(
     socket_path: impl AsRef<Path>,
     automation: AutomationHandle,

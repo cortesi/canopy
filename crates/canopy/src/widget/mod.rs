@@ -58,8 +58,8 @@ pub trait Widget: Any {
 
     /// Attempt to focus this widget.
     ///
-    /// Widgets can use the provided context to query their tree state (e.g., whether they have
-    /// children) when deciding whether to accept focus.
+    /// Widgets can use the provided context to query their tree state (e.g.,
+    /// whether they have children) when deciding whether to accept focus.
     fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         false
     }
@@ -76,8 +76,9 @@ pub trait Widget: Any {
 
     /// Called when the widget is mounted in the tree, before its first render.
     ///
-    /// A failed hook rolls back core-owned state. External effects and widget-owned state must be
-    /// repeatable or compensating because a later mount attempt may call this hook again.
+    /// A failed hook rolls back core-owned state. External effects and
+    /// widget-owned state must be repeatable or compensating because a
+    /// later mount attempt may call this hook again.
     fn on_mount(&mut self, _ctx: &mut dyn Context) -> Result<()> {
         Ok(())
     }
@@ -91,8 +92,9 @@ pub trait Widget: Any {
 
     /// Called before a successfully mounted widget is removed or replaced.
     ///
-    /// This hook cannot veto removal. During failure rollback, structural context operations are
-    /// rejected and external cleanup must be safe to repeat.
+    /// This hook cannot veto removal. During failure rollback, structural
+    /// context operations are rejected and external cleanup must be safe to
+    /// repeat.
     fn on_unmount(&mut self, _ctx: &mut dyn Context) {}
 
     /// Name used for commands and paths.

@@ -71,7 +71,8 @@ fn benchmark_editor_rendering(c: &mut Criterion) {
             .size(80, 24)
             .build()
             .expect("Failed to create harness");
-        // The first render also runs the on-start hooks, so warm up outside the measured loop.
+        // The first render also runs the on-start hooks, so warm up outside the
+        // measured loop.
         harness.render().expect("Failed to render");
 
         b.iter(|| {

@@ -14,7 +14,8 @@ pub enum Direction {
     Column,
     /// Stack children horizontally (row).
     Row,
-    /// Children overlap in the same space (painter's algorithm - last child on top).
+    /// Children overlap in the same space (painter's algorithm - last child on
+    /// top).
     Stack,
 }
 
@@ -311,7 +312,8 @@ impl Layout {
 
     /// Inherit overflow permission from an enclosing layout.
     ///
-    /// Overflow only widens: a layout that already allows overflow on an axis keeps it.
+    /// Overflow only widens: a layout that already allows overflow on an axis
+    /// keeps it.
     pub(crate) fn inherit_overflow(&mut self, x: bool, y: bool) {
         self.overflow_x |= x;
         self.overflow_y |= y;
@@ -466,7 +468,8 @@ pub struct MeasureConstraints {
 }
 
 impl MeasureConstraints {
-    /// Leaf widgets: clamp a content size to these constraints and return Fixed.
+    /// Leaf widgets: clamp a content size to these constraints and return
+    /// Fixed.
     pub fn clamp(&self, content: Size) -> Measurement {
         Measurement::Fixed(self.clamp_size(content))
     }

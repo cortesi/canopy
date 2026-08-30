@@ -1,4 +1,5 @@
-//! Widgets and node builders shared by the world and layout-driver test modules.
+//! Widgets and node builders shared by the world and layout-driver test
+//! modules.
 
 use std::sync::{Arc, Mutex};
 
@@ -16,7 +17,8 @@ pub(super) type MeasureFn = dyn Fn(MeasureConstraints) -> Measurement + Send + S
 /// Canvas hook installed on a [`TestWidget`].
 pub(super) type CanvasFn = dyn Fn(Size, &CanvasContext) -> Size + Send + Sync;
 
-/// A widget whose measure and canvas behavior a test supplies, recording every measure call.
+/// A widget whose measure and canvas behavior a test supplies, recording every
+/// measure call.
 pub(super) struct TestWidget {
     /// Measurement hook.
     measure_fn: Arc<MeasureFn>,
@@ -100,7 +102,8 @@ pub(super) fn wrap_node(core: &mut Core) -> Result<NodeId> {
     core.create_detached(widget)
 }
 
-/// Assert that a node operation error carries its operation, node, path, and source.
+/// Assert that a node operation error carries its operation, node, path, and
+/// source.
 pub fn assert_error_context(error: &Error, operation: &str, node_id: NodeId, path: &str) {
     let Error::NodeOperation {
         operation: actual_operation,

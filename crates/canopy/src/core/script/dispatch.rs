@@ -42,8 +42,8 @@ fn map_matches_named(spec: &CommandSpec, map: &BTreeMap<String, ArgValue>) -> bo
 
 /// Build command arguments from converted script values.
 ///
-/// A single map argument whose keys name the command's parameters binds by name; every other
-/// shape binds positionally.
+/// A single map argument whose keys name the command's parameters binds by
+/// name; every other shape binds positionally.
 fn build_args_from_values(spec: &CommandSpec, mut values: Vec<ArgValue>) -> CommandArgs {
     if values.len() != 1 {
         return CommandArgs::Positional(values);

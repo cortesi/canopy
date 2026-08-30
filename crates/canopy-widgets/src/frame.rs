@@ -95,7 +95,8 @@ impl Frame {
         &self.box_glyphs
     }
 
-    /// Wrap an existing child node in a configured frame and return the frame node ID.
+    /// Wrap an existing child node in a configured frame and return the frame
+    /// node ID.
     pub fn wrap_with(c: &mut dyn Context, child: impl Into<NodeId>, frame: Self) -> Result<NodeId> {
         Ok(wrap(c, child, frame)?.into())
     }

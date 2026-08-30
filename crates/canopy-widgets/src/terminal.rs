@@ -76,7 +76,8 @@ struct DriverRuntime {
     host: DriverHost,
     /// Cloneable driver handle exposed to integrations.
     handle: Arc<DriverHandle>,
-    /// Runtime used to enqueue async driver operations without blocking UI events.
+    /// Runtime used to enqueue async driver operations without blocking UI
+    /// events.
     runtime: Runtime,
 }
 
@@ -534,7 +535,8 @@ impl Terminal {
         true
     }
 
-    /// Queue raw input bytes through the attached driver without blocking the UI thread.
+    /// Queue raw input bytes through the attached driver without blocking the
+    /// UI thread.
     fn queue_input(&self, bytes: Vec<u8>) {
         let Some(driver) = &self.driver else {
             return;
@@ -542,7 +544,8 @@ impl Terminal {
         driver.queue_input(bytes);
     }
 
-    /// Send a mouse input sequence to the terminal when mouse reporting is enabled.
+    /// Send a mouse input sequence to the terminal when mouse reporting is
+    /// enabled.
     fn send_mouse_sequence(&self, event: &mouse::MouseEvent, state: &TerminalState) {
         if let Some(bytes) = encode_mouse(event, state) {
             self.queue_input(bytes);
@@ -615,7 +618,8 @@ impl Terminal {
         }
     }
 
-    /// Return the focus report the terminal expects, if it enabled focus reporting.
+    /// Return the focus report the terminal expects, if it enabled focus
+    /// reporting.
     fn focus_report(&self, focused: bool) -> Option<Vec<u8>> {
         let state = self.state()?;
         state.modes.focus_in_out.then(|| {

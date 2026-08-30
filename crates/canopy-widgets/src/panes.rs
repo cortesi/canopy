@@ -161,7 +161,8 @@ impl Panes {
     }
 }
 
-/// Focus the first focusable leaf under a column, falling back to the first leaf.
+/// Focus the first focusable leaf under a column, falling back to the first
+/// leaf.
 fn focus_column_node(c: &mut dyn Context, column_node: NodeId) -> Result<()> {
     let focusables = c.focusable_leaves(column_node);
     if let Some(target) = focusables

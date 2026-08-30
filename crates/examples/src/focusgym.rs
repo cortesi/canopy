@@ -85,7 +85,8 @@ impl Block {
         (self.horizontal && a.w <= 4) || (!self.horizontal && a.h <= 4)
     }
 
-    /// Adjust flex factors by the requested deltas and apply the updated layout.
+    /// Adjust flex factors by the requested deltas and apply the updated
+    /// layout.
     fn adjust_flex(&self, c: &mut dyn Context, delta: i32) -> Result<()> {
         if let Some(view) = c.node_view(c.node_id())
             && (view.outer.w <= 1 || view.outer.h <= 1)

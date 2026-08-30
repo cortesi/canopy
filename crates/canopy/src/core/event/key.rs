@@ -222,13 +222,13 @@ impl Key {
     ///
     /// Normalization handles two common sources of divergence across terminals:
     ///
-    /// - **Ctrl-modified ASCII control codes** (0x00–0x1F and 0x7F) are mapped to
-    ///   canonical printable equivalents (e.g. 0x01 → `A`, 0x1B → `[`, 0x7F → `?`).
-    ///   Some terminals emit control codes without setting the Ctrl modifier, so
-    ///   these codes are treated as Ctrl-combinations even if Ctrl isn't reported.
-    ///   Ctrl+`_`, Ctrl+`?`, and Ctrl+`7` then alias to `/` to align with common
-    ///   `Ctrl+/` help bindings, and Ctrl+`4`, Ctrl+`5`, Ctrl+`6` alias to `\`, `]`,
-    ///   and `^`.
+    /// - **Ctrl-modified ASCII control codes** (0x00–0x1F and 0x7F) are mapped
+    ///   to canonical printable equivalents (e.g. 0x01 → `A`, 0x1B → `[`, 0x7F
+    ///   → `?`). Some terminals emit control codes without setting the Ctrl
+    ///   modifier, so these codes are treated as Ctrl-combinations even if Ctrl
+    ///   isn't reported. Ctrl+`_`, Ctrl+`?`, and Ctrl+`7` then alias to `/` to
+    ///   align with common `Ctrl+/` help bindings, and Ctrl+`4`, Ctrl+`5`,
+    ///   Ctrl+`6` alias to `\`, `]`, and `^`.
     /// - **Shift handling** is applied after Ctrl canonicalization.
     ///
     /// Handling of the shift key is the most intricate part of this module.
@@ -260,8 +260,9 @@ impl Key {
     /// | shift + enter     | shift + enter    |
     /// | shift + ctrl + A  | ctrl + A         |
     ///
-    /// `normalize` must be called explicitly when needed. Comparison is literal and
-    /// straightforward and does not normalize. `parse_spec` normalizes its result.
+    /// `normalize` must be called explicitly when needed. Comparison is literal
+    /// and straightforward and does not normalize. `parse_spec` normalizes
+    /// its result.
     pub fn normalize(&self) -> Self {
         let mut normalized = *self;
         if let KeyCode::Char(c) = normalized.key {
@@ -277,7 +278,8 @@ impl Key {
             }
         }
 
-        // Shift is folded into the character it produced, except for space, which keeps it.
+        // Shift is folded into the character it produced, except for space, which keeps
+        // it.
         if normalized.mods.shift
             && let KeyCode::Char(c) = normalized.key
             && c != ' '
@@ -301,7 +303,8 @@ impl Key {
 
 /// Split an input specification into its modifier set and its trailing body.
 ///
-/// The separators differ per input kind: key specs accept `-` and `+`, mouse specs only `-`.
+/// The separators differ per input kind: key specs accept `-` and `+`, mouse
+/// specs only `-`.
 pub(crate) fn parse_spec_parts<'a>(
     spec: &'a str,
     separators: &[char],
@@ -466,7 +469,8 @@ impl fmt::Display for KeyCode {
 }
 
 impl fmt::Display for Mods {
-    /// Write the active modifiers as `Ctrl+Alt+Shift`, or nothing when none are set.
+    /// Write the active modifiers as `Ctrl+Alt+Shift`, or nothing when none are
+    /// set.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut separator = "";
         for (active, name) in [

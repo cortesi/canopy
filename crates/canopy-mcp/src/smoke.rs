@@ -14,9 +14,11 @@ use crate::{
 /// Configuration for a smoke-suite run.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SuiteConfig {
-    /// Root directory to scan for `.luau` scripts when no explicit script list is provided.
+    /// Root directory to scan for `.luau` scripts when no explicit script list
+    /// is provided.
     pub suite_dir: PathBuf,
-    /// Optional subset of scripts to run. Relative paths are resolved against `suite_dir`.
+    /// Optional subset of scripts to run. Relative paths are resolved against
+    /// `suite_dir`.
     pub scripts: Vec<PathBuf>,
 }
 
@@ -82,7 +84,8 @@ pub fn run_suite(
 
 /// Derive a fixture name from the first path component under the suite root.
 ///
-/// Only a normal component names a fixture; a root, prefix, or `..` component does not.
+/// Only a normal component names a fixture; a root, prefix, or `..` component
+/// does not.
 pub fn fixture_for_script(suite_dir: &Path, script: &Path) -> Option<String> {
     let relative = script.strip_prefix(suite_dir).ok()?;
     let mut components = relative.components();
@@ -96,8 +99,9 @@ pub fn fixture_for_script(suite_dir: &Path, script: &Path) -> Option<String> {
 
 /// Resolve the ordered list of smoke scripts for a suite run.
 ///
-/// An explicit script list keeps its given order, because that order decides which script a
-/// fail-fast run stops on. Discovered files are sorted so a directory walk is reproducible.
+/// An explicit script list keeps its given order, because that order decides
+/// which script a fail-fast run stops on. Discovered files are sorted so a
+/// directory walk is reproducible.
 pub fn discover_scripts(config: &SuiteConfig) -> Result<Vec<PathBuf>> {
     let scripts = if config.scripts.is_empty() {
         let mut discovered = Vec::new();

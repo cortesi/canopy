@@ -303,7 +303,8 @@ impl Logs {
 
     /// Page through the log view.
     /// Positive values move down; negative values move up.
-    /// @param delta Signed page delta. Positive moves down and negative moves up.
+    /// @param delta Signed page delta. Positive moves down and negative moves
+    /// up.
     #[command]
     pub fn page(&self, c: &mut dyn Context, delta: i32) -> Result<()> {
         self.with_list(c, |list, ctx| list.page(ctx, delta))

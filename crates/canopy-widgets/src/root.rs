@@ -214,7 +214,8 @@ impl Root {
     }
 
     #[command]
-    /// If we're currently focused in the inspector, shift focus into the app pane instead.
+    /// If we're currently focused in the inspector, shift focus into the app
+    /// pane instead.
     pub fn focus_app(&mut self, c: &mut dyn Context) -> Result<()> {
         let inspector = self.inspector_id(c)?;
         let app = self.app_id(c)?;
@@ -345,7 +346,8 @@ impl Root {
         Self::install_app_with_inspector(canopy, app, false)
     }
 
-    /// Helper to install a root widget into the canopy with an optional inspector pane.
+    /// Helper to install a root widget into the canopy with an optional
+    /// inspector pane.
     pub fn install_app_with_inspector<W>(
         canopy: &mut Canopy,
         app: W,

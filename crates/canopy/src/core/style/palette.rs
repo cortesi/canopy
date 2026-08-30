@@ -1,14 +1,14 @@
 //! Role colours shared by every built-in theme.
 //!
-//! A theme is a [`Palette`] of role colours plus the single [`theme`] rule builder. Adding a
-//! rule here adds it to every theme at once.
+//! A theme is a [`Palette`] of role colours plus the single [`theme`] rule
+//! builder. Adding a rule here adds it to every theme at once.
 
 use super::{Attr, AttrSet, Color, StyleBuilder, StyleMap};
 
 /// The role colours a theme assigns.
 ///
-/// Each field names the role a colour plays, not the colour itself, so the same rule set can
-/// render a light theme, a dark theme, or any other palette.
+/// Each field names the role a colour plays, not the colour itself, so the same
+/// rule set can render a light theme, a dark theme, or any other palette.
 #[derive(Debug, Clone, Copy)]
 pub struct Palette {
     /// Default foreground.

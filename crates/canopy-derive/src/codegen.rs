@@ -28,7 +28,8 @@ impl ParamMeta {
         syn::LitStr::new(&self.ty_str, proc_macro2::Span::call_site())
     }
 
-    /// Render command metadata for this parameter when it is externally visible.
+    /// Render command metadata for this parameter when it is externally
+    /// visible.
     fn spec_tokens(&self) -> Option<proc_macro2::TokenStream> {
         let (kind_tokens, ty_tokens, decls_tokens) = match self.kind {
             ParamKind::Injected => (
@@ -312,7 +313,8 @@ impl CommandMeta {
             .collect()
     }
 
-    /// Bindings that require mutable context access and must happen after user args are parsed.
+    /// Bindings that require mutable context access and must happen after user
+    /// args are parsed.
     fn mutable_context_bindings(&self) -> Vec<proc_macro2::TokenStream> {
         self.params
             .iter()
@@ -492,7 +494,8 @@ impl CommandMeta {
     }
 }
 
-/// Generate command metadata and wrappers for `#[command]` methods in an impl block.
+/// Generate command metadata and wrappers for `#[command]` methods in an impl
+/// block.
 pub fn expand_derive_commands(input: &ItemImpl) -> syn::Result<proc_macro2::TokenStream> {
     let owner = owner_name(input)?;
     let name = input.self_ty.clone();

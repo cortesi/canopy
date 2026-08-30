@@ -397,7 +397,8 @@ impl InputMap {
         removed
     }
 
-    /// Drop the selected application records and report their script targets in registry order.
+    /// Drop the selected application records and report their script targets in
+    /// registry order.
     fn remove_application_records(
         &mut self,
         selected: impl Fn(&BindingRecord) -> bool,
@@ -452,7 +453,8 @@ impl InputMap {
         })
     }
 
-    /// Return normalized key inputs that can participate in the current scope state.
+    /// Return normalized key inputs that can participate in the current scope
+    /// state.
     pub(crate) fn eligible_keys(&self) -> Vec<Key> {
         let active_group = self.active_exclusive_group();
         let mut keys = HashSet::new();

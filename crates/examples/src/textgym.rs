@@ -98,7 +98,8 @@ impl Widget for TextGym {
 
 /// Wrap a text widget in a titled frame.
 ///
-/// `VStack::push_fixed` sets the row height, so `section` sets only the width it controls.
+/// `VStack::push_fixed` sets the row height, so `section` sets only the width
+/// it controls.
 fn section(c: &mut dyn Context, title: &str, text: Text, width: u32) -> Result<NodeId> {
     let text_id = c.create_detached(text)?;
     c.set_layout_of(text_id, Layout::fill())?;

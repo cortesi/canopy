@@ -11,8 +11,8 @@ use crate::{
 };
 
 /// A simple harness that holds a [`Canopy`], a [`NopBackend`] backend and a
-/// root node ID. Tests drive the UI by sending key events and triggering renders
-/// and can then inspect the render buffer.
+/// root node ID. Tests drive the UI by sending key events and triggering
+/// renders and can then inspect the render buffer.
 pub struct Harness {
     /// The Canopy instance that manages the node tree and rendering.
     pub canopy: Canopy,
@@ -78,7 +78,8 @@ impl Harness {
         })
     }
 
-    /// Create a harness builder for constructing a test harness with a fluent API.
+    /// Create a harness builder for constructing a test harness with a fluent
+    /// API.
     pub fn builder<W: Widget + Loader + 'static>(root: W) -> HarnessBuilder<W> {
         HarnessBuilder::new(root)
     }
@@ -88,7 +89,8 @@ impl Harness {
         Self::builder(root).build()
     }
 
-    /// Access the current render buffer. Panics if a render has not yet been performed.
+    /// Access the current render buffer. Panics if a render has not yet been
+    /// performed.
     pub fn buf(&self) -> &TermBuf {
         self.canopy.buf().expect("render buffer not initialized")
     }

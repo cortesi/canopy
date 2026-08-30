@@ -1,8 +1,9 @@
 //! The canopy integration test binary.
 //!
-//! Cargo builds one crate per file directly under `tests/`, and every one of them links the
-//! Luau-bearing library. Keeping a single root here keeps that to one link step. Cargo resolves
-//! a test root's modules against `tests/` itself, so each module names its path explicitly.
+//! Cargo builds one crate per file directly under `tests/`, and every one of
+//! them links the Luau-bearing library. Keeping a single root here keeps that
+//! to one link step. Cargo resolves a test root's modules against `tests/`
+//! itself, so each module names its path explicitly.
 
 /// Command dispatch, argument, and error integration tests.
 #[path = "it/commands.rs"]

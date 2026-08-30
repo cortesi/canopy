@@ -19,7 +19,8 @@ pub fn slice_by_columns(s: &str, start: usize, max: usize) -> (&str, usize) {
         let g_width = grapheme_width(grapheme);
 
         if !started {
-            // A grapheme that ends at or before the start column, or straddles it, is skipped.
+            // A grapheme that ends at or before the start column, or straddles it, is
+            // skipped.
             if col < start || col + g_width <= start {
                 col += g_width;
                 continue;
@@ -48,7 +49,8 @@ pub fn slice_by_columns(s: &str, start: usize, max: usize) -> (&str, usize) {
     (&s[start_byte..end_byte], out_cols)
 }
 
-/// Return the display width of a grapheme cluster, capped at terminal cell widths.
+/// Return the display width of a grapheme cluster, capped at terminal cell
+/// widths.
 pub fn grapheme_width(grapheme: &str) -> usize {
     if grapheme.is_empty() {
         return 0;

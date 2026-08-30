@@ -27,7 +27,8 @@ impl Pad {
         Self::new(Edges::all(padding))
     }
 
-    /// Wrap an existing child node in a configured pad and return the pad node ID.
+    /// Wrap an existing child node in a configured pad and return the pad node
+    /// ID.
     pub fn wrap_with(c: &mut dyn Context, child: impl Into<NodeId>, pad: Self) -> Result<NodeId> {
         Ok(wrap(c, child, pad)?.into())
     }

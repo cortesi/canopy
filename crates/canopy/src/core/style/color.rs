@@ -60,13 +60,15 @@ const fn hex_digit(c: u8) -> u8 {
 
 /// Parse one hex byte from its two digits.
 ///
-/// This supports the [`rgb!`](crate::rgb) macro and is not part of the stable surface.
+/// This supports the [`rgb!`](crate::rgb) macro and is not part of the stable
+/// surface.
 #[doc(hidden)]
 pub const fn hex_byte(high: u8, low: u8) -> u8 {
     hex_digit(high) * 16 + hex_digit(low)
 }
 
-/// Build a [`Color`](crate::style::Color) from a `#RRGGBB` or `RRGGBB` literal at compile time.
+/// Build a [`Color`](crate::style::Color) from a `#RRGGBB` or `RRGGBB` literal
+/// at compile time.
 #[macro_export]
 macro_rules! rgb {
     ($hex:literal) => {{
@@ -131,7 +133,8 @@ impl Color {
         }
     }
 
-    /// Scale brightness by a factor. 0.0 = black, 1.0 = unchanged, 2.0 = double brightness.
+    /// Scale brightness by a factor. 0.0 = black, 1.0 = unchanged, 2.0 = double
+    /// brightness.
     pub fn scale_brightness(self, factor: f32) -> Self {
         let (r, g, b) = self.rgb();
         let scale = |v: u8| ((v as f32 * factor).clamp(0.0, 255.0)) as u8;
@@ -142,7 +145,8 @@ impl Color {
         }
     }
 
-    /// Adjust saturation. 0.0 = grayscale, 1.0 = unchanged, 2.0 = double saturation.
+    /// Adjust saturation. 0.0 = grayscale, 1.0 = unchanged, 2.0 = double
+    /// saturation.
     pub fn saturation(self, factor: f32) -> Self {
         let (r, g, b) = self.rgb();
         let (hue, sat, light) = rgb_to_hsl(r, g, b);

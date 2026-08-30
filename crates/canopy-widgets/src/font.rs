@@ -51,13 +51,15 @@ pub struct Glyph {
     pub height: u32,
     /// Horizontal bearing to the left of the glyph origin, in pixels.
     pub bearing_left: i32,
-    /// Vertical bearing to the bottom of the glyph relative to the baseline, in pixels.
+    /// Vertical bearing to the bottom of the glyph relative to the baseline, in
+    /// pixels.
     pub bearing_bottom: i32,
     /// Horizontal advance width in pixels.
     pub advance: f32,
 }
 
-/// Coverage mask for a glyph, ordered as top-left, top-right, bottom-left, bottom-right.
+/// Coverage mask for a glyph, ordered as top-left, top-right, bottom-left,
+/// bottom-right.
 #[derive(Debug, Clone, Copy)]
 struct GlyphSample {
     /// Glyph character.

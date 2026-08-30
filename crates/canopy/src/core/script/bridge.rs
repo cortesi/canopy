@@ -63,7 +63,8 @@ impl Drop for ActiveEvalGuard {
     }
 }
 
-/// Stack guard for the script dispatch anchor inside the borrowed Canopy context.
+/// Stack guard for the script dispatch anchor inside the borrowed Canopy
+/// context.
 pub(super) struct ScriptAnchorGuard<'a, 's> {
     /// Scope that owns the Canopy context borrow.
     scope: &'a Scope<'s>,
@@ -115,7 +116,8 @@ pub(super) fn with_reentrant_canopy<R>(
     })
 }
 
-/// Execute a closure with the live Canopy, through the normal context or the reentrant bridge.
+/// Execute a closure with the live Canopy, through the normal context or the
+/// reentrant bridge.
 fn with_canopy<R>(scope: &Scope<'_>, f: impl FnOnce(&mut Canopy) -> Result<R>) -> Result<R> {
     if let Some(mut canopy) = scope.context_mut::<Canopy>() {
         return f(&mut canopy);

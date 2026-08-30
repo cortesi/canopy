@@ -190,7 +190,8 @@ pub trait ViewContext {
         matching_nodes(self, path_filter).next()
     }
 
-    /// Find all nodes whose paths match the filter, relative to the current node.
+    /// Find all nodes whose paths match the filter, relative to the current
+    /// node.
     ///
     /// The filter is normalized to match full paths.
     fn find_nodes(&self, path_filter: &str) -> Vec<NodeId> {
@@ -221,7 +222,8 @@ fn preorder_from<C: ViewContext + ?Sized>(
     })
 }
 
-/// Walk the current node's subtree, yielding nodes whose path matches the filter.
+/// Walk the current node's subtree, yielding nodes whose path matches the
+/// filter.
 fn matching_nodes<'a, C: ViewContext + ?Sized>(
     ctx: &'a C,
     path_filter: &'a PathFilter,
@@ -231,7 +233,8 @@ fn matching_nodes<'a, C: ViewContext + ?Sized>(
         .filter(move |id| path_filter.check_match(&ctx.node_path(root, *id)).is_some())
 }
 
-/// Apply a scroll transform to a node, clamp it to the canvas, and report whether it moved.
+/// Apply a scroll transform to a node, clamp it to the canvas, and report
+/// whether it moved.
 fn update_scroll(core: &mut Core, node_id: NodeId, f: impl FnOnce(Point) -> Point) -> bool {
     let Some(node) = core.nodes.get_mut(node_id) else {
         return false;
@@ -270,7 +273,8 @@ impl dyn ViewContext + '_ {
         preorder_from(self, root.into())
     }
 
-    /// Return the first widget of type `W` anywhere in the tree, including the root.
+    /// Return the first widget of type `W` anywhere in the tree, including the
+    /// root.
     pub fn first_in_tree<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
         self.preorder(self.root_id())
             .find(|id| ViewContext::node_type_id(self, *id) == Some(TypeId::of::<W>()))
@@ -310,7 +314,8 @@ impl dyn ViewContext + '_ {
             .collect()
     }
 
-    /// Return the unique descendant of type `W`, or error if more than one exists.
+    /// Return the unique descendant of type `W`, or error if more than one
+    /// exists.
     pub fn unique_descendant<W: Widget + 'static>(&self) -> Result<Option<TypedId<W>>> {
         self.unique_typed(self.preorder(self.node_id()).skip(1))
     }
@@ -331,10 +336,12 @@ impl dyn ViewContext + '_ {
             .find(|id| ViewContext::node_is_on_focus_path(self, (*id).into()))
     }
 
-    /// Return the descendant of type `W` on the focus path, or the first if none focused.
+    /// Return the descendant of type `W` on the focus path, or the first if
+    /// none focused.
     ///
-    /// This searches only within the current node's subtree. Use the tree-wide helpers on
-    /// `ViewContext` if you need to search from an arbitrary root.
+    /// This searches only within the current node's subtree. Use the tree-wide
+    /// helpers on `ViewContext` if you need to search from an arbitrary
+    /// root.
     pub fn focused_or_first_descendant<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
         let descendants = self.descendants_of_type::<W>();
         let focused = descendants
@@ -349,7 +356,8 @@ impl dyn ViewContext + '_ {
         ViewContext::node_type_id(self, node) == Some(TypeId::of::<W>())
     }
 
-    /// Return the single node of type `W` among `ids`, or error when more than one matches.
+    /// Return the single node of type `W` among `ids`, or error when more than
+    /// one matches.
     fn unique_typed<W: Widget + 'static>(
         &self,
         ids: impl Iterator<Item = NodeId>,
@@ -437,10 +445,12 @@ pub trait Context: ViewContext {
     /// Remove one exclusive binding frame.
     fn pop_exclusive_bindings(&mut self, token: ExclusiveFrameToken) -> Result<()>;
 
-    /// Scroll the view to the specified position. Returns `true` if movement occurred.
+    /// Scroll the view to the specified position. Returns `true` if movement
+    /// occurred.
     fn scroll_to(&mut self, x: u32, y: u32) -> bool;
 
-    /// Scroll the view by the given offsets. Returns `true` if movement occurred.
+    /// Scroll the view by the given offsets. Returns `true` if movement
+    /// occurred.
     fn scroll_by(&mut self, x: i32, y: i32) -> bool;
 
     /// Scroll the view up by one page. Returns `true` if movement occurred.
@@ -496,7 +506,8 @@ pub trait Context: ViewContext {
         edit: &mut dyn FnMut(&mut dyn Context) -> Result<()>,
     ) -> Result<()>;
 
-    /// Execute a closure with mutable access to a widget and its node-bound context.
+    /// Execute a closure with mutable access to a widget and its node-bound
+    /// context.
     fn with_widget_mut(
         &mut self,
         node: NodeId,
@@ -522,10 +533,12 @@ pub trait Context: ViewContext {
     /// Return the current list-row context for injection.
     fn current_list_row(&self) -> Option<ListRowContext>;
 
-    /// Add a boxed widget as a child of a specific parent and return the new node ID.
+    /// Add a boxed widget as a child of a specific parent and return the new
+    /// node ID.
     fn add_child_to_boxed(&mut self, parent: NodeId, widget: Box<dyn Widget>) -> Result<NodeId>;
 
-    /// Add a boxed widget as a keyed child of a specific parent and return the new node ID.
+    /// Add a boxed widget as a keyed child of a specific parent and return the
+    /// new node ID.
     fn add_child_to_keyed_boxed(
         &mut self,
         parent: NodeId,
@@ -635,12 +648,14 @@ impl dyn Context + '_ {
         Ok(TypedId::new(id))
     }
 
-    /// Add a widget as a child of the current node and return the new typed node ID.
+    /// Add a widget as a child of the current node and return the new typed
+    /// node ID.
     pub fn add_child<W: Widget + 'static>(&mut self, widget: W) -> Result<TypedId<W>> {
         self.add_child_to(self.node_id(), widget)
     }
 
-    /// Add a widget as a child of a specific parent and return the new typed node ID.
+    /// Add a widget as a child of a specific parent and return the new typed
+    /// node ID.
     pub fn add_child_to<W: Widget + 'static>(
         &mut self,
         parent: impl Into<NodeId>,
@@ -706,12 +721,14 @@ impl dyn Context + '_ {
         self.add_keyed_to(parent, K::KEY, make())
     }
 
-    /// Add a typed keyed child to the current node and return its typed node ID.
+    /// Add a typed keyed child to the current node and return its typed node
+    /// ID.
     pub fn add_keyed<K: ChildKey>(&mut self, widget: K::Widget) -> Result<TypedId<K::Widget>> {
         self.add_keyed_to(self.node_id(), K::KEY, widget)
     }
 
-    /// Add a typed keyed child to a specific parent and return its typed node ID.
+    /// Add a typed keyed child to a specific parent and return its typed node
+    /// ID.
     pub fn add_keyed_to<W: Widget + 'static>(
         &mut self,
         parent: impl Into<NodeId>,
@@ -765,7 +782,8 @@ impl dyn Context + '_ {
     }
 }
 
-/// Context bound to a specific node, over a shared or exclusive borrow of the core.
+/// Context bound to a specific node, over a shared or exclusive borrow of the
+/// core.
 pub struct NodeCtx<C> {
     /// Core state reference.
     core: C,

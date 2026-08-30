@@ -370,7 +370,8 @@ impl TermBuf {
 
     /// Write text along a line, resolving the style separately for each cell.
     ///
-    /// The text is clipped to the line and padded with spaces to the line's width.
+    /// The text is clipped to the line and padded with spaces to the line's
+    /// width.
     pub fn text_with(
         &mut self,
         l: Line,
@@ -614,7 +615,8 @@ fn grapheme_start(row: &[Cell], mut x: usize) -> usize {
     x
 }
 
-/// Return the exclusive end of a range expanded to include trailing continuations.
+/// Return the exclusive end of a range expanded to include trailing
+/// continuations.
 fn grapheme_end(row: &[Cell], mut x: usize) -> usize {
     x = x.min(row.len());
     while x < row.len() && row[x].continuation {
@@ -720,9 +722,9 @@ fn borders_match(current: &TermBuf, prev: &TermBuf) -> bool {
     true
 }
 
-/// Check that every interior row shares one first cell and one last cell. The production backend
-/// scrolls the full terminal width, so an interior shift is only safe when the side columns look
-/// the same after the scroll moves them.
+/// Check that every interior row shares one first cell and one last cell. The
+/// production backend scrolls the full terminal width, so an interior shift is
+/// only safe when the side columns look the same after the scroll moves them.
 fn side_columns_are_uniform(buf: &TermBuf) -> bool {
     let width = buf.size.w as usize;
     let height = buf.size.h as usize;
@@ -734,7 +736,8 @@ fn side_columns_are_uniform(buf: &TermBuf) -> bool {
     })
 }
 
-/// Check whether two buffers are identical up to a vertical shift within a rect.
+/// Check whether two buffers are identical up to a vertical shift within a
+/// rect.
 fn detect_row_shift_in_rect(
     current: &TermBuf,
     prev: &TermBuf,
@@ -763,7 +766,8 @@ fn detect_row_shift_in_rect(
     None
 }
 
-/// Shift the rows of `rect` on the backend and repaint the rows the shift exposed.
+/// Shift the rows of `rect` on the backend and repaint the rows the shift
+/// exposed.
 fn render_shifted_rect<R: RenderBackend>(
     buf: &TermBuf,
     backend: &mut R,
@@ -778,7 +782,8 @@ fn render_shifted_rect<R: RenderBackend>(
     } else {
         rect.tl.y + rect.h - count..rect.tl.y + rect.h
     };
-    // The backend scrolls the full terminal width, so repaint the whole exposed row.
+    // The backend scrolls the full terminal width, so repaint the whole exposed
+    // row.
     for y in exposed {
         let row_start = y as usize * width;
         let row = &buf.cells[row_start..row_start + width];
@@ -787,7 +792,8 @@ fn render_shifted_rect<R: RenderBackend>(
     backend.flush()
 }
 
-/// Determine whether two buffers match for a given vertical shift within a rect.
+/// Determine whether two buffers match for a given vertical shift within a
+/// rect.
 fn buffer_matches_shift_in_rect(current: &TermBuf, prev: &TermBuf, rect: Rect, shift: i32) -> bool {
     if shift == 0 {
         return false;
@@ -833,7 +839,8 @@ fn buffer_matches_shift_in_rect(current: &TermBuf, prev: &TermBuf, rect: Rect, s
     true
 }
 
-/// Determine whether the current line matches the previous line shifted by `shift`.
+/// Determine whether the current line matches the previous line shifted by
+/// `shift`.
 fn line_matches_shift(current: &[Cell], prev: &[Cell], shift: i32) -> bool {
     let width = current.len();
     if width == 0 || width != prev.len() || shift == 0 {

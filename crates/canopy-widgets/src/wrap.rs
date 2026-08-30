@@ -4,8 +4,8 @@ use canopy::{Context, NodeId, TypedId, Widget, error::Result};
 
 /// Wrap `child` in a new `widget` node and return the wrapper's typed id.
 ///
-/// The child keeps its identity: it is detached from its current parent and reattached under
-/// the wrapper.
+/// The child keeps its identity: it is detached from its current parent and
+/// reattached under the wrapper.
 pub fn wrap<W: Widget + 'static>(
     c: &mut dyn Context,
     child: impl Into<NodeId>,

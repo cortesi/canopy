@@ -75,7 +75,8 @@ pub(crate) struct PathMatch {
     pub literals: usize,
     /// Number of path components matched.
     pub depth: usize,
-    /// Whether the match ends at the end of the path and consumed at least one component.
+    /// Whether the match ends at the end of the path and consumed at least one
+    /// component.
     pub anchored_end: bool,
 }
 
@@ -113,8 +114,8 @@ enum Segment {
 impl PathFilter {
     /// Compile a validated path filter.
     ///
-    /// Filters support `*` for one component and `**` for zero or more components. Literal
-    /// components must be valid [`NodeName`] values.
+    /// Filters support `*` for one component and `**` for zero or more
+    /// components. Literal components must be valid [`NodeName`] values.
     pub fn new(path: &str) -> Result<Self> {
         let anchor_start = path.starts_with('/');
         let anchor_end = path.ends_with('/');
@@ -156,7 +157,8 @@ impl PathFilter {
         &self.filter
     }
 
-    /// Check whether the path filter matches a given path, returning match metadata.
+    /// Check whether the path filter matches a given path, returning match
+    /// metadata.
     pub(crate) fn check_match(&self, path: &Path) -> Option<PathMatch> {
         let parts = &path.path;
         let mut best: Option<PathMatch> = None;

@@ -11,7 +11,8 @@ mod parse;
 use quote::quote;
 use syn::{Attribute, Fields, ItemImpl, Result, parse_macro_input, parse_quote};
 
-/// Generate command metadata and wrappers for `#[command]` methods in an impl block.
+/// Generate command metadata and wrappers for `#[command]` methods in an impl
+/// block.
 #[proc_macro_attribute]
 pub fn derive_commands(
     _attr: proc_macro::TokenStream,

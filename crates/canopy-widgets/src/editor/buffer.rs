@@ -265,8 +265,9 @@ impl TextBuffer {
 
     /// Return the range a forward delete at `from` would remove.
     ///
-    /// At the end of a line the range joins the next line when `allow_line_wrap` is set.
-    /// Returns `None` when there is nothing after the position to delete.
+    /// At the end of a line the range joins the next line when
+    /// `allow_line_wrap` is set. Returns `None` when there is nothing after
+    /// the position to delete.
     pub fn forward_delete_range(
         &self,
         from: TextPosition,
@@ -364,7 +365,8 @@ impl TextBuffer {
 
     /// Return the closest position for a display column within a line.
     pub fn position_for_column(&self, line: usize, column: usize, tab_stop: usize) -> TextPosition {
-        // `char_for_column` already stops at the end of the line, so no pre-clamp is needed.
+        // `char_for_column` already stops at the end of the line, so no pre-clamp is
+        // needed.
         let char_index = char_for_column(&self.line_text(line), column, tab_stop);
         TextPosition::new(line, char_index)
     }

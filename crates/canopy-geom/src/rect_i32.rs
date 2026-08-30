@@ -37,7 +37,8 @@ impl RectI32 {
         }
     }
 
-    /// Intersect this signed rect with an unsigned rect in the same coordinate space.
+    /// Intersect this signed rect with an unsigned rect in the same coordinate
+    /// space.
     pub fn intersect_rect(&self, other: Rect) -> Option<Rect> {
         if self.is_zero() || other.is_zero() {
             return None;

@@ -124,7 +124,8 @@ pub struct ScriptCheckDiagnostic {
     pub severity: String,
     /// One-based line number, or zero when the diagnostic is not source-bound.
     pub line: usize,
-    /// One-based column number, or zero when the diagnostic is not source-bound.
+    /// One-based column number, or zero when the diagnostic is not
+    /// source-bound.
     pub column: usize,
     /// Human-readable diagnostic message.
     pub message: String,
@@ -197,9 +198,11 @@ impl ScriptCheckResult {
 
 /// Cached compiled script and its retained root once the host is finalized.
 struct Script {
-    /// Strict source executed at runtime, including identity and diagnostic metadata.
+    /// Strict source executed at runtime, including identity and diagnostic
+    /// metadata.
     runtime_source: Source,
-    /// Checked graph artifact used to produce the chunk, when the surface is finalized.
+    /// Checked graph artifact used to produce the chunk, when the surface is
+    /// finalized.
     prepared: Option<PreparedGraph>,
     /// Root loaded into the retained runtime.
     root: Option<RootHandle>,
@@ -291,8 +294,9 @@ impl ScriptCache {
     }
 }
 
-/// Stored Luau closure state before and after promotion into the retained runtime. The stash pins
-/// the closure in the VM registry; dropping it queues the release for the VM's next step.
+/// Stored Luau closure state before and after promotion into the retained
+/// runtime. The stash pins the closure in the VM registry; dropping it queues
+/// the release for the VM's next step.
 #[derive(Clone)]
 enum StoredFunctionTarget {
     /// Stash created during the currently active VM invocation.
@@ -344,7 +348,8 @@ impl ClosureRegistry {
         }
     }
 
-    /// Promote pending stashes and release removed handles between VM invocations.
+    /// Promote pending stashes and release removed handles between VM
+    /// invocations.
     fn synchronize(&mut self, runtime: &mut Runtime) -> StdResult<(), LifecycleError> {
         for handle in self.released.drain(..) {
             match runtime.release(&handle) {
@@ -466,7 +471,8 @@ fn strict_source(source: &str) -> String {
     }
 }
 
-/// Build one named strict source for checking, compilation, loading, and tracebacks.
+/// Build one named strict source for checking, compilation, loading, and
+/// tracebacks.
 fn named_source(module_id: impl Into<ModuleId>, source: &str) -> Source {
     Source::text(module_id, strict_source(source))
 }
@@ -499,7 +505,8 @@ fn startup_runtime_source(source: &str) -> String {
     runtime
 }
 
-/// Compile Luau source under the canopy profile before the surface is finalized.
+/// Compile Luau source under the canopy profile before the surface is
+/// finalized.
 fn compile_chunk(source: &str) -> Result<BytecodeChunk> {
     RuntimeCapabilities::default()
         .compile_source(source.as_bytes(), &CompileOptions::new())
@@ -535,7 +542,8 @@ fn module_diagnostic_to_script(diagnostic: ModuleDiagnosticRecord) -> ScriptChec
     diagnostic_record_to_script(Some(diagnostic.display_name), diagnostic.diagnostic)
 }
 
-/// Check a named source and convert its owned diagnostics through the Canopy adapter.
+/// Check a named source and convert its owned diagnostics through the Canopy
+/// adapter.
 fn check_source_with_surface(surface: &Surface, source: &Source) -> ScriptCheckResult {
     let source_name = source.display_name().to_string();
     let checked = surface.check(source, CheckOptions::default());
@@ -737,7 +745,8 @@ impl LuauHost {
         (state.logs.len(), state.assertions.len())
     }
 
-    /// Audit and stage the command and startup surfaces without publishing a runtime.
+    /// Audit and stage the command and startup surfaces without publishing a
+    /// runtime.
     ///
     /// Returns the rendered Luau definition file for the installed modules.
     pub(crate) fn prepare_finalize(
@@ -783,7 +792,8 @@ impl LuauHost {
         Ok(definitions)
     }
 
-    /// Build and publish the retained runtime after every other preparation step succeeds.
+    /// Build and publish the retained runtime after every other preparation
+    /// step succeeds.
     pub(crate) fn publish_finalize(&self) -> Result<()> {
         if self.is_finalized() {
             return Err(error::Error::InvalidOperation(
@@ -837,7 +847,8 @@ impl LuauHost {
         Ok(())
     }
 
-    /// Discard a failed finalization attempt and scripts compiled only for that attempt.
+    /// Discard a failed finalization attempt and scripts compiled only for that
+    /// attempt.
     pub(crate) fn abort_finalize(&self, existing_scripts: &HashSet<ScriptId>) {
         *self.runtime.borrow_mut() = None;
         let mut state = self.state.borrow_mut();
@@ -866,7 +877,8 @@ impl LuauHost {
         self.compile_source(&Source::text(ModuleId::new(b"canopy".to_vec()), source))
     }
 
-    /// Compile a source while preserving its module identity and diagnostic metadata.
+    /// Compile a source while preserving its module identity and diagnostic
+    /// metadata.
     pub(crate) fn compile_source(&self, source: &Source) -> Result<ScriptId> {
         let runtime_source = strict_named_source(source)?;
         let prepared = if let Some(surface) = self.state.borrow().surface.clone() {
@@ -904,7 +916,8 @@ impl LuauHost {
         ))
     }
 
-    /// Compile a startup source while preserving its mounted identity and metadata.
+    /// Compile a startup source while preserving its mounted identity and
+    /// metadata.
     pub(crate) fn compile_startup_source(&self, source: &Source) -> Result<ScriptId> {
         let original = source.as_str().ok_or_else(|| {
             error::Error::Invalid(format!(
@@ -971,7 +984,8 @@ impl LuauHost {
         Ok(root)
     }
 
-    /// Return the loaded root for a script, reloading after source invalidation.
+    /// Return the loaded root for a script, reloading after source
+    /// invalidation.
     fn loaded_root(&self, sid: ScriptId) -> Result<RootHandle> {
         let invalidated = self
             .runtime_mut("cannot inspect scripts while the script VM is executing")
@@ -1032,7 +1046,8 @@ impl LuauHost {
             .map(|_| ())
     }
 
-    /// Borrow the finalized retained runtime, reporting `busy` when a scope is live.
+    /// Borrow the finalized retained runtime, reporting `busy` when a scope is
+    /// live.
     fn runtime_mut(&self, busy: &str) -> Result<RefMut<'_, Runtime>> {
         let runtime = self
             .runtime
@@ -1133,7 +1148,8 @@ impl LuauHost {
         call_in_scope(scope, function, label, timeout)
     }
 
-    /// Promote and release callback handles between retained-runtime invocations.
+    /// Promote and release callback handles between retained-runtime
+    /// invocations.
     fn synchronize_closures(
         &self,
         runtime: &mut Runtime,

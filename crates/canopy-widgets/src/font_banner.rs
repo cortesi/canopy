@@ -86,7 +86,8 @@ impl FontBanner {
         self.effects = effects;
     }
 
-    /// Rebuild the cached layout when the text, size, options, or effects changed.
+    /// Rebuild the cached layout when the text, size, options, or effects
+    /// changed.
     fn refresh_layout(&mut self, size: Size) {
         let rebuild = match &self.cache {
             Some(cache) => {

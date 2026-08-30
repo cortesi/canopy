@@ -69,7 +69,8 @@ impl Widget for GridNode {
     }
 }
 
-/// A test utility for creating grids with configurable recursion and subdivisions.
+/// A test utility for creating grids with configurable recursion and
+/// subdivisions.
 pub struct Grid {
     /// Root node for the grid.
     pub root: NodeId,

@@ -14,7 +14,8 @@ use crate::{
 /// Ordered keyed child collection helper.
 ///
 /// Stores a stable mapping from keys to node IDs plus a current order. Use
-/// [`KeyedChildren::reconcile`] to create, update, and reorder children based on a desired key list.
+/// [`KeyedChildren::reconcile`] to create, update, and reorder children based
+/// on a desired key list.
 #[derive(Debug)]
 pub struct KeyedChildren<K, W> {
     /// Mapping from key to node ID.

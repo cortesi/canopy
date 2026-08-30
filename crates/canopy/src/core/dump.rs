@@ -9,8 +9,8 @@ use crate::{
 };
 
 /// Traverses the node tree and returns a string showing the node names and
-/// views for each node for visual display, marking the focused node when it is set.
-/// This is a debug function.
+/// views for each node for visual display, marking the focused node when it is
+/// set. This is a debug function.
 pub fn dump(core: &Core) -> Result<String> {
     let mut buffer = Buffer::ansi();
     dump_node(&mut buffer, core, core.root, 0, core.focus)?;

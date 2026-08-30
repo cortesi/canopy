@@ -17,7 +17,8 @@ pub trait RenderBackend {
         false
     }
     /// Shift characters within a line starting at the location.
-    /// Positive counts insert blanks and shift right, negative counts delete and shift left.
+    /// Positive counts insert blanks and shift right, negative counts delete
+    /// and shift left.
     fn shift_chars(&mut self, _loc: geom::Point, _count: i32) -> Result<()> {
         Ok(())
     }
@@ -100,7 +101,8 @@ fn untranslate(origin: Offset, p: geom::Point) -> geom::Point {
     }
 }
 
-/// A renderer that only renders to a specific rectangle within the target terminal buffer.
+/// A renderer that only renders to a specific rectangle within the target
+/// terminal buffer.
 pub struct Render<'a> {
     /// The terminal buffer to render to.
     buf: &'a mut TermBuf,
@@ -119,8 +121,8 @@ pub struct Render<'a> {
 impl<'a> Render<'a> {
     /// Construct a renderer that writes into `buf`.
     ///
-    /// `clip` is the visible rectangle in canvas coordinates, and `screen_origin` is where the
-    /// clip's top-left lands in the buffer.
+    /// `clip` is the visible rectangle in canvas coordinates, and
+    /// `screen_origin` is where the clip's top-left lands in the buffer.
     pub fn new(
         stylemap: &'a StyleMap,
         style: &'a mut StyleManager,
@@ -145,7 +147,8 @@ impl<'a> Render<'a> {
     }
 
     /// Apply the current effect stack to a style.
-    /// Use this when you have a Style from a source other than the style manager.
+    /// Use this when you have a Style from a source other than the style
+    /// manager.
     pub fn apply_effects(&self, style: Style) -> Style {
         let mut result = style;
         for effect in self.effects {
@@ -175,7 +178,8 @@ impl<'a> Render<'a> {
         self.style.push_layer(name);
     }
 
-    /// Fill a rectangle with a specified character. Writes out of bounds will be clipped.
+    /// Fill a rectangle with a specified character. Writes out of bounds will
+    /// be clipped.
     pub fn fill(&mut self, style: &str, r: geom::Rect, c: char) -> Result<()> {
         let Some(intersection) = r.intersect(self.clip) else {
             return Ok(());

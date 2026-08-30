@@ -85,7 +85,8 @@ pub enum ScriptTaskState {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ScriptErrorInfo {
     #[serde(rename = "type")]
-    /// Pipeline stage that failed: `build`, `typecheck`, `timeout`, `runtime`, or `invalid`.
+    /// Pipeline stage that failed: `build`, `typecheck`, `timeout`, `runtime`,
+    /// or `invalid`.
     pub error_type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     /// Stable host error category such as `no_target` or `unknown_command`,
@@ -223,7 +224,8 @@ impl ScriptEvalOutcome {
     }
 }
 
-/// Headless evaluator that creates a fresh canopy app instance for each request.
+/// Headless evaluator that creates a fresh canopy app instance for each
+/// request.
 #[derive(Clone)]
 pub struct AppEvaluator {
     /// Factory that builds a fresh canopy app for each request.
@@ -409,10 +411,11 @@ pub fn evaluate_live(canopy: &mut Canopy, request: &ScriptEvalRequest) -> Script
     evaluate_in(canopy, request, 0, Instant::now(), None)
 }
 
-/// Typecheck, evaluate, and report one script against an already-built canopy app.
+/// Typecheck, evaluate, and report one script against an already-built canopy
+/// app.
 ///
-/// `render` is supplied for headless evaluation, where nothing else drives the screen after the
-/// script runs; a live app renders on its own event loop.
+/// `render` is supplied for headless evaluation, where nothing else drives the
+/// screen after the script runs; a live app renders on its own event loop.
 fn evaluate_in(
     canopy: &mut Canopy,
     request: &ScriptEvalRequest,
@@ -511,7 +514,8 @@ enum TypecheckGate {
     Failed(Box<ScriptEvalOutcome>),
 }
 
-/// Run Luau typechecking and return a failure outcome when evaluation should stop.
+/// Run Luau typechecking and return a failure outcome when evaluation should
+/// stop.
 fn typecheck_for_eval(canopy: &mut Canopy, script: &str, timing: ScriptTiming) -> TypecheckGate {
     let result = match canopy.check_script("canopy/mcp-eval", script) {
         Ok(result) => result,

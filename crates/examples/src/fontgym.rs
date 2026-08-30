@@ -213,7 +213,8 @@ impl Widget for FontGym {
 
 impl Loader for FontGym {}
 
-/// Focusable frame wrapper that delegates rendering and handles keyboard scroll.
+/// Focusable frame wrapper that delegates rendering and handles keyboard
+/// scroll.
 struct FocusFrame {
     /// Inner frame widget.
     frame: Frame,

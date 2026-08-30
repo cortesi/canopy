@@ -18,8 +18,8 @@ const PREAMBLE: &str = include_str!("../../../luau/preamble.d.luau");
 
 /// Render the Luau definition file from the modules the surface installs.
 ///
-/// Modules render in the order `prepare_finalize` installs them, so the text and the audited
-/// surface never drift.
+/// Modules render in the order `prepare_finalize` installs them, so the text
+/// and the audited surface never drift.
 pub(super) fn render_definitions(
     modules: &[Arc<dyn NativeModule>],
     fixtures: &[FixtureInfo],
@@ -42,7 +42,8 @@ pub(super) fn render_definitions(
     output
 }
 
-/// Group node-dispatched command specs by owner, including default-binding owners.
+/// Group node-dispatched command specs by owner, including default-binding
+/// owners.
 pub(super) fn owner_command_specs(
     commands: &CommandSet,
     default_binding_owners: &BTreeSet<String>,

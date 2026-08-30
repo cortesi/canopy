@@ -198,7 +198,8 @@ impl CanopyErrorPayload {
         self
     }
 
-    /// Convert this host payload into a core error while preserving traceback context.
+    /// Convert this host payload into a core error while preserving traceback
+    /// context.
     fn to_canopy_error(&self, label: &str, traceback: Option<&str>) -> error::Error {
         if let Some(timeout_ms) = self.timeout_ms {
             return error::Error::ScriptTimeout { timeout_ms };
@@ -212,7 +213,8 @@ impl CanopyErrorPayload {
     }
 }
 
-/// Render one `{label} failed: {message}` line, appending a traceback when one was captured.
+/// Render one `{label} failed: {message}` line, appending a traceback when one
+/// was captured.
 fn labelled_failure(label: &str, message: &str, traceback: Option<&str>) -> String {
     match traceback {
         Some(traceback) => format!("{label} failed: {message}\n{traceback}"),

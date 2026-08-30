@@ -29,7 +29,8 @@ struct AppSection {
     headless: Option<Vec<String>>,
     /// Command used to run the interactive app.
     run: Option<Vec<String>>,
-    /// Extra args appended to the interactive command to inject the socket path.
+    /// Extra args appended to the interactive command to inject the socket
+    /// path.
     mcp_args: Option<Vec<String>>,
     /// Working directory for spawned processes.
     cwd: Option<PathBuf>,

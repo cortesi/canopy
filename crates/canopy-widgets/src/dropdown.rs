@@ -14,8 +14,8 @@ use crate::label::Label;
 
 /// A dropdown widget for single-value selection.
 ///
-/// When collapsed, displays the currently selected item with a dropdown indicator.
-/// When expanded, displays all options for selection.
+/// When collapsed, displays the currently selected item with a dropdown
+/// indicator. When expanded, displays all options for selection.
 pub struct Dropdown<T>
 where
     T: Label,
