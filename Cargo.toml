@@ -6,6 +6,7 @@ members = ["crates/*", "examples/*", "xtask"]
 schema-version = 1
 requires-nanocode = ">=0.1, <0.2"
 features = "all"
+cargo-release = "canopy"
 tidy-hooks = [
     ["cargo", "xtask", "feature-check"],
     ["cargo", "xtask", "checks"],
