@@ -11,8 +11,6 @@ tidy-hooks = [
     ["cargo", "xtask", "checks"],
     ["cargo", "xtask", "bench-check"],
 ]
-smoke-hooks = [["cargo", "xtask", "smoke"]]
-
 [profile.dev]
 debug = "line-tables-only"
 
