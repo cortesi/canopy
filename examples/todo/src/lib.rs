@@ -25,6 +25,9 @@ const FIXTURE_WITH_ITEMS: &[&str] = &[
     "Review MCP bindings",
 ];
 
+/// Columns reserved for the selection indicator and its spacer.
+const TODO_GUTTER_WIDTH: u32 = 2;
+
 /// Widget for a todo entry.
 pub struct TodoEntry {
     /// Stored todo.
@@ -61,9 +64,14 @@ impl Widget for TodoEntry {
             Constraint::Exact(n) | Constraint::AtMost(n) => n.max(1),
             Constraint::Unbounded => 80,
         };
-        let width = available_width as usize;
-        let lines = textwrap::wrap(&self.todo.item, width);
-        let height = lines.len().max(1) as u32;
+        let text_width = available_width.saturating_sub(TODO_GUTTER_WIDTH);
+        let height = if text_width == 0 {
+            1
+        } else {
+            textwrap::wrap(&self.todo.item, text_width as usize)
+                .len()
+                .max(1) as u32
+        };
         c.clamp(Size::new(available_width, height))
     }
 
@@ -88,8 +96,8 @@ impl Widget for TodoEntry {
         }
 
         // Text content starts at column 2
-        let text_start_x = area.tl.x + 2;
-        let text_visible_width = area.w.saturating_sub(2);
+        let text_start_x = area.tl.x + TODO_GUTTER_WIDTH;
+        let text_visible_width = area.w.saturating_sub(TODO_GUTTER_WIDTH);
 
         if text_visible_width > 0 {
             let width = text_visible_width as usize;
@@ -221,6 +229,7 @@ impl Todo {
             .expect("main content not initialized");
         let main_content_node = NodeId::from(main_content_id);
 
+        c.clear_effects(main_content_node)?;
         if self.adder_active {
             self.ensure_modal(c)?;
             c.push_effect(main_content_node, effects::brightness(0.5))?;
@@ -229,8 +238,6 @@ impl Todo {
                 Ok(())
             })?;
         } else {
-            // Clear dimming when modal is not active
-            c.clear_effects(main_content_node)?;
             let _ = c.try_with_child::<ModalSlot, _>(|_, ctx| {
                 ctx.set_hidden(true)?;
                 Ok(())
@@ -313,22 +320,15 @@ impl Todo {
     #[command]
     /// Delete the selected todo entry.
     pub fn delete_item(&self, c: &mut dyn Context) -> Result<()> {
-        // Read the selected item's todo id before deleting it.
-        let to_delete = self.with_list(c, |list, ctx| {
-            let id = match list.selected_item() {
-                Some(item_id) => {
-                    Some(ctx.with_widget(item_id, |entry: &mut TodoEntry, _| Ok(entry.todo.id))?)
-                }
-                None => None,
+        self.with_list(c, |list, ctx| {
+            let Some(item_id) = list.selected_item() else {
+                return Ok(());
             };
-            let _ = list.delete_selected(ctx)?;
-            Ok(id)
-        })?;
-
-        if let Some(id) = to_delete {
+            let id = ctx.with_widget(item_id, |entry: &mut TodoEntry, _| Ok(entry.todo.id))?;
             current_store()?.delete_todo(id).map_err(store_error)?;
-        }
-        Ok(())
+            let _ = list.delete_selected(ctx)?;
+            Ok(())
+        })
     }
 
     #[command]
@@ -549,4 +549,87 @@ pub fn create_app_with_config(db_path: &str, config: Option<&Path>) -> AnyResult
     let todo = Todo::new()?;
     Root::install_app(&mut cnpy, todo)?;
     Ok(cnpy)
+}
+
+#[cfg(test)]
+mod tests {
+    use canopy::{geom::Point, style::ResolvedStyle, testing::harness::Harness};
+
+    use super::*;
+
+    #[test]
+    fn todo_entry_measures_text_after_the_gutter() {
+        for (text, width, height) in [
+            ("aaaa bbb", 8, 2),
+            ("aaaa bbb", 10, 1),
+            ("aaaa bbb", 0, 1),
+            ("aaaa bbb", 1, 1),
+            ("aaaa bbb", 2, 1),
+            ("", 8, 1),
+        ] {
+            let entry = TodoEntry::new(store::Todo {
+                id: 1,
+                item: text.to_owned(),
+            });
+            assert_eq!(
+                entry.measure(MeasureConstraints {
+                    width: Constraint::Exact(width),
+                    height: Constraint::Unbounded,
+                }),
+                Measurement::Fixed(Size::new(width, height))
+            );
+        }
+    }
+
+    #[test]
+    fn narrow_todo_entry_renders_every_wrapped_line() -> AnyResult<()> {
+        let entry = TodoEntry::new(store::Todo {
+            id: 1,
+            item: "aaaa bbb".to_owned(),
+        });
+        let Measurement::Fixed(size) = entry.measure(MeasureConstraints {
+            width: Constraint::Exact(8),
+            height: Constraint::Unbounded,
+        }) else {
+            panic!("todo entry has a fixed measurement");
+        };
+        let mut canopy = Canopy::new();
+        canopy.replace_root(entry)?;
+        let mut harness = Harness::from_canopy(canopy, size)?;
+        harness.render()?;
+        assert!(harness.tbuf().contains_text("aaaa"));
+        assert!(harness.tbuf().contains_text("bbb"));
+        Ok(())
+    }
+
+    fn status_style(harness: &Harness) -> ResolvedStyle {
+        let buffer = harness.buf();
+        buffer
+            .get(Point {
+                x: 0,
+                y: buffer.size().h - 1,
+            })
+            .expect("status cell")
+            .style
+    }
+
+    #[test]
+    fn repeated_modal_opening_keeps_one_dimming_effect() -> AnyResult<()> {
+        let mut harness = Harness::from_canopy(create_app(":memory:")?, Size::new(80, 24))?;
+        harness.render()?;
+        let normal = status_style(&harness);
+        harness.script("todo.enter_item()")?;
+        let dimmed = status_style(&harness);
+        assert_ne!(normal, dimmed);
+        harness.script("todo.enter_item()")?;
+        assert_eq!(status_style(&harness), dimmed);
+        for _ in 0..2 {
+            harness.canopy.apply_fixture("modal_open")?;
+            harness.render()?;
+            assert_eq!(status_style(&harness), dimmed);
+        }
+        harness.script("todo.cancel_add()")?;
+        assert_eq!(status_style(&harness), normal);
+        Ok(())
+    }
 }

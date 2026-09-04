@@ -12,8 +12,8 @@ This survey records clear improvements across Canopy's runtime, widgets, macros,
 - [x] W4: Preserve non-socket files at live socket paths
 - [x] W5: Save the correct selection for redo
 - [x] W6: Require every character to satisfy a text-style assertion
-- [ ] W7: Preserve Todo entries when database deletion fails
-- [ ] W8: Replace Todo fixture rows in one transaction
+- [x] W7: Preserve Todo entries when database deletion fails
+- [x] W8: Replace Todo fixture rows in one transaction
 - [x] W9: Propagate list activation errors
 - [x] W10: Exclude hidden ancestors from focus candidates
 - [x] W11: Clear layout state throughout excluded subtrees
@@ -50,9 +50,9 @@ This survey records clear improvements across Canopy's runtime, widgets, macros,
 - [x] W42: Correct mouse-event coordinate documentation
 - [x] W43: Remove the transaction guard's permanently enabled flag
 - [x] W44: Align help keys by terminal width
-- [ ] W45: Load Todo rows in explicit identifier order
-- [ ] W46: Measure Todo text at its rendered width
-- [ ] W47: Make Todo modal dimming repeatable
+- [x] W45: Load Todo rows in explicit identifier order
+- [x] W46: Measure Todo text at its rendered width
+- [x] W47: Make Todo modal dimming repeatable
 - [x] W48: Correct the documented FNV-1a digest
 - [ ] W49: Preserve Stylegym modal dimming when effects change
 - [ ] W50: Measure FontGym input and its cursor in display columns
@@ -102,6 +102,8 @@ Each stage ends with focused and package proof, checklist updates, and a commit.
 - External-style effects now resolve paints at render positions. This also preserves custom effects that return gradients without introducing a solid-paint panic.
 
 - MCP/CLI package proof: `ncode test -E 'package(canopy-mcp) | package(canopyctl)' --no-fail-fast` passed all 36 tests. All five items are complete. The built CLI and Todo process also verified failed-eval JSON, the persisted failed journal entry, and exit status 1. Evidence: `tmp/wins-eval-x2y2_yw5/`.
+
+- Todo (5 items): `ncode test -E 'package(todo)' --no-fail-fast` passed all 19 tests, including rollback, deletion failure, ordering, wrapping, repeated modal dimming, PTY input, and the Luau smoke suite.
 
 ## Checklist Adjustments
 

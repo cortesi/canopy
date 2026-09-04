@@ -72,17 +72,19 @@ impl Store {
         &self,
         items: impl IntoIterator<Item = &'a str>,
     ) -> Result<Vec<Todo>> {
+        let transaction = self.conn.unchecked_transaction()?;
         self.clear_todos()?;
         let mut todos = Vec::new();
         for item in items {
             todos.push(self.add_todo(item)?);
         }
+        transaction.commit()?;
         Ok(todos)
     }
 
     /// Load every persisted todo.
     pub fn todos(&self) -> Result<Vec<Todo>> {
-        let mut stmt = self.conn.prepare("SELECT id, item FROM todo")?;
+        let mut stmt = self.conn.prepare("SELECT id, item FROM todo ORDER BY id")?;
         let todos = stmt
             .query_map([], |row| {
                 Ok(Todo {
@@ -122,6 +124,84 @@ mod tests {
     use rusqlite::Connection;
 
     use super::*;
+
+    #[test]
+    fn replace_todos_rolls_back_failed_insert() -> Result<()> {
+        let store = Store::open(":memory:")?;
+        let original = store.add_todo("original")?;
+        store.conn.execute_batch(
+            "CREATE TRIGGER reject_item BEFORE INSERT ON todo
+            WHEN NEW.item = 'reject' BEGIN SELECT RAISE(ABORT, 'rejected'); END;",
+        )?;
+        assert!(store.replace_todos(["first", "reject", "last"]).is_err());
+        let rows = store.todos()?;
+        assert_eq!(rows.len(), 1);
+        assert_eq!(
+            (rows[0].id, rows[0].item.as_str()),
+            (original.id, "original")
+        );
+        let replaced = store.replace_todos(["first", "last"])?;
+        assert_eq!(
+            replaced
+                .iter()
+                .map(|row| row.item.as_str())
+                .collect::<Vec<_>>(),
+            ["first", "last"]
+        );
+        assert_eq!(store.todos()?.len(), 2);
+        assert!(store.replace_todos([])?.is_empty());
+        assert!(store.todos()?.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn todos_have_explicit_identifier_order() -> Result<()> {
+        let store = Store::open(":memory:")?;
+        store.replace_todos(["first", "second", "third"])?;
+        store
+            .conn
+            .execute_batch("PRAGMA reverse_unordered_selects = ON;")?;
+        let rows = store.todos()?;
+        assert_eq!(
+            rows.iter().map(|row| row.item.as_str()).collect::<Vec<_>>(),
+            ["first", "second", "third"]
+        );
+        assert!(rows.windows(2).all(|pair| pair[0].id < pair[1].id));
+        Ok(())
+    }
+
+    #[test]
+    fn failed_delete_preserves_selected_widget_and_storage() -> Result<()> {
+        let mut canopy = crate::create_app(":memory:")?;
+        canopy.apply_fixture("with_items")?;
+        let store = get()?;
+        store.conn.execute_batch(
+            "CREATE TRIGGER reject_delete BEFORE DELETE ON todo
+            BEGIN SELECT RAISE(ABORT, 'cannot delete'); END;",
+        )?;
+        let before = crate::with_todo(&mut canopy, |todo, ctx| {
+            todo.with_list(ctx, |list, _| Ok((list.len(), list.selected_item())))
+        })?;
+        let original_rows = store.todos()?;
+        assert!(crate::with_todo(&mut canopy, |todo, ctx| todo.delete_item(ctx)).is_err());
+        let after = crate::with_todo(&mut canopy, |todo, ctx| {
+            todo.with_list(ctx, |list, _| Ok((list.len(), list.selected_item())))
+        })?;
+        assert!(before.1.is_some());
+        assert_eq!(before, after);
+        assert_eq!(
+            store
+                .todos()?
+                .iter()
+                .map(|row| (row.id, row.item.clone()))
+                .collect::<Vec<_>>(),
+            original_rows
+                .iter()
+                .map(|row| (row.id, row.item.clone()))
+                .collect::<Vec<_>>()
+        );
+        Ok(())
+    }
 
     #[test]
     fn get_errors_before_open() {
