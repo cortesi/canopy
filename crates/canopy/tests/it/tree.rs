@@ -3,8 +3,8 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, NodeId, ViewContext, Widget,
-        error::Result,
+        Canopy, Context, NodeId, ViewContext, Widget,
+        error::{Error, Result},
         geom::{Point, Size},
         path::Path,
         state::NodeName,
@@ -27,6 +27,68 @@ mod tests {
         fn name(&self) -> NodeName {
             NodeName::convert(&self.name)
         }
+    }
+
+    #[derive(Default)]
+    struct MountCounter {
+        attempts: usize,
+    }
+
+    impl Widget for MountCounter {
+        fn on_mount(&mut self, _ctx: &mut dyn Context) -> Result<()> {
+            self.attempts += 1;
+            Err(Error::Invalid("mount rejected".into()))
+        }
+    }
+
+    #[test]
+    fn failed_mount_restores_structure_but_retains_widget_mutation() -> Result<()> {
+        let mut canopy = Canopy::new();
+        canopy.with_root_context(|ctx| {
+            let child = ctx.create_detached(MountCounter::default())?;
+            for expected_attempts in 1..=2 {
+                let error = ctx.edit_structure(&mut |ctx| ctx.attach(ctx.node_id(), child.into()));
+                assert!(matches!(error, Err(Error::Invalid(_))));
+                assert!(ctx.children().is_empty());
+                assert!(ctx.node_type_id(child.into()).is_some());
+                ctx.with_widget(child, |widget, _| {
+                    assert_eq!(widget.attempts, expected_attempts);
+                    Ok(())
+                })?;
+            }
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn nested_structural_rollback_retains_widget_mutation() -> Result<()> {
+        let mut canopy = Canopy::new();
+        canopy.with_root_context(|ctx| {
+            let child = ctx.create_detached(TreeWidget::new("original"))?;
+            let root = ctx.node_id();
+            ctx.edit_structure(&mut |ctx| {
+                ctx.attach(root, child.into())?;
+                let error = ctx.edit_structure(&mut |ctx| {
+                    ctx.with_widget(child, |widget, _| {
+                        widget.name = "changed".into();
+                        Ok(())
+                    })?;
+                    ctx.detach(child.into())?;
+                    Err(Error::Invalid("nested edit rejected".into()))
+                });
+                assert!(matches!(error, Err(Error::Invalid(_))));
+                assert_eq!(ctx.children(), vec![child.into()]);
+                // The node's captured metadata and the widget's own state differ.
+                assert_eq!(node_name(ctx, root, child.into()), "original");
+                ctx.with_widget(child, |widget, _| {
+                    assert_eq!(widget.name, "changed");
+                    Ok(())
+                })?;
+                Ok(())
+            })?;
+            assert_eq!(ctx.children(), vec![child.into()]);
+            Ok(())
+        })
     }
 
     fn build_tree(

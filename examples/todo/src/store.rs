@@ -1,13 +1,9 @@
-//! Thread-local SQLite storage for the todo example.
+//! SQLite storage for the todo example.
 
-use std::{cell::RefCell, rc::Rc};
+use std::rc::Rc;
 
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use rusqlite::Connection;
-
-thread_local! {
-    static STORE: RefCell<Option<Store>> = const { RefCell::new(None) };
-}
 
 #[derive(Debug, Clone)]
 /// A persisted todo record.
@@ -19,7 +15,7 @@ pub struct Todo {
 }
 
 #[derive(Debug, Clone)]
-/// Handle to the current todo database.
+/// Cloneable handle to one todo database.
 pub struct Store {
     /// Shared connection for cloned store handles on one thread.
     conn: Rc<Connection>,
@@ -27,7 +23,7 @@ pub struct Store {
 
 impl Store {
     /// Open or initialize a SQLite store.
-    fn open(path: &str) -> Result<Self> {
+    pub fn open(path: &str) -> Result<Self> {
         let conn = Connection::open(path)?;
         conn.execute(
             "CREATE TABLE IF NOT EXISTS todo (
@@ -97,26 +93,6 @@ impl Store {
     }
 }
 
-/// Open a store for the current thread.
-pub(crate) fn open(path: &str) -> Result<()> {
-    let s = Store::open(path)?;
-    STORE.with(|store| {
-        *store.borrow_mut() = Some(s);
-    });
-    Ok(())
-}
-
-/// Return the store opened for the current thread.
-pub fn get() -> Result<Store> {
-    STORE.with(|store| {
-        store
-            .borrow()
-            .as_ref()
-            .cloned()
-            .ok_or_else(|| anyhow!("todo store has not been opened"))
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use std::rc::Rc;
@@ -172,9 +148,9 @@ mod tests {
 
     #[test]
     fn failed_delete_preserves_selected_widget_and_storage() -> Result<()> {
-        let mut canopy = crate::create_app(":memory:")?;
+        let store = Store::open(":memory:")?;
+        let mut canopy = crate::create_app_with_store(store.clone(), None)?;
         canopy.apply_fixture("with_items")?;
-        let store = get()?;
         store.conn.execute_batch(
             "CREATE TRIGGER reject_delete BEFORE DELETE ON todo
             BEGIN SELECT RAISE(ABORT, 'cannot delete'); END;",
@@ -201,14 +177,6 @@ mod tests {
                 .collect::<Vec<_>>()
         );
         Ok(())
-    }
-
-    #[test]
-    fn get_errors_before_open() {
-        STORE.with(|store| {
-            *store.borrow_mut() = None;
-        });
-        assert!(get().is_err());
     }
 
     #[test]

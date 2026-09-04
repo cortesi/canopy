@@ -6,7 +6,7 @@ use crate::{
     geom::{Point, Rect, RectI32, Size},
     layout::{
         Align, CanvasChild, CanvasContext, Constraint, Direction as LayoutDirection, Display,
-        Layout, MeasureConstraints, Measurement, Sizing,
+        Layout, MeasureConstraints, MeasureOverflow, Measurement, Sizing,
     },
 };
 
@@ -62,7 +62,9 @@ pub(super) fn refresh_layouts(core: &mut Core) -> Result<()> {
         )?;
         layout.validate()?;
         if let Some(node) = core.nodes.get_mut(node_id) {
-            node.layout = layout;
+            let effective = node.layout_override.apply(layout)?;
+            node.base_layout = layout;
+            node.layout = effective;
             node.layout_dirty = false;
         }
     }
@@ -90,15 +92,15 @@ struct LayoutPass<'a> {
 /// Overflow flags propagated from parent layouts.
 struct Overflow {
     /// Allow horizontal overflow during measurement.
-    x: bool,
+    x: MeasureOverflow,
     /// Allow vertical overflow during measurement.
-    y: bool,
+    y: MeasureOverflow,
 }
 
 impl Overflow {
     /// Return a zero-overflow configuration.
     fn none() -> Self {
-        Self { x: false, y: false }
+        Self { x: MeasureOverflow::Bounded, y: MeasureOverflow::Bounded }
     }
 
     /// Build overflow flags from a layout.
@@ -223,7 +225,7 @@ impl<'a> LayoutPass<'a> {
                 layout.min_width,
                 layout.max_width,
                 pad_x,
-                layout.overflow_x,
+                layout.overflow_x == MeasureOverflow::Unbounded,
             ),
             height: constraint_for_axis(
                 layout.height,
@@ -231,7 +233,7 @@ impl<'a> LayoutPass<'a> {
                 layout.min_height,
                 layout.max_height,
                 pad_y,
-                layout.overflow_y,
+                layout.overflow_y == MeasureOverflow::Unbounded,
             ),
         };
 

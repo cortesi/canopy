@@ -8,7 +8,7 @@ use crate::{
     core::{Core, inputmap},
     error::Result,
     event::{Event, key, mouse},
-    geom::{Point, Size},
+    geom::{Point, PointI32, Size},
     path::Path,
     script::LuauFunctionId,
     widget::EventOutcome,
@@ -61,11 +61,19 @@ impl RoutedInput {
             .get(node_id)
             .map(|node| node.view)
             .unwrap_or_default();
+        let local = view.screen_to_viewport(PointI32 {
+            x: i32::try_from(mouse.location.x).unwrap_or(i32::MAX),
+            y: i32::try_from(mouse.location.y).unwrap_or(i32::MAX),
+        });
         mouse::MouseEvent {
             action: mouse.action,
             button: mouse.button,
             modifiers: mouse.modifiers,
-            location: view.content.to_local_point(mouse.location),
+            // Keep the existing unsigned viewport-local mouse boundary.
+            location: Point {
+                x: u32::try_from(local.x).unwrap_or(0),
+                y: u32::try_from(local.y).unwrap_or(0),
+            },
         }
     }
 }

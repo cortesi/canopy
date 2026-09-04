@@ -8,7 +8,7 @@ use crate::{
         view::View,
         widget_access::{WidgetSlotPolicy, validate_slot},
     },
-    layout::Layout,
+    layout::{Layout, LayoutOverride},
     path::Path,
     widget::Widget,
 };
@@ -76,21 +76,33 @@ impl Core {
         f: impl FnOnce(&mut Layout),
     ) -> Result<()> {
         let node = node.into();
-        let mut layout = self
-            .nodes
-            .get(node)
-            .ok_or(Error::NodeNotFound(node))?
-            .layout;
+        let current = self.nodes.get(node).ok_or(Error::NodeNotFound(node))?;
+        let before = current.layout;
+        let mut layout = before;
         f(&mut layout);
-        layout.validate()?;
-        self.nodes[node].layout = layout;
+        let mut overrides = current.layout_override;
+        overrides.record_changes(before, layout);
+        self.set_layout_override_of(node, overrides)
+    }
+
+    /// Replace all persistent parent constraints for a node.
+    pub fn set_layout_override_of(&mut self, node: NodeId, overrides: LayoutOverride) -> Result<()> {
+        let current = self.nodes.get_mut(node).ok_or(Error::NodeNotFound(node))?;
+        let layout = overrides.apply(current.base_layout)?;
+        current.layout_override = overrides;
+        current.layout = layout;
         Ok(())
     }
 
-    /// Set the layout for a node.
+    /// Restore the widget's base layout.
+    pub fn clear_layout_override_of(&mut self, node: NodeId) -> Result<()> {
+        self.set_layout_override_of(node, LayoutOverride::default())
+    }
+
+    /// Override every field of a node's layout.
     #[cfg(test)]
     pub fn set_layout_of(&mut self, node: impl Into<NodeId>, layout: Layout) -> Result<()> {
-        self.with_layout_of(node, |l| *l = layout)
+        self.set_layout_override_of(node.into(), LayoutOverride::full(layout))
     }
 
     /// Replace a widget and remove all descendant nodes.
@@ -142,6 +154,8 @@ impl Core {
         node.widget = Rc::new(RefCell::new(Some(widget)));
         node.name = name;
         node.layout = layout;
+        node.base_layout = layout;
+        node.layout_override = LayoutOverride::default();
         node.widget_type = widget_type;
         node.mounted = false;
         node.initialized = false;
@@ -488,6 +502,11 @@ impl Core {
 
     /// Validate cached layout and view state for a node.
     fn validate_cached_state(&self, node_id: NodeId, node: &Node) -> Result<()> {
+        if node.layout_override.apply(node.base_layout)? != node.layout {
+            return Err(invariant_violation(format!(
+                "node {node_id:?} effective layout differs from its base and overrides"
+            )));
+        }
         if node.content_size.w > node.rect.w || node.content_size.h > node.rect.h {
             return Err(invariant_violation(format!(
                 "node {node_id:?} content size {:?} exceeds rect {:?}",

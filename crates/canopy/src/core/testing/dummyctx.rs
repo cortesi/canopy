@@ -15,7 +15,7 @@ use crate::{
     error::Result,
     event::{Event, mouse::MouseEvent},
     geom::{Direction, Point},
-    layout::Layout,
+    layout::{Layout, LayoutOverride},
     path::Path,
     style::StyleMap,
     widget::Widget,
@@ -164,6 +164,14 @@ impl Context for DummyContext {
 
     fn invalidate_layout(&mut self) {}
 
+    fn set_layout_override_of(&mut self, _node: NodeId, _overrides: LayoutOverride) -> Result<()> {
+        Ok(())
+    }
+
+    fn clear_layout_override_of(&mut self, _node: NodeId) -> Result<()> {
+        Ok(())
+    }
+
     fn with_layout_of(&mut self, _node: NodeId, _f: &mut dyn FnMut(&mut Layout)) -> Result<()> {
         Ok(())
     }
@@ -172,7 +180,7 @@ impl Context for DummyContext {
         Ok(NodeId::null())
     }
 
-    fn apply_tree_edit(
+    fn edit_structure(
         &mut self,
         edit: &mut dyn FnMut(&mut dyn Context) -> Result<()>,
     ) -> Result<()> {

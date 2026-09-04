@@ -143,6 +143,8 @@ impl Widget for MainContent {}
 
 /// Root node for the todo demo.
 pub(crate) struct Todo {
+    /// Database owned by this application.
+    store: store::Store,
     /// Entries waiting for the widget tree to mount.
     pending: Vec<store::Todo>,
     /// Whether the add-item modal is active.
@@ -151,10 +153,11 @@ pub(crate) struct Todo {
 
 #[derive_commands]
 impl Todo {
-    /// Load a todo widget from the current store.
-    pub(crate) fn new() -> AnyResult<Self> {
-        let pending = store::get()?.todos()?;
+    /// Load a todo widget from its database.
+    pub(crate) fn new(store: store::Store) -> AnyResult<Self> {
+        let pending = store.todos()?;
         Ok(Self {
+            store,
             pending,
             adder_active: false,
         })
@@ -325,7 +328,7 @@ impl Todo {
                 return Ok(());
             };
             let id = ctx.with_widget(item_id, |entry: &mut TodoEntry, _| Ok(entry.todo.id))?;
-            current_store()?.delete_todo(id).map_err(store_error)?;
+            self.store.delete_todo(id).map_err(store_error)?;
             let _ = list.delete_selected(ctx)?;
             Ok(())
         })
@@ -337,7 +340,7 @@ impl Todo {
         let value = self.with_input(c, |input| Ok(input.value().to_string()))?;
 
         if !value.is_empty() {
-            let item = current_store()?.add_todo(&value).map_err(store_error)?;
+            let item = self.store.add_todo(&value).map_err(store_error)?;
             self.with_list(c, |list, ctx| {
                 list.append(ctx, TodoEntry::new(item))?;
                 list.select_last(ctx)?;
@@ -462,21 +465,9 @@ fn store_error(error: impl Display) -> Error {
     Error::Invalid(error.to_string())
 }
 
-/// Return the current thread's store as an application result.
-fn current_store() -> Result<store::Store> {
-    store::get().map_err(store_error)
-}
-
 /// Register and finalize the todo application API with default bindings.
 pub fn setup_app(cnpy: &mut Canopy) -> Result<()> {
     setup_app_with_config(cnpy, None)
-}
-
-/// Replace store contents with fixture data.
-fn store_fixture_items(items: &[&str]) -> Result<Vec<store::Todo>> {
-    current_store()?
-        .replace_todos(items.iter().copied())
-        .map_err(store_error)
 }
 
 /// Run a mutation against the unique Todo widget.
@@ -493,8 +484,8 @@ fn register_fixtures(cnpy: &mut Canopy) -> Result<()> {
         "empty",
         "App with no todo items and no modal open",
         |cnpy| {
-            let items = store_fixture_items(&[])?;
             with_todo(cnpy, |todo, ctx| {
+                let items = todo.store.replace_todos([]).map_err(store_error)?;
                 todo.apply_items_fixture(ctx, items, false)
             })
         },
@@ -503,8 +494,8 @@ fn register_fixtures(cnpy: &mut Canopy) -> Result<()> {
         "with_items",
         "App with a pre-populated todo list",
         |cnpy| {
-            let items = store_fixture_items(FIXTURE_WITH_ITEMS)?;
             with_todo(cnpy, |todo, ctx| {
+                let items = todo.store.replace_todos(FIXTURE_WITH_ITEMS.iter().copied()).map_err(store_error)?;
                 todo.apply_items_fixture(ctx, items, false)
             })
         },
@@ -513,8 +504,10 @@ fn register_fixtures(cnpy: &mut Canopy) -> Result<()> {
         "modal_open",
         "App with the add-item modal open and ready for typing",
         |cnpy| {
-            let items = store_fixture_items(FIXTURE_WITH_ITEMS)?;
-            with_todo(cnpy, |todo, ctx| todo.apply_items_fixture(ctx, items, true))
+            with_todo(cnpy, |todo, ctx| {
+                let items = todo.store.replace_todos(FIXTURE_WITH_ITEMS.iter().copied()).map_err(store_error)?;
+                todo.apply_items_fixture(ctx, items, true)
+            })
         },
     ))?;
     Ok(())
@@ -541,12 +534,16 @@ pub fn create_app(db_path: &str) -> AnyResult<Canopy> {
 
 /// Create a todo canopy app with optional user config.
 pub fn create_app_with_config(db_path: &str, config: Option<&Path>) -> AnyResult<Canopy> {
-    store::open(db_path)?;
+    create_app_with_store(store::Store::open(db_path)?, config)
+}
+
+/// Create a todo application with an explicit database and optional user config.
+pub fn create_app_with_store(store: store::Store, config: Option<&Path>) -> AnyResult<Canopy> {
 
     let mut cnpy = Canopy::new();
     setup_app_with_config(&mut cnpy, config)?;
 
-    let todo = Todo::new()?;
+    let todo = Todo::new(store)?;
     Root::install_app(&mut cnpy, todo)?;
     Ok(cnpy)
 }

@@ -4,7 +4,7 @@ use canopy::{
     Context, EventOutcome, ViewContext, Widget, command, cursor, derive_commands,
     error::Result,
     event::{Event, key, mouse},
-    geom::{Direction, Line, Point, Rect},
+    geom::{Direction, Line, Point, PointI32, Rect},
     layout::{CanvasContext, Constraint, MeasureConstraints, Measurement, Size},
     render::Render,
     state::NodeName,
@@ -604,9 +604,13 @@ impl Editor {
         let view_rect = view.view_rect();
         let gutter_width = self.gutter_width();
         self.update_layout(view_rect, gutter_width);
+        let content_point = view.viewport_to_content(PointI32 {
+            x: i32::try_from(event.location.x).unwrap_or(i32::MAX),
+            y: i32::try_from(event.location.y).unwrap_or(i32::MAX),
+        });
         let content_point = Point {
-            x: view.tl.x.saturating_add(event.location.x),
-            y: view.tl.y.saturating_add(event.location.y),
+            x: u32::try_from(content_point.x).unwrap_or(0),
+            y: u32::try_from(content_point.y).unwrap_or(0),
         };
         let mut text_point = content_point;
         text_point.x = text_point.x.saturating_sub(gutter_width);

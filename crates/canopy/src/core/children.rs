@@ -76,6 +76,10 @@ where
     }
 
     /// Reconcile this collection against the desired key order.
+    ///
+    /// Errors restore structure and leave this collection unchanged. Mutations
+    /// performed by `create` and `update` have the rollback limits documented by
+    /// [`Context::edit_structure`], including retained widget state and external effects.
     pub fn reconcile<I, C, U>(
         &mut self,
         ctx: &mut dyn Context,
@@ -138,7 +142,7 @@ where
         let mut candidates = Some(candidates);
         let mut outcome = None;
 
-        ctx.apply_tree_edit(&mut |ctx| {
+        ctx.edit_structure(&mut |ctx| {
             let mut working_map = planned_map
                 .take()
                 .ok_or_else(|| Error::Internal("reconcile map consumed".into()))?;

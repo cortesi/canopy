@@ -544,8 +544,11 @@ impl<W: Selectable> List<W> {
     /// Find the item index at a local content-space location.
     fn index_at_location(&self, c: &dyn Context, location: Point) -> Option<usize> {
         let view = c.view();
-        let view_rect = view.view_rect();
-        let content_y = view_rect.tl.y.saturating_add(location.y);
+        let content = view.viewport_to_content(canopy::geom::PointI32 {
+            x: i32::try_from(location.x).unwrap_or(i32::MAX),
+            y: i32::try_from(location.y).unwrap_or(i32::MAX),
+        });
+        let content_y = u32::try_from(content.y).ok()?;
         let metrics = self.item_metrics(c);
         Self::index_at_y(&metrics, content_y)
     }
@@ -677,10 +680,13 @@ impl<W: Selectable + 'static> Widget for List<W> {
                     .min(view_rect.tl.y.saturating_add(view_rect.h));
 
                 if visible_start < visible_end {
-                    let content_origin = view.content_origin();
-                    let local_y = content_origin
-                        .y
-                        .saturating_add(visible_start - view_rect.tl.y);
+                    let outer = view.viewport_to_outer(canopy::geom::PointI32 {
+                        x: 0,
+                        y: i32::try_from(visible_start - view_rect.tl.y).unwrap_or(i32::MAX),
+                    });
+                    let Ok(local_y) = u32::try_from(outer.y) else {
+                        return Ok(());
+                    };
                     let width = indicator.width.min(area.w);
 
                     if width > 0 {

@@ -20,7 +20,7 @@ use crate::{
     error::{Error, Result},
     event::{Event, mouse::MouseEvent},
     geom::{Direction, Point, Rect},
-    layout::Layout,
+    layout::{Layout, LayoutOverride},
     path::{Path, PathFilter},
     style::StyleMap,
     widget::Widget,
@@ -497,11 +497,27 @@ pub trait Context: ViewContext {
     /// Update the layout for a specific node.
     fn with_layout_of(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Layout)) -> Result<()>;
 
+    /// Replace persistent parent constraints without replacing widget layout fields.
+    fn set_layout_override_of(&mut self, node: NodeId, overrides: LayoutOverride) -> Result<()>;
+
+    /// Clear parent constraints and restore the widget's base layout.
+    fn clear_layout_override_of(&mut self, node: NodeId) -> Result<()>;
+
     /// Create a new widget node detached from the tree.
     fn create_detached_boxed(&mut self, widget: Box<dyn Widget>) -> Result<NodeId>;
 
-    /// Apply a related set of tree mutations atomically.
-    fn apply_tree_edit(
+    /// Run immediate mutations with structural rollback on error.
+    ///
+    /// Rollback restores arena metadata, topology, child keys, layouts, views,
+    /// lifecycle flags, root, focus, mouse capture, focus recovery hints, exit
+    /// requests, pending styles, command registry and scope, and diagnostic requests.
+    /// Each failed nested edit restores its own structural checkpoint.
+    ///
+    /// Widget slots are shared with the checkpoint: widget-owned mutations survive.
+    /// Binding registration and external effects also survive and require explicit
+    /// compensation. Cleanup hooks must be safe to repeat. This is not a widget
+    /// state or database transaction.
+    fn edit_structure(
         &mut self,
         edit: &mut dyn FnMut(&mut dyn Context) -> Result<()>,
     ) -> Result<()>;
@@ -600,7 +616,7 @@ impl dyn Context + '_ {
 
     /// Set the layout for a specific node.
     pub fn set_layout_of(&mut self, node: impl Into<NodeId>, layout: Layout) -> Result<()> {
-        Context::with_layout_of(self, node.into(), &mut |l| *l = layout)
+        Context::set_layout_override_of(self, node.into(), LayoutOverride::full(layout))
     }
 
     /// Execute a closure with mutable access through a typed widget ID.
@@ -942,6 +958,14 @@ impl Context for NodeCtx<&mut Core> {
         }
     }
 
+    fn set_layout_override_of(&mut self, node: NodeId, overrides: LayoutOverride) -> Result<()> {
+        self.core.set_layout_override_of(node, overrides)
+    }
+
+    fn clear_layout_override_of(&mut self, node: NodeId) -> Result<()> {
+        self.core.clear_layout_override_of(node)
+    }
+
     fn with_layout_of(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Layout)) -> Result<()> {
         self.core.with_layout_of(node, |layout| f(layout))
     }
@@ -950,7 +974,7 @@ impl Context for NodeCtx<&mut Core> {
         self.core.create_detached_boxed(widget)
     }
 
-    fn apply_tree_edit(
+    fn edit_structure(
         &mut self,
         edit: &mut dyn FnMut(&mut dyn Context) -> Result<()>,
     ) -> Result<()> {

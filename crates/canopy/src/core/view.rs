@@ -1,6 +1,6 @@
 use crate::{
     error::Result,
-    geom::{Point, Rect, RectI32, Size},
+    geom::{Point, PointI32, Rect, RectI32, Size},
 };
 
 /// Render-time view information for a node.
@@ -17,6 +17,53 @@ pub struct View {
 }
 
 impl View {
+    /// Convert a screen point to viewport-local coordinates, before scroll.
+    /// Coordinates outside the signed range saturate at its limits.
+    pub fn screen_to_viewport(&self, point: PointI32) -> PointI32 {
+        signed_point(
+            i64::from(point.x) - i64::from(self.content.tl.x),
+            i64::from(point.y) - i64::from(self.content.tl.y),
+        )
+    }
+
+    /// Convert a viewport-local point to scrolled content coordinates.
+    /// Coordinates outside the signed range saturate at its limits.
+    pub fn viewport_to_content(&self, point: PointI32) -> PointI32 {
+        signed_point(
+            i64::from(point.x) + i64::from(self.tl.x),
+            i64::from(point.y) + i64::from(self.tl.y),
+        )
+    }
+
+    /// Convert a viewport-local point to outer-local coordinates, including padding.
+    /// Coordinates outside the signed range saturate at its limits.
+    pub fn viewport_to_outer(&self, point: PointI32) -> PointI32 {
+        signed_point(
+            i64::from(point.x) + i64::from(self.content.tl.x) - i64::from(self.outer.tl.x),
+            i64::from(point.y) + i64::from(self.content.tl.y) - i64::from(self.outer.tl.y),
+        )
+    }
+
+    /// Convert a scrolled content point to screen coordinates.
+    /// Coordinates outside the signed range saturate at its limits.
+    pub fn content_to_screen(&self, point: PointI32) -> PointI32 {
+        signed_point(
+            i64::from(point.x) + i64::from(self.content.tl.x) - i64::from(self.tl.x),
+            i64::from(point.y) + i64::from(self.content.tl.y) - i64::from(self.tl.y),
+        )
+    }
+
+    /// Convert an outer-local point to scrolled content coordinates.
+    /// Coordinates outside the signed range saturate at its limits.
+    pub fn outer_to_content(&self, point: PointI32) -> PointI32 {
+        signed_point(
+            i64::from(point.x) + i64::from(self.outer.tl.x) - i64::from(self.content.tl.x)
+                + i64::from(self.tl.x),
+            i64::from(point.y) + i64::from(self.outer.tl.y) - i64::from(self.content.tl.y)
+                + i64::from(self.tl.y),
+        )
+    }
+
     /// Size of the outer rect.
     pub fn outer_size(&self) -> Size {
         Size::new(self.outer.w, self.outer.h)
@@ -101,6 +148,14 @@ impl View {
                 margin.hslice(post)?,
             )))
         }
+    }
+}
+
+/// Clamp only after the complete translation, so intermediate offsets retain their sign.
+fn signed_point(x: i64, y: i64) -> PointI32 {
+    PointI32 {
+        x: x.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32,
+        y: y.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32,
     }
 }
 

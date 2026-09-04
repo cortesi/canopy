@@ -44,6 +44,27 @@ and view caches, and mount and polling flags. Parent links, child lists, and key
 must agree: parents list their children, children point back, and keys point only
 at direct children.
 
+## Structural Edits
+
+`Context::edit_structure` runs its closure immediately. If the closure returns
+an error, the runtime restores its structural checkpoint. A failed nested edit
+restores its own checkpoint, even when the enclosing edit handles the error.
+
+The checkpoint captures every arena node, including detached nodes. It restores
+node metadata, topology, child keys, layout and view caches, and lifecycle flags.
+It also restores root, focus, mouse capture, focus recovery hints, exit requests,
+pending style changes, command registry and scope, and pending diagnostic requests.
+Layout metadata includes the widget base layout and persistent override.
+
+The checkpoint shares widget slots with the live arena. Widget-owned mutations
+survive rollback. Binding registration and external effects, including database
+writes, are also outside this guarantee. Callers must compensate those effects
+or make them safe to repeat.
+
+Rollback unwinds completed mounts in reverse order before restoring the checkpoint.
+Cleanup hooks must be safe to repeat. A failed mount can run again on a later
+attachment attempt with its previous widget mutations still present.
+
 ## Node Lifecycle
 
 Nodes start detached. Attaching a subtree under an attached parent mounts its

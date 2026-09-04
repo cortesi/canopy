@@ -237,7 +237,7 @@ fn bench_tree_edit(c: &mut Criterion) {
             |(mut app, child)| {
                 let root = app.root_id();
                 app.with_root_context(|context| {
-                    context.apply_tree_edit(&mut |context| context.attach(root, child.into()))
+                    context.edit_structure(&mut |context| context.attach(root, child.into()))
                 })
                 .expect("tree edit should succeed");
                 black_box(app)

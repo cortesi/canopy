@@ -3,7 +3,7 @@ use std::{any::TypeId, cell::RefCell, collections::HashMap, rc::Rc};
 use crate::{
     core::{id::NodeId, style::Effect, view::View},
     geom::{Point, Rect, Size},
-    layout::Layout,
+    layout::{Layout, LayoutOverride},
     state::NodeName,
     widget::Widget,
 };
@@ -23,6 +23,11 @@ pub struct Node {
     pub(crate) children: Vec<NodeId>,
     /// Mapping of child role keys to node IDs.
     pub(crate) child_keys: HashMap<String, NodeId>,
+
+    /// Last validated widget layout.
+    pub(crate) base_layout: Layout,
+    /// Persistent parent constraints.
+    pub(crate) layout_override: LayoutOverride,
 
     /// Cached layout configuration for quick access.
     pub(crate) layout: Layout,
@@ -69,6 +74,8 @@ impl Node {
             children: Vec::new(),
             child_keys: HashMap::new(),
             layout,
+            base_layout: layout,
+            layout_override: LayoutOverride::default(),
             rect: Rect::zero(),
             content_size: Size::default(),
             canvas: Size::default(),

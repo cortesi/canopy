@@ -49,6 +49,28 @@ pub enum Sizing {
     Flex(u32),
 }
 
+/// Per-axis policy for measurement beyond the available viewport.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum MeasureOverflow {
+    /// Use the enclosing layout's policy, bounded at the root.
+    #[default]
+    Inherit,
+    /// Measure within the available space, even under an unbounded parent.
+    Bounded,
+    /// Allow measurement beyond the available space.
+    Unbounded,
+}
+
+impl MeasureOverflow {
+    /// Resolve this policy against an enclosing policy.
+    fn resolve(self, parent: Self) -> Self {
+        match self {
+            Self::Inherit => parent,
+            explicit => explicit,
+        }
+    }
+}
+
 /// Invalid layout configuration.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum LayoutValidationError {
@@ -185,9 +207,9 @@ pub struct Layout {
     pub max_height: Option<u32>,
 
     /// Allow horizontal overflow during measurement.
-    pub overflow_x: bool,
+    pub overflow_x: MeasureOverflow,
     /// Allow vertical overflow during measurement.
-    pub overflow_y: bool,
+    pub overflow_y: MeasureOverflow,
 
     /// Structural padding inside the widget (cells).
     pub padding: Edges,
@@ -208,6 +230,118 @@ pub struct Layout {
     pub align_vertical: Align,
 }
 
+/// Persistent parent constraints applied after the widget's base layout.
+///
+/// `None` inherits a field. For optional bounds, `Some(None)` clears the bound.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct LayoutOverride {
+    /// Override for [`Layout::display`].
+    pub display: Option<Display>,
+    /// Override for [`Layout::direction`].
+    pub direction: Option<Direction>,
+    /// Override for [`Layout::width`].
+    pub width: Option<Sizing>,
+    /// Override for [`Layout::height`].
+    pub height: Option<Sizing>,
+    /// Override for [`Layout::min_width`].
+    pub min_width: Option<Option<u32>>,
+    /// Override for [`Layout::max_width`].
+    pub max_width: Option<Option<u32>>,
+    /// Override for [`Layout::min_height`].
+    pub min_height: Option<Option<u32>>,
+    /// Override for [`Layout::max_height`].
+    pub max_height: Option<Option<u32>>,
+    /// Override for [`Layout::overflow_x`].
+    pub overflow_x: Option<MeasureOverflow>,
+    /// Override for [`Layout::overflow_y`].
+    pub overflow_y: Option<MeasureOverflow>,
+    /// Override for [`Layout::padding`].
+    pub padding: Option<Edges>,
+    /// Override for [`Layout::gap`].
+    pub gap: Option<u32>,
+    /// Override for [`Layout::align_horizontal`].
+    pub align_horizontal: Option<Align>,
+    /// Override for [`Layout::align_vertical`].
+    pub align_vertical: Option<Align>,
+}
+
+impl LayoutOverride {
+    /// Inherit every widget field.
+    pub fn new() -> Self { Self::default() }
+
+    /// Override every field of a complete layout.
+    pub fn full(layout: Layout) -> Self {
+        Self {
+            display: Some(layout.display),
+            direction: Some(layout.direction),
+            width: Some(layout.width),
+            height: Some(layout.height),
+            min_width: Some(layout.min_width),
+            max_width: Some(layout.max_width),
+            min_height: Some(layout.min_height),
+            max_height: Some(layout.max_height),
+            overflow_x: Some(layout.overflow_x),
+            overflow_y: Some(layout.overflow_y),
+            padding: Some(layout.padding),
+            gap: Some(layout.gap),
+            align_horizontal: Some(layout.align_horizontal),
+            align_vertical: Some(layout.align_vertical),
+        }
+    }
+
+    /// Apply constraints and validate both the widget and resulting layout.
+    pub fn apply(self, base: Layout) -> Result<Layout, LayoutValidationError> {
+        base.validate()?;
+        let mut layout = base;
+        if let Some(value) = self.display { layout.display = value; }
+        if let Some(value) = self.direction { layout.direction = value; }
+        if let Some(value) = self.width { layout.width = value; }
+        if let Some(value) = self.height { layout.height = value; }
+        if let Some(value) = self.min_width { layout.min_width = value; }
+        if let Some(value) = self.max_width { layout.max_width = value; }
+        if let Some(value) = self.min_height { layout.min_height = value; }
+        if let Some(value) = self.max_height { layout.max_height = value; }
+        if let Some(value) = self.overflow_x { layout.overflow_x = value; }
+        if let Some(value) = self.overflow_y { layout.overflow_y = value; }
+        if let Some(value) = self.padding { layout.padding = value; }
+        if let Some(value) = self.gap { layout.gap = value; }
+        if let Some(value) = self.align_horizontal { layout.align_horizontal = value; }
+        if let Some(value) = self.align_vertical { layout.align_vertical = value; }
+        layout.validate()?;
+        Ok(layout)
+    }
+
+    /// Persist only fields changed by a layout callback.
+    pub(crate) fn record_changes(&mut self, before: Layout, after: Layout) {
+        if before.display != after.display { self.display = Some(after.display); }
+        if before.direction != after.direction { self.direction = Some(after.direction); }
+        if before.width != after.width { self.width = Some(after.width); }
+        if before.height != after.height { self.height = Some(after.height); }
+        if before.min_width != after.min_width { self.min_width = Some(after.min_width); }
+        if before.max_width != after.max_width { self.max_width = Some(after.max_width); }
+        if before.min_height != after.min_height { self.min_height = Some(after.min_height); }
+        if before.max_height != after.max_height { self.max_height = Some(after.max_height); }
+        if before.overflow_x != after.overflow_x { self.overflow_x = Some(after.overflow_x); }
+        if before.overflow_y != after.overflow_y { self.overflow_y = Some(after.overflow_y); }
+        if before.padding != after.padding { self.padding = Some(after.padding); }
+        if before.gap != after.gap { self.gap = Some(after.gap); }
+        if before.align_horizontal != after.align_horizontal { self.align_horizontal = Some(after.align_horizontal); }
+        if before.align_vertical != after.align_vertical { self.align_vertical = Some(after.align_vertical); }
+    }
+    /// Set both outer width bounds.
+    pub fn fixed_width(mut self, value: u32) -> Self {
+        self.min_width = Some(Some(value));
+        self.max_width = Some(Some(value));
+        self
+    }
+    /// Set both outer height bounds.
+    pub fn fixed_height(mut self, value: u32) -> Self {
+        self.min_height = Some(Some(value));
+        self.max_height = Some(Some(value));
+        self
+    }
+}
+
 impl Default for Layout {
     fn default() -> Self {
         Self::column()
@@ -226,8 +360,8 @@ impl Layout {
             max_width: None,
             min_height: None,
             max_height: None,
-            overflow_x: false,
-            overflow_y: false,
+            overflow_x: MeasureOverflow::Inherit,
+            overflow_y: MeasureOverflow::Inherit,
             padding: Edges::all(0),
             gap: 0,
             align_horizontal: Align::Start,
@@ -300,23 +434,32 @@ impl Layout {
 
     /// Allow horizontal overflow during measurement.
     pub fn overflow_x(mut self) -> Self {
-        self.overflow_x = true;
+        self.overflow_x = MeasureOverflow::Unbounded;
         self
     }
 
     /// Allow vertical overflow during measurement.
     pub fn overflow_y(mut self) -> Self {
-        self.overflow_y = true;
+        self.overflow_y = MeasureOverflow::Unbounded;
         self
     }
 
-    /// Inherit overflow permission from an enclosing layout.
-    ///
-    /// Overflow only widens: a layout that already allows overflow on an axis
-    /// keeps it.
-    pub(crate) fn inherit_overflow(&mut self, x: bool, y: bool) {
-        self.overflow_x |= x;
-        self.overflow_y |= y;
+    /// Set the horizontal measurement policy.
+    pub fn measure_overflow_x(mut self, policy: MeasureOverflow) -> Self {
+        self.overflow_x = policy;
+        self
+    }
+
+    /// Set the vertical measurement policy.
+    pub fn measure_overflow_y(mut self, policy: MeasureOverflow) -> Self {
+        self.overflow_y = policy;
+        self
+    }
+
+    /// Resolve inherited policies without replacing explicit child policies.
+    pub(crate) fn inherit_overflow(&mut self, x: MeasureOverflow, y: MeasureOverflow) {
+        self.overflow_x = self.overflow_x.resolve(x);
+        self.overflow_y = self.overflow_y.resolve(y);
     }
 
     /// Convenience: fixed outer width without a `Fixed` enum.

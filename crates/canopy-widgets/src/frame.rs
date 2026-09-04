@@ -169,7 +169,14 @@ impl Widget for Frame {
         let canvas_size = child_view.canvas;
         let outer = ctx.view().outer_rect_local();
         let frame = geom::FrameRects::new(outer, 1);
-        let outer_location = m.location + ctx.view().content_origin();
+        let outer_location = ctx.view().viewport_to_outer(geom::PointI32 {
+            x: i32::try_from(m.location.x).unwrap_or(i32::MAX),
+            y: i32::try_from(m.location.y).unwrap_or(i32::MAX),
+        });
+        let outer_location = geom::Point {
+            x: u32::try_from(outer_location.x).unwrap_or(0),
+            y: u32::try_from(outer_location.y).unwrap_or(0),
+        };
 
         if let Some(drag) = self.scroll_drag {
             match m.action {
