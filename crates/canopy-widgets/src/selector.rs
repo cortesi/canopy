@@ -7,6 +7,7 @@ use canopy::{
     layout::{MeasureConstraints, Measurement, Size},
     render::Render,
     state::NodeName,
+    text,
 };
 use unicode_width::UnicodeWidthStr;
 
@@ -116,7 +117,7 @@ where
         if event.action != mouse::Action::Down || event.button != mouse::Button::Left {
             return Ok(());
         }
-        let clicked_row = event.location.y as usize;
+        let clicked_row = event.location.y.saturating_add(c.view().tl.y) as usize;
         if clicked_row < self.items.len() {
             self.focused = clicked_row;
             self.toggle(c)?;
@@ -175,8 +176,8 @@ where
         let rect = view.view_rect_local();
         let is_widget_focused = ctx.is_focused();
 
-        for (idx, item) in self.items.iter().enumerate() {
-            let Ok(row) = u32::try_from(idx) else {
+        for (idx, item) in self.items.iter().enumerate().skip(view.tl.y as usize) {
+            let Ok(row) = u32::try_from(idx - view.tl.y as usize) else {
                 break;
             };
             if row >= rect.h {
@@ -190,20 +191,22 @@ where
             // Checkbox prefix
             let prefix = if is_selected { "[x] " } else { "[ ] " };
             let display = format!("{}{}", prefix, label);
+            let (display, _) =
+                text::slice_by_columns(&display, view.tl.x as usize, rect.w as usize);
 
             // Show focus highlight only when the widget has focus
             if is_item_focused && is_widget_focused {
                 // Focused item - highlight background
                 rndr.fill("selector/focus", line_rect.into(), ' ')?;
                 if is_selected {
-                    rndr.text("selector/focus/selected", line_rect, &display)?;
+                    rndr.text("selector/focus/selected", line_rect, display)?;
                 } else {
-                    rndr.text("selector/focus", line_rect, &display)?;
+                    rndr.text("selector/focus", line_rect, display)?;
                 }
             } else if is_selected {
-                rndr.text("selector/selected", line_rect, &display)?;
+                rndr.text("selector/selected", line_rect, display)?;
             } else {
-                rndr.text("selector", line_rect, &display)?;
+                rndr.text("selector", line_rect, display)?;
             }
         }
 

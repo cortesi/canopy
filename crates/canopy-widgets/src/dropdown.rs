@@ -7,6 +7,7 @@ use canopy::{
     layout::{MeasureConstraints, Measurement, Size},
     render::Render,
     state::NodeName,
+    text,
 };
 use unicode_width::UnicodeWidthStr;
 
@@ -101,7 +102,7 @@ where
         if event.action != mouse::Action::Down || event.button != mouse::Button::Left {
             return Ok(());
         }
-        let clicked_row = event.location.y as usize;
+        let clicked_row = event.location.y.saturating_add(c.view().tl.y) as usize;
         if !self.expanded {
             return self.toggle(c);
         }
@@ -168,16 +169,17 @@ where
         let rect = view.view_rect_local();
 
         if self.expanded {
-            // Render all items
-            for (idx, item) in self.items.iter().enumerate() {
-                let Ok(row) = u32::try_from(idx) else {
+            // Render visible items
+            for (idx, item) in self.items.iter().enumerate().skip(view.tl.y as usize) {
+                let Ok(row) = u32::try_from(idx - view.tl.y as usize) else {
                     break;
                 };
                 if row >= rect.h {
                     break;
                 }
                 let line_rect = rect.line(row)?;
-                let label = item.label();
+                let (label, _) =
+                    text::slice_by_columns(item.label(), view.tl.x as usize, rect.w as usize);
 
                 if idx == self.highlighted {
                     // Highlighted item - inverse colors
@@ -198,7 +200,9 @@ where
             let label = self.items[self.selected].label();
             let indicator = " ▼";
             let display = format!("{}{}", label, indicator);
-            rndr.text("dropdown", rect.line(0)?, &display)?;
+            let (display, _) =
+                text::slice_by_columns(&display, view.tl.x as usize, rect.w as usize);
+            rndr.text("dropdown", rect.line(0)?, display)?;
         }
 
         Ok(())

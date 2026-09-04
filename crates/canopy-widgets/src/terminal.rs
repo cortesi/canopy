@@ -15,7 +15,7 @@ use canopy::{
     render::Render,
     rgb,
     state::NodeName,
-    style::{AttrSet, Color, ResolvedStyle},
+    style::{AttrSet, Color, ResolvedStyle, Style},
     text,
 };
 use itty_core::{
@@ -441,24 +441,34 @@ impl Terminal {
             return false;
         };
 
-        let chars: Vec<char> = line.chars().collect();
-        if chars.is_empty() {
+        let mut column = 0;
+        let spans: Vec<_> = line
+            .graphemes(true)
+            .map(|grapheme| {
+                let start = column;
+                column += text::grapheme_width(grapheme);
+                (start, column, grapheme.chars().all(char::is_whitespace))
+            })
+            .collect();
+        let Some(index) = spans
+            .iter()
+            .position(|&(start, end, _)| start <= point.x as usize && (point.x as usize) < end)
+        else {
+            return self.set_selection(point, point);
+        };
+        if spans[index].2 {
             return self.set_selection(point, point);
         }
-
-        let mut idx = (point.x as usize).min(chars.len().saturating_sub(1));
-        if chars[idx].is_whitespace() {
-            return self.set_selection(point, point);
+        let mut first = index;
+        while first > 0 && !spans[first - 1].2 {
+            first -= 1;
         }
-
-        while idx > 0 && !chars[idx - 1].is_whitespace() {
-            idx -= 1;
+        let mut last = index;
+        while last + 1 < spans.len() && !spans[last + 1].2 {
+            last += 1;
         }
-        let start = idx;
-        let mut end = (point.x as usize).min(chars.len().saturating_sub(1));
-        while end + 1 < chars.len() && !chars[end + 1].is_whitespace() {
-            end += 1;
-        }
+        let start = spans[first].0;
+        let end = spans[last].1.saturating_sub(1);
 
         self.set_selection(
             geom::Point {
@@ -911,7 +921,7 @@ fn render_run(
     display_offset: usize,
     default_bg: Color,
 ) -> Result<()> {
-    // Only the selection swap varies per cell, so the run's style resolves once.
+    // Apply effects once to each variant after the raw selection color swap.
     let base = ResolvedStyle::new(
         Color::Rgb {
             r: run.fg.r(),
@@ -932,22 +942,36 @@ fn render_run(
         },
     );
 
+    let selected = rndr.apply_effects(Style {
+        fg: base.bg.into(),
+        bg: base.fg.into(),
+        attrs: base.attrs,
+    });
+    let base = rndr.apply_effects(Style {
+        fg: base.fg.into(),
+        bg: base.bg.into(),
+        attrs: base.attrs,
+    });
+
+    let bounds = geom::Rect::new(
+        origin.x.saturating_add(run.start_col as u32),
+        origin.y.saturating_add(row_idx as u32),
+        run.end_col.saturating_sub(run.start_col) as u32,
+        1,
+    );
     let mut col = run.start_col;
     for grapheme in run.text.graphemes(true) {
         let width = text::grapheme_width(grapheme);
         let style = if selection_contains(selection, row_idx, col, display_offset) {
-            ResolvedStyle::new(base.bg, base.fg, base.attrs)
+            &selected
         } else {
-            base
+            &base
         };
-        rndr.put_grapheme(
-            style,
-            geom::Point {
-                x: origin.x.saturating_add(col as u32),
-                y: origin.y.saturating_add(row_idx as u32),
-            },
-            grapheme,
-        )?;
+        let point = geom::Point {
+            x: origin.x.saturating_add(col as u32),
+            y: origin.y.saturating_add(row_idx as u32),
+        };
+        rndr.put_grapheme(style.resolve_at(bounds, point), point, grapheme)?;
         col += width;
     }
     Ok(())
@@ -1008,7 +1032,7 @@ fn encode_mouse(event: &mouse::MouseEvent, state: &TerminalState) -> Option<Vec<
         },
     };
 
-    if event.action == mouse::Action::Up {
+    if event.action == mouse::Action::Up && !state.modes.mouse_sgr {
         cb = 3;
     }
     if matches!(event.action, mouse::Action::Moved | mouse::Action::Drag) {
@@ -1064,12 +1088,16 @@ mod tests {
 
     use super::*;
 
-    fn mounted_terminal() -> Terminal {
+    fn stream_terminal() -> (Terminal, itty_core::StreamInputReceiver) {
+        let (session, receiver) = Session::new_stream(
+            DEFAULT_COLUMNS,
+            DEFAULT_LINES,
+            itty_core::palette::builtin::one_dark(),
+        )
+        .expect("stream terminal");
         let mut terminal = Terminal::new(TerminalConfig::default());
-        terminal
-            .mount_session()
-            .expect("mount itty-backed terminal");
-        terminal
+        terminal.session = Some(session);
+        (terminal, receiver)
     }
 
     fn wait_for_driver_signal<T>(terminal: &mut Terminal, rx: &mpsc::Receiver<T>) -> Option<T> {
@@ -1131,6 +1159,251 @@ mod tests {
         assert_eq!(buf.rows()[0], ["A", "⚡", "", "e\u{301}", "B", " "]);
     }
 
+    /// Exercise the run renderer as a child that inherits its parent's effects.
+    struct EffectRun;
+
+    impl Widget for EffectRun {
+        fn layout(&self) -> canopy::layout::Layout {
+            canopy::layout::Layout::fill()
+        }
+
+        fn render(&mut self, render: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+            let run = StyledRunPublic {
+                text: "AB".to_string(),
+                fg: Rgba8 {
+                    r: 200,
+                    g: 100,
+                    b: 40,
+                    a: 255,
+                },
+                bg: Some(Rgba8 {
+                    r: 40,
+                    g: 80,
+                    b: 120,
+                    a: 255,
+                }),
+                italic: true,
+                underline: false,
+                strikethrough: false,
+                bold: false,
+                hyperlink: None,
+                start_col: 0,
+                end_col: 2,
+            };
+            render_run(
+                render,
+                geom::Point::default(),
+                0,
+                &run,
+                Some(SelectionSnapshot {
+                    start_line: 0,
+                    start_col: 1,
+                    end_line: 0,
+                    end_col: 1,
+                    block: false,
+                }),
+                0,
+                Color::Black,
+            )
+        }
+    }
+
+    fn render_effect_run(effects: Vec<canopy::style::Effect>) -> Result<TermBuf> {
+        let mut canopy = canopy::Canopy::new();
+        canopy.with_root_context(|ctx| {
+            ctx.set_layout(canopy::layout::Layout::fill())?;
+            let _ = ctx.add_child(EffectRun)?;
+            for effect in effects {
+                ctx.push_effect(ctx.node_id(), effect)?;
+            }
+            Ok(())
+        })?;
+        let mut harness =
+            canopy::testing::harness::Harness::from_canopy(canopy, geom::Size::new(2, 1))?;
+        harness.render()?;
+        Ok(harness.buf().clone())
+    }
+
+    #[test]
+    fn terminal_runs_inherit_effects_once_for_both_selection_variants() -> Result<()> {
+        for dimmed in [false, true] {
+            let effects = if dimmed {
+                vec![
+                    canopy::style::effects::brightness(0.5),
+                    canopy::style::effects::bold(),
+                ]
+            } else {
+                vec![]
+            };
+            let buf = render_effect_run(effects)?;
+            let (fg, bg) = if dimmed {
+                (
+                    Color::Rgb {
+                        r: 100,
+                        g: 50,
+                        b: 20,
+                    },
+                    Color::Rgb {
+                        r: 20,
+                        g: 40,
+                        b: 60,
+                    },
+                )
+            } else {
+                (
+                    Color::Rgb {
+                        r: 200,
+                        g: 100,
+                        b: 40,
+                    },
+                    Color::Rgb {
+                        r: 40,
+                        g: 80,
+                        b: 120,
+                    },
+                )
+            };
+            let attrs = AttrSet {
+                bold: dimmed,
+                italic: true,
+                ..AttrSet::default()
+            };
+            let normal = buf.get(geom::Point { x: 0, y: 0 }).expect("normal cell");
+            let selected = buf.get(geom::Point { x: 1, y: 0 }).expect("selected cell");
+            assert_eq!(normal.ch, 'A');
+            assert_eq!(selected.ch, 'B');
+            assert_eq!(normal.style, ResolvedStyle::new(fg, bg, attrs));
+            assert_eq!(selected.style, ResolvedStyle::new(bg, fg, attrs));
+        }
+        Ok(())
+    }
+
+    #[derive(Debug)]
+    struct ForegroundGradient;
+
+    impl canopy::style::StyleEffect for ForegroundGradient {
+        fn apply(&self, mut style: Style) -> Style {
+            style.fg = canopy::style::Paint::gradient(canopy::style::GradientSpec::with_stops(
+                0.0,
+                vec![canopy::style::GradientStop::new(0.0, Color::Blue)],
+            ));
+            style
+        }
+    }
+
+    #[test]
+    fn terminal_selection_swaps_raw_colors_before_custom_effects() -> Result<()> {
+        let buf = render_effect_run(vec![Arc::new(ForegroundGradient)])?;
+        let normal = buf
+            .get(geom::Point { x: 0, y: 0 })
+            .expect("normal cell")
+            .style;
+        let selected = buf
+            .get(geom::Point { x: 1, y: 0 })
+            .expect("selected cell")
+            .style;
+        assert_eq!(normal.fg, Color::Blue);
+        assert_eq!(selected.fg, Color::Blue);
+        assert_eq!(
+            normal.bg,
+            Color::Rgb {
+                r: 40,
+                g: 80,
+                b: 120
+            }
+        );
+        assert_eq!(
+            selected.bg,
+            Color::Rgb {
+                r: 200,
+                g: 100,
+                b: 40
+            }
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn word_selection_uses_cell_columns_for_wide_and_combining_graphemes() {
+        let (mut terminal, _receiver) = stream_terminal();
+        terminal
+            .session_mut()
+            .expect("session")
+            .set_visible_lines(&["界 e\u{301}x word".to_string()])
+            .expect("seed lines");
+        for (column, expected) in [
+            (0, "界"),
+            (1, "界"),
+            (2, " "),
+            (3, "e\u{301}x"),
+            (4, "e\u{301}x"),
+            (5, " "),
+            (6, "word"),
+            (9, "word"),
+        ] {
+            assert!(terminal.select_word(geom::Point { x: column, y: 0 }));
+            assert_eq!(
+                terminal
+                    .session()
+                    .and_then(Session::copy_selection)
+                    .as_deref(),
+                Some(expected),
+                "column {column}"
+            );
+        }
+    }
+
+    #[test]
+    fn mouse_button_releases_preserve_sgr_buttons_and_legacy_release_code() {
+        let (terminal, _receiver) = stream_terminal();
+        let mut state = terminal.state().expect("state");
+        for sgr in [false, true] {
+            state.modes.mouse_sgr = sgr;
+            for (button, button_code) in [
+                (mouse::Button::Left, 0),
+                (mouse::Button::Middle, 1),
+                (mouse::Button::Right, 2),
+            ] {
+                for action in [mouse::Action::Down, mouse::Action::Up] {
+                    for (modifiers, modifier_code) in [
+                        (key::Empty, 0),
+                        (key::Shift, 4),
+                        (key::Alt, 8),
+                        (key::Ctrl, 16),
+                        (key::Shift + key::Alt + key::Ctrl, 28),
+                    ] {
+                        let event = mouse::MouseEvent {
+                            action,
+                            button,
+                            modifiers,
+                            location: geom::Point { x: 4, y: 6 },
+                        };
+                        let code = if action == mouse::Action::Up && !sgr {
+                            3
+                        } else {
+                            button_code
+                        } + modifier_code;
+                        let expected = if sgr {
+                            let suffix = if action == mouse::Action::Up {
+                                'm'
+                            } else {
+                                'M'
+                            };
+                            format!("\x1b[<{code};5;7{suffix}").into_bytes()
+                        } else {
+                            vec![0x1b, b'[', b'M', code + 32, 37, 39]
+                        };
+                        assert_eq!(
+                            encode_mouse(&event, &state),
+                            Some(expected),
+                            "sgr={sgr}, {button:?}, {action:?}, {modifiers:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     #[test]
     fn maps_shift_backtab_to_shift_tab() {
         let key = key::Shift + key::KeyCode::BackTab;
@@ -1141,7 +1414,7 @@ mod tests {
 
     #[test]
     fn double_click_selects_word() {
-        let mut terminal = mounted_terminal();
+        let (mut terminal, _receiver) = stream_terminal();
         terminal
             .session_mut()
             .expect("session")
@@ -1162,29 +1435,20 @@ mod tests {
 
     #[test]
     fn focus_reports_follow_the_terminal_mode() {
-        let terminal = mounted_terminal();
-        // A fresh terminal has not requested focus reporting.
+        let (terminal, _receiver) = stream_terminal();
         assert_eq!(terminal.focus_report(true), None);
         assert_eq!(terminal.focus_report(false), None);
-
-        terminal.queue_input(b"\x1b[?1004h".to_vec());
-        let Some(terminal) = wait_for_focus_reporting(terminal) else {
-            return;
-        };
+        let session = terminal.session().expect("session");
+        session
+            .feed_stream_output(b"\x1b[?1004h")
+            .expect("enable focus reports");
         assert_eq!(terminal.focus_report(true), Some(b"\x1b[I".to_vec()));
         assert_eq!(terminal.focus_report(false), Some(b"\x1b[O".to_vec()));
-    }
-
-    /// Poll until the terminal reports focus-reporting mode, or give up.
-    fn wait_for_focus_reporting(mut terminal: Terminal) -> Option<Terminal> {
-        for _ in 0..200 {
-            terminal.poll_driver();
-            if terminal.focus_report(true).is_some() {
-                return Some(terminal);
-            }
-            thread::sleep(Duration::from_millis(5));
-        }
-        None
+        session
+            .feed_stream_output(b"\x1b[?1004l")
+            .expect("disable focus reports");
+        assert_eq!(terminal.focus_report(true), None);
+        assert_eq!(terminal.focus_report(false), None);
     }
 
     #[test]
@@ -1240,7 +1504,7 @@ mod tests {
 
     #[test]
     fn mouse_encoding_uses_sgr_when_requested() {
-        let mut terminal = mounted_terminal();
+        let (mut terminal, _receiver) = stream_terminal();
         let mut state = terminal.session_mut().expect("session").state();
         state.modes.mouse_report_click = true;
         state.modes.mouse_drag = false;

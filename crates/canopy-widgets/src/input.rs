@@ -147,11 +147,8 @@ impl InputBuffer {
         }
 
         let text_width = self.line_width();
-        if text_width <= self.view_width {
-            self.scroll = 0;
-        } else if self.scroll > text_width.saturating_sub(1) {
-            self.scroll = text_width.saturating_sub(1);
-        }
+        let max_scroll = text_width.saturating_add(1).saturating_sub(self.view_width);
+        self.scroll = self.scroll.min(max_scroll);
     }
 }
 
@@ -263,6 +260,34 @@ mod tests {
     use unicode_width::UnicodeWidthStr;
 
     use super::{Input, InputBuffer};
+
+    #[test]
+    fn input_caret_stays_inside_nonempty_viewports() {
+        for width in [1, 3] {
+            for text in ["", "a", "abc", "abcdef", "界a", "e\u{301}ab"] {
+                let mut buf = InputBuffer::new(text);
+                buf.set_display_width(width);
+                assert!(
+                    buf.cursor_display() < width as u32,
+                    "{text:?}, width {width}"
+                );
+                for _ in 0..text.chars().count() {
+                    buf.left();
+                    assert!(buf.cursor_display() < width as u32);
+                }
+                assert_eq!(buf.scroll, 0);
+                for _ in 0..text.chars().count() {
+                    buf.right();
+                    assert!(buf.cursor_display() < width as u32);
+                }
+                for _ in 0..text.chars().count() {
+                    buf.backspace();
+                    assert!(buf.cursor_display() < width as u32);
+                }
+                assert_eq!(buf.value(), "");
+            }
+        }
+    }
 
     #[test]
     fn input_buffer_handles_multibyte_chars() {

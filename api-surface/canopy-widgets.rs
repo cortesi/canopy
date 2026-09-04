@@ -121,8 +121,9 @@ pub mod canopy_widgets {
 
             /// Return the range a forward delete at `from` would remove.
             ///
-            /// At the end of a line the range joins the next line when `allow_line_wrap` is set.
-            /// Returns `None` when there is nothing after the position to delete.
+            /// At the end of a line the range joins the next line when
+            /// `allow_line_wrap` is set. Returns `None` when there is nothing after
+            /// the position to delete.
             pub fn forward_delete_range(
                 &self,
                 from: TextPosition,
@@ -445,7 +446,8 @@ pub mod canopy_widgets {
 
                 /// Page through the log view.
                 /// Positive values move down; negative values move up.
-                /// @param delta Signed page delta. Positive moves down and negative moves up.
+                /// @param delta Signed page delta. Positive moves down and negative moves
+                /// up.
                 pub fn page(&self, c: &mut dyn Context, delta: i32) -> Result<()> {}
 
                 /// Return a typed command reference for this command.
@@ -636,8 +638,8 @@ pub mod canopy_widgets {
 
     /// A dropdown widget for single-value selection.
     ///
-    /// When collapsed, displays the currently selected item with a dropdown indicator.
-    /// When expanded, displays all options for selection.
+    /// When collapsed, displays the currently selected item with a dropdown
+    /// indicator. When expanded, displays all options for selection.
     pub struct Dropdown<T>
     where
         T: Label, {}
@@ -811,7 +813,8 @@ pub mod canopy_widgets {
         /// Return the glyph set used by the frame.
         pub fn glyphs(&self) -> &BoxGlyphs {}
 
-        /// Wrap an existing child node in a configured frame and return the frame node ID.
+        /// Wrap an existing child node in a configured frame and return the frame
+        /// node ID.
         pub fn wrap_with(
             c: &mut dyn Context,
             child: impl Into<NodeId>,
@@ -940,8 +943,8 @@ pub mod canopy_widgets {
 
     /// A typed list container for widget items.
     ///
-    /// List items are actual widgets in the tree, enabling composition and focus management.
-    /// The list arranges items vertically and supports scrolling.
+    /// List items are actual widgets in the tree, enabling composition and focus
+    /// management. The list arranges items vertically and supports scrolling.
     ///
     /// Items must implement the [`Selectable`] trait so the list can manage their
     /// selection state independently of focus.
@@ -1024,7 +1027,8 @@ pub mod canopy_widgets {
 
         /// Move selection by pages.
         /// Positive values move down; negative values move up.
-        /// @param delta Signed page delta. Positive moves down and negative moves up.
+        /// @param delta Signed page delta. Positive moves down and negative moves
+        /// up.
         pub fn page(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {}
 
         /// Return a typed command reference for this command.
@@ -1090,7 +1094,8 @@ pub mod canopy_widgets {
         /// Create a pad with uniform padding on all sides.
         pub fn uniform(padding: u32) -> Self {}
 
-        /// Wrap an existing child node in a configured pad and return the pad node ID.
+        /// Wrap an existing child node in a configured pad and return the pad node
+        /// ID.
         pub fn wrap_with(
             c: &mut dyn Context,
             child: impl Into<NodeId>,
@@ -1164,7 +1169,8 @@ pub mod canopy_widgets {
         /// Toggle inspector visibility.
         pub fn toggle_inspector(&mut self, c: &mut dyn Context) -> Result<()> {}
 
-        /// If we're currently focused in the inspector, shift focus into the app pane instead.
+        /// If we're currently focused in the inspector, shift focus into the app
+        /// pane instead.
         pub fn focus_app(&mut self, c: &mut dyn Context) -> Result<()> {}
 
         /// Show the help modal with contextual bindings and commands.
@@ -1182,7 +1188,8 @@ pub mod canopy_widgets {
             W: Widget + 'static, {
         }
 
-        /// Helper to install a root widget into the canopy with an optional inspector pane.
+        /// Helper to install a root widget into the canopy with an optional
+        /// inspector pane.
         pub fn install_app_with_inspector<W>(
             canopy: &mut Canopy,
             app: W,
@@ -1426,7 +1433,8 @@ pub mod canopy_widgets {
 
         /// Page vertically through the text.
         /// Positive values move down; negative values move up.
-        /// @param delta Signed page delta. Positive moves down and negative moves up.
+        /// @param delta Signed page delta. Positive moves down and negative moves
+        /// up.
         pub fn page(&mut self, c: &mut dyn Context, delta: i32) {}
 
         /// Return a typed command reference for this command.

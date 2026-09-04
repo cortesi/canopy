@@ -120,7 +120,10 @@ impl Widget for Frame {
 
         self.box_glyphs.draw(rndr, style, f)?;
 
-        if let Some(title) = &self.title {
+        if let Some(title) = &self.title
+            && f.top.w > 0
+            && f.top.h > 0
+        {
             let title_with_spaces = format!(" {title} ");
             let title_len = UnicodeWidthStr::width(title_with_spaces.as_str());
 

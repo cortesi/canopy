@@ -418,7 +418,7 @@ impl<W: Selectable> List<W> {
                     if !pending.dragged {
                         let index = self.index_at_location(c, event.location);
                         if index == Some(pending.index) {
-                            self.dispatch_activate(c, pending.index);
+                            self.dispatch_activate(c, pending.index)?;
                         }
                     }
                     return Ok(true);
@@ -440,9 +440,9 @@ impl<W: Selectable> List<W> {
     }
 
     /// Dispatch the activation command for a selected row.
-    fn dispatch_activate(&self, c: &mut dyn Context, index: usize) -> bool {
+    fn dispatch_activate(&self, c: &mut dyn Context, index: usize) -> Result<()> {
         let Some(config) = self.on_activate.as_ref() else {
-            return false;
+            return Ok(());
         };
         let frame = CommandScopeFrame {
             event: c.current_event().cloned(),
@@ -453,7 +453,8 @@ impl<W: Selectable> List<W> {
             }),
         };
         let invocation = invocation_with_index(config, index);
-        c.dispatch_command_scoped(frame, &invocation).is_ok()
+        c.dispatch_command_scoped(frame, &invocation)?;
+        Ok(())
     }
 
     /// Scroll the view by one line in the specified direction.
@@ -763,6 +764,77 @@ mod tests {
 
     use super::*;
     use crate::Text;
+
+    struct ActivationRoot {
+        fail: bool,
+        activations: usize,
+    }
+
+    #[derive_commands]
+    impl ActivationRoot {
+        #[command]
+        fn activate(&mut self, index: usize) -> Result<()> {
+            assert_eq!(index, 0);
+            self.activations += 1;
+            if self.fail {
+                Err(Error::Invalid("activation failed".into()))
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    impl Widget for ActivationRoot {
+        fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
+            let list =
+                ctx.add_child(List::<Text>::new().with_on_activate(Self::cmd_activate().call()))?;
+            ctx.with_widget::<List<Text>, _>(list, |list, ctx| {
+                list.append(ctx, Text::new("First row"))?;
+                Ok(())
+            })
+        }
+    }
+
+    impl Loader for ActivationRoot {
+        fn load(canopy: &mut Canopy) -> Result<()> {
+            canopy.add_commands::<Self>()
+        }
+    }
+
+    #[test]
+    fn list_activation_propagates_errors_after_releasing_capture() -> Result<()> {
+        for (fail, drag) in [(false, false), (true, false), (true, true)] {
+            let mut harness = Harness::builder(ActivationRoot {
+                fail,
+                activations: 0,
+            })
+            .size(20, 4)
+            .build()?;
+            harness.render()?;
+            let mut event = mouse::MouseEvent {
+                action: mouse::Action::Down,
+                button: mouse::Button::Left,
+                modifiers: canopy::event::key::Empty,
+                location: Point { x: 0, y: 0 },
+            };
+            harness.mouse(event)?;
+            if drag {
+                event.action = mouse::Action::Drag;
+                event.location.x = 8;
+                harness.mouse(event)?;
+            }
+            event.action = mouse::Action::Up;
+            event.location.x = 0;
+            let result = harness.mouse(event);
+            assert_eq!(result.is_err(), fail && !drag);
+            harness.with_root_context(|root: &mut ActivationRoot, ctx| {
+                assert_eq!(root.activations, usize::from(!drag));
+                assert_eq!(ctx.take_mouse_capture()?, None);
+                Ok(())
+            })?;
+        }
+        Ok(())
+    }
 
     struct Row {
         selected: bool,

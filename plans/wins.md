@@ -14,7 +14,7 @@ This survey records clear improvements across Canopy's runtime, widgets, macros,
 - [x] W6: Require every character to satisfy a text-style assertion
 - [ ] W7: Preserve Todo entries when database deletion fails
 - [ ] W8: Replace Todo fixture rows in one transaction
-- [ ] W9: Propagate list activation errors
+- [x] W9: Propagate list activation errors
 - [x] W10: Exclude hidden ancestors from focus candidates
 - [x] W11: Clear layout state throughout excluded subtrees
 - [x] W12: Ignore terminal key-release events
@@ -26,17 +26,17 @@ This survey records clear improvements across Canopy's runtime, widgets, macros,
 - [x] W18: Insert below the current line at the correct position
 - [x] W19: Preserve line boundaries during linewise put
 - [x] W20: Exclude complete CRLF endings from logical line contents
-- [ ] W21: Skip frame titles when the frame has no top edge
-- [ ] W22: Keep the input caret visible at the right edge
+- [x] W21: Skip frame titles when the frame has no top edge
+- [x] W22: Keep the input caret visible at the right edge
 - [x] W23: Use content-relative mouse coordinates in the editor
-- [ ] W24: Render and select the scrolled dropdown rows
-- [ ] W25: Render and select the scrolled selector rows
+- [x] W24: Render and select the scrolled dropdown rows
+- [x] W25: Render and select the scrolled selector rows
 - [x] W26: Apply search styles only to overlapping graphemes
-- [ ] W27: Apply inherited effects to terminal colors
-- [ ] W28: Apply inherited effects to image colors
-- [ ] W29: Preserve the released button in SGR mouse reports
-- [ ] W30: Make terminal focus-report tests deterministic
-- [ ] W31: Use terminal columns for double-click word selection
+- [x] W27: Apply inherited effects to terminal colors
+- [x] W28: Apply inherited effects to image colors
+- [x] W29: Preserve the released button in SGR mouse reports
+- [x] W30: Make terminal focus-report tests deterministic
+- [x] W31: Use terminal columns for double-click word selection
 - [ ] W32: Reject failed live fixture acknowledgments
 - [ ] W33: Serialize session replacement and disconnection
 - [x] W34: Preserve full-width flex remainders
@@ -49,7 +49,7 @@ This survey records clear improvements across Canopy's runtime, widgets, macros,
 - [x] W41: Resolve only the requested owner while waiting for a node
 - [x] W42: Correct mouse-event coordinate documentation
 - [x] W43: Remove the transaction guard's permanently enabled flag
-- [ ] W44: Align help keys by terminal width
+- [x] W44: Align help keys by terminal width
 - [ ] W45: Load Todo rows in explicit identifier order
 - [ ] W46: Measure Todo text at its rendered width
 - [ ] W47: Make Todo modal dimming repeatable
@@ -98,6 +98,8 @@ Each stage ends with focused and package proof, checklist updates, and a commit.
 - Command macros (2 items): `ncode test -E 'package(canopy-derive)'` passed all 9 tests. Explicit error returns and positional/named binding collisions are covered.
 
 - Editor (10 items): all 58 editor tests passed in the widget package run, including replacement termination, history, vi operations, CRLF, coordinates, and style precedence.
+- Widgets (11 items): `ncode test -E 'package(canopy-widgets)'` passed all 129 tests, with the existing real-PTY test ignored. The dropdown regression applies explicit padding after the expansion layout refresh.
+- External-style effects now resolve paints at render positions. This also preserves custom effects that return gradients without introducing a solid-paint panic.
 
 ## Checklist Adjustments
 

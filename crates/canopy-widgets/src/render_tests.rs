@@ -6,12 +6,97 @@ mod tests {
         Canopy, Context, Loader, ViewContext, Widget, buf,
         commands::{CommandNode, CommandSpec},
         error::Result,
-        layout::Layout,
+        event::{key, mouse},
+        geom::Point,
+        layout::{Edges, Layout},
         state::NodeName,
         testing::harness::Harness,
     };
 
-    use crate::{BoxGlyphs, Button, Frame, List, Text};
+    use crate::{BoxGlyphs, Button, Dropdown, Frame, List, Selector, Text};
+
+    fn click_at(location: Point) -> mouse::MouseEvent {
+        mouse::MouseEvent {
+            action: mouse::Action::Down,
+            button: mouse::Button::Left,
+            modifiers: key::Empty,
+            location,
+        }
+    }
+
+    #[test]
+    fn dropdown_scrolls_labels_and_selects_the_visible_row() -> Result<()> {
+        let items = [
+            "00-Alpha-long",
+            "01-Bravo-long",
+            "02-Charlie-long",
+            "03-Delta-long",
+        ]
+        .map(String::from)
+        .to_vec();
+        let root = SnapshotRoot::new(Dropdown::new(items));
+        let mut harness = Harness::builder(root).size(10, 4).build()?;
+        harness.with_root_context(|_root: &mut SnapshotRoot<Dropdown<String>>, ctx| {
+            ctx.with_unique_descendant::<Dropdown<String>, _>(|dropdown, ctx| dropdown.toggle(ctx))
+        })?;
+        harness.render()?;
+        harness.with_root_context(|_root: &mut SnapshotRoot<Dropdown<String>>, ctx| {
+            ctx.with_unique_descendant::<Dropdown<String>, _>(|_, ctx| {
+                ctx.set_layout(Layout::fill().padding(Edges::all(1)))
+            })
+        })?;
+        harness.render()?;
+        harness.with_root_context(|_root: &mut SnapshotRoot<Dropdown<String>>, ctx| {
+            ctx.with_unique_descendant::<Dropdown<String>, _>(|_, ctx| {
+                assert!(ctx.scroll_to(3, 2));
+                Ok(())
+            })
+        })?;
+        harness.render()?;
+        assert!(harness.tbuf().contains_text("Charlie-"));
+        assert_eq!(harness.buf().get(Point { x: 1, y: 1 }).unwrap().ch, 'C');
+        harness.mouse(click_at(Point { x: 1, y: 1 }))?;
+        harness.with_root_context(|_root: &mut SnapshotRoot<Dropdown<String>>, ctx| {
+            ctx.with_unique_descendant::<Dropdown<String>, _>(|dropdown, _| {
+                assert_eq!(dropdown.selected_index(), 2);
+                Ok(())
+            })
+        })?;
+        assert!(harness.tbuf().contains_text("Charlie-"));
+        Ok(())
+    }
+
+    #[test]
+    fn selector_scrolls_labels_and_toggles_the_visible_row() -> Result<()> {
+        let items = ["Alpha-long", "Bravo-long", "Charlie-long", "Delta-long"]
+            .map(String::from)
+            .to_vec();
+        let root = SnapshotRoot::new(Selector::new(items));
+        let mut harness = Harness::builder(root).size(10, 4).build()?;
+        harness.with_root_context(|_root: &mut SnapshotRoot<Selector<String>>, ctx| {
+            ctx.with_unique_descendant::<Selector<String>, _>(|_, ctx| {
+                ctx.set_layout(Layout::fill().padding(Edges::all(1)))
+            })
+        })?;
+        harness.render()?;
+        harness.with_root_context(|_root: &mut SnapshotRoot<Selector<String>>, ctx| {
+            ctx.with_unique_descendant::<Selector<String>, _>(|_, ctx| {
+                assert!(ctx.scroll_to(4, 2));
+                Ok(())
+            })
+        })?;
+        harness.render()?;
+        assert!(harness.tbuf().contains_text("Charlie-"));
+        assert_eq!(harness.buf().get(Point { x: 1, y: 1 }).unwrap().ch, 'C');
+        harness.mouse(click_at(Point { x: 1, y: 1 }))?;
+        harness.with_root_context(|_root: &mut SnapshotRoot<Selector<String>>, ctx| {
+            ctx.with_unique_descendant::<Selector<String>, _>(|selector, _| {
+                assert_eq!(selector.selected_items(), [&"Charlie-long".to_string()]);
+                Ok(())
+            })
+        })?;
+        Ok(())
+    }
 
     const ASCII_BOX: BoxGlyphs = BoxGlyphs {
         topleft: '+',
@@ -58,6 +143,20 @@ mod tests {
         fn load(_c: &mut Canopy) -> Result<()> {
             Ok(())
         }
+    }
+
+    #[test]
+    fn titled_frames_render_at_tiny_sizes() -> Result<()> {
+        for width in 0..=3 {
+            for height in 0..=3 {
+                let frame = Frame::new().with_title("Title");
+                let mut harness = Harness::builder(SnapshotRoot::new(frame))
+                    .size(width, height)
+                    .build()?;
+                harness.render()?;
+            }
+        }
+        Ok(())
     }
 
     #[test]

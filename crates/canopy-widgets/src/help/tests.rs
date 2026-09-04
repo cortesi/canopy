@@ -61,6 +61,22 @@ fn harness_with(width: u32, height: u32, bindings: Vec<AvailableBinding>) -> Res
 }
 
 #[test]
+fn wide_keys_align_descriptions_by_display_columns() {
+    let list = list_with(vec![
+        binding(1, 'a', "ASCII", BindingPhase::BeforeWidget),
+        binding(2, '界', "Wide", BindingPhase::BeforeWidget),
+        binding(3, key::Ctrl + 'a', "Modified", BindingPhase::BeforeWidget),
+    ]);
+    let lines = list.display_lines(60);
+    let widths = lines
+        .iter()
+        .filter_map(|line| line.key.as_deref())
+        .map(unicode_width::UnicodeWidthStr::width)
+        .collect::<Vec<_>>();
+    assert_eq!(widths, [6, 6, 6]);
+}
+
+#[test]
 fn empty_list_has_one_explicit_row() {
     let list = BindingList::new();
     let lines = list.display_lines(40);

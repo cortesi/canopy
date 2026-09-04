@@ -287,7 +287,10 @@ fn binding_lines(
             let wrap_width = width.saturating_sub(max_key_width + 2).max(1);
             let mut wrapped = textwrap::wrap(&binding.description, wrap_width).into_iter();
             lines.push(DisplayLine {
-                key: Some(format!("{key:>max_key_width$}")),
+                key: Some(format!(
+                    "{}{key}",
+                    " ".repeat(max_key_width.saturating_sub(UnicodeWidthStr::width(key.as_str())))
+                )),
                 text: wrapped
                     .next()
                     .map_or_else(String::new, |text| text.to_string()),

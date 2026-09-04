@@ -9,7 +9,7 @@ use canopy::{
     geom::{Direction, Point, Rect, Size},
     layout::{CanvasContext, Layout},
     render::Render,
-    style::{AttrSet, Color, ResolvedStyle},
+    style::{AttrSet, Color, Style},
 };
 use image::RgbaImage;
 
@@ -295,6 +295,7 @@ impl ImageView {
         zoom: f32,
     ) -> canopy_error::Result<()> {
         let (offset_x, offset_y) = offset;
+        let bounds = Rect::new(origin.x, origin.y, view.w, view.h);
 
         for row_index in 0..view.h {
             let top_subpixel_row = view.tl.y.saturating_add(row_index).saturating_mul(2);
@@ -306,12 +307,16 @@ impl ImageView {
                 let column = (view.tl.x + column_index) as f32 - offset_x;
                 let top_color = self.sample_color(zoom, column, top_row);
                 let bottom_color = self.sample_color(zoom, column, bottom_row);
-                let style = ResolvedStyle::new(top_color, bottom_color, AttrSet::default());
+                let style = render.apply_effects(Style {
+                    fg: top_color.into(),
+                    bg: bottom_color.into(),
+                    attrs: AttrSet::default(),
+                });
                 let point = Point {
                     x: origin.x + column_index,
                     y: origin.y + row_index,
                 };
-                render.put_cell(style, point, HALF_BLOCK)?;
+                render.put_cell(style.resolve_at(bounds, point), point, HALF_BLOCK)?;
             }
         }
 
@@ -431,6 +436,131 @@ mod tests {
 
     fn make_view(width: u32, height: u32) -> Size {
         Size::new(width, height)
+    }
+
+    fn render_effect_image(
+        effects: Vec<canopy::style::Effect>,
+    ) -> canopy_error::Result<canopy::TermBuf> {
+        let image = RgbaImage::from_fn(2, 2, |x, y| {
+            if y == 0 {
+                Rgba([200, 100, 40, if x == 0 { 255 } else { 128 }])
+            } else {
+                Rgba([40, 80, 120, 255])
+            }
+        });
+        let mut canopy = Canopy::new();
+        canopy.with_root_context(|ctx| {
+            ctx.set_layout(Layout::fill())?;
+            let _ = ctx.add_child(ImageView::new(&image))?;
+            for effect in effects {
+                ctx.push_effect(ctx.node_id(), effect)?;
+            }
+            Ok(())
+        })?;
+        let mut harness = canopy::testing::harness::Harness::from_canopy(canopy, Size::new(2, 1))?;
+        harness.render()?;
+        Ok(harness.buf().clone())
+    }
+
+    #[test]
+    fn image_cells_inherit_effects_once_on_both_pixel_channels() -> canopy_error::Result<()> {
+        let plain = render_effect_image(vec![])?;
+        let dimmed = render_effect_image(vec![
+            canopy::style::effects::brightness(0.5),
+            canopy::style::effects::bold(),
+        ])?;
+        for x in 0..2 {
+            let point = Point { x, y: 0 };
+            let plain_cell = plain.get(point).expect("plain pixel cell");
+            let dimmed_cell = dimmed.get(point).expect("dimmed pixel cell");
+            assert_eq!(plain_cell.ch, HALF_BLOCK);
+            assert_eq!(dimmed_cell.ch, HALF_BLOCK);
+            let plain_fg = if x == 0 {
+                Color::Rgb {
+                    r: 200,
+                    g: 100,
+                    b: 40,
+                }
+            } else {
+                Color::Rgb {
+                    r: 100,
+                    g: 50,
+                    b: 20,
+                }
+            };
+            let dimmed_fg = if x == 0 {
+                Color::Rgb {
+                    r: 100,
+                    g: 50,
+                    b: 20,
+                }
+            } else {
+                Color::Rgb {
+                    r: 50,
+                    g: 25,
+                    b: 10,
+                }
+            };
+            assert_eq!(plain_cell.style.fg, plain_fg);
+            assert_eq!(
+                plain_cell.style.bg,
+                Color::Rgb {
+                    r: 40,
+                    g: 80,
+                    b: 120
+                }
+            );
+            assert_eq!(plain_cell.style.attrs, AttrSet::default());
+            assert_eq!(dimmed_cell.style.fg, dimmed_fg);
+            assert_eq!(
+                dimmed_cell.style.bg,
+                Color::Rgb {
+                    r: 20,
+                    g: 40,
+                    b: 60
+                }
+            );
+            assert_eq!(
+                dimmed_cell.style.attrs,
+                AttrSet {
+                    bold: true,
+                    ..AttrSet::default()
+                }
+            );
+        }
+        Ok(())
+    }
+
+    #[derive(Debug)]
+    struct PixelGradient;
+
+    impl canopy::style::StyleEffect for PixelGradient {
+        fn apply(&self, mut style: Style) -> Style {
+            style.fg = canopy::style::Paint::gradient(canopy::style::GradientSpec::with_stops(
+                0.0,
+                vec![canopy::style::GradientStop::new(0.0, Color::Blue)],
+            ));
+            style
+        }
+    }
+
+    #[test]
+    fn image_effects_can_replace_solid_paint_with_a_gradient() -> canopy_error::Result<()> {
+        let buf = render_effect_image(vec![std::sync::Arc::new(PixelGradient)])?;
+        for x in 0..2 {
+            let cell = buf.get(Point { x, y: 0 }).expect("pixel cell");
+            assert_eq!(cell.ch, HALF_BLOCK);
+            assert_eq!(cell.style.fg, Color::Blue);
+            assert_eq!(
+                cell.style.bg,
+                Color::Rgb {
+                    r: 40,
+                    g: 80,
+                    b: 120
+                }
+            );
+        }
+        Ok(())
     }
 
     #[test]
