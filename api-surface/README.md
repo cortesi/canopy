@@ -18,7 +18,7 @@ cargo xtask api
 
 The task regenerates every skeleton with the pinned `ruskel` and prints the tracked surface
 sizes. `cargo xtask api --check` verifies the checked-in skeletons without writing them, and
-`cargo xtask ci` runs that check. Install the pinned version
+`cargo xtask checks` runs that check. Install the pinned version
 with `cargo install ruskel --version 0.0.11`; the task refuses to run against any other version,
 because the rendered text is version dependent.
 

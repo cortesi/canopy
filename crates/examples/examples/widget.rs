@@ -232,20 +232,29 @@ fn load_widget_api(cnpy: &mut Canopy, command: &Command) -> Result<()> {
 
 /// Load fonts from a directory, returning stable ordering by filename.
 fn load_font_sources(path: &Path) -> Result<Vec<FontSource>> {
-    let mut entries: Vec<PathBuf> = fs::read_dir(path)
-        .map_err(|err| {
+    let directory = fs::read_dir(path).map_err(|err| {
+        error::Error::Invalid(format!(
+            "failed to read font directory {}: {err}",
+            path.display()
+        ))
+    })?;
+    let mut entries = Vec::new();
+    for entry in directory {
+        let entry = entry.map_err(|err| {
             error::Error::Invalid(format!(
-                "failed to read font directory {}: {err}",
+                "failed to read entry in font directory {}: {err}",
                 path.display()
             ))
-        })?
-        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
-        .filter(|path| {
-            path.extension()
-                .and_then(|ext| ext.to_str())
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("ttf"))
-        })
-        .collect();
+        })?;
+        let entry_path = entry.path();
+        if entry_path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("ttf"))
+        {
+            entries.push(entry_path);
+        }
+    }
     entries.sort();
 
     let mut sources = Vec::new();
@@ -280,4 +289,53 @@ end)
 "#,
     )?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use canopy::testing::dummyctx::DummyContext;
+
+    use super::*;
+
+    #[test]
+    fn font_discovery_preserves_order_filters_extensions_and_rejects_empty_directories()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let directory = std::env::temp_dir().join(format!(
+            "canopy-font-discovery-{}-{}",
+            process::id(),
+            rand::random::<u64>(),
+        ));
+        fs::create_dir(&directory)?;
+        let result = (|| -> std::result::Result<(), Box<dyn std::error::Error>> {
+            fs::write(directory.join("z.ttf"), b"invalid font z")?;
+            fs::write(directory.join("a.TTF"), b"invalid font a")?;
+            fs::write(directory.join("ignored.txt"), b"not a font source")?;
+            let sources = load_font_sources(&directory)?;
+            assert_eq!(sources.len(), 2);
+            for (source, name) in sources.into_iter().zip(["a.TTF", "z.ttf"]) {
+                // FontDemo reports the selected source label when parsing fails.
+                let mut demo = FontDemo::new(
+                    "test",
+                    vec![source],
+                    Duration::from_secs(1),
+                    false,
+                    FontEffects::default(),
+                );
+                let error = demo.on_mount(&mut DummyContext::default()).unwrap_err();
+                assert!(
+                    error
+                        .to_string()
+                        .contains(&format!("font parse failed for {name}:"))
+                );
+            }
+            fs::remove_file(directory.join("a.TTF"))?;
+            fs::remove_file(directory.join("z.ttf"))?;
+            let error = load_font_sources(&directory).unwrap_err();
+            assert!(error.to_string().contains("no fonts found in"));
+            assert!(error.to_string().contains(directory.to_str().unwrap()));
+            Ok(())
+        })();
+        fs::remove_dir_all(&directory)?;
+        result
+    }
 }

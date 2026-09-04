@@ -1,6 +1,6 @@
 use canopy::{
     prelude::*,
-    style::{Attr, AttrSet, PartialStyle},
+    style::{Attr, AttrSet, PartialStyle, ResolvedStyle},
     testing::harness::Harness,
 };
 use canopy_widgets::{Root, Selector};
@@ -61,5 +61,65 @@ fn italic_effect_excludes_demo_frame() -> Result<()> {
     );
     assert!(!harness.tbuf().contains_text_style("│", &italic));
 
+    Ok(())
+}
+
+fn demo_color_and_frame_style(harness: &Harness) -> (ResolvedStyle, ResolvedStyle) {
+    let frame = harness.canopy.with_root_view(|ctx| {
+        let right = ctx.children()[1];
+        let frame = ctx.children_of(right)[0];
+        ctx.node_view(frame).expect("demo frame view").outer
+    });
+    let content = Point {
+        x: (frame.left() + 1) as u32,
+        y: (frame.top() + 2) as u32,
+    };
+    let border = Point {
+        x: (frame.right() - 1) as u32,
+        y: content.y,
+    };
+    let content = harness.buf().get(content).expect("red sample cell");
+    let border = harness.buf().get(border).expect("demo border cell");
+    assert_eq!(content.ch, '█');
+    assert_eq!(border.ch, '│');
+    (content.style, border.style)
+}
+
+fn select_invert_and_apply(harness: &mut Harness) -> Result<()> {
+    harness.with_root_context(|stylegym: &mut Stylegym, ctx| {
+        ctx.with_unique_descendant::<Selector<EffectOption>, _>(|selector, selector_ctx| {
+            selector.select_by(selector_ctx, 3)?;
+            selector.toggle(selector_ctx)
+        })?;
+        stylegym.apply_effects(ctx)
+    })?;
+    harness.render()
+}
+
+#[test]
+fn modal_dimming_survives_effect_changes_without_accumulating() -> Result<()> {
+    let mut effects_first = setup_harness(Size::new(80, 24))?;
+    let baseline = demo_color_and_frame_style(&effects_first);
+    select_invert_and_apply(&mut effects_first)?;
+    let undimmed_invert = demo_color_and_frame_style(&effects_first);
+    effects_first.with_root_context(|stylegym: &mut Stylegym, ctx| stylegym.show_modal(ctx))?;
+    effects_first.render()?;
+    let expected = demo_color_and_frame_style(&effects_first);
+    assert_ne!(expected.0, undimmed_invert.0);
+    assert_eq!(expected.1, baseline.1);
+
+    let mut modal_first = setup_harness(Size::new(80, 24))?;
+    modal_first.with_root_context(|stylegym: &mut Stylegym, ctx| stylegym.show_modal(ctx))?;
+    select_invert_and_apply(&mut modal_first)?;
+    assert_eq!(demo_color_and_frame_style(&modal_first), expected);
+    for _ in 0..2 {
+        modal_first
+            .with_root_context(|stylegym: &mut Stylegym, ctx| stylegym.apply_effects(ctx))?;
+        modal_first.render()?;
+        assert_eq!(demo_color_and_frame_style(&modal_first), expected);
+    }
+    modal_first.with_root_context(|stylegym: &mut Stylegym, ctx| stylegym.hide_modal(ctx))?;
+    modal_first.render()?;
+    assert_eq!(demo_color_and_frame_style(&modal_first), undimmed_invert);
     Ok(())
 }

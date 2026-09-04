@@ -294,3 +294,22 @@ fn test_separators_remain_continuous_after_nested_splits() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn repeated_deletion_preserves_a_root_that_can_split_again() -> Result<()> {
+    let mut harness = setup_harness(Size::new(60, 14))?;
+    let root = with_root_block(&mut harness, |_ctx, root| Ok(root))?;
+    for _ in 0..5 {
+        harness.key('x')?;
+    }
+    with_root_block(&mut harness, |ctx, current| {
+        assert_eq!(current, root);
+        assert!(ctx.node_is_attached(root));
+        assert!(ctx.node_is_focused(root));
+        assert!(ctx.children_of(root).is_empty());
+        Ok(())
+    })?;
+    harness.key('s')?;
+    assert_eq!(root_children(&mut harness)?.len(), 2);
+    Ok(())
+}

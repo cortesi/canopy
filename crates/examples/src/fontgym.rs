@@ -575,7 +575,12 @@ impl Widget for FontGymInput {
     fn cursor(&self) -> Option<Cursor> {
         Some(Cursor {
             location: Point {
-                x: self.cursor as u32,
+                x: text::slice_by_columns(
+                    &self.text[..byte_index_for_char(&self.text, self.cursor)],
+                    0,
+                    usize::MAX,
+                )
+                .1 as u32,
                 y: 0,
             },
             shape: CursorShape::Block,
@@ -670,7 +675,7 @@ impl Widget for FontGymInput {
     }
 
     fn measure(&self, c: MeasureConstraints) -> Measurement {
-        let width = self.text.chars().count().max(1) as u32;
+        let width = text::slice_by_columns(&self.text, 0, usize::MAX).1.max(1) as u32;
         c.clamp(Size::new(width, 1))
     }
 
@@ -954,4 +959,45 @@ end)
 "#,
     )?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use canopy::layout::Constraint;
+
+    use super::*;
+
+    #[test]
+    fn input_cursor_and_measurement_use_display_columns() -> Result<()> {
+        let mut canopy = Canopy::new();
+        let status = canopy.create_detached(Text::new(""))?;
+        for (text, columns, width) in [
+            ("界a", vec![0, 2, 3], 3),
+            ("e\u{301}a", vec![0, 1, 1, 2], 2),
+            ("abc", vec![0, 1, 2, 3], 3),
+            ("", vec![0], 1),
+        ] {
+            let mut input = FontGymInput::new(text, Vec::new(), 1, FontEffects::default(), status);
+            for (position, column) in columns.into_iter().enumerate() {
+                input.cursor = position;
+                let cursor = input.cursor().expect("input cursor");
+                assert_eq!(cursor.location, Point { x: column, y: 0 });
+            }
+            assert_eq!(
+                input.measure(MeasureConstraints {
+                    width: Constraint::Unbounded,
+                    height: Constraint::Unbounded,
+                }),
+                Measurement::Fixed(Size::new(width, 1))
+            );
+            assert_eq!(
+                input.measure(MeasureConstraints {
+                    width: Constraint::AtMost(1),
+                    height: Constraint::Exact(1),
+                }),
+                Measurement::Fixed(Size::new(1, 1))
+            );
+        }
+        Ok(())
+    }
 }

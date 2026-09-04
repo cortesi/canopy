@@ -234,6 +234,9 @@ impl FocusGym {
         let Some(focused) = c.focused_leaf(root_block) else {
             return Ok(());
         };
+        if focused == root_block {
+            return Ok(());
+        }
         c.remove_subtree(focused)?;
         c.focus_first(FocusScope::Node(root_block))?;
         Ok(())

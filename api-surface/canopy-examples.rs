@@ -449,7 +449,8 @@ pub mod canopy_examples {
         //! Stylegym example nodes.
         //! Stylegym: A demonstration app for Canopy's styling features.
         //!
-        //! This example showcases themes, effects, and modal overlays in a two-pane layout.
+        //! This example showcases themes, effects, and modal overlays in a two-pane
+        //! layout.
 
         /// Theme option for the dropdown.
         #[derive(Clone)]
@@ -806,7 +807,8 @@ pub mod canopy_examples {
     /// Render the shared scroll bindings for one receiver and binding path.
     pub fn text_scroll_bindings(receiver: &str, path: &str) -> String {}
 
-    /// Build a `Canopy` for a demo launcher, with `Root` loaded and the help binding installed.
+    /// Build a `Canopy` for a demo launcher, with `Root` loaded and the help
+    /// binding installed.
     pub fn demo_canopy() -> canopy::error::Result<canopy::Canopy> {}
 
     /// Install one demo app under a root and run the terminal loop.

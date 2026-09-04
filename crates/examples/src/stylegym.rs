@@ -392,6 +392,9 @@ impl Stylegym {
             for effect in selected {
                 ctx.push_effect(ctx.node_id(), effect)?;
             }
+            if self.modal_visible {
+                ctx.push_effect(ctx.node_id(), effects::brightness(0.5))?;
+            }
             Ok(())
         })?;
         Ok(())

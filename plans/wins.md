@@ -54,11 +54,11 @@ This survey records clear improvements across Canopy's runtime, widgets, macros,
 - [x] W46: Measure Todo text at its rendered width
 - [x] W47: Make Todo modal dimming repeatable
 - [x] W48: Correct the documented FNV-1a digest
-- [ ] W49: Preserve Stylegym modal dimming when effects change
-- [ ] W50: Measure FontGym input and its cursor in display columns
-- [ ] W51: Keep FocusGym's root block after repeated deletion
-- [ ] W52: Propagate font-directory entry errors
-- [ ] W53: Document the current API check command
+- [x] W49: Preserve Stylegym modal dimming when effects change
+- [x] W50: Measure FontGym input and its cursor in display columns
+- [x] W51: Keep FocusGym's root block after repeated deletion
+- [x] W52: Propagate font-directory entry errors
+- [x] W53: Document the current API check command
 
 ## Scope and Compatibility
 
@@ -104,6 +104,8 @@ Each stage ends with focused and package proof, checklist updates, and a commit.
 - MCP/CLI package proof: `ncode test -E 'package(canopy-mcp) | package(canopyctl)' --no-fail-fast` passed all 36 tests. All five items are complete. The built CLI and Todo process also verified failed-eval JSON, the persisted failed journal entry, and exit status 1. Evidence: `tmp/wins-eval-x2y2_yw5/`.
 
 - Todo (5 items): `ncode test -E 'package(todo)' --no-fail-fast` passed all 19 tests, including rollback, deletion failure, ordering, wrapping, repeated modal dimming, PTY input, and the Luau smoke suite.
+
+- Demos: `ncode test -E 'package(canopy-examples)' --no-fail-fast` passed all 26 tests. W49–W51 are complete. Markdown checks and live xtask dispatch inspection complete W53. The explicit font-discovery example test passed with `cargo nextest run -p canopy-examples --example widget --all-features font_discovery`, completing W52.
 
 ## Checklist Adjustments
 
