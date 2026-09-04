@@ -7,6 +7,7 @@ use anyhow::Result as AnyResult;
 use canopy::{
     command, derive_commands,
     error::Error,
+    layout::LayoutOverride,
     prelude::*,
     style::{effects, solarized},
 };
@@ -213,12 +214,14 @@ impl Todo {
         let adder_frame_id = c.add_child_to(modal_id, Frame::new())?;
         let input_id = c.add_child_to(adder_frame_id, Input::new(""))?;
 
-        let mut layout = Frame::new().layout();
-        layout.min_height = Some(3);
-        layout.max_height = Some(3);
-        layout.min_width = Some(30);
-        layout.max_width = Some(50);
-        c.set_layout_of(adder_frame_id, layout)?;
+        c.set_layout_override_of(
+            adder_frame_id.into(),
+            LayoutOverride {
+                min_width: Some(Some(30)),
+                max_width: Some(Some(50)),
+                ..LayoutOverride::new().fixed_height(3)
+            },
+        )?;
 
         c.set_layout_of(input_id, Layout::fill())?;
 
@@ -495,7 +498,10 @@ fn register_fixtures(cnpy: &mut Canopy) -> Result<()> {
         "App with a pre-populated todo list",
         |cnpy| {
             with_todo(cnpy, |todo, ctx| {
-                let items = todo.store.replace_todos(FIXTURE_WITH_ITEMS.iter().copied()).map_err(store_error)?;
+                let items = todo
+                    .store
+                    .replace_todos(FIXTURE_WITH_ITEMS.iter().copied())
+                    .map_err(store_error)?;
                 todo.apply_items_fixture(ctx, items, false)
             })
         },
@@ -505,7 +511,10 @@ fn register_fixtures(cnpy: &mut Canopy) -> Result<()> {
         "App with the add-item modal open and ready for typing",
         |cnpy| {
             with_todo(cnpy, |todo, ctx| {
-                let items = todo.store.replace_todos(FIXTURE_WITH_ITEMS.iter().copied()).map_err(store_error)?;
+                let items = todo
+                    .store
+                    .replace_todos(FIXTURE_WITH_ITEMS.iter().copied())
+                    .map_err(store_error)?;
                 todo.apply_items_fixture(ctx, items, true)
             })
         },
@@ -537,9 +546,9 @@ pub fn create_app_with_config(db_path: &str, config: Option<&Path>) -> AnyResult
     create_app_with_store(store::Store::open(db_path)?, config)
 }
 
-/// Create a todo application with an explicit database and optional user config.
+/// Create a todo application with an explicit database and optional user
+/// config.
 pub fn create_app_with_store(store: store::Store, config: Option<&Path>) -> AnyResult<Canopy> {
-
     let mut cnpy = Canopy::new();
     setup_app_with_config(&mut cnpy, config)?;
 

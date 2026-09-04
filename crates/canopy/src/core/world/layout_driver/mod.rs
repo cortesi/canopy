@@ -100,7 +100,10 @@ struct Overflow {
 impl Overflow {
     /// Return a zero-overflow configuration.
     fn none() -> Self {
-        Self { x: MeasureOverflow::Bounded, y: MeasureOverflow::Bounded }
+        Self {
+            x: MeasureOverflow::Bounded,
+            y: MeasureOverflow::Bounded,
+        }
     }
 
     /// Build overflow flags from a layout.
@@ -242,7 +245,12 @@ impl<'a> LayoutPass<'a> {
 
         let mut measured_content = Size::ZERO;
         if did_measure {
-            measured_content = self.measure_content(node_id, layout, c0)?;
+            measured_content = self.measure_content(
+                node_id,
+                layout,
+                c0,
+                Size::new(available_content_w, available_content_h),
+            )?;
         }
 
         let outer_w0 = match layout.width {
@@ -270,7 +278,12 @@ impl<'a> LayoutPass<'a> {
                     width: Constraint::Exact(content.w),
                     height: c0.height,
                 };
-                let content1 = self.measure_content(node_id, layout, c1)?;
+                let content1 = self.measure_content(
+                    node_id,
+                    layout,
+                    c1,
+                    Size::new(content.w, available_content_h),
+                )?;
 
                 if matches!(layout.height, Sizing::Measure) {
                     let outer_h1 = content1.h.saturating_add(pad_y);
@@ -298,10 +311,13 @@ impl<'a> LayoutPass<'a> {
         node_id: NodeId,
         layout: Layout,
         constraints: MeasureConstraints,
+        available: Size,
     ) -> Result<Size> {
         let raw = match self.measure_cached(node_id, constraints)? {
             Measurement::Fixed(content) => content,
-            Measurement::Wrap => self.measure_wrap_content(node_id, layout, constraints)?,
+            Measurement::Wrap => {
+                self.measure_wrap_content(node_id, layout, constraints, available)?
+            }
         };
         Ok(constraints.clamp_size(raw))
     }
@@ -312,6 +328,7 @@ impl<'a> LayoutPass<'a> {
         node_id: NodeId,
         layout: Layout,
         constraints: MeasureConstraints,
+        available: Size,
     ) -> Result<Size> {
         let children = self.visible_children(node_id)?;
         if children.is_empty() {
@@ -320,15 +337,18 @@ impl<'a> LayoutPass<'a> {
 
         // For Stack direction, content size is the max of all children
         if layout.direction == LayoutDirection::Stack {
-            return self.measure_wrap_content_stack(layout, constraints, &children);
+            return self.measure_wrap_content_stack(layout, constraints, &children, available);
         }
 
         let main = constraints.main(layout.direction);
         let cross = constraints.cross(layout.direction);
         let main_fixed = main.is_exact();
         let cross_fixed = cross.is_exact();
-        let avail_main = main.max_bound();
-        let avail_cross = cross.max_bound();
+        // Retain the viewport bound so an explicitly bounded descendant can
+        // stop inherited overflow. Unbounded descendants ignore this bound.
+        let bounded = constraints.clamp_size(available);
+        let avail_main = layout.direction.main_size(bounded);
+        let avail_cross = layout.direction.cross_size(bounded);
         let avail = layout
             .direction
             .size_from_main_cross(avail_main, avail_cross);
@@ -410,10 +430,9 @@ impl<'a> LayoutPass<'a> {
         layout: Layout,
         constraints: MeasureConstraints,
         children: &[NodeId],
+        available: Size,
     ) -> Result<Size> {
-        let avail_w = constraints.width.max_bound();
-        let avail_h = constraints.height.max_bound();
-        let avail = Size::new(avail_w, avail_h);
+        let avail = constraints.clamp_size(available);
 
         let mut max_w = 0u32;
         let mut max_h = 0u32;

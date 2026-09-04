@@ -74,6 +74,17 @@ pub mod canopy {
             Flex(u32),
         }
 
+        /// Per-axis policy for measurement beyond the available viewport.
+        #[derive(Clone, Copy, Debug, Default, StructuralPartialEq, PartialEq, Eq)]
+        pub enum MeasureOverflow {
+            /// Use the enclosing layout's policy, bounded at the root.
+            Inherit,
+            /// Measure within the available space, even under an unbounded parent.
+            Bounded,
+            /// Allow measurement beyond the available space.
+            Unbounded,
+        }
+
         /// Invalid layout configuration.
         #[derive(Clone, Debug, StructuralPartialEq, PartialEq, Eq, Error, Display)]
         pub enum LayoutValidationError {
@@ -155,9 +166,9 @@ pub mod canopy {
             /// Maximum outer height constraint (cells).
             pub max_height: Option<u32>,
             /// Allow horizontal overflow during measurement.
-            pub overflow_x: bool,
+            pub overflow_x: MeasureOverflow,
             /// Allow vertical overflow during measurement.
-            pub overflow_y: bool,
+            pub overflow_y: MeasureOverflow,
             /// Structural padding inside the widget (cells).
             pub padding: Edges,
             /// Gap between children along the main axis (cells).
@@ -215,6 +226,12 @@ pub mod canopy {
             /// Allow vertical overflow during measurement.
             pub fn overflow_y(self) -> Self {}
 
+            /// Set the horizontal measurement policy.
+            pub fn measure_overflow_x(self, policy: MeasureOverflow) -> Self {}
+
+            /// Set the vertical measurement policy.
+            pub fn measure_overflow_y(self, policy: MeasureOverflow) -> Self {}
+
             /// Convenience: fixed outer width without a `Fixed` enum.
             pub fn fixed_width(self, n: u32) -> Self {}
 
@@ -247,6 +264,58 @@ pub mod canopy {
 
             /// Validate this layout configuration.
             pub fn validate(&self) -> Result<(), LayoutValidationError> {}
+        }
+
+        /// Persistent parent constraints applied after the widget's base layout.
+        ///
+        /// `None` inherits a field. For optional bounds, `Some(None)` clears the bound.
+        #[derive(Clone, Copy, Debug, Default, StructuralPartialEq, PartialEq, Eq)]
+        pub struct LayoutOverride {
+            /// Override for [`Layout::display`].
+            pub display: Option<Display>,
+            /// Override for [`Layout::direction`].
+            pub direction: Option<Direction>,
+            /// Override for [`Layout::width`].
+            pub width: Option<Sizing>,
+            /// Override for [`Layout::height`].
+            pub height: Option<Sizing>,
+            /// Override for [`Layout::min_width`].
+            pub min_width: Option<Option<u32>>,
+            /// Override for [`Layout::max_width`].
+            pub max_width: Option<Option<u32>>,
+            /// Override for [`Layout::min_height`].
+            pub min_height: Option<Option<u32>>,
+            /// Override for [`Layout::max_height`].
+            pub max_height: Option<Option<u32>>,
+            /// Override for [`Layout::overflow_x`].
+            pub overflow_x: Option<MeasureOverflow>,
+            /// Override for [`Layout::overflow_y`].
+            pub overflow_y: Option<MeasureOverflow>,
+            /// Override for [`Layout::padding`].
+            pub padding: Option<Edges>,
+            /// Override for [`Layout::gap`].
+            pub gap: Option<u32>,
+            /// Override for [`Layout::align_horizontal`].
+            pub align_horizontal: Option<Align>,
+            /// Override for [`Layout::align_vertical`].
+            pub align_vertical: Option<Align>,
+        }
+
+        impl LayoutOverride {
+            /// Inherit every widget field.
+            pub fn new() -> Self {}
+
+            /// Override every field of a complete layout.
+            pub fn full(layout: Layout) -> Self {}
+
+            /// Apply constraints and validate both the widget and resulting layout.
+            pub fn apply(self, base: Layout) -> Result<Layout, LayoutValidationError> {}
+
+            /// Set both outer width bounds.
+            pub fn fixed_width(self, value: u32) -> Self {}
+
+            /// Set both outer height bounds.
+            pub fn fixed_height(self, value: u32) -> Self {}
         }
 
         /// Content-box measurement constraints.
@@ -678,11 +747,33 @@ pub mod canopy {
                 f: &mut dyn FnMut(&mut Layout),
             ) -> Result<()>;
 
+            /// Replace persistent parent constraints without replacing widget layout
+            /// fields.
+            fn set_layout_override_of(
+                &mut self,
+                node: NodeId,
+                overrides: LayoutOverride,
+            ) -> Result<()>;
+
+            /// Clear parent constraints and restore the widget's base layout.
+            fn clear_layout_override_of(&mut self, node: NodeId) -> Result<()>;
+
             /// Create a new widget node detached from the tree.
             fn create_detached_boxed(&mut self, widget: Box<dyn Widget>) -> Result<NodeId>;
 
-            /// Apply a related set of tree mutations atomically.
-            fn apply_tree_edit(
+            /// Run immediate mutations with structural rollback on error.
+            ///
+            /// Rollback restores arena metadata, topology, child keys, layouts, views,
+            /// lifecycle flags, root, focus, mouse capture, focus recovery hints, exit
+            /// requests, pending styles, command registry and scope, and diagnostic
+            /// requests. Each failed nested edit restores its own structural
+            /// checkpoint.
+            ///
+            /// Widget slots are shared with the checkpoint: widget-owned mutations
+            /// survive. Binding registration and external effects also survive and
+            /// require explicit compensation. Cleanup hooks must be safe to repeat.
+            /// This is not a widget state or database transaction.
+            fn edit_structure(
                 &mut self,
                 edit: &mut dyn FnMut(&mut dyn Context) -> Result<()>,
             ) -> Result<()>;
@@ -986,9 +1077,10 @@ pub mod canopy {
 
             /// Called when the widget is mounted in the tree, before its first render.
             ///
-            /// A failed hook rolls back core-owned state. External effects and
-            /// widget-owned state must be repeatable or compensating because a
-            /// later mount attempt may call this hook again.
+            /// A failed hook restores the structural state listed by
+            /// [`Context::edit_structure`]. Widget state, binding registration, and
+            /// external effects survive. Compensate those effects or make them safe
+            /// to repeat, because a later mount attempt may call this hook again.
             fn on_mount(&mut self, _ctx: &mut dyn Context) -> Result<()> {}
 
             /// Validation hook before a widget is removed or replaced.
@@ -1554,9 +1646,9 @@ pub mod canopy {
             /// Maximum outer height constraint (cells).
             pub max_height: Option<u32>,
             /// Allow horizontal overflow during measurement.
-            pub overflow_x: bool,
+            pub overflow_x: MeasureOverflow,
             /// Allow vertical overflow during measurement.
-            pub overflow_y: bool,
+            pub overflow_y: MeasureOverflow,
             /// Structural padding inside the widget (cells).
             pub padding: Edges,
             /// Gap between children along the main axis (cells).
@@ -1613,6 +1705,12 @@ pub mod canopy {
 
             /// Allow vertical overflow during measurement.
             pub fn overflow_y(self) -> Self {}
+
+            /// Set the horizontal measurement policy.
+            pub fn measure_overflow_x(self, policy: MeasureOverflow) -> Self {}
+
+            /// Set the vertical measurement policy.
+            pub fn measure_overflow_y(self, policy: MeasureOverflow) -> Self {}
 
             /// Convenience: fixed outer width without a `Fixed` enum.
             pub fn fixed_width(self, n: u32) -> Self {}
@@ -2422,11 +2520,30 @@ pub mod canopy {
         /// Update the layout for a specific node.
         fn with_layout_of(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Layout)) -> Result<()>;
 
+        /// Replace persistent parent constraints without replacing widget layout
+        /// fields.
+        fn set_layout_override_of(&mut self, node: NodeId, overrides: LayoutOverride)
+            -> Result<()>;
+
+        /// Clear parent constraints and restore the widget's base layout.
+        fn clear_layout_override_of(&mut self, node: NodeId) -> Result<()>;
+
         /// Create a new widget node detached from the tree.
         fn create_detached_boxed(&mut self, widget: Box<dyn Widget>) -> Result<NodeId>;
 
-        /// Apply a related set of tree mutations atomically.
-        fn apply_tree_edit(
+        /// Run immediate mutations with structural rollback on error.
+        ///
+        /// Rollback restores arena metadata, topology, child keys, layouts, views,
+        /// lifecycle flags, root, focus, mouse capture, focus recovery hints, exit
+        /// requests, pending styles, command registry and scope, and diagnostic
+        /// requests. Each failed nested edit restores its own structural
+        /// checkpoint.
+        ///
+        /// Widget slots are shared with the checkpoint: widget-owned mutations
+        /// survive. Binding registration and external effects also survive and
+        /// require explicit compensation. Cleanup hooks must be safe to repeat.
+        /// This is not a widget state or database transaction.
+        fn edit_structure(
             &mut self,
             edit: &mut dyn FnMut(&mut dyn Context) -> Result<()>,
         ) -> Result<()>;
@@ -2638,6 +2755,11 @@ pub mod canopy {
         pub fn iter_ids(&self) -> impl Iterator<Item = TypedId<W>> + '_ {}
 
         /// Reconcile this collection against the desired key order.
+        ///
+        /// Errors restore structure and leave this collection unchanged. Mutations
+        /// performed by `create` and `update` have the rollback limits documented
+        /// by [`Context::edit_structure`], including retained widget state and
+        /// external effects.
         pub fn reconcile<I, C, U>(
             &mut self,
             ctx: &mut dyn Context,
@@ -4999,6 +5121,26 @@ pub mod canopy {
         }
 
         impl View {
+            /// Convert a screen point to viewport-local coordinates, before scroll.
+            /// Returns a geometry error if the result is outside the signed range.
+            pub fn screen_to_viewport(&self, point: PointI32) -> Result<PointI32> {}
+
+            /// Convert a viewport-local point to scrolled content coordinates.
+            /// Returns a geometry error if the result is outside the signed range.
+            pub fn viewport_to_content(&self, point: PointI32) -> Result<PointI32> {}
+
+            /// Convert a viewport-local point to outer-local coordinates, including
+            /// padding. Returns a geometry error if the result is outside the signed range.
+            pub fn viewport_to_outer(&self, point: PointI32) -> Result<PointI32> {}
+
+            /// Convert a scrolled content point to screen coordinates.
+            /// Returns a geometry error if the result is outside the signed range.
+            pub fn content_to_screen(&self, point: PointI32) -> Result<PointI32> {}
+
+            /// Convert an outer-local point to scrolled content coordinates.
+            /// Returns a geometry error if the result is outside the signed range.
+            pub fn outer_to_content(&self, point: PointI32) -> Result<PointI32> {}
+
             /// Size of the outer rect.
             pub fn outer_size(&self) -> Size {}
 
@@ -5083,9 +5225,10 @@ pub mod canopy {
 
         /// Called when the widget is mounted in the tree, before its first render.
         ///
-        /// A failed hook rolls back core-owned state. External effects and
-        /// widget-owned state must be repeatable or compensating because a
-        /// later mount attempt may call this hook again.
+        /// A failed hook restores the structural state listed by
+        /// [`Context::edit_structure`]. Widget state, binding registration, and
+        /// external effects survive. Compensate those effects or make them safe
+        /// to repeat, because a later mount attempt may call this hook again.
         fn on_mount(&mut self, _ctx: &mut dyn Context) -> Result<()> {}
 
         /// Validation hook before a widget is removed or replaced.

@@ -77,9 +77,9 @@ pub trait Widget: Any {
     /// Called when the widget is mounted in the tree, before its first render.
     ///
     /// A failed hook restores the structural state listed by
-    /// [`Context::edit_structure`]. Widget state, binding registration, and external
-    /// effects survive. Compensate those effects or make them safe to repeat,
-    /// because a later mount attempt may call this hook again.
+    /// [`Context::edit_structure`]. Widget state, binding registration, and
+    /// external effects survive. Compensate those effects or make them safe
+    /// to repeat, because a later mount attempt may call this hook again.
     fn on_mount(&mut self, _ctx: &mut dyn Context) -> Result<()> {
         Ok(())
     }

@@ -557,6 +557,62 @@ fn mouse_click_moves_cursor() {
 }
 
 #[test]
+fn nested_padding_scroll_and_captured_pointer_agree_on_wide_grapheme() {
+    let config = EditorConfig::new().with_wrap(WrapMode::None);
+    let text = ["ab界cdefghijklmnopqrstuvwxyz"; 10].join("\n");
+    let mut harness = build_harness(&text, config, 18, 8);
+    harness
+        .with_root_context(|_root: &mut EditorHost, ctx| {
+            ctx.set_layout(Layout::fill().padding(Edges::all(1)))?;
+            ctx.with_child::<EditorSlot, _>(|_editor, ctx| {
+                ctx.set_layout(Layout::fill().padding(Edges::all(1)))
+            })
+        })
+        .unwrap();
+    harness.render().unwrap();
+    scroll_editor_to(&mut harness, 1, 2);
+    harness.render().unwrap();
+    assert_eq!(editor_view_scroll(&mut harness), Point { x: 1, y: 2 });
+    assert_eq!(harness.buf().get(Point { x: 2, y: 2 }).unwrap().ch, 'b');
+    assert_eq!(harness.buf().get(Point { x: 3, y: 2 }).unwrap().ch, '界');
+    assert!(
+        harness
+            .buf()
+            .get(Point { x: 4, y: 2 })
+            .unwrap()
+            .continuation
+    );
+    assert_eq!(harness.buf().get(Point { x: 5, y: 2 }).unwrap().ch, 'c');
+
+    // Screen x=3 is content x=2, the first cell of the wide grapheme.
+    harness
+        .mouse(mouse_event(mouse::Action::Down, 3, 2))
+        .unwrap();
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(2, 2));
+    harness
+        .with_root_context(|_root: &mut EditorHost, ctx| {
+            ctx.with_child::<EditorSlot, _>(|_editor, ctx| ctx.capture_mouse())
+        })
+        .unwrap();
+    // Captured input still uses viewport-local coordinates at the trailing cell.
+    harness
+        .mouse(mouse_event(mouse::Action::Drag, 4, 2))
+        .unwrap();
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(2, 2));
+    // Outside input clamps at the legacy unsigned viewport boundary.
+    harness
+        .mouse(mouse_event(mouse::Action::Drag, 0, 2))
+        .unwrap();
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(2, 1));
+    harness.mouse(mouse_event(mouse::Action::Up, 0, 2)).unwrap();
+    harness
+        .with_root_context(|_root: &mut EditorHost, ctx| {
+            ctx.with_child::<EditorSlot, _>(|_editor, ctx| ctx.release_mouse())
+        })
+        .unwrap();
+}
+
+#[test]
 fn padded_editor_mouse_uses_content_coordinates_with_gutter_and_scroll() {
     for (numbers, scroll_x, scroll_y) in [
         (LineNumbers::None, 0, 0),

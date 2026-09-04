@@ -497,7 +497,8 @@ pub trait Context: ViewContext {
     /// Update the layout for a specific node.
     fn with_layout_of(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Layout)) -> Result<()>;
 
-    /// Replace persistent parent constraints without replacing widget layout fields.
+    /// Replace persistent parent constraints without replacing widget layout
+    /// fields.
     fn set_layout_override_of(&mut self, node: NodeId, overrides: LayoutOverride) -> Result<()>;
 
     /// Clear parent constraints and restore the widget's base layout.
@@ -510,13 +511,14 @@ pub trait Context: ViewContext {
     ///
     /// Rollback restores arena metadata, topology, child keys, layouts, views,
     /// lifecycle flags, root, focus, mouse capture, focus recovery hints, exit
-    /// requests, pending styles, command registry and scope, and diagnostic requests.
-    /// Each failed nested edit restores its own structural checkpoint.
+    /// requests, pending styles, command registry and scope, and diagnostic
+    /// requests. Each failed nested edit restores its own structural
+    /// checkpoint.
     ///
-    /// Widget slots are shared with the checkpoint: widget-owned mutations survive.
-    /// Binding registration and external effects also survive and require explicit
-    /// compensation. Cleanup hooks must be safe to repeat. This is not a widget
-    /// state or database transaction.
+    /// Widget slots are shared with the checkpoint: widget-owned mutations
+    /// survive. Binding registration and external effects also survive and
+    /// require explicit compensation. Cleanup hooks must be safe to repeat.
+    /// This is not a widget state or database transaction.
     fn edit_structure(
         &mut self,
         edit: &mut dyn FnMut(&mut dyn Context) -> Result<()>,
@@ -611,7 +613,7 @@ pub trait Context: ViewContext {
 impl dyn Context + '_ {
     /// Set the layout for the current node.
     pub fn set_layout(&mut self, layout: Layout) -> Result<()> {
-        self.with_layout(&mut |l| *l = layout)
+        self.set_layout_of(self.node_id(), layout)
     }
 
     /// Set the layout for a specific node.

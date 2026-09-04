@@ -267,7 +267,9 @@ pub struct LayoutOverride {
 
 impl LayoutOverride {
     /// Inherit every widget field.
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     /// Override every field of a complete layout.
     pub fn full(layout: Layout) -> Self {
@@ -293,40 +295,96 @@ impl LayoutOverride {
     pub fn apply(self, base: Layout) -> Result<Layout, LayoutValidationError> {
         base.validate()?;
         let mut layout = base;
-        if let Some(value) = self.display { layout.display = value; }
-        if let Some(value) = self.direction { layout.direction = value; }
-        if let Some(value) = self.width { layout.width = value; }
-        if let Some(value) = self.height { layout.height = value; }
-        if let Some(value) = self.min_width { layout.min_width = value; }
-        if let Some(value) = self.max_width { layout.max_width = value; }
-        if let Some(value) = self.min_height { layout.min_height = value; }
-        if let Some(value) = self.max_height { layout.max_height = value; }
-        if let Some(value) = self.overflow_x { layout.overflow_x = value; }
-        if let Some(value) = self.overflow_y { layout.overflow_y = value; }
-        if let Some(value) = self.padding { layout.padding = value; }
-        if let Some(value) = self.gap { layout.gap = value; }
-        if let Some(value) = self.align_horizontal { layout.align_horizontal = value; }
-        if let Some(value) = self.align_vertical { layout.align_vertical = value; }
+        if let Some(value) = self.display {
+            layout.display = value;
+        }
+        if let Some(value) = self.direction {
+            layout.direction = value;
+        }
+        if let Some(value) = self.width {
+            layout.width = value;
+        }
+        if let Some(value) = self.height {
+            layout.height = value;
+        }
+        if let Some(value) = self.min_width {
+            layout.min_width = value;
+        }
+        if let Some(value) = self.max_width {
+            layout.max_width = value;
+        }
+        if let Some(value) = self.min_height {
+            layout.min_height = value;
+        }
+        if let Some(value) = self.max_height {
+            layout.max_height = value;
+        }
+        if let Some(value) = self.overflow_x {
+            layout.overflow_x = value;
+        }
+        if let Some(value) = self.overflow_y {
+            layout.overflow_y = value;
+        }
+        if let Some(value) = self.padding {
+            layout.padding = value;
+        }
+        if let Some(value) = self.gap {
+            layout.gap = value;
+        }
+        if let Some(value) = self.align_horizontal {
+            layout.align_horizontal = value;
+        }
+        if let Some(value) = self.align_vertical {
+            layout.align_vertical = value;
+        }
         layout.validate()?;
         Ok(layout)
     }
 
     /// Persist only fields changed by a layout callback.
     pub(crate) fn record_changes(&mut self, before: Layout, after: Layout) {
-        if before.display != after.display { self.display = Some(after.display); }
-        if before.direction != after.direction { self.direction = Some(after.direction); }
-        if before.width != after.width { self.width = Some(after.width); }
-        if before.height != after.height { self.height = Some(after.height); }
-        if before.min_width != after.min_width { self.min_width = Some(after.min_width); }
-        if before.max_width != after.max_width { self.max_width = Some(after.max_width); }
-        if before.min_height != after.min_height { self.min_height = Some(after.min_height); }
-        if before.max_height != after.max_height { self.max_height = Some(after.max_height); }
-        if before.overflow_x != after.overflow_x { self.overflow_x = Some(after.overflow_x); }
-        if before.overflow_y != after.overflow_y { self.overflow_y = Some(after.overflow_y); }
-        if before.padding != after.padding { self.padding = Some(after.padding); }
-        if before.gap != after.gap { self.gap = Some(after.gap); }
-        if before.align_horizontal != after.align_horizontal { self.align_horizontal = Some(after.align_horizontal); }
-        if before.align_vertical != after.align_vertical { self.align_vertical = Some(after.align_vertical); }
+        if before.display != after.display {
+            self.display = Some(after.display);
+        }
+        if before.direction != after.direction {
+            self.direction = Some(after.direction);
+        }
+        if before.width != after.width {
+            self.width = Some(after.width);
+        }
+        if before.height != after.height {
+            self.height = Some(after.height);
+        }
+        if before.min_width != after.min_width {
+            self.min_width = Some(after.min_width);
+        }
+        if before.max_width != after.max_width {
+            self.max_width = Some(after.max_width);
+        }
+        if before.min_height != after.min_height {
+            self.min_height = Some(after.min_height);
+        }
+        if before.max_height != after.max_height {
+            self.max_height = Some(after.max_height);
+        }
+        if before.overflow_x != after.overflow_x {
+            self.overflow_x = Some(after.overflow_x);
+        }
+        if before.overflow_y != after.overflow_y {
+            self.overflow_y = Some(after.overflow_y);
+        }
+        if before.padding != after.padding {
+            self.padding = Some(after.padding);
+        }
+        if before.gap != after.gap {
+            self.gap = Some(after.gap);
+        }
+        if before.align_horizontal != after.align_horizontal {
+            self.align_horizontal = Some(after.align_horizontal);
+        }
+        if before.align_vertical != after.align_vertical {
+            self.align_vertical = Some(after.align_vertical);
+        }
     }
     /// Set both outer width bounds.
     pub fn fixed_width(mut self, value: u32) -> Self {

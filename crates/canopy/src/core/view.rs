@@ -1,6 +1,6 @@
 use crate::{
     error::Result,
-    geom::{Point, PointI32, Rect, RectI32, Size},
+    geom::{Error as GeometryError, Point, PointI32, Rect, RectI32, Size},
 };
 
 /// Render-time view information for a node.
@@ -18,8 +18,8 @@ pub struct View {
 
 impl View {
     /// Convert a screen point to viewport-local coordinates, before scroll.
-    /// Coordinates outside the signed range saturate at its limits.
-    pub fn screen_to_viewport(&self, point: PointI32) -> PointI32 {
+    /// Returns a geometry error if the result is outside the signed range.
+    pub fn screen_to_viewport(&self, point: PointI32) -> Result<PointI32> {
         signed_point(
             i64::from(point.x) - i64::from(self.content.tl.x),
             i64::from(point.y) - i64::from(self.content.tl.y),
@@ -27,17 +27,18 @@ impl View {
     }
 
     /// Convert a viewport-local point to scrolled content coordinates.
-    /// Coordinates outside the signed range saturate at its limits.
-    pub fn viewport_to_content(&self, point: PointI32) -> PointI32 {
+    /// Returns a geometry error if the result is outside the signed range.
+    pub fn viewport_to_content(&self, point: PointI32) -> Result<PointI32> {
         signed_point(
             i64::from(point.x) + i64::from(self.tl.x),
             i64::from(point.y) + i64::from(self.tl.y),
         )
     }
 
-    /// Convert a viewport-local point to outer-local coordinates, including padding.
-    /// Coordinates outside the signed range saturate at its limits.
-    pub fn viewport_to_outer(&self, point: PointI32) -> PointI32 {
+    /// Convert a viewport-local point to outer-local coordinates, including
+    /// padding. Returns a geometry error if the result is outside the signed
+    /// range.
+    pub fn viewport_to_outer(&self, point: PointI32) -> Result<PointI32> {
         signed_point(
             i64::from(point.x) + i64::from(self.content.tl.x) - i64::from(self.outer.tl.x),
             i64::from(point.y) + i64::from(self.content.tl.y) - i64::from(self.outer.tl.y),
@@ -45,8 +46,8 @@ impl View {
     }
 
     /// Convert a scrolled content point to screen coordinates.
-    /// Coordinates outside the signed range saturate at its limits.
-    pub fn content_to_screen(&self, point: PointI32) -> PointI32 {
+    /// Returns a geometry error if the result is outside the signed range.
+    pub fn content_to_screen(&self, point: PointI32) -> Result<PointI32> {
         signed_point(
             i64::from(point.x) + i64::from(self.content.tl.x) - i64::from(self.tl.x),
             i64::from(point.y) + i64::from(self.content.tl.y) - i64::from(self.tl.y),
@@ -54,8 +55,8 @@ impl View {
     }
 
     /// Convert an outer-local point to scrolled content coordinates.
-    /// Coordinates outside the signed range saturate at its limits.
-    pub fn outer_to_content(&self, point: PointI32) -> PointI32 {
+    /// Returns a geometry error if the result is outside the signed range.
+    pub fn outer_to_content(&self, point: PointI32) -> Result<PointI32> {
         signed_point(
             i64::from(point.x) + i64::from(self.outer.tl.x) - i64::from(self.content.tl.x)
                 + i64::from(self.tl.x),
@@ -151,12 +152,13 @@ impl View {
     }
 }
 
-/// Clamp only after the complete translation, so intermediate offsets retain their sign.
-fn signed_point(x: i64, y: i64) -> PointI32 {
-    PointI32 {
-        x: x.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32,
-        y: y.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32,
-    }
+/// Check the complete translation so intermediate offsets retain their sign.
+fn signed_point(x: i64, y: i64) -> Result<PointI32> {
+    let error = GeometryError::CoordinateOutOfRange { x, y };
+    Ok(PointI32 {
+        x: i32::try_from(x).map_err(|_| error.clone())?,
+        y: i32::try_from(y).map_err(|_| error)?,
+    })
 }
 
 #[cfg(test)]
@@ -164,6 +166,81 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
+    use crate::error::Error;
+
+    #[test]
+    fn signed_coordinate_conversions_preserve_padding_scroll_and_offscreen_points() {
+        let view = View::new(
+            RectI32::new(10, 4, 12, 8),
+            RectI32::new(11, 5, 10, 6),
+            Point { x: 0, y: 3 },
+            Size::new(30, 20),
+        );
+        let screen = PointI32 { x: 13, y: 6 };
+        let viewport = view.screen_to_viewport(screen).unwrap();
+        assert_eq!(viewport, PointI32 { x: 2, y: 1 });
+        assert_eq!(
+            view.viewport_to_outer(viewport).unwrap(),
+            PointI32 { x: 3, y: 2 }
+        );
+        let content = view.viewport_to_content(viewport).unwrap();
+        assert_eq!(content, PointI32 { x: 2, y: 4 });
+        assert_eq!(view.content_to_screen(content).unwrap(), screen);
+        assert_eq!(
+            view.outer_to_content(PointI32 { x: 3, y: 2 }).unwrap(),
+            content
+        );
+        assert_eq!(
+            view.screen_to_viewport(PointI32 { x: 9, y: 3 }).unwrap(),
+            PointI32 { x: -2, y: -2 },
+        );
+        assert_eq!(
+            view.outer_to_content(PointI32 { x: 0, y: 0 }).unwrap(),
+            PointI32 { x: -1, y: 2 },
+        );
+    }
+
+    #[test]
+    fn signed_conversions_check_complete_translation() {
+        let view = View::new(
+            RectI32::new(i32::MIN, i32::MIN, 10, 10),
+            RectI32::new(i32::MIN + 1, i32::MIN + 1, 8, 8),
+            Point {
+                x: u32::MAX,
+                y: u32::MAX,
+            },
+            Size::new(u32::MAX, u32::MAX),
+        );
+        assert!(matches!(
+            view.screen_to_viewport(PointI32 {
+                x: i32::MAX,
+                y: i32::MAX
+            }),
+            Err(Error::Geometry(GeometryError::CoordinateOutOfRange { .. })),
+        ));
+        assert!(view.viewport_to_content(PointI32::default()).is_err());
+        assert!(view.content_to_screen(PointI32::default()).is_err());
+        assert!(view.outer_to_content(PointI32::default()).is_err());
+        assert!(
+            view.viewport_to_outer(PointI32 { x: i32::MAX, y: 0 })
+                .is_err()
+        );
+        assert_eq!(
+            view.viewport_to_content(PointI32 {
+                x: i32::MIN,
+                y: i32::MIN
+            })
+            .unwrap(),
+            PointI32 {
+                x: i32::MAX,
+                y: i32::MAX
+            },
+        );
+        assert_eq!(
+            view.viewport_to_outer(PointI32::default()).unwrap(),
+            PointI32 { x: 1, y: 1 },
+        );
+    }
 
     fn view_for_sizes(content: Size, canvas: Size, tl: Point) -> View {
         View::new(

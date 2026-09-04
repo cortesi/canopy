@@ -86,7 +86,11 @@ impl Core {
     }
 
     /// Replace all persistent parent constraints for a node.
-    pub fn set_layout_override_of(&mut self, node: NodeId, overrides: LayoutOverride) -> Result<()> {
+    pub fn set_layout_override_of(
+        &mut self,
+        node: NodeId,
+        overrides: LayoutOverride,
+    ) -> Result<()> {
         let current = self.nodes.get_mut(node).ok_or(Error::NodeNotFound(node))?;
         let layout = overrides.apply(current.base_layout)?;
         current.layout_override = overrides;

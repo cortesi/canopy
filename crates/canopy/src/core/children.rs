@@ -78,8 +78,9 @@ where
     /// Reconcile this collection against the desired key order.
     ///
     /// Errors restore structure and leave this collection unchanged. Mutations
-    /// performed by `create` and `update` have the rollback limits documented by
-    /// [`Context::edit_structure`], including retained widget state and external effects.
+    /// performed by `create` and `update` have the rollback limits documented
+    /// by [`Context::edit_structure`], including retained widget state and
+    /// external effects.
     pub fn reconcile<I, C, U>(
         &mut self,
         ctx: &mut dyn Context,

@@ -5,7 +5,7 @@ pub mod todo {
     //! Todo application used as Canopy's end-to-end example and smoke-test target.
 
     pub mod store {
-        //! Thread-local SQLite storage for the todo example.
+        //! SQLite storage for the todo example.
 
         /// A persisted todo record.
         #[derive(Debug, Clone)]
@@ -16,17 +16,17 @@ pub mod todo {
             pub item: String,
         }
 
-        /// Handle to the current todo database.
+        /// Cloneable handle to one todo database.
         #[derive(Debug, Clone)]
         pub struct Store {}
 
         impl Store {
+            /// Open or initialize a SQLite store.
+            pub fn open(path: &str) -> Result<Self> {}
+
             /// Load every persisted todo.
             pub fn todos(&self) -> Result<Vec<Todo>> {}
         }
-
-        /// Return the store opened for the current thread.
-        pub fn get() -> anyhow::Result<Store> {}
     }
 
     /// Widget for a todo entry.
@@ -61,6 +61,14 @@ pub mod todo {
     /// Create a todo canopy app with optional user config.
     pub fn create_app_with_config(
         db_path: &str,
+        config: Option<&std::path::Path>,
+    ) -> anyhow::Result<Canopy> {
+    }
+
+    /// Create a todo application with an explicit database and optional user
+    /// config.
+    pub fn create_app_with_store(
+        store: store::Store,
         config: Option<&std::path::Path>,
     ) -> anyhow::Result<Canopy> {
     }

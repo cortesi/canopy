@@ -12,7 +12,7 @@ use canopy::{
     derive_commands,
     error::{Error, Result},
     event::{Event, mouse},
-    geom::{Direction, Line, Point},
+    geom::{Direction, Line, Point, PointI32},
     layout::{CanvasContext, Constraint, Edges, Layout, MeasureConstraints, Measurement, Size},
     render::Render,
     state::NodeName,
@@ -541,13 +541,12 @@ impl<W: Selectable> List<W> {
         Ok(())
     }
 
-    /// Find the item index at a local content-space location.
+    /// Find the item index at a viewport-local location.
     fn index_at_location(&self, c: &dyn Context, location: Point) -> Option<usize> {
         let view = c.view();
-        let content = view.viewport_to_content(canopy::geom::PointI32 {
-            x: i32::try_from(location.x).unwrap_or(i32::MAX),
-            y: i32::try_from(location.y).unwrap_or(i32::MAX),
-        });
+        let content = view
+            .viewport_to_content(PointI32::try_from(location).ok()?)
+            .ok()?;
         let content_y = u32::try_from(content.y).ok()?;
         let metrics = self.item_metrics(c);
         Self::index_at_y(&metrics, content_y)
@@ -680,13 +679,12 @@ impl<W: Selectable + 'static> Widget for List<W> {
                     .min(view_rect.tl.y.saturating_add(view_rect.h));
 
                 if visible_start < visible_end {
-                    let outer = view.viewport_to_outer(canopy::geom::PointI32 {
-                        x: 0,
-                        y: i32::try_from(visible_start - view_rect.tl.y).unwrap_or(i32::MAX),
-                    });
-                    let Ok(local_y) = u32::try_from(outer.y) else {
-                        return Ok(());
-                    };
+                    let outer =
+                        Point::try_from(view.viewport_to_outer(PointI32::try_from(Point {
+                            x: 0,
+                            y: visible_start - view_rect.tl.y,
+                        })?)?)?;
+                    let local_y = outer.y;
                     let width = indicator.width.min(area.w);
 
                     if width > 0 {

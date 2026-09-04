@@ -604,14 +604,8 @@ impl Editor {
         let view_rect = view.view_rect();
         let gutter_width = self.gutter_width();
         self.update_layout(view_rect, gutter_width);
-        let content_point = view.viewport_to_content(PointI32 {
-            x: i32::try_from(event.location.x).unwrap_or(i32::MAX),
-            y: i32::try_from(event.location.y).unwrap_or(i32::MAX),
-        });
-        let content_point = Point {
-            x: u32::try_from(content_point.x).unwrap_or(0),
-            y: u32::try_from(content_point.y).unwrap_or(0),
-        };
+        let content_point =
+            Point::try_from(view.viewport_to_content(PointI32::try_from(event.location)?)?)?;
         let mut text_point = content_point;
         text_point.x = text_point.x.saturating_sub(gutter_width);
         let pos = self

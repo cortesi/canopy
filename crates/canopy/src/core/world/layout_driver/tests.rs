@@ -1,6 +1,9 @@
 //! Tests for the layout driver.
 
-use std::sync::{Arc, Mutex};
+use std::{
+    any::Any,
+    sync::{Arc, Mutex},
+};
 
 use proptest::prelude::*;
 use rand::{RngExt, SeedableRng, rngs::StdRng};
@@ -1065,5 +1068,153 @@ fn excluded_subtrees_clear_previously_computed_layout() -> Result<()> {
         assert!(!core.nodes[grandchild].view.is_zero());
         assert_eq!(core.nodes[child].canvas, Size::new(50, 50));
     }
+    Ok(())
+}
+
+#[test]
+fn sparse_overrides_survive_refresh_and_clear() -> Result<()> {
+    use crate::layout::LayoutOverride;
+
+    let mut core = Core::new();
+    let base = Layout::column().padding(Edges::all(1));
+    let node = core.create_detached(LayoutWidget(base))?;
+    attach_root_child(&mut core, node)?;
+    core.set_layout_override_of(node, LayoutOverride::new().fixed_height(4))?;
+    for _ in 0..2 {
+        core.nodes[node].layout_dirty = true;
+        core.update_layout(Size::new(20, 10))?;
+        assert_eq!(core.nodes[node].rect.h, 4);
+        assert_eq!(core.nodes[node].layout.padding, base.padding);
+    }
+    core.detach(node)?;
+    attach_root_child(&mut core, node)?;
+    assert_eq!(core.nodes[node].layout.min_height, Some(4));
+    core.clear_layout_override_of(node)?;
+    assert_eq!(core.nodes[node].layout, base);
+    core.set_layout_override_of(node, LayoutOverride::new().fixed_height(4))?;
+    core.replace_subtree(node, LayoutWidget(Layout::row()))?;
+    assert_eq!(core.nodes[node].layout_override, LayoutOverride::default());
+    assert_eq!(core.nodes[node].base_layout, Layout::row());
+    Ok(())
+}
+
+#[test]
+fn invalid_override_merge_and_refresh_preserve_previous_layout() -> Result<()> {
+    use crate::layout::LayoutOverride;
+
+    let mut core = Core::new();
+    let node = core.create_detached(LayoutWidget(Layout::column().max_height(4)))?;
+    let before = core.nodes[node].layout;
+    assert!(
+        core.set_layout_override_of(
+            node,
+            LayoutOverride {
+                min_height: Some(Some(5)),
+                ..LayoutOverride::new()
+            }
+        )
+        .is_err()
+    );
+    assert_eq!(core.nodes[node].layout, before);
+    assert_eq!(core.nodes[node].layout_override, LayoutOverride::new());
+    core.set_layout_override_of(
+        node,
+        LayoutOverride {
+            min_height: Some(Some(5)),
+            max_height: Some(None),
+            ..LayoutOverride::new()
+        },
+    )?;
+    assert_eq!(core.nodes[node].layout.max_height, None);
+    core.with_layout_of(node, |layout| layout.gap = 2)?;
+    assert_eq!(core.nodes[node].layout_override.padding, None);
+    let before = core.nodes[node].layout;
+    let base = core.nodes[node].base_layout;
+    let mut slot = core.nodes[node].widget.borrow_mut();
+    let widget: &mut dyn Any = slot.as_mut().unwrap().as_mut();
+    widget.downcast_mut::<LayoutWidget>().unwrap().0 = Layout::column().flex_horizontal(0);
+    drop(slot);
+    core.nodes[node].layout_dirty = true;
+    assert!(super::refresh_layouts(&mut core).is_err());
+    assert_eq!(core.nodes[node].layout, before);
+    assert_eq!(core.nodes[node].base_layout, base);
+    Ok(())
+}
+
+#[test]
+fn bounded_descendant_stops_inherited_measurement_overflow() -> Result<()> {
+    use crate::layout::MeasureOverflow;
+
+    let mut core = Core::new();
+    let parent = core.create_detached(LayoutWidget(Layout::column().overflow_x().overflow_y()))?;
+    let (widget, calls) = TestWidget::new(|constraints| constraints.clamp(Size::new(100, 100)));
+    let child = core.create_detached(widget)?;
+    core.set_layout_of(
+        child,
+        Layout::column()
+            .measure_overflow_x(MeasureOverflow::Bounded)
+            .measure_overflow_y(MeasureOverflow::Bounded),
+    )?;
+    core.set_children(parent, vec![child])?;
+    attach_root_child(&mut core, parent)?;
+    core.update_layout(Size::new(10, 5))?;
+    assert!(!calls.lock().unwrap().is_empty());
+    assert!(
+        calls
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|c| c.width != Constraint::Unbounded && c.height != Constraint::Unbounded)
+    );
+    assert_eq!(core.nodes[child].rect.expanse(), Size::new(10, 5));
+    Ok(())
+}
+
+#[test]
+fn structural_failure_restores_layout_base_and_override() -> Result<()> {
+    use crate::layout::LayoutOverride;
+
+    let mut core = Core::new();
+    let node = core.create_detached(LayoutWidget(Layout::column().padding(Edges::all(1))))?;
+    core.set_layout_override_of(node, LayoutOverride::new().fixed_height(3))?;
+    let base = core.nodes[node].base_layout;
+    let overrides = core.nodes[node].layout_override;
+    let layout = core.nodes[node].layout;
+    let result: Result<()> = core.with_tree_edit("layout rollback test", |core| {
+        core.replace_subtree(node, LayoutWidget(Layout::row()))?;
+        core.set_layout_override_of(node, LayoutOverride::new().fixed_height(7))?;
+        Err(Error::NodeNotFound(NodeId::default()))
+    });
+    assert!(result.is_err());
+    assert_eq!(core.nodes[node].base_layout, base);
+    assert_eq!(core.nodes[node].layout_override, overrides);
+    assert_eq!(core.nodes[node].layout, layout);
+    Ok(())
+}
+
+#[test]
+fn refreshed_base_must_remain_valid_after_parent_constraints() -> Result<()> {
+    use crate::layout::LayoutOverride;
+
+    let mut core = Core::new();
+    let node = core.create_detached(LayoutWidget(Layout::column().max_height(10)))?;
+    core.set_layout_override_of(
+        node,
+        LayoutOverride {
+            min_height: Some(Some(5)),
+            ..LayoutOverride::new()
+        },
+    )?;
+    let base = core.nodes[node].base_layout;
+    let layout = core.nodes[node].layout;
+    let mut slot = core.nodes[node].widget.borrow_mut();
+    let widget: &mut dyn Any = slot.as_mut().unwrap().as_mut();
+    widget.downcast_mut::<LayoutWidget>().unwrap().0 = Layout::column().max_height(4);
+    drop(slot);
+    core.nodes[node].layout_dirty = true;
+    assert!(super::refresh_layouts(&mut core).is_err());
+    assert_eq!(core.nodes[node].base_layout, base);
+    assert_eq!(core.nodes[node].layout, layout);
+    assert!(core.nodes[node].layout_dirty);
     Ok(())
 }

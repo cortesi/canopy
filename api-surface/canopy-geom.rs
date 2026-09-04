@@ -19,6 +19,13 @@ pub mod canopy_geom {
     /// Geometry error type.
     #[derive(Debug, Clone, Error, Display, StructuralPartialEq, PartialEq, Eq)]
     pub enum Error {
+        /// A point cannot be represented in the destination coordinate type.
+        CoordinateOutOfRange {
+            /// Rejected x coordinate.
+            x: i64,
+            /// Rejected y coordinate.
+            y: i64,
+        },
         /// A zero-length window cannot be projected into a track.
         ZeroLengthWindow,
         /// A window lies outside the view used to project it.
@@ -160,6 +167,16 @@ pub mod canopy_geom {
         fn from(v: (u32, u32)) -> Self {}
     }
 
+    impl TryFrom<Point> for PointI32 {
+        type Error = Error;
+        fn try_from(point: Point) -> Result<Self, Self::Error> {}
+    }
+
+    impl TryFrom<PointI32> for crate::Point {
+        type Error = Error;
+        fn try_from(point: PointI32) -> Result<Self, Self::Error> {}
+    }
+
     /// A signed 2D point in integer cell coordinates.
     #[derive(Debug, Clone, Copy, Hash, StructuralPartialEq, PartialEq, Eq, Default)]
     pub struct PointI32 {
@@ -167,6 +184,16 @@ pub mod canopy_geom {
         pub x: i32,
         /// Y coordinate.
         pub y: i32,
+    }
+
+    impl TryFrom<Point> for PointI32 {
+        type Error = Error;
+        fn try_from(point: Point) -> Result<Self, Self::Error> {}
+    }
+
+    impl TryFrom<PointI32> for crate::Point {
+        type Error = Error;
+        fn try_from(point: PointI32) -> Result<Self, Self::Error> {}
     }
 
     /// A half-open rectangle with an unsigned origin and size.

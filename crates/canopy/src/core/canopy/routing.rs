@@ -61,19 +61,22 @@ impl RoutedInput {
             .get(node_id)
             .map(|node| node.view)
             .unwrap_or_default();
-        let local = view.screen_to_viewport(PointI32 {
-            x: i32::try_from(mouse.location.x).unwrap_or(i32::MAX),
-            y: i32::try_from(mouse.location.y).unwrap_or(i32::MAX),
-        });
+        let local = PointI32::try_from(mouse.location)
+            .ok()
+            .and_then(|screen| view.screen_to_viewport(screen).ok());
+        // Preserve the full unsigned range and the legacy top/left clamp.
+        let location = local.map_or_else(
+            || view.content.to_local_point(mouse.location),
+            |point| Point {
+                x: u32::try_from(point.x).unwrap_or(0),
+                y: u32::try_from(point.y).unwrap_or(0),
+            },
+        );
         mouse::MouseEvent {
             action: mouse.action,
             button: mouse.button,
             modifiers: mouse.modifiers,
-            // Keep the existing unsigned viewport-local mouse boundary.
-            location: Point {
-                x: u32::try_from(local.x).unwrap_or(0),
-                y: u32::try_from(local.y).unwrap_or(0),
-            },
+            location,
         }
     }
 }

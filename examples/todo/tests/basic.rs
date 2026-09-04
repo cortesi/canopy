@@ -171,7 +171,11 @@ mod tests {
     }
 
     fn records(store: &Store) -> AnyResult<Vec<(i64, String)>> {
-        Ok(store.todos()?.into_iter().map(|row| (row.id, row.item)).collect())
+        Ok(store
+            .todos()?
+            .into_iter()
+            .map(|row| (row.id, row.item))
+            .collect())
     }
 
     fn list_state(h: &mut Harness) -> Result<(usize, Option<usize>)> {
@@ -184,14 +188,13 @@ mod tests {
 
     fn modal_focused(h: &Harness) -> bool {
         h.canopy.with_root_view(|ctx| {
-            ctx.focused_node().is_some_and(|node| {
-                ctx.node_type_id(node) == Some(TypeId::of::<Input>())
-            })
+            ctx.focused_node()
+                .is_some_and(|node| ctx.node_type_id(node) == Some(TypeId::of::<Input>()))
         })
     }
 
     #[test]
-    fn two_apps_keep_commands_and_fixtures_isolated() -> AnyResult<()> {
+    fn two_apps_keep_commands_isolated() -> AnyResult<()> {
         let (mut first, first_store) = app()?;
         let (mut second, second_store) = app()?;
 
@@ -199,7 +202,13 @@ mod tests {
         add(&mut second, "second app")?;
         add(&mut first, "first extra")?;
         del_first(&mut second)?;
-        assert_eq!(records(&first_store)?.iter().map(|(_, text)| text.as_str()).collect::<Vec<_>>(), ["first app", "first extra"]);
+        assert_eq!(
+            records(&first_store)?
+                .iter()
+                .map(|(_, text)| text.as_str())
+                .collect::<Vec<_>>(),
+            ["first app", "first extra"]
+        );
         assert!(records(&second_store)?.is_empty());
         assert_eq!(list_state(&mut first)?, (2, Some(1)));
         assert_eq!(list_state(&mut second)?, (0, None));
@@ -207,6 +216,16 @@ mod tests {
         assert!(first.tbuf().contains_text("first extra"));
         assert!(!modal_focused(&first));
         assert!(!modal_focused(&second));
+
+        Ok(())
+    }
+
+    #[test]
+    fn two_apps_keep_all_fixtures_isolated() -> AnyResult<()> {
+        let (mut first, first_store) = app()?;
+        let (mut second, second_store) = app()?;
+        add(&mut first, "first app")?;
+        add(&mut second, "second app")?;
 
         // Apply every fixture to both apps while preserving the other app's state.
         for fixture in ["modal_open", "empty", "with_items"] {
@@ -236,6 +255,15 @@ mod tests {
             assert_eq!(modal_focused(&second), fixture == "modal_open");
         }
 
+        Ok(())
+    }
+
+    #[test]
+    fn other_app_fixture_preserves_pending_modal_input() -> AnyResult<()> {
+        let (mut first, first_store) = app()?;
+        let (mut second, second_store) = app()?;
+        first.canopy.apply_fixture("with_items")?;
+        first.render()?;
         first.key('a')?;
         first.key('x')?;
         second.canopy.apply_fixture("empty")?;
@@ -249,5 +277,4 @@ mod tests {
         assert_eq!(list_state(&mut second)?, (0, None));
         Ok(())
     }
-
 }
