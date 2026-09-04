@@ -35,8 +35,8 @@ impl View {
     /// Offset from the outer origin to the content origin, in local
     /// coordinates.
     pub fn content_origin(&self) -> Point {
-        let dx = (self.content.tl.x - self.outer.tl.x).max(0) as u32;
-        let dy = (self.content.tl.y - self.outer.tl.y).max(0) as u32;
+        let dx = (i64::from(self.content.tl.x) - i64::from(self.outer.tl.x)).max(0) as u32;
+        let dy = (i64::from(self.content.tl.y) - i64::from(self.outer.tl.y)).max(0) as u32;
         Point { x: dx, y: dy }
     }
 
@@ -200,5 +200,29 @@ mod tests {
         let view = view_for_sizes(Size::new(10, 5), Size::new(10, 5), Point::zero());
         assert!(view.vactive(Rect::new(0, 0, 1, 5)).unwrap().is_none());
         assert!(view.hactive(Rect::new(0, 0, 10, 1)).unwrap().is_none());
+    }
+    #[test]
+    fn content_origins_cover_the_signed_coordinate_range() {
+        for (outer, content, expected) in [
+            (0, 0, 0),
+            (8, 3, 0),
+            (-8, -3, 5),
+            (i32::MIN, i32::MAX, u32::MAX),
+        ] {
+            let view = View::new(
+                RectI32::new(outer, outer, 10, 10),
+                RectI32::new(content, content, 4, 3),
+                Point::zero(),
+                Size::new(4, 3),
+            );
+            assert_eq!(
+                view.content_origin(),
+                Point {
+                    x: expected,
+                    y: expected
+                }
+            );
+            assert_eq!(view.view_rect_local(), Rect::new(expected, expected, 4, 3));
+        }
     }
 }

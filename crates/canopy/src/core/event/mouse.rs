@@ -138,8 +138,10 @@ pub struct MouseEvent {
     pub button: Button,
     /// Keyboard modifiers.
     pub modifiers: key::Mods,
-    /// Cursor location in local coordinates relative to the node view. To map
-    /// back to screen coordinates, add the node view's outer top-left.
+    /// Cursor location in screen coordinates for incoming events, and relative
+    /// to the node's content origin for events delivered to widgets. Coordinates
+    /// before the content origin saturate to zero, including captured events
+    /// and events in padding, so the conversion is not always reversible.
     pub location: Point,
 }
 

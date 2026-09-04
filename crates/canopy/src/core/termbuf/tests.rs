@@ -247,10 +247,13 @@ impl RenderBackend for RecBackend {
 struct RegionShiftBackend {
     shift: Option<(u32, u32, i32)>,
     text_ops: usize,
+    style_ops: usize,
+    flush_ops: usize,
 }
 
 impl RenderBackend for RegionShiftBackend {
     fn style(&mut self, _style: &ResolvedStyle) -> Result<()> {
+        self.style_ops += 1;
         Ok(())
     }
 
@@ -269,6 +272,7 @@ impl RenderBackend for RegionShiftBackend {
     }
 
     fn flush(&mut self) -> Result<()> {
+        self.flush_ops += 1;
         Ok(())
     }
 }
@@ -1133,4 +1137,26 @@ fn empty_constructor_uses_canonical_empty_cells() {
         "XXXXX"
         "XXXXX"
     ]);
+}
+
+#[test]
+fn identical_multirow_buffers_emit_no_operations() -> Result<()> {
+    for rows in [["   ", "   ", "   "], ["abc", "abc", "abc"]] {
+        let current = buf_from_rows(&rows);
+        let previous = current.clone();
+        let mut backend = RegionShiftBackend::default();
+        current.diff(&previous, &mut backend)?;
+        assert_eq!(backend.shift, None);
+        assert_eq!(backend.text_ops, 0);
+        assert_eq!(backend.style_ops, 0);
+        assert_eq!(backend.flush_ops, 0);
+    }
+    let mut invalid = buf_from_rows(&["abc", "abc", "abc"]);
+    invalid.cells[0] = Cell::continuation(def_style());
+    assert!(
+        invalid
+            .diff(&invalid, &mut RegionShiftBackend::default())
+            .is_err()
+    );
+    Ok(())
 }

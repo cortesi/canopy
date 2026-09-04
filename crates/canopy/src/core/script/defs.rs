@@ -111,48 +111,19 @@ pub(super) fn register_framework_declarations(builder: &mut module::Builder) {
     builder.alias(
         declaration::Alias::new(
             "NodeInfo",
-            declaration::Type::table([
-                declaration::Field::new("id", declaration::Type::named("NodeId"))
-                    .doc("Stable node handle for use in other API calls."),
-                declaration::Field::new("name", declaration::Type::String)
-                    .doc("Widget owner name used in paths and command dispatch."),
-                declaration::Field::new("focused", declaration::Type::Boolean)
-                    .doc("True when this node currently owns focus."),
-                declaration::Field::new("on_focus_path", declaration::Type::Boolean)
-                    .doc("True when this node lies on the path to the focused node."),
-                declaration::Field::new("hidden", declaration::Type::Boolean)
-                    .doc("True when the node's hidden flag is set."),
-                declaration::Field::new("visible", declaration::Type::Boolean)
-                    .doc("True when the node is visible."),
-                declaration::Field::new("children", declaration::Type::named("NodeId").array())
-                    .doc("Direct child nodes in tree order."),
-                declaration::Field::new("rect", declaration::Type::named("Rect").optional())
-                    .doc("Outer rectangle on screen, or nil for zero-sized nodes."),
-                declaration::Field::new(
-                    "content_rect",
-                    declaration::Type::named("Rect").optional(),
-                )
-                .doc("Inner content rectangle after padding, or nil when zero-sized."),
-                declaration::Field::new("canvas", declaration::Type::named("Size"))
-                    .doc("Total scrollable canvas size in content coordinates."),
-                declaration::Field::new("scroll", declaration::Type::named("Point"))
-                    .doc("Current viewport origin within the canvas."),
-                declaration::Field::new("accept_focus", declaration::Type::Boolean)
-                    .doc("True when the widget reports that it can accept focus."),
-            ]),
+            declaration::Type::table(node_info_fields(
+                declaration::Type::named("NodeId").array(),
+                "Direct child nodes in tree order.",
+            )),
         )
         .doc("Summary information for a node in the widget tree."),
     );
     builder.alias(declaration::Alias::new(
         "TreeNode",
-        declaration::Type::Intersection(vec![
-            declaration::Type::named("NodeInfo"),
-            declaration::Type::table([declaration::Field::new(
-                "children",
-                declaration::Type::named("TreeNode").array(),
-            )
-            .doc("Recursive child tree entries in tree order.")]),
-        ]),
+        declaration::Type::table(node_info_fields(
+            declaration::Type::named("TreeNode").array(),
+            "Recursive child tree entries in tree order.",
+        )),
     ));
     builder.alias(declaration::Alias::new(
         "BindOptions",
@@ -405,4 +376,37 @@ pub(super) fn command_doc(spec: &CommandSpec) -> Option<String> {
         }
     }
     (!lines.is_empty()).then(|| lines.join("\n"))
+}
+
+/// Shared node record fields, with the child representation selected by the
+/// alias.
+fn node_info_fields(
+    children: declaration::Type,
+    children_doc: &'static str,
+) -> Vec<declaration::Field> {
+    vec![
+        declaration::Field::new("id", declaration::Type::named("NodeId"))
+            .doc("Stable node handle for use in other API calls."),
+        declaration::Field::new("name", declaration::Type::String)
+            .doc("Widget owner name used in paths and command dispatch."),
+        declaration::Field::new("focused", declaration::Type::Boolean)
+            .doc("True when this node currently owns focus."),
+        declaration::Field::new("on_focus_path", declaration::Type::Boolean)
+            .doc("True when this node lies on the path to the focused node."),
+        declaration::Field::new("hidden", declaration::Type::Boolean)
+            .doc("True when the node's hidden flag is set."),
+        declaration::Field::new("visible", declaration::Type::Boolean)
+            .doc("True when the node is visible."),
+        declaration::Field::new("children", children).doc(children_doc),
+        declaration::Field::new("rect", declaration::Type::named("Rect").optional())
+            .doc("Outer rectangle on screen, or nil for zero-sized nodes."),
+        declaration::Field::new("content_rect", declaration::Type::named("Rect").optional())
+            .doc("Inner content rectangle after padding, or nil when zero-sized."),
+        declaration::Field::new("canvas", declaration::Type::named("Size"))
+            .doc("Total scrollable canvas size in content coordinates."),
+        declaration::Field::new("scroll", declaration::Type::named("Point"))
+            .doc("Current viewport origin within the canvas."),
+        declaration::Field::new("accept_focus", declaration::Type::Boolean)
+            .doc("True when the widget reports that it can accept focus."),
+    ]
 }

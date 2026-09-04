@@ -489,7 +489,10 @@ impl StyleMap {
 
     /// Insert a partial style at a path.
     fn insert_style(&mut self, path: &str, style: PartialStyle) {
-        self.styles.insert(canonical_path(path), style);
+        self.styles
+            .entry(canonical_path(path))
+            .and_modify(|existing| *existing = style.join(existing))
+            .or_insert(style);
     }
 }
 
@@ -1118,5 +1121,35 @@ mod tests {
 
         assert_eq!(resolved.fg, fg_spec.color_at(rect, point));
         assert_eq!(resolved.bg, bg_spec.color_at(rect, point));
+    }
+    #[test]
+    fn committed_style_rules_merge_canonical_components() {
+        let mut map = StyleMap::new();
+        map.rules().fg("/", Color::Red).apply();
+        let manager = StyleManager::new();
+        let root = manager.get(&map, "").resolve_solid().unwrap();
+        assert_eq!(root.fg, Color::Red);
+        assert_eq!(root.bg, Color::Black);
+        assert_eq!(root.attrs, AttrSet::default());
+
+        map.rules()
+            .fg("/item", Color::Blue)
+            .attr("/item", Attr::Bold)
+            .apply();
+        map.rules().bg("item/", Color::Green).apply();
+        let item = manager.get(&map, "item").resolve_solid().unwrap();
+        assert_eq!(item.fg, Color::Blue);
+        assert_eq!(item.bg, Color::Green);
+        assert_eq!(item.attrs, AttrSet::new(Attr::Bold));
+
+        map.rules()
+            .fg("//item/", Color::Yellow)
+            .bg("item", Color::Red)
+            .style("/item//", StyleBuilder::new().attrs(AttrSet::default()))
+            .apply();
+        let item = manager.get(&map, "item").resolve_solid().unwrap();
+        assert_eq!(item.fg, Color::Yellow);
+        assert_eq!(item.bg, Color::Red);
+        assert_eq!(item.attrs, AttrSet::default());
     }
 }

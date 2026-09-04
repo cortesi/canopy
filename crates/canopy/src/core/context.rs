@@ -455,14 +455,14 @@ pub trait Context: ViewContext {
 
     /// Scroll the view up by one page. Returns `true` if movement occurred.
     fn page_up(&mut self) -> bool {
-        let h = self.view().content.h as i32;
-        self.scroll_by(0, -h)
+        let view = self.view();
+        self.scroll_to(view.tl.x, view.tl.y.saturating_sub(view.content.h))
     }
 
     /// Scroll the view down by one page. Returns `true` if movement occurred.
     fn page_down(&mut self) -> bool {
-        let h = self.view().content.h as i32;
-        self.scroll_by(0, h)
+        let view = self.view();
+        self.scroll_to(view.tl.x, view.tl.y.saturating_add(view.content.h))
     }
 
     /// Scroll the view up by one line. Returns `true` if movement occurred.
@@ -1093,5 +1093,38 @@ mod tests {
     fn key_macro_names_the_slot_after_the_key_type() {
         assert_eq!(Editor::KEY, "Editor");
         assert_eq!(ModalSlot::KEY, "ModalSlot");
+    }
+    #[test]
+    fn page_scrolling_preserves_unsigned_offsets_and_clamps() {
+        use super::{Context, CoreContext, ViewContext};
+        use crate::{
+            core::Core,
+            geom::{Point, Size},
+        };
+
+        let mut core = Core::new();
+        let root = core.root_id();
+        for height in [0, 3, i32::MAX as u32 + 1, u32::MAX] {
+            let max_y = if height == 0 { 0 } else { u32::MAX - height };
+            let node = &mut core.nodes[root];
+            node.content_size = Size::new(1, height);
+            node.canvas = Size::new(10, u32::MAX);
+            node.view.content.h = height;
+            node.scroll = Point { x: 2, y: 0 };
+            node.view.tl = node.scroll;
+            let mut context = CoreContext::new(&mut core, root);
+            for step in 1u32..=2 {
+                let before = context.view().tl.y;
+                let expected = height.saturating_mul(step).min(max_y);
+                assert_eq!(context.page_down(), before != expected);
+                assert_eq!(context.view().tl, Point { x: 2, y: expected });
+            }
+            context.scroll_to(2, max_y);
+            let expected = max_y.saturating_sub(height);
+            assert_eq!(context.page_up(), max_y != expected);
+            assert_eq!(context.view().tl, Point { x: 2, y: expected });
+            context.scroll_to(2, 0);
+            assert!(!context.page_up());
+        }
     }
 }

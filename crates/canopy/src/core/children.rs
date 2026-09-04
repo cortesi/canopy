@@ -123,14 +123,13 @@ where
             }
         }
 
-        let desired_set: HashSet<K> = desired.iter().cloned().collect();
         let removed: Vec<K> = children
             .iter()
             .filter_map(|node_id| {
                 planned_map
                     .iter()
                     .find(|(key, mapped)| {
-                        NodeId::from(**mapped) == *node_id && !desired_set.contains(*key)
+                        NodeId::from(**mapped) == *node_id && !seen.contains(*key)
                     })
                     .map(|(key, _)| key.clone())
             })

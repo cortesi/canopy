@@ -515,6 +515,9 @@ impl TermBuf {
         if self.size != prev.size {
             return self.render(backend);
         }
+        if self.cells == prev.cells {
+            return Ok(());
+        }
         if backend.supports_line_shift() {
             let full = self.rect();
             if let Some(shift) = detect_row_shift_in_rect(self, prev, full, MAX_ROW_SHIFT) {

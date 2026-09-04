@@ -264,7 +264,8 @@ pub mod canopy_geom {
         /// If the point is to the left/top of the rect, the result clamps to 0.
         pub fn to_local_point(&self, p: Point) -> Point {}
 
-        /// Intersect this signed rect with an unsigned rect in the same coordinate space.
+        /// Intersect this signed rect with an unsigned rect in the same coordinate
+        /// space.
         pub fn intersect_rect(&self, other: Rect) -> Option<Rect> {}
 
         /// Left edge of the rect.
@@ -302,7 +303,8 @@ pub mod canopy_geom {
         /// Create a new size with the given width and height.
         pub fn new(w: u32, h: u32) -> Self {}
 
-        /// Return a `Rect` with the same dimensions as the `Size`, but a location at (0, 0).
+        /// Return a `Rect` with the same dimensions as the `Size`, but a location
+        /// at (0, 0).
         pub fn rect(&self) -> Rect {}
     }
 

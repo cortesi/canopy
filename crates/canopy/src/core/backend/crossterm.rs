@@ -51,29 +51,43 @@ where
 
     /// Await one event from either the terminal or the framework channel.
     async fn next_uncoalesced(&mut self) -> Result<Event> {
-        let terminal = self.terminal.next();
-        let internal = self.internal.next();
-        pin_mut!(terminal, internal);
-        match select(terminal, internal).await {
-            Either::Left((terminal, _)) => terminal_event(terminal),
-            Either::Right((Some(event), _)) => Ok(event),
-            Either::Right((None, _)) => Err(error::Error::RunLoop(
-                "framework event channel closed".into(),
-            )),
+        loop {
+            let terminal = self.terminal.next();
+            let internal = self.internal.next();
+            pin_mut!(terminal, internal);
+            match select(terminal, internal).await {
+                Either::Left((terminal, _)) => {
+                    if let Some(event) = terminal_event(terminal)? {
+                        return Ok(event);
+                    }
+                }
+                Either::Right((Some(event), _)) => return Ok(event),
+                Either::Right((None, _)) => {
+                    return Err(error::Error::RunLoop(
+                        "framework event channel closed".into(),
+                    ));
+                }
+            }
         }
     }
 
     /// Take one event that is already available without waiting.
     fn next_ready(&mut self) -> Result<Option<Event>> {
-        if let Some(internal) = self.internal.next().now_or_never() {
-            return internal
-                .map(Some)
-                .ok_or_else(|| error::Error::RunLoop("framework event channel closed".into()));
+        loop {
+            if let Some(internal) = self.internal.next().now_or_never() {
+                return internal
+                    .map(Some)
+                    .ok_or_else(|| error::Error::RunLoop("framework event channel closed".into()));
+            }
+            match self.terminal.next().now_or_never() {
+                Some(terminal) => {
+                    if let Some(event) = terminal_event(terminal)? {
+                        return Ok(Some(event));
+                    }
+                }
+                None => return Ok(None),
+            }
         }
-        if let Some(terminal) = self.terminal.next().now_or_never() {
-            return terminal_event(terminal).map(Some);
-        }
-        Ok(None)
     }
 
     /// Await the next event, coalescing consecutive ready mouse moves.
@@ -111,9 +125,12 @@ where
 }
 
 /// Translate one terminal stream item or report reader termination.
-fn terminal_event(event: Option<io::Result<cevent::Event>>) -> Result<Event> {
+fn terminal_event(event: Option<io::Result<cevent::Event>>) -> Result<Option<Event>> {
     match event {
-        Some(Ok(event)) => Ok(translate_event(event)),
+        Some(Ok(cevent::Event::Key(event))) if event.kind == cevent::KeyEventKind::Release => {
+            Ok(None)
+        }
+        Some(Ok(event)) => Ok(Some(translate_event(event))),
         Some(Err(error)) => Err(error::Error::TerminalIo(error)),
         None => Err(error::Error::RunLoop("terminal event stream closed".into())),
     }
@@ -998,5 +1015,107 @@ mod tests {
         let runs = positioned_text_runs(Point { x: 1, y: 3 }, "e\u{0301}x");
 
         assert_eq!(runs, vec![text_run(1, 3, "e\u{0301}x")]);
+    }
+    fn terminal_key(kind: cevent::KeyEventKind) -> cevent::Event {
+        cevent::Event::Key(cevent::KeyEvent::new_with_kind(
+            cevent::KeyCode::Char('a'),
+            cevent::KeyModifiers::empty(),
+            kind,
+        ))
+    }
+
+    fn terminal_move(column: u16) -> cevent::Event {
+        cevent::Event::Mouse(cevent::MouseEvent {
+            kind: cevent::MouseEventKind::Moved,
+            column,
+            row: 0,
+            modifiers: cevent::KeyModifiers::empty(),
+        })
+    }
+
+    #[test]
+    fn event_source_ignores_releases_and_preserves_repeats() -> Result<()> {
+        let (_tx, rx) = unbounded();
+        let terminal = stream::iter([
+            Ok(terminal_key(cevent::KeyEventKind::Press)),
+            Ok(terminal_key(cevent::KeyEventKind::Release)),
+            Ok(terminal_key(cevent::KeyEventKind::Repeat)),
+            Ok(terminal_key(cevent::KeyEventKind::Release)),
+        ]);
+        let mut events = EventSource::new(terminal, rx);
+        for _ in 0..2 {
+            assert!(matches!(
+                block_on(events.next())?,
+                Event::Key(key::Key {
+                    key: key::KeyCode::Char('a'),
+                    ..
+                })
+            ));
+        }
+        assert!(matches!(
+            block_on(events.next()),
+            Err(error::Error::RunLoop(_))
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn event_source_releases_preserve_errors_in_both_ingestion_paths() {
+        for ready in [false, true] {
+            let (_tx, rx) = unbounded();
+            let terminal = stream::iter([
+                Ok(terminal_key(cevent::KeyEventKind::Release)),
+                Err(io::Error::other("after release")),
+            ]);
+            let mut events = EventSource::new(terminal, rx);
+            let result = if ready {
+                events.next_ready()
+            } else {
+                block_on(events.next()).map(Some)
+            };
+            assert!(
+                matches!(result, Err(error::Error::TerminalIo(error)) if error.to_string() == "after release")
+            );
+        }
+    }
+
+    #[test]
+    fn event_source_release_preserves_eof_in_ready_path() {
+        let (_tx, rx) = unbounded();
+        let terminal = stream::iter([Ok(terminal_key(cevent::KeyEventKind::Release))]);
+        let mut events = EventSource::new(terminal, rx);
+        assert!(matches!(events.next_ready(), Err(error::Error::RunLoop(_))));
+    }
+
+    #[test]
+    fn event_source_coalesces_moves_across_releases() -> Result<()> {
+        let (_tx, rx) = unbounded();
+        let terminal = stream::iter([
+            Ok(terminal_move(1)),
+            Ok(terminal_key(cevent::KeyEventKind::Release)),
+            Ok(terminal_move(2)),
+            Ok(terminal_key(cevent::KeyEventKind::Press)),
+        ]);
+        let mut events = EventSource::new(terminal, rx);
+        assert!(matches!(
+            block_on(events.next())?,
+            Event::Mouse(mouse::MouseEvent {
+                location: Point { x: 2, y: 0 },
+                ..
+            })
+        ));
+        assert!(matches!(block_on(events.next())?, Event::Key(_)));
+        Ok(())
+    }
+
+    #[test]
+    fn event_source_release_does_not_consume_framework_wake() -> Result<()> {
+        let (tx, rx) = unbounded();
+        tx.unbounded_send(Event::Wake).unwrap();
+        let terminal = stream::iter([Ok(terminal_key(cevent::KeyEventKind::Release))])
+            .chain(stream::pending());
+        let mut events = EventSource::new(terminal, rx);
+        assert!(matches!(block_on(events.next())?, Event::Wake));
+        Ok(())
     }
 }

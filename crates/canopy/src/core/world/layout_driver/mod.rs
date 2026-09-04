@@ -168,8 +168,7 @@ impl<'a> LayoutPass<'a> {
             .ok_or(Error::NodeNotFound(node_id))?;
 
         if node.hidden || node.layout.display == Display::None {
-            node.view = View::default();
-            return Ok(());
+            return self.clear_layout(node_id);
         }
 
         let outer_x = i64::from(parent_view.content.tl.x) + i64::from(node.rect.tl.x)
@@ -786,7 +785,7 @@ fn allocate_flex_shares(remaining: u32, weights: &[u32]) -> Vec<u32> {
         let weight = u64::from(*w);
         let prod = u64::from(remaining) * weight;
         base.push(u32::try_from(prod / total).unwrap_or(u32::MAX));
-        rem.push(u32::try_from(prod % total).unwrap_or(u32::MAX));
+        rem.push(prod % total);
     }
 
     let used: u32 = base.iter().sum();

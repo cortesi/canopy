@@ -29,7 +29,8 @@ pub mod canopy {
             Column,
             /// Stack children horizontally (row).
             Row,
-            /// Children overlap in the same space (painter's algorithm - last child on top).
+            /// Children overlap in the same space (painter's algorithm - last child on
+            /// top).
             Stack,
         }
 
@@ -277,7 +278,8 @@ pub mod canopy {
         }
 
         impl MeasureConstraints {
-            /// Leaf widgets: clamp a content size to these constraints and return Fixed.
+            /// Leaf widgets: clamp a content size to these constraints and return
+            /// Fixed.
             pub fn clamp(&self, content: Size) -> Measurement {}
 
             /// Containers: request wrapping.
@@ -399,12 +401,14 @@ pub mod canopy {
 
             /// Invalidate cached exports from persistent script modules.
             ///
-            /// Pass a root such as `@user` or `@project` to invalidate one root, or `None` to
-            /// invalidate every root. Returns the new source epoch, or `None` when no module source
-            /// is configured or the named root is unknown.
+            /// Pass a root such as `@user` or `@project` to invalidate one root, or
+            /// `None` to invalidate every root. Returns the new source epoch, or
+            /// `None` when no module source is configured or the named root is
+            /// unknown.
             pub fn invalidate_script_modules(&mut self, root: Option<&str>) -> Option<u64> {}
 
-            /// Register an audited Ruau native module on the same surface as Canopy commands.
+            /// Register an audited Ruau native module on the same surface as Canopy
+            /// commands.
             pub fn register_script_module(&mut self, module: Arc<dyn NativeModule>) -> Result<()> {}
 
             /// Register an app-level startup script.
@@ -454,10 +458,12 @@ pub mod canopy {
             ) -> Result<script::ScriptCheckResult> {
             }
 
-            /// Drain and return log lines recorded by the most recent script evaluation.
+            /// Drain and return log lines recorded by the most recent script
+            /// evaluation.
             pub fn take_script_logs(&self) -> Vec<String> {}
 
-            /// Drain and return assertion outcomes from the most recent script evaluation.
+            /// Drain and return assertion outcomes from the most recent script
+            /// evaluation.
             pub fn take_script_assertions(&self) -> Vec<script::ScriptAssertion> {}
 
             /// Return the in-memory script evaluation journal.
@@ -522,11 +528,11 @@ pub mod canopy {
 
             /// Return command availability from the current focus position.
             ///
-            /// This computes which commands would resolve to a target if dispatched from the current
-            /// focus. For each command:
+            /// This computes which commands would resolve to a target if dispatched
+            /// from the current focus. For each command:
             /// - Free commands always have `resolution = Some(Free)`
-            /// - Node-routed commands have `resolution = Some(Subtree{..})` or `Some(Ancestor{..})`
-            ///   if a matching node exists, `None` otherwise
+            /// - Node-routed commands have `resolution = Some(Subtree{..})` or
+            ///   `Some(Ancestor{..})` if a matching node exists, `None` otherwise
             pub fn command_availability_from_focus(
                 &self,
             ) -> Vec<commands::CommandAvailability<'_>> {
@@ -534,8 +540,8 @@ pub mod canopy {
 
             /// Return command availability from a specific node.
             ///
-            /// Computes which commands would dispatch to a target, using the same resolution logic
-            /// as `commands::dispatch`:
+            /// Computes which commands would dispatch to a target, using the same
+            /// resolution logic as `commands::dispatch`:
             /// 1. First search the subtree rooted at `start` in pre-order
             /// 2. Then walk ancestors
             pub fn command_availability_from_node(
@@ -633,10 +639,12 @@ pub mod canopy {
             /// Remove one exclusive binding frame.
             fn pop_exclusive_bindings(&mut self, token: ExclusiveFrameToken) -> Result<()>;
 
-            /// Scroll the view to the specified position. Returns `true` if movement occurred.
+            /// Scroll the view to the specified position. Returns `true` if movement
+            /// occurred.
             fn scroll_to(&mut self, x: u32, y: u32) -> bool;
 
-            /// Scroll the view by the given offsets. Returns `true` if movement occurred.
+            /// Scroll the view by the given offsets. Returns `true` if movement
+            /// occurred.
             fn scroll_by(&mut self, x: i32, y: i32) -> bool;
 
             /// Scroll the view up by one page. Returns `true` if movement occurred.
@@ -679,7 +687,8 @@ pub mod canopy {
                 edit: &mut dyn FnMut(&mut dyn Context) -> Result<()>,
             ) -> Result<()>;
 
-            /// Execute a closure with mutable access to a widget and its node-bound context.
+            /// Execute a closure with mutable access to a widget and its node-bound
+            /// context.
             fn with_widget_mut(
                 &mut self,
                 node: NodeId,
@@ -708,14 +717,16 @@ pub mod canopy {
             /// Return the current list-row context for injection.
             fn current_list_row(&self) -> Option<ListRowContext>;
 
-            /// Add a boxed widget as a child of a specific parent and return the new node ID.
+            /// Add a boxed widget as a child of a specific parent and return the new
+            /// node ID.
             fn add_child_to_boxed(
                 &mut self,
                 parent: NodeId,
                 widget: Box<dyn Widget>,
             ) -> Result<NodeId>;
 
-            /// Add a boxed widget as a keyed child of a specific parent and return the new node ID.
+            /// Add a boxed widget as a keyed child of a specific parent and return the
+            /// new node ID.
             fn add_child_to_keyed_boxed(
                 &mut self,
                 parent: NodeId,
@@ -787,8 +798,8 @@ pub mod canopy {
             Node(super::id::NodeId),
         }
 
-        /// A trait that allows widgets to perform recursive initialization of themselves and their
-        /// children.
+        /// A trait that allows widgets to perform recursive initialization of
+        /// themselves and their children.
         pub trait Loader {
             /// Load commands or resources into the canopy instance.
             /// Returns an error if loading fails.
@@ -931,7 +942,8 @@ pub mod canopy {
             /// Find the first node whose path matches the validated filter.
             fn find_node_matching(&self, path_filter: &PathFilter) -> Option<NodeId> {}
 
-            /// Find all nodes whose paths match the filter, relative to the current node.
+            /// Find all nodes whose paths match the filter, relative to the current
+            /// node.
             ///
             /// The filter is normalized to match full paths.
             fn find_nodes(&self, path_filter: &str) -> Vec<NodeId> {}
@@ -962,8 +974,8 @@ pub mod canopy {
 
             /// Attempt to focus this widget.
             ///
-            /// Widgets can use the provided context to query their tree state (e.g., whether they have
-            /// children) when deciding whether to accept focus.
+            /// Widgets can use the provided context to query their tree state (e.g.,
+            /// whether they have children) when deciding whether to accept focus.
             fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
             /// Cursor specification for focused widgets.
@@ -974,8 +986,9 @@ pub mod canopy {
 
             /// Called when the widget is mounted in the tree, before its first render.
             ///
-            /// A failed hook rolls back core-owned state. External effects and widget-owned state must be
-            /// repeatable or compensating because a later mount attempt may call this hook again.
+            /// A failed hook rolls back core-owned state. External effects and
+            /// widget-owned state must be repeatable or compensating because a
+            /// later mount attempt may call this hook again.
             fn on_mount(&mut self, _ctx: &mut dyn Context) -> Result<()> {}
 
             /// Validation hook before a widget is removed or replaced.
@@ -985,8 +998,9 @@ pub mod canopy {
 
             /// Called before a successfully mounted widget is removed or replaced.
             ///
-            /// This hook cannot veto removal. During failure rollback, structural context operations are
-            /// rejected and external cleanup must be safe to repeat.
+            /// This hook cannot veto removal. During failure rollback, structural
+            /// context operations are rejected and external cleanup must be safe to
+            /// repeat.
             fn on_unmount(&mut self, _ctx: &mut dyn Context) {}
 
             /// Name used for commands and paths.
@@ -1289,13 +1303,13 @@ pub mod canopy {
             ///
             /// Normalization handles two common sources of divergence across terminals:
             ///
-            /// - **Ctrl-modified ASCII control codes** (0x00–0x1F and 0x7F) are mapped to
-            ///   canonical printable equivalents (e.g. 0x01 → `A`, 0x1B → `[`, 0x7F → `?`).
-            ///   Some terminals emit control codes without setting the Ctrl modifier, so
-            ///   these codes are treated as Ctrl-combinations even if Ctrl isn't reported.
-            ///   Ctrl+`_`, Ctrl+`?`, and Ctrl+`7` then alias to `/` to align with common
-            ///   `Ctrl+/` help bindings, and Ctrl+`4`, Ctrl+`5`, Ctrl+`6` alias to `\`, `]`,
-            ///   and `^`.
+            /// - **Ctrl-modified ASCII control codes** (0x00–0x1F and 0x7F) are mapped
+            ///   to canonical printable equivalents (e.g. 0x01 → `A`, 0x1B → `[`, 0x7F
+            ///   → `?`). Some terminals emit control codes without setting the Ctrl
+            ///   modifier, so these codes are treated as Ctrl-combinations even if Ctrl
+            ///   isn't reported. Ctrl+`_`, Ctrl+`?`, and Ctrl+`7` then alias to `/` to
+            ///   align with common `Ctrl+/` help bindings, and Ctrl+`4`, Ctrl+`5`,
+            ///   Ctrl+`6` alias to `\`, `]`, and `^`.
             /// - **Shift handling** is applied after Ctrl canonicalization.
             ///
             /// Handling of the shift key is the most intricate part of this module.
@@ -1327,8 +1341,9 @@ pub mod canopy {
             /// | shift + enter     | shift + enter    |
             /// | shift + ctrl + A  | ctrl + A         |
             ///
-            /// `normalize` must be called explicitly when needed. Comparison is literal and
-            /// straightforward and does not normalize. `parse_spec` normalizes its result.
+            /// `normalize` must be called explicitly when needed. Comparison is literal
+            /// and straightforward and does not normalize. `parse_spec` normalizes
+            /// its result.
             pub fn normalize(&self) -> Self {}
 
             /// Parse a key specification such as `ctrl-s`, `PageDown`, or `A`.
@@ -1415,8 +1430,10 @@ pub mod canopy {
                 pub button: Button,
                 /// Keyboard modifiers.
                 pub modifiers: key::Mods,
-                /// Cursor location in local coordinates relative to the node view. To map
-                /// back to screen coordinates, add the node view's outer top-left.
+                /// Cursor location in screen coordinates for incoming events, and relative
+                /// to the node's content origin for events delivered to widgets. Coordinates
+                /// before the content origin saturate to zero, including captured events
+                /// and events in padding, so the conversion is not always reversible.
                 pub location: crate::geom::Point,
             }
 
@@ -1491,7 +1508,8 @@ pub mod canopy {
             Column,
             /// Stack children horizontally (row).
             Row,
-            /// Children overlap in the same space (painter's algorithm - last child on top).
+            /// Children overlap in the same space (painter's algorithm - last child on
+            /// top).
             Stack,
         }
 
@@ -1639,7 +1657,8 @@ pub mod canopy {
         }
 
         impl MeasureConstraints {
-            /// Leaf widgets: clamp a content size to these constraints and return Fixed.
+            /// Leaf widgets: clamp a content size to these constraints and return
+            /// Fixed.
             pub fn clamp(&self, content: Size) -> Measurement {}
 
             /// Containers: request wrapping.
@@ -1707,8 +1726,8 @@ pub mod canopy {
         impl PathFilter {
             /// Compile a validated path filter.
             ///
-            /// Filters support `*` for one component and `**` for zero or more components. Literal
-            /// components must be valid [`NodeName`] values.
+            /// Filters support `*` for one component and `**` for zero or more
+            /// components. Literal components must be valid [`NodeName`] values.
             pub fn new(path: &str) -> Result<Self> {}
 
             /// Compile a filter after normalizing it to a full-path match.
@@ -1718,14 +1737,15 @@ pub mod canopy {
             pub fn as_str(&self) -> &str {}
         }
 
-        /// A renderer that only renders to a specific rectangle within the target terminal buffer.
+        /// A renderer that only renders to a specific rectangle within the target
+        /// terminal buffer.
         pub struct Render<'a> {}
 
         impl<'a> Render<'a> {
             /// Construct a renderer that writes into `buf`.
             ///
-            /// `clip` is the visible rectangle in canvas coordinates, and `screen_origin` is where the
-            /// clip's top-left lands in the buffer.
+            /// `clip` is the visible rectangle in canvas coordinates, and
+            /// `screen_origin` is where the clip's top-left lands in the buffer.
             pub fn new(
                 stylemap: &'a StyleMap,
                 style: &'a mut StyleManager,
@@ -1736,7 +1756,8 @@ pub mod canopy {
             }
 
             /// Apply the current effect stack to a style.
-            /// Use this when you have a Style from a source other than the style manager.
+            /// Use this when you have a Style from a source other than the style
+            /// manager.
             pub fn apply_effects(&self, style: Style) -> Style {}
 
             /// Resolve a style by name and apply the current effect stack.
@@ -1754,7 +1775,8 @@ pub mod canopy {
             /// Push a style layer.
             pub fn push_layer(&mut self, name: &str) {}
 
-            /// Fill a rectangle with a specified character. Writes out of bounds will be clipped.
+            /// Fill a rectangle with a specified character. Writes out of bounds will
+            /// be clipped.
             pub fn fill(&mut self, style: &str, r: geom::Rect, c: char) -> Result<()> {}
 
             /// Print text in the specified line. If the text is wider than the
@@ -1811,10 +1833,7 @@ pub mod canopy {
         ///     .attr(Attr::Bold);
         ///
         /// let mut style_map = StyleMap::new();
-        /// style_map
-        ///     .rules()
-        ///     .style("item/selected", selected)
-        ///     .apply();
+        /// style_map.rules().style("item/selected", selected).apply();
         /// ```
         #[derive(Clone, Default, Debug, StructuralPartialEq, PartialEq)]
         pub struct StyleBuilder {}
@@ -1874,8 +1893,8 @@ pub mod canopy {
 
         /// Run the main render/event loop using the crossterm backend.
         ///
-        /// Ctrl+C dumps the node tree and stops the loop with status 130. Keyboard enhancement flags
-        /// are enabled so escape codes are unambiguous.
+        /// Ctrl+C dumps the node tree and stops the loop with status 130. Keyboard
+        /// enhancement flags are enabled so escape codes are unambiguous.
         pub fn runloop(cnpy: crate::Canopy) -> crate::error::Result<i32> {}
     }
 
@@ -1957,7 +1976,8 @@ pub mod canopy {
 
         /// Write text along a line, resolving the style separately for each cell.
         ///
-        /// The text is clipped to the line and padded with spaces to the line's width.
+        /// The text is clipped to the line and padded with spaces to the line's
+        /// width.
         pub fn text_with(
             &mut self,
             l: Line,
@@ -2133,12 +2153,14 @@ pub mod canopy {
 
         /// Invalidate cached exports from persistent script modules.
         ///
-        /// Pass a root such as `@user` or `@project` to invalidate one root, or `None` to
-        /// invalidate every root. Returns the new source epoch, or `None` when no module source
-        /// is configured or the named root is unknown.
+        /// Pass a root such as `@user` or `@project` to invalidate one root, or
+        /// `None` to invalidate every root. Returns the new source epoch, or
+        /// `None` when no module source is configured or the named root is
+        /// unknown.
         pub fn invalidate_script_modules(&mut self, root: Option<&str>) -> Option<u64> {}
 
-        /// Register an audited Ruau native module on the same surface as Canopy commands.
+        /// Register an audited Ruau native module on the same surface as Canopy
+        /// commands.
         pub fn register_script_module(&mut self, module: Arc<dyn NativeModule>) -> Result<()> {}
 
         /// Register an app-level startup script.
@@ -2188,10 +2210,12 @@ pub mod canopy {
         ) -> Result<script::ScriptCheckResult> {
         }
 
-        /// Drain and return log lines recorded by the most recent script evaluation.
+        /// Drain and return log lines recorded by the most recent script
+        /// evaluation.
         pub fn take_script_logs(&self) -> Vec<String> {}
 
-        /// Drain and return assertion outcomes from the most recent script evaluation.
+        /// Drain and return assertion outcomes from the most recent script
+        /// evaluation.
         pub fn take_script_assertions(&self) -> Vec<script::ScriptAssertion> {}
 
         /// Return the in-memory script evaluation journal.
@@ -2256,17 +2280,17 @@ pub mod canopy {
 
         /// Return command availability from the current focus position.
         ///
-        /// This computes which commands would resolve to a target if dispatched from the current
-        /// focus. For each command:
+        /// This computes which commands would resolve to a target if dispatched
+        /// from the current focus. For each command:
         /// - Free commands always have `resolution = Some(Free)`
-        /// - Node-routed commands have `resolution = Some(Subtree{..})` or `Some(Ancestor{..})`
-        ///   if a matching node exists, `None` otherwise
+        /// - Node-routed commands have `resolution = Some(Subtree{..})` or
+        ///   `Some(Ancestor{..})` if a matching node exists, `None` otherwise
         pub fn command_availability_from_focus(&self) -> Vec<commands::CommandAvailability<'_>> {}
 
         /// Return command availability from a specific node.
         ///
-        /// Computes which commands would dispatch to a target, using the same resolution logic
-        /// as `commands::dispatch`:
+        /// Computes which commands would dispatch to a target, using the same
+        /// resolution logic as `commands::dispatch`:
         /// 1. First search the subtree rooted at `start` in pre-order
         /// 2. Then walk ancestors
         pub fn command_availability_from_node(
@@ -2362,10 +2386,12 @@ pub mod canopy {
         /// Remove one exclusive binding frame.
         fn pop_exclusive_bindings(&mut self, token: ExclusiveFrameToken) -> Result<()>;
 
-        /// Scroll the view to the specified position. Returns `true` if movement occurred.
+        /// Scroll the view to the specified position. Returns `true` if movement
+        /// occurred.
         fn scroll_to(&mut self, x: u32, y: u32) -> bool;
 
-        /// Scroll the view by the given offsets. Returns `true` if movement occurred.
+        /// Scroll the view by the given offsets. Returns `true` if movement
+        /// occurred.
         fn scroll_by(&mut self, x: i32, y: i32) -> bool;
 
         /// Scroll the view up by one page. Returns `true` if movement occurred.
@@ -2404,7 +2430,8 @@ pub mod canopy {
             edit: &mut dyn FnMut(&mut dyn Context) -> Result<()>,
         ) -> Result<()>;
 
-        /// Execute a closure with mutable access to a widget and its node-bound context.
+        /// Execute a closure with mutable access to a widget and its node-bound
+        /// context.
         fn with_widget_mut(
             &mut self,
             node: NodeId,
@@ -2433,11 +2460,13 @@ pub mod canopy {
         /// Return the current list-row context for injection.
         fn current_list_row(&self) -> Option<ListRowContext>;
 
-        /// Add a boxed widget as a child of a specific parent and return the new node ID.
+        /// Add a boxed widget as a child of a specific parent and return the new
+        /// node ID.
         fn add_child_to_boxed(&mut self, parent: NodeId, widget: Box<dyn Widget>)
             -> Result<NodeId>;
 
-        /// Add a boxed widget as a keyed child of a specific parent and return the new node ID.
+        /// Add a boxed widget as a keyed child of a specific parent and return the
+        /// new node ID.
         fn add_child_to_keyed_boxed(
             &mut self,
             parent: NodeId,
@@ -2576,7 +2605,8 @@ pub mod canopy {
     /// Ordered keyed child collection helper.
     ///
     /// Stores a stable mapping from keys to node IDs plus a current order. Use
-    /// [`KeyedChildren::reconcile`] to create, update, and reorder children based on a desired key list.
+    /// [`KeyedChildren::reconcile`] to create, update, and reorder children based
+    /// on a desired key list.
     #[derive(Debug, Default)]
     pub struct KeyedChildren<K, W> {}
 
@@ -2621,8 +2651,8 @@ pub mod canopy {
         }
     }
 
-    /// A trait that allows widgets to perform recursive initialization of themselves and their
-    /// children.
+    /// A trait that allows widgets to perform recursive initialization of
+    /// themselves and their children.
     pub trait Loader {
         /// Load commands or resources into the canopy instance.
         /// Returns an error if loading fails.
@@ -2809,7 +2839,8 @@ pub mod canopy {
         /// Find the first node whose path matches the validated filter.
         fn find_node_matching(&self, path_filter: &PathFilter) -> Option<NodeId> {}
 
-        /// Find all nodes whose paths match the filter, relative to the current node.
+        /// Find all nodes whose paths match the filter, relative to the current
+        /// node.
         ///
         /// The filter is normalized to match full paths.
         fn find_nodes(&self, path_filter: &str) -> Vec<NodeId> {}
@@ -2948,18 +2979,19 @@ pub mod canopy {
         /// Marker trait for serde-backed command arguments.
         pub trait CommandArg: Serialize + DeserializeOwned + 'static {}
 
-        /// Registry for declaration items required by command argument and return types.
+        /// Registry for declaration items required by command argument and return
+        /// types.
         ///
         /// Tracks in-flight named registrations so recursive and shared types
-        /// terminate: a type's `luau_decls` claims its name with [`DeclRegistry::begin`]
-        /// before recursing into field types.
+        /// terminate: a type's `luau_decls` claims its name with
+        /// [`DeclRegistry::begin`] before recursing into field types.
         pub struct DeclRegistry<'a> {}
 
         impl<'a> DeclRegistry<'a> {
             /// Claim a type name for registration.
             ///
-            /// Returns false when the name is already in progress, in which case the caller must skip
-            /// both recursion and registration.
+            /// Returns false when the name is already in progress, in which case the
+            /// caller must skip both recursion and registration.
             pub fn begin(&mut self, name: &str) -> bool {}
 
             /// Registers an alias declaration.
@@ -3753,13 +3785,13 @@ pub mod canopy {
                 ///
                 /// Normalization handles two common sources of divergence across terminals:
                 ///
-                /// - **Ctrl-modified ASCII control codes** (0x00–0x1F and 0x7F) are mapped to
-                ///   canonical printable equivalents (e.g. 0x01 → `A`, 0x1B → `[`, 0x7F → `?`).
-                ///   Some terminals emit control codes without setting the Ctrl modifier, so
-                ///   these codes are treated as Ctrl-combinations even if Ctrl isn't reported.
-                ///   Ctrl+`_`, Ctrl+`?`, and Ctrl+`7` then alias to `/` to align with common
-                ///   `Ctrl+/` help bindings, and Ctrl+`4`, Ctrl+`5`, Ctrl+`6` alias to `\`, `]`,
-                ///   and `^`.
+                /// - **Ctrl-modified ASCII control codes** (0x00–0x1F and 0x7F) are mapped
+                ///   to canonical printable equivalents (e.g. 0x01 → `A`, 0x1B → `[`, 0x7F
+                ///   → `?`). Some terminals emit control codes without setting the Ctrl
+                ///   modifier, so these codes are treated as Ctrl-combinations even if Ctrl
+                ///   isn't reported. Ctrl+`_`, Ctrl+`?`, and Ctrl+`7` then alias to `/` to
+                ///   align with common `Ctrl+/` help bindings, and Ctrl+`4`, Ctrl+`5`,
+                ///   Ctrl+`6` alias to `\`, `]`, and `^`.
                 /// - **Shift handling** is applied after Ctrl canonicalization.
                 ///
                 /// Handling of the shift key is the most intricate part of this module.
@@ -3791,8 +3823,9 @@ pub mod canopy {
                 /// | shift + enter     | shift + enter    |
                 /// | shift + ctrl + A  | ctrl + A         |
                 ///
-                /// `normalize` must be called explicitly when needed. Comparison is literal and
-                /// straightforward and does not normalize. `parse_spec` normalizes its result.
+                /// `normalize` must be called explicitly when needed. Comparison is literal
+                /// and straightforward and does not normalize. `parse_spec` normalizes
+                /// its result.
                 pub fn normalize(&self) -> Self {}
 
                 /// Parse a key specification such as `ctrl-s`, `PageDown`, or `A`.
@@ -3880,8 +3913,10 @@ pub mod canopy {
                 pub button: Button,
                 /// Keyboard modifiers.
                 pub modifiers: key::Mods,
-                /// Cursor location in local coordinates relative to the node view. To map
-                /// back to screen coordinates, add the node view's outer top-left.
+                /// Cursor location in screen coordinates for incoming events, and relative
+                /// to the node's content origin for events delivered to widgets. Coordinates
+                /// before the content origin saturate to zero, including captured events
+                /// and events in padding, so the conversion is not always reversible.
                 pub location: crate::geom::Point,
             }
 
@@ -4000,8 +4035,8 @@ pub mod canopy {
         impl PathFilter {
             /// Compile a validated path filter.
             ///
-            /// Filters support `*` for one component and `**` for zero or more components. Literal
-            /// components must be valid [`NodeName`] values.
+            /// Filters support `*` for one component and `**` for zero or more
+            /// components. Literal components must be valid [`NodeName`] values.
             pub fn new(path: &str) -> Result<Self> {}
 
             /// Compile a filter after normalizing it to a full-path match.
@@ -4027,7 +4062,8 @@ pub mod canopy {
             fn supports_char_shift(&self) -> bool {}
 
             /// Shift characters within a line starting at the location.
-            /// Positive counts insert blanks and shift right, negative counts delete and shift left.
+            /// Positive counts insert blanks and shift right, negative counts delete
+            /// and shift left.
             fn shift_chars(&mut self, _loc: geom::Point, _count: i32) -> Result<()> {}
 
             /// Return true if the backend can shift lines within a region.
@@ -4064,14 +4100,15 @@ pub mod canopy {
             fn flush(&mut self) -> Result<()> {}
         }
 
-        /// A renderer that only renders to a specific rectangle within the target terminal buffer.
+        /// A renderer that only renders to a specific rectangle within the target
+        /// terminal buffer.
         pub struct Render<'a> {}
 
         impl<'a> Render<'a> {
             /// Construct a renderer that writes into `buf`.
             ///
-            /// `clip` is the visible rectangle in canvas coordinates, and `screen_origin` is where the
-            /// clip's top-left lands in the buffer.
+            /// `clip` is the visible rectangle in canvas coordinates, and
+            /// `screen_origin` is where the clip's top-left lands in the buffer.
             pub fn new(
                 stylemap: &'a StyleMap,
                 style: &'a mut StyleManager,
@@ -4082,7 +4119,8 @@ pub mod canopy {
             }
 
             /// Apply the current effect stack to a style.
-            /// Use this when you have a Style from a source other than the style manager.
+            /// Use this when you have a Style from a source other than the style
+            /// manager.
             pub fn apply_effects(&self, style: Style) -> Style {}
 
             /// Resolve a style by name and apply the current effect stack.
@@ -4100,7 +4138,8 @@ pub mod canopy {
             /// Push a style layer.
             pub fn push_layer(&mut self, name: &str) {}
 
-            /// Fill a rectangle with a specified character. Writes out of bounds will be clipped.
+            /// Fill a rectangle with a specified character. Writes out of bounds will
+            /// be clipped.
             pub fn fill(&mut self, style: &str, r: geom::Rect, c: char) -> Result<()> {}
 
             /// Print text in the specified line. If the text is wider than the
@@ -4167,7 +4206,8 @@ pub mod canopy {
             pub severity: String,
             /// One-based line number, or zero when the diagnostic is not source-bound.
             pub line: usize,
-            /// One-based column number, or zero when the diagnostic is not source-bound.
+            /// One-based column number, or zero when the diagnostic is not
+            /// source-bound.
             pub column: usize,
             /// Human-readable diagnostic message.
             pub message: String,
@@ -4286,8 +4326,8 @@ pub mod canopy {
             //! Style effects system.
             //! Style effects system for transforming styles during rendering.
             //!
-            //! Effects are transformations applied to styles that inherit through the node tree.
-            //! They can modify colors, attributes, or both.
+            //! Effects are transformations applied to styles that inherit through the node
+            //! tree. They can modify colors, attributes, or both.
 
             /// A style transformation that can be applied during rendering.
             ///
@@ -4503,10 +4543,12 @@ pub mod canopy {
             /// Named colors and ANSI-256 values use the standard palette mappings.
             pub fn rgb(self) -> (u8, u8, u8) {}
 
-            /// Scale brightness by a factor. 0.0 = black, 1.0 = unchanged, 2.0 = double brightness.
+            /// Scale brightness by a factor. 0.0 = black, 1.0 = unchanged, 2.0 = double
+            /// brightness.
             pub fn scale_brightness(self, factor: f32) -> Self {}
 
-            /// Adjust saturation. 0.0 = grayscale, 1.0 = unchanged, 2.0 = double saturation.
+            /// Adjust saturation. 0.0 = grayscale, 1.0 = unchanged, 2.0 = double
+            /// saturation.
             pub fn saturation(self, factor: f32) -> Self {}
 
             /// Blend this color with another. ratio 0.0 = self, 1.0 = other.
@@ -4537,8 +4579,8 @@ pub mod canopy {
 
         /// The role colours a theme assigns.
         ///
-        /// Each field names the role a colour plays, not the colour itself, so the same rule set can
-        /// render a light theme, a dark theme, or any other palette.
+        /// Each field names the role a colour plays, not the colour itself, so the same
+        /// rule set can render a light theme, a dark theme, or any other palette.
         #[derive(Debug, Clone, Copy)]
         pub struct Palette {
             /// Default foreground.
@@ -4773,10 +4815,7 @@ pub mod canopy {
         ///     .attr(Attr::Bold);
         ///
         /// let mut style_map = StyleMap::new();
-        /// style_map
-        ///     .rules()
-        ///     .style("item/selected", selected)
-        ///     .apply();
+        /// style_map.rules().style("item/selected", selected).apply();
         /// ```
         #[derive(Clone, Default, Debug, StructuralPartialEq, PartialEq)]
         pub struct StyleBuilder {}
@@ -4930,7 +4969,8 @@ pub mod canopy {
         /// Slice a string by display columns, returning the substring and its width.
         pub fn slice_by_columns(s: &str, start: usize, max: usize) -> (&str, usize) {}
 
-        /// Return the display width of a grapheme cluster, capped at terminal cell widths.
+        /// Return the display width of a grapheme cluster, capped at terminal cell
+        /// widths.
         pub fn grapheme_width(grapheme: &str) -> usize {}
 
         /// Expand tabs into spaces using the configured tab stop.
@@ -4966,7 +5006,8 @@ pub mod canopy {
             /// True if the view is zero-sized.
             pub fn is_zero(&self) -> bool {}
 
-            /// Offset from the outer origin to the content origin, in local coordinates.
+            /// Offset from the outer origin to the content origin, in local
+            /// coordinates.
             pub fn content_origin(&self) -> Point {}
 
             /// Visible view rectangle in content coordinates.
@@ -4978,15 +5019,16 @@ pub mod canopy {
             /// Local outer rectangle with origin at (0,0).
             pub fn outer_rect_local(&self) -> Rect {}
 
-            /// Build a view from signed outer and content rects, a scroll offset, and a canvas size.
+            /// Build a view from signed outer and content rects, a scroll offset, and a
+            /// canvas size.
             pub fn new(outer: RectI32, content: RectI32, tl: Point, canvas: Size) -> Self {}
 
             /// Calculates the (pre, active, post) rectangles needed to draw a vertical
             /// scroll bar for this view in the specified margin rect.
             pub fn vactive(&self, margin: Rect) -> Result<Option<(Rect, Rect, Rect)>> {}
 
-            /// Calculates the (pre, active, post) rectangles needed to draw a horizontal
-            /// scroll bar for this view in the specified margin rect.
+            /// Calculates the (pre, active, post) rectangles needed to draw a
+            /// horizontal scroll bar for this view in the specified margin rect.
             pub fn hactive(&self, margin: Rect) -> Result<Option<(Rect, Rect, Rect)>> {}
         }
     }
@@ -5027,8 +5069,8 @@ pub mod canopy {
 
         /// Attempt to focus this widget.
         ///
-        /// Widgets can use the provided context to query their tree state (e.g., whether they have
-        /// children) when deciding whether to accept focus.
+        /// Widgets can use the provided context to query their tree state (e.g.,
+        /// whether they have children) when deciding whether to accept focus.
         fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
         /// Cursor specification for focused widgets.
@@ -5039,8 +5081,9 @@ pub mod canopy {
 
         /// Called when the widget is mounted in the tree, before its first render.
         ///
-        /// A failed hook rolls back core-owned state. External effects and widget-owned state must be
-        /// repeatable or compensating because a later mount attempt may call this hook again.
+        /// A failed hook rolls back core-owned state. External effects and
+        /// widget-owned state must be repeatable or compensating because a
+        /// later mount attempt may call this hook again.
         fn on_mount(&mut self, _ctx: &mut dyn Context) -> Result<()> {}
 
         /// Validation hook before a widget is removed or replaced.
@@ -5050,15 +5093,17 @@ pub mod canopy {
 
         /// Called before a successfully mounted widget is removed or replaced.
         ///
-        /// This hook cannot veto removal. During failure rollback, structural context operations are
-        /// rejected and external cleanup must be safe to repeat.
+        /// This hook cannot veto removal. During failure rollback, structural
+        /// context operations are rejected and external cleanup must be safe to
+        /// repeat.
         fn on_unmount(&mut self, _ctx: &mut dyn Context) {}
 
         /// Name used for commands and paths.
         fn name(&self) -> NodeName {}
     }
 
-    /// Build a [`Color`](crate::style::Color) from a `#RRGGBB` or `RRGGBB` literal at compile time.
+    /// Build a [`Color`](crate::style::Color) from a `#RRGGBB` or `RRGGBB` literal
+    /// at compile time.
     #[macro_export]
     macro_rules! rgb {
     ($hex:literal) => { ... };

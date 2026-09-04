@@ -100,10 +100,15 @@ impl Rect {
     /// Splits the rectangle horizontally into n sections, as close to equally
     /// sized as possible.
     pub fn split_horizontal(&self, n: u32) -> Result<Vec<Self>> {
-        let widths = split(self.w, n)?;
-        let mut off: u32 = self.tl.x;
-        let mut ret = vec![];
-        for width in widths {
+        if n == 0 {
+            return Err(Error::ZeroSections);
+        }
+        let width = self.w / n;
+        let remainder = self.w % n;
+        let mut off = self.tl.x;
+        let mut ret = Vec::with_capacity(n as usize);
+        for i in 0..n {
+            let width = width + u32::from(i < remainder);
             ret.push(Self::new(off, self.tl.y, width, self.h));
             off = off.saturating_add(width);
         }
@@ -164,20 +169,6 @@ impl From<Line> for Rect {
             h: 1,
         }
     }
-}
-
-/// Split a length into n sections, as evenly as possible.
-fn split(len: u32, n: u32) -> Result<Vec<u32>> {
-    if n == 0 {
-        return Err(Error::ZeroSections);
-    }
-    let w = len / n;
-    let rem = len % n;
-    let mut v = Vec::with_capacity(n as usize);
-    for i in 0..n {
-        v.push(if i < rem { w + 1 } else { w })
-    }
-    Ok(v)
 }
 
 #[cfg(test)]
@@ -314,5 +305,37 @@ mod tests {
         assert!(r.contains_rect(r));
 
         Ok(())
+    }
+    #[test]
+    fn horizontal_splits_preserve_order_and_boundaries() {
+        assert_eq!(
+            Rect::new(4, 2, 8, 3).split_horizontal(3).unwrap(),
+            [
+                Rect::new(4, 2, 3, 3),
+                Rect::new(7, 2, 3, 3),
+                Rect::new(10, 2, 2, 3),
+            ]
+        );
+        assert_eq!(
+            Rect::new(4, 2, 1, 3).split_horizontal(3).unwrap(),
+            [
+                Rect::new(4, 2, 1, 3),
+                Rect::new(5, 2, 0, 3),
+                Rect::new(5, 2, 0, 3),
+            ]
+        );
+        assert!(matches!(
+            Rect::new(0, 0, 1, 1).split_horizontal(0),
+            Err(Error::ZeroSections)
+        ));
+        assert_eq!(
+            Rect::new(u32::MAX - 1, 2, 4, 3)
+                .split_horizontal(2)
+                .unwrap(),
+            [
+                Rect::new(u32::MAX - 1, 2, 2, 3),
+                Rect::new(u32::MAX, 2, 2, 3),
+            ]
+        );
     }
 }

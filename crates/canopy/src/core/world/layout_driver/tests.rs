@@ -1017,3 +1017,52 @@ fn canvas_errors_include_operation_node_and_path() -> Result<()> {
     assert_error_context(&error, "canvas", child, &path);
     Ok(())
 }
+
+#[test]
+fn flex_shares_keep_large_remainders() {
+    assert_eq!(
+        allocate_flex_shares(2, &[3_000_000_000, 4_000_000_000, 4_000_000_000]),
+        [0, 1, 1]
+    );
+}
+
+#[test]
+fn excluded_subtrees_clear_previously_computed_layout() -> Result<()> {
+    for display_none in [false, true] {
+        let mut core = Core::new();
+        let parent = wrap_node(&mut core)?;
+        let (widget, _) = TestWidget::with_canvas(|_| Measurement::Wrap, |_, _| Size::new(50, 50));
+        let child = core.create_detached(widget)?;
+        let grandchild = fixed_leaf(&mut core, 2, 2)?;
+        core.set_children(child, vec![grandchild])?;
+        core.set_children(parent, vec![child])?;
+        attach_root_child(&mut core, parent)?;
+        core.set_layout_of(parent, Layout::fill())?;
+        core.set_layout_of(child, Layout::fill())?;
+        core.update_layout(Size::new(10, 10))?;
+        core.nodes[child].scroll = Point { x: 4, y: 5 };
+        core.update_layout(Size::new(10, 10))?;
+        assert!(!core.nodes[grandchild].view.is_zero());
+        assert_eq!(core.nodes[child].scroll, Point { x: 4, y: 5 });
+        if display_none {
+            core.set_layout_of(parent, Layout::fill().none())?;
+        } else {
+            core.set_hidden(parent, true)?;
+        }
+        core.update_layout(Size::new(10, 10))?;
+        for id in [parent, child, grandchild] {
+            let node = &core.nodes[id];
+            assert_eq!(node.rect, crate::geom::Rect::zero());
+            assert_eq!(node.content_size, Size::ZERO);
+            assert_eq!(node.canvas, Size::ZERO);
+            assert_eq!(node.scroll, Point::zero());
+            assert_eq!(node.view, crate::view::View::default());
+        }
+        core.set_hidden(parent, false)?;
+        core.set_layout_of(parent, Layout::fill())?;
+        core.update_layout(Size::new(10, 10))?;
+        assert!(!core.nodes[grandchild].view.is_zero());
+        assert_eq!(core.nodes[child].canvas, Size::new(50, 50));
+    }
+    Ok(())
+}

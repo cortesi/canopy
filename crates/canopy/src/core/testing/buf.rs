@@ -98,7 +98,6 @@ impl<'a> BufTest<'a> {
         for y in 0..self.buf.size().h {
             for x in 0..=self.buf.size().w.saturating_sub(tl) {
                 let mut m = true;
-                let mut c = false;
                 for (i, ch) in txt.chars().enumerate() {
                     if let Some(cell) = self.buf.get(Point { x: x + i as u32, y }) {
                         if cell.display_char() != ch {
@@ -119,15 +118,16 @@ impl<'a> BufTest<'a> {
                         let attr_matches =
                             style.attrs.is_none() || style.attrs == Some(cell.style.attrs);
                         let style_matches = fg_matches && bg_matches && attr_matches;
-                        if style_matches {
-                            c = true;
+                        if !style_matches {
+                            m = false;
+                            break;
                         }
                     } else {
                         m = false;
                         break;
                     }
                 }
-                if m && c {
+                if m {
                     return true;
                 }
             }
@@ -269,5 +269,40 @@ mod tests {
             "bold",
             &PartialStyle::from(StyleBuilder::new().fg(Color::Red).attr(Attr::Italic))
         ));
+    }
+    #[test]
+    fn contains_text_style_requires_every_character_and_component() {
+        let base = test_style();
+        let red = ResolvedStyle::new(Color::Red, Color::Blue, AttrSet::new(Attr::Bold));
+        let requested = PartialStyle::from(
+            StyleBuilder::new()
+                .fg(Color::Red)
+                .bg(Color::Blue)
+                .attr(Attr::Bold),
+        );
+        for red_column in 0..3 {
+            let mut buf = TermBuf::new((3, 1), 'x', base).unwrap();
+            buf.put(
+                Point {
+                    x: red_column,
+                    y: 0,
+                },
+                'x',
+                red,
+            )
+            .unwrap();
+            assert!(!BufTest::new(&buf).contains_text_style("xxx", &requested));
+        }
+        let mut buf = TermBuf::new((3, 1), 'x', red).unwrap();
+        assert!(BufTest::new(&buf).contains_text_style("xxx", &requested));
+        assert!(!BufTest::new(&buf).contains_text_style("", &requested));
+        for changed in [
+            ResolvedStyle::new(Color::White, red.bg, red.attrs),
+            ResolvedStyle::new(red.fg, Color::Black, red.attrs),
+            ResolvedStyle::new(red.fg, red.bg, AttrSet::default()),
+        ] {
+            buf.put(Point { x: 1, y: 0 }, 'x', changed).unwrap();
+            assert!(!BufTest::new(&buf).contains_text_style("xxx", &requested));
+        }
     }
 }

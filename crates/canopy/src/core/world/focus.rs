@@ -4,6 +4,7 @@ use crate::{
     core::{id::NodeId, widget_access},
     error::{Error, Result},
     geom::{Direction, RectI32},
+    layout::Display,
     path::Path,
 };
 
@@ -382,8 +383,15 @@ fn is_focus_candidate(core: &Core, node_id: NodeId, require_view: bool) -> bool 
     let Some(node) = core.nodes.get(node_id) else {
         return false;
     };
-    if node.hidden {
-        return false;
+    let mut current = Some(node_id);
+    while let Some(id) = current {
+        let Some(ancestor) = core.nodes.get(id) else {
+            return false;
+        };
+        if ancestor.hidden || ancestor.layout.display == Display::None {
+            return false;
+        }
+        current = ancestor.parent;
     }
     if require_view && node.view.is_zero() {
         return false;

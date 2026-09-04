@@ -727,17 +727,16 @@ async fn wait_for_node(
                 let canopy = scope
                     .context_mut::<Canopy>()
                     .ok_or_else(|| RuntimeError::runtime("no active canopy context"))?;
-                Ok(canopy
-                    .command_availability_from_focus()
-                    .iter()
-                    .any(|entry| {
-                        entry.resolution.is_some()
-                            && matches!(
-                                entry.spec.dispatch,
-                                commands::CommandDispatchKind::Node { owner: entry_owner }
-                                    if entry_owner == owner
-                            )
-                    }))
+                let registered = canopy.core.commands.iter().any(|(_, spec)| {
+                    matches!(spec.dispatch,
+                        commands::CommandDispatchKind::Node { owner: entry_owner }
+                            if entry_owner == owner)
+                });
+                let start = canopy.core.focus.unwrap_or(canopy.core.root);
+                Ok(registered
+                    && commands::CommandResolver::new(&canopy.core, start)
+                        .resolve_owner(&owner)
+                        .is_some())
             })
             .await
         })
@@ -1367,8 +1366,8 @@ fn host_screen_region<'s>(
     let rect = RectI32::new(
         i32::try_from(x).unwrap_or(if x < 0 { i32::MIN } else { i32::MAX }),
         i32::try_from(y).unwrap_or(if y < 0 { i32::MIN } else { i32::MAX }),
-        u32::try_from(w).unwrap_or(u32::MAX),
-        u32::try_from(h).unwrap_or(u32::MAX),
+        u32::try_from(w.max(0)).unwrap_or(u32::MAX),
+        u32::try_from(h.max(0)).unwrap_or(u32::MAX),
     );
     let text = with_current_canopy(scope, |canopy, _| screen_text_for_rect(canopy, rect))?;
     Ok(ret_one(ScopedValue::String(scope.create_string(&text)?)))

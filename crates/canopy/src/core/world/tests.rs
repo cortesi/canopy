@@ -1591,3 +1591,78 @@ fn keyed_reconcile_defers_removal_until_updates_succeed() -> Result<()> {
     assert!(core.nodes.contains_key(a.into()));
     core.validate_invariants()
 }
+
+#[test]
+fn focus_recovery_excludes_hidden_ancestor_subtrees() -> Result<()> {
+    for laid_out in [false, true] {
+        for display_none in [false, true] {
+            let mut core = Core::new();
+            let parent = core.create_detached(simple_widget())?;
+            let child = core.create_detached(FocusableWidget)?;
+            let sibling = core.create_detached(FocusableWidget)?;
+            core.set_children(parent, vec![child])?;
+            core.set_children(core.root, vec![parent, sibling])?;
+            for id in [core.root, parent, child, sibling] {
+                core.set_layout_of(id, Layout::fill())?;
+            }
+            if laid_out {
+                core.update_layout(Size::new(20, 10))?;
+            }
+            core.set_focus(child)?;
+            if display_none {
+                core.set_layout_of(parent, Layout::fill().none())?;
+                core.ensure_focus_valid(None)?;
+            } else {
+                core.set_hidden(parent, true)?;
+            }
+            assert_eq!(core.focus_id(), Some(sibling));
+            assert!(!core.focusable_leaves(core.root).contains(&child));
+            core.focus_next(core.root)?;
+            assert_eq!(core.focus_id(), Some(sibling));
+            core.set_hidden(sibling, true)?;
+            assert_eq!(core.focus_id(), None);
+            core.set_hidden(parent, false)?;
+            core.set_layout_of(parent, Layout::fill())?;
+            core.focus_first(core.root)?;
+            assert_eq!(core.focus_id(), Some(child));
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn keyed_reconcile_preserves_ids_when_reordered_and_rejects_duplicates_first() -> Result<()> {
+    let mut core = Core::new();
+    let parent = core.create_detached(simple_widget())?;
+    core.attach(core.root, parent)?;
+    let mut keyed = KeyedChildren::<&str, ReconcileWidget>::new();
+    let mut ctx = CoreContext::new(&mut core, parent);
+    let first = keyed.reconcile(
+        &mut ctx,
+        ["a", "b"],
+        |_| Ok(ReconcileWidget::succeeds()),
+        |_, _, _| Ok(()),
+    )?;
+    let second = keyed.reconcile(
+        &mut ctx,
+        ["b", "a"],
+        |_| panic!("reordered keys must reuse widgets"),
+        |_, _, _| Ok(()),
+    )?;
+    assert_eq!(second, [first[1], first[0]]);
+    assert_eq!(
+        ctx.children(),
+        second.iter().copied().map(NodeId::from).collect::<Vec<_>>()
+    );
+    let error = keyed
+        .reconcile(
+            &mut ctx,
+            ["a", "a"],
+            |_| panic!("duplicates must fail before creation"),
+            |_, _, _| panic!("duplicates must fail before update"),
+        )
+        .expect_err("duplicate keys must fail");
+    assert!(matches!(error, Error::Invalid(_)));
+    assert_eq!(keyed.keys(), &["b", "a"]);
+    Ok(())
+}

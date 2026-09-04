@@ -1104,4 +1104,48 @@ mod tests {
         assert!(api.contains("children: {TreePayload}"));
         Ok(())
     }
+    #[test]
+    fn screen_regions_clamp_signed_dimensions() -> Result<()> {
+        let mut harness = Harness::builder(ApiRoot).size(20, 5).build()?;
+        harness.render()?;
+        harness.script(
+            r#"
+            for _, size in {{-1, 1}, {1, -1}, {0, 1}, {1, 0}} do
+                canopy.assert(canopy.screen_region(0, 0, size[1], size[2]) == "")
+            end
+            local screen = canopy.screen_text()
+            canopy.assert(canopy.screen_region(0, 0, 20, 5) == screen)
+            canopy.assert(canopy.screen_region(0, 0, 5000000000, 5000000000) == screen)
+            canopy.assert(canopy.screen_region(-1, -1, 21, 6) == screen)
+            canopy.assert(canopy.screen_region(30, 30, 10, 10) == "")
+            canopy.assert(canopy.screen_region(0, 0, 1, 1) == "0")
+        "#,
+        )
+    }
+
+    #[test]
+    fn recursive_tree_declarations_match_runtime_records() -> Result<()> {
+        let mut harness = Harness::builder(ApiRoot).size(20, 5).build()?;
+        let source = r#"
+            local function visit(node: TreeNode)
+                local name: string = node.name
+                canopy.node_info(node.id)
+                for _, child in node.children do
+                    visit(child)
+                end
+            end
+            visit(canopy.tree())
+            for _, child in canopy.node_info(canopy.root()).children do
+                canopy.node_info(child)
+            end
+        "#;
+        let checked = harness.canopy.check_script("recursive-tree.luau", source)?;
+        assert!(checked.is_ok(), "{:?}", checked.diagnostics());
+        harness.script(source)?;
+        let invalid = harness
+            .canopy
+            .check_script("tree-is-not-handle.luau", "canopy.node_info(canopy.tree())")?;
+        assert!(!invalid.is_ok());
+        Ok(())
+    }
 }

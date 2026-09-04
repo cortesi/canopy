@@ -1,6 +1,6 @@
 //! Tests for the Luau scripting host.
 
-use std::collections::BTreeMap;
+use std::{any::Any, collections::BTreeMap};
 
 use proptest::{
     prelude::*,
@@ -667,6 +667,82 @@ fn tcompile_rejects_type_errors_when_finalized() -> Result<()> {
         c.finalize_api()?;
         let err = c.script_host.compile("local value: string = 1");
         assert!(matches!(err, Err(error::Error::Parse(_))));
+        Ok(())
+    })
+}
+
+/// Mounted owner used to distinguish free commands from node dispatch.
+struct WaitFreeOwner;
+
+impl crate::Widget for WaitFreeOwner {
+    fn name(&self) -> crate::state::NodeName {
+        crate::state::NodeName::convert("wait_free")
+    }
+}
+
+fn wait_command_invoke(
+    _target: Option<&mut dyn Any>,
+    _ctx: &mut dyn crate::Context,
+    _invocation: &commands::CommandInvocation,
+) -> StdResult<ArgValue, commands::CommandError> {
+    Ok(ArgValue::Null)
+}
+
+static WAIT_EXTRA_NODE: CommandSpec = CommandSpec {
+    id: commands::CommandId("ba_la::wait_extra"),
+    name: "wait_extra",
+    dispatch: commands::CommandDispatchKind::Node { owner: "ba_la" },
+    params: &[],
+    ret: commands::CommandReturnSpec::Unit,
+    doc: None,
+    invoke: wait_command_invoke,
+};
+
+static WAIT_FREE: CommandSpec = CommandSpec {
+    id: commands::CommandId("wait_free::run"),
+    name: "run",
+    dispatch: commands::CommandDispatchKind::Free,
+    params: &[],
+    ret: commands::CommandReturnSpec::Unit,
+    doc: None,
+    invoke: wait_command_invoke,
+};
+
+#[test]
+fn wait_for_node_preserves_registration_and_focus_resolution() -> Result<()> {
+    run_ttree(|canopy, _, tree| {
+        static WAIT_COMMANDS: &[&CommandSpec] = &[&WAIT_EXTRA_NODE, &WAIT_FREE];
+        canopy.core.commands.add(WAIT_COMMANDS)?;
+        canopy
+            .core
+            .add_child_to_boxed(tree.root, Box::new(WaitFreeOwner))?;
+        canopy.core.set_focus(tree.root)?;
+        assert_eq!(
+            canopy.eval_script_value(r#"return canopy.wait_for_node("ba_la", 10)"#)?,
+            ArgValue::Bool(true)
+        );
+        for owner in ["ba", "wait_free", "missing"] {
+            let error = canopy
+                .eval_script_value(&format!("return canopy.wait_for_node({owner:?}, 1)"))
+                .expect_err("unregistered or absent node owner must time out");
+            assert!(matches!(
+                error,
+                error::Error::ScriptTimeout { timeout_ms: 1 }
+            ));
+        }
+        canopy.core.set_focus(tree.b)?;
+        let error = canopy
+            .eval_script_value(r#"return canopy.wait_for_node("ba_la", 1)"#)
+            .expect_err("owner outside focus subtree and ancestors must time out");
+        assert!(matches!(
+            error,
+            error::Error::ScriptTimeout { timeout_ms: 1 }
+        ));
+        canopy.core.set_focus(tree.a_a)?;
+        assert_eq!(
+            canopy.eval_script_value(r#"return canopy.wait_for_node("ba_la", 10)"#)?,
+            ArgValue::Bool(true)
+        );
         Ok(())
     })
 }
