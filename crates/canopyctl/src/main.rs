@@ -11,6 +11,7 @@ mod session;
 use std::{
     fmt::Display,
     fs,
+    io::{self, Write},
     path::{Path, PathBuf},
     process::{Stdio, exit, id},
     sync::Arc,
@@ -19,8 +20,8 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use canopy_mcp::{
-    ApplyFixtureRequest, ScriptEvalRequest, SuiteConfig, discover_scripts, fixture_for_script,
-    json_tool_result,
+    ApplyFixtureRequest, ScriptEvalOutcome, ScriptEvalRequest, SuiteConfig, discover_scripts,
+    fixture_for_script, json_tool_result,
 };
 use clap::{Args, Parser, Subcommand};
 use ruau_script_api::{ScriptApiQuery, ScriptApiResponse};
@@ -29,7 +30,7 @@ use tokio::{net::UnixStream, sync::Mutex, time::sleep};
 
 use crate::{
     config::LoadedConfig,
-    replay::{load_replay_journal, replay_entry_from_eval, write_replay_journal},
+    replay::{ReplayEntry, load_replay_journal, replay_entry_from_eval, write_replay_journal},
     session::{Session, SessionManager},
 };
 
@@ -303,11 +304,22 @@ async fn smoke_command(config: LoadedConfig, args: SmokeArgs) -> Result<()> {
     let timeout_ms = config.smoke_timeout_ms(args.timeout_ms);
     let fail_fast = config.smoke_fail_fast(args.fail_fast);
 
+    smoke_scripts(&session, &suite_dir, scripts, timeout_ms, fail_fast).await
+}
+
+/// Run resolved smoke scripts through one connected session.
+async fn smoke_scripts(
+    session: &Session,
+    suite_dir: &Path,
+    scripts: Vec<PathBuf>,
+    timeout_ms: Option<u64>,
+    fail_fast: bool,
+) -> Result<()> {
     let mut failed = 0usize;
     for path in scripts {
         let source =
             fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
-        let script_fixture = fixture_for_script(&suite_dir, &path);
+        let script_fixture = fixture_for_script(suite_dir, &path);
         let started = Instant::now();
         let outcome = session
             .eval(ScriptEvalRequest {
@@ -318,7 +330,7 @@ async fn smoke_command(config: LoadedConfig, args: SmokeArgs) -> Result<()> {
             .await?;
         let elapsed = started.elapsed().as_millis();
         let fixture = script_fixture.as_deref().unwrap_or("-");
-        let test_name = smoke_test_name(&suite_dir, &path, script_fixture.as_deref());
+        let test_name = smoke_test_name(suite_dir, &path, script_fixture.as_deref());
         if outcome.success {
             println!("PASS fixture={fixture} test={test_name} ({elapsed}ms)");
         } else {
@@ -344,6 +356,15 @@ async fn replay_command(config: LoadedConfig, args: ReplayArgs) -> Result<()> {
     let command = config.headless_command(&args.command)?;
     let session = Session::spawn_headless(&command).await?;
     let journal = load_replay_journal(&args.journal)?;
+    replay_entries(&session, journal, &args).await
+}
+
+/// Replay entries through one connected session.
+async fn replay_entries(
+    session: &Session,
+    journal: Vec<ReplayEntry>,
+    args: &ReplayArgs,
+) -> Result<()> {
     let mut failed = 0usize;
     let mut skipped = 0usize;
 
@@ -434,12 +455,30 @@ async fn eval_command(config: LoadedConfig, args: EvalArgs) -> Result<()> {
             timeout_ms: args.timeout_ms,
         })
         .await?;
-    println!("{}", serde_json::to_string_pretty(&outcome)?);
-    if let Some(path) = args.journal_out {
-        write_replay_journal(&path, replay_entry_from_eval(script, &outcome))?;
-    }
+    write_eval_output(
+        &outcome,
+        script,
+        args.journal_out.as_deref(),
+        &mut io::stdout().lock(),
+    )?;
     if !outcome.success {
         exit(1);
+    }
+    Ok(())
+}
+
+/// Write evaluation output and its optional journal before exit status
+/// handling.
+fn write_eval_output(
+    outcome: &ScriptEvalOutcome,
+    script: String,
+    journal_out: Option<&Path>,
+    output: &mut impl Write,
+) -> Result<()> {
+    serde_json::to_writer_pretty(&mut *output, outcome)?;
+    writeln!(output)?;
+    if let Some(path) = journal_out {
+        write_replay_journal(path, replay_entry_from_eval(script, outcome))?;
     }
     Ok(())
 }
@@ -537,7 +576,116 @@ fn tool_error(error: impl Display) -> ToolError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::replay::ReplayInput;
+    use crate::{
+        replay::ReplayInput,
+        session::tests::{manager_with_session, peer_session, request},
+    };
+
+    #[tokio::test]
+    async fn smoke_failure_accounting_preserves_fail_fast() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let scripts = vec![
+            directory.path().join("first.luau"),
+            directory.path().join("second.luau"),
+        ];
+        fs::write(&scripts[0], "failure")?;
+        fs::write(&scripts[1], "success")?;
+        for fail_fast in [false, true] {
+            let (session, calls, peer) = peer_session().await?;
+            let error = smoke_scripts(&session, directory.path(), scripts.clone(), None, fail_fast)
+                .await
+                .unwrap_err();
+            assert_eq!(error.to_string(), "1 smoke script(s) failed");
+            assert_eq!(
+                *calls.lock().await,
+                if fail_fast {
+                    vec!["failure"]
+                } else {
+                    vec!["failure", "success"]
+                }
+            );
+            peer.abort();
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn replay_failure_accounting_preserves_fail_fast() -> Result<()> {
+        for fail_fast in [false, true] {
+            let (session, calls, peer) = peer_session().await?;
+            let journal = serde_json::from_str::<ReplayInput>(
+                r#"[{"script":"failure"},{"script":"success"}]"#,
+            )?
+            .into_entries();
+            let args = ReplayArgs {
+                journal: PathBuf::new(),
+                fixture: None,
+                fail_fast,
+                include_failed: false,
+                timeout_ms: None,
+                command: Vec::new(),
+            };
+            let error = replay_entries(&session, journal, &args).await.unwrap_err();
+            assert_eq!(error.to_string(), "1 replay entries failed; 0 skipped");
+            assert_eq!(
+                *calls.lock().await,
+                if fail_fast {
+                    vec!["failure"]
+                } else {
+                    vec!["failure", "success"]
+                }
+            );
+            peer.abort();
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn failed_eval_writes_json_and_replay_journal() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let journal = directory.path().join("journal.json");
+        let (session, _, peer) = peer_session().await?;
+        let outcome = session.eval(request("failure")).await?;
+        let mut output = Vec::new();
+        write_eval_output(&outcome, "failure".to_owned(), Some(&journal), &mut output)?;
+        let decoded: ScriptEvalOutcome = serde_json::from_slice(&output)?;
+        assert!(!decoded.success);
+        assert_eq!(decoded, outcome);
+        let entries = load_replay_journal(&journal)?;
+        assert_eq!(entries.len(), 1);
+        assert!(entries[0].originally_failed());
+        assert_eq!(entries[0].source()?, "failure");
+        peer.abort();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn proxy_does_not_acknowledge_failed_fixture() -> Result<()> {
+        let (session, _, peer) = peer_session().await?;
+        let server = CanopyctlMcpServer {
+            sessions: manager_with_session(session).await?,
+            last_activity: Arc::new(Mutex::new(Instant::now())),
+        };
+        assert!(
+            server
+                .apply_fixture(ApplyFixtureRequest {
+                    name: "bad".to_owned()
+                })
+                .await
+                .is_err()
+        );
+        let success = server
+            .apply_fixture(ApplyFixtureRequest {
+                name: "good".to_owned(),
+            })
+            .await?;
+        assert_eq!(
+            success.structured_content,
+            Some(serde_json::json!({"applied":"good"}))
+        );
+        peer.abort();
+        Ok(())
+    }
 
     #[test]
     fn replay_input_accepts_object_journal() -> Result<()> {

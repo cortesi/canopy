@@ -8,8 +8,8 @@ This survey records clear improvements across Canopy's runtime, widgets, macros,
 
 - [x] W1: Replace each search occurrence once
 - [x] W2: Merge committed style components at canonical map keys
-- [ ] W3: Preserve failed evaluation outcomes through the CLI client
-- [ ] W4: Preserve non-socket files at live socket paths
+- [x] W3: Preserve failed evaluation outcomes through the CLI client
+- [x] W4: Preserve non-socket files at live socket paths
 - [x] W5: Save the correct selection for redo
 - [x] W6: Require every character to satisfy a text-style assertion
 - [ ] W7: Preserve Todo entries when database deletion fails
@@ -37,8 +37,8 @@ This survey records clear improvements across Canopy's runtime, widgets, macros,
 - [x] W29: Preserve the released button in SGR mouse reports
 - [x] W30: Make terminal focus-report tests deterministic
 - [x] W31: Use terminal columns for double-click word selection
-- [ ] W32: Reject failed live fixture acknowledgments
-- [ ] W33: Serialize session replacement and disconnection
+- [x] W32: Reject failed live fixture acknowledgments
+- [x] W33: Serialize session replacement and disconnection
 - [x] W34: Preserve full-width flex remainders
 - [x] W35: Avoid overflow when calculating content origins
 - [x] W36: Remove narrowing from page scrolling
@@ -53,7 +53,7 @@ This survey records clear improvements across Canopy's runtime, widgets, macros,
 - [ ] W45: Load Todo rows in explicit identifier order
 - [ ] W46: Measure Todo text at its rendered width
 - [ ] W47: Make Todo modal dimming repeatable
-- [ ] W48: Correct the documented FNV-1a digest
+- [x] W48: Correct the documented FNV-1a digest
 - [ ] W49: Preserve Stylegym modal dimming when effects change
 - [ ] W50: Measure FontGym input and its cursor in display columns
 - [ ] W51: Keep FocusGym's root block after repeated deletion
@@ -100,6 +100,8 @@ Each stage ends with focused and package proof, checklist updates, and a commit.
 - Editor (10 items): all 58 editor tests passed in the widget package run, including replacement termination, history, vi operations, CRLF, coordinates, and style precedence.
 - Widgets (11 items): `ncode test -E 'package(canopy-widgets)'` passed all 129 tests, with the existing real-PTY test ignored. The dropdown regression applies explicit padding after the expansion layout refresh.
 - External-style effects now resolve paints at render positions. This also preserves custom effects that return gradients without introducing a solid-paint panic.
+
+- MCP/CLI package proof: `ncode test -E 'package(canopy-mcp) | package(canopyctl)' --no-fail-fast` passed all 36 tests. All five items are complete. The built CLI and Todo process also verified failed-eval JSON, the persisted failed journal entry, and exit status 1. Evidence: `tmp/wins-eval-x2y2_yw5/`.
 
 ## Checklist Adjustments
 

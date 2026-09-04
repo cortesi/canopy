@@ -1,5 +1,6 @@
 use std::{
-    fs,
+    fs, io,
+    os::unix::fs::FileTypeExt,
     path::{Path, PathBuf},
     result,
     sync::mpsc,
@@ -252,8 +253,17 @@ pub fn serve_uds(
     automation: AutomationHandle,
 ) -> Result<UdsServerHandle> {
     let socket_path = socket_path.as_ref().to_path_buf();
-    if socket_path.exists() {
-        fs::remove_file(&socket_path)?;
+    match fs::symlink_metadata(&socket_path) {
+        Ok(metadata) if metadata.file_type().is_socket() => fs::remove_file(&socket_path)?,
+        Ok(_) => {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                format!("MCP socket path is not a socket: {}", socket_path.display()),
+            )
+            .into());
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
     }
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
@@ -309,10 +319,53 @@ pub fn serve_uds(
 
 #[cfg(test)]
 mod tests {
+    use std::os::unix::{fs::symlink, net::UnixListener as StdUnixListener};
+
     use canopy::{Fixture, command, derive_commands, error::Result as CanopyResult, prelude::*};
 
     use super::*;
     use crate::script::app_factory;
+
+    #[test]
+    fn uds_preserves_non_socket_paths() -> crate::Result<()> {
+        let directory = tempfile::tempdir()?;
+        let file = directory.path().join("data");
+        fs::write(&file, "preserve me")?;
+        let link = directory.path().join("link");
+        symlink(&file, &link)?;
+        let dangling = directory.path().join("dangling");
+        symlink(directory.path().join("absent"), &dangling)?;
+        let folder = directory.path().join("folder");
+        fs::create_dir(&folder)?;
+        for path in [&file, &link, &dangling, &folder] {
+            let error = serve_uds(path, Canopy::new().automation_handle())
+                .err()
+                .expect("reject non-socket");
+            assert!(
+                matches!(error, crate::Error::Io(error) if error.kind() == io::ErrorKind::AlreadyExists)
+            );
+        }
+        assert_eq!(fs::read_to_string(&file)?, "preserve me");
+        assert_eq!(fs::read_link(&link)?, file);
+        assert_eq!(fs::read_link(&dangling)?, directory.path().join("absent"));
+        Ok(())
+    }
+
+    #[test]
+    fn uds_starts_new_and_replaces_stale_socket() -> crate::Result<()> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("app.sock");
+        for stale in [false, true] {
+            if stale {
+                drop(StdUnixListener::bind(&path)?);
+            }
+            let server = serve_uds(&path, Canopy::new().automation_handle())?;
+            assert!(fs::symlink_metadata(&path)?.file_type().is_socket());
+            server.stop()?;
+            assert!(!path.exists());
+        }
+        Ok(())
+    }
 
     struct EchoNode {
         value: i32,

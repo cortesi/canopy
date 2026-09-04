@@ -2,11 +2,14 @@
 
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use canopy::FixtureInfo;
 use canopy_mcp::{ApplyFixtureRequest, BootstrapResponse, ScriptEvalOutcome, ScriptEvalRequest};
 use ruau_script_api::ScriptApiQuery;
-use tmcp::{Client, schema::CallToolResult};
+use tmcp::{
+    Client,
+    schema::{CallToolResult, ToolResultMode},
+};
 use tokio::{
     net::UnixStream,
     process::Child,
@@ -83,10 +86,10 @@ impl Session {
         if self.kind == SessionKind::Headless && request.fixture.is_none() {
             request.fixture = self.default_fixture.clone();
         }
-        Ok(self
-            .client
-            .call_tool_structured("script_eval", request)
-            .await?)
+        let result = self.client.call_tool("script_eval", request).await?;
+        result
+            .extract_as::<ScriptEvalOutcome>(ToolResultMode::Structured)
+            .context("decode structured script_eval outcome")
     }
 
     /// Request shared API discovery.
@@ -108,10 +111,18 @@ impl Session {
     pub async fn apply_fixture(&mut self, name: String) -> Result<()> {
         match self.kind {
             SessionKind::Live => {
-                let _result = self
+                let result = self
                     .client
                     .call_tool("apply_fixture", ApplyFixtureRequest { name })
                     .await?;
+                if result.is_error() {
+                    bail!(
+                        "{}",
+                        result
+                            .error_message()
+                            .unwrap_or_else(|| "apply_fixture failed".to_owned())
+                    );
+                }
             }
             SessionKind::Headless => {
                 self.default_fixture = Some(name);
@@ -140,18 +151,20 @@ impl SessionManager {
 
     /// Connect to a live UDS session, replacing any existing session.
     pub async fn connect_live(&self, socket: &Path) -> Result<()> {
-        let previous = self.take_session().await;
+        let mut state = self.state.lock().await;
+        let previous = state.take();
         if let Some(previous) = previous {
             previous.shutdown().await;
         }
         let session = Session::connect_live(socket).await?;
-        *self.state.lock().await = Some(session);
+        *state = Some(session);
         Ok(())
     }
 
     /// Drop and shut down the current session, if any.
     pub async fn disconnect(&self) -> Result<()> {
-        if let Some(session) = self.take_session().await {
+        let mut state = self.state.lock().await;
+        if let Some(session) = state.take() {
             session.shutdown().await;
         }
         Ok(())
@@ -193,9 +206,244 @@ impl SessionManager {
             state.as_mut().expect("session installed above")
         }))
     }
+}
 
-    /// Remove and return the current session.
-    pub async fn take_session(&self) -> Option<Session> {
-        self.state.lock().await.take()
+#[cfg(test)]
+pub(crate) mod tests {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
+
+    use canopy_mcp::{ScriptErrorInfo, ScriptTaskState, ScriptTiming};
+    use serde_json::{Value, json};
+    use tmcp::{Server, ToolResult, mcp_server};
+    use tokio::{
+        io::{duplex, split},
+        net::UnixListener,
+        sync::oneshot,
+        task::JoinHandle,
+    };
+
+    use super::*;
+
+    #[derive(Clone, Default)]
+    struct Peer {
+        calls: Arc<Mutex<Vec<String>>>,
+    }
+
+    #[mcp_server]
+    impl Peer {
+        #[tool]
+        async fn script_eval(&self, request: ScriptEvalRequest) -> ToolResult<CallToolResult> {
+            self.calls.lock().await.push(request.script.clone());
+            match request.script.as_str() {
+                "missing" => return Ok(CallToolResult::new()),
+                "malformed" => {
+                    return Ok(
+                        CallToolResult::new().with_structured_content(json!({"success": "wrong"}))
+                    );
+                }
+                _ => {}
+            }
+            let state = match request.script.as_str() {
+                "failure" => ScriptTaskState::Failed,
+                "timeout" => ScriptTaskState::TimedOut,
+                _ => ScriptTaskState::Completed,
+            };
+            let success = state == ScriptTaskState::Completed;
+            let outcome = ScriptEvalOutcome {
+                success,
+                state,
+                value: Some(request.fixture.map_or(Value::Null, Value::String)),
+                logs: Vec::new(),
+                assertions: Vec::new(),
+                diagnostics: Vec::new(),
+                timing: ScriptTiming::default(),
+                error: (!success).then(|| ScriptErrorInfo {
+                    error_type: if state == ScriptTaskState::TimedOut {
+                        "timeout"
+                    } else {
+                        "runtime"
+                    }
+                    .to_owned(),
+                    kind: None,
+                    command: None,
+                    owner: None,
+                    message: "script rejected".to_owned(),
+                }),
+            };
+            Ok(outcome.to_tool_result())
+        }
+
+        #[tool]
+        async fn apply_fixture(&self, request: ApplyFixtureRequest) -> ToolResult<CallToolResult> {
+            Ok(if request.name == "bad" {
+                CallToolResult::new()
+                    .with_is_error(true)
+                    .with_text_content("fixture rejected")
+            } else {
+                CallToolResult::new()
+            })
+        }
+    }
+
+    pub(crate) async fn peer_session() -> Result<(Session, Arc<Mutex<Vec<String>>>, JoinHandle<()>)>
+    {
+        let peer = Peer::default();
+        let calls = peer.calls.clone();
+        let (client_stream, server_stream) = duplex(8192);
+        let task = tokio::spawn(async move {
+            let (reader, writer) = split(server_stream);
+            Server::new(move || peer.clone())
+                .serve_stream(reader, writer)
+                .await
+                .expect("peer transport");
+        });
+        let (reader, writer) = split(client_stream);
+        let mut client = Client::new(CLIENT_NAME, CLIENT_VERSION);
+        client.connect_stream(reader, writer).await?;
+        Ok((
+            Session {
+                client,
+                child: None,
+                kind: SessionKind::Live,
+                default_fixture: None,
+            },
+            calls,
+            task,
+        ))
+    }
+
+    pub(crate) fn request(script: &str) -> ScriptEvalRequest {
+        ScriptEvalRequest {
+            script: script.to_owned(),
+            fixture: None,
+            timeout_ms: None,
+        }
+    }
+
+    pub(crate) async fn manager_with_session(session: Session) -> Result<Arc<SessionManager>> {
+        let manager = Arc::new(SessionManager::new(LoadedConfig::load()?));
+        *manager.state.lock().await = Some(session);
+        Ok(manager)
+    }
+
+    #[tokio::test]
+    async fn eval_decodes_outcomes_including_error_envelopes() -> Result<()> {
+        let (session, _, peer) = peer_session().await?;
+        for (script, state) in [
+            ("success", ScriptTaskState::Completed),
+            ("failure", ScriptTaskState::Failed),
+            ("timeout", ScriptTaskState::TimedOut),
+        ] {
+            let outcome = session.eval(request(script)).await?;
+            assert_eq!(outcome.state, state);
+            assert_eq!(outcome.success, state == ScriptTaskState::Completed);
+        }
+        for script in ["missing", "malformed"] {
+            let error = session.eval(request(script)).await.unwrap_err();
+            assert!(
+                error
+                    .to_string()
+                    .contains("decode structured script_eval outcome")
+            );
+        }
+        peer.abort();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn fixture_acknowledgments_and_headless_defaults() -> Result<()> {
+        let (mut session, _, peer) = peer_session().await?;
+        session.apply_fixture("good".to_owned()).await?;
+        assert!(
+            session
+                .apply_fixture("bad".to_owned())
+                .await
+                .unwrap_err()
+                .to_string()
+                .contains("fixture rejected")
+        );
+        session.kind = SessionKind::Headless;
+        session.apply_fixture("default".to_owned()).await?;
+        assert_eq!(
+            session.eval(request("success")).await?.value,
+            Some(json!("default"))
+        );
+        let mut explicit = request("success");
+        explicit.fixture = Some("explicit".to_owned());
+        assert_eq!(session.eval(explicit).await?.value, Some(json!("explicit")));
+        peer.abort();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn failed_connection_leaves_the_manager_empty() -> Result<()> {
+        let (session, _, peer) = peer_session().await?;
+        let manager = manager_with_session(session).await?;
+        let directory = tempfile::tempdir()?;
+        assert!(
+            manager
+                .connect_live(&directory.path().join("missing.sock"))
+                .await
+                .is_err()
+        );
+        assert!(manager.state.lock().await.is_none());
+        peer.abort();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn connect_serializes_eval_and_disconnect_until_handshake_finishes() -> Result<()> {
+        for disconnect in [false, true] {
+            let directory = tempfile::tempdir()?;
+            let socket = directory.path().join("peer.sock");
+            let listener = UnixListener::bind(&socket)?;
+            let (accepted_tx, accepted_rx) = oneshot::channel();
+            let (release_tx, release_rx) = oneshot::channel();
+            let peer = tokio::spawn(async move {
+                let (stream, _) = listener.accept().await.expect("accept");
+                accepted_tx.send(()).expect("accepted signal");
+                release_rx.await.expect("release handshake");
+                let (reader, writer) = stream.into_split();
+                Server::new(Peer::default)
+                    .serve_stream(reader, writer)
+                    .await
+                    .expect("serve");
+            });
+            let manager = Arc::new(SessionManager::new(LoadedConfig::load()?));
+            let connecting_manager = manager.clone();
+            let connecting =
+                tokio::spawn(async move { connecting_manager.connect_live(&socket).await });
+            accepted_rx.await?;
+            assert!(
+                manager.state.try_lock().is_err(),
+                "connection must own the transition lock"
+            );
+            let finished = Arc::new(AtomicBool::new(false));
+            let operation_manager = manager.clone();
+            let operation_finished = finished.clone();
+            let (started_tx, started_rx) = oneshot::channel();
+            let operation = tokio::spawn(async move {
+                started_tx.send(()).expect("operation started");
+                if disconnect {
+                    operation_manager.disconnect().await?;
+                } else {
+                    assert!(operation_manager.eval(request("success")).await?.success);
+                }
+                operation_finished.store(true, Ordering::SeqCst);
+                Ok::<_, anyhow::Error>(())
+            });
+            started_rx.await?;
+            assert!(!finished.load(Ordering::SeqCst));
+            release_tx.send(()).expect("release");
+            connecting.await??;
+            operation.await??;
+            assert_eq!(manager.state.lock().await.is_none(), disconnect);
+            manager.disconnect().await?;
+            peer.abort();
+        }
+        Ok(())
     }
 }

@@ -393,7 +393,7 @@ fn stable_digest(text: &str) -> String {
     let mut hash = 0xcbf2_9ce4_8422_2325_u64;
     for byte in text.as_bytes() {
         hash ^= u64::from(*byte);
-        hash = hash.wrapping_mul(0x1000_0000_01b3);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
     }
     format!("{hash:016x}")
 }
@@ -631,6 +631,13 @@ mod tests {
     };
 
     use super::*;
+
+    #[test]
+    fn stable_digest_matches_fnv1a_vectors() {
+        assert_eq!(stable_digest(""), "cbf29ce484222325");
+        assert_eq!(stable_digest("a"), "af63dc4c8601ec8c");
+        assert_eq!(stable_digest("foobar"), "85944171f73967e8");
+    }
 
     struct ScriptTarget {
         value: i32,
