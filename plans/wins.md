@@ -62,7 +62,7 @@ This survey records clear improvements across Canopy's runtime, widgets, macros,
 
 ## Scope and Compatibility
 
-The survey started from a clean tree at `9c018d9e044a714398a43757b80947924feaf685` on September 5, 2026. No existing plan occupied this path. Only this plan changed.
+The survey started from a clean tree at `9c018d9e044a714398a43757b80947924feaf685` on September 5, 2026. No existing plan occupied this path. The initial survey changed only this plan.
 
 Three independent readers covered the core and geometry, reusable widgets, and automation/CLI/Todo areas. The coordinating reader covered derives, demos, documentation, and tooling, then reopened retained evidence.
 
@@ -91,26 +91,37 @@ Each stage ends with focused and package proof, checklist updates, and a commit.
 
 ## Execution Proof
 
-- Core runtime and geometry (15 items): `ncode test -E 'package(canopy) | package(canopy-geom)'` passed all 386 tests. New regressions cover the kept contracts. Source review confirms the removed duplicate collection and traversal. Generated API documentation is refreshed before the stage commit.
-- The stronger W6 assertion exposed an existing editor test whose cursor covered part of its highlighted span. Move the cursor beyond the asserted text. This preserves the whole-span assertion.
-- The installed `ncode test -p` kept workspace test selection. Subsequent package proof uses explicit Nextest package expressions to select only the intended tests.
+All 53 retained items are complete. Three native agents implemented independent source groups. The driver reviewed their diffs, integrated the changes, and owned validation and commits.
 
-- Command macros (2 items): `ncode test -E 'package(canopy-derive)'` passed all 9 tests. Explicit error returns and positional/named binding collisions are covered.
+| Group | Items | Focused proof |
+| --- | --- | --- |
+| Core and geometry | 15 | All 386 selected tests passed. |
+| Command macros | 2 | All 9 package tests passed. |
+| Editor and widgets | 21 | All 129 package tests passed, including 58 editor tests. |
+| MCP and CLI | 5 | All 36 package tests passed. |
+| Todo | 5 | All 19 package tests passed, including PTY input and the Luau smoke suite. |
+| Demos and API documentation | 5 | All 26 package tests and the explicit font-discovery example test passed. Markdown and command checks passed. |
 
-- Editor (10 items): all 58 editor tests passed in the widget package run, including replacement termination, history, vi operations, CRLF, coordinates, and style precedence.
-- Widgets (11 items): `ncode test -E 'package(canopy-widgets)'` passed all 129 tests, with the existing real-PTY test ignored. The dropdown regression applies explicit padding after the expansion layout refresh.
-- External-style effects now resolve paints at render positions. This also preserves custom effects that return gradients without introducing a solid-paint panic.
+The built `canopyctl` and Todo processes verified failed-eval JSON, a persisted failed replay entry, and exit status 1. Evidence is in `tmp/wins-eval-x2y2_yw5/`.
 
-- MCP/CLI package proof: `ncode test -E 'package(canopy-mcp) | package(canopyctl)' --no-fail-fast` passed all 36 tests. All five items are complete. The built CLI and Todo process also verified failed-eval JSON, the persisted failed journal entry, and exit status 1. Evidence: `tmp/wins-eval-x2y2_yw5/`.
+Final gates on the settled source:
 
-- Todo (5 items): `ncode test -E 'package(todo)' --no-fail-fast` passed all 19 tests, including rollback, deletion failure, ordering, wrapping, repeated modal dimming, PTY input, and the Luau smoke suite.
+- `ncode test`: 609 passed, with one existing real-PTY test ignored. No doctests ran.
+- `ncode tidy --check`: passed formatting, warning-free Clippy, default-feature checks, API/Luau checks, and benchmark compilation.
+- `cargo xtask smoke`: all seven discovered Todo scripts passed.
+- `cargo nextest run -p canopy-examples --example widget --all-features font_discovery`: one passed.
+- Markdown checks and `git diff --check`: passed.
 
-- Demos: `ncode test -E 'package(canopy-examples)' --no-fail-fast` passed all 26 tests. W49–W51 are complete. Markdown checks and live xtask dispatch inspection complete W53. The explicit font-discovery example test passed with `cargo nextest run -p canopy-examples --example widget --all-features font_discovery`, completing W52.
+The run record is `tmp/wins.run.csv`. Detailed command output remains in `tmp/`. The initial tree contained no unrelated changes. All sibling sources remained unchanged.
 
 ## Checklist Adjustments
 
 - Grouped the priority-ordered survey into seven related implementation stages. No retained item was removed or deferred.
-- Validation initially stopped during dependency resolution: the configured tmcp sibling is now 0.6.0, while Canopy required 0.5.0. Align the local requirement and lockfile in a prerequisite compatibility commit. Keep all sibling sources unchanged.
+- Validation initially stopped during dependency resolution: the configured tmcp sibling is now 0.6.0, while Canopy required 0.5.0. A prerequisite compatibility commit aligned the local requirement and lockfile. All sibling sources remained unchanged.
+- The stronger W6 assertion exposed an editor test whose cursor covered the highlighted text. The corrected test puts the cursor outside the asserted span.
+- Explicit Nextest package expressions replaced `ncode test -p`, which retained workspace test selection in this installation.
+- External-style effects resolve paints at render positions, preserving custom gradient effects without a solid-paint panic.
+- The final maintenance pass repaired test imports, ownership annotations, and formatting. Changed mouse rustdoc line breaks required an API snapshot refresh before the final tidy gate.
 
 ## Items
 

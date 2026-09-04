@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use std::{any::Any, marker::PhantomData};
+    use std::{any::Any, marker::PhantomData, result};
 
     use canopy::{
         self, Widget,
@@ -11,6 +11,7 @@ mod tests {
             CommandParamKind, CommandReturnSpec,
         },
         error::{Error, Result},
+        event::mouse::MouseEvent,
         testing::dummyctx::DummyContext,
     };
     use canopy_derive::{command, derive_commands};
@@ -101,21 +102,21 @@ mod tests {
     impl Collision {
         #[command]
         fn bindings(
-            &mut self,
+            &self,
             target: String,
             ctx: &mut dyn canopy::Context,
             values: String,
-            inv: Option<canopy::event::Event>,
+            inv: Option<MouseEvent>,
             normalized: String,
             __canopy_param_0: String,
         ) -> String {
             assert!(inv.is_none());
-            let _root = ctx.root_id();
-            format!("{target}/{values}/{normalized}/{__canopy_param_0}")
+            ctx.invalidate_layout();
+            [target, values, normalized, __canopy_param_0].join("/")
         }
 
         #[command(ignore_result)]
-        fn opaque(&mut self, fail: bool) -> std::result::Result<Opaque, Error> {
+        fn opaque(&self, fail: bool) -> result::Result<Opaque, Error> {
             if fail {
                 Err(Error::Invalid("opaque failure".into()))
             } else {
@@ -124,7 +125,7 @@ mod tests {
         }
 
         #[command]
-        fn explicit(&mut self) -> std::result::Result<String, Error> {
+        fn explicit(&self) -> result::Result<String, Error> {
             Ok("value".into())
         }
     }

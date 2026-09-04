@@ -18,11 +18,12 @@ use crate::{
         },
     },
     error::{Error, NodeOperationKind, Result},
-    geom::{Point, Size},
+    geom::{Point, Rect, Size},
     layout::{
         Align, Constraint, Direction, Direction as LayoutDirection, Display, Edges, Layout,
         MeasureConstraints, Measurement, Sizing,
     },
+    view::View,
 };
 
 #[test]
@@ -1052,11 +1053,11 @@ fn excluded_subtrees_clear_previously_computed_layout() -> Result<()> {
         core.update_layout(Size::new(10, 10))?;
         for id in [parent, child, grandchild] {
             let node = &core.nodes[id];
-            assert_eq!(node.rect, crate::geom::Rect::zero());
+            assert_eq!(node.rect, Rect::zero());
             assert_eq!(node.content_size, Size::ZERO);
             assert_eq!(node.canvas, Size::ZERO);
             assert_eq!(node.scroll, Point::zero());
-            assert_eq!(node.view, crate::view::View::default());
+            assert_eq!(node.view, View::default());
         }
         core.set_hidden(parent, false)?;
         core.set_layout_of(parent, Layout::fill())?;

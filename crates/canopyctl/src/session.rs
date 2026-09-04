@@ -209,7 +209,7 @@ impl SessionManager {
 }
 
 #[cfg(test)]
-pub(crate) mod tests {
+pub mod tests {
     use std::sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -288,8 +288,7 @@ pub(crate) mod tests {
         }
     }
 
-    pub(crate) async fn peer_session() -> Result<(Session, Arc<Mutex<Vec<String>>>, JoinHandle<()>)>
-    {
+    pub async fn peer_session() -> Result<(Session, Arc<Mutex<Vec<String>>>, JoinHandle<()>)> {
         let peer = Peer::default();
         let calls = peer.calls.clone();
         let (client_stream, server_stream) = duplex(8192);
@@ -315,7 +314,7 @@ pub(crate) mod tests {
         ))
     }
 
-    pub(crate) fn request(script: &str) -> ScriptEvalRequest {
+    pub fn request(script: &str) -> ScriptEvalRequest {
         ScriptEvalRequest {
             script: script.to_owned(),
             fixture: None,
@@ -323,7 +322,7 @@ pub(crate) mod tests {
         }
     }
 
-    pub(crate) async fn manager_with_session(session: Session) -> Result<Arc<SessionManager>> {
+    pub async fn manager_with_session(session: Session) -> Result<Arc<SessionManager>> {
         let manager = Arc::new(SessionManager::new(LoadedConfig::load()?));
         *manager.state.lock().await = Some(session);
         Ok(manager)

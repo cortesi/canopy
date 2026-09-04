@@ -758,7 +758,7 @@ fn drag_exceeded(origin: Point, current: Point, threshold: u32) -> bool {
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, Loader, NodeId, ViewContext, derive_commands, state::NodeName,
+        Canopy, Loader, NodeId, ViewContext, derive_commands, event::key, state::NodeName,
         testing::harness::Harness,
     };
 
@@ -814,7 +814,7 @@ mod tests {
             let mut event = mouse::MouseEvent {
                 action: mouse::Action::Down,
                 button: mouse::Button::Left,
-                modifiers: canopy::event::key::Empty,
+                modifiers: key::Empty,
                 location: Point { x: 0, y: 0 },
             };
             harness.mouse(event)?;

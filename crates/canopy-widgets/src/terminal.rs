@@ -1078,9 +1078,13 @@ mod tests {
     use canopy::{
         TermBuf,
         event::{key, mouse},
-        style::{StyleManager, StyleMap},
+        layout::Layout,
+        style::{
+            Effect, GradientSpec, GradientStop, Paint, StyleEffect, StyleManager, StyleMap, effects,
+        },
+        testing::harness::Harness,
     };
-    use itty_core::colors::Rgba8;
+    use itty_core::{colors::Rgba8, palette::builtin};
     use itty_script::{
         RunMetrics, ScriptExecPolicy, SharedScriptSurfaceFactory, TermModuleBuilder,
         default_script_surface, run_source,
@@ -1089,12 +1093,9 @@ mod tests {
     use super::*;
 
     fn stream_terminal() -> (Terminal, itty_core::StreamInputReceiver) {
-        let (session, receiver) = Session::new_stream(
-            DEFAULT_COLUMNS,
-            DEFAULT_LINES,
-            itty_core::palette::builtin::one_dark(),
-        )
-        .expect("stream terminal");
+        let (session, receiver) =
+            Session::new_stream(DEFAULT_COLUMNS, DEFAULT_LINES, builtin::one_dark())
+                .expect("stream terminal");
         let mut terminal = Terminal::new(TerminalConfig::default());
         terminal.session = Some(session);
         (terminal, receiver)
@@ -1163,8 +1164,8 @@ mod tests {
     struct EffectRun;
 
     impl Widget for EffectRun {
-        fn layout(&self) -> canopy::layout::Layout {
-            canopy::layout::Layout::fill()
+        fn layout(&self) -> Layout {
+            Layout::fill()
         }
 
         fn render(&mut self, render: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
@@ -1208,18 +1209,17 @@ mod tests {
         }
     }
 
-    fn render_effect_run(effects: Vec<canopy::style::Effect>) -> Result<TermBuf> {
+    fn render_effect_run(effects: Vec<Effect>) -> Result<TermBuf> {
         let mut canopy = canopy::Canopy::new();
         canopy.with_root_context(|ctx| {
-            ctx.set_layout(canopy::layout::Layout::fill())?;
+            ctx.set_layout(Layout::fill())?;
             let _ = ctx.add_child(EffectRun)?;
             for effect in effects {
                 ctx.push_effect(ctx.node_id(), effect)?;
             }
             Ok(())
         })?;
-        let mut harness =
-            canopy::testing::harness::Harness::from_canopy(canopy, geom::Size::new(2, 1))?;
+        let mut harness = Harness::from_canopy(canopy, geom::Size::new(2, 1))?;
         harness.render()?;
         Ok(harness.buf().clone())
     }
@@ -1228,10 +1228,7 @@ mod tests {
     fn terminal_runs_inherit_effects_once_for_both_selection_variants() -> Result<()> {
         for dimmed in [false, true] {
             let effects = if dimmed {
-                vec![
-                    canopy::style::effects::brightness(0.5),
-                    canopy::style::effects::bold(),
-                ]
+                vec![effects::brightness(0.5), effects::bold()]
             } else {
                 vec![]
             };
@@ -1281,11 +1278,11 @@ mod tests {
     #[derive(Debug)]
     struct ForegroundGradient;
 
-    impl canopy::style::StyleEffect for ForegroundGradient {
+    impl StyleEffect for ForegroundGradient {
         fn apply(&self, mut style: Style) -> Style {
-            style.fg = canopy::style::Paint::gradient(canopy::style::GradientSpec::with_stops(
+            style.fg = Paint::gradient(GradientSpec::with_stops(
                 0.0,
-                vec![canopy::style::GradientStop::new(0.0, Color::Blue)],
+                vec![GradientStop::new(0.0, Color::Blue)],
             ));
             style
         }

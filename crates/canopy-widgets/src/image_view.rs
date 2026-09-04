@@ -430,6 +430,12 @@ impl Loader for ImageView {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use canopy::{
+        style::{Effect, GradientSpec, GradientStop, Paint, StyleEffect, effects},
+        testing::harness::Harness,
+    };
     use image::Rgba;
 
     use super::*;
@@ -438,9 +444,7 @@ mod tests {
         Size::new(width, height)
     }
 
-    fn render_effect_image(
-        effects: Vec<canopy::style::Effect>,
-    ) -> canopy_error::Result<canopy::TermBuf> {
+    fn render_effect_image(effects: Vec<Effect>) -> canopy_error::Result<canopy::TermBuf> {
         let image = RgbaImage::from_fn(2, 2, |x, y| {
             if y == 0 {
                 Rgba([200, 100, 40, if x == 0 { 255 } else { 128 }])
@@ -457,7 +461,7 @@ mod tests {
             }
             Ok(())
         })?;
-        let mut harness = canopy::testing::harness::Harness::from_canopy(canopy, Size::new(2, 1))?;
+        let mut harness = Harness::from_canopy(canopy, Size::new(2, 1))?;
         harness.render()?;
         Ok(harness.buf().clone())
     }
@@ -465,10 +469,7 @@ mod tests {
     #[test]
     fn image_cells_inherit_effects_once_on_both_pixel_channels() -> canopy_error::Result<()> {
         let plain = render_effect_image(vec![])?;
-        let dimmed = render_effect_image(vec![
-            canopy::style::effects::brightness(0.5),
-            canopy::style::effects::bold(),
-        ])?;
+        let dimmed = render_effect_image(vec![effects::brightness(0.5), effects::bold()])?;
         for x in 0..2 {
             let point = Point { x, y: 0 };
             let plain_cell = plain.get(point).expect("plain pixel cell");
@@ -534,11 +535,11 @@ mod tests {
     #[derive(Debug)]
     struct PixelGradient;
 
-    impl canopy::style::StyleEffect for PixelGradient {
+    impl StyleEffect for PixelGradient {
         fn apply(&self, mut style: Style) -> Style {
-            style.fg = canopy::style::Paint::gradient(canopy::style::GradientSpec::with_stops(
+            style.fg = Paint::gradient(GradientSpec::with_stops(
                 0.0,
-                vec![canopy::style::GradientStop::new(0.0, Color::Blue)],
+                vec![GradientStop::new(0.0, Color::Blue)],
             ));
             style
         }
@@ -546,7 +547,7 @@ mod tests {
 
     #[test]
     fn image_effects_can_replace_solid_paint_with_a_gradient() -> canopy_error::Result<()> {
-        let buf = render_effect_image(vec![std::sync::Arc::new(PixelGradient)])?;
+        let buf = render_effect_image(vec![Arc::new(PixelGradient)])?;
         for x in 0..2 {
             let cell = buf.get(Point { x, y: 0 }).expect("pixel cell");
             assert_eq!(cell.ch, HALF_BLOCK);

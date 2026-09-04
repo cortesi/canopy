@@ -11,6 +11,7 @@ use ruau::vm::{HostArgCursor, MarshaledPair, MultiValue, OwnedValue, ScopedValue
 use super::{base_api::read_node_id, bridge::REENTRANT_CANOPY, *};
 use crate::{
     core::testing::model::trace_result,
+    state::NodeName,
     testing::ttree::{get_state, run_ttree},
 };
 
@@ -675,8 +676,8 @@ fn tcompile_rejects_type_errors_when_finalized() -> Result<()> {
 struct WaitFreeOwner;
 
 impl crate::Widget for WaitFreeOwner {
-    fn name(&self) -> crate::state::NodeName {
-        crate::state::NodeName::convert("wait_free")
+    fn name(&self) -> NodeName {
+        NodeName::convert("wait_free")
     }
 }
 

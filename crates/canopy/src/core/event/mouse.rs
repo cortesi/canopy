@@ -139,9 +139,10 @@ pub struct MouseEvent {
     /// Keyboard modifiers.
     pub modifiers: key::Mods,
     /// Cursor location in screen coordinates for incoming events, and relative
-    /// to the node's content origin for events delivered to widgets. Coordinates
-    /// before the content origin saturate to zero, including captured events
-    /// and events in padding, so the conversion is not always reversible.
+    /// to the node's content origin for events delivered to widgets.
+    /// Coordinates before the content origin saturate to zero, including
+    /// captured events and events in padding, so the conversion is not
+    /// always reversible.
     pub location: Point,
 }
 
