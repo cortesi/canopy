@@ -602,19 +602,11 @@ impl Editor {
     ) -> Result<bool> {
         let view = ctx.view();
         let view_rect = view.view_rect();
-        let origin = view.content_origin();
         let gutter_width = self.gutter_width();
         self.update_layout(view_rect, gutter_width);
-        if event.location.x < origin.x || event.location.y < origin.y {
-            return Ok(false);
-        }
-        let local = Point {
-            x: event.location.x.saturating_sub(origin.x),
-            y: event.location.y.saturating_sub(origin.y),
-        };
         let content_point = Point {
-            x: view.tl.x.saturating_add(local.x),
-            y: view.tl.y.saturating_add(local.y),
+            x: view.tl.x.saturating_add(event.location.x),
+            y: view.tl.y.saturating_add(event.location.y),
         };
         let mut text_point = content_point;
         text_point.x = text_point.x.saturating_sub(gutter_width);
@@ -763,10 +755,10 @@ impl Editor {
 
             if selection_on_line && g_start < line_end_sel && g_end > line_start_sel {
                 style = &ctx.styles.selection;
-            } else if let Some((start, end)) = current_search_range {
-                if g_start < end && g_end > start {
-                    style = &ctx.styles.search_current;
-                }
+            } else if current_search_range
+                .is_some_and(|(start, end)| g_start < end && g_end > start)
+            {
+                style = &ctx.styles.search_current;
             } else if search_ranges
                 .iter()
                 .any(|(start, end)| g_start < *end && g_end > *start)
@@ -845,6 +837,9 @@ impl Editor {
     /// Undo the last edit.
     #[command]
     pub fn undo(&mut self, _ctx: &mut dyn Context) {
+        if self.config.read_only {
+            return;
+        }
         self.buffer.undo();
         self.update_preferred_column();
     }
@@ -852,6 +847,9 @@ impl Editor {
     /// Redo the last undone edit.
     #[command]
     pub fn redo(&mut self, _ctx: &mut dyn Context) {
+        if self.config.read_only {
+            return;
+        }
         self.buffer.redo();
         self.update_preferred_column();
     }

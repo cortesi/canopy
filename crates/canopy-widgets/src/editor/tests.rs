@@ -8,13 +8,17 @@ use canopy::{
     error::Result,
     event::{key, mouse},
     geom::Point,
-    layout::Layout,
+    layout::{Edges, Layout},
     state::NodeName,
     style::{AttrSet, Color, Paint, PartialStyle, Style, StyleManager},
     testing::harness::Harness,
 };
 
-use super::{Selection, TextPosition, TextRange};
+use super::{
+    Selection, TextPosition, TextRange,
+    search::{PromptState, SearchDirection, find_matches},
+    vi::ViMode,
+};
 use crate::editor::{
     EditMode, Editor, EditorConfig, LineNumbers, WrapMode,
     highlight::{HighlightSpan, Highlighter},
@@ -300,6 +304,231 @@ fn search_replace_all() {
     assert_eq!(editor_text(&mut harness), "baz bar baz");
 }
 
+fn prepare_replace(harness: &mut Harness, query: &str, replacement: &str) {
+    with_editor(harness, |editor| {
+        editor.prompt = Some(PromptState::ReplaceConfirm {
+            query: query.to_string(),
+            replacement: replacement.to_string(),
+            matches: find_matches(&editor.buffer, query),
+            index: 0,
+            replace_all: false,
+        });
+    });
+}
+
+#[test]
+fn replace_all_consumes_original_occurrences_once() {
+    for (text, query, replacement, expected) in [
+        ("a", "a", "aa", "aa"),
+        ("aaaa", "aa", "a", "aa"),
+        ("aaa", "a", "", ""),
+        ("aa", "a", "a", "aa"),
+        ("éééé", "éé", "é", "éé"),
+        ("aa", "a", "x\ny", "x\nyx\ny"),
+        ("abc", "missing", "x", "abc"),
+        ("abc", "", "x", "abc"),
+    ] {
+        let config = EditorConfig::new().with_mode(EditMode::Vi);
+        let mut harness = build_harness(text, config, 20, 4);
+        prepare_replace(&mut harness, query, replacement);
+        harness.key('a').unwrap();
+        assert_eq!(editor_text(&mut harness), expected, "{text:?} / {query:?}");
+        assert!(with_editor(&mut harness, |editor| editor.prompt.is_none()));
+    }
+}
+
+#[test]
+fn replace_confirmation_preserves_skips_and_forward_order() {
+    let config = EditorConfig::new().with_mode(EditMode::Vi);
+    let mut harness = build_harness("a a a", config, 20, 2);
+    prepare_replace(&mut harness, "a", "aa");
+    harness.keys(['n', 'y']).unwrap();
+    assert_eq!(editor_text(&mut harness), "a aa a");
+    assert!(with_editor(&mut harness, |editor| editor.prompt.is_some()));
+    harness.key('y').unwrap();
+    assert_eq!(editor_text(&mut harness), "a aa aa");
+    assert!(with_editor(&mut harness, |editor| editor.prompt.is_none()));
+
+    with_editor(&mut harness, |editor| editor.set_text("a a a"));
+    prepare_replace(&mut harness, "a", "");
+    harness.keys(['n', 'a']).unwrap();
+    assert_eq!(editor_text(&mut harness), "a  ");
+    assert!(with_editor(&mut harness, |editor| editor.prompt.is_none()));
+}
+
+#[test]
+fn replace_confirmation_preserves_read_only_contents_and_selection() {
+    for response in ['y', 'a'] {
+        let config = EditorConfig::new()
+            .with_mode(EditMode::Vi)
+            .with_read_only(true);
+        let mut harness = build_harness("aaa", config, 10, 2);
+        prepare_replace(&mut harness, "a", "aa");
+        let selection = editor_selection(&mut harness);
+        harness.key(response).unwrap();
+        assert_eq!(editor_text(&mut harness), "aaa");
+        assert_eq!(editor_selection(&mut harness), selection);
+        assert!(with_editor(&mut harness, |editor| editor.prompt.is_none()));
+    }
+}
+
+#[test]
+fn replacement_keeps_single_line_normalization() {
+    let config = EditorConfig::new()
+        .with_mode(EditMode::Vi)
+        .with_multiline(false);
+    let mut harness = build_harness("aa", config, 20, 1);
+    prepare_replace(&mut harness, "a", "x\ny");
+    harness.key('a').unwrap();
+    assert_eq!(editor_text(&mut harness), "x yx y");
+}
+
+#[test]
+fn read_only_history_commands_preserve_text_selection_and_history() {
+    for command_path in [false, true] {
+        for redo in [false, true] {
+            let config = EditorConfig::new().with_mode(EditMode::Vi);
+            let mut harness = build_harness("abc", config, 10, 2);
+            with_editor(&mut harness, |editor| {
+                editor.buffer.insert_text("X");
+                if redo {
+                    assert!(editor.buffer.undo());
+                }
+                editor.set_config(editor.config().clone().with_read_only(true));
+            });
+            let text = editor_text(&mut harness);
+            let selection = editor_selection(&mut harness);
+            for read_only in [true, false] {
+                with_editor(&mut harness, |editor| {
+                    editor.set_config(editor.config().clone().with_read_only(read_only));
+                });
+                if command_path {
+                    harness
+                        .canopy
+                        .eval_script(if redo {
+                            "editor.redo()"
+                        } else {
+                            "editor.undo()"
+                        })
+                        .unwrap();
+                } else if redo {
+                    harness.key(key::Ctrl + 'r').unwrap();
+                } else {
+                    harness.key('u').unwrap();
+                }
+                if read_only {
+                    assert_eq!(editor_text(&mut harness), text);
+                    assert_eq!(editor_selection(&mut harness), selection);
+                } else {
+                    assert_eq!(editor_text(&mut harness), if redo { "Xabc" } else { "abc" });
+                    assert_eq!(
+                        editor_cursor(&mut harness),
+                        TextPosition::new(0, usize::from(redo))
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn visual_change_enters_insert_and_undoes_as_one_edit() {
+    for (text, keys, expected) in [
+        ("abc", vec!['v', 'l'], "Xbc"),
+        ("one\ntwo", vec!['V'], "Xtwo"),
+    ] {
+        let config = EditorConfig::new().with_mode(EditMode::Vi);
+        let mut harness = build_harness(text, config, 20, 3);
+        harness.keys(keys).unwrap();
+        harness.key('c').unwrap();
+        assert_eq!(
+            with_editor(&mut harness, |editor| editor.vi.mode()),
+            ViMode::Insert
+        );
+        harness.type_text("X").unwrap();
+        harness.key(key::KeyCode::Esc).unwrap();
+        assert_eq!(editor_text(&mut harness), expected);
+        assert_eq!(
+            with_editor(&mut harness, |editor| editor.vi.mode()),
+            ViMode::Normal
+        );
+        harness.key('u').unwrap();
+        assert_eq!(editor_text(&mut harness), text);
+    }
+}
+
+#[test]
+fn open_below_enters_the_new_line() {
+    for (text, expected) in [
+        ("one\ntwo", "one\nX\ntwo"),
+        ("one", "one\nX"),
+        ("one\n", "one\nX\n"),
+    ] {
+        let config = EditorConfig::new().with_mode(EditMode::Vi);
+        let mut harness = build_harness(text, config, 20, 4);
+        harness.key('o').unwrap();
+        assert_eq!(editor_cursor(&mut harness), TextPosition::new(1, 0));
+        harness.type_text("X").unwrap();
+        harness.key(key::KeyCode::Esc).unwrap();
+        assert_eq!(editor_text(&mut harness), expected);
+        harness.key('u').unwrap();
+        assert_eq!(editor_text(&mut harness), text);
+    }
+}
+
+#[test]
+fn repeat_empty_open_below_enters_another_new_line() {
+    let config = EditorConfig::new().with_mode(EditMode::Vi);
+    let mut harness = build_harness("one\ntwo", config, 20, 5);
+    harness.key('o').unwrap();
+    harness.key(key::KeyCode::Esc).unwrap();
+    harness.key('.').unwrap();
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(2, 0));
+    harness.type_text("X").unwrap();
+    harness.key(key::KeyCode::Esc).unwrap();
+    assert_eq!(editor_text(&mut harness), "one\n\nX\ntwo");
+}
+
+#[test]
+fn linewise_put_preserves_line_boundaries_and_history() {
+    for (text, yank, line, before, expected) in [
+        ("one", "one", 0, false, "one\none"),
+        ("one", "one", 0, true, "one\none"),
+        ("one", "two\n", 0, false, "one\ntwo\n"),
+        ("one\nthree", "two", 0, false, "one\ntwo\nthree"),
+        ("one\nthree", "two\n", 1, true, "one\ntwo\nthree"),
+        ("one\n", "two", 1, false, "one\ntwo"),
+        ("one\n", "two\n", 1, false, "one\ntwo\n"),
+        ("one\n", "two", 1, true, "one\ntwo\n"),
+    ] {
+        let config = EditorConfig::new().with_mode(EditMode::Vi);
+        let mut harness = build_harness(text, config, 20, 5);
+        with_editor(&mut harness, |editor| {
+            editor.yank = yank.to_string();
+            editor.yank_linewise = true;
+            editor.buffer.set_cursor(TextPosition::new(line, 0));
+        });
+        let before_selection = editor_selection(&mut harness);
+        harness.key(if before { 'P' } else { 'p' }).unwrap();
+        assert_eq!(editor_text(&mut harness), expected);
+        let after_selection = editor_selection(&mut harness);
+        harness.key('u').unwrap();
+        assert_eq!(editor_text(&mut harness), text);
+        assert_eq!(editor_selection(&mut harness), before_selection);
+        harness.key(key::Ctrl + 'r').unwrap();
+        assert_eq!(editor_text(&mut harness), expected);
+        assert_eq!(editor_selection(&mut harness), after_selection);
+    }
+}
+
+#[test]
+fn final_line_yank_put_keeps_a_separate_line() {
+    let config = EditorConfig::new().with_mode(EditMode::Vi);
+    let mut harness = build_harness("one", config, 10, 3);
+    harness.keys(['y', 'y', 'p']).unwrap();
+    assert_eq!(editor_text(&mut harness), "one\none");
+}
+
 #[test]
 fn mouse_double_click_selects_word() {
     let config = EditorConfig::new().with_mode(EditMode::Text);
@@ -325,6 +554,60 @@ fn mouse_click_moves_cursor() {
         .mouse(mouse_event(mouse::Action::Down, 2, 0))
         .unwrap();
     assert_eq!(editor_cursor(&mut harness), TextPosition::new(0, 2));
+}
+
+#[test]
+fn padded_editor_mouse_uses_content_coordinates_with_gutter_and_scroll() {
+    for (numbers, scroll_x, scroll_y) in [
+        (LineNumbers::None, 0, 0),
+        (LineNumbers::Absolute, 0, 2),
+        (LineNumbers::None, 3, 2),
+    ] {
+        let config = EditorConfig::new()
+            .with_wrap(WrapMode::None)
+            .with_line_numbers(numbers);
+        let text = ["abcdefghijklmnopqrstuvwxyz"; 10].join("\n");
+        let mut harness = build_harness(&text, config, 18, 6);
+        harness
+            .with_root_context(|_root: &mut EditorHost, ctx| {
+                ctx.with_child::<EditorSlot, _>(|_editor, ctx| {
+                    ctx.set_layout(Layout::fill().padding(Edges::all(1)))
+                })
+            })
+            .unwrap();
+        harness.render().unwrap();
+        scroll_editor_to(&mut harness, scroll_x, scroll_y);
+        harness.render().unwrap();
+        let gutter = with_editor(&mut harness, |editor| editor.gutter_width());
+        let first_x = 1 + gutter;
+        harness
+            .mouse(mouse_event(mouse::Action::Down, first_x, 1))
+            .unwrap();
+        assert_eq!(
+            editor_cursor(&mut harness),
+            TextPosition::new(scroll_y as usize, scroll_x as usize)
+        );
+        harness
+            .mouse(mouse_event(mouse::Action::Up, first_x, 1))
+            .unwrap();
+        harness
+            .mouse(mouse_event(mouse::Action::Down, first_x + 3, 1))
+            .unwrap();
+        assert_eq!(
+            editor_cursor(&mut harness),
+            TextPosition::new(scroll_y as usize, scroll_x as usize + 3)
+        );
+        harness
+            .mouse(mouse_event(mouse::Action::Drag, first_x + 5, 1))
+            .unwrap();
+        assert_eq!(
+            editor_selection(&mut harness).range(),
+            TextRange::new(
+                TextPosition::new(scroll_y as usize, scroll_x as usize + 3),
+                TextPosition::new(scroll_y as usize, scroll_x as usize + 5),
+            )
+        );
+    }
 }
 
 #[test]
@@ -491,6 +774,7 @@ fn highlight_spans_apply_styles() {
         attrs: AttrSet::default(),
     };
     with_editor(&mut harness, |editor| {
+        editor.buffer.set_cursor(TextPosition::new(0, 2));
         editor.set_highlighter(Some(Box::new(TestHighlighter {
             style: style.clone(),
         })));
@@ -498,6 +782,61 @@ fn highlight_spans_apply_styles() {
     harness.render().unwrap();
     let partial = PartialStyle::fg(Color::Red);
     assert!(harness.tbuf().contains_text_style("hi", &partial));
+}
+
+#[test]
+fn search_current_other_matches_and_syntax_keep_separate_styles() {
+    let config = EditorConfig::new().with_wrap(WrapMode::None);
+    let mut harness = build_harness("hi a a", config, 10, 1);
+    with_editor(&mut harness, |editor| {
+        editor.set_highlighter(Some(Box::new(TestHighlighter {
+            style: Style {
+                fg: Paint::solid(Color::Red),
+                bg: Paint::solid(Color::Black),
+                attrs: AttrSet::default(),
+            },
+        })));
+        editor
+            .search
+            .set_query(&editor.buffer, "a", SearchDirection::Forward);
+        editor.buffer.set_cursor(TextPosition::new(0, 6));
+    });
+    harness.render().unwrap();
+    let styles = StyleManager::default();
+    let current = styles.get(harness.canopy.style(), "editor/search/current");
+    let other = styles.get(harness.canopy.style(), "editor/search/match");
+    let selected = styles.get(harness.canopy.style(), "editor/selection");
+    let buffer = harness.buf();
+    assert_eq!(
+        buffer.get(Point { x: 0, y: 0 }).unwrap().style.fg,
+        Color::Red
+    );
+    assert_eq!(
+        buffer.get(Point { x: 1, y: 0 }).unwrap().style.fg,
+        Color::Red
+    );
+    assert_eq!(
+        buffer.get(Point { x: 3, y: 0 }).unwrap().style.bg,
+        current.bg.solid_color().unwrap()
+    );
+    assert_eq!(
+        buffer.get(Point { x: 5, y: 0 }).unwrap().style.bg,
+        other.bg.solid_color().unwrap()
+    );
+    assert_ne!(current.bg, other.bg);
+
+    with_editor(&mut harness, |editor| {
+        editor.buffer.set_selection(Selection::new(
+            TextPosition::new(0, 0),
+            TextPosition::new(0, 6),
+        ));
+    });
+    harness.render().unwrap();
+    for x in [0, 1, 3, 5] {
+        let style = harness.buf().get(Point { x, y: 0 }).unwrap().style;
+        assert_eq!(style.fg, selected.fg.solid_color().unwrap());
+        assert_eq!(style.bg, selected.bg.solid_color().unwrap());
+    }
 }
 
 #[test]

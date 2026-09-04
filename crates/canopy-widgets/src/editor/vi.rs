@@ -258,7 +258,7 @@ impl Editor {
                 self.begin_text_entry_transaction();
                 if self.config.multiline {
                     let cursor = self.buffer.cursor();
-                    let end = self.buffer.line_end_position(cursor.line, true);
+                    let end = self.buffer.line_end_position(cursor.line, false);
                     self.buffer.set_cursor(end);
                     self.handle_insert_text("\n");
                 }
@@ -350,6 +350,9 @@ impl Editor {
                 key: key::KeyCode::Char('u'),
                 ..
             }) => {
+                if self.config.read_only {
+                    return EventOutcome::Handle;
+                }
                 self.buffer.undo();
                 self.update_preferred_column();
                 self.ensure_cursor_visible(ctx);
@@ -359,6 +362,9 @@ impl Editor {
                 key: key::KeyCode::Char('r'),
                 mods,
             }) if mods.ctrl => {
+                if self.config.read_only {
+                    return EventOutcome::Handle;
+                }
                 self.buffer.redo();
                 self.update_preferred_column();
                 self.ensure_cursor_visible(ctx);
@@ -856,8 +862,8 @@ impl Editor {
                 self.set_yank(range, linewise);
                 self.begin_text_entry_transaction();
                 self.buffer.replace_range(range, "");
-                self.vi.begin_insert();
                 self.exit_visual();
+                self.vi.begin_insert();
                 self.vi.set_last_edit(RepeatableEdit::ChangeLine);
                 EventOutcome::Handle
             }
@@ -1032,13 +1038,22 @@ impl Editor {
         if self.config.read_only || self.yank.is_empty() {
             return;
         }
-        let content = self.normalize_insert_text(&self.yank);
+        let mut content = self.normalize_insert_text(&self.yank);
         let multiline = self.config.multiline;
         let linewise = self.yank_linewise;
         {
             let mut transaction = self.buffer.transaction();
             if linewise {
                 let cursor = transaction.cursor();
+                if multiline {
+                    if !before && cursor.line + 1 == transaction.line_count() {
+                        if transaction.line_char_len(cursor.line) > 0 {
+                            content.insert(0, '\n');
+                        }
+                    } else if !content.ends_with('\n') {
+                        content.push('\n');
+                    }
+                }
                 let target = if before {
                     TextPosition::new(cursor.line, 0)
                 } else {
@@ -1274,7 +1289,7 @@ impl Editor {
             RepeatableEdit::OpenBelow => {
                 if self.config.multiline {
                     let cursor = self.buffer.cursor();
-                    let end = self.buffer.line_end_position(cursor.line, true);
+                    let end = self.buffer.line_end_position(cursor.line, false);
                     self.buffer.set_cursor(end);
                     self.handle_insert_text("\n");
                 }

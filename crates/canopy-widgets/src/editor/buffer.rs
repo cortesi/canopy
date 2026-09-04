@@ -123,11 +123,21 @@ impl TextBuffer {
     /// Return the line length in chars without clamping the line index.
     fn line_char_len_at(&self, line: usize) -> usize {
         let slice = self.rope.line(line);
-        let mut len = slice.len_chars();
-        if line + 1 < self.line_count() {
-            len = len.saturating_sub(1);
+        slice.len_chars() - self.line_separator_len(line)
+    }
+
+    /// Return the trailing separator length without changing stored bytes.
+    fn line_separator_len(&self, line: usize) -> usize {
+        if line + 1 == self.line_count() {
+            return 0;
         }
-        len
+        let slice = self.rope.line(line);
+        let len = slice.len_chars();
+        if len >= 2 && slice.char(len - 2) == '\r' && slice.char(len - 1) == '\n' {
+            2
+        } else {
+            1
+        }
     }
 
     /// Return the text of a logical line without a trailing newline.
@@ -140,7 +150,7 @@ impl TextBuffer {
     fn line_text_at(&self, line: usize) -> String {
         let slice = self.rope.line(line);
         let mut text = slice.to_string();
-        if line + 1 < self.line_count() {
+        for _ in 0..self.line_separator_len(line) {
             let _ = text.pop();
         }
         text
@@ -180,10 +190,7 @@ impl TextBuffer {
     /// Begin a grouped transaction that commits when the guard is dropped.
     pub fn transaction(&mut self) -> TextTransaction<'_> {
         self.begin_transaction();
-        TextTransaction {
-            buffer: self,
-            active: true,
-        }
+        TextTransaction { buffer: self }
     }
 
     /// Undo the most recent transaction.
@@ -219,6 +226,7 @@ impl TextBuffer {
 
     /// Replace a range with the provided text.
     pub fn replace_range(&mut self, range: TextRange, text: &str) {
+        let before = self.selection;
         let range = self.normalize_range(range);
         let start_char = self.position_to_char(range.start);
         let end_char = self.position_to_char(range.end);
@@ -228,9 +236,9 @@ impl TextBuffer {
         self.rope.insert(start_char, text);
 
         let edit = Edit::new(range, deleted, text.to_string());
-        self.record_edit(edit);
         let new_cursor = advance_position(range.start, text);
         self.selection = Selection::caret(new_cursor);
+        self.record_edit(edit, before);
         self.bump_revision(range, text);
     }
 
@@ -391,11 +399,11 @@ impl TextBuffer {
     }
 
     /// Record an edit into the active transaction or history.
-    fn record_edit(&mut self, edit: Edit) {
+    fn record_edit(&mut self, edit: Edit, before: Selection) {
         if let Some(transaction) = self.transaction.as_mut() {
             transaction.edits.push(edit);
         } else {
-            let mut transaction = Transaction::new(self.selection);
+            let mut transaction = Transaction::new(before);
             transaction.edits.push(edit);
             transaction.finish(self.selection);
             self.undo.push(transaction);
@@ -466,8 +474,6 @@ impl TextBuffer {
 pub struct TextTransaction<'a> {
     /// Buffer being edited.
     buffer: &'a mut TextBuffer,
-    /// Whether the transaction should commit on drop.
-    active: bool,
 }
 
 impl Deref for TextTransaction<'_> {
@@ -486,9 +492,7 @@ impl DerefMut for TextTransaction<'_> {
 
 impl Drop for TextTransaction<'_> {
     fn drop(&mut self) {
-        if self.active {
-            self.buffer.commit_transaction();
-        }
+        self.buffer.commit_transaction();
     }
 }
 
@@ -624,6 +628,72 @@ mod tests {
         assert_eq!(buf.text(), "abc");
         assert!(buf.undo());
         assert_eq!(buf.text(), "a");
+    }
+
+    #[test]
+    fn standalone_history_restores_both_selections() {
+        for (text, selection, inserted, expected, after) in [
+            (
+                "abc",
+                Selection::caret(TextPosition::new(0, 3)),
+                "d",
+                "abcd",
+                TextPosition::new(0, 4),
+            ),
+            (
+                "abc",
+                Selection::new(TextPosition::new(0, 1), TextPosition::new(0, 3)),
+                "X",
+                "aX",
+                TextPosition::new(0, 2),
+            ),
+            (
+                "abc",
+                Selection::new(TextPosition::new(0, 1), TextPosition::new(0, 3)),
+                "",
+                "a",
+                TextPosition::new(0, 1),
+            ),
+            (
+                "a\nb\nc",
+                Selection::new(TextPosition::new(0, 1), TextPosition::new(2, 1)),
+                "",
+                "a",
+                TextPosition::new(0, 1),
+            ),
+        ] {
+            let mut buffer = TextBuffer::new(text);
+            buffer.set_selection(selection);
+            buffer.insert_text(inserted);
+            assert_eq!(buffer.text(), expected);
+            assert_eq!(buffer.selection(), Selection::caret(after));
+            assert!(buffer.undo());
+            assert_eq!(buffer.text(), text);
+            assert_eq!(buffer.selection(), selection);
+            assert!(buffer.redo());
+            assert_eq!(buffer.text(), expected);
+            assert_eq!(buffer.selection(), Selection::caret(after));
+        }
+    }
+
+    #[test]
+    fn crlf_lines_exclude_both_separator_characters() {
+        let mut buffer = TextBuffer::new("a\r\nb");
+        assert_eq!(buffer.line_text(0), "a");
+        assert_eq!(buffer.line_char_len(0), 1);
+        buffer.set_cursor(TextPosition::new(0, 1));
+        assert!(buffer.move_right(true));
+        assert_eq!(buffer.cursor(), TextPosition::new(1, 0));
+        assert!(buffer.delete_backward(true));
+        assert_eq!(buffer.text(), "ab");
+        assert_eq!(buffer.cursor(), TextPosition::new(0, 1));
+        assert!(buffer.undo());
+        assert_eq!(buffer.text(), "a\r\nb");
+        assert_eq!(buffer.cursor(), TextPosition::new(1, 0));
+        assert!(buffer.redo());
+        assert_eq!(buffer.text(), "ab");
+        assert_eq!(buffer.cursor(), TextPosition::new(0, 1));
+        assert_eq!(TextBuffer::new("\r\n").line_text(0), "");
     }
 
     proptest! {

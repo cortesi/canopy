@@ -145,14 +145,25 @@ impl SearchState {
 
 /// Find text matches for a query within the buffer.
 pub fn find_matches(buffer: &TextBuffer, query: &str) -> Vec<TextRange> {
+    find_matches_from(buffer, query, TextPosition::new(0, 0))
+}
+
+/// Find matches entirely within the suffix beginning at a character position.
+fn find_matches_from(buffer: &TextBuffer, query: &str, start: TextPosition) -> Vec<TextRange> {
     if query.is_empty() || query.contains('\n') {
         return Vec::new();
     }
 
     let mut out = Vec::new();
-    for line_idx in 0..buffer.line_count() {
+    for line_idx in start.line..buffer.line_count() {
         let line = buffer.line_text(line_idx);
-        let mut offset = 0usize;
+        let mut offset = if line_idx == start.line {
+            line.char_indices()
+                .nth(start.column)
+                .map_or(line.len(), |(offset, _)| offset)
+        } else {
+            0
+        };
         while let Some(found) = line[offset..].find(query) {
             let byte_start = offset.saturating_add(found);
             let byte_end = byte_start.saturating_add(query.len());
@@ -191,6 +202,29 @@ mod tests {
         assert_ne!(first, second);
         let back = state.move_next(&buffer, true).unwrap();
         assert_eq!(back, first);
+    }
+
+    #[test]
+    fn suffix_search_starts_before_nonoverlapping_match_collection() {
+        let buffer = TextBuffer::new("ééé");
+        assert_eq!(
+            find_matches_from(&buffer, "éé", TextPosition::new(0, 1)),
+            [TextRange::new(
+                TextPosition::new(0, 1),
+                TextPosition::new(0, 3)
+            )]
+        );
+        assert!(find_matches_from(&buffer, "é", TextPosition::new(0, 99)).is_empty());
+        assert!(find_matches_from(&buffer, "é", TextPosition::new(1, 0)).is_empty());
+        assert!(find_matches(&buffer, "").is_empty());
+    }
+
+    #[test]
+    fn crlf_and_lf_have_equivalent_search_matches() {
+        let lf = TextBuffer::new("ab\nab\n");
+        let crlf = TextBuffer::new("ab\r\nab\r\n");
+        assert_eq!(find_matches(&lf, "ab"), find_matches(&crlf, "ab"));
+        assert!(find_matches(&crlf, "\r").is_empty());
     }
 }
 
@@ -338,6 +372,11 @@ impl Editor {
 
     /// Handle y/n/a/q during replace confirmation.
     fn handle_replace_confirm(&mut self, c: char, ctx: &mut dyn Context) -> EventOutcome {
+        if self.config.read_only && matches!(self.prompt, Some(PromptState::ReplaceConfirm { .. }))
+        {
+            self.prompt = None;
+            return EventOutcome::Handle;
+        }
         let Some(PromptState::ReplaceConfirm {
             query,
             replacement,
@@ -425,12 +464,8 @@ impl Editor {
             .set_selection(Selection::new(range.start, range.end));
         self.handle_insert_text(replacement);
         self.ensure_cursor_visible(ctx);
-        let updated = find_matches(&self.buffer, query);
-        let next_index = updated
-            .iter()
-            .position(|candidate| candidate.start > range.start)
-            .unwrap_or(updated.len());
-        (updated, next_index)
+        let updated = find_matches_from(&self.buffer, query, self.buffer.cursor());
+        (updated, 0)
     }
 
     /// Render the search/replace prompt overlay.

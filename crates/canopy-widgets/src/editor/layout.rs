@@ -379,6 +379,18 @@ mod tests {
     }
 
     #[test]
+    fn crlf_and_lf_have_equivalent_wrapping() {
+        let mut lf = TextBuffer::new("abcd\nefgh\n");
+        let mut crlf = TextBuffer::new("abcd\r\nefgh\r\n");
+        let mut lf_cache = LayoutCache::new();
+        let mut crlf_cache = LayoutCache::new();
+        lf_cache.sync(&mut lf, 2, WrapMode::Soft, 4);
+        crlf_cache.sync(&mut crlf, 2, WrapMode::Soft, 4);
+        assert_eq!(lf_cache.lines, crlf_cache.lines);
+        assert_eq!(lf_cache.line_offsets, crlf_cache.line_offsets);
+    }
+
+    #[test]
     fn mapping_roundtrip() {
         let mut buffer = TextBuffer::new("a\tb");
         let mut cache = LayoutCache::new();
