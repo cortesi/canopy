@@ -7,8 +7,8 @@ mod tests {
     use canopy::{
         self, Widget,
         commands::{
-            ArgValue, CommandDispatchKind, CommandError, CommandNode, CommandParamKind,
-            CommandReturnSpec,
+            ArgValue, CommandArgs, CommandDispatchKind, CommandError, CommandNode,
+            CommandParamKind, CommandReturnSpec,
         },
         error::{Error, Result},
         testing::dummyctx::DummyContext,
@@ -94,6 +94,87 @@ mod tests {
     }
 
     impl Widget for Foo {}
+
+    struct Collision;
+
+    #[derive_commands]
+    impl Collision {
+        #[command]
+        fn bindings(
+            &mut self,
+            target: String,
+            ctx: &mut dyn canopy::Context,
+            values: String,
+            inv: Option<canopy::event::Event>,
+            normalized: String,
+            __canopy_param_0: String,
+        ) -> String {
+            assert!(inv.is_none());
+            let _root = ctx.root_id();
+            format!("{target}/{values}/{normalized}/{__canopy_param_0}")
+        }
+
+        #[command(ignore_result)]
+        fn opaque(&mut self, fail: bool) -> std::result::Result<Opaque, Error> {
+            if fail {
+                Err(Error::Invalid("opaque failure".into()))
+            } else {
+                Ok(Opaque {})
+            }
+        }
+
+        #[command]
+        fn explicit(&mut self) -> std::result::Result<String, Error> {
+            Ok("value".into())
+        }
+    }
+
+    #[test]
+    fn generated_bindings_preserve_parameter_names_and_order() {
+        let mut target = Collision;
+        let mut ctx = DummyContext::default();
+        let spec = Collision::cmd_bindings();
+        let names = ["target", "values", "normalized", "__canopy_param_0"];
+        let values = ["a", "b", "c", "d"].map(|s| ArgValue::String(s.into()));
+        let mut inv = spec.call_with(()).invocation();
+        for args in [
+            CommandArgs::Positional(values.to_vec()),
+            CommandArgs::Named(names.into_iter().map(String::from).zip(values).collect()),
+        ] {
+            inv.args = args;
+            assert_eq!(
+                (spec.invoke)(Some(&mut target), &mut ctx, &inv).unwrap(),
+                ArgValue::String("a/b/c/d".into()),
+            );
+        }
+        assert_eq!(
+            spec.params.iter().map(|p| p.name).collect::<Vec<_>>(),
+            ["target", "values", "inv", "normalized", "__canopy_param_0"]
+        );
+    }
+
+    #[test]
+    fn explicit_result_dispatch_preserves_errors_and_values() {
+        let mut target = Collision;
+        let mut ctx = DummyContext::default();
+        let spec = Collision::cmd_opaque();
+        for fail in [false, true] {
+            let mut inv = spec.call_with(()).invocation();
+            inv.args = CommandArgs::Positional(vec![ArgValue::Bool(fail)]);
+            let result = (spec.invoke)(Some(&mut target), &mut ctx, &inv);
+            if fail {
+                assert!(matches!(result, Err(CommandError::Exec(_))));
+            } else {
+                assert_eq!(result.unwrap(), ArgValue::Null);
+            }
+        }
+        let spec = Collision::cmd_explicit();
+        let inv = spec.call_with(()).invocation();
+        assert_eq!(
+            (spec.invoke)(Some(&mut target), &mut ctx, &inv).unwrap(),
+            ArgValue::String("value".into())
+        );
+    }
 
     struct Bar<N>
     where

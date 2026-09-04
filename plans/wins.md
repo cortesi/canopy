@@ -18,8 +18,8 @@ This survey records clear improvements across Canopy's runtime, widgets, macros,
 - [x] W10: Exclude hidden ancestors from focus candidates
 - [x] W11: Clear layout state throughout excluded subtrees
 - [x] W12: Ignore terminal key-release events
-- [ ] W13: Preserve errors from explicit two-parameter Result returns
-- [ ] W14: Isolate generated command bindings from parameter names
+- [x] W13: Preserve errors from explicit two-parameter Result returns
+- [x] W14: Isolate generated command bindings from parameter names
 - [x] W15: Give recursive tree records the correct children type
 - [ ] W16: Enforce read-only mode for undo and redo
 - [ ] W17: Enter insert mode after a visual change
@@ -94,6 +94,8 @@ Each stage ends with focused and package proof, checklist updates, and a commit.
 - Core runtime and geometry (15 items): `ncode test -E 'package(canopy) | package(canopy-geom)'` passed all 386 tests. New regressions cover the kept contracts. Source review confirms the removed duplicate collection and traversal. Generated API documentation is refreshed before the stage commit.
 - The stronger W6 assertion exposed an existing editor test whose cursor covered part of its highlighted span. Move the cursor beyond the asserted text. This preserves the whole-span assertion.
 - The installed `ncode test -p` kept workspace test selection. Subsequent package proof uses explicit Nextest package expressions to select only the intended tests.
+
+- Command macros (2 items): `ncode test -E 'package(canopy-derive)'` passed all 9 tests. Explicit error returns and positional/named binding collisions are covered.
 
 ## Checklist Adjustments
 

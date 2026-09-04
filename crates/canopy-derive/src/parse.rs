@@ -93,6 +93,32 @@ fn extract_single_generic<'a>(ty: &'a Type, ident: &str) -> Option<&'a Type> {
     }
 }
 
+/// Extract the success type from a Result alias or a two-parameter Result.
+fn extract_result_type(ty: &Type) -> Option<&Type> {
+    let Type::Path(path) = ty else {
+        return None;
+    };
+    let segment = path.path.segments.last()?;
+    if segment.ident != "Result" {
+        return None;
+    }
+    let PathArguments::AngleBracketed(args) = &segment.arguments else {
+        return None;
+    };
+    if !(1..=2).contains(&args.args.len())
+        || !args
+            .args
+            .iter()
+            .all(|arg| matches!(arg, GenericArgument::Type(_)))
+    {
+        return None;
+    }
+    match args.args.first()? {
+        GenericArgument::Type(inner) => Some(inner),
+        _ => None,
+    }
+}
+
 /// Determine whether a type is a reference to a Context.
 fn is_context_ref(ty: &Type) -> Option<bool> {
     let Type::Reference(reference) = ty else {
@@ -134,7 +160,7 @@ fn parse_return_type(output: &ReturnType, doc: Option<String>) -> ReturnMeta {
             doc,
         };
     };
-    let (inner, is_result) = match extract_single_generic(ty, "Result") {
+    let (inner, is_result) = match extract_result_type(ty) {
         Some(inner) => (inner, true),
         None => (&**ty, false),
     };
@@ -235,9 +261,12 @@ fn classify_value_param(ty: &Type) -> Result<(ParamKind, bool)> {
 }
 
 /// Parse a typed argument from a command method signature.
-fn parse_command_param(pat: &syn::PatType) -> Result<ParamMeta> {
-    let ident = parse_param_ident(&pat.pat)?;
-    let name = ident.to_string();
+fn parse_command_param(pat: &syn::PatType, index: usize) -> Result<ParamMeta> {
+    let name = parse_param_ident(&pat.pat)?.to_string();
+    let ident = syn::Ident::new(
+        &format!("__canopy_param_{index}"),
+        proc_macro2::Span::mixed_site(),
+    );
     let ty = (*pat.ty).clone();
     let ty_str = type_to_string(&ty);
 
@@ -282,7 +311,7 @@ pub fn parse_command_method(owner: &str, method: &ImplItemFn) -> Result<Option<C
                 has_receiver = true;
                 validate_receiver(receiver)?;
             }
-            syn::FnArg::Typed(pat) => params.push(parse_command_param(pat)?),
+            syn::FnArg::Typed(pat) => params.push(parse_command_param(pat, params.len())?),
         }
     }
 
@@ -336,7 +365,30 @@ pub fn owner_name(input: &ItemImpl) -> Result<String> {
 mod tests {
     use syn::parse_quote;
 
-    use super::parse_command_method;
+    use super::{extract_result_type, extract_single_generic, parse_command_method};
+
+    #[test]
+    fn result_success_types() {
+        for ty in [
+            parse_quote!(Result<()>),
+            parse_quote!(Result<String>),
+            parse_quote!(std::result::Result<(), Error>),
+            parse_quote!(std::result::Result<String, Error>),
+        ] {
+            assert!(extract_result_type(&ty).is_some());
+        }
+        for ty in [
+            parse_quote!(Result),
+            parse_quote!(Result),
+            parse_quote!(Result<String, Error, Extra>),
+            parse_quote!(Result<'a>),
+            parse_quote!(Result<String, 3>),
+            parse_quote!(Option<String>),
+        ] {
+            assert!(extract_result_type(&ty).is_none());
+        }
+        assert!(extract_single_generic(&parse_quote!(Option<String, Error>), "Option").is_none());
+    }
 
     #[test]
     fn ignore_result_preserves_result_flag() {

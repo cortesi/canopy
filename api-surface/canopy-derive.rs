@@ -4,7 +4,8 @@
 pub mod canopy_derive {
     //! Proc-macro support for canopy commands and nodes.
 
-    /// Generate command metadata and wrappers for `#[command]` methods in an impl block.
+    /// Generate command metadata and wrappers for `#[command]` methods in an impl
+    /// block.
     #[proc_macro_attribute]
     pub fn derive_commands(
         attr: proc_macro::TokenStream,
