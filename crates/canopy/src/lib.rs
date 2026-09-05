@@ -36,10 +36,11 @@ pub use core::{
     AutomationCallback, AutomationHandle, BindingId, BindingOptions, BindingOwner, BindingPhase,
     BindingScope, BindingTarget, Canopy, ChangeOutcome, ChangeSet, ChildBuilder, ChildConfig,
     ChildKey, Context, EvalId, EvalOutcome, EvalRequest, EvalTicket, ExclusiveFrameToken, Fixture,
-    FixtureInfo, FocusScope, FrameId, FrameworkBindingGroup, InputSpec, InteractionToken,
-    Invalidation, KeyedChildren, Loader, ModalBindings, ModalOptions, NodeId, NodeWakeHandle,
-    RoutePhase, RouteTraceEntry, ScriptJournalEntry, SemanticIdentity, TurnOutcome, TypedId,
-    ViewContext, WakeOutcome, Work, WorkLifetime,
+    FixtureInfo, FocusScope, FrameId, FrameSnapshot, FrameworkBindingGroup, InputSpec,
+    InteractionToken, Invalidation, KeyedChildren, Loader, ModalBindings, ModalOptions, NodeId,
+    NodeSnapshot, NodeWakeHandle, RoutePhase, RouteTraceEntry, ScriptJournalEntry,
+    SemanticIdentity, TurnOutcome, TypedId, ViewContext, WakeOutcome, WidgetSemantics, Work,
+    WorkLifetime,
 };
 // App-author modules used by widget implementations and derive output.
 pub use core::{

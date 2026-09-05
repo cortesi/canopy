@@ -98,6 +98,9 @@ impl From<&error::Error> for CanopyErrorPayload {
             error::Error::Invalid(_) | error::Error::InvalidOperation(_) => {
                 Self::new(error::ScriptErrorKind::Invalid, err.to_string())
             }
+            error::Error::InvalidPhase { .. } => {
+                Self::new(error::ScriptErrorKind::InvalidPhase, err.to_string())
+            }
             error::Error::ScriptStructured {
                 kind,
                 command,

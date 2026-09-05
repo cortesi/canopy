@@ -25,6 +25,8 @@ pub mod path;
 pub mod render;
 /// Scripting support.
 pub mod script;
+/// Immutable frame observations.
+pub mod snapshot;
 /// Shared node name types.
 pub mod state;
 /// Styling and color helpers.
@@ -75,6 +77,7 @@ pub use inputmap::{
     ExclusiveFrameToken, FrameworkBindingGroup, InputSpec,
 };
 pub use node::SemanticIdentity;
+pub use snapshot::{FrameSnapshot, NodeSnapshot, WidgetSemantics};
 pub use wake::{NodeWakeHandle, WakeOutcome, WorkLifetime};
 pub use world::{
     Core,

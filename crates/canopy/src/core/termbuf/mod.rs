@@ -333,6 +333,24 @@ impl TermBuf {
         Ok(())
     }
 
+    /// Restyle the complete grapheme at a cell without changing its text.
+    pub(crate) fn restyle_grapheme(&mut self, location: Point, style: ResolvedStyle) {
+        let Some(idx) = self.idx(location) else {
+            return;
+        };
+        let width = self.size.w as usize;
+        let row_start = idx / width * width;
+        let row_end = row_start.saturating_add(width).min(self.cells.len());
+        let Some((start, end)) =
+            grapheme_range(&self.cells[row_start..row_end], idx - row_start, 1)
+        else {
+            return;
+        };
+        for cell in &mut self.cells[row_start + start..row_start + end] {
+            cell.style = style;
+        }
+    }
+
     /// Overlay a cursor on a cell by adjusting its style.
     pub fn overlay_cursor(&mut self, location: Point, shape: cursor::CursorShape) {
         let Some(idx) = self.idx(location) else {

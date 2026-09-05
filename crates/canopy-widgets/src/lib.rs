@@ -58,7 +58,7 @@ pub use font::{Font, FontEffects, FontRenderer, LayoutOptions};
 pub use font_banner::FontBanner;
 pub use frame::Frame;
 pub use image_view::ImageView;
-pub use input::Input;
+pub use input::{Input, ValueExposure};
 pub use label::Label;
 pub use list::{AutoKey, List, Selectable};
 pub use pad::Pad;

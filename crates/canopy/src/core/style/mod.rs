@@ -19,6 +19,50 @@ pub use palette::{Palette, theme};
 
 use crate::geom;
 
+/// Stable paint roles used by stock widgets, independent of child node names.
+pub mod roles {
+    /// Button component layer.
+    pub const BUTTON: &str = "button";
+    /// Button label paint path beneath its component and state layers.
+    pub const BUTTON_LABEL: &str = "text";
+    /// Button border paint path beneath its component and state layers.
+    pub const BUTTON_BORDER: &str = "border";
+    /// Input component layer.
+    pub const INPUT: &str = "input";
+    /// Input text paint path.
+    pub const INPUT_TEXT: &str = "text";
+    /// Input cursor cell path, falling back to the text role.
+    pub const INPUT_CURSOR: &str = "text/cursor";
+}
+
+/// Independent widget states mapped onto the existing style layer stack.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WidgetState {
+    /// The widget or its descendant holds focus.
+    Focused,
+    /// The widget is selected independently of focus.
+    Selected,
+    /// The configured action is disabled.
+    Disabled,
+    /// The widget is pressed or explicitly active.
+    Pressed,
+    /// Compatibility state for a button that is not active.
+    Inactive,
+}
+
+impl WidgetState {
+    /// Return the existing string layer for this state.
+    pub const fn layer(self) -> &'static str {
+        match self {
+            Self::Focused => "focused",
+            Self::Selected => "selected",
+            Self::Disabled => "disabled",
+            Self::Pressed => "active",
+            Self::Inactive => "inactive",
+        }
+    }
+}
+
 /// A text attribute.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Attr {
@@ -733,6 +777,56 @@ impl StyleManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stock_roles_preserve_fallback_across_decorative_levels() {
+        let mut map = StyleMap::new();
+        map.rules()
+            .fg("button/active/text", Color::Red)
+            .fg("button/active/border", Color::Blue)
+            .fg("input/text", Color::Green)
+            .apply();
+        let mut manager = StyleManager::new();
+        manager.push_layer(roles::BUTTON);
+        manager.push_layer(WidgetState::Pressed.layer());
+        let label = manager.get(&map, roles::BUTTON_LABEL);
+        let border = manager.get(&map, roles::BUTTON_BORDER);
+        manager.push();
+        manager.push();
+        assert_eq!(manager.get(&map, roles::BUTTON_LABEL), label);
+        assert_eq!(manager.get(&map, roles::BUTTON_BORDER), border);
+        let mut input = StyleManager::new();
+        input.push_layer(roles::INPUT);
+        input.push_layer(WidgetState::Focused.layer());
+        assert_eq!(
+            input.get(&map, roles::INPUT_CURSOR),
+            input.get(&map, roles::INPUT_TEXT)
+        );
+    }
+
+    #[test]
+    fn disabled_selected_and_focused_layers_remain_distinct() {
+        let mut map = StyleMap::new();
+        map.rules()
+            .fg("button/inactive/text", Color::White)
+            .fg("button/inactive/focused/text", Color::Blue)
+            .fg("button/inactive/focused/selected/text", Color::Green)
+            .fg("button/inactive/focused/selected/disabled/text", Color::Red)
+            .apply();
+        let mut manager = StyleManager::new();
+        manager.push_layer(roles::BUTTON);
+        manager.push_layer(WidgetState::Inactive.layer());
+        let inactive = manager.get(&map, roles::BUTTON_LABEL);
+        manager.push_layer(WidgetState::Focused.layer());
+        let focused = manager.get(&map, roles::BUTTON_LABEL);
+        manager.push_layer(WidgetState::Selected.layer());
+        let selected = manager.get(&map, roles::BUTTON_LABEL);
+        manager.push_layer(WidgetState::Disabled.layer());
+        let disabled = manager.get(&map, roles::BUTTON_LABEL);
+        assert_ne!(inactive, focused);
+        assert_ne!(focused, selected);
+        assert_ne!(selected, disabled);
+    }
 
     #[test]
     fn style_builder_defines_a_reusable_rule() {

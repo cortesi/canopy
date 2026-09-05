@@ -305,6 +305,28 @@ run past the requested timeout. Infinite Luau loops time out with `state =
 
 ## Testing
 
+Use `canopy.snapshot()` to read one completed frame. It returns detached records
+for cells, focus, and every live arena node, including detached nodes. Reading a
+snapshot runs no hooks and does not advance its `frame_id`. It returns `nil`
+until a viewport has been prepared. A headless evaluation prepares its initial
+frame before running user source.
+
+After commands return, call `canopy.flush()` to publish pending changes. Calls
+made while a native widget mutation callback holds its widget fail with
+`InvalidPhase`. Old snapshots retain their values after later publications and
+node removal; their node tokens do not become durable references.
+
+Node snapshots distinguish `attached`, `displayed`, and `intersects_viewport`.
+Displayed nodes have no hidden or `Display::None` ancestor. Offscreen displayed
+nodes retain their computed rectangles; non-displayed nodes have no current
+screen rectangle. Intersection includes ancestor clipping but makes no claim
+about occlusion. Widget semantics expose only declared roles, labels, selection,
+action status, and explicitly enabled values. Sensitive input values are omitted.
+
+Legacy `screen`, `screen_cells`, and `screen_text` queries still prepare pending
+changes. Legacy `node_info.visible` describes the node's own hidden flag; use a
+snapshot for attachment, ancestor visibility, and clipping decisions.
+
 The generated API is test-covered by an exact golden tail that includes command
 enums, optional named arguments, fixtures, and default bindings.
 

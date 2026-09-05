@@ -454,6 +454,13 @@ pub mod canopy {
             /// Get a reference to the current render buffer, if any.
             pub fn buf(&self) -> Option<&TermBuf> {}
 
+            /// Read the last publication without running widget hooks or refreshing
+            /// state.
+            pub fn snapshot(&self) -> Option<Arc<FrameSnapshot>> {}
+
+            /// Prepare pending changes after widget mutation callbacks have returned.
+            pub fn flush(&mut self) -> Result<()> {}
+
             /// Evaluate a Luau source string in the current app context.
             pub fn eval_script(&mut self, source: &str) -> Result<()> {}
 
@@ -1076,6 +1083,17 @@ pub mod canopy {
                 invocation: &CommandInvocation,
             ) -> Result<CommandStatus>;
 
+            /// Inspect an action for display. Built-in contexts report registry and
+            /// target resolution failures as disabled reasons, while eligibility
+            /// hook errors remain errors. Custom contexts default to their command
+            /// status behavior.
+            fn action_status(
+                &self,
+                target: CommandTarget,
+                invocation: &CommandInvocation,
+            ) -> Result<CommandStatus> {
+            }
+
             /// Widget type identifier for a specific node.
             fn node_type_id(&self, node: NodeId) -> Option<TypeId>;
 
@@ -1157,6 +1175,11 @@ pub mod canopy {
 
         /// Widgets are the behavior attached to nodes in the Core arena.
         pub trait Widget: Any {
+            /// Describe application semantics for one publication through read-only
+            /// access. Sensitive values must be omitted; this hook does not
+            /// serialize widget state.
+            fn semantics(&self, _view: &dyn ViewContext) -> Result<WidgetSemantics> {}
+
             /// Layout configuration for this widget.
             fn layout(&self) -> Layout {}
 
@@ -1276,6 +1299,8 @@ pub mod canopy {
                 NotFound,
                 /// Invalid input or operation.
                 Invalid,
+                /// Operation requires an unwound widget callback boundary.
+                InvalidPhase,
                 /// Unclassified Canopy failure.
                 Canopy,
                 /// Unknown command identifier.
@@ -1420,6 +1445,11 @@ pub mod canopy {
                 },
                 /// Invalid structural operation.
                 InvalidOperation(String),
+                /// Operation attempted before a mutable widget callback returned.
+                InvalidPhase {
+                    /// Operation requiring an unwound callback boundary.
+                    operation: &'static str,
+                },
                 /// Structural mutation attempted while a failed edit is unwinding.
                 TreeEditDuringRollback {
                     /// Requested tree operation.
@@ -2003,6 +2033,10 @@ pub mod canopy {
             /// Push a style layer.
             pub fn push_layer(&mut self, name: &str) {}
 
+            /// Apply a named style to the painted grapheme at a point, preserving its
+            /// text.
+            pub fn restyle(&mut self, style: &str, point: geom::Point) {}
+
             /// Fill a rectangle with a specified character. Writes out of bounds will
             /// be clipped.
             pub fn fill(&mut self, style: &str, r: geom::Rect, c: char) -> Result<()> {}
@@ -2385,6 +2419,13 @@ pub mod canopy {
 
         /// Get a reference to the current render buffer, if any.
         pub fn buf(&self) -> Option<&TermBuf> {}
+
+        /// Read the last publication without running widget hooks or refreshing
+        /// state.
+        pub fn snapshot(&self) -> Option<Arc<FrameSnapshot>> {}
+
+        /// Prepare pending changes after widget mutation callbacks have returned.
+        pub fn flush(&mut self) -> Result<()> {}
 
         /// Evaluate a Luau source string in the current app context.
         pub fn eval_script(&mut self, source: &str) -> Result<()> {}
@@ -3050,6 +3091,21 @@ pub mod canopy {
     #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq)]
     pub struct FrameId(pub u64);
 
+    /// Immutable data from one successfully prepared frame.
+    #[derive(Clone, Debug, StructuralPartialEq, PartialEq)]
+    pub struct FrameSnapshot {
+        /// Publication generation shared with turn outcomes.
+        pub frame_id: crate::FrameId,
+        /// Dimensions of the rendered cells.
+        pub viewport: crate::geom::Size,
+        /// All live arena nodes, including detached trees.
+        pub nodes: Vec<NodeSnapshot>,
+        /// Styled terminal cells in row-major order.
+        pub cells: Vec<crate::Cell>,
+        /// Focus owner at publication.
+        pub focus: Option<crate::NodeId>,
+    }
+
     /// Stable name for one framework-owned binding group.
     #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq, Hash, Display)]
     pub struct FrameworkBindingGroup(_);
@@ -3211,6 +3267,39 @@ pub mod canopy {
         fn from(value: TypedId<T>) -> Self {}
     }
 
+    /// Owned identity, geometry, and semantics for one live arena node.
+    #[derive(Clone, Debug, StructuralPartialEq, PartialEq)]
+    pub struct NodeSnapshot {
+        /// Arena identity at publication, retained even after removal.
+        pub id: crate::NodeId,
+        /// Structural parent at publication.
+        pub parent: Option<crate::NodeId>,
+        /// Children in source order.
+        pub children: Vec<crate::NodeId>,
+        /// Widget path name.
+        pub name: String,
+        /// Explicit application identity.
+        pub semantic_identity: Option<crate::SemanticIdentity>,
+        /// Whether the root tree contains this node.
+        pub attached: bool,
+        /// Attached with no hidden or display-suppressed ancestor.
+        pub displayed: bool,
+        /// Intersection with the viewport and all ancestor content clips.
+        pub intersects_viewport: bool,
+        /// Current signed screen rectangle, absent when not displayed.
+        pub rect: Option<crate::geom::RectI32>,
+        /// Current signed content rectangle, absent when not displayed.
+        pub content_rect: Option<crate::geom::RectI32>,
+        /// Content scroll offset.
+        pub scroll: crate::geom::Point,
+        /// Content canvas size.
+        pub canvas: crate::geom::Size,
+        /// Whether this node owns focus.
+        pub focused: bool,
+        /// Widget-provided observations captured after paint.
+        pub semantics: WidgetSemantics,
+    }
+
     /// Thread-safe handle that requests a poll of one widget incarnation.
     ///
     /// Producers keep results in their own bounded channels. This handle never owns
@@ -3347,6 +3436,17 @@ pub mod canopy {
             invocation: &CommandInvocation,
         ) -> Result<CommandStatus>;
 
+        /// Inspect an action for display. Built-in contexts report registry and
+        /// target resolution failures as disabled reasons, while eligibility
+        /// hook errors remain errors. Custom contexts default to their command
+        /// status behavior.
+        fn action_status(
+            &self,
+            target: CommandTarget,
+            invocation: &CommandInvocation,
+        ) -> Result<CommandStatus> {
+        }
+
         /// Widget type identifier for a specific node.
         fn node_type_id(&self, node: NodeId) -> Option<TypeId>;
 
@@ -3435,6 +3535,23 @@ pub mod canopy {
         Coalesced,
         /// The owning widget, attachment, or application no longer exists.
         Expired,
+    }
+
+    /// Optional application observations, without arbitrary widget serialization.
+    #[derive(Clone, Debug, Default, StructuralPartialEq, PartialEq)]
+    pub struct WidgetSemantics {
+        /// Application role independent of structural wrappers.
+        pub role: Option<String>,
+        /// Human-readable accessible label.
+        pub label: Option<String>,
+        /// Explicitly exposed value; sensitive values must be omitted.
+        pub value: Option<String>,
+        /// Whether this widget is selected, when applicable.
+        pub selected: Option<bool>,
+        /// Stable application keys selected by a collection.
+        pub selected_keys: Vec<crate::commands::ArgValue>,
+        /// Availability of the widget's primary action.
+        pub action_status: Option<crate::commands::CommandStatus>,
     }
 
     /// One runtime input.
@@ -4080,6 +4197,8 @@ pub mod canopy {
             NotFound,
             /// Invalid input or operation.
             Invalid,
+            /// Operation requires an unwound widget callback boundary.
+            InvalidPhase,
             /// Unclassified Canopy failure.
             Canopy,
             /// Unknown command identifier.
@@ -4224,6 +4343,11 @@ pub mod canopy {
             },
             /// Invalid structural operation.
             InvalidOperation(String),
+            /// Operation attempted before a mutable widget callback returned.
+            InvalidPhase {
+                /// Operation requiring an unwound callback boundary.
+                operation: &'static str,
+            },
             /// Structural mutation attempted while a failed edit is unwinding.
             TreeEditDuringRollback {
                 /// Requested tree operation.
@@ -4863,6 +4987,10 @@ pub mod canopy {
             /// Push a style layer.
             pub fn push_layer(&mut self, name: &str) {}
 
+            /// Apply a named style to the painted grapheme at a point, preserving its
+            /// text.
+            pub fn restyle(&mut self, style: &str, point: geom::Point) {}
+
             /// Fill a rectangle with a specified character. Writes out of bounds will
             /// be clipped.
             pub fn fill(&mut self, style: &str, r: geom::Rect, c: char) -> Result<()> {}
@@ -5213,6 +5341,28 @@ pub mod canopy {
             pub fn solarized_light() -> super::StyleMap {}
         }
 
+        pub mod roles {
+            //! Stable paint roles used by stock widgets, independent of child node names.
+
+            /// Button component layer.
+            pub const BUTTON: &str = "button";
+
+            /// Button label paint path beneath its component and state layers.
+            pub const BUTTON_LABEL: &str = "text";
+
+            /// Button border paint path beneath its component and state layers.
+            pub const BUTTON_BORDER: &str = "border";
+
+            /// Input component layer.
+            pub const INPUT: &str = "input";
+
+            /// Input text paint path.
+            pub const INPUT_TEXT: &str = "text";
+
+            /// Input cursor cell path, falling back to the text role.
+            pub const INPUT_CURSOR: &str = "text/cursor";
+        }
+
         /// A terminal color value.
         #[derive(Copy, Clone, Debug, StructuralPartialEq, PartialEq, Eq, Ord, PartialOrd, Hash)]
         pub enum Color {
@@ -5348,6 +5498,26 @@ pub mod canopy {
 
         /// Build the shared rule set for one palette.
         pub fn theme(p: &Palette) -> super::StyleMap {}
+
+        /// Independent widget states mapped onto the existing style layer stack.
+        #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq)]
+        pub enum WidgetState {
+            /// The widget or its descendant holds focus.
+            Focused,
+            /// The widget is selected independently of focus.
+            Selected,
+            /// The configured action is disabled.
+            Disabled,
+            /// The widget is pressed or explicitly active.
+            Pressed,
+            /// Compatibility state for a button that is not active.
+            Inactive,
+        }
+
+        impl WidgetState {
+            /// Return the existing string layer for this state.
+            pub const fn layer(self) -> &'static str {}
+        }
 
         /// A text attribute.
         #[derive(Debug, StructuralPartialEq, PartialEq, Eq, Clone, Copy)]
@@ -5796,6 +5966,11 @@ pub mod canopy {
 
     /// Widgets are the behavior attached to nodes in the Core arena.
     pub trait Widget: Any {
+        /// Describe application semantics for one publication through read-only
+        /// access. Sensitive values must be omitted; this hook does not
+        /// serialize widget state.
+        fn semantics(&self, _view: &dyn ViewContext) -> Result<WidgetSemantics> {}
+
         /// Layout configuration for this widget.
         fn layout(&self) -> Layout {}
 

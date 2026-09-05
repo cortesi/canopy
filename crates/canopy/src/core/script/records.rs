@@ -9,7 +9,137 @@ use super::{
     ViewContext, commands, error, inputmap, node_id_to_arg, node_list_to_arg, point_to_arg,
     rect_to_arg, size_to_arg, widget_access,
 };
-use crate::core::termbuf::TermBuf;
+use crate::{FrameSnapshot, NodeSnapshot, core::termbuf::TermBuf};
+
+/// Convert a publication without consulting live widget or node state.
+pub(super) fn snapshot_to_arg(frame: &FrameSnapshot) -> ArgValue {
+    let mut rows = Vec::with_capacity(frame.viewport.h as usize);
+    for y in 0..frame.viewport.h {
+        let row = (0..frame.viewport.w)
+            .map(|x| {
+                let index = y as usize * frame.viewport.w as usize + x as usize;
+                cell_to_arg(x, y, &frame.cells[index])
+            })
+            .collect();
+        rows.push(ArgValue::Array(row));
+    }
+    ArgValue::Map(BTreeMap::from([
+        ("frame_id".into(), ArgValue::UInt(frame.frame_id.0)),
+        ("viewport".into(), size_to_arg(frame.viewport)),
+        (
+            "focus".into(),
+            frame.focus.map(node_id_to_arg).unwrap_or(ArgValue::Null),
+        ),
+        (
+            "nodes".into(),
+            ArgValue::Array(frame.nodes.iter().map(snapshot_node_to_arg).collect()),
+        ),
+        ("cells".into(), ArgValue::Array(rows)),
+    ]))
+}
+
+/// Serialize owned semantic and geometry data, including expired node tokens.
+fn snapshot_node_to_arg(node: &NodeSnapshot) -> ArgValue {
+    let semantics = &node.semantics;
+    let action_status = semantics
+        .action_status
+        .as_ref()
+        .map(|status| {
+            let (kind, reason) = match status {
+                commands::CommandStatus::Enabled => ("enabled", ArgValue::Null),
+                commands::CommandStatus::Disabled(reason) => {
+                    ("disabled", ArgValue::String(reason.clone()))
+                }
+            };
+            ArgValue::Map(BTreeMap::from([
+                ("kind".into(), ArgValue::String(kind.into())),
+                ("reason".into(), reason),
+            ]))
+        })
+        .unwrap_or(ArgValue::Null);
+    ArgValue::Map(BTreeMap::from([
+        ("id".into(), node_id_to_arg(node.id)),
+        (
+            "parent".into(),
+            node.parent.map(node_id_to_arg).unwrap_or(ArgValue::Null),
+        ),
+        (
+            "children".into(),
+            node_list_to_arg(node.children.iter().copied()),
+        ),
+        ("name".into(), ArgValue::String(node.name.to_string())),
+        (
+            "semantic_identity".into(),
+            node.semantic_identity
+                .as_ref()
+                .map(|identity| {
+                    ArgValue::Map(BTreeMap::from([
+                        ("scope".into(), node_id_to_arg(identity.scope)),
+                        ("key".into(), ArgValue::String(identity.key.clone())),
+                    ]))
+                })
+                .unwrap_or(ArgValue::Null),
+        ),
+        ("attached".into(), ArgValue::Bool(node.attached)),
+        ("displayed".into(), ArgValue::Bool(node.displayed)),
+        (
+            "intersects_viewport".into(),
+            ArgValue::Bool(node.intersects_viewport),
+        ),
+        (
+            "rect".into(),
+            node.rect.map(rect_to_arg).unwrap_or(ArgValue::Null),
+        ),
+        (
+            "content_rect".into(),
+            node.content_rect.map(rect_to_arg).unwrap_or(ArgValue::Null),
+        ),
+        ("scroll".into(), point_to_arg(node.scroll)),
+        ("canvas".into(), size_to_arg(node.canvas)),
+        ("focused".into(), ArgValue::Bool(node.focused)),
+        (
+            "semantics".into(),
+            ArgValue::Map(BTreeMap::from([
+                (
+                    "role".into(),
+                    semantics
+                        .role
+                        .clone()
+                        .map(ArgValue::String)
+                        .unwrap_or(ArgValue::Null),
+                ),
+                (
+                    "label".into(),
+                    semantics
+                        .label
+                        .clone()
+                        .map(ArgValue::String)
+                        .unwrap_or(ArgValue::Null),
+                ),
+                (
+                    "value".into(),
+                    semantics
+                        .value
+                        .clone()
+                        .map(ArgValue::String)
+                        .unwrap_or(ArgValue::Null),
+                ),
+                (
+                    "selected".into(),
+                    semantics
+                        .selected
+                        .map(ArgValue::Bool)
+                        .unwrap_or(ArgValue::Null),
+                ),
+                (
+                    "selected_keys".into(),
+                    ArgValue::Array(semantics.selected_keys.clone()),
+                ),
+                ("action_status".into(), action_status),
+            ])),
+        ),
+    ]))
+}
 
 /// Convert a node into the `NodeInfo` scripting record.
 pub(super) fn node_info_to_arg(
@@ -326,7 +456,7 @@ pub(super) fn command_info_to_arg(availability: commands::CommandAvailability<'_
 
 /// Refresh the app snapshot and borrow its rendered buffer.
 fn rendered_buffer(canopy: &mut Canopy) -> Result<&TermBuf> {
-    canopy.refresh_snapshot()?;
+    canopy.flush()?;
     canopy
         .buf()
         .ok_or_else(|| error::Error::Script("screen unavailable before render".into()))

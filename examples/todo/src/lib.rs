@@ -8,7 +8,7 @@ use canopy::{
     InteractionToken, ModalBindings, ModalOptions, command, commands::CommandStatus,
     derive_commands, error::Error, layout::LayoutOverride, prelude::*, style::solarized,
 };
-use canopy_widgets::{Center, Frame, Input, List, Root, Selectable};
+use canopy_widgets::{Center, Frame, Input, List, Root, Selectable, ValueExposure};
 
 // Typed keys for keyed children
 canopy::key!(MainSlot: MainContent);
@@ -212,10 +212,15 @@ impl Todo {
                         max_width: Some(Some(50)),
                         ..LayoutOverride::new().fixed_height(3)
                     })?;
-                    frame.child(Input::new(""), |input| {
-                        input.layout_override(LayoutOverride::full(Layout::fill()))?;
-                        input.semantic_key(scope, "todo.input")
-                    })?;
+                    frame.child(
+                        Input::new("")
+                            .with_label("New todo item")
+                            .with_value_exposure(ValueExposure::Public),
+                        |input| {
+                            input.layout_override(LayoutOverride::full(Layout::fill()))?;
+                            input.semantic_key(scope, "todo.input")
+                        },
+                    )?;
                     Ok(())
                 })?;
                 Ok(())

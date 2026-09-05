@@ -22,6 +22,27 @@ fn def_style() -> ResolvedStyle {
     }
 }
 
+#[test]
+fn restyling_preserves_wide_and_combining_graphemes() -> Result<()> {
+    let mut buffer = TermBuf::new(Size::new(5, 1), ' ', def_style())?;
+    buffer.text(&def_style(), Line::new(0, 0, 5), "界e\u{301}")?;
+    let before = buffer.clone();
+    let mut style = def_style();
+    style.fg = Color::Red;
+    buffer.restyle_grapheme(Point { x: 1, y: 0 }, style);
+    buffer.restyle_grapheme(Point { x: 2, y: 0 }, style);
+    for x in 0..3 {
+        let old = before.get(Point { x, y: 0 }).expect("old cell");
+        let new = buffer.get(Point { x, y: 0 }).expect("new cell");
+        assert_eq!(
+            (new.ch, &new.suffix, new.continuation),
+            (old.ch, &old.suffix, old.continuation)
+        );
+        assert_eq!(new.style, style);
+    }
+    Ok(())
+}
+
 fn buf_from_rows(rows: &[&str]) -> TermBuf {
     let height = rows.len() as u32;
     let width = rows.first().map(|row| row.len()).unwrap_or(0) as u32;

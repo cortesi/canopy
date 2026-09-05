@@ -1025,26 +1025,26 @@ R05, R10, R14, and R15 use the structural and turn boundaries from Stage 3.
 
 R19 and R24 publish stable observations using Stage 4 identity and interaction state.
 
-- [ ] Add snapshot and semantic data types in `core/snapshot.rs` and
+- [x] Add snapshot and semantic data types in `core/snapshot.rs` and
   `Widget::semantics` in `widget/mod.rs`.
   Capture immutable node data and cells after successful preparation and paint.
-- [ ] Implement precise attachment, display, and clip-intersection flags.
+- [x] Implement precise attachment, display, and clip-intersection flags.
   Add snapshot and flush APIs in `core/canopy/mod.rs` and
   `core/script/{base_api,records,defs}.rs`.
   Keep legacy node/screen query behavior clearly documented.
-- [ ] Add Input, Button, and List semantic hooks with configurable value exposure.
+- [x] Add Input, Button, and List semantic hooks with configurable value exposure.
   Include labels, selected keys, and command status.
   Exclude sensitive values and unsupported occlusion claims.
-- [ ] Add stock role constants and `WidgetState` mappings using the current style
+- [x] Add stock role constants and `WidgetState` mappings using the current style
   resolver in `core/style/mod.rs`.
   Apply them in Button and Input and document them in `docs/styles.md`.
-- [ ] Update Todo smoke assertions to use one snapshot and semantic keys.
+- [x] Update Todo smoke assertions to use one snapshot and semantic keys.
   Add hidden-ancestor, detached, offscreen, old-snapshot, and flush-phase tests.
   Compare terminal output after in-eval observation with full repaint output.
-- [ ] Add wrapper-independent role tests and disabled/focused/selected state tests.
+- [x] Add wrapper-independent role tests and disabled/focused/selected state tests.
   Preserve existing theme goldens unless the new disabled state changes output
   intentionally.
-- [ ] Validate with `ncode test -p canopy -p canopy-widgets -p todo`.
+- [x] Validate with `ncode test -p canopy -p canopy-widgets -p todo`.
   Run `cargo xtask smoke`, regenerate API skeletons, and run `cargo xtask checks`.
   Review the completed stage, including snapshot allocation and value exposure.
 

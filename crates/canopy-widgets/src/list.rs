@@ -7,10 +7,11 @@
 use std::{collections::HashSet, hash::Hash};
 
 use canopy::{
-    Context, EventOutcome, KeyedChildren, NodeId, TypedId, ViewContext, Widget, command,
+    Context, EventOutcome, KeyedChildren, NodeId, TypedId, ViewContext, Widget, WidgetSemantics,
+    command,
     commands::{
         ArgValue, CommandAction, CommandArgs, CommandCall, CommandInvocation, CommandScopeFrame,
-        CommandTarget, ListRowContext, ToArgValue,
+        CommandStatus, CommandTarget, ListRowContext, ToArgValue,
     },
     derive_commands,
     error::{Error, Result},
@@ -109,6 +110,8 @@ pub struct List<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static = Aut
     on_activate: Option<CommandAction>,
     /// Pending activation state while handling clicks.
     pending_activate: Option<PendingActivate<K>>,
+    /// Optional semantic label for the collection.
+    label: Option<String>,
 }
 
 impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> Default for List<W, K> {
@@ -128,7 +131,32 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
             selection_indicator: None,
             on_activate: None,
             pending_activate: None,
+            label: None,
         }
+    }
+
+    /// Set the semantic label of the collection.
+    pub fn with_label(mut self, label: impl Into<String>) -> Self {
+        self.label = Some(label.into());
+        self
+    }
+
+    /// Inspect the selected row's configured activation command.
+    fn action_status(&self, ctx: &dyn ViewContext) -> Result<Option<CommandStatus>> {
+        let Some(action) = self.on_activate.as_ref() else {
+            return Ok(None);
+        };
+        if !ctx.node_is_attached(ctx.node_id()) {
+            return Ok(Some(CommandStatus::Disabled("List is detached".into())));
+        }
+        let Some(index) = self.selected_index() else {
+            return Ok(Some(CommandStatus::Disabled("No item selected".into())));
+        };
+        ctx.action_status(
+            action.target.unwrap_or(CommandTarget::From(ctx.node_id())),
+            &invocation_with_index(&action.invocation, index),
+        )
+        .map(Some)
     }
 
     /// Build a list with a list-level selection indicator.
@@ -679,6 +707,21 @@ impl<W: Selectable> List<W, AutoKey> {
 }
 
 impl<W: Selectable + 'static, K: Eq + Hash + Clone + ToArgValue + 'static> Widget for List<W, K> {
+    fn semantics(&self, ctx: &dyn ViewContext) -> Result<WidgetSemantics> {
+        Ok(WidgetSemantics {
+            role: Some("list".into()),
+            label: self.label.clone(),
+            selected_keys: self
+                .selected
+                .iter()
+                .cloned()
+                .map(ToArgValue::to_arg_value)
+                .collect(),
+            action_status: self.action_status(ctx)?,
+            ..WidgetSemantics::default()
+        })
+    }
+
     fn layout(&self) -> Layout {
         let mut layout = Layout::fill().overflow_x();
         if let Some(indicator) = &self.selection_indicator
@@ -954,6 +997,10 @@ mod tests {
             assert_eq!(list.selected_key(), Some(&20));
             assert_eq!(list.selected_index(), Some(2));
             assert_eq!(list.item_for_key(&20), Some(selected));
+            let semantics = list.semantics(ctx)?;
+            assert_eq!(semantics.role.as_deref(), Some("list"));
+            assert_eq!(semantics.selected_keys, vec![20_i64.to_arg_value()]);
+            assert_eq!(semantics.selected, None);
             Ok(selected)
         })?;
         assert_eq!(focused_row(&harness), Some(selected.into()));

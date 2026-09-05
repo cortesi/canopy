@@ -559,6 +559,9 @@ pub mod canopy_widgets {
 
         /// Enable interior fill using the default fill style name.
         pub fn with_fill(self) -> Self {}
+
+        /// Set the border paint role while preserving inherited component layers.
+        pub fn with_border_style(self, style: impl Into<String>) -> Self {}
     }
 
     impl CommandNode for Border {
@@ -633,11 +636,13 @@ pub mod canopy_widgets {
     }
 
     impl Widget for Button {
+        fn semantics(&self, ctx: &dyn ViewContext) -> Result<WidgetSemantics> {}
+
         fn layout(&self) -> Layout {}
 
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {}
 
-        fn render(&mut self, rndr: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
+        fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
 
         fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {}
 
@@ -952,6 +957,12 @@ pub mod canopy_widgets {
         /// Construct a new input with initial text.
         pub fn new(txt: impl Into<String>) -> Self {}
 
+        /// Set the semantic label without changing the displayed value.
+        pub fn with_label(self, label: impl Into<String>) -> Self {}
+
+        /// Configure whether semantic snapshots expose this input's value.
+        pub fn with_value_exposure(self, exposure: ValueExposure) -> Self {}
+
         /// Return the raw input value without padding.
         pub fn value(&self) -> &str {}
 
@@ -982,6 +993,8 @@ pub mod canopy_widgets {
     }
 
     impl Widget for Input {
+        fn semantics(&self, _ctx: &dyn ViewContext) -> Result<WidgetSemantics> {}
+
         fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
         fn cursor(&self) -> Option<cursor::Cursor> {}
@@ -993,6 +1006,17 @@ pub mod canopy_widgets {
         fn measure(&self, c: MeasureConstraints) -> Measurement {}
 
         fn name(&self) -> NodeName {}
+    }
+
+    /// Policy for publishing an input value in semantic snapshots.
+    #[derive(Clone, Copy, Debug, Default, StructuralPartialEq, PartialEq, Eq)]
+    pub enum ValueExposure {
+        /// Omit the value from semantics.
+        Omit,
+        /// Publish the raw single-line value.
+        Public,
+        /// Mark the value as sensitive and always omit it from semantics.
+        Sensitive,
     }
 
     /// An item that renders as one line of text.
@@ -1022,6 +1046,9 @@ pub mod canopy_widgets {
     impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
         /// Construct an empty list.
         pub fn new() -> Self {}
+
+        /// Set the semantic label of the collection.
+        pub fn with_label(self, label: impl Into<String>) -> Self {}
 
         /// Build a list with a list-level selection indicator.
         /// Repeat controls whether the indicator renders on every visible line.
@@ -1173,6 +1200,8 @@ pub mod canopy_widgets {
     }
 
     impl<W: Selectable + 'static, K: Eq + Hash + Clone + ToArgValue + 'static> Widget for List<W, K> {
+        fn semantics(&self, ctx: &dyn ViewContext) -> Result<WidgetSemantics> {}
+
         fn layout(&self) -> Layout {}
 
         fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {}

@@ -131,6 +131,18 @@ pub trait ViewContext {
         invocation: &CommandInvocation,
     ) -> Result<CommandStatus>;
 
+    /// Inspect an action for display. Built-in contexts report registry and
+    /// target resolution failures as disabled reasons, while eligibility
+    /// hook errors remain errors. Custom contexts default to their command
+    /// status behavior.
+    fn action_status(
+        &self,
+        target: CommandTarget,
+        invocation: &CommandInvocation,
+    ) -> Result<CommandStatus> {
+        self.command_status(target, invocation)
+    }
+
     /// Widget type identifier for a specific node.
     fn node_type_id(&self, node: NodeId) -> Option<TypeId>;
 
@@ -1002,6 +1014,14 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
         invocation: &CommandInvocation,
     ) -> Result<CommandStatus> {
         commands::command_status(&self.core, target, invocation)
+    }
+
+    fn action_status(
+        &self,
+        target: CommandTarget,
+        invocation: &CommandInvocation,
+    ) -> Result<CommandStatus> {
+        commands::action_status(&self.core, target, invocation)
     }
 
     fn find_key(&self, scope: NodeId, key: &str) -> Result<Option<NodeId>> {

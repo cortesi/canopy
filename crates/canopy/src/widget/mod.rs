@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    Context, WorkLifetime,
+    Context, WidgetSemantics, WorkLifetime,
     core::context::ViewContext,
     cursor,
     error::Result,
@@ -29,6 +29,13 @@ pub enum EventOutcome {
 
 /// Widgets are the behavior attached to nodes in the Core arena.
 pub trait Widget: Any {
+    /// Describe application semantics for one publication through read-only
+    /// access. Sensitive values must be omitted; this hook does not
+    /// serialize widget state.
+    fn semantics(&self, _view: &dyn ViewContext) -> Result<WidgetSemantics> {
+        Ok(WidgetSemantics::default())
+    }
+
     /// Layout configuration for this widget.
     fn layout(&self) -> Layout {
         Layout::column()

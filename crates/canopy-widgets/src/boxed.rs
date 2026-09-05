@@ -116,6 +116,12 @@ impl Border {
         self.fill_style = Some("fill".to_string());
         self
     }
+
+    /// Set the border paint role while preserving inherited component layers.
+    pub fn with_border_style(mut self, style: impl Into<String>) -> Self {
+        self.border_style = style.into();
+        self
+    }
 }
 
 impl Default for Border {

@@ -19,12 +19,15 @@ use serde::{Deserialize, Serialize};
 use super::{
     inputmap,
     poll::Poller,
+    snapshot::FrameSnapshot,
     termbuf::{RenderLimits, TermBuf},
 };
 
 mod rendering;
 #[cfg(test)]
 mod rendering_tests;
+#[cfg(test)]
+mod snapshot_tests;
 mod turn;
 #[cfg(test)]
 mod turn_cleanup_tests;
@@ -98,6 +101,8 @@ pub struct Canopy {
 
     /// Cached terminal buffer.
     termbuf: Option<TermBuf>,
+    /// Last successfully prepared immutable observation.
+    snapshot: Option<Arc<FrameSnapshot>>,
     /// Last successfully emitted terminal frame.
     emitted_buf: Option<TermBuf>,
     /// Adapter-independent runtime progress.
@@ -355,6 +360,7 @@ impl Canopy {
             root_size: None,
             render_limits: RenderLimits::default(),
             termbuf: None,
+            snapshot: None,
             emitted_buf: None,
             render_pending: true,
             core,
@@ -417,6 +423,20 @@ impl Canopy {
     /// Get a reference to the current render buffer, if any.
     pub fn buf(&self) -> Option<&TermBuf> {
         self.termbuf.as_ref()
+    }
+
+    /// Read the last publication without running widget hooks or refreshing
+    /// state.
+    pub fn snapshot(&self) -> Option<Arc<FrameSnapshot>> {
+        self.snapshot.clone()
+    }
+
+    /// Prepare pending changes after widget mutation callbacks have returned.
+    pub fn flush(&mut self) -> Result<()> {
+        if self.core.callback_depth != 0 {
+            return Err(error::Error::InvalidPhase { operation: "flush" });
+        }
+        self.prepare_frame(false).map(|_| ())
     }
 
     /// Evaluate a Luau source string in the current app context.

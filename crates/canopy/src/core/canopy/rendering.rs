@@ -1,10 +1,12 @@
 //! Rendering pipeline for the canopy facade.
 
-use super::Canopy;
+use std::sync::Arc;
+
+use super::{Canopy, FrameId};
 use crate::{
     NodeId,
     core::{
-        context::CoreViewContext, termbuf::TermBuf, view::View, wake::WorkStamp,
+        context::CoreViewContext, snapshot, termbuf::TermBuf, view::View, wake::WorkStamp,
         world::WidgetOperation,
     },
     cursor,
@@ -38,7 +40,7 @@ impl Canopy {
 
     /// Refresh observation data without advancing terminal output history.
     pub(crate) fn refresh_snapshot(&mut self) -> Result<()> {
-        self.prepare_frame(false).map(|_| ())
+        self.flush()
     }
 
     /// Poll one node and schedule its next callback.
@@ -291,7 +293,10 @@ impl Canopy {
             self.core.update_layout(root_size)?;
         }
         let next = self.render_pass(root_size)?;
+        let frame_id = FrameId(self.driver.publication.generation() + 1);
+        let observation = snapshot::capture(&self.core, frame_id, &next)?;
         self.termbuf = Some(next);
+        self.snapshot = Some(Arc::new(observation));
         self.render_pending = false;
         self.core.changes = crate::ChangeSet::default();
         self.driver.publication.publish();

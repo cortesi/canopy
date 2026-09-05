@@ -42,3 +42,7 @@ mod viewport;
 /// Scoped script lookup integration tests.
 #[path = "it/semantic_script.rs"]
 mod semantic_script;
+
+/// Immutable script observation integration tests.
+#[path = "it/snapshot_script.rs"]
+mod snapshot_script;

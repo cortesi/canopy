@@ -1,11 +1,12 @@
 use canopy::{
-    Context, EventOutcome, ViewContext, Widget, command, cursor, derive_commands,
+    Context, EventOutcome, ViewContext, Widget, WidgetSemantics, command, cursor, derive_commands,
     error::Result,
     event::{Event, key},
     geom::{Line, Point},
     layout::{MeasureConstraints, Measurement, Size},
     render::Render,
     state::NodeName,
+    style::{WidgetState, roles},
     text,
 };
 
@@ -156,6 +157,22 @@ impl InputBuffer {
 pub struct Input {
     /// Text buffer for the input.
     buffer: InputBuffer,
+    /// Optional semantic label independent of the text value.
+    label: Option<String>,
+    /// Policy for exposing the value in semantic snapshots.
+    value_exposure: ValueExposure,
+}
+
+/// Policy for publishing an input value in semantic snapshots.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ValueExposure {
+    /// Omit the value from semantics.
+    #[default]
+    Omit,
+    /// Publish the raw single-line value.
+    Public,
+    /// Mark the value as sensitive and always omit it from semantics.
+    Sensitive,
 }
 
 #[derive_commands]
@@ -164,7 +181,21 @@ impl Input {
     pub fn new(txt: impl Into<String>) -> Self {
         Self {
             buffer: InputBuffer::new(txt),
+            label: None,
+            value_exposure: ValueExposure::Omit,
         }
+    }
+
+    /// Set the semantic label without changing the displayed value.
+    pub fn with_label(mut self, label: impl Into<String>) -> Self {
+        self.label = Some(label.into());
+        self
+    }
+
+    /// Configure whether semantic snapshots expose this input's value.
+    pub fn with_value_exposure(mut self, exposure: ValueExposure) -> Self {
+        self.value_exposure = exposure;
+        self
     }
 
     /// Return the raw input value without padding.
@@ -197,6 +228,15 @@ impl Input {
 }
 
 impl Widget for Input {
+    fn semantics(&self, _ctx: &dyn ViewContext) -> Result<WidgetSemantics> {
+        Ok(WidgetSemantics {
+            role: Some("input".into()),
+            label: self.label.clone(),
+            value: (self.value_exposure == ValueExposure::Public).then(|| self.value().to_owned()),
+            ..WidgetSemantics::default()
+        })
+    }
+
     fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }
@@ -212,13 +252,27 @@ impl Widget for Input {
     }
 
     fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+        r.push_layer(roles::INPUT);
+        if ctx.is_focused() {
+            r.push_layer(WidgetState::Focused.layer());
+        }
         let view = ctx.view();
         let view_rect = view.view_rect();
         let content_origin = view.content_origin();
         self.buffer.set_display_width(view_rect.w as usize);
         let line = Line::new(content_origin.x, content_origin.y, view_rect.w);
         let content = self.buffer.render_text();
-        r.text("text", line, &content)
+        r.text(roles::INPUT_TEXT, line, &content)?;
+        if ctx.is_focused() && self.buffer.cursor_display() < view_rect.w {
+            r.restyle(
+                roles::INPUT_CURSOR,
+                Point {
+                    x: content_origin.x + self.buffer.cursor_display(),
+                    y: content_origin.y,
+                },
+            );
+        }
+        Ok(())
     }
 
     fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {
@@ -259,7 +313,37 @@ mod tests {
     };
     use unicode_width::UnicodeWidthStr;
 
-    use super::{Input, InputBuffer};
+    use super::{Input, InputBuffer, ValueExposure};
+
+    #[test]
+    fn semantic_values_require_explicit_public_exposure() {
+        for exposure in [
+            ValueExposure::Omit,
+            ValueExposure::Public,
+            ValueExposure::Sensitive,
+        ] {
+            let mut input = Input::new("secret")
+                .with_label("Account")
+                .with_value_exposure(exposure);
+            input.set_value("updated");
+            let semantics = input
+                .semantics(&DummyContext::default())
+                .expect("input semantics");
+            assert_eq!(semantics.role.as_deref(), Some("input"));
+            assert_eq!(semantics.label.as_deref(), Some("Account"));
+            assert_eq!(
+                semantics.value.as_deref(),
+                (exposure == ValueExposure::Public).then_some("updated")
+            );
+        }
+        assert_eq!(
+            Input::new("private")
+                .semantics(&DummyContext::default())
+                .expect("default semantics")
+                .value,
+            None
+        );
+    }
 
     #[test]
     fn input_caret_stays_inside_nonempty_viewports() {

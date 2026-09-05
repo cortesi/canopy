@@ -1574,6 +1574,27 @@ pub(crate) fn command_status(
     status_at(core, spec, resolution)
 }
 
+/// Report unavailable action targets as disabled without hiding hook failures.
+pub(crate) fn action_status(
+    core: &Core,
+    target: CommandTarget,
+    inv: &CommandInvocation,
+) -> CoreResult<CommandStatus> {
+    let Some(spec) = core.commands.get(inv.id.0) else {
+        return Ok(CommandStatus::Disabled(
+            CommandError::UnknownCommand {
+                id: inv.id.0.to_string(),
+            }
+            .to_string(),
+        ));
+    };
+    let resolution = match checked_resolution(&CommandResolver::for_target(core, target), spec) {
+        Ok(resolution) => resolution,
+        Err(error) => return Ok(CommandStatus::Disabled(error.to_string())),
+    };
+    status_at(core, spec, resolution)
+}
+
 /// Run the optional read-only hook on a resolved owner.
 fn status_at(
     core: &Core,
@@ -1679,6 +1700,74 @@ mod tests {
     use serde::{Serialize, ser};
 
     use super::*;
+    use crate::{Widget, error::Error, state::NodeName};
+
+    struct StatusOwner;
+
+    impl Widget for StatusOwner {
+        fn name(&self) -> NodeName {
+            NodeName::convert("status_owner")
+        }
+    }
+
+    /// Fail inside eligibility to distinguish callback errors from resolution.
+    fn failed_status(_widget: &dyn Any, _view: &dyn ViewContext) -> CoreResult<CommandStatus> {
+        Err(Error::Invalid("eligibility hook failed".into()))
+    }
+
+    static FAILING_STATUS: CommandSpec = CommandSpec {
+        id: CommandId("status_owner.action"),
+        name: "action",
+        dispatch: CommandDispatchKind::Node {
+            owner: "status_owner",
+        },
+        params: &[],
+        ret: CommandReturnSpec::Unit,
+        doc: None,
+        invoke: registry_invoke,
+        status: Some(failed_status),
+    };
+
+    static FAILING_COMMANDS: &[&CommandSpec] = &[&FAILING_STATUS];
+
+    #[test]
+    fn action_status_disables_resolution_failures_but_preserves_hook_errors() -> CoreResult<()> {
+        let mut core = Core::new();
+        core.commands.add(FAILING_COMMANDS)?;
+        let owner = core.create_detached(StatusOwner)?;
+        let missing = core.create_detached(StatusOwner)?;
+        core.remove_subtree(missing)?;
+        let invocation = CommandInvocation {
+            id: FAILING_STATUS.id,
+            args: CommandArgs::default(),
+        };
+        let context = CoreViewContext::new(&core, core.root);
+        assert!(matches!(
+            context.action_status(CommandTarget::Exact(missing), &invocation)?,
+            CommandStatus::Disabled(_)
+        ));
+        assert!(
+            context
+                .command_status(CommandTarget::Exact(missing), &invocation)
+                .is_err()
+        );
+        assert!(matches!(
+            context.action_status(CommandTarget::Exact(core.root), &invocation)?,
+            CommandStatus::Disabled(_)
+        ));
+        assert!(
+            matches!(context.action_status(CommandTarget::Exact(owner), &invocation), Err(Error::Invalid(message)) if message == "eligibility hook failed")
+        );
+        let unknown = CommandInvocation {
+            id: CommandId("unknown.action"),
+            args: CommandArgs::default(),
+        };
+        assert!(matches!(
+            context.action_status(CommandTarget::Exact(owner), &unknown)?,
+            CommandStatus::Disabled(_)
+        ));
+        Ok(())
+    }
 
     fn registry_invoke(
         _target: Option<&mut dyn Any>,

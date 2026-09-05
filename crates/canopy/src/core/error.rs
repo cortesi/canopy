@@ -92,6 +92,8 @@ pub enum ScriptErrorKind {
     NotFound,
     /// Invalid input or operation.
     Invalid,
+    /// Operation requires an unwound widget callback boundary.
+    InvalidPhase,
     /// Unclassified Canopy failure.
     Canopy,
     /// Unknown command identifier.
@@ -136,6 +138,7 @@ impl ScriptErrorKind {
             Self::TypeMismatch => "type_mismatch",
             Self::NotFound => "not_found",
             Self::Invalid => "invalid",
+            Self::InvalidPhase => "invalid_phase",
             Self::Canopy => "canopy_error",
             Self::UnknownCommand => "unknown_command",
             Self::ConflictingCommand => "conflicting_command",
@@ -292,6 +295,12 @@ pub enum Error {
     /// Invalid structural operation.
     #[error("invalid operation: {0}")]
     InvalidOperation(String),
+    /// Operation attempted before a mutable widget callback returned.
+    #[error("{operation} is not allowed during a widget mutation callback")]
+    InvalidPhase {
+        /// Operation requiring an unwound callback boundary.
+        operation: &'static str,
+    },
     /// Structural mutation attempted while a failed edit is unwinding.
     #[error("tree edit {operation} is not allowed during rollback")]
     TreeEditDuringRollback {

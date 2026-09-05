@@ -292,6 +292,7 @@ fn register_command_info(builder: &mut module::Builder) {
 
 /// Register observation and diagnostics records.
 fn register_observation_info(builder: &mut module::Builder) {
+    register_snapshot_info(builder);
     builder.alias(declaration::Alias::new(
         "ScreenCell",
         declaration::Type::table([
@@ -430,6 +431,64 @@ fn register_observation_info(builder: &mut module::Builder) {
             ),
             declaration::Field::new("duration_ms", declaration::Type::Number)
                 .doc("Wall-clock duration in milliseconds."),
+        ]),
+    ));
+}
+
+/// Declare detached frame records with explicit display and clipping semantics.
+fn register_snapshot_info(builder: &mut module::Builder) {
+    use declaration::{Alias, Field, Type};
+    builder.alias(Alias::new(
+        "SemanticActionStatus",
+        Type::table([
+            Field::new("kind", Type::literals(["enabled", "disabled"])),
+            Field::new("reason", Type::String.optional()),
+        ]),
+    ));
+    builder.alias(Alias::new(
+        "WidgetSemantics",
+        Type::table([
+            Field::new("role", Type::String.optional()),
+            Field::new("label", Type::String.optional()),
+            Field::new("value", Type::String.optional()),
+            Field::new("selected", Type::Boolean.optional()),
+            Field::new("selected_keys", Type::Any.array()),
+            Field::new(
+                "action_status",
+                Type::named("SemanticActionStatus").optional(),
+            ),
+        ]),
+    ));
+    builder.alias(Alias::new(
+        "NodeSnapshot",
+        Type::table([
+            Field::new("id", Type::named("NodeId")),
+            Field::new("parent", Type::named("NodeId").optional()),
+            Field::new("children", Type::named("NodeId").array()),
+            Field::new("name", Type::String),
+            Field::new(
+                "semantic_identity",
+                Type::named("SemanticIdentity").optional(),
+            ),
+            Field::new("attached", Type::Boolean),
+            Field::new("displayed", Type::Boolean),
+            Field::new("intersects_viewport", Type::Boolean),
+            Field::new("rect", Type::named("Rect").optional()),
+            Field::new("content_rect", Type::named("Rect").optional()),
+            Field::new("scroll", Type::named("Point")),
+            Field::new("canvas", Type::named("Size")),
+            Field::new("focused", Type::Boolean),
+            Field::new("semantics", Type::named("WidgetSemantics")),
+        ]),
+    ));
+    builder.alias(Alias::new(
+        "FrameSnapshot",
+        Type::table([
+            Field::new("frame_id", Type::Number),
+            Field::new("viewport", Type::named("Size")),
+            Field::new("focus", Type::named("NodeId").optional()),
+            Field::new("nodes", Type::named("NodeSnapshot").array()),
+            Field::new("cells", Type::named("ScreenCell").array().array()),
         ]),
     ));
 }

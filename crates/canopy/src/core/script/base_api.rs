@@ -28,7 +28,7 @@ use super::{
     node_id_from_value, node_id_to_arg, node_info_to_arg, node_list_to_arg, owned_truthy, ret_arg,
     ret_none, ret_one, route_trace_to_arg, scoped_value_to_string, screen_cells_to_arg,
     screen_text, screen_text_for_rect, screen_to_arg, script_callback_label, script_journal_to_arg,
-    tree_node_to_arg, validate_node_handle, values_to_args, with_current_canopy,
+    snapshot_to_arg, tree_node_to_arg, validate_node_handle, values_to_args, with_current_canopy,
 };
 
 /// The native implementation behind one base API function.
@@ -327,6 +327,18 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
         docs: Some("Pop the top input mode and return the active mode after the pop."),
         signature: || FunctionSignature::new().ret(Type::String),
         handler: Handler::Sync(host_pop_mode),
+    },
+    BaseFunction {
+        name: "snapshot",
+        docs: Some("Return the last completed frame without running hooks or preparing a frame."),
+        signature: || FunctionSignature::new().ret(Type::named("FrameSnapshot").optional()),
+        handler: Handler::Sync(host_snapshot),
+    },
+    BaseFunction {
+        name: "flush",
+        docs: Some("Publish pending changes after native mutation callbacks have returned."),
+        signature: FunctionSignature::new,
+        handler: Handler::Sync(host_flush),
     },
     BaseFunction {
         name: "screen",
@@ -1584,6 +1596,28 @@ fn host_clear_bindings<'s>(
         let _ = canopy.clear_bindings();
         Ok(())
     })?;
+    Ok(ret_none())
+}
+
+/// `canopy.snapshot`: copy the last publication into detached Luau records.
+fn host_snapshot<'s>(
+    scope: &Scope<'s>,
+    _args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    host_value(scope, |canopy, _| {
+        Ok(canopy
+            .snapshot()
+            .map(|frame| snapshot_to_arg(&frame))
+            .unwrap_or(ArgValue::Null))
+    })
+}
+
+/// `canopy.flush`: explicitly prepare pending changes at a host-call boundary.
+fn host_flush<'s>(
+    scope: &Scope<'s>,
+    _args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    with_current_canopy(scope, |canopy, _| canopy.flush())?;
     Ok(ret_none())
 }
 
