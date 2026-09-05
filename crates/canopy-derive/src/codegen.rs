@@ -3,7 +3,7 @@ use syn::{ImplItem, ItemImpl};
 
 use crate::{
     model::{CommandMeta, ParamKind, ParamMeta, ReturnKind, ReturnMeta, UserBindingSource},
-    parse::{owner_name, parse_command_method},
+    parse::{cfg_attributes, owner_name, parse_command_method},
 };
 
 /// Render an `Option<&str>` metadata field from an optional string.
@@ -365,7 +365,8 @@ impl CommandMeta {
     /// Render a reference to this command's spec constant.
     fn spec_ref_tokens(&self) -> proc_macro2::TokenStream {
         let spec_const_ident = self.spec_const_ident();
-        quote! { &Self::#spec_const_ident }
+        let cfg_attrs = &self.cfg_attrs;
+        quote! { #(#cfg_attrs)* &Self::#spec_const_ident }
     }
 
     /// Render the generated invoke function for this command.
@@ -546,28 +547,27 @@ impl CommandMeta {
 
     /// Render all generated impl items for this command.
     fn generated_items(&self) -> proc_macro2::TokenStream {
-        let names = self.names_const_tokens();
-        let params = self.params_const_tokens();
-        let invoke = self.invoke_tokens();
-        let spec = self.spec_const_tokens();
-        let accessor = self.accessor_tokens();
-        let builder = self.call_builder_tokens();
-        let status = self.status_tokens();
-        quote! {
-            #names
-            #params
-            #invoke
-            #spec
-            #accessor
-            #builder
-            #status
-        }
+        let cfg_attrs = &self.cfg_attrs;
+        [
+            self.names_const_tokens(),
+            self.params_const_tokens(),
+            self.invoke_tokens(),
+            self.spec_const_tokens(),
+            self.accessor_tokens(),
+            self.call_builder_tokens(),
+            self.status_tokens(),
+        ]
+        .into_iter()
+        .filter(|item| !item.is_empty())
+        .map(|item| quote! { #(#cfg_attrs)* #item })
+        .collect()
     }
 }
 
 /// Generate command metadata and wrappers for `#[command]` methods in an impl
 /// block.
 pub fn expand_derive_commands(input: &ItemImpl) -> syn::Result<proc_macro2::TokenStream> {
+    let cfg_attrs = cfg_attributes(&input.attrs)?;
     let owner = owner_name(input)?;
     let name = input.self_ty.clone();
     let (impl_generics, _, where_clause) = input.generics.split_for_impl();
@@ -599,10 +599,12 @@ pub fn expand_derive_commands(input: &ItemImpl) -> syn::Result<proc_macro2::Toke
     Ok(quote! {
         #input
 
+        #(#cfg_attrs)*
         impl #impl_generics #name #where_clause {
             #generated
         }
 
+        #(#cfg_attrs)*
         impl #impl_generics canopy::commands::CommandNode for #name #where_clause {
             fn commands() -> &'static [&'static canopy::commands::CommandSpec] {
                 Self::#commands_const_ident

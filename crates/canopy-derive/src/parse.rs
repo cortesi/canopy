@@ -4,7 +4,7 @@ use convert_case::{Case, Casing};
 use quote::ToTokens;
 use syn::{
     Attribute, GenericArgument, ImplItemFn, ItemImpl, Meta, Pat, PathArguments, Result, ReturnType,
-    Type, TypeParamBound,
+    Type, TypeParamBound, punctuated::Punctuated,
 };
 
 use crate::model::{CommandMeta, MacroArgs, ParamKind, ParamMeta, ReturnKind, ReturnMeta};
@@ -335,6 +335,7 @@ pub fn parse_command_method(owner: &str, method: &ImplItemFn) -> Result<Option<C
     let ret = parse_return_type(&method.sig.output, return_doc);
 
     Ok(Some(CommandMeta {
+        cfg_attrs: cfg_attributes(&method.attrs)?,
         name: method.sig.ident.to_string(),
         owner: owner.to_string(),
         params,
@@ -343,6 +344,44 @@ pub fn parse_command_method(owner: &str, method: &ImplItemFn) -> Result<Option<C
         ret,
         doc,
     }))
+}
+
+/// Retain compilation gates without copying unrelated conditional attributes.
+pub fn cfg_attributes(attrs: &[Attribute]) -> Result<Vec<Attribute>> {
+    attrs
+        .iter()
+        .filter_map(|attr| match cfg_meta(&attr.meta) {
+            Ok(Some(meta)) => Some(Ok(syn::parse_quote!(#[#meta]))),
+            Ok(None) => None,
+            Err(error) => Some(Err(error)),
+        })
+        .collect()
+}
+
+/// Extract nested `cfg` gates from a conditional attribute.
+fn cfg_meta(meta: &Meta) -> Result<Option<Meta>> {
+    if meta.path().is_ident("cfg") {
+        return Ok(Some(meta.clone()));
+    }
+    if !meta.path().is_ident("cfg_attr") {
+        return Ok(None);
+    }
+    let list = meta.require_list()?;
+    let parts = list.parse_args_with(Punctuated::<Meta, syn::Token![,]>::parse_terminated)?;
+    let mut parts = parts.into_iter();
+    let Some(predicate) = parts.next() else {
+        return Err(syn::Error::new_spanned(
+            meta,
+            "cfg_attr requires a predicate",
+        ));
+    };
+    let mut gates = Vec::new();
+    for part in parts {
+        if let Some(gate) = cfg_meta(&part)? {
+            gates.push(gate);
+        }
+    }
+    Ok((!gates.is_empty()).then(|| syn::parse_quote!(cfg_attr(#predicate, #(#gates),*))))
 }
 
 /// Resolve the owner type name for an impl block.

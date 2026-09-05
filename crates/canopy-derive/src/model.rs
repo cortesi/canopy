@@ -70,6 +70,8 @@ pub struct ReturnMeta {
 /// Parsed metadata describing a command.
 #[derive(Debug, Clone)]
 pub struct CommandMeta {
+    /// Conditional compilation gates shared by every generated item.
+    pub(crate) cfg_attrs: Vec<syn::Attribute>,
     /// Command name (snake_case).
     pub(crate) name: String,
     /// Owner type name.
