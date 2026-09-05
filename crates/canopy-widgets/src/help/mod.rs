@@ -39,7 +39,7 @@ impl Help {
         context.attach_keyed(panel.into(), BindingListSlot::KEY, bindings.into())?;
         context.attach_keyed(panel.into(), FooterSlot::KEY, footer.into())?;
 
-        let frame = context.create_detached(Frame::new().with_title("Key bindings"))?;
+        let frame = context.create_detached(Frame::new().with_title("Keyboard shortcuts"))?;
         context.attach_keyed(frame.into(), PanelSlot::KEY, panel.into())?;
         context.with_layout_of(frame.into(), &mut |layout| {
             *layout = Layout::fill()

@@ -95,10 +95,28 @@ fn prove_help_flow(mut harness: Harness) -> Result<()> {
             .map(|group| group.as_str()),
         Some("root.help")
     );
-    assert!(harness.tbuf().contains_text("Key bindings"));
+    assert!(harness.tbuf().contains_text("Keyboard shortcuts"));
     assert!(!harness.tbuf().contains_text("Context:"));
-    assert!(harness.tbuf().contains_text("Up/k Down/j scroll"));
-    assert!(harness.tbuf().contains_text("?/Esc close"));
+    assert!(harness.tbuf().contains_text("↑/↓ Scroll"));
+    assert!(harness.tbuf().contains_text("Esc Close"));
+    let frame = harness.canopy.snapshot().expect("published help");
+    let panel = frame
+        .nodes
+        .iter()
+        .find(|node| node.name == "help_panel")
+        .and_then(|node| node.rect)
+        .expect("visible help panel");
+    let cell = |x, y| &frame.cells[(y * frame.viewport.w + x) as usize];
+    let background = cell(panel.tl.x as u32, panel.tl.y as u32).style.bg;
+    for y in panel.tl.y as u32..panel.tl.y as u32 + panel.h {
+        for x in panel.tl.x as u32..panel.tl.x as u32 + panel.w {
+            assert_eq!(
+                cell(x, y).style.bg,
+                background,
+                "help background gap at {x},{y}"
+            );
+        }
+    }
 
     harness.key(Key::parse_spec("Down").expect("valid key"))?;
     assert!(harness.canopy.route_trace().iter().any(|entry| {

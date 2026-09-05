@@ -4,7 +4,7 @@ use canopy::{
     ViewContext, Widget,
     error::Result,
     geom::Line,
-    layout::{Constraint, Direction, Layout, MeasureConstraints, Measurement, Size, Sizing},
+    layout::{Constraint, Direction, Edges, Layout, MeasureConstraints, Measurement, Size, Sizing},
     render::Render,
     state::NodeName,
 };
@@ -27,7 +27,13 @@ impl Default for HelpPanel {
 
 impl Widget for HelpPanel {
     fn layout(&self) -> Layout {
-        Layout::fill().direction(Direction::Column)
+        Layout::fill()
+            .direction(Direction::Column)
+            .padding(Edges::all(1))
+    }
+
+    fn render(&mut self, render: &mut Render, context: &dyn ViewContext) -> Result<()> {
+        render.fill("help/panel", context.view().outer_rect_local(), ' ')
     }
 
     fn name(&self) -> NodeName {
@@ -41,12 +47,12 @@ pub struct ControlFooter;
 impl ControlFooter {
     /// Navigation key groups shown from left to right when space permits.
     const NAVIGATION: [(&'static str, &'static str); 3] = [
-        ("Up/k Down/j", " scroll"),
-        ("PgUp/PgDn", " page"),
-        ("Home/End", " jump"),
+        ("↑/↓", " Scroll"),
+        ("PgUp/PgDn", " Page"),
+        ("Home/End", " First/last"),
     ];
-    /// Close keys, which remain visible when navigation groups do not fit.
-    const CLOSE: (&'static str, &'static str) = ("?/Esc", " close");
+    /// Close key, kept visible when navigation groups do not fit.
+    const CLOSE: (&'static str, &'static str) = ("Esc", " Close");
     /// Space between adjacent guide groups.
     const GAP: &'static str = "  ";
 
@@ -113,7 +119,7 @@ impl Widget for ControlFooter {
             Constraint::Exact(width) | Constraint::AtMost(width) => width,
             Constraint::Unbounded => Self::preferred_width(),
         };
-        constraints.clamp(Size::new(width, 1))
+        constraints.clamp(Size::new(width, 2))
     }
 
     fn render(&mut self, render: &mut Render, context: &dyn ViewContext) -> Result<()> {
@@ -121,6 +127,9 @@ impl Widget for ControlFooter {
         if rect.h == 0 || rect.w == 0 {
             return Ok(());
         }
+
+        render.fill("help/footer", rect, ' ')?;
+        let y = rect.h - 1;
 
         let close_width = Self::group_width(Self::CLOSE);
         let close_x = rect.w.saturating_sub(close_width);
@@ -132,13 +141,13 @@ impl Widget for ControlFooter {
                 break;
             }
             if index > 0 {
-                Self::render_text(render, "help/footer", Self::GAP, &mut x, 0)?;
+                Self::render_text(render, "help/footer", Self::GAP, &mut x, y)?;
             }
-            Self::render_group(render, group, &mut x, 0)?;
+            Self::render_group(render, group, &mut x, y)?;
         }
 
         let mut close_x = close_x;
-        Self::render_group(render, Self::CLOSE, &mut close_x, 0)?;
+        Self::render_group(render, Self::CLOSE, &mut close_x, y)?;
         Ok(())
     }
 

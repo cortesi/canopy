@@ -30,7 +30,7 @@ canopy.assert(
     #canopy.available_bindings(origin).bindings == 0,
     "the exclusive frame must block application bindings"
 )
-canopy.assert(canopy.screen_text():find("Key bindings") ~= nil, "help must render synchronously")
+canopy.assert(canopy.screen_text():find("Keyboard shortcuts") ~= nil, "help must render synchronously")
 
 canopy.send_key("PageDown")
 local trace = canopy.route_trace()

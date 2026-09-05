@@ -87,7 +87,7 @@ fn empty_list_has_one_explicit_row() {
 }
 
 #[test]
-fn rows_sort_by_key_category_and_split_fallbacks() {
+fn rows_sort_by_key_category_without_routing_details() {
     let list = list_with(vec![
         binding(1, key::Ctrl + 'a', "Modified", BindingPhase::BeforeWidget),
         binding(
@@ -106,11 +106,8 @@ fn rows_sort_by_key_category_and_split_fallbacks() {
         .iter()
         .filter_map(|line| line.key.as_deref().map(str::trim))
         .collect::<Vec<_>>();
-    assert_eq!(keys, ["a", "B", "2", "Down", "Ctrl+a", "z"]);
-    assert!(lines.iter().any(|line| {
-        line.text == "When the focused widget does not handle the key"
-            && line.style == "help/fallback"
-    }));
+    assert_eq!(keys, ["a", "z", "B", "2", "Down", "Ctrl+a"]);
+    assert_eq!(lines.len(), 6);
 }
 
 #[test]
@@ -140,10 +137,10 @@ fn normal_and_empty_buffers_are_stable() -> Result<()> {
     )?;
     normal.tbuf().assert_matches(buf![
         "a  Alpha"
-        ""
-        "When the focused widget does not"
-        "handle the key"
         "b  Beta"
+        ""
+        ""
+        ""
     ]);
 
     let empty = harness_with(32, 2, Vec::new())?;
@@ -275,13 +272,46 @@ fn wheel_indicator_and_resize_keep_scroll_within_the_exact_canvas() -> Result<()
 }
 
 #[test]
+fn scrolling_reserves_a_gutter_instead_of_overwriting_action_text() -> Result<()> {
+    let harness = harness_with(
+        32,
+        2,
+        vec![
+            binding(
+                1,
+                'a',
+                "12345678901234567890123456789",
+                BindingPhase::BeforeWidget,
+            ),
+            binding(2, 'b', "Another action", BindingPhase::BeforeWidget),
+            binding(3, 'c', "Last action", BindingPhase::BeforeWidget),
+        ],
+    )?;
+    for y in 0..2 {
+        assert_eq!(
+            harness
+                .buf()
+                .get(Point { x: 30, y })
+                .unwrap()
+                .rendered_text(),
+            " "
+        );
+    }
+    harness.tbuf().assert_matches(buf![
+        "a  123456789012345678901234567 █"
+        "   89"
+    ]);
+    Ok(())
+}
+
+#[test]
 fn footer_groups_navigation_and_keeps_close_guide_visible() -> Result<()> {
     let mut wide = Harness::builder(ControlFooter::new()).size(70, 1).build()?;
     wide.render()?;
-    assert!(wide.tbuf().contains_text("Up/k Down/j scroll"));
-    assert!(wide.tbuf().contains_text("PgUp/PgDn page"));
-    assert!(wide.tbuf().contains_text("Home/End jump"));
-    assert!(wide.tbuf().contains_text("?/Esc close"));
+    assert!(wide.tbuf().contains_text("↑/↓ Scroll"));
+    assert!(wide.tbuf().contains_text("PgUp/PgDn Page"));
+    assert!(wide.tbuf().contains_text("Home/End First/last"));
+    assert!(wide.tbuf().contains_text("Esc Close"));
     let key_style = wide
         .buf()
         .get(Point { x: 0, y: 0 })
@@ -289,7 +319,7 @@ fn footer_groups_navigation_and_keeps_close_guide_visible() -> Result<()> {
         .style;
     let label_style = wide
         .buf()
-        .get(Point { x: 12, y: 0 })
+        .get(Point { x: 5, y: 0 })
         .expect("first footer label")
         .style;
     assert!(key_style.attrs.bold);
@@ -298,12 +328,19 @@ fn footer_groups_navigation_and_keeps_close_guide_visible() -> Result<()> {
 
     let mut narrow = Harness::builder(ControlFooter::new()).size(20, 1).build()?;
     narrow.render()?;
-    narrow.tbuf().assert_matches(buf!["         ?/Esc close"]);
+    narrow.tbuf().assert_matches(buf!["           Esc Close"]);
+    for x in 0..70 {
+        assert_eq!(
+            wide.buf().get(Point { x, y: 0 }).unwrap().style.bg,
+            key_style.bg,
+            "footer background must cover gaps at column {x}"
+        );
+    }
     Ok(())
 }
 
 #[test]
-fn command_help_shows_target_arguments_and_disabled_reason() {
+fn command_help_keeps_user_feedback_without_command_diagnostics() {
     use canopy::{
         commands::{
             ArgValue, CommandAction, CommandArgs, CommandId, CommandInvocation, CommandRequirement,
@@ -325,7 +362,7 @@ fn command_help_shows_target_arguments_and_disabled_reason() {
         status: Some(CommandStatus::Disabled("no selection".into())),
         missing_requirements: vec![CommandRequirement::ListRow],
     });
-    let list = list_with(vec![binding]);
+    let list = list_with(vec![binding.clone()]);
     let text = list
         .display_lines(100)
         .into_iter()
@@ -333,7 +370,9 @@ fn command_help_shows_target_arguments_and_disabled_reason() {
         .collect::<Vec<_>>()
         .join(" ");
     let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    assert!(text.contains("Disabled: no selection"));
-    assert!(text.contains("todo::delete_item; focus; [Int(7)]"));
-    assert!(text.contains("Context required: list row"));
+    assert_eq!(text, "Delete selection — Unavailable: no selection");
+    // Input dispatch supplies event/row context that passive discovery lacks.
+    binding.command.as_mut().unwrap().status = Some(CommandStatus::Enabled);
+    let list = list_with(vec![binding]);
+    assert_eq!(list.display_lines(100)[0].text, "Delete selection");
 }

@@ -3,8 +3,8 @@
 use std::mem;
 
 use canopy::{
-    BindingPhase, Canopy, Context, EventOutcome, Loader, ViewContext, Widget, command,
-    commands::{CommandArgs, CommandRequirement, CommandStatus, CommandTarget},
+    Canopy, Context, EventOutcome, Loader, ViewContext, Widget, command,
+    commands::CommandStatus,
     derive_commands,
     error::Result,
     event::{
@@ -106,11 +106,7 @@ impl BindingList {
             .snapshot
             .as_ref()
             .map_or(&[][..], |snapshot| snapshot.bindings.as_slice());
-        let (mut primary, mut fallback): (Vec<_>, Vec<_>) = bindings
-            .iter()
-            .partition(|binding| binding.phase == BindingPhase::BeforeWidget);
-
-        if primary.is_empty() && fallback.is_empty() {
+        if bindings.is_empty() {
             return vec![DisplayLine {
                 key: None,
                 text: "No key bindings in this context".to_string(),
@@ -118,44 +114,24 @@ impl BindingList {
             }];
         }
 
-        primary.sort_by_cached_key(|left| binding_sort_key(left));
-        fallback.sort_by_cached_key(|left| binding_sort_key(left));
-
-        let max_key_width = primary
+        let mut bindings = bindings.iter().collect::<Vec<_>>();
+        bindings.sort_by_cached_key(|binding| binding_sort_key(binding));
+        let max_key_width = bindings
             .iter()
-            .chain(&fallback)
             .map(|binding| UnicodeWidthStr::width(binding.key.to_string().as_str()))
             .max()
             .unwrap_or(0);
-        let mut lines = binding_lines(&primary, width, max_key_width, "help/label");
-        if !fallback.is_empty() {
-            if !lines.is_empty() {
-                lines.push(DisplayLine {
-                    key: None,
-                    text: String::new(),
-                    style: "help/fallback",
-                });
-            }
-            lines.extend(
-                textwrap::wrap(
-                    "When the focused widget does not handle the key",
-                    (width as usize).max(1),
-                )
-                .into_iter()
-                .map(|text| DisplayLine {
-                    key: None,
-                    text: text.to_string(),
-                    style: "help/fallback",
-                }),
-            );
-            lines.extend(binding_lines(
-                &fallback,
-                width,
-                max_key_width,
-                "help/fallback",
-            ));
+        binding_lines(&bindings, width, max_key_width, "help/label")
+    }
+
+    /// Reserve a gutter when scrolling so the indicator never covers text.
+    fn viewport_lines(&self, view: Size) -> Vec<DisplayLine> {
+        let lines = self.display_lines(view.w);
+        if lines.len() > view.h as usize && view.w > 2 {
+            self.display_lines(view.w - 2)
+        } else {
+            lines
         }
-        lines
     }
 }
 
@@ -175,7 +151,7 @@ impl Widget for BindingList {
     }
 
     fn canvas(&self, view: Size, _context: &CanvasContext) -> Size {
-        let lines = self.display_lines(view.w);
+        let lines = self.viewport_lines(view);
         Size::new(view.w, u32::try_from(lines.len()).unwrap_or(u32::MAX))
     }
 
@@ -194,7 +170,10 @@ impl Widget for BindingList {
             }
             mouse::Action::Down if mouse.button == mouse::Button::Left => {
                 let view = context.view();
-                if view.content.w > 0 && mouse.location.x + 1 >= view.content.w {
+                if view.canvas.h > view.view_rect().h
+                    && view.content.w > 0
+                    && mouse.location.x + 1 >= view.content.w
+                {
                     let viewport = view.view_rect().h;
                     let maximum = view.canvas.h.saturating_sub(viewport);
                     let denominator = view.content.h.saturating_sub(1).max(1);
@@ -213,7 +192,7 @@ impl Widget for BindingList {
         let view = context.view();
         let rect = view.outer_rect_local();
         render.fill("help/panel", rect, ' ')?;
-        let lines = self.display_lines(view.content.w);
+        let lines = self.viewport_lines(Size::new(view.content.w, view.content.h));
         let viewport = view.view_rect();
         for (index, line) in lines
             .iter()
@@ -222,7 +201,11 @@ impl Widget for BindingList {
             .take(viewport.h as usize)
         {
             let y = u32::try_from(index).unwrap_or(u32::MAX) - viewport.tl.y;
-            let width = view.content.w;
+            let width = if view.canvas.h > viewport.h && view.content.w > 2 {
+                view.content.w - 2
+            } else {
+                view.content.w
+            };
             if let Some(key) = &line.key {
                 let key_width = UnicodeWidthStr::width(key.as_str()) as u32;
                 render.text("help/key", Line::new(0, y, key_width.min(width)), key)?;
@@ -258,7 +241,7 @@ impl Widget for BindingList {
     }
 }
 
-/// Build wrapped display lines for one phase section.
+/// Build aligned shortcut rows, stacking keys above actions on narrow screens.
 fn binding_lines(
     bindings: &[&AvailableBinding],
     width: u32,
@@ -272,11 +255,15 @@ fn binding_lines(
         let key = binding.key.to_string();
         let description = binding_description(binding);
         if narrow {
-            lines.push(DisplayLine {
-                key: None,
-                text: key,
-                style: "help/key",
-            });
+            lines.extend(
+                textwrap::wrap(&key, width.max(1))
+                    .into_iter()
+                    .map(|text| DisplayLine {
+                        key: None,
+                        text: text.into_owned(),
+                        style: "help/key",
+                    }),
+            );
             let wrap_width = width.saturating_sub(2).max(1);
             for text in textwrap::wrap(&description, wrap_width) {
                 lines.push(DisplayLine {
@@ -310,7 +297,8 @@ fn binding_lines(
     lines
 }
 
-/// Include inspectable command intent and captured eligibility in its help row.
+/// Show the action and useful availability feedback, leaving diagnostics to
+/// inspection APIs.
 fn binding_description(binding: &AvailableBinding) -> String {
     let Some(command) = &binding.command else {
         return binding.description.clone();
@@ -318,37 +306,10 @@ fn binding_description(binding: &AvailableBinding) -> String {
     let mut description = binding.description.clone();
     match &command.status {
         Some(CommandStatus::Disabled(reason)) => {
-            description.push_str(&format!(" — Disabled: {reason}"));
+            description.push_str(&format!(" — Unavailable: {reason}"));
         }
-        None => description.push_str(" — Unavailable target"),
+        None => description.push_str(" — Unavailable here"),
         Some(CommandStatus::Enabled) => {}
-    }
-    let target = match command.action.target {
-        Some(CommandTarget::Exact(node)) => format!("exact {node:?}"),
-        Some(CommandTarget::From(node)) => format!("from {node:?}"),
-        Some(CommandTarget::Focus) => "focus".into(),
-        None => "from binding route".into(),
-    };
-    let args = match &command.action.invocation.args {
-        CommandArgs::Positional(values) => format!("{values:?}"),
-        CommandArgs::Named(values) => format!("{values:?}"),
-    };
-    description.push_str(&format!(
-        " ({}; {target}; {args})",
-        command.action.invocation.id.0
-    ));
-    if !command.missing_requirements.is_empty() {
-        let missing = command
-            .missing_requirements
-            .iter()
-            .map(|requirement| match requirement {
-                CommandRequirement::Event => "event",
-                CommandRequirement::Mouse => "mouse event",
-                CommandRequirement::ListRow => "list row",
-            })
-            .collect::<Vec<_>>()
-            .join(", ");
-        description.push_str(&format!(" — Context required: {missing}"));
     }
     description
 }
