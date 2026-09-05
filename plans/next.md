@@ -987,9 +987,6 @@ Stage 2.
   Review buffer diff equivalence and script ABI results before accepting the
   completed stage.
 
-Dynamic validation limitation: `cargo xtask dynamic` could not run because
-`cargo-miri` is not installed for `nightly-2026-07-01`.
-
 ### Stage 4: Scoped composition, keyed collections, and modal interaction
 
 R05, R10, R14, and R15 use the structural and turn boundaries from Stage 3.

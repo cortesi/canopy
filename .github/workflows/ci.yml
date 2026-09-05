@@ -29,7 +29,7 @@ jobs:
       - name: Install the format toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: nightly-2026-07-01
+          toolchain: nightly
           components: rustfmt
 
       - uses: Swatinem/rust-cache@v2

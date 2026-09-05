@@ -56,7 +56,7 @@ fn main() -> ExitCode {
 }
 
 /// Rust nightly used for the repository's Miri checks.
-const MIRI_TOOLCHAIN: &str = "+nightly-2026-07-01";
+const MIRI_TOOLCHAIN: &str = "+nightly";
 
 /// Ruskel version required locally and in CI.
 const RUSKEL_VERSION: &str = "0.0.11";
