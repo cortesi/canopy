@@ -8,6 +8,9 @@
 /// Command dispatch, argument, and error integration tests.
 #[path = "it/commands.rs"]
 mod commands;
+/// Shared native and adapter contract trace.
+#[path = "it/contracts.rs"]
+mod contracts;
 /// Focus traversal integration tests.
 #[path = "it/focus.rs"]
 mod focus;

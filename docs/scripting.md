@@ -357,3 +357,68 @@ enums, optional named arguments, fixtures, and default bindings.
 Script ABI tests cover positional and named dispatch, optional arguments, error
 reporting, logs, assertions, nested callbacks, deferred release, unbind, and
 event dispatch.
+
+## Versioned replay
+
+`canopyctl eval --journal-out trace.json` writes a `canopy.replay/1` envelope
+from the evaluation's actual metadata. Recording requires an API digest; a
+failure before app construction still produces evaluation JSON, but cannot
+produce a complete replay envelope.
+
+```json
+{
+  "schema": "canopy.replay/1",
+  "app": "todo",
+  "api_digest": "recorded-api-digest",
+  "execution": "fresh-app-per-eval",
+  "viewport": { "width": 120, "height": 40 },
+  "fixture": "with_items",
+  "reset": "isolated",
+  "steps": [
+    {
+      "source": "todo.select_first(); todo.delete_item()",
+      "expect": { "success": true }
+    }
+  ]
+}
+```
+
+Replay checks application identity, API digest, execution mode, viewport, and
+domain reset policy before applying a fixture or evaluating source. Headless
+replay requests the recorded viewport. Live replay checks the current viewport
+and uses the explicitly selected socket. For example:
+
+```sh
+canopyctl replay trace.json -- todo mcp :memory:
+canopyctl replay live-trace.json --socket /path/to/live.sock
+```
+
+Each `fresh-app-per-eval` step constructs a new app. Put a sequence that requires
+shared state in one step's source. `live-session` steps share the running app;
+reconnecting does not reset its widgets or database. Live replay applies a named
+fixture through the fixture tool before the selected steps. Headless replay
+passes the fixture into each evaluation. A missing fixture implementation is an
+error in either mode.
+
+`--allow-mismatch` reports each differing compatibility field before execution.
+It does not permit an unsupported schema, malformed data, invalid dimensions,
+or a missing fixture. A file database's `external` reset policy must not be
+treated as `isolated` merely because headless evaluation creates a new UI.
+
+Recorded failure steps are skipped unless `--include-failed` selects them.
+Selected steps compare actual success with `expect.success`: an expected
+failure passes when evaluation fails, and fails when evaluation succeeds.
+`--fail-fast` stops at the first outcome that differs from its expectation.
+
+Old object journals and bare arrays require `--legacy`. Headless legacy replay
+also requires `--viewport WIDTHxHEIGHT`; `--fixture NAME` selects a reset
+fixture, and omitting it means no fixture. These files lack enough metadata to
+claim complete reproduction:
+
+```sh
+canopyctl replay old-journal.json --legacy --viewport 120x40 \
+  --fixture with_items -- todo mcp :memory:
+```
+
+Source strings are durable replay steps. Live node tokens and session IDs are
+not durable node references; use semantic keys and application identifiers.

@@ -50,6 +50,14 @@ choosing actions. The payload includes the operating guide, generated API text,
 an API digest, fixture metadata, current command availability, and a compact
 script-journal summary.
 
+The `metadata` record declares `app`, `execution`, `session_id`, `viewport`,
+`reset`, and `api_digest`. Headless `fresh-app-per-eval` requests reconstruct the
+UI and receive independent session IDs. `live-session` requests reuse the app
+and retain one session ID across client reconnects. Domain isolation comes from
+the declared reset policy, never from UI reconstruction. A pre-build failure
+can omit the API digest. Node tokens remain temporary references within a
+session, not durable replay targets.
+
 `default_target = "root"` identifies the top-level eval anchor.
 `default_commands` reports root-relative availability, while `focus_commands`
 reports focus-relative availability. The legacy `commands` field remains an
@@ -173,13 +181,30 @@ cargo run -p canopyctl -- eval \
   -- cargo run -p todo -- mcp :memory:
 ```
 
-Replay that journal against a fresh app:
+The journal uses `canopy.replay/1` and records application/API identity, execution
+mode, viewport, fixture and reset contracts, and ordered source/expected-success
+steps. Replay uses the recorded fixture and dimensions:
 
 ```sh
 cargo run -p canopyctl -- replay tmp/todo-delete.json \
-  --fixture with_items \
   -- cargo run -p todo -- mcp :memory:
 ```
+
+Use `--socket PATH` for a live target. Replay checks compatibility and fixture
+availability before applying a fixture or executing sources. `--allow-mismatch`
+reports compatibility overrides; malformed envelopes, invalid viewports, and
+missing fixtures remain errors. `--include-failed` executes recorded expected
+failures and compares the result with their expectation.
+
+Old journals require `--legacy` and explicit fixture/viewport options where
+needed. They do not claim complete reproduction. Each fresh-app step is a
+separate eval; put a stateful sequence into one eval source when its steps must
+share a fresh app. Live replay applies its explicit fixture through
+`apply_fixture`, then runs against the same live session.
+
+Live fixture callbacks must use native mutation or typed dispatch. They execute
+inside a runtime turn, so a nested synchronous eval returns `ScriptBusy`.
+Run top-level scripts through `script_eval` after applying the fixture.
 
 When a replay becomes part of the permanent workflow, move the Luau body into a
 smoke script under the relevant fixture directory and run `cargo xtask smoke`.

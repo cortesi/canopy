@@ -4,7 +4,9 @@ use std::path::Path;
 
 use anyhow::{Context, Result, bail};
 use canopy::FixtureInfo;
-use canopy_mcp::{ApplyFixtureRequest, BootstrapResponse, ScriptEvalOutcome, ScriptEvalRequest};
+use canopy_mcp::{
+    ApplyFixtureRequest, BootstrapRequest, BootstrapResponse, ScriptEvalOutcome, ScriptEvalRequest,
+};
 use ruau_script_api::ScriptApiQuery;
 use tmcp::{
     Client,
@@ -97,9 +99,17 @@ impl Session {
         Ok(self.client.call_tool("script_api", query).await?)
     }
 
-    /// Request bootstrap information.
-    pub async fn bootstrap(&self) -> Result<BootstrapResponse> {
-        Ok(self.client.call_tool_structured("bootstrap", ()).await?)
+    /// Return the explicitly selected transport mode.
+    pub fn kind(&self) -> SessionKind {
+        self.kind
+    }
+
+    /// Request bootstrap information at an optional headless viewport.
+    pub async fn bootstrap(&self, request: BootstrapRequest) -> Result<BootstrapResponse> {
+        Ok(self
+            .client
+            .call_tool_structured("bootstrap", request)
+            .await?)
     }
 
     /// Request the fixture catalog.
@@ -181,8 +191,8 @@ impl SessionManager {
     }
 
     /// Request bootstrap information on the active session.
-    pub async fn bootstrap(&self) -> Result<BootstrapResponse> {
-        self.session().await?.bootstrap().await
+    pub async fn bootstrap(&self, request: BootstrapRequest) -> Result<BootstrapResponse> {
+        self.session().await?.bootstrap(request).await
     }
 
     /// Request the fixture catalog on the active session.
@@ -215,17 +225,91 @@ pub mod tests {
         atomic::{AtomicBool, Ordering},
     };
 
-    use canopy_mcp::{ScriptErrorInfo, ScriptTaskState, ScriptTiming};
+    use canopy::testing::contracts;
+    use canopy_mcp::{
+        AppEvaluator, ExecutionMetadata, ExecutionMode, ResetPolicy, ScriptErrorInfo,
+        ScriptTaskState, ScriptTiming, Viewport, app_factory, json_tool_result,
+    };
     use serde_json::{Value, json};
-    use tmcp::{Server, ToolResult, mcp_server};
+    use tmcp::{Server, ToolError, ToolResult, mcp_server};
     use tokio::{
         io::{duplex, split},
         net::UnixListener,
         sync::oneshot,
-        task::JoinHandle,
+        task::{JoinHandle, block_in_place},
     };
 
     use super::*;
+
+    /// Real evaluator exposed over MCP for cross-adapter contract tests.
+    #[derive(Clone)]
+    struct EvaluatorPeer {
+        /// The same public evaluator used by headless MCP applications.
+        evaluator: AppEvaluator,
+        /// Sources observed at the transport boundary.
+        calls: Arc<Mutex<Vec<String>>>,
+    }
+
+    #[mcp_server]
+    impl EvaluatorPeer {
+        #[tool]
+        async fn script_eval(&self, request: ScriptEvalRequest) -> ToolResult<CallToolResult> {
+            self.calls.lock().await.push(request.script.clone());
+            Ok(block_in_place(|| self.evaluator.evaluate(&request)).to_tool_result())
+        }
+
+        #[tool]
+        async fn bootstrap(&self, request: BootstrapRequest) -> ToolResult<CallToolResult> {
+            let response = block_in_place(|| self.evaluator.bootstrap_with_request(&request))
+                .map_err(|error| ToolError::internal(error.to_string()))?;
+            Ok(json_tool_result(
+                serde_json::to_value(response)
+                    .map_err(|error| ToolError::internal(error.to_string()))?,
+            ))
+        }
+
+        #[tool]
+        async fn fixtures(&self) -> ToolResult<CallToolResult> {
+            let fixtures = self
+                .evaluator
+                .fixtures()
+                .map_err(|error| ToolError::internal(error.to_string()))?;
+            Ok(json_tool_result(
+                serde_json::to_value(fixtures)
+                    .map_err(|error| ToolError::internal(error.to_string()))?,
+            ))
+        }
+    }
+
+    /// Connect a real fresh-app evaluator through an in-memory MCP transport.
+    pub async fn evaluator_session() -> Result<(Session, Arc<Mutex<Vec<String>>>, JoinHandle<()>)> {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let peer = EvaluatorPeer {
+            evaluator: AppEvaluator::new(app_factory(|| contracts::app().map_err(Into::into))),
+            calls: Arc::clone(&calls),
+        };
+        let (client_stream, server_stream) = duplex(65536);
+        let task = tokio::spawn(async move {
+            let (reader, writer) = split(server_stream);
+            Server::new(move || peer.clone())
+                .serve_stream(reader, writer)
+                .await
+                .expect("evaluator transport");
+        });
+        let (reader, writer) = split(client_stream);
+        let mut client = Client::new(CLIENT_NAME, CLIENT_VERSION);
+        client.connect_stream(reader, writer).await?;
+        Ok((
+            Session {
+                client,
+                child: None,
+                kind: SessionKind::Headless,
+                default_fixture: None,
+            },
+            calls,
+            task,
+        ))
+    }
 
     #[derive(Clone, Default)]
     struct Peer {
@@ -253,6 +337,14 @@ pub mod tests {
             };
             let success = state == ScriptTaskState::Completed;
             let outcome = ScriptEvalOutcome {
+                metadata: ExecutionMetadata {
+                    app: "test".into(),
+                    execution: ExecutionMode::LiveSession,
+                    session_id: "test-session".into(),
+                    viewport: Viewport::default(),
+                    reset: ResetPolicy::External,
+                    api_digest: Some("test-digest".into()),
+                },
                 success,
                 state,
                 value: Some(request.fixture.map_or(Value::Null, Value::String)),
@@ -319,6 +411,7 @@ pub mod tests {
             script: script.to_owned(),
             fixture: None,
             timeout_ms: None,
+            viewport: None,
         }
     }
 

@@ -487,6 +487,7 @@ dependencies = [
  "canopy",
  "canopy-mcp",
  "clap",
+ "futures",
  "ruau-script-api",
  "serde",
  "serde_json",

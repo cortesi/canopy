@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 use canopy::terminal::{RunOptions, runloop_with_options};
 
 use crate::{
-    Error, Result,
-    script::{AppEvaluator, AppFactory},
-    server::{serve_stdio, serve_uds},
+    AppFactory, Error, LiveContext, Result,
+    script::AppEvaluator,
+    server::{serve_stdio, serve_uds_with_context},
 };
 
 /// Authority granted to local automation transports.
@@ -105,7 +105,13 @@ fn run_interactive(
     let canopy = (factory.as_ref())()?;
     let automation = canopy.automation_handle();
     let live_server = mcp_socket
-        .map(|socket_path| serve_uds(socket_path, automation))
+        .map(|socket_path| {
+            serve_uds_with_context(
+                socket_path,
+                automation,
+                LiveContext::new(factory.metadata().clone()),
+            )
+        })
         .transpose()?;
 
     let run_result = runloop_with_options(canopy, options);

@@ -41,7 +41,7 @@ impl RenderLimits {
     }
 
     /// Validate a visible target size and return its exact cell count.
-    pub(crate) fn cell_count(self, size: Size) -> Result<usize> {
+    pub fn cell_count(self, size: Size) -> Result<usize> {
         if size.w > self.max_width {
             return Err(Error::RenderWidthLimit {
                 requested: size.w,

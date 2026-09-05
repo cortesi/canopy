@@ -14,14 +14,15 @@ use std::{
     io::{self, Write},
     path::{Path, PathBuf},
     process::{Stdio, exit, id},
+    result,
     sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{Context, Result, bail};
 use canopy_mcp::{
-    ApplyFixtureRequest, ScriptEvalOutcome, ScriptEvalRequest, SuiteConfig, discover_scripts,
-    fixture_for_script, json_tool_result,
+    ApplyFixtureRequest, BootstrapRequest, ScriptEvalOutcome, ScriptEvalRequest, SuiteConfig,
+    Viewport, discover_scripts, fixture_for_script, json_tool_result,
 };
 use clap::{Args, Parser, Subcommand};
 use ruau_script_api::{ScriptApiQuery, ScriptApiResponse};
@@ -30,8 +31,11 @@ use tokio::{net::UnixStream, sync::Mutex, time::sleep};
 
 use crate::{
     config::LoadedConfig,
-    replay::{ReplayEntry, load_replay_journal, replay_entry_from_eval, write_replay_journal},
-    session::{Session, SessionManager},
+    replay::{
+        ReplayEnvelope, ReplayExpectation, ReplayFile, ReplayStep, load_replay, validate_viewport,
+        write_replay,
+    },
+    session::{Session, SessionKind, SessionManager},
 };
 
 /// Top-level CLI arguments.
@@ -52,7 +56,7 @@ enum Commands {
     Mcp,
     /// Execute a Luau smoke suite through the headless MCP server.
     Smoke(SmokeArgs),
-    /// Replay a recorded script journal through a headless app instance.
+    /// Replay a versioned envelope against an explicit live or headless target.
     Replay(ReplayArgs),
     /// Print MCP bootstrap information from a headless app instance.
     Bootstrap(SpawnArgs),
@@ -118,11 +122,23 @@ struct SmokeArgs {
 }
 
 /// Arguments for `canopyctl replay`.
-#[derive(Args)]
+#[derive(Args, Default)]
 struct ReplayArgs {
+    /// Connect to this live socket instead of spawning a headless command.
+    #[arg(long, conflicts_with = "command")]
+    socket: Option<PathBuf>,
+    /// Permit legacy journals with incomplete reproduction metadata.
+    #[arg(long)]
+    legacy: bool,
+    /// Report and permit each compatibility mismatch before executing sources.
+    #[arg(long)]
+    allow_mismatch: bool,
+    /// Explicit WIDTHxHEIGHT for legacy headless replay.
+    #[arg(long, value_parser = parse_viewport)]
+    viewport: Option<Viewport>,
     /// Path to a JSON replay journal.
     journal: PathBuf,
-    /// Optional fixture to apply before each replayed entry.
+    /// Fixture for legacy replay (once for live, per eval for headless).
     #[arg(long)]
     fixture: Option<String>,
     /// Stop after the first failing replay entry.
@@ -153,7 +169,10 @@ struct EvalArgs {
     /// Optional evaluation timeout override in milliseconds.
     #[arg(long)]
     timeout_ms: Option<u64>,
-    /// Write a replay journal containing this evaluation.
+    /// Optional headless viewport as WIDTHxHEIGHT.
+    #[arg(long, value_parser = parse_viewport)]
+    viewport: Option<Viewport>,
+    /// Write a versioned replay envelope containing this evaluation.
     #[arg(long)]
     journal_out: Option<PathBuf>,
     /// Command override passed after `--`.
@@ -214,9 +233,9 @@ impl CanopyctlMcpServer {
 
     #[tool]
     /// Return bootstrap information for the active session.
-    async fn bootstrap(&self) -> ToolResult<CallToolResult> {
+    async fn bootstrap(&self, request: BootstrapRequest) -> ToolResult<CallToolResult> {
         self.touch().await;
-        let bootstrap = self.sessions.bootstrap().await.map_err(tool_error)?;
+        let bootstrap = self.sessions.bootstrap(request).await.map_err(tool_error)?;
         let value = serde_json::to_value(bootstrap).map_err(tool_error)?;
         Ok(json_tool_result(value))
     }
@@ -326,6 +345,7 @@ async fn smoke_scripts(
                 script: source,
                 fixture: script_fixture.clone(),
                 timeout_ms,
+                viewport: None,
             })
             .await?;
         let elapsed = started.elapsed().as_millis();
@@ -351,46 +371,175 @@ async fn smoke_scripts(
     Ok(())
 }
 
-/// Execute `canopyctl replay`.
-async fn replay_command(config: LoadedConfig, args: ReplayArgs) -> Result<()> {
-    let command = config.headless_command(&args.command)?;
-    let session = Session::spawn_headless(&command).await?;
-    let journal = load_replay_journal(&args.journal)?;
-    replay_entries(&session, journal, &args).await
+/// Parse and validate one CLI viewport before an app is spawned.
+fn parse_viewport(text: &str) -> result::Result<Viewport, String> {
+    let (width, height) = text
+        .split_once('x')
+        .ok_or_else(|| "viewport must be WIDTHxHEIGHT".to_owned())?;
+    let viewport = Viewport {
+        width: width.parse().map_err(|_| "invalid viewport width")?,
+        height: height.parse().map_err(|_| "invalid viewport height")?,
+    };
+    validate_viewport(viewport).map_err(|error| error.to_string())?;
+    Ok(viewport)
 }
 
-/// Replay entries through one connected session.
+/// Execute `canopyctl replay` after parsing all sources and assumptions.
+async fn replay_command(config: LoadedConfig, args: ReplayArgs) -> Result<()> {
+    let input = load_replay(&args.journal, args.legacy)?;
+    validate_replay_options(&input, &args)?;
+    let mut session = match &args.socket {
+        Some(socket) => Session::connect_live(socket).await?,
+        None => Session::spawn_headless(&config.headless_command(&args.command)?).await?,
+    };
+    let result = replay_file(&mut session, input, &args).await;
+    session.shutdown().await;
+    result
+}
+
+/// Validate compatibility before applying fixtures or running any replay step.
+async fn replay_file(session: &mut Session, input: ReplayFile, args: &ReplayArgs) -> Result<()> {
+    validate_replay_options(&input, args)?;
+    let (steps, fixture, viewport) = match input {
+        ReplayFile::Versioned(envelope) => {
+            if args.fixture.is_some() || args.viewport.is_some() {
+                bail!("fixture and viewport overrides are only accepted for legacy journals");
+            }
+            envelope.validate()?;
+            let requested = (session.kind() == SessionKind::Headless).then_some(envelope.viewport);
+            let target = session
+                .bootstrap(BootstrapRequest {
+                    viewport: requested,
+                })
+                .await?;
+            validate_viewport(target.metadata.viewport)?;
+            if let Some(name) = &envelope.fixture
+                && !target.fixtures.iter().any(|fixture| fixture.name == *name)
+            {
+                bail!("replay fixture {name:?} is not implemented by the target");
+            }
+            let differences = envelope.mismatches(&target.metadata)?;
+            if !differences.is_empty() && !args.allow_mismatch {
+                bail!("replay compatibility mismatch:\n{}", differences.join("\n"));
+            }
+            for difference in differences {
+                eprintln!("OVERRIDE {difference}");
+            }
+            (envelope.steps, envelope.fixture, requested)
+        }
+        ReplayFile::Legacy(entries) => {
+            eprintln!(
+                "LEGACY replay: metadata is incomplete; complete reproduction is not claimed"
+            );
+            if let Some(viewport) = args.viewport {
+                validate_viewport(viewport)?;
+            }
+            if session.kind() == SessionKind::Live && args.viewport.is_some() {
+                bail!("legacy viewport selection is only supported by headless sessions");
+            }
+            validate_fixture(session, args.fixture.as_deref()).await?;
+            let steps = entries
+                .into_iter()
+                .map(|entry| {
+                    Ok(ReplayStep {
+                        source: entry.source()?.to_owned(),
+                        expect: ReplayExpectation {
+                            success: !entry.originally_failed(),
+                        },
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?;
+            (steps, args.fixture.clone(), args.viewport)
+        }
+    };
+    if !steps
+        .iter()
+        .any(|step| step.expect.success || args.include_failed)
+    {
+        return Ok(());
+    }
+    if session.kind() == SessionKind::Live
+        && let Some(name) = &fixture
+    {
+        session.apply_fixture(name.clone()).await?;
+    }
+    let inline_fixture = if session.kind() == SessionKind::Headless {
+        fixture
+    } else {
+        None
+    };
+    replay_entries(session, steps, inline_fixture, viewport, args).await
+}
+
+/// Reject conflicting or incomplete target options before connecting.
+fn validate_replay_options(input: &ReplayFile, args: &ReplayArgs) -> Result<()> {
+    match input {
+        ReplayFile::Versioned(_) if args.fixture.is_some() || args.viewport.is_some() => {
+            bail!("fixture and viewport overrides are only accepted for legacy journals");
+        }
+        ReplayFile::Legacy(_) if args.socket.is_none() && args.viewport.is_none() => {
+            bail!("legacy headless replay requires an explicit --viewport WIDTHxHEIGHT");
+        }
+        ReplayFile::Legacy(_) if args.socket.is_some() && args.viewport.is_some() => {
+            bail!("legacy viewport selection is only supported by headless sessions");
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Reject a missing fixture implementation even when compatibility is
+/// overridden.
+async fn validate_fixture(session: &Session, fixture: Option<&str>) -> Result<()> {
+    if let Some(name) = fixture
+        && !session
+            .fixtures()
+            .await?
+            .iter()
+            .any(|fixture| fixture.name == name)
+    {
+        bail!("replay fixture {name:?} is not implemented by the target");
+    }
+    Ok(())
+}
+
+/// Execute selected steps and compare both successful and failed expectations.
 async fn replay_entries(
     session: &Session,
-    journal: Vec<ReplayEntry>,
+    steps: Vec<ReplayStep>,
+    fixture: Option<String>,
+    viewport: Option<Viewport>,
     args: &ReplayArgs,
 ) -> Result<()> {
     let mut failed = 0usize;
     let mut skipped = 0usize;
-
-    for (index, entry) in journal.into_iter().enumerate() {
+    for (index, step) in steps.into_iter().enumerate() {
         let replay_id = index + 1;
-        if entry.originally_failed() && !args.include_failed {
+        if !step.expect.success && !args.include_failed {
             skipped += 1;
             println!(
-                "SKIP replay#{replay_id} origin={} (originally failed)",
-                entry.origin()
+                "SKIP replay#{replay_id} (recorded failure; select --include-failed to execute)"
             );
             continue;
         }
-        let script = entry.source()?;
         let outcome = session
             .eval(ScriptEvalRequest {
-                script: script.to_string(),
-                fixture: args.fixture.clone(),
+                script: step.source,
+                fixture: fixture.clone(),
                 timeout_ms: args.timeout_ms,
+                viewport,
             })
             .await?;
-        if outcome.success {
-            println!("PASS replay#{replay_id} origin={}", entry.origin());
+        if outcome.success == step.expect.success {
+            println!(
+                "PASS replay#{replay_id} expected_success={}",
+                step.expect.success
+            );
         } else {
             failed += 1;
-            println!("FAIL replay#{replay_id} origin={}", entry.origin());
+            println!(
+                "FAIL replay#{replay_id} expected_success={} actual_success={}",
+                step.expect.success, outcome.success
+            );
             if let Some(error) = outcome.error {
                 println!("  {}", error.message);
             }
@@ -399,7 +548,6 @@ async fn replay_entries(
             }
         }
     }
-
     if failed > 0 {
         bail!("{failed} replay entries failed; {skipped} skipped");
     }
@@ -410,7 +558,7 @@ async fn replay_entries(
 async fn bootstrap_command(config: LoadedConfig, args: SpawnArgs) -> Result<()> {
     let command = config.headless_command(&args.command)?;
     let session = Session::spawn_headless(&command).await?;
-    let bootstrap = session.bootstrap().await?;
+    let bootstrap = session.bootstrap(BootstrapRequest::default()).await?;
     println!("{}", serde_json::to_string_pretty(&bootstrap)?);
     Ok(())
 }
@@ -451,14 +599,16 @@ async fn eval_command(config: LoadedConfig, args: EvalArgs) -> Result<()> {
     let outcome = session
         .eval(ScriptEvalRequest {
             script: script.clone(),
-            fixture: args.fixture,
+            fixture: args.fixture.clone(),
             timeout_ms: args.timeout_ms,
+            viewport: args.viewport,
         })
         .await?;
     write_eval_output(
         &outcome,
         script,
         args.journal_out.as_deref(),
+        args.fixture,
         &mut io::stdout().lock(),
     )?;
     if !outcome.success {
@@ -473,12 +623,13 @@ fn write_eval_output(
     outcome: &ScriptEvalOutcome,
     script: String,
     journal_out: Option<&Path>,
+    fixture: Option<String>,
     output: &mut impl Write,
 ) -> Result<()> {
     serde_json::to_writer_pretty(&mut *output, outcome)?;
     writeln!(output)?;
     if let Some(path) = journal_out {
-        write_replay_journal(path, replay_entry_from_eval(script, outcome))?;
+        write_replay(path, &ReplayEnvelope::record(script, fixture, outcome)?)?;
     }
     Ok(())
 }
@@ -575,11 +726,234 @@ fn tool_error(error: impl Display) -> ToolError {
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        panic::{AssertUnwindSafe, catch_unwind},
+        sync::{
+            atomic::{AtomicUsize, Ordering},
+            mpsc,
+        },
+        thread,
+    };
+
+    use canopy::{Canopy, Fixture, Work, geom::Size, testing::contracts};
+    use canopy_mcp::{ExecutionMode, ResetPolicy, serve_uds};
+    use futures::{StreamExt, executor};
+    use tmcp::schema::ToolResultMode;
+    use tokio::runtime::Builder;
+
     use super::*;
     use crate::{
         replay::ReplayInput,
-        session::tests::{manager_with_session, peer_session, request},
+        session::tests::{evaluator_session, manager_with_session, peer_session, request},
     };
+
+    #[test]
+    fn live_replay_applies_fixture_once_and_preserves_state_between_steps() -> Result<()> {
+        let mut canopy = Canopy::new();
+        let applications = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&applications);
+        canopy.register_fixture(Fixture::new("seed", "Seed live state", move |canopy| {
+            observed.fetch_add(1, Ordering::Relaxed);
+            canopy.set_input_mode("seed")
+        }))?;
+        canopy.finalize_api()?;
+        canopy.set_root_size(Size::new(20, 5))?;
+        canopy.turn(Work::Prepare)?;
+        let automation = canopy.automation_handle();
+        let mut events = canopy.take_event_receiver().expect("test owns events");
+        let directory = tempfile::tempdir()?;
+        let socket = directory.path().join("replay.sock");
+        let listener = serve_uds(&socket, automation.clone())?;
+        let (done_tx, done_rx) = mpsc::channel();
+        let worker = thread::spawn(move || {
+            let result = catch_unwind(AssertUnwindSafe(|| -> Result<()> {
+                Builder::new_current_thread().enable_all().build()?.block_on(async {
+                    let mut session = Session::connect_live(&socket).await?;
+                    assert_eq!(session.kind(), SessionKind::Live);
+                    let bootstrap = session.bootstrap(BootstrapRequest::default()).await?;
+                    let envelope = ReplayEnvelope {
+                        schema: "canopy.replay/1".into(), app: bootstrap.metadata.app,
+                        api_digest: bootstrap.metadata.api_digest.expect("live digest"),
+                        execution: ExecutionMode::LiveSession, viewport: bootstrap.metadata.viewport,
+                        fixture: Some("seed".into()), reset: ResetPolicy::Fixture,
+                        steps: [
+                            "canopy.assert(canopy.input_mode() == \"seed\"); canopy.set_mode(\"first\")",
+                            "canopy.assert(canopy.input_mode() == \"first\"); canopy.set_mode(\"second\")",
+                        ].into_iter().map(|source| ReplayStep { source: source.into(), expect: ReplayExpectation { success: true } }).collect(),
+                    };
+                    let args = ReplayArgs { socket: Some(socket), ..ReplayArgs::default() };
+                    replay_file(&mut session, ReplayFile::Versioned(envelope), &args).await
+                })
+            }));
+            done_tx.send(result).expect("test observer connected");
+            automation
+                .submit(Box::new(|_| {}))
+                .expect("wake test observer");
+        });
+        let result = loop {
+            if let Ok(result) = done_rx.try_recv() {
+                break result;
+            }
+            executor::block_on(events.next()).expect("live MCP wakes the UI");
+            canopy.turn(Work::Wake)?;
+        };
+        worker.join().expect("live replay worker exits");
+        listener.stop()?;
+        result.expect("live replay client did not panic")?;
+        assert_eq!(applications.load(Ordering::Relaxed), 1);
+        assert_eq!(canopy.input_mode(), "second");
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn shared_contract_crosses_real_evaluator_proxy_and_versioned_replay() -> Result<()> {
+        let (session, _, peer) = evaluator_session().await?;
+        let proxy = CanopyctlMcpServer {
+            sessions: manager_with_session(session).await?,
+            last_activity: Arc::new(Mutex::new(Instant::now())),
+        };
+        let mut request = request(contracts::SCRIPT);
+        request.viewport = Some(Viewport {
+            width: 12,
+            height: 3,
+        });
+        let response = proxy.script_eval(request).await?;
+        let outcome = response.extract_as::<ScriptEvalOutcome>(ToolResultMode::Structured)?;
+        assert!(outcome.success, "{:?}", outcome.error);
+        assert_eq!(
+            outcome.value,
+            Some(contracts::expected().to_external_json_value()?)
+        );
+        let envelope = ReplayEnvelope::record(contracts::SCRIPT.to_owned(), None, &outcome)?;
+        let encoded = serde_json::to_string(&envelope)?;
+        let replay = replay::parse_replay(&encoded, false)?;
+        let (mut session, calls, replay_peer) = evaluator_session().await?;
+        replay_file(&mut session, replay, &ReplayArgs::default()).await?;
+        assert_eq!(calls.lock().await.as_slice(), [contracts::SCRIPT]);
+        peer.abort();
+        replay_peer.abort();
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn strict_preflight_blocks_execution_and_overrides_never_hide_missing_fixtures()
+    -> Result<()> {
+        let (mut session, calls, peer) = evaluator_session().await?;
+        let target = session
+            .bootstrap(BootstrapRequest {
+                viewport: Some(Viewport {
+                    width: 12,
+                    height: 3,
+                }),
+            })
+            .await?;
+        let mut envelope = ReplayEnvelope {
+            schema: "canopy.replay/1".into(),
+            app: "wrong app".into(),
+            api_digest: "wrong digest".into(),
+            execution: ExecutionMode::LiveSession,
+            viewport: target.metadata.viewport,
+            fixture: None,
+            reset: ResetPolicy::Isolated,
+            steps: vec![ReplayStep {
+                source: contracts::SCRIPT.into(),
+                expect: ReplayExpectation { success: true },
+            }],
+        };
+        let error = replay_file(
+            &mut session,
+            ReplayFile::Versioned(envelope.clone()),
+            &ReplayArgs::default(),
+        )
+        .await
+        .unwrap_err();
+        for field in ["app:", "api_digest:", "execution:", "reset:"] {
+            assert!(error.to_string().contains(field));
+        }
+        assert!(calls.lock().await.is_empty());
+        let args = ReplayArgs {
+            allow_mismatch: true,
+            ..ReplayArgs::default()
+        };
+        replay_file(&mut session, ReplayFile::Versioned(envelope.clone()), &args).await?;
+        assert_eq!(calls.lock().await.len(), 1);
+        calls.lock().await.clear();
+        envelope.fixture = Some("missing fixture".into());
+        envelope.reset = ResetPolicy::Fixture;
+        let error = replay_file(&mut session, ReplayFile::Versioned(envelope), &args)
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("not implemented"));
+        assert!(calls.lock().await.is_empty());
+        peer.abort();
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn selected_recorded_failures_are_executed_and_compared() -> Result<()> {
+        let (session, calls, peer) = evaluator_session().await?;
+        let steps = vec![ReplayStep {
+            source: "error(\"expected failure\")".into(),
+            expect: ReplayExpectation { success: false },
+        }];
+        replay_entries(&session, steps.clone(), None, None, &ReplayArgs::default()).await?;
+        assert!(calls.lock().await.is_empty());
+        let args = ReplayArgs {
+            include_failed: true,
+            ..ReplayArgs::default()
+        };
+        replay_entries(&session, steps, None, None, &args).await?;
+        assert_eq!(calls.lock().await.len(), 1);
+        let error = replay_entries(
+            &session,
+            vec![ReplayStep {
+                source: "return true".into(),
+                expect: ReplayExpectation { success: false },
+            }],
+            None,
+            None,
+            &args,
+        )
+        .await
+        .unwrap_err();
+        assert!(error.to_string().contains("1 replay entries failed"));
+        peer.abort();
+        Ok(())
+    }
+
+    #[test]
+    fn replay_cli_selects_live_or_headless_and_requires_legacy_viewport() -> Result<()> {
+        let cli = Cli::try_parse_from([
+            "canopyctl",
+            "replay",
+            "trace.json",
+            "--socket",
+            "/tmp/app.sock",
+        ])?;
+        let Commands::Replay(args) = cli.command else {
+            panic!("replay command");
+        };
+        assert_eq!(args.socket, Some(PathBuf::from("/tmp/app.sock")));
+        assert!(
+            Cli::try_parse_from([
+                "canopyctl",
+                "replay",
+                "trace.json",
+                "--socket",
+                "/tmp/app.sock",
+                "--",
+                "todo",
+                "mcp"
+            ])
+            .is_err()
+        );
+        let legacy = replay::parse_replay("[{\"script\":\"return 1\"}]", true)?;
+        assert!(validate_replay_options(&legacy, &ReplayArgs::default()).is_err());
+        assert!(parse_viewport("0x3").is_err());
+        assert!(parse_viewport("12x0").is_err());
+        assert!(parse_viewport("12x3").is_ok());
+        Ok(())
+    }
 
     #[tokio::test]
     async fn smoke_failure_accounting_preserves_fail_fast() -> Result<()> {
@@ -616,16 +990,22 @@ mod tests {
             let journal = serde_json::from_str::<ReplayInput>(
                 r#"[{"script":"failure"},{"script":"success"}]"#,
             )?
-            .into_entries();
+            .into_entries()
+            .into_iter()
+            .map(|entry| {
+                Ok(ReplayStep {
+                    source: entry.source()?.to_owned(),
+                    expect: ReplayExpectation { success: true },
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
             let args = ReplayArgs {
-                journal: PathBuf::new(),
-                fixture: None,
                 fail_fast,
-                include_failed: false,
-                timeout_ms: None,
-                command: Vec::new(),
+                ..ReplayArgs::default()
             };
-            let error = replay_entries(&session, journal, &args).await.unwrap_err();
+            let error = replay_entries(&session, journal, None, None, &args)
+                .await
+                .unwrap_err();
             assert_eq!(error.to_string(), "1 replay entries failed; 0 skipped");
             assert_eq!(
                 *calls.lock().await,
@@ -647,14 +1027,22 @@ mod tests {
         let (session, _, peer) = peer_session().await?;
         let outcome = session.eval(request("failure")).await?;
         let mut output = Vec::new();
-        write_eval_output(&outcome, "failure".to_owned(), Some(&journal), &mut output)?;
+        write_eval_output(
+            &outcome,
+            "failure".to_owned(),
+            Some(&journal),
+            None,
+            &mut output,
+        )?;
         let decoded: ScriptEvalOutcome = serde_json::from_slice(&output)?;
         assert!(!decoded.success);
         assert_eq!(decoded, outcome);
-        let entries = load_replay_journal(&journal)?;
-        assert_eq!(entries.len(), 1);
-        assert!(entries[0].originally_failed());
-        assert_eq!(entries[0].source()?, "failure");
+        let ReplayFile::Versioned(envelope) = load_replay(&journal, false)? else {
+            panic!("versioned recording");
+        };
+        assert_eq!(envelope.steps.len(), 1);
+        assert!(!envelope.steps[0].expect.success);
+        assert_eq!(envelope.steps[0].source, "failure");
         peer.abort();
         Ok(())
     }

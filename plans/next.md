@@ -1092,35 +1092,35 @@ R21, R22, R23, and R25 complete application assembly after Stage 5.
 
 R26 and the cross-adapter portion of R27 complete the spec after Stage 6.
 
-- [ ] Add execution/session metadata, app identity, reset policy, and viewport
+- [x] Add execution/session metadata, app identity, reset policy, and viewport
   request support in `canopy-mcp/src/script.rs`.
   Report metadata from headless and live servers without implying database
   isolation from app construction alone.
-- [ ] Add the versioned replay envelope in `canopyctl/src/replay.rs`.
+- [x] Add the versioned replay envelope in `canopyctl/src/replay.rs`.
   Extend CLI arguments and replay routing in `canopyctl/src/main.rs`.
   Validate mode, digest, viewport, fixture, and reset contract before execution.
-- [ ] Propagate request/response fields through `canopyctl/src/{session,main}.rs`
+- [x] Propagate request/response fields through `canopyctl/src/{session,main}.rs`
   and MCP smoke helpers.
   Add live replay selection, explicit legacy parsing, mismatch reports, and
   expected-success comparison.
-- [ ] Update Todo factories and `docs/{agent-loop,fixtures,scripting}.md` with
+- [x] Update Todo factories and `docs/{agent-loop,fixtures,scripting}.md` with
   fresh/live behavior, reset guarantees, and reproducible replay examples.
   Preserve source-only smoke scripts as the normal durable scenario format.
-- [ ] Complete the shared scenario suite across native, terminal, direct MCP,
+- [x] Complete the shared scenario suite across native, terminal, direct MCP,
   proxy MCP, and CLI replay boundaries.
   Cover the permanent R27 cases with explicit adapter-policy differences.
 - [x] Update `.github/workflows/ci.yml` to use the current native gate commands.
   Retain its documented sibling-dependency blocker until hosted checkout inputs
   are actually supplied. Do not claim hosted CI success from local validation.
-- [ ] Run Clippy fixes and `cargo +nightly fmt` once after implementation settles,
+- [x] Run Clippy fixes and `cargo +nightly fmt` once after implementation settles,
   selecting workspace packages explicitly and using `rustfmt.toml`.
   Review changes, regenerate API skeletons, and run focused tests for corrections.
   This replaces installed Ncode's dated formatter pin under the approved workflow.
-- [ ] Run `ncode test`, the native CI maintenance checks, and `cargo xtask smoke`
+- [x] Run `ncode test`, the native CI maintenance checks, and `cargo xtask smoke`
   sequentially. The maintenance checks cover formatting, Clippy, isolated feature
   profiles, API/Luau declarations, and benchmark compilation.
   Confirm every focused filter selected tests.
   Check `api-surface/` and generated Luau declarations for intended public changes.
-- [ ] Run `rumdl check` on this spec and the five changed documentation files.
+- [x] Run `rumdl check` on this spec and the five changed documentation files.
   Review the full uncommitted diff and run `git diff --check`.
   Record completed stage proof and any environment blockers before handoff.

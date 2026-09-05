@@ -15,10 +15,10 @@ use tmcp::{Server, ToolError, ToolResult, mcp_server, schema::CallToolResult};
 use tokio::{net::UnixListener, runtime::Builder, sync::oneshot, task::block_in_place};
 
 use crate::{
-    Error, Result,
+    AppFactory, AppMetadata, BootstrapRequest, Error, LiveContext, Result,
     script::{
-        AppEvaluator, AppFactory, ScriptEvalRequest, bootstrap_for_canopy, evaluate_live_request,
-        query_script_api,
+        AppEvaluator, ScriptEvalRequest, bootstrap_for_canopy, evaluate_live_request,
+        query_script_api, validate_live_viewport,
     },
 };
 
@@ -56,11 +56,19 @@ fn canopy_mcp_server(factory: AppFactory) -> CanopyMcpServer {
 struct LiveCanopyMcpServer {
     /// Handle used to marshal work onto the runloop thread.
     automation: AutomationHandle,
+    /// One identity and explicit fixture state shared across reconnects.
+    context: LiveContext,
 }
 
 /// Construct the live MCP server for a running canopy app.
-fn live_canopy_mcp_server(automation: AutomationHandle) -> LiveCanopyMcpServer {
-    LiveCanopyMcpServer { automation }
+fn live_canopy_mcp_server(
+    automation: AutomationHandle,
+    context: LiveContext,
+) -> LiveCanopyMcpServer {
+    LiveCanopyMcpServer {
+        automation,
+        context,
+    }
 }
 
 #[mcp_server]
@@ -68,10 +76,10 @@ impl CanopyMcpServer {
     #[tool]
     /// Return the operating guide, generated API, fixtures, availability, and
     /// journal summary.
-    async fn bootstrap(&self) -> ToolResult<CallToolResult> {
+    async fn bootstrap(&self, params: BootstrapRequest) -> ToolResult<CallToolResult> {
         let bootstrap = self
             .evaluator
-            .bootstrap()
+            .bootstrap_with_request(&params)
             .map_err(|error| ToolError::internal(error.to_string()))?;
         let value = serde_json::to_value(bootstrap)
             .map_err(|error| ToolError::internal(error.to_string()))?;
@@ -112,12 +120,15 @@ impl LiveCanopyMcpServer {
     #[tool]
     /// Return the operating guide, generated API, fixtures, availability, and
     /// journal summary.
-    async fn bootstrap(&self) -> ToolResult<CallToolResult> {
+    async fn bootstrap(&self, params: BootstrapRequest) -> ToolResult<CallToolResult> {
         let automation = self.automation.clone();
+        let context = self.context.clone();
         let bootstrap = block_in_place(move || {
-            automation.request(|canopy| {
+            automation.request(move |canopy| {
                 canopy.finalize_api()?;
-                bootstrap_for_canopy(canopy)
+                let metadata = context.metadata(canopy)?;
+                validate_live_viewport(params.viewport, &metadata)?;
+                bootstrap_for_canopy(canopy, metadata)
             })
         })
         .map_err(|error| ToolError::internal(error.to_string()))?;
@@ -129,7 +140,8 @@ impl LiveCanopyMcpServer {
     #[tool]
     /// Evaluate a Luau script against the currently running canopy app.
     async fn script_eval(&self, params: ScriptEvalRequest) -> ToolResult<CallToolResult> {
-        let outcome = evaluate_live_request(self.automation.clone(), params).await;
+        let outcome =
+            evaluate_live_request(self.automation.clone(), params, self.context.clone()).await;
         Ok(outcome.to_tool_result())
     }
 
@@ -162,9 +174,11 @@ impl LiveCanopyMcpServer {
         let name = params.name;
         let applied_name = name.clone();
         let automation = self.automation.clone();
+        let context = self.context.clone();
         block_in_place(move || {
             automation.request(move |canopy| {
                 canopy.apply_fixture(&name)?;
+                context.fixture_applied();
                 Ok(())
             })
         })
@@ -253,6 +267,20 @@ pub fn serve_uds(
     socket_path: impl AsRef<Path>,
     automation: AutomationHandle,
 ) -> Result<UdsServerHandle> {
+    serve_uds_with_context(
+        socket_path,
+        automation,
+        LiveContext::new(AppMetadata::default()),
+    )
+}
+
+/// Serve a live application with an explicit identity retained across
+/// reconnects.
+pub fn serve_uds_with_context(
+    socket_path: impl AsRef<Path>,
+    automation: AutomationHandle,
+    context: LiveContext,
+) -> Result<UdsServerHandle> {
     let socket_path = socket_path.as_ref().to_path_buf();
     match fs::symlink_metadata(&socket_path) {
         Ok(metadata) if metadata.file_type().is_socket() => fs::remove_file(&socket_path)?,
@@ -292,9 +320,10 @@ pub fn serve_uds(
                     accept_result = listener.accept() => {
                         let (stream, _) = accept_result?;
                         let automation = automation.clone();
+                        let context = context.clone();
                         tokio::spawn(async move {
                             let (reader, writer) = stream.into_split();
-                            let _ignored = Server::new(move || live_canopy_mcp_server(automation.clone()))
+                            let _ignored = Server::new(move || live_canopy_mcp_server(automation.clone(), context.clone()))
                                 .serve_stream(reader, writer)
                                 .await;
                         });
@@ -320,12 +349,20 @@ pub fn serve_uds(
 
 #[cfg(test)]
 mod tests {
-    use std::os::unix::{fs::symlink, net::UnixListener as StdUnixListener};
+    use std::{
+        os::unix::{fs::symlink, net::UnixListener as StdUnixListener},
+        panic::catch_unwind,
+        path::Path,
+    };
 
-    use canopy::{Fixture, command, derive_commands, error::Result as CanopyResult, prelude::*};
+    use canopy::{
+        Fixture, command, derive_commands, error::Result as CanopyResult, geom::Size, prelude::*,
+        testing::contracts,
+    };
+    use tokio::net::UnixStream;
 
     use super::*;
-    use crate::script::app_factory;
+    use crate::app_factory;
 
     #[test]
     fn uds_preserves_non_socket_paths() -> crate::Result<()> {
@@ -472,7 +509,10 @@ mod tests {
 
     #[tokio::test]
     async fn bootstrap_returns_digest_inventory_and_availability() {
-        let result = server().bootstrap().await.expect("bootstrap");
+        let result = server()
+            .bootstrap(BootstrapRequest::default())
+            .await
+            .expect("bootstrap");
         let payload = result.structured_content.expect("structured content");
         assert!(payload.get("api").is_none());
         assert!(!payload["api_digest"].as_str().expect("digest").is_empty());
@@ -488,12 +528,194 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn shared_trace_through_direct_mcp_handler() -> crate::Result<()> {
+        let server = canopy_mcp_server(app_factory(|| Ok(contracts::app()?)).with_metadata(
+            AppMetadata {
+                app: "contract".into(),
+                reset: crate::ResetPolicy::Isolated,
+            },
+        ));
+        let response = server
+            .script_eval(ScriptEvalRequest {
+                script: contracts::SCRIPT.into(),
+                fixture: None,
+                timeout_ms: None,
+                viewport: Some(crate::Viewport {
+                    width: 12,
+                    height: 3,
+                }),
+            })
+            .await
+            .expect("direct MCP evaluation");
+        let outcome: crate::ScriptEvalOutcome =
+            serde_json::from_value(response.structured_content.expect("structured result"))
+                .expect("typed eval outcome");
+        assert!(outcome.success, "{outcome:?}");
+        assert_eq!(
+            outcome.value,
+            Some(contracts::expected().to_external_json_value()?)
+        );
+        assert_eq!(outcome.metadata.app, "contract");
+        Ok(())
+    }
+
+    /// Connect one real MCP client to the test listener.
+    async fn live_client(path: &Path) -> crate::Result<tmcp::Client<()>> {
+        let stream = UnixStream::connect(path).await?;
+        let (reader, writer) = stream.into_split();
+        let mut client = tmcp::Client::new("metadata-test", "1");
+        client.connect_stream(reader, writer).await?;
+        Ok(client)
+    }
+
+    /// Exercise successful and failed fixtures, then reconnect to the same
+    /// listener.
+    async fn reconnect_metadata_trace(path: &Path) -> crate::Result<()> {
+        let client = live_client(path).await?;
+        let before: crate::BootstrapResponse = client
+            .call_tool_structured("bootstrap", BootstrapRequest::default())
+            .await?;
+        assert_eq!(before.metadata.reset, crate::ResetPolicy::External);
+        let missing = client
+            .call_tool(
+                "apply_fixture",
+                ApplyFixtureRequest {
+                    name: "missing".into(),
+                },
+            )
+            .await?;
+        assert!(missing.is_error());
+        let unchanged: crate::BootstrapResponse = client
+            .call_tool_structured("bootstrap", BootstrapRequest::default())
+            .await?;
+        assert_eq!(unchanged.metadata, before.metadata);
+        let recursive = client
+            .call_tool(
+                "apply_fixture",
+                ApplyFixtureRequest {
+                    name: "scripted".into(),
+                },
+            )
+            .await?;
+        assert!(recursive.is_error());
+        assert!(
+            recursive
+                .error_message()
+                .unwrap_or_default()
+                .contains("another runtime turn or evaluation is active")
+        );
+        let still_external: crate::BootstrapResponse = client
+            .call_tool_structured("bootstrap", BootstrapRequest::default())
+            .await?;
+        assert_eq!(still_external.metadata, before.metadata);
+        let applied = client
+            .call_tool(
+                "apply_fixture",
+                ApplyFixtureRequest {
+                    name: "seeded".into(),
+                },
+            )
+            .await?;
+        assert!(
+            !applied.is_error(),
+            "fixture application failed: {applied:?}"
+        );
+        let outcome: crate::ScriptEvalOutcome = client
+            .call_tool_structured(
+                "script_eval",
+                ScriptEvalRequest {
+                    script: "return echo_node.get()".into(),
+                    fixture: None,
+                    timeout_ms: None,
+                    viewport: None,
+                },
+            )
+            .await?;
+        assert!(outcome.success);
+        assert_eq!(outcome.value, Some(serde_json::Value::from(7)));
+        assert_eq!(outcome.metadata.reset, crate::ResetPolicy::Fixture);
+        assert_eq!(outcome.metadata.session_id, before.metadata.session_id);
+        drop(client);
+        let reconnected = live_client(path).await?;
+        let after: crate::BootstrapResponse = reconnected
+            .call_tool_structured("bootstrap", BootstrapRequest::default())
+            .await?;
+        assert_eq!(after.metadata.session_id, before.metadata.session_id);
+        assert_eq!(after.metadata.reset, crate::ResetPolicy::Fixture);
+        assert_eq!(after.metadata.execution, crate::ExecutionMode::LiveSession);
+        Ok(())
+    }
+
+    #[test]
+    fn live_metadata_survives_real_socket_reconnects() -> crate::Result<()> {
+        use futures::{StreamExt, executor};
+        let mut canopy = Canopy::new();
+        EchoNode::load(&mut canopy)?;
+        canopy.register_fixture(Fixture::new(
+            "seeded",
+            "Set persistent live state",
+            |canopy| {
+                canopy.with_root_context(|ctx| {
+                    ctx.dispatch_exact(ctx.node_id(), &EchoNode::call_set(7).invocation())?;
+                    Ok(())
+                })
+            },
+        ))?;
+        canopy.register_fixture(Fixture::new(
+            "scripted",
+            "Attempt recursive top-level evaluation",
+            |canopy| canopy.eval_script("echo_node.set(99)"),
+        ))?;
+        canopy.finalize_api()?;
+        canopy.replace_root(EchoNode::new())?;
+        canopy.set_root_size(Size::new(20, 5))?;
+        canopy.turn(canopy::Work::Prepare)?;
+        let automation = canopy.automation_handle();
+        let mut events = canopy.take_event_receiver().expect("test owns events");
+        let directory = tempfile::tempdir()?;
+        let socket = directory.path().join("metadata.sock");
+        let server = serve_uds_with_context(
+            &socket,
+            automation.clone(),
+            LiveContext::new(AppMetadata {
+                app: "live-test".into(),
+                reset: crate::ResetPolicy::External,
+            }),
+        )?;
+        let (done_tx, done_rx) = mpsc::channel();
+        let worker = thread::spawn(move || {
+            let result = catch_unwind(|| {
+                Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .map_err(crate::Error::from)
+                    .and_then(|runtime| runtime.block_on(reconnect_metadata_trace(&socket)))
+            });
+            done_tx.send(result).expect("test observer connected");
+            automation
+                .submit(Box::new(|_| {}))
+                .expect("wake test observer");
+        });
+        let result = loop {
+            if let Ok(result) = done_rx.try_recv() {
+                break result;
+            }
+            executor::block_on(events.next()).expect("MCP work wakes UI");
+            canopy.turn(canopy::Work::Wake)?;
+        };
+        worker.join().expect("MCP client worker");
+        server.stop()?;
+        result.expect("live transport metadata assertions")
+    }
+
+    #[tokio::test]
     async fn script_eval_returns_json_payload() {
         let result = server()
             .script_eval(ScriptEvalRequest {
                 script: "return echo_node.ping()".to_string(),
                 fixture: None,
                 timeout_ms: None,
+                viewport: None,
             })
             .await
             .expect("script_eval");
@@ -512,6 +734,7 @@ mod tests {
                 script: "return echo_node.get()".to_string(),
                 fixture: Some("seeded".to_string()),
                 timeout_ms: None,
+                viewport: None,
             })
             .await
             .expect("script_eval");
@@ -541,6 +764,7 @@ mod tests {
                 script: "echo_node.ping(1)".to_string(),
                 fixture: None,
                 timeout_ms: None,
+                viewport: None,
             })
             .await
             .expect("script_eval");
@@ -584,12 +808,13 @@ mod tests {
         let mut events = canopy
             .take_event_receiver()
             .expect("test owns event receiver");
-        let server = live_canopy_mcp_server(automation.clone());
+        let server =
+            live_canopy_mcp_server(automation.clone(), LiveContext::new(AppMetadata::default()));
         let worker = thread::spawn(move || {
             let runtime = Builder::new_current_thread().enable_all().build().unwrap();
             runtime.block_on(server.script_eval(ScriptEvalRequest {
                 script: "echo_node.signal_started(); canopy.wait_for(function() return echo_node.get() == 7 end); return echo_node.get()".to_string(),
-                fixture: None, timeout_ms: None,
+                fixture: None, timeout_ms: None, viewport: None,
             })).expect("live eval transport")
         });
         while started_rx.try_recv().is_err() {

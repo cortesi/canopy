@@ -3,12 +3,11 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-use canopy::Canopy;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Error, Result,
-    script::{AppEvaluator, ScriptEvalOutcome, ScriptEvalRequest, app_factory},
+    AppFactory, Error, Result,
+    script::{AppEvaluator, ScriptEvalOutcome, ScriptEvalRequest},
 };
 
 /// Configuration for a smoke-suite run.
@@ -58,11 +57,8 @@ impl SuiteResult {
 }
 
 /// Run a smoke suite against fresh headless app instances.
-pub fn run_suite(
-    factory: impl Fn() -> Result<Canopy> + Send + Sync + 'static,
-    config: &SuiteConfig,
-) -> Result<SuiteResult> {
-    let evaluator = AppEvaluator::new(app_factory(factory));
+pub fn run_suite(factory: AppFactory, config: &SuiteConfig) -> Result<SuiteResult> {
+    let evaluator = AppEvaluator::new(factory);
     let scripts = discover_scripts(config)?;
     let mut results = Vec::with_capacity(scripts.len());
     for path in scripts {
@@ -72,6 +68,7 @@ pub fn run_suite(
             script: source,
             fixture: fixture.clone(),
             timeout_ms: None,
+            viewport: None,
         });
         results.push(ScriptResult {
             path,

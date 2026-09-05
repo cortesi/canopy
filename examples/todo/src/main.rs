@@ -4,7 +4,9 @@
 use std::{path::PathBuf, process};
 
 use anyhow::Result;
-use canopy_mcp::{AppFactory, Error as McpError, LaunchMode, app_factory, launch};
+use canopy_mcp::{
+    AppFactory, AppMetadata, Error as McpError, LaunchMode, ResetPolicy, app_factory, launch,
+};
 use clap::{Parser, Subcommand};
 use todo::create_app_with_config;
 
@@ -47,14 +49,29 @@ enum Command {
 
 /// Build an application factory for a database and optional config.
 fn make_factory(path: String, config: Option<PathBuf>) -> AppFactory {
+    let reset = if path == ":memory:" {
+        ResetPolicy::Isolated
+    } else {
+        ResetPolicy::External
+    };
     app_factory(move || create_app_with_config(&path, config.as_deref()).map_err(McpError::app))
+        .with_metadata(AppMetadata {
+            app: "todo".into(),
+            reset,
+        })
 }
 
 fn main() -> Result<()> {
     let args = Args::parse();
 
     if args.api {
-        let code = launch(app_factory(|| Ok(todo::setup_app()?)), LaunchMode::Api)?;
+        let code = launch(
+            app_factory(|| Ok(todo::setup_app()?)).with_metadata(AppMetadata {
+                app: "todo".into(),
+                reset: ResetPolicy::Isolated,
+            }),
+            LaunchMode::Api,
+        )?;
         if code != 0 {
             process::exit(code);
         }

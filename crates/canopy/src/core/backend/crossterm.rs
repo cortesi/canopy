@@ -921,6 +921,67 @@ mod tests {
     use futures::{StreamExt, channel::mpsc::unbounded, executor::block_on, stream};
 
     use super::*;
+    use crate::{
+        EvalRequest,
+        testing::{backend::TestRender, contracts},
+    };
+
+    #[test]
+    fn shared_trace_crosses_terminal_ingestion_driver_and_emission() -> Result<()> {
+        let mut canopy = contracts::app()?;
+        canopy.turn(Work::Prepare)?;
+        let mut backend = TestRender::new();
+        canopy.emit_frame(&mut backend)?;
+        let (_tx, rx) = unbounded();
+        let terminal = stream::iter([Ok(cevent::Event::Key(cevent::KeyEvent::new(
+            cevent::KeyCode::Char('x'),
+            cevent::KeyModifiers::empty(),
+        )))]);
+        let mut events = EventSource::new(terminal, rx);
+        let mut next_source = 0;
+        let work = block_on(next_runtime_work(
+            &mut events,
+            &canopy,
+            None,
+            &mut next_source,
+        ))?;
+        assert!(matches!(work, Work::Input(Event::Key(_))));
+        let outcome = canopy.turn(work)?;
+        assert!(outcome.frame.is_some());
+        canopy.emit_frame(&mut backend)?;
+        assert_eq!(
+            canopy.snapshot().unwrap().nodes[0]
+                .semantics
+                .value
+                .as_deref(),
+            Some("1")
+        );
+        assert_eq!(
+            backend.text,
+            ["111111111111", "111111111111", "111111111111"]
+        );
+
+        let request = EvalRequest {
+            source: contracts::SCRIPT.into(),
+            timeout: None,
+            anchor: canopy.root_id(),
+        };
+        let mut outcome = canopy.turn(Work::StartEval(request))?;
+        if outcome.completed.is_empty() {
+            outcome = canopy.turn(Work::Wake)?;
+        }
+        assert_eq!(outcome.completed.len(), 1);
+        assert_eq!(
+            outcome.completed[0].result.as_ref().as_ref().unwrap(),
+            &contracts::expected()
+        );
+        canopy.emit_frame(&mut backend)?;
+        assert_eq!(
+            backend.text,
+            ["999999999999", "999999999999", "999999999999"]
+        );
+        Ok(())
+    }
 
     /// Backend lifecycle recorder used without acquiring a real terminal.
     #[derive(Debug)]

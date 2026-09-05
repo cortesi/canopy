@@ -20,5 +20,7 @@ toml = "1.1.2"
 workspace = true
 
 [dev-dependencies]
+canopy = { path = "../canopy", features = ["testing"] }
+futures = "0.3.32"
 tempfile.workspace = true
 tokio = { workspace = true, features = ["io-util"] }

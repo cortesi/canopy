@@ -1039,6 +1039,9 @@ pub mod canopy {
         impl RenderLimits {
             /// Construct explicit visible render-target limits.
             pub const fn new(max_width: u32, max_height: u32, max_cells: usize) -> Self {}
+
+            /// Validate a visible target size and return its exact cell count.
+            pub fn cell_count(self, size: Size) -> Result<usize> {}
         }
 
         /// Type-safe wrapper around a node identifier tied to a widget type.
@@ -2218,6 +2221,9 @@ pub mod canopy {
     impl RenderLimits {
         /// Construct explicit visible render-target limits.
         pub const fn new(max_width: u32, max_height: u32, max_cells: usize) -> Self {}
+
+        /// Validate a visible target size and return its exact cell count.
+        pub fn cell_count(self, size: Size) -> Result<usize> {}
     }
 
     /// A 2D terminal buffer of styled cells.
@@ -2913,7 +2919,7 @@ pub mod canopy {
         /// Replace persistent parent constraints without replacing widget layout
         /// fields.
         fn set_layout_override_of(&mut self, node: NodeId, overrides: LayoutOverride)
-            -> Result<()>;
+        -> Result<()>;
 
         /// Clear parent constraints and restore the widget's base layout.
         fn clear_layout_override_of(&mut self, node: NodeId) -> Result<()>;
@@ -3002,7 +3008,7 @@ pub mod canopy {
         /// Add a boxed widget as a child of a specific parent and return the new
         /// node ID.
         fn add_child_to_boxed(&mut self, parent: NodeId, widget: Box<dyn Widget>)
-            -> Result<NodeId>;
+        -> Result<NodeId>;
 
         /// Add a boxed widget as a keyed child of a specific parent and return the
         /// new node ID.
@@ -6034,10 +6040,10 @@ pub mod canopy {
         }
     }
 
-    pub use canopy_derive::command;
-    pub use canopy_derive::derive_commands;
     pub use canopy_derive::CommandArg;
     pub use canopy_derive::CommandEnum;
+    pub use canopy_derive::command;
+    pub use canopy_derive::derive_commands;
     /// The result of an event handler.
     #[derive(Debug, StructuralPartialEq, PartialEq, Eq, Clone)]
     pub enum EventOutcome {
