@@ -775,7 +775,11 @@ mod tests {
         );
 
         write_script(&project_root.join("lib.luau"), "return { value = 45 }");
-        assert!(canopy.invalidate_script_modules(Some("@project")).is_some());
+        assert!(
+            canopy
+                .invalidate_script_modules(Some("@project"))?
+                .is_some()
+        );
         canopy.eval_script(r#"canopy.send_key("x")"#)?;
         assert_eq!(
             canopy.eval_script_value("return api_leaf.get()")?,
@@ -1040,16 +1044,13 @@ mod tests {
     }
 
     #[test]
-    fn on_start_hooks_run_after_first_render() -> Result<()> {
+    fn on_start_hooks_run_during_preparation_after_geometry() -> Result<()> {
         let mut harness = Harness::builder(ScriptTarget::new()).size(10, 1).build()?;
 
         harness
             .canopy
             .eval_script("canopy.on_start(function() script_target.set(21) end)")?;
-        harness.with_root_widget::<ScriptTarget, _>(|target| {
-            assert_eq!(target.value, 0);
-        });
-
+        // Synchronous eval drives its final preparation before returning.
         harness.render()?;
         harness.with_root_widget::<ScriptTarget, _>(|target| {
             assert_eq!(target.value, 21);
@@ -1068,20 +1069,17 @@ mod tests {
         let mut harness = Harness::builder(ScriptTarget::new()).size(10, 1).build()?;
         harness
             .canopy
-            .eval_script("canopy.on_start(function() script_target.set(1) end)")?;
-        harness.canopy.eval_script(
-            r#"
+            .eval_script(
+                r#"
+            canopy.on_start(function() script_target.set(1) end)
             canopy.on_start(function()
                 canopy.on_start(function() script_target.set(4) end)
                 error("hook failed")
             end)
+            canopy.on_start(function() script_target.set(3) end)
         "#,
-        )?;
-        harness
-            .canopy
-            .eval_script("canopy.on_start(function() script_target.set(3) end)")?;
-
-        harness.render().expect_err("second hook should fail");
+            )
+            .expect_err("second hook should fail during evaluation preparation");
         harness.with_root_widget::<ScriptTarget, _>(|target| {
             assert_eq!(target.value, 1);
         });

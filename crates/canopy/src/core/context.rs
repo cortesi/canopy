@@ -260,7 +260,11 @@ fn update_scroll(core: &mut Core, node_id: NodeId, f: impl FnOnce(Point) -> Poin
     node.scroll = f(before);
     clamp_scroll(&mut node.scroll, node.content_size, node.canvas);
     node.view.tl = node.scroll;
-    before != node.scroll
+    let changed = before != node.scroll;
+    if changed {
+        core.invalidate(crate::Invalidation::Layout);
+    }
+    changed
 }
 
 /// Validate one raw node ID against a requested widget type.
@@ -527,6 +531,11 @@ pub trait Context: ViewContext {
     /// Mark this node dirty so the next frame re-runs layout.
     fn invalidate_layout(&mut self);
 
+    /// Record changes for the next runtime preparation.
+    fn invalidate(&mut self, _invalidation: crate::Invalidation) {
+        self.invalidate_layout();
+    }
+
     /// Update the layout for the current node.
     fn with_layout(&mut self, f: &mut dyn FnMut(&mut Layout)) -> Result<()> {
         let node = self.node_id();
@@ -647,6 +656,18 @@ pub trait Context: ViewContext {
 
     /// Remove a node and all descendants from the arena.
     fn remove_subtree(&mut self, node: NodeId) -> Result<()>;
+
+    /// Remove the current widget incarnation after the outer dispatch succeeds.
+    /// Failed dispatches discard their requests. Missing or replaced targets
+    /// are harmless. Lifecycle hooks run after active widget slots are
+    /// restored. The shared batch accepts at most 1024 requests. Overflow
+    /// returns an error without running removals or discarding previously
+    /// accepted requests.
+    fn remove_after_dispatch(&mut self, node: NodeId) -> Result<()>;
+
+    /// Capture a thread-safe wake handle for this widget's work lifetime.
+    /// Attachment handles require this node to be attached when acquired.
+    fn wake_handle(&self, lifetime: crate::WorkLifetime) -> Result<crate::NodeWakeHandle>;
 
     /// Replace the children list for the current node.
     fn set_children(&mut self, children: Vec<NodeId>) -> Result<()> {
@@ -1045,7 +1066,15 @@ impl Context for NodeCtx<&mut Core> {
         update_scroll(self.core, self.node_id, |scroll| scroll.scroll(x, y))
     }
 
+    fn invalidate(&mut self, invalidation: crate::Invalidation) {
+        self.core.invalidate(invalidation);
+        if invalidation == crate::Invalidation::Layout {
+            self.invalidate_layout();
+        }
+    }
+
     fn invalidate_layout(&mut self) {
+        self.core.invalidate(crate::Invalidation::Layout);
         if let Some(node) = self.core.nodes.get_mut(self.node_id) {
             node.layout_dirty = true;
         }
@@ -1170,6 +1199,14 @@ impl Context for NodeCtx<&mut Core> {
         self.core.detach(child)
     }
 
+    fn wake_handle(&self, lifetime: crate::WorkLifetime) -> Result<crate::NodeWakeHandle> {
+        self.core.wake_handle(self.node_id, lifetime)
+    }
+
+    fn remove_after_dispatch(&mut self, node: NodeId) -> Result<()> {
+        self.core.remove_after_dispatch(node)
+    }
+
     fn remove_subtree(&mut self, node: NodeId) -> Result<()> {
         self.core.remove_subtree(node)
     }
@@ -1193,6 +1230,7 @@ impl Context for NodeCtx<&mut Core> {
             .get_mut(node)
             .ok_or(Error::NodeNotFound(node))?;
         node.effects.push(effect);
+        self.core.invalidate(crate::Invalidation::Paint);
         Ok(())
     }
 
@@ -1202,12 +1240,16 @@ impl Context for NodeCtx<&mut Core> {
             .nodes
             .get_mut(node)
             .ok_or(Error::NodeNotFound(node))?;
-        node.effects = Vec::new();
+        if !node.effects.is_empty() {
+            node.effects.clear();
+            self.core.invalidate(crate::Invalidation::Paint);
+        }
         Ok(())
     }
 
     fn set_style(&mut self, style: StyleMap) {
         self.core.pending_style = Some(style);
+        self.core.invalidate(crate::Invalidation::Paint);
     }
 
     fn request_diagnostic_dump(&mut self, target: NodeId) {

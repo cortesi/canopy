@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    Context,
+    Context, WorkLifetime,
     core::context::ViewContext,
     cursor,
     error::Result,
@@ -67,6 +67,15 @@ pub trait Widget: Any {
     /// Cursor specification for focused widgets.
     fn cursor(&self) -> Option<cursor::Cursor> {
         None
+    }
+
+    /// Lifetime of scheduled polling. Hiding never stops polling.
+    ///
+    /// Node lifetime preserves background work while detached. Attachment
+    /// lifetime pauses polling on detach and initializes it again after
+    /// reattachment.
+    fn poll_lifetime(&self) -> WorkLifetime {
+        WorkLifetime::Node
     }
 
     /// Scheduled poll endpoint.

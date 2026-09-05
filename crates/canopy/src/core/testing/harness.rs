@@ -3,7 +3,7 @@ use crate::{
     Canopy, Context, Loader, NodeId,
     core::termbuf::TermBuf,
     error::Result,
-    event::{key, mouse},
+    event::{Event, key, mouse},
     geom::Size,
     layout::Sizing,
     render::NopBackend,
@@ -57,6 +57,7 @@ impl<W: Widget + Loader + 'static> HarnessBuilder<W> {
             *layout = layout.width(Sizing::Flex(1)).height(Sizing::Flex(1));
         })?;
         canopy.set_root_size(self.size)?;
+        canopy.turn(crate::Work::Prepare)?;
 
         Ok(Harness {
             root: canopy.core.root,
@@ -70,6 +71,7 @@ impl Harness {
     /// Wrap an already configured Canopy application in a test harness.
     pub fn from_canopy(mut canopy: Canopy, size: Size) -> Result<Self> {
         canopy.set_root_size(size)?;
+        canopy.turn(crate::Work::Prepare)?;
         let root = canopy.root_id();
         Ok(Self {
             canopy,
@@ -100,14 +102,16 @@ impl Harness {
     where
         T: Into<key::Key>,
     {
-        self.canopy.key(None, k)?;
-        self.canopy.render(&mut self.backend)
+        self.canopy
+            .turn(crate::Work::Input(Event::Key(k.into())))
+            .map(|_| ())
     }
 
     /// Send a mouse event and render.
     pub fn mouse(&mut self, m: mouse::MouseEvent) -> Result<()> {
-        self.canopy.mouse(None, m)?;
-        self.canopy.render(&mut self.backend)
+        self.canopy
+            .turn(crate::Work::Input(Event::Mouse(m)))
+            .map(|_| ())
     }
 
     /// Send a sequence of key events and render after each.
@@ -134,8 +138,7 @@ impl Harness {
 
     /// Execute a script on the app under test.
     pub fn script(&mut self, script: &str) -> Result<()> {
-        self.canopy.eval_script(script)?;
-        self.canopy.render(&mut self.backend)
+        self.canopy.eval_script(script)
     }
 
     /// Execute a closure with mutable access to a widget by node id.

@@ -6,7 +6,7 @@ use proptest::{
     prelude::*,
     test_runner::{TestCaseError, TestCaseResult},
 };
-use ruau::vm::{HostArgCursor, MarshaledPair, MultiValue, OwnedValue, ScopedValue};
+use ruau::vm::{HostArgCursor, MarshaledPair, MultiValue, OwnedValue, ScopedValue, ValueSnapshot};
 
 use super::{base_api::read_node_id, bridge::REENTRANT_CANOPY, *};
 use crate::{

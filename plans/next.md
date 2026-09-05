@@ -938,54 +938,57 @@ Stage 1.
 R02, R11, R13, R18, R20, and the driver portion of R27 unify progress after
 Stage 2.
 
-- [ ] Add `ChangeSet` and invalidation in `core/change.rs`, `core/world/mod.rs`,
+- [x] Add `ChangeSet` and invalidation in `core/change.rs`, `core/world/mod.rs`,
   Context, facade mutators, and mutable widget access.
   Include failed mutations, style changes, scrolling, focus, and tree changes.
-- [ ] Add incarnation and attachment generations to nodes.
+- [x] Add incarnation and attachment generations to nodes.
   Commit generation changes, wake expiration, and poll cancellation after
   successful structural edits in `core/world/tree.rs`.
-- [ ] Add the bounded post-dispatch removal batch and nested checkpoints.
+- [x] Add the bounded post-dispatch removal batch and nested checkpoints.
   Integrate callback depth with `core/widget_access.rs`, command dispatch,
   native context entry, and script segment completion.
-- [ ] Add runtime work/outcome types and the shared driver in
+- [x] Add runtime work/outcome types and the shared driver in
   `core/canopy/turn.rs`.
   Move preparation and frame construction out of adapter-owned scheduling.
   Separate published frames from backend diff baselines in `rendering.rs`.
-- [ ] Replace `LuauHost::run_root_async` with detached invocation polling in
+- [x] Replace `LuauHost::run_root_async` with detached invocation polling in
   `core/script/mod.rs`.
   Use Ruau's existing invocation API and release borrowed state between polls.
   Preserve script anchors, closure synchronization, print capture, and journal
   completion on success, failure, cancellation, and timeout.
-- [ ] Replace `wait_until`'s yield loop in `core/script/base_api.rs` with
+- [x] Replace `wait_until`'s yield loop in `core/script/base_api.rs` with
   publication/deadline wake registration.
   Remove recursive automation servicing from wait helpers.
   Reject concurrent top-level eval and reload with a structured busy result.
-- [ ] Move deadlines into the shared driver and reuse `PendingHeap` in
+- [x] Move deadlines into the shared driver and reuse `PendingHeap` in
   `core/poll.rs`.
   Add poll cancellation and `NodeWakeHandle` delivery with per-owner coalescing.
   Replace one eager poll-worker thread per Canopy with adapter waiting on the
   driver's next deadline and wake receiver.
-- [ ] Adapt Crossterm `EventSource` and runloop to drive VM wakes, terminal events,
+- [x] Adapt Crossterm `EventSource` and runloop to drive VM wakes, terminal events,
   and timer deadlines fairly.
   Adapt `AutomationHandle` requests and `canopy-mcp/src/{script,server}.rs` so
   active eval does not block ordinary input or native automation progress.
-- [ ] Route Harness and synchronous eval conveniences through the same driver.
+- [x] Route Harness and synchronous eval conveniences through the same driver.
   Add a manually advanced clock and controllable wake source under `testing`.
   Preserve explicit `Harness::render` for isolated rendering tests.
-- [ ] Add `crates/canopy/tests/it/turn.rs` and register it in the integration target.
+- [x] Add `crates/canopy/tests/it/turn.rs` and register it in the integration target.
   Cover error invalidation, button teardown, stale incarnation, lifetime expiry,
   wait progress, cancellation, busy requests, and fair servicing.
-- [ ] Add MCP pending-eval tests and terminal adapter tests with the same trace.
+- [x] Add MCP pending-eval tests and terminal adapter tests with the same trace.
   Assert published state and lifecycle order without unconditional rendering or
   timing sleeps.
-- [ ] Run package tests with `ncode test` for `canopy`, `canopy-widgets`,
+- [x] Run package tests with `ncode test` for `canopy`, `canopy-widgets`,
   `canopy-mcp`, `canopy-examples`, and `todo`.
   Run `cargo xtask dynamic` for changed widget-access and script-context safety
   boundaries when the configured Miri toolchain is available.
   Record any unavailable dynamic check as a validation limitation.
-- [ ] Regenerate API skeletons and update runtime/wait documentation.
+- [x] Regenerate API skeletons and update runtime/wait documentation.
   Review buffer diff equivalence and script ABI results before accepting the
   completed stage.
+
+Dynamic validation limitation: `cargo xtask dynamic` could not run because
+`cargo-miri` is not installed for `nightly-2026-07-01`.
 
 ### Stage 4: Scoped composition, keyed collections, and modal interaction
 

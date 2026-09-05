@@ -409,8 +409,14 @@ pub mod canopy {
         pub struct Canopy {}
 
         impl super::Canopy {
-            /// Render the widget tree. All visible nodes are rendered.
+            /// Prepare and render the widget tree explicitly.
             pub fn render<R: RenderBackend>(&mut self, be: &mut R) -> Result<()> {}
+
+            /// Return the next time at which the adapter must deliver a wake.
+            pub fn next_deadline(&mut self) -> Option<Instant> {}
+
+            /// Advance one bounded runtime turn.
+            pub fn turn(&mut self, work: Work) -> Result<TurnOutcome> {}
 
             /// Set the size on the root node.
             pub fn set_root_size(&mut self, size: Size) -> Result<()> {}
@@ -474,7 +480,8 @@ pub mod canopy {
             /// `None` to invalidate every root. Returns the new source epoch, or
             /// `None` when no module source is configured or the named root is
             /// unknown.
-            pub fn invalidate_script_modules(&mut self, root: Option<&str>) -> Option<u64> {}
+            pub fn invalidate_script_modules(&mut self, root: Option<&str>) -> Result<Option<u64>> {
+            }
 
             /// Register an audited Ruau native module on the same surface as Canopy
             /// commands.
@@ -650,6 +657,10 @@ pub mod canopy {
             pub fn diagnostic_dump(&self, target: NodeId) -> String {}
         }
 
+        impl Drop for super::Canopy {
+            fn drop(&mut self) {}
+        }
+
         /// Outcome of an accepted state mutation.
         #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq)]
         pub enum ChangeOutcome {
@@ -756,6 +767,9 @@ pub mod canopy {
 
             /// Mark this node dirty so the next frame re-runs layout.
             fn invalidate_layout(&mut self);
+
+            /// Record changes for the next runtime preparation.
+            fn invalidate(&mut self, _invalidation: crate::Invalidation) {}
 
             /// Update the layout for the current node.
             fn with_layout(&mut self, f: &mut dyn FnMut(&mut Layout)) -> Result<()> {}
@@ -887,6 +901,18 @@ pub mod canopy {
 
             /// Remove a node and all descendants from the arena.
             fn remove_subtree(&mut self, node: NodeId) -> Result<()>;
+
+            /// Remove the current widget incarnation after the outer dispatch succeeds.
+            /// Failed dispatches discard their requests. Missing or replaced targets
+            /// are harmless. Lifecycle hooks run after active widget slots are
+            /// restored. The shared batch accepts at most 1024 requests. Overflow
+            /// returns an error without running removals or discarding previously
+            /// accepted requests.
+            fn remove_after_dispatch(&mut self, node: NodeId) -> Result<()>;
+
+            /// Capture a thread-safe wake handle for this widget's work lifetime.
+            /// Attachment handles require this node to be attached when acquired.
+            fn wake_handle(&self, lifetime: crate::WorkLifetime) -> Result<crate::NodeWakeHandle>;
 
             /// Replace the children list for the current node.
             fn set_children(&mut self, children: Vec<NodeId>) -> Result<()> {}
@@ -1137,6 +1163,13 @@ pub mod canopy {
             /// Cursor specification for focused widgets.
             fn cursor(&self) -> Option<cursor::Cursor> {}
 
+            /// Lifetime of scheduled polling. Hiding never stops polling.
+            ///
+            /// Node lifetime preserves background work while detached. Attachment
+            /// lifetime pauses polling on detach and initializes it again after
+            /// reattachment.
+            fn poll_lifetime(&self) -> WorkLifetime {}
+
             /// Scheduled poll endpoint.
             fn poll(&mut self, _ctx: &mut dyn Context) -> Option<Duration> {}
 
@@ -1264,6 +1297,8 @@ pub mod canopy {
             /// Core error type.
             #[derive(Error, Display, Debug)]
             pub enum Error {
+                /// Evaluation explicitly cancelled by its caller.
+                ScriptCancelled,
                 /// A render target exceeds its configured width limit.
                 RenderWidthLimit {
                     /// Requested target width.
@@ -2183,7 +2218,13 @@ pub mod canopy {
     #[derive(Clone)]
     pub struct AutomationHandle {}
 
-    impl AutomationHandle {
+    impl super::AutomationHandle {
+        /// Submit evaluation work without blocking the UI thread while it runs.
+        pub fn submit_eval(&self, request: EvalRequest) -> Result<EvalTicket> {}
+
+        /// Request cancellation and wait only for driver admission.
+        pub fn cancel_eval(&self, id: EvalId) -> Result<crate::ChangeOutcome> {}
+
         /// Queue a callback to run on the UI thread.
         pub fn submit(&self, callback: AutomationCallback) -> Result<()> {}
 
@@ -2279,8 +2320,14 @@ pub mod canopy {
     pub struct Canopy {}
 
     impl super::Canopy {
-        /// Render the widget tree. All visible nodes are rendered.
+        /// Prepare and render the widget tree explicitly.
         pub fn render<R: RenderBackend>(&mut self, be: &mut R) -> Result<()> {}
+
+        /// Return the next time at which the adapter must deliver a wake.
+        pub fn next_deadline(&mut self) -> Option<Instant> {}
+
+        /// Advance one bounded runtime turn.
+        pub fn turn(&mut self, work: Work) -> Result<TurnOutcome> {}
 
         /// Set the size on the root node.
         pub fn set_root_size(&mut self, size: Size) -> Result<()> {}
@@ -2344,7 +2391,7 @@ pub mod canopy {
         /// `None` to invalidate every root. Returns the new source epoch, or
         /// `None` when no module source is configured or the named root is
         /// unknown.
-        pub fn invalidate_script_modules(&mut self, root: Option<&str>) -> Option<u64> {}
+        pub fn invalidate_script_modules(&mut self, root: Option<&str>) -> Result<Option<u64>> {}
 
         /// Register an audited Ruau native module on the same surface as Canopy
         /// commands.
@@ -2520,6 +2567,10 @@ pub mod canopy {
         pub fn diagnostic_dump(&self, target: NodeId) -> String {}
     }
 
+    impl Drop for super::Canopy {
+        fn drop(&mut self) {}
+    }
+
     /// Outcome of an accepted state mutation.
     #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq)]
     pub enum ChangeOutcome {
@@ -2532,6 +2583,27 @@ pub mod canopy {
     impl ChangeOutcome {
         /// Return whether the request changed state.
         pub fn changed(self) -> bool {}
+    }
+
+    /// Pending work accumulated independently of adapter scheduling.
+    #[derive(Clone, Copy, Debug, Default, StructuralPartialEq, PartialEq, Eq)]
+    pub struct ChangeSet {
+        /// Geometry must be recomputed.
+        pub layout: bool,
+        /// Visible cells must be rebuilt.
+        pub paint: bool,
+        /// Cursor state must be refreshed.
+        pub cursor: bool,
+        /// Observations must be published.
+        pub observation: bool,
+    }
+
+    impl ChangeSet {
+        /// Record work, including the dependencies of the requested invalidation.
+        pub fn invalidate(&mut self, invalidation: Invalidation) {}
+
+        /// Whether any work remains to be published.
+        pub fn is_pending(self) -> bool {}
     }
 
     /// A typed key for keyed children.
@@ -2624,6 +2696,9 @@ pub mod canopy {
 
         /// Mark this node dirty so the next frame re-runs layout.
         fn invalidate_layout(&mut self);
+
+        /// Record changes for the next runtime preparation.
+        fn invalidate(&mut self, _invalidation: crate::Invalidation) {}
 
         /// Update the layout for the current node.
         fn with_layout(&mut self, f: &mut dyn FnMut(&mut Layout)) -> Result<()> {}
@@ -2746,6 +2821,18 @@ pub mod canopy {
         /// Remove a node and all descendants from the arena.
         fn remove_subtree(&mut self, node: NodeId) -> Result<()>;
 
+        /// Remove the current widget incarnation after the outer dispatch succeeds.
+        /// Failed dispatches discard their requests. Missing or replaced targets
+        /// are harmless. Lifecycle hooks run after active widget slots are
+        /// restored. The shared batch accepts at most 1024 requests. Overflow
+        /// returns an error without running removals or discarding previously
+        /// accepted requests.
+        fn remove_after_dispatch(&mut self, node: NodeId) -> Result<()>;
+
+        /// Capture a thread-safe wake handle for this widget's work lifetime.
+        /// Attachment handles require this node to be attached when acquired.
+        fn wake_handle(&self, lifetime: crate::WorkLifetime) -> Result<crate::NodeWakeHandle>;
+
         /// Replace the children list for the current node.
         fn set_children(&mut self, children: Vec<NodeId>) -> Result<()> {}
 
@@ -2774,6 +2861,42 @@ pub mod canopy {
 
         /// Request a diagnostic dump for a target node.
         fn request_diagnostic_dump(&mut self, target: NodeId);
+    }
+
+    /// Globally unique evaluation identifier, never reused by another application.
+    #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq, Hash)]
+    pub struct EvalId(pub u64);
+
+    /// Completed script value or failure.
+    #[derive(Clone)]
+    pub struct EvalOutcome {
+        /// Evaluation that completed.
+        pub id: EvalId,
+        /// Shared completion, also delivered to an automation ticket.
+        pub result: std::sync::Arc<crate::error::Result<crate::commands::ArgValue>>,
+        /// Output isolated to this evaluation.
+        pub logs: Vec<String>,
+        /// Assertions isolated to this evaluation.
+        pub assertions: Vec<script::ScriptAssertion>,
+    }
+
+    /// One top-level script request.
+    #[derive(Clone, Debug)]
+    pub struct EvalRequest {
+        /// Owned Luau source.
+        pub source: String,
+        /// Absolute execution budget, including parked time.
+        pub timeout: Option<std::time::Duration>,
+        /// Anchor retained across invocation segments.
+        pub anchor: crate::NodeId,
+    }
+
+    /// Completion receiver that is awaited outside the UI thread.
+    pub struct EvalTicket {
+        /// Accepted queue identity, including failed admission results.
+        pub id: EvalId,
+        /// Evaluation completion after publication.
+        pub completion: oneshot::Receiver<EvalOutcome>,
     }
 
     /// Opaque token for one active exclusive binding frame.
@@ -2836,6 +2959,10 @@ pub mod canopy {
         Node(super::id::NodeId),
     }
 
+    /// Identifier of an immutable publication.
+    #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq)]
+    pub struct FrameId(pub u64);
+
     /// Stable name for one framework-owned binding group.
     #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq, Hash, Display)]
     pub struct FrameworkBindingGroup(_);
@@ -2860,6 +2987,17 @@ pub mod canopy {
     impl InputSpec {
         /// Normalize key variants for matching.
         pub fn normalize(self) -> Self {}
+    }
+
+    /// Work invalidated by a mutation.
+    #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq)]
+    pub enum Invalidation {
+        /// Recompute layout, paint, cursor and observations.
+        Layout,
+        /// Repaint and publish the visible state.
+        Paint,
+        /// Republish semantic observations.
+        Semantics,
     }
 
     /// Ordered keyed child collection helper.
@@ -2956,6 +3094,18 @@ pub mod canopy {
         fn from(value: TypedId<T>) -> Self {}
     }
 
+    /// Thread-safe handle that requests a poll of one widget incarnation.
+    ///
+    /// Producers keep results in their own bounded channels. This handle never owns
+    /// the application or widget and expires when its registered lifetime ends.
+    #[derive(Clone, Debug)]
+    pub struct NodeWakeHandle {}
+
+    impl NodeWakeHandle {
+        /// Queue one owner poll, coalesce with existing work, or report expiration.
+        pub fn wake(&self) -> Result<WakeOutcome> {}
+    }
+
     /// A phase in key or mouse event routing.
     #[derive(Debug, Clone, Copy, StructuralPartialEq, PartialEq, Eq)]
     pub enum RoutePhase {
@@ -3014,6 +3164,19 @@ pub mod canopy {
         pub assertions: Vec<script::ScriptAssertion>,
         /// Wall-clock duration in milliseconds.
         pub duration_ms: u64,
+    }
+
+    /// Observable effects of one turn.
+    #[derive(Default)]
+    pub struct TurnOutcome {
+        /// Frame published by this turn, if any.
+        pub frame: Option<FrameId>,
+        /// Evaluation accepted by this turn.
+        pub started: Option<EvalId>,
+        /// Evaluations completed after publication.
+        pub completed: Vec<EvalOutcome>,
+        /// Requested application exit status.
+        pub exit_code: Option<i32>,
     }
 
     /// Type-safe wrapper around a node identifier tied to a widget type.
@@ -3126,6 +3289,40 @@ pub mod canopy {
 
         /// Find all nodes whose paths match the validated filter.
         fn find_nodes_matching(&self, path_filter: &PathFilter) -> Vec<NodeId> {}
+    }
+
+    /// Result of requesting a poll through a node wake handle.
+    #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq)]
+    pub enum WakeOutcome {
+        /// The owner now has pending work.
+        Queued,
+        /// The owner already had pending work.
+        Coalesced,
+        /// The owning widget, attachment, or application no longer exists.
+        Expired,
+    }
+
+    /// One runtime input.
+    pub enum Work {
+        /// Deliver an input event.
+        Input(crate::event::Event),
+        /// Service ready background work.
+        Wake,
+        /// Start a top-level evaluation.
+        StartEval(EvalRequest),
+        /// Cancel an evaluation owned by this runtime.
+        CancelEval(EvalId),
+        /// Prepare changes made through native access.
+        Prepare,
+    }
+
+    /// Lifetime of runtime-managed widget work.
+    #[derive(Clone, Copy, Debug, Default, StructuralPartialEq, PartialEq, Eq)]
+    pub enum WorkLifetime {
+        /// Continue while the widget exists, including while hidden or detached.
+        Node,
+        /// End when the widget is detached, replaced, or removed.
+        Attachment,
     }
 
     pub mod commands {
@@ -3788,6 +3985,8 @@ pub mod canopy {
         /// Core error type.
         #[derive(Error, Display, Debug)]
         pub enum Error {
+            /// Evaluation explicitly cancelled by its caller.
+            ScriptCancelled,
             /// A render target exceeds its configured width limit.
             RenderWidthLimit {
                 /// Requested target width.
@@ -5485,6 +5684,13 @@ pub mod canopy {
 
         /// Cursor specification for focused widgets.
         fn cursor(&self) -> Option<cursor::Cursor> {}
+
+        /// Lifetime of scheduled polling. Hiding never stops polling.
+        ///
+        /// Node lifetime preserves background work while detached. Attachment
+        /// lifetime pauses polling on detach and initializes it again after
+        /// reattachment.
+        fn poll_lifetime(&self) -> WorkLifetime {}
 
         /// Scheduled poll endpoint.
         fn poll(&mut self, _ctx: &mut dyn Context) -> Option<Duration> {}

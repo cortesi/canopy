@@ -1492,6 +1492,24 @@ pub(crate) fn dispatch_target(
     target: CommandTarget,
     inv: &CommandInvocation,
 ) -> Result<ArgValue, CommandError> {
+    let checkpoint = core.begin_dispatch();
+    let result = dispatch_target_inner(core, target, inv);
+    let completion = core.finish_dispatch(checkpoint, result.is_ok());
+    match result {
+        Ok(value) => {
+            completion.map_err(CommandError::execution)?;
+            Ok(value)
+        }
+        Err(error) => Err(error),
+    }
+}
+
+/// Invoke one command inside an established completion boundary.
+fn dispatch_target_inner(
+    core: &mut Core,
+    target: CommandTarget,
+    inv: &CommandInvocation,
+) -> Result<ArgValue, CommandError> {
     let spec = core
         .commands
         .get(inv.id.0)

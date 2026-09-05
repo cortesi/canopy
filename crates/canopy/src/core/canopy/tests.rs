@@ -43,7 +43,7 @@ fn synchronous_automation_request_rejects_ui_thread() {
 }
 
 #[test]
-fn automation_service_is_bounded_and_requests_redraw() -> Result<()> {
+fn read_only_automation_service_is_bounded_without_redraw() -> Result<()> {
     let mut canopy = Canopy::new();
     let handle = canopy.automation_handle();
     let count = Arc::new(AtomicUsize::new(0));
@@ -55,9 +55,11 @@ fn automation_service_is_bounded_and_requests_redraw() -> Result<()> {
     }
 
     canopy.render_pending = false;
+    canopy.core.changes = crate::ChangeSet::default();
     assert_eq!(canopy.service_automation(), AUTOMATION_SERVICE_BUDGET);
     assert_eq!(count.load(Ordering::Relaxed), AUTOMATION_SERVICE_BUDGET);
-    assert!(canopy.render_pending);
+    assert!(!canopy.render_pending);
+    assert!(!canopy.core.changes.is_pending());
     assert_eq!(canopy.service_automation(), 1);
     assert_eq!(count.load(Ordering::Relaxed), AUTOMATION_SERVICE_BUDGET + 1);
     Ok(())
@@ -342,7 +344,7 @@ fn render_errors_include_operation_node_and_path() -> Result<()> {
 }
 
 #[test]
-fn mouse_move_does_not_request_render() -> Result<()> {
+fn ignored_mouse_callback_conservatively_requests_render() -> Result<()> {
     let mut canopy = Canopy::new();
     let app_id = canopy
         .core
@@ -361,6 +363,7 @@ fn mouse_move_does_not_request_render() -> Result<()> {
         location: Point { x: 1, y: 1 },
     };
     canopy.event(Event::Mouse(event))?;
+    assert!(canopy.render_if_pending(&mut render)?);
     assert!(!canopy.render_if_pending(&mut render)?);
     Ok(())
 }

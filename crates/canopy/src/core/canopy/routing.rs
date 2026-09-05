@@ -121,6 +121,26 @@ impl Canopy {
     fn route_input(
         &mut self,
         start: Option<NodeId>,
+        path: Path,
+        input: RoutedInput,
+        scope: Option<&Scope<'_>>,
+    ) -> Result<bool> {
+        let checkpoint = self.core.begin_dispatch();
+        let result = self.route_input_inner(start, path, input, scope);
+        let completion = self.core.finish_dispatch(checkpoint, result.is_ok());
+        match result {
+            Ok(handled) => {
+                completion?;
+                Ok(handled)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    /// Route one synchronous input inside a shared completion boundary.
+    fn route_input_inner(
+        &mut self,
+        start: Option<NodeId>,
         mut path: Path,
         input: RoutedInput,
         scope: Option<&Scope<'_>>,
@@ -310,8 +330,7 @@ impl Canopy {
             let Ok(callback) = self.automation_rx.try_recv() else {
                 break;
             };
-            callback(self);
-            self.render_pending = true;
+            self.service_message(callback);
             serviced += 1;
         }
         if serviced == AUTOMATION_SERVICE_BUDGET {
@@ -322,6 +341,14 @@ impl Canopy {
 
     /// Propagate an event through the tree.
     pub(crate) fn event(&mut self, e: Event) -> Result<()> {
+        let checkpoint = self.core.begin_dispatch();
+        let result = self.dispatch_input(e);
+        let completion = self.core.finish_dispatch(checkpoint, result.is_ok());
+        result.and(completion)
+    }
+
+    /// Dispatch an event inside its completion boundary.
+    fn dispatch_input(&mut self, e: Event) -> Result<()> {
         match e {
             Event::Key(k) => self.key(None, k),
             Event::Mouse(m) => self.mouse(None, m),
@@ -346,7 +373,7 @@ impl Canopy {
         self.render_limits.cell_count(size)?;
         self.root_size = Some(size);
         self.render_pending = true;
-        self.core.update_layout(size)?;
+        self.core.invalidate(crate::Invalidation::Layout);
         Ok(())
     }
 

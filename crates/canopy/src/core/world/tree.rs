@@ -6,6 +6,7 @@ use crate::{
         context::CoreContext,
         node::Node,
         view::View,
+        wake::WorkStamp,
         widget_access::{WidgetSlotPolicy, validate_slot},
     },
     layout::{Layout, LayoutOverride},
@@ -20,6 +21,7 @@ impl TreeStateSnapshot {
     /// tree-edit rollback.
     fn capture(core: &Core) -> Self {
         Self {
+            removal_checkpoint: core.completion.requests.len(),
             nodes: core.nodes.clone(),
             root: core.root,
             focus: core.focus,
@@ -35,6 +37,7 @@ impl TreeStateSnapshot {
 
     /// Restore a previously captured core state.
     fn restore(self, core: &mut Core) {
+        core.completion.requests.truncate(self.removal_checkpoint);
         core.nodes = self.nodes;
         core.root = self.root;
         core.focus = self.focus;
@@ -69,6 +72,46 @@ impl MountedWidget {
 }
 
 impl Core {
+    /// Allocate an identity that failed structural edits cannot reuse.
+    fn next_generation(&mut self) -> u64 {
+        let generation = self.next_generation;
+        self.next_generation = generation
+            .checked_add(1)
+            .expect("node generation exhausted");
+        generation
+    }
+
+    /// Update provisional attachment identities after topology changes.
+    fn refresh_attachment_generations(&mut self) {
+        let nodes: Vec<_> = self.nodes.keys().collect();
+        for id in nodes {
+            let attached = self.is_attached_to_root(id);
+            let generation = self.nodes[id].attachment_generation;
+            if attached && generation.is_none() {
+                let generation = self.next_generation();
+                self.nodes[id].attachment_generation = Some(generation);
+                if self.nodes[id].poll_lifetime == crate::WorkLifetime::Attachment {
+                    self.nodes[id].initialized = false;
+                }
+            } else if !attached && generation.is_some() {
+                self.nodes[id].attachment_generation = None;
+                if self.nodes[id].poll_lifetime == crate::WorkLifetime::Attachment {
+                    self.nodes[id].initialized = false;
+                }
+            }
+        }
+    }
+
+    /// Commit live work identities and expire provisional or retired handles.
+    fn sync_work_stamps(&self) -> Result<()> {
+        self.wake_registry
+            .sync(self.nodes.iter().map(|(node, entry)| WorkStamp {
+                node,
+                incarnation: entry.incarnation,
+                attachment: entry.attachment_generation,
+            }))
+    }
+
     /// Update the layout for a node.
     pub fn with_layout_of(
         &mut self,
@@ -93,8 +136,11 @@ impl Core {
     ) -> Result<()> {
         let current = self.nodes.get_mut(node).ok_or(Error::NodeNotFound(node))?;
         let layout = overrides.apply(current.base_layout)?;
-        current.layout_override = overrides;
-        current.layout = layout;
+        if current.layout_override != overrides || current.layout != layout {
+            current.layout_override = overrides;
+            current.layout = layout;
+            self.invalidate(crate::Invalidation::Layout);
+        }
         Ok(())
     }
 
@@ -129,6 +175,7 @@ impl Core {
         let layout = widget.layout();
         layout.validate()?;
         let widget_type = widget.as_ref().type_id();
+        let poll_lifetime = widget.poll_lifetime();
 
         let plan = self.plan_subtree_removal(node_id, "replace subtree")?;
         let removed_focus_root = self.removed_focus_root(&plan);
@@ -151,10 +198,14 @@ impl Core {
         node.child_keys.clear();
         self.clear_removed_targets(&plan.pre_order[1..]);
 
+        let incarnation = self.next_generation();
         let node = self
             .nodes
             .get_mut(node_id)
             .ok_or(Error::NodeNotFound(node_id))?;
+        node.incarnation = incarnation;
+        node.attachment_generation = None;
+        node.poll_lifetime = poll_lifetime;
         node.widget = Rc::new(RefCell::new(Some(widget)));
         node.name = name;
         node.layout = layout;
@@ -164,6 +215,7 @@ impl Core {
         node.mounted = false;
         node.initialized = false;
 
+        self.refresh_attachment_generations();
         if self.is_attached_to_root(node_id) {
             self.mount_node(node_id)?;
         }
@@ -215,6 +267,7 @@ impl Core {
         if self.rolling_back_tree_edit {
             return Err(Error::TreeEditDuringRollback { operation });
         }
+        self.invalidate(crate::Invalidation::Layout);
         if self.tree_edit.is_some() {
             let before = TreeStateSnapshot::capture(self);
             let (mounted_len, unmounted_before, replaced_owners_before) = {
@@ -239,6 +292,7 @@ impl Core {
                     };
                     self.unwind_mounted_widgets(&mounted, &unmounted);
                     before.restore(self);
+                    // Keep committed registrations until the outer edit settles.
                     Err(error)
                 }
             };
@@ -250,6 +304,8 @@ impl Core {
 
         match result {
             Ok(value) => {
+                self.refresh_attachment_generations();
+                self.sync_work_stamps()?;
                 let attached = self
                     .nodes
                     .keys()
@@ -263,17 +319,19 @@ impl Core {
                 Ok(value)
             }
             Err(err) => {
-                self.rollback_tree_edit(journal);
+                self.rollback_tree_edit(journal)?;
                 Err(err)
             }
         }
     }
 
     /// Unwind completed mounts in reverse order and restore the captured state.
-    fn rollback_tree_edit(&mut self, journal: TreeEditJournal) {
+    fn rollback_tree_edit(&mut self, journal: TreeEditJournal) -> Result<()> {
         self.unwind_mounted_widgets(&journal.mounted, &journal.unmounted);
         journal.before.restore(self);
+        self.sync_work_stamps()?;
         self.debug_assert_tree_invariants();
+        Ok(())
     }
 
     /// Run rollback cleanup for mounts completed after a journal checkpoint.
@@ -587,9 +645,15 @@ impl Core {
                 operation: "create detached",
             });
         }
-        let node = Node::new(widget);
+        let generation = self.next_generation();
+        let node = Node::new(widget, generation);
         node.layout.validate()?;
-        Ok(self.nodes.insert(node))
+        let id = self.nodes.insert(node);
+        self.invalidate(crate::Invalidation::Semantics);
+        if self.tree_edit.is_none() {
+            self.sync_work_stamps()?;
+        }
+        Ok(id)
     }
 
     /// Add a boxed widget as a child of a specific parent and return the new
@@ -701,6 +765,7 @@ impl Core {
             node.children.push(child);
         }
 
+        self.refresh_attachment_generations();
         if parent_attached {
             self.mount_subtree_pre_order(child)?;
         }
@@ -730,6 +795,7 @@ impl Core {
             if let Some(node) = core.nodes.get_mut(child) {
                 node.parent = None;
             }
+            core.refresh_attachment_generations();
             core.focus_hint = hint;
             core.ensure_invariants(Some(child))?;
             Ok(())
@@ -846,6 +912,7 @@ impl Core {
         self.retain_child_keys(parent);
 
         let new_children = self.nodes[parent].children.clone();
+        self.refresh_attachment_generations();
         if parent_attached {
             for child in new_children {
                 self.mount_subtree_pre_order(child)?;
@@ -1059,6 +1126,7 @@ impl Core {
         let changed = node.hidden != hidden;
         node.hidden = hidden;
         if changed {
+            self.invalidate(crate::Invalidation::Layout);
             self.ensure_invariants(None)?;
             Ok(ChangeOutcome::Changed)
         } else {

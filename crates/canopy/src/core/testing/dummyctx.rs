@@ -276,6 +276,14 @@ impl Context for DummyContext {
         Ok(())
     }
 
+    fn wake_handle(&self, _lifetime: crate::WorkLifetime) -> Result<crate::NodeWakeHandle> {
+        Err(Error::NodeNotFound(self.node_id))
+    }
+
+    fn remove_after_dispatch(&mut self, _node: NodeId) -> Result<()> {
+        Ok(())
+    }
+
     fn remove_subtree(&mut self, _node: NodeId) -> Result<()> {
         Ok(())
     }

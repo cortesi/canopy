@@ -45,6 +45,7 @@ impl Core {
             Ok(ChangeOutcome::Unchanged)
         } else {
             self.focus = target;
+            self.invalidate(crate::Invalidation::Paint);
             Ok(ChangeOutcome::Changed)
         }
     }
@@ -216,6 +217,7 @@ impl Core {
             Ok(ChangeOutcome::Unchanged)
         } else {
             self.mouse_capture = target;
+            self.invalidate(crate::Invalidation::Semantics);
             Ok(ChangeOutcome::Changed)
         }
     }

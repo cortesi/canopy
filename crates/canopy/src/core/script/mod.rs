@@ -1,13 +1,21 @@
+#![expect(
+    clippy::multiple_inherent_impl,
+    reason = "LuauHost methods are split by compilation and detached invocation concerns."
+)]
+
 use std::{
     cell::{RefCell, RefMut},
     collections::{BTreeSet, HashMap, HashSet},
-    fmt, mem,
+    fmt,
+    future::poll_fn,
+    mem,
     pin::Pin,
     ptr::NonNull,
     rc::Rc,
     result::Result as StdResult,
     sync::{Arc, Mutex},
-    time::Duration,
+    task::Poll,
+    time::{Duration, Instant},
 };
 
 use futures::executor;
@@ -19,15 +27,12 @@ use ruau::{
     typecheck::{DiagnosticRecord, ModuleDiagnosticRecord, Severity},
     vm::{
         Ambient, CallOptions, Cancel, Limits, NativeModule, RuntimeCapabilities, Scope, SinkQuota,
-        StashedClosure, ValueSnapshot,
+        StashedClosure,
     },
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use tokio::{
-    runtime::{Builder as RuntimeBuilder, Handle},
-    task::yield_now,
-};
+use tokio::runtime::{Builder as RuntimeBuilder, Handle};
 
 use crate::{
     Canopy, ChangeOutcome, FixtureInfo, NodeId,
@@ -56,6 +61,8 @@ mod defs;
 mod dispatch;
 /// Conversions between Luau host errors and canopy errors.
 mod errors;
+/// Detached script invocations and borrowed VM segments.
+mod invocation;
 /// Luau module roots and their on-disk sources.
 mod modules;
 /// Builders that turn live canopy state into script-visible records.
@@ -68,6 +75,7 @@ use bridge::*;
 pub(crate) use bridge::{in_live_scope, validate_node_handle};
 use dispatch::*;
 use errors::*;
+pub(crate) use invocation::{SCRIPT_GAS_LIMIT, ScriptInvocation};
 pub(crate) use modules::{ScriptModuleRoots, ScriptModuleSource};
 use records::*;
 use value::*;
@@ -419,7 +427,7 @@ impl fmt::Debug for LuauHost {
 /// allocations. Wall-clock timeouts are layered per invocation via `Cancel`.
 fn default_vm_limits() -> Limits {
     Limits {
-        gas: Some(500_000_000),
+        gas: Some(SCRIPT_GAS_LIMIT),
         max_memory_bytes: Some(256 * 1024 * 1024),
         ..Limits::unlimited()
     }
@@ -631,15 +639,8 @@ impl LuauHost {
 
     /// Mark the retained runtime as busy with a top-level async evaluation.
     fn begin_active_eval(&self) -> Result<ActiveEvalGuard> {
+        self.ensure_eval_idle()?;
         let mut state = self.state.borrow_mut();
-        if state.active_eval {
-            return Err(error::Error::ScriptStructured {
-                kind: error::ScriptErrorKind::ScriptBusy,
-                command: None,
-                owner: None,
-                message: "a script evaluation is already active".to_string(),
-            });
-        }
         state.active_eval = true;
         Ok(ActiveEvalGuard {
             state: Rc::clone(&self.state),
@@ -677,13 +678,6 @@ impl LuauHost {
                 result.format_diagnostics(),
             )))
         }
-    }
-
-    /// Clear recorded logs and assertions for the next script evaluation.
-    fn clear_diagnostics(&self) {
-        let mut state = self.state.borrow_mut();
-        state.logs.clear();
-        state.assertions.clear();
     }
 
     /// Append a log line to the current evaluation state.
@@ -880,6 +874,7 @@ impl LuauHost {
     /// Compile a source while preserving its module identity and diagnostic
     /// metadata.
     pub(crate) fn compile_source(&self, source: &Source) -> Result<ScriptId> {
+        self.ensure_eval_idle()?;
         let runtime_source = strict_named_source(source)?;
         let prepared = if let Some(surface) = self.state.borrow().surface.clone() {
             Some(
@@ -919,6 +914,7 @@ impl LuauHost {
     /// Compile a startup source while preserving its mounted identity and
     /// metadata.
     pub(crate) fn compile_startup_source(&self, source: &Source) -> Result<ScriptId> {
+        self.ensure_eval_idle()?;
         let original = source.as_str().ok_or_else(|| {
             error::Error::Invalid(format!(
                 "startup source {} is not valid UTF-8",
@@ -1017,15 +1013,44 @@ impl LuauHost {
         timeout: Option<Duration>,
     ) -> Result<ArgValue> {
         let node_id = node_id.into();
-        let root = self.loaded_root(sid)?;
-        // Diagnostics accumulate per top-level evaluation: a nested run
-        // triggered from inside a live script must not erase the logs and
-        // assertions the outer evaluation has already collected.
-        if !in_live_scope(canopy) {
-            self.clear_diagnostics();
+        let mut invocation = self.start_invocation(node_id, sid)?;
+        if let Some(entry) = canopy.core.nodes.get(node_id) {
+            invocation.set_anchor_incarnation(entry.incarnation);
         }
-        let label = format!("script {sid} on node {node_id:?}");
-        self.run_root_async(canopy, node_id, &root, &label, timeout)
+        invocation.set_reporting_timeout(timeout);
+        let started = Instant::now();
+        let mut gas = SCRIPT_GAS_LIMIT;
+        let future = poll_fn(|cx| {
+            let remaining = timeout.map(|timeout| timeout.saturating_sub(started.elapsed()));
+            if remaining == Some(Duration::ZERO) {
+                return Poll::Ready(self.abort_invocation(&mut invocation).and_then(|()| {
+                    Err(error::Error::ScriptTimeout {
+                        timeout_ms: timeout
+                            .unwrap_or_default()
+                            .as_millis()
+                            .try_into()
+                            .unwrap_or(u64::MAX),
+                    })
+                }));
+            }
+            let step = self.poll_invocation(canopy, &mut invocation, cx, gas, remaining);
+            gas = gas.saturating_sub(step.gas_spent);
+            step.poll
+        });
+        let outcome = if Handle::try_current().is_ok() {
+            executor::block_on(future)
+        } else {
+            let runtime = RuntimeBuilder::new_current_thread()
+                .enable_time()
+                .build()
+                .map_err(|error| {
+                    error::Error::Script(format!("script async runtime failed: {error}"))
+                })?;
+            runtime.block_on(future)
+        };
+        let (logs, assertions) = invocation.take_diagnostics();
+        self.set_diagnostics(logs, assertions);
+        outcome
     }
 
     /// Execute a compiled script inside an existing VM scope.
@@ -1069,7 +1094,6 @@ impl LuauHost {
         label: &str,
         timeout: Option<Duration>,
     ) -> Result<ArgValue> {
-        let _active_eval = self.begin_active_eval()?;
         let mut runtime = self.runtime_mut("script VM re-entered without a live scope")?;
         let target = CallTarget::Stored(target);
         let print_lines = Arc::new(Mutex::new(Vec::new()));
@@ -1087,47 +1111,6 @@ impl LuauHost {
                 outcome.unwrap_or_else(|| {
                     Err(error::Error::Script(format!("{label} produced no result")))
                 })
-            }
-            Err(error) => Err(retained_runtime_error_to_canopy(&error, label, timeout)),
-        }
-    }
-
-    /// Run a retained root through Ruau's async owned-result driver.
-    fn run_root_async(
-        &self,
-        canopy: &mut Canopy,
-        node_id: NodeId,
-        root: &RootHandle,
-        label: &str,
-        timeout: Option<Duration>,
-    ) -> Result<ArgValue> {
-        let _active_eval = self.begin_active_eval()?;
-        let mut runtime = self.runtime_mut("script VM re-entered without a live scope")?;
-        let print_lines = Arc::new(Mutex::new(Vec::new()));
-        let options = invocation_options(timeout, &print_lines);
-        canopy.script_context_stack.push(node_id);
-        let future = runtime.run_with_context(root, canopy, options);
-        let outcome = if Handle::try_current().is_ok() {
-            executor::block_on(future)
-        } else {
-            let runtime = RuntimeBuilder::new_current_thread()
-                .enable_time()
-                .build()
-                .map_err(|err| {
-                    error::Error::Script(format!("script async runtime failed: {err}"))
-                })?;
-            runtime.block_on(future)
-        };
-        let popped = canopy.script_context_stack.pop();
-        debug_assert_eq!(popped, Some(node_id));
-        let synchronized = self.synchronize_closures(&mut runtime, label, timeout);
-        self.push_print_lines(&print_lines);
-        match outcome {
-            Ok(values) => {
-                synchronized?;
-                let value = values.first().unwrap_or(&ValueSnapshot::Nil);
-                marshaled_to_arg_value(value)
-                    .map_err(|message| error::Error::Script(format!("{label}: {message}")))
             }
             Err(error) => Err(retained_runtime_error_to_canopy(&error, label, timeout)),
         }

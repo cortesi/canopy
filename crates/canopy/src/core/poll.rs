@@ -1,31 +1,28 @@
-//! Poll scheduling for widget callbacks.
+//! Driver-owned deadlines for widget poll callbacks.
 
 use std::{
     cmp::Ordering,
     collections::{HashMap, binary_heap::BinaryHeap},
     fmt::Debug,
-    sync::{Arc, mpsc},
-    thread,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
-use futures::channel::mpsc::UnboundedSender;
-
 use crate::{
     NodeId,
+    core::wake::WorkStamp,
     error::{Error, Result},
-    event::Event,
 };
 
-/// Time source used to calculate poll deadlines.
-trait Clock: Debug + Send + Sync {
+/// Monotonic time source shared by driver scheduling and deterministic tests.
+pub trait Clock: Debug + Send + Sync {
     /// Return the current monotonic time.
     fn now(&self) -> Instant;
 }
 
 /// Production monotonic clock.
 #[derive(Debug)]
-struct SystemClock;
+pub struct SystemClock;
 
 impl Clock for SystemClock {
     fn now(&self) -> Instant {
@@ -33,326 +30,243 @@ impl Clock for SystemClock {
     }
 }
 
-/// One scheduled node callback.
-#[derive(Debug)]
+/// One scheduled incarnation of a node callback.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct PendingNode {
-    /// Scheduled time for the callback.
+    /// Monotonic instant when this callback becomes due.
     deadline: Instant,
-    /// Node identifier to poll.
-    node_id: NodeId,
+    /// Widget incarnation and optional attachment that own this callback.
+    stamp: WorkStamp,
 }
 
-impl PartialEq for PendingNode {
-    fn eq(&self, other: &Self) -> bool {
-        self.deadline == other.deadline && self.node_id == other.node_id
-    }
-}
-
-impl Eq for PendingNode {}
-
-/// Reverse order so the closest deadline is at the top.
 impl PartialOrd for PendingNode {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-/// Reverse order so the closest deadline is at the top.
 impl Ord for PendingNode {
     fn cmp(&self, other: &Self) -> Ordering {
         other
             .deadline
             .cmp(&self.deadline)
-            .then_with(|| other.node_id.cmp(&self.node_id))
+            .then_with(|| other.stamp.cmp(&self.stamp))
     }
 }
 
-/// Pending deadlines, with stale heap entries removed lazily after
-/// rescheduling.
+/// Deadline heap with one authoritative entry per node and bounded stale
+/// entries.
 #[derive(Default, Debug)]
 struct PendingHeap {
-    /// Deadline-ordered callback entries.
+    /// Deadline-ordered entries, including bounded stale entries.
     nodes: BinaryHeap<PendingNode>,
-    /// Authoritative deadline for each scheduled node.
-    deadlines: HashMap<NodeId, Instant>,
+    /// Latest accepted deadline for each node.
+    deadlines: HashMap<NodeId, PendingNode>,
 }
 
 impl PendingHeap {
-    /// Schedule or reschedule one node at an absolute deadline.
-    fn schedule(&mut self, node_id: NodeId, deadline: Instant) {
-        self.deadlines.insert(node_id, deadline);
-        self.nodes.push(PendingNode { deadline, node_id });
+    /// Replace one node deadline and bound obsolete heap entries.
+    fn schedule(&mut self, stamp: WorkStamp, deadline: Instant) {
+        let pending = PendingNode { deadline, stamp };
+        self.deadlines.insert(stamp.node, pending);
+        self.nodes.push(pending);
+        self.compact();
     }
 
-    /// Discard heap entries superseded by a reschedule or cancellation.
+    /// Rebuild when stale entries outnumber current deadlines.
+    fn compact(&mut self) {
+        if self.nodes.len() > self.deadlines.len().saturating_mul(2) {
+            self.nodes = self.deadlines.values().copied().collect();
+        }
+    }
+
+    /// Remove obsolete entries before inspecting the next callback.
     fn discard_stale(&mut self) {
         while self
             .nodes
             .peek()
-            .is_some_and(|node| self.deadlines.get(&node.node_id).copied() != Some(node.deadline))
+            .is_some_and(|pending| self.deadlines.get(&pending.stamp.node) != Some(pending))
         {
             self.nodes.pop();
         }
     }
 
-    /// Calculate how long the worker should wait for the next deadline.
-    fn current_wait(&mut self, now: Instant) -> Option<Duration> {
+    /// Return the earliest authoritative deadline.
+    fn next_deadline(&mut self) -> Option<Instant> {
         self.discard_stale();
-        self.nodes
-            .peek()
-            .map(|node| node.deadline.saturating_duration_since(now))
+        self.nodes.peek().map(|pending| pending.deadline)
     }
 
-    /// Remove and return every callback due at `now`.
-    fn collect(&mut self, now: Instant) -> Vec<NodeId> {
+    /// Remove and return every callback due at the supplied instant.
+    fn collect(&mut self, now: Instant) -> Vec<WorkStamp> {
         let mut due = Vec::new();
         loop {
             self.discard_stale();
-            let Some(node) = self.nodes.peek() else {
+            let Some(pending) = self.nodes.peek() else {
                 break;
             };
-            if node.deadline > now {
+            if pending.deadline > now {
                 break;
             }
-            let node = self.nodes.pop().expect("pending node disappeared");
-            if self.deadlines.remove(&node.node_id) == Some(node.deadline) {
-                due.push(node.node_id);
+            let pending = self.nodes.pop().expect("pending deadline exists");
+            if self.deadlines.remove(&pending.stamp.node) == Some(pending) {
+                due.push(pending.stamp);
             }
         }
+        self.compact();
         due
     }
 }
 
-/// Commands accepted by the scheduler worker.
-#[derive(Clone, Copy, Debug)]
-enum SchedulerCommand {
-    /// Schedule or reschedule a node.
-    Schedule {
-        /// Node whose callback should run.
-        node_id: NodeId,
-        /// Absolute monotonic deadline.
-        deadline: Instant,
-    },
-    /// Stop the worker.
-    Shutdown,
-}
-
-/// Apply one scheduler command, returning false on shutdown.
-fn apply_command(command: SchedulerCommand, pending: &mut PendingHeap) -> bool {
-    match command {
-        SchedulerCommand::Schedule { node_id, deadline } => {
-            pending.schedule(node_id, deadline);
-            true
-        }
-        SchedulerCommand::Shutdown => false,
-    }
-}
-
-/// Run the scheduler until shutdown or the event receiver closes.
-fn scheduler_worker(
-    commands: &mpsc::Receiver<SchedulerCommand>,
-    event_tx: &UnboundedSender<Event>,
-    clock: &dyn Clock,
-) {
-    let mut pending = PendingHeap::default();
-    loop {
-        let now = clock.now();
-        let due = pending.collect(now);
-        if !due.is_empty() && event_tx.unbounded_send(Event::Poll(due)).is_err() {
-            return;
-        }
-
-        let command = match pending.current_wait(now) {
-            Some(wait) => match commands.recv_timeout(wait) {
-                Ok(command) => command,
-                Err(mpsc::RecvTimeoutError::Timeout) => continue,
-                Err(mpsc::RecvTimeoutError::Disconnected) => return,
-            },
-            None => match commands.recv() {
-                Ok(command) => command,
-                Err(mpsc::RecvError) => return,
-            },
-        };
-        if !apply_command(command, &mut pending) {
-            return;
-        }
-    }
-}
-
-/// Owned scheduler for widget poll callbacks.
+/// Poll deadlines serviced by the application driver without a worker thread.
 #[derive(Debug)]
 pub struct Poller {
-    /// Scheduler command sender.
-    command_tx: Option<mpsc::Sender<SchedulerCommand>>,
-    /// Scheduler worker, joined during shutdown.
-    worker: Option<thread::JoinHandle<()>>,
-    /// Clock used to calculate checked deadlines.
+    /// Scheduled callbacks owned by this application.
+    pending: PendingHeap,
+    /// Time source shared with driver deadline calculations.
     clock: Arc<dyn Clock>,
 }
 
 impl Poller {
     /// Construct a scheduler using the system monotonic clock.
-    pub(crate) fn new(event_tx: UnboundedSender<Event>) -> Self {
-        Self::with_clock(event_tx, Arc::new(SystemClock))
+    pub(crate) fn new() -> Self {
+        Self::with_clock(Arc::new(SystemClock))
     }
 
-    /// Construct a scheduler with an explicit clock.
-    fn with_clock(event_tx: UnboundedSender<Event>, clock: Arc<dyn Clock>) -> Self {
-        let (command_tx, command_rx) = mpsc::channel();
-        let worker_clock = Arc::clone(&clock);
-        let worker = thread::spawn(move || {
-            scheduler_worker(&command_rx, &event_tx, worker_clock.as_ref());
-        });
+    /// Construct a scheduler using an explicit monotonic clock.
+    pub(crate) fn with_clock(clock: Arc<dyn Clock>) -> Self {
         Self {
-            command_tx: Some(command_tx),
-            worker: Some(worker),
+            pending: PendingHeap::default(),
             clock,
         }
     }
 
-    /// Send a command unless the scheduler has already stopped.
-    ///
-    /// `shutdown` clears the sender and the worker together, so one liveness
-    /// check covers both.
-    fn send(&self, command: SchedulerCommand) -> Result<()> {
-        let running = self
-            .worker
-            .as_ref()
-            .is_some_and(|worker| !worker.is_finished());
-        let Some(sender) = self.command_tx.as_ref().filter(|_| running) else {
-            return Err(Error::RunLoop("poll scheduler is not running".into()));
-        };
-        sender
-            .send(command)
-            .map_err(|_| Error::RunLoop("poll scheduler command channel closed".into()))
+    /// Install a testing clock before any pending deadline exists.
+    #[cfg(any(test, feature = "testing"))]
+    pub(crate) fn set_clock(&mut self, clock: Arc<dyn Clock>) -> Result<()> {
+        if !self.pending.deadlines.is_empty() {
+            return Err(Error::InvalidOperation(
+                "cannot replace a clock with pending poll deadlines".into(),
+            ));
+        }
+        self.clock = clock;
+        Ok(())
     }
 
-    /// Schedule or reschedule a node callback.
-    pub(crate) fn schedule(&self, node_id: impl Into<NodeId>, duration: Duration) -> Result<()> {
-        let node_id = node_id.into();
+    /// Return the scheduler's current time.
+    pub(crate) fn now(&self) -> Instant {
+        self.clock.now()
+    }
+
+    /// Replace the pending callback for this owner.
+    pub(crate) fn schedule(&mut self, stamp: WorkStamp, duration: Duration) -> Result<()> {
         let deadline = self
-            .clock
             .now()
             .checked_add(duration)
             .ok_or_else(|| Error::RunLoop("poll deadline overflow".into()))?;
-        // `PendingHeap::schedule` overwrites the deadline and `discard_stale` drops the
-        // superseded heap entry, so no cancellation is needed first.
-        self.send(SchedulerCommand::Schedule { node_id, deadline })
-    }
-
-    /// Stop and join the scheduler worker.
-    fn shutdown(&mut self) -> Result<()> {
-        if let Some(tx) = self.command_tx.take() {
-            let _worker_already_stopped = tx.send(SchedulerCommand::Shutdown);
-        }
-        if let Some(worker) = self.worker.take() {
-            worker
-                .join()
-                .map_err(|_| Error::RunLoop("poll scheduler worker panicked".into()))?;
-        }
+        self.pending.schedule(stamp, deadline);
         Ok(())
     }
-}
 
-impl Drop for Poller {
-    fn drop(&mut self) {
-        drop(self.shutdown());
+    /// Cancel work belonging to the specified widget incarnation.
+    pub(crate) fn cancel_owner(&mut self, node: NodeId, incarnation: u64) {
+        if self
+            .pending
+            .deadlines
+            .get(&node)
+            .is_some_and(|pending| pending.stamp.incarnation == incarnation)
+        {
+            self.pending.deadlines.remove(&node);
+            self.pending.compact();
+        }
+    }
+
+    /// Cancel work whose lifetime is no longer valid after a structural commit.
+    pub(crate) fn retain(&mut self, mut valid: impl FnMut(WorkStamp) -> bool) {
+        let expired: Vec<_> = self
+            .pending
+            .deadlines
+            .values()
+            .filter(|pending| !valid(pending.stamp))
+            .map(|pending| (pending.stamp.node, pending.stamp.incarnation))
+            .collect();
+        for (node, incarnation) in expired {
+            self.cancel_owner(node, incarnation);
+        }
+    }
+
+    /// Return the earliest pending deadline for adapter waiting.
+    pub(crate) fn next_deadline(&mut self) -> Option<Instant> {
+        self.pending.next_deadline()
+    }
+
+    /// Remove callbacks due under the injected clock.
+    pub(crate) fn collect_due(&mut self) -> Vec<WorkStamp> {
+        let now = self.now();
+        self.pending.collect(now)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Mutex;
-
-    use futures::{StreamExt, channel::mpsc::unbounded, executor::block_on};
     use slotmap::SlotMap;
 
     use super::*;
+    use crate::testing::ManualClock;
 
-    /// Deterministic clock advanced explicitly by tests.
-    #[derive(Debug)]
-    struct ManualClock {
-        now: Mutex<Instant>,
-    }
-
-    impl ManualClock {
-        /// Construct a clock at an explicit instant.
-        fn new(now: Instant) -> Self {
-            Self {
-                now: Mutex::new(now),
-            }
-        }
-
-        /// Advance the clock without waiting for wall time.
-        fn advance(&self, duration: Duration) {
-            let mut now = self.now.lock().unwrap();
-            *now = now.checked_add(duration).expect("test clock overflow");
+    fn stamp() -> WorkStamp {
+        let mut nodes: SlotMap<NodeId, ()> = SlotMap::with_key();
+        WorkStamp {
+            node: nodes.insert(()),
+            incarnation: 1,
+            attachment: None,
         }
     }
 
-    impl Clock for ManualClock {
-        fn now(&self) -> Instant {
-            *self.now.lock().unwrap()
+    #[test]
+    fn rescheduling_and_cancellation_use_latest_incarnation() -> Result<()> {
+        let clock = Arc::new(ManualClock::new());
+        let mut poller = Poller::with_clock(clock.clone());
+        let old = stamp();
+        poller.schedule(old, Duration::from_secs(10))?;
+        let current = WorkStamp {
+            incarnation: 2,
+            ..old
+        };
+        poller.schedule(current, Duration::from_secs(20))?;
+        poller.cancel_owner(old.node, old.incarnation);
+        clock.advance(Duration::from_secs(15))?;
+        assert!(poller.collect_due().is_empty());
+        clock.advance(Duration::from_secs(5))?;
+        assert_eq!(poller.collect_due(), [current]);
+        assert_eq!(poller.next_deadline(), None);
+        Ok(())
+    }
+
+    #[test]
+    fn repeated_rescheduling_bounds_heap_storage() -> Result<()> {
+        let mut poller = Poller::new();
+        let owner = stamp();
+        for delay in 0..10_000 {
+            poller.schedule(owner, Duration::from_secs(delay))?;
+            assert!(poller.pending.nodes.len() <= 2);
         }
-    }
-
-    fn node_ids() -> (NodeId, NodeId) {
-        let mut map: SlotMap<NodeId, ()> = SlotMap::with_key();
-        (map.insert(()), map.insert(()))
-    }
-
-    #[test]
-    fn pending_heap_reschedules_deterministically() {
-        let now = Instant::now();
-        let (first, second) = node_ids();
-        let mut pending = PendingHeap::default();
-
-        pending.schedule(first, now + Duration::from_secs(10));
-        pending.schedule(first, now + Duration::from_secs(20));
-        pending.schedule(second, now + Duration::from_secs(15));
-        assert_eq!(pending.collect(now + Duration::from_secs(11)), Vec::new());
-        assert_eq!(pending.collect(now + Duration::from_secs(16)), vec![second]);
-        assert_eq!(
-            pending.current_wait(now),
-            Some(Duration::from_secs(20)),
-            "the second schedule for the first node supersedes the first"
-        );
+        poller.cancel_owner(owner.node, owner.incarnation);
+        assert!(poller.pending.nodes.is_empty());
+        assert_eq!(poller.next_deadline(), None);
+        Ok(())
     }
 
     #[test]
-    fn worker_uses_injected_clock_and_emits_due_nodes() {
-        let now = Instant::now();
-        let clock = Arc::new(ManualClock::new(now));
-        let (event_tx, mut event_rx) = unbounded();
-        let poller = Poller::with_clock(event_tx, clock.clone());
-        let (node, _) = node_ids();
-
-        clock.advance(Duration::from_secs(5));
-        poller
-            .schedule(node, Duration::ZERO)
-            .expect("scheduler should accept work");
-        let event = block_on(event_rx.next()).expect("scheduler should emit an event");
-        assert!(matches!(event, Event::Poll(nodes) if nodes == vec![node]));
-    }
-
-    #[test]
-    fn shutdown_joins_worker_and_rejects_more_work() {
-        let (event_tx, _event_rx) = unbounded();
-        let mut poller = Poller::new(event_tx);
-        let (node, _) = node_ids();
-
-        poller.shutdown().expect("scheduler should join cleanly");
-        assert!(matches!(
-            poller.schedule(node, Duration::ZERO),
-            Err(Error::RunLoop(_))
-        ));
-    }
-
-    #[test]
-    fn repeated_construct_drop_joins_every_worker() {
-        for _ in 0..64 {
-            let (event_tx, _event_rx) = unbounded();
-            drop(Poller::new(event_tx));
-        }
+    fn lifetime_cancellation_discards_due_work() -> Result<()> {
+        let mut poller = Poller::new();
+        let owner = WorkStamp {
+            attachment: Some(4),
+            ..stamp()
+        };
+        poller.schedule(owner, Duration::ZERO)?;
+        poller.retain(|stamp| stamp.attachment.is_none());
+        assert!(poller.collect_due().is_empty());
+        Ok(())
     }
 }

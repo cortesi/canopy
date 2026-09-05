@@ -102,12 +102,16 @@ canopy.send_key("?")
 canopy.assert(canopy.focused() == origin, "help must restore exact focus")
 ```
 
-Async predicate waits run on the Ruau async driver. Use `canopy.wait_for(fn,
-timeout_ms?)`, `canopy.wait_for_node(owner, timeout_ms?)`, or
-`canopy.wait_for_screen_text(text, timeout_ms?)` when an eval must observe
-state that may arrive through automation while the script is active. The wait
-helpers service automation between predicate checks; broader terminal event
-redraw during a pending eval remains the outstanding live-loop refinement.
+Use `canopy.wait_for(fn, timeout_ms?)`, `canopy.wait_for_node(owner, timeout_ms?)`,
+or `canopy.wait_for_screen_text(text, timeout_ms?)` to observe asynchronous state.
+Waits subscribe to snapshot publication and deadlines, then release runtime borrows
+while parked. The shared driver continues terminal input, timers, node wakes, and
+bounded native automation. Predicates resume after publication on a later turn.
+
+Only one top-level evaluation may be active. Concurrent evaluation and module
+reload receive `ScriptBusy`. Live automation submits typed evaluation tickets and
+awaits completion outside the UI thread. Cancellation targets the ticket's `EvalId`.
+The original ticket reports cancellation after runtime preparation.
 
 ## Startup Shape
 

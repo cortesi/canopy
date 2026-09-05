@@ -165,6 +165,9 @@ impl fmt::Display for ScriptErrorKind {
 /// Core error type.
 #[derive(Error, Debug)]
 pub enum Error {
+    /// Evaluation explicitly cancelled by its caller.
+    #[error("script evaluation cancelled")]
+    ScriptCancelled,
     /// A render target exceeds its configured width limit.
     #[error("render target width {requested} exceeds limit {limit}")]
     RenderWidthLimit {

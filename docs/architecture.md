@@ -74,14 +74,28 @@ Removing a subtree runs `pre_remove` in pre-order, runs `on_unmount` in
 post-order, then deletes the nodes. Every `NodeId` in the subtree becomes invalid.
 
 Replacing a subtree deletes descendants first, then replaces the target widget.
-The node keeps its ID and resets mount and polling state.
+The node keeps its ID and resets mount and polling state. Its widget incarnation
+changes, so old poll callbacks and wake handles cannot reach the replacement.
 
-Detaching clears the parent link but leaves the subtree in the arena. Detached
-nodes may keep stale lifecycle and layout caches until code attaches and lays
-them out again.
+Detaching clears the parent link but preserves mounted widgets. Reattachment does
+not repeat completed mount hooks. Layout caches refresh when the subtree returns.
 
-A successful tree edit drops exclusive binding frames whose owner is no longer
-attached.
+Runtime-managed work declares `WorkLifetime::Node` or `WorkLifetime::Attachment`.
+Node lifetime ends on widget replacement or removal. Attachment lifetime also ends
+on detach. Reattachment starts a new attachment generation. Hiding ends neither
+lifetime. `Widget::poll_lifetime()` defaults to node lifetime, preserving detached
+terminal polling. Attachment polling initializes again after reattachment.
+
+`Context::wake_handle(lifetime)` creates a `Send + Sync` `NodeWakeHandle` for the
+current widget incarnation. Attachment handles require an attached owner.
+`wake()` returns `Queued`, `Coalesced`, or `Expired` and requests one owner poll.
+Producers keep results in their own bounded channels. The runtime coalesces wakes
+per owner and stores no producer-result queue.
+
+Structural success commits lifetime expiration and cancels obsolete polling.
+Provisional registrations allow workers started by mount hooks to wake before
+commit. Rollback removes provisional registrations and preserves valid earlier
+wakes. Successful edits also drop exclusive binding frames with detached owners.
 
 ## Invariants
 
@@ -130,6 +144,16 @@ Removing or replacing siblings is allowed. Removing the focused node recovers
 focus immediately. Removing the mouse-capture node clears capture immediately.
 Removed `NodeId`s become invalid immediately.
 
+Use `Context::remove_after_dispatch(node)` when an active callback must remove
+itself or an ancestor. The bounded FIFO records widget incarnations and drains
+after successful outer dispatch, once active widget slots are restored. Admission
+fails when the batch reaches capacity. A failed nested dispatch discards requests
+added since its checkpoint. A failed outer dispatch discards its remaining batch.
+
+Missing or replaced targets are harmless. A lifecycle veto stops the drain and
+discards its tail. Earlier successful removals remain committed. Cleanup hooks
+cannot enqueue another removal. Direct removal retains the restrictions above.
+
 ## Layout
 
 Layout starts at the root with the terminal size. Each node gets an outer
@@ -161,8 +185,10 @@ become zero measurements or fallback canvases.
 ## Rendering
 
 Rendering consumes current layout and view state. Canopy renders visible nodes in
-tree order into an offscreen buffer, applies the cursor overlay, and diffs against
-the previous buffer when possible.
+tree order into an offscreen buffer and applies the cursor overlay. Published
+snapshots and backend output use separate buffers. Observation can refresh the
+published snapshot without changing the backend diff baseline. The baseline
+advances only after output and backend flush succeed.
 
 Widgets draw through `Render` in local coordinates. The runtime clips to the view,
 translates to terminal coordinates, and applies style effects.
@@ -177,6 +203,30 @@ with full render output.
 
 If a pre-render hook marks layout dirty, Canopy runs layout again before
 rendering. Rendering must not rely on stale views.
+
+## Runtime Turns
+
+`Canopy::turn(Work)` drives input, background wakes, evaluation start or cancellation,
+and explicit preparation. `TurnOutcome` reports the published `FrameId`, evaluation
+admission and completion, and exit status. Crossterm, headless evaluation, and the
+test harness use this driver.
+
+Dispatch completion restores widget slots and applies queued removals before layout.
+The driver services bounded native automation work, due polls, node wakes, and
+ready VM segments. It then prepares layout, paints, and publishes changed state.
+Evaluation tickets complete after preparation. Publication wakes parked predicates
+for a later turn.
+
+`ChangeSet` tracks layout, paint, cursor, and observation invalidation. Mutable
+widget access and accepted runtime mutations record the required work. Failed
+mutations retain invalidation for state they changed. Read-only automation does
+not request a redraw. `Canopy::render` remains an explicit preparation and emission
+path for isolated rendering tests.
+
+Poll deadlines belong to the driver. There is no eager scheduler thread per
+application. Adapters wait on terminal input, runtime notifications, and
+`Canopy::next_deadline()` with fair ready-source selection. Tests can install
+`testing::ManualClock` before initialization, advance it, then deliver `Work::Wake`.
 
 ## Event Routing
 
@@ -236,6 +286,14 @@ alive.
 
 MCP and live automation cross the event-loop boundary. Work submitted from another
 thread must marshal back to the UI thread before touching `Canopy` or `Core`.
+`AutomationHandle::submit_eval` queues an `EvalRequest` and returns an `EvalTicket`.
+Await its completion outside the UI thread. `cancel_eval(id)` requests cancellation
+and waits only for driver admission. The queue applies bounded backpressure.
+
+Only one top-level evaluation may be active. Another evaluation or module reload
+receives `ScriptBusy`. Input and bounded native automation continue during parked
+evaluations. A detached invocation holds no application, widget, or VM borrow
+between polls. Each resumed segment restores its original script anchor.
 
 ## Failure and Panic Policy
 

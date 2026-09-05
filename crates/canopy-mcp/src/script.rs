@@ -5,7 +5,7 @@ use std::{
 };
 
 use canopy::{
-    Canopy, FixtureInfo,
+    AutomationHandle, Canopy, EvalRequest, FixtureInfo,
     commands::{
         ArgValue, CommandDispatchKind, CommandRequirement, CommandResolution, CommandStatus,
         CommandTarget,
@@ -24,6 +24,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use tmcp::{TOOL_ERROR_INTERNAL, schema::CallToolResult, tool_params};
+use tokio::task::spawn_blocking;
 
 use crate::Result;
 
@@ -83,6 +84,8 @@ pub enum ScriptTaskState {
     Failed,
     /// Evaluation stopped at the cooperative timeout boundary.
     TimedOut,
+    /// Evaluation was explicitly cancelled.
+    Cancelled,
 }
 
 /// Error details included in a failed script evaluation.
@@ -90,7 +93,7 @@ pub enum ScriptTaskState {
 pub struct ScriptErrorInfo {
     #[serde(rename = "type")]
     /// Pipeline stage that failed: `build`, `typecheck`, `timeout`, `runtime`,
-    /// or `invalid`.
+    /// `cancelled`, or `invalid`.
     pub error_type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     /// Stable host error category such as `no_target` or `unknown_command`,
@@ -456,6 +459,137 @@ pub fn evaluate_live(canopy: &mut Canopy, request: &ScriptEvalRequest) -> Script
     evaluate_in(canopy, request, 0, Instant::now(), None)
 }
 
+/// Evaluate on the live driver, awaiting completion without borrowing the UI.
+pub async fn evaluate_live_request(
+    automation: AutomationHandle,
+    request: ScriptEvalRequest,
+) -> ScriptEvalOutcome {
+    let total_start = Instant::now();
+    if request.fixture.is_some() {
+        return ScriptEvalOutcome::error_only(
+            "invalid",
+            "live sessions do not support eval(fixture=...); use apply_fixture instead",
+            Vec::new(),
+            ScriptTiming::default(),
+        );
+    }
+    let preflight_handle = automation.clone();
+    let source = request.script.clone();
+    let preflight = spawn_blocking(move || {
+        preflight_handle.request(move |canopy| {
+            let gate = typecheck_for_eval(
+                canopy,
+                &source,
+                ScriptTiming {
+                    build_ms: 0,
+                    exec_ms: 0,
+                    total_ms: elapsed_ms(total_start),
+                },
+            );
+            Ok((canopy.root_id(), gate))
+        })
+    })
+    .await;
+    let (anchor, gate) = match preflight {
+        Ok(Ok(preflight)) => preflight,
+        Ok(Err(error)) => {
+            return failed_info(
+                canopy_error_info(&error),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                live_timing(total_start, total_start),
+            );
+        }
+        Err(error) => {
+            return ScriptEvalOutcome::error_only(
+                "runtime",
+                error.to_string(),
+                Vec::new(),
+                live_timing(total_start, total_start),
+            );
+        }
+    };
+    let diagnostics = match gate {
+        TypecheckGate::Ready(diagnostics) => diagnostics,
+        TypecheckGate::Failed(outcome) => return *outcome,
+    };
+    let exec_start = Instant::now();
+    let ticket = match automation.submit_eval(EvalRequest {
+        source: request.script,
+        timeout: request
+            .timeout_ms
+            .filter(|timeout| *timeout > 0)
+            .map(Duration::from_millis),
+        anchor,
+    }) {
+        Ok(ticket) => ticket,
+        Err(error) => {
+            return failed_info(
+                canopy_error_info(&error),
+                Vec::new(),
+                Vec::new(),
+                diagnostics,
+                live_timing(total_start, exec_start),
+            );
+        }
+    };
+    let completion = match ticket.completion.await {
+        Ok(completion) => completion,
+        Err(error) => {
+            return ScriptEvalOutcome::error_only(
+                "runtime",
+                format!("live evaluation completion channel closed: {error}"),
+                diagnostics,
+                live_timing(total_start, exec_start),
+            );
+        }
+    };
+    let timing = live_timing(total_start, exec_start);
+    match completion.result.as_ref() {
+        Ok(value) => match value.to_external_json_value() {
+            Ok(value) => ScriptEvalOutcome {
+                success: true,
+                state: ScriptTaskState::Completed,
+                value: Some(value),
+                logs: completion.logs,
+                assertions: completion.assertions,
+                diagnostics,
+                timing,
+                error: None,
+            },
+            Err(error) => failure_with_logs(
+                &crate::Error::from(error),
+                completion.logs,
+                completion.assertions,
+                diagnostics,
+                timing,
+            ),
+        },
+        Err(error) => failed_info(
+            canopy_error_info(error),
+            completion.logs,
+            completion.assertions,
+            diagnostics,
+            timing,
+        ),
+    }
+}
+
+/// Elapsed wall time for transport timing metadata.
+fn elapsed_ms(start: Instant) -> u64 {
+    u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX)
+}
+
+/// Timing for live evaluation, where construction belongs to the running app.
+fn live_timing(total_start: Instant, exec_start: Instant) -> ScriptTiming {
+    ScriptTiming {
+        build_ms: 0,
+        exec_ms: elapsed_ms(exec_start),
+        total_ms: elapsed_ms(total_start),
+    }
+}
+
 /// Typecheck, evaluate, and report one script against an already-built canopy
 /// app.
 ///
@@ -588,28 +722,11 @@ fn typecheck_for_eval(canopy: &mut Canopy, script: &str, timing: ScriptTiming) -
 
 /// Map an error category to the corresponding task state.
 fn script_task_state(error_type: &str) -> ScriptTaskState {
-    if error_type == "timeout" {
-        ScriptTaskState::TimedOut
-    } else {
-        ScriptTaskState::Failed
+    match error_type {
+        "timeout" => ScriptTaskState::TimedOut,
+        "cancelled" => ScriptTaskState::Cancelled,
+        _ => ScriptTaskState::Failed,
     }
-}
-
-/// Return the evaluation error category for a runtime error.
-fn evaluation_error_type(error: &crate::Error) -> &'static str {
-    if is_script_timeout(error) {
-        "timeout"
-    } else {
-        "runtime"
-    }
-}
-
-/// Return true when a canopy script error represents cooperative timeout.
-fn is_script_timeout(error: &crate::Error) -> bool {
-    matches!(
-        error,
-        crate::Error::Canopy(CanopyError::ScriptTimeout { .. })
-    )
 }
 
 /// Build a failed outcome while preserving logs, assertions, and diagnostics.
@@ -620,12 +737,26 @@ fn failure_with_logs(
     diagnostics: Vec<ScriptCheckDiagnostic>,
     timing: ScriptTiming,
 ) -> ScriptEvalOutcome {
-    let info = script_error_info(error);
-    let error_type = info.error_type.clone();
-    let state = script_task_state(&error_type);
+    failed_info(
+        script_error_info(error),
+        logs,
+        assertions,
+        diagnostics,
+        timing,
+    )
+}
+
+/// Build a failed outcome from owned structured error fields.
+fn failed_info(
+    info: ScriptErrorInfo,
+    logs: Vec<String>,
+    assertions: Vec<ScriptAssertion>,
+    diagnostics: Vec<ScriptCheckDiagnostic>,
+    timing: ScriptTiming,
+) -> ScriptEvalOutcome {
     ScriptEvalOutcome {
         success: false,
-        state,
+        state: script_task_state(&info.error_type),
         value: None,
         logs,
         assertions,
@@ -637,31 +768,49 @@ fn failure_with_logs(
 
 /// Build structured script error information from a canopy or automation error.
 fn script_error_info(error: &crate::Error) -> ScriptErrorInfo {
-    if let crate::Error::Canopy(CanopyError::ScriptStructured {
+    if let crate::Error::Canopy(error) = error {
+        return canopy_error_info(error);
+    }
+    ScriptErrorInfo {
+        error_type: "runtime".to_string(),
+        kind: None,
+        command: None,
+        owner: None,
+        message: error.to_string(),
+    }
+}
+
+/// Preserve structured fields from shared driver errors without cloning the
+/// error.
+fn canopy_error_info(error: &CanopyError) -> ScriptErrorInfo {
+    if let CanopyError::ScriptStructured {
         kind,
         command,
         owner,
         message,
-    }) = error
+    } = error
     {
-        // `error_type` stays on the pipeline-stage axis; the host category
-        // travels in `kind`.
-        let error_type = if *kind == ScriptErrorKind::Timeout {
-            "timeout"
-        } else {
-            "runtime"
-        };
         return ScriptErrorInfo {
-            error_type: error_type.to_string(),
+            error_type: if *kind == ScriptErrorKind::Timeout {
+                "timeout"
+            } else {
+                "runtime"
+            }
+            .to_string(),
             kind: Some(kind.as_str().to_string()),
             command: command.clone(),
             owner: owner.clone(),
             message: message.clone(),
         };
     }
+    let category = match error {
+        CanopyError::ScriptTimeout { .. } => "timeout",
+        CanopyError::ScriptCancelled => "cancelled",
+        _ => "runtime",
+    };
     ScriptErrorInfo {
-        error_type: evaluation_error_type(error).to_string(),
-        kind: None,
+        error_type: category.to_string(),
+        kind: matches!(error, CanopyError::ScriptCancelled).then(|| "script_cancelled".to_string()),
         command: None,
         owner: None,
         message: error.to_string(),
@@ -984,5 +1133,21 @@ declare script_target: {
         assert_eq!(outcome.state, ScriptTaskState::Completed);
         assert_eq!(outcome.value, Some(JsonValue::from(31)));
         Ok(())
+    }
+    #[test]
+    fn cancellation_has_a_distinct_task_state() {
+        let outcome = failure_with_logs(
+            &crate::Error::Canopy(CanopyError::ScriptCancelled),
+            vec!["before cancellation".to_string()],
+            Vec::new(),
+            Vec::new(),
+            ScriptTiming::default(),
+        );
+        assert_eq!(outcome.state, ScriptTaskState::Cancelled);
+        assert_eq!(outcome.logs, vec!["before cancellation"]);
+        assert_eq!(
+            outcome.error.as_ref().unwrap().kind.as_deref(),
+            Some("script_cancelled")
+        );
     }
 }

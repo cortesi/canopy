@@ -1,20 +1,21 @@
 use std::{
+    future::{Future, pending, poll_fn},
     io::{self, Stderr, Write},
     mem,
+    pin::Pin,
+    task::{Context, Poll},
+    time::Instant,
 };
 
-use futures::{
-    FutureExt,
-    channel::mpsc::UnboundedReceiver,
-    executor::block_on,
-    future::{Either, select},
-    pin_mut,
-    stream::{Stream, StreamExt},
+use futures::{FutureExt, channel::mpsc::UnboundedReceiver, pin_mut, stream::Stream};
+use tokio::{
+    runtime::Builder,
+    time::{Instant as TokioInstant, sleep_until},
 };
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
-    Canopy,
+    Canopy, Work,
     backend::{BackendControl, TerminalSession},
     core::{Core, dump::dump, text},
     error::{self, Result},
@@ -34,6 +35,8 @@ struct EventSource<S> {
     internal: UnboundedReceiver<Event>,
     /// Buffered non-move event encountered while coalescing.
     pending: Option<Event>,
+    /// Alternate terminal and framework input when both remain ready.
+    prefer_internal: bool,
 }
 
 impl<S> EventSource<S>
@@ -46,48 +49,56 @@ where
             terminal,
             internal,
             pending: None,
+            prefer_internal: false,
         }
     }
 
-    /// Await one event from either the terminal or the framework channel.
-    async fn next_uncoalesced(&mut self) -> Result<Event> {
-        loop {
-            let terminal = self.terminal.next();
-            let internal = self.internal.next();
-            pin_mut!(terminal, internal);
-            match select(terminal, internal).await {
-                Either::Left((terminal, _)) => {
-                    if let Some(event) = terminal_event(terminal)? {
-                        return Ok(event);
+    /// Poll one input source, preserving stream errors and termination.
+    fn poll_source(&mut self, cx: &mut Context<'_>, internal: bool) -> Poll<Result<Option<Event>>> {
+        if internal {
+            Pin::new(&mut self.internal).poll_next(cx).map(|event| {
+                event
+                    .map(Some)
+                    .ok_or_else(|| error::Error::RunLoop("framework event channel closed".into()))
+            })
+        } else {
+            Pin::new(&mut self.terminal)
+                .poll_next(cx)
+                .map(terminal_event)
+        }
+    }
+
+    /// Poll fairly while bounding ignored terminal events in one executor turn.
+    fn poll_uncoalesced(&mut self, cx: &mut Context<'_>) -> Poll<Result<Event>> {
+        for _ in 0..64 {
+            let first = self.prefer_internal;
+            let (result, internal) = match self.poll_source(cx, first) {
+                Poll::Pending => (self.poll_source(cx, !first), !first),
+                ready => (ready, first),
+            };
+            match result {
+                Poll::Ready(Ok(event)) => {
+                    self.prefer_internal = !internal;
+                    if let Some(event) = event {
+                        return Poll::Ready(Ok(event));
                     }
                 }
-                Either::Right((Some(event), _)) => return Ok(event),
-                Either::Right((None, _)) => {
-                    return Err(error::Error::RunLoop(
-                        "framework event channel closed".into(),
-                    ));
-                }
+                Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
+                Poll::Pending => return Poll::Pending,
             }
         }
+        cx.waker().wake_by_ref();
+        Poll::Pending
+    }
+
+    /// Await one event from either the terminal or framework channel.
+    async fn next_uncoalesced(&mut self) -> Result<Event> {
+        poll_fn(|cx| self.poll_uncoalesced(cx)).await
     }
 
     /// Take one event that is already available without waiting.
     fn next_ready(&mut self) -> Result<Option<Event>> {
-        loop {
-            if let Some(internal) = self.internal.next().now_or_never() {
-                return internal
-                    .map(Some)
-                    .ok_or_else(|| error::Error::RunLoop("framework event channel closed".into()));
-            }
-            match self.terminal.next().now_or_never() {
-                Some(terminal) => {
-                    if let Some(event) = terminal_event(terminal)? {
-                        return Ok(Some(event));
-                    }
-                }
-                None => return Ok(None),
-            }
-        }
+        self.next_uncoalesced().now_or_never().transpose()
     }
 
     /// Await the next event, coalescing consecutive ready mouse moves.
@@ -104,7 +115,10 @@ where
                 ..
             })
         ) {
-            while let Some(next) = self.next_ready()? {
+            for _ in 0..64 {
+                let Some(next) = self.next_ready()? else {
+                    break;
+                };
                 if matches!(
                     next,
                     Event::Mouse(mouse::MouseEvent {
@@ -122,6 +136,62 @@ where
 
         Ok(event)
     }
+}
+
+/// Select input, runtime notification, or a timer with rotating ready priority.
+async fn select_work<E, W, D>(
+    event: E,
+    wake: W,
+    deadline: D,
+    next_source: &mut usize,
+) -> Result<Work>
+where
+    E: Future<Output = Result<Event>>,
+    W: Future<Output = Result<()>>,
+    D: Future<Output = ()>,
+{
+    pin_mut!(event, wake, deadline);
+    poll_fn(|cx| {
+        for offset in 0..3 {
+            let source = (*next_source + offset) % 3;
+            let ready = match source {
+                0 => event.as_mut().poll(cx).map(|event| event.map(Work::Input)),
+                1 => wake.as_mut().poll(cx).map(|wake| wake.map(|()| Work::Wake)),
+                _ => deadline.as_mut().poll(cx).map(|()| Ok(Work::Wake)),
+            };
+            if ready.is_ready() {
+                *next_source = (source + 1) % 3;
+                return ready;
+            }
+        }
+        Poll::Pending
+    })
+    .await
+}
+
+/// Wait without holding any widget or VM borrow across suspension.
+async fn next_runtime_work<S>(
+    events: &mut EventSource<S>,
+    canopy: &Canopy,
+    deadline: Option<Instant>,
+    next_source: &mut usize,
+) -> Result<Work>
+where
+    S: Stream<Item = io::Result<cevent::Event>> + Unpin,
+{
+    let timer = async move {
+        match deadline {
+            Some(deadline) => sleep_until(TokioInstant::from_std(deadline)).await,
+            None => pending::<()>().await,
+        }
+    };
+    select_work(
+        events.next(),
+        poll_fn(|cx| canopy.poll_runtime_wake(cx)),
+        timer,
+        next_source,
+    )
+    .await
 }
 
 /// Translate one terminal stream item or report reader termination.
@@ -744,23 +814,34 @@ pub fn runloop(mut cnpy: Canopy) -> Result<i32> {
     let size = translate_result(terminal::size())?;
     cnpy.set_root_size(Size::new(size.0.into(), size.1.into()))?;
 
-    if let Err(e) = cnpy.render(&mut be) {
-        return Err(handle_render_error(e, &cnpy.core, &mut session));
-    }
-    translate_result(be.flush())?;
-    if let Some(code) = cnpy.core.take_exit_request() {
+    let runtime = Builder::new_current_thread()
+        .enable_time()
+        .build()
+        .map_err(|error| error::Error::RunLoop(format!("cannot start event runtime: {error}")))?;
+    let _runtime_context = runtime.enter();
+    let prepared = cnpy.turn(Work::Prepare)?;
+    cnpy.emit_frame(&mut be)
+        .map_err(|error| handle_render_error(error, &cnpy.core, &mut session))?;
+    if let Some(code) = prepared.exit_code {
         return Ok(code);
     }
 
+    let mut next_source = 0;
     loop {
-        let event = block_on(events.next())?;
+        let deadline = cnpy.next_deadline();
+        let work = runtime.block_on(next_runtime_work(
+            &mut events,
+            &cnpy,
+            deadline,
+            &mut next_source,
+        ))?;
 
         if matches!(
-            &event,
-            Event::Key(key::Key {
+            &work,
+            Work::Input(Event::Key(key::Key {
                 key: key::KeyCode::Char('c'),
                 mods: key::Mods { ctrl: true, .. },
-            })
+            }))
         ) {
             stop_and_dump(
                 &mut session,
@@ -770,20 +851,13 @@ pub fn runloop(mut cnpy: Canopy) -> Result<i32> {
             return Ok(130);
         }
 
-        cnpy.event(event)?;
-        cnpy.service_automation();
-        if let Some(code) = cnpy.core.take_exit_request() {
+        let outcome = cnpy.turn(work)?;
+        if let Some(code) = outcome.exit_code {
             return Ok(code);
         }
-        match cnpy.render_if_pending(&mut be) {
-            Ok(rendered) => {
-                if rendered && let Err(e) = translate_result(be.flush()) {
-                    return Err(handle_render_error(e, &cnpy.core, &mut session));
-                }
-            }
-            Err(e) => {
-                return Err(handle_render_error(e, &cnpy.core, &mut session));
-            }
+        if outcome.frame.is_some() {
+            cnpy.emit_frame(&mut be)
+                .map_err(|error| handle_render_error(error, &cnpy.core, &mut session))?;
         }
     }
 }
@@ -791,6 +865,7 @@ pub fn runloop(mut cnpy: Canopy) -> Result<i32> {
 #[cfg(test)]
 mod tests {
     use std::{
+        future::ready,
         io::Write,
         pin::Pin,
         sync::{
@@ -800,7 +875,7 @@ mod tests {
         task::{Context, Poll},
     };
 
-    use futures::{channel::mpsc::unbounded, stream};
+    use futures::{StreamExt, channel::mpsc::unbounded, executor::block_on, stream};
 
     use super::*;
 
@@ -1115,6 +1190,57 @@ mod tests {
         let terminal = stream::iter([Ok(terminal_key(cevent::KeyEventKind::Release))])
             .chain(stream::pending());
         let mut events = EventSource::new(terminal, rx);
+        assert!(matches!(block_on(events.next())?, Event::Wake));
+        Ok(())
+    }
+
+    #[test]
+    fn adapter_rotates_between_ready_input_wake_and_deadline() -> Result<()> {
+        let mut next_source = 0;
+        for expected_source in 0..3 {
+            let work = block_on(select_work(
+                ready(Ok(Event::FocusGained)),
+                ready(Ok(())),
+                ready(()),
+                &mut next_source,
+            ))?;
+            assert_eq!(next_source, (expected_source + 1) % 3);
+            if expected_source == 0 {
+                assert!(matches!(work, Work::Input(Event::FocusGained)));
+            } else {
+                assert!(matches!(work, Work::Wake));
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn adapter_services_deadlines_without_terminal_input() -> Result<()> {
+        let mut next_source = 0;
+        let work = block_on(select_work(
+            pending::<Result<Event>>(),
+            pending::<Result<()>>(),
+            ready(()),
+            &mut next_source,
+        ))?;
+        assert!(matches!(work, Work::Wake));
+        Ok(())
+    }
+
+    #[test]
+    fn event_source_alternates_ready_terminal_and_internal_events() -> Result<()> {
+        let (tx, rx) = unbounded();
+        tx.unbounded_send(Event::Wake).unwrap();
+        tx.unbounded_send(Event::Wake).unwrap();
+        let terminal = stream::iter([
+            Ok(terminal_key(cevent::KeyEventKind::Press)),
+            Ok(terminal_key(cevent::KeyEventKind::Press)),
+        ])
+        .chain(stream::pending());
+        let mut events = EventSource::new(terminal, rx);
+        assert!(matches!(block_on(events.next())?, Event::Key(_)));
+        assert!(matches!(block_on(events.next())?, Event::Wake));
+        assert!(matches!(block_on(events.next())?, Event::Key(_)));
         assert!(matches!(block_on(events.next())?, Event::Wake));
         Ok(())
     }

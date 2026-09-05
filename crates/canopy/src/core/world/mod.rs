@@ -10,6 +10,7 @@ use slotmap::SlotMap;
 use self::focus::FocusRecoveryHint;
 use super::{
     inputmap::{ExclusiveFrameToken, InputMap},
+    wake::WakeRegistry,
     widget_access::{WidgetMutGuard, WidgetReadGuard, WidgetSlotGuard},
 };
 use crate::{
@@ -23,12 +24,16 @@ use crate::{
     widget::Widget,
 };
 
+#[cfg(test)]
+mod change_tests;
 /// Event dispatch and bubbling helpers.
 mod dispatch;
 /// Focus and mouse-capture management.
 mod focus;
 /// Layout traversal, measurement, and hit-testing.
 pub mod layout_driver;
+/// Removal requests completed after callback restoration.
+mod teardown;
 /// Widgets and node builders shared by the world test modules.
 #[cfg(test)]
 pub mod test_support;
@@ -39,6 +44,8 @@ mod tree;
 
 /// Core state for the arena, layout engine, and focus.
 pub struct Core {
+    /// Changes awaiting frame publication.
+    pub(crate) changes: crate::ChangeSet,
     /// Node storage arena.
     pub(crate) nodes: SlotMap<NodeId, Node>,
     /// Root node ID.
@@ -55,6 +62,14 @@ pub struct Core {
     pub(crate) focus_hint: Option<FocusRecoveryHint>,
     /// Active tree edit and its rollback state.
     tree_edit: Option<TreeEditJournal>,
+    /// Monotonic widget and attachment generation source, outside rollback.
+    next_generation: u64,
+    /// Widget slots currently extracted by mutation callbacks.
+    pub(crate) callback_depth: usize,
+    /// Completion-boundary removal queue and dispatch nesting.
+    completion: teardown::CompletionBatch,
+    /// Cross-thread work handles synchronized with committed structural state.
+    pub(crate) wake_registry: WakeRegistry,
     /// Whether lifecycle cleanup is unwinding a failed tree edit.
     rolling_back_tree_edit: bool,
     /// Registered command specs.
@@ -109,6 +124,8 @@ struct RemovalEntry {
 
 /// Core-owned state restored when a tree edit fails.
 struct TreeStateSnapshot {
+    /// Requests preceding this structural checkpoint.
+    removal_checkpoint: usize,
     /// Arena contents and all node metadata.
     nodes: SlotMap<NodeId, Node>,
     /// Root node ID.
@@ -170,9 +187,12 @@ impl Core {
     /// Create a new Core with a default root node.
     pub fn new() -> Self {
         let mut nodes = SlotMap::with_key();
-        let root = nodes.insert(Node::new(Box::new(RootContainer)));
+        let mut root_node = Node::new(Box::new(RootContainer), 1);
+        root_node.attachment_generation = Some(1);
+        let root = nodes.insert(root_node);
 
         Self {
+            changes: crate::ChangeSet::default(),
             nodes,
             root,
             focus: None,
@@ -181,6 +201,10 @@ impl Core {
             mouse_capture: None,
             focus_hint: None,
             tree_edit: None,
+            next_generation: 2,
+            callback_depth: 0,
+            completion: teardown::CompletionBatch::default(),
+            wake_registry: WakeRegistry::default(),
             rolling_back_tree_edit: false,
             commands: CommandSet::new(),
             input_map: InputMap::new(),
@@ -251,7 +275,15 @@ impl Core {
                 error,
             )
         })?;
-        Ok(f(guard.widget_mut(), self))
+        self.invalidate(crate::Invalidation::Layout);
+        if let Some(node) = self.nodes.get_mut(node_id) {
+            node.layout_dirty = true;
+        }
+        self.callback_depth += 1;
+        let result = f(guard.widget_mut(), self);
+        drop(guard);
+        self.callback_depth -= 1;
+        Ok(result)
     }
 
     /// Borrow a widget mutably alongside a context bound to the same node.
@@ -346,5 +378,12 @@ impl Widget for RootContainer {
 
     fn name(&self) -> NodeName {
         NodeName::convert("root")
+    }
+}
+
+impl Core {
+    /// Record pending work. Flags survive callback and preparation errors.
+    pub(crate) fn invalidate(&mut self, invalidation: crate::Invalidation) {
+        self.changes.invalidate(invalidation);
     }
 }

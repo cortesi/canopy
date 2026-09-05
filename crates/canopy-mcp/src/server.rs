@@ -17,7 +17,7 @@ use tokio::{net::UnixListener, runtime::Builder, sync::oneshot, task::block_in_p
 use crate::{
     Error, Result,
     script::{
-        AppEvaluator, AppFactory, ScriptEvalRequest, bootstrap_for_canopy, evaluate_live,
+        AppEvaluator, AppFactory, ScriptEvalRequest, bootstrap_for_canopy, evaluate_live_request,
         query_script_api,
     },
 };
@@ -129,11 +129,7 @@ impl LiveCanopyMcpServer {
     #[tool]
     /// Evaluate a Luau script against the currently running canopy app.
     async fn script_eval(&self, params: ScriptEvalRequest) -> ToolResult<CallToolResult> {
-        let automation = self.automation.clone();
-        let outcome = block_in_place(move || {
-            automation.request(move |canopy| Ok(evaluate_live(canopy, &params)))
-        })
-        .map_err(|error| ToolError::internal(error.to_string()))?;
+        let outcome = evaluate_live_request(self.automation.clone(), params).await;
         Ok(outcome.to_tool_result())
     }
 
@@ -369,12 +365,23 @@ mod tests {
 
     struct EchoNode {
         value: i32,
+        started: Option<mpsc::Sender<()>>,
     }
 
     #[derive_commands]
     impl EchoNode {
         fn new() -> Self {
-            Self { value: 0 }
+            Self {
+                value: 0,
+                started: None,
+            }
+        }
+
+        #[command]
+        fn signal_started(&self) {
+            if let Some(started) = &self.started {
+                started.send(()).expect("test observer remains connected");
+            }
         }
 
         #[command]
@@ -547,5 +554,91 @@ mod tests {
                 .as_array()
                 .is_some_and(|items| !items.is_empty())
         );
+    }
+    #[test]
+    fn live_pending_eval_allows_native_progress_and_reports_busy() -> crate::Result<()> {
+        use canopy::{
+            EvalRequest, Work,
+            commands::ArgValue,
+            error::{Error as CanopyError, ScriptErrorKind},
+            geom::Size,
+        };
+        use futures::{StreamExt, executor};
+
+        let mut canopy = Canopy::new();
+        EchoNode::load(&mut canopy)?;
+        canopy.finalize_api()?;
+        let (started_tx, started_rx) = mpsc::channel();
+        canopy.replace_root(EchoNode {
+            value: 0,
+            started: Some(started_tx),
+        })?;
+        canopy.set_root_size(Size::new(20, 5))?;
+        canopy.turn(Work::Prepare)?;
+        let automation = canopy.automation_handle();
+        let mut events = canopy
+            .take_event_receiver()
+            .expect("test owns event receiver");
+        let server = live_canopy_mcp_server(automation.clone());
+        let worker = thread::spawn(move || {
+            let runtime = Builder::new_current_thread().enable_all().build().unwrap();
+            runtime.block_on(server.script_eval(ScriptEvalRequest {
+                script: "echo_node.signal_started(); canopy.wait_for(function() return echo_node.get() == 7 end); return echo_node.get()".to_string(),
+                fixture: None, timeout_ms: None,
+            })).expect("live eval transport")
+        });
+        while started_rx.try_recv().is_err() {
+            executor::block_on(events.next()).expect("queued work wakes the UI");
+            let outcome = canopy.turn(Work::Wake)?;
+            assert!(
+                outcome.completed.is_empty(),
+                "wait must remain pending before mutation"
+            );
+        }
+        assert!(
+            !worker.is_finished(),
+            "MCP must await the pending runtime ticket"
+        );
+        let busy = automation.submit_eval(EvalRequest {
+            source: "return 99".to_string(),
+            timeout: None,
+            anchor: canopy.root_id(),
+        })?;
+        let (mutation_tx, mutation_rx) = mpsc::channel();
+        automation.submit(Box::new(move |canopy| {
+            let result = canopy.with_root_context(|ctx| {
+                ctx.dispatch_exact(ctx.node_id(), &EchoNode::call_set(7).invocation())?;
+                Ok(())
+            });
+            mutation_tx
+                .send(result)
+                .expect("mutation observer connected");
+        }))?;
+        executor::block_on(events.next()).expect("native mutation wakes the UI");
+        let mut outcome = canopy.turn(Work::Wake)?;
+        mutation_rx.recv().expect("native callback ran")?;
+        let busy_result = executor::block_on(busy.completion).expect("busy request completed");
+        assert!(matches!(
+            busy_result.result.as_ref(),
+            Err(CanopyError::ScriptStructured {
+                kind: ScriptErrorKind::ScriptBusy,
+                ..
+            })
+        ));
+        while outcome.completed.is_empty() {
+            executor::block_on(events.next()).expect("publication wakes the waiting script");
+            outcome = canopy.turn(Work::Wake)?;
+        }
+        assert!(matches!(
+            outcome.completed[0].result.as_ref(),
+            Ok(ArgValue::Int(7))
+        ));
+        let response = worker.join().expect("MCP worker exits");
+        let payload = response
+            .structured_content
+            .expect("structured evaluation result");
+        assert_eq!(payload["success"], true);
+        assert_eq!(payload["value"], 7);
+        Ok(())
     }
 }

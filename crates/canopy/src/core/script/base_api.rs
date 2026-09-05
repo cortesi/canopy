@@ -2,10 +2,11 @@
 
 use std::{
     collections::BTreeSet,
+    future::poll_fn,
     iter,
     result::Result as StdResult,
-    sync::Arc,
-    time::{Duration, Instant},
+    sync::{Arc, Mutex},
+    time::Duration,
 };
 
 use ruau::{
@@ -27,7 +28,7 @@ use super::{
     node_id_from_value, node_id_to_arg, node_info_to_arg, node_list_to_arg, owned_truthy, ret_arg,
     ret_none, ret_one, route_trace_to_arg, scoped_value_to_string, screen_cells_to_arg,
     screen_text, screen_text_for_rect, screen_to_arg, script_callback_label, script_journal_to_arg,
-    tree_node_to_arg, validate_node_handle, values_to_args, with_current_canopy, yield_now,
+    tree_node_to_arg, validate_node_handle, values_to_args, with_current_canopy,
 };
 
 /// The native implementation behind one base API function.
@@ -742,25 +743,51 @@ where
         AsyncHostContext,
     ) -> Pin<Box<dyn Future<Output = StdResult<bool, RuntimeError>> + Send>>,
 {
-    let started = Instant::now();
-    loop {
-        ctx.scope(|scope| {
-            let mut canopy = scope
-                .context_mut::<Canopy>()
-                .ok_or_else(|| RuntimeError::runtime("no active canopy context"))?;
-            canopy.service_automation();
-            Ok(())
+    let observed = Arc::new(Mutex::new(None));
+    let delivered = Arc::clone(&observed);
+    ctx.scope(move |scope| {
+        let canopy = scope
+            .context_mut::<Canopy>()
+            .ok_or_else(|| RuntimeError::runtime("no active canopy context"))?;
+        *delivered
+            .lock()
+            .map_err(|_| RuntimeError::runtime("wait state lock poisoned"))? =
+            Some((canopy.publication_watch(), canopy.now()));
+        Ok(())
+    })
+    .await?;
+    let (watch, started) = observed
+        .lock()
+        .map_err(|_| RuntimeError::runtime("wait state lock poisoned"))?
+        .take()
+        .ok_or_else(|| RuntimeError::runtime("wait state was not delivered"))?;
+    let deadline = timeout_ms
+        .map(|timeout_ms| {
+            started
+                .checked_add(Duration::from_millis(timeout_ms))
+                .ok_or_else(|| RuntimeError::runtime("wait timeout exceeds the clock range"))
         })
-        .await?;
+        .transpose()?;
+    loop {
+        // Capture before checking the predicate; poll_changed rechecks before parking.
+        let generation = watch.generation();
         if ready(ctx.clone()).await? {
             return Ok(host_return(true));
         }
-        if let Some(timeout_ms) = timeout_ms
-            && started.elapsed() >= Duration::from_millis(timeout_ms)
-        {
-            return Err(wait_timeout(timeout_ms));
+        if let (Some(deadline), Some(timeout_ms)) = (deadline, timeout_ms) {
+            let expired = ctx
+                .scope(move |scope| {
+                    let canopy = scope
+                        .context_mut::<Canopy>()
+                        .ok_or_else(|| RuntimeError::runtime("no active canopy context"))?;
+                    Ok(canopy.now() >= deadline)
+                })
+                .await?;
+            if expired {
+                return Err(wait_timeout(timeout_ms));
+            }
         }
-        yield_now().await;
+        poll_fn(|cx| watch.poll_changed(generation, deadline, cx)).await;
     }
 }
 
@@ -822,11 +849,12 @@ async fn wait_for_screen_text(
         let text = args.text.clone();
         Box::pin(async move {
             ctx.scope(move |scope| {
-                let mut canopy = scope
+                let canopy = scope
                     .context_mut::<Canopy>()
                     .ok_or_else(|| RuntimeError::runtime("no active canopy context"))?;
-                let screen = screen_text(&mut canopy)?;
-                Ok(screen.contains(&text))
+                Ok(canopy
+                    .buf()
+                    .is_some_and(|buffer| buffer.screen_text().contains(&text)))
             })
             .await
         })

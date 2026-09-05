@@ -207,12 +207,14 @@ mod tests {
         })?;
 
         canopy.set_root_size(Size::new(10, 10))?;
+        canopy.turn(canopy::Work::Prepare)?;
         canopy.with_root_context(|context| {
             context.with_layout_of(first.into(), &mut |layout| {
                 *layout = layout.fixed_height(0);
             })
         })?;
         canopy.set_root_size(Size::new(10, 10))?;
+        canopy.turn(canopy::Work::Prepare)?;
 
         assert_eq!(
             canopy.with_root_view(|context| context.focused_leaf(context.root_id())),

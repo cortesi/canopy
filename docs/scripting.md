@@ -48,6 +48,18 @@ Do not call script callbacks from arbitrary threads. Live MCP and other
 automation entry points must marshal work back to the UI thread before touching
 `Canopy` or `Core`.
 
+The shared runtime driver polls detached Luau invocations. It releases application,
+widget, and VM borrows between polls. Input, timers, node wakes, and bounded native
+automation can progress while an evaluation waits. Resumed segments retain their
+original script anchor. Focus-targeted calls resolve current focus when invoked.
+
+Only one top-level evaluation may run at a time. Another evaluation or module
+reload fails with structured `ScriptBusy`. Live callers submit an `EvalRequest`
+through `AutomationHandle::submit_eval` and await the returned `EvalTicket` outside
+the UI thread. Its completion contains the value or error, logs, and assertions.
+`AutomationHandle::cancel_eval(id)` waits for cancellation admission. Completion
+arrives through the original ticket after runtime preparation.
+
 Script-created node IDs, binding IDs, and function handles are runtime
 capabilities. They are valid only while the app, node, script host, and
 registry entry remain live. Removing a node invalidates its `NodeId`. Unbinding
@@ -226,7 +238,20 @@ MCP evaluation returns:
 - `timing`
 - `error`
 
-`state` is `completed`, `failed`, or `timed_out`.
+`state` is `completed`, `failed`, `timed_out`, or `cancelled`.
+
+## Waiting for State
+
+Use `canopy.wait_for(predicate, timeout_ms?)`,
+`canopy.wait_for_node(owner, timeout_ms?)`, or
+`canopy.wait_for_screen_text(text, timeout_ms?)` for asynchronous state changes.
+These helpers subscribe to snapshot publication and optional deadlines. They
+recheck before parking to avoid a lost publication wake. The runtime services
+input and automation between resumed segments. Wait helpers do not run their own
+event loop or recursively service automation.
+
+Screen observation reads published cells. Refreshing a snapshot does not advance
+the backend's output baseline. A later visible frame still includes those changes.
 
 ## Typechecking
 
@@ -269,9 +294,9 @@ visible through `canopy.bindings()`.
 
 ## Timeouts
 
-MCP timeouts are wall-clock watchdogs layered per invocation on top of the gas
-budget. The watchdog cancels execution at the next VM safepoint; the failure
-surfaces as a structured `ScriptTimeout` error.
+The driver includes parked time in each evaluation deadline. VM limits also check
+running Luau at safepoints. Expiration surfaces as a structured `ScriptTimeout`
+error. Explicit cancellation produces `ScriptCancelled` and MCP state `cancelled`.
 
 Timeouts do not kill a thread or process. Rust callbacks must return to Luau
 before the cancellation can be observed. A long native callback can therefore

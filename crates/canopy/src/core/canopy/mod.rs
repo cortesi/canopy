@@ -23,6 +23,14 @@ use super::{
 };
 
 mod rendering;
+#[cfg(test)]
+mod rendering_tests;
+mod turn;
+#[cfg(test)]
+mod turn_cleanup_tests;
+#[cfg(any(test, feature = "testing"))]
+mod turn_testing;
+pub use turn::{EvalId, EvalOutcome, EvalRequest, EvalTicket, FrameId, TurnOutcome, Work};
 mod routing;
 #[cfg(test)]
 mod tests;
@@ -90,6 +98,10 @@ pub struct Canopy {
 
     /// Cached terminal buffer.
     termbuf: Option<TermBuf>,
+    /// Last successfully emitted terminal frame.
+    emitted_buf: Option<TermBuf>,
+    /// Adapter-independent runtime progress.
+    driver: turn::Driver,
     /// Whether a render is pending after the most recent event.
     render_pending: bool,
 
@@ -98,9 +110,9 @@ pub struct Canopy {
     /// Event receiver channel.
     pub(crate) event_rx: Option<UnboundedReceiver<Event>>,
     /// Cross-thread automation callback sender.
-    automation_tx: mpsc::SyncSender<AutomationCallback>,
+    automation_tx: mpsc::SyncSender<turn::AutomationMessage>,
     /// Cross-thread automation callback receiver.
-    automation_rx: mpsc::Receiver<AutomationCallback>,
+    automation_rx: mpsc::Receiver<turn::AutomationMessage>,
     /// Thread that exclusively owns this application instance.
     ui_thread: ThreadId,
 
@@ -170,7 +182,7 @@ const AUTOMATION_SERVICE_BUDGET: usize = 64;
 #[derive(Clone)]
 pub struct AutomationHandle {
     /// Sender for queued UI-thread callbacks.
-    callback_tx: mpsc::SyncSender<AutomationCallback>,
+    callback_tx: mpsc::SyncSender<turn::AutomationMessage>,
     /// Sender for wake events so the runloop notices queued work.
     wake_tx: UnboundedSender<Event>,
     /// Thread that owns the associated Canopy instance.
@@ -180,8 +192,13 @@ pub struct AutomationHandle {
 impl AutomationHandle {
     /// Queue a callback to run on the UI thread.
     pub fn submit(&self, callback: AutomationCallback) -> Result<()> {
+        self.submit_message(turn::AutomationMessage::Callback(callback))
+    }
+
+    /// Enqueue a typed driver message and wake its adapter.
+    fn submit_message(&self, message: turn::AutomationMessage) -> Result<()> {
         self.callback_tx
-            .try_send(callback)
+            .try_send(message)
             .map_err(|error| match error {
                 mpsc::TrySendError::Full(_) => {
                     error::Error::RunLoop("automation callback queue is full".into())
@@ -311,7 +328,8 @@ impl Canopy {
         let (automation_tx, automation_rx) = mpsc::sync_channel(AUTOMATION_QUEUE_CAPACITY);
         let core = Core::new();
         Self {
-            poller: Poller::new(tx.clone()),
+            poller: Poller::new(),
+            driver: turn::Driver::new(tx.clone()),
             event_tx: tx,
             event_rx: Some(rx),
             automation_tx,
@@ -337,6 +355,7 @@ impl Canopy {
             root_size: None,
             render_limits: RenderLimits::default(),
             termbuf: None,
+            emitted_buf: None,
             render_pending: true,
             core,
         }
@@ -421,9 +440,7 @@ impl Canopy {
 
     /// Evaluate one source against the root node under a journal entry.
     fn eval_root(&mut self, source: &str, timeout: Option<Duration>) -> Result<commands::ArgValue> {
-        self.eval_journaled("eval", source, move |canopy, script_id, host| {
-            host.execute(canopy, canopy.core.root_id(), script_id, timeout)
-        })
+        self.eval_headless(source, timeout)
     }
 
     /// Finalize the script API surface if an evaluation needs it.
@@ -432,28 +449,6 @@ impl Canopy {
             return Ok(());
         }
         self.finalize_api()
-    }
-
-    /// Compile and run one source under a journal entry.
-    ///
-    /// `run` receives the compiled script and a clone of the script host, so
-    /// the caller chooses the execution mode without repeating the journal,
-    /// finalize, and compile prologue.
-    fn eval_journaled(
-        &mut self,
-        origin: impl Into<String>,
-        source: &str,
-        run: impl FnOnce(&mut Self, script::ScriptId, script::LuauHost) -> Result<commands::ArgValue>,
-    ) -> Result<commands::ArgValue> {
-        let baseline = self.begin_script_journal();
-        let result = (|| {
-            self.ensure_finalized()?;
-            let script_id = self.script_host.compile(source)?;
-            let host = self.script_host.clone();
-            run(self, script_id, host)
-        })();
-        self.record_script_journal(origin, source, baseline, &result);
-        result
     }
 
     /// Configure the `@user` persistent script root.
@@ -476,14 +471,27 @@ impl Canopy {
     /// `None` to invalidate every root. Returns the new source epoch, or
     /// `None` when no module source is configured or the named root is
     /// unknown.
-    pub fn invalidate_script_modules(&mut self, root: Option<&str>) -> Option<u64> {
-        let source = self.script_module_source.as_ref()?;
+    pub fn invalidate_script_modules(&mut self, root: Option<&str>) -> Result<Option<u64>> {
+        if self.script_host.is_eval_active() {
+            return Err(error::Error::ScriptStructured {
+                kind: error::ScriptErrorKind::ScriptBusy,
+                command: None,
+                owner: None,
+                message: "cannot reload modules while evaluation is active".into(),
+            });
+        }
+        let Some(source) = self.script_module_source.as_ref() else {
+            return Ok(None);
+        };
         let epoch = match root {
-            Some(root) => source.invalidate(root).ok()?,
+            Some(root) => match source.invalidate(root) {
+                Ok(epoch) => epoch,
+                Err(_) => return Ok(None),
+            },
             None => source.invalidate_all(),
         };
         self.clear_script_callbacks();
-        Some(epoch)
+        Ok(Some(epoch))
     }
 
     /// Register an audited Ruau native module on the same surface as Canopy
@@ -531,6 +539,7 @@ impl Canopy {
 
     /// Run app, user, and project startup scripts once.
     pub fn run_startup_scripts(&mut self) -> Result<usize> {
+        self.driver.startup_attempted = true;
         self.ensure_finalized()?;
         let host = self.script_host.clone();
         let mut ran = 0;
@@ -745,8 +754,14 @@ impl Canopy {
         if !self.core.nodes.contains_key(node) {
             return Err(error::Error::NodeNotFound(node));
         }
-        let mut context = crate::core::context::CoreContext::new(&mut self.core, node);
-        f(&mut context)
+        let checkpoint = self.core.begin_dispatch();
+        self.core.invalidate(crate::Invalidation::Layout);
+        let result = {
+            let mut context = crate::core::context::CoreContext::new(&mut self.core, node);
+            f(&mut context)
+        };
+        let completion = self.core.finish_dispatch(checkpoint, result.is_ok());
+        result.and_then(|value| completion.map(|()| value))
     }
 
     /// Run a closure against an immutable view of the root context.

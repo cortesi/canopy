@@ -448,6 +448,7 @@ name = "canopy-mcp"
 version = "0.1.0"
 dependencies = [
  "canopy",
+ "futures",
  "ruau-script-api",
  "schemars",
  "serde",
