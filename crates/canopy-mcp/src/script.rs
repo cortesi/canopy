@@ -6,7 +6,10 @@ use std::{
 
 use canopy::{
     Canopy, FixtureInfo,
-    commands::{ArgValue, CommandDispatchKind, CommandResolution},
+    commands::{
+        ArgValue, CommandDispatchKind, CommandRequirement, CommandResolution, CommandStatus,
+        CommandTarget,
+    },
     error::{Error as CanopyError, Result as CanopyResult, ScriptErrorKind},
     geom::Size,
     render::NopBackend,
@@ -42,7 +45,8 @@ const DEFAULT_VIEW_SIZE: Size = Size { w: 120, h: 40 };
 const BOOTSTRAP_GUIDE: &str = "Use script_eval for actions and assertions. Scripts run against \
 the generated Luau API, can call canopy.available_bindings(), canopy.commands(), canopy.screen_text(), \
 canopy.screen_cells(), canopy.route_trace(), and canopy.script_journal(), and should prefer typed \
-command calls over coordinate input when possible.";
+command calls over coordinate input when possible. Top-level scripts start at root; \
+use canopy.call_focus for focus-relative actions and canopy.call_exact for a stable node target.";
 
 /// Request payload for the `script_eval` tool.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -137,6 +141,12 @@ pub struct BootstrapCommand {
     pub owner: String,
     /// Whether the command currently resolves.
     pub available: bool,
+    /// Eligibility, when an owner resolves.
+    pub status: Option<String>,
+    /// User-facing reason for disabled eligibility.
+    pub disabled_reason: Option<String>,
+    /// Missing originating event or row context, separate from eligibility.
+    pub missing_requirements: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     /// Debug token for the current target node, when available.
     pub target: Option<String>,
@@ -170,8 +180,14 @@ pub struct BootstrapResponse {
     pub api_sources: Vec<ScriptApiEntry>,
     /// Registered fixtures.
     pub fixtures: Vec<FixtureInfo>,
-    /// Current command availability.
+    /// Legacy focus-relative command availability.
     pub commands: Vec<BootstrapCommand>,
+    /// Default top-level script target policy.
+    pub default_target: String,
+    /// Availability from the root used by top-level script evaluation.
+    pub default_commands: Vec<BootstrapCommand>,
+    /// Availability from the currently focused node.
+    pub focus_commands: Vec<BootstrapCommand>,
     /// Recent script journal entries.
     pub journal: Vec<BootstrapJournalEntry>,
 }
@@ -292,12 +308,17 @@ pub fn bootstrap_for_canopy(canopy: &Canopy) -> CanopyResult<BootstrapResponse> 
     else {
         unreachable!("Canopy declarations are ready")
     };
+    let focus_commands = bootstrap_commands(canopy, CommandTarget::Focus)?;
+    let default_commands = bootstrap_commands(canopy, CommandTarget::From(canopy.root_id()))?;
     Ok(BootstrapResponse {
         guide: format!("{BOOTSTRAP_GUIDE} Call script_api for declarations."),
         api_digest: stable_digest(&api),
         api_sources: overview.entries,
         fixtures: canopy.fixture_infos(),
-        commands: bootstrap_commands(canopy),
+        commands: focus_commands.clone(),
+        default_target: "root".to_string(),
+        default_commands,
+        focus_commands,
         journal: bootstrap_journal(canopy),
     })
 }
@@ -347,26 +368,50 @@ pub fn query_script_api(
 }
 
 /// Return command availability records.
-fn bootstrap_commands(canopy: &Canopy) -> Vec<BootstrapCommand> {
-    canopy
-        .command_availability_from_focus()
+fn bootstrap_commands(
+    canopy: &Canopy,
+    target: CommandTarget,
+) -> CanopyResult<Vec<BootstrapCommand>> {
+    Ok(canopy
+        .command_availability(target)?
         .into_iter()
         .map(|availability| {
             let owner = match availability.spec.dispatch {
                 CommandDispatchKind::Node { owner } => owner,
                 CommandDispatchKind::Free => "",
             };
+            let (status, disabled_reason) = match availability.status {
+                Some(CommandStatus::Enabled) => (Some("enabled".to_string()), None),
+                Some(CommandStatus::Disabled(reason)) => {
+                    (Some("disabled".to_string()), Some(reason))
+                }
+                None => (None, None),
+            };
             BootstrapCommand {
                 name: availability.spec.name.to_string(),
                 owner: owner.to_string(),
                 available: availability.resolution.is_some(),
+                status,
+                disabled_reason,
+                missing_requirements: availability
+                    .missing_requirements
+                    .into_iter()
+                    .map(|requirement| {
+                        match requirement {
+                            CommandRequirement::Event => "event",
+                            CommandRequirement::Mouse => "mouse",
+                            CommandRequirement::ListRow => "list_row",
+                        }
+                        .to_string()
+                    })
+                    .collect(),
                 target: availability
                     .resolution
                     .and_then(CommandResolution::target)
                     .map(|target| format!("{target:?}")),
             }
         })
-        .collect()
+        .collect())
 }
 
 /// Return compact journal records.
@@ -700,6 +745,24 @@ mod tests {
             canopy.replace_root(ScriptTarget::new())?;
             Ok(canopy)
         })
+    }
+
+    #[test]
+    fn bootstrap_declares_script_default_and_preserves_focus_alias() -> crate::Result<()> {
+        let evaluator = AppEvaluator::new(test_factory());
+        let bootstrap = evaluator.bootstrap()?;
+        assert_eq!(bootstrap.default_target, "root");
+        assert_eq!(bootstrap.commands, bootstrap.focus_commands);
+        assert!(
+            bootstrap
+                .default_commands
+                .iter()
+                .any(|command| command.name == "get" && command.available)
+        );
+        let json = serde_json::to_value(&bootstrap).unwrap();
+        let decoded: BootstrapResponse = serde_json::from_value(json).unwrap();
+        assert_eq!(decoded, bootstrap);
+        Ok(())
     }
 
     #[test]

@@ -69,7 +69,7 @@ pub use context::{ChildKey, Context, FocusScope, ViewContext};
 pub use fixture::{Fixture, FixtureInfo};
 pub use id::{NodeId, TypedId};
 pub use inputmap::{
-    BindingId, BindingOwner, BindingPhase, BindingScope, BindingTarget, ExclusiveFrameToken,
-    FrameworkBindingGroup, InputSpec,
+    BindingId, BindingOptions, BindingOwner, BindingPhase, BindingScope, BindingTarget,
+    ExclusiveFrameToken, FrameworkBindingGroup, InputSpec,
 };
 pub use world::Core;

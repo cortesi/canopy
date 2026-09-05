@@ -270,11 +270,20 @@ pub mod canopy_widgets {
             /// Return a typed command reference for this command.
             pub fn cmd_cursor() -> &'static canopy::commands::CommandSpec {}
 
+            /// Build a positional call with typed user arguments.
+            pub fn call_cursor(dir: Direction) -> canopy::commands::CommandCall {}
+
             /// Return a typed command reference for this command.
             pub fn cmd_undo() -> &'static canopy::commands::CommandSpec {}
 
+            /// Build a positional call with typed user arguments.
+            pub fn call_undo() -> canopy::commands::CommandCall {}
+
             /// Return a typed command reference for this command.
             pub fn cmd_redo() -> &'static canopy::commands::CommandSpec {}
+
+            /// Build a positional call with typed user arguments.
+            pub fn call_redo() -> canopy::commands::CommandCall {}
         }
 
         impl CommandNode for Editor {
@@ -453,23 +462,44 @@ pub mod canopy_widgets {
                 /// Return a typed command reference for this command.
                 pub fn cmd_clear() -> &'static canopy::commands::CommandSpec {}
 
+                /// Build a positional call with typed user arguments.
+                pub fn call_clear() -> canopy::commands::CommandCall {}
+
                 /// Return a typed command reference for this command.
                 pub fn cmd_delete_selected() -> &'static canopy::commands::CommandSpec {}
+
+                /// Build a positional call with typed user arguments.
+                pub fn call_delete_selected() -> canopy::commands::CommandCall {}
 
                 /// Return a typed command reference for this command.
                 pub fn cmd_select_first() -> &'static canopy::commands::CommandSpec {}
 
+                /// Build a positional call with typed user arguments.
+                pub fn call_select_first() -> canopy::commands::CommandCall {}
+
                 /// Return a typed command reference for this command.
                 pub fn cmd_select_last() -> &'static canopy::commands::CommandSpec {}
+
+                /// Build a positional call with typed user arguments.
+                pub fn call_select_last() -> canopy::commands::CommandCall {}
 
                 /// Return a typed command reference for this command.
                 pub fn cmd_select_by() -> &'static canopy::commands::CommandSpec {}
 
+                /// Build a positional call with typed user arguments.
+                pub fn call_select_by(delta: i32) -> canopy::commands::CommandCall {}
+
                 /// Return a typed command reference for this command.
                 pub fn cmd_scroll() -> &'static canopy::commands::CommandSpec {}
 
+                /// Build a positional call with typed user arguments.
+                pub fn call_scroll(dir: Direction) -> canopy::commands::CommandCall {}
+
                 /// Return a typed command reference for this command.
                 pub fn cmd_page() -> &'static canopy::commands::CommandSpec {}
+
+                /// Build a positional call with typed user arguments.
+                pub fn call_page(delta: i32) -> canopy::commands::CommandCall {}
             }
 
             impl Widget for Logs {
@@ -593,6 +623,9 @@ pub mod canopy_widgets {
 
         /// Return a typed command reference for this command.
         pub fn cmd_press() -> &'static canopy::commands::CommandSpec {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_press() -> canopy::commands::CommandCall {}
     }
 
     impl CommandNode for Button {
@@ -674,14 +707,26 @@ pub mod canopy_widgets {
         /// Return a typed command reference for this command.
         pub fn cmd_toggle() -> &'static canopy::commands::CommandSpec {}
 
+        /// Build a positional call with typed user arguments.
+        pub fn call_toggle() -> canopy::commands::CommandCall {}
+
         /// Return a typed command reference for this command.
         pub fn cmd_select_by() -> &'static canopy::commands::CommandSpec {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_select_by(delta: i32) -> canopy::commands::CommandCall {}
 
         /// Return a typed command reference for this command.
         pub fn cmd_confirm() -> &'static canopy::commands::CommandSpec {}
 
+        /// Build a positional call with typed user arguments.
+        pub fn call_confirm() -> canopy::commands::CommandCall {}
+
         /// Return a typed command reference for this command.
         pub fn cmd_cancel() -> &'static canopy::commands::CommandSpec {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_cancel() -> canopy::commands::CommandCall {}
     }
 
     impl<T> CommandNode for Dropdown<T>
@@ -863,8 +908,14 @@ pub mod canopy_widgets {
         /// Return a typed command reference for this command.
         pub fn cmd_zoom() -> &'static canopy::commands::CommandSpec {}
 
+        /// Build a positional call with typed user arguments.
+        pub fn call_zoom(dir: ZoomDirection) -> canopy::commands::CommandCall {}
+
         /// Return a typed command reference for this command.
         pub fn cmd_pan() -> &'static canopy::commands::CommandSpec {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_pan(dir: Direction) -> canopy::commands::CommandCall {}
     }
 
     impl CommandNode for ImageView {
@@ -910,11 +961,20 @@ pub mod canopy_widgets {
         /// Return a typed command reference for this command.
         pub fn cmd_left() -> &'static canopy::commands::CommandSpec {}
 
+        /// Build a positional call with typed user arguments.
+        pub fn call_left() -> canopy::commands::CommandCall {}
+
         /// Return a typed command reference for this command.
         pub fn cmd_right() -> &'static canopy::commands::CommandSpec {}
 
+        /// Build a positional call with typed user arguments.
+        pub fn call_right() -> canopy::commands::CommandCall {}
+
         /// Return a typed command reference for this command.
         pub fn cmd_backspace() -> &'static canopy::commands::CommandSpec {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_backspace() -> canopy::commands::CommandCall {}
     }
 
     impl CommandNode for Input {
@@ -1034,23 +1094,44 @@ pub mod canopy_widgets {
         /// Return a typed command reference for this command.
         pub fn cmd_clear() -> &'static canopy::commands::CommandSpec {}
 
+        /// Build a positional call with typed user arguments.
+        pub fn call_clear() -> canopy::commands::CommandCall {}
+
         /// Return a typed command reference for this command.
         pub fn cmd_delete_selected() -> &'static canopy::commands::CommandSpec {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_delete_selected() -> canopy::commands::CommandCall {}
 
         /// Return a typed command reference for this command.
         pub fn cmd_select_first() -> &'static canopy::commands::CommandSpec {}
 
+        /// Build a positional call with typed user arguments.
+        pub fn call_select_first() -> canopy::commands::CommandCall {}
+
         /// Return a typed command reference for this command.
         pub fn cmd_select_last() -> &'static canopy::commands::CommandSpec {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_select_last() -> canopy::commands::CommandCall {}
 
         /// Return a typed command reference for this command.
         pub fn cmd_select_by() -> &'static canopy::commands::CommandSpec {}
 
+        /// Build a positional call with typed user arguments.
+        pub fn call_select_by(delta: i32) -> canopy::commands::CommandCall {}
+
         /// Return a typed command reference for this command.
         pub fn cmd_scroll() -> &'static canopy::commands::CommandSpec {}
 
+        /// Build a positional call with typed user arguments.
+        pub fn call_scroll(dir: Direction) -> canopy::commands::CommandCall {}
+
         /// Return a typed command reference for this command.
         pub fn cmd_page() -> &'static canopy::commands::CommandSpec {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_page(delta: i32) -> canopy::commands::CommandCall {}
     }
 
     impl<W: Selectable> CommandNode for List<W> {
@@ -1133,6 +1214,9 @@ pub mod canopy_widgets {
 
         /// Return a typed command reference for this command.
         pub fn cmd_focus_column() -> &'static canopy::commands::CommandSpec {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_focus_column(delta: i32) -> canopy::commands::CommandCall {}
     }
 
     impl CommandNode for Panes {
@@ -1202,32 +1286,62 @@ pub mod canopy_widgets {
         /// Return a typed command reference for this command.
         pub fn cmd_quit() -> &'static canopy::commands::CommandSpec {}
 
+        /// Build a positional call with typed user arguments.
+        pub fn call_quit() -> canopy::commands::CommandCall {}
+
         /// Return a typed command reference for this command.
         pub fn cmd_dump_diagnostics() -> &'static canopy::commands::CommandSpec {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_dump_diagnostics() -> canopy::commands::CommandCall {}
 
         /// Return a typed command reference for this command.
         pub fn cmd_focus() -> &'static canopy::commands::CommandSpec {}
 
+        /// Build a positional call with typed user arguments.
+        pub fn call_focus(direction: FocusDirection) -> canopy::commands::CommandCall {}
+
         /// Return a typed command reference for this command.
         pub fn cmd_hide_inspector() -> &'static canopy::commands::CommandSpec {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_hide_inspector() -> canopy::commands::CommandCall {}
 
         /// Return a typed command reference for this command.
         pub fn cmd_activate_inspector() -> &'static canopy::commands::CommandSpec {}
 
+        /// Build a positional call with typed user arguments.
+        pub fn call_activate_inspector() -> canopy::commands::CommandCall {}
+
         /// Return a typed command reference for this command.
         pub fn cmd_toggle_inspector() -> &'static canopy::commands::CommandSpec {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_toggle_inspector() -> canopy::commands::CommandCall {}
 
         /// Return a typed command reference for this command.
         pub fn cmd_focus_app() -> &'static canopy::commands::CommandSpec {}
 
+        /// Build a positional call with typed user arguments.
+        pub fn call_focus_app() -> canopy::commands::CommandCall {}
+
         /// Return a typed command reference for this command.
         pub fn cmd_show_help() -> &'static canopy::commands::CommandSpec {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_show_help() -> canopy::commands::CommandCall {}
 
         /// Return a typed command reference for this command.
         pub fn cmd_hide_help() -> &'static canopy::commands::CommandSpec {}
 
+        /// Build a positional call with typed user arguments.
+        pub fn call_hide_help() -> canopy::commands::CommandCall {}
+
         /// Return a typed command reference for this command.
         pub fn cmd_toggle_help() -> &'static canopy::commands::CommandSpec {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_toggle_help() -> canopy::commands::CommandCall {}
     }
 
     impl CommandNode for Root {
@@ -1283,20 +1397,38 @@ pub mod canopy_widgets {
         /// Return a typed command reference for this command.
         pub fn cmd_toggle() -> &'static canopy::commands::CommandSpec {}
 
+        /// Build a positional call with typed user arguments.
+        pub fn call_toggle() -> canopy::commands::CommandCall {}
+
         /// Return a typed command reference for this command.
         pub fn cmd_select_by() -> &'static canopy::commands::CommandSpec {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_select_by(delta: i32) -> canopy::commands::CommandCall {}
 
         /// Return a typed command reference for this command.
         pub fn cmd_select_first() -> &'static canopy::commands::CommandSpec {}
 
+        /// Build a positional call with typed user arguments.
+        pub fn call_select_first() -> canopy::commands::CommandCall {}
+
         /// Return a typed command reference for this command.
         pub fn cmd_select_last() -> &'static canopy::commands::CommandSpec {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_select_last() -> canopy::commands::CommandCall {}
 
         /// Return a typed command reference for this command.
         pub fn cmd_clear() -> &'static canopy::commands::CommandSpec {}
 
+        /// Build a positional call with typed user arguments.
+        pub fn call_clear() -> canopy::commands::CommandCall {}
+
         /// Return a typed command reference for this command.
         pub fn cmd_select_all() -> &'static canopy::commands::CommandSpec {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_select_all() -> canopy::commands::CommandCall {}
     }
 
     impl<T> CommandNode for Selector<T>
@@ -1440,11 +1572,20 @@ pub mod canopy_widgets {
         /// Return a typed command reference for this command.
         pub fn cmd_scroll_to() -> &'static canopy::commands::CommandSpec {}
 
+        /// Build a positional call with typed user arguments.
+        pub fn call_scroll_to(x: u32, y: u32) -> canopy::commands::CommandCall {}
+
         /// Return a typed command reference for this command.
         pub fn cmd_scroll() -> &'static canopy::commands::CommandSpec {}
 
+        /// Build a positional call with typed user arguments.
+        pub fn call_scroll(dir: Direction) -> canopy::commands::CommandCall {}
+
         /// Return a typed command reference for this command.
         pub fn cmd_page() -> &'static canopy::commands::CommandSpec {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_page(delta: i32) -> canopy::commands::CommandCall {}
     }
 
     impl Selectable for Text {

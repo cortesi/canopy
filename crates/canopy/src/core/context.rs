@@ -12,11 +12,14 @@ use super::{
     inputmap::{ExclusiveFrameToken, FrameworkBindingGroup},
     style::Effect,
     view::View,
-    world::{Core, layout_driver::clamp_scroll},
+    world::{Core, WidgetOperation, layout_driver::clamp_scroll},
 };
 use crate::{
     ChangeOutcome,
-    commands::{ArgValue, CommandError, CommandInvocation, CommandScopeFrame, ListRowContext},
+    commands::{
+        ArgValue, CommandError, CommandInvocation, CommandScopeFrame, CommandStatus, CommandTarget,
+        ListRowContext,
+    },
     error::{Error, Result},
     event::{Event, mouse::MouseEvent},
     geom::{Direction, Point, Rect},
@@ -113,6 +116,20 @@ pub trait ViewContext {
 
     /// Layout configuration for a specific node.
     fn node_layout(&self, node: NodeId) -> Option<Layout>;
+
+    /// Read a widget without extracting its slot or marking it changed.
+    fn read_widget(
+        &self,
+        node: NodeId,
+        callback: &mut dyn FnMut(&dyn Widget) -> Result<()>,
+    ) -> Result<()>;
+
+    /// Inspect the current eligibility of an explicitly targeted command.
+    fn command_status(
+        &self,
+        target: CommandTarget,
+        invocation: &CommandInvocation,
+    ) -> Result<CommandStatus>;
 
     /// Widget type identifier for a specific node.
     fn node_type_id(&self, node: NodeId) -> Option<TypeId>;
@@ -263,6 +280,28 @@ where
 }
 
 impl dyn ViewContext + '_ {
+    /// Read a typed widget while preserving immutable access and borrow errors.
+    pub fn with_widget_read<W: Widget + 'static, R>(
+        &self,
+        node: TypedId<W>,
+        callback: impl FnOnce(&W) -> Result<R>,
+    ) -> Result<R> {
+        let mut callback = Some(callback);
+        let mut result = None;
+        self.read_widget(node.into(), &mut |widget| {
+            let any = widget as &dyn Any;
+            let widget = any
+                .downcast_ref::<W>()
+                .ok_or_else(|| Error::Internal("widget type mismatch".into()))?;
+            let callback = callback
+                .take()
+                .ok_or_else(|| Error::Internal("widget callback repeated".into()))?;
+            result = Some(callback(widget)?);
+            Ok(())
+        })?;
+        result.ok_or_else(|| Error::Internal("widget callback omitted".into()))
+    }
+
     /// Validate an untyped node ID and return its typed form.
     pub fn typed_id<W: Widget + 'static>(&self, node: impl Into<NodeId>) -> Result<TypedId<W>> {
         checked_typed_id(self, node.into())
@@ -531,6 +570,39 @@ pub trait Context: ViewContext {
         node: NodeId,
         f: &mut dyn FnMut(&mut dyn Widget, &mut dyn Context) -> Result<()>,
     ) -> Result<()>;
+
+    /// Dispatch according to an explicit target policy.
+    fn dispatch_target(
+        &mut self,
+        target: CommandTarget,
+        cmd: &CommandInvocation,
+    ) -> StdResult<ArgValue, CommandError>;
+
+    /// Invoke only the specified command owner.
+    fn dispatch_exact(
+        &mut self,
+        node: NodeId,
+        cmd: &CommandInvocation,
+    ) -> StdResult<ArgValue, CommandError> {
+        self.dispatch_target(CommandTarget::Exact(node), cmd)
+    }
+
+    /// Search the supplied origin subtree, then its ancestors.
+    fn dispatch_from(
+        &mut self,
+        node: NodeId,
+        cmd: &CommandInvocation,
+    ) -> StdResult<ArgValue, CommandError> {
+        self.dispatch_target(CommandTarget::From(node), cmd)
+    }
+
+    /// Invoke with explicit target and input scope.
+    fn dispatch_target_scoped(
+        &mut self,
+        target: CommandTarget,
+        frame: CommandScopeFrame,
+        cmd: &CommandInvocation,
+    ) -> StdResult<ArgValue, CommandError>;
 
     /// Dispatch a command relative to this node.
     fn dispatch_command(&mut self, cmd: &CommandInvocation) -> StdResult<ArgValue, CommandError>;
@@ -839,6 +911,25 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
         self.core.nodes.get(node).map(|n| n.layout)
     }
 
+    fn read_widget(
+        &self,
+        node: NodeId,
+        callback: &mut dyn FnMut(&dyn Widget) -> Result<()>,
+    ) -> Result<()> {
+        self.core
+            .with_widget_read(node, WidgetOperation::access("read widget"), |widget, _| {
+                callback(widget)
+            })?
+    }
+
+    fn command_status(
+        &self,
+        target: CommandTarget,
+        invocation: &CommandInvocation,
+    ) -> Result<CommandStatus> {
+        commands::command_status(&self.core, target, invocation)
+    }
+
     fn node_type_id(&self, node: NodeId) -> Option<TypeId> {
         self.core.nodes.get(node).map(|n| n.widget_type)
     }
@@ -994,6 +1085,26 @@ impl Context for NodeCtx<&mut Core> {
     ) -> Result<()> {
         self.core
             .with_widget_ctx(node, |widget, ctx| f(widget, ctx))?
+    }
+
+    fn dispatch_target(
+        &mut self,
+        target: CommandTarget,
+        cmd: &CommandInvocation,
+    ) -> StdResult<ArgValue, CommandError> {
+        commands::dispatch_target(self.core, target, cmd)
+    }
+
+    fn dispatch_target_scoped(
+        &mut self,
+        target: CommandTarget,
+        frame: CommandScopeFrame,
+        cmd: &CommandInvocation,
+    ) -> StdResult<ArgValue, CommandError> {
+        let guard = self.core.push_command_scope(frame);
+        let result = commands::dispatch_target(self.core, target, cmd);
+        self.core.pop_command_scope(guard);
+        result
     }
 
     fn dispatch_command(&mut self, cmd: &CommandInvocation) -> StdResult<ArgValue, CommandError> {

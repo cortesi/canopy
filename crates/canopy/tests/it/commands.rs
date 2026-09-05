@@ -5,13 +5,13 @@ mod tests {
     use std::{any::Any, cell::RefCell, collections::BTreeMap};
 
     use canopy::{
-        Canopy, CommandArg, CommandEnum, Context, Widget, command,
+        Canopy, CommandArg, CommandEnum, Context, ViewContext, Widget, command,
         commands::{
             ArgValue, CommandArgs, CommandDispatchKind, CommandError, CommandInvocation,
-            CommandResolution, FromArgValue, SerdeArg, ToArgValue,
+            CommandResolution, CommandStatus, CommandTarget, FromArgValue, SerdeArg, ToArgValue,
         },
         derive_commands,
-        error::Result,
+        error::{Error, Result},
         event::Event,
         testing::dummyctx::DummyContext,
     };
@@ -147,7 +147,7 @@ mod tests {
             Ok((first_leaf, branch_id))
         })?;
 
-        let availability = canopy.command_availability_from_node(branch_id.into());
+        let availability = canopy.command_availability_from_node(branch_id.into())?;
         let leaf_availability = availability
             .iter()
             .find(|availability| availability.spec.id == TestLeaf::cmd_c_leaf().id)
@@ -159,7 +159,7 @@ mod tests {
             })
         );
 
-        let availability = canopy.command_availability_from_node(first_leaf.into());
+        let availability = canopy.command_availability_from_node(first_leaf.into())?;
         let branch_availability = availability
             .iter()
             .find(|availability| availability.spec.id == TestBranch::cmd_c_branch().id)
@@ -357,5 +357,100 @@ mod tests {
                 if param == "event" && expected == "Event"
         ));
         assert_eq!(tester.hits, 0);
+    }
+    struct TargetCounter {
+        count: i64,
+        enabled: bool,
+    }
+
+    #[derive_commands]
+    impl TargetCounter {
+        fn can_increment(&self, _ctx: &dyn ViewContext) -> Result<CommandStatus> {
+            Ok(if self.enabled {
+                CommandStatus::Enabled
+            } else {
+                CommandStatus::Disabled("counter paused".into())
+            })
+        }
+
+        #[command(enabled = "can_increment")]
+        fn increment(&mut self, amount: i64) {
+            self.count += amount;
+        }
+    }
+
+    impl Widget for TargetCounter {
+        fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+            true
+        }
+    }
+
+    #[test]
+    fn exact_from_and_focus_targets_share_discovery_and_recheck_status() -> Result<()> {
+        let mut app = Canopy::new();
+        app.add_commands::<TargetCounter>()?;
+        let (first, second) = app.with_root_context(|ctx| {
+            let first = ctx.add_child(TargetCounter {
+                count: 0,
+                enabled: true,
+            })?;
+            let second = ctx.add_child(TargetCounter {
+                count: 0,
+                enabled: true,
+            })?;
+            ctx.set_focus(second.into())?;
+            Ok((first, second))
+        })?;
+        let invocation = TargetCounter::call_increment(2).invocation();
+        for (target, expected) in [
+            (CommandTarget::From(app.root_id()), first),
+            (CommandTarget::Focus, second),
+            (CommandTarget::Exact(second.into()), second),
+        ] {
+            let availability = app.command_availability(target)?;
+            let command = availability
+                .iter()
+                .find(|entry| entry.spec.id == invocation.id)
+                .unwrap();
+            assert_eq!(
+                command.resolution.and_then(CommandResolution::target),
+                Some(expected.into())
+            );
+            assert_eq!(command.status, Some(CommandStatus::Enabled));
+            app.with_root_context(|ctx| Ok(ctx.dispatch_target(target, &invocation)?))?;
+        }
+        app.with_root_context(|ctx| {
+            ctx.with_widget(first, |counter, _| {
+                assert_eq!(counter.count, 2);
+                Ok(())
+            })?;
+            ctx.with_widget(second, |counter, _| {
+                assert_eq!(counter.count, 4);
+                counter.enabled = false;
+                Ok(())
+            })
+        })?;
+        let target = CommandTarget::Exact(second.into());
+        app.with_root_view(|ctx| {
+            assert_eq!(
+                ctx.command_status(target, &invocation)?,
+                CommandStatus::Disabled("counter paused".into())
+            );
+            Ok::<_, Error>(())
+        })?;
+        let err = app
+            .with_root_context(|ctx| Ok(ctx.dispatch_target(target, &invocation)))?
+            .unwrap_err();
+        assert!(matches!(err, CommandError::Disabled { reason, .. } if reason == "counter paused"));
+        let err = app
+            .with_root_context(|ctx| Ok(ctx.dispatch_exact(ctx.root_id(), &invocation)))?
+            .unwrap_err();
+        assert!(matches!(err, CommandError::WrongOwner { .. }));
+        app.with_root_context(|ctx| ctx.remove_subtree(second.into()))?;
+        let err = app
+            .with_root_context(|ctx| Ok(ctx.dispatch_target(target, &invocation)))?
+            .unwrap_err();
+        assert!(matches!(err, CommandError::InvalidNode { .. }));
+        Ok(())
     }
 }

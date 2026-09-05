@@ -3,7 +3,7 @@ use std::mem;
 use std::{cmp::Ordering, collections::HashSet, fmt};
 
 use crate::{
-    commands::CommandInvocation,
+    commands::{CommandAction, CommandInvocation},
     core::NodeId,
     error::{Error, Result},
     event::{key::Key, mouse::Mouse},
@@ -106,13 +106,28 @@ impl BindingScope {
     }
 }
 
+/// Options shared by native and scripted application bindings.
+#[derive(Clone, Debug)]
+pub struct BindingOptions {
+    /// Path selector, with an empty string matching the current route.
+    pub path: String,
+    /// Application scope and optional named mode.
+    pub scope: BindingScope,
+    /// Required user-facing description.
+    pub description: String,
+    /// Optional diagnostic source.
+    pub source: Option<String>,
+    /// Explicit routing phase, or the legacy selector-derived phase.
+    pub phase: Option<BindingPhase>,
+}
+
 /// Action executed by a binding.
 #[derive(Clone, Debug, PartialEq)]
 pub enum BindingTarget {
     /// Stored Luau callback.
     Script(LuauFunctionId),
     /// Rust command invocation.
-    Command(CommandInvocation),
+    Command(CommandAction),
 }
 
 impl BindingTarget {
@@ -140,6 +155,8 @@ pub struct BindingRecord {
     pub description: String,
     /// Optional diagnostic source.
     pub source: Option<String>,
+    /// Explicit phase override, if supplied at registration.
+    pub phase: Option<BindingPhase>,
     /// Binding target.
     pub target: BindingTarget,
     /// Monotonic insertion order.
@@ -270,37 +287,36 @@ impl InputMap {
         }
     }
 
-    /// Store or replace one application binding.
-    pub fn replace_application_binding(
+    /// Store or replace an application action, preserving its explicit phase.
+    pub fn replace_application_action(
         &mut self,
-        scope: BindingScope,
         input: InputSpec,
-        path_filter: &str,
-        description: &str,
-        source: Option<String>,
-        target: LuauFunctionId,
-    ) -> Result<(BindingId, Vec<(BindingId, LuauFunctionId)>)> {
-        validate_application_scope(&scope, path_filter)?;
-        validate_description(description)?;
-        let path_matcher = PathFilter::new(path_filter)?;
+        options: BindingOptions,
+        target: BindingTarget,
+    ) -> Result<(BindingId, Vec<(BindingId, BindingTarget)>)> {
+        validate_application_scope(&options.scope, &options.path)?;
+        validate_description(&options.description)?;
+        validate_phase(input, options.phase)?;
+        let path_matcher = PathFilter::new(&options.path)?;
         let id = self.allocate_binding_id()?;
         let insertion_id = self.allocate_insertion_id()?;
         let input = input.normalize();
         let removed = self.unbind_input(
             input,
             &BindingSelector {
-                scope: Some(scope.clone()),
-                path_filter: Some(path_filter),
+                scope: Some(options.scope.clone()),
+                path_filter: Some(&options.path),
             },
         );
         self.records.push(BindingRecord {
             id,
             input,
             owner: BindingOwner::Application,
-            scope,
-            description: description.to_string(),
-            source,
-            target: BindingTarget::Script(target),
+            scope: options.scope,
+            description: options.description,
+            source: options.source,
+            phase: options.phase,
+            target,
             insertion_id,
             path_matcher,
         });
@@ -316,17 +332,52 @@ impl InputMap {
         description: &str,
         command: CommandInvocation,
     ) -> Result<BindingId> {
-        validate_description(description)?;
+        self.bind_framework_with_options(
+            group,
+            input,
+            BindingOptions {
+                path: path_filter.to_string(),
+                scope: BindingScope::Exclusive(group),
+                description: description.to_string(),
+                source: None,
+                phase: None,
+            },
+            command,
+        )
+    }
+
+    /// Store an idempotent framework binding with an explicit phase and source.
+    pub fn bind_framework_with_options(
+        &mut self,
+        group: FrameworkBindingGroup,
+        input: InputSpec,
+        options: BindingOptions,
+        command: CommandInvocation,
+    ) -> Result<BindingId> {
+        validate_description(&options.description)?;
+        validate_phase(input, options.phase)?;
+        let scope = BindingScope::Exclusive(group);
+        if options.scope != scope {
+            return Err(Error::InvalidOperation(
+                "framework binding scope must match its exclusive group".to_string(),
+            ));
+        }
+        let path_filter = options.path.as_str();
         let path_matcher = PathFilter::new(path_filter)?;
         let input = input.normalize();
-        let scope = BindingScope::Exclusive(group);
+        let command = CommandAction {
+            invocation: command,
+            target: None,
+        };
         if let Some(existing) = self.records.iter().find(|record| {
             record.owner == BindingOwner::Framework(group)
                 && record.input == input
                 && record.path_filter() == path_filter
         }) {
             if existing.scope == scope
-                && existing.description == description
+                && existing.description == options.description
+                && existing.phase == options.phase
+                && existing.source == options.source
                 && existing.target == BindingTarget::Command(command)
             {
                 return Ok(existing.id);
@@ -342,8 +393,9 @@ impl InputMap {
             input,
             owner: BindingOwner::Framework(group),
             scope,
-            description: description.to_string(),
-            source: None,
+            description: options.description,
+            source: options.source,
+            phase: options.phase,
             target: BindingTarget::Command(command),
             insertion_id,
             path_matcher,
@@ -352,7 +404,7 @@ impl InputMap {
     }
 
     /// Remove one application binding.
-    pub fn unbind(&mut self, id: BindingId) -> Result<Option<LuauFunctionId>> {
+    pub fn unbind(&mut self, id: BindingId) -> Result<Option<BindingTarget>> {
         let Some(index) = self.records.iter().position(|record| record.id == id) else {
             return Ok(None);
         };
@@ -363,12 +415,7 @@ impl InputMap {
             )));
         }
         let record = self.records.remove(index);
-        match record.target {
-            BindingTarget::Script(target) => Ok(Some(target)),
-            BindingTarget::Command(_) => Err(Error::Internal(
-                "application binding has a command target".to_string(),
-            )),
-        }
+        Ok(Some(record.target))
     }
 
     /// Remove application bindings for an input and selector.
@@ -376,7 +423,7 @@ impl InputMap {
         &mut self,
         input: InputSpec,
         selector: &BindingSelector<'_>,
-    ) -> Vec<(BindingId, LuauFunctionId)> {
+    ) -> Vec<(BindingId, BindingTarget)> {
         let input = input.normalize();
         self.remove_application_records(|record| {
             record.input == input
@@ -391,26 +438,24 @@ impl InputMap {
     }
 
     /// Remove all application bindings and reset application modes.
-    pub fn clear_application(&mut self) -> Vec<(BindingId, LuauFunctionId)> {
+    pub fn clear_application(&mut self) -> Vec<(BindingId, BindingTarget)> {
         let removed = self.remove_application_records(|_| true);
         self.mode_stack.clear();
         removed
     }
 
-    /// Drop the selected application records and report their script targets in
-    /// registry order.
+    /// Drop selected application records and report their targets in registry
+    /// order.
     fn remove_application_records(
         &mut self,
         selected: impl Fn(&BindingRecord) -> bool,
-    ) -> Vec<(BindingId, LuauFunctionId)> {
+    ) -> Vec<(BindingId, BindingTarget)> {
         let mut removed = Vec::new();
         self.records.retain(|record| {
             if !matches!(record.owner, BindingOwner::Application) || !selected(record) {
                 return true;
             }
-            if let BindingTarget::Script(target) = record.target {
-                removed.push((record.id, target));
-            }
+            removed.push((record.id, record.target.clone()));
             false
         });
         removed
@@ -448,7 +493,7 @@ impl InputMap {
         Some(ResolvedBinding {
             id: winner.0.id,
             target: winner.0.target.clone(),
-            phase: binding_phase(winner.1),
+            phase: winner.0.phase.unwrap_or_else(|| binding_phase(winner.1)),
             description: winner.0.description.clone(),
         })
     }
@@ -743,6 +788,16 @@ fn binding_phase(path_match: PathMatch) -> BindingPhase {
     } else {
         BindingPhase::AfterIgnore
     }
+}
+
+/// Reject pre-widget mouse bindings, which the mouse route cannot execute.
+fn validate_phase(input: InputSpec, phase: Option<BindingPhase>) -> Result<()> {
+    if matches!(input, InputSpec::Mouse(_)) && phase == Some(BindingPhase::BeforeWidget) {
+        return Err(Error::InvalidOperation(
+            "mouse bindings cannot use the before_widget phase".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 /// Validate an application binding scope.

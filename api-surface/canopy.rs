@@ -562,6 +562,28 @@ pub mod canopy {
             ) -> Result<inputmap::BindingId> {
             }
 
+            /// Install an idempotent framework binding with an explicit phase and
+            /// source.
+            pub fn bind_framework_with_options(
+                &mut self,
+                group: inputmap::FrameworkBindingGroup,
+                input: inputmap::InputSpec,
+                options: inputmap::BindingOptions,
+                command: commands::CommandInvocation,
+            ) -> Result<inputmap::BindingId> {
+            }
+
+            /// Install or replace an application command binding.
+            ///
+            /// An omitted command target resolves from the node where the binding wins.
+            pub fn bind_command(
+                &mut self,
+                key: impl Into<Key>,
+                options: inputmap::BindingOptions,
+                command: commands::CommandCall,
+            ) -> Result<inputmap::BindingId> {
+            }
+
             /// Remove an application binding by ID.
             ///
             /// A framework-owned ID returns an error.
@@ -595,28 +617,26 @@ pub mod canopy {
             /// Return the rendered Luau definition file for a ready app.
             pub fn script_api(&self) -> Result<&str> {}
 
-            /// Return command availability from the current focus position.
-            ///
-            /// This computes which commands would resolve to a target if dispatched
-            /// from the current focus. For each command:
-            /// - Free commands always have `resolution = Some(Free)`
-            /// - Node-routed commands have `resolution = Some(Subtree{..})` or
-            ///   `Some(Ancestor{..})` if a matching node exists, `None` otherwise
-            pub fn command_availability_from_focus(
+            /// Return command availability using an explicit target policy.
+            pub fn command_availability(
                 &self,
-            ) -> Vec<commands::CommandAvailability<'_>> {
+                target: commands::CommandTarget,
+            ) -> Result<Vec<commands::CommandAvailability<'_>>> {
             }
 
-            /// Return command availability from a specific node.
-            ///
-            /// Computes which commands would dispatch to a target, using the same
-            /// resolution logic as `commands::dispatch`:
-            /// 1. First search the subtree rooted at `start` in pre-order
-            /// 2. Then walk ancestors
+            /// Return command availability from the current focus, or root if
+            /// unfocused.
+            pub fn command_availability_from_focus(
+                &self,
+            ) -> Result<Vec<commands::CommandAvailability<'_>>> {
+            }
+
+            /// Return command availability by searching a node's subtree, then
+            /// ancestors.
             pub fn command_availability_from_node(
                 &self,
                 start: NodeId,
-            ) -> Vec<commands::CommandAvailability<'_>> {
+            ) -> Result<Vec<commands::CommandAvailability<'_>>> {
             }
 
             /// Return the effective key bindings for a node or the current focus.
@@ -785,6 +805,37 @@ pub mod canopy {
                 node: NodeId,
                 f: &mut dyn FnMut(&mut dyn Widget, &mut dyn Context) -> Result<()>,
             ) -> Result<()>;
+
+            /// Dispatch according to an explicit target policy.
+            fn dispatch_target(
+                &mut self,
+                target: CommandTarget,
+                cmd: &CommandInvocation,
+            ) -> StdResult<ArgValue, CommandError>;
+
+            /// Invoke only the specified command owner.
+            fn dispatch_exact(
+                &mut self,
+                node: NodeId,
+                cmd: &CommandInvocation,
+            ) -> StdResult<ArgValue, CommandError> {
+            }
+
+            /// Search the supplied origin subtree, then its ancestors.
+            fn dispatch_from(
+                &mut self,
+                node: NodeId,
+                cmd: &CommandInvocation,
+            ) -> StdResult<ArgValue, CommandError> {
+            }
+
+            /// Invoke with explicit target and input scope.
+            fn dispatch_target_scoped(
+                &mut self,
+                target: CommandTarget,
+                frame: CommandScopeFrame,
+                cmd: &CommandInvocation,
+            ) -> StdResult<ArgValue, CommandError>;
 
             /// Dispatch a command relative to this node.
             fn dispatch_command(
@@ -972,6 +1023,20 @@ pub mod canopy {
 
             /// Layout configuration for a specific node.
             fn node_layout(&self, node: NodeId) -> Option<Layout>;
+
+            /// Read a widget without extracting its slot or marking it changed.
+            fn read_widget(
+                &self,
+                node: NodeId,
+                callback: &mut dyn FnMut(&dyn Widget) -> Result<()>,
+            ) -> Result<()>;
+
+            /// Inspect the current eligibility of an explicitly targeted command.
+            fn command_status(
+                &self,
+                target: CommandTarget,
+                invocation: &CommandInvocation,
+            ) -> Result<CommandStatus>;
 
             /// Widget type identifier for a specific node.
             fn node_type_id(&self, node: NodeId) -> Option<TypeId>;
@@ -1167,6 +1232,10 @@ pub mod canopy {
                 InvalidCommand,
                 /// No command target was found.
                 NoTarget,
+                /// An exact node does not own the command.
+                WrongOwner,
+                /// The command is currently disabled.
+                DisabledCommand,
                 /// A command node handle is stale.
                 InvalidNode,
                 /// Positional argument count mismatch.
@@ -1376,6 +1445,8 @@ pub mod canopy {
         }
 
         impl Inject for crate::event::Event {
+            fn requirement() -> Option<CommandRequirement> {}
+
             fn inject(ctx: &dyn Context) -> Option<Self> {}
         }
 
@@ -1531,6 +1602,8 @@ pub mod canopy {
             }
 
             impl Inject for crate::event::mouse::MouseEvent {
+                fn requirement() -> Option<CommandRequirement> {}
+
                 fn inject(ctx: &dyn Context) -> Option<Self> {}
             }
 
@@ -2134,6 +2207,21 @@ pub mod canopy {
         pub fn from_u64(id: u64) -> Self {}
     }
 
+    /// Options shared by native and scripted application bindings.
+    #[derive(Clone, Debug)]
+    pub struct BindingOptions {
+        /// Path selector, with an empty string matching the current route.
+        pub path: String,
+        /// Application scope and optional named mode.
+        pub scope: BindingScope,
+        /// Required user-facing description.
+        pub description: String,
+        /// Optional diagnostic source.
+        pub source: Option<String>,
+        /// Explicit routing phase, or the legacy selector-derived phase.
+        pub phase: Option<BindingPhase>,
+    }
+
     /// Owner of one binding record.
     #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq, Hash)]
     pub enum BindingOwner {
@@ -2179,7 +2267,7 @@ pub mod canopy {
         /// Stored Luau callback.
         Script(crate::script::LuauFunctionId),
         /// Rust command invocation.
-        Command(crate::commands::CommandInvocation),
+        Command(crate::commands::CommandAction),
     }
 
     impl BindingTarget {
@@ -2344,6 +2432,28 @@ pub mod canopy {
         ) -> Result<inputmap::BindingId> {
         }
 
+        /// Install an idempotent framework binding with an explicit phase and
+        /// source.
+        pub fn bind_framework_with_options(
+            &mut self,
+            group: inputmap::FrameworkBindingGroup,
+            input: inputmap::InputSpec,
+            options: inputmap::BindingOptions,
+            command: commands::CommandInvocation,
+        ) -> Result<inputmap::BindingId> {
+        }
+
+        /// Install or replace an application command binding.
+        ///
+        /// An omitted command target resolves from the node where the binding wins.
+        pub fn bind_command(
+            &mut self,
+            key: impl Into<Key>,
+            options: inputmap::BindingOptions,
+            command: commands::CommandCall,
+        ) -> Result<inputmap::BindingId> {
+        }
+
         /// Remove an application binding by ID.
         ///
         /// A framework-owned ID returns an error.
@@ -2377,25 +2487,26 @@ pub mod canopy {
         /// Return the rendered Luau definition file for a ready app.
         pub fn script_api(&self) -> Result<&str> {}
 
-        /// Return command availability from the current focus position.
-        ///
-        /// This computes which commands would resolve to a target if dispatched
-        /// from the current focus. For each command:
-        /// - Free commands always have `resolution = Some(Free)`
-        /// - Node-routed commands have `resolution = Some(Subtree{..})` or
-        ///   `Some(Ancestor{..})` if a matching node exists, `None` otherwise
-        pub fn command_availability_from_focus(&self) -> Vec<commands::CommandAvailability<'_>> {}
+        /// Return command availability using an explicit target policy.
+        pub fn command_availability(
+            &self,
+            target: commands::CommandTarget,
+        ) -> Result<Vec<commands::CommandAvailability<'_>>> {
+        }
 
-        /// Return command availability from a specific node.
-        ///
-        /// Computes which commands would dispatch to a target, using the same
-        /// resolution logic as `commands::dispatch`:
-        /// 1. First search the subtree rooted at `start` in pre-order
-        /// 2. Then walk ancestors
+        /// Return command availability from the current focus, or root if
+        /// unfocused.
+        pub fn command_availability_from_focus(
+            &self,
+        ) -> Result<Vec<commands::CommandAvailability<'_>>> {
+        }
+
+        /// Return command availability by searching a node's subtree, then
+        /// ancestors.
         pub fn command_availability_from_node(
             &self,
             start: NodeId,
-        ) -> Vec<commands::CommandAvailability<'_>> {
+        ) -> Result<Vec<commands::CommandAvailability<'_>>> {
         }
 
         /// Return the effective key bindings for a node or the current focus.
@@ -2555,6 +2666,37 @@ pub mod canopy {
             node: NodeId,
             f: &mut dyn FnMut(&mut dyn Widget, &mut dyn Context) -> Result<()>,
         ) -> Result<()>;
+
+        /// Dispatch according to an explicit target policy.
+        fn dispatch_target(
+            &mut self,
+            target: CommandTarget,
+            cmd: &CommandInvocation,
+        ) -> StdResult<ArgValue, CommandError>;
+
+        /// Invoke only the specified command owner.
+        fn dispatch_exact(
+            &mut self,
+            node: NodeId,
+            cmd: &CommandInvocation,
+        ) -> StdResult<ArgValue, CommandError> {
+        }
+
+        /// Search the supplied origin subtree, then its ancestors.
+        fn dispatch_from(
+            &mut self,
+            node: NodeId,
+            cmd: &CommandInvocation,
+        ) -> StdResult<ArgValue, CommandError> {
+        }
+
+        /// Invoke with explicit target and input scope.
+        fn dispatch_target_scoped(
+            &mut self,
+            target: CommandTarget,
+            frame: CommandScopeFrame,
+            cmd: &CommandInvocation,
+        ) -> StdResult<ArgValue, CommandError>;
 
         /// Dispatch a command relative to this node.
         fn dispatch_command(
@@ -2902,6 +3044,20 @@ pub mod canopy {
         /// Layout configuration for a specific node.
         fn node_layout(&self, node: NodeId) -> Option<Layout>;
 
+        /// Read a widget without extracting its slot or marking it changed.
+        fn read_widget(
+            &self,
+            node: NodeId,
+            callback: &mut dyn FnMut(&dyn Widget) -> Result<()>,
+        ) -> Result<()>;
+
+        /// Inspect the current eligibility of an explicitly targeted command.
+        fn command_status(
+            &self,
+            target: CommandTarget,
+            invocation: &CommandInvocation,
+        ) -> Result<CommandStatus>;
+
         /// Widget type identifier for a specific node.
         fn node_type_id(&self, node: NodeId) -> Option<TypeId>;
 
@@ -3192,7 +3348,7 @@ pub mod canopy {
         }
 
         /// Static metadata for a command parameter.
-        #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq)]
+        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
         pub struct CommandParamSpec {
             /// Parameter name for named argument binding.
             pub name: &'static str,
@@ -3202,6 +3358,52 @@ pub mod canopy {
             pub ty: CommandTypeSpec,
             /// Whether the parameter is optional.
             pub optional: bool,
+            /// Required event context, supplied by the injection type.
+            pub requirement: Option<fn() -> Option<CommandRequirement>>,
+        }
+
+        /// Event context required by a command parameter.
+        #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq)]
+        pub enum CommandRequirement {
+            /// An originating input event.
+            Event,
+            /// An originating mouse event.
+            Mouse,
+            /// An originating list row.
+            ListRow,
+        }
+
+        /// Current command eligibility, separate from authorization and resolution.
+        #[derive(Clone, Debug, StructuralPartialEq, PartialEq, Eq)]
+        pub enum CommandStatus {
+            /// The action can currently run.
+            Enabled,
+            /// The action cannot run, with a user-facing reason.
+            Disabled(String),
+        }
+
+        /// Read-only, erased command eligibility hook.
+        pub type StatusFn =
+            fn(_: &dyn Any, _: &dyn ViewContext) -> crate::error::Result<CommandStatus>;
+
+        /// Policy for resolving a command owner.
+        #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq)]
+        pub enum CommandTarget {
+            /// Require this exact node to own the command.
+            Exact(crate::core::NodeId),
+            /// Search this subtree, then its ancestors.
+            From(crate::core::NodeId),
+            /// Search from the current focus when invoked.
+            Focus,
+        }
+
+        /// Stored action with an optional explicit target policy.
+        #[derive(Clone, Debug, StructuralPartialEq, PartialEq)]
+        pub struct CommandAction {
+            /// Command and its encoded arguments.
+            pub invocation: CommandInvocation,
+            /// Omission uses the caller's route origin.
+            pub target: Option<CommandTarget>,
         }
 
         /// Static metadata for a command return type.
@@ -3249,6 +3451,8 @@ pub mod canopy {
             pub doc: Option<&'static str>,
             /// Erased invoke entrypoint.
             pub invoke: InvokeFn,
+            /// Optional read-only node eligibility hook.
+            pub status: Option<StatusFn>,
         }
 
         impl CommandSpec {
@@ -3264,6 +3468,11 @@ pub mod canopy {
         pub enum CommandResolution {
             /// Command is free (no target).
             Free,
+            /// Command targets the specified owner without searching.
+            Exact {
+                /// Target node ID.
+                target: crate::core::NodeId,
+            },
             /// Command would dispatch to a node in the focus subtree.
             Subtree {
                 /// Target node ID.
@@ -3282,12 +3491,16 @@ pub mod canopy {
         }
 
         /// Command availability from a given focus context.
-        #[derive(Clone, Copy, Debug)]
+        #[derive(Clone, Debug)]
         pub struct CommandAvailability<'a> {
             /// Command specification.
             pub spec: &'a CommandSpec,
             /// Resolution if the command has a target, or `None` if no target exists.
             pub resolution: Option<CommandResolution>,
+            /// Eligibility for a resolved command.
+            pub status: Option<CommandStatus>,
+            /// Required context absent at inspection time.
+            pub missing_requirements: Vec<CommandRequirement>,
         }
 
         /// The CommandNode trait is implemented by widgets to expose commands.
@@ -3303,6 +3516,12 @@ pub mod canopy {
         pub struct CommandCall {}
 
         impl CommandCall {
+            /// Bind this call to a target policy.
+            pub fn with_target(self, target: CommandTarget) -> Self {}
+
+            /// Preserve both arguments and target when storing an action.
+            pub fn action(self) -> CommandAction {}
+
             /// Convert into an invocation.
             pub fn invocation(self) -> CommandInvocation {}
         }
@@ -3338,6 +3557,22 @@ pub mod canopy {
             InvalidNode {
                 /// Stale node id.
                 id: crate::core::NodeId,
+            },
+            /// An exact target does not own the requested node command.
+            WrongOwner {
+                /// Requested command identifier.
+                id: String,
+                /// Requested exact node.
+                node: crate::core::NodeId,
+                /// Required owner, absent for a free command.
+                expected: Option<String>,
+            },
+            /// Eligibility changed or the action was already disabled.
+            Disabled {
+                /// Requested command identifier.
+                id: String,
+                /// Current disabled reason.
+                reason: String,
             },
             /// Incorrect number of arguments.
             ArityMismatch {
@@ -3397,6 +3632,9 @@ pub mod canopy {
 
         /// Trait for injectable parameters.
         pub trait Inject: Sized {
+            /// Required event context, if this injection depends on one.
+            fn requirement() -> Option<CommandRequirement> {}
+
             /// Inject a value from the context, or `None` when the context has none.
             fn inject(ctx: &dyn Context) -> Option<Self>;
         }
@@ -3411,6 +3649,8 @@ pub mod canopy {
         }
 
         impl Inject for ListRowContext {
+            fn requirement() -> Option<CommandRequirement> {}
+
             fn inject(ctx: &dyn Context) -> Option<Self> {}
         }
 
@@ -3516,6 +3756,10 @@ pub mod canopy {
             InvalidCommand,
             /// No command target was found.
             NoTarget,
+            /// An exact node does not own the command.
+            WrongOwner,
+            /// The command is currently disabled.
+            DisabledCommand,
             /// A command node handle is stale.
             InvalidNode,
             /// Positional argument count mismatch.
@@ -4045,6 +4289,8 @@ pub mod canopy {
             }
 
             impl Inject for crate::event::mouse::MouseEvent {
+                fn requirement() -> Option<CommandRequirement> {}
+
                 fn inject(ctx: &dyn Context) -> Option<Self> {}
             }
 
@@ -4075,6 +4321,8 @@ pub mod canopy {
         }
 
         impl Inject for crate::event::Event {
+            fn requirement() -> Option<CommandRequirement> {}
+
             fn inject(ctx: &dyn Context) -> Option<Self> {}
         }
     }
@@ -4117,8 +4365,25 @@ pub mod canopy {
             pub route_path: crate::path::Path,
             /// Phase relative to widget input handling.
             pub phase: crate::core::inputmap::BindingPhase,
+            /// Explicit registration phase, absent for legacy selector-derived phases.
+            pub declared_phase: Option<crate::core::inputmap::BindingPhase>,
+            /// Declarative command details, absent for opaque script callbacks.
+            pub command: Option<BindingCommand>,
             /// Optional diagnostic source.
             pub source: Option<String>,
+        }
+
+        /// Owned command details captured with an effective key binding.
+        #[derive(Clone, Debug)]
+        pub struct BindingCommand {
+            /// Stored invocation, arguments, and target policy.
+            pub action: crate::commands::CommandAction,
+            /// Resolved owner at capture time, absent for an unavailable command.
+            pub resolution: Option<crate::commands::CommandResolution>,
+            /// Eligibility at capture time, separate from target resolution.
+            pub status: Option<crate::commands::CommandStatus>,
+            /// Required context absent at capture time.
+            pub missing_requirements: Vec<crate::commands::CommandRequirement>,
         }
     }
 
@@ -5130,7 +5395,8 @@ pub mod canopy {
             pub fn viewport_to_content(&self, point: PointI32) -> Result<PointI32> {}
 
             /// Convert a viewport-local point to outer-local coordinates, including
-            /// padding. Returns a geometry error if the result is outside the signed range.
+            /// padding. Returns a geometry error if the result is outside the signed
+            /// range.
             pub fn viewport_to_outer(&self, point: PointI32) -> Result<PointI32> {}
 
             /// Convert a scrolled content point to screen coordinates.

@@ -10,7 +10,9 @@ use ruau::vm::{HostArgCursor, MarshaledPair, MultiValue, OwnedValue, ScopedValue
 
 use super::{base_api::read_node_id, bridge::REENTRANT_CANOPY, *};
 use crate::{
+    Widget, command,
     core::testing::model::trace_result,
+    derive_commands,
     state::NodeName,
     testing::ttree::{get_state, run_ttree},
 };
@@ -697,6 +699,7 @@ static WAIT_EXTRA_NODE: CommandSpec = CommandSpec {
     ret: commands::CommandReturnSpec::Unit,
     doc: None,
     invoke: wait_command_invoke,
+    status: None,
 };
 
 static WAIT_FREE: CommandSpec = CommandSpec {
@@ -707,6 +710,7 @@ static WAIT_FREE: CommandSpec = CommandSpec {
     ret: commands::CommandReturnSpec::Unit,
     doc: None,
     invoke: wait_command_invoke,
+    status: None,
 };
 
 #[test]
@@ -746,4 +750,239 @@ fn wait_for_node_preserves_registration_and_focus_resolution() -> Result<()> {
         );
         Ok(())
     })
+}
+
+/// A repeated command owner used to check script argument and target contracts.
+struct ScriptCallProbe {
+    value: i64,
+}
+
+#[derive_commands]
+impl ScriptCallProbe {
+    #[command]
+    fn identify(&self) -> i64 {
+        self.value
+    }
+
+    #[command]
+    fn echo(&self, options: ArgValue) -> ArgValue {
+        options
+    }
+
+    #[command]
+    fn optional(&self, options: Option<ArgValue>) -> Option<ArgValue> {
+        options
+    }
+
+    fn can_set(&self, _ctx: &dyn ViewContext) -> Result<commands::CommandStatus> {
+        Ok(if self.value < 0 {
+            commands::CommandStatus::Disabled("value is locked".to_string())
+        } else {
+            commands::CommandStatus::Enabled
+        })
+    }
+
+    #[command(enabled = "can_set")]
+    fn set_value(&mut self, value: i64) {
+        self.value = value;
+    }
+
+    #[command]
+    fn needs_mouse(&self, _mouse: mouse::MouseEvent) {}
+}
+
+impl Widget for ScriptCallProbe {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+        true
+    }
+}
+
+/// Construct two owners of the same command, with the second focused.
+fn script_call_probes() -> Result<(Canopy, NodeId, NodeId)> {
+    let mut canopy = Canopy::new();
+    let first = canopy.core.create_detached(ScriptCallProbe { value: 1 })?;
+    let second = canopy.core.create_detached(ScriptCallProbe { value: 2 })?;
+    canopy
+        .core
+        .set_children(canopy.core.root_id(), vec![first, second])?;
+    canopy.add_commands::<ScriptCallProbe>()?;
+    canopy.core.set_focus(second)?;
+    canopy.finalize_api()?;
+    Ok((canopy, first, second))
+}
+
+#[test]
+fn explicit_script_targets_match_discovery_and_survive_owner_insertion() -> Result<()> {
+    let (mut canopy, first, second) = script_call_probes()?;
+    assert_eq!(canopy.eval_script_value(r#"
+        local children = canopy.children(canopy.root())
+        local first, second = children[1], children[2]
+        assert(first and second)
+        assert(canopy.call_from(canopy.root(), "script_call_probe::identify") == 1)
+        assert(canopy.call_focus("script_call_probe::identify") == 2)
+        assert(canopy.call_exact(second, "script_call_probe::identify") == 2)
+        assert(canopy.cmd_on(canopy.root(), "script_call_probe::identify") == 1)
+        for _, command in canopy.commands({kind = "exact", node = second}) do
+            if command.name == "identify" then
+                assert(command.available and command.target == second and command.status == "enabled")
+            end
+        end
+        for _, command in canopy.commands({kind = "focus"}) do
+            assert(command.target == second)
+        end
+        return canopy.call_named("script_call_probe::identify", {}, {kind = "exact", node = second})
+    "#)?, ArgValue::Int(2));
+    let extra = canopy.core.create_detached(ScriptCallProbe { value: 3 })?;
+    canopy
+        .core
+        .set_children(canopy.core.root_id(), vec![extra, first, second])?;
+    assert_eq!(
+        canopy.eval_script_value(
+            r#"
+        local second = canopy.children(canopy.root())[3]
+        assert(canopy.call_from(canopy.root(), "script_call_probe::identify") == 3)
+        return canopy.call_exact(second, "script_call_probe::identify")
+    "#
+        )?,
+        ArgValue::Int(2)
+    );
+    let error = canopy
+        .eval_script_value(
+            r#"
+        return canopy.call_exact(canopy.root(), "script_call_probe::identify")
+    "#,
+        )
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        error::Error::ScriptStructured {
+            kind: error::ScriptErrorKind::WrongOwner,
+            ..
+        }
+    ));
+    Ok(())
+}
+
+#[test]
+fn explicit_script_arguments_do_not_infer_named_maps() -> Result<()> {
+    let (mut canopy, _, _) = script_call_probes()?;
+    assert_eq!(canopy.eval_script_value(r#"
+        local root = canopy.root()
+        local empty = canopy.call_from(root, "script_call_probe::echo", {})
+        assert(next(empty) == nil)
+        local collision = canopy.call_from(root, "script_call_probe::echo", {options = "dark"})
+        assert(collision.options == "dark")
+        local nested = canopy.call_named("script_call_probe::echo", {options = {options = {theme = "dark"}}})
+        assert(nested.options.theme == "dark")
+        assert(canopy.call_named("script_call_probe::optional", {}) == nil)
+        local optional = canopy.call_named("script_call_probe::optional", {options = {theme = "light"}})
+        assert(optional.theme == "light")
+        assert(canopy.cmd("script_call_probe::echo", {options = "legacy"}) == "legacy")
+        return true
+    "#)?, ArgValue::Bool(true));
+    for source in [
+        r#"canopy.call_named("script_call_probe::echo", {options = 1, OPTIONS = 2})"#,
+        r#"canopy.call_named("script_call_probe::echo", {wrong = 1})"#,
+        r#"canopy.call_named("script_call_probe::echo", {options = 1}, nil, 2)"#,
+        r#"canopy.call_named("script_call_probe::echo", {1})"#,
+        r#"canopy.call_from(canopy.root(), "script_call_probe::echo", 1, 2)"#,
+        r#"canopy.call_named("script_call_probe::echo", {options = 1}, {kind = "focus", node = canopy.root()})"#,
+    ] {
+        assert!(
+            canopy.eval_script_value(source).is_err(),
+            "accepted invalid explicit call: {source}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn declarative_script_binding_exposes_arguments_phase_and_route_target() -> Result<()> {
+    let (mut canopy, _, _) = script_call_probes()?;
+    canopy.eval_script(r#"
+        canopy.bind_command("x", {description = "Set value", phase = "before_widget"}, "script_call_probe::set_value", 7)
+        for _, binding in canopy.bindings() do
+            if binding.input == "x" then
+                assert(binding.target == "command")
+                assert(binding.command == "script_call_probe::set_value")
+                assert(binding.arguments[1] == 7)
+                local target = binding.command_target
+                assert(target and target.kind == "route")
+                assert(binding.phase == "before_widget")
+            end
+        end
+    "#)?;
+    canopy.key(None, 'x')?;
+    assert_eq!(
+        canopy.eval_script_value(r#"return canopy.call_focus("script_call_probe::identify")"#)?,
+        ArgValue::Int(7)
+    );
+    assert!(canopy.eval_script(r#"canopy.bind_mouse("LeftDown", {description = "Bad phase", phase = "before_widget"}, function() end)"#).is_err());
+    Ok(())
+}
+
+#[test]
+fn script_discovery_separates_disabled_state_and_missing_input() -> Result<()> {
+    let (mut canopy, _, _) = script_call_probes()?;
+    let ArgValue::Array(availability) = canopy.eval_script_value(
+        r#"
+        canopy.call_focus("script_call_probe::set_value", -1)
+        return canopy.commands({kind = "focus"})
+    "#,
+    )?
+    else {
+        panic!("command discovery must return an array");
+    };
+    let find = |name: &str| {
+        availability
+            .iter()
+            .find_map(|value| {
+                let ArgValue::Map(fields) = value else {
+                    return None;
+                };
+                (fields.get("name") == Some(&ArgValue::String(name.to_string()))).then_some(fields)
+            })
+            .expect("registered command must be present")
+    };
+    let disabled = find("set_value");
+    assert_eq!(disabled.get("available"), Some(&ArgValue::Bool(true)));
+    assert_eq!(
+        disabled.get("status"),
+        Some(&ArgValue::String("disabled".to_string()))
+    );
+    assert_eq!(
+        disabled.get("disabled_reason"),
+        Some(&ArgValue::String("value is locked".to_string()))
+    );
+    assert_eq!(
+        disabled.get("missing_requirements"),
+        Some(&ArgValue::Map(BTreeMap::new()))
+    );
+    let missing_mouse = find("needs_mouse");
+    assert_eq!(missing_mouse.get("available"), Some(&ArgValue::Bool(true)));
+    assert_eq!(
+        missing_mouse.get("status"),
+        Some(&ArgValue::String("enabled".to_string()))
+    );
+    assert_eq!(
+        missing_mouse.get("missing_requirements"),
+        Some(&ArgValue::Array(vec![ArgValue::String(
+            "mouse".to_string()
+        )]))
+    );
+    assert!(matches!(
+        canopy.eval_script_value(r#"return canopy.call_focus("script_call_probe::set_value", 1)"#),
+        Err(error::Error::ScriptStructured {
+            kind: error::ScriptErrorKind::DisabledCommand,
+            ..
+        }),
+    ));
+    assert!(matches!(
+        canopy.eval_script_value(r#"return canopy.call_focus("script_call_probe::needs_mouse")"#),
+        Err(error::Error::ScriptStructured {
+            kind: error::ScriptErrorKind::MissingInjected,
+            ..
+        }),
+    ));
+    Ok(())
 }

@@ -183,15 +183,16 @@ rendering. Rendering must not rely on stale views.
 Input arrives as typed events. `Core` owns one flat `InputMap` with complete
 records for application and framework bindings. Each record contains its
 normalized input, owner, scope, path matcher, description, source, target, and
-insertion order. Application targets call Luau functions. Framework targets
-dispatch commands.
+insertion order. Application targets call Luau functions or dispatch stored
+commands. Framework targets dispatch commands.
 
 The resolver checks the newest exclusive framework frame first. Without an
 exclusive frame, it checks the global scope, active modes from newest to
 oldest, and then the default scope. Path specificity and insertion order select
-a winner within one scope. A match that is end-anchored at the route node (the
-filter ends with `/` and consumes at least one component) runs before the
-target widget. Other matches run after the widget ignores the input.
+a winner within one scope. An explicit binding phase chooses dispatch before
+widget input or after the widget ignores it. Omitted phases retain the
+path-derived rule: a match that consumes the route terminus runs before the
+widget. Mouse bindings run after ignored widget input.
 
 Key routing and `available_bindings` call the same resolver at each node in the
 focus-to-root route. Availability returns an owned snapshot with one effective

@@ -10,9 +10,7 @@ use canopy_widgets::{
 const DEFAULT_BINDINGS: &str = r#"
 root.default_bindings()
 
-canopy.bind("Tab", { path = "widget_editor/", description = "Next focus" }, function()
-    root.focus("Next")
-end)
+canopy.bind_command("Tab", { phase = "before_widget", path = "widget_editor/", description = "Next focus" }, "root::focus", "Next")
 "#;
 
 /// Widget editor example that opens a Rust file with syntax highlighting.

@@ -5,7 +5,9 @@ use std::{fmt::Display, mem, path::Path};
 
 use anyhow::Result as AnyResult;
 use canopy::{
-    command, derive_commands,
+    command,
+    commands::CommandStatus,
+    derive_commands,
     error::Error,
     layout::LayoutOverride,
     prelude::*,
@@ -323,7 +325,21 @@ impl Todo {
         Ok(())
     }
 
-    #[command]
+    /// Delete eligibility follows the current list selection.
+    fn can_delete(&self, ctx: &dyn ViewContext) -> Result<CommandStatus> {
+        let Some(list) = ctx.unique_descendant::<List<TodoEntry>>()? else {
+            return Ok(CommandStatus::Disabled("No item selected".into()));
+        };
+        ctx.with_widget_read(list, |list| {
+            Ok(if list.selected_item().is_some() {
+                CommandStatus::Enabled
+            } else {
+                CommandStatus::Disabled("No item selected".into())
+            })
+        })
+    }
+
+    #[command(enabled = "can_delete")]
     /// Delete the selected todo entry.
     pub fn delete_item(&self, c: &mut dyn Context) -> Result<()> {
         self.with_list(c, |list, ctx| {
@@ -406,45 +422,35 @@ impl Loader for Todo {
 
 /// Default Luau bindings for the todo app.
 pub(crate) const DEFAULT_BINDINGS: &str = r#"
-canopy.bind("?", {
+canopy.bind_command("?", { phase = "before_widget",
     description = "Show key bindings",
     path = "/root/**/",
     tier = "global",
-}, function() root.toggle_help() end)
-canopy.bind("q", { description = "Quit" }, function() root.quit() end)
-canopy.bind("d", { description = "Delete item" }, function() todo.delete_item() end)
-canopy.bind("a", { description = "Add item" }, function() todo.enter_item() end)
-canopy.bind("g", { description = "First item" }, function() todo.select_first() end)
-canopy.bind("j", { description = "Next item" }, function() todo.select_by(1) end)
-canopy.bind("Down", { description = "Next item" }, function() todo.select_by(1) end)
-canopy.bind("k", { description = "Previous item" }, function() todo.select_by(-1) end)
-canopy.bind("Up", { description = "Previous item" }, function() todo.select_by(-1) end)
-canopy.bind("Space", { description = "Page down" }, function() todo.page(1) end)
-canopy.bind("PageDown", { description = "Page down" }, function() todo.page(1) end)
-canopy.bind("PageUp", { description = "Page up" }, function() todo.page(-1) end)
+}, "root::toggle_help")
+canopy.bind_command("q", { phase = "after_widget", description = "Quit" }, "root::quit")
+canopy.bind_command("d", { phase = "after_widget", description = "Delete item" }, "todo::delete_item")
+canopy.bind_command("a", { phase = "after_widget", description = "Add item" }, "todo::enter_item")
+canopy.bind_command("g", { phase = "after_widget", description = "First item" }, "todo::select_first")
+canopy.bind_command("j", { phase = "after_widget", description = "Next item" }, "todo::select_by", 1)
+canopy.bind_command("Down", { phase = "after_widget", description = "Next item" }, "todo::select_by", 1)
+canopy.bind_command("k", { phase = "after_widget", description = "Previous item" }, "todo::select_by", -1)
+canopy.bind_command("Up", { phase = "after_widget", description = "Previous item" }, "todo::select_by", -1)
+canopy.bind_command("Space", { phase = "after_widget", description = "Page down" }, "todo::page", 1)
+canopy.bind_command("PageDown", { phase = "after_widget", description = "Page down" }, "todo::page", 1)
+canopy.bind_command("PageUp", { phase = "after_widget", description = "Page up" }, "todo::page", -1)
 
-canopy.bind_mouse("ScrollUp", { description = "Previous item" }, function()
+canopy.bind_mouse("ScrollUp", { phase = "after_widget", description = "Previous item" }, function()
     todo.select_by(-1)
 end)
-canopy.bind_mouse("ScrollDown", { description = "Next item" }, function()
+canopy.bind_mouse("ScrollDown", { phase = "after_widget", description = "Next item" }, function()
     todo.select_by(1)
 end)
 
-canopy.bind("Left", { path = "input", description = "Cursor left" }, function()
-    input.left()
-end)
-canopy.bind("Right", { path = "input", description = "Cursor right" }, function()
-    input.right()
-end)
-canopy.bind("Backspace", { path = "input", description = "Delete char" }, function()
-    input.backspace()
-end)
-canopy.bind("Enter", { path = "input", description = "Confirm new item" }, function()
-    todo.accept_add()
-end)
-canopy.bind("Escape", { path = "input", description = "Cancel add" }, function()
-    todo.cancel_add()
-end)
+canopy.bind_command("Left", { phase = "before_widget", path = "input", description = "Cursor left" }, "input::left")
+canopy.bind_command("Right", { phase = "before_widget", path = "input", description = "Cursor right" }, "input::right")
+canopy.bind_command("Backspace", { phase = "before_widget", path = "input", description = "Delete char" }, "input::backspace")
+canopy.bind_command("Enter", { phase = "before_widget", path = "input", description = "Confirm new item" }, "todo::accept_add")
+canopy.bind_command("Escape", { phase = "before_widget", path = "input", description = "Cancel add" }, "todo::cancel_add")
 "#;
 
 /// Install the todo application's style rules.

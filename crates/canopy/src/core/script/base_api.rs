@@ -22,11 +22,11 @@ use super::{
     ArgValue, Canopy, ChangeOutcome, CommandSet, Context, CoreContext, CoreViewContext, FocusScope,
     NodeId, PathFilter, Pin, Point, RectI32, ReentrantCanopyGuard, Result, ViewContext,
     available_bindings_to_arg, base_api, binding_info_to_arg, command_info_to_arg, commands, defs,
-    dispatch_command, dispatch_command_by_name, error, fixtures_to_arg, host_return, host_value,
-    inputmap, key, luau_global_owner_name, mouse, node_handle_type, node_id_from_value,
-    node_id_to_arg, node_info_to_arg, node_list_to_arg, owned_truthy, ret_arg, ret_none, ret_one,
-    route_trace_to_arg, scoped_value_to_string, screen_cells_to_arg, screen_text,
-    screen_text_for_rect, screen_to_arg, script_callback_label, script_journal_to_arg,
+    dispatch_command, dispatch_command_by_name, dispatch_explicit, error, fixtures_to_arg,
+    host_return, host_value, inputmap, key, luau_global_owner_name, mouse, node_handle_type,
+    node_id_from_value, node_id_to_arg, node_info_to_arg, node_list_to_arg, owned_truthy, ret_arg,
+    ret_none, ret_one, route_trace_to_arg, scoped_value_to_string, screen_cells_to_arg,
+    screen_text, screen_text_for_rect, screen_to_arg, script_callback_label, script_journal_to_arg,
     tree_node_to_arg, validate_node_handle, values_to_args, with_current_canopy, yield_now,
 };
 
@@ -205,7 +205,7 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "cmd_on",
-        docs: Some("Dispatch a command against a specific node."),
+        docs: Some("Search from a node using the legacy single-map argument inference."),
         signature: || {
             FunctionSignature::new()
                 .param(("id", Type::named("NodeId")))
@@ -214,6 +214,55 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
                 .ret(Type::Any)
         },
         handler: Handler::Sync(host_cmd_on),
+    },
+    BaseFunction {
+        name: "call_exact",
+        docs: Some(
+            "Call only the supplied node with positional arguments. Free commands are rejected.",
+        ),
+        signature: || {
+            FunctionSignature::new()
+                .param(("node", Type::named("NodeId")))
+                .param(("id", Type::String))
+                .varargs(Type::Any)
+                .ret(Type::Any)
+        },
+        handler: Handler::Sync(host_call_exact),
+    },
+    BaseFunction {
+        name: "call_from",
+        docs: Some("Search from the supplied node and call with positional arguments."),
+        signature: || {
+            FunctionSignature::new()
+                .param(("node", Type::named("NodeId")))
+                .param(("id", Type::String))
+                .varargs(Type::Any)
+                .ret(Type::Any)
+        },
+        handler: Handler::Sync(host_call_from),
+    },
+    BaseFunction {
+        name: "call_focus",
+        docs: Some("Resolve the focus at invocation time and call with positional arguments."),
+        signature: || {
+            FunctionSignature::new()
+                .param(("id", Type::String))
+                .varargs(Type::Any)
+                .ret(Type::Any)
+        },
+        handler: Handler::Sync(host_call_focus),
+    },
+    BaseFunction {
+        name: "call_named",
+        docs: Some("Call with named fields. An omitted target searches from the script anchor."),
+        signature: || {
+            FunctionSignature::new()
+                .param(("id", Type::String))
+                .param(("fields", Type::Any))
+                .param(("target", Type::named("CommandTarget").optional()))
+                .ret(Type::Any)
+        },
+        handler: Handler::Sync(host_call_named),
     },
     BaseFunction {
         name: "resolve",
@@ -234,7 +283,11 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     BaseFunction {
         name: "commands",
         docs: Some("Return structured metadata for all registered commands."),
-        signature: || FunctionSignature::new().ret(Type::named("CommandInfo").array()),
+        signature: || {
+            FunctionSignature::new()
+                .param(("target", Type::named("CommandTarget").optional()))
+                .ret(Type::named("CommandInfo").array())
+        },
         handler: Handler::Sync(host_commands),
     },
     BaseFunction {
@@ -353,6 +406,21 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
                 .ret(Type::Number)
         },
         handler: Handler::Sync(host_bind),
+    },
+    BaseFunction {
+        name: "bind_command",
+        docs: Some(
+            "Bind a key to one command with positional arguments and the binding route origin.",
+        ),
+        signature: || {
+            FunctionSignature::new()
+                .param(("key", Type::String))
+                .param(("options", Type::named("BindOptions")))
+                .param(("id", Type::String))
+                .varargs(Type::Any)
+                .ret(Type::Number)
+        },
+        handler: Handler::Sync(host_bind_command),
     },
     BaseFunction {
         name: "bind_mouse",
@@ -479,17 +547,6 @@ pub(super) fn register(builder: &mut module::Builder) {
     );
 }
 
-/// Parsed options for script-created bindings.
-#[derive(Debug, Clone)]
-struct ScriptBindOptions {
-    /// Binding scope.
-    scope: inputmap::BindingScope,
-    /// Optional path filter override.
-    path: String,
-    /// Required human-readable description.
-    description: String,
-}
-
 /// Selector for application binding removal.
 #[derive(Debug, Clone, Default)]
 struct ScriptUnbindSelector {
@@ -517,18 +574,18 @@ fn optional_string_field<'s>(
 fn parse_bind_options<'s>(
     scope: &Scope<'s>,
     options: Option<Table<'s>>,
-) -> StdResult<ScriptBindOptions, RuntimeError> {
+) -> StdResult<inputmap::BindingOptions, RuntimeError> {
     let Some(options) = options else {
         return Err(RuntimeError::runtime("binding options table is required"));
     };
     let field = |name: &str| optional_string_field(scope, &options, name);
-    // `InputMap::replace_application_binding` rejects a blank description on the
+    // `InputMap::replace_application_action` rejects a blank description on the
     // next step.
     let description = field("description")?
         .ok_or_else(|| RuntimeError::runtime("binding description is required"))?;
     let mode = field("mode")?.filter(|mode| !mode.is_empty());
     let tier = field("tier")?;
-    let scope = match tier.as_deref() {
+    let binding_scope = match tier.as_deref() {
         None => mode.map_or(
             inputmap::BindingScope::Default,
             inputmap::BindingScope::Mode,
@@ -545,10 +602,22 @@ fn parse_bind_options<'s>(
             )));
         }
     };
-    Ok(ScriptBindOptions {
-        scope,
+    let phase = match field("phase")?.as_deref() {
+        None => None,
+        Some("before_widget") => Some(inputmap::BindingPhase::BeforeWidget),
+        Some("after_widget") => Some(inputmap::BindingPhase::AfterIgnore),
+        Some(other) => {
+            return Err(RuntimeError::runtime(format!(
+                "unknown binding phase: {other}"
+            )));
+        }
+    };
+    Ok(inputmap::BindingOptions {
+        scope: binding_scope,
         path: field("path")?.unwrap_or_default(),
         description,
+        source: Some(script_callback_label(scope)),
+        phase,
     })
 }
 
@@ -788,19 +857,15 @@ fn install_function_binding<'s>(
     scope: &Scope<'s>,
     function: Function<'s>,
     input: inputmap::InputSpec,
-    options: &ScriptBindOptions,
+    options: &inputmap::BindingOptions,
 ) -> StdResult<i64, RuntimeError> {
     let stashed = scope.stash_function(function)?;
-    let source = Some(script_callback_label(scope));
     with_current_canopy(scope, |canopy, _| {
         let function_id = canopy.script_host.store_function(stashed)?;
-        let result = canopy.core.input_map.replace_application_binding(
-            options.scope.clone(),
+        let result = canopy.core.input_map.replace_application_action(
             input,
-            &options.path,
-            &options.description,
-            source,
-            function_id,
+            options.clone(),
+            inputmap::BindingTarget::Script(function_id),
         );
         match result {
             Ok((binding_id, removed)) => {
@@ -839,6 +904,121 @@ fn host_cmd_on<'s>(
     let values = values_to_args(scope, iter::from_fn(|| args.raw()).collect())?;
     let result = dispatch_command_by_name(scope, &name, Some(node_id), values)?;
     ret_arg(scope, &result)
+}
+
+/// Parse a target selector and validate explicit node handles.
+fn parse_command_target<'s>(
+    scope: &Scope<'s>,
+    value: Option<ScopedValue<'s>>,
+) -> StdResult<commands::CommandTarget, RuntimeError> {
+    let anchor = with_current_canopy(scope, |_, anchor| Ok(anchor))?;
+    let Some(value) = value.filter(|value| !matches!(value, ScopedValue::Nil)) else {
+        return Ok(commands::CommandTarget::From(anchor));
+    };
+    let ArgValue::Map(mut fields) =
+        super::scoped_to_arg_value(scope, value).map_err(RuntimeError::runtime)?
+    else {
+        return Err(RuntimeError::runtime("command target must be a table"));
+    };
+    let kind = match fields.remove("kind") {
+        Some(ArgValue::String(kind)) => kind,
+        _ => return Err(RuntimeError::runtime("command target kind is required")),
+    };
+    let node = fields.remove("node");
+    if !fields.is_empty() {
+        return Err(RuntimeError::runtime("unknown command target field"));
+    }
+    match (kind.as_str(), node) {
+        ("anchor", None) => Ok(commands::CommandTarget::From(anchor)),
+        ("focus", None) => Ok(commands::CommandTarget::Focus),
+        ("exact" | "from", Some(ArgValue::Node(node))) => {
+            with_current_canopy(scope, |canopy, _| validate_node_handle(&canopy.core, node))?;
+            Ok(if kind == "exact" {
+                commands::CommandTarget::Exact(node)
+            } else {
+                commands::CommandTarget::From(node)
+            })
+        }
+        _ => Err(RuntimeError::runtime(
+            "target requires kind 'anchor' or 'focus', or kind 'exact' or 'from' with a node",
+        )),
+    }
+}
+
+/// Dispatch the positional remainder of an explicit call.
+fn host_positional_call<'s>(
+    scope: &Scope<'s>,
+    mut args: HostArgCursor<'_, 's>,
+    target: commands::CommandTarget,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    let name = args.required::<String>("id")?;
+    let values = values_to_args(scope, iter::from_fn(|| args.raw()).collect())?;
+    ret_arg(
+        scope,
+        &dispatch_explicit(
+            scope,
+            &name,
+            target,
+            commands::CommandArgs::Positional(values),
+        )?,
+    )
+}
+
+/// `canopy.call_exact`: dispatch only to the specified owner.
+fn host_call_exact<'s>(
+    scope: &Scope<'s>,
+    args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    let mut args = HostArgCursor::new(scope, args);
+    let node = read_node_id(scope, &mut args, "node")?;
+    host_positional_call(scope, args, commands::CommandTarget::Exact(node))
+}
+
+/// `canopy.call_from`: dispatch relative to the supplied origin.
+fn host_call_from<'s>(
+    scope: &Scope<'s>,
+    args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    let mut args = HostArgCursor::new(scope, args);
+    let node = read_node_id(scope, &mut args, "node")?;
+    host_positional_call(scope, args, commands::CommandTarget::From(node))
+}
+
+/// `canopy.call_focus`: resolve focus when invoked.
+fn host_call_focus<'s>(
+    scope: &Scope<'s>,
+    args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    host_positional_call(
+        scope,
+        HostArgCursor::new(scope, args),
+        commands::CommandTarget::Focus,
+    )
+}
+
+/// `canopy.call_named`: dispatch one explicit named-argument map.
+fn host_call_named<'s>(
+    scope: &Scope<'s>,
+    args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    let mut args = HostArgCursor::new(scope, args);
+    let name = args.required::<String>("id")?;
+    let fields = args.required::<Table<'_>>("fields")?;
+    let ArgValue::Map(fields) = super::scoped_to_arg_value(scope, ScopedValue::Table(fields))
+        .map_err(RuntimeError::runtime)?
+    else {
+        return Err(RuntimeError::runtime("named fields must have string keys"));
+    };
+    let target = parse_command_target(scope, args.raw())?;
+    if args.raw().is_some() {
+        return Err(RuntimeError::runtime(
+            "call_named accepts only id, fields, and target",
+        ));
+    }
+    ret_arg(
+        scope,
+        &dispatch_explicit(scope, &name, target, commands::CommandArgs::Named(fields))?,
+    )
 }
 
 /// `canopy.log`: append a log line to the evaluation diagnostics.
@@ -1165,17 +1345,18 @@ fn host_bindings<'s>(
 /// `canopy.commands`: return metadata for all registered commands.
 fn host_commands<'s>(
     scope: &Scope<'s>,
-    _args: MultiValue<'s>,
+    args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    host_value(scope, |canopy, node_id| {
-        let resolver = commands::CommandResolver::new(&canopy.core, node_id);
-        let mut availability = resolver.availability();
+    let mut args = HostArgCursor::new(scope, args);
+    let target = parse_command_target(scope, args.raw())?;
+    if args.raw().is_some() {
+        return Err(RuntimeError::runtime("commands accepts only a target"));
+    }
+    host_value(scope, |canopy, _| {
+        let mut availability = canopy.command_availability(target)?;
         availability.sort_by_key(|item| item.spec.id.0);
         Ok(ArgValue::Array(
-            availability
-                .into_iter()
-                .map(|item| command_info_to_arg(item.spec, item.resolution))
-                .collect(),
+            availability.into_iter().map(command_info_to_arg).collect(),
         ))
     })
 }
@@ -1255,6 +1436,30 @@ fn host_bind<'s>(
         inputmap::InputSpec::Key(key::Key::parse_spec(&key_spec).map_err(error::Error::Script)?);
     let id = install_function_binding(scope, function, input, &options)?;
     Ok(ret_one(ScopedValue::Number(id as f64)))
+}
+
+/// `canopy.bind_command`: install one inspectable positional command action.
+fn host_bind_command<'s>(
+    scope: &Scope<'s>,
+    args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    let mut args = HostArgCursor::new(scope, args);
+    let key_spec = args.required::<String>("key")?;
+    let options = parse_bind_options(scope, args.optional::<Table<'_>>("options")?)?;
+    let name = args.required::<String>("id")?;
+    let values = values_to_args(scope, iter::from_fn(|| args.raw()).collect())?;
+    let key = key::Key::parse_spec(&key_spec).map_err(error::Error::Script)?;
+    let id = with_current_canopy(scope, |canopy, _| {
+        let spec = canopy.core.commands.get(&name).ok_or_else(|| {
+            error::Error::from(commands::CommandError::UnknownCommand { id: name.clone() })
+        })?;
+        canopy.bind_command(
+            key,
+            options,
+            spec.call_with(commands::CommandArgs::Positional(values)),
+        )
+    })?;
+    Ok(ret_one(ScopedValue::Number(id.as_u64() as f64)))
 }
 
 /// `canopy.bind_mouse`: bind a mouse spec to a Luau callback.

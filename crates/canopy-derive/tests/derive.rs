@@ -8,14 +8,62 @@ mod tests {
         self, Widget,
         commands::{
             ArgValue, CommandArgs, CommandDispatchKind, CommandError, CommandNode,
-            CommandParamKind, CommandReturnSpec,
+            CommandParamKind, CommandRequirement, CommandReturnSpec, CommandStatus, ListRowContext,
         },
         error::{Error, Result},
-        event::mouse::MouseEvent,
+        event::{Event, mouse::MouseEvent},
         testing::dummyctx::DummyContext,
     };
     use canopy_derive::{command, derive_commands};
     use pretty_assertions::assert_eq;
+    use serde::de::DeserializeOwned;
+
+    #[derive(serde::Serialize, serde::Deserialize, canopy_derive::CommandArg)]
+    struct TreeArgument {
+        label: String,
+        children: Vec<Self>,
+    }
+
+    #[derive(serde::Serialize, serde::Deserialize, canopy_derive::CommandArg)]
+    #[serde(bound = "T: serde::Serialize + serde::de::DeserializeOwned")]
+    struct GenericArgument<T>
+    where
+        T: serde::Serialize + DeserializeOwned + 'static,
+    {
+        value: T,
+    }
+
+    #[test]
+    fn command_arg_encodes_structural_recursive_and_generic_values() {
+        use std::collections::BTreeMap;
+
+        use canopy::commands::ToArgValue;
+
+        let tree = TreeArgument {
+            label: "root".into(),
+            children: vec![TreeArgument {
+                label: "child".into(),
+                children: vec![],
+            }],
+        }
+        .to_arg_value();
+        let ArgValue::Map(fields) = tree else {
+            panic!("expected record");
+        };
+        assert_eq!(fields["label"], ArgValue::String("root".into()));
+        let ArgValue::Array(children) = &fields["children"] else {
+            panic!("expected children");
+        };
+        assert_eq!(children.len(), 1);
+        let ArgValue::Map(child) = &children[0] else {
+            panic!("expected child record");
+        };
+        assert_eq!(child["label"], ArgValue::String("child".into()));
+        assert_eq!(
+            GenericArgument { value: 7i64 }.to_arg_value(),
+            ArgValue::Map(BTreeMap::from([("value".into(), ArgValue::Int(7))])),
+        );
+    }
 
     struct Opaque {}
 
@@ -174,6 +222,96 @@ mod tests {
         assert_eq!(
             (spec.invoke)(Some(&mut target), &mut ctx, &inv).unwrap(),
             ArgValue::String("value".into())
+        );
+    }
+
+    struct Eligible {
+        enabled: bool,
+    }
+
+    #[derive_commands]
+    impl Eligible {
+        fn can_update(&self, _ctx: &dyn canopy::ViewContext) -> Result<CommandStatus> {
+            Ok(if self.enabled {
+                CommandStatus::Enabled
+            } else {
+                CommandStatus::Disabled("no selection".into())
+            })
+        }
+
+        #[command(enabled = "can_update")]
+        fn update(
+            &self,
+            _ctx: &mut dyn canopy::Context,
+            value: Option<String>,
+            _event: Event,
+            _mouse: MouseEvent,
+            _row: ListRowContext,
+            _optional_mouse: Option<MouseEvent>,
+        ) -> Option<String> {
+            value
+        }
+    }
+
+    #[test]
+    fn typed_builders_preserve_arguments_and_omit_injections() {
+        let call = Eligible::call_update(Some("selected".into())).invocation();
+        assert_eq!(call.id, Eligible::cmd_update().id);
+        assert_eq!(
+            call.args,
+            CommandArgs::Positional(vec![ArgValue::String("selected".into())])
+        );
+        assert_eq!(
+            Eligible::call_update(None).invocation().args,
+            CommandArgs::Positional(vec![ArgValue::Null])
+        );
+        assert_eq!(Bar::<Foo>::call_a().invocation().id, Bar::<Foo>::cmd_a().id);
+        let call =
+            Collision::call_bindings("a".into(), "b".into(), "c".into(), "d".into()).invocation();
+        let mut target = Collision;
+        assert_eq!(
+            (Collision::cmd_bindings().invoke)(
+                Some(&mut target),
+                &mut DummyContext::default(),
+                &call,
+            )
+            .unwrap(),
+            ArgValue::String("a/b/c/d".into())
+        );
+    }
+
+    #[test]
+    fn status_shim_checks_target_and_reads_current_eligibility() -> Result<()> {
+        let status = Eligible::cmd_update().status.expect("eligibility hook");
+        let ctx = DummyContext::default();
+        let mut target = Eligible { enabled: false };
+        assert_eq!(
+            status(&target, &ctx)?,
+            CommandStatus::Disabled("no selection".into())
+        );
+        target.enabled = true;
+        assert_eq!(status(&target, &ctx)?, CommandStatus::Enabled);
+        assert!(status(&Collision, &ctx).is_err());
+        assert!(Foo::cmd_a().status.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn injection_metadata_uses_requirements_and_preserves_optional_parameters() {
+        let requirements = Eligible::cmd_update()
+            .params
+            .iter()
+            .map(|param| param.requirement.and_then(|requirement| requirement()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            requirements,
+            vec![
+                None,
+                Some(CommandRequirement::Event),
+                Some(CommandRequirement::Mouse),
+                Some(CommandRequirement::ListRow),
+                Some(CommandRequirement::Mouse),
+            ]
         );
     }
 

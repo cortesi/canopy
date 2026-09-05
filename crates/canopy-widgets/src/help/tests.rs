@@ -27,6 +27,8 @@ fn binding(
         path_filter: String::new(),
         route_path: Path::from("/root/editor"),
         phase,
+        declared_phase: Some(phase),
+        command: None,
         source: Some("test".to_string()),
     }
 }
@@ -298,4 +300,40 @@ fn footer_groups_navigation_and_keeps_close_guide_visible() -> Result<()> {
     narrow.render()?;
     narrow.tbuf().assert_matches(buf!["         ?/Esc close"]);
     Ok(())
+}
+
+#[test]
+fn command_help_shows_target_arguments_and_disabled_reason() {
+    use canopy::{
+        commands::{
+            ArgValue, CommandAction, CommandArgs, CommandId, CommandInvocation, CommandRequirement,
+            CommandStatus, CommandTarget,
+        },
+        help::BindingCommand,
+    };
+
+    let mut binding = binding(1, 'd', "Delete selection", BindingPhase::BeforeWidget);
+    binding.command = Some(BindingCommand {
+        action: CommandAction {
+            invocation: CommandInvocation {
+                id: CommandId("todo::delete_item"),
+                args: CommandArgs::Positional(vec![ArgValue::Int(7)]),
+            },
+            target: Some(CommandTarget::Focus),
+        },
+        resolution: None,
+        status: Some(CommandStatus::Disabled("no selection".into())),
+        missing_requirements: vec![CommandRequirement::ListRow],
+    });
+    let list = list_with(vec![binding]);
+    let text = list
+        .display_lines(100)
+        .into_iter()
+        .map(|line| line.text)
+        .collect::<Vec<_>>()
+        .join(" ");
+    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(text.contains("Disabled: no selection"));
+    assert!(text.contains("todo::delete_item; focus; [Int(7)]"));
+    assert!(text.contains("Context required: list row"));
 }

@@ -1,0 +1,4 @@
+# Compile fixtures build an isolated dependency graph on a cold cache.
+[[profile.default.overrides]]
+filter = 'package(canopy-derive) & binary(compile)'
+slow-timeout = { period = "60s", terminate-after = 3 }

@@ -21,15 +21,9 @@ use crate::{help::Help, inspector::Inspector};
 const DEFAULT_BINDINGS: &str = r#"
 inspector.default_bindings()
 
-canopy.bind("ctrl-Right", { path = "root", description = "Toggle inspector" }, function()
-    root.toggle_inspector()
-end)
-canopy.bind("q", { path = "root", description = "Quit" }, function()
-    root.quit()
-end)
-canopy.bind("a", { path = "inspector", description = "Focus app" }, function()
-    root.focus_app()
-end)
+canopy.bind_command("ctrl-Right", { phase = "after_widget", path = "root", description = "Toggle inspector" }, "root::toggle_inspector")
+canopy.bind_command("q", { phase = "after_widget", path = "root", description = "Quit" }, "root::quit")
+canopy.bind_command("a", { phase = "after_widget", path = "inspector", description = "Focus app" }, "root::focus_app")
 "#;
 
 /// Framework binding group used while contextual help is open.
@@ -442,11 +436,16 @@ fn register_help_bindings(canopy: &mut Canopy) -> Result<()> {
         ("?", "Close help", "root::toggle_help"),
     ];
     for (key, description, command) in bindings {
-        canopy.bind_framework(
+        canopy.bind_framework_with_options(
             HELP_BINDINGS,
             InputSpec::Key(Key::parse_spec(key).map_err(Error::Invalid)?),
-            "/root/help/**/",
-            description,
+            canopy::BindingOptions {
+                path: "/root/help/**/".to_string(),
+                scope: canopy::BindingScope::Exclusive(HELP_BINDINGS),
+                description: description.to_string(),
+                source: None,
+                phase: Some(canopy::BindingPhase::BeforeWidget),
+            },
             CommandInvocation {
                 id: CommandId(command),
                 args: CommandArgs::default(),
@@ -564,13 +563,11 @@ mod tests {
     fn install_help_trigger(canopy: &mut Canopy) -> Result<()> {
         canopy.eval_script(
             r#"
-            canopy.bind("?", {
+            canopy.bind_command("?", { phase = "before_widget",
                 description = "Show key bindings",
                 path = "/root/**/",
                 tier = "global",
-            }, function()
-                root.toggle_help()
-            end)
+            }, "root::toggle_help")
             "#,
         )
     }
@@ -740,7 +737,7 @@ mod tests {
             local keys: {string} = { "b", "c", "d", "e", "f", "g", "h", "i", "j", "k",
                 "l", "m", "n", "o", "p", "r", "s", "t", "u", "v", "w", "x", "y", "z" }
             for _, key: string in keys do
-                canopy.bind(key, { description = "Extra binding" }, function() end)
+                canopy.bind(key, { phase = "after_widget", description = "Extra binding" }, function() end)
             end
             "#,
         )?;
@@ -783,13 +780,13 @@ mod tests {
         install_help_trigger(&mut canopy)?;
         canopy.eval_script(
             r#"
-            canopy.bind("x", { description = "Leak sentinel" }, function()
+            canopy.bind("x", { phase = "after_widget", description = "Leak sentinel" }, function()
                 canopy.set_mode("leaked")
             end)
             local keys: {string} = { "b", "c", "d", "e", "f", "g", "h", "i", "j", "k",
                 "l", "m", "n", "o", "p", "r", "s", "t", "u", "v", "w", "y", "z" }
             for _, key: string in keys do
-                canopy.bind(key, { description = "Extra binding" }, function() end)
+                canopy.bind(key, { phase = "after_widget", description = "Extra binding" }, function() end)
             end
             "#,
         )?;
@@ -889,7 +886,7 @@ mod tests {
         let first = modal_snapshot(&mut canopy)?;
         send_key(&mut canopy, "?")?;
         canopy
-            .eval_script(r#"canopy.bind("z", { description = "Added later" }, function() end)"#)?;
+            .eval_script(r#"canopy.bind("z", { phase = "after_widget", description = "Added later" }, function() end)"#)?;
 
         send_key(&mut canopy, "?")?;
         let second = modal_snapshot(&mut canopy)?;

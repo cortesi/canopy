@@ -1,10 +1,15 @@
 //! Contextual binding discovery.
 
 use crate::{
+    commands::{
+        CommandAction, CommandRequirement, CommandResolution, CommandResolver, CommandStatus,
+        CommandTarget,
+    },
     core::{
         Core, NodeId,
         inputmap::{
-            BindingId, BindingOwner, BindingPhase, BindingScope, FrameworkBindingGroup, InputSpec,
+            BindingId, BindingOwner, BindingPhase, BindingScope, BindingTarget,
+            FrameworkBindingGroup, InputSpec,
         },
     },
     error::Result,
@@ -46,8 +51,25 @@ pub struct AvailableBinding {
     pub route_path: Path,
     /// Phase relative to widget input handling.
     pub phase: BindingPhase,
+    /// Explicit registration phase, absent for legacy selector-derived phases.
+    pub declared_phase: Option<BindingPhase>,
+    /// Declarative command details, absent for opaque script callbacks.
+    pub command: Option<BindingCommand>,
     /// Optional diagnostic source.
     pub source: Option<String>,
+}
+
+/// Owned command details captured with an effective key binding.
+#[derive(Clone, Debug)]
+pub struct BindingCommand {
+    /// Stored invocation, arguments, and target policy.
+    pub action: CommandAction,
+    /// Resolved owner at capture time, absent for an unavailable command.
+    pub resolution: Option<CommandResolution>,
+    /// Eligibility at capture time, separate from target resolution.
+    pub status: Option<CommandStatus>,
+    /// Required context absent at capture time.
+    pub missing_requirements: Vec<CommandRequirement>,
 }
 
 impl Core {
@@ -74,6 +96,29 @@ impl Core {
                     .input_map
                     .binding(resolved.id)
                     .expect("resolved binding record must remain registered");
+                let command = match &record.target {
+                    BindingTarget::Script(_) => None,
+                    BindingTarget::Command(action) => {
+                        let availability = self
+                            .commands
+                            .get(action.invocation.id.0)
+                            .map(|spec| {
+                                CommandResolver::for_target(
+                                    self,
+                                    action.target.unwrap_or(CommandTarget::From(node)),
+                                )
+                                .availability_for(spec)
+                            })
+                            .transpose()?;
+                        Some(BindingCommand {
+                            action: action.clone(),
+                            resolution: availability.as_ref().and_then(|item| item.resolution),
+                            status: availability.as_ref().and_then(|item| item.status.clone()),
+                            missing_requirements: availability
+                                .map_or_else(Vec::new, |item| item.missing_requirements),
+                        })
+                    }
+                };
                 bindings.push(AvailableBinding {
                     id: record.id,
                     key,
@@ -83,6 +128,8 @@ impl Core {
                     path_filter: record.path_filter().to_string(),
                     route_path: route_path.clone(),
                     phase: resolved.phase,
+                    declared_phase: record.phase,
+                    command,
                     source: record.source.clone(),
                 });
                 break;
@@ -106,8 +153,11 @@ impl Core {
 
 #[cfg(test)]
 mod tests {
+    use std::{cell::Cell, rc::Rc};
+
     use super::*;
     use crate::{
+        command,
         commands::{CommandArgs, CommandId, CommandInvocation},
         core::inputmap::{BindingTarget, InputSpec},
         error::Error,
@@ -132,13 +182,16 @@ mod tests {
         description: &str,
         target: u64,
     ) -> Result<()> {
-        core.input_map.replace_application_binding(
-            scope,
+        core.input_map.replace_application_action(
             InputSpec::Key(key.into()),
-            path,
-            description,
-            Some("test".to_string()),
-            LuauFunctionId::for_test(target),
+            crate::BindingOptions {
+                scope,
+                path: path.into(),
+                description: description.into(),
+                source: Some("test".to_string()),
+                phase: None,
+            },
+            BindingTarget::Script(LuauFunctionId::for_test(target)),
         )?;
         Ok(())
     }
@@ -187,6 +240,87 @@ mod tests {
             .expect("global binding");
         assert_eq!(global.description, "Global");
         assert_eq!(global.scope, BindingScope::Global);
+        Ok(())
+    }
+
+    struct EligibleLeaf {
+        enabled: Rc<Cell<bool>>,
+    }
+
+    impl Widget for EligibleLeaf {
+        fn name(&self) -> NodeName {
+            NodeName::convert("eligible_leaf")
+        }
+    }
+
+    #[crate::derive_commands]
+    impl EligibleLeaf {
+        fn can_update(&self, _ctx: &dyn crate::ViewContext) -> Result<CommandStatus> {
+            Ok(if self.enabled.get() {
+                CommandStatus::Enabled
+            } else {
+                CommandStatus::Disabled("no selection".into())
+            })
+        }
+
+        #[command(enabled = "can_update")]
+        fn update(&self, value: i64) {
+            let _ = value;
+        }
+    }
+
+    #[test]
+    fn command_binding_snapshot_captures_intent_and_current_status() -> Result<()> {
+        use crate::{commands::CommandNode, core::inputmap::BindingOptions};
+
+        let mut core = Core::new();
+        let enabled = Rc::new(Cell::new(false));
+        let leaf = core.create_detached(EligibleLeaf {
+            enabled: enabled.clone(),
+        })?;
+        core.attach(core.root, leaf)?;
+        core.commands.add(EligibleLeaf::commands())?;
+        let action = EligibleLeaf::call_update(7)
+            .with_target(CommandTarget::Exact(leaf))
+            .action();
+        core.input_map.replace_application_action(
+            InputSpec::Key('u'.into()),
+            BindingOptions {
+                path: "eligible_leaf/".into(),
+                scope: BindingScope::Default,
+                description: "Update selection".into(),
+                source: None,
+                phase: Some(BindingPhase::AfterIgnore),
+            },
+            BindingTarget::Command(action.clone()),
+        )?;
+        let snapshot = core.available_bindings(Some(leaf))?;
+        let binding = &snapshot.bindings[0];
+        assert_eq!(binding.phase, BindingPhase::AfterIgnore);
+        assert_eq!(binding.declared_phase, Some(BindingPhase::AfterIgnore));
+        let command = binding.command.as_ref().expect("command details");
+        assert_eq!(command.action, action);
+        assert_eq!(
+            command.resolution,
+            Some(CommandResolution::Exact { target: leaf })
+        );
+        assert_eq!(
+            command.status,
+            Some(CommandStatus::Disabled("no selection".into()))
+        );
+        enabled.set(true);
+        assert_eq!(
+            core.available_bindings(Some(leaf))?.bindings[0]
+                .command
+                .as_ref()
+                .unwrap()
+                .status,
+            Some(CommandStatus::Enabled)
+        );
+        assert_eq!(
+            command.status,
+            Some(CommandStatus::Disabled("no selection".into()))
+        );
         Ok(())
     }
 

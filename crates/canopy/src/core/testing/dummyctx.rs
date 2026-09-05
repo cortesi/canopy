@@ -4,7 +4,10 @@ use slotmap::Key;
 
 use crate::{
     ChangeOutcome, Context, FocusScope, ViewContext,
-    commands::{ArgValue, CommandError, CommandInvocation, CommandScopeFrame, ListRowContext},
+    commands::{
+        ArgValue, CommandError, CommandInvocation, CommandScopeFrame, CommandStatus, CommandTarget,
+        ListRowContext,
+    },
     core::{
         NodeId,
         help::BindingSnapshot,
@@ -12,7 +15,7 @@ use crate::{
         style::Effect,
         view::View,
     },
-    error::Result,
+    error::{Error, Result},
     event::{Event, mouse::MouseEvent},
     geom::{Direction, Point},
     layout::{Layout, LayoutOverride},
@@ -47,6 +50,20 @@ impl ViewContext for DummyContext {
         None
     }
 
+    fn read_widget(
+        &self,
+        node: NodeId,
+        _callback: &mut dyn FnMut(&dyn Widget) -> Result<()>,
+    ) -> Result<()> {
+        Err(Error::NodeNotFound(node))
+    }
+    fn command_status(
+        &self,
+        _target: CommandTarget,
+        _invocation: &CommandInvocation,
+    ) -> Result<CommandStatus> {
+        Ok(CommandStatus::Enabled)
+    }
     fn node_type_id(&self, _node: NodeId) -> Option<TypeId> {
         None
     }
@@ -195,6 +212,21 @@ impl Context for DummyContext {
         Ok(())
     }
 
+    fn dispatch_target(
+        &mut self,
+        _target: CommandTarget,
+        cmd: &CommandInvocation,
+    ) -> StdResult<ArgValue, CommandError> {
+        self.dispatch_command(cmd)
+    }
+    fn dispatch_target_scoped(
+        &mut self,
+        _target: CommandTarget,
+        frame: CommandScopeFrame,
+        cmd: &CommandInvocation,
+    ) -> StdResult<ArgValue, CommandError> {
+        self.dispatch_command_scoped(frame, cmd)
+    }
     fn dispatch_command(&mut self, _cmd: &CommandInvocation) -> StdResult<ArgValue, CommandError> {
         Ok(ArgValue::Null)
     }

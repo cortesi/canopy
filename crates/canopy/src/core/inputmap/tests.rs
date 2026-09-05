@@ -2,7 +2,7 @@ use slotmap::Key as _;
 
 use super::*;
 use crate::{
-    commands::{CommandArgs, CommandId},
+    commands::{CommandArgs, CommandId, CommandTarget},
     error::Result,
     event::key,
 };
@@ -29,13 +29,16 @@ fn bind(
     description: &str,
     target: u64,
 ) -> Result<BindingId> {
-    map.replace_application_binding(
-        scope,
+    map.replace_application_action(
         InputSpec::Key(key.into()),
-        path,
-        description,
-        Some("test:1".to_string()),
-        script(target),
+        BindingOptions {
+            scope,
+            path: path.to_string(),
+            description: description.to_string(),
+            source: Some("test:1".to_string()),
+            phase: None,
+        },
+        BindingTarget::Script(script(target)),
     )
     .map(|(id, _)| id)
 }
@@ -222,7 +225,10 @@ fn newest_exclusive_frame_blocks_all_application_tiers() -> Result<()> {
     let help = map.push_exclusive_bindings(HELP, owner)?;
     assert_eq!(
         target(&map, "/root/help/binding_list", 'j'),
-        Some(BindingTarget::Command(command("binding_list::scroll_down")))
+        Some(BindingTarget::Command(CommandAction {
+            invocation: command("binding_list::scroll_down"),
+            target: None
+        }))
     );
     assert_eq!(target(&map, "/root/help/binding_list", 'x'), None);
     let other = map.push_exclusive_bindings(OTHER, owner)?;
@@ -248,7 +254,7 @@ fn application_mutation_cannot_remove_framework_records() -> Result<()> {
         "Help down",
         command("binding_list::scroll_down"),
     )?;
-    assert_eq!(map.unbind(app)?, Some(script(1)));
+    assert_eq!(map.unbind(app)?, Some(BindingTarget::Script(script(1))));
     assert!(map.unbind(framework).is_err());
     map.clear_application();
     assert_eq!(map.bindings().len(), 1);
@@ -410,5 +416,177 @@ fn diagnostics_distinguish_scope_path_insertion_route_and_exclusive_causes() -> 
         "blocked by exclusive group root.help"
     );
     map.pop_exclusive_bindings(token)?;
+    Ok(())
+}
+
+fn options(path: &str, phase: Option<BindingPhase>) -> BindingOptions {
+    BindingOptions {
+        path: path.to_string(),
+        scope: BindingScope::Default,
+        description: "Test action".to_string(),
+        source: None,
+        phase,
+    }
+}
+
+#[test]
+fn explicit_phase_is_independent_of_selector() -> Result<()> {
+    let mut map = InputMap::new();
+    let input = InputSpec::Key('x'.into());
+    for path in ["editor", "editor/"] {
+        for phase in [BindingPhase::BeforeWidget, BindingPhase::AfterIgnore] {
+            map.clear_application();
+            let (id, _) = map.replace_application_action(
+                input,
+                options(path, Some(phase)),
+                BindingTarget::Script(script(1)),
+            )?;
+            assert_eq!(map.binding(id).unwrap().phase, Some(phase));
+            let resolved = map
+                .resolve_match(&Path::from("/root/editor"), input)
+                .unwrap();
+            assert_eq!(resolved.phase, phase);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn omitted_phase_preserves_selector_rule() -> Result<()> {
+    let mut map = InputMap::new();
+    for (path, route, expected) in [
+        ("editor", "/root/editor", BindingPhase::BeforeWidget),
+        ("editor", "/root/editor/child", BindingPhase::AfterIgnore),
+        ("editor/", "/root/editor", BindingPhase::BeforeWidget),
+        ("", "/root/editor", BindingPhase::AfterIgnore),
+    ] {
+        map.clear_application();
+        bind(&mut map, BindingScope::Default, 'x', path, "Legacy", 1)?;
+        let resolved = map
+            .resolve_match(&Path::from(route), InputSpec::Key('x'.into()))
+            .unwrap();
+        assert_eq!(resolved.phase, expected);
+    }
+    Ok(())
+}
+
+#[test]
+fn rejected_mouse_phase_preserves_existing_binding() -> Result<()> {
+    let mut map = InputMap::new();
+    let input = InputSpec::Mouse(Mouse::parse_spec("ScrollUp").unwrap());
+    let (id, _) = map.replace_application_action(
+        input,
+        options("editor/", Some(BindingPhase::AfterIgnore)),
+        BindingTarget::Script(script(1)),
+    )?;
+    assert!(
+        map.replace_application_action(
+            input,
+            options("editor/", Some(BindingPhase::BeforeWidget)),
+            BindingTarget::Script(script(2)),
+        )
+        .is_err()
+    );
+    assert_eq!(map.bindings().len(), 1);
+    let resolved = map
+        .resolve_match(&Path::from("/root/editor"), input)
+        .unwrap();
+    assert_eq!(resolved.id, id);
+    assert_eq!(resolved.target, BindingTarget::Script(script(1)));
+    Ok(())
+}
+
+#[test]
+fn application_command_targets_replace_and_remove_like_callbacks() -> Result<()> {
+    let mut map = InputMap::new();
+    let script_id = bind(&mut map, BindingScope::Default, 'x', "", "Script", 1)?;
+    let action = BindingTarget::Command(CommandAction {
+        invocation: command("editor::undo"),
+        target: Some(CommandTarget::Focus),
+    });
+    let (command_id, removed) = map.replace_application_action(
+        InputSpec::Key('x'.into()),
+        options("", None),
+        action.clone(),
+    )?;
+    assert_eq!(removed, [(script_id, BindingTarget::Script(script(1)))]);
+    assert_eq!(target(&map, "/root", 'x'), Some(action.clone()));
+    assert_eq!(map.unbind(command_id)?, Some(action.clone()));
+    assert_eq!(map.unbind(command_id)?, None);
+
+    let (command_id, _) = map.replace_application_action(
+        InputSpec::Key('x'.into()),
+        options("", None),
+        action.clone(),
+    )?;
+    let (_, removed) = map.replace_application_action(
+        InputSpec::Key('x'.into()),
+        options("", None),
+        BindingTarget::Script(script(2)),
+    )?;
+    assert_eq!(removed, [(command_id, action)]);
+    Ok(())
+}
+
+#[test]
+fn application_snapshot_and_clear_include_commands() -> Result<()> {
+    let mut map = InputMap::new();
+    let action = BindingTarget::Command(CommandAction {
+        invocation: command("editor::undo"),
+        target: Some(CommandTarget::Exact(NodeId::null())),
+    });
+    let (command_id, _) = map.replace_application_action(
+        InputSpec::Key('x'.into()),
+        options("", Some(BindingPhase::BeforeWidget)),
+        action.clone(),
+    )?;
+    let snapshot = map.snapshot_application();
+    let script_id = bind(&mut map, BindingScope::Default, 'y', "", "Script", 1)?;
+    assert_eq!(map.targets_not_in(&snapshot), [script(1)]);
+    let removed = map.clear_application();
+    assert_eq!(
+        removed,
+        [
+            (command_id, action.clone()),
+            (script_id, BindingTarget::Script(script(1)))
+        ]
+    );
+    assert!(map.bindings().is_empty());
+    map.restore_application(snapshot);
+    assert_eq!(map.bindings().len(), 1);
+    assert_eq!(target(&map, "/root", 'x'), Some(action));
+    assert_eq!(
+        map.binding(command_id).unwrap().phase,
+        Some(BindingPhase::BeforeWidget)
+    );
+    Ok(())
+}
+
+#[test]
+fn framework_binding_options_preserve_explicit_phase() -> Result<()> {
+    let mut map = InputMap::new();
+    let mut options = options("/root/help/**/", Some(BindingPhase::AfterIgnore));
+    options.scope = BindingScope::Exclusive(HELP);
+    let input = InputSpec::Key('j'.into());
+    let invocation = command("binding_list::scroll_down");
+    let id = map.bind_framework_with_options(HELP, input, options.clone(), invocation.clone())?;
+    assert_eq!(
+        map.bind_framework_with_options(HELP, input, options.clone(), invocation.clone())?,
+        id
+    );
+    map.push_exclusive_bindings(HELP, NodeId::null())?;
+    let resolved = map
+        .resolve_match(&Path::from("/root/help/list"), input)
+        .unwrap();
+    assert_eq!(resolved.phase, BindingPhase::AfterIgnore);
+    options.phase = Some(BindingPhase::BeforeWidget);
+    assert!(
+        map.bind_framework_with_options(HELP, input, options, invocation)
+            .is_err()
+    );
+    assert_eq!(
+        map.binding(id).unwrap().phase,
+        Some(BindingPhase::AfterIgnore)
+    );
     Ok(())
 }

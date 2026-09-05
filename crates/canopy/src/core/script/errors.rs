@@ -135,6 +135,18 @@ impl From<&commands::CommandError> for CanopyErrorPayload {
                     .with_command(id.clone())
                     .with_owner(owner.clone())
             }
+            commands::CommandError::WrongOwner { id, expected, .. } => {
+                let mut payload = Self::new(error::ScriptErrorKind::WrongOwner, err.to_string())
+                    .with_command(id.clone());
+                if let Some(owner) = expected {
+                    payload = payload.with_owner(owner.clone());
+                }
+                payload
+            }
+            commands::CommandError::Disabled { id, .. } => {
+                Self::new(error::ScriptErrorKind::DisabledCommand, err.to_string())
+                    .with_command(id.clone())
+            }
             commands::CommandError::InvalidNode { .. } => {
                 Self::new(error::ScriptErrorKind::InvalidNode, err.to_string())
             }

@@ -4,6 +4,7 @@ use std::mem;
 
 use canopy::{
     BindingPhase, Canopy, Context, EventOutcome, Loader, ViewContext, Widget, command,
+    commands::{CommandArgs, CommandRequirement, CommandStatus, CommandTarget},
     derive_commands,
     error::Result,
     event::{
@@ -269,6 +270,7 @@ fn binding_lines(
     let mut lines = Vec::new();
     for binding in bindings {
         let key = binding.key.to_string();
+        let description = binding_description(binding);
         if narrow {
             lines.push(DisplayLine {
                 key: None,
@@ -276,7 +278,7 @@ fn binding_lines(
                 style: "help/key",
             });
             let wrap_width = width.saturating_sub(2).max(1);
-            for text in textwrap::wrap(&binding.description, wrap_width) {
+            for text in textwrap::wrap(&description, wrap_width) {
                 lines.push(DisplayLine {
                     key: None,
                     text: format!("  {text}"),
@@ -285,7 +287,7 @@ fn binding_lines(
             }
         } else {
             let wrap_width = width.saturating_sub(max_key_width + 2).max(1);
-            let mut wrapped = textwrap::wrap(&binding.description, wrap_width).into_iter();
+            let mut wrapped = textwrap::wrap(&description, wrap_width).into_iter();
             lines.push(DisplayLine {
                 key: Some(format!(
                     "{}{key}",
@@ -306,6 +308,49 @@ fn binding_lines(
         }
     }
     lines
+}
+
+/// Include inspectable command intent and captured eligibility in its help row.
+fn binding_description(binding: &AvailableBinding) -> String {
+    let Some(command) = &binding.command else {
+        return binding.description.clone();
+    };
+    let mut description = binding.description.clone();
+    match &command.status {
+        Some(CommandStatus::Disabled(reason)) => {
+            description.push_str(&format!(" — Disabled: {reason}"));
+        }
+        None => description.push_str(" — Unavailable target"),
+        Some(CommandStatus::Enabled) => {}
+    }
+    let target = match command.action.target {
+        Some(CommandTarget::Exact(node)) => format!("exact {node:?}"),
+        Some(CommandTarget::From(node)) => format!("from {node:?}"),
+        Some(CommandTarget::Focus) => "focus".into(),
+        None => "from binding route".into(),
+    };
+    let args = match &command.action.invocation.args {
+        CommandArgs::Positional(values) => format!("{values:?}"),
+        CommandArgs::Named(values) => format!("{values:?}"),
+    };
+    description.push_str(&format!(
+        " ({}; {target}; {args})",
+        command.action.invocation.id.0
+    ));
+    if !command.missing_requirements.is_empty() {
+        let missing = command
+            .missing_requirements
+            .iter()
+            .map(|requirement| match requirement {
+                CommandRequirement::Event => "event",
+                CommandRequirement::Mouse => "mouse event",
+                CommandRequirement::ListRow => "list row",
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        description.push_str(&format!(" — Context required: {missing}"));
+    }
+    description
 }
 
 /// Sort bindings by requested key category and display string.

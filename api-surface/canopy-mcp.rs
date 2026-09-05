@@ -103,6 +103,12 @@ pub mod canopy_mcp {
         pub owner: String,
         /// Whether the command currently resolves.
         pub available: bool,
+        /// Eligibility, when an owner resolves.
+        pub status: Option<String>,
+        /// User-facing reason for disabled eligibility.
+        pub disabled_reason: Option<String>,
+        /// Missing originating event or row context, separate from eligibility.
+        pub missing_requirements: Vec<String>,
         /// Debug token for the current target node, when available.
         pub target: Option<String>,
     }
@@ -155,8 +161,14 @@ pub mod canopy_mcp {
         pub api_sources: Vec<ruau_script_api::ScriptApiEntry>,
         /// Registered fixtures.
         pub fixtures: Vec<canopy::FixtureInfo>,
-        /// Current command availability.
+        /// Legacy focus-relative command availability.
         pub commands: Vec<BootstrapCommand>,
+        /// Default top-level script target policy.
+        pub default_target: String,
+        /// Availability from the root used by top-level script evaluation.
+        pub default_commands: Vec<BootstrapCommand>,
+        /// Availability from the currently focused node.
+        pub focus_commands: Vec<BootstrapCommand>,
         /// Recent script journal entries.
         pub journal: Vec<BootstrapJournalEntry>,
     }

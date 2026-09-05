@@ -17,6 +17,8 @@ convert_case.workspace = true
 [dev-dependencies]
 canopy = { path = "../canopy", features = ["testing"] }
 pretty_assertions = "1.4.1"
+trybuild = "1.0.120"
+serde.workspace = true
 
 [lints]
 workspace = true

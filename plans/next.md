@@ -902,32 +902,32 @@ This stage has no prerequisites.
 R04, R06, R07, R08, and R09 establish an inspectable action contract after
 Stage 1.
 
-- [ ] Add target policy, exact dispatch, and read-only status hooks in
+- [x] Add target policy, exact dispatch, and read-only status hooks in
   `core/commands.rs` and `core/context.rs`.
   Extend `CommandError`, `core/script/errors.rs`, and MCP error conversion for
   wrong owner, disabled action, and missing event requirements.
-- [ ] Extend `canopy-derive/src/{parse,model,codegen}.rs` for typed `call_*`
+- [x] Extend `canopy-derive/src/{parse,model,codegen}.rs` for typed `call_*`
   builders and `enabled` attributes.
   Preserve generics, optional user arguments, ignored returns, and injection.
-- [ ] Add explicit call functions and target-aware discovery in
+- [x] Add explicit call functions and target-aware discovery in
   `core/script/{dispatch,base_api,records,defs}.rs`.
   Keep legacy decoder behavior under legacy entry points.
-- [ ] Add stored phases and application command targets in `core/inputmap/mod.rs`.
+- [x] Add stored phases and application command targets in `core/inputmap/mod.rs`.
   Update routing, help snapshots, binding diagnostics, removal, and epoch cleanup.
   Preserve one winner per input under the existing resolver ordering.
-- [ ] Preserve targeted actions in `canopy-widgets/src/{button,list}.rs`.
-  Add Todo delete eligibility and show status in Help's command panel.
-- [ ] Migrate workspace binding strings and tracked Luau to explicit phases.
+- [x] Preserve targeted actions in `canopy-widgets/src/{button,list}.rs`.
+  Add Todo delete eligibility and show status in Help's binding list.
+- [x] Migrate workspace binding strings and tracked Luau to explicit phases.
   Preserve prior phase at each selector.
   Convert only callbacks that invoke one command to declarative bindings.
-- [ ] Update bootstrap in `canopy-mcp/src/script.rs` and consumers in
+- [x] Update bootstrap in `canopy-mcp/src/script.rs` and consumers in
   `canopyctl/src/{main,session}.rs` for explicit default/focus availability.
   Update `docs/scripting.md` and `docs/agent-loop.md` with migration examples.
-- [ ] Extend `crates/canopy/tests/it/commands.rs`, `core/script/tests.rs`,
+- [x] Extend `crates/canopy/tests/it/commands.rs`, `core/script/tests.rs`,
   `core/inputmap/tests.rs`, `core/help.rs`, and derive tests.
   Add two-owner target, explicit-map, eligibility transition, and phase cases.
   Add negative compile fixtures for typed native calls and invalid status hooks.
-- [ ] Run package tests with `ncode test` for `canopy`, `canopy-derive`,
+- [x] Run package tests with `ncode test` for `canopy`, `canopy-derive`,
   `canopy-widgets`, `todo`, `canopy-mcp`, and `canopyctl`.
   Run TermGym's F6/navigation tests in `canopy-examples`.
   Regenerate API skeletons and run `cargo xtask checks`.

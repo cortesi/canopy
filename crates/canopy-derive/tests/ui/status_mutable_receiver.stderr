@@ -1,0 +1,16 @@
+error[E0596]: cannot borrow data in a `&` reference as mutable
+ --> tests/ui/status_mutable_receiver.rs:6:1
+  |
+6 | #[derive_commands]
+  | ^^^^^^^^^^^^^^^^^^ `target` is a `&` reference, so it cannot be borrowed as mutable
+  |
+  = note: this error originates in the attribute macro `derive_commands` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: consider annotating `App` with `#[derive(Clone)]`
+  |
+4 + #[derive(Clone)]
+5 | struct App;
+  |
+help: consider specifying this binding's type
+  |
+6 | #[derive_commands]: &mut App
+  |                   ++++++++++

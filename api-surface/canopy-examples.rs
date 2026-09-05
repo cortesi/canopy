@@ -56,11 +56,20 @@ pub mod canopy_examples {
             /// Return a typed command reference for this command.
             pub fn cmd_scroll() -> &'static canopy::commands::CommandSpec {}
 
+            /// Build a positional call with typed user arguments.
+            pub fn call_scroll(dir: geom::Direction) -> canopy::commands::CommandCall {}
+
             /// Return a typed command reference for this command.
             pub fn cmd_page() -> &'static canopy::commands::CommandSpec {}
 
+            /// Build a positional call with typed user arguments.
+            pub fn call_page(delta: i32) -> canopy::commands::CommandCall {}
+
             /// Return a typed command reference for this command.
             pub fn cmd_scroll_to() -> &'static canopy::commands::CommandSpec {}
+
+            /// Build a positional call with typed user arguments.
+            pub fn call_scroll_to(x: u32, y: u32) -> canopy::commands::CommandCall {}
         }
 
         impl CommandNode for EditorGym {
@@ -93,17 +102,32 @@ pub mod canopy_examples {
             /// Return a typed command reference for this command.
             pub fn cmd_add() -> &'static canopy::commands::CommandSpec {}
 
+            /// Build a positional call with typed user arguments.
+            pub fn call_add() -> canopy::commands::CommandCall {}
+
             /// Return a typed command reference for this command.
             pub fn cmd_split() -> &'static canopy::commands::CommandSpec {}
+
+            /// Build a positional call with typed user arguments.
+            pub fn call_split() -> canopy::commands::CommandCall {}
 
             /// Return a typed command reference for this command.
             pub fn cmd_flex_grow_inc() -> &'static canopy::commands::CommandSpec {}
 
+            /// Build a positional call with typed user arguments.
+            pub fn call_flex_grow_inc() -> canopy::commands::CommandCall {}
+
             /// Return a typed command reference for this command.
             pub fn cmd_flex_grow_dec() -> &'static canopy::commands::CommandSpec {}
 
+            /// Build a positional call with typed user arguments.
+            pub fn call_flex_grow_dec() -> canopy::commands::CommandCall {}
+
             /// Return a typed command reference for this command.
             pub fn cmd_focus() -> &'static canopy::commands::CommandSpec {}
+
+            /// Build a positional call with typed user arguments.
+            pub fn call_focus() -> canopy::commands::CommandCall {}
         }
 
         impl CommandNode for Block {
@@ -128,6 +152,9 @@ pub mod canopy_examples {
 
             /// Return a typed command reference for this command.
             pub fn cmd_delete_focused() -> &'static canopy::commands::CommandSpec {}
+
+            /// Build a positional call with typed user arguments.
+            pub fn call_delete_focused() -> canopy::commands::CommandCall {}
         }
 
         impl CommandNode for FocusGym {
@@ -195,11 +222,20 @@ pub mod canopy_examples {
             /// Return a typed command reference for this command.
             pub fn cmd_scroll_to() -> &'static canopy::commands::CommandSpec {}
 
+            /// Build a positional call with typed user arguments.
+            pub fn call_scroll_to(x: u32, y: u32) -> canopy::commands::CommandCall {}
+
             /// Return a typed command reference for this command.
             pub fn cmd_scroll() -> &'static canopy::commands::CommandSpec {}
 
+            /// Build a positional call with typed user arguments.
+            pub fn call_scroll(dir: Direction) -> canopy::commands::CommandCall {}
+
             /// Return a typed command reference for this command.
             pub fn cmd_page() -> &'static canopy::commands::CommandSpec {}
+
+            /// Build a positional call with typed user arguments.
+            pub fn call_page(delta: i32) -> canopy::commands::CommandCall {}
         }
 
         impl CommandNode for TestPattern {
@@ -299,6 +335,9 @@ pub mod canopy_examples {
 
             /// Return a typed command reference for this command.
             pub fn cmd_add_item() -> &'static canopy::commands::CommandSpec {}
+
+            /// Build a positional call with typed user arguments.
+            pub fn call_add_item() -> canopy::commands::CommandCall {}
         }
 
         impl CommandNode for Intervals {
@@ -389,17 +428,32 @@ pub mod canopy_examples {
             /// Return a typed command reference for this command.
             pub fn cmd_add_item() -> &'static canopy::commands::CommandSpec {}
 
+            /// Build a positional call with typed user arguments.
+            pub fn call_add_item() -> canopy::commands::CommandCall {}
+
             /// Return a typed command reference for this command.
             pub fn cmd_append_item() -> &'static canopy::commands::CommandSpec {}
+
+            /// Build a positional call with typed user arguments.
+            pub fn call_append_item() -> canopy::commands::CommandCall {}
 
             /// Return a typed command reference for this command.
             pub fn cmd_clear() -> &'static canopy::commands::CommandSpec {}
 
+            /// Build a positional call with typed user arguments.
+            pub fn call_clear() -> canopy::commands::CommandCall {}
+
             /// Return a typed command reference for this command.
             pub fn cmd_add_column() -> &'static canopy::commands::CommandSpec {}
 
+            /// Build a positional call with typed user arguments.
+            pub fn call_add_column() -> canopy::commands::CommandCall {}
+
             /// Return a typed command reference for this command.
             pub fn cmd_delete_column() -> &'static canopy::commands::CommandSpec {}
+
+            /// Build a positional call with typed user arguments.
+            pub fn call_delete_column() -> canopy::commands::CommandCall {}
         }
 
         impl CommandNode for ListGym {
@@ -510,14 +564,26 @@ pub mod canopy_examples {
             /// Return a typed command reference for this command.
             pub fn cmd_show_modal() -> &'static canopy::commands::CommandSpec {}
 
+            /// Build a positional call with typed user arguments.
+            pub fn call_show_modal() -> canopy::commands::CommandCall {}
+
             /// Return a typed command reference for this command.
             pub fn cmd_hide_modal() -> &'static canopy::commands::CommandSpec {}
+
+            /// Build a positional call with typed user arguments.
+            pub fn call_hide_modal() -> canopy::commands::CommandCall {}
 
             /// Return a typed command reference for this command.
             pub fn cmd_apply_theme() -> &'static canopy::commands::CommandSpec {}
 
+            /// Build a positional call with typed user arguments.
+            pub fn call_apply_theme() -> canopy::commands::CommandCall {}
+
             /// Return a typed command reference for this command.
             pub fn cmd_apply_effects() -> &'static canopy::commands::CommandSpec {}
+
+            /// Build a positional call with typed user arguments.
+            pub fn call_apply_effects() -> canopy::commands::CommandCall {}
         }
 
         impl CommandNode for Stylegym {
@@ -576,26 +642,50 @@ pub mod canopy_examples {
             /// Return a typed command reference for this command.
             pub fn cmd_new_terminal() -> &'static canopy::commands::CommandSpec {}
 
+            /// Build a positional call with typed user arguments.
+            pub fn call_new_terminal() -> canopy::commands::CommandCall {}
+
             /// Return a typed command reference for this command.
             pub fn cmd_new_terminal_sidebar() -> &'static canopy::commands::CommandSpec {}
+
+            /// Build a positional call with typed user arguments.
+            pub fn call_new_terminal_sidebar() -> canopy::commands::CommandCall {}
 
             /// Return a typed command reference for this command.
             pub fn cmd_next_terminal_sidebar() -> &'static canopy::commands::CommandSpec {}
 
+            /// Build a positional call with typed user arguments.
+            pub fn call_next_terminal_sidebar() -> canopy::commands::CommandCall {}
+
             /// Return a typed command reference for this command.
             pub fn cmd_prev_terminal_sidebar() -> &'static canopy::commands::CommandSpec {}
+
+            /// Build a positional call with typed user arguments.
+            pub fn call_prev_terminal_sidebar() -> canopy::commands::CommandCall {}
 
             /// Return a typed command reference for this command.
             pub fn cmd_delete_terminal() -> &'static canopy::commands::CommandSpec {}
 
+            /// Build a positional call with typed user arguments.
+            pub fn call_delete_terminal() -> canopy::commands::CommandCall {}
+
             /// Return a typed command reference for this command.
             pub fn cmd_focus_active_terminal() -> &'static canopy::commands::CommandSpec {}
+
+            /// Build a positional call with typed user arguments.
+            pub fn call_focus_active_terminal() -> canopy::commands::CommandCall {}
 
             /// Return a typed command reference for this command.
             pub fn cmd_toggle_terminal_focus() -> &'static canopy::commands::CommandSpec {}
 
+            /// Build a positional call with typed user arguments.
+            pub fn call_toggle_terminal_focus() -> canopy::commands::CommandCall {}
+
             /// Return a typed command reference for this command.
             pub fn cmd_activate_terminal() -> &'static canopy::commands::CommandSpec {}
+
+            /// Build a positional call with typed user arguments.
+            pub fn call_activate_terminal(index: usize) -> canopy::commands::CommandCall {}
         }
 
         impl CommandNode for TermGym {
@@ -693,6 +783,9 @@ pub mod canopy_examples {
 
             /// Return a typed command reference for this command.
             pub fn cmd_next_tab() -> &'static canopy::commands::CommandSpec {}
+
+            /// Build a positional call with typed user arguments.
+            pub fn call_next_tab() -> canopy::commands::CommandCall {}
         }
 
         impl CommandNode for TermDemo {

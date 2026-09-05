@@ -7,7 +7,8 @@
 use canopy::{
     Context, EventOutcome, KeyedChildren, NodeId, TypedId, ViewContext, Widget, command,
     commands::{
-        CommandArgs, CommandCall, CommandInvocation, CommandScopeFrame, ListRowContext, ToArgValue,
+        CommandAction, CommandArgs, CommandCall, CommandInvocation, CommandScopeFrame,
+        CommandTarget, ListRowContext, ToArgValue,
     },
     derive_commands,
     error::{Error, Result},
@@ -97,7 +98,7 @@ pub struct List<W: Selectable> {
     /// Optional list-level selection indicator.
     selection_indicator: Option<SelectionIndicator>,
     /// Optional activation command configuration.
-    on_activate: Option<CommandInvocation>,
+    on_activate: Option<CommandAction>,
     /// Pending activation state while handling clicks.
     pending_activate: Option<PendingActivate>,
 }
@@ -143,7 +144,7 @@ impl<W: Selectable> List<W> {
 
     /// Build a list that dispatches a command when a row is activated.
     pub fn with_on_activate(mut self, command: CommandCall) -> Self {
-        self.on_activate = Some(command.invocation());
+        self.on_activate = Some(command.action());
         self
     }
 
@@ -452,8 +453,12 @@ impl<W: Selectable> List<W> {
                 index,
             }),
         };
-        let invocation = invocation_with_index(config, index);
-        c.dispatch_command_scoped(frame, &invocation)?;
+        let invocation = invocation_with_index(&config.invocation, index);
+        c.dispatch_target_scoped(
+            config.target.unwrap_or(CommandTarget::From(c.node_id())),
+            frame,
+            &invocation,
+        )?;
         Ok(())
     }
 

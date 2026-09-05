@@ -40,7 +40,7 @@ impl RoutedInput {
         }
     }
 
-    /// Return true when an anchored binding may run before widget event
+    /// Return true when a binding may run before widget event
     /// dispatch.
     fn allows_pre_event_binding(self) -> bool {
         matches!(self, Self::Key(_))
@@ -222,11 +222,15 @@ impl Canopy {
             inputmap::BindingTarget::Script(binding) => {
                 self.execute_binding_with_scope(node_id, binding, scope)
             }
-            inputmap::BindingTarget::Command(command) => {
-                commands::dispatch(&mut self.core, node_id, &command)
-                    .map(|_| ())
-                    .map_err(Into::into)
-            }
+            inputmap::BindingTarget::Command(command) => commands::dispatch_target(
+                &mut self.core,
+                command
+                    .target
+                    .unwrap_or(commands::CommandTarget::From(node_id)),
+                &command.invocation,
+            )
+            .map(|_| ())
+            .map_err(Into::into),
         };
         self.core.pop_command_scope(depth);
         result?;
@@ -361,16 +365,19 @@ impl Canopy {
         }
     }
 
-    /// Release any Luau closures referenced by removed bindings.
+    /// Release removed script closures and return the count of all removed
+    /// bindings.
     pub(crate) fn release_removed_bindings(
         &mut self,
-        removed: Vec<(inputmap::BindingId, LuauFunctionId)>,
+        removed: Vec<(inputmap::BindingId, inputmap::BindingTarget)>,
     ) -> usize {
-        let released = removed.len();
-        for (_, binding) in removed {
-            self.release_binding_target(binding);
+        let removed_count = removed.len();
+        for (_, target) in removed {
+            if let inputmap::BindingTarget::Script(binding) = target {
+                self.release_binding_target(binding);
+            }
         }
-        released
+        removed_count
     }
 
     /// Release the script host's reference to a bound closure.

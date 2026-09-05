@@ -1,0 +1,12 @@
+error[E0308]: mismatched types
+ --> tests/ui/status_wrong_return.rs:6:1
+  |
+6 | #[derive_commands]
+  | ^^^^^^^^^^^^^^^^^^
+  | |
+  | expected `Result<CommandStatus, Error>`, found `bool`
+  | expected `Result<CommandStatus, canopy::error::Error>` because of return type
+  |
+  = note: expected enum `Result<CommandStatus, canopy::error::Error>`
+             found type `bool`
+  = note: this error originates in the attribute macro `derive_commands` (in Nightly builds, run with -Z macro-backtrace for more info)

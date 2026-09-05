@@ -1,4 +1,4 @@
-use canopy::{BindingPhase, event::key::Key, prelude::*, testing::harness::Harness};
+use canopy::{BindingPhase, RoutePhase, event::key::Key, prelude::*, testing::harness::Harness};
 use canopy_widgets::{Frame, Root, SINGLE_THICK, Terminal};
 
 use crate::termgym::{TermGym, setup_bindings};
@@ -94,6 +94,18 @@ fn f6_toggles_terminal_focus_without_stealing_shell_shortcuts() -> Result<()> {
         .expect("terminal toggle binding");
     assert_eq!(toggle.description, "Toggle terminal list");
     assert_eq!(toggle.phase, BindingPhase::BeforeWidget);
+    assert_eq!(toggle.declared_phase, Some(BindingPhase::BeforeWidget));
+    assert_eq!(
+        toggle
+            .command
+            .as_ref()
+            .expect("declarative toggle")
+            .action
+            .invocation
+            .id
+            .0,
+        "term_gym::toggle_terminal_focus"
+    );
     for removed in ["ctrl-a", "ctrl-F2", "ctrl-F3", "ctrl-F4"] {
         let removed = Key::parse_spec(removed).expect("valid removed key");
         assert!(
@@ -106,6 +118,20 @@ fn f6_toggles_terminal_focus_without_stealing_shell_shortcuts() -> Result<()> {
 
     harness.key(Key::parse_spec("F6").expect("valid key"))?;
     assert!(!terminal_has_focus(&harness));
+    assert!(
+        harness
+            .canopy
+            .route_trace()
+            .iter()
+            .any(|entry| entry.phase == RoutePhase::PreEventBinding)
+    );
+    assert!(
+        !harness
+            .canopy
+            .route_trace()
+            .iter()
+            .any(|entry| entry.phase == RoutePhase::WidgetEvent)
+    );
     let list_path = focus_path(&harness);
     assert!(list_path.to_string().contains("/list/term_entry"));
 

@@ -1,9 +1,9 @@
 # Agent Loop
 
 Canopy automation is built around one typed Luau eval surface. A useful agent
-session should read the surface once, arrange state through fixtures or scripts,
-act through typed commands, observe through the script API, and save any script
-that should become a repeatable smoke test.
+session should read the surface once, arrange state through fixtures or
+scripts, act through typed commands, observe through the script API, and save
+any script that should become a repeatable smoke test.
 
 ## Bootstrap
 
@@ -12,14 +12,27 @@ choosing actions. The payload includes the operating guide, generated API text,
 an API digest, fixture metadata, current command availability, and a compact
 script-journal summary.
 
+`default_target = "root"` identifies the top-level eval anchor.
+`default_commands` reports root-relative availability, while `focus_commands`
+reports focus-relative availability. The legacy `commands` field remains an
+alias for `focus_commands`. Choose an explicit target when multiple widgets
+share a command owner. Use `canopy.call_exact(node, id, ...)` to keep a
+selected owner stable across tree changes, or `canopy.call_focus(id, ...)` to
+follow focus.
+
+Availability includes eligibility and missing event requirements. A disabled
+reason can change between discovery and invocation. Inspect the structured
+invocation error instead of assuming discovery reserves an action.
+
 ```sh
 cargo run -p canopyctl -- bootstrap -- cargo run -p todo -- mcp :memory:
 ```
 
 Inside Luau, use `canopy.api()`, `canopy.commands()`, `canopy.bindings()`,
-`canopy.available_bindings(node?)`, and `fixtures()` when a scenario must inspect the app in the
-same eval that acts on it. `bindings()` returns the complete registry. `available_bindings()`
-returns the effective key-binding snapshot for one focus context.
+`canopy.available_bindings(node?)`, and `fixtures()` when a scenario must
+inspect the app in the same eval that acts on it. `bindings()` returns the
+complete registry. `available_bindings()` returns the effective key-binding
+snapshot for one focus context.
 
 ## Fixtures
 
@@ -38,8 +51,8 @@ applied.
 
 ## Eval Shape
 
-Prefer one eval per scenario step: check availability, call commands, and assert
-the result in the same Luau program. Use typed command calls and runtime
+Prefer one eval per scenario step: check availability, call commands, and
+assert the result in the same Luau program. Use typed command calls and runtime
 observation before coordinate input.
 
 ```luau
@@ -59,14 +72,17 @@ Observation helpers are script-visible:
 - `canopy.screen_cells()` for styled cell assertions.
 - `canopy.screen_region(x, y, w, h)` and `canopy.node_region(node)` for crops.
 - `canopy.route_trace()` for the most recent key or mouse route.
-- `canopy.bindings()` for the complete application and framework binding registry.
-- `canopy.available_bindings(node?)` for effective keys, active modes, and exclusive state.
+- `canopy.bindings()` for the complete application and framework binding
+  registry.
+- `canopy.available_bindings(node?)` for effective keys, active modes, and
+  exclusive state.
 - `canopy.diagnostic_dump(node?)` for tree, focus, binding, and route context.
 - `canopy.script_journal()` for recent eval records.
 
-For modal automation, inspect the application snapshot before opening the modal. After opening,
-verify the exclusive group and focused modal node. Then close the modal and verify the exact focus
-before sending the next application input.
+For modal automation, inspect the application snapshot before opening the
+modal. After opening, verify the exclusive group and focused modal node. Then
+close the modal and verify the exact focus before sending the next application
+input.
 
 ```luau
 local origin = canopy.focused()
@@ -86,9 +102,9 @@ canopy.send_key("?")
 canopy.assert(canopy.focused() == origin, "help must restore exact focus")
 ```
 
-Async predicate waits run on the Ruau async driver. Use
-`canopy.wait_for(fn, timeout_ms?)`, `canopy.wait_for_node(owner, timeout_ms?)`,
-or `canopy.wait_for_screen_text(text, timeout_ms?)` when an eval must observe
+Async predicate waits run on the Ruau async driver. Use `canopy.wait_for(fn,
+timeout_ms?)`, `canopy.wait_for_node(owner, timeout_ms?)`, or
+`canopy.wait_for_screen_text(text, timeout_ms?)` when an eval must observe
 state that may arrive through automation while the script is active. The wait
 helpers service automation between predicate checks; broader terminal event
 redraw during a pending eval remains the outstanding live-loop refinement.
@@ -96,11 +112,12 @@ redraw during a pending eval remains the outstanding live-loop refinement.
 ## Startup Shape
 
 Reusable app/user/project startup scripts are typed roots with an obligated
-`setup: () -> ()` global. Top level startup code should import modules and build pure
-locals; bindings, mode changes, and command calls belong inside `setup()`. Canopy runs
-app-registered startup scripts first, then `@user/init.luau`, then `@project/init.luau`.
-Required modules loaded by those roots keep the ordinary `.d.luau` conformance contract
-and do not need their own `setup`.
+`setup: () -> ()` global. Top level startup code should import modules and
+build pure locals; bindings, mode changes, and command calls belong inside
+`setup()`. Canopy runs app-registered startup scripts first, then
+`@user/init.luau`, then `@project/init.luau`. Required modules loaded by those
+roots keep the ordinary `.d.luau` conformance contract and do not need their
+own `setup`.
 
 ## Replay
 

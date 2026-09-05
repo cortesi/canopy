@@ -102,6 +102,10 @@ pub enum ScriptErrorKind {
     InvalidCommand,
     /// No command target was found.
     NoTarget,
+    /// An exact node does not own the command.
+    WrongOwner,
+    /// The command is currently disabled.
+    DisabledCommand,
     /// A command node handle is stale.
     InvalidNode,
     /// Positional argument count mismatch.
@@ -137,6 +141,8 @@ impl ScriptErrorKind {
             Self::ConflictingCommand => "conflicting_command",
             Self::InvalidCommand => "invalid_command",
             Self::NoTarget => "no_target",
+            Self::WrongOwner => "wrong_owner",
+            Self::DisabledCommand => "command_disabled",
             Self::InvalidNode => "node_invalid",
             Self::ArityMismatch => "arity_mismatch",
             Self::MissingNamedArgument => "missing_named_arg",

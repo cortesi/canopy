@@ -6,6 +6,12 @@ pub mod canopy_derive {
 
     /// Generate command metadata and wrappers for `#[command]` methods in an impl
     /// block.
+    ///
+    /// Each command gets a `cmd_*` metadata accessor and a `call_*` builder with
+    /// typed user parameters. Builders omit context and injected parameters.
+    /// `#[command(enabled = "method")]` adds a read-only eligibility hook. The
+    /// method takes `&self` and `&dyn canopy::ViewContext` and returns
+    /// `canopy::error::Result<canopy::commands::CommandStatus>`.
     #[proc_macro_attribute]
     pub fn derive_commands(
         attr: proc_macro::TokenStream,

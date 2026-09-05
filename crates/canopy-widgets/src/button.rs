@@ -2,7 +2,7 @@
 
 use canopy::{
     Context, EventOutcome, ViewContext, Widget, command,
-    commands::{CommandCall, CommandInvocation},
+    commands::{CommandAction, CommandCall, CommandTarget},
     derive_commands,
     error::Result,
     event::{Event, mouse},
@@ -26,7 +26,7 @@ pub struct Button {
     /// Button label.
     label: String,
     /// Command invocation to dispatch on click.
-    command: Option<CommandInvocation>,
+    command: Option<CommandAction>,
     /// Glyph set for the button border.
     glyphs: BoxGlyphs,
     /// Active state for the button.
@@ -53,7 +53,7 @@ impl Button {
 
     /// Build a button that dispatches a command when clicked.
     pub fn with_command(mut self, command: CommandCall) -> Self {
-        self.command = Some(command.invocation());
+        self.command = Some(command.action());
         self
     }
 
@@ -66,7 +66,10 @@ impl Button {
     #[command]
     pub fn press(&mut self, ctx: &mut dyn Context) -> Result<()> {
         if let Some(command) = self.command.as_ref() {
-            ctx.dispatch_command(command)?;
+            ctx.dispatch_target(
+                command.target.unwrap_or(CommandTarget::From(ctx.node_id())),
+                &command.invocation,
+            )?;
         }
         Ok(())
     }

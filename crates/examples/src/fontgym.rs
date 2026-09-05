@@ -950,12 +950,8 @@ fn status_text(height: u32, state: FontEffects) -> String {
 pub fn setup_bindings(c: &mut Canopy) -> Result<()> {
     c.eval_script(
         r#"
-canopy.bind("Tab", { description = "Next focus" }, function()
-    root.focus("Next")
-end)
-canopy.bind("BackTab", { description = "Previous focus" }, function()
-    root.focus("Prev")
-end)
+canopy.bind_command("Tab", { phase = "after_widget", description = "Next focus" }, "root::focus", "Next")
+canopy.bind_command("BackTab", { phase = "after_widget", description = "Previous focus" }, "root::focus", "Prev")
 "#,
     )?;
     Ok(())

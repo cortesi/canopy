@@ -5,6 +5,8 @@ use syn::Type;
 pub struct MacroArgs {
     /// Ignore command return value when dispatching.
     pub(crate) ignore_result: bool,
+    /// Read-only command eligibility method.
+    pub(crate) enabled: Option<syn::Ident>,
 }
 
 /// Classification of command parameter sources.
@@ -76,6 +78,8 @@ pub struct CommandMeta {
     pub(crate) params: Vec<ParamMeta>,
     /// Whether the return value is ignored.
     pub(crate) ignore_result: bool,
+    /// Read-only command eligibility method.
+    pub(crate) enabled: Option<syn::Ident>,
     /// Return type metadata.
     pub(crate) ret: ReturnMeta,
     /// Command documentation, taken from the method's doc comment.

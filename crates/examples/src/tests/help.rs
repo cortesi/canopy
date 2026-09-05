@@ -25,12 +25,12 @@ fn add_scroll_rows(canopy: &mut canopy::Canopy) -> Result<()> {
     let mut source = ('a'..='t')
         .map(|key| {
             format!(
-                "canopy.bind(\"alt-{key}\", {{ description = \"Extra help row {key}\" }}, function() end)\n"
+                "canopy.bind(\"alt-{key}\", {{ phase = \"after_widget\", description = \"Extra help row {key}\" }}, function() end)\n"
             )
         })
         .collect::<String>();
     source.push_str(
-        r#"canopy.bind("ctrl-x", {
+        r#"canopy.bind("ctrl-x", { phase = "before_widget",
             description = "Acceptance sentinel",
             path = "/root/**/",
             tier = "global",

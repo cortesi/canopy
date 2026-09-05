@@ -194,6 +194,12 @@ fn parse_command_macro_args(attrs: &[Attribute]) -> Result<Option<MacroArgs>> {
                 attr.parse_nested_meta(|meta| {
                     if meta.path.is_ident("ignore_result") {
                         args.ignore_result = true;
+                    } else if meta.path.is_ident("enabled") {
+                        if args.enabled.is_some() {
+                            return Err(meta.error("duplicate enabled argument"));
+                        }
+                        let name: syn::LitStr = meta.value()?.parse()?;
+                        args.enabled = Some(name.parse()?);
                     } else {
                         return Err(syn::Error::new_spanned(
                             meta.path,
@@ -333,6 +339,7 @@ pub fn parse_command_method(owner: &str, method: &ImplItemFn) -> Result<Option<C
         owner: owner.to_string(),
         params,
         ignore_result: macro_args.ignore_result,
+        enabled: macro_args.enabled,
         ret,
         doc,
     }))
@@ -401,6 +408,37 @@ mod tests {
         let cmd = parse_command_method("foo", &method).unwrap().unwrap();
         assert!(cmd.ignore_result);
         assert!(cmd.ret.is_result);
+    }
+
+    #[test]
+    fn parses_enabled_hook_with_ignore_result() {
+        let method: syn::ImplItemFn = parse_quote! {
+            #[command(enabled = "can_update", ignore_result)]
+            fn update(&mut self) {}
+        };
+        let cmd = parse_command_method("foo", &method).unwrap().unwrap();
+        assert_eq!(cmd.enabled.unwrap(), "can_update");
+        assert!(cmd.ignore_result);
+    }
+
+    #[test]
+    fn rejects_invalid_or_duplicate_enabled_hooks() {
+        for method in [
+            parse_quote! {
+                #[command(enabled = "self.can_update")]
+                fn update(&mut self) {}
+            },
+            parse_quote! {
+                #[command(enabled = "can_update", enabled = "other")]
+                fn update(&mut self) {}
+            },
+            parse_quote! {
+                #[command(enabled = true)]
+                fn update(&mut self) {}
+            },
+        ] {
+            assert!(parse_command_method("foo", &method).is_err());
+        }
     }
 
     #[test]

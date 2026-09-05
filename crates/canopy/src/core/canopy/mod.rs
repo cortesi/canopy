@@ -34,7 +34,7 @@ use crate::{
         fixture::{Fixture, FixtureInfo},
     },
     error::{self, Result},
-    event::Event,
+    event::{Event, key::Key},
     geom::Size,
     script,
     style::{StyleMap, solarized},
@@ -845,6 +845,38 @@ impl Canopy {
             .bind_framework(group, input, path, description, command)
     }
 
+    /// Install an idempotent framework binding with an explicit phase and
+    /// source.
+    pub fn bind_framework_with_options(
+        &mut self,
+        group: inputmap::FrameworkBindingGroup,
+        input: inputmap::InputSpec,
+        options: inputmap::BindingOptions,
+        command: commands::CommandInvocation,
+    ) -> Result<inputmap::BindingId> {
+        self.core
+            .input_map
+            .bind_framework_with_options(group, input, options, command)
+    }
+
+    /// Install or replace an application command binding.
+    ///
+    /// An omitted command target resolves from the node where the binding wins.
+    pub fn bind_command(
+        &mut self,
+        key: impl Into<Key>,
+        options: inputmap::BindingOptions,
+        command: commands::CommandCall,
+    ) -> Result<inputmap::BindingId> {
+        let (id, removed) = self.core.input_map.replace_application_action(
+            inputmap::InputSpec::Key(key.into()),
+            options,
+            inputmap::BindingTarget::Command(command.action()),
+        )?;
+        self.release_removed_bindings(removed);
+        Ok(id)
+    }
+
     /// Remove an application binding by ID.
     ///
     /// A framework-owned ID returns an error.
@@ -852,7 +884,9 @@ impl Canopy {
         let Some(target) = self.core.input_map.unbind(id)? else {
             return Ok(false);
         };
-        self.release_binding_target(target);
+        if let inputmap::BindingTarget::Script(target) = target {
+            self.release_binding_target(target);
+        }
         Ok(true)
     }
 
@@ -872,8 +906,7 @@ impl Canopy {
         self.release_removed_bindings(removed)
     }
 
-    /// Remove all callbacks whose VM ownership is tied to the current source
-    /// epoch.
+    /// Remove application bindings and callbacks from the current source epoch.
     fn clear_script_callbacks(&mut self) {
         let removed = self.core.input_map.clear_application();
         self.release_removed_bindings(removed);
@@ -1226,29 +1259,29 @@ impl Canopy {
         Ok(ran)
     }
 
-    /// Return command availability from the current focus position.
-    ///
-    /// This computes which commands would resolve to a target if dispatched
-    /// from the current focus. For each command:
-    /// - Free commands always have `resolution = Some(Free)`
-    /// - Node-routed commands have `resolution = Some(Subtree{..})` or
-    ///   `Some(Ancestor{..})` if a matching node exists, `None` otherwise
-    pub fn command_availability_from_focus(&self) -> Vec<commands::CommandAvailability<'_>> {
-        let start = self.core.focus.unwrap_or(self.core.root);
-        self.command_availability_from_node(start)
+    /// Return command availability using an explicit target policy.
+    pub fn command_availability(
+        &self,
+        target: commands::CommandTarget,
+    ) -> Result<Vec<commands::CommandAvailability<'_>>> {
+        commands::CommandResolver::for_target(&self.core, target).availability()
     }
 
-    /// Return command availability from a specific node.
-    ///
-    /// Computes which commands would dispatch to a target, using the same
-    /// resolution logic as `commands::dispatch`:
-    /// 1. First search the subtree rooted at `start` in pre-order
-    /// 2. Then walk ancestors
+    /// Return command availability from the current focus, or root if
+    /// unfocused.
+    pub fn command_availability_from_focus(
+        &self,
+    ) -> Result<Vec<commands::CommandAvailability<'_>>> {
+        self.command_availability(commands::CommandTarget::Focus)
+    }
+
+    /// Return command availability by searching a node's subtree, then
+    /// ancestors.
     pub fn command_availability_from_node(
         &self,
         start: NodeId,
-    ) -> Vec<commands::CommandAvailability<'_>> {
-        commands::CommandResolver::new(&self.core, start).availability()
+    ) -> Result<Vec<commands::CommandAvailability<'_>>> {
+        self.command_availability(commands::CommandTarget::From(start))
     }
 
     /// Return the effective key bindings for a node or the current focus.

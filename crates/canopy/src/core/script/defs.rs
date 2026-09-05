@@ -126,6 +126,17 @@ pub(super) fn register_framework_declarations(builder: &mut module::Builder) {
         )),
     ));
     builder.alias(declaration::Alias::new(
+        "CommandTarget",
+        declaration::Type::table([
+            declaration::Field::new(
+                "kind",
+                declaration::Type::literals(["anchor", "exact", "from", "focus"]),
+            ),
+            declaration::Field::new("node", declaration::Type::named("NodeId").optional())
+                .doc("Required for exact and from; omitted for anchor and focus."),
+        ]),
+    ));
+    builder.alias(declaration::Alias::new(
         "BindOptions",
         declaration::Type::table([
             declaration::Field::new("description", declaration::Type::String)
@@ -134,6 +145,11 @@ pub(super) fn register_framework_declarations(builder: &mut module::Builder) {
                 .doc("Optional input mode. Nil or empty uses the default mode."),
             declaration::Field::new("path", declaration::Type::String.optional())
                 .doc("Optional path filter such as `editor/*`."),
+            declaration::Field::new(
+                "phase",
+                declaration::Type::literals(["before_widget", "after_widget"]).optional(),
+            )
+            .doc("Explicit key dispatch phase. Mouse bindings accept only after_widget."),
             declaration::Field::new("tier", declaration::Type::literals(["global"]).optional())
                 .doc("Use the global tier. A global binding cannot name a mode."),
         ]),
@@ -185,6 +201,23 @@ fn register_binding_info(builder: &mut module::Builder) {
                 .doc("Named input mode, when the scope is mode."),
             declaration::Field::new("path", declaration::Type::String)
                 .doc("Path filter string used when matching the focused path."),
+            declaration::Field::new(
+                "phase",
+                declaration::Type::literals(["before_widget", "after_widget"]).optional(),
+            ),
+            declaration::Field::new("command", declaration::Type::String.optional()),
+            declaration::Field::new("arguments", declaration::Type::Any.optional()),
+            declaration::Field::new(
+                "command_target",
+                declaration::Type::table([
+                    declaration::Field::new(
+                        "kind",
+                        declaration::Type::literals(["route", "exact", "from", "focus"]),
+                    ),
+                    declaration::Field::new("node", declaration::Type::named("NodeId").optional()),
+                ])
+                .optional(),
+            ),
             declaration::Field::new("description", declaration::Type::String)
                 .doc("Required user-facing description."),
             declaration::Field::new("source", declaration::Type::String.optional())
@@ -203,6 +236,11 @@ fn register_command_info(builder: &mut module::Builder) {
                 .doc("Parameter name used for named invocation."),
             declaration::Field::new("kind", declaration::Type::literals(["injected", "user"]))
                 .doc("Whether the parameter is injected or user-supplied."),
+            declaration::Field::new(
+                "requirement",
+                declaration::Type::literals(["event", "mouse", "list_row"]).optional(),
+            )
+            .doc("Injected context kind. Optional parameters do not require its presence."),
             declaration::Field::new("rust_type", declaration::Type::String)
                 .doc("Rust type name from command metadata."),
             declaration::Field::new("luau_type", declaration::Type::String)
@@ -232,6 +270,15 @@ fn register_command_info(builder: &mut module::Builder) {
                 .doc("True when the command can resolve from the current script anchor."),
             declaration::Field::new("target", declaration::Type::named("NodeId").optional())
                 .doc("Current target node, when a node command can resolve."),
+            declaration::Field::new(
+                "status",
+                declaration::Type::literals(["enabled", "disabled"]).optional(),
+            ),
+            declaration::Field::new("disabled_reason", declaration::Type::String.optional()),
+            declaration::Field::new(
+                "missing_requirements",
+                declaration::Type::literals(["event", "mouse", "list_row"]).array(),
+            ),
         ]),
     ));
 }
@@ -271,6 +318,48 @@ fn register_observation_info(builder: &mut module::Builder) {
             declaration::Field::new("id", declaration::Type::Number)
                 .doc("Stable numeric binding identifier."),
             declaration::Field::new("input", declaration::Type::String).doc("Normalized key spec."),
+            declaration::Field::new(
+                "declared_phase",
+                declaration::Type::literals(["before_widget", "after_widget"]).optional(),
+            ),
+            declaration::Field::new(
+                "command",
+                declaration::Type::table([
+                    declaration::Field::new("command", declaration::Type::String),
+                    declaration::Field::new("arguments", declaration::Type::Any),
+                    declaration::Field::new(
+                        "command_target",
+                        declaration::Type::table([
+                            declaration::Field::new(
+                                "kind",
+                                declaration::Type::literals(["route", "exact", "from", "focus"]),
+                            ),
+                            declaration::Field::new(
+                                "node",
+                                declaration::Type::named("NodeId").optional(),
+                            ),
+                        ]),
+                    ),
+                    declaration::Field::new("available", declaration::Type::Boolean),
+                    declaration::Field::new(
+                        "target",
+                        declaration::Type::named("NodeId").optional(),
+                    ),
+                    declaration::Field::new(
+                        "status",
+                        declaration::Type::literals(["enabled", "disabled"]).optional(),
+                    ),
+                    declaration::Field::new(
+                        "disabled_reason",
+                        declaration::Type::String.optional(),
+                    ),
+                    declaration::Field::new(
+                        "missing_requirements",
+                        declaration::Type::literals(["event", "mouse", "list_row"]).array(),
+                    ),
+                ])
+                .optional(),
+            ),
             declaration::Field::new("description", declaration::Type::String),
             declaration::Field::new("owner", declaration::Type::String)
                 .doc("Application or framework group owner."),
@@ -285,7 +374,7 @@ fn register_observation_info(builder: &mut module::Builder) {
                 .doc("Route path at which this binding wins."),
             declaration::Field::new(
                 "phase",
-                declaration::Type::literals(["before_widget", "after_ignore"]),
+                declaration::Type::literals(["before_widget", "after_widget"]),
             )
             .doc("Phase relative to widget input handling."),
             declaration::Field::new("source", declaration::Type::String.optional())

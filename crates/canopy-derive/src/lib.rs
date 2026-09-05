@@ -13,6 +13,12 @@ use syn::{Attribute, Fields, ItemImpl, Result, parse_macro_input, parse_quote};
 
 /// Generate command metadata and wrappers for `#[command]` methods in an impl
 /// block.
+///
+/// Each command gets a `cmd_*` metadata accessor and a `call_*` builder with
+/// typed user parameters. Builders omit context and injected parameters.
+/// `#[command(enabled = "method")]` adds a read-only eligibility hook. The
+/// method takes `&self` and `&dyn canopy::ViewContext` and returns
+/// `canopy::error::Result<canopy::commands::CommandStatus>`.
 #[proc_macro_attribute]
 pub fn derive_commands(
     _attr: proc_macro::TokenStream,
@@ -81,6 +87,23 @@ fn expand_command_arg(input: &syn::DeriveInput) -> Result<proc_macro2::TokenStre
         }
     }
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let mut value_generics = input.generics.clone();
+    if !value_generics.params.is_empty() {
+        for field in fields {
+            let ty = &field.ty;
+            value_generics
+                .make_where_clause()
+                .predicates
+                .push(parse_quote!(#ty: canopy::commands::ToArgValue));
+        }
+    }
+    let (value_impl_generics, value_ty_generics, value_where_clause) =
+        value_generics.split_for_impl();
+    let value_fields = fields.iter().map(|field| {
+        let ident = field.ident.as_ref().expect("named struct field");
+        let name = ident.to_string();
+        quote! { (#name.to_string(), canopy::commands::ToArgValue::to_arg_value(self.#ident)) }
+    });
 
     let field_decl_regs = fields.iter().map(|field| {
         let ty = &field.ty;
@@ -108,6 +131,14 @@ fn expand_command_arg(input: &syn::DeriveInput) -> Result<proc_macro2::TokenStre
     }
 
     Ok(quote! {
+        impl #value_impl_generics canopy::commands::ToArgValue for #ident #value_ty_generics #value_where_clause {
+            fn to_arg_value(self) -> canopy::commands::ArgValue {
+                canopy::commands::ArgValue::Map(::std::collections::BTreeMap::from([
+                    #(#value_fields),*
+                ]))
+            }
+        }
+
         impl #impl_generics canopy::commands::CommandArg for #ident #ty_generics #where_clause {}
 
         impl #impl_generics canopy::commands::CommandType for #ident #ty_generics #where_clause {

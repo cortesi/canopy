@@ -118,9 +118,7 @@ impl Loader for TextGym {}
 
 /// Default bindings for the text gym demo.
 const DEFAULT_BINDINGS: &str = r#"
-canopy.bind("q", { path = "root", description = "Quit" }, function()
-    root.quit()
-end)
+canopy.bind_command("q", { phase = "after_widget", path = "root", description = "Quit" }, "root::quit")
 "#;
 
 /// Install key bindings for the text gym demo.

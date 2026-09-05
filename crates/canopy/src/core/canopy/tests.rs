@@ -542,6 +542,56 @@ fn framework_command_bindings_share_route_resolution_and_command_scope() -> Resu
 }
 
 #[test]
+fn explicit_binding_phases_override_the_same_selector_and_change_route_trace() -> Result<()> {
+    run_ttree(|c, _, tree| {
+        c.core.set_focus(tree.a_a)?;
+        for phase in [
+            inputmap::BindingPhase::BeforeWidget,
+            inputmap::BindingPhase::AfterIgnore,
+        ] {
+            c.bind_command(
+                'h',
+                inputmap::BindingOptions {
+                    path: "/r/**/".into(),
+                    scope: inputmap::BindingScope::Default,
+                    description: "Root action".into(),
+                    source: None,
+                    phase: Some(phase),
+                },
+                R::call_c_root(),
+            )?;
+            let snapshot = c.available_bindings(None)?;
+            let binding = snapshot
+                .bindings
+                .iter()
+                .find(|binding| binding.key == 'h')
+                .unwrap();
+            assert_eq!(binding.phase, phase);
+            assert_eq!(binding.declared_phase, Some(phase));
+            assert_eq!(binding.path_filter, "/r/**/");
+            reset_state();
+            c.key(None, 'h')?;
+            let phases = c
+                .route_trace()
+                .iter()
+                .map(|entry| entry.phase)
+                .collect::<Vec<_>>();
+            if phase == inputmap::BindingPhase::BeforeWidget {
+                assert_eq!(get_state().path, ["r.c_root()"]);
+                assert!(phases.contains(&RoutePhase::PreEventBinding));
+                assert!(!phases.contains(&RoutePhase::WidgetEvent));
+            } else {
+                assert_eq!(get_state().path, ["ba_la@key->ignore", "r.c_root()"]);
+                assert!(phases.contains(&RoutePhase::PostEventBinding));
+                assert!(phases.contains(&RoutePhase::WidgetEvent));
+                assert!(!phases.contains(&RoutePhase::PreEventBinding));
+            }
+        }
+        Ok(())
+    })
+}
+
+#[test]
 fn input_mode_binding_target_switches_modes() -> Result<()> {
     let mut canopy = Canopy::new();
     canopy.eval_script(r#"canopy.bind("i", { description = "Insert mode" }, function() canopy.set_mode("insert") end)"#)?;

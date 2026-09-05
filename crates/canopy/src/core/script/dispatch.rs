@@ -89,6 +89,29 @@ pub(super) fn dispatch_command_by_name(
     dispatch_command(scope, spec, node_id.unwrap_or(anchor), values)
 }
 
+/// Dispatch explicit arguments without the legacy single-map inference.
+pub(super) fn dispatch_explicit(
+    scope: &Scope<'_>,
+    name: &str,
+    target: commands::CommandTarget,
+    args: CommandArgs,
+) -> Result<ArgValue> {
+    with_current_canopy(scope, |canopy, anchor| {
+        let spec = canopy.core.commands.get(name).ok_or_else(|| {
+            error::Error::from(commands::CommandError::UnknownCommand {
+                id: name.to_string(),
+            })
+        })?;
+        let invocation = CommandInvocation { id: spec.id, args };
+        let mut ctx = super::CoreContext::new(&mut canopy.core, anchor);
+        Ok(super::Context::dispatch_target(
+            &mut ctx,
+            target,
+            &invocation,
+        )?)
+    })
+}
+
 /// Convert the remaining host-call values into command arguments.
 pub(super) fn values_to_args<'s>(
     scope: &Scope<'s>,

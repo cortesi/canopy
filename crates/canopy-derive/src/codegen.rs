@@ -47,6 +47,12 @@ impl ParamMeta {
             }
             ParamKind::Context { .. } => return None,
         };
+        let requirement = if self.kind == ParamKind::Injected {
+            let ty = &self.ty;
+            quote! { Some(<#ty as canopy::commands::Inject>::requirement) }
+        } else {
+            quote! { None }
+        };
         let name = self.name_lit();
         let ty = self.ty_lit();
         let optional = self.is_option;
@@ -63,6 +69,7 @@ impl ParamMeta {
                     doc: #doc,
                 },
                 optional: #optional,
+                requirement: #requirement,
             }
         })
     }
@@ -265,6 +272,14 @@ impl CommandMeta {
         )
     }
 
+    /// Identifier for the erased read-only eligibility shim.
+    fn status_ident(&self) -> syn::Ident {
+        syn::Ident::new(
+            &format!("__canopy_cmd_status_{}", self.name),
+            proc_macro2::Span::call_site(),
+        )
+    }
+
     /// Fully-qualified command identifier string.
     fn command_id(&self) -> String {
         format!("{}::{}", self.owner, self.name)
@@ -451,6 +466,12 @@ impl CommandMeta {
         let owner = &self.owner;
         let ret = self.ret.spec_tokens(self.ignore_result);
         let doc = opt_str_tokens(self.doc.as_deref());
+        let status = if self.enabled.is_some() {
+            let status_ident = self.status_ident();
+            quote! { Some(Self::#status_ident) }
+        } else {
+            quote! { None }
+        };
 
         quote! {
             const #spec_const_ident: canopy::commands::CommandSpec = canopy::commands::CommandSpec {
@@ -461,6 +482,7 @@ impl CommandMeta {
                 ret: #ret,
                 doc: #doc,
                 invoke: Self::#invoke_ident,
+                status: #status,
             };
         }
     }
@@ -477,6 +499,51 @@ impl CommandMeta {
         }
     }
 
+    /// Render a positional call builder with the original user parameter types.
+    fn call_builder_tokens(&self) -> proc_macro2::TokenStream {
+        let builder_ident = syn::Ident::new(
+            &format!("call_{}", self.name),
+            proc_macro2::Span::call_site(),
+        );
+        let accessor = self.accessor_ident();
+        let params = self.user_params();
+        let names: Vec<syn::Ident> = params
+            .iter()
+            .map(|param| syn::parse_str(&param.name).expect("parsed parameter identifier"))
+            .collect();
+        let types = params.iter().map(|param| &param.ty);
+        quote! {
+            #[doc = "Build a positional call with typed user arguments."]
+            pub fn #builder_ident(#(#names: #types),*) -> canopy::commands::CommandCall {
+                Self::#accessor().call_with(canopy::commands::CommandArgs::Positional(vec![
+                    #(canopy::commands::ToArgValue::to_arg_value(#names)),*
+                ]))
+            }
+        }
+    }
+
+    /// Render the checked immutable target adapter for an eligibility method.
+    fn status_tokens(&self) -> proc_macro2::TokenStream {
+        let Some(method) = &self.enabled else {
+            return quote! {};
+        };
+        let status_ident = self.status_ident();
+        quote! {
+            fn #status_ident(
+                target: &dyn ::std::any::Any,
+                ctx: &dyn canopy::ViewContext,
+            ) -> canopy::error::Result<canopy::commands::CommandStatus>
+            where
+                Self: 'static,
+            {
+                let target = target.downcast_ref::<Self>().ok_or_else(|| {
+                    canopy::error::Error::Invalid("command status target type mismatch".into())
+                })?;
+                target.#method(ctx)
+            }
+        }
+    }
+
     /// Render all generated impl items for this command.
     fn generated_items(&self) -> proc_macro2::TokenStream {
         let names = self.names_const_tokens();
@@ -484,12 +551,16 @@ impl CommandMeta {
         let invoke = self.invoke_tokens();
         let spec = self.spec_const_tokens();
         let accessor = self.accessor_tokens();
+        let builder = self.call_builder_tokens();
+        let status = self.status_tokens();
         quote! {
             #names
             #params
             #invoke
             #spec
             #accessor
+            #builder
+            #status
         }
     }
 }
