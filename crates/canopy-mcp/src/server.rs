@@ -199,6 +199,8 @@ fn script_api_tool_result(
 
 /// Serve `bootstrap`, `script_eval`, `script_api`, and `fixtures` over stdio
 /// for an app factory.
+/// This low-level entry point grants trusted-local access to all exposed native
+/// actions. Use `launch_with_options` to enforce an application launch policy.
 pub fn serve_stdio(factory: AppFactory) -> Result<()> {
     Server::new(move || canopy_mcp_server(factory.clone()))
         .serve_stdio_blocking()
@@ -244,6 +246,9 @@ impl Drop for UdsServerHandle {
 
 /// Serve live MCP automation for a running canopy app over a Unix-domain
 /// socket.
+/// This low-level entry point grants trusted-local access. The application must
+/// choose a private socket directory and enforce suitable host filesystem
+/// permissions.
 pub fn serve_uds(
     socket_path: impl AsRef<Path>,
     automation: AutomationHandle,

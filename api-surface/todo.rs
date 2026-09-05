@@ -53,7 +53,7 @@ pub mod todo {
     }
 
     /// Register and finalize the todo application API with default bindings.
-    pub fn setup_app(cnpy: &mut Canopy) -> Result<()> {}
+    pub fn setup_app() -> Result<Canopy> {}
 
     /// Create a fully configured todo application backed by `db_path`.
     pub fn create_app(db_path: &str) -> anyhow::Result<Canopy> {}

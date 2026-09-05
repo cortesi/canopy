@@ -1,21 +1,33 @@
 use canopy::{
-    Loader, RoutePhase, Widget, error::Result, event::key::Key, geom::Size,
+    CanopyBuilder, Loader, RoutePhase, Widget, error::Result, event::key::Key, geom::Size,
     testing::harness::Harness,
 };
 use canopy_widgets::Root;
 
 use crate::{demo_canopy, termgym, widget_editor};
 
-fn root_harness<W>(app: W, setup: fn(&mut canopy::Canopy) -> Result<()>) -> Result<Harness>
+#[test]
+fn demo_api_build_does_not_assemble_or_publish() -> Result<()> {
+    let canopy = termgym::binding_setup(demo_canopy().configure(termgym::TermGym::load)).build()?;
+    assert!(canopy.snapshot().is_none());
+    assert!(
+        canopy
+            .with_root_view(|context| context.find_nodes("root/termgym"))
+            .is_empty()
+    );
+    Ok(())
+}
+
+fn root_harness<W>(app: W, setup: fn(CanopyBuilder) -> CanopyBuilder) -> Result<Harness>
 where
     W: Widget + Loader + 'static,
 {
-    let mut canopy = demo_canopy()?;
-    W::load(&mut canopy)?;
-    canopy.finalize_api()?;
-    setup(&mut canopy)?;
-    Root::install_app(&mut canopy, app)?;
-    canopy.run_startup_scripts()?;
+    let canopy = setup(demo_canopy().configure(W::load))
+        .assemble(move |canopy| {
+            Root::install_app(canopy, app)?;
+            Ok(())
+        })
+        .build()?;
     let mut harness = Harness::from_canopy(canopy, Size::new(80, 24))?;
     harness.render()?;
     Ok(harness)
@@ -122,7 +134,7 @@ fn prove_help_flow(mut harness: Harness) -> Result<()> {
 
 #[test]
 fn termgym_help_opens_over_a_consuming_terminal_and_restores_input() -> Result<()> {
-    let harness = root_harness(termgym::TermGym::new(), termgym::setup_bindings)?;
+    let harness = root_harness(termgym::TermGym::new(), termgym::binding_setup)?;
     prove_help_flow(harness)
 }
 
@@ -130,7 +142,7 @@ fn termgym_help_opens_over_a_consuming_terminal_and_restores_input() -> Result<(
 fn widget_editor_help_opens_over_a_consuming_editor_and_restores_input() -> Result<()> {
     let harness = root_harness(
         widget_editor::WidgetEditor::new("fn main() {}\n", "rs", "test.rs"),
-        widget_editor::setup_bindings,
+        widget_editor::binding_setup,
     )?;
     prove_help_flow(harness)
 }

@@ -1,5 +1,5 @@
 use canopy::{
-    command, derive_commands,
+    CanopyBuilder, command, derive_commands,
     geom::{Direction, Line},
     layout::CanvasContext,
     prelude::*,
@@ -171,4 +171,15 @@ pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
     cnpy.eval_script(FRAMEGYM_PREFIX)?;
     cnpy.eval_script(&crate::text_scroll_bindings("test_pattern", "frame_gym"))?;
     Ok(())
+}
+
+/// Queue this demo's bindings and native configuration in their builder phases.
+#[must_use]
+pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
+    builder
+        .bindings("framegym-prefix", FRAMEGYM_PREFIX)
+        .bindings(
+            "framegym-scroll",
+            crate::text_scroll_bindings("test_pattern", "frame_gym"),
+        )
 }

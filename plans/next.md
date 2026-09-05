@@ -1052,40 +1052,40 @@ R19 and R24 publish stable observations using Stage 4 identity and interaction s
 
 R21, R22, R23, and R25 complete application assembly after Stage 5.
 
-- [ ] Add `CanopyBuilder` in `core/canopy/builder.rs` and export it through the
+- [x] Add `CanopyBuilder` in `core/canopy/builder.rs` and export it through the
   crate's intentional public paths.
   Implement consuming phases and disabled/trusted script-root options.
-- [ ] Convert Todo setup and `crates/examples/src/lib.rs` shared setup helpers.
+- [x] Convert Todo setup and `crates/examples/src/lib.rs` shared setup helpers.
   Preserve app/user/project startup order and API-only construction behavior.
   Update demos that register defaults or roots through those helpers.
-- [ ] Add `RunOptions` and the pure interrupt decision function in the Crossterm
+- [x] Add `RunOptions` and the pure interrupt decision function in the Crossterm
   adapter.
   Add `runloop_with_options` and pass options through MCP launch configuration.
   Configure TermGym for routed Ctrl+C and explicit emergency exit.
-- [ ] Add launch automation policy in `canopy-mcp/src/{launch,server}.rs`.
+- [x] Add launch automation policy in `canopy-mcp/src/{launch,server}.rs`.
   Keep disabled launch paths free of listeners.
   Document trusted-local native authority and socket deployment requirements in
   `docs/scripting.md` and `docs/agent-loop.md`.
-- [ ] Add widget capability features in `canopy-widgets/Cargo.toml` and gate
+- [x] Add widget capability features in `canopy-widgets/Cargo.toml` and gate
   modules/re-exports in `canopy-widgets/src/lib.rs`.
   Make `image`, `fontdue`, `syntect`, `itty-core`, and feature-specific runtime
   dependencies optional where their callers permit it.
-- [ ] Extract shared buffer support from `canopy-widgets/src/editor/` into
+- [x] Extract shared buffer support from `canopy-widgets/src/editor/` into
   `canopy-widgets/src/text_buffer/`.
   Update Input and Editor imports while preserving public editor buffer exports.
   Gate Inspector construction and commands in Root behind `devtools`.
-- [ ] Update feature-dependent tests, benchmarks, and demo manifests.
+- [x] Update feature-dependent tests, benchmarks, and demo manifests.
   Make `xtask::run_default_check` verify minimum, full, and each independent
   widget capability without feature unification from example dependencies.
   Keep full-feature `cargo xtask api` generation unchanged.
-- [ ] Add builder phase-failure and disabled-root tests.
+- [x] Add builder phase-failure and disabled-root tests.
   Add adapter Ctrl+C delivery, legacy exit, and emergency cleanup tests.
   Add minimum-feature Input/List/Root tests with no Inspector nodes.
-- [ ] Validate minimum and each capability using package-scoped Cargo checks.
+- [x] Validate minimum and each capability using package-scoped Cargo checks.
   Inspect `cargo tree -p canopy-widgets --no-default-features -e normal`.
   Run package tests with `ncode test` for `canopy`, `canopy-widgets`,
   `canopy-mcp`, `canopy-examples`, and `todo`.
-- [ ] Regenerate API skeletons and run `cargo xtask checks`.
+- [x] Regenerate API skeletons and run `cargo xtask checks`.
   Review feature boundaries, setup failure ownership, and the completed stage diff.
 
 ### Stage 7: Replay contracts and final integration

@@ -147,9 +147,34 @@ fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
-/// Build all workspace targets with default features.
+/// Build the full workspace and isolated minimum and independent widget
+/// profiles.
 fn run_default_check(workspace_root: &Path) -> bool {
-    run_cargo_command(workspace_root, &["check", "--workspace", "--all-targets"])
+    if !run_cargo_command(workspace_root, &["check", "--workspace", "--all-targets"]) {
+        return false;
+    }
+    for capability in [
+        None,
+        Some("editor"),
+        Some("terminal-widget"),
+        Some("graphics"),
+        Some("devtools"),
+    ] {
+        let mut args = vec![
+            "check",
+            "-p",
+            "canopy-widgets",
+            "--no-default-features",
+            "--all-targets",
+        ];
+        if let Some(capability) = capability {
+            args.extend(["--features", capability]);
+        }
+        if !run_cargo_command(workspace_root, &args) {
+            return false;
+        }
+    }
+    true
 }
 
 /// Type-check every tracked Luau source under its owning application surface.

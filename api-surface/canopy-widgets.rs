@@ -43,6 +43,83 @@ pub mod canopy_widgets {
             }
         }
 
+        /// Editor widget implementation.
+        pub struct Editor {}
+
+        impl super::widget::Editor {
+            /// Construct an editor with default configuration.
+            pub fn new(text: impl Into<String>) -> Self {}
+
+            /// Construct an editor with a configuration.
+            pub fn with_config(text: impl Into<String>, config: EditorConfig) -> Self {}
+
+            /// Return the current editor configuration.
+            pub fn config(&self) -> &EditorConfig {}
+
+            /// Replace the editor configuration.
+            pub fn set_config(&mut self, config: EditorConfig) {}
+
+            /// Return the buffer contents.
+            pub fn text(&self) -> String {}
+
+            /// Replace the buffer contents.
+            pub fn set_text(&mut self, text: impl Into<String>) {}
+
+            /// Return the current selection.
+            pub fn selection(&self) -> Selection {}
+
+            /// Install a syntax highlighter.
+            pub fn set_highlighter(&mut self, highlighter: Option<Box<dyn Highlighter>>) {}
+
+            /// Move the cursor.
+            /// @param dir The direction to move the cursor.
+            pub fn cursor(&mut self, ctx: &mut dyn Context, dir: Direction) {}
+
+            /// Undo the last edit.
+            pub fn undo(&mut self, _ctx: &mut dyn Context) {}
+
+            /// Redo the last undone edit.
+            pub fn redo(&mut self, _ctx: &mut dyn Context) {}
+
+            /// Return a typed command reference for this command.
+            pub fn cmd_cursor() -> &'static canopy::commands::CommandSpec {}
+
+            /// Build a positional call with typed user arguments.
+            pub fn call_cursor(dir: Direction) -> canopy::commands::CommandCall {}
+
+            /// Return a typed command reference for this command.
+            pub fn cmd_undo() -> &'static canopy::commands::CommandSpec {}
+
+            /// Build a positional call with typed user arguments.
+            pub fn call_undo() -> canopy::commands::CommandCall {}
+
+            /// Return a typed command reference for this command.
+            pub fn cmd_redo() -> &'static canopy::commands::CommandSpec {}
+
+            /// Build a positional call with typed user arguments.
+            pub fn call_redo() -> canopy::commands::CommandCall {}
+        }
+
+        impl CommandNode for Editor {
+            fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
+        }
+
+        impl Widget for Editor {
+            fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
+
+            fn cursor(&self) -> Option<cursor::Cursor> {}
+
+            fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
+
+            fn measure(&self, c: MeasureConstraints) -> Measurement {}
+
+            fn canvas(&self, view: Size, _ctx: &CanvasContext<'_>) -> Size {}
+
+            fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {}
+
+            fn name(&self) -> NodeName {}
+        }
+
         /// Information about how an edit changed logical line counts.
         #[derive(Debug, Clone, Copy, StructuralPartialEq, PartialEq, Eq)]
         pub struct LineChange {
@@ -52,6 +129,33 @@ pub mod canopy_widgets {
             pub old_line_count: usize,
             /// Number of lines inserted.
             pub new_line_count: usize,
+        }
+
+        /// A text selection expressed as an anchor and head position.
+        #[derive(Debug, Clone, Copy, StructuralPartialEq, PartialEq, Eq)]
+        pub struct Selection {}
+
+        impl Selection {
+            /// Construct a collapsed selection at a position.
+            pub fn caret(position: TextPosition) -> Self {}
+
+            /// Construct a selection from anchor and head positions.
+            pub fn new(anchor: TextPosition, head: TextPosition) -> Self {}
+
+            /// Return the anchor position.
+            pub fn anchor(self) -> TextPosition {}
+
+            /// Return the head position.
+            pub fn head(self) -> TextPosition {}
+
+            /// Update the head position.
+            pub fn set_head(&mut self, head: TextPosition) {}
+
+            /// Return the selection range as a normalized text range.
+            pub fn range(self) -> TextRange {}
+
+            /// Return true if the selection is empty.
+            pub fn is_empty(self) -> bool {}
         }
 
         /// Rope-backed text buffer with selection and undo/redo support.
@@ -200,110 +304,6 @@ pub mod canopy_widgets {
 
             /// Return true if the range is empty.
             pub fn is_empty(self) -> bool {}
-        }
-
-        /// A text selection expressed as an anchor and head position.
-        #[derive(Debug, Clone, Copy, StructuralPartialEq, PartialEq, Eq)]
-        pub struct Selection {}
-
-        impl Selection {
-            /// Construct a collapsed selection at a position.
-            pub fn caret(position: TextPosition) -> Self {}
-
-            /// Construct a selection from anchor and head positions.
-            pub fn new(anchor: TextPosition, head: TextPosition) -> Self {}
-
-            /// Return the anchor position.
-            pub fn anchor(self) -> TextPosition {}
-
-            /// Return the head position.
-            pub fn head(self) -> TextPosition {}
-
-            /// Update the head position.
-            pub fn set_head(&mut self, head: TextPosition) {}
-
-            /// Return the selection range as a normalized text range.
-            pub fn range(self) -> TextRange {}
-
-            /// Return true if the selection is empty.
-            pub fn is_empty(self) -> bool {}
-        }
-
-        /// Editor widget implementation.
-        pub struct Editor {}
-
-        impl super::widget::Editor {
-            /// Construct an editor with default configuration.
-            pub fn new(text: impl Into<String>) -> Self {}
-
-            /// Construct an editor with a configuration.
-            pub fn with_config(text: impl Into<String>, config: EditorConfig) -> Self {}
-
-            /// Return the current editor configuration.
-            pub fn config(&self) -> &EditorConfig {}
-
-            /// Replace the editor configuration.
-            pub fn set_config(&mut self, config: EditorConfig) {}
-
-            /// Return the buffer contents.
-            pub fn text(&self) -> String {}
-
-            /// Replace the buffer contents.
-            pub fn set_text(&mut self, text: impl Into<String>) {}
-
-            /// Return the current selection.
-            pub fn selection(&self) -> Selection {}
-
-            /// Install a syntax highlighter.
-            pub fn set_highlighter(&mut self, highlighter: Option<Box<dyn Highlighter>>) {}
-
-            /// Move the cursor.
-            /// @param dir The direction to move the cursor.
-            pub fn cursor(&mut self, ctx: &mut dyn Context, dir: Direction) {}
-
-            /// Undo the last edit.
-            pub fn undo(&mut self, _ctx: &mut dyn Context) {}
-
-            /// Redo the last undone edit.
-            pub fn redo(&mut self, _ctx: &mut dyn Context) {}
-
-            /// Return a typed command reference for this command.
-            pub fn cmd_cursor() -> &'static canopy::commands::CommandSpec {}
-
-            /// Build a positional call with typed user arguments.
-            pub fn call_cursor(dir: Direction) -> canopy::commands::CommandCall {}
-
-            /// Return a typed command reference for this command.
-            pub fn cmd_undo() -> &'static canopy::commands::CommandSpec {}
-
-            /// Build a positional call with typed user arguments.
-            pub fn call_undo() -> canopy::commands::CommandCall {}
-
-            /// Return a typed command reference for this command.
-            pub fn cmd_redo() -> &'static canopy::commands::CommandSpec {}
-
-            /// Build a positional call with typed user arguments.
-            pub fn call_redo() -> canopy::commands::CommandCall {}
-        }
-
-        impl CommandNode for Editor {
-            fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-        }
-
-        impl Widget for Editor {
-            fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
-
-            fn cursor(&self) -> Option<cursor::Cursor> {}
-
-            fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
-
-            fn measure(&self, c: MeasureConstraints) -> Measurement {}
-
-            fn canvas(&self, view: Size, _ctx: &CanvasContext<'_>) -> Size {}
-
-            fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {}
-
-            fn name(&self) -> NodeName {}
         }
 
         /// Wrapping behavior for the editor.
@@ -543,6 +543,213 @@ pub mod canopy_widgets {
 
         impl Loader for Inspector {
             fn load(c: &mut Canopy) -> Result<()> {}
+        }
+    }
+
+    pub mod text_buffer {
+        //! Shared text editing machinery for Input and Editor.
+        //! Feature-independent rope storage, editing, and selection helpers.
+
+        /// Information about how an edit changed logical line counts.
+        #[derive(Debug, Clone, Copy, StructuralPartialEq, PartialEq, Eq)]
+        pub struct LineChange {
+            /// First affected line index.
+            pub start_line: usize,
+            /// Number of lines replaced.
+            pub old_line_count: usize,
+            /// Number of lines inserted.
+            pub new_line_count: usize,
+        }
+
+        /// Rope-backed text buffer with selection and undo/redo support.
+        #[derive(Debug, Clone)]
+        pub struct TextBuffer {}
+
+        impl TextBuffer {
+            /// Create a new buffer from an initial string.
+            pub fn new(text: impl Into<String>) -> Self {}
+
+            /// Return the current buffer revision.
+            pub fn revision(&self) -> u64 {}
+
+            /// Return the current selection.
+            pub fn selection(&self) -> Selection {}
+
+            /// Replace the selection, clamping to bounds.
+            pub fn set_selection(&mut self, selection: Selection) {}
+
+            /// Return the cursor position (selection head).
+            pub fn cursor(&self) -> TextPosition {}
+
+            /// Replace the cursor and collapse the selection.
+            pub fn set_cursor(&mut self, pos: TextPosition) {}
+
+            /// Return the full buffer contents as a string.
+            pub fn text(&self) -> String {}
+
+            /// Return the total number of logical lines.
+            pub fn line_count(&self) -> usize {}
+
+            /// Return the line length in chars, excluding any trailing newline.
+            pub fn line_char_len(&self, line: usize) -> usize {}
+
+            /// Return the text of a logical line without a trailing newline.
+            pub fn line_text(&self, line: usize) -> String {}
+
+            /// Take the pending line change, if any.
+            ///
+            /// Returns `Some` only when exactly one edit has landed since the last
+            /// sync. Multiple edits drain as `None` so the layout cache rebuilds.
+            pub fn take_change(&mut self) -> Option<LineChange> {}
+
+            /// Begin a grouped transaction.
+            pub fn begin_transaction(&mut self) {}
+
+            /// Commit the active transaction, if any.
+            pub fn commit_transaction(&mut self) {}
+
+            /// Begin a grouped transaction that commits when the guard is dropped.
+            pub fn transaction(&mut self) -> TextTransaction<'_> {}
+
+            /// Undo the most recent transaction.
+            pub fn undo(&mut self) -> bool {}
+
+            /// Redo the most recently undone transaction.
+            pub fn redo(&mut self) -> bool {}
+
+            /// Insert text at the cursor, replacing any selection.
+            pub fn insert_text(&mut self, text: &str) {}
+
+            /// Replace a range with the provided text.
+            pub fn replace_range(&mut self, range: TextRange, text: &str) {}
+
+            /// Delete the selection or the grapheme before the cursor.
+            pub fn delete_backward(&mut self, allow_line_wrap: bool) -> bool {}
+
+            /// Return the range a forward delete at `from` would remove.
+            ///
+            /// At the end of a line the range joins the next line when
+            /// `allow_line_wrap` is set. Returns `None` when there is nothing after
+            /// the position to delete.
+            pub fn forward_delete_range(
+                &self,
+                from: TextPosition,
+                allow_line_wrap: bool,
+            ) -> Option<TextRange> {
+            }
+
+            /// Delete the selection or the grapheme after the cursor.
+            pub fn delete_forward(&mut self, allow_line_wrap: bool) -> bool {}
+
+            /// Move the cursor left by one grapheme.
+            pub fn move_left(&mut self, allow_line_wrap: bool) -> bool {}
+
+            /// Move the cursor right by one grapheme.
+            pub fn move_right(&mut self, allow_line_wrap: bool) -> bool {}
+
+            /// Move the cursor to the start of the current line.
+            pub fn move_line_start(&mut self) {}
+
+            /// Move the cursor to the end of the current line.
+            pub fn move_line_end(&mut self) {}
+
+            /// Move the cursor to the first non-whitespace character in the line.
+            pub fn move_line_first_non_ws(&mut self) {}
+
+            /// Return the display column for a position.
+            pub fn column_for_position(&self, pos: TextPosition, tab_stop: usize) -> usize {}
+
+            /// Return the closest position for a display column within a line.
+            pub fn position_for_column(
+                &self,
+                line: usize,
+                column: usize,
+                tab_stop: usize,
+            ) -> TextPosition {
+            }
+
+            /// Return the end position for a line, optionally including the newline.
+            pub fn line_end_position(&self, line: usize, include_newline: bool) -> TextPosition {}
+
+            /// Return the text in a range.
+            pub fn range_text(&self, range: TextRange) -> String {}
+        }
+
+        /// Scoped text edit transaction.
+        pub struct TextTransaction<'a> {}
+
+        impl Deref for TextTransaction<'_> {
+            type Target = TextBuffer;
+            fn deref(&self) -> &Self::Target {}
+        }
+
+        impl DerefMut for TextTransaction<'_> {
+            fn deref_mut(&mut self) -> &mut Self::Target {}
+        }
+
+        impl Drop for TextTransaction<'_> {
+            fn drop(&mut self) {}
+        }
+
+        /// A position in the text buffer expressed as a logical line and a char index.
+        #[derive(Debug, Clone, Copy, StructuralPartialEq, PartialEq, Eq, Hash, Ord, PartialOrd)]
+        pub struct TextPosition {
+            /// Logical line index (0-based).
+            pub line: usize,
+            /// Char index within the line (0-based).
+            pub column: usize,
+        }
+
+        impl TextPosition {
+            /// Create a new text position.
+            pub fn new(line: usize, column: usize) -> Self {}
+        }
+
+        /// A half-open text range expressed in buffer coordinates.
+        #[derive(Debug, Clone, Copy, StructuralPartialEq, PartialEq, Eq, Hash)]
+        pub struct TextRange {
+            /// Range start position (inclusive).
+            pub start: TextPosition,
+            /// Range end position (exclusive).
+            pub end: TextPosition,
+        }
+
+        impl TextRange {
+            /// Construct a text range.
+            pub fn new(start: TextPosition, end: TextPosition) -> Self {}
+
+            /// Return a range with start/end ordered.
+            pub fn normalized(self) -> Self {}
+
+            /// Return true if the range is empty.
+            pub fn is_empty(self) -> bool {}
+        }
+
+        /// A text selection expressed as an anchor and head position.
+        #[derive(Debug, Clone, Copy, StructuralPartialEq, PartialEq, Eq)]
+        pub struct Selection {}
+
+        impl Selection {
+            /// Construct a collapsed selection at a position.
+            pub fn caret(position: TextPosition) -> Self {}
+
+            /// Construct a selection from anchor and head positions.
+            pub fn new(anchor: TextPosition, head: TextPosition) -> Self {}
+
+            /// Return the anchor position.
+            pub fn anchor(self) -> TextPosition {}
+
+            /// Return the head position.
+            pub fn head(self) -> TextPosition {}
+
+            /// Update the head position.
+            pub fn set_head(&mut self, head: TextPosition) {}
+
+            /// Return the selection range as a normalized text range.
+            pub fn range(self) -> TextRange {}
+
+            /// Return true if the selection is empty.
+            pub fn is_empty(self) -> bool {}
         }
     }
 

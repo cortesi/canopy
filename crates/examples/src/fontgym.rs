@@ -1,7 +1,7 @@
 use std::{f32::consts::TAU, time::Duration};
 
 use canopy::{
-    Canopy, Context, EventOutcome, Loader, NodeId, ViewContext, Widget,
+    Canopy, CanopyBuilder, Context, EventOutcome, Loader, NodeId, ViewContext, Widget,
     cursor::{Cursor, CursorShape},
     error::Result,
     event::{Event, key},
@@ -948,13 +948,20 @@ fn status_text(height: u32, state: FontEffects) -> String {
 
 /// Install key bindings for focus navigation.
 pub fn setup_bindings(c: &mut Canopy) -> Result<()> {
-    c.eval_script(
-        r#"
+    c.eval_script(DEFAULT_BINDINGS)?;
+    Ok(())
+}
+
+/// Focus controls shared by eager and builder setup.
+const DEFAULT_BINDINGS: &str = r#"
 canopy.bind_command("Tab", { phase = "after_widget", description = "Next focus" }, "root::focus", "Next")
 canopy.bind_command("BackTab", { phase = "after_widget", description = "Previous focus" }, "root::focus", "Prev")
-"#,
-    )?;
-    Ok(())
+"#;
+
+/// Queue this demo's bindings and native configuration in their builder phases.
+#[must_use]
+pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
+    builder.bindings("fontgym", DEFAULT_BINDINGS)
 }
 
 #[cfg(test)]

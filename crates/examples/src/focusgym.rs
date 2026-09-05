@@ -1,4 +1,4 @@
-use canopy::{command, derive_commands, prelude::*};
+use canopy::{CanopyBuilder, command, derive_commands, prelude::*};
 use canopy_widgets::Root;
 
 /// Default bindings for the focus gym demo.
@@ -237,4 +237,10 @@ impl Loader for FocusGym {
 /// Install key bindings for the focus gym demo.
 pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
     cnpy.eval_script(DEFAULT_BINDINGS)
+}
+
+/// Queue this demo's bindings and native configuration in their builder phases.
+#[must_use]
+pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
+    builder.bindings("focusgym", DEFAULT_BINDINGS)
 }

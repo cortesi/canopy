@@ -28,6 +28,23 @@ Path-oriented APIs use `Path`, `PathFilter`, and `NodeName`. Literal path
 components must be valid node names. Raw script path strings are validated at the
 Luau boundary before matching.
 
+## Widget capabilities
+
+`canopy-widgets` enables its complete bundle by default. Basic forms can set
+`default-features = false`; Input, List, Root, and Help remain available. The
+shared `canopy_widgets::text_buffer` module is independent of Editor. Editor
+retains its existing buffer re-exports when enabled.
+
+| Feature | Additional widgets and dependencies |
+| --- | --- |
+| `editor` | Editor and Syntect syntax highlighting |
+| `terminal-widget` | Terminal, Itty, and its runtime support |
+| `graphics` | Images, fonts, `image`, and `fontdue` |
+| `devtools` | Inspector and tracing subscriber support |
+
+Without `devtools`, Root creates no Inspector nodes or Inspector commands.
+Core scripting and the Crossterm adapter remain available in every profile.
+
 ## Tree Model
 
 `Core` stores `Node`s in a `SlotMap<NodeId, Node>`. A `NodeId` is valid only while

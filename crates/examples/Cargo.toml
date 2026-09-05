@@ -9,7 +9,7 @@ doctest = false
 
 [dependencies]
 canopy = { path = "../canopy" }
-canopy-widgets = { path = "../canopy-widgets" }
+canopy-widgets = { path = "../canopy-widgets", default-features = false, features = ["editor", "terminal-widget", "graphics", "devtools"] }
 rand = "0.10.1"
 unicode-width.workspace = true
 

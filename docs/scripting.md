@@ -170,6 +170,30 @@ script for that owner.
 
 ## Persistent Modules
 
+`CanopyBuilder` makes setup order explicit. Its owned `configure` callbacks
+register commands, fixtures, and defaults before API finalization. Named
+`bindings` and `config` sources run next, in insertion order. Owned `assemble`
+callbacks then create the widget tree. `build()` consumes the builder and
+returns no application on failure. Native and database effects are not rolled
+back; retry with a fresh builder and suitable application resources.
+
+Build does not prepare a frame or run startup. The first runtime preparation
+runs startup, calculates geometry, then invokes `on_start` before publication.
+The low-level `Canopy` setup APIs remain available.
+
+Builder user and project script roots default to disabled. Register each root
+with `user_script_root(path, ScriptTrust::TrustedLocal)` or
+`project_script_root(path, ScriptTrust::TrustedLocal)` to enable it. A root
+declared `ScriptTrust::Disabled` is not mounted, inspected, required, or executed.
+An explicit `config(path)` call selects that local file for execution.
+
+Trusted scripts can exercise the application's exposed native actions,
+including filesystem and database effects. VM limits bound script execution;
+they do not restrict the authority of those native actions. MCP launch options
+likewise default to `AutomationPolicy::Disabled`; explicit MCP modes select
+`TrustedLocal`. A trusted socket requires an appropriate directory and host
+filesystem permissions. Raw `serve_uds` is an explicitly trusted low-level API.
+
 Canopy can mount existing user and project directories at `@user` and
 `@project`. The roots are validated when the API is finalized. Scripts may use
 explicit-root imports such as `require("@user/keymap")` and relative imports

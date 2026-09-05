@@ -1,5 +1,5 @@
 use canopy::{
-    command, derive_commands,
+    CanopyBuilder, command, derive_commands,
     error::Error,
     layout::{CanvasContext, MeasureConstraints, Measurement, Size},
     prelude::*,
@@ -283,6 +283,13 @@ impl Loader for ListGym {
 
 /// Install key bindings for the list gym demo.
 pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
+    setup_style(cnpy);
+    cnpy.eval_script(DEFAULT_BINDINGS)?;
+    Ok(())
+}
+
+/// Install native styles during the configuration phase.
+fn setup_style(cnpy: &mut Canopy) {
     cnpy.style_mut()
         .rules()
         .fg("red/text", solarized::RED)
@@ -290,7 +297,15 @@ pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
         .fg("statusbar/text", solarized::BLUE)
         .fg("list/selected", solarized::BLUE)
         .apply();
+}
 
-    cnpy.eval_script(DEFAULT_BINDINGS)?;
-    Ok(())
+/// Queue this demo's bindings and native configuration in their builder phases.
+#[must_use]
+pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
+    builder
+        .configure(|cnpy| {
+            setup_style(cnpy);
+            Ok(())
+        })
+        .bindings("listgym", DEFAULT_BINDINGS)
 }

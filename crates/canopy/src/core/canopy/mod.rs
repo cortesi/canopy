@@ -23,6 +23,8 @@ use super::{
     termbuf::{RenderLimits, TermBuf},
 };
 
+mod builder;
+pub use builder::{CanopyBuilder, ScriptTrust};
 mod rendering;
 #[cfg(test)]
 mod rendering_tests;

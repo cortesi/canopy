@@ -2,10 +2,10 @@
 //! Example widgets used by canopy demos.
 
 use canopy::{
-    Canopy, Loader, Widget,
+    Canopy, CanopyBuilder, Loader, Widget,
     error::Result,
     style::{Color, GradientSpec, GradientStop, Paint},
-    terminal::runloop,
+    terminal::{RunOptions, runloop_with_options},
 };
 use canopy_widgets::Root;
 
@@ -110,20 +110,38 @@ pub fn text_scroll_bindings(receiver: &str, path: &str) -> String {
         )
 }
 
-/// Build a `Canopy` for a demo launcher, with `Root` loaded and the help
-/// binding installed.
-pub fn demo_canopy() -> Result<Canopy> {
-    let mut cnpy = Canopy::new();
-    Root::load(&mut cnpy)?;
-    cnpy.register_startup_script("examples-help", HELP_BINDING)?;
-    Ok(cnpy)
+/// Start demo registration with Root and its first-preparation help setup.
+#[must_use]
+pub fn demo_canopy() -> CanopyBuilder {
+    CanopyBuilder::new().configure(|cnpy| {
+        Root::load(cnpy)?;
+        cnpy.register_startup_script("examples-help", HELP_BINDING)
+    })
 }
 
 /// Install one demo app under a root and run the terminal loop.
-pub fn run_demo<T: Widget + 'static>(mut cnpy: Canopy, app: T, inspector: bool) -> Result<i32> {
-    Root::install_app_with_inspector(&mut cnpy, app, inspector)?;
-    cnpy.run_startup_scripts()?;
-    runloop(cnpy)
+pub fn run_demo<T: Widget + 'static>(
+    builder: CanopyBuilder,
+    app: T,
+    inspector: bool,
+) -> Result<i32> {
+    run_demo_with_options(builder, app, inspector, RunOptions::default())
+}
+
+/// Install a demo and run it with explicit terminal interrupt behavior.
+pub fn run_demo_with_options<T: Widget + 'static>(
+    builder: CanopyBuilder,
+    app: T,
+    inspector: bool,
+    options: RunOptions,
+) -> Result<i32> {
+    let canopy = builder
+        .assemble(move |cnpy| {
+            Root::install_app_with_inspector(cnpy, app, inspector)?;
+            Ok(())
+        })
+        .build()?;
+    runloop_with_options(canopy, options)
 }
 
 #[cfg(test)]

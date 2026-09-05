@@ -5,6 +5,44 @@ session should read the surface once, arrange state through fixtures or
 scripts, act through typed commands, observe through the script API, and save
 any script that should become a repeatable smoke test.
 
+## Trust and launch policy
+
+Local scripts and automation can invoke every exposed native action, including
+application commands, input, fixtures, and native modules. VM isolation does not
+reduce that native authority. These interfaces do not provide read-only eval or
+command allowlists.
+
+Builder script roots use `ScriptTrust::Disabled` or `ScriptTrust::TrustedLocal`.
+Disabled roots are not mounted, required, or executed. Register a trusted root
+only when its contents have the same authority as the application user.
+
+`LaunchOptions::default()` disables automation. With `launch_with_options`,
+requesting stdio MCP or a live socket while automation is disabled returns
+`AutomationDisabled` before constructing the app or opening a listener. Set
+`automation: AutomationPolicy::TrustedLocal` to permit a requested transport.
+The convenience `launch` function treats explicit `LaunchMode::HeadlessMcp`
+and `LaunchMode::Run { mcp_socket: Some(...) }` choices as trusted-local opt-ins.
+Ordinary interactive and API-output modes open no automation listener.
+
+Low-level `serve_stdio` and `serve_uds` calls are explicit trusted-local
+operations. Socket placement and host filesystem permissions are deployment
+responsibilities: use a private directory accessible only to intended clients.
+The launcher does not provide a first-use approval interface or an application
+permission profile.
+
+## Terminal interrupts
+
+`canopy::terminal::runloop` retains the default Ctrl+C behavior: restore the
+terminal, dump the node tree, and return status 130. `runloop_with_options`
+accepts `RunOptions` with `InterruptPolicy::RouteToApplication` to deliver Ctrl+C
+through normal input routing, including to embedded terminal widgets.
+
+`RunOptions::emergency_exit` optionally specifies a separate exact `Key` match.
+It exits with status 130 before widget dispatch and restores the terminal once.
+TermGym routes Ctrl+C and reserves Ctrl+Alt+Q for emergency exit. Its key value
+uses lowercase `q` with Ctrl and Alt modifiers, matching ordinary terminal input.
+These policies do not change process signal handlers.
+
 ## Bootstrap
 
 Start with the MCP `bootstrap` tool, or with `canopyctl bootstrap`, before

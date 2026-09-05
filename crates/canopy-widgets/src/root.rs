@@ -12,14 +12,21 @@ use canopy::{
     state::NodeName,
 };
 
-use crate::{help::Help, inspector::Inspector};
+use crate::help::Help;
+#[cfg(feature = "devtools")]
+use crate::inspector::Inspector;
 
 /// Default root bindings exposed through `root.default_bindings()`.
 const DEFAULT_BINDINGS: &str = r#"
+canopy.bind_command("q", { phase = "after_widget", path = "root", description = "Quit" }, "root::quit")
+"#;
+
+/// Additional root bindings installed with developer tools.
+#[cfg(feature = "devtools")]
+const DEVTOOLS_BINDINGS: &str = r#"
 inspector.default_bindings()
 
 canopy.bind_command("ctrl-Right", { phase = "after_widget", path = "root", description = "Toggle inspector" }, "root::toggle_inspector")
-canopy.bind_command("q", { phase = "after_widget", path = "root", description = "Quit" }, "root::quit")
 canopy.bind_command("a", { phase = "after_widget", path = "inspector", description = "Focus app" }, "root::focus_app")
 "#;
 
@@ -27,6 +34,7 @@ canopy.bind_command("a", { phase = "after_widget", path = "inspector", descripti
 const HELP_BINDINGS: FrameworkBindingGroup = FrameworkBindingGroup::new("root.help");
 
 // Typed key for the inspector slot
+#[cfg(feature = "devtools")]
 canopy::key!(InspectorSlot: Inspector);
 
 // Typed key for the help slot
@@ -41,6 +49,7 @@ const KEY_MAIN_PANE: &str = "MainPane";
 /// A Root widget that lives at the base of a Canopy app.
 pub struct Root {
     /// Whether the inspector is visible.
+    #[cfg(feature = "devtools")]
     inspector_active: bool,
     /// Context saved while the help modal is open.
     help_state: HelpState,
@@ -69,12 +78,14 @@ impl Root {
     /// Construct a root widget wrapping the application and inspector nodes.
     fn new() -> Self {
         Self {
+            #[cfg(feature = "devtools")]
             inspector_active: false,
             help_state: HelpState::Closed,
         }
     }
 
     /// Start with the inspector open.
+    #[cfg(feature = "devtools")]
     fn with_inspector(mut self, state: bool) -> Self {
         self.inspector_active = state;
         self
@@ -83,8 +94,11 @@ impl Root {
     /// Synchronize the root layout based on inspector and help visibility.
     fn sync_layout(&self, c: &mut dyn Context) -> Result<()> {
         let app = self.app_id(c)?;
-        let inspector = self.inspector_id(c)?;
-        c.set_hidden_of(inspector, !self.inspector_active)?;
+        #[cfg(feature = "devtools")]
+        {
+            let inspector = self.inspector_id(c)?;
+            c.set_hidden_of(inspector, !self.inspector_active)?;
+        }
         c.with_layout_of(app, &mut |layout| {
             *layout = layout.width(Sizing::Flex(1)).height(Sizing::Flex(1));
         })?;
@@ -105,6 +119,7 @@ impl Root {
     }
 
     /// Inspector node id (inside main pane).
+    #[cfg(feature = "devtools")]
     fn inspector_id(&self, c: &dyn Context) -> Result<NodeId> {
         let main_pane = self.main_pane_id(c)?;
         c.get_child_in::<InspectorSlot>(main_pane)?
@@ -125,11 +140,14 @@ impl Root {
     pub fn quit(&mut self, c: &mut dyn Context) -> Result<()> {
         if self.help_state.is_open(c) {
             self.hide_help(c)?;
-        } else if self.inspector_active {
-            self.hide_inspector(c)?;
-        } else {
-            c.exit(0);
+            return Ok(());
         }
+        #[cfg(feature = "devtools")]
+        if self.inspector_active {
+            self.hide_inspector(c)?;
+            return Ok(());
+        }
+        c.exit(0);
         Ok(())
     }
 
@@ -158,6 +176,7 @@ impl Root {
 
     #[command]
     /// Hide the inspector.
+    #[cfg(feature = "devtools")]
     pub fn hide_inspector(&mut self, c: &mut dyn Context) -> Result<()> {
         self.inspector_active = false;
         self.sync_layout(c)?;
@@ -168,6 +187,7 @@ impl Root {
 
     #[command]
     /// Show the inspector.
+    #[cfg(feature = "devtools")]
     pub fn activate_inspector(&mut self, c: &mut dyn Context) -> Result<()> {
         self.inspector_active = true;
         self.sync_layout(c)?;
@@ -178,6 +198,7 @@ impl Root {
 
     #[command]
     /// Toggle inspector visibility.
+    #[cfg(feature = "devtools")]
     pub fn toggle_inspector(&mut self, c: &mut dyn Context) -> Result<()> {
         if self.inspector_active {
             self.hide_inspector(c)
@@ -189,6 +210,7 @@ impl Root {
     #[command]
     /// If we're currently focused in the inspector, shift focus into the app
     /// pane instead.
+    #[cfg(feature = "devtools")]
     pub fn focus_app(&mut self, c: &mut dyn Context) -> Result<()> {
         let inspector = self.inspector_id(c)?;
         let app = self.app_id(c)?;
@@ -261,11 +283,12 @@ impl Root {
     where
         W: Widget + 'static,
     {
-        Self::install_app_with_inspector(canopy, app, false)
+        Self::new().install(canopy, app)
     }
 
     /// Helper to install a root widget into the canopy with an optional
     /// inspector pane.
+    #[cfg(feature = "devtools")]
     pub fn install_app_with_inspector<W>(
         canopy: &mut Canopy,
         app: W,
@@ -274,16 +297,28 @@ impl Root {
     where
         W: Widget + 'static,
     {
+        Self::new()
+            .with_inspector(inspector_active)
+            .install(canopy, app)
+    }
+
+    /// Install the application, shared help, and enabled developer tools.
+    fn install<W>(self, canopy: &mut Canopy, app: W) -> Result<TypedId<W>>
+    where
+        W: Widget + 'static,
+    {
         let app_id = canopy.create_detached(app)?;
         let app_node = NodeId::from(app_id);
-        let root = Self::new().with_inspector(inspector_active);
-        let root_id: NodeId = canopy.replace_root(root)?.into();
+        let root_id: NodeId = canopy.replace_root(self)?.into();
         canopy.with_root_context(|context| {
             // Main pane holds the app beside the inspector.
             let main_pane: NodeId = context.create_detached(MainPane)?.into();
-            let inspector = Inspector::install(context)?;
             context.attach_keyed(main_pane, KEY_APP, app_node)?;
-            context.attach_keyed(main_pane, InspectorSlot::KEY, inspector)?;
+            #[cfg(feature = "devtools")]
+            {
+                let inspector = Inspector::install(context)?;
+                context.attach_keyed(main_pane, InspectorSlot::KEY, inspector)?;
+            }
 
             // The help modal overlays the main pane.
             let help = Help::install(context)?;
@@ -335,8 +370,16 @@ impl Widget for Root {
 impl Loader for Root {
     fn load(c: &mut Canopy) -> Result<()> {
         c.add_commands::<Self>()?;
+        #[cfg(feature = "devtools")]
+        {
+            c.register_default_bindings(
+                "root",
+                &format!("{DEFAULT_BINDINGS}\n{DEVTOOLS_BINDINGS}"),
+            )?;
+            Inspector::load(c)?;
+        }
+        #[cfg(not(feature = "devtools"))]
         c.register_default_bindings("root", DEFAULT_BINDINGS)?;
-        Inspector::load(c)?;
         Help::load(c)?;
         register_help_bindings(c)?;
         Ok(())
@@ -384,6 +427,8 @@ fn register_help_bindings(canopy: &mut Canopy) -> Result<()> {
 mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
+    #[cfg(feature = "devtools")]
+    use canopy::testing::harness::Harness;
     use canopy::{
         BindingScope, Context, EventOutcome, ViewContext, Widget,
         commands::{CommandNode, CommandSpec},
@@ -394,7 +439,6 @@ mod tests {
         layout::Layout,
         render::NopBackend,
         state::NodeName,
-        testing::harness::Harness,
     };
 
     use super::*;
@@ -536,6 +580,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "devtools")]
     fn inspector_pane_draws_its_frame() -> Result<()> {
         let mut canopy = Canopy::new();
         Root::load(&mut canopy)?;

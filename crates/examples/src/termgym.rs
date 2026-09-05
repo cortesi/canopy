@@ -1,7 +1,7 @@
 use std::env;
 
 use canopy::{
-    command, derive_commands,
+    CanopyBuilder, command, derive_commands,
     error::Error,
     prelude::*,
     style::{Attr, AttrSet, solarized},
@@ -420,6 +420,13 @@ impl Loader for TermGym {
 
 /// Install key bindings and styles for the terminal gym demo.
 pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
+    setup_style(cnpy);
+    cnpy.eval_script(DEFAULT_BINDINGS)?;
+    Ok(())
+}
+
+/// Install native styles during the configuration phase.
+fn setup_style(cnpy: &mut Canopy) {
     use canopy::style::StyleBuilder;
 
     let selected_attrs = AttrSet {
@@ -471,7 +478,15 @@ pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
             StyleBuilder::new().fg(solarized::BASE3).attr(Attr::Bold),
         )
         .apply();
+}
 
-    cnpy.eval_script(DEFAULT_BINDINGS)?;
-    Ok(())
+/// Queue this demo's bindings and native configuration in their builder phases.
+#[must_use]
+pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
+    builder
+        .configure(|cnpy| {
+            setup_style(cnpy);
+            Ok(())
+        })
+        .bindings("termgym", DEFAULT_BINDINGS)
 }

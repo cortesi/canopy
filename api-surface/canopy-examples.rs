@@ -29,6 +29,9 @@ pub mod canopy_examples {
 
         /// Install key bindings for the chargym demo.
         pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {}
+
+        /// Queue this demo's bindings and native configuration in their builder phases.
+        pub fn binding_setup(builder: canopy::CanopyBuilder) -> canopy::CanopyBuilder {}
     }
 
     pub mod editorgym {
@@ -90,6 +93,9 @@ pub mod canopy_examples {
 
         /// Install key bindings for the editor gym demo.
         pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {}
+
+        /// Queue this demo's bindings and native configuration in their builder phases.
+        pub fn binding_setup(builder: canopy::CanopyBuilder) -> canopy::CanopyBuilder {}
     }
 
     pub mod focusgym {
@@ -171,6 +177,9 @@ pub mod canopy_examples {
 
         /// Install key bindings for the focus gym demo.
         pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {}
+
+        /// Queue this demo's bindings and native configuration in their builder phases.
+        pub fn binding_setup(builder: canopy::CanopyBuilder) -> canopy::CanopyBuilder {}
     }
 
     pub mod fontgym {
@@ -195,6 +204,9 @@ pub mod canopy_examples {
 
         /// Install key bindings for focus navigation.
         pub fn setup_bindings(c: &mut canopy::Canopy) -> canopy::error::Result<()> {}
+
+        /// Queue this demo's bindings and native configuration in their builder phases.
+        pub fn binding_setup(builder: canopy::CanopyBuilder) -> canopy::CanopyBuilder {}
     }
 
     pub mod framegym {
@@ -273,6 +285,9 @@ pub mod canopy_examples {
 
         /// Install key bindings for the frame gym demo.
         pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {}
+
+        /// Queue this demo's bindings and native configuration in their builder phases.
+        pub fn binding_setup(builder: canopy::CanopyBuilder) -> canopy::CanopyBuilder {}
     }
 
     pub mod imgview {
@@ -280,6 +295,9 @@ pub mod canopy_examples {
 
         /// Configure key bindings for the image viewer.
         pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {}
+
+        /// Queue this demo's bindings and native configuration in their builder phases.
+        pub fn binding_setup(builder: canopy::CanopyBuilder) -> canopy::CanopyBuilder {}
     }
 
     pub mod intervals {
@@ -360,6 +378,9 @@ pub mod canopy_examples {
 
         /// Install key bindings for the intervals demo.
         pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {}
+
+        /// Queue this demo's bindings and native configuration in their builder phases.
+        pub fn binding_setup(builder: canopy::CanopyBuilder) -> canopy::CanopyBuilder {}
     }
 
     pub mod listgym {
@@ -472,6 +493,9 @@ pub mod canopy_examples {
 
         /// Install key bindings for the list gym demo.
         pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {}
+
+        /// Queue this demo's bindings and native configuration in their builder phases.
+        pub fn binding_setup(builder: canopy::CanopyBuilder) -> canopy::CanopyBuilder {}
     }
 
     pub mod pager {
@@ -497,6 +521,9 @@ pub mod canopy_examples {
 
         /// Install key bindings for the pager demo.
         pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {}
+
+        /// Queue this demo's bindings and native configuration in their builder phases.
+        pub fn binding_setup(builder: canopy::CanopyBuilder) -> canopy::CanopyBuilder {}
     }
 
     pub mod stylegym {
@@ -602,6 +629,9 @@ pub mod canopy_examples {
 
         /// Set up key bindings for the stylegym demo.
         pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {}
+
+        /// Queue this demo's bindings and native configuration in their builder phases.
+        pub fn binding_setup(builder: canopy::CanopyBuilder) -> canopy::CanopyBuilder {}
     }
 
     pub mod termgym {
@@ -708,6 +738,9 @@ pub mod canopy_examples {
 
         /// Install key bindings and styles for the terminal gym demo.
         pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {}
+
+        /// Queue this demo's bindings and native configuration in their builder phases.
+        pub fn binding_setup(builder: canopy::CanopyBuilder) -> canopy::CanopyBuilder {}
     }
 
     pub mod textgym {
@@ -730,6 +763,9 @@ pub mod canopy_examples {
 
         /// Install key bindings for the text gym demo.
         pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {}
+
+        /// Queue this demo's bindings and native configuration in their builder phases.
+        pub fn binding_setup(builder: canopy::CanopyBuilder) -> canopy::CanopyBuilder {}
     }
 
     pub mod widget {
@@ -892,6 +928,9 @@ pub mod canopy_examples {
 
         /// Return a short title for the editor frame.
         pub fn file_title(path: &std::path::Path) -> String {}
+
+        /// Queue this demo's bindings and native configuration in their builder phases.
+        pub fn binding_setup(builder: canopy::CanopyBuilder) -> canopy::CanopyBuilder {}
     }
 
     /// Finalize and print the Luau API definitions for a demo app.
@@ -900,15 +939,23 @@ pub mod canopy_examples {
     /// Render the shared scroll bindings for one receiver and binding path.
     pub fn text_scroll_bindings(receiver: &str, path: &str) -> String {}
 
-    /// Build a `Canopy` for a demo launcher, with `Root` loaded and the help
-    /// binding installed.
-    pub fn demo_canopy() -> canopy::error::Result<canopy::Canopy> {}
+    /// Start demo registration with Root and its first-preparation help setup.
+    pub fn demo_canopy() -> canopy::CanopyBuilder {}
 
     /// Install one demo app under a root and run the terminal loop.
     pub fn run_demo<T: Widget + 'static>(
-        cnpy: canopy::Canopy,
+        builder: canopy::CanopyBuilder,
         app: T,
         inspector: bool,
+    ) -> canopy::error::Result<i32> {
+    }
+
+    /// Install a demo and run it with explicit terminal interrupt behavior.
+    pub fn run_demo_with_options<T: Widget + 'static>(
+        builder: canopy::CanopyBuilder,
+        app: T,
+        inspector: bool,
+        options: canopy::terminal::RunOptions,
     ) -> canopy::error::Result<i32> {
     }
 }

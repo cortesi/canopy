@@ -4,32 +4,21 @@
 )]
 //! Editor widget and supporting types.
 
-/// Text buffer implementation backed by a rope.
-pub(crate) mod buffer;
-/// Undo/redo edit definitions.
-mod edit;
 /// Syntax highlighting helpers.
 pub mod highlight;
 /// Layout and wrapping cache.
 mod layout;
-/// Text position and range types.
-pub(crate) mod position;
 /// Search state and match helpers.
 mod search;
-/// Selection types and helpers.
-pub(crate) mod selection;
-/// Shared editor helpers.
-mod util;
 /// Vi mode state helpers.
 mod vi;
 /// Editor widget implementation.
 pub(crate) mod widget;
 
-pub use buffer::{LineChange, TextBuffer};
-pub use position::{TextPosition, TextRange};
-pub use selection::Selection;
-pub(crate) use util::display_width;
 pub use widget::Editor;
+
+pub(crate) use crate::text_buffer::display_width;
+pub use crate::text_buffer::{LineChange, Selection, TextBuffer, TextPosition, TextRange};
 
 #[cfg(test)]
 mod tests;

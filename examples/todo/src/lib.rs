@@ -5,7 +5,7 @@ use std::{collections::HashMap, fmt::Display, path::Path};
 
 use anyhow::Result as AnyResult;
 use canopy::{
-    InteractionToken, ModalBindings, ModalOptions, command, commands::CommandStatus,
+    CanopyBuilder, InteractionToken, ModalBindings, ModalOptions, command, commands::CommandStatus,
     derive_commands, error::Error, layout::LayoutOverride, prelude::*, style::solarized,
 };
 use canopy_widgets::{Center, Frame, Input, List, Root, Selectable, ValueExposure};
@@ -484,8 +484,8 @@ fn store_error(error: impl Display) -> Error {
 }
 
 /// Register and finalize the todo application API with default bindings.
-pub fn setup_app(cnpy: &mut Canopy) -> Result<()> {
-    setup_app_with_config(cnpy, None)
+pub fn setup_app() -> Result<Canopy> {
+    app_builder(None).build()
 }
 
 /// Run a mutation against the unique Todo widget.
@@ -537,18 +537,21 @@ fn register_fixtures(cnpy: &mut Canopy) -> Result<()> {
     Ok(())
 }
 
-/// Register commands, finalize the Luau API, and apply default/user bindings.
-pub(crate) fn setup_app_with_config(cnpy: &mut Canopy, config: Option<&Path>) -> Result<()> {
-    Root::load(cnpy)?;
-    <Todo as Loader>::load(cnpy)?;
-    style(cnpy);
-    register_fixtures(cnpy)?;
-    cnpy.finalize_api()?;
-    cnpy.eval_script(DEFAULT_BINDINGS)?;
+/// Queue API registration and binding sources without constructing a database.
+fn app_builder(config: Option<&Path>) -> CanopyBuilder {
+    let builder = CanopyBuilder::new()
+        .configure(|cnpy| {
+            Root::load(cnpy)?;
+            <Todo as Loader>::load(cnpy)?;
+            style(cnpy);
+            register_fixtures(cnpy)
+        })
+        .bindings("todo-defaults", DEFAULT_BINDINGS);
     if let Some(config) = config {
-        cnpy.run_config(config)?;
+        builder.config(config.to_owned())
+    } else {
+        builder
     }
-    Ok(())
 }
 
 /// Create a fully configured todo application backed by `db_path`.
@@ -564,12 +567,13 @@ pub fn create_app_with_config(db_path: &str, config: Option<&Path>) -> AnyResult
 /// Create a todo application with an explicit database and optional user
 /// config.
 pub fn create_app_with_store(store: store::Store, config: Option<&Path>) -> AnyResult<Canopy> {
-    let mut cnpy = Canopy::new();
-    setup_app_with_config(&mut cnpy, config)?;
-
-    let todo = Todo::new(store)?;
-    Root::install_app(&mut cnpy, todo)?;
-    Ok(cnpy)
+    Ok(app_builder(config)
+        .assemble(move |cnpy| {
+            let todo = Todo::new(store).map_err(store_error)?;
+            Root::install_app(cnpy, todo)?;
+            Ok(())
+        })
+        .build()?)
 }
 
 #[cfg(test)]

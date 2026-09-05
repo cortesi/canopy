@@ -4,7 +4,7 @@
 //! layout.
 
 use canopy::{
-    command, derive_commands,
+    CanopyBuilder, command, derive_commands,
     layout::Edges,
     prelude::*,
     style::{StyleMap, dracula, effects, effects::Effect, gruvbox, solarized},
@@ -465,4 +465,10 @@ impl Loader for Stylegym {
 /// Set up key bindings for the stylegym demo.
 pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
     cnpy.eval_script(DEFAULT_BINDINGS)
+}
+
+/// Queue this demo's bindings and native configuration in their builder phases.
+#[must_use]
+pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
+    builder.bindings("stylegym", DEFAULT_BINDINGS)
 }

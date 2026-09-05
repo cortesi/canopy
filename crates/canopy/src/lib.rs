@@ -34,13 +34,13 @@ pub use core::testing;
 // Stable app-author surface.
 pub use core::{
     AutomationCallback, AutomationHandle, BindingId, BindingOptions, BindingOwner, BindingPhase,
-    BindingScope, BindingTarget, Canopy, ChangeOutcome, ChangeSet, ChildBuilder, ChildConfig,
-    ChildKey, Context, EvalId, EvalOutcome, EvalRequest, EvalTicket, ExclusiveFrameToken, Fixture,
-    FixtureInfo, FocusScope, FrameId, FrameSnapshot, FrameworkBindingGroup, InputSpec,
-    InteractionToken, Invalidation, KeyedChildren, Loader, ModalBindings, ModalOptions, NodeId,
-    NodeSnapshot, NodeWakeHandle, RoutePhase, RouteTraceEntry, ScriptJournalEntry,
-    SemanticIdentity, TurnOutcome, TypedId, ViewContext, WakeOutcome, WidgetSemantics, Work,
-    WorkLifetime,
+    BindingScope, BindingTarget, Canopy, CanopyBuilder, ChangeOutcome, ChangeSet, ChildBuilder,
+    ChildConfig, ChildKey, Context, EvalId, EvalOutcome, EvalRequest, EvalTicket,
+    ExclusiveFrameToken, Fixture, FixtureInfo, FocusScope, FrameId, FrameSnapshot,
+    FrameworkBindingGroup, InputSpec, InteractionToken, Invalidation, KeyedChildren, Loader,
+    ModalBindings, ModalOptions, NodeId, NodeSnapshot, NodeWakeHandle, RoutePhase, RouteTraceEntry,
+    ScriptJournalEntry, ScriptTrust, SemanticIdentity, TurnOutcome, TypedId, ViewContext,
+    WakeOutcome, WidgetSemantics, Work, WorkLifetime,
 };
 // App-author modules used by widget implementations and derive output.
 pub use core::{
@@ -49,7 +49,9 @@ pub use core::{
 
 /// Crossterm terminal run-loop integration.
 pub mod terminal {
-    pub use crate::core::backend::crossterm::runloop;
+    pub use crate::core::backend::crossterm::{
+        InterruptPolicy, RunOptions, runloop, runloop_with_options,
+    };
 }
 
 // Re-export derive macros

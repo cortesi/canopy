@@ -7,6 +7,8 @@ pub mod canopy_mcp {
     /// Errors returned by `canopy-mcp`.
     #[derive(Debug, Error, Display)]
     pub enum Error {
+        /// The requested transport conflicts with explicit disabled automation.
+        AutomationDisabled,
         /// A canopy runtime error.
         Canopy(canopy::error::Error),
         /// A canopy command conversion error.
@@ -49,6 +51,16 @@ pub mod canopy_mcp {
     /// Result type used by `canopy-mcp`.
     pub type Result<T> = std::result::Result<T, Error>;
 
+    /// Authority granted to local automation transports.
+    #[derive(Clone, Copy, Debug, Default, StructuralPartialEq, PartialEq, Eq)]
+    pub enum AutomationPolicy {
+        /// Do not start an automation listener.
+        Disabled,
+        /// Allow local clients to exercise the application's exposed native
+        /// actions.
+        TrustedLocal,
+    }
+
     /// Launcher mode for a Canopy application.
     pub enum LaunchMode {
         /// Run the interactive terminal UI.
@@ -62,12 +74,32 @@ pub mod canopy_mcp {
         Api,
     }
 
+    /// Explicit terminal and automation policy for an application launch.
+    #[derive(Clone, Copy, Debug, Default, StructuralPartialEq, PartialEq, Eq)]
+    pub struct LaunchOptions {
+        /// Terminal interrupt behavior.
+        pub run_options: canopy::terminal::RunOptions,
+        /// Trust granted to a requested automation listener.
+        pub automation: AutomationPolicy,
+    }
+
     /// Launch a Canopy app in the selected mode.
     ///
     /// The caller owns CLI parsing and app-specific configuration. This function
     /// owns the repeated framework wiring: API output, headless MCP, live MCP, and
     /// the terminal runloop.
+    /// Explicit `HeadlessMcp` and socket modes grant `TrustedLocal` automation.
+    /// Use `launch_with_options` when the application must deny that authority.
     pub fn launch(factory: crate::script::AppFactory, mode: LaunchMode) -> crate::Result<i32> {}
+
+    /// Launch with explicit policies; disabled automation rejects listener modes
+    /// before constructing the application or opening any transport.
+    pub fn launch_with_options(
+        factory: crate::script::AppFactory,
+        mode: LaunchMode,
+        options: LaunchOptions,
+    ) -> crate::Result<i32> {
+    }
 
     /// Headless evaluator that creates a fresh canopy app instance for each
     /// request.
@@ -358,10 +390,15 @@ pub mod canopy_mcp {
 
     /// Serve `bootstrap`, `script_eval`, `script_api`, and `fixtures` over stdio
     /// for an app factory.
+    /// This low-level entry point grants trusted-local access to all exposed native
+    /// actions. Use `launch_with_options` to enforce an application launch policy.
     pub fn serve_stdio(factory: crate::script::AppFactory) -> crate::Result<()> {}
 
     /// Serve live MCP automation for a running canopy app over a Unix-domain
     /// socket.
+    /// This low-level entry point grants trusted-local access. The application must
+    /// choose a private socket directory and enforce suitable host filesystem
+    /// permissions.
     pub fn serve_uds(
         socket_path: impl AsRef<std::path::Path>,
         automation: canopy::AutomationHandle,

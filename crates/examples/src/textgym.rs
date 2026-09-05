@@ -1,4 +1,4 @@
-use canopy::{layout::Edges, prelude::*};
+use canopy::{CanopyBuilder, layout::Edges, prelude::*};
 use canopy_widgets::{CanvasWidth, Frame, Pad, Selectable, Text, VStack};
 
 /// Text sample using the default tab stop.
@@ -124,4 +124,10 @@ canopy.bind_command("q", { phase = "after_widget", path = "root", description = 
 /// Install key bindings for the text gym demo.
 pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
     cnpy.eval_script(DEFAULT_BINDINGS)
+}
+
+/// Queue this demo's bindings and native configuration in their builder phases.
+#[must_use]
+pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
+    builder.bindings("textgym", DEFAULT_BINDINGS)
 }

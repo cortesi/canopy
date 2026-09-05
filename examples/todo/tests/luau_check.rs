@@ -4,7 +4,7 @@
 mod tests {
     use std::{error::Error, fs, path::Path};
 
-    use canopy::{Canopy, testing::luau::assert_typechecks};
+    use canopy::testing::luau::assert_typechecks;
     use canopy_mcp::collect_luau_scripts;
 
     #[test]
@@ -18,8 +18,7 @@ mod tests {
             .parent()
             .and_then(Path::parent)
             .expect("workspace root");
-        let mut canopy = Canopy::new();
-        todo::setup_app(&mut canopy)?;
+        let mut canopy = todo::setup_app()?;
         for path in scripts {
             let relative = path.strip_prefix(workspace_root)?.to_string_lossy();
             let source = fs::read_to_string(&path)?;

@@ -24,6 +24,50 @@ use crate::{
     render::RenderBackend,
     style::{Color, ResolvedStyle},
 };
+
+/// Host handling of terminal Ctrl+C input.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum InterruptPolicy {
+    /// Restore the terminal and exit the host loop with status 130.
+    #[default]
+    Exit130,
+    /// Deliver Ctrl+C through normal application input routing.
+    RouteToApplication,
+}
+
+/// Terminal adapter policy, applied before application input dispatch.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RunOptions {
+    /// Policy for Ctrl+C.
+    pub interrupt_policy: InterruptPolicy,
+    /// Optional exact key that exits even when Ctrl+C is routed.
+    pub emergency_exit: Option<key::Key>,
+}
+
+/// Decide host interruption without starting or mutating a terminal session.
+fn interrupt_exit_code(work: &Work, options: RunOptions) -> Option<i32> {
+    let Work::Input(Event::Key(pressed)) = work else {
+        return None;
+    };
+    let emergency = options.emergency_exit == Some(*pressed);
+    let interrupt = options.interrupt_policy == InterruptPolicy::Exit130
+        && pressed.key == key::KeyCode::Char('c')
+        && pressed.mods.ctrl;
+    (emergency || interrupt).then_some(130)
+}
+
+/// Restore an intercepted terminal session before any widget sees the key.
+fn intercept_interrupt(
+    session: &mut TerminalSession,
+    work: &Work,
+    options: RunOptions,
+) -> Result<Option<i32>> {
+    let code = interrupt_exit_code(work, options);
+    if code.is_some() {
+        session.stop()?;
+    }
+    Ok(code)
+}
 /// Simple event source wrapper for receiving events.
 ///
 /// This coalesces consecutive mouse-move events so clicks are not delayed by
@@ -801,7 +845,12 @@ fn handle_render_error(
 ///
 /// Ctrl+C dumps the node tree and stops the loop with status 130. Keyboard
 /// enhancement flags are enabled so escape codes are unambiguous.
-pub fn runloop(mut cnpy: Canopy) -> Result<i32> {
+pub fn runloop(cnpy: Canopy) -> Result<i32> {
+    runloop_with_options(cnpy, RunOptions::default())
+}
+
+/// Run the terminal adapter with explicit interrupt and emergency-key policies.
+pub fn runloop_with_options(mut cnpy: Canopy, options: RunOptions) -> Result<i32> {
     let mut be = CrosstermRender::default();
     let mut session = TerminalSession::new(Box::new(CrosstermControl::new()))?;
 
@@ -836,19 +885,13 @@ pub fn runloop(mut cnpy: Canopy) -> Result<i32> {
             &mut next_source,
         ))?;
 
-        if matches!(
-            &work,
-            Work::Input(Event::Key(key::Key {
-                key: key::KeyCode::Char('c'),
-                mods: key::Mods { ctrl: true, .. },
-            }))
-        ) {
+        if let Some(code) = intercept_interrupt(&mut session, &work, options)? {
             stop_and_dump(
                 &mut session,
                 &cnpy.core,
-                "\nCtrl+C pressed - Node tree dump:",
+                "\nTerminal interrupt - Node tree dump:",
             );
-            return Ok(130);
+            return Ok(code);
         }
 
         let outcome = cnpy.turn(work)?;
@@ -870,7 +913,7 @@ mod tests {
         pin::Pin,
         sync::{
             Arc,
-            atomic::{AtomicBool, Ordering},
+            atomic::{AtomicBool, AtomicUsize, Ordering},
         },
         task::{Context, Poll},
     };
@@ -878,6 +921,84 @@ mod tests {
     use futures::{StreamExt, channel::mpsc::unbounded, executor::block_on, stream};
 
     use super::*;
+
+    /// Backend lifecycle recorder used without acquiring a real terminal.
+    #[derive(Debug)]
+    struct PolicyBackend(Arc<AtomicUsize>);
+
+    impl BackendControl for PolicyBackend {
+        fn start(&mut self) -> Result<()> {
+            Ok(())
+        }
+        fn stop(&mut self) -> Result<()> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+    }
+
+    /// Focusable terminal stand-in that records routed control keys.
+    struct PolicyTerminal(Arc<AtomicUsize>);
+
+    impl crate::Widget for PolicyTerminal {
+        fn accept_focus(&self, _ctx: &dyn crate::ViewContext) -> bool {
+            true
+        }
+        fn on_event(
+            &mut self,
+            event: &Event,
+            _ctx: &mut dyn crate::Context,
+        ) -> Result<crate::EventOutcome> {
+            if matches!(event, Event::Key(_)) {
+                self.0.fetch_add(1, Ordering::SeqCst);
+                return Ok(crate::EventOutcome::Handle);
+            }
+            Ok(crate::EventOutcome::Ignore)
+        }
+    }
+
+    #[test]
+    fn adapter_interrupt_policy_routes_or_exits_and_restores_once() -> Result<()> {
+        let control_c = key::Ctrl + 'c';
+        let emergency = key::Ctrl + key::Alt + 'q';
+        for (policy, pressed, expected_exit) in [
+            (InterruptPolicy::Exit130, control_c, Some(130)),
+            (InterruptPolicy::RouteToApplication, control_c, None),
+            (InterruptPolicy::RouteToApplication, emergency, Some(130)),
+            (InterruptPolicy::RouteToApplication, key::Ctrl + 'q', None),
+        ] {
+            let stops = Arc::new(AtomicUsize::new(0));
+            let received = Arc::new(AtomicUsize::new(0));
+            let mut session = TerminalSession::new(Box::new(PolicyBackend(stops.clone())))?;
+            let mut canopy = Canopy::new();
+            canopy.replace_root(PolicyTerminal(received.clone()))?;
+            canopy.set_root_size(Size::new(8, 2))?;
+            canopy.turn(Work::Prepare)?;
+            let work = Work::Input(Event::Key(pressed));
+            let result = intercept_interrupt(
+                &mut session,
+                &work,
+                RunOptions {
+                    interrupt_policy: policy,
+                    emergency_exit: Some(emergency),
+                },
+            )?;
+            assert_eq!(result, expected_exit);
+            if result.is_none() {
+                canopy.turn(work)?;
+            }
+            assert_eq!(
+                received.load(Ordering::SeqCst),
+                usize::from(expected_exit.is_none())
+            );
+            drop(session);
+            assert_eq!(stops.load(Ordering::SeqCst), 1);
+        }
+        assert_eq!(
+            RunOptions::default().interrupt_policy,
+            InterruptPolicy::Exit130
+        );
+        Ok(())
+    }
 
     /// Pending stream that records when cancellation drops it.
     struct DropReader {

@@ -8,6 +8,13 @@ license.workspace = true
 [lib]
 doctest = false
 
+[features]
+default = ["editor", "terminal-widget", "graphics", "devtools"]
+editor = ["dep:syntect"]
+terminal-widget = ["dep:itty-core", "dep:itty-script", "dep:tokio"]
+graphics = ["dep:image", "dep:fontdue"]
+devtools = ["dep:tracing-subscriber"]
+
 [dependencies]
 canopy = { path = "../canopy" }
 
@@ -15,7 +22,7 @@ canopy = { path = "../canopy" }
 textwrap.workspace = true
 unicode-width.workspace = true
 unicode-segmentation.workspace = true
-image = { version = "0.25.10", default-features = false, features = [
+image = { version = "0.25.10", optional = true, default-features = false, features = [
     "rayon",
     "bmp",
     "dds",
@@ -33,22 +40,27 @@ image = { version = "0.25.10", default-features = false, features = [
     "webp",
 ] }
 ropey = "1.6.1"
-syntect = "5.3.0"
-tracing-subscriber.workspace = true
-fontdue = "0.9.3"
-tokio = { workspace = true, features = ["rt-multi-thread", "time", "sync"] }
-itty-core.workspace = true
+syntect = { version = "5.3.0", optional = true }
+tracing-subscriber = { workspace = true, optional = true }
+fontdue = { version = "0.9.3", optional = true }
+tokio = { workspace = true, optional = true, features = ["rt-multi-thread", "time", "sync"] }
+itty-core = { workspace = true, optional = true }
+itty-script = { workspace = true, optional = true }
 
 [dev-dependencies]
 canopy = { path = "../canopy", features = ["testing"] }
 criterion.workspace = true
-itty-script.workspace = true
 proptest.workspace = true
 
 
 [[bench]]
 name = "editor"
 harness = false
+required-features = ["editor"]
+
+[[test]]
+name = "logs_subscriber"
+required-features = ["devtools"]
 
 [[bench]]
 name = "rendering"

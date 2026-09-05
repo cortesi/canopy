@@ -2,10 +2,15 @@
 
 use std::{error::Error, fs, path::PathBuf, process, result::Result as StdResult};
 
-use canopy::prelude::*;
+use canopy::{
+    CanopyBuilder,
+    prelude::*,
+    terminal::{InterruptPolicy, RunOptions},
+};
 use canopy_examples::{
     chargym, demo_canopy, editorgym, focusgym, fontgym, framegym, imgview, intervals, listgym,
-    pager, print_luau_api, run_demo, stylegym, termgym, textgym, widget_editor,
+    pager, print_luau_api, run_demo, run_demo_with_options, stylegym, termgym, textgym,
+    widget_editor,
 };
 use canopy_widgets::ImageView;
 use clap::{Parser, Subcommand};
@@ -70,15 +75,14 @@ enum Demo {
 /// Run one demo.
 fn main() -> StdResult<(), Box<dyn Error>> {
     let args = Args::parse();
-    let mut cnpy = demo_canopy()?;
-    args.demo.load(&mut cnpy)?;
+    let builder = args.demo.configure(demo_canopy());
 
     if args.api {
-        print_luau_api(&mut cnpy)?;
+        print_luau_api(&mut builder.build()?)?;
         return Ok(());
     }
 
-    let exit_code = args.demo.run(cnpy, args.inspector)?;
+    let exit_code = args.demo.run(builder, args.inspector)?;
     if exit_code != 0 {
         process::exit(exit_code);
     }
@@ -86,66 +90,33 @@ fn main() -> StdResult<(), Box<dyn Error>> {
 }
 
 impl Demo {
-    /// Register the demo's commands and default bindings.
-    fn load(&self, cnpy: &mut Canopy) -> Result<()> {
+    /// Queue the demo's API registration and binding setup.
+    fn configure(&self, builder: CanopyBuilder) -> CanopyBuilder {
         match self {
             Self::Cedit { .. } => {
-                widget_editor::WidgetEditor::load(cnpy)?;
-                widget_editor::setup_bindings(cnpy)
+                widget_editor::binding_setup(builder.configure(widget_editor::WidgetEditor::load))
             }
-            Self::Chargym => {
-                chargym::CharGym::load(cnpy)?;
-                chargym::setup_bindings(cnpy)
-            }
+            Self::Chargym => chargym::binding_setup(builder.configure(chargym::CharGym::load)),
             Self::Editorgym => {
-                editorgym::EditorGym::load(cnpy)?;
-                editorgym::setup_bindings(cnpy)
+                editorgym::binding_setup(builder.configure(editorgym::EditorGym::load))
             }
-            Self::Focusgym => {
-                focusgym::FocusGym::load(cnpy)?;
-                focusgym::setup_bindings(cnpy)
-            }
-            Self::Fontgym => {
-                fontgym::FontGym::load(cnpy)?;
-                fontgym::setup_bindings(cnpy)
-            }
-            Self::Framegym => {
-                framegym::FrameGym::load(cnpy)?;
-                framegym::setup_bindings(cnpy)
-            }
-            Self::Imgview { .. } => {
-                ImageView::load(cnpy)?;
-                imgview::setup_bindings(cnpy)
-            }
+            Self::Focusgym => focusgym::binding_setup(builder.configure(focusgym::FocusGym::load)),
+            Self::Fontgym => fontgym::binding_setup(builder.configure(fontgym::FontGym::load)),
+            Self::Framegym => framegym::binding_setup(builder.configure(framegym::FrameGym::load)),
+            Self::Imgview { .. } => imgview::binding_setup(builder.configure(ImageView::load)),
             Self::Intervals => {
-                intervals::Intervals::load(cnpy)?;
-                intervals::setup_bindings(cnpy)
+                intervals::binding_setup(builder.configure(intervals::Intervals::load))
             }
-            Self::Listgym => {
-                listgym::ListGym::load(cnpy)?;
-                listgym::setup_bindings(cnpy)
-            }
-            Self::Pager { .. } => {
-                pager::Pager::load(cnpy)?;
-                pager::setup_bindings(cnpy)
-            }
-            Self::Stylegym => {
-                stylegym::Stylegym::load(cnpy)?;
-                stylegym::setup_bindings(cnpy)
-            }
-            Self::Termgym => {
-                termgym::TermGym::load(cnpy)?;
-                termgym::setup_bindings(cnpy)
-            }
-            Self::Textgym => {
-                textgym::TextGym::load(cnpy)?;
-                textgym::setup_bindings(cnpy)
-            }
+            Self::Listgym => listgym::binding_setup(builder.configure(listgym::ListGym::load)),
+            Self::Pager { .. } => pager::binding_setup(builder.configure(pager::Pager::load)),
+            Self::Stylegym => stylegym::binding_setup(builder.configure(stylegym::Stylegym::load)),
+            Self::Termgym => termgym::binding_setup(builder.configure(termgym::TermGym::load)),
+            Self::Textgym => textgym::binding_setup(builder.configure(textgym::TextGym::load)),
         }
     }
 
     /// Build the demo's root widget and run the terminal loop.
-    fn run(self, cnpy: Canopy, inspector: bool) -> StdResult<i32, Box<dyn Error>> {
+    fn run(self, cnpy: CanopyBuilder, inspector: bool) -> StdResult<i32, Box<dyn Error>> {
         Ok(match self {
             Self::Cedit { file } => {
                 let contents = fs::read_to_string(&file)?;
@@ -169,7 +140,17 @@ impl Demo {
                 run_demo(cnpy, pager::Pager::new(&contents), inspector)?
             }
             Self::Stylegym => run_demo(cnpy, stylegym::Stylegym::new(), inspector)?,
-            Self::Termgym => run_demo(cnpy, termgym::TermGym::new(), inspector)?,
+            Self::Termgym => run_demo_with_options(
+                cnpy,
+                termgym::TermGym::new(),
+                inspector,
+                RunOptions {
+                    interrupt_policy: InterruptPolicy::RouteToApplication,
+                    emergency_exit: Some(
+                        Key::parse_spec("Ctrl+Alt+q").map_err(error::Error::Invalid)?,
+                    ),
+                },
+            )?,
             Self::Textgym => run_demo(cnpy, textgym::TextGym::new(), inspector)?,
         })
     }

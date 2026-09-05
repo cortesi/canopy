@@ -14,7 +14,7 @@ mod server;
 mod smoke;
 
 pub use error::{Error, Result};
-pub use launch::{LaunchMode, launch};
+pub use launch::{AutomationPolicy, LaunchMode, LaunchOptions, launch, launch_with_options};
 pub use script::{
     AppEvaluator, AppFactory, BootstrapCommand, BootstrapJournalEntry, BootstrapResponse,
     ScriptErrorInfo, ScriptEvalOutcome, ScriptEvalRequest, ScriptTaskState, ScriptTiming,

@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use canopy::{
-    command, derive_commands,
+    CanopyBuilder, command, derive_commands,
     layout::Edges,
     prelude::*,
     style::{AttrSet, solarized},
@@ -253,6 +253,13 @@ impl Loader for Intervals {
 
 /// Install key bindings for the intervals demo.
 pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
+    setup_style(cnpy);
+    cnpy.eval_script(DEFAULT_BINDINGS)?;
+    Ok(())
+}
+
+/// Install native styles during the configuration phase.
+fn setup_style(cnpy: &mut Canopy) {
     use canopy::style::StyleBuilder;
 
     let selected_attrs = AttrSet {
@@ -285,7 +292,15 @@ pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
                 .bg(solarized::BASE1),
         )
         .apply();
+}
 
-    cnpy.eval_script(DEFAULT_BINDINGS)?;
-    Ok(())
+/// Queue this demo's bindings and native configuration in their builder phases.
+#[must_use]
+pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
+    builder
+        .configure(|cnpy| {
+            setup_style(cnpy);
+            Ok(())
+        })
+        .bindings("intervals", DEFAULT_BINDINGS)
 }

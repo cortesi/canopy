@@ -2153,11 +2153,36 @@ pub mod canopy {
     pub mod terminal {
         //! Crossterm terminal run-loop integration.
 
+        /// Host handling of terminal Ctrl+C input.
+        #[derive(Clone, Copy, Debug, Default, StructuralPartialEq, PartialEq, Eq)]
+        pub enum InterruptPolicy {
+            /// Restore the terminal and exit the host loop with status 130.
+            Exit130,
+            /// Deliver Ctrl+C through normal application input routing.
+            RouteToApplication,
+        }
+
+        /// Terminal adapter policy, applied before application input dispatch.
+        #[derive(Clone, Copy, Debug, Default, StructuralPartialEq, PartialEq, Eq)]
+        pub struct RunOptions {
+            /// Policy for Ctrl+C.
+            pub interrupt_policy: InterruptPolicy,
+            /// Optional exact key that exits even when Ctrl+C is routed.
+            pub emergency_exit: Option<key::Key>,
+        }
+
         /// Run the main render/event loop using the crossterm backend.
         ///
         /// Ctrl+C dumps the node tree and stops the loop with status 130. Keyboard
         /// enhancement flags are enabled so escape codes are unambiguous.
         pub fn runloop(cnpy: crate::Canopy) -> crate::error::Result<i32> {}
+
+        /// Run the terminal adapter with explicit interrupt and emergency-key policies.
+        pub fn runloop_with_options(
+            cnpy: crate::Canopy,
+            options: RunOptions,
+        ) -> crate::error::Result<i32> {
+        }
     }
 
     pub use canopy_geom as geom;
@@ -2631,6 +2656,57 @@ pub mod canopy {
 
     impl Drop for super::Canopy {
         fn drop(&mut self) {}
+    }
+
+    /// Assemble one application through registration, scripts, and widget creation.
+    ///
+    /// Configuration callbacks run first, then the API is finalized. Binding and
+    /// config sources run next in their shared insertion order, followed by
+    /// assembly callbacks. Callbacks are owned and need not be `Send`. The first
+    /// runtime preparation performs startup and publishes geometry; `build` does
+    /// neither.
+    ///
+    /// A failed build returns no application. Native or database effects performed
+    /// by callbacks are not rolled back. Retrying requires a fresh builder and
+    /// application resources suitable for retry.
+    #[derive(Default)]
+    pub struct CanopyBuilder {}
+
+    impl CanopyBuilder {
+        /// Start a builder with no mounted script roots or setup callbacks.
+        pub fn new() -> Self {}
+
+        /// Register commands, fixtures, defaults, and other pre-finalization state.
+        pub fn configure(
+            self,
+            configure: impl FnOnce(&mut Canopy) -> Result<()> + 'static,
+        ) -> Self {
+        }
+
+        /// Evaluate named binding source after finalization and before assembly.
+        pub fn bindings(self, name: impl Into<String>, source: impl Into<String>) -> Self {}
+
+        /// Evaluate an explicitly trusted local config file before assembly.
+        pub fn config(self, path: impl Into<PathBuf>) -> Self {}
+
+        /// Construct widgets after the finalized setup sources have run.
+        pub fn assemble(self, assemble: impl FnOnce(&mut Canopy) -> Result<()> + 'static) -> Self {}
+
+        /// Declare the user script root; the last declaration for this root wins.
+        ///
+        /// Disabled paths are not accessed. Trusted roots use the existing `@user`
+        /// module namespace and execute startup during the first preparation.
+        pub fn user_script_root(self, path: PathBuf, trust: ScriptTrust) -> Self {}
+
+        /// Declare the project script root; the last declaration for this root
+        /// wins.
+        ///
+        /// Disabled paths are not accessed. Trusted roots use the existing
+        /// `@project` module namespace and retain project startup ordering.
+        pub fn project_script_root(self, path: PathBuf, trust: ScriptTrust) -> Self {}
+
+        /// Consume all setup phases, returning the application only on success.
+        pub fn build(self) -> Result<Canopy> {}
     }
 
     /// Outcome of an accepted state mutation.
@@ -3370,6 +3446,15 @@ pub mod canopy {
         pub assertions: Vec<script::ScriptAssertion>,
         /// Wall-clock duration in milliseconds.
         pub duration_ms: u64,
+    }
+
+    /// Authority granted to scripts loaded from an application-declared root.
+    #[derive(Clone, Copy, Debug, Default, StructuralPartialEq, PartialEq, Eq)]
+    pub enum ScriptTrust {
+        /// Do not mount, inspect, require, or execute this root.
+        Disabled,
+        /// Execute local scripts with the application's full native authority.
+        TrustedLocal,
     }
 
     /// Application identity unique within an explicit arena subtree.

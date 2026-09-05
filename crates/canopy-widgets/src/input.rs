@@ -10,7 +10,7 @@ use canopy::{
     text,
 };
 
-use crate::editor::{TextBuffer, TextPosition};
+use crate::text_buffer::{TextBuffer, TextPosition};
 
 /// Default tab stop width for single-line inputs.
 const DEFAULT_TAB_STOP: usize = 4;

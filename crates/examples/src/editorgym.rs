@@ -1,5 +1,5 @@
 use canopy::{
-    command, derive_commands, geom,
+    CanopyBuilder, command, derive_commands, geom,
     layout::{CanvasContext, Edges},
     prelude::*,
 };
@@ -316,4 +316,10 @@ impl Loader for EditorGym {
 pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
     cnpy.eval_script(DEFAULT_BINDINGS)?;
     Ok(())
+}
+
+/// Queue this demo's bindings and native configuration in their builder phases.
+#[must_use]
+pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
+    builder.bindings("editorgym", DEFAULT_BINDINGS)
 }

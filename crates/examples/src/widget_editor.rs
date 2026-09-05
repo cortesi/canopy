@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use canopy::{layout::Edges, prelude::*};
+use canopy::{CanopyBuilder, layout::Edges, prelude::*};
 use canopy_widgets::{
     Frame, Pad,
     editor::{EditMode, Editor, EditorConfig, WrapMode, highlight::SyntectHighlighter},
@@ -86,4 +86,10 @@ pub fn file_title(path: &Path) -> String {
         .and_then(|name| name.to_str())
         .map(str::to_string)
         .unwrap_or_else(|| path.display().to_string())
+}
+
+/// Queue this demo's bindings and native configuration in their builder phases.
+#[must_use]
+pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
+    builder.bindings("widget_editor", DEFAULT_BINDINGS)
 }

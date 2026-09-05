@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-use canopy::prelude::*;
+use canopy::{CanopyBuilder, prelude::*};
 use canopy_examples::{
     imgview, print_luau_api,
     widget::{DemoHost, DemoSize, FontDemo, FontSource, ListDemo, TermDemo},
@@ -139,12 +139,10 @@ struct EditorArgs {
 /// Run the widget demo.
 fn main() -> Result<()> {
     let args = Args::parse();
-    let mut cnpy = canopy_examples::demo_canopy()?;
-
-    load_widget_api(&mut cnpy, &args.command)?;
+    let builder = widget_builder(&args.command);
 
     if args.api {
-        print_luau_api(&mut cnpy)?;
+        print_luau_api(&mut builder.build()?)?;
         return Ok(());
     }
 
@@ -174,7 +172,6 @@ fn main() -> Result<()> {
             )
         }
         Command::Image(image_args) => {
-            imgview::setup_bindings(&mut cnpy)?;
             let view = ImageView::from_path(&image_args.path)?;
             DemoHost::new(view, size, true)
                 .with_inner_padding(0)
@@ -193,17 +190,12 @@ fn main() -> Result<()> {
             };
             DemoHost::new(ListDemo::new(interval), size, args.frame)
         }
-        Command::Term => {
-            setup_term_bindings(&mut cnpy)?;
-            DemoHost::new(TermDemo::new(), size, args.frame)
-        }
+        Command::Term => DemoHost::new(TermDemo::new(), size, args.frame),
         Command::Editor(editor_args) => {
             let contents = fs::read_to_string(&editor_args.path)
                 .map_err(|err| error::Error::Internal(err.to_string()))?;
             let extension = widget_editor::file_extension(&editor_args.path);
             let title = widget_editor::file_title(&editor_args.path);
-
-            widget_editor::setup_bindings(&mut cnpy)?;
 
             DemoHost::new(
                 WidgetEditor::new(contents, extension, title),
@@ -213,20 +205,23 @@ fn main() -> Result<()> {
             .with_inner_padding(0)
         }
     };
-    let exit_code = canopy_examples::run_demo(cnpy, demo, args.inspector)?;
+    let exit_code = canopy_examples::run_demo(builder, demo, args.inspector)?;
     if exit_code != 0 {
         process::exit(exit_code);
     }
     Ok(())
 }
 
-/// Load the command surface needed by the selected widget demo.
-fn load_widget_api(cnpy: &mut Canopy, command: &Command) -> Result<()> {
+/// Queue the selected widget API and binding sources before assembly.
+fn widget_builder(command: &Command) -> CanopyBuilder {
+    let builder = canopy_examples::demo_canopy();
     match command {
-        Command::Font(_) | Command::List(_) => Ok(()),
-        Command::Image(_) => ImageView::load(cnpy),
-        Command::Term => cnpy.add_commands::<TermDemo>(),
-        Command::Editor(_) => WidgetEditor::load(cnpy),
+        Command::Font(_) | Command::List(_) => builder,
+        Command::Image(_) => imgview::binding_setup(builder.configure(ImageView::load)),
+        Command::Term => builder
+            .configure(|canopy| canopy.add_commands::<TermDemo>())
+            .bindings("widget-terminal", TERM_BINDINGS),
+        Command::Editor(_) => widget_editor::binding_setup(builder.configure(WidgetEditor::load)),
     }
 }
 
@@ -279,17 +274,12 @@ fn load_font_sources(path: &Path) -> Result<Vec<FontSource>> {
     Ok(sources)
 }
 
-/// Register keybindings for the terminal demo.
-fn setup_term_bindings(cnpy: &mut Canopy) -> Result<()> {
-    cnpy.eval_script(
-        r#"
+/// Terminal controls evaluated after API registration and before assembly.
+const TERM_BINDINGS: &str = r#"
 canopy.bind("ctrl-Tab", { path = "term_demo/**/", description = "Next tab" }, function()
     term_demo.next_tab()
 end)
-"#,
-    )?;
-    Ok(())
-}
+"#;
 
 #[cfg(test)]
 mod tests {

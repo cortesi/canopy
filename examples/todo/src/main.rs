@@ -54,14 +54,7 @@ fn main() -> Result<()> {
     let args = Args::parse();
 
     if args.api {
-        let code = launch(
-            app_factory(|| {
-                let mut cnpy = canopy::Canopy::new();
-                todo::setup_app(&mut cnpy)?;
-                Ok(cnpy)
-            }),
-            LaunchMode::Api,
-        )?;
+        let code = launch(app_factory(|| Ok(todo::setup_app()?)), LaunchMode::Api)?;
         if code != 0 {
             process::exit(code);
         }

@@ -11,7 +11,7 @@ doctest = false
 anyhow.workspace = true
 canopy = { path = "../../crates/canopy" }
 canopy-mcp = { version = "0.1.0", path = "../../crates/canopy-mcp" }
-canopy-widgets = { path = "../../crates/canopy-widgets" }
+canopy-widgets = { path = "../../crates/canopy-widgets", default-features = false }
 clap.workspace = true
 rusqlite = "0.39"
 textwrap.workspace = true
