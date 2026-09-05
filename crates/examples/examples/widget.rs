@@ -313,7 +313,8 @@ mod tests {
             let sources = load_font_sources(&directory)?;
             assert_eq!(sources.len(), 2);
             for (source, name) in sources.into_iter().zip(["a.TTF", "z.ttf"]) {
-                // FontDemo reports the selected source label when parsing fails.
+                // FontDemo reports the selected source label when parsing
+                // fails.
                 let mut demo = FontDemo::new(
                     "test",
                     vec![source],

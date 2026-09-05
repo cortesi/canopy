@@ -883,8 +883,9 @@ impl LuauHost {
                     .map_err(|error| prepare_graph_error_to_canopy(&error))?,
             )
         } else {
-            // Compiling before finalization proves the source is well formed; the retained
-            // runtime recompiles it from the prepared graph.
+            // Compiling before finalization proves the source is well formed;
+            // the retained runtime recompiles it from the prepared
+            // graph.
             compile_chunk(runtime_source.as_str().expect("strict source is UTF-8"))?;
             None
         };

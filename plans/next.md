@@ -991,33 +991,33 @@ Stage 2.
 
 R05, R10, R14, and R15 use the structural and turn boundaries from Stage 3.
 
-- [ ] Add semantic identity metadata and the `(scope, key)` index in Core.
+- [x] Add semantic identity metadata and the `(scope, key)` index in Core.
   Extend tree validation, edit snapshots, replacement, reparenting, and removal.
   Add Context and Luau key lookup methods.
-- [ ] Add `ChildBuilder` in `core/children.rs` and the `compose` Context adapter.
+- [x] Add `ChildBuilder` in `core/children.rs` and the `compose` Context adapter.
   Restrict construction to detached nodes and apply overrides before mounting.
-- [ ] Add `List<W, K = AutoKey>` and keyed reconciliation in
+- [x] Add `List<W, K = AutoKey>` and keyed reconciliation in
   `canopy-widgets/src/list.rs`.
   Reject unmanaged children in `KeyedChildren::reconcile`.
   Preserve selection and pending activation by key, including injected row keys.
-- [ ] Migrate Todo to `List<TodoEntry, i64>` and scoped composition.
+- [x] Migrate Todo to `List<TodoEntry, i64>` and scoped composition.
   Assign semantic keys to the Todo list and new-item input.
   Update `examples/todo/tests/basic.rs` typed lookups and smoke selectors.
-- [ ] Add the modal scope stack in `core/world/interaction.rs`.
+- [x] Add the modal scope stack in `core/world/interaction.rs`.
   Integrate binding admission, route boundaries, focus constraints, pointer
   targeting, token-owned effects, and structural retirement.
   Use R11 completion for closes requested during dispatch.
-- [ ] Replace Root help and Todo modal state coordination with interaction tokens.
+- [x] Replace Root help and Todo modal state coordination with interaction tokens.
   Preserve Root's pre-open help snapshot and application binding ownership.
   Keep existing commands and Escape/help bindings as application-facing controls.
-- [ ] Extend tree and key tests for wrapper changes, scope moves, and rollback.
+- [x] Extend tree and key tests for wrapper changes, scope moves, and rollback.
   Exercise `canopy-widgets/src/wrap.rs` inside a complete structural edit.
   Add List tests for reorder, selected-key removal, duplicate keys, and unmanaged
   children beside a dedicated row container.
-- [ ] Extend Root/Todo tests for nested modals, outside pointer input, capture,
+- [x] Extend Root/Todo tests for nested modals, outside pointer input, capture,
   failed open, focus recovery, and owner replacement.
   Verify that scope close preserves unrelated effects.
-- [ ] Validate with `ncode test -p canopy -p canopy-widgets -p todo -p canopy-examples`.
+- [x] Validate with `ncode test -p canopy -p canopy-widgets -p todo -p canopy-examples`.
   Run `cargo xtask smoke`, regenerate API skeletons, and run `cargo xtask checks`.
   Review the completed stage diff and the production Root layout cases.
 

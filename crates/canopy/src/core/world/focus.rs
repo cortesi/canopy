@@ -40,6 +40,11 @@ impl Core {
     pub(crate) fn transition_focus(&mut self, target: Option<NodeId>) -> Result<ChangeOutcome> {
         if let Some(node) = target {
             self.validate_attached_node(node)?;
+            if !self.interaction_admits(node) {
+                return Err(Error::InvalidOperation(
+                    "node is outside the active modal".into(),
+                ));
+            }
         }
         if self.focus == target {
             Ok(ChangeOutcome::Unchanged)
@@ -212,6 +217,11 @@ impl Core {
     fn transition_mouse_capture(&mut self, target: Option<NodeId>) -> Result<ChangeOutcome> {
         if let Some(node) = target {
             self.validate_attached_node(node)?;
+            if !self.interaction_admits(node) {
+                return Err(Error::InvalidOperation(
+                    "node is outside the active modal".into(),
+                ));
+            }
         }
         if self.mouse_capture == target {
             Ok(ChangeOutcome::Unchanged)
@@ -381,7 +391,10 @@ fn nearest_focusable_ancestor_with(
 
 /// Return whether the node is focusable, respecting hidden and view
 /// requirements.
-fn is_focus_candidate(core: &Core, node_id: NodeId, require_view: bool) -> bool {
+pub(super) fn is_focus_candidate(core: &Core, node_id: NodeId, require_view: bool) -> bool {
+    if !core.interaction_admits(node_id) {
+        return false;
+    }
     let Some(node) = core.nodes.get(node_id) else {
         return false;
     };

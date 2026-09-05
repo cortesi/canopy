@@ -278,8 +278,8 @@ impl Key {
             }
         }
 
-        // Shift is folded into the character it produced, except for space, which keeps
-        // it.
+        // Shift is folded into the character it produced, except for space,
+        // which keeps it.
         if normalized.mods.shift
             && let KeyCode::Char(c) = normalized.key
             && c != ' '

@@ -71,8 +71,8 @@ mod tests {
         let mut position_errors: Vec<String> = Vec::new();
 
         for row in 0..grid_height {
-            // Rows alternate direction, so even rows run left to right and odd rows right
-            // to left.
+            // Rows alternate direction, so even rows run left to right and odd
+            // rows right to left.
             let forward = row % 2 == 0;
             let step = if forward {
                 Direction::Right

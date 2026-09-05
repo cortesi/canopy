@@ -373,8 +373,8 @@ impl TextBuffer {
 
     /// Return the closest position for a display column within a line.
     pub fn position_for_column(&self, line: usize, column: usize, tab_stop: usize) -> TextPosition {
-        // `char_for_column` already stops at the end of the line, so no pre-clamp is
-        // needed.
+        // `char_for_column` already stops at the end of the line, so no
+        // pre-clamp is needed.
         let char_index = char_for_column(&self.line_text(line), column, tab_stop);
         TextPosition::new(line, char_index)
     }

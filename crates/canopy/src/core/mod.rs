@@ -66,7 +66,7 @@ pub use canopy::{
     FrameId, Loader, RoutePhase, RouteTraceEntry, ScriptJournalEntry, TurnOutcome, Work,
 };
 pub use change::{ChangeOutcome, ChangeSet, Invalidation};
-pub use children::KeyedChildren;
+pub use children::{ChildBuilder, ChildConfig, KeyedChildren};
 pub use context::{ChildKey, Context, FocusScope, ViewContext};
 pub use fixture::{Fixture, FixtureInfo};
 pub use id::{NodeId, TypedId};
@@ -74,5 +74,9 @@ pub use inputmap::{
     BindingId, BindingOptions, BindingOwner, BindingPhase, BindingScope, BindingTarget,
     ExclusiveFrameToken, FrameworkBindingGroup, InputSpec,
 };
+pub use node::SemanticIdentity;
 pub use wake::{NodeWakeHandle, WakeOutcome, WorkLifetime};
-pub use world::Core;
+pub use world::{
+    Core,
+    interaction::{InteractionToken, ModalBindings, ModalOptions},
+};

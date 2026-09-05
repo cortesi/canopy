@@ -1001,6 +1001,14 @@ pub mod canopy_widgets {
         fn label(&self) -> &str;
     }
 
+    /// Monotonic key for list items.
+    #[derive(Debug, Clone, Copy, StructuralPartialEq, PartialEq, Eq, Hash)]
+    pub struct AutoKey(_);
+
+    impl ToArgValue for AutoKey {
+        fn to_arg_value(self) -> ArgValue {}
+    }
+
     /// A typed list container for widget items.
     ///
     /// List items are actual widgets in the tree, enabling composition and focus
@@ -1009,9 +1017,9 @@ pub mod canopy_widgets {
     /// Items must implement the [`Selectable`] trait so the list can manage their
     /// selection state independently of focus.
     #[derive(Default)]
-    pub struct List<W: Selectable> {}
+    pub struct List<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static = AutoKey> {}
 
-    impl<W: Selectable> List<W> {
+    impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
         /// Construct an empty list.
         pub fn new() -> Self {}
 
@@ -1043,21 +1051,33 @@ pub mod canopy_widgets {
         /// Returns the typed ID of the currently selected item.
         pub fn selected_item(&self) -> Option<TypedId<W>> {}
 
-        /// Append an item widget to the end of the list.
-        pub fn append(&mut self, ctx: &mut dyn Context, widget: W) -> Result<TypedId<W>>
-        where
-            W: 'static, {
-        }
+        /// Return the stable key of the selected row.
+        pub fn selected_key(&self) -> Option<&K> {}
 
-        /// Insert an item widget at the specified index.
-        pub fn insert(
+        /// Return the widget for a domain key.
+        pub fn item_for_key(&self, key: &K) -> Option<TypedId<W>> {}
+
+        /// Select a domain key, returning an error when it is absent.
+        pub fn select_key(&mut self, ctx: &mut dyn Context, key: &K) -> Result<()> {}
+
+        /// Reconcile domain keys while retaining widgets and selection for
+        /// surviving keys.
+        ///
+        /// Duplicate keys fail before callbacks run. Updates have the same
+        /// structural rollback boundary as [`KeyedChildren::reconcile`]. If
+        /// selection is removed, the next surviving old neighbor wins, then the
+        /// previous neighbor.
+        pub fn reconcile<I, C, U>(
             &mut self,
             ctx: &mut dyn Context,
-            index: usize,
-            widget: W,
-        ) -> Result<TypedId<W>>
+            desired: I,
+            create: C,
+            update: U,
+        ) -> Result<Vec<TypedId<W>>>
         where
-            W: 'static, {
+            I: IntoIterator<Item = K>,
+            C: FnMut(&K) -> Result<W>,
+            U: FnMut(&K, TypedId<W>, &mut dyn Context) -> Result<()>, {
         }
 
         /// Remove the item at the specified index.
@@ -1134,11 +1154,25 @@ pub mod canopy_widgets {
         pub fn call_page(delta: i32) -> canopy::commands::CommandCall {}
     }
 
-    impl<W: Selectable> CommandNode for List<W> {
+    impl<W: Selectable> List<W, AutoKey> {
+        /// Append a widget with a fresh automatic key.
+        pub fn append(&mut self, ctx: &mut dyn Context, widget: W) -> Result<TypedId<W>> {}
+
+        /// Insert a widget with a fresh automatic key at the clamped index.
+        pub fn insert(
+            &mut self,
+            ctx: &mut dyn Context,
+            index: usize,
+            widget: W,
+        ) -> Result<TypedId<W>> {
+        }
+    }
+
+    impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> CommandNode for List<W, K> {
         fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
     }
 
-    impl<W: Selectable + 'static> Widget for List<W> {
+    impl<W: Selectable + 'static, K: Eq + Hash + Clone + ToArgValue + 'static> Widget for List<W, K> {
         fn layout(&self) -> Layout {}
 
         fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {}

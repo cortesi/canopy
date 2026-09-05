@@ -78,7 +78,8 @@ mod tests {
                 });
                 assert!(matches!(error, Err(Error::Invalid(_))));
                 assert_eq!(ctx.children(), vec![child.into()]);
-                // The node's captured metadata and the widget's own state differ.
+                // The node's captured metadata and the widget's own state
+                // differ.
                 assert_eq!(node_name(ctx, root, child.into()), "original");
                 ctx.with_widget(child, |widget, _| {
                     assert_eq!(widget.name, "changed");

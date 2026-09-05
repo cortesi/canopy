@@ -15,7 +15,7 @@ use super::{
     world::{Core, WidgetOperation, layout_driver::clamp_scroll},
 };
 use crate::{
-    ChangeOutcome,
+    ChangeOutcome, InteractionToken, ModalOptions, SemanticIdentity,
     commands::{
         ArgValue, CommandError, CommandInvocation, CommandScopeFrame, CommandStatus, CommandTarget,
         ListRowContext,
@@ -134,6 +134,12 @@ pub trait ViewContext {
     /// Widget type identifier for a specific node.
     fn node_type_id(&self, node: NodeId) -> Option<TypeId>;
 
+    /// Resolve a semantic key in an explicit live subtree scope.
+    fn find_key(&self, scope: NodeId, key: &str) -> Result<Option<NodeId>>;
+
+    /// Return a node's independently assigned semantic identity.
+    fn semantic_identity(&self, node: NodeId) -> Option<SemanticIdentity>;
+
     /// Visible view rectangle in content coordinates.
     fn view_rect(&self) -> Rect {
         self.view().view_rect()
@@ -187,6 +193,12 @@ pub trait ViewContext {
 
     /// Return whether a node exists and is attached to the root tree.
     fn node_is_attached(&self, node: NodeId) -> bool;
+
+    /// Whether a modal scope remains open, including pending deferred closes.
+    fn modal_is_open(&self, token: InteractionToken) -> bool {
+        let _ = token;
+        false
+    }
 
     /// Return the path for a node relative to a root.
     fn node_path(&self, root: NodeId, node: NodeId) -> Path;
@@ -449,6 +461,21 @@ impl FocusScope {
 
 /// Mutable context available to widgets during event handling.
 pub trait Context: ViewContext {
+    /// Commit configured composition topology and semantic keys before mount.
+    #[doc(hidden)]
+    fn attach_composed(
+        &mut self,
+        parent: NodeId,
+        roots: &[(NodeId, Option<&str>)],
+        keys: &[(NodeId, NodeId, String)],
+    ) -> Result<()>;
+
+    /// Assign a unique semantic key within a containing subtree scope.
+    fn set_semantic_key(&mut self, node: NodeId, scope: NodeId, key: &str) -> Result<()>;
+
+    /// Remove the semantic identity of a live node.
+    fn clear_semantic_key(&mut self, node: NodeId) -> Result<()>;
+
     /// Focus an attached node.
     fn set_focus(&mut self, node: NodeId) -> Result<ChangeOutcome>;
 
@@ -478,6 +505,22 @@ pub trait Context: ViewContext {
 
     /// Return effective key bindings for a node or the current focus.
     fn available_bindings(&self, node: Option<NodeId>) -> Result<BindingSnapshot>;
+
+    /// Open a modal scope that owns focus, input admission, and visual effects.
+    fn open_modal(&mut self, options: ModalOptions) -> Result<InteractionToken> {
+        let _ = options;
+        Err(Error::InvalidOperation(
+            "modal interaction is unavailable".into(),
+        ))
+    }
+
+    /// Close this scope and its nested scopes after active callbacks return.
+    fn close_modal(&mut self, token: InteractionToken) -> Result<()> {
+        let _ = token;
+        Err(Error::InvalidOperation(
+            "modal interaction is unavailable".into(),
+        ))
+    }
 
     /// Push an exclusive framework binding frame owned by the current node.
     fn push_exclusive_bindings(
@@ -704,6 +747,16 @@ pub trait Context: ViewContext {
 }
 
 impl dyn Context + '_ {
+    /// Build detached children and attach them after configuration succeeds.
+    /// Structural rollback follows [`Context::edit_structure`].
+    pub fn compose<R>(
+        &mut self,
+        parent: NodeId,
+        build: impl FnOnce(&mut crate::ChildBuilder<'_>) -> Result<R>,
+    ) -> Result<R> {
+        super::children::compose(self, parent, build)
+    }
+
     /// Set the layout for the current node.
     pub fn set_layout(&mut self, layout: Layout) -> Result<()> {
         self.set_layout_of(self.node_id(), layout)
@@ -951,6 +1004,17 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
         commands::command_status(&self.core, target, invocation)
     }
 
+    fn find_key(&self, scope: NodeId, key: &str) -> Result<Option<NodeId>> {
+        self.core.find_key(scope, key)
+    }
+
+    fn semantic_identity(&self, node: NodeId) -> Option<SemanticIdentity> {
+        self.core
+            .nodes
+            .get(node)
+            .and_then(|entry| entry.semantic_identity.clone())
+    }
+
     fn node_type_id(&self, node: NodeId) -> Option<TypeId> {
         self.core.nodes.get(node).map(|n| n.widget_type)
     }
@@ -987,6 +1051,10 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
         self.core.nodes.get(node).and_then(|n| n.parent)
     }
 
+    fn modal_is_open(&self, token: InteractionToken) -> bool {
+        self.core.modal_is_open(token)
+    }
+
     fn node_is_attached(&self, node: NodeId) -> bool {
         self.core.is_attached_to_root(node)
     }
@@ -1005,6 +1073,23 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
 }
 
 impl Context for NodeCtx<&mut Core> {
+    fn attach_composed(
+        &mut self,
+        parent: NodeId,
+        roots: &[(NodeId, Option<&str>)],
+        keys: &[(NodeId, NodeId, String)],
+    ) -> Result<()> {
+        self.core.attach_composed(parent, roots, keys)
+    }
+
+    fn set_semantic_key(&mut self, node: NodeId, scope: NodeId, key: &str) -> Result<()> {
+        self.core.set_semantic_key(node, scope, key)
+    }
+
+    fn clear_semantic_key(&mut self, node: NodeId) -> Result<()> {
+        self.core.clear_semantic_key(node)
+    }
+
     fn set_focus(&mut self, node: NodeId) -> Result<ChangeOutcome> {
         self.core.set_focus(node)
     }
@@ -1043,6 +1128,14 @@ impl Context for NodeCtx<&mut Core> {
 
     fn available_bindings(&self, node: Option<NodeId>) -> Result<BindingSnapshot> {
         self.core.available_bindings(node)
+    }
+
+    fn open_modal(&mut self, options: ModalOptions) -> Result<InteractionToken> {
+        self.core.open_modal(options)
+    }
+
+    fn close_modal(&mut self, token: InteractionToken) -> Result<()> {
+        self.core.close_modal(token)
     }
 
     fn push_exclusive_bindings(
@@ -1171,7 +1264,7 @@ impl Context for NodeCtx<&mut Core> {
     fn current_list_row(&self) -> Option<ListRowContext> {
         self.core
             .current_command_scope()
-            .and_then(|frame| frame.list_row)
+            .and_then(|frame| frame.list_row.clone())
     }
 
     fn add_child_to_boxed(&mut self, parent: NodeId, widget: Box<dyn Widget>) -> Result<NodeId> {

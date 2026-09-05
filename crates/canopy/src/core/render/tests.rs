@@ -69,7 +69,8 @@ fn test_part_render_fill_within_bounds() {
         .render(|r| r.fill("default", geom::Rect::new(6, 6, 3, 3), '#'))
         .unwrap();
 
-    // Check that the buffer was filled correctly (adjusted to buffer coordinates)
+    // Check that the buffer was filled correctly (adjusted to buffer
+    // coordinates)
     target.assert_matches(buf!(
         "XXXXXXXXXX"
         "X###XXXXXX"

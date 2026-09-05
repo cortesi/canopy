@@ -29,7 +29,7 @@ mod tests {
     fn list_len(h: &mut Harness) -> usize {
         h.canopy
             .with_root_context(|ctx| {
-                ctx.with_unique_descendant::<List<TodoEntry>, _>(|list, _| Ok(list.len()))
+                ctx.with_unique_descendant::<List<TodoEntry, i64>, _>(|list, _| Ok(list.len()))
             })
             .expect("list node missing")
     }
@@ -140,8 +140,9 @@ mod tests {
         let (mut h, store) = app()?;
         add(&mut h, "one")?;
         add(&mut h, "two")?;
-        // A step down and back up returns the selection to where it started, so the
-        // delete removes the same item it would have without navigating.
+        // A step down and back up returns the selection to where it started, so
+        // the delete removes the same item it would have without
+        // navigating.
         h.key('j')?;
         h.key('k')?;
         h.key('d')?;
@@ -180,7 +181,7 @@ mod tests {
 
     fn list_state(h: &mut Harness) -> Result<(usize, Option<usize>)> {
         h.canopy.with_root_context(|ctx| {
-            ctx.with_unique_descendant::<List<TodoEntry>, _>(|list, _| {
+            ctx.with_unique_descendant::<List<TodoEntry, i64>, _>(|list, _| {
                 Ok((list.len(), list.selected_index()))
             })
         })
@@ -227,7 +228,8 @@ mod tests {
         add(&mut first, "first app")?;
         add(&mut second, "second app")?;
 
-        // Apply every fixture to both apps while preserving the other app's state.
+        // Apply every fixture to both apps while preserving the other app's
+        // state.
         for fixture in ["modal_open", "empty", "with_items"] {
             let second_rows = records(&second_store)?;
             let second_list = list_state(&mut second)?;

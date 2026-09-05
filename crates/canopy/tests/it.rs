@@ -38,3 +38,7 @@ mod turn;
 /// Viewport scrolling integration tests.
 #[path = "it/viewport.rs"]
 mod viewport;
+
+/// Scoped script lookup integration tests.
+#[path = "it/semantic_script.rs"]
+mod semantic_script;

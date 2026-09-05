@@ -76,6 +76,17 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
         handler: Handler::Sync(host_node_info),
     },
     BaseFunction {
+        name: "find_key",
+        docs: Some("Find a semantic key within an explicit scope, defaulting to root."),
+        signature: || {
+            FunctionSignature::new()
+                .param(("key", Type::String))
+                .param(("scope", Type::named("NodeId").optional()))
+                .ret(Type::named("NodeId").optional())
+        },
+        handler: Handler::Sync(host_find_key),
+    },
+    BaseFunction {
         name: "find_node",
         docs: Some("Find the first node whose path matches a canopy path pattern."),
         signature: || {
@@ -769,7 +780,8 @@ where
         })
         .transpose()?;
     loop {
-        // Capture before checking the predicate; poll_changed rechecks before parking.
+        // Capture before checking the predicate; poll_changed rechecks before
+        // parking.
         let generation = watch.generation();
         if ready(ctx.clone()).await? {
             return Ok(host_return(true));
@@ -1122,6 +1134,24 @@ fn host_node_info<'s>(
     let node_id = read_node_id(scope, &mut args, "id")?;
     host_value(scope, |canopy, _| {
         node_info_to_arg(canopy, node_id).map(ArgValue::Map)
+    })
+}
+
+/// `canopy.find_key`: resolve a key independently of decorative ancestors.
+fn host_find_key<'s>(
+    scope: &Scope<'s>,
+    args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    let mut args = HostArgCursor::new(scope, args);
+    let key = args.required::<String>("key")?;
+    let requested_scope = read_opt_node_id(scope, &mut args, "scope")?;
+    host_value(scope, |canopy, _| {
+        let root = canopy.core.root_id();
+        let context = CoreViewContext::new(&canopy.core, root);
+        Ok(context
+            .find_key(requested_scope.unwrap_or(root), &key)?
+            .map(node_id_to_arg)
+            .unwrap_or(ArgValue::Null))
     })
 }
 

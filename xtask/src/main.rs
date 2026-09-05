@@ -361,8 +361,8 @@ fn is_surface_header(line: &str, surface: &str) -> bool {
     };
     let head = head.trim_end();
     if let Some(ty) = head.strip_prefix("impl ") {
-        // Ruskel renders an inherent impl under the path the type is defined at, which
-        // is longer than the re-export the budget names.
+        // Ruskel renders an inherent impl under the path the type is defined
+        // at, which is longer than the re-export the budget names.
         return ty.rsplit("::").next().unwrap_or(ty) == surface;
     }
     if let Some(ty) = head.strip_prefix("pub trait ") {

@@ -3,7 +3,11 @@
     reason = "Core methods are split by arena, layout, and dispatch concerns."
 )]
 
-use std::{cell::RefCell, collections::HashSet, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    rc::Rc,
+};
 
 use slotmap::SlotMap;
 
@@ -30,8 +34,12 @@ mod change_tests;
 mod dispatch;
 /// Focus and mouse-capture management.
 mod focus;
+/// Modal interaction scopes and retirement.
+pub mod interaction;
 /// Layout traversal, measurement, and hit-testing.
 pub mod layout_driver;
+/// Scoped application identity and index invariants.
+mod semantic;
 /// Removal requests completed after callback restoration.
 mod teardown;
 /// Widgets and node builders shared by the world test modules.
@@ -48,6 +56,10 @@ pub struct Core {
     pub(crate) changes: crate::ChangeSet,
     /// Node storage arena.
     pub(crate) nodes: SlotMap<NodeId, Node>,
+    /// Application keys unique within explicit arena scopes.
+    semantic_keys: HashMap<(NodeId, String), NodeId>,
+    /// Runtime-owned modal interaction scopes.
+    interaction: interaction::InteractionState,
     /// Root node ID.
     pub(crate) root: NodeId,
     /// Currently focused node.
@@ -128,6 +140,10 @@ struct TreeStateSnapshot {
     removal_checkpoint: usize,
     /// Arena contents and all node metadata.
     nodes: SlotMap<NodeId, Node>,
+    /// Scoped identities captured with arena metadata.
+    semantic_keys: HashMap<(NodeId, String), NodeId>,
+    /// Modal scopes captured with structural state.
+    interaction: interaction::InteractionState,
     /// Root node ID.
     root: NodeId,
     /// Focus target.
@@ -194,6 +210,8 @@ impl Core {
         Self {
             changes: crate::ChangeSet::default(),
             nodes,
+            semantic_keys: HashMap::new(),
+            interaction: interaction::InteractionState::default(),
             root,
             focus: None,
             exit_requested: None,

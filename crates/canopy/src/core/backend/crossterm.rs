@@ -474,9 +474,9 @@ impl CrosstermRender {
 
     /// Apply a style to subsequent output.
     fn apply_style(&mut self, s: &ResolvedStyle) -> io::Result<()> {
-        // Always reset first to clear any previous attributes, then set colors and
-        // attrs. Order is important: reset clears everything, so we must set
-        // colors after.
+        // Always reset first to clear any previous attributes, then set colors
+        // and attrs. Order is important: reset clears everything, so we
+        // must set colors after.
         self.fp
             .queue(style::SetAttribute(style::Attribute::Reset))?;
         self.fp

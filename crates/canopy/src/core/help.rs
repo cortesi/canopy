@@ -81,14 +81,18 @@ impl Core {
         let mut bindings = Vec::new();
 
         for key in self.input_map.eligible_keys() {
-            let mut route_node = Some(focus);
+            let mut route_node = self.interaction_admits(focus).then_some(focus);
             let mut route_path = focus_path.clone();
             while let Some(node) = route_node {
                 let Some(resolved) = self
                     .input_map
                     .resolve_match(&route_path, InputSpec::Key(key))
                 else {
-                    route_node = self.nodes.get(node).and_then(|entry| entry.parent);
+                    route_node = if self.modal_owner() == Some(node) {
+                        None
+                    } else {
+                        self.nodes.get(node).and_then(|entry| entry.parent)
+                    };
                     route_path.pop();
                     continue;
                 };

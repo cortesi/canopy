@@ -43,6 +43,10 @@ mod tests {
         }
 
         #[command]
+        #[expect(
+            clippy::needless_pass_by_value,
+            reason = "commands receive owned injected row context"
+        )]
         fn activate(&mut self, index: usize, row: ListRowContext) {
             assert_eq!(index, row.index);
             self.rows.push((row.list, index));
@@ -121,7 +125,8 @@ mod tests {
             ctx.dispatch_exact(button.into(), &Button::call_press().invocation())?;
             ctx.detach(button.into())?;
             ctx.attach(second.into(), button.into())?;
-            // The button is active while its containing owner checks eligibility.
+            // The button is active while its containing owner checks
+            // eligibility.
             ctx.dispatch_exact(button.into(), &Button::call_press().invocation())?;
             Ok(())
         })?;

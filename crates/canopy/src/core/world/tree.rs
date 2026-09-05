@@ -23,6 +23,8 @@ impl TreeStateSnapshot {
         Self {
             removal_checkpoint: core.completion.requests.len(),
             nodes: core.nodes.clone(),
+            semantic_keys: core.semantic_keys.clone(),
+            interaction: core.interaction.clone(),
             root: core.root,
             focus: core.focus,
             exit_requested: core.exit_requested,
@@ -39,6 +41,9 @@ impl TreeStateSnapshot {
     fn restore(self, core: &mut Core) {
         core.completion.requests.truncate(self.removal_checkpoint);
         core.nodes = self.nodes;
+        core.semantic_keys = self.semantic_keys;
+        core.interaction = self.interaction;
+        core.sync_modal_bindings();
         core.root = self.root;
         core.focus = self.focus;
         core.exit_requested = self.exit_requested;
@@ -187,6 +192,7 @@ impl Core {
 
         for removed_node in plan.post_order.iter().copied() {
             if removed_node != plan.root {
+                self.clear_semantic_key(removed_node)?;
                 self.nodes.remove(removed_node);
             }
         }
@@ -198,6 +204,7 @@ impl Core {
         node.child_keys.clear();
         self.clear_removed_targets(&plan.pre_order[1..]);
 
+        self.clear_semantic_key(node_id)?;
         let incarnation = self.next_generation();
         let node = self
             .nodes
@@ -292,7 +299,8 @@ impl Core {
                     };
                     self.unwind_mounted_widgets(&mounted, &unmounted);
                     before.restore(self);
-                    // Keep committed registrations until the outer edit settles.
+                    // Keep committed registrations until the outer edit
+                    // settles.
                     Err(error)
                 }
             };
@@ -304,6 +312,7 @@ impl Core {
 
         match result {
             Ok(value) => {
+                self.prune_semantic_keys();
                 self.refresh_attachment_generations();
                 self.sync_work_stamps()?;
                 let attached = self
@@ -316,6 +325,7 @@ impl Core {
                     &journal.replaced_binding_owners,
                     &journal.exclusive_frames_before,
                 );
+                self.retire_invalid_interactions()?;
                 Ok(value)
             }
             Err(err) => {
@@ -410,6 +420,7 @@ impl Core {
         }
         self.validate_focus_and_capture()?;
         self.validate_pending_targets()?;
+        self.validate_semantic_keys()?;
         Ok(())
     }
 
@@ -720,6 +731,40 @@ impl Core {
 
     /// Attach a child under a parent, optionally tracking a keyed association.
     fn attach_inner(&mut self, parent: NodeId, child: NodeId, key: Option<&str>) -> Result<()> {
+        self.attach_topology(parent, child, key)?;
+        if self.is_attached_to_root(parent) {
+            self.mount_subtree_pre_order(child)?;
+        }
+        self.ensure_invariants(None)?;
+        Ok(())
+    }
+
+    /// Attach all configured topology and identities before invoking mount
+    /// hooks.
+    pub(crate) fn attach_composed(
+        &mut self,
+        parent: NodeId,
+        roots: &[(NodeId, Option<&str>)],
+        keys: &[(NodeId, NodeId, String)],
+    ) -> Result<()> {
+        self.with_tree_edit("attach composition", |core| {
+            for (node, key) in roots {
+                core.attach_topology(parent, *node, *key)?;
+            }
+            for (node, scope, key) in keys {
+                core.set_semantic_key(*node, *scope, key)?;
+            }
+            if core.is_attached_to_root(parent) {
+                for (node, _) in roots {
+                    core.mount_subtree_pre_order(*node)?;
+                }
+            }
+            core.ensure_invariants(None)
+        })
+    }
+
+    /// Update validated topology without running mount callbacks yet.
+    fn attach_topology(&mut self, parent: NodeId, child: NodeId, key: Option<&str>) -> Result<()> {
         if !self.nodes.contains_key(parent) {
             return Err(Error::NodeNotFound(parent));
         }
@@ -766,11 +811,6 @@ impl Core {
         }
 
         self.refresh_attachment_generations();
-        if parent_attached {
-            self.mount_subtree_pre_order(child)?;
-        }
-
-        self.ensure_invariants(None)?;
         Ok(())
     }
 
@@ -957,6 +997,7 @@ impl Core {
         }
 
         for node_id in &plan.post_order {
+            self.clear_semantic_key(*node_id)?;
             self.nodes.remove(*node_id);
         }
 

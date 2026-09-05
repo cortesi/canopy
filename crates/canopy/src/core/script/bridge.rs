@@ -109,9 +109,10 @@ pub(super) fn with_reentrant_canopy<R>(
 ) -> Option<Result<R>> {
     REENTRANT_CANOPY.with(|stack| {
         let canopy = stack.borrow().last().copied()?;
-        // SAFETY: `ReentrantCanopyGuard` is installed only while the script-originated
-        // routing call owns the live `&mut Canopy` on this thread, and is popped before
-        // that borrow returns to Ruau.
+        // SAFETY: `ReentrantCanopyGuard` is installed only while the
+        // script-originated routing call owns the live `&mut Canopy` on
+        // this thread, and is popped before that borrow returns to
+        // Ruau.
         Some(f(unsafe { &mut *canopy.as_ptr() }))
     })
 }

@@ -8,6 +8,15 @@ use crate::{
     widget::Widget,
 };
 
+/// Application identity unique within an explicit arena subtree.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SemanticIdentity {
+    /// Scope root, which may itself be detached.
+    pub scope: NodeId,
+    /// Application-defined key independent of structural child keys.
+    pub key: String,
+}
+
 /// Core node data stored in the arena.
 #[derive(Clone)]
 pub struct Node {
@@ -29,6 +38,8 @@ pub struct Node {
     pub(crate) children: Vec<NodeId>,
     /// Mapping of child role keys to node IDs.
     pub(crate) child_keys: HashMap<String, NodeId>,
+    /// Optional application identity registered in the Core scope index.
+    pub(crate) semantic_identity: Option<SemanticIdentity>,
 
     /// Last validated widget layout.
     pub(crate) base_layout: Layout,
@@ -83,6 +94,7 @@ impl Node {
             parent: None,
             children: Vec::new(),
             child_keys: HashMap::new(),
+            semantic_identity: None,
             layout,
             base_layout: layout,
             layout_override: LayoutOverride::default(),

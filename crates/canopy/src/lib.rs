@@ -34,10 +34,11 @@ pub use core::testing;
 // Stable app-author surface.
 pub use core::{
     AutomationCallback, AutomationHandle, BindingId, BindingOptions, BindingOwner, BindingPhase,
-    BindingScope, BindingTarget, Canopy, ChangeOutcome, ChangeSet, ChildKey, Context, EvalId,
-    EvalOutcome, EvalRequest, EvalTicket, ExclusiveFrameToken, Fixture, FixtureInfo, FocusScope,
-    FrameId, FrameworkBindingGroup, InputSpec, Invalidation, KeyedChildren, Loader, NodeId,
-    NodeWakeHandle, RoutePhase, RouteTraceEntry, ScriptJournalEntry, TurnOutcome, TypedId,
+    BindingScope, BindingTarget, Canopy, ChangeOutcome, ChangeSet, ChildBuilder, ChildConfig,
+    ChildKey, Context, EvalId, EvalOutcome, EvalRequest, EvalTicket, ExclusiveFrameToken, Fixture,
+    FixtureInfo, FocusScope, FrameId, FrameworkBindingGroup, InputSpec, InteractionToken,
+    Invalidation, KeyedChildren, Loader, ModalBindings, ModalOptions, NodeId, NodeWakeHandle,
+    RoutePhase, RouteTraceEntry, ScriptJournalEntry, SemanticIdentity, TurnOutcome, TypedId,
     ViewContext, WakeOutcome, Work, WorkLifetime,
 };
 // App-author modules used by widget implementations and derive output.

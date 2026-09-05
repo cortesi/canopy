@@ -34,6 +34,13 @@ pub struct DummyContext {
 }
 
 impl ViewContext for DummyContext {
+    fn find_key(&self, _scope: NodeId, _key: &str) -> Result<Option<NodeId>> {
+        Ok(None)
+    }
+    fn semantic_identity(&self, _node: NodeId) -> Option<crate::SemanticIdentity> {
+        None
+    }
+
     fn node_id(&self) -> NodeId {
         self.node_id
     }
@@ -114,6 +121,22 @@ impl ViewContext for DummyContext {
 }
 
 impl Context for DummyContext {
+    fn attach_composed(
+        &mut self,
+        _parent: NodeId,
+        _roots: &[(NodeId, Option<&str>)],
+        _keys: &[(NodeId, NodeId, String)],
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    fn set_semantic_key(&mut self, _node: NodeId, _scope: NodeId, _key: &str) -> Result<()> {
+        Ok(())
+    }
+    fn clear_semantic_key(&mut self, _node: NodeId) -> Result<()> {
+        Ok(())
+    }
+
     fn set_focus(&mut self, _node: NodeId) -> Result<ChangeOutcome> {
         Ok(ChangeOutcome::Unchanged)
     }

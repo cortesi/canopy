@@ -84,8 +84,16 @@ impl RoutedInput {
 impl Canopy {
     /// Return the starting target and binding path for a mouse event.
     fn mouse_route_start(&mut self, location: Point) -> Result<(Option<NodeId>, Path)> {
+        if let Some(modal) = self.core.modal_region() {
+            let hit = self.core.locate_node(self.core.root, location)?;
+            if !hit.is_some_and(|node| self.core.is_ancestor_or_self(modal, node)) {
+                return Ok((None, Path::empty()));
+            }
+        }
         if let Some(capture) = self.core.mouse_capture {
-            if self.core.validate_attached_node(capture).is_ok() {
+            if self.core.validate_attached_node(capture).is_ok()
+                && self.core.interaction_admits(capture)
+            {
                 return Ok((Some(capture), self.core.node_path(self.core.root, capture)));
             } else {
                 self.core.clear_mouse_capture()?;
@@ -146,6 +154,12 @@ impl Canopy {
         scope: Option<&Scope<'_>>,
     ) -> Result<bool> {
         self.route_trace.clear();
+        if self.core.modal_region().is_some()
+            && !start.is_some_and(|node| self.core.interaction_admits(node))
+        {
+            return Ok(true);
+        }
+        let modal_owner = self.core.modal_owner();
         self.trace_route(
             RoutePhase::Target,
             start,
@@ -189,7 +203,11 @@ impl Canopy {
                 &path,
                 format!("{event:?}"),
             );
-            let outcome = self.core.dispatch_event_on_node(id, &event)?;
+            let outcome = if self.core.interaction_admits(id) {
+                self.core.dispatch_event_on_node(id, &event)?
+            } else {
+                EventOutcome::Ignore
+            };
 
             match outcome {
                 EventOutcome::Handle | EventOutcome::Consume => {
@@ -208,6 +226,9 @@ impl Canopy {
                             .execute_routed_binding_with_scope(id, &path, input, binding, scope);
                     }
                     self.trace_route(RoutePhase::Bubble, Some(id), &path, "ignored");
+                    if modal_owner == Some(id) {
+                        return Ok(true);
+                    }
                     target = self.core.nodes.get(id).and_then(|node| node.parent);
                     path.pop();
                 }

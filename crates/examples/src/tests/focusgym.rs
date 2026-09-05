@@ -199,7 +199,8 @@ fn test_flex_adjust_refuses_at_min_size() -> Result<()> {
     let (view, _) = outer_pair(&mut harness)?;
     assert!(view.w <= 1 || view.h <= 1);
 
-    // Grow first, so a refused shrink is distinguishable from the `.max(1)` clamp.
+    // Grow first, so a refused shrink is distinguishable from the `.max(1)`
+    // clamp.
     let weight_before = left_flex_weight(&mut harness)?;
     harness.key(']')?;
     let grown = left_flex_weight(&mut harness)?;

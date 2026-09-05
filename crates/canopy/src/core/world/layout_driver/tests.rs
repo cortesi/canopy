@@ -745,7 +745,8 @@ fn random_tree_no_panics() -> Result<()> {
     }
 
     for node in core.nodes.values() {
-        // For Stack direction, children can overlap, so skip position ordering check
+        // For Stack direction, children can overlap, so skip position ordering
+        // check
         if node.layout.direction == LayoutDirection::Stack {
             continue;
         }

@@ -474,12 +474,14 @@ impl<'a> LayoutPass<'a> {
         let parent_overflow = Overflow::from_layout(layout);
         match layout.direction {
             LayoutDirection::Stack => {
-                // Stack: all children get full content area, positioned according to alignment
+                // Stack: all children get full content area, positioned
+                // according to alignment
                 for child in &children {
                     // First, layout the child to determine its size
                     let child_size = self.layout_node(*child, content, parent_overflow)?;
 
-                    // Then apply alignment to position the child within content area
+                    // Then apply alignment to position the child within content
+                    // area
                     let offset_x = align_offset(child_size.w, content.w, layout.align_horizontal);
                     let offset_y = align_offset(child_size.h, content.h, layout.align_vertical);
                     self.set_node_position(

@@ -1,17 +1,12 @@
 #![deny(unsafe_code)]
 //! Todo application used as Canopy's end-to-end example and smoke-test target.
 
-use std::{fmt::Display, mem, path::Path};
+use std::{collections::HashMap, fmt::Display, path::Path};
 
 use anyhow::Result as AnyResult;
 use canopy::{
-    command,
-    commands::CommandStatus,
-    derive_commands,
-    error::Error,
-    layout::LayoutOverride,
-    prelude::*,
-    style::{effects, solarized},
+    InteractionToken, ModalBindings, ModalOptions, command, commands::CommandStatus,
+    derive_commands, error::Error, layout::LayoutOverride, prelude::*, style::solarized,
 };
 use canopy_widgets::{Center, Frame, Input, List, Root, Selectable};
 
@@ -150,8 +145,8 @@ pub(crate) struct Todo {
     store: store::Store,
     /// Entries waiting for the widget tree to mount.
     pending: Vec<store::Todo>,
-    /// Whether the add-item modal is active.
-    adder_active: bool,
+    /// Owned interaction scope for the add-item modal.
+    adder: Option<InteractionToken>,
 }
 
 #[derive_commands]
@@ -162,45 +157,42 @@ impl Todo {
         Ok(Self {
             store,
             pending,
-            adder_active: false,
+            adder: None,
         })
     }
 
     /// Build the Todo widget subtree once.
     fn ensure_tree(&mut self, c: &mut dyn Context) -> Result<()> {
         if c.has_child::<MainSlot>()? {
+            if !self.pending.is_empty() {
+                self.reconcile_items(c, self.pending.clone())?;
+                self.pending.clear();
+            }
             return Ok(());
         }
 
-        // Create the main content container (list + status bar in column layout)
-        let main_content_id = c.add_keyed::<MainSlot>(MainContent)?;
-        let frame_id = c.add_child_to(main_content_id, Frame::new())?;
-        let list_id = c.add_child_to(frame_id, List::<TodoEntry>::new())?;
-        let status_id = c.add_child_to(main_content_id, StatusBar)?;
-        let main_content_node = NodeId::from(main_content_id);
-
-        // Set Todo (self) to use Stack direction for modal overlay support
-        c.set_layout(Layout::fill().direction(Direction::Stack))?;
-
-        // Main content fills the space
-        c.set_layout_of(main_content_id, Layout::fill())?;
-
-        c.set_layout_of(list_id, Layout::fill())?;
-
-        c.set_layout_of(status_id, Layout::row().flex_horizontal(1).fixed_height(1))?;
-
-        // Initially only show main content
-        c.set_children(vec![main_content_node])?;
-
-        if !self.pending.is_empty() {
-            let pending = mem::take(&mut self.pending);
-            c.with_widget(list_id, |list: &mut List<TodoEntry>, ctx| {
-                for item in pending {
-                    list.append(ctx, TodoEntry::new(item))?;
-                }
+        let scope = c.node_id();
+        c.compose(scope, |tree| {
+            tree.keyed::<MainSlot>(MainContent, |main| {
+                main.layout_override(LayoutOverride::full(Layout::fill()))?;
+                main.child(Frame::new(), |frame| {
+                    frame.child(List::<TodoEntry, i64>::new(), |list| {
+                        list.semantic_key(scope, "todo.list")
+                    })?;
+                    Ok(())
+                })?;
+                main.child(StatusBar, |status| {
+                    status.layout_override(LayoutOverride::full(
+                        Layout::row().flex_horizontal(1).fixed_height(1),
+                    ))
+                })?;
                 Ok(())
             })?;
-        }
+            Ok(())
+        })?;
+        self.reconcile_items(c, self.pending.clone())?;
+        self.pending.clear();
+        self.with_list(c, |list, ctx| list.select_first(ctx))?;
 
         Ok(())
     }
@@ -211,55 +203,65 @@ impl Todo {
             return Ok(());
         }
 
-        // Create the modal with an input frame
-        let modal_id = c.add_keyed::<ModalSlot>(Center::new())?;
-        let adder_frame_id = c.add_child_to(modal_id, Frame::new())?;
-        let input_id = c.add_child_to(adder_frame_id, Input::new(""))?;
+        let scope = c.node_id();
+        c.compose(scope, |tree| {
+            tree.keyed::<ModalSlot>(Center::new(), |modal| {
+                modal.child(Frame::new(), |frame| {
+                    frame.layout_override(LayoutOverride {
+                        min_width: Some(Some(30)),
+                        max_width: Some(Some(50)),
+                        ..LayoutOverride::new().fixed_height(3)
+                    })?;
+                    frame.child(Input::new(""), |input| {
+                        input.layout_override(LayoutOverride::full(Layout::fill()))?;
+                        input.semantic_key(scope, "todo.input")
+                    })?;
+                    Ok(())
+                })?;
+                Ok(())
+            })?;
+            Ok(())
+        })
+    }
 
-        c.set_layout_override_of(
-            adder_frame_id.into(),
-            LayoutOverride {
-                min_width: Some(Some(30)),
-                max_width: Some(Some(50)),
-                ..LayoutOverride::new().fixed_height(3)
-            },
-        )?;
-
-        c.set_layout_of(input_id, Layout::fill())?;
-
+    /// Close only this application's modal effects and restore prior focus.
+    fn close_adder(&self, c: &mut dyn Context) -> Result<()> {
+        if let Some(token) = self.adder {
+            c.close_modal(token)?;
+        }
         Ok(())
     }
 
-    /// Synchronize modal visibility and the main-content dimming effect.
-    fn sync_modal_state(&self, c: &mut dyn Context) -> Result<()> {
-        let main_content_id = c
-            .get_child::<MainSlot>()?
-            .expect("main content not initialized");
-        let main_content_node = NodeId::from(main_content_id);
-
-        c.clear_effects(main_content_node)?;
-        if self.adder_active {
-            self.ensure_modal(c)?;
-            c.push_effect(main_content_node, effects::brightness(0.5))?;
-            c.with_child::<ModalSlot, _>(|_, ctx| {
-                ctx.set_hidden(false)?;
-                Ok(())
-            })?;
-        } else {
-            let _ = c.try_with_child::<ModalSlot, _>(|_, ctx| {
-                ctx.set_hidden(true)?;
-                Ok(())
-            })?;
-        }
-        Ok(())
+    /// Reconcile database rows by their persistent identifiers.
+    fn reconcile_items(&self, c: &mut dyn Context, items: Vec<store::Todo>) -> Result<()> {
+        let keys: Vec<i64> = items.iter().map(|item| item.id).collect();
+        let items: HashMap<i64, store::Todo> =
+            items.into_iter().map(|item| (item.id, item)).collect();
+        self.with_list(c, |list, ctx| {
+            list.reconcile(
+                ctx,
+                keys,
+                |key| Ok(TodoEntry::new(items[key].clone())),
+                |key, id, ctx| {
+                    ctx.with_widget(id, |entry: &mut TodoEntry, _| {
+                        entry.todo = items[key].clone();
+                        Ok(())
+                    })
+                },
+            )?;
+            Ok(())
+        })
     }
 
     /// Run a mutation against the unique todo list.
     fn with_list<F, R>(&self, c: &mut dyn Context, f: F) -> Result<R>
     where
-        F: FnOnce(&mut List<TodoEntry>, &mut dyn Context) -> Result<R>,
+        F: FnOnce(&mut List<TodoEntry, i64>, &mut dyn Context) -> Result<R>,
     {
-        c.with_unique_descendant::<List<TodoEntry>, _>(f)
+        let id = c
+            .find_key(c.node_id(), "todo.list")?
+            .ok_or_else(|| Error::Internal("todo list is not initialized".into()))?;
+        c.with_node(id, f)
     }
 
     /// Run a mutation against the unique modal input.
@@ -267,9 +269,10 @@ impl Todo {
     where
         F: FnOnce(&mut Input) -> Result<R>,
     {
-        c.with_child::<ModalSlot, _>(|_, ctx| {
-            ctx.with_unique_descendant::<Input, _>(|input, _| f(input))
-        })
+        let id = c
+            .find_key(c.node_id(), "todo.input")?
+            .ok_or_else(|| Error::Internal("todo input is not initialized".into()))?;
+        c.with_node(id, |input: &mut Input, _| f(input))
     }
 
     /// Replace list state and set the requested modal state for a fixture.
@@ -281,24 +284,19 @@ impl Todo {
     ) -> Result<()> {
         self.ensure_tree(c)?;
         let empty = items.is_empty();
-        self.with_list(c, |list, ctx| {
-            list.clear(ctx)?;
-            for item in items {
-                list.append(ctx, TodoEntry::new(item))?;
-            }
-            if !empty {
-                list.select_first(ctx)?;
-            }
-            Ok(())
-        })?;
-
+        self.reconcile_items(c, items)?;
+        self.with_list(c, |list, ctx| list.select(ctx, 0))?;
         if modal_open {
             self.open_adder(c)?;
         } else {
-            self.adder_active = false;
-            self.sync_modal_state(c)?;
-            if empty {
-                c.set_focus(c.node_id())?;
+            let was_open = self.adder.is_some_and(|token| c.modal_is_open(token));
+            self.close_adder(c)?;
+            if !was_open {
+                if empty {
+                    c.set_focus(c.node_id())?;
+                } else {
+                    self.with_list(c, |list, ctx| list.select_first(ctx))?;
+                }
             }
         }
         Ok(())
@@ -313,24 +311,36 @@ impl Todo {
 
     /// Show the add-item modal with an empty input and focus it.
     fn open_adder(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.adder_active = true;
-        self.sync_modal_state(c)?;
+        self.ensure_modal(c)?;
         self.with_input(c, |input| {
             input.set_value("");
             Ok(())
         })?;
-        if let Some(input_id) = (c as &dyn ViewContext).unique_descendant::<Input>()? {
-            c.set_focus(NodeId::from(input_id))?;
+        let input = c
+            .find_key(c.node_id(), "todo.input")?
+            .ok_or_else(|| Error::Internal("todo input is not initialized".into()))?;
+        if !self.adder.is_some_and(|token| c.modal_is_open(token)) {
+            let modal = c.get_child::<ModalSlot>()?.expect("modal initialized");
+            let main = c.get_child::<MainSlot>()?.expect("main initialized");
+            self.adder = Some(c.open_modal(ModalOptions {
+                owner: c.node_id(),
+                modal: modal.into(),
+                initial_focus: input,
+                dim_target: Some(main.into()),
+                bindings: ModalBindings::Application,
+            })?);
+        } else {
+            c.set_focus(input)?;
         }
         Ok(())
     }
 
     /// Delete eligibility follows the current list selection.
     fn can_delete(&self, ctx: &dyn ViewContext) -> Result<CommandStatus> {
-        let Some(list) = ctx.unique_descendant::<List<TodoEntry>>()? else {
+        let Some(list) = ctx.find_key(ctx.node_id(), "todo.list")? else {
             return Ok(CommandStatus::Disabled("No item selected".into()));
         };
-        ctx.with_widget_read(list, |list| {
+        ctx.with_widget_read(ctx.typed_id::<List<TodoEntry, i64>>(list)?, |list| {
             Ok(if list.selected_item().is_some() {
                 CommandStatus::Enabled
             } else {
@@ -343,10 +353,9 @@ impl Todo {
     /// Delete the selected todo entry.
     pub fn delete_item(&self, c: &mut dyn Context) -> Result<()> {
         self.with_list(c, |list, ctx| {
-            let Some(item_id) = list.selected_item() else {
+            let Some(id) = list.selected_key().copied() else {
                 return Ok(());
             };
-            let id = ctx.with_widget(item_id, |entry: &mut TodoEntry, _| Ok(entry.todo.id))?;
             self.store.delete_todo(id).map_err(store_error)?;
             let _ = list.delete_selected(ctx)?;
             Ok(())
@@ -355,31 +364,22 @@ impl Todo {
 
     #[command]
     /// Store the pending input and close the add-item modal.
-    pub fn accept_add(&mut self, c: &mut dyn Context) -> Result<()> {
+    pub fn accept_add(&self, c: &mut dyn Context) -> Result<()> {
         let value = self.with_input(c, |input| Ok(input.value().to_string()))?;
 
         if !value.is_empty() {
             let item = self.store.add_todo(&value).map_err(store_error)?;
-            self.with_list(c, |list, ctx| {
-                list.append(ctx, TodoEntry::new(item))?;
-                list.select_last(ctx)?;
-                Ok(())
-            })?;
+            self.reconcile_items(c, self.store.todos().map_err(store_error)?)?;
+            self.with_list(c, |list, ctx| list.select_key(ctx, &item.id))?;
         }
 
-        self.adder_active = false;
-        self.sync_modal_state(c)?;
-        c.set_focus(c.node_id())?;
-        Ok(())
+        self.close_adder(c)
     }
 
     #[command]
     /// Discard pending input and close the add-item modal.
-    pub fn cancel_add(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.adder_active = false;
-        self.sync_modal_state(c)?;
-        c.set_focus(c.node_id())?;
-        Ok(())
+    pub fn cancel_add(&self, c: &mut dyn Context) -> Result<()> {
+        self.close_adder(c)
     }
 
     #[command]
@@ -402,6 +402,10 @@ impl Todo {
 }
 
 impl Widget for Todo {
+    fn layout(&self) -> Layout {
+        Layout::fill().direction(Direction::Stack)
+    }
+
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         self.ensure_tree(c)
     }
@@ -414,7 +418,7 @@ impl Widget for Todo {
 impl Loader for Todo {
     fn load(c: &mut Canopy) -> Result<()> {
         c.add_commands::<Self>()?;
-        c.add_commands::<List<TodoEntry>>()?;
+        c.add_commands::<List<TodoEntry, i64>>()?;
         c.add_commands::<Input>()?;
         Ok(())
     }
@@ -565,7 +569,11 @@ pub fn create_app_with_store(store: store::Store, config: Option<&Path>) -> AnyR
 
 #[cfg(test)]
 mod tests {
-    use canopy::{geom::Point, style::ResolvedStyle, testing::harness::Harness};
+    use canopy::{
+        geom::Point,
+        style::{ResolvedStyle, effects},
+        testing::harness::Harness,
+    };
 
     use super::*;
 
@@ -626,8 +634,49 @@ mod tests {
     }
 
     #[test]
+    fn semantic_controls_survive_decorative_wrappers_and_reorder() -> AnyResult<()> {
+        let store = store::Store::open(":memory:")?;
+        let first = store.add_todo("first")?;
+        let second = store.add_todo("second")?;
+        let mut canopy = create_app_with_store(store, None)?;
+        with_todo(&mut canopy, |todo, ctx| {
+            let scope = ctx.node_id();
+            let list = ctx.find_key(scope, "todo.list")?.expect("keyed list");
+            let frame = ctx.parent_of(list).expect("list frame");
+            ctx.edit_structure(&mut |ctx| {
+                let wrapper = ctx.create_detached(Frame::new())?;
+                ctx.detach(list)?;
+                ctx.attach(wrapper.into(), list)?;
+                ctx.attach(frame, wrapper.into())
+            })?;
+            assert_eq!(ctx.find_key(scope, "todo.list")?, Some(list));
+            let first_node = todo.with_list(ctx, |list, ctx| {
+                list.select_key(ctx, &first.id)?;
+                Ok(list.selected_item().expect("first entry"))
+            })?;
+            todo.reconcile_items(ctx, vec![second.clone(), first.clone()])?;
+            todo.with_list(ctx, |list, _| {
+                assert_eq!(list.selected_key(), Some(&first.id));
+                assert_eq!(list.selected_index(), Some(1));
+                assert_eq!(list.selected_item(), Some(first_node));
+                Ok(())
+            })?;
+            todo.open_adder(ctx)?;
+            let input = ctx.find_key(scope, "todo.input")?.expect("keyed input");
+            assert_eq!(ctx.focused_node(), Some(input));
+            todo.close_adder(ctx)
+        })?;
+        Ok(())
+    }
+
+    #[test]
     fn repeated_modal_opening_keeps_one_dimming_effect() -> AnyResult<()> {
         let mut harness = Harness::from_canopy(create_app(":memory:")?, Size::new(80, 24))?;
+        with_todo(&mut harness.canopy, |_, ctx| {
+            let main = ctx.get_child::<MainSlot>()?.expect("main initialized");
+            ctx.push_effect(main.into(), effects::brightness(0.8))?;
+            Ok(())
+        })?;
         harness.render()?;
         let normal = status_style(&harness);
         harness.script("todo.enter_item()")?;

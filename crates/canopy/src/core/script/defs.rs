@@ -108,6 +108,13 @@ pub(super) fn register_framework_declarations(builder: &mut module::Builder) {
             declaration::Field::new("h", declaration::Type::Number).doc("Height in cells."),
         ]),
     ));
+    builder.alias(declaration::Alias::new(
+        "SemanticIdentity",
+        declaration::Type::table([
+            declaration::Field::new("scope", declaration::Type::named("NodeId")),
+            declaration::Field::new("key", declaration::Type::String),
+        ]),
+    ));
     builder.alias(
         declaration::Alias::new(
             "NodeInfo",
@@ -478,6 +485,11 @@ fn node_info_fields(
             .doc("Stable node handle for use in other API calls."),
         declaration::Field::new("name", declaration::Type::String)
             .doc("Widget owner name used in paths and command dispatch."),
+        declaration::Field::new(
+            "semantic_identity",
+            declaration::Type::named("SemanticIdentity").optional(),
+        )
+        .doc("Application key and explicit arena scope, if registered."),
         declaration::Field::new("focused", declaration::Type::Boolean)
             .doc("True when this node currently owns focus."),
         declaration::Field::new("on_focus_path", declaration::Type::Boolean)

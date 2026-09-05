@@ -1390,12 +1390,14 @@ where
 }
 
 /// Context passed to list row injections.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ListRowContext {
     /// Owning list node id.
     pub list: NodeId,
     /// Row index.
     pub index: usize,
+    /// Stable collection key for this row.
+    pub key: ArgValue,
 }
 
 impl Inject for MouseEvent {

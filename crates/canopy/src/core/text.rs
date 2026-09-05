@@ -19,8 +19,8 @@ pub fn slice_by_columns(s: &str, start: usize, max: usize) -> (&str, usize) {
         let g_width = grapheme_width(grapheme);
 
         if !started {
-            // A grapheme that ends at or before the start column, or straddles it, is
-            // skipped.
+            // A grapheme that ends at or before the start column, or straddles
+            // it, is skipped.
             if col < start || col + g_width <= start {
                 col += g_width;
                 continue;

@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 
 use super::Core;
 use crate::{
-    NodeId,
+    InteractionToken, NodeId,
     core::wake::WorkStamp,
     error::{Error, Result},
 };
@@ -21,11 +21,19 @@ pub(super) struct RemovalRequest {
     incarnation: u64,
 }
 
+/// Mutation deferred until the outer callback boundary completes.
+pub(super) enum CompletionRequest {
+    /// Remove a widget incarnation.
+    Remove(RemovalRequest),
+    /// Close a modal scope and all its descendants.
+    CloseModal(InteractionToken),
+}
+
 /// Pending teardown and dispatch nesting state.
 #[derive(Default)]
 pub(super) struct CompletionBatch {
     /// FIFO requests from active dispatches.
-    pub(super) requests: VecDeque<RemovalRequest>,
+    pub(super) requests: VecDeque<CompletionRequest>,
     /// Active explicit dispatch boundaries.
     depth: usize,
     /// Lifecycle cleanup cannot add work while this is true.
@@ -103,10 +111,33 @@ impl Core {
                 "dispatch removal batch exceeds {MAX_REMOVAL_REQUESTS} requests"
             )));
         }
-        self.completion.requests.push_back(RemovalRequest {
-            node,
-            incarnation: entry.incarnation,
-        });
+        self.completion
+            .requests
+            .push_back(CompletionRequest::Remove(RemovalRequest {
+                node,
+                incarnation: entry.incarnation,
+            }));
+        if self.completion.depth == 0 && self.callback_depth == 0 {
+            self.drain_removals()?;
+        }
+        Ok(())
+    }
+
+    /// Defer modal closure with the same failure checkpoint as node removal.
+    pub(crate) fn close_modal_after_dispatch(&mut self, token: InteractionToken) -> Result<()> {
+        if self.completion.draining || self.rolling_back_tree_edit {
+            return Err(Error::Invalid(
+                "cannot queue modal close during lifecycle cleanup".into(),
+            ));
+        }
+        if self.completion.requests.len() >= MAX_REMOVAL_REQUESTS {
+            return Err(Error::InvalidOperation(
+                "dispatch completion batch is full".into(),
+            ));
+        }
+        self.completion
+            .requests
+            .push_back(CompletionRequest::CloseModal(token));
         if self.completion.depth == 0 && self.callback_depth == 0 {
             self.drain_removals()?;
         }
@@ -129,6 +160,13 @@ impl Core {
     /// Remove only nodes whose widget incarnation still matches the request.
     fn drain_removals_inner(&mut self) -> Result<()> {
         while let Some(request) = self.completion.requests.pop_front() {
+            let request = match request {
+                CompletionRequest::CloseModal(token) => {
+                    self.close_modal_now(token)?;
+                    continue;
+                }
+                CompletionRequest::Remove(request) => request,
+            };
             if self
                 .nodes
                 .get(request.node)

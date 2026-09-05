@@ -402,7 +402,8 @@ impl Widget for Stylegym {
                 .padding(Edges::all(1)),
         )?;
 
-        // Create theme dropdown with its own frame - no fixed height so it can expand
+        // Create theme dropdown with its own frame - no fixed height so it can
+        // expand
         let theme_frame_id = c.add_keyed_to(
             left_frame_id,
             ThemeFrameSlot::KEY,

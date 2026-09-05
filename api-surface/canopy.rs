@@ -700,6 +700,12 @@ pub mod canopy {
         pub use crate::CommandEnum;
         /// Mutable context available to widgets during event handling.
         pub trait Context: ViewContext {
+            /// Assign a unique semantic key within a containing subtree scope.
+            fn set_semantic_key(&mut self, node: NodeId, scope: NodeId, key: &str) -> Result<()>;
+
+            /// Remove the semantic identity of a live node.
+            fn clear_semantic_key(&mut self, node: NodeId) -> Result<()>;
+
             /// Focus an attached node.
             fn set_focus(&mut self, node: NodeId) -> Result<ChangeOutcome>;
 
@@ -729,6 +735,12 @@ pub mod canopy {
 
             /// Return effective key bindings for a node or the current focus.
             fn available_bindings(&self, node: Option<NodeId>) -> Result<BindingSnapshot>;
+
+            /// Open a modal scope that owns focus, input admission, and visual effects.
+            fn open_modal(&mut self, options: ModalOptions) -> Result<InteractionToken> {}
+
+            /// Close this scope and its nested scopes after active callbacks return.
+            fn close_modal(&mut self, token: InteractionToken) -> Result<()> {}
 
             /// Push an exclusive framework binding frame owned by the current node.
             fn push_exclusive_bindings(
@@ -1067,6 +1079,12 @@ pub mod canopy {
             /// Widget type identifier for a specific node.
             fn node_type_id(&self, node: NodeId) -> Option<TypeId>;
 
+            /// Resolve a semantic key in an explicit live subtree scope.
+            fn find_key(&self, scope: NodeId, key: &str) -> Result<Option<NodeId>>;
+
+            /// Return a node's independently assigned semantic identity.
+            fn semantic_identity(&self, node: NodeId) -> Option<SemanticIdentity>;
+
             /// Visible view rectangle in content coordinates.
             fn view_rect(&self) -> Rect {}
 
@@ -1108,6 +1126,9 @@ pub mod canopy {
 
             /// Return whether a node exists and is attached to the root tree.
             fn node_is_attached(&self, node: NodeId) -> bool;
+
+            /// Whether a modal scope remains open, including pending deferred closes.
+            fn modal_is_open(&self, token: InteractionToken) -> bool {}
 
             /// Return the path for a node relative to a root.
             fn node_path(&self, root: NodeId, node: NodeId) -> Path;
@@ -2606,6 +2627,60 @@ pub mod canopy {
         pub fn is_pending(self) -> bool {}
     }
 
+    /// Restricted builder for new children of one existing parent.
+    ///
+    /// Configuration completes while nodes are detached. The enclosing structural
+    /// edit attaches roots in source order, then registers scoped semantic keys.
+    pub struct ChildBuilder<'a> {}
+
+    impl ChildBuilder<'_> {
+        /// Configure an unkeyed child before attaching it to the existing parent.
+        pub fn child<W: Widget + 'static>(
+            &mut self,
+            widget: W,
+            configure: impl FnOnce(&mut ChildConfig<'_, W>) -> Result<()>,
+        ) -> Result<TypedId<W>> {
+        }
+
+        /// Configure a child occupying a typed structural slot.
+        pub fn keyed<K: crate::ChildKey>(
+            &mut self,
+            widget: K::Widget,
+            configure: impl FnOnce(&mut ChildConfig<'_, K::Widget>) -> Result<()>,
+        ) -> Result<TypedId<K::Widget>> {
+        }
+    }
+
+    /// Configuration access limited to a newly created detached node.
+    pub struct ChildConfig<'a, W> {}
+
+    impl<W: Widget + 'static> ChildConfig<'_, W> {
+        /// Return the new node's typed identity.
+        pub fn id(&self) -> TypedId<W> {}
+
+        /// Set persistent layout constraints before mount.
+        pub fn layout_override(&mut self, overrides: LayoutOverride) -> Result<()> {}
+
+        /// Register this node's semantic key after its completed tree is attached.
+        pub fn semantic_key(&mut self, scope: NodeId, key: &str) -> Result<()> {}
+
+        /// Configure and attach a descendant to this new detached parent.
+        pub fn child<C: Widget + 'static>(
+            &mut self,
+            widget: C,
+            configure: impl FnOnce(&mut ChildConfig<'_, C>) -> Result<()>,
+        ) -> Result<TypedId<C>> {
+        }
+
+        /// Configure a descendant in a typed structural slot.
+        pub fn keyed<K: crate::ChildKey>(
+            &mut self,
+            widget: K::Widget,
+            configure: impl FnOnce(&mut ChildConfig<'_, K::Widget>) -> Result<()>,
+        ) -> Result<TypedId<K::Widget>> {
+        }
+    }
+
     /// A typed key for keyed children.
     ///
     /// This trait associates a string key with a specific widget type, providing
@@ -2629,6 +2704,12 @@ pub mod canopy {
 
     /// Mutable context available to widgets during event handling.
     pub trait Context: ViewContext {
+        /// Assign a unique semantic key within a containing subtree scope.
+        fn set_semantic_key(&mut self, node: NodeId, scope: NodeId, key: &str) -> Result<()>;
+
+        /// Remove the semantic identity of a live node.
+        fn clear_semantic_key(&mut self, node: NodeId) -> Result<()>;
+
         /// Focus an attached node.
         fn set_focus(&mut self, node: NodeId) -> Result<ChangeOutcome>;
 
@@ -2658,6 +2739,12 @@ pub mod canopy {
 
         /// Return effective key bindings for a node or the current focus.
         fn available_bindings(&self, node: Option<NodeId>) -> Result<BindingSnapshot>;
+
+        /// Open a modal scope that owns focus, input admission, and visual effects.
+        fn open_modal(&mut self, options: ModalOptions) -> Result<InteractionToken> {}
+
+        /// Close this scope and its nested scopes after active callbacks return.
+        fn close_modal(&mut self, token: InteractionToken) -> Result<()> {}
 
         /// Push an exclusive framework binding frame owned by the current node.
         fn push_exclusive_bindings(
@@ -2989,6 +3076,10 @@ pub mod canopy {
         pub fn normalize(self) -> Self {}
     }
 
+    /// Opaque identity of one modal scope, unique across applications.
+    #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq)]
+    pub struct InteractionToken(_);
+
     /// Work invalidated by a mutation.
     #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq)]
     pub enum Invalidation {
@@ -3004,7 +3095,9 @@ pub mod canopy {
     ///
     /// Stores a stable mapping from keys to node IDs plus a current order. Use
     /// [`KeyedChildren::reconcile`] to create, update, and reorder children based
-    /// on a desired key list.
+    /// on a desired key list. The collection owns all children of its context node;
+    /// unmanaged children are rejected before callbacks run. Place persistent
+    /// headers and footers outside a dedicated collection container.
     #[derive(Debug, Default)]
     pub struct KeyedChildren<K, W> {}
 
@@ -3060,6 +3153,30 @@ pub mod canopy {
         /// Load commands or resources into the canopy instance.
         /// Returns an error if loading fails.
         fn load(_: &mut Canopy) -> Result<()> {}
+    }
+
+    /// Bindings admitted within a modal's route to its owner.
+    #[derive(Clone, Copy, Debug, StructuralPartialEq, PartialEq, Eq)]
+    pub enum ModalBindings {
+        /// Admit only this framework binding group.
+        Framework(crate::FrameworkBindingGroup),
+        /// Admit ordinary application bindings on the bounded modal route.
+        Application,
+    }
+
+    /// Nodes and binding admission owned by one modal scope.
+    #[derive(Clone, Copy, Debug)]
+    pub struct ModalOptions {
+        /// Ancestor that owns the modal lifetime and bounds binding routing.
+        pub owner: crate::NodeId,
+        /// Subtree that receives normal input while this scope is on top.
+        pub modal: crate::NodeId,
+        /// Focusable node inside the modal to focus on successful open.
+        pub initial_focus: crate::NodeId,
+        /// Optional subtree dimmed while the scope remains active.
+        pub dim_target: Option<crate::NodeId>,
+        /// Binding ownership admitted by this scope.
+        pub bindings: ModalBindings,
     }
 
     /// Opaque identifier for a node stored in the Core arena.
@@ -3166,6 +3283,15 @@ pub mod canopy {
         pub duration_ms: u64,
     }
 
+    /// Application identity unique within an explicit arena subtree.
+    #[derive(Clone, Debug, StructuralPartialEq, PartialEq, Eq)]
+    pub struct SemanticIdentity {
+        /// Scope root, which may itself be detached.
+        pub scope: crate::core::id::NodeId,
+        /// Application-defined key independent of structural child keys.
+        pub key: String,
+    }
+
     /// Observable effects of one turn.
     #[derive(Default)]
     pub struct TurnOutcome {
@@ -3224,6 +3350,12 @@ pub mod canopy {
         /// Widget type identifier for a specific node.
         fn node_type_id(&self, node: NodeId) -> Option<TypeId>;
 
+        /// Resolve a semantic key in an explicit live subtree scope.
+        fn find_key(&self, scope: NodeId, key: &str) -> Result<Option<NodeId>>;
+
+        /// Return a node's independently assigned semantic identity.
+        fn semantic_identity(&self, node: NodeId) -> Option<SemanticIdentity>;
+
         /// Visible view rectangle in content coordinates.
         fn view_rect(&self) -> Rect {}
 
@@ -3265,6 +3397,9 @@ pub mod canopy {
 
         /// Return whether a node exists and is attached to the root tree.
         fn node_is_attached(&self, node: NodeId) -> bool;
+
+        /// Whether a modal scope remains open, including pending deferred closes.
+        fn modal_is_open(&self, token: InteractionToken) -> bool {}
 
         /// Return the path for a node relative to a root.
         fn node_path(&self, root: NodeId, node: NodeId) -> Path;
@@ -3837,12 +3972,14 @@ pub mod canopy {
         }
 
         /// Context passed to list row injections.
-        #[derive(Debug, Clone, Copy, StructuralPartialEq, PartialEq, Eq)]
+        #[derive(Debug, Clone, StructuralPartialEq, PartialEq)]
         pub struct ListRowContext {
             /// Owning list node id.
             pub list: crate::core::NodeId,
             /// Row index.
             pub index: usize,
+            /// Stable collection key for this row.
+            pub key: ArgValue,
         }
 
         impl Inject for ListRowContext {

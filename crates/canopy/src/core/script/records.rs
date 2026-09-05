@@ -35,6 +35,18 @@ pub(super) fn node_info_to_arg(
         ("id".to_string(), node_id_to_arg(node_id)),
         ("name".to_string(), ArgValue::String(node.name.to_string())),
         (
+            "semantic_identity".to_string(),
+            root_ctx
+                .semantic_identity(node_id)
+                .map(|identity| {
+                    ArgValue::Map(BTreeMap::from([
+                        ("scope".to_string(), node_id_to_arg(identity.scope)),
+                        ("key".to_string(), ArgValue::String(identity.key)),
+                    ]))
+                })
+                .unwrap_or(ArgValue::Null),
+        ),
+        (
             "focused".to_string(),
             ArgValue::Bool(root_ctx.node_is_focused(node_id)),
         ),

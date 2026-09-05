@@ -4,10 +4,12 @@
 //! Items participate in focus management and can be composed from other
 //! widgets.
 
+use std::{collections::HashSet, hash::Hash};
+
 use canopy::{
     Context, EventOutcome, KeyedChildren, NodeId, TypedId, ViewContext, Widget, command,
     commands::{
-        CommandAction, CommandArgs, CommandCall, CommandInvocation, CommandScopeFrame,
+        ArgValue, CommandAction, CommandArgs, CommandCall, CommandInvocation, CommandScopeFrame,
         CommandTarget, ListRowContext, ToArgValue,
     },
     derive_commands,
@@ -58,9 +60,9 @@ fn invocation_with_index(command: &CommandInvocation, index: usize) -> CommandIn
 
 /// Pending activation state for list row clicks.
 #[derive(Debug, Clone, Copy)]
-struct PendingActivate {
-    /// Selected row index.
-    index: usize,
+struct PendingActivate<K> {
+    /// Stable key of the pressed row.
+    key: K,
     /// Pointer origin when the press began.
     origin: Point,
     /// Whether the drag threshold was exceeded.
@@ -69,7 +71,13 @@ struct PendingActivate {
 
 /// Monotonic key for list items.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct ListKey(u64);
+pub struct AutoKey(u64);
+
+impl ToArgValue for AutoKey {
+    fn to_arg_value(self) -> ArgValue {
+        self.0.to_arg_value()
+    }
+}
 
 /// Trait for widgets that can be selected in a list.
 ///
@@ -88,29 +96,29 @@ pub trait Selectable: Widget {
 ///
 /// Items must implement the [`Selectable`] trait so the list can manage their
 /// selection state independently of focus.
-pub struct List<W: Selectable> {
+pub struct List<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static = AutoKey> {
     /// Keyed list items in order.
-    items: KeyedChildren<ListKey, W>,
+    items: KeyedChildren<K, W>,
     /// Next monotonic key to assign.
     next_key: u64,
-    /// Currently selected item index.
-    selected: Option<usize>,
+    /// Stable key of the selected item.
+    selected: Option<K>,
     /// Optional list-level selection indicator.
     selection_indicator: Option<SelectionIndicator>,
     /// Optional activation command configuration.
     on_activate: Option<CommandAction>,
     /// Pending activation state while handling clicks.
-    pending_activate: Option<PendingActivate>,
+    pending_activate: Option<PendingActivate<K>>,
 }
 
-impl<W: Selectable> Default for List<W> {
+impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> Default for List<W, K> {
     fn default() -> Self {
         Self::new()
     }
 }
 
 #[derive_commands]
-impl<W: Selectable> List<W> {
+impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
     /// Construct an empty list.
     pub fn new() -> Self {
         Self {
@@ -166,61 +174,106 @@ impl<W: Selectable> List<W> {
     /// Returns the currently selected index.
     pub fn selected_index(&self) -> Option<usize> {
         self.selected
+            .as_ref()
+            .and_then(|key| self.items.keys().iter().position(|item| item == key))
     }
 
     /// Returns the typed ID of the currently selected item.
     pub fn selected_item(&self) -> Option<TypedId<W>> {
-        self.selected.and_then(|idx| self.item(idx))
+        self.selected
+            .as_ref()
+            .and_then(|key| self.items.id_for(key))
     }
 
-    /// Append an item widget to the end of the list.
-    pub fn append(&mut self, ctx: &mut dyn Context, widget: W) -> Result<TypedId<W>>
-    where
-        W: 'static,
-    {
-        self.insert(ctx, self.items.len(), widget)
+    /// Return the stable key of the selected row.
+    pub fn selected_key(&self) -> Option<&K> {
+        self.selected.as_ref()
     }
 
-    /// Insert an item widget at the specified index.
-    pub fn insert(&mut self, ctx: &mut dyn Context, index: usize, widget: W) -> Result<TypedId<W>>
-    where
-        W: 'static,
-    {
-        let clamped = index.min(self.items.len());
-        let key = self.next_key();
-        let was_empty = self.selected.is_none();
-        let previous_focus = ctx.focused_leaf(ctx.root_id());
-        let mut desired = self.items.keys().to_vec();
-        desired.insert(clamped, key);
-        let ordered = self.reconcile_with_widget(ctx, desired, key, widget)?;
-        let id = ordered
-            .get(clamped)
-            .copied()
-            .ok_or_else(|| Error::Internal("list insert did not return the new item".into()))?;
+    /// Return the widget for a domain key.
+    pub fn item_for_key(&self, key: &K) -> Option<TypedId<W>> {
+        self.items.id_for(key)
+    }
 
-        // Adjust selection if inserting before current selection
-        if let Some(sel) = self.selected {
-            if clamped <= sel {
-                // Just update index, don't change which item is selected
-                self.selected = Some(sel + 1);
-            }
-        } else if !self.items.is_empty() {
-            self.update_selection(ctx, Some(0))?;
+    /// Select a domain key, returning an error when it is absent.
+    pub fn select_key(&mut self, ctx: &mut dyn Context, key: &K) -> Result<()> {
+        let index = self
+            .items
+            .keys()
+            .iter()
+            .position(|item| item == key)
+            .ok_or_else(|| Error::Invalid("list selection key is absent".into()))?;
+        self.select(ctx, index)
+    }
+
+    /// Reconcile domain keys while retaining widgets and selection for
+    /// surviving keys.
+    ///
+    /// Duplicate keys fail before callbacks run. Updates have the same
+    /// structural rollback boundary as [`KeyedChildren::reconcile`]. If
+    /// selection is removed, the next surviving old neighbor wins, then the
+    /// previous neighbor.
+    pub fn reconcile<I, C, U>(
+        &mut self,
+        ctx: &mut dyn Context,
+        desired: I,
+        create: C,
+        mut update: U,
+    ) -> Result<Vec<TypedId<W>>>
+    where
+        I: IntoIterator<Item = K>,
+        C: FnMut(&K) -> Result<W>,
+        U: FnMut(&K, TypedId<W>, &mut dyn Context) -> Result<()>,
+    {
+        let desired: Vec<K> = desired.into_iter().collect();
+        let keys: HashSet<&K> = desired.iter().collect();
+        if keys.len() != desired.len() {
+            return Err(Error::Invalid("duplicate list key".into()));
         }
-
-        // Focus first item if this was an empty list
-        if was_empty
-            && let Some(first_id) = self.item(0)
-            && ctx.node_is_attached(first_id.into())
+        let selected = self.selection_after_reconcile(&desired);
+        let selection_changed = selected != self.selected;
+        let had_focus = ctx.node_is_on_focus_path(ctx.node_id());
+        let previous_focus = ctx.focused_node();
+        let ordered = self.items.reconcile(ctx, desired, create, |key, id, ctx| {
+            update(key, id, ctx)?;
+            ctx.with_widget(id, |widget: &mut W, _| {
+                widget.set_selected(selected.as_ref() == Some(key));
+                Ok(())
+            })
+        })?;
+        self.selected = selected;
+        if self
+            .pending_activate
+            .as_ref()
+            .is_some_and(|pending| self.items.id_for(&pending.key).is_none())
         {
-            ctx.set_focus(first_id.into())?;
-        } else if let Some(previous_focus) = previous_focus {
-            ctx.set_focus(previous_focus)?;
-        } else {
-            self.focus_selected(ctx)?;
+            self.pending_activate = None;
+            ctx.release_mouse()?;
         }
+        if selection_changed && had_focus {
+            self.focus_selected(ctx)?;
+        } else if let Some(focus) = previous_focus
+            && ctx.node_is_attached(focus)
+        {
+            ctx.set_focus(focus)?;
+        }
+        Ok(ordered)
+    }
 
-        Ok(id)
+    /// Choose a surviving selection using the previous row order.
+    fn selection_after_reconcile(&self, desired: &[K]) -> Option<K> {
+        let Some(selected) = self.selected.as_ref() else {
+            return desired.first().cloned();
+        };
+        if desired.contains(selected) {
+            return Some(selected.clone());
+        }
+        let old_index = self.selected_index()?;
+        self.items.keys()[old_index + 1..]
+            .iter()
+            .chain(self.items.keys()[..old_index].iter().rev())
+            .find(|key| desired.contains(key))
+            .cloned()
     }
 
     /// Remove the item at the specified index.
@@ -231,7 +284,6 @@ impl<W: Selectable> List<W> {
         }
         desired.remove(index);
         self.reconcile_order(ctx, desired)?;
-        self.repair_selection_after_remove(ctx, index)?;
         Ok(true)
     }
 
@@ -246,7 +298,7 @@ impl<W: Selectable> List<W> {
     /// Delete the currently selected item.
     #[command(ignore_result)]
     pub fn delete_selected(&mut self, ctx: &mut dyn Context) -> Result<bool> {
-        match self.selected {
+        match self.selected_index() {
             Some(sel) => self.remove(ctx, sel),
             None => Ok(false),
         }
@@ -274,13 +326,16 @@ impl<W: Selectable> List<W> {
             ));
         }
 
-        let old_id = self.selection_id(self.selected, "list selection points at a missing item")?;
+        let old_id = self.selection_id(
+            self.selected_index(),
+            "list selection points at a missing item",
+        )?;
         let new_id =
             self.selection_id(new_selected, "new list selection points at a missing item")?;
         let same_selection = old_id.as_ref().map(|id| NodeId::from(*id))
             == new_id.as_ref().map(|id| NodeId::from(*id));
         if same_selection {
-            self.selected = new_selected;
+            self.selected = new_selected.map(|index| self.items.keys()[index].clone());
             return Ok(());
         }
 
@@ -298,7 +353,7 @@ impl<W: Selectable> List<W> {
             })?;
         }
 
-        self.selected = new_selected;
+        self.selected = new_selected.map(|index| self.items.keys()[index].clone());
         debug_assert!(self.selection_invariant_holds());
         Ok(())
     }
@@ -316,32 +371,9 @@ impl<W: Selectable> List<W> {
 
     /// Return whether the stored selection points at a live list item.
     fn selection_invariant_holds(&self) -> bool {
-        self.selected.is_none_or(|index| index < self.items.len())
-    }
-
-    /// Repair selection and focus after removing an item.
-    fn repair_selection_after_remove(&mut self, ctx: &mut dyn Context, index: usize) -> Result<()> {
-        if let Some(sel) = self.selected {
-            if index < sel {
-                self.selected = Some(sel - 1);
-                debug_assert!(self.selection_invariant_holds());
-                return Ok(());
-            }
-            if index == sel {
-                let new_sel = if self.items.is_empty() {
-                    None
-                } else {
-                    Some(sel.min(self.items.len() - 1))
-                };
-                self.selected = None;
-                self.update_selection(ctx, new_sel)?;
-                if new_sel.is_some() {
-                    self.focus_selected(ctx)?;
-                }
-            }
-        }
-        debug_assert!(self.selection_invariant_holds());
-        Ok(())
+        self.selected
+            .as_ref()
+            .is_none_or(|key| self.items.id_for(key).is_some())
     }
 
     /// Select an item by index, focus it, and scroll it into view.
@@ -373,7 +405,7 @@ impl<W: Selectable> List<W> {
     #[command]
     pub fn select_by(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {
         let next = self
-            .selected
+            .selected_index()
             .unwrap_or(0)
             .saturating_add_signed(delta as isize);
         self.select_and_reveal(c, next)
@@ -389,7 +421,7 @@ impl<W: Selectable> List<W> {
                 self.select_and_reveal(c, index)?;
                 if self.on_activate.is_some() {
                     self.pending_activate = Some(PendingActivate {
-                        index,
+                        key: self.items.keys()[index].clone(),
                         origin: event.location,
                         dragged: false,
                     });
@@ -418,8 +450,10 @@ impl<W: Selectable> List<W> {
                     c.release_mouse()?;
                     if !pending.dragged {
                         let index = self.index_at_location(c, event.location);
-                        if index == Some(pending.index) {
-                            self.dispatch_activate(c, pending.index)?;
+                        if let Some(index) = index
+                            && self.items.keys().get(index) == Some(&pending.key)
+                        {
+                            self.dispatch_activate(c, index)?;
                         }
                     }
                     return Ok(true);
@@ -451,6 +485,7 @@ impl<W: Selectable> List<W> {
             list_row: Some(ListRowContext {
                 list: c.node_id(),
                 index,
+                key: self.items.keys()[index].clone().to_arg_value(),
             }),
         };
         let invocation = invocation_with_index(&config.invocation, index);
@@ -493,7 +528,7 @@ impl<W: Selectable> List<W> {
 
     /// Ensure the selected item is visible in the view.
     fn ensure_selected_visible(&self, c: &mut dyn Context) {
-        let Some(selected_idx) = self.selected else {
+        let Some(selected_idx) = self.selected_index() else {
             return;
         };
 
@@ -528,7 +563,7 @@ impl<W: Selectable> List<W> {
         }
 
         let metrics = self.item_metrics(c);
-        let selected_idx = self.selected.unwrap_or(0).min(self.items.len() - 1);
+        let selected_idx = self.selected_index().unwrap_or(0).min(self.items.len() - 1);
         let Some((start, _height)) = metrics.get(selected_idx).copied() else {
             return Ok(());
         };
@@ -586,65 +621,64 @@ impl<W: Selectable> List<W> {
             Some(metrics.len() - 1)
         }
     }
-    /// Allocate the next list key.
-    fn next_key(&mut self) -> ListKey {
-        let key = ListKey(self.next_key);
-        self.next_key = self.next_key.saturating_add(1);
-        key
-    }
-
-    /// Reconcile the list order while creating a single new widget.
-    fn reconcile_with_widget(
-        &mut self,
-        ctx: &mut dyn Context,
-        desired: Vec<ListKey>,
-        key: ListKey,
-        widget: W,
-    ) -> Result<Vec<TypedId<W>>>
-    where
-        W: 'static,
-    {
-        if self.items.id_for(&key).is_some() {
-            return Err(Error::Internal("list key collision".into()));
-        }
-        let mut widget = Some(widget);
-        self.items.reconcile(
-            ctx,
-            desired,
-            |requested| {
-                if *requested != key {
-                    return Err(Error::Internal(
-                        "list reconcile requested an unexpected key".into(),
-                    ));
-                }
-                widget
-                    .take()
-                    .ok_or_else(|| Error::Internal("list widget already consumed".into()))
-            },
-            |_, _, _| Ok(()),
-        )
-    }
-
     /// Reconcile the list order without creating new widgets.
     fn reconcile_order(
         &mut self,
         ctx: &mut dyn Context,
-        desired: Vec<ListKey>,
+        desired: Vec<K>,
     ) -> Result<Vec<TypedId<W>>> {
-        self.items.reconcile(
+        self.reconcile(
             ctx,
             desired,
-            |requested| {
-                Err(Error::Internal(format!(
-                    "list reconcile requested missing widget for key {requested:?}",
-                )))
+            |_| {
+                Err(Error::Internal(
+                    "list reconcile requested a missing widget".into(),
+                ))
             },
             |_, _, _| Ok(()),
         )
     }
 }
 
-impl<W: Selectable + 'static> Widget for List<W> {
+impl<W: Selectable> List<W, AutoKey> {
+    /// Append a widget with a fresh automatic key.
+    pub fn append(&mut self, ctx: &mut dyn Context, widget: W) -> Result<TypedId<W>> {
+        self.insert(ctx, self.len(), widget)
+    }
+
+    /// Insert a widget with a fresh automatic key at the clamped index.
+    pub fn insert(&mut self, ctx: &mut dyn Context, index: usize, widget: W) -> Result<TypedId<W>> {
+        let index = index.min(self.len());
+        let key = AutoKey(self.next_key);
+        self.next_key = self
+            .next_key
+            .checked_add(1)
+            .ok_or_else(|| Error::Internal("list automatic keys exhausted".into()))?;
+        let previous_focus = ctx.focused_node();
+        let was_empty = self.is_empty();
+        let mut desired = self.items.keys().to_vec();
+        desired.insert(index, key);
+        let mut widget = Some(widget);
+        let ordered = self.reconcile(
+            ctx,
+            desired,
+            |_| {
+                widget
+                    .take()
+                    .ok_or_else(|| Error::Internal("list widget already consumed".into()))
+            },
+            |_, _, _| Ok(()),
+        )?;
+        if was_empty {
+            self.focus_selected(ctx)?;
+        } else if let Some(focus) = previous_focus {
+            ctx.set_focus(focus)?;
+        }
+        Ok(ordered[index])
+    }
+}
+
+impl<W: Selectable + 'static, K: Eq + Hash + Clone + ToArgValue + 'static> Widget for List<W, K> {
     fn layout(&self) -> Layout {
         let mut layout = Layout::fill().overflow_x();
         if let Some(indicator) = &self.selection_indicator
@@ -672,7 +706,7 @@ impl<W: Selectable + 'static> Widget for List<W> {
         rndr.fill("list", area, ' ')?;
 
         if let Some(indicator) = &self.selection_indicator
-            && let Some(selected_idx) = self.selected
+            && let Some(selected_idx) = self.selected_index()
             && indicator.width > 0
         {
             let metrics = self.item_metrics(ctx);
@@ -884,6 +918,236 @@ mod tests {
             c.add_commands::<Self>()?;
             Ok(())
         }
+    }
+
+    impl Loader for List<Row, i64> {
+        fn load(canopy: &mut Canopy) -> Result<()> {
+            canopy.add_commands::<Self>()
+        }
+    }
+
+    /// Reconcile a domain-keyed fixture with selectable rows.
+    fn reconcile_rows(
+        list: &mut List<Row, i64>,
+        ctx: &mut dyn Context,
+        keys: &[i64],
+    ) -> Result<()> {
+        list.reconcile(
+            ctx,
+            keys.iter().copied(),
+            |_| Ok(Row::new()),
+            |_, _, _| Ok(()),
+        )?;
+        Ok(())
+    }
+
+    #[test]
+    fn keyed_reorder_preserves_selection_widget_and_focus() -> Result<()> {
+        let mut harness = Harness::builder(List::<Row, i64>::new())
+            .size(20, 10)
+            .build()?;
+        let selected = harness.with_root_context(|list: &mut List<Row, i64>, ctx| {
+            reconcile_rows(list, ctx, &[10, 20, 30])?;
+            list.select_by(ctx, 1)?;
+            let selected = list.item_for_key(&20).expect("selected row");
+            reconcile_rows(list, ctx, &[30, 10, 20])?;
+            assert_eq!(list.selected_key(), Some(&20));
+            assert_eq!(list.selected_index(), Some(2));
+            assert_eq!(list.item_for_key(&20), Some(selected));
+            Ok(selected)
+        })?;
+        assert_eq!(focused_row(&harness), Some(selected.into()));
+        assert!(harness.with_widget(selected, |row: &mut Row| row.selected));
+        Ok(())
+    }
+
+    #[test]
+    fn keyed_selection_removal_prefers_old_neighbors() -> Result<()> {
+        let mut harness = Harness::builder(List::<Row, i64>::new())
+            .size(20, 10)
+            .build()?;
+        harness.with_root_context(|list: &mut List<Row, i64>, ctx| {
+            reconcile_rows(list, ctx, &[10, 20, 30, 40])?;
+            list.select_key(ctx, &20)?;
+            reconcile_rows(list, ctx, &[40, 10, 30])?;
+            assert_eq!(list.selected_key(), Some(&30));
+            reconcile_rows(list, ctx, &[40, 10])?;
+            assert_eq!(list.selected_key(), Some(&10));
+            reconcile_rows(list, ctx, &[99])?;
+            assert_eq!(list.selected_key(), None);
+            assert!(list.select_key(ctx, &100).is_err());
+            list.select_key(ctx, &99)?;
+            assert_eq!(list.selected_index(), Some(0));
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn keyed_duplicate_and_failed_updates_preserve_mapping() -> Result<()> {
+        let mut harness = Harness::builder(List::<Row, i64>::new())
+            .size(20, 10)
+            .build()?;
+        harness.with_root_context(|list: &mut List<Row, i64>, ctx| {
+            reconcile_rows(list, ctx, &[10, 20])?;
+            let first = list.item_for_key(&10);
+            let mut creates = 0;
+            let mut updates = 0;
+            assert!(
+                list.reconcile(
+                    ctx,
+                    [30, 30],
+                    |_| {
+                        creates += 1;
+                        Ok(Row::new())
+                    },
+                    |_, _, _| {
+                        updates += 1;
+                        Ok(())
+                    }
+                )
+                .is_err()
+            );
+            assert_eq!((creates, updates), (0, 0));
+            assert!(
+                list.reconcile(
+                    ctx,
+                    [20, 30],
+                    |_| Ok(Row::new()),
+                    |_, _, _| { Err(Error::Invalid("update failed".into())) }
+                )
+                .is_err()
+            );
+            assert_eq!(list.item(0), first);
+            assert_eq!(list.selected_key(), Some(&10));
+            assert_eq!(list.item_for_key(&30), None);
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn keyed_list_rejects_unmanaged_children_before_callbacks() -> Result<()> {
+        let mut harness = Harness::builder(List::<Row, i64>::new())
+            .size(20, 10)
+            .build()?;
+        harness.with_root_context(|list: &mut List<Row, i64>, ctx| {
+            let header = ctx.add_child(Text::new("unmanaged header"))?;
+            let result = list.reconcile(
+                ctx,
+                [1],
+                |_| panic!("create must not run with unmanaged children"),
+                |_, _, _| panic!("update must not run with unmanaged children"),
+            );
+            assert!(result.is_err());
+            assert_eq!(ctx.children(), vec![header.into()]);
+            assert!(list.is_empty());
+            Ok(())
+        })
+    }
+
+    /// Receives domain-keyed row activation together with its current index.
+    #[derive(Default)]
+    struct KeyedActivationRoot {
+        /// Last delivered activation index and stable key.
+        activation: Option<(usize, ArgValue)>,
+    }
+
+    #[derive_commands]
+    impl KeyedActivationRoot {
+        #[command]
+        fn activate(&mut self, index: usize, row: ListRowContext) {
+            assert_eq!(index, row.index);
+            self.activation = Some((index, row.key));
+        }
+    }
+
+    impl Widget for KeyedActivationRoot {
+        fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
+            let list = ctx.add_child(
+                List::<Text, i64>::new().with_on_activate(
+                    Self::cmd_activate()
+                        .call()
+                        .with_target(CommandTarget::Exact(ctx.node_id())),
+                ),
+            )?;
+            ctx.with_widget(list, |list, ctx| {
+                list.reconcile(
+                    ctx,
+                    [10, 20],
+                    |key| Ok(Text::new(key.to_string())),
+                    |_, _, _| Ok(()),
+                )?;
+                Ok(())
+            })
+        }
+    }
+
+    impl Loader for KeyedActivationRoot {
+        fn load(canopy: &mut Canopy) -> Result<()> {
+            canopy.add_commands::<Self>()
+        }
+    }
+
+    #[test]
+    fn pending_activation_follows_key_through_reorder() -> Result<()> {
+        let mut harness = Harness::builder(KeyedActivationRoot::default())
+            .size(20, 4)
+            .build()?;
+        harness.render()?;
+        let mut event = mouse::MouseEvent {
+            action: mouse::Action::Down,
+            button: mouse::Button::Left,
+            modifiers: key::Empty,
+            location: Point { x: 0, y: 0 },
+        };
+        harness.mouse(event)?;
+        harness.with_root_context(|_: &mut KeyedActivationRoot, ctx| {
+            ctx.with_unique_descendant::<List<Text, i64>, _>(|list, ctx| {
+                list.reconcile(
+                    ctx,
+                    [20, 10],
+                    |_| unreachable!("rows retained"),
+                    |_, _, _| Ok(()),
+                )?;
+                Ok(())
+            })
+        })?;
+        harness.render()?;
+        event.action = mouse::Action::Up;
+        event.location.y = 1;
+        harness.mouse(event)?;
+        harness.with_root_widget::<KeyedActivationRoot, _>(|root| {
+            assert_eq!(root.activation, Some((1, 10_i64.to_arg_value())));
+        });
+        Ok(())
+    }
+
+    #[test]
+    fn removing_pressed_key_cancels_activation_and_capture() -> Result<()> {
+        let mut harness = Harness::builder(KeyedActivationRoot::default())
+            .size(20, 4)
+            .build()?;
+        harness.render()?;
+        harness.mouse(mouse::MouseEvent {
+            action: mouse::Action::Down,
+            button: mouse::Button::Left,
+            modifiers: key::Empty,
+            location: Point { x: 0, y: 0 },
+        })?;
+        harness.with_root_context(|root: &mut KeyedActivationRoot, ctx| {
+            ctx.with_unique_descendant::<List<Text, i64>, _>(|list, ctx| {
+                list.reconcile(
+                    ctx,
+                    [20],
+                    |_| unreachable!("row retained"),
+                    |_, _, _| Ok(()),
+                )?;
+                assert!(list.pending_activate.is_none());
+                assert_eq!(ctx.take_mouse_capture()?, None);
+                Ok(())
+            })?;
+            assert_eq!(root.activation, None);
+            Ok(())
+        })
     }
 
     fn row_selection(harness: &mut Harness) -> Vec<bool> {

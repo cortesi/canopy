@@ -60,7 +60,7 @@ pub use frame::Frame;
 pub use image_view::ImageView;
 pub use input::Input;
 pub use label::Label;
-pub use list::{List, Selectable};
+pub use list::{AutoKey, List, Selectable};
 pub use pad::Pad;
 pub use panes::Panes;
 pub use root::Root;

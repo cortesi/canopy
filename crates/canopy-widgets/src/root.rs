@@ -1,8 +1,6 @@
-use std::mem;
-
 use canopy::{
-    Canopy, ChildKey, Context, ExclusiveFrameToken, FocusScope, FrameworkBindingGroup, InputSpec,
-    Loader, NodeId, TypedId, Widget, command,
+    Canopy, ChildKey, Context, FocusScope, FrameworkBindingGroup, InputSpec, InteractionToken,
+    Loader, ModalBindings, ModalOptions, NodeId, TypedId, ViewContext, Widget, command,
     commands::{
         CommandArgs, CommandId, CommandInvocation, CommandNode, CommandSpec, FocusDirection,
     },
@@ -12,7 +10,6 @@ use canopy::{
     geom,
     layout::{Direction, Layout, Sizing},
     state::NodeName,
-    style::effects,
 };
 
 use crate::{help::Help, inspector::Inspector};
@@ -53,21 +50,17 @@ pub struct Root {
 enum HelpState {
     /// Help is not visible.
     Closed,
-    /// Help is visible and owns one exclusive binding frame.
+    /// Last opened scope; Core determines whether it remains active.
     Open {
-        /// Focus node to restore when it remains live.
-        origin_focus: Option<NodeId>,
-        /// Application or inspector pane used for fallback focus.
-        origin_pane: Option<NodeId>,
-        /// Exact exclusive frame to remove when help closes.
-        exclusive_token: ExclusiveFrameToken,
+        /// Retained after deferred close so a failed outer dispatch can retry.
+        token: InteractionToken,
     },
 }
 
 impl HelpState {
     /// Return true when help is open.
-    fn is_open(&self) -> bool {
-        matches!(self, Self::Open { .. })
+    fn is_open(&self, context: &dyn ViewContext) -> bool {
+        matches!(self, Self::Open { token } if context.modal_is_open(*token))
     }
 }
 
@@ -89,26 +82,12 @@ impl Root {
 
     /// Synchronize the root layout based on inspector and help visibility.
     fn sync_layout(&self, c: &mut dyn Context) -> Result<()> {
-        let main_pane = self.main_pane_id(c)?;
         let app = self.app_id(c)?;
         let inspector = self.inspector_id(c)?;
-        let help = self.help_id(c)?;
-
         c.set_hidden_of(inspector, !self.inspector_active)?;
         c.with_layout_of(app, &mut |layout| {
             *layout = layout.width(Sizing::Flex(1)).height(Sizing::Flex(1));
         })?;
-
-        // Help overlay
-        c.set_hidden_of(help, !self.help_state.is_open())?;
-
-        // Dim effect on main pane when help is visible
-        if self.help_state.is_open() {
-            c.push_effect(main_pane, effects::brightness(0.5))?;
-        } else {
-            c.clear_effects(main_pane)?;
-        }
-
         Ok(())
     }
 
@@ -144,7 +123,7 @@ impl Root {
     /// Exit from the program, restoring terminal state. If help or inspector is
     /// open, close them first.
     pub fn quit(&mut self, c: &mut dyn Context) -> Result<()> {
-        if self.help_state.is_open() {
+        if self.help_state.is_open(c) {
             self.hide_help(c)?;
         } else if self.inspector_active {
             self.hide_inspector(c)?;
@@ -222,22 +201,13 @@ impl Root {
     #[command]
     /// Show the help modal with contextual bindings and commands.
     pub fn show_help(&mut self, c: &mut dyn Context) -> Result<()> {
-        if self.help_state.is_open() {
+        if self.help_state.is_open(c) {
             return Ok(());
         }
 
         let help = self.help_id(c)?;
         let list = Help::binding_list_id(c, help)?;
         let origin_focus = c.focused_node();
-        let app = self.app_id(c)?;
-        let inspector = self.inspector_id(c)?;
-        let origin_pane = if c.node_is_on_focus_path(app) {
-            Some(app)
-        } else if c.node_is_on_focus_path(inspector) {
-            Some(inspector)
-        } else {
-            None
-        };
         let snapshot = c.available_bindings(origin_focus)?;
         let (previous_snapshot, previous_scroll) = c.with_widget(list, |list, context| {
             let previous = list.replace_snapshot(Some(snapshot));
@@ -246,39 +216,23 @@ impl Root {
             Ok((previous, scroll))
         })?;
 
-        let mut token = None;
-        let mut prior_capture = None;
-        let opened = (|| {
-            let exclusive = c.push_exclusive_bindings(HELP_BINDINGS)?;
-            token = Some(exclusive);
-            prior_capture = c.take_mouse_capture()?;
-            self.help_state = HelpState::Open {
-                origin_focus,
-                origin_pane,
-                exclusive_token: exclusive,
-            };
-            self.sync_layout(c)?;
-            c.set_focus(NodeId::from(list))?;
-            Ok(())
-        })();
-        if let Err(error) = opened {
-            self.help_state = HelpState::Closed;
-            drop(self.sync_layout(c));
-            if let Some(token) = token {
-                drop(c.pop_exclusive_bindings(token));
+        let opened = c.open_modal(ModalOptions {
+            owner: c.node_id(),
+            modal: help,
+            initial_focus: list.into(),
+            dim_target: Some(self.main_pane_id(c)?),
+            bindings: ModalBindings::Framework(HELP_BINDINGS),
+        });
+        match opened {
+            Ok(token) => self.help_state = HelpState::Open { token },
+            Err(error) => {
+                c.with_widget(list, |list, context| {
+                    list.replace_snapshot(previous_snapshot);
+                    context.scroll_to(previous_scroll.x, previous_scroll.y);
+                    Ok(())
+                })?;
+                return Err(error);
             }
-            if let Some(capture) = prior_capture {
-                drop(c.restore_mouse_capture(capture));
-            }
-            drop(c.with_widget(list, |list, context| {
-                list.replace_snapshot(previous_snapshot);
-                context.scroll_to(previous_scroll.x, previous_scroll.y);
-                Ok(())
-            }));
-            if let Some(origin) = origin_focus {
-                drop(c.set_focus(origin));
-            }
-            return Err(error);
         }
         Ok(())
     }
@@ -286,46 +240,16 @@ impl Root {
     #[command]
     /// Hide the help modal.
     pub fn hide_help(&mut self, c: &mut dyn Context) -> Result<()> {
-        let HelpState::Open {
-            origin_focus,
-            origin_pane,
-            exclusive_token,
-        } = mem::replace(&mut self.help_state, HelpState::Closed)
-        else {
+        let HelpState::Open { token } = self.help_state else {
             return Ok(());
         };
-        let help = self.help_id(c)?;
-        let list = Help::binding_list_id(c, help)?;
-        self.sync_layout(c)?;
-        c.with_widget(list, |list, context| {
-            list.replace_snapshot(None);
-            context.scroll_to(0, 0);
-            Ok(())
-        })?;
-        c.pop_exclusive_bindings(exclusive_token)?;
-
-        let focusable = c.focusable_leaves(c.root_id());
-        if let Some(origin) = origin_focus
-            && focusable.contains(&origin)
-        {
-            c.set_focus(origin)?;
-            return Ok(());
-        }
-        if let Some(pane) = origin_pane
-            && c.node_is_attached(pane)
-            && c.focus_first(FocusScope::Node(pane))?.changed()
-        {
-            return Ok(());
-        }
-        let main_pane = self.main_pane_id(c)?;
-        c.focus_first(FocusScope::Node(main_pane))?;
-        Ok(())
+        c.close_modal(token)
     }
 
     #[command]
     /// Toggle help modal visibility.
     pub fn toggle_help(&mut self, c: &mut dyn Context) -> Result<()> {
-        if self.help_state.is_open() {
+        if self.help_state.is_open(c) {
             self.hide_help(c)
         } else {
             self.show_help(c)
@@ -365,6 +289,7 @@ impl Root {
             let help = Help::install(context)?;
             context.attach_keyed(root_id, KEY_MAIN_PANE, main_pane)?;
             context.attach_keyed(root_id, HelpSlot::KEY, help)?;
+            context.set_hidden_of(help, true)?;
             Ok(())
         })?;
         canopy.with_root_context(|context| {
@@ -817,6 +742,33 @@ mod tests {
         send_key(&mut canopy, "x")?;
         assert_eq!(canopy.input_mode(), "leaked");
         assert_eq!(APP_EVENTS.load(Ordering::Relaxed), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn failed_outer_dispatch_keeps_help_close_retryable() -> Result<()> {
+        let (mut canopy, _backend, left, _right) = setup_root_tree()?;
+        canopy.eval_script("root.show_help()")?;
+        let before = modal_snapshot(&mut canopy)?;
+        let result = canopy.with_root_context(|context| {
+            context.dispatch_exact(context.node_id(), &Root::call_hide_help().invocation())?;
+            Err::<(), _>(Error::Invalid("outer dispatch failed".into()))
+        });
+        assert!(result.is_err());
+        assert_eq!(
+            canopy.available_bindings(None)?.exclusive_group,
+            Some(HELP_BINDINGS)
+        );
+        assert_eq!(
+            modal_snapshot(&mut canopy)?.bindings.len(),
+            before.bindings.len()
+        );
+        canopy.eval_script("root.hide_help()")?;
+        assert_eq!(canopy.available_bindings(None)?.exclusive_group, None);
+        assert_eq!(
+            canopy.with_root_view(|context| context.focused_node()),
+            Some(left)
+        );
         Ok(())
     }
 

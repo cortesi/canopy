@@ -167,7 +167,8 @@ where
         if let Event::Mouse(mouse_event) = event {
             self.handle_click(ctx, *mouse_event)?;
         }
-        // Ignore so mouse bindings can also fire, for example to trigger effects.
+        // Ignore so mouse bindings can also fire, for example to trigger
+        // effects.
         Ok(EventOutcome::Ignore)
     }
 
@@ -259,8 +260,8 @@ mod tests {
         assert!(selector.selected.is_empty());
 
         // Toggle focused item (index 0)
-        // Note: We can't easily call commands without a Context, so test the logic
-        // directly
+        // Note: We can't easily call commands without a Context, so test the
+        // logic directly
         selector.selected.push(0);
         assert!(selector.selected.contains(&0));
         assert_eq!(selector.selected.len(), 1);

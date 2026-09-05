@@ -3,6 +3,7 @@ use std::mem;
 use std::{cmp::Ordering, collections::HashSet, fmt};
 
 use crate::{
+    ModalBindings,
     commands::{CommandAction, CommandInvocation},
     core::NodeId,
     error::{Error, Result},
@@ -260,6 +261,8 @@ pub struct InputMap {
     mode_stack: Vec<String>,
     /// Active exclusive framework frames in push order.
     exclusive_frames: Vec<ExclusiveFrame>,
+    /// Admission imposed by the active modal, overriding legacy frames.
+    modal_bindings: Option<ModalBindings>,
     /// Next binding identifier.
     next_id: u64,
     /// Next insertion-order identifier.
@@ -281,6 +284,7 @@ impl InputMap {
             records: Vec::new(),
             mode_stack: Vec::new(),
             exclusive_frames: Vec::new(),
+            modal_bindings: None,
             next_id: 1,
             next_insertion_id: 1,
             next_token: 1,
@@ -474,13 +478,8 @@ impl InputMap {
     /// Resolve one input at one route node.
     pub fn resolve_match(&self, path: &Path, input: InputSpec) -> Option<ResolvedBinding> {
         let input = input.normalize();
-        let winner = if let Some(frame) = self.exclusive_frames.last() {
-            self.best_in_scope(
-                path,
-                input,
-                &BindingScope::Exclusive(frame.group),
-                Some(frame.group),
-            )
+        let winner = if let Some(group) = self.active_exclusive_group() {
+            self.best_in_scope(path, input, &BindingScope::Exclusive(group), Some(group))
         } else {
             self.best_in_scope(path, input, &BindingScope::Global, None)
                 .or_else(|| {
@@ -619,9 +618,18 @@ impl InputMap {
         Ok(())
     }
 
+    /// Apply or remove the admission owned by the top modal scope.
+    pub(crate) fn set_modal_bindings(&mut self, bindings: Option<ModalBindings>) {
+        self.modal_bindings = bindings;
+    }
+
     /// Return the newest active exclusive group.
     pub fn active_exclusive_group(&self) -> Option<FrameworkBindingGroup> {
-        self.exclusive_frames.last().map(|frame| frame.group)
+        match self.modal_bindings {
+            Some(ModalBindings::Framework(group)) => Some(group),
+            Some(ModalBindings::Application) => None,
+            None => self.exclusive_frames.last().map(|frame| frame.group),
+        }
     }
 
     /// Remove frames whose owner is not attached to the active tree.

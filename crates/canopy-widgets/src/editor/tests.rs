@@ -594,7 +594,8 @@ fn nested_padding_scroll_and_captured_pointer_agree_on_wide_grapheme() {
             ctx.with_child::<EditorSlot, _>(|_editor, ctx| ctx.capture_mouse())
         })
         .unwrap();
-    // Captured input still uses viewport-local coordinates at the trailing cell.
+    // Captured input still uses viewport-local coordinates at the trailing
+    // cell.
     harness
         .mouse(mouse_event(mouse::Action::Drag, 4, 2))
         .unwrap();

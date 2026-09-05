@@ -179,6 +179,9 @@ impl Canopy {
         let saved_len = traversal.effect_stack.len();
 
         traversal.effect_stack.extend(node.effects.iter().cloned());
+        traversal
+            .effect_stack
+            .extend(self.core.modal_effects_for(node_id));
 
         let current_len = active_len + traversal.effect_stack.len() - saved_len;
 

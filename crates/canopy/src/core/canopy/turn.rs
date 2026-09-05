@@ -590,7 +590,8 @@ impl Canopy {
                         event = event => Work::Input(event.ok_or_else(||Error::RunLoop("headless event channel closed".into()))?),
                     }
                 };
-                // All waiting futures release application references before dispatch.
+                // All waiting futures release application references before
+                // dispatch.
                 outcome = self.turn(work)?;
             }
         };
