@@ -22,7 +22,7 @@ struct Cli {
 /// Supported xtask commands.
 #[derive(Subcommand)]
 enum Task {
-    /// Build all workspace targets with default features.
+    /// Build the workspace and isolated widget capability profiles.
     FeatureCheck,
     /// Check API skeletons and tracked Luau sources.
     Checks,

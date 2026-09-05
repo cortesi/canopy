@@ -1109,13 +1109,16 @@ R26 and the cross-adapter portion of R27 complete the spec after Stage 6.
 - [ ] Complete the shared scenario suite across native, terminal, direct MCP,
   proxy MCP, and CLI replay boundaries.
   Cover the permanent R27 cases with explicit adapter-policy differences.
-- [ ] Update `.github/workflows/ci.yml` to use the current native gate commands.
+- [x] Update `.github/workflows/ci.yml` to use the current native gate commands.
   Retain its documented sibling-dependency blocker until hosted checkout inputs
   are actually supplied. Do not claim hosted CI success from local validation.
-- [ ] Run `ncode tidy` once after implementation settles.
-  Review its changes, regenerate API skeletons, and run focused tests for any
-  resulting corrections.
-- [ ] Run `ncode test`, `ncode tidy --check`, and `cargo xtask smoke` sequentially.
+- [ ] Run Clippy fixes and `cargo +nightly fmt` once after implementation settles,
+  selecting workspace packages explicitly and using `rustfmt.toml`.
+  Review changes, regenerate API skeletons, and run focused tests for corrections.
+  This replaces installed Ncode's dated formatter pin under the approved workflow.
+- [ ] Run `ncode test`, the native CI maintenance checks, and `cargo xtask smoke`
+  sequentially. The maintenance checks cover formatting, Clippy, isolated feature
+  profiles, API/Luau declarations, and benchmark compilation.
   Confirm every focused filter selected tests.
   Check `api-surface/` and generated Luau declarations for intended public changes.
 - [ ] Run `rumdl check` on this spec and the five changed documentation files.

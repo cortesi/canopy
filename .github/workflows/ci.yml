@@ -1,6 +1,6 @@
 # Blocker: this workflow cannot pass on a hosted runner yet. The workspace
-# depends on the sibling path crates ruau, tmcp, itty-core, and the itty-script
-# dev-dependency, which are not published and are not part of this repository.
+# depends on the sibling path crates ruau, tmcp, itty-core, and itty-script,
+# which are not published and are not part of this repository.
 # The job stays red until those crates are published, vendored, or checked out
 # beside the workspace here. Do not replace it with a passing no-op.
 name: CI
@@ -18,14 +18,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The pinned channel comes from rust-toolchain.toml.
+      # Keep the existing CI compiler pin; formatting uses the nightly label.
       - name: Install the pinned toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.96.1
           components: clippy, rustfmt
 
-      # cargo xtask tidy and ci format with this nightly.
       - name: Install the format toolchain
         uses: dtolnay/rust-toolchain@master
         with:
@@ -39,4 +38,28 @@ jobs:
           cargo install cargo-nextest --version 0.9.99 --locked
           cargo install ruskel --version 0.0.11 --locked
 
-      - run: cargo xtask ci
+      # Select members explicitly: --all also formats sibling path dependencies.
+      - name: Check formatting
+        run: >-
+          cargo +nightly fmt
+          -p canopy -p canopy-derive -p canopy-geom -p canopy-mcp
+          -p canopy-widgets -p canopyctl -p canopy-examples -p todo -p xtask
+          -- --check --config-path rustfmt.toml
+
+      - name: Check lints
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+      - name: Check isolated widget capabilities
+        run: cargo xtask feature-check
+
+      - name: Check API and Luau declarations
+        run: cargo xtask checks
+
+      - name: Compile benchmarks
+        run: cargo xtask bench-check
+
+      - name: Test workspace
+        run: cargo nextest run --workspace --all-features --no-tests fail
+
+      - name: Test smoke scenarios
+        run: cargo xtask smoke
