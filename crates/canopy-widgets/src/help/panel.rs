@@ -1,12 +1,10 @@
 //! List container and control footer for contextual help.
 
 use canopy::{
-    ViewContext, Widget,
+    NodeName, Render, ViewContext, Widget,
     error::Result,
     geom::{Line, Size},
     layout::{Constraint, Direction, Edges, Layout, MeasureConstraints, Measurement, Sizing},
-    render::Render,
-    state::NodeName,
 };
 
 /// Column container for the scrolling list and fixed footer.

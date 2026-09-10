@@ -5,11 +5,10 @@ mod tests {
     use std::{cell::Cell, rc::Rc};
 
     use canopy::{
-        Canopy, Context, ContextExt, Loader, Widget,
+        Canopy, Context, ContextExt, Loader, NodeName, Widget,
         commands::CommandTarget,
         derive_commands,
         error::{Error, Result},
-        state::NodeName,
     };
     use canopy_widgets::{Button, Root};
 

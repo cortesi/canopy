@@ -1,4 +1,4 @@
-use canopy::{error::Result, prelude::*, testing::harness::Harness};
+use canopy::{ContextExt, ViewContext, ViewContextExt, error::Result, testing::harness::Harness};
 use canopy_widgets::{List, Panes};
 
 use crate::listgym::{ListEntry, ListGym};

@@ -1,9 +1,8 @@
 //! Center widget for centering content.
 
 use canopy::{
-    Widget, derive_commands,
+    NodeName, Widget, derive_commands,
     layout::{Align, Direction, Layout},
-    state::NodeName,
 };
 
 /// Container that centers its child within available space.

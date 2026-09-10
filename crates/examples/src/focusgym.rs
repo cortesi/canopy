@@ -1,4 +1,10 @@
-use canopy::{CanopyBuilder, derive_commands, error::Result, prelude::*};
+use canopy::{
+    Canopy, CanopyBuilder, Context, ContextExt, FocusDirection, FocusScope, Loader, NodeId, Render,
+    ViewContext, ViewContextExt, Widget, derive_commands,
+    error::Result,
+    geom::Size,
+    layout::{Direction, Layout, Sizing},
+};
 use canopy_widgets::Root;
 
 /// Default bindings for the focus gym demo.

@@ -1,9 +1,8 @@
 //! Padding container widget.
 
 use canopy::{
-    Widget, derive_commands,
+    NodeName, Widget, derive_commands,
     layout::{Edges, Layout},
-    state::NodeName,
 };
 
 /// Container that adds padding around its child.

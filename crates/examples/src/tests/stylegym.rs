@@ -1,6 +1,7 @@
 use canopy::{
+    ContextExt, ViewContextExt,
     error::Result,
-    prelude::*,
+    geom::{Point, Size},
     style::{Attr, AttrSet, PartialStyle, ResolvedStyle},
     testing::harness::Harness,
 };

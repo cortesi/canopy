@@ -1,14 +1,12 @@
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use canopy::{
-    Context, EventOutcome, ViewContext, Widget, cursor, derive_commands,
+    Context, EventOutcome, NodeName, Render, ViewContext, Widget, cursor, derive_commands,
     error::{Error, Result},
     event::{self, key, mouse},
     geom::{self, Size},
     layout::{CanvasContext, MeasureConstraints, Measurement},
-    render::Render,
     rgb,
-    state::NodeName,
     style::{AttrSet, Color, ResolvedStyle, Style},
     text,
 };

@@ -1,8 +1,7 @@
 use canopy::{
-    Context, NodeId, Widget, derive_commands,
+    Context, NodeId, NodeName, Widget, derive_commands,
     error::Result,
     layout::{Layout, Sizing},
-    state::NodeName,
 };
 
 /// Child sizing for a vertical stack.

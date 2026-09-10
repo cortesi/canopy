@@ -3,8 +3,8 @@
 use std::{error::Error, fs, path::PathBuf, process, result::Result as StdResult};
 
 use canopy::{
-    CanopyBuilder,
-    prelude::*,
+    CanopyBuilder, Loader,
+    event::key::Key,
     terminal::{InterruptPolicy, RunOptions},
 };
 use canopy_examples::{

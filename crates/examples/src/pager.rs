@@ -1,4 +1,7 @@
-use canopy::{CanopyBuilder, error::Result, prelude::*};
+use canopy::{
+    Canopy, CanopyBuilder, Context, ContextExt, Loader, ViewContext, Widget, error::Result,
+    layout::Layout,
+};
 use canopy_widgets::{Frame, Text};
 
 /// Simple pager widget for file contents.

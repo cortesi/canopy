@@ -3,11 +3,10 @@
 use std::time::Duration;
 
 use canopy::{
-    Context, ContextExt, TypedId, Widget,
+    Context, ContextExt, NodeName, TypedId, Widget,
     error::{Error, Result},
     layout::{Align, Layout},
     rgb,
-    state::NodeName,
     style::StyleMap,
 };
 use canopy_widgets::font::{Font, FontBanner, FontEffects, FontRenderer, LayoutOptions};

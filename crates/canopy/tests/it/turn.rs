@@ -6,14 +6,13 @@ mod tests {
     use std::{sync::Arc, time::Duration};
 
     use canopy::{
-        Canopy, Context, ContextExt, EvalRequest, EventOutcome, TypedId, ViewContext,
+        Canopy, Context, ContextExt, EvalRequest, EventOutcome, Render, TypedId, ViewContext,
         ViewContextExt, Widget, Work,
         commands::ArgValue,
         error::{Error, Result, ScriptErrorKind},
         event::Event,
         geom::{Line, Size},
         layout::Layout,
-        render::Render,
         testing::ManualClock,
     };
 

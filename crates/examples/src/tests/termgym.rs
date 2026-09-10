@@ -1,5 +1,6 @@
 use canopy::{
-    BindingPhase, RoutePhase, error::Result, event::key::Key, prelude::*, testing::harness::Harness,
+    BindingPhase, ContextExt, NodeId, RoutePhase, ViewContextExt, error::Result, event::key::Key,
+    geom::Size, path::Path, testing::harness::Harness,
 };
 use canopy_widgets::terminal::Terminal;
 

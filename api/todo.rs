@@ -46,14 +46,14 @@ pub mod todo {
     pub struct TodoEntry {}
 
     /// Build the todo command and fixture API without assembling a widget tree.
-    pub fn api_app() -> canopy::error::Result<Canopy> {}
+    pub fn api_app() -> canopy::error::Result<canopy::Canopy> {}
 
     /// Create a todo application with an explicit database and optional user
     /// config.
     pub fn create_app(
         store: store::Store,
         config: Option<&std::path::Path>,
-    ) -> anyhow::Result<Canopy> {
+    ) -> anyhow::Result<canopy::Canopy> {
     }
 
     impl Selectable for TodoEntry {

@@ -1,11 +1,10 @@
 use canopy::{
-    Context, EventOutcome, ViewContext, Widget, WidgetSemantics, cursor, derive_commands,
+    Context, EventOutcome, NodeName, Render, ViewContext, Widget, WidgetSemantics, cursor,
+    derive_commands,
     error::Result,
     event::{Event, key},
     geom::{Line, Point, Size},
     layout::{MeasureConstraints, Measurement},
-    render::Render,
-    state::NodeName,
     style::{WidgetState, roles},
     text,
 };

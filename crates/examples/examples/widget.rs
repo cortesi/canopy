@@ -8,9 +8,8 @@ use std::{
 };
 
 use canopy::{
-    CanopyBuilder,
+    CanopyBuilder, Loader,
     error::{self, Result},
-    prelude::*,
 };
 use canopy_examples::{
     imgview,

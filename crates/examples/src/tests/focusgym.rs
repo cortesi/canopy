@@ -1,8 +1,8 @@
 use canopy::{
-    TermBuf,
+    Context, NodeId, TermBuf, ViewContext, ViewContextExt,
     error::{Error, Result},
-    geom::RectI32,
-    prelude::*,
+    geom::{Point, RectI32, Size},
+    layout::{Layout, Sizing},
     testing::harness::Harness,
 };
 

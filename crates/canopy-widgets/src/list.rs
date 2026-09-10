@@ -7,8 +7,8 @@
 use std::{collections::HashSet, hash::Hash};
 
 use canopy::{
-    Context, ContextExt, EventOutcome, FocusDirection, KeyedChildren, NodeId, TypedId, ViewContext,
-    Widget, WidgetSemantics,
+    Context, ContextExt, EventOutcome, FocusDirection, KeyedChildren, NodeId, NodeName, Render,
+    TypedId, ViewContext, Widget, WidgetSemantics,
     commands::{
         ArgValue, CommandAction, CommandArgs, CommandCall, CommandInvocation, CommandScopeFrame,
         CommandStatus, CommandTarget, ListRowContext, ToArgValue,
@@ -20,8 +20,6 @@ use canopy::{
     layout::{
         CanvasContext, Constraint, Edges, Layout, MeasureConstraints, MeasureOverflow, Measurement,
     },
-    render::Render,
-    state::NodeName,
 };
 use unicode_width::UnicodeWidthStr;
 
@@ -846,7 +844,7 @@ fn drag_exceeded(origin: Point, current: Point, threshold: u32) -> bool {
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, Loader, NodeId, ViewContext, derive_commands, event::key, state::NodeName,
+        Canopy, Loader, NodeId, NodeName, ViewContext, derive_commands, event::key,
         testing::harness::Harness,
     };
 

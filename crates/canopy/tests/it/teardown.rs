@@ -5,9 +5,8 @@ mod tests {
     use std::{cell::RefCell, rc::Rc};
 
     use canopy::{
-        Canopy, Context, ContextExt, NodeId, Widget, derive_commands,
+        Canopy, Context, ContextExt, NodeId, NodeName, Widget, derive_commands,
         error::{Error, Result},
-        state::NodeName,
     };
 
     struct Dialog {

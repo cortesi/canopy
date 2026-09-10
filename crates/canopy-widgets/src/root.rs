@@ -1,12 +1,12 @@
 use canopy::{
     Canopy, ChildSlot, Context, ContextExt, FocusDirection, FocusScope, FrameworkBindingGroup,
-    InteractionToken, Loader, ModalBindings, ModalOptions, NodeId, TypedId, ViewContext, Widget,
+    InteractionToken, Loader, ModalBindings, ModalOptions, NodeId, NodeName, TypedId, ViewContext,
+    Widget,
     commands::{CommandCall, CommandNode, CommandSpec},
     derive_commands,
     error::{Error, Result},
     event::key::Key,
     layout::{Direction, Layout, Sizing},
-    state::NodeName,
 };
 
 use crate::help::{BindingList, Help};
@@ -379,7 +379,7 @@ mod tests {
     #[cfg(feature = "devtools")]
     use canopy::testing::harness::Harness;
     use canopy::{
-        BindingScope, Context, EventOutcome, ViewContext, Widget,
+        BindingScope, Context, EventOutcome, NodeName, ViewContext, Widget,
         commands::{CommandNode, CommandSpec},
         error::Result,
         event::Event,
@@ -387,7 +387,6 @@ mod tests {
         help::BindingSnapshot,
         layout::Layout,
         render::NopBackend,
-        state::NodeName,
     };
 
     use super::*;

@@ -3,10 +3,9 @@
 use std::time::Duration;
 
 use canopy::{
-    Context, ContextExt, NodeId, TypedId, Widget,
+    Context, ContextExt, NodeId, NodeName, TypedId, Widget,
     error::{Error, Result},
     layout::{Edges, Layout, MeasureOverflow},
-    state::NodeName,
     style::{Color, Paint, StyleMap},
 };
 use canopy_widgets::{Center, Frame, List, Pad, Text};

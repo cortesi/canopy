@@ -1,7 +1,12 @@
 use std::time::Duration;
 
 use canopy::{
-    CanopyBuilder, derive_commands, error::Result, layout::Edges, prelude::*, style::solarized,
+    Canopy, CanopyBuilder, Context, ContextExt, Loader, NodeName, Render, ViewContext,
+    ViewContextExt, Widget, derive_commands,
+    error::Result,
+    geom::Size,
+    layout::{Edges, Layout, MeasureConstraints, Measurement},
+    style::solarized,
 };
 use canopy_widgets::{Border, Center, Frame, List, SINGLE, Selectable, Text, VStack};
 use unicode_width::UnicodeWidthStr;

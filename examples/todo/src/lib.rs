@@ -5,12 +5,13 @@ use std::{collections::HashMap, fmt::Display, path::Path};
 
 use anyhow::Result as AnyResult;
 use canopy::{
-    CanopyBuilder, InteractionToken, ModalBindings, ModalOptions,
+    Canopy, CanopyBuilder, Context, ContextExt, InteractionToken, Loader, ModalBindings,
+    ModalOptions, NodeId, NodeName, Render, ViewContext, ViewContextExt, Widget,
     commands::CommandStatus,
     derive_commands,
     error::{Error, Result},
-    layout::LayoutOverride,
-    prelude::*,
+    geom::{Rect, Size},
+    layout::{Constraint, Direction, Layout, LayoutOverride, MeasureConstraints, Measurement},
     style::solarized,
 };
 use canopy_widgets::{Center, Frame, Input, List, Root, Selectable, ValueExposure};
@@ -568,6 +569,7 @@ pub fn create_app(store: store::Store, config: Option<&Path>) -> AnyResult<Canop
 #[cfg(test)]
 mod tests {
     use canopy::{
+        ContextExt,
         geom::Point,
         style::{ResolvedStyle, effects},
         testing::harness::Harness,

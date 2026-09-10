@@ -4,12 +4,11 @@ use std::sync::{
 };
 
 use canopy::{
-    Canopy, Context, ContextExt, FocusScope, Loader, Widget, buf, derive_commands,
+    Canopy, Context, ContextExt, FocusScope, Loader, NodeName, Widget, buf, derive_commands,
     error::Result,
     event::{key, mouse},
     geom::Point,
     layout::{Edges, Layout},
-    state::NodeName,
     style::{AttrSet, Color, Paint, PartialStyle, Style, StyleManager},
     testing::harness::Harness,
 };

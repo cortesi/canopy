@@ -7,13 +7,11 @@ mod tests;
 
 pub use binding_list::BindingList;
 use canopy::{
-    Canopy, ChildSlot, Context, ContextExt, EventOutcome, Loader, NodeId, TypedId, ViewContext,
-    Widget, derive_commands,
+    Canopy, ChildSlot, Context, ContextExt, EventOutcome, Loader, NodeId, NodeName, Render,
+    TypedId, ViewContext, Widget, derive_commands,
     error::{Error, Result},
     event::Event,
     layout::{Align, Direction, Edges, Layout},
-    render::Render,
-    state::NodeName,
 };
 use panel::{ControlFooter, HelpPanel};
 

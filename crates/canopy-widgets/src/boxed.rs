@@ -1,10 +1,8 @@
 use canopy::{
-    ViewContext, Widget, derive_commands,
+    NodeName, Render, ViewContext, Widget, derive_commands,
     error::Result,
     geom,
     layout::{Edges, Layout},
-    render::Render,
-    state::NodeName,
 };
 
 /// Defines the set of glyphs used to draw the box.

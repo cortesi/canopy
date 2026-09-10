@@ -15,6 +15,7 @@ use crate::{
     NodeId,
     core::{
         id::testing_node_id,
+        view::View,
         world::{
             Core,
             test_support::{
@@ -29,7 +30,6 @@ use crate::{
         Align, Constraint, Direction, Direction as LayoutDirection, Display, Edges, Layout,
         MeasureConstraints, MeasureOverflow, Measurement, Sizing,
     },
-    view::View,
 };
 
 #[test]

@@ -10,10 +10,15 @@ adding behavior.
 
 ## Public API Surface
 
-Application code should start from `canopy::prelude::*` and selected
-`canopy_widgets` types. The stable surface is `Canopy`, `Widget`, `ViewContext`,
-`Context`, capability context traits, typed node IDs, layout types, geometry,
-styles, command macros, and validated path types.
+Application code imports core types from the crate root and domain types from
+their module; it selects `canopy_widgets` types directly. The root holds the
+facade traits and their handle types: `Canopy`, `Widget`, `Context`,
+`ViewContext`, `Render`, `NodeName`, `View`, the capability context traits,
+typed node IDs, and the command macros. Value libraries live in their modules:
+`canopy::geom`, `canopy::layout`, `canopy::style`, `canopy::event`,
+`canopy::path`, `canopy::script`, `canopy::error`, `canopy::help`,
+`canopy::cursor`, `canopy::text`, and `canopy::render` (backend interfaces).
+Each item has one canonical location, and there is no prelude.
 
 `Canopy` owns `Core` and the style map. Its fields are private. Apps install root
 widgets with helpers such as `Root::install`, mutate styles through
@@ -21,8 +26,8 @@ widgets with helpers such as `Root::install`, mutate styles through
 modes, rendering, and automation.
 
 Lower-level runtime state is crate-private. `Core`, `inputmap`, and raw arena
-mutation are not reachable from app code, and `script`, `view`, and the backend
-modules expose only what the stable surface above needs.
+mutation are not reachable from app code, and `script` and the backend modules
+expose only what the stable surface above needs.
 
 Path-oriented APIs use `Path`, `PathFilter`, and `NodeName`. Literal path
 components must be valid node names. Raw script path strings are validated at the

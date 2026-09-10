@@ -1,16 +1,14 @@
 use std::{f32::consts::TAU, time::Duration};
 
 use canopy::{
-    CanopyBuilder, ChangeOutcome, Context, ContextExt, EventOutcome, Loader, NodeId, ViewContext,
-    Widget,
+    CanopyBuilder, ChangeOutcome, Context, ContextExt, EventOutcome, Loader, NodeId, NodeName,
+    Render, ViewContext, Widget,
     cursor::{Cursor, CursorShape},
     error::Result,
     event::{Event, key},
     geom::{Line, Point, Size},
     layout::{Align, Edges, Layout, MeasureConstraints, Measurement},
-    render::Render,
     rgb,
-    state::NodeName,
     style::{Attr, Color, StyleMap},
     text,
 };

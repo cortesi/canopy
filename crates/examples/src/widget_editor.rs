@@ -1,6 +1,10 @@
 use std::path::Path;
 
-use canopy::{CanopyBuilder, error::Result, layout::Edges, prelude::*};
+use canopy::{
+    Canopy, CanopyBuilder, Context, ContextExt, Loader, Widget,
+    error::Result,
+    layout::{Edges, Layout},
+};
 use canopy_widgets::{
     Frame, Pad,
     editor::{EditMode, Editor, EditorConfig, WrapMode, highlight::SyntectHighlighter},

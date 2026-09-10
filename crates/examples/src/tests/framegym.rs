@@ -1,4 +1,10 @@
-use canopy::{error::Result, geom, layout::Edges, prelude::*, testing::harness::Harness};
+use canopy::{
+    ContextExt, ViewContext,
+    error::Result,
+    geom::{self, Size},
+    layout::{Edges, Layout},
+    testing::harness::Harness,
+};
 
 use super::{Mount, root_harness};
 use crate::framegym::{FrameGym, FrameSlot, PatternSlot, binding_setup};

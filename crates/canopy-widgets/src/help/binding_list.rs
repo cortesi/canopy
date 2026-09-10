@@ -3,7 +3,7 @@
 use std::mem;
 
 use canopy::{
-    Canopy, Context, EventOutcome, Loader, ViewContext, Widget,
+    Canopy, Context, EventOutcome, Loader, NodeName, Render, ViewContext, Widget,
     commands::CommandStatus,
     derive_commands,
     error::Result,
@@ -15,8 +15,6 @@ use canopy::{
     geom::{Line, Rect, Size},
     help::{AvailableBinding, BindingSnapshot},
     layout::{CanvasContext, Layout, MeasureOverflow},
-    render::Render,
-    state::NodeName,
 };
 use unicode_width::UnicodeWidthStr;
 

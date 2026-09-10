@@ -1,4 +1,8 @@
-use canopy::{CanopyBuilder, error::Result, layout::Edges, prelude::*};
+use canopy::{
+    CanopyBuilder, Context, ContextExt, Loader, NodeId, ViewContext, Widget,
+    error::Result,
+    layout::{Edges, Layout},
+};
 use canopy_widgets::{CanvasWidth, Frame, Pad, Selectable, Text, VStack, wrap};
 
 /// Text sample using the default tab stop.

@@ -1,9 +1,11 @@
 use std::env;
 
 use canopy::{
-    CanopyBuilder, derive_commands,
+    Canopy, CanopyBuilder, Context, ContextExt, FocusScope, Loader, NodeId, NodeName, Render,
+    ViewContext, ViewContextExt, Widget, derive_commands,
     error::{Error, Result},
-    prelude::*,
+    geom::Size,
+    layout::{Constraint, Direction, Layout, MeasureConstraints, Measurement},
     style::{Attr, AttrSet, solarized},
 };
 use canopy_widgets::{

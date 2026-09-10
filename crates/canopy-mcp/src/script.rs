@@ -911,8 +911,8 @@ fn canopy_error_info(error: &CanopyError) -> ScriptErrorInfo {
 #[cfg(test)]
 mod tests {
     use canopy::{
-        CanopyBuilder, Fixture, FocusDirection, derive_commands, error::Result as CanopyResult,
-        prelude::*, testing::contracts,
+        CanopyBuilder, Fixture, FocusDirection, Loader, NodeName, Widget, derive_commands,
+        error::Result as CanopyResult, geom::Size, testing::contracts,
     };
 
     use super::*;

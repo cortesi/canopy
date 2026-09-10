@@ -4,10 +4,10 @@
 //! layout.
 
 use canopy::{
-    CanopyBuilder, derive_commands,
+    Canopy, CanopyBuilder, ChildSlot, Context, ContextExt, Loader, Render, ViewContext, Widget,
+    derive_commands,
     error::Result,
-    layout::Edges,
-    prelude::*,
+    layout::{Direction, Edges, Layout},
     style::{
         StyleMap, dracula,
         effects::{self, Effect},

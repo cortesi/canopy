@@ -6,14 +6,13 @@ mod tests {
 
     use canopy::{
         BindingOptions, BindingScope, Canopy, CommandArg, Context, ContextExt, EventOutcome,
-        FrameworkBindingGroup, Loader, NodeId, ViewContext, Widget,
+        FrameworkBindingGroup, Loader, NodeId, Render, ViewContext, Widget,
         commands::ArgValue,
         derive_commands,
         error::{Error, Result, ScriptErrorKind},
         event::{Event, key::Key, mouse},
         geom::{Line, Size},
         layout::Layout,
-        render::Render,
         testing::{backend::TestRender, harness::Harness},
     };
     use serde::{Deserialize, Serialize};

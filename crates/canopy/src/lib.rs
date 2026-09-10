@@ -24,7 +24,6 @@ mod core;
 // `canopy::geom` is the app-facing path to the geometry crate.
 pub use canopy_geom as geom;
 pub mod layout;
-pub mod prelude;
 pub(crate) mod widget;
 
 pub(crate) use core::backend;
@@ -43,9 +42,18 @@ pub use core::{
     WakeOutcome, WidgetSemantics, Work, WorkLifetime,
 };
 // App-author modules used by widget implementations and derive output.
-pub use core::{
-    commands, cursor, error, event, help, path, render, script, state, style, text, view,
-};
+pub use core::{commands, cursor, error, event, help, path, script, style, text};
+// App-facing handle types re-exported from private core modules.
+pub use core::{render::Render, state::NodeName, view::View};
+
+// Internal module paths used across the crate.
+use crate::core::state;
+
+/// Rendering backend interfaces.
+pub mod render {
+    pub(crate) use crate::core::render::Render;
+    pub use crate::core::render::{NopBackend, RenderBackend};
+}
 
 /// Crossterm terminal run-loop integration.
 pub mod terminal {

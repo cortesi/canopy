@@ -5,14 +5,13 @@ mod tests {
     use std::any::Any;
 
     use canopy::{
-        Canopy, ContextExt, Loader, NodeId, TypedId, ViewContext, ViewContextExt, Widget,
+        Canopy, ContextExt, Loader, NodeId, NodeName, TypedId, ViewContext, ViewContextExt, Widget,
         commands::{CommandStatus, CommandTarget, ListRowContext},
         derive_commands,
         error::Result,
         event::{key, mouse},
         geom::{Point, Size},
         layout::{Direction, Layout},
-        state::NodeName,
         testing::harness::Harness,
     };
     use canopy_widgets::{Button, List, Root, Text};

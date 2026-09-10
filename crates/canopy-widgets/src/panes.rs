@@ -1,10 +1,9 @@
 use canopy::{
-    Context, ContextExt, NodeId, ViewContext, ViewContextExt, Widget,
+    Context, ContextExt, NodeId, NodeName, ViewContext, ViewContextExt, Widget,
     commands::{CommandNode, CommandSpec},
     derive_commands,
     error::Result,
     layout::{Direction, Layout, Sizing},
-    state::NodeName,
 };
 
 /// Internal column container for panes.

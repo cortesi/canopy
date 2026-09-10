@@ -1,6 +1,9 @@
 use canopy::{
-    CanopyBuilder, FocusDirection, derive_commands, error::Result, geom::Line,
-    layout::CanvasContext, prelude::*,
+    Canopy, CanopyBuilder, ChildSlot, Context, ContextExt, FocusDirection, Loader, Render,
+    ViewContext, Widget, derive_commands,
+    error::Result,
+    geom::{Line, Size},
+    layout::{CanvasContext, Layout, MeasureConstraints, Measurement},
 };
 use canopy_widgets::Frame;
 

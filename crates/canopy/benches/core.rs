@@ -3,14 +3,13 @@
 use std::hint::black_box;
 
 use canopy::{
-    Canopy, Context, ContextExt, NodeId, TermBuf, ViewContext, Widget,
+    Canopy, Context, ContextExt, NodeId, NodeName, Render, TermBuf, ViewContext, Widget,
     commands::CommandTarget,
     derive_commands,
     error::Result,
     geom::{Line, Point, Size},
     layout::{Layout, MeasureConstraints, Measurement},
-    render::{Render, RenderBackend},
-    state::NodeName,
+    render::RenderBackend,
     style::{AttrSet, Color, ResolvedStyle},
 };
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};

@@ -1,13 +1,12 @@
 use std::{collections::HashMap, time::Duration};
 
 use canopy::{
-    Context, EventOutcome, FocusDirection, ViewContext, Widget, cursor, derive_commands,
+    Context, EventOutcome, FocusDirection, NodeName, Render, ViewContext, Widget, cursor,
+    derive_commands,
     error::Result,
     event::{Event, key, mouse},
     geom::{Line, Point, PointI32, Rect, Size},
     layout::{CanvasContext, Constraint, MeasureConstraints, Measurement},
-    render::Render,
-    state::NodeName,
     style::Style,
 };
 use unicode_segmentation::UnicodeSegmentation;

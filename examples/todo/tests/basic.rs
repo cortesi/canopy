@@ -5,7 +5,9 @@ mod tests {
     use std::any::TypeId;
 
     use anyhow::Result as AnyResult;
-    use canopy::{error::Result, event::key::KeyCode, prelude::*, testing::harness::Harness};
+    use canopy::{
+        ContextExt, error::Result, event::key::KeyCode, geom::Size, testing::harness::Harness,
+    };
     use canopy_widgets::{Input, List};
     use todo::{TodoEntry, create_app, store::Store};
 

@@ -1,9 +1,9 @@
 use canopy::{
-    CanopyBuilder, derive_commands,
+    Canopy, CanopyBuilder, Context, ContextExt, Loader, NodeId, NodeName, Render, TypedId,
+    ViewContext, ViewContextExt, Widget, derive_commands,
     error::{Error, Result},
     geom::Size,
     layout::{CanvasContext, MeasureConstraints, Measurement},
-    prelude::*,
     style::solarized,
 };
 use canopy_widgets::{CanvasWidth, Frame, List, Panes, Selectable, Text, VStack};

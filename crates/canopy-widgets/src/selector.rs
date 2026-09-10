@@ -1,13 +1,11 @@
 //! Selector widget for multi-value selection with checkbox-style items.
 
 use canopy::{
-    Context, EventOutcome, ViewContext, Widget, derive_commands,
+    Context, EventOutcome, NodeName, Render, ViewContext, Widget, derive_commands,
     error::Result,
     event::{Event, mouse},
     geom::Size,
     layout::{MeasureConstraints, Measurement},
-    render::Render,
-    state::NodeName,
     text,
 };
 use unicode_width::UnicodeWidthStr;

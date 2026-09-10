@@ -1,12 +1,9 @@
 use canopy::{
-    Context, EventOutcome, NodeId, ViewContext, Widget, derive_commands,
+    Context, EventOutcome, NodeId, NodeName, Render, View, ViewContext, Widget, derive_commands,
     error::Result,
     event::{Event, mouse},
     geom,
     layout::{Edges, Layout},
-    render::Render,
-    state::NodeName,
-    view::View,
 };
 use unicode_width::UnicodeWidthStr;
 

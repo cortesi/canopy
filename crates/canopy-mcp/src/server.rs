@@ -323,8 +323,8 @@ mod tests {
     };
 
     use canopy::{
-        CanopyBuilder, Fixture, derive_commands, error::Result as CanopyResult, geom::Size,
-        prelude::*, testing::contracts,
+        Canopy, CanopyBuilder, ContextExt, Fixture, Loader, NodeName, Widget, derive_commands,
+        error::Result as CanopyResult, geom::Size, testing::contracts,
     };
     use tokio::net::UnixStream;
 

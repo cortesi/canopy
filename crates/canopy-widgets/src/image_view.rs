@@ -3,11 +3,11 @@
 use std::path::Path;
 
 use canopy::{
-    Canopy, CommandEnum, Context, FocusDirection, Loader, ViewContext, Widget, derive_commands,
+    Canopy, CommandEnum, Context, FocusDirection, Loader, Render, ViewContext, Widget,
+    derive_commands,
     error::{Error, Result},
     geom::{Point, Rect, Size},
     layout::{CanvasContext, Layout},
-    render::Render,
     style::{AttrSet, Color, Style},
 };
 use image::RgbaImage;
