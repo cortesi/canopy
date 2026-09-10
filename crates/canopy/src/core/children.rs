@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    Context, NodeId, TypedId, Widget,
+    Context, ContextExt, NodeId, TypedId, Widget,
     error::{Error, Result},
     layout::LayoutOverride,
 };

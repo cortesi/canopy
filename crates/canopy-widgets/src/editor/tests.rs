@@ -4,7 +4,7 @@ use std::sync::{
 };
 
 use canopy::{
-    Canopy, Context, FocusScope, Loader, Widget, buf, derive_commands,
+    Canopy, Context, ContextExt, FocusScope, Loader, Widget, buf, derive_commands,
     error::Result,
     event::{key, mouse},
     geom::Point,

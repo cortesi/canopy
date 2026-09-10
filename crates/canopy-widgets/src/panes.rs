@@ -1,5 +1,5 @@
 use canopy::{
-    Context, NodeId, ViewContext, Widget,
+    Context, ContextExt, NodeId, ViewContext, ViewContextExt, Widget,
     commands::{CommandNode, CommandSpec},
     derive_commands,
     error::Result,

@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, Context, NodeId, ViewContext, Widget,
+        Canopy, Context, ContextExt, NodeId, ViewContext, ViewContextExt, Widget,
         error::{Error, Result},
         geom::{Point, Size},
         path::Path,

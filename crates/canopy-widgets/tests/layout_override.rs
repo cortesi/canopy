@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, Loader, Widget,
+        Canopy, ContextExt, Loader, Widget,
         error::Result,
         geom::{Point, Size},
         layout::LayoutOverride,

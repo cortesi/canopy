@@ -442,6 +442,7 @@ mod tests {
     use std::sync::Arc;
 
     use canopy::{
+        ContextExt,
         style::{
             GradientSpec, GradientStop, Paint,
             effects::{self, Effect, StyleEffect},

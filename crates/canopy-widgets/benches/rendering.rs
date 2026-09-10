@@ -3,7 +3,7 @@
 use std::hint::black_box;
 
 use canopy::{
-    Context, Loader, Widget, derive_commands, error::Result, layout::Layout,
+    Context, ContextExt, Loader, Widget, derive_commands, error::Result, layout::Layout,
     testing::harness::Harness,
 };
 use canopy_widgets::Text;

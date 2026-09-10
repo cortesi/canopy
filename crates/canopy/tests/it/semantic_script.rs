@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use canopy::{Canopy, NodeId, Widget, commands::ArgValue, error::Result};
+    use canopy::{Canopy, ContextExt, NodeId, Widget, commands::ArgValue, error::Result};
 
     struct Marker;
     impl Widget for Marker {}

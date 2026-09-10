@@ -1,7 +1,8 @@
 use std::{f32::consts::TAU, time::Duration};
 
 use canopy::{
-    CanopyBuilder, ChangeOutcome, Context, EventOutcome, Loader, NodeId, ViewContext, Widget,
+    CanopyBuilder, ChangeOutcome, Context, ContextExt, EventOutcome, Loader, NodeId, ViewContext,
+    Widget,
     cursor::{Cursor, CursorShape},
     error::Result,
     event::{Event, key},
@@ -969,7 +970,7 @@ pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
 
 #[cfg(test)]
 mod tests {
-    use canopy::{layout::Constraint, testing::harness::Harness};
+    use canopy::{ViewContextExt, layout::Constraint, testing::harness::Harness};
 
     use super::*;
     use crate::tests::{Mount, root_harness};

@@ -1,6 +1,6 @@
 //! Wrapping an existing node in a container widget.
 
-use canopy::{Context, NodeId, TypedId, Widget, error::Result};
+use canopy::{Context, ContextExt, NodeId, TypedId, Widget, error::Result};
 
 /// Wrap `child` in a new `widget` node and return the wrapper's typed id.
 ///

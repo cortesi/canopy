@@ -2,7 +2,7 @@
 
 use super::Canopy;
 use crate::{
-    ViewContext, Widget,
+    ContextExt, ViewContext, Widget,
     commands::ArgValue,
     error::{Error, Result},
     geom::{Point, Size},

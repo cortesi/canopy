@@ -1,7 +1,7 @@
 //! Button widget.
 
 use canopy::{
-    Context, EventOutcome, ViewContext, Widget, WidgetSemantics,
+    Context, ContextExt, EventOutcome, ViewContext, Widget, WidgetSemantics,
     commands::{CommandAction, CommandCall, CommandStatus, CommandTarget},
     derive_commands,
     error::Result,
@@ -179,7 +179,7 @@ impl Widget for Button {
 
 #[cfg(test)]
 mod tests {
-    use canopy::{Canopy, Loader, style::Color, testing::harness::Harness};
+    use canopy::{Canopy, Loader, ViewContextExt, style::Color, testing::harness::Harness};
 
     use super::*;
 

@@ -12,7 +12,7 @@ use super::{
     *,
 };
 use crate::{
-    Context, KeyedChildren, ModalBindings, ModalOptions, ViewContext,
+    Context, ContextExt, KeyedChildren, ModalBindings, ModalOptions, ViewContext, ViewContextExt,
     core::{
         context::{CoreContext, CoreViewContext},
         inputmap::FrameworkBindingGroup,

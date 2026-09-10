@@ -3,7 +3,7 @@
 use std::hint::black_box;
 
 use canopy::{
-    Canopy, Context, NodeId, TermBuf, ViewContext, Widget,
+    Canopy, Context, ContextExt, NodeId, TermBuf, ViewContext, Widget,
     commands::CommandTarget,
     derive_commands,
     error::Result,

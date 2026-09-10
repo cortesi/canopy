@@ -5,7 +5,7 @@ mod tests {
     use std::any::Any;
 
     use canopy::{
-        Canopy, Loader, NodeId, TypedId, ViewContext, Widget,
+        Canopy, ContextExt, Loader, NodeId, TypedId, ViewContext, ViewContextExt, Widget,
         commands::{CommandStatus, CommandTarget, ListRowContext},
         derive_commands,
         error::Result,

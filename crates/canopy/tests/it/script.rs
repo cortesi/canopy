@@ -5,7 +5,7 @@ mod tests {
     use std::{fs, path::Path};
 
     use canopy::{
-        BindingOptions, BindingScope, Canopy, CommandArg, Context, EventOutcome,
+        BindingOptions, BindingScope, Canopy, CommandArg, Context, ContextExt, EventOutcome,
         FrameworkBindingGroup, Loader, NodeId, ViewContext, Widget,
         commands::ArgValue,
         derive_commands,

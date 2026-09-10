@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use canopy::{
-    Context, TypedId, Widget,
+    Context, ContextExt, TypedId, Widget,
     error::{Error, Result},
     layout::{Align, Layout},
     rgb,

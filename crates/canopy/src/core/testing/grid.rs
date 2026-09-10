@@ -1,7 +1,7 @@
 //! Grid test utility for creating configurable grid layouts.
 
 use crate::{
-    Canopy, Context, NodeId, ViewContext,
+    Canopy, Context, ContextExt, NodeId, ViewContext,
     error::Result,
     geom::Size,
     layout::{Layout, Sizing},

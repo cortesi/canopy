@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, Context, Loader, ViewContext, Widget, buf,
+        Canopy, Context, ContextExt, Loader, ViewContext, ViewContextExt, Widget, buf,
         commands::{CommandNode, CommandSpec},
         error::Result,
         event::{key, mouse},

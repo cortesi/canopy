@@ -5,7 +5,7 @@ mod tests {
     use std::{cell::Cell, rc::Rc};
 
     use canopy::{
-        Canopy, Context, Loader, Widget,
+        Canopy, Context, ContextExt, Loader, Widget,
         commands::CommandTarget,
         derive_commands,
         error::{Error, Result},

@@ -5,7 +5,7 @@ mod tests {
     use std::{any::Any, cell::RefCell, collections::BTreeMap};
 
     use canopy::{
-        Canopy, CommandArg, CommandEnum, Context, ViewContext, Widget,
+        Canopy, CommandArg, CommandEnum, Context, ContextExt, ViewContext, Widget,
         commands::{
             ArgValue, CommandArgs, CommandDispatchKind, CommandError, CommandInvocation,
             CommandResolution, CommandStatus, CommandTarget, FromArgValue, SerdeArg, ToArgValue,

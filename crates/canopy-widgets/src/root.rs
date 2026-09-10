@@ -1,5 +1,5 @@
 use canopy::{
-    Canopy, ChildSlot, Context, FocusDirection, FocusScope, FrameworkBindingGroup,
+    Canopy, ChildSlot, Context, ContextExt, FocusDirection, FocusScope, FrameworkBindingGroup,
     InteractionToken, Loader, ModalBindings, ModalOptions, NodeId, TypedId, ViewContext, Widget,
     commands::{CommandCall, CommandNode, CommandSpec},
     derive_commands,

@@ -1,6 +1,6 @@
 use super::buf::BufTest;
 use crate::{
-    Canopy, Context, Loader, NodeId,
+    Canopy, Context, ContextExt, Loader, NodeId,
     core::termbuf::TermBuf,
     error::Result,
     event::{Event, key, mouse},

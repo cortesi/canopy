@@ -9,7 +9,7 @@ use std::{
 };
 
 use canopy::{
-    Canopy, Context, FocusDirection, Loader, ViewContext, Widget, derive_commands,
+    Canopy, Context, ContextExt, FocusDirection, Loader, ViewContext, Widget, derive_commands,
     error::Result,
     geom::Size,
     layout::{CanvasContext, Constraint, Layout, MeasureConstraints, Measurement},

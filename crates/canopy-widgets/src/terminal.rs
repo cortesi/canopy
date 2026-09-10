@@ -1005,7 +1005,7 @@ mod tests {
     };
 
     use canopy::{
-        TermBuf,
+        ContextExt, TermBuf,
         event::{key, mouse},
         layout::Layout,
         style::{

@@ -6,7 +6,8 @@ mod tests {
     use std::{sync::Arc, time::Duration};
 
     use canopy::{
-        Canopy, Context, EvalRequest, EventOutcome, TypedId, ViewContext, Widget, Work,
+        Canopy, Context, ContextExt, EvalRequest, EventOutcome, TypedId, ViewContext,
+        ViewContextExt, Widget, Work,
         commands::ArgValue,
         error::{Error, Result, ScriptErrorKind},
         event::Event,

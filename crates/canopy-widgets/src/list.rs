@@ -7,8 +7,8 @@
 use std::{collections::HashSet, hash::Hash};
 
 use canopy::{
-    Context, EventOutcome, FocusDirection, KeyedChildren, NodeId, TypedId, ViewContext, Widget,
-    WidgetSemantics,
+    Context, ContextExt, EventOutcome, FocusDirection, KeyedChildren, NodeId, TypedId, ViewContext,
+    Widget, WidgetSemantics,
     commands::{
         ArgValue, CommandAction, CommandArgs, CommandCall, CommandInvocation, CommandScopeFrame,
         CommandStatus, CommandTarget, ListRowContext, ToArgValue,

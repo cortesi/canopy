@@ -3,7 +3,7 @@
 use std::env;
 
 use canopy::{
-    Context, NodeId, TypedId, ViewContext, Widget, derive_commands,
+    Context, ContextExt, NodeId, TypedId, ViewContext, Widget, derive_commands,
     error::{Error, Result},
     layout::{Direction, Edges, Layout},
     render::Render,
