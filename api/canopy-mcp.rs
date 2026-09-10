@@ -314,6 +314,16 @@ pub mod canopy_mcp {
         pub scripts: Vec<ScriptOutcome>,
     }
 
+    /// One planned smoke script with its resolved fixture and evaluation request.
+    pub struct SuiteScript {
+        /// Script path on disk.
+        pub path: std::path::PathBuf,
+        /// Fixture derived for this script, if any.
+        pub fixture: Option<String>,
+        /// Evaluation request carrying the script source and suite options.
+        pub request: crate::script::ScriptEvalRequest,
+    }
+
     /// Handle for a running live UDS MCP listener.
     pub struct UdsServerHandle {}
 
@@ -323,23 +333,6 @@ pub mod canopy_mcp {
         pub width: u32,
         /// Number of rows.
         pub height: u32,
-    }
-
-    /// Resolve the ordered list of smoke scripts for a suite run.
-    ///
-    /// An explicit script list keeps its given order, because that order decides
-    /// which script a fail-fast run stops on. Discovered files are sorted so a
-    /// directory walk is reproducible.
-    pub fn discover_scripts(config: &SuiteConfig) -> crate::Result<Vec<std::path::PathBuf>> {}
-
-    /// Derive a fixture name from the first path component under the suite root.
-    ///
-    /// Only a normal component names a fixture; a root, prefix, or `..` component
-    /// does not.
-    pub fn fixture_for_script(
-        suite_dir: &std::path::Path,
-        script: &std::path::Path,
-    ) -> Option<String> {
     }
 
     /// Launch a Canopy app in the selected mode.
@@ -353,6 +346,12 @@ pub mod canopy_mcp {
         run_options: canopy::terminal::RunOptions,
     ) -> crate::Result<i32> {
     }
+
+    /// Resolve the ordered smoke scripts for a suite run into evaluation requests.
+    ///
+    /// Reading the source and deriving the fixture happen here so `run_suite` and
+    /// external runners share one plan.
+    pub fn plan_suite(config: &SuiteConfig) -> crate::Result<Vec<SuiteScript>> {}
 
     /// Run a smoke suite against fresh headless app instances.
     pub fn run_suite(
@@ -1133,6 +1132,18 @@ pub mod canopy_mcp {
     impl SuiteOutcome {
         /// Return true when all smoke scripts passed.
         pub fn success(&self) -> bool {}
+    }
+
+    impl Clone for SuiteScript {
+        fn clone(&self) -> SuiteScript {}
+    }
+
+    impl Debug for SuiteScript {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
+    }
+
+    impl PartialEq for SuiteScript {
+        fn eq(&self, other: &SuiteScript) -> bool {}
     }
 
     impl Clone for Viewport {

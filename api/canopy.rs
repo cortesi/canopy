@@ -1389,72 +1389,6 @@ pub mod canopy {
                 ///
                 /// `KeyCode::Char('c')` represents the `c` character, and so on.
                 Char(char),
-                /// Media key code.
-                Media(MediaKeyCode),
-                /// Modifier key code.
-                Modifier(ModifierKeyCode),
-            }
-
-            /// Media key codes.
-            pub enum MediaKeyCode {
-                /// Play media key.
-                Play,
-                /// Pause media key.
-                Pause,
-                /// Play/Pause media key.
-                PlayPause,
-                /// Reverse media key.
-                Reverse,
-                /// Stop media key.
-                Stop,
-                /// Fast-forward media key.
-                FastForward,
-                /// Rewind media key.
-                Rewind,
-                /// Next-track media key.
-                TrackNext,
-                /// Previous-track media key.
-                TrackPrevious,
-                /// Record media key.
-                Record,
-                /// Lower-volume media key.
-                LowerVolume,
-                /// Raise-volume media key.
-                RaiseVolume,
-                /// Mute media key.
-                MuteVolume,
-            }
-
-            /// Physical modifier key codes.
-            pub enum ModifierKeyCode {
-                /// Left Shift key.
-                LeftShift,
-                /// Left Control key.
-                LeftControl,
-                /// Left Alt key.
-                LeftAlt,
-                /// Left Super key.
-                LeftSuper,
-                /// Left Hyper key.
-                LeftHyper,
-                /// Left Meta key.
-                LeftMeta,
-                /// Right Shift key.
-                RightShift,
-                /// Right Control key.
-                RightControl,
-                /// Right Alt key.
-                RightAlt,
-                /// Right Super key.
-                RightSuper,
-                /// Right Hyper key.
-                RightHyper,
-                /// Right Meta key.
-                RightMeta,
-                /// Iso Level3 Shift key.
-                IsoLevel3Shift,
-                /// Iso Level5 Shift key.
-                IsoLevel5Shift,
             }
 
             /// Modifier key state.
@@ -1663,56 +1597,6 @@ pub mod canopy {
             impl PartialEq<char> for Key {
                 /// An unmodified key matches the character it produces.
                 fn eq(&self, c: &char) -> bool {}
-            }
-
-            impl Clone for MediaKeyCode {
-                fn clone(&self) -> MediaKeyCode {}
-            }
-
-            impl Debug for MediaKeyCode {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-            }
-
-            impl Eq for MediaKeyCode {
-                #[doc(hidden)]
-                fn assert_fields_are_eq(&self) {}
-            }
-
-            impl Hash for MediaKeyCode {
-                fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-            }
-
-            impl PartialEq for MediaKeyCode {
-                fn eq(&self, other: &MediaKeyCode) -> bool {}
-            }
-
-            impl PartialOrd for MediaKeyCode {
-                fn partial_cmp(&self, other: &MediaKeyCode) -> option::Option<cmp::Ordering> {}
-            }
-
-            impl Clone for ModifierKeyCode {
-                fn clone(&self) -> ModifierKeyCode {}
-            }
-
-            impl Debug for ModifierKeyCode {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-            }
-
-            impl Eq for ModifierKeyCode {
-                #[doc(hidden)]
-                fn assert_fields_are_eq(&self) {}
-            }
-
-            impl Hash for ModifierKeyCode {
-                fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-            }
-
-            impl PartialEq for ModifierKeyCode {
-                fn eq(&self, other: &ModifierKeyCode) -> bool {}
-            }
-
-            impl PartialOrd for ModifierKeyCode {
-                fn partial_cmp(&self, other: &ModifierKeyCode) -> option::Option<cmp::Ordering> {}
             }
         }
 
@@ -2780,8 +2664,6 @@ pub mod canopy {
         pub enum EventOutcome {
             /// The event was processed and propagation stops.
             Handle,
-            /// The event was processed without a state change and propagation stops.
-            Consume,
             /// The event was not handled and will bubble up the tree.
             Ignore,
         }
@@ -3341,8 +3223,9 @@ pub mod canopy {
             /// Find all nodes whose paths match the filter, relative to the current
             /// node.
             ///
-            /// The filter is normalized to match full paths.
-            fn find_nodes(&self, path_filter: &str) -> Vec<NodeId> {}
+            /// The filter is normalized to match full paths. An invalid filter returns
+            /// the parse error.
+            fn find_nodes(&self, path_filter: &str) -> Result<Vec<NodeId>> {}
 
             /// Find all nodes whose paths match the validated filter.
             fn find_nodes_matching(&self, path_filter: &PathFilter) -> Vec<NodeId> {}
@@ -4303,9 +4186,6 @@ pub mod canopy {
             /// Advance one bounded runtime turn.
             pub fn turn(&mut self, work: Work) -> Result<TurnOutcome> {}
 
-            /// Return the next time at which the adapter must deliver a wake.
-            pub fn next_deadline(&mut self) -> Option<Instant> {}
-
             /// Drive the shared runtime until one synchronous headless evaluation
             /// completes.
             pub fn eval(&mut self, request: EvalRequest) -> Result<EvalOutcome> {}
@@ -4315,9 +4195,6 @@ pub mod canopy {
 
             /// Apply a named fixture to the current app instance.
             pub fn apply_fixture(&mut self, name: &str) -> Result<()> {}
-
-            /// Build a diagnostic dump with tree, focus, and binding details.
-            pub fn diagnostic_dump(&self, target: NodeId) -> String {}
 
             /// Create a detached widget node.
             pub fn create_detached<W>(&mut self, widget: W) -> Result<TypedId<W>>
@@ -4360,15 +4237,6 @@ pub mod canopy {
             ) -> Result<inputmap::BindingId> {
             }
 
-            /// Invalidate cached exports from persistent script modules.
-            ///
-            /// Pass a root such as `@user` or `@project` to invalidate one root, or
-            /// `None` to invalidate every root. Returns the new source epoch, or
-            /// `None` when no module source is configured or the named root is
-            /// unknown.
-            pub fn invalidate_script_modules(&mut self, root: Option<&str>) -> Result<Option<u64>> {
-            }
-
             /// Load the commands from a command node using the default node name.
             /// Returns an error if any command id is already registered.
             pub fn add_commands<T: commands::CommandNode>(&mut self) -> Result<()> {}
@@ -4378,13 +4246,6 @@ pub mod canopy {
 
             /// Pop the top input mode and return the new active mode.
             pub fn pop_input_mode(&mut self) -> &str {}
-
-            /// Prepare pending changes after widget mutation callbacks have returned.
-            ///
-            /// This is the synchronous boundary for native callers that need snapshots
-            /// or geometry before the next driver turn. `turn(Work::Prepare)` also
-            /// services queued automation and advances the driver lifecycle.
-            pub fn flush(&mut self) -> Result<()> {}
 
             /// Push an input mode above the current mode.
             pub fn push_input_mode(&mut self, mode: &str) {}
@@ -4402,18 +4263,6 @@ pub mod canopy {
             /// Register an app-level startup script.
             pub fn register_startup_script(&mut self, name: &str, source: &str) -> Result<()> {}
 
-            /// Register an audited Ruau native module on the same surface as Canopy
-            /// commands.
-            pub fn register_script_module(&mut self, module: Arc<dyn NativeModule>) -> Result<()> {}
-
-            /// Remove all bindings from all modes.
-            pub fn clear_bindings(&mut self) -> usize {}
-
-            /// Remove an application binding by ID.
-            ///
-            /// A framework-owned ID returns an error.
-            pub fn unbind(&mut self, id: inputmap::BindingId) -> Result<bool> {}
-
             /// Replace the root widget while preserving its stable node ID.
             pub fn replace_root<W>(&mut self, widget: W) -> Result<TypedId<W>>
             where
@@ -4422,9 +4271,6 @@ pub mod canopy {
 
             /// Replace the visible render-target limits.
             pub fn set_render_limits(&mut self, limits: RenderLimits) -> Result<()> {}
-
-            /// Require every startup script root to define a typed global.
-            pub fn require_startup_global(&mut self, name: &str, type_text: &str) -> Result<()> {}
 
             /// Return a handle for submitting automation work to this app's UI thread.
             pub fn automation_handle(&self) -> AutomationHandle {}
@@ -4491,12 +4337,6 @@ pub mod canopy {
 
             /// Set the active input mode.
             pub fn set_input_mode(&mut self, mode: &str) {}
-
-            /// Set the maximum number of retained script journal entries.
-            ///
-            /// When the journal exceeds the limit the oldest entries are evicted. A
-            /// limit of zero disables retention entirely.
-            pub fn set_script_journal_limit(&mut self, limit: usize) {}
 
             /// Type-check a named Luau source against the finalized app API.
             pub fn check_script(
@@ -5187,49 +5027,6 @@ pub mod canopy {
             Gradient(GradientSpec),
         }
 
-        /// The role colours a theme assigns.
-        ///
-        /// Each field names the role a colour plays, not the colour itself, so the same
-        /// rule set can render a light theme, a dark theme, or any other palette.
-        pub struct Palette {
-            /// Default foreground.
-            pub fg: super::Color,
-            /// Default background, and the foreground drawn on top of `accent`.
-            pub bg: super::Color,
-            /// Inactive frame borders.
-            pub frame: super::Color,
-            /// Border of the frame that owns the active subtree.
-            pub frame_active: super::Color,
-            /// Frame title text.
-            pub frame_title: super::Color,
-            /// Primary accent: focus and selection.
-            pub accent: super::Color,
-            /// Foreground on panel backgrounds, one step away from `fg`.
-            pub muted_fg: super::Color,
-            /// Background of panels such as the help overlay and prompt.
-            pub panel_bg: super::Color,
-            /// Editor selection background.
-            pub selection_bg: super::Color,
-            /// Editor line-number gutter.
-            pub line_number: super::Color,
-            /// Named blue.
-            pub blue: super::Color,
-            /// Named red.
-            pub red: super::Color,
-            /// Named magenta.
-            pub magenta: super::Color,
-            /// Named violet.
-            pub violet: super::Color,
-            /// Named cyan, also the help overlay's key colour.
-            pub cyan: super::Color,
-            /// Named green.
-            pub green: super::Color,
-            /// Named yellow, also the search-match background.
-            pub yellow: super::Color,
-            /// Named orange, also the current-search-match background.
-            pub orange: super::Color,
-        }
-
         /// A possibly partial style specification, which is stored in a StyleManager.
         /// Partial styles are completely resolved during the style resolution process.
         pub struct PartialStyle {
@@ -5337,9 +5134,6 @@ pub mod canopy {
         /// This supports the [`rgb!`](crate::rgb) macro and is not part of the stable
         /// surface.
         pub const fn hex_byte(high: u8, low: u8) -> u8 {}
-
-        /// Build the shared rule set for one palette.
-        pub fn theme(p: &Palette) -> super::StyleMap {}
 
         impl AttrSet {
             /// A helper for progressive construction of attribute sets.
@@ -5524,14 +5318,6 @@ pub mod canopy {
 
         impl PartialEq for Paint {
             fn eq(&self, other: &Paint) -> bool {}
-        }
-
-        impl Clone for Palette {
-            fn clone(&self) -> Palette {}
-        }
-
-        impl Debug for Palette {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
         }
 
         impl Clone for PartialStyle {
@@ -5860,6 +5646,9 @@ pub mod canopy {
     pub mod text {
         //! Text utilities.
 
+        /// Return the display width of a string in terminal cells.
+        pub fn display_width(s: &str) -> usize {}
+
         /// Expand tabs into spaces using the configured tab stop.
         pub fn expand_tabs(s: &str, tab_stop: usize) -> std::borrow::Cow<'_, str> {}
 
@@ -6105,8 +5894,8 @@ pub mod canopy {
     pub struct EvalOutcome {
         /// Evaluation that completed.
         pub id: EvalId,
-        /// Shared completion, also delivered to an automation ticket.
-        pub result: std::sync::Arc<crate::error::Result<crate::commands::ArgValue>>,
+        /// Completion value or failure.
+        pub result: crate::error::Result<crate::commands::ArgValue>,
         /// Output isolated to this evaluation.
         pub logs: Vec<String>,
         /// Assertions isolated to this evaluation.
@@ -6139,8 +5928,6 @@ pub mod canopy {
     pub enum EventOutcome {
         /// The event was processed and propagation stops.
         Handle,
-        /// The event was processed without a state change and propagation stops.
-        Consume,
         /// The event was not handled and will bubble up the tree.
         Ignore,
     }
@@ -6280,14 +6067,8 @@ pub mod canopy {
         pub displayed: bool,
         /// Intersection with the viewport and all ancestor content clips.
         pub intersects_viewport: bool,
-        /// Current signed screen rectangle, absent when not displayed.
-        pub rect: Option<crate::geom::RectI32>,
-        /// Current signed content rectangle, absent when not displayed.
-        pub content_rect: Option<crate::geom::RectI32>,
-        /// Content scroll offset.
-        pub scroll: crate::geom::Point,
-        /// Content canvas size.
-        pub canvas: crate::geom::Size,
+        /// Current view geometry, absent when not displayed.
+        pub view: Option<super::view::View>,
         /// Whether this node owns focus.
         pub focused: bool,
         /// Widget-provided observations captured after paint.
@@ -6405,7 +6186,7 @@ pub mod canopy {
         pub frame: Option<FrameId>,
         /// Evaluation accepted by this turn.
         pub started: Option<EvalId>,
-        /// Evaluations completed after publication.
+        /// Evaluations completed after publication without an automation ticket.
         pub completed: Vec<EvalOutcome>,
         /// Requested application exit status.
         pub exit_code: Option<i32>,
@@ -6846,8 +6627,9 @@ pub mod canopy {
         /// Find all nodes whose paths match the filter, relative to the current
         /// node.
         ///
-        /// The filter is normalized to match full paths.
-        fn find_nodes(&self, path_filter: &str) -> Vec<NodeId> {}
+        /// The filter is normalized to match full paths. An invalid filter returns
+        /// the parse error.
+        fn find_nodes(&self, path_filter: &str) -> Result<Vec<NodeId>> {}
 
         /// Find all nodes whose paths match the validated filter.
         fn find_nodes_matching(&self, path_filter: &PathFilter) -> Vec<NodeId> {}
@@ -7265,9 +7047,6 @@ pub mod canopy {
     }
 
     impl super::AutomationHandle {
-        /// Request cancellation and wait only for driver admission.
-        pub fn cancel_eval(&self, id: EvalId) -> Result<crate::ChangeOutcome> {}
-
         /// Submit evaluation work without blocking the UI thread while it runs.
         pub fn submit_eval(&self, request: EvalRequest) -> Result<EvalTicket> {}
 
@@ -7330,15 +7109,6 @@ pub mod canopy {
 
     impl PartialEq for EvalId {
         fn eq(&self, other: &EvalId) -> bool {}
-    }
-
-    impl Clone for EvalOutcome {
-        fn clone(&self) -> EvalOutcome {}
-    }
-
-    impl EvalOutcome {
-        /// Take the evaluation result when this outcome has no other owner.
-        pub fn into_result(self) -> Result<ArgValue> {}
     }
 
     impl Clone for EvalRequest {
@@ -8044,9 +7814,6 @@ pub mod canopy {
         /// Advance one bounded runtime turn.
         pub fn turn(&mut self, work: Work) -> Result<TurnOutcome> {}
 
-        /// Return the next time at which the adapter must deliver a wake.
-        pub fn next_deadline(&mut self) -> Option<Instant> {}
-
         /// Drive the shared runtime until one synchronous headless evaluation
         /// completes.
         pub fn eval(&mut self, request: EvalRequest) -> Result<EvalOutcome> {}
@@ -8056,9 +7823,6 @@ pub mod canopy {
 
         /// Apply a named fixture to the current app instance.
         pub fn apply_fixture(&mut self, name: &str) -> Result<()> {}
-
-        /// Build a diagnostic dump with tree, focus, and binding details.
-        pub fn diagnostic_dump(&self, target: NodeId) -> String {}
 
         /// Create a detached widget node.
         pub fn create_detached<W>(&mut self, widget: W) -> Result<TypedId<W>>
@@ -8101,14 +7865,6 @@ pub mod canopy {
         ) -> Result<inputmap::BindingId> {
         }
 
-        /// Invalidate cached exports from persistent script modules.
-        ///
-        /// Pass a root such as `@user` or `@project` to invalidate one root, or
-        /// `None` to invalidate every root. Returns the new source epoch, or
-        /// `None` when no module source is configured or the named root is
-        /// unknown.
-        pub fn invalidate_script_modules(&mut self, root: Option<&str>) -> Result<Option<u64>> {}
-
         /// Load the commands from a command node using the default node name.
         /// Returns an error if any command id is already registered.
         pub fn add_commands<T: commands::CommandNode>(&mut self) -> Result<()> {}
@@ -8118,13 +7874,6 @@ pub mod canopy {
 
         /// Pop the top input mode and return the new active mode.
         pub fn pop_input_mode(&mut self) -> &str {}
-
-        /// Prepare pending changes after widget mutation callbacks have returned.
-        ///
-        /// This is the synchronous boundary for native callers that need snapshots
-        /// or geometry before the next driver turn. `turn(Work::Prepare)` also
-        /// services queued automation and advances the driver lifecycle.
-        pub fn flush(&mut self) -> Result<()> {}
 
         /// Push an input mode above the current mode.
         pub fn push_input_mode(&mut self, mode: &str) {}
@@ -8142,18 +7891,6 @@ pub mod canopy {
         /// Register an app-level startup script.
         pub fn register_startup_script(&mut self, name: &str, source: &str) -> Result<()> {}
 
-        /// Register an audited Ruau native module on the same surface as Canopy
-        /// commands.
-        pub fn register_script_module(&mut self, module: Arc<dyn NativeModule>) -> Result<()> {}
-
-        /// Remove all bindings from all modes.
-        pub fn clear_bindings(&mut self) -> usize {}
-
-        /// Remove an application binding by ID.
-        ///
-        /// A framework-owned ID returns an error.
-        pub fn unbind(&mut self, id: inputmap::BindingId) -> Result<bool> {}
-
         /// Replace the root widget while preserving its stable node ID.
         pub fn replace_root<W>(&mut self, widget: W) -> Result<TypedId<W>>
         where
@@ -8162,9 +7899,6 @@ pub mod canopy {
 
         /// Replace the visible render-target limits.
         pub fn set_render_limits(&mut self, limits: RenderLimits) -> Result<()> {}
-
-        /// Require every startup script root to define a typed global.
-        pub fn require_startup_global(&mut self, name: &str, type_text: &str) -> Result<()> {}
 
         /// Return a handle for submitting automation work to this app's UI thread.
         pub fn automation_handle(&self) -> AutomationHandle {}
@@ -8232,12 +7966,6 @@ pub mod canopy {
         /// Set the active input mode.
         pub fn set_input_mode(&mut self, mode: &str) {}
 
-        /// Set the maximum number of retained script journal entries.
-        ///
-        /// When the journal exceeds the limit the oldest entries are evicted. A
-        /// limit of zero disables retention entirely.
-        pub fn set_script_journal_limit(&mut self, limit: usize) {}
-
         /// Type-check a named Luau source against the finalized app API.
         pub fn check_script(
             &mut self,
@@ -8245,6 +7973,11 @@ pub mod canopy {
             source: &str,
         ) -> Result<script::ScriptCheckResult> {
         }
+    }
+
+    impl EvalOutcome {
+        /// Return the evaluation result.
+        pub fn into_result(self) -> Result<ArgValue> {}
     }
 
     impl<K, W> Default for KeyedChildren<K, W> {

@@ -500,12 +500,6 @@ pub mod canopy_widgets {
         }
 
         impl TerminalConfig {
-            /// Configure the child exit callback.
-            pub fn with_on_exit<F>(self, on_exit: F) -> Self
-            where
-                F: 'static + Fn(i32) + Send + Sync, {
-            }
-
             /// Configure the command argv to run instead of the default shell.
             pub fn with_command<I, S>(self, command: I) -> Self
             where

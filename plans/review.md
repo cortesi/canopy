@@ -271,10 +271,13 @@ Supporting crates, examples, tooling:
 
 ### Stage 4: Items gated on decisions
 
-- [ ] C3 twin policy decided, then C11 as decided; record in `api-budget.md`
-- [x] C9: `plan_suite`; legacy replay removal if confirmed
-- [ ] C10 if approved
-- [ ] C105: recalibrate `docs/api-budget.md`
+- [x] C3 twin policy: keep the current-node convenience twins as accepted API.
+      C11: keep the five test-only context methods as deliberate API. `C105` is
+      skipped because `docs/api-budget.md` is explicitly out of scope here.
+- [x] C9: `plan_suite`; legacy replay removal confirmed and landed
+- [ ] C10 deferred: folding `Node` scroll/canvas into `View` touches layout-pass
+      ordering and the view-cache heuristic, so it needs a dedicated pass.
+- [x] C105 skipped: `docs/api-budget.md` is explicitly out of scope for this effort.
 - [x] C109, C110 second line, C33 as decided
 - [ ] C112, C113, C114, C115, C116 second part as decided
   - [x] C112: colourless `Ctrl+C` tree dump; drop `termcolor`
@@ -284,15 +287,26 @@ Supporting crates, examples, tooling:
       avoiding the `redundant_pub_crate` lint.
   - [x] C115: `WidgetSlotGuard::drop` invariant asserts
   - [x] C116 first part: public `display_width`; fontgym and `Text` widths
+  - [ ] C113 deferred: the two table-conversion pipelines need a design call on
+        a shared key enum. C116 second part (sweep the other widget width sites)
+        deferred as a separate, riskier pass.
 - [ ] C20 (a) or (b), then C125 to C136 as decided
   - [x] C129: delete the dead `cancel_eval` path and its docs
   - [x] C130: ticket-or-push completion; unshared `EvalOutcome.result`
   - [x] C131: remove `EventOutcome::Consume`, use `Handle`
   - [x] C133: `NodeSnapshot.view` replaces four flattened fields
   - [x] C136: `register_fixture` compares setup identity
-- [ ] C126 and C127 taken together
+  - [ ] C20 deferred: option (a) needs an `itty` API change; option (b) deletes
+        the wake registry and needs a dedicated, risky pass.
+  - [ ] C125, C126, C127, C132, C134, C135 deferred: these need design
+        decisions and touch runtime/public contracts; take C126 and C127
+        together in a later effort.
+- [ ] C126 and C127 taken together (deferred; see above)
 - [x] C138 visibility with C128
 - [ ] Remaining structural candidates C12 to C32 as each decision is made
+      (deferred: each needs a design call. C16 needs `ruau`, C20 option (a)
+      needs `itty`, C14/C15/C26/C28/C29/C30 are larger refactors, C31 changes
+      the proc-macro contract, C12 is test-infrastructure churn.)
 - [x] C13: `ViewContext::find_nodes` returns `Result`; an invalid filter
       propagates its parse error through `Harness::find_nodes` and callers.
 - [x] C17: drop `NodeInfo.visible`
@@ -304,6 +318,7 @@ Supporting crates, examples, tooling:
     the widget writes the selection through `SystemClipboard` directly.
 - [x] C25: trim the `image` feature list to jpeg, png, gif, webp
 - [ ] C16 and C20 cross-repo changes coordinated with `ruau` and `itty`
+      (deferred: neither sibling API is being changed in this effort).
 
 ## Changes
 
