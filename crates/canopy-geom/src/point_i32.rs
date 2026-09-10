@@ -89,12 +89,18 @@ mod tests {
     fn widened_point_conversions_are_explicit_about_overflow() {
         assert_eq!(
             PointI32::try_from_i64(i64::from(i32::MIN), i64::from(i32::MAX)).unwrap(),
-            PointI32 { x: i32::MIN, y: i32::MAX }
+            PointI32 {
+                x: i32::MIN,
+                y: i32::MAX
+            }
         );
         assert!(PointI32::try_from_i64(i64::from(i32::MAX) + 1, 0).is_err());
         assert_eq!(
             PointI32::clamped_from_i64(i64::MIN, i64::MAX),
-            PointI32 { x: i32::MIN, y: i32::MAX }
+            PointI32 {
+                x: i32::MIN,
+                y: i32::MAX
+            }
         );
     }
 }

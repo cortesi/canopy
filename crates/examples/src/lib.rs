@@ -4,7 +4,9 @@
 use canopy::{
     CanopyBuilder, Context, FocusDirection, Loader, Widget,
     error::Result,
-    style::{AttrSet, Color, GradientSpec, GradientStop, Paint, StyleBuilder, StyleRules, solarized},
+    style::{
+        AttrSet, Color, GradientSpec, GradientStop, Paint, StyleBuilder, StyleRules, solarized,
+    },
     terminal::{RunOptions, runloop_with_options},
 };
 use canopy_widgets::Root;

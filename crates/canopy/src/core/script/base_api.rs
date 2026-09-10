@@ -25,10 +25,10 @@ use super::{
     available_bindings_to_arg, base_api, binding_info_to_arg, command_info_to_arg, commands, defs,
     dispatch_command, dispatch_command_by_name, dispatch_explicit, error, fixtures_to_arg,
     host_return, host_value, inputmap, key, luau_global_owner_name, mouse, node_handle_type,
-    node_id_from_value, node_info_to_arg, node_list_to_arg, owned_truthy, ret_arg,
-    ret_none, ret_one, route_trace_to_arg, screen_cells_to_arg, screen_text,
-    screen_text_for_rect, screen_to_arg, script_callback_label, script_journal_to_arg,
-    snapshot_to_arg, tree_node_to_arg, validate_node_handle, values_to_args, with_current_canopy,
+    node_id_from_value, node_info_to_arg, node_list_to_arg, owned_truthy, ret_arg, ret_none,
+    ret_one, route_trace_to_arg, screen_cells_to_arg, screen_text, screen_text_for_rect,
+    screen_to_arg, script_callback_label, script_journal_to_arg, snapshot_to_arg, tree_node_to_arg,
+    validate_node_handle, values_to_args, with_current_canopy,
 };
 use crate::{FocusDirection, geom::PointI32};
 
@@ -762,9 +762,7 @@ fn wait_timeout(timeout_ms: u64) -> RuntimeError {
 }
 
 /// Borrow the active Canopy context from a live scope.
-fn canopy_context<'a, 's>(
-    scope: &'a Scope<'s>,
-) -> StdResult<ContextMut<'a, Canopy>, RuntimeError> {
+fn canopy_context<'a, 's>(scope: &'a Scope<'s>) -> StdResult<ContextMut<'a, Canopy>, RuntimeError> {
     scope
         .context_mut::<Canopy>()
         .ok_or_else(|| RuntimeError::runtime("no active canopy context"))

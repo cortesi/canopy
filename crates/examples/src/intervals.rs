@@ -1,11 +1,7 @@
 use std::time::Duration;
 
 use canopy::{
-    CanopyBuilder, derive_commands,
-    error::Result,
-    layout::Edges,
-    prelude::*,
-    style::solarized,
+    CanopyBuilder, derive_commands, error::Result, layout::Edges, prelude::*, style::solarized,
 };
 use canopy_widgets::{Border, Center, Frame, List, SINGLE, Selectable, Text, VStack};
 use unicode_width::UnicodeWidthStr;

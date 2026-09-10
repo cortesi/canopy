@@ -6,8 +6,8 @@ use ruau::vm::Scope;
 
 use super::{
     ArgValue, AttrSet, Canopy, Cell, Color, CoreViewContext, NodeId, Point, RectI32, Result,
-    ViewContext, commands, error, inputmap, node_list_to_arg, point_to_arg,
-    rect_to_arg, size_to_arg, widget_access,
+    ViewContext, commands, error, inputmap, node_list_to_arg, point_to_arg, rect_to_arg,
+    size_to_arg, widget_access,
 };
 use crate::{FrameSnapshot, NodeSnapshot, core::termbuf::TermBuf};
 

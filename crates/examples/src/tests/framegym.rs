@@ -19,7 +19,12 @@ fn metrics(ctx: &dyn ViewContext) -> ViewMetrics {
 }
 
 fn framegym_harness() -> Result<Harness> {
-    root_harness(FrameGym::new(), binding_setup, Size::new(20, 20), Mount::Replace)
+    root_harness(
+        FrameGym::new(),
+        binding_setup,
+        Size::new(20, 20),
+        Mount::Replace,
+    )
 }
 
 fn frame_views(harness: &mut Harness) -> Result<(ViewMetrics, ViewMetrics, Layout)> {
@@ -27,8 +32,8 @@ fn frame_views(harness: &mut Harness) -> Result<(ViewMetrics, ViewMetrics, Layou
         ctx.with_typed_slot::<FrameSlot, _>(|_frame, frame_ctx| {
             let frame_view = metrics(frame_ctx);
             let frame_layout = frame_ctx.layout();
-            let pattern_view = frame_ctx
-                .with_typed_slot::<PatternSlot, _>(|_pattern, pattern_ctx| {
+            let pattern_view =
+                frame_ctx.with_typed_slot::<PatternSlot, _>(|_pattern, pattern_ctx| {
                     Ok(metrics(pattern_ctx))
                 })?;
             Ok((frame_view, pattern_view, frame_layout))

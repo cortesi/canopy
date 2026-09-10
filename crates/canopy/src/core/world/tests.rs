@@ -1454,9 +1454,8 @@ fn failed_removal_keeps_the_restored_owners_modal_bindings() -> Result<()> {
     let log = Arc::new(Mutex::new(Vec::new()));
     let modal = core.create_detached(FocusableWidget)?;
     core.attach(core.root, modal)?;
-    let child = core.create_detached(
-        FaultWidget::new("child", log).with_pre_remove(PreRemoveAction::Fail),
-    )?;
+    let child = core
+        .create_detached(FaultWidget::new("child", log).with_pre_remove(PreRemoveAction::Fail))?;
     core.set_children(modal, vec![child])?;
     let group = FrameworkBindingGroup::new("test.modal");
     core.open_modal(ModalOptions {

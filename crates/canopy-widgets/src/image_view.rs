@@ -3,8 +3,7 @@
 use std::path::Path;
 
 use canopy::{
-    Canopy, CommandEnum, Context, FocusDirection, Loader, ViewContext, Widget,
-    derive_commands,
+    Canopy, CommandEnum, Context, FocusDirection, Loader, ViewContext, Widget, derive_commands,
     error::{Error, Result},
     geom::{Point, Rect, Size},
     layout::{CanvasContext, Layout},

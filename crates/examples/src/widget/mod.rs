@@ -16,8 +16,8 @@ mod font;
 mod term;
 
 pub use font::{FontDemo, FontSource};
-pub(crate) use term::TerminalStack;
 pub use term::TermDemo;
+pub(crate) use term::TerminalStack;
 
 /// Style path used for list items.
 const LIST_STYLE_PATH: &str = "widget/list/item";

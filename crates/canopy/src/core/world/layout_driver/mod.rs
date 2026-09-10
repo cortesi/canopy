@@ -34,11 +34,7 @@ impl Core {
     /// Locate the deepest node under a screen-space point.
     pub fn locate_node(&self, root: impl Into<NodeId>, point: Point) -> Result<Option<NodeId>> {
         let root = root.into();
-        let root_view = self
-            .nodes
-            .get(root)
-            .ok_or(Error::NodeNotFound(root))?
-            .view;
+        let root_view = self.nodes.get(root).ok_or(Error::NodeNotFound(root))?.view;
         let clip = root_view
             .outer
             .intersect_rect(Rect::new(0, 0, root_view.outer.w, root_view.outer.h))
@@ -891,7 +887,10 @@ fn locate_recursive(
     point: Point,
     parent_clip: Rect,
 ) -> Result<Option<NodeId>> {
-    let node = core.nodes.get(node_id).ok_or(Error::NodeNotFound(node_id))?;
+    let node = core
+        .nodes
+        .get(node_id)
+        .ok_or(Error::NodeNotFound(node_id))?;
 
     if node.hidden || node.layout.display == Display::None {
         return Ok(None);
