@@ -15,17 +15,20 @@ surface, in install order:
 
 1. The header comment in `crates/canopy/luau/preamble.d.luau`.
 2. The base `canopy` module, which declares `NodeId`, `Point`, `Size`, `Rect`,
-   `NodeInfo`, `TreeNode`, `BindOptions`, `UnbindSelector`, `MouseSpec`,
-   `FixtureInfo`, `BindingInfo`, `CommandTarget`, `CommandParamInfo`,
-   `CommandInfo`, `ScreenCell`, `RouteTraceEntry`, `AvailableBinding`,
-   `BindingSnapshot`, `ScriptAssertionInfo`, `ScriptJournalEntry`, the `canopy`
-   global, and `fixtures()`.
+   `SemanticIdentity`, `NodeInfo`, `TreeNode`, `CommandTarget`,
+   `CommandTargetInfo`, `BindOptions`, `UnbindSelector`, `MouseSpec`,
+   `FixtureInfo`, `BindingInfo`, `CommandParamInfo`, `CommandInfo`, `ScreenCell`,
+   `RouteTraceEntry`, `AvailableBinding`, `BindingSnapshot`,
+   `ScriptAssertionInfo`, `ScriptJournalEntry`, `SemanticActionStatus`,
+   `WidgetSemantics`, `NodeSnapshot`, `FrameSnapshot`, the `canopy` global, and
+   `fixtures()`.
 3. Each module registered through `Canopy::register_script_module`.
 4. One module per widget owner, carrying its command table and default-binding
    helper.
 5. Fixture comment lines.
 
-The text and the audited surface therefore cannot drift apart.
+The generated function signatures and the audited surface therefore cannot drift
+apart.
 
 Generated widget globals use the widget owner name. For a widget owner named
 `editor`, commands appear as `editor.save(...)`, `editor.move_left(...)`, and
@@ -87,8 +90,9 @@ canopy.call_named("app::configure", { options = { options = "dark" } }, {
 })
 ```
 
-Target tables accept `{ kind = "exact", node = id }`, `{ kind = "from", node =
-id }`, or `{ kind = "focus" }`. Omission uses the current script anchor.
+Target tables accept `{ kind = "anchor" }`, `{ kind = "exact", node = id }`,
+`{ kind = "from", node = id }`, or `{ kind = "focus" }`. Omission also uses the
+current script anchor.
 `canopy.commands(target?)` uses the same target policies. Exact dispatch
 rejects stale nodes, wrong owners, and free commands. It never searches for a
 replacement target.

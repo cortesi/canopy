@@ -16,7 +16,7 @@ Application code should start from `canopy::prelude::*` and selected
 styles, command macros, and validated path types.
 
 `Canopy` owns `Core` and the style map. Its fields are private. Apps install root
-widgets with helpers such as `Root::install_app`, mutate styles through
+widgets with helpers such as `Root::install`, mutate styles through
 `Canopy::style_mut()`, and use `Canopy` methods for scripting, fixtures, input
 modes, rendering, and automation.
 
@@ -33,13 +33,14 @@ Luau boundary before matching.
 `canopy-widgets` enables its complete bundle by default. Basic forms can set
 `default-features = false`; Input, List, Root, and Help remain available. The
 shared `canopy_widgets::text_buffer` module is independent of Editor. Editor
-retains its existing buffer re-exports when enabled.
+does not re-export text-buffer types; it uses `display_width` internally when
+enabled.
 
 | Feature | Additional widgets and dependencies |
 | --- | --- |
 | `editor` | Editor and Syntect syntax highlighting |
 | `terminal-widget` | Terminal and `itty-core` |
-| `graphics` | Images, fonts, `image`, and `fontdue` |
+| `graphics` | `ImageView` (crate-root re-export), fonts, `image`, and `fontdue` |
 | `devtools` | Inspector and tracing subscriber support |
 
 Without `devtools`, Root creates no Inspector nodes or Inspector commands.
@@ -47,9 +48,10 @@ Core scripting and the Crossterm adapter remain available in every profile.
 
 ## Tree Model
 
-`Core` stores `Node`s in a `SlotMap<NodeId, Node>`. A `NodeId` is valid only while
-its node remains in the arena. Removed IDs are invalid for application code,
-scripts, bindings, and tests.
+`Core` stores `Node`s in a `NodeArena<Node>` over `SlotMap<RawNodeId, Node>`. The
+wrapper keeps the raw slotmap key private, so apps cannot forge `NodeId`s. A
+`NodeId` is valid only while its node remains in the arena. Removed IDs are
+invalid for application code, scripts, bindings, and tests.
 
 The root node always exists. It has no parent and anchors the attached tree. A
 node is attached when its parent chain reaches the root without cycles. Detached
@@ -122,8 +124,8 @@ layout pass ends with it, so any tree mutation that reaches layout is checked.
 `Core` is crate-private, so only canopy's own tests call it directly.
 
 It checks the root, widget slots, reciprocal links, duplicate children, cycles,
-keys, focus, mouse capture, lifecycle flags, layout caches, and computed view
-caches.
+keys, focus, mouse capture, lifecycle flags, layout caches, computed view caches,
+the semantic-key index, and pending diagnostic targets.
 
 It does not run layout. Run layout before using screen coordinates.
 
@@ -145,7 +147,8 @@ test helper callbacks use this mode. Nested access to the same widget fails
 instead of aliasing the widget.
 
 All widget access failures include the operation, node ID, node path, and source
-error. The access layer owns the unsafe restoration boundary.
+error. Slot take and restore are safe code through `WidgetSlotGuard`. The only
+`unsafe` in the runtime is the reentrant script bridge.
 
 ## Callback Mutation
 
@@ -239,7 +242,8 @@ for a later turn.
 widget access and accepted runtime mutations record the required work. Failed
 mutations retain invalidation for state they changed. Read-only automation does
 not request a redraw. `Canopy::render` remains an explicit preparation and emission
-path for isolated rendering tests.
+path for isolated rendering tests. `Canopy::flush` prepares pending changes for
+native callers that need snapshots or geometry before the next turn.
 
 Poll deadlines belong to the driver. There is no eager scheduler thread per
 application. Adapters wait on terminal input, runtime notifications, and

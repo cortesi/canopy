@@ -265,9 +265,9 @@ Supporting crates, examples, tooling:
 - [x] C6: remove the two checkpoint fields; trim two doc sentences
 - [x] C7: label methods, shared eligibility and target declarations
 - [x] C8: `List<Text>` logs, list in `on_mount`, remove `View`, private module
-- [ ] C106: `docs/architecture.md` drift (unattended items)
-- [ ] C107: `docs/agent-loop.md` and served guide text
-- [ ] C108: `docs/scripting.md` drift (parts not tied to decisions)
+- [x] C106: `docs/architecture.md` drift (unattended items)
+- [x] C107: `docs/agent-loop.md` and served guide text
+- [x] C108: `docs/scripting.md` drift (parts not tied to decisions)
 
 ### Stage 4: Items gated on decisions
 
@@ -1847,7 +1847,7 @@ starts after the decisions listed in C3, C9, C10, and C105 are made.
       builder, one `ScriptStructured` constructor.
 - [x] C8: `List<Text>` logs, list created in `on_mount`, `View` node removed,
       `mod inspector` private, one wrapping snapshot test.
-- [ ] C106 unattended items and C107, C108 (the parts not tied to open
+- [x] C106 unattended items and C107, C108 (the parts not tied to open
       decisions).
 
 ### Stage 4: Items gated on decisions

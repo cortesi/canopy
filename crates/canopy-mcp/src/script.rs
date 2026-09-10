@@ -382,7 +382,7 @@ pub fn script_api_catalog(api: String) -> result::Result<ScriptApiCatalog, Scrip
                 },
                 ScriptApiTask {
                     name: "Use fixtures".to_owned(),
-                    instruction: "Request canopy.fixtures and apply a named fixture before evaluation.".to_owned(),
+                    instruction: "Call the fixtures() global and apply a named fixture before evaluation.".to_owned(),
                 },
             ],
         },

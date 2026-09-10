@@ -43,9 +43,9 @@ These policies do not change process signal handlers.
 ## Bootstrap
 
 Start with the MCP `bootstrap` tool, or with `canopyctl bootstrap`, before
-choosing actions. The payload includes the operating guide, generated API text,
-an API digest, fixture metadata, current command availability, and a compact
-script-journal summary.
+choosing actions. The payload includes the operating guide, an API source
+inventory, an API digest, fixture metadata, current command availability, and a
+compact script-journal summary.
 
 The `metadata` record declares `app`, `execution`, `session_id`, `viewport`,
 `reset`, and `api_digest`. Headless `fresh-app-per-eval` requests reconstruct the
@@ -57,9 +57,8 @@ session, not durable replay targets.
 
 `default_target = "root"` identifies the top-level eval anchor.
 `default_commands` reports root-relative availability, while `focus_commands`
-reports focus-relative availability. The legacy `commands` field remains an
-alias for `focus_commands`. Choose an explicit target when multiple widgets
-share a command owner. Use `canopy.call_exact(node, id, ...)` to keep a
+reports focus-relative availability. Choose an explicit target when multiple
+widgets share a command owner. Use `canopy.call_exact(node, id, ...)` to keep a
 selected owner stable across tree changes, or `canopy.call_focus(id, ...)` to
 follow focus.
 
