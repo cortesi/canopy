@@ -135,31 +135,6 @@ impl<'a> BufTest<'a> {
         false
     }
 
-    /// Dumps the contents of the buffer to the terminal for debugging purposes.
-    pub fn dump(&self) {
-        let width = self.buf.size().w as usize;
-
-        println!(
-            "\nTermBuf dump ({}x{}):",
-            self.buf.size().w,
-            self.buf.size().h
-        );
-        println!("┌{}┐", "─".repeat(width));
-
-        for y in 0..self.buf.size().h {
-            println!("│{}│{}", self.row_string(y), y % 10);
-        }
-
-        println!("└{}┘", "─".repeat(width));
-
-        // Bottom ruler
-        print!(" ");
-        for x in 0..width {
-            print!("{}", x % 10);
-        }
-        println!();
-    }
-
     /// Return the contents of the buffer as lines of text.
     pub fn lines(&self) -> Vec<String> {
         (0..self.buf.size().h).map(|y| self.row_string(y)).collect()
@@ -195,20 +170,6 @@ mod tests {
         let matcher = BufTest::new(&buf);
         assert!(matcher.matches(&["hello", "XXXXX", "XXXXX"]));
         assert!(!matcher.matches(&["world", "XXXXX", "XXXXX"]));
-    }
-
-    #[test]
-    fn test_dump() {
-        let mut buf = TermBuf::new(Size::new(5, 3), '\0', test_style())
-            .expect("test render target should allocate");
-        buf.text(&test_style(), Line::new(0, 0, 5), "hello")
-            .expect("test buffer mutation should succeed");
-        buf.text(&test_style(), Line::new(1, 1, 3), "abc")
-            .expect("test buffer mutation should succeed");
-
-        // This test just verifies dump() runs without panicking
-        // The actual output goes to stdout
-        BufTest::new(&buf).dump();
     }
 
     #[test]

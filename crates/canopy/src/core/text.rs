@@ -1,4 +1,4 @@
-use std::iter::repeat_n;
+use std::{borrow::Cow, iter::repeat_n};
 
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
@@ -59,7 +59,10 @@ pub fn grapheme_width(grapheme: &str) -> usize {
 }
 
 /// Expand tabs into spaces using the configured tab stop.
-pub fn expand_tabs(s: &str, tab_stop: usize) -> String {
+pub fn expand_tabs(s: &str, tab_stop: usize) -> Cow<'_, str> {
+    if !s.contains('\t') {
+        return Cow::Borrowed(s);
+    }
     let mut out = String::new();
     let mut col = 0usize;
     for grapheme in s.graphemes(true) {
@@ -77,7 +80,7 @@ pub fn expand_tabs(s: &str, tab_stop: usize) -> String {
         out.push_str(grapheme);
         col = col.saturating_add(grapheme_width(grapheme));
     }
-    out
+    Cow::Owned(out)
 }
 
 /// Compute the width of the next tab from the provided column.

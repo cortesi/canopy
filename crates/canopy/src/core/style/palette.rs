@@ -109,38 +109,29 @@ pub fn theme(p: &Palette) -> StyleMap {
         )
         .style("/help/overlay", StyleBuilder::new().fg(p.fg).bg(p.bg))
         .style("/help/panel", StyleBuilder::new().fg(p.fg).bg(p.panel_bg))
-        .style("/help/frame", StyleBuilder::new().bg(p.panel_bg))
-        .style("/help/frame/focused", StyleBuilder::new().bg(p.panel_bg))
-        .style("/help/frame/active", StyleBuilder::new().bg(p.panel_bg))
-        .style("/help/frame/title", StyleBuilder::new().bg(p.panel_bg))
-        .style(
-            "/help/key",
+        .style_all(
+            &[
+                "/help/frame",
+                "/help/frame/focused",
+                "/help/frame/active",
+                "/help/frame/title",
+            ],
+            StyleBuilder::new().bg(p.panel_bg),
+        )
+        .style_all(
+            &["/help/key", "/help/footer/key"],
             StyleBuilder::new()
                 .fg(p.cyan)
                 .bg(p.panel_bg)
                 .attrs(AttrSet::new(Attr::Bold)),
         )
-        .style(
-            "/help/label",
-            StyleBuilder::new().fg(p.muted_fg).bg(p.panel_bg),
-        )
-        .style(
-            "/help/fallback",
-            StyleBuilder::new().fg(p.muted_fg).bg(p.panel_bg),
-        )
-        .style(
-            "/help/footer",
-            StyleBuilder::new().fg(p.muted_fg).bg(p.panel_bg),
-        )
-        .style(
-            "/help/footer/key",
-            StyleBuilder::new()
-                .fg(p.cyan)
-                .bg(p.panel_bg)
-                .attrs(AttrSet::new(Attr::Bold)),
-        )
-        .style(
-            "/help/footer/label",
+        .style_all(
+            &[
+                "/help/label",
+                "/help/fallback",
+                "/help/footer",
+                "/help/footer/label",
+            ],
             StyleBuilder::new().fg(p.muted_fg).bg(p.panel_bg),
         )
         .style(

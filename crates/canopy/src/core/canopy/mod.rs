@@ -868,12 +868,21 @@ impl Canopy {
         if !self.core.nodes.contains_key(node) {
             return Err(error::Error::NodeNotFound(node));
         }
-        let checkpoint = self.core.begin_dispatch();
-        self.core.invalidate(crate::Invalidation::Layout);
-        let result = {
-            let mut context = crate::core::context::CoreContext::new(&mut self.core, node);
+        self.with_dispatch_boundary(|canopy| {
+            canopy.core.invalidate(crate::Invalidation::Layout);
+            let mut context = crate::core::context::CoreContext::new(&mut canopy.core, node);
             f(&mut context)
-        };
+        })
+    }
+
+    /// Run work inside a completion boundary so queued teardown drains only
+    /// after the outermost callback returns.
+    pub(crate) fn with_dispatch_boundary<R>(
+        &mut self,
+        f: impl FnOnce(&mut Self) -> Result<R>,
+    ) -> Result<R> {
+        let checkpoint = self.core.begin_dispatch();
+        let result = f(self);
         let completion = self.core.finish_dispatch(checkpoint, result.is_ok());
         result.and_then(|value| completion.map(|()| value))
     }

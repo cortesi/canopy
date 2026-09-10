@@ -106,38 +106,42 @@ impl Core {
         let Some(entry) = self.nodes.get(node) else {
             return Ok(());
         };
-        if self.completion.requests.len() >= MAX_REMOVAL_REQUESTS {
-            return Err(Error::InvalidOperation(format!(
-                "dispatch removal batch exceeds {MAX_REMOVAL_REQUESTS} requests"
-            )));
-        }
-        self.completion
-            .requests
-            .push_back(CompletionRequest::Remove(RemovalRequest {
+        self.enqueue_completion(
+            CompletionRequest::Remove(RemovalRequest {
                 node,
                 incarnation: entry.incarnation,
-            }));
-        if self.completion.depth == 0 && self.callback_depth == 0 {
-            self.drain_removals()?;
-        }
-        Ok(())
+            }),
+            "removal",
+            format!("dispatch removal batch exceeds {MAX_REMOVAL_REQUESTS} requests"),
+        )
     }
 
     /// Defer modal closure with the same failure checkpoint as node removal.
     pub(crate) fn close_modal_after_dispatch(&mut self, token: InteractionToken) -> Result<()> {
+        self.enqueue_completion(
+            CompletionRequest::CloseModal(token),
+            "modal close",
+            "dispatch completion batch is full".into(),
+        )
+    }
+
+    /// Admit a completion request unless lifecycle cleanup forbids new work,
+    /// then drain the outer boundary when no dispatch remains open.
+    fn enqueue_completion(
+        &mut self,
+        request: CompletionRequest,
+        what: &str,
+        full: String,
+    ) -> Result<()> {
         if self.completion.draining || self.rolling_back_tree_edit {
-            return Err(Error::Invalid(
-                "cannot queue modal close during lifecycle cleanup".into(),
-            ));
+            return Err(Error::Invalid(format!(
+                "cannot queue {what} during lifecycle cleanup"
+            )));
         }
         if self.completion.requests.len() >= MAX_REMOVAL_REQUESTS {
-            return Err(Error::InvalidOperation(
-                "dispatch completion batch is full".into(),
-            ));
+            return Err(Error::InvalidOperation(full));
         }
-        self.completion
-            .requests
-            .push_back(CompletionRequest::CloseModal(token));
+        self.completion.requests.push_back(request);
         if self.completion.depth == 0 && self.callback_depth == 0 {
             self.drain_removals()?;
         }

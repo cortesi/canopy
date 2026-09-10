@@ -7,33 +7,33 @@ use crate::rgb;
 
 // Dracula background colors
 /// Background.
-pub const BACKGROUND: Color = rgb!("#282a36");
+const BACKGROUND: Color = rgb!("#282a36");
 /// Current line / selection background.
-pub const CURRENT_LINE: Color = rgb!("#44475a");
+const CURRENT_LINE: Color = rgb!("#44475a");
 /// Selection.
-pub const SELECTION: Color = rgb!("#44475a");
+const SELECTION: Color = rgb!("#44475a");
 
 // Dracula foreground colors
 /// Foreground.
-pub const FOREGROUND: Color = rgb!("#f8f8f2");
+const FOREGROUND: Color = rgb!("#f8f8f2");
 /// Comment color (also used for subtle elements).
-pub const COMMENT: Color = rgb!("#6272a4");
+const COMMENT: Color = rgb!("#6272a4");
 
 // Dracula accent colors
 /// Red.
-pub const RED: Color = rgb!("#ff5555");
+const RED: Color = rgb!("#ff5555");
 /// Orange.
-pub const ORANGE: Color = rgb!("#ffb86c");
+const ORANGE: Color = rgb!("#ffb86c");
 /// Yellow.
-pub const YELLOW: Color = rgb!("#f1fa8c");
+const YELLOW: Color = rgb!("#f1fa8c");
 /// Green.
-pub const GREEN: Color = rgb!("#50fa7b");
+const GREEN: Color = rgb!("#50fa7b");
 /// Cyan.
-pub const CYAN: Color = rgb!("#8be9fd");
+const CYAN: Color = rgb!("#8be9fd");
 /// Purple.
-pub const PURPLE: Color = rgb!("#bd93f9");
+const PURPLE: Color = rgb!("#bd93f9");
 /// Pink.
-pub const PINK: Color = rgb!("#ff79c6");
+const PINK: Color = rgb!("#ff79c6");
 
 /// Build a Dracula style map.
 pub fn dracula() -> StyleMap {

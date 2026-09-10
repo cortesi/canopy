@@ -167,14 +167,14 @@ Rendering, terminal buffer, input, layout:
 
 Core support files:
 
-- [ ] C117: 32 public theme colour constants with zero consumers
-- [ ] C118: Two copies of the completion-queue admission guard
-- [ ] C119: The dispatch boundary is hand-rolled at five sites
-- [ ] C120: `#[derive_commands]` on test nodes with no commands
-- [ ] C121: Help-panel styles spelled ten times
-- [ ] C122: `expand_tabs` allocates even when there are no tabs
-- [ ] C123: `normalize_filter` is `pub(crate)` with one in-file caller
-- [ ] C124: `BufTest::dump()` has no consumer beyond its own smoke test
+- [x] C117: 32 public theme colour constants with zero consumers
+- [x] C118: Two copies of the completion-queue admission guard
+- [x] C119: The dispatch boundary is hand-rolled at five sites
+- [x] C120: `#[derive_commands]` on test nodes with no commands
+- [x] C121: Help-panel styles spelled ten times
+- [x] C122: `expand_tabs` allocates even when there are no tabs
+- [x] C123: `normalize_filter` is `pub(crate)` with one in-file caller
+- [x] C124: `BufTest::dump()` has no consumer beyond its own smoke test
 
 Runtime facade:
 

@@ -196,13 +196,12 @@ impl Harness {
 mod tests {
     use super::*;
     use crate::{
-        ViewContext, derive_commands, error::Result, geom::Line, layout::Layout, render::Render,
-        state::NodeName, widget::Widget,
+        ViewContext, error::Result, geom::Line, layout::Layout, render::Render, state::NodeName,
+        widget::Widget,
     };
 
     struct TestNode;
 
-    #[derive_commands]
     impl TestNode {
         fn new() -> Self {
             Self

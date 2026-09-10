@@ -1,7 +1,7 @@
 //! Grid test utility for creating configurable grid layouts.
 
 use crate::{
-    Canopy, Context, NodeId, ViewContext, derive_commands,
+    Canopy, Context, NodeId, ViewContext,
     error::Result,
     geom::Size,
     layout::{Layout, Sizing},
@@ -28,7 +28,6 @@ struct GridNode {
     kind: GridKind,
 }
 
-#[derive_commands]
 impl GridNode {
     /// Construct a new grid node.
     fn new(name: String, kind: GridKind) -> Self {

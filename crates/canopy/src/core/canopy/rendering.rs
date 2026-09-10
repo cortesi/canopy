@@ -64,13 +64,12 @@ impl Canopy {
             incarnation: entry.incarnation,
             attachment,
         };
-        let checkpoint = self.core.begin_dispatch();
-        let result = self
-            .core
-            .with_widget_ctx(node_id, |widget, ctx| widget.poll(ctx));
-        let completion = self.core.finish_dispatch(checkpoint, result.is_ok());
+        let result = self.with_dispatch_boundary(|canopy| {
+            canopy
+                .core
+                .with_widget_ctx(node_id, |widget, ctx| widget.poll(ctx))
+        });
         let next = result?;
-        completion?;
         if self.core.work_stamp_valid(stamp)
             && let Some(next) = next
         {

@@ -133,16 +133,7 @@ impl Canopy {
         input: RoutedInput,
         scope: Option<&Scope<'_>>,
     ) -> Result<bool> {
-        let checkpoint = self.core.begin_dispatch();
-        let result = self.route_input_inner(start, path, input, scope);
-        let completion = self.core.finish_dispatch(checkpoint, result.is_ok());
-        match result {
-            Ok(handled) => {
-                completion?;
-                Ok(handled)
-            }
-            Err(error) => Err(error),
-        }
+        self.with_dispatch_boundary(|canopy| canopy.route_input_inner(start, path, input, scope))
     }
 
     /// Route one synchronous input inside a shared completion boundary.
@@ -352,10 +343,7 @@ impl Canopy {
 
     /// Propagate an event through the tree.
     pub(crate) fn event(&mut self, e: &Event) -> Result<()> {
-        let checkpoint = self.core.begin_dispatch();
-        let result = self.dispatch_input(e);
-        let completion = self.core.finish_dispatch(checkpoint, result.is_ok());
-        result.and(completion)
+        self.with_dispatch_boundary(|canopy| canopy.dispatch_input(e))
     }
 
     /// Dispatch an event inside its completion boundary.

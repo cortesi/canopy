@@ -149,7 +149,13 @@ impl PathFilter {
 
     /// Compile a filter after normalizing it to a full-path match.
     pub fn normalized(filter: &str) -> Result<Self> {
-        Self::new(&normalize_filter(filter))
+        let trimmed = filter.trim_matches('/');
+        let normalized = if trimmed.is_empty() {
+            String::new()
+        } else {
+            format!("/{trimmed}/")
+        };
+        Self::new(&normalized)
     }
 
     /// Return the original filter string.
@@ -184,16 +190,6 @@ impl PathFilter {
             }
         }
         best
-    }
-}
-
-/// Normalize a path filter to match a full path.
-pub(crate) fn normalize_filter(path_filter: &str) -> String {
-    let trimmed = path_filter.trim_matches('/');
-    if trimmed.is_empty() {
-        String::new()
-    } else {
-        format!("/{trimmed}/")
     }
 }
 
