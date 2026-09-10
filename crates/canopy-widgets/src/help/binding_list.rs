@@ -36,16 +36,10 @@ pub struct BindingList {
     snapshot: Option<BindingSnapshot>,
 }
 
-impl Default for BindingList {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 #[derive_commands]
 impl BindingList {
     /// Construct an empty list.
-    pub const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self { snapshot: None }
     }
 
@@ -121,16 +115,18 @@ impl BindingList {
             .map(|binding| UnicodeWidthStr::width(binding.key.to_string().as_str()))
             .max()
             .unwrap_or(0);
-        binding_lines(&bindings, width, max_key_width, "help/label")
+        binding_lines(&bindings, width, max_key_width)
     }
 
     /// Reserve a gutter when scrolling so the indicator never covers text.
-    fn viewport_lines(&self, view: Size) -> Vec<DisplayLine> {
+    ///
+    /// Returns the display lines and the text width used to build them.
+    fn viewport_lines(&self, view: Size) -> (Vec<DisplayLine>, u32) {
         let lines = self.display_lines(view.w);
         if lines.len() > view.h as usize && view.w > 2 {
-            self.display_lines(view.w - 2)
+            (self.display_lines(view.w - 2), view.w - 2)
         } else {
-            lines
+            (lines, view.w)
         }
     }
 }
@@ -151,7 +147,7 @@ impl Widget for BindingList {
     }
 
     fn canvas(&self, view: Size, _context: &CanvasContext) -> Size {
-        let lines = self.viewport_lines(view);
+        let (lines, _) = self.viewport_lines(view);
         Size::new(view.w, u32::try_from(lines.len()).unwrap_or(u32::MAX))
     }
 
@@ -192,7 +188,7 @@ impl Widget for BindingList {
         let view = context.view();
         let rect = view.outer_rect_local();
         render.fill("help/panel", rect, ' ')?;
-        let lines = self.viewport_lines(view.content.size());
+        let (lines, width) = self.viewport_lines(view.content.size());
         let viewport = view.view_rect();
         for (index, line) in lines
             .iter()
@@ -201,11 +197,6 @@ impl Widget for BindingList {
             .take(viewport.h as usize)
         {
             let y = u32::try_from(index).unwrap_or(u32::MAX) - viewport.tl.y;
-            let width = if view.canvas.h > viewport.h && view.content.w > 2 {
-                view.content.w - 2
-            } else {
-                view.content.w
-            };
             if let Some(key) = &line.key {
                 let key_width = UnicodeWidthStr::width(key.as_str()) as u32;
                 render.text("help/key", Line::new(0, y, key_width.min(width)), key)?;
@@ -246,7 +237,6 @@ fn binding_lines(
     bindings: &[&AvailableBinding],
     width: u32,
     max_key_width: usize,
-    style: &'static str,
 ) -> Vec<DisplayLine> {
     let width = width as usize;
     let narrow = width < max_key_width.saturating_add(12) || width < 28;
@@ -269,7 +259,7 @@ fn binding_lines(
                 lines.push(DisplayLine {
                     key: None,
                     text: format!("  {text}"),
-                    style,
+                    style: "help/label",
                 });
             }
         } else {
@@ -283,13 +273,13 @@ fn binding_lines(
                 text: wrapped
                     .next()
                     .map_or_else(String::new, |text| text.to_string()),
-                style,
+                style: "help/label",
             });
             for text in wrapped {
                 lines.push(DisplayLine {
                     key: None,
                     text: format!("{}  {text}", " ".repeat(max_key_width)),
-                    style,
+                    style: "help/label",
                 });
             }
         }

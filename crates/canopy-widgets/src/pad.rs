@@ -25,12 +25,6 @@ impl Pad {
     }
 }
 
-impl Default for Pad {
-    fn default() -> Self {
-        Self::new(Edges::all(0))
-    }
-}
-
 impl Widget for Pad {
     fn layout(&self) -> Layout {
         Layout::fill().padding(self.padding)

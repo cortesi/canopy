@@ -311,12 +311,6 @@ impl Logs {
     }
 }
 
-impl Default for Logs {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl Loader for Logs {
     fn load(c: &mut Canopy) -> Result<()> {
         c.add_commands::<Self>()?;

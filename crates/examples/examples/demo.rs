@@ -12,7 +12,7 @@ use canopy_examples::{
     pager, print_luau_api, run_demo, run_demo_with_options, stylegym, termgym, textgym,
     widget_editor,
 };
-use canopy_widgets::font::ImageView;
+use canopy_widgets::ImageView;
 use clap::{Parser, Subcommand};
 
 /// Shared CLI flags for every demo.

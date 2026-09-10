@@ -17,7 +17,7 @@ use canopy_examples::{
     widget::{DemoHost, DemoSize, FontDemo, FontSource, ListDemo, TermDemo},
     widget_editor::{self, WidgetEditor},
 };
-use canopy_widgets::font::{FontEffects, ImageView};
+use canopy_widgets::{ImageView, font::FontEffects};
 use clap::{Parser, Subcommand};
 
 /// Default text for the font demo.

@@ -98,14 +98,17 @@ impl SearchState {
     }
 
     /// Return match ranges for a line.
-    pub fn matches_for_line(&self, line: usize) -> Vec<(usize, usize)> {
-        let mut ranges = Vec::new();
-        for range in &self.matches {
-            if range.start.line == line {
-                ranges.push((range.start.column, range.end.column));
-            }
-        }
-        ranges
+    ///
+    /// Matches are stored in ascending order, so the slice for one line is
+    /// located with two partition points and borrowed without allocating.
+    pub fn matches_for_line(&self, line: usize) -> &[TextRange] {
+        let start = self
+            .matches
+            .partition_point(|range| range.start.line < line);
+        let end = self
+            .matches
+            .partition_point(|range| range.start.line <= line);
+        &self.matches[start..end]
     }
 
     /// Move to the next match and return its position.
@@ -388,17 +391,16 @@ impl Editor {
 
         match c {
             'y' => {
-                let query = query.clone();
-                let replacement = replacement.clone();
-                let matches = mem::take(matches);
-                let index = *index;
-                let (new_matches, next_index) =
-                    self.replace_match(&query, &replacement, matches, index, ctx);
-                if let Some(PromptState::ReplaceConfirm { matches, index, .. }) =
-                    self.prompt.as_mut()
-                {
-                    *matches = new_matches;
-                    *index = next_index;
+                if let Some(range) = matches.get(*index).copied() {
+                    let query = query.clone();
+                    let replacement = replacement.clone();
+                    let new_matches = self.replace_match(&query, &replacement, range, ctx);
+                    if let Some(PromptState::ReplaceConfirm { matches, index, .. }) =
+                        self.prompt.as_mut()
+                    {
+                        *matches = new_matches;
+                        *index = 0;
+                    }
                 }
             }
             'n' => {
@@ -430,11 +432,9 @@ impl Editor {
             let replacement = replacement.clone();
             let mut matches = mem::take(matches);
             let mut index = *index;
-            while index < matches.len() {
-                let (new_matches, next_index) =
-                    self.replace_match(&query, &replacement, matches, index, ctx);
-                matches = new_matches;
-                index = next_index;
+            while let Some(range) = matches.get(index).copied() {
+                matches = self.replace_match(&query, &replacement, range, ctx);
+                index = 0;
             }
             self.prompt = None;
             return EventOutcome::Handle;
@@ -446,24 +446,19 @@ impl Editor {
         EventOutcome::Handle
     }
 
-    /// Replace a match at an index and return updated matches and next index.
+    /// Replace a match range and return the remaining matches from the cursor.
     pub(super) fn replace_match(
         &mut self,
         query: &str,
         replacement: &str,
-        matches: Vec<TextRange>,
-        index: usize,
+        range: TextRange,
         ctx: &mut dyn Context,
-    ) -> (Vec<TextRange>, usize) {
-        let Some(range) = matches.get(index).copied() else {
-            return (matches, index);
-        };
+    ) -> Vec<TextRange> {
         self.buffer
             .set_selection(Selection::new(range.start, range.end));
         self.handle_insert_text(replacement);
         self.ensure_cursor_visible(ctx);
-        let updated = find_matches_from(&self.buffer, query, self.buffer.cursor());
-        (updated, 0)
+        find_matches_from(&self.buffer, query, self.buffer.cursor())
     }
 
     /// Render the search/replace prompt overlay.

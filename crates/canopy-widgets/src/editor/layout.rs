@@ -304,6 +304,25 @@ impl LayoutCache {
     }
 }
 
+/// Compute `(display_line_count, max_line_width)` by scanning the buffer.
+///
+/// `display_width` is independent of wrapping, so one pass supplies both.
+pub fn metrics(
+    buffer: &TextBuffer,
+    wrap_mode: WrapMode,
+    wrap_width: usize,
+    tab_stop: usize,
+) -> (usize, usize) {
+    let mut lines = 0usize;
+    let mut max_width = 1usize;
+    for line in 0..buffer.line_count().max(1) {
+        let layout = layout_line(&buffer.line_text(line), wrap_mode, wrap_width, tab_stop);
+        lines = lines.saturating_add(layout.display_lines());
+        max_width = max_width.max(layout.display_width);
+    }
+    (lines.max(1), max_width)
+}
+
 /// Build layout segments for a single logical line.
 pub fn layout_line(
     text: &str,

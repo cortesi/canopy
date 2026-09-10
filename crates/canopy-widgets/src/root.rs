@@ -48,26 +48,8 @@ pub struct Root {
     /// Whether the inspector is visible.
     #[cfg(feature = "devtools")]
     inspector_active: bool,
-    /// Context saved while the help modal is open.
-    help_state: HelpState,
-}
-
-/// Root-owned contextual help state.
-enum HelpState {
-    /// Help is not visible.
-    Closed,
-    /// Last opened scope; Core determines whether it remains active.
-    Open {
-        /// Retained after deferred close so a failed outer dispatch can retry.
-        token: InteractionToken,
-    },
-}
-
-impl HelpState {
-    /// Return true when help is open.
-    fn is_open(&self, context: &dyn ViewContext) -> bool {
-        matches!(self, Self::Open { token } if context.modal_is_open(*token))
-    }
+    /// Token for the open help modal, if any.
+    help_token: Option<InteractionToken>,
 }
 
 impl Default for Root {
@@ -83,8 +65,14 @@ impl Root {
         Self {
             #[cfg(feature = "devtools")]
             inspector_active: false,
-            help_state: HelpState::Closed,
+            help_token: None,
         }
+    }
+
+    /// Return true when the help modal is open.
+    fn help_is_open(&self, context: &dyn ViewContext) -> bool {
+        self.help_token
+            .is_some_and(|token| context.modal_is_open(token))
     }
 
     /// Start with the inspector open.
@@ -92,20 +80,6 @@ impl Root {
     pub fn with_inspector(mut self, state: bool) -> Self {
         self.inspector_active = state;
         self
-    }
-
-    /// Synchronize the root layout based on inspector and help visibility.
-    fn sync_layout(&self, c: &mut dyn Context) -> Result<()> {
-        let app = self.app_id(c)?;
-        #[cfg(feature = "devtools")]
-        {
-            let inspector = self.inspector_id(c)?;
-            c.set_hidden_of(inspector, !self.inspector_active)?;
-        }
-        c.with_layout_of(app, &mut |layout| {
-            *layout = layout.width(Sizing::Flex(1)).height(Sizing::Flex(1));
-        })?;
-        Ok(())
     }
 
     /// Main pane (app + inspector container) node id.
@@ -141,7 +115,7 @@ impl Root {
     /// Exit from the program, restoring terminal state. If help or inspector is
     /// open, close them first.
     pub fn quit(&mut self, c: &mut dyn Context) -> Result<()> {
-        if self.help_state.is_open(c) {
+        if self.help_is_open(c) {
             self.hide_help(c)?;
             return Ok(());
         }
@@ -175,7 +149,8 @@ impl Root {
     #[cfg(feature = "devtools")]
     pub fn hide_inspector(&mut self, c: &mut dyn Context) -> Result<()> {
         self.inspector_active = false;
-        self.sync_layout(c)?;
+        let inspector = self.inspector_id(c)?;
+        c.set_hidden_of(inspector, true)?;
         let app = self.app_id(c)?;
         c.focus_first(FocusScope::Node(app))?;
         Ok(())
@@ -186,8 +161,8 @@ impl Root {
     #[cfg(feature = "devtools")]
     pub fn show_inspector(&mut self, c: &mut dyn Context) -> Result<()> {
         self.inspector_active = true;
-        self.sync_layout(c)?;
         let inspector = self.inspector_id(c)?;
+        c.set_hidden_of(inspector, false)?;
         c.focus_first(FocusScope::Node(inspector))?;
         Ok(())
     }
@@ -219,7 +194,7 @@ impl Root {
     #[command]
     /// Show the help modal with contextual bindings and commands.
     pub fn show_help(&mut self, c: &mut dyn Context) -> Result<()> {
-        if self.help_state.is_open(c) {
+        if self.help_is_open(c) {
             return Ok(());
         }
 
@@ -243,7 +218,7 @@ impl Root {
             bindings: ModalBindings::Framework(HELP_BINDINGS),
         });
         match opened {
-            Ok(token) => self.help_state = HelpState::Open { token },
+            Ok(token) => self.help_token = Some(token),
             Err(error) => {
                 c.with_widget_mut(list, |list: &mut BindingList, context| {
                     list.replace_snapshot(previous_snapshot);
@@ -259,7 +234,7 @@ impl Root {
     #[command]
     /// Hide the help modal.
     pub fn hide_help(&mut self, c: &mut dyn Context) -> Result<()> {
-        let HelpState::Open { token } = self.help_state else {
+        let Some(token) = self.help_token else {
             return Ok(());
         };
         c.close_modal(token)
@@ -268,7 +243,7 @@ impl Root {
     #[command]
     /// Toggle help modal visibility.
     pub fn toggle_help(&mut self, c: &mut dyn Context) -> Result<()> {
-        if self.help_state.is_open(c) {
+        if self.help_is_open(c) {
             self.hide_help(c)
         } else {
             self.show_help(c)
@@ -280,6 +255,8 @@ impl Root {
     where
         W: Widget + 'static,
     {
+        #[cfg(feature = "devtools")]
+        let inspector_active = self.inspector_active;
         let app_id = canopy.create_detached(app)?;
         let app_node = NodeId::from(app_id);
         let root_id: NodeId = canopy.replace_root(self)?.into();
@@ -288,23 +265,24 @@ impl Root {
             let main_pane: NodeId = context.create_detached(MainPane)?.into();
             context.attach_slot(main_pane, KEY_APP, app_node)?;
             #[cfg(feature = "devtools")]
-            {
+            let inspector: NodeId = {
                 let inspector = Inspector::install(context)?;
                 context.attach_slot(main_pane, InspectorSlot::KEY, inspector)?;
-            }
+                inspector
+            };
 
             // The help modal overlays the main pane.
             let help = Help::install(context)?;
             context.attach_slot(root_id, KEY_MAIN_PANE, main_pane)?;
             context.attach_slot(root_id, HelpSlot::KEY, help)?;
             context.set_hidden_of(help, true)?;
+
+            #[cfg(feature = "devtools")]
+            context.set_hidden_of(inspector, !inspector_active)?;
+            context.with_layout_of(app_node, &mut |layout| {
+                *layout = layout.width(Sizing::Flex(1)).height(Sizing::Flex(1));
+            })?;
             Ok(())
-        })?;
-        canopy.with_root_context(|context| {
-            let root_id = context.node_id();
-            context.with_widget_mut(root_id, |root: &mut Self, context| {
-                root.sync_layout(context)
-            })
         })?;
         Ok(app_id)
     }

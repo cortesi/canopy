@@ -44,7 +44,7 @@ pub struct FontEffects {
 
 /// Glyph raster data rendered to pixel coverage.
 #[derive(Debug, Clone)]
-pub struct Glyph {
+struct Glyph {
     /// Rasterized coverage mask, row-major, 0-255 per pixel.
     pub bitmap: Vec<u8>,
     /// Glyph width in pixels.
@@ -184,7 +184,7 @@ struct GlyphCacheKey {
 
 /// A rendered font cell with coverage weights for foreground and background.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct FontCell {
+pub(crate) struct FontCell {
     /// Rendered character for this cell.
     pub ch: char,
     /// Foreground coverage weight (0-255).
@@ -195,7 +195,7 @@ pub struct FontCell {
 
 /// Cached layout for rasterized font text.
 #[derive(Debug, Clone)]
-pub struct FontLayout {
+pub(crate) struct FontLayout {
     /// Target canvas size.
     pub size: Size,
     /// Size of the rendered content before clipping.
@@ -228,7 +228,7 @@ impl FontRenderer {
     }
 
     /// Render text into a layout that fits within the target canvas.
-    pub fn layout(
+    pub(crate) fn layout(
         &mut self,
         text: &str,
         size: Size,
@@ -522,7 +522,7 @@ impl FontRenderer {
 }
 
 /// Compute an offset for aligning content inside a span.
-pub fn align_offset(content: u32, available: u32, align: Align) -> u32 {
+pub(crate) fn align_offset(content: u32, available: u32, align: Align) -> u32 {
     if available <= content {
         return 0;
     }

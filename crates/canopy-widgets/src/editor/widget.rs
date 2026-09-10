@@ -15,13 +15,13 @@ use unicode_segmentation::UnicodeSegmentation;
 use super::{
     EditMode, EditorConfig, LineNumbers, WrapMode, display_width,
     highlight::{HighlightSpan, Highlighter},
-    layout::{LayoutCache, WrapSegment, layout_line},
+    layout::{LayoutCache, WrapSegment, metrics},
     search::{PromptState, SearchDirection, SearchState},
     vi::{ViMode, ViState},
 };
 use crate::{
     click::ClickTracker,
-    text_buffer::{Selection, TextBuffer, TextPosition, TextRange},
+    text_buffer::{Selection, TextBuffer, TextPosition, TextRange, single_line},
 };
 
 /// Maximum delay between clicks to count as multi-click selection.
@@ -37,14 +37,10 @@ pub struct Editor {
     pub(super) buffer: TextBuffer,
     /// Layout cache for wrapping and mapping.
     pub(super) layout: LayoutCache,
-    /// Cached cursor position in content coordinates.
-    pub(super) cursor_point: Option<Point>,
     /// Cached cursor position in view coordinates.
     pub(super) cursor_view_point: Option<Point>,
     /// Preferred display column for vertical movement.
     pub(super) preferred_column: usize,
-    /// Whether a text-entry transaction is active.
-    pub(super) text_entry_transaction: bool,
     /// Vi mode state when enabled.
     pub(super) vi: ViState,
     /// Yank register for vi operations.
@@ -164,11 +160,6 @@ impl HighlightCache {
 
 #[derive_commands]
 impl Editor {
-    /// Construct an editor with default configuration.
-    pub fn new(text: impl Into<String>) -> Self {
-        Self::with_config(text, EditorConfig::default())
-    }
-
     /// Construct an editor with a configuration.
     pub fn with_config(text: impl Into<String>, config: EditorConfig) -> Self {
         let mut buffer = TextBuffer::new(text);
@@ -178,10 +169,8 @@ impl Editor {
             config,
             buffer,
             layout: LayoutCache::new(),
-            cursor_point: None,
             cursor_view_point: None,
             preferred_column,
-            text_entry_transaction: false,
             vi: ViState::new(),
             yank: String::new(),
             yank_linewise: false,
@@ -219,11 +208,6 @@ impl Editor {
         self.search = SearchState::new();
     }
 
-    /// Return the current selection.
-    pub fn selection(&self) -> Selection {
-        self.buffer.selection()
-    }
-
     /// Install a syntax highlighter.
     pub fn set_highlighter(&mut self, highlighter: Option<Box<dyn Highlighter>>) {
         self.highlighter = highlighter;
@@ -259,20 +243,18 @@ impl Editor {
                 self.config.tab_stop,
             )
             .unwrap_or_else(|| {
-                (
-                    display_line_count(
-                        &self.buffer,
-                        self.config.wrap,
-                        wrap_width,
-                        self.config.tab_stop,
-                    ),
-                    display_line_width(&self.buffer, self.config.tab_stop),
+                metrics(
+                    &self.buffer,
+                    self.config.wrap,
+                    wrap_width,
+                    self.config.tab_stop,
                 )
             })
     }
 
-    /// Synchronize layout and cached cursor position.
-    pub(super) fn update_layout(&mut self, view_rect: Rect, gutter_width: u32) {
+    /// Synchronize layout and return the cursor position in content
+    /// coordinates.
+    pub(super) fn update_layout(&mut self, view_rect: Rect, gutter_width: u32) -> Point {
         let wrap_width = view_rect.w.saturating_sub(gutter_width).max(1) as usize;
         self.layout.sync(
             &mut self.buffer,
@@ -288,11 +270,11 @@ impl Editor {
             x: point.x.saturating_add(gutter_width),
             y: point.y,
         };
-        self.cursor_point = Some(cursor_point);
         self.cursor_view_point = view_rect.contains_point(cursor_point).then(|| Point {
             x: cursor_point.x - view_rect.tl.x,
             y: cursor_point.y - view_rect.tl.y,
         });
+        cursor_point
     }
 
     /// Ensure the cursor is visible within the current scroll view.
@@ -300,11 +282,7 @@ impl Editor {
         let view = ctx.view();
         let view_rect = view.view_rect();
         let gutter_width = self.gutter_width();
-        self.update_layout(view_rect, gutter_width);
-
-        let Some(cursor) = self.cursor_point else {
-            return;
-        };
+        let cursor = self.update_layout(view_rect, gutter_width);
         let cursor_x = cursor.x;
         let cursor_y = cursor.y;
 
@@ -381,14 +359,16 @@ impl Editor {
         self.update_preferred_column();
     }
 
-    /// Insert text at the cursor, respecting read-only state.
-    pub(super) fn handle_insert_text(&mut self, text: &str) {
-        if self.config.read_only {
-            return;
-        }
+    /// Insert text at the cursor, respecting read-only state. Returns the
+    /// normalized text that was inserted, or an empty string when read-only.
+    pub(super) fn handle_insert_text(&mut self, text: &str) -> String {
         let content = self.normalize_insert_text(text);
+        if self.config.read_only {
+            return String::new();
+        }
         self.buffer.insert_text(&content);
         self.update_preferred_column();
+        content
     }
 
     /// Normalize inserted text for single-line editors.
@@ -396,7 +376,7 @@ impl Editor {
         if self.config.multiline {
             text.to_string()
         } else {
-            text.replace(['\n', '\r'], " ")
+            single_line(text)
         }
     }
 
@@ -442,31 +422,14 @@ impl Editor {
         true
     }
 
-    /// Normalize and insert pasted text, returning the inserted string.
-    pub(super) fn handle_paste(&mut self, text: &str) -> String {
-        let content = self.normalize_insert_text(text);
-        if self.config.read_only {
-            return String::new();
-        }
-        self.buffer.insert_text(&content);
-        self.update_preferred_column();
-        content
-    }
-
     /// Begin a grouped text-entry transaction if needed.
     pub(super) fn begin_text_entry_transaction(&mut self) {
-        if !self.text_entry_transaction {
-            self.buffer.begin_transaction();
-            self.text_entry_transaction = true;
-        }
+        self.buffer.begin_transaction();
     }
 
     /// Commit the active text-entry transaction if present.
     pub(super) fn commit_text_entry_transaction(&mut self) {
-        if self.text_entry_transaction {
-            self.buffer.commit_transaction();
-            self.text_entry_transaction = false;
-        }
+        self.buffer.commit_transaction();
     }
 
     /// Handle events in text-entry mode.
@@ -585,7 +548,7 @@ impl Editor {
             }
             Event::Paste(content) => {
                 self.begin_text_entry_transaction();
-                let _ = self.handle_paste(content);
+                self.handle_insert_text(content);
                 self.ensure_cursor_visible(ctx);
                 EventOutcome::Handle
             }
@@ -617,26 +580,25 @@ impl Editor {
         Ok(match event.action {
             mouse::Action::Down if event.button == mouse::Button::Left => {
                 ctx.set_focus(ctx.node_id())?;
-                let click_type = self.mouse.click_type(event.location);
-                match click_type {
-                    ClickType::Single => {
-                        self.mouse.selecting = true;
-                        self.mouse.anchor = Some(pos);
-                        self.buffer.set_selection(Selection::new(pos, pos));
-                    }
-                    ClickType::Double => {
+                match self.mouse.click_state.count(event.location) {
+                    2 => {
                         let range = word_range(&self.buffer, pos);
                         self.mouse.selecting = true;
                         self.mouse.anchor = Some(range.start);
                         self.buffer
                             .set_selection(Selection::new(range.start, range.end));
                     }
-                    ClickType::Triple => {
+                    3 => {
                         let start = TextPosition::new(pos.line, 0);
                         let end = self.buffer.line_end_position(pos.line, true);
                         self.mouse.selecting = true;
                         self.mouse.anchor = Some(start);
                         self.buffer.set_selection(Selection::new(start, end));
+                    }
+                    _ => {
+                        self.mouse.selecting = true;
+                        self.mouse.anchor = Some(pos);
+                        self.buffer.set_selection(Selection::new(pos, pos));
                     }
                 }
                 self.update_preferred_column();
@@ -761,7 +723,7 @@ impl Editor {
                 style = &ctx.styles.search_current;
             } else if search_ranges
                 .iter()
-                .any(|(start, end)| g_start < *end && g_end > *start)
+                .any(|range| g_start < range.end.column && g_end > range.start.column)
             {
                 style = &ctx.styles.search_match;
             } else {
@@ -986,26 +948,6 @@ impl MouseState {
             click_state: ClickTracker::new(Duration::from_millis(DOUBLE_CLICK_MS)),
         }
     }
-
-    /// Determine click type based on click timing.
-    fn click_type(&mut self, location: Point) -> ClickType {
-        match self.click_state.count(location) {
-            2 => ClickType::Double,
-            3 => ClickType::Triple,
-            _ => ClickType::Single,
-        }
-    }
-}
-
-/// Mouse click selection types.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ClickType {
-    /// Single click.
-    Single,
-    /// Double click.
-    Double,
-    /// Triple click.
-    Triple,
 }
 
 /// Build prompt text for search and replace overlays.
@@ -1037,37 +979,6 @@ fn line_number_text(relative: bool, line: usize, cursor_line: usize, width: u32)
         "{number:>width$} ",
         width = width.saturating_sub(1) as usize
     )
-}
-
-/// Compute the total display line count for a buffer.
-fn display_line_count(
-    buffer: &TextBuffer,
-    wrap_mode: WrapMode,
-    wrap_width: usize,
-    tab_stop: usize,
-) -> usize {
-    if wrap_mode == WrapMode::None {
-        // An unwrapped logical line always yields exactly one display line.
-        return buffer.line_count().max(1);
-    }
-    let mut total = 0usize;
-    for line in 0..buffer.line_count().max(1) {
-        let text = buffer.line_text(line);
-        let layout = layout_line(&text, wrap_mode, wrap_width, tab_stop);
-        total = total.saturating_add(layout.display_lines());
-    }
-    total.max(1)
-}
-
-/// Compute the maximum display width for a buffer.
-fn display_line_width(buffer: &TextBuffer, tab_stop: usize) -> usize {
-    let mut max_width = 1usize;
-    for line in 0..buffer.line_count().max(1) {
-        let text = buffer.line_text(line);
-        let layout = layout_line(&text, WrapMode::None, 1, tab_stop);
-        max_width = max_width.max(layout.display_width);
-    }
-    max_width
 }
 
 /// Determine if a character counts as a word constituent.

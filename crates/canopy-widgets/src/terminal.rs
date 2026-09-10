@@ -136,114 +136,46 @@ impl TerminalSize {
     }
 }
 
-/// Default terminal color palette.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct TerminalColors {
-    /// ANSI black (0).
-    pub black: Color,
-    /// ANSI red (1).
-    pub red: Color,
-    /// ANSI green (2).
-    pub green: Color,
-    /// ANSI yellow (3).
-    pub yellow: Color,
-    /// ANSI blue (4).
-    pub blue: Color,
-    /// ANSI magenta (5).
-    pub magenta: Color,
-    /// ANSI cyan (6).
-    pub cyan: Color,
-    /// ANSI white (7).
-    pub white: Color,
-    /// ANSI bright black (8).
-    pub bright_black: Color,
-    /// ANSI bright red (9).
-    pub bright_red: Color,
-    /// ANSI bright green (10).
-    pub bright_green: Color,
-    /// ANSI bright yellow (11).
-    pub bright_yellow: Color,
-    /// ANSI bright blue (12).
-    pub bright_blue: Color,
-    /// ANSI bright magenta (13).
-    pub bright_magenta: Color,
-    /// ANSI bright cyan (14).
-    pub bright_cyan: Color,
-    /// ANSI bright white (15).
-    pub bright_white: Color,
-    /// Default foreground color.
-    pub foreground: Color,
-    /// Default background color.
-    pub background: Color,
-    /// Cursor color.
-    pub cursor: Color,
-}
+/// Default terminal background color.
+const DEFAULT_BACKGROUND: Color = rgb!("#000000");
 
-impl Default for TerminalColors {
-    fn default() -> Self {
-        Self {
-            black: rgb!("#000000"),
-            red: rgb!("#cc0000"),
-            green: rgb!("#4e9a06"),
-            yellow: rgb!("#c4a000"),
-            blue: rgb!("#3465a4"),
-            magenta: rgb!("#75507b"),
-            cyan: rgb!("#06989a"),
-            white: rgb!("#d3d7cf"),
-            bright_black: rgb!("#555753"),
-            bright_red: rgb!("#ef2929"),
-            bright_green: rgb!("#8ae234"),
-            bright_yellow: rgb!("#fce94f"),
-            bright_blue: rgb!("#729fcf"),
-            bright_magenta: rgb!("#ad7fa8"),
-            bright_cyan: rgb!("#34e2e2"),
-            bright_white: rgb!("#eeeeec"),
-            foreground: rgb!("#eeeeec"),
-            background: rgb!("#000000"),
-            cursor: rgb!("#ffffff"),
-        }
-    }
-}
-
-impl TerminalColors {
-    /// Convert the Canopy palette into an inline `itty` palette.
-    fn palette_config(self) -> PaletteConfig {
-        PaletteConfig {
-            normal: [
-                canopy_hex(self.black),
-                canopy_hex(self.red),
-                canopy_hex(self.green),
-                canopy_hex(self.yellow),
-                canopy_hex(self.blue),
-                canopy_hex(self.magenta),
-                canopy_hex(self.cyan),
-                canopy_hex(self.white),
-            ],
-            bright: [
-                canopy_hex(self.bright_black),
-                canopy_hex(self.bright_red),
-                canopy_hex(self.bright_green),
-                canopy_hex(self.bright_yellow),
-                canopy_hex(self.bright_blue),
-                canopy_hex(self.bright_magenta),
-                canopy_hex(self.bright_cyan),
-                canopy_hex(self.bright_white),
-            ],
-            dim: None,
-            foreground: canopy_hex(self.foreground),
-            background: canopy_hex(self.background),
-            cursor: canopy_hex(self.cursor),
-            bright_foreground: None,
-            dim_foreground: None,
-            selection_bg: None,
-            selection_fg: None,
-            search_match_bg: None,
-            search_current_bg: None,
-            meta: PaletteMeta {
-                name: "canopy".to_string(),
-                kind: PaletteKind::Dark,
-            },
-        }
+/// Build the default terminal color palette.
+fn default_palette() -> PaletteConfig {
+    PaletteConfig {
+        normal: [
+            canopy_hex(rgb!("#000000")),
+            canopy_hex(rgb!("#cc0000")),
+            canopy_hex(rgb!("#4e9a06")),
+            canopy_hex(rgb!("#c4a000")),
+            canopy_hex(rgb!("#3465a4")),
+            canopy_hex(rgb!("#75507b")),
+            canopy_hex(rgb!("#06989a")),
+            canopy_hex(rgb!("#d3d7cf")),
+        ],
+        bright: [
+            canopy_hex(rgb!("#555753")),
+            canopy_hex(rgb!("#ef2929")),
+            canopy_hex(rgb!("#8ae234")),
+            canopy_hex(rgb!("#fce94f")),
+            canopy_hex(rgb!("#729fcf")),
+            canopy_hex(rgb!("#ad7fa8")),
+            canopy_hex(rgb!("#34e2e2")),
+            canopy_hex(rgb!("#eeeeec")),
+        ],
+        dim: None,
+        foreground: canopy_hex(rgb!("#eeeeec")),
+        background: canopy_hex(DEFAULT_BACKGROUND),
+        cursor: canopy_hex(rgb!("#ffffff")),
+        bright_foreground: None,
+        dim_foreground: None,
+        selection_bg: None,
+        selection_fg: None,
+        search_match_bg: None,
+        search_current_bg: None,
+        meta: PaletteMeta {
+            name: "canopy".to_string(),
+            kind: PaletteKind::Dark,
+        },
     }
 }
 
@@ -429,11 +361,6 @@ impl Terminal {
         Some(geom::Point { x, y })
     }
 
-    /// Determine the selection mode based on click timing.
-    fn selection_type_for_click(&mut self, location: geom::Point) -> u8 {
-        self.last_click.count(location)
-    }
-
     /// Select a single semantic word around the provided viewport point.
     fn select_word(&mut self, point: geom::Point) -> bool {
         let Some(line) = self
@@ -504,7 +431,7 @@ impl Terminal {
             return false;
         };
 
-        match self.selection_type_for_click(point) {
+        match self.last_click.count(point) {
             2 => {
                 self.selection_active = false;
                 self.selection_anchor = None;
@@ -670,7 +597,7 @@ impl Widget for Terminal {
         let selection = session.selection();
         let child_exited = session.child_exited();
         let child_exit_code = session.child_exit_code().unwrap_or(1);
-        let default_bg = TerminalColors::default().background;
+        let default_bg = DEFAULT_BACKGROUND;
         self.cursor = cursor_from_state(&state);
 
         for (row_idx, line) in runs.iter().enumerate() {
@@ -830,7 +757,7 @@ fn terminal_config(config: &TerminalConfig, size: TerminalSize) -> EguiTTYConfig
         .grid_fixed(size.columns, size.rows)
         .scrollback_lines(DEFAULT_SCROLLBACK)
         .kitty_keyboard(true)
-        .palette_inline(TerminalColors::default().palette_config());
+        .palette_inline(default_palette());
 
     if let Some(argv) = &config.command
         && let Some((program, args)) = argv.split_first()

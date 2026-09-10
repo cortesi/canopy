@@ -785,7 +785,7 @@ impl Editor {
                 EventOutcome::Handle
             }
             Event::Paste(content) => {
-                let inserted = self.handle_paste(content);
+                let inserted = self.handle_insert_text(content);
                 self.vi.push_inserted(&inserted);
                 self.ensure_cursor_visible(ctx);
                 EventOutcome::Handle

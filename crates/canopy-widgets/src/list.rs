@@ -308,7 +308,7 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
     }
 
     /// Remove the item at the specified index.
-    pub fn remove(&mut self, ctx: &mut dyn Context, index: usize) -> Result<bool> {
+    pub(crate) fn remove(&mut self, ctx: &mut dyn Context, index: usize) -> Result<bool> {
         let mut desired = self.items.keys().to_vec();
         if index >= desired.len() {
             return Ok(false);
@@ -322,7 +322,6 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
     #[command(ignore_result)]
     pub fn clear(&mut self, ctx: &mut dyn Context) -> Result<()> {
         self.reconcile_order(ctx, Vec::new())?;
-        self.selected = None;
         Ok(())
     }
 

@@ -1717,7 +1717,6 @@ version = "0.1.0"
 dependencies = [
  "itty-core",
  "parking_lot",
- "png",
  "regex",
  "ruau",
  "serde",

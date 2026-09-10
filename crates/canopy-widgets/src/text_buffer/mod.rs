@@ -11,7 +11,8 @@ mod selection;
 /// Grapheme and display-width helpers.
 mod util;
 
-pub use buffer::{LineChange, TextBuffer, TextTransaction};
+pub(crate) use buffer::LineChange;
+pub use buffer::{TextBuffer, TextTransaction};
 pub use position::{TextPosition, TextRange};
 pub use selection::Selection;
-pub(crate) use util::display_width;
+pub(crate) use util::{display_width, single_line};

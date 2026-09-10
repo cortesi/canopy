@@ -10,6 +10,11 @@ pub fn display_width(grapheme: &str, column: usize, tab_stop: usize) -> usize {
     }
 }
 
+/// Replace newline characters with spaces for single-line text.
+pub fn single_line(text: &str) -> String {
+    text.replace(['\n', '\r'], " ")
+}
+
 /// Return the grapheme boundary immediately before a char column, or 0.
 pub fn prev_grapheme_boundary(line: &str, column: usize) -> usize {
     let mut previous = 0usize;

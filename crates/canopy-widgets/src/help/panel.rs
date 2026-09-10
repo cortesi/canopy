@@ -14,14 +14,8 @@ pub struct HelpPanel;
 
 impl HelpPanel {
     /// Construct an empty help panel.
-    pub const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self
-    }
-}
-
-impl Default for HelpPanel {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -57,7 +51,7 @@ impl ControlFooter {
     const GAP: &'static str = "  ";
 
     /// Construct the control footer.
-    pub const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self
     }
 
@@ -100,12 +94,6 @@ impl ControlFooter {
     fn render_group(render: &mut Render, group: (&str, &str), x: &mut u32, y: u32) -> Result<()> {
         Self::render_text(render, "help/footer/key", group.0, x, y)?;
         Self::render_text(render, "help/footer/label", group.1, x, y)
-    }
-}
-
-impl Default for ControlFooter {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

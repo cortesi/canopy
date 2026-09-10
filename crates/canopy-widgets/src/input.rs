@@ -10,7 +10,7 @@ use canopy::{
     text,
 };
 
-use crate::text_buffer::{TextBuffer, TextPosition};
+use crate::text_buffer::{TextBuffer, TextPosition, single_line};
 
 /// Default tab stop width for single-line inputs.
 const DEFAULT_TAB_STOP: usize = 4;
@@ -34,7 +34,7 @@ impl InputBuffer {
     /// Construct a new input buffer with initial content.
     fn new(start: impl Into<String>) -> Self {
         let raw = start.into();
-        let value = sanitize_single_line(&raw);
+        let value = single_line(&raw);
         let buffer = TextBuffer::new(value.clone());
         let mut out = Self {
             buffer,
@@ -76,11 +76,8 @@ impl InputBuffer {
 
     /// Insert a character at the cursor position.
     fn insert(&mut self, c: char) {
-        let insert = match c {
-            '\n' | '\r' => ' ',
-            _ => c,
-        };
-        self.buffer.insert_text(&insert.to_string());
+        let insert = single_line(c.encode_utf8(&mut [0; 4]));
+        self.buffer.insert_text(&insert);
         self.sync_value();
         self.ensure_cursor_visible();
     }
@@ -297,11 +294,6 @@ impl Widget for Input {
     fn name(&self) -> NodeName {
         NodeName::convert("input")
     }
-}
-
-/// Replace newlines in single-line input values.
-fn sanitize_single_line(value: &str) -> String {
-    value.replace(['\n', '\r'], " ")
 }
 
 #[cfg(test)]

@@ -191,22 +191,22 @@ Runtime facade:
 
 Widgets:
 
-- [ ] C55: `Editor.text_entry_transaction` duplicates buffer state
-- [ ] C56: Display-metric fallback scans the buffer twice
-- [ ] C57: `LineChange` and `take_change` leak the layout-cache protocol
-- [ ] C58: `Editor::selection()` and `Editor::new()` have zero consumers
-- [ ] C59: `handle_paste` duplicates `handle_insert_text`
-- [ ] C60: Three copies of the single-line newline policy
-- [ ] C61: `TerminalColors` is 110 lines for one fixed palette
-- [ ] C62: `matches_for_line` allocates per visible line per frame
-- [ ] C63: Two adapters over `ClickTracker::count`
-- [ ] C64: A field used as a return value, and a constant tuple element
-- [ ] C65: `font` module publishes items with no consumer
-- [ ] C66: `Root::HelpState` never returns to `Closed`
-- [ ] C67: `Root::install` re-enters the root widget to run `sync_layout`
-- [ ] C68: `Default` impls that exist only for the lint
-- [ ] C69: `BindingList` decides the gutter twice with two predicates
-- [ ] C70: `List::clear` redundant reset and `List::remove` visibility
+- [x] C55: `Editor.text_entry_transaction` duplicates buffer state
+- [x] C56: Display-metric fallback scans the buffer twice
+- [x] C57: `LineChange` and `take_change` leak the layout-cache protocol
+- [x] C58: `Editor::selection()` and `Editor::new()` have zero consumers
+- [x] C59: `handle_paste` duplicates `handle_insert_text`
+- [x] C60: Three copies of the single-line newline policy
+- [x] C61: `TerminalColors` is 110 lines for one fixed palette
+- [x] C62: `matches_for_line` allocates per visible line per frame
+- [x] C63: Two adapters over `ClickTracker::count`
+- [x] C64: A field used as a return value, and a constant tuple element
+- [x] C65: `font` module publishes items with no consumer
+- [x] C66: `Root::HelpState` never returns to `Closed`
+- [x] C67: `Root::install` re-enters the root widget to run `sync_layout`
+- [x] C68: `Default` impls that exist only for the lint
+- [x] C69: `BindingList` decides the gutter twice with two predicates
+- [x] C70: `List::clear` redundant reset and `List::remove` visibility
 
 Automation stack:
 

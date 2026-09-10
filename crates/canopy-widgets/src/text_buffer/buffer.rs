@@ -160,7 +160,7 @@ impl TextBuffer {
     ///
     /// Returns `Some` only when exactly one edit has landed since the last
     /// sync. Multiple edits drain as `None` so the layout cache rebuilds.
-    pub fn take_change(&mut self) -> Option<LineChange> {
+    pub(crate) fn take_change(&mut self) -> Option<LineChange> {
         match mem::replace(&mut self.pending_change, PendingChange::None) {
             PendingChange::One(change) => Some(change),
             PendingChange::None | PendingChange::Dirty => None,
