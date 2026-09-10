@@ -47,11 +47,11 @@ impl Widget for TabBar {
 }
 
 /// Stack container for terminal widgets.
-struct TerminalStack;
+pub struct TerminalStack;
 
 impl TerminalStack {
     /// Construct a terminal stack container.
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self
     }
 }

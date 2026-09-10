@@ -16,6 +16,7 @@ mod font;
 mod term;
 
 pub use font::{FontDemo, FontSource};
+pub(crate) use term::TerminalStack;
 pub use term::TermDemo;
 
 /// Style path used for list items.

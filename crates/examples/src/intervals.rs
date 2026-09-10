@@ -5,7 +5,7 @@ use canopy::{
     error::Result,
     layout::Edges,
     prelude::*,
-    style::{AttrSet, solarized},
+    style::solarized,
 };
 use canopy_widgets::{Border, Center, Frame, List, SINGLE, Selectable, Text, VStack};
 use unicode_width::UnicodeWidthStr;
@@ -256,28 +256,7 @@ impl Loader for Intervals {
 fn setup_style(cnpy: &mut Canopy) {
     use canopy::style::StyleBuilder;
 
-    let selected_attrs = AttrSet {
-        bold: true,
-        ..AttrSet::default()
-    };
-
-    let normal = StyleBuilder::new()
-        .fg(solarized::BASE0)
-        .bg(solarized::BASE03);
-
-    let selected = StyleBuilder::new()
-        .fg(solarized::BASE3)
-        .bg(solarized::BLUE)
-        .attrs(selected_attrs);
-
-    cnpy.style_mut()
-        .rules()
-        .prefix("intervals/entry")
-        .style_all(&["border", "fill", "text"], normal)
-        .style_all(
-            &["selected/border", "selected/fill", "selected/text"],
-            selected,
-        )
+    crate::selectable_entry_styles(cnpy.style_mut().rules(), "intervals/entry")
         .no_prefix()
         .style(
             "statusbar/text",

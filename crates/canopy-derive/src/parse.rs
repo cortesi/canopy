@@ -93,8 +93,8 @@ fn extract_single_generic<'a>(ty: &'a Type, ident: &str) -> Option<&'a Type> {
     }
 }
 
-/// Extract the success type from a Result alias or a two-parameter Result.
-fn extract_result_type(ty: &Type) -> Option<&Type> {
+/// Extract the success type from a `Result`-shaped path type.
+pub fn extract_result_type(ty: &Type) -> Option<&Type> {
     let Type::Path(path) = ty else {
         return None;
     };
@@ -105,22 +105,15 @@ fn extract_result_type(ty: &Type) -> Option<&Type> {
     let PathArguments::AngleBracketed(args) = &segment.arguments else {
         return None;
     };
-    if !(1..=2).contains(&args.args.len())
-        || !args
-            .args
-            .iter()
-            .all(|arg| matches!(arg, GenericArgument::Type(_)))
-    {
-        return None;
-    }
     match args.args.first()? {
         GenericArgument::Type(inner) => Some(inner),
         _ => None,
     }
 }
 
-/// Determine whether a type is a reference to a Context.
-fn is_context_ref(ty: &Type) -> Option<bool> {
+/// Determine whether a type is a reference to a trait object with the given
+/// trait name; returns whether the reference is mutable.
+pub fn is_context_ref(ty: &Type, trait_name: &str) -> Option<bool> {
     let Type::Reference(reference) = ty else {
         return None;
     };
@@ -129,7 +122,7 @@ fn is_context_ref(ty: &Type) -> Option<bool> {
     };
     for bound in &obj.bounds {
         if let TypeParamBound::Trait(trait_bound) = bound
-            && trait_bound.path.segments.last()?.ident == "Context"
+            && trait_bound.path.segments.last()?.ident == trait_name
         {
             return Some(reference.mutability.is_some());
         }
@@ -268,7 +261,8 @@ fn classify_value_param(ty: &Type) -> Result<(ParamKind, bool)> {
 
 /// Parse a typed argument from a command method signature.
 fn parse_command_param(pat: &syn::PatType, index: usize) -> Result<ParamMeta> {
-    let name = parse_param_ident(&pat.pat)?.to_string();
+    let user_ident = parse_param_ident(&pat.pat)?;
+    let name = user_ident.to_string();
     let ident = syn::Ident::new(
         &format!("__canopy_param_{index}"),
         proc_macro2::Span::mixed_site(),
@@ -276,9 +270,10 @@ fn parse_command_param(pat: &syn::PatType, index: usize) -> Result<ParamMeta> {
     let ty = (*pat.ty).clone();
     let ty_str = type_to_string(&ty);
 
-    if let Some(mutable) = is_context_ref(&ty) {
+    if let Some(mutable) = is_context_ref(&ty, "Context") {
         return Ok(ParamMeta {
             ident,
+            user_ident,
             name,
             ty,
             ty_str,
@@ -292,6 +287,7 @@ fn parse_command_param(pat: &syn::PatType, index: usize) -> Result<ParamMeta> {
 
     Ok(ParamMeta {
         ident,
+        user_ident,
         name,
         ty,
         ty_str,
@@ -420,15 +416,13 @@ mod tests {
             parse_quote!(Result<String>),
             parse_quote!(std::result::Result<(), Error>),
             parse_quote!(std::result::Result<String, Error>),
+            parse_quote!(Result<String, Error, Extra>),
         ] {
             assert!(extract_result_type(&ty).is_some());
         }
         for ty in [
             parse_quote!(Result),
-            parse_quote!(Result),
-            parse_quote!(Result<String, Error, Extra>),
             parse_quote!(Result<'a>),
-            parse_quote!(Result<String, 3>),
             parse_quote!(Option<String>),
         ] {
             assert!(extract_result_type(&ty).is_none());

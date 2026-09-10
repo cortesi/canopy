@@ -10,11 +10,6 @@ pub struct LineSegment {
 }
 
 impl LineSegment {
-    /// Construct a line segment from its offset and length.
-    pub const fn new(off: u32, len: u32) -> Self {
-        Self { off, len }
-    }
-
     /// The exclusive far edge of the extent using widened arithmetic.
     pub(crate) fn end(&self) -> u64 {
         u64::from(self.off) + u64::from(self.len)

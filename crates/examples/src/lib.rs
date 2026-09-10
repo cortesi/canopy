@@ -2,9 +2,9 @@
 //! Example widgets used by canopy demos.
 
 use canopy::{
-    Canopy, CanopyBuilder, Loader, Widget,
+    CanopyBuilder, Context, FocusDirection, Loader, Widget,
     error::Result,
-    style::{Color, GradientSpec, GradientStop, Paint},
+    style::{AttrSet, Color, GradientSpec, GradientStop, Paint, StyleBuilder, StyleRules, solarized},
     terminal::{RunOptions, runloop_with_options},
 };
 use canopy_widgets::Root;
@@ -49,11 +49,6 @@ pub mod widget;
 /// Widget editor example nodes.
 pub mod widget_editor;
 
-/// Return the Luau API definitions for a built demo app.
-pub fn print_luau_api(cnpy: &mut Canopy) -> Result<String> {
-    cnpy.script_api().map(str::to_owned)
-}
-
 /// Build a four-stop gradient paint at a fixed angle, evenly weighted toward
 /// the tail.
 pub(crate) fn banner_gradient(angle_deg: f32, colors: [Color; 4]) -> Paint {
@@ -66,6 +61,47 @@ pub(crate) fn banner_gradient(angle_deg: f32, colors: [Color; 4]) -> Paint {
             GradientStop::new(1.0, colors[3]),
         ],
     ))
+}
+
+/// Scroll a context by one line in the given direction.
+pub(crate) fn scroll_in(c: &mut dyn Context, dir: FocusDirection) {
+    match dir {
+        FocusDirection::Up | FocusDirection::Prev => c.scroll_up(),
+        FocusDirection::Down | FocusDirection::Next => c.scroll_down(),
+        FocusDirection::Left => c.scroll_left(),
+        FocusDirection::Right => c.scroll_right(),
+    };
+}
+
+/// Page a context by a signed delta; negative moves up, positive moves down.
+pub(crate) fn page_by(c: &mut dyn Context, delta: i32) {
+    if delta < 0 {
+        c.page_up();
+    } else if delta > 0 {
+        c.page_down();
+    }
+}
+
+/// Add the standard normal and selected entry rules under a path prefix.
+pub(crate) fn selectable_entry_styles<'a>(rules: StyleRules<'a>, prefix: &str) -> StyleRules<'a> {
+    let selected_attrs = AttrSet {
+        bold: true,
+        ..AttrSet::default()
+    };
+    let normal = StyleBuilder::new()
+        .fg(solarized::BASE0)
+        .bg(solarized::BASE03);
+    let selected = StyleBuilder::new()
+        .fg(solarized::BASE3)
+        .bg(solarized::BLUE)
+        .attrs(selected_attrs);
+    rules
+        .prefix(prefix)
+        .style_all(&["border", "fill", "text"], normal)
+        .style_all(
+            &["selected/border", "selected/fill", "selected/text"],
+            selected,
+        )
 }
 
 /// Binding template for a full-window scrollable demo.

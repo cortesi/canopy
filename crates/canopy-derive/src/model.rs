@@ -28,6 +28,8 @@ pub enum ParamKind {
 pub struct ParamMeta {
     /// Rust identifier for binding.
     pub(crate) ident: syn::Ident,
+    /// User-facing parameter identifier.
+    pub(crate) user_ident: syn::Ident,
     /// Normalized parameter name.
     pub(crate) name: String,
     /// Original Rust type.

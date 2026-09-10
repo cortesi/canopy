@@ -4,22 +4,27 @@ use canopy::{
     style::{Attr, AttrSet, PartialStyle, ResolvedStyle},
     testing::harness::Harness,
 };
-use canopy_widgets::{Root, Selector};
+use canopy_widgets::Selector;
 
-use super::root_harness;
+use super::{Mount, root_harness};
 use crate::stylegym::{EffectOption, Stylegym, binding_setup};
 
 fn setup_harness(size: Size) -> Result<Harness> {
-    root_harness(Stylegym::new(), binding_setup, size)
+    root_harness(Stylegym::new(), binding_setup, size, Mount::Replace)
 }
 
 #[test]
 fn installed_stylegym_keeps_controls_beside_demo() -> Result<()> {
-    let mut canopy = Canopy::new();
-    Stylegym::load(&mut canopy)?;
-    let app = Root::new().install(&mut canopy, Stylegym::new())?;
-    let mut harness = Harness::from_canopy(canopy, Size::new(80, 24))?;
-    harness.render()?;
+    let harness = root_harness(
+        Stylegym::new(),
+        binding_setup,
+        Size::new(80, 24),
+        Mount::Wrap,
+    )?;
+    let app = harness
+        .canopy
+        .with_root_view(|context| context.unique_descendant::<Stylegym>())?
+        .expect("stylegym node");
 
     harness.canopy.with_root_view(|context| {
         let children = context.children_of(app.into());

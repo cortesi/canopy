@@ -235,7 +235,7 @@ impl FocusFrame {
         ctx: &mut dyn Context,
         action: impl FnOnce(&mut dyn Context) -> ChangeOutcome,
     ) -> Result<bool> {
-        ctx.with_widget_mut(self.list_id, |_: &mut List<Text>, list_ctx| {
+        ctx.with_widget_mut(self.list_id, |_: &mut List<FontBlock>, list_ctx| {
             Ok(action(list_ctx).changed())
         })
     }
@@ -301,30 +301,32 @@ impl FontBlock {
         }
     }
 
-    /// Update the banner text.
-    fn set_text(&mut self, ctx: &mut dyn Context, text: String) -> Result<()> {
+    /// Apply a mutation to the mounted banner, or to the unmounted banner
+    /// widget before it is mounted.
+    fn with_banner(
+        &mut self,
+        ctx: &mut dyn Context,
+        f: impl FnOnce(&mut FontBanner),
+    ) -> Result<()> {
         if let Some(banner_id) = self.banner_id {
             ctx.with_widget_mut(banner_id, |banner: &mut FontBanner, _| {
-                banner.set_text(text);
+                f(banner);
                 Ok(())
             })?;
         } else if let Some(banner) = self.banner.as_mut() {
-            banner.set_text(text);
+            f(banner);
         }
         Ok(())
     }
 
+    /// Update the banner text.
+    fn set_text(&mut self, ctx: &mut dyn Context, text: String) -> Result<()> {
+        self.with_banner(ctx, |banner| banner.set_text(text))
+    }
+
     /// Update the banner effects.
     fn set_effects(&mut self, ctx: &mut dyn Context, effects: FontEffects) -> Result<()> {
-        if let Some(banner_id) = self.banner_id {
-            ctx.with_widget_mut(banner_id, |banner: &mut FontBanner, _| {
-                banner.set_effects(effects);
-                Ok(())
-            })?;
-        } else if let Some(banner) = self.banner.as_mut() {
-            banner.set_effects(effects);
-        }
-        Ok(())
+        self.with_banner(ctx, |banner| banner.set_effects(effects))
     }
 
     /// Update the banner height.
@@ -967,9 +969,47 @@ pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
 
 #[cfg(test)]
 mod tests {
-    use canopy::layout::Constraint;
+    use canopy::{layout::Constraint, testing::harness::Harness};
 
     use super::*;
+    use crate::tests::{Mount, root_harness};
+
+    fn font_list_scroll(harness: &Harness) -> Point {
+        harness.canopy.with_root_view(|ctx| {
+            let list = ctx
+                .unique_descendant::<List<FontBlock>>()
+                .expect("list lookup")
+                .expect("font list");
+            ctx.view_of(list.into()).expect("font list view").scroll
+        })
+    }
+
+    #[test]
+    fn page_down_scrolls_the_font_list() -> Result<()> {
+        let mut harness = root_harness(
+            FontGym::new(),
+            binding_setup,
+            Size::new(80, 24),
+            Mount::Wrap,
+        )?;
+        let before = font_list_scroll(&harness);
+
+        let frame = harness
+            .canopy
+            .with_root_view(|ctx| ctx.unique_descendant::<FocusFrame>())
+            .expect("frame lookup")
+            .expect("focus frame");
+        harness.canopy.with_root_context(|ctx| {
+            ctx.set_focus(frame.into())?;
+            Ok(())
+        })?;
+
+        harness.key(key::Key::parse_spec("PageDown").expect("valid key"))?;
+
+        let after = font_list_scroll(&harness);
+        assert!(after.y > before.y, "PageDown must scroll the font list");
+        Ok(())
+    }
 
     #[test]
     fn input_cursor_and_measurement_use_display_columns() -> Result<()> {

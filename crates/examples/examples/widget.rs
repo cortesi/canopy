@@ -13,7 +13,7 @@ use canopy::{
     prelude::*,
 };
 use canopy_examples::{
-    imgview, print_luau_api,
+    imgview,
     widget::{DemoHost, DemoSize, FontDemo, FontSource, ListDemo, TermDemo},
     widget_editor::{self, WidgetEditor},
 };
@@ -146,7 +146,7 @@ fn main() -> Result<()> {
     let builder = widget_builder(&args.command);
 
     if args.api {
-        print!("{}", print_luau_api(&mut builder.build()?)?);
+        print!("{}", builder.build()?.script_api()?);
         return Ok(());
     }
 

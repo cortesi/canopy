@@ -1,25 +1,9 @@
 use canopy::{
-    CanopyBuilder, Loader, RoutePhase, Widget, error::Result, event::key::Key, geom::Size,
-    testing::harness::Harness,
+    Loader, RoutePhase, error::Result, event::key::Key, geom::Size, testing::harness::Harness,
 };
-use canopy_widgets::Root;
 
+use super::{Mount, root_harness};
 use crate::{demo_canopy, termgym, widget_editor};
-
-fn wrapped_harness<W>(app: W, setup: fn(CanopyBuilder) -> CanopyBuilder) -> Result<Harness>
-where
-    W: Widget + Loader + 'static,
-{
-    let canopy = setup(demo_canopy().configure(W::load))
-        .assemble(move |canopy| {
-            Root::new().install(canopy, app)?;
-            Ok(())
-        })
-        .build()?;
-    let mut harness = Harness::from_canopy(canopy, Size::new(80, 24))?;
-    harness.render()?;
-    Ok(harness)
-}
 
 #[test]
 fn demo_api_build_does_not_assemble_or_publish() -> Result<()> {
@@ -152,15 +136,22 @@ fn prove_help_flow(mut harness: Harness) -> Result<()> {
 
 #[test]
 fn termgym_help_opens_over_a_consuming_terminal_and_restores_input() -> Result<()> {
-    let harness = wrapped_harness(termgym::TermGym::new(), termgym::binding_setup)?;
+    let harness = root_harness(
+        termgym::TermGym::new(),
+        termgym::binding_setup,
+        Size::new(80, 24),
+        Mount::Wrap,
+    )?;
     prove_help_flow(harness)
 }
 
 #[test]
 fn widget_editor_help_opens_over_a_consuming_editor_and_restores_input() -> Result<()> {
-    let harness = wrapped_harness(
+    let harness = root_harness(
         widget_editor::WidgetEditor::new("fn main() {}\n", "rs", "test.rs"),
         widget_editor::binding_setup,
+        Size::new(80, 24),
+        Mount::Wrap,
     )?;
     prove_help_flow(harness)
 }

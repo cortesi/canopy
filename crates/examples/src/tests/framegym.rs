@@ -1,6 +1,6 @@
 use canopy::{error::Result, geom, layout::Edges, prelude::*, testing::harness::Harness};
 
-use super::root_harness;
+use super::{Mount, root_harness};
 use crate::framegym::{FrameGym, TestPattern, binding_setup};
 
 struct ViewMetrics {
@@ -19,7 +19,7 @@ fn metrics(ctx: &dyn ViewContext) -> ViewMetrics {
 }
 
 fn framegym_harness() -> Result<Harness> {
-    root_harness(FrameGym::new(), binding_setup, Size::new(20, 20))
+    root_harness(FrameGym::new(), binding_setup, Size::new(20, 20), Mount::Replace)
 }
 
 fn frame_views(harness: &mut Harness) -> Result<(ViewMetrics, ViewMetrics, Layout)> {

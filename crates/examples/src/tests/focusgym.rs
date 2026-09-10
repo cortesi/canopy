@@ -6,11 +6,11 @@ use canopy::{
     testing::harness::Harness,
 };
 
-use super::root_harness;
+use super::{Mount, root_harness};
 use crate::focusgym::{Block, FocusGym, binding_setup};
 
 fn setup_harness(size: Size) -> Result<Harness> {
-    root_harness(FocusGym::new(), binding_setup, size)
+    root_harness(FocusGym::new(), binding_setup, size, Mount::Replace)
 }
 
 fn with_root_block<R>(
@@ -70,12 +70,10 @@ fn outer_of(ctx: &dyn Context, node: NodeId, label: &str) -> Result<RectI32> {
         .ok_or_else(|| Error::NotFound(label.to_string()))
 }
 
-fn layout_of(ctx: &mut dyn Context, node: NodeId) -> Result<Layout> {
-    let mut layout = Layout::default();
-    ctx.with_layout_of(node, &mut |layout_of| {
-        layout = *layout_of;
-    })?;
-    Ok(layout)
+fn layout_of(ctx: &dyn Context, node: NodeId) -> Result<Layout> {
+    (ctx as &dyn ViewContext)
+        .layout_of(node)
+        .ok_or_else(|| Error::NotFound("layout".into()))
 }
 
 /// Find the blank column that separates two side-by-side blocks, if one exists.

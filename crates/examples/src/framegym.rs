@@ -49,23 +49,14 @@ impl TestPattern {
     /// Scroll by one line in the specified direction.
     /// @param dir The direction to scroll.
     pub(crate) fn scroll(&self, c: &mut dyn Context, dir: FocusDirection) {
-        match dir {
-            FocusDirection::Up | FocusDirection::Prev => c.scroll_up(),
-            FocusDirection::Down | FocusDirection::Next => c.scroll_down(),
-            FocusDirection::Left => c.scroll_left(),
-            FocusDirection::Right => c.scroll_right(),
-        };
+        crate::scroll_in(c, dir);
     }
 
     #[command]
     /// Page the view. Negative values move up; positive values move down.
     /// @param delta Signed page delta.
     pub(crate) fn page(&self, c: &mut dyn Context, delta: i32) {
-        if delta < 0 {
-            c.page_up();
-        } else if delta > 0 {
-            c.page_down();
-        }
+        crate::page_by(c, delta);
     }
 
     /// Return the character for the test pattern at a position.

@@ -405,6 +405,38 @@ mod tests {
         assert_cmd_bar_metadata();
     }
 
+    struct ConditionalApp;
+
+    #[derive_commands]
+    impl ConditionalApp {
+        #[cfg(any())]
+        #[command(enabled = "absent_eligibility")]
+        fn absent(&self, _value: MissingType) {}
+
+        #[cfg_attr(all(), cfg_attr(all(), cfg(any())), inline)]
+        #[command]
+        fn nested_absent(&self, _value: MissingType) {}
+
+        #[cfg(not(any()))]
+        #[cfg_attr(all(), inline)]
+        #[command]
+        fn present(&self, _value: i64) {}
+    }
+
+    #[derive_commands]
+    #[cfg(any())]
+    impl MissingType {
+        #[command]
+        fn absent(&self) {}
+    }
+
+    #[test]
+    fn conditional_commands_drop_absent_methods() {
+        assert_eq!(ConditionalApp::commands().len(), 1);
+        let _ = ConditionalApp::call_present(3);
+        let _ = ConditionalApp::cmd_present();
+    }
+
     #[test]
     fn invoke_dispatches() {
         let mut f = Foo::default();

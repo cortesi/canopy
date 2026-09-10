@@ -22,5 +22,5 @@ workspace = true
 
 [dev-dependencies]
 canopy = { path = "../canopy", features = ["testing"] }
-futures = "0.3.32"
+futures.workspace = true
 tempfile.workspace = true

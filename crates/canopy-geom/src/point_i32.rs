@@ -25,14 +25,6 @@ impl TryFrom<Point> for PointI32 {
 }
 
 impl PointI32 {
-    /// Origin point.
-    pub const ZERO: Self = Self { x: 0, y: 0 };
-
-    /// Construct a point from its coordinates.
-    pub const fn new(x: i32, y: i32) -> Self {
-        Self { x, y }
-    }
-
     /// Convert widened coordinates without losing out-of-range information.
     pub fn try_from_i64(x: i64, y: i64) -> Result<Self, Error> {
         let error = Error::CoordinateOutOfRange { x, y };
@@ -97,12 +89,12 @@ mod tests {
     fn widened_point_conversions_are_explicit_about_overflow() {
         assert_eq!(
             PointI32::try_from_i64(i64::from(i32::MIN), i64::from(i32::MAX)).unwrap(),
-            PointI32::new(i32::MIN, i32::MAX)
+            PointI32 { x: i32::MIN, y: i32::MAX }
         );
         assert!(PointI32::try_from_i64(i64::from(i32::MAX) + 1, 0).is_err());
         assert_eq!(
             PointI32::clamped_from_i64(i64::MIN, i64::MAX),
-            PointI32::new(i32::MIN, i32::MAX)
+            PointI32 { x: i32::MIN, y: i32::MAX }
         );
     }
 }

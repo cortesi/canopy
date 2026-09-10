@@ -231,24 +231,24 @@ Automation stack:
 
 Supporting crates, examples, tooling:
 
-- [ ] C89: fontgym `FocusFrame` scrolls through the wrong widget type
-- [ ] C90: `canopy-geom` items with zero workspace consumers
-- [ ] C91: Two trybuild `pass` cases duplicate unit-test coverage
-- [ ] C92: Two type-shape matchers duplicated across derive files
-- [ ] C93: `expand_command_arg` loops three times over one field list
-- [ ] C94: Call builder re-parses parameter names from strings
-- [ ] C95: `scroll`, `page`, `scroll_to` commands copied between two gyms
-- [ ] C96: `TerminalStack` is defined twice
-- [ ] C97: Two near-identical harness builders in the examples tests
-- [ ] C98: Reading a layout through the mutable visitor
-- [ ] C99: `print_luau_api` does not print
-- [ ] C100: `renderer_from_font` is a misnamed identity wrapper
-- [ ] C101: `FontBlock::set_text` and `set_effects` duplicate the mount split
-- [ ] C102: Entry style rules duplicated between two demos
-- [ ] C103: `futures` and `rand` are not hoisted
-- [ ] C104: `canopy-examples` spells out the default widget feature set
-- [ ] C110 first line: `clippy.toml` default cognitive-complexity threshold
-- [ ] C111: remove local `vendor/` build output
+- [x] C89: fontgym `FocusFrame` scrolls through the wrong widget type
+- [x] C90: `canopy-geom` items with zero workspace consumers
+- [x] C91: Two trybuild `pass` cases duplicate unit-test coverage
+- [x] C92: Two type-shape matchers duplicated across derive files
+- [x] C93: `expand_command_arg` loops three times over one field list
+- [x] C94: Call builder re-parses parameter names from strings
+- [x] C95: `scroll`, `page`, `scroll_to` commands copied between two gyms
+- [x] C96: `TerminalStack` is defined twice
+- [x] C97: Two near-identical harness builders in the examples tests
+- [x] C98: Reading a layout through the mutable visitor
+- [x] C99: `print_luau_api` does not print
+- [x] C100: `renderer_from_font` is a misnamed identity wrapper
+- [x] C101: `FontBlock::set_text` and `set_effects` duplicate the mount split
+- [x] C102: Entry style rules duplicated between two demos
+- [x] C103: `futures` and `rand` are not hoisted
+- [x] C104: `canopy-examples` spells out the default widget feature set
+- [x] C110 first line: `clippy.toml` default cognitive-complexity threshold
+- [x] C111: remove local `vendor/` build output
 - [ ] Refresh every `api/` capture
 
 ### Stage 3: Deslop batch items that need no decision

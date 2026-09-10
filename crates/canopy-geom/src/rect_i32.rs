@@ -1,4 +1,4 @@
-use super::{Error, Point, PointI32, Rect, Size};
+use super::{Point, PointI32, Rect, Size};
 
 /// A half-open rectangle with a signed origin and unsigned size.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Default)]
@@ -12,13 +12,6 @@ pub struct RectI32 {
 }
 
 impl RectI32 {
-    /// Empty rectangle at the origin.
-    pub const ZERO: Self = Self {
-        tl: PointI32::ZERO,
-        w: 0,
-        h: 0,
-    };
-
     /// Construct a rectangle from coordinates and size.
     pub fn new(x: i32, y: i32, w: u32, h: u32) -> Self {
         Self {
@@ -36,15 +29,6 @@ impl RectI32 {
     /// Return the rectangle's dimensions without its origin.
     pub const fn size(&self) -> Size {
         Size::new(self.w, self.h)
-    }
-
-    /// Translate the origin, rejecting a result outside signed coordinates.
-    pub fn translate(self, offset: PointI32) -> Result<Self, Error> {
-        let tl = PointI32::try_from_i64(
-            i64::from(self.tl.x) + i64::from(offset.x),
-            i64::from(self.tl.y) + i64::from(offset.y),
-        )?;
-        Ok(Self { tl, ..self })
     }
 
     /// Convert a screen point to local coordinates relative to this rect.
@@ -126,30 +110,6 @@ impl RectI32 {
     }
 }
 
-impl TryFrom<Rect> for RectI32 {
-    type Error = Error;
-
-    fn try_from(rect: Rect) -> Result<Self, Self::Error> {
-        Ok(Self {
-            tl: PointI32::try_from(rect.tl)?,
-            w: rect.w,
-            h: rect.h,
-        })
-    }
-}
-
-impl TryFrom<RectI32> for Rect {
-    type Error = Error;
-
-    fn try_from(rect: RectI32) -> Result<Self, Self::Error> {
-        Ok(Self {
-            tl: Point::try_from(rect.tl)?,
-            w: rect.w,
-            h: rect.h,
-        })
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
@@ -188,25 +148,6 @@ mod tests {
             signed.intersect_rect(unsigned),
             Some(Rect::new(i32::MAX as u32, 0, 8, 1))
         );
-    }
-
-    #[test]
-    fn rectangles_convert_and_translate_without_narrowing_sizes() {
-        let unsigned = Rect::new(7, 9, u32::MAX, 11);
-        let signed = RectI32::try_from(unsigned).unwrap();
-        assert_eq!(signed, RectI32::new(7, 9, u32::MAX, 11));
-        assert_eq!(Rect::try_from(signed).unwrap(), unsigned);
-        assert_eq!(
-            signed.translate(PointI32::new(-10, 5)).unwrap(),
-            RectI32::new(-3, 14, u32::MAX, 11)
-        );
-        assert!(
-            RectI32::new(i32::MAX, 0, 1, 1)
-                .translate(PointI32::new(1, 0))
-                .is_err()
-        );
-        assert!(RectI32::try_from(Rect::new(u32::MAX, 0, 1, 1)).is_err());
-        assert!(Rect::try_from(RectI32::new(-1, 0, 1, 1)).is_err());
     }
 
     proptest! {

@@ -1,9 +1,11 @@
 use quote::quote;
-use syn::{FnArg, GenericArgument, ImplItem, ItemImpl, PathArguments, ReturnType, Type};
+use syn::{FnArg, ImplItem, ItemImpl, ReturnType, Type};
 
 use crate::{
     model::{CommandMeta, ParamKind, ParamMeta, ReturnKind, ReturnMeta, UserBindingSource},
-    parse::{cfg_attributes, owner_name, parse_command_method},
+    parse::{
+        cfg_attributes, extract_result_type, is_context_ref, owner_name, parse_command_method,
+    },
 };
 
 /// Validate enabled hooks at their declarations so failures point to the
@@ -49,7 +51,7 @@ fn validate_enabled_hooks(input: &ItemImpl, commands: &[CommandMeta]) -> syn::Re
                 "enabled hook must take &dyn ViewContext after &self",
             ));
         };
-        if inputs.next().is_some() || !is_immutable_view_context(&context.ty) {
+        if inputs.next().is_some() || is_context_ref(&context.ty, "ViewContext") != Some(false) {
             return Err(syn::Error::new_spanned(
                 context,
                 "enabled hook must take exactly one &dyn ViewContext argument",
@@ -65,54 +67,23 @@ fn validate_enabled_hooks(input: &ItemImpl, commands: &[CommandMeta]) -> syn::Re
     Ok(())
 }
 
-/// Return whether a hook parameter is an immutable `dyn ViewContext` reference.
-fn is_immutable_view_context(ty: &Type) -> bool {
-    let Type::Reference(reference) = ty else {
-        return false;
-    };
-    if reference.mutability.is_some() {
-        return false;
-    }
-    let Type::TraitObject(object) = &*reference.elem else {
-        return false;
-    };
-    object.bounds.iter().any(|bound| {
-        let syn::TypeParamBound::Trait(bound) = bound else {
-            return false;
-        };
-        bound
-            .path
-            .segments
-            .last()
-            .is_some_and(|segment| segment.ident == "ViewContext")
-    })
-}
-
 /// Return whether a hook output is a `Result` whose success type is
 /// `CommandStatus`.
 fn is_command_status_result(output: &ReturnType) -> bool {
     let ReturnType::Type(_, ty) = output else {
         return false;
     };
-    let Type::Path(result) = &**ty else {
-        return false;
-    };
-    let Some(segment) = result.path.segments.last() else {
-        return false;
-    };
-    if segment.ident != "Result" {
-        return false;
-    }
-    let PathArguments::AngleBracketed(args) = &segment.arguments else {
-        return false;
-    };
-    let Some(GenericArgument::Type(Type::Path(ok))) = args.args.first() else {
-        return false;
-    };
-    ok.path
-        .segments
-        .last()
-        .is_some_and(|segment| segment.ident == "CommandStatus")
+    extract_result_type(ty).is_some_and(|inner| {
+        matches!(
+            inner,
+            Type::Path(path)
+                if path
+                    .path
+                    .segments
+                    .last()
+                    .is_some_and(|segment| segment.ident == "CommandStatus")
+        )
+    })
 }
 
 /// Render an `Option<&str>` metadata field from an optional string.
@@ -617,10 +588,7 @@ impl CommandMeta {
         );
         let accessor = self.accessor_ident();
         let params = self.user_params();
-        let names: Vec<syn::Ident> = params
-            .iter()
-            .map(|param| syn::parse_str(&param.name).expect("parsed parameter identifier"))
-            .collect();
+        let names: Vec<&syn::Ident> = params.iter().map(|param| &param.user_ident).collect();
         let types = params.iter().map(|param| &param.ty);
         quote! {
             #[doc = "Build a positional call with typed user arguments."]

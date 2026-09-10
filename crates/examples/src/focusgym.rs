@@ -67,15 +67,10 @@ impl Block {
             return Ok(());
         }
 
-        let parent_dir = if let Some(parent) = c.parent_of(c.node_id()) {
-            let mut dir = None;
-            c.with_layout_of(parent, &mut |layout| {
-                dir = Some(layout.direction);
-            })?;
-            dir
-        } else {
-            None
-        };
+        let parent_dir = c
+            .parent_of(c.node_id())
+            .and_then(|parent| (c as &dyn ViewContext).layout_of(parent))
+            .map(|layout| layout.direction);
 
         let adjust_horizontal = match parent_dir {
             Some(Direction::Row) => true,

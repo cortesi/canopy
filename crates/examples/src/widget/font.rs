@@ -87,12 +87,7 @@ impl FontDemo {
         let font = Font::from_bytes(source.bytes.as_slice()).map_err(|err| {
             Error::Invalid(format!("font parse failed for {}: {err}", source.label))
         })?;
-        Ok(Self::renderer_from_font(font))
-    }
-
-    /// Build a renderer with demo glyph settings.
-    fn renderer_from_font(font: Font) -> FontRenderer {
-        FontRenderer::new(font)
+        Ok(FontRenderer::new(font))
     }
 
     /// Swap the font renderer used by the banner.

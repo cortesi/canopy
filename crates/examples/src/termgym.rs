@@ -12,6 +12,8 @@ use canopy_widgets::{
 };
 use unicode_width::UnicodeWidthStr;
 
+use crate::widget::TerminalStack;
+
 /// Height for each terminal entry row, including borders.
 const ENTRY_HEIGHT: u32 = 3;
 
@@ -103,22 +105,6 @@ impl Widget for TermEntry {
 
     fn name(&self) -> NodeName {
         NodeName::convert("term_entry")
-    }
-}
-
-/// Stack container for terminal widgets.
-struct TerminalStack;
-
-impl TerminalStack {
-    /// Construct a terminal stack container.
-    fn new() -> Self {
-        Self
-    }
-}
-
-impl Widget for TerminalStack {
-    fn layout(&self) -> Layout {
-        Layout::fill().direction(Direction::Stack)
     }
 }
 
@@ -426,33 +412,16 @@ fn setup_style(cnpy: &mut Canopy) {
         bold: true,
         ..AttrSet::default()
     };
-
-    let entry_normal = StyleBuilder::new()
-        .fg(solarized::BASE0)
-        .bg(solarized::BASE03);
-
-    let entry_selected = StyleBuilder::new()
-        .fg(solarized::BASE3)
-        .bg(solarized::BLUE)
-        .attrs(selected_attrs);
-
     let button_normal = StyleBuilder::new()
         .fg(solarized::BASE3)
         .bg(solarized::BASE02);
-
     let button_selected = StyleBuilder::new()
         .fg(solarized::BASE3)
         .bg(solarized::BLUE)
         .attrs(selected_attrs);
 
-    cnpy.style_mut()
-        .rules()
-        .prefix("termgym/entry")
-        .style_all(&["border", "fill", "text"], entry_normal)
-        .style_all(
-            &["selected/border", "selected/fill", "selected/text"],
-            entry_selected,
-        )
+    let rules = crate::selectable_entry_styles(cnpy.style_mut().rules(), "termgym/entry");
+    rules
         .prefix("termgym/button")
         .style_all(&["border", "fill", "text"], button_normal)
         .style_all(

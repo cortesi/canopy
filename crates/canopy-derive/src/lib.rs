@@ -91,43 +91,9 @@ fn expand_command_arg(input: &syn::DeriveInput) -> Result<proc_macro2::TokenStre
             ));
         }
     };
-    let mut generics = input.generics.clone();
-    // Field-type bounds are only needed to propagate generic parameters; for
-    // concrete structs they would turn self-referential fields into cyclic
-    // trait obligations, so they are omitted there.
-    if !generics.params.is_empty() {
-        let where_clause = generics.make_where_clause();
-        for field in fields {
-            let ty = &field.ty;
-            where_clause
-                .predicates
-                .push(parse_quote!(#ty: canopy::commands::CommandType));
-        }
-    }
-    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-    let mut value_generics = input.generics.clone();
-    if !value_generics.params.is_empty() {
-        for field in fields {
-            let ty = &field.ty;
-            value_generics
-                .make_where_clause()
-                .predicates
-                .push(parse_quote!(#ty: canopy::commands::ToArgValue));
-        }
-    }
-    let (value_impl_generics, value_ty_generics, value_where_clause) =
-        value_generics.split_for_impl();
-    let value_fields = fields.iter().map(|field| {
-        let ident = field.ident.as_ref().expect("named struct field");
-        let name = ident.to_string();
-        quote! { (#name.to_string(), canopy::commands::ToArgValue::to_arg_value(self.#ident)) }
-    });
-
-    let field_decl_regs = fields.iter().map(|field| {
-        let ty = &field.ty;
-        quote! { <#ty as canopy::commands::CommandType>::luau_decls(registry); }
-    });
     let mut field_tokens = Vec::new();
+    let mut command_bounds = Vec::new();
+    let mut value_bounds = Vec::new();
     for field in fields {
         let Some(ident) = &field.ident else {
             return Err(syn::Error::new_spanned(
@@ -146,7 +112,24 @@ fn expand_command_arg(input: &syn::DeriveInput) -> Result<proc_macro2::TokenStre
             )
             #doc
         });
+        command_bounds.push(parse_quote!(#ty: canopy::commands::CommandType));
+        value_bounds.push(parse_quote!(#ty: canopy::commands::ToArgValue));
     }
+    let generics = bounded_generics(&input.generics, command_bounds);
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let value_generics = bounded_generics(&input.generics, value_bounds);
+    let (value_impl_generics, value_ty_generics, value_where_clause) =
+        value_generics.split_for_impl();
+    let value_fields = fields.iter().map(|field| {
+        let ident = field.ident.as_ref().expect("named struct field");
+        let name = ident.to_string();
+        quote! { (#name.to_string(), canopy::commands::ToArgValue::to_arg_value(self.#ident)) }
+    });
+
+    let field_decl_regs = fields.iter().map(|field| {
+        let ty = &field.ty;
+        quote! { <#ty as canopy::commands::CommandType>::luau_decls(registry); }
+    });
 
     Ok(quote! {
         impl #value_impl_generics canopy::commands::ToArgValue for #ident #value_ty_generics #value_where_clause {
@@ -179,6 +162,23 @@ fn expand_command_arg(input: &syn::DeriveInput) -> Result<proc_macro2::TokenStre
             }
         }
     })
+}
+
+/// Clone generics, adding the provided predicates only when the input is
+/// generic.
+///
+/// Field-type bounds are only needed to propagate generic parameters; for
+/// concrete structs they would turn self-referential fields into cyclic trait
+/// obligations, so they are omitted there.
+fn bounded_generics(
+    generics: &syn::Generics,
+    predicates: impl IntoIterator<Item = syn::WherePredicate>,
+) -> syn::Generics {
+    let mut bounded = generics.clone();
+    if !bounded.params.is_empty() {
+        bounded.make_where_clause().predicates.extend(predicates);
+    }
+    bounded
 }
 
 /// Render a doc-attachment token stream for declaration model items.

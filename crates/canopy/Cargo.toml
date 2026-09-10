@@ -24,12 +24,12 @@ serde_json.workspace = true
 schemars.workspace = true
 ruau.workspace = true
 tokio = { workspace = true, features = ["rt", "time", "sync"] }
-futures = "0.3.32"
+futures.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
 canopy = { path = ".", features = ["testing"] }
-rand = "0.10.1"
+rand.workspace = true
 proptest.workspace = true
 criterion.workspace = true
 

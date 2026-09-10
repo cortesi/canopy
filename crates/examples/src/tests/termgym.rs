@@ -3,12 +3,17 @@ use canopy::{
 };
 use canopy_widgets::terminal::Terminal;
 
-use super::root_harness;
+use super::{Mount, root_harness};
 use crate::termgym::{TermGym, binding_setup};
 
 /// Build the installed TermGym application with its real bindings.
 fn termgym_harness() -> Result<(Harness, NodeId)> {
-    let harness = root_harness(TermGym::new(), binding_setup, Size::new(80, 24))?;
+    let harness = root_harness(
+        TermGym::new(),
+        binding_setup,
+        Size::new(80, 24),
+        Mount::Replace,
+    )?;
     let app = harness.canopy.with_root_view(|context| context.root_id());
     Ok((harness, app))
 }

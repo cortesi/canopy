@@ -9,8 +9,7 @@ use canopy::{
 };
 use canopy_examples::{
     chargym, demo_canopy, editorgym, focusgym, fontgym, framegym, imgview, intervals, listgym,
-    pager, print_luau_api, run_demo, run_demo_with_options, stylegym, termgym, textgym,
-    widget_editor,
+    pager, run_demo, run_demo_with_options, stylegym, termgym, textgym, widget_editor,
 };
 use canopy_widgets::ImageView;
 use clap::{Parser, Subcommand};
@@ -78,7 +77,7 @@ fn main() -> StdResult<(), Box<dyn Error>> {
     let builder = args.demo.configure(demo_canopy());
 
     if args.api {
-        print!("{}", print_luau_api(&mut builder.build()?)?);
+        print!("{}", builder.build()?.script_api()?);
         return Ok(());
     }
 
