@@ -8,8 +8,8 @@ use ruau::vm::{
 };
 
 use super::{
-    ArgValue, Canopy, ClosureRegistry, Core, LuauFunctionId, LuauState, NodeId, NonNull, Rc,
-    RefCell, Result, ScriptCache, commands, error,
+    Canopy, ClosureRegistry, Core, LuauFunctionId, LuauState, NodeId, NonNull, Rc, RefCell, Result,
+    ScriptCache, commands, error,
 };
 
 thread_local! {
@@ -196,11 +196,6 @@ fn marshaled_string_pair(key: &str, value: impl Into<String>) -> MarshaledPair {
         key: ValueSnapshot::String(key.as_bytes().to_vec()),
         value: ValueSnapshot::String(value.into().into_bytes()),
     }
-}
-
-/// Convert a node identifier into its scripting representation.
-pub(super) fn node_id_to_arg(node_id: NodeId) -> ArgValue {
-    ArgValue::Node(node_id)
 }
 
 /// Convert a script node handle back into a node identifier.

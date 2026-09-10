@@ -7,21 +7,7 @@ use ruau::vm::{
     UnsupportedTableKey, ValueSnapshot, classify_marshaled_table,
 };
 
-use super::{ArgValue, NodeId, Point, RectI32, Size, node_id_to_arg};
-
-/// Copy the text behind a scoped string value.
-pub(super) fn scoped_value_to_string<'s>(
-    scope: &Scope<'s>,
-    value: ScopedValue<'s>,
-) -> StdResult<String, String> {
-    match value {
-        ScopedValue::String(text) => scope
-            .string_bytes(text)
-            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
-            .map_err(|err| err.to_string()),
-        other => Err(format!("expected string, got {}", other.type_name())),
-    }
-}
+use super::{ArgValue, NodeId, Point, RectI32, Size};
 
 /// Canopy-owned location within a nested command value.
 #[derive(Clone)]
@@ -290,7 +276,7 @@ pub(super) fn rect_to_arg(rect: RectI32) -> ArgValue {
 
 /// Convert a list of node ids into a scripting array.
 pub(super) fn node_list_to_arg(nodes: impl IntoIterator<Item = NodeId>) -> ArgValue {
-    ArgValue::Array(nodes.into_iter().map(node_id_to_arg).collect())
+    ArgValue::Array(nodes.into_iter().map(ArgValue::Node).collect())
 }
 
 /// Convert an owned async-driver result into a command argument value.

@@ -6,7 +6,7 @@ use ruau::vm::Scope;
 
 use super::{
     ArgValue, AttrSet, Canopy, Cell, Color, CoreViewContext, NodeId, Point, RectI32, Result,
-    ViewContext, commands, error, inputmap, node_id_to_arg, node_list_to_arg, point_to_arg,
+    ViewContext, commands, error, inputmap, node_list_to_arg, point_to_arg,
     rect_to_arg, size_to_arg, widget_access,
 };
 use crate::{FrameSnapshot, NodeSnapshot, core::termbuf::TermBuf};
@@ -28,7 +28,7 @@ pub(super) fn snapshot_to_arg(frame: &FrameSnapshot) -> ArgValue {
         ("viewport".into(), size_to_arg(frame.viewport)),
         (
             "focus".into(),
-            frame.focus.map(node_id_to_arg).unwrap_or(ArgValue::Null),
+            frame.focus.map(ArgValue::Node).unwrap_or(ArgValue::Null),
         ),
         (
             "nodes".into(),
@@ -58,10 +58,10 @@ fn snapshot_node_to_arg(node: &NodeSnapshot) -> ArgValue {
         })
         .unwrap_or(ArgValue::Null);
     ArgValue::Map(BTreeMap::from([
-        ("id".into(), node_id_to_arg(node.id)),
+        ("id".into(), ArgValue::Node(node.id)),
         (
             "parent".into(),
-            node.parent.map(node_id_to_arg).unwrap_or(ArgValue::Null),
+            node.parent.map(ArgValue::Node).unwrap_or(ArgValue::Null),
         ),
         (
             "children".into(),
@@ -74,7 +74,7 @@ fn snapshot_node_to_arg(node: &NodeSnapshot) -> ArgValue {
                 .as_ref()
                 .map(|identity| {
                     ArgValue::Map(BTreeMap::from([
-                        ("scope".into(), node_id_to_arg(identity.scope)),
+                        ("scope".into(), ArgValue::Node(identity.scope)),
                         ("key".into(), ArgValue::String(identity.key.clone())),
                     ]))
                 })
@@ -162,7 +162,7 @@ pub(super) fn node_info_to_arg(
     };
     let accept_focus = widget_access::accepts_focus(&canopy.core, node_id);
     Ok(BTreeMap::from([
-        ("id".to_string(), node_id_to_arg(node_id)),
+        ("id".to_string(), ArgValue::Node(node_id)),
         ("name".to_string(), ArgValue::String(node.name.to_string())),
         (
             "semantic_identity".to_string(),
@@ -170,7 +170,7 @@ pub(super) fn node_info_to_arg(
                 .semantic_identity(node_id)
                 .map(|identity| {
                     ArgValue::Map(BTreeMap::from([
-                        ("scope".to_string(), node_id_to_arg(identity.scope)),
+                        ("scope".to_string(), ArgValue::Node(identity.scope)),
                         ("key".to_string(), ArgValue::String(identity.key)),
                     ]))
                 })
@@ -322,7 +322,7 @@ fn insert_command_action(
     };
     let mut target = BTreeMap::from([("kind".to_string(), ArgValue::String(kind.to_string()))]);
     if let Some(node) = node {
-        target.insert("node".to_string(), node_id_to_arg(node));
+        target.insert("node".to_string(), ArgValue::Node(node));
     }
     record.insert("command_target".to_string(), ArgValue::Map(target));
 }
@@ -449,7 +449,7 @@ pub(super) fn command_info_to_arg(availability: commands::CommandAvailability<'_
         record.insert("ret_doc".to_string(), ArgValue::String(doc.to_string()));
     }
     if let Some(target) = resolution.and_then(commands::CommandResolution::target) {
-        record.insert("target".to_string(), node_id_to_arg(target));
+        record.insert("target".to_string(), ArgValue::Node(target));
     }
     ArgValue::Map(record)
 }
@@ -581,7 +581,7 @@ pub(super) fn route_trace_to_arg(canopy: &Canopy) -> ArgValue {
                     ("detail".to_string(), ArgValue::String(entry.detail.clone())),
                 ]);
                 if let Some(node) = entry.node {
-                    record.insert("node".to_string(), node_id_to_arg(node));
+                    record.insert("node".to_string(), ArgValue::Node(node));
                 }
                 ArgValue::Map(record)
             })
@@ -669,7 +669,7 @@ pub(super) fn available_bindings_to_arg(
                     .resolution
                     .and_then(commands::CommandResolution::target)
                 {
-                    detail.insert("target".to_string(), node_id_to_arg(target));
+                    detail.insert("target".to_string(), ArgValue::Node(target));
                 }
                 record.insert("command".to_string(), ArgValue::Map(detail));
             }
@@ -683,7 +683,7 @@ pub(super) fn available_bindings_to_arg(
         })
         .collect();
     Ok(ArgValue::Map(BTreeMap::from([
-        ("focus".to_string(), node_id_to_arg(snapshot.focus)),
+        ("focus".to_string(), ArgValue::Node(snapshot.focus)),
         (
             "focus_path".to_string(),
             ArgValue::String(snapshot.focus_path.to_string()),

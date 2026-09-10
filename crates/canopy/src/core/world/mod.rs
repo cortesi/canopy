@@ -22,6 +22,7 @@ use crate::{
         context::CoreContext,
         id::{NodeArena, NodeId},
         node::Node,
+        path::Path,
     },
     error::{Error, NodeOperationKind, Result},
     layout::Layout,
@@ -226,7 +227,7 @@ impl Core {
             completion: teardown::CompletionBatch::default(),
             wake_registry: WakeRegistry::default(),
             rolling_back_tree_edit: false,
-            commands: CommandSet::new(),
+            commands: CommandSet::default(),
             input_map: InputMap::new(),
             command_scope: Vec::new(),
             pending_diagnostic_dump: None,
@@ -238,21 +239,6 @@ impl Core {
         if self.exit_requested.is_none() {
             self.exit_requested = Some(code);
         }
-    }
-
-    /// Take the pending exit request, if any.
-    pub(crate) fn take_exit_request(&mut self) -> Option<i32> {
-        self.exit_requested.take()
-    }
-
-    /// Request a diagnostic dump for a target node.
-    pub(crate) fn request_diagnostic_dump(&mut self, target: NodeId) {
-        self.pending_diagnostic_dump = Some(target);
-    }
-
-    /// Take and clear any pending diagnostic dump request.
-    pub(crate) fn take_diagnostic_dump_request(&mut self) -> Option<NodeId> {
-        self.pending_diagnostic_dump.take()
     }
 
     /// Return the current command-scope frame, if any.
@@ -379,11 +365,11 @@ impl Core {
         if !self.nodes.contains_key(node_id) {
             return "<missing>".into();
         }
-        let path = self.path_of(self.root, node_id).to_string();
-        if path == "/" && node_id != self.root {
+        let path = self.path_of(self.root, node_id);
+        if path == Path::empty() {
             "<detached>".into()
         } else {
-            path
+            path.to_string()
         }
     }
 }

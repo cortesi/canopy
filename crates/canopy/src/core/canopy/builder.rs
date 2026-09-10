@@ -132,7 +132,7 @@ impl CanopyBuilder {
         canopy.ensure_api_unfinalized("builder registration phase")?;
         // Builder root declarations are authoritative, including disabled
         // defaults.
-        canopy.script_module_roots = ScriptModuleRoots::new();
+        canopy.script_module_roots = ScriptModuleRoots::default();
         if let Some((path, ScriptTrust::TrustedLocal)) = self.user_root {
             canopy.set_user_script_root_inner(path)?;
         }

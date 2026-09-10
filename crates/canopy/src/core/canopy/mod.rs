@@ -409,7 +409,7 @@ impl Canopy {
             route_trace: Vec::new(),
             script_host: script::LuauHost::new(),
             script_api_text: None,
-            script_module_roots: script::ScriptModuleRoots::new(),
+            script_module_roots: script::ScriptModuleRoots::default(),
             script_module_source: None,
             script_native_modules: Vec::new(),
             startup_scripts: Vec::new(),

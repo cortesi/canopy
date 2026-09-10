@@ -81,7 +81,7 @@ use records::*;
 use value::*;
 
 /// Script identifier.
-pub type ScriptId = u64;
+pub(crate) type ScriptId = u64;
 
 /// One-shot fault-injection checkpoints for finalization tests.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -169,7 +169,7 @@ pub struct ScriptCheckResult {
 
 impl ScriptCheckResult {
     /// Construct a result from checker diagnostics.
-    pub fn from_diagnostics(diagnostics: Vec<ScriptCheckDiagnostic>) -> Self {
+    pub(crate) fn from_diagnostics(diagnostics: Vec<ScriptCheckDiagnostic>) -> Self {
         Self { diagnostics }
     }
 
@@ -658,19 +658,15 @@ impl LuauHost {
         Ok(check_source_with_surface(&surface, &source))
     }
 
-    /// Type-check a named startup script against its runtime module identity.
-    fn check_startup_source(&self, source: &Source) -> Result<ScriptCheckResult> {
+    /// Type-check a named startup script against its runtime module identity
+    /// and enforce the startup-script obligation.
+    fn typecheck_startup_source(&self, source: &Source) -> Result<()> {
         let surface = self.state.borrow().startup_surface.clone().ok_or_else(|| {
             error::Error::InvalidOperation(
                 "cannot type-check startup scripts before finalize_api()".to_string(),
             )
         })?;
-        Ok(check_source_with_surface(&surface, source))
-    }
-
-    /// Enforce the startup-script obligation before compiling a startup root.
-    fn typecheck_startup_source(&self, source: &Source) -> Result<()> {
-        let result = self.check_startup_source(source)?;
+        let result = check_source_with_surface(&surface, source);
         if result.is_ok() {
             Ok(())
         } else {
@@ -944,6 +940,13 @@ impl LuauHost {
         Ok(sid)
     }
 
+    /// Drop cached roots and closure references after a source change.
+    fn clear_script_root_caches(&self) {
+        let mut state = self.state.borrow_mut();
+        state.scripts.clear_roots();
+        state.closures.clear();
+    }
+
     /// Load a compiled script into the retained runtime.
     fn load_script(&self, sid: ScriptId) -> Result<RootHandle> {
         let (source, prepared) = {
@@ -962,9 +965,7 @@ impl LuauHost {
             error::Error::InvalidOperation("cannot load scripts before finalize_api()".to_string())
         })?;
         if runtime.invalidate_if_source_changed().is_some() {
-            let mut state = self.state.borrow_mut();
-            state.scripts.clear_roots();
-            state.closures.clear();
+            self.clear_script_root_caches();
         }
         let prepared = match prepared {
             Some(prepared) => prepared,
@@ -990,9 +991,7 @@ impl LuauHost {
             .and_then(|mut runtime| Runtime::invalidate_if_source_changed(&mut runtime))
             .is_some();
         if invalidated {
-            let mut state = self.state.borrow_mut();
-            state.scripts.clear_roots();
-            state.closures.clear();
+            self.clear_script_root_caches();
         }
         if let Some(root) = self.state.borrow().scripts.root(sid) {
             return Ok(root);

@@ -11,7 +11,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Map as JsonMap, Number as JsonNumber, Value as JsonValue};
 
 use crate::{
-    CommandEnum, Context, ViewContext,
+    Context, ViewContext,
     core::{
         Core, NodeId,
         context::{CoreContext, CoreViewContext},
@@ -42,15 +42,6 @@ pub enum ArgValue {
     Array(Vec<Self>),
     /// Map value.
     Map(BTreeMap<String, Self>),
-}
-
-/// Direction for zoom commands.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, CommandEnum)]
-pub enum ZoomDirection {
-    /// Zoom in.
-    In,
-    /// Zoom out.
-    Out,
 }
 
 impl ArgValue {
@@ -881,11 +872,6 @@ pub(crate) struct CommandResolver<'a> {
 }
 
 impl<'a> CommandResolver<'a> {
-    /// Construct a resolver for commands dispatched from `start`.
-    pub(crate) fn new(core: &'a Core, start: NodeId) -> Self {
-        Self::for_target(core, CommandTarget::From(start))
-    }
-
     /// Construct a resolver for an explicit target policy.
     pub(crate) fn for_target(core: &'a Core, target: CommandTarget) -> Self {
         let start = match target {
@@ -1064,13 +1050,6 @@ pub(crate) struct CommandSet {
 }
 
 impl CommandSet {
-    /// Construct an empty command set.
-    pub fn new() -> Self {
-        Self {
-            commands: BTreeMap::new(),
-        }
-    }
-
     /// Add a command batch atomically.
     ///
     /// Repeating an equivalent definition is idempotent. A conflicting
@@ -1414,15 +1393,6 @@ pub fn normalize_named_args<'a>(
     Ok(normalized)
 }
 
-/// Dispatch a command relative to a node.
-pub(crate) fn dispatch(
-    core: &mut Core,
-    current_id: NodeId,
-    inv: &CommandInvocation,
-) -> Result<ArgValue, CommandError> {
-    dispatch_target(core, CommandTarget::From(current_id), inv)
-}
-
 /// Resolve and invoke using one explicit target policy.
 pub(crate) fn dispatch_target(
     core: &mut Core,
@@ -1729,7 +1699,7 @@ mod tests {
 
     #[test]
     fn command_batches_are_atomic_conflict_aware_and_idempotent() {
-        let mut commands = CommandSet::new();
+        let mut commands = CommandSet::default();
         commands.add(REGISTRY_A_BATCH).unwrap();
 
         let error = commands.add(REGISTRY_CONFLICT_BATCH).unwrap_err();
@@ -1750,13 +1720,13 @@ mod tests {
         let mut reverse = Core::new();
         reverse.commands.add(REGISTRY_REVERSE_BATCH).unwrap();
 
-        let forward_ids = CommandResolver::new(&forward, forward.root)
+        let forward_ids = CommandResolver::for_target(&forward, CommandTarget::From(forward.root))
             .availability()
             .unwrap()
             .into_iter()
             .map(|item| item.spec.id.0)
             .collect::<Vec<_>>();
-        let reverse_ids = CommandResolver::new(&reverse, reverse.root)
+        let reverse_ids = CommandResolver::for_target(&reverse, CommandTarget::From(reverse.root))
             .availability()
             .unwrap()
             .into_iter()

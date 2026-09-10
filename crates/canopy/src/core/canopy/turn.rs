@@ -321,7 +321,7 @@ impl Canopy {
             id,
             request,
             deadline,
-            gas: 500_000_000,
+            gas: script::SCRIPT_GAS_LIMIT,
             invocation,
             started: self.now(),
         });
@@ -516,7 +516,7 @@ impl Canopy {
         if let Some(error) = dispatch_error {
             return Err(error);
         }
-        outcome.exit_code = self.core.take_exit_request();
+        outcome.exit_code = self.core.exit_requested.take();
         Ok(outcome)
     }
 }

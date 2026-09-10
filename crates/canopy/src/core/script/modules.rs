@@ -22,12 +22,6 @@ pub struct ScriptModuleRoots {
 }
 
 impl ScriptModuleRoots {
-    /// Construct an empty root set.
-    #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     /// Return the configured `@user` root.
     #[must_use]
     pub fn user_root(&self) -> Option<&Path> {
@@ -140,7 +134,7 @@ mod tests {
         let project_file = project.join("nested/init.luau");
         write(&user_file, "return {}");
         write(&project_file, "return {}");
-        let mut roots = ScriptModuleRoots::new();
+        let mut roots = ScriptModuleRoots::default();
         roots.set_user_root(&user);
         roots.set_project_root(&project);
         let source = roots
@@ -161,7 +155,7 @@ mod tests {
     #[test]
     fn composite_source_requires_explicit_roots_for_root_imports() {
         let user = tempfile::tempdir().expect("fixture root creates");
-        let mut roots = ScriptModuleRoots::new();
+        let mut roots = ScriptModuleRoots::default();
         roots.set_user_root(user.path());
         let source = roots
             .module_source()

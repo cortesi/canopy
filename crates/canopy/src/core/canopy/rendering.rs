@@ -300,7 +300,7 @@ impl Canopy {
         self.render_pending = false;
         self.core.changes = crate::ChangeSet::default();
         self.driver.publication.publish();
-        if let Some(target) = self.core.take_diagnostic_dump_request() {
+        if let Some(target) = self.core.pending_diagnostic_dump.take() {
             eprintln!("{}", self.diagnostic_dump(target));
         }
         Ok(true)

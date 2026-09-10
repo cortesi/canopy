@@ -3,8 +3,7 @@
 use std::path::Path;
 
 use canopy::{
-    Canopy, Context, FocusDirection, Loader, ViewContext, Widget,
-    commands::ZoomDirection,
+    Canopy, CommandEnum, Context, FocusDirection, Loader, ViewContext, Widget,
     derive_commands,
     error::{Error, Result},
     geom::{Point, Rect, Size},
@@ -13,6 +12,15 @@ use canopy::{
     style::{AttrSet, Color, Style},
 };
 use image::RgbaImage;
+
+/// Direction for zoom commands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, CommandEnum)]
+pub enum ZoomDirection {
+    /// Zoom in.
+    In,
+    /// Zoom out.
+    Out,
+}
 
 /// Character used to render two vertical pixels per terminal cell.
 const HALF_BLOCK: char = '\u{2580}';

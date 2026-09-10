@@ -185,10 +185,7 @@ impl Core {
         let plan = self.plan_subtree_removal(node_id, "replace subtree")?;
         let removed_focus_root = self.removed_focus_root(&plan);
         let focus_hint = removed_focus_root.map(|root| self.focus_recovery_hint(root));
-        self.run_pre_remove_plan(&plan)?;
-        self.validate_removal_plan(&plan)?;
-        self.run_unmount_plan(&plan)?;
-        self.validate_removal_plan(&plan)?;
+        self.run_removal_hooks(&plan)?;
 
         for removed_node in plan.post_order.iter().copied() {
             if removed_node != plan.root {
@@ -983,10 +980,7 @@ impl Core {
             None
         };
         let plan = self.plan_subtree_removal(root_id, "remove subtree")?;
-        self.run_pre_remove_plan(&plan)?;
-        self.validate_removal_plan(&plan)?;
-        self.run_unmount_plan(&plan)?;
-        self.validate_removal_plan(&plan)?;
+        self.run_removal_hooks(&plan)?;
 
         let parent = self.nodes.get(root_id).and_then(|node| node.parent);
         if let Some(parent) = parent
@@ -1029,6 +1023,15 @@ impl Core {
             pre_order,
             post_order: self.subtree_post_order(root),
         })
+    }
+
+    /// Run the full fallible removal hook sequence for a plan.
+    fn run_removal_hooks(&mut self, plan: &RemovalPlan) -> Result<()> {
+        self.run_pre_remove_plan(plan)?;
+        self.validate_removal_plan(plan)?;
+        self.run_unmount_plan(plan)?;
+        self.validate_removal_plan(plan)?;
+        Ok(())
     }
 
     /// Run fallible removal hooks in deterministic pre-order.

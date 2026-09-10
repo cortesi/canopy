@@ -1535,7 +1535,7 @@ impl Context for NodeCtx<&mut Core> {
     }
 
     fn request_diagnostic_dump(&mut self, target: NodeId) {
-        self.core.request_diagnostic_dump(target);
+        self.core.pending_diagnostic_dump = Some(target);
     }
 }
 

@@ -37,7 +37,7 @@ impl Core {
         let root_view = self
             .nodes
             .get(root)
-            .ok_or_else(|| Error::Internal("missing root node".into()))?
+            .ok_or(Error::NodeNotFound(root))?
             .view;
         let clip = root_view
             .outer
@@ -891,10 +891,7 @@ fn locate_recursive(
     point: Point,
     parent_clip: Rect,
 ) -> Result<Option<NodeId>> {
-    let node = core
-        .nodes
-        .get(node_id)
-        .ok_or_else(|| Error::Internal("missing node".into()))?;
+    let node = core.nodes.get(node_id).ok_or(Error::NodeNotFound(node_id))?;
 
     if node.hidden || node.layout.display == Display::None {
         return Ok(None);

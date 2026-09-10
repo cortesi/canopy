@@ -42,10 +42,7 @@ fn dump_node(
     level: usize,
     focus: Option<NodeId>,
 ) -> Result<()> {
-    let node = core
-        .nodes
-        .get(node_id)
-        .ok_or_else(|| Error::Internal("missing node".into()))?;
+    let node = core.nodes.get(node_id).ok_or(Error::NodeNotFound(node_id))?;
 
     // Create indentation based on the level
     let indent = "    ".repeat(level);
