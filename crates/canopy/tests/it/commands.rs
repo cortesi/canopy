@@ -5,7 +5,7 @@ mod tests {
     use std::{any::Any, cell::RefCell, collections::BTreeMap};
 
     use canopy::{
-        Canopy, CommandArg, CommandEnum, Context, ViewContext, Widget, command,
+        Canopy, CommandArg, CommandEnum, Context, ViewContext, Widget,
         commands::{
             ArgValue, CommandArgs, CommandDispatchKind, CommandError, CommandInvocation,
             CommandResolution, CommandStatus, CommandTarget, FromArgValue, SerdeArg, ToArgValue,
@@ -73,8 +73,9 @@ mod tests {
         })?;
 
         let inv = TestLeaf::cmd_c_leaf().call_with(()).invocation();
-        let result =
-            canopy.with_context(branch_id, |context| Ok(context.dispatch_command(&inv)))??;
+        let result = canopy.with_context(branch_id, |context| {
+            Ok(context.dispatch(CommandTarget::From(context.node_id()), &inv))
+        })??;
 
         assert_eq!(result, ArgValue::Null);
         assert_eq!(state_path(), vec!["test_leaf.c_leaf()"]);
@@ -99,8 +100,9 @@ mod tests {
         })?;
 
         let inv = TestLeaf::cmd_c_leaf().call_with(()).invocation();
-        let result =
-            canopy.with_context(branch_id, |context| Ok(context.dispatch_command(&inv)))??;
+        let result = canopy.with_context(branch_id, |context| {
+            Ok(context.dispatch(CommandTarget::From(context.node_id()), &inv))
+        })??;
         assert_eq!(result, ArgValue::Null);
         assert_eq!(state_path(), vec!["test_leaf.c_leaf()"]);
 
@@ -114,7 +116,9 @@ mod tests {
         let inv = TestLeaf::cmd_c_leaf().call_with(()).invocation();
 
         let err = canopy
-            .with_root_context(|context| Ok(context.dispatch_command(&inv)))?
+            .with_root_context(|context| {
+                Ok(context.dispatch(CommandTarget::From(context.node_id()), &inv))
+            })?
             .unwrap_err();
         let owner_name = match TestLeaf::cmd_c_leaf().dispatch {
             CommandDispatchKind::Node { owner } => owner,
@@ -147,7 +151,7 @@ mod tests {
             Ok((first_leaf, branch_id))
         })?;
 
-        let availability = canopy.command_availability_from_node(branch_id.into())?;
+        let availability = canopy.command_availability(CommandTarget::From(branch_id.into()))?;
         let leaf_availability = availability
             .iter()
             .find(|availability| availability.spec.id == TestLeaf::cmd_c_leaf().id)
@@ -159,7 +163,7 @@ mod tests {
             })
         );
 
-        let availability = canopy.command_availability_from_node(first_leaf.into())?;
+        let availability = canopy.command_availability(CommandTarget::From(first_leaf.into()))?;
         let branch_availability = availability
             .iter()
             .find(|availability| availability.spec.id == TestBranch::cmd_c_branch().id)
@@ -417,14 +421,14 @@ mod tests {
                 Some(expected.into())
             );
             assert_eq!(command.status, Some(CommandStatus::Enabled));
-            app.with_root_context(|ctx| Ok(ctx.dispatch_target(target, &invocation)?))?;
+            app.with_root_context(|ctx| Ok(ctx.dispatch(target, &invocation)?))?;
         }
         app.with_root_context(|ctx| {
-            ctx.with_widget(first, |counter, _| {
+            ctx.with_widget_mut(first, |counter: &mut TargetCounter, _| {
                 assert_eq!(counter.count, 2);
                 Ok(())
             })?;
-            ctx.with_widget(second, |counter, _| {
+            ctx.with_widget_mut(second, |counter: &mut TargetCounter, _| {
                 assert_eq!(counter.count, 4);
                 counter.enabled = false;
                 Ok(())
@@ -439,7 +443,7 @@ mod tests {
             Ok::<_, Error>(())
         })?;
         let err = app
-            .with_root_context(|ctx| Ok(ctx.dispatch_target(target, &invocation)))?
+            .with_root_context(|ctx| Ok(ctx.dispatch(target, &invocation)))?
             .unwrap_err();
         assert!(matches!(err, CommandError::Disabled { reason, .. } if reason == "counter paused"));
         let err = app
@@ -448,7 +452,7 @@ mod tests {
         assert!(matches!(err, CommandError::WrongOwner { .. }));
         app.with_root_context(|ctx| ctx.remove_subtree(second.into()))?;
         let err = app
-            .with_root_context(|ctx| Ok(ctx.dispatch_target(target, &invocation)))?
+            .with_root_context(|ctx| Ok(ctx.dispatch(target, &invocation)))?
             .unwrap_err();
         assert!(matches!(err, CommandError::InvalidNode { .. }));
         Ok(())

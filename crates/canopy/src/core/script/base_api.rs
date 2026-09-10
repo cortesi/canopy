@@ -30,6 +30,7 @@ use super::{
     screen_text, screen_text_for_rect, screen_to_arg, script_callback_label, script_journal_to_arg,
     snapshot_to_arg, tree_node_to_arg, validate_node_handle, values_to_args, with_current_canopy,
 };
+use crate::{FocusDirection, geom::PointI32};
 
 /// The native implementation behind one base API function.
 enum Handler {
@@ -76,7 +77,7 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
         handler: Handler::Sync(host_node_info),
     },
     BaseFunction {
-        name: "find_key",
+        name: "find_identity",
         docs: Some("Find a semantic key within an explicit scope, defaulting to root."),
         signature: || {
             FunctionSignature::new()
@@ -84,7 +85,7 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
                 .param(("scope", Type::named("NodeId").optional()))
                 .ret(Type::named("NodeId").optional())
         },
-        handler: Handler::Sync(host_find_key),
+        handler: Handler::Sync(host_find_identity),
     },
     BaseFunction {
         name: "find_node",
@@ -638,7 +639,10 @@ fn parse_bind_options<'s>(
     };
     Ok(inputmap::BindingOptions {
         scope: binding_scope,
-        path: field("path")?.unwrap_or_default(),
+        path: field("path")?
+            .filter(|path| !path.is_empty())
+            .map(|path| path.parse())
+            .transpose()?,
         description,
         source: Some(script_callback_label(scope)),
         phase,
@@ -1149,8 +1153,8 @@ fn host_node_info<'s>(
     })
 }
 
-/// `canopy.find_key`: resolve a key independently of decorative ancestors.
-fn host_find_key<'s>(
+/// `canopy.find_identity`: resolve a key independently of decorative ancestors.
+fn host_find_identity<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
@@ -1161,7 +1165,7 @@ fn host_find_key<'s>(
         let root = canopy.core.root_id();
         let context = CoreViewContext::new(&canopy.core, root);
         Ok(context
-            .find_key(requested_scope.unwrap_or(root), &key)?
+            .find_identity(requested_scope.unwrap_or(root), &key)?
             .map(node_id_to_arg)
             .unwrap_or(ArgValue::Null))
     })
@@ -1277,7 +1281,7 @@ fn host_focus_next<'s>(
     with_current_canopy(scope, |canopy, _| {
         let root_id = canopy.core.root_id();
         let mut ctx = CoreContext::new(&mut canopy.core, root_id);
-        ctx.focus_next(FocusScope::Root)?;
+        ctx.focus_move(FocusScope::Root, FocusDirection::Next)?;
         Ok(())
     })?;
     Ok(ret_none())
@@ -1291,7 +1295,7 @@ fn host_focus_prev<'s>(
     with_current_canopy(scope, |canopy, _| {
         let root_id = canopy.core.root_id();
         let mut ctx = CoreContext::new(&mut canopy.core, root_id);
-        ctx.focus_prev(FocusScope::Root)?;
+        ctx.focus_move(FocusScope::Root, FocusDirection::Prev)?;
         Ok(())
     })?;
     Ok(ret_none())
@@ -1309,7 +1313,7 @@ fn host_focus_dir<'s>(
             .map_err(error::Error::from)?;
         let root_id = canopy.core.root_id();
         let mut ctx = CoreContext::new(&mut canopy.core, root_id);
-        ctx.focus_dir(FocusScope::Root, dir)?;
+        ctx.focus_move(FocusScope::Root, dir)?;
         Ok(())
     })?;
     Ok(ret_none())
@@ -1323,7 +1327,7 @@ fn host_send_key<'s>(
     let mut args = HostArgCursor::new(scope, args);
     let key_spec = args.required::<String>("key")?;
     with_current_canopy(scope, |canopy, _| {
-        let key = key::Key::parse_spec(&key_spec).map_err(error::Error::Script)?;
+        let key = key::Key::parse_spec(&key_spec)?;
         let _reentrant = ReentrantCanopyGuard::push(canopy);
         canopy.key(Some(scope), key)
     })?;
@@ -1377,7 +1381,7 @@ fn host_send_scroll<'s>(
         } else if dir.eq_ignore_ascii_case("down") {
             mouse::Action::ScrollDown
         } else {
-            return Err(error::Error::Script(format!(
+            return Err(error::Error::script(format!(
                 "unknown scroll direction: {dir}"
             )));
         };
@@ -1503,7 +1507,7 @@ fn host_bind<'s>(
     let options = parse_bind_options(scope, args.optional::<Table<'_>>("options")?)?;
     let function = args.required::<Function<'_>>("handler")?;
     let input =
-        inputmap::InputSpec::Key(key::Key::parse_spec(&key_spec).map_err(error::Error::Script)?);
+        inputmap::InputSpec::Key(key::Key::parse_spec(&key_spec).map_err(error::Error::from)?);
     let id = install_function_binding(scope, function, input, &options)?;
     Ok(ret_one(ScopedValue::Number(id as f64)))
 }
@@ -1518,7 +1522,7 @@ fn host_bind_command<'s>(
     let options = parse_bind_options(scope, args.optional::<Table<'_>>("options")?)?;
     let name = args.required::<String>("id")?;
     let values = values_to_args(scope, iter::from_fn(|| args.raw()).collect())?;
-    let key = key::Key::parse_spec(&key_spec).map_err(error::Error::Script)?;
+    let key = key::Key::parse_spec(&key_spec).map_err(error::Error::from)?;
     let id = with_current_canopy(scope, |canopy, _| {
         let spec = canopy.core.commands.get(&name).ok_or_else(|| {
             error::Error::from(commands::CommandError::UnknownCommand { id: name.clone() })
@@ -1542,7 +1546,7 @@ fn host_bind_mouse<'s>(
     let options = parse_bind_options(scope, args.optional::<Table<'_>>("options")?)?;
     let function = args.required::<Function<'_>>("handler")?;
     let input = inputmap::InputSpec::Mouse(
-        mouse::Mouse::parse_spec(&mouse_spec).map_err(error::Error::Script)?,
+        mouse::Mouse::parse_spec(&mouse_spec).map_err(error::Error::from)?,
     );
     let id = install_function_binding(scope, function, input, &options)?;
     Ok(ret_one(ScopedValue::Number(id as f64)))
@@ -1570,7 +1574,7 @@ fn host_unbind_key<'s>(
     let key_spec = args.required::<String>("key")?;
     let options = parse_unbind_selector(scope, args.optional::<Table<'_>>("options")?)?;
     with_current_canopy(scope, |canopy, _| {
-        let key = key::Key::parse_spec(&key_spec).map_err(error::Error::Script)?;
+        let key = key::Key::parse_spec(&key_spec)?;
         let scope = options
             .mode
             .as_ref()
@@ -1660,9 +1664,10 @@ fn host_screen_region<'s>(
     let w = args.required::<i64>("w")?;
     let h = args.required::<i64>("h")?;
     // Out-of-range coordinates clamp to the screen bounds rather than failing.
+    let top_left = PointI32::clamped_from_i64(x, y);
     let rect = RectI32::new(
-        i32::try_from(x).unwrap_or(if x < 0 { i32::MIN } else { i32::MAX }),
-        i32::try_from(y).unwrap_or(if y < 0 { i32::MIN } else { i32::MAX }),
+        top_left.x,
+        top_left.y,
         u32::try_from(w.max(0)).unwrap_or(u32::MAX),
         u32::try_from(h.max(0)).unwrap_or(u32::MAX),
     );
@@ -1781,7 +1786,7 @@ pub(super) fn build_base_module() -> Result<Arc<dyn NativeModule>> {
     );
     base_api::register(&mut builder);
     builder.build().map_err(|error| {
-        error::Error::Script(format!("building base script module failed: {error}"))
+        error::Error::script(format!("building base script module failed: {error}"))
     })
 }
 
@@ -1832,7 +1837,7 @@ pub(super) fn build_owner_modules(
             );
         }
         modules.push(builder.build().map_err(|error| {
-            error::Error::Script(format!("building owner script module failed: {error}"))
+            error::Error::script(format!("building owner script module failed: {error}"))
         })?);
     }
     Ok(modules)

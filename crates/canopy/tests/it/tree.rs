@@ -50,8 +50,8 @@ mod tests {
                 let error = ctx.edit_structure(&mut |ctx| ctx.attach(ctx.node_id(), child.into()));
                 assert!(matches!(error, Err(Error::Invalid(_))));
                 assert!(ctx.children().is_empty());
-                assert!(ctx.node_type_id(child.into()).is_some());
-                ctx.with_widget(child, |widget, _| {
+                assert!(ctx.type_id_of(child.into()).is_some());
+                ctx.with_widget_mut(child, |widget: &mut MountCounter, _| {
                     assert_eq!(widget.attempts, expected_attempts);
                     Ok(())
                 })?;
@@ -69,7 +69,7 @@ mod tests {
             ctx.edit_structure(&mut |ctx| {
                 ctx.attach(root, child.into())?;
                 let error = ctx.edit_structure(&mut |ctx| {
-                    ctx.with_widget(child, |widget, _| {
+                    ctx.with_widget_mut(child, |widget: &mut TreeWidget, _| {
                         widget.name = "changed".into();
                         Ok(())
                     })?;
@@ -81,7 +81,7 @@ mod tests {
                 // The node's captured metadata and the widget's own state
                 // differ.
                 assert_eq!(node_name(ctx, root, child.into()), "original");
-                ctx.with_widget(child, |widget, _| {
+                ctx.with_widget_mut(child, |widget: &mut TreeWidget, _| {
                     assert_eq!(widget.name, "changed");
                     Ok(())
                 })?;
@@ -131,9 +131,9 @@ mod tests {
         let (root, _ba, _bb, ba_la, _ba_lb, _bb_la, _bb_lb) = build_tree(&mut canopy)?;
 
         canopy.with_root_view(|context| {
-            assert_eq!(context.node_path(root, root), Path::new(["r"]));
+            assert_eq!(context.path_of(root, root), Path::new(["r"]));
             assert_eq!(
-                context.node_path(root, ba_la),
+                context.path_of(root, ba_la),
                 Path::new(["r", "ba", "ba_la"])
             );
         });
@@ -143,7 +143,7 @@ mod tests {
 
     fn node_name(context: &dyn ViewContext, root: NodeId, node: NodeId) -> String {
         context
-            .node_path(root, node)
+            .path_of(root, node)
             .pop()
             .expect("node path should contain a name")
     }

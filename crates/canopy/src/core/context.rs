@@ -10,7 +10,7 @@ use super::{
     help::BindingSnapshot,
     id::{NodeId, TypedId},
     inputmap::{ExclusiveFrameToken, FrameworkBindingGroup},
-    style::Effect,
+    style::effects::Effect,
     view::View,
     world::{Core, WidgetOperation, layout_driver::clamp_scroll},
 };
@@ -22,61 +22,61 @@ use crate::{
     },
     error::{Error, Result},
     event::{Event, mouse::MouseEvent},
-    geom::{Direction, Point, Rect},
+    geom::{Point, Rect},
     layout::{Layout, LayoutOverride},
     path::{Path, PathFilter},
     style::StyleMap,
     widget::Widget,
 };
 
-/// A typed key for keyed children.
+/// A typed slot for keyed children.
 ///
 /// This trait associates a string key with a specific widget type, providing
 /// compile-time type safety for keyed child access.
 ///
-/// Use the [`crate::key!`] macro to define keys:
+/// Use the [`crate::slot!`] macro to define keys:
 ///
 /// ```
-/// use canopy::{ChildKey, Widget, key};
+/// use canopy::{ChildSlot, Widget, slot};
 ///
 /// pub struct Modal;
 /// impl Widget for Modal {}
 ///
-/// key!(ModalSlot: Modal);
+/// slot!(ModalSlot: Modal);
 /// assert_eq!(ModalSlot::KEY, "ModalSlot");
 /// ```
-pub trait ChildKey {
+pub trait ChildSlot {
     /// The widget type associated with this key.
     type Widget: Widget + 'static;
     /// The string key used for storage.
     const KEY: &'static str;
 }
 
-/// Define a typed key for keyed children.
+/// Define a typed slot for keyed children.
 ///
 /// # Examples
 ///
 /// ```
-/// use canopy::{ChildKey, Widget, key};
+/// use canopy::{ChildSlot, Widget, slot};
 ///
-/// key!(Editor);
+/// slot!(Editor);
 /// impl Widget for Editor {}
 ///
 /// pub struct Modal;
 /// impl Widget for Modal {}
-/// key!(pub ModalSlot: Modal);
+/// slot!(pub ModalSlot: Modal);
 ///
 /// assert_eq!(Editor::KEY, "Editor");
 /// assert_eq!(ModalSlot::KEY, "ModalSlot");
 /// ```
 #[macro_export]
-macro_rules! key {
+macro_rules! slot {
     ($vis:vis $name:ident) => {
         /// Typed key for a keyed child slot.
         #[derive(Debug, Clone, Copy)]
         $vis struct $name;
 
-        impl $crate::ChildKey for $name {
+        impl $crate::ChildSlot for $name {
             type Widget = $name;
             const KEY: &'static str = ::std::stringify!($name);
         }
@@ -86,15 +86,40 @@ macro_rules! key {
         #[derive(Debug, Clone, Copy)]
         $vis struct $name;
 
-        impl $crate::ChildKey for $name {
+        impl $crate::ChildSlot for $name {
             type Widget = $widget;
             const KEY: &'static str = ::std::stringify!($name);
         }
     };
 }
 
+/// Implementation hooks reserved for Canopy's built-in contexts.
+pub mod sealed {
+    use super::{NodeId, Result};
+
+    /// Marker implemented only by Canopy's built-in read-only contexts.
+    pub trait ViewContext {}
+
+    /// Mutation hooks implemented only by Canopy's built-in mutable contexts.
+    pub trait Context {
+        /// Borrow this implementation through the public context interface.
+        fn as_context(&mut self) -> &mut dyn super::Context;
+
+        /// Attach the topology produced by a completed composition pass.
+        fn attach_composed(
+            &mut self,
+            parent: NodeId,
+            roots: &[(NodeId, Option<&str>)],
+            slots: &[(NodeId, NodeId, String)],
+        ) -> Result<()>;
+    }
+}
+
 /// Read-only context available to widgets during render and measure.
-pub trait ViewContext {
+///
+/// Applications consume contexts supplied by Canopy and cannot implement this
+/// trait themselves.
+pub trait ViewContext: sealed::ViewContext {
     /// The node currently being rendered.
     fn node_id(&self) -> NodeId;
 
@@ -103,51 +128,41 @@ pub trait ViewContext {
 
     /// View information for the current node.
     fn view(&self) -> View {
-        self.node_view(self.node_id()).unwrap_or_default()
+        self.view_of(self.node_id()).unwrap_or_default()
     }
 
     /// Cached layout configuration for the current node.
     fn layout(&self) -> Layout {
-        self.node_layout(self.node_id()).unwrap_or_default()
+        self.layout_of(self.node_id()).unwrap_or_default()
     }
 
     /// View information for a specific node.
-    fn node_view(&self, node: NodeId) -> Option<View>;
+    fn view_of(&self, node: NodeId) -> Option<View>;
 
     /// Layout configuration for a specific node.
-    fn node_layout(&self, node: NodeId) -> Option<Layout>;
+    fn layout_of(&self, node: NodeId) -> Option<Layout>;
 
     /// Read a widget without extracting its slot or marking it changed.
-    fn read_widget(
+    fn with_widget_dyn(
         &self,
         node: NodeId,
         callback: &mut dyn FnMut(&dyn Widget) -> Result<()>,
     ) -> Result<()>;
 
-    /// Inspect the current eligibility of an explicitly targeted command.
+    /// Inspect a command for display. Registry and target resolution failures
+    /// are returned as disabled reasons; eligibility hook failures remain
+    /// errors.
     fn command_status(
         &self,
         target: CommandTarget,
         invocation: &CommandInvocation,
     ) -> Result<CommandStatus>;
 
-    /// Inspect an action for display. Built-in contexts report registry and
-    /// target resolution failures as disabled reasons, while eligibility
-    /// hook errors remain errors. Custom contexts default to their command
-    /// status behavior.
-    fn action_status(
-        &self,
-        target: CommandTarget,
-        invocation: &CommandInvocation,
-    ) -> Result<CommandStatus> {
-        self.command_status(target, invocation)
-    }
-
     /// Widget type identifier for a specific node.
-    fn node_type_id(&self, node: NodeId) -> Option<TypeId>;
+    fn type_id_of(&self, node: NodeId) -> Option<TypeId>;
 
     /// Resolve a semantic key in an explicit live subtree scope.
-    fn find_key(&self, scope: NodeId, key: &str) -> Result<Option<NodeId>>;
+    fn find_identity(&self, scope: NodeId, key: &str) -> Result<Option<NodeId>>;
 
     /// Return a node's independently assigned semantic identity.
     fn semantic_identity(&self, node: NodeId) -> Option<SemanticIdentity>;
@@ -177,22 +192,22 @@ pub trait ViewContext {
 
     /// Does the current node have focus?
     fn is_focused(&self) -> bool {
-        self.node_is_focused(self.node_id())
+        self.is_focused_of(self.node_id())
     }
 
     /// Does the specified node have focus?
-    fn node_is_focused(&self, node: NodeId) -> bool;
+    fn is_focused_of(&self, node: NodeId) -> bool;
 
     /// Return the currently focused node, including one not yet laid out.
     fn focused_node(&self) -> Option<NodeId>;
 
     /// Is the current node on the focus path?
     fn is_on_focus_path(&self) -> bool {
-        self.node_is_on_focus_path(self.node_id())
+        self.is_on_focus_path_of(self.node_id())
     }
 
     /// Is the specified node on the focus path?
-    fn node_is_on_focus_path(&self, node: NodeId) -> bool;
+    fn is_on_focus_path_of(&self, node: NodeId) -> bool;
 
     /// Return the focused leaf under the subtree rooted at `root`.
     fn focused_leaf(&self, root: NodeId) -> Option<NodeId>;
@@ -204,7 +219,7 @@ pub trait ViewContext {
     fn parent_of(&self, node: NodeId) -> Option<NodeId>;
 
     /// Return whether a node exists and is attached to the root tree.
-    fn node_is_attached(&self, node: NodeId) -> bool;
+    fn is_attached_of(&self, node: NodeId) -> bool;
 
     /// Whether a modal scope remains open, including pending deferred closes.
     fn modal_is_open(&self, token: InteractionToken) -> bool {
@@ -213,18 +228,18 @@ pub trait ViewContext {
     }
 
     /// Return the path for a node relative to a root.
-    fn node_path(&self, root: NodeId, node: NodeId) -> Path;
+    fn path_of(&self, root: NodeId, node: NodeId) -> Path;
 
     /// Locate the deepest visible node at a point within a subtree.
     fn locate(&self, root: NodeId, point: Point) -> Result<Option<NodeId>>;
 
     /// Return a keyed child relative to the current node.
-    fn child_keyed(&self, key: &str) -> Option<NodeId> {
-        self.child_keyed_in(self.node_id(), key)
+    fn child_slot(&self, key: &str) -> Option<NodeId> {
+        self.child_slot_of(self.node_id(), key)
     }
 
     /// Return a keyed child relative to a specific parent node.
-    fn child_keyed_in(&self, parent: NodeId, key: &str) -> Option<NodeId>;
+    fn child_slot_of(&self, parent: NodeId, key: &str) -> Option<NodeId>;
 
     /// Find the first node whose path matches the validated filter.
     fn find_node_matching(&self, path_filter: &PathFilter) -> Option<NodeId> {
@@ -271,24 +286,32 @@ fn matching_nodes<'a, C: ViewContext + ?Sized>(
 ) -> impl Iterator<Item = NodeId> + 'a {
     let root = ctx.node_id();
     preorder_from(ctx, root)
-        .filter(move |id| path_filter.check_match(&ctx.node_path(root, *id)).is_some())
+        .filter(move |id| path_filter.check_match(&ctx.path_of(root, *id)).is_some())
 }
 
 /// Apply a scroll transform to a node, clamp it to the canvas, and report
 /// whether it moved.
-fn update_scroll(core: &mut Core, node_id: NodeId, f: impl FnOnce(Point) -> Point) -> bool {
+fn update_scroll(
+    core: &mut Core,
+    node_id: NodeId,
+    f: impl FnOnce(Point) -> Point,
+) -> ChangeOutcome {
     let Some(node) = core.nodes.get_mut(node_id) else {
-        return false;
+        return ChangeOutcome::Unchanged;
     };
     let before = node.scroll;
     node.scroll = f(before);
     clamp_scroll(&mut node.scroll, node.content_size, node.canvas);
-    node.view.tl = node.scroll;
+    node.view.scroll = node.scroll;
     let changed = before != node.scroll;
     if changed {
         core.invalidate(crate::Invalidation::Layout);
     }
-    changed
+    if changed {
+        ChangeOutcome::Changed
+    } else {
+        ChangeOutcome::Unchanged
+    }
 }
 
 /// Validate one raw node ID against a requested widget type.
@@ -297,7 +320,7 @@ where
     W: Widget + 'static,
     C: ViewContext + ?Sized,
 {
-    let actual = ctx.node_type_id(node).ok_or(Error::NodeNotFound(node))?;
+    let actual = ctx.type_id_of(node).ok_or(Error::NodeNotFound(node))?;
     if actual != TypeId::of::<W>() {
         return Err(Error::NodeTypeMismatch {
             node,
@@ -307,16 +330,17 @@ where
     Ok(TypedId::new(node))
 }
 
-impl dyn ViewContext + '_ {
+/// Typed helpers shared by read-only and mutable contexts.
+pub trait ViewContextExt: ViewContext {
     /// Read a typed widget while preserving immutable access and borrow errors.
-    pub fn with_widget_read<W: Widget + 'static, R>(
+    fn with_widget<W: Widget + 'static, R>(
         &self,
         node: TypedId<W>,
         callback: impl FnOnce(&W) -> Result<R>,
     ) -> Result<R> {
         let mut callback = Some(callback);
         let mut result = None;
-        self.read_widget(node.into(), &mut |widget| {
+        self.with_widget_dyn(node.into(), &mut |widget| {
             let any = widget as &dyn Any;
             let widget = any
                 .downcast_ref::<W>()
@@ -331,33 +355,33 @@ impl dyn ViewContext + '_ {
     }
 
     /// Validate an untyped node ID and return its typed form.
-    pub fn typed_id<W: Widget + 'static>(&self, node: impl Into<NodeId>) -> Result<TypedId<W>> {
+    fn typed_id<W: Widget + 'static>(&self, node: impl Into<NodeId>) -> Result<TypedId<W>> {
         checked_typed_id(self, node.into())
     }
 
     /// Pre-order traversal of the subtree rooted at `root`.
-    pub fn preorder(&self, root: impl Into<NodeId>) -> impl Iterator<Item = NodeId> + '_ {
+    fn preorder(&self, root: impl Into<NodeId>) -> impl Iterator<Item = NodeId> + '_ {
         preorder_from(self, root.into())
     }
 
     /// Return the first widget of type `W` anywhere in the tree, including the
     /// root.
-    pub fn first_in_tree<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
+    fn first_in_tree<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
         self.preorder(self.root_id())
-            .find(|id| ViewContext::node_type_id(self, *id) == Some(TypeId::of::<W>()))
+            .find(|id| ViewContext::type_id_of(self, *id) == Some(TypeId::of::<W>()))
             .map(TypedId::new)
     }
 
     /// Return all widgets of type `W` anywhere in the tree, including the root.
-    pub fn all_in_tree<W: Widget + 'static>(&self) -> Vec<TypedId<W>> {
+    fn all_in_tree<W: Widget + 'static>(&self) -> Vec<TypedId<W>> {
         self.preorder(self.root_id())
-            .filter(|id| ViewContext::node_type_id(self, *id) == Some(TypeId::of::<W>()))
+            .filter(|id| ViewContext::type_id_of(self, *id) == Some(TypeId::of::<W>()))
             .map(TypedId::new)
             .collect()
     }
 
     /// Find exactly one node matching a path filter.
-    pub fn find_one(&self, path: &str) -> Result<NodeId> {
+    fn find_one(&self, path: &str) -> Result<NodeId> {
         let filter = PathFilter::normalized(path)?;
         let matches = self.find_nodes_matching(&filter);
         match matches.len() {
@@ -368,39 +392,39 @@ impl dyn ViewContext + '_ {
     }
 
     /// Return the unique child of type `W`, or error if more than one exists.
-    pub fn unique_child<W: Widget + 'static>(&self) -> Result<Option<TypedId<W>>> {
-        self.unique_typed(self.children().into_iter())
+    fn unique_child<W: Widget + 'static>(&self) -> Result<Option<TypedId<W>>> {
+        unique_typed(self, self.children().into_iter())
     }
 
     /// Return all direct children of type `W`.
-    pub fn children_of_type<W: Widget + 'static>(&self) -> Vec<TypedId<W>> {
+    fn children_of_type<W: Widget + 'static>(&self) -> Vec<TypedId<W>> {
         self.children()
             .into_iter()
-            .filter(|id| self.node_matches_type::<W>(*id))
+            .filter(|id| node_matches_type::<W, _>(self, *id))
             .map(TypedId::new)
             .collect()
     }
 
     /// Return the unique descendant of type `W`, or error if more than one
     /// exists.
-    pub fn unique_descendant<W: Widget + 'static>(&self) -> Result<Option<TypedId<W>>> {
-        self.unique_typed(self.preorder(self.node_id()).skip(1))
+    fn unique_descendant<W: Widget + 'static>(&self) -> Result<Option<TypedId<W>>> {
+        unique_typed(self, self.preorder(self.node_id()).skip(1))
     }
 
     /// Return all descendants of type `W` (excluding self).
-    pub fn descendants_of_type<W: Widget + 'static>(&self) -> Vec<TypedId<W>> {
+    fn descendants_of_type<W: Widget + 'static>(&self) -> Vec<TypedId<W>> {
         self.preorder(self.node_id())
             .skip(1)
-            .filter(|id| self.node_matches_type::<W>(*id))
+            .filter(|id| node_matches_type::<W, _>(self, *id))
             .map(TypedId::new)
             .collect()
     }
 
     /// Return the descendant of type `W` that is on the focus path, if any.
-    pub fn focused_descendant<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
+    fn focused_descendant<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
         self.descendants_of_type::<W>()
             .into_iter()
-            .find(|id| ViewContext::node_is_on_focus_path(self, (*id).into()))
+            .find(|id| ViewContext::is_on_focus_path_of(self, (*id).into()))
     }
 
     /// Return the descendant of type `W` on the focus path, or the first if
@@ -409,44 +433,107 @@ impl dyn ViewContext + '_ {
     /// This searches only within the current node's subtree. Use the tree-wide
     /// helpers on `ViewContext` if you need to search from an arbitrary
     /// root.
-    pub fn focused_or_first_descendant<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
+    fn focused_or_first_descendant<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
         let descendants = self.descendants_of_type::<W>();
         let focused = descendants
             .iter()
             .copied()
-            .find(|id| ViewContext::node_is_on_focus_path(self, (*id).into()));
+            .find(|id| ViewContext::is_on_focus_path_of(self, (*id).into()));
         focused.or_else(|| descendants.into_iter().next())
-    }
-
-    /// Return true if the node's widget type matches `W`.
-    fn node_matches_type<W: Widget + 'static>(&self, node: NodeId) -> bool {
-        ViewContext::node_type_id(self, node) == Some(TypeId::of::<W>())
-    }
-
-    /// Return the single node of type `W` among `ids`, or error when more than
-    /// one matches.
-    fn unique_typed<W: Widget + 'static>(
-        &self,
-        ids: impl Iterator<Item = NodeId>,
-    ) -> Result<Option<TypedId<W>>> {
-        let mut found = None;
-        for id in ids.filter(|id| self.node_matches_type::<W>(*id)) {
-            if found.is_some() {
-                return Err(Error::MultipleMatches);
-            }
-            found = Some(TypedId::new(id));
-        }
-        Ok(found)
     }
 
     /// Return the first leaf node under `root` using pre-order traversal.
     ///
     /// A leaf is a node with no children.
-    pub fn first_leaf(&self, root: impl Into<NodeId>) -> Option<NodeId> {
+    fn first_leaf(&self, root: impl Into<NodeId>) -> Option<NodeId> {
         let root = root.into();
         self.preorder(root)
             .find(|id| ViewContext::children_of(self, *id).is_empty())
     }
+}
+
+impl<T: ViewContext + ?Sized> ViewContextExt for T {}
+
+#[allow(missing_docs)]
+impl dyn ViewContext + '_ {
+    pub fn with_widget<W: Widget + 'static, R>(
+        &self,
+        node: TypedId<W>,
+        callback: impl FnOnce(&W) -> Result<R>,
+    ) -> Result<R> {
+        ViewContextExt::with_widget(self, node, callback)
+    }
+
+    pub fn typed_id<W: Widget + 'static>(&self, node: impl Into<NodeId>) -> Result<TypedId<W>> {
+        ViewContextExt::typed_id(self, node)
+    }
+
+    pub fn preorder(&self, root: impl Into<NodeId>) -> impl Iterator<Item = NodeId> + '_ {
+        ViewContextExt::preorder(self, root)
+    }
+
+    pub fn first_in_tree<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
+        ViewContextExt::first_in_tree(self)
+    }
+
+    pub fn all_in_tree<W: Widget + 'static>(&self) -> Vec<TypedId<W>> {
+        ViewContextExt::all_in_tree(self)
+    }
+
+    pub fn find_one(&self, path: &str) -> Result<NodeId> {
+        ViewContextExt::find_one(self, path)
+    }
+
+    pub fn unique_child<W: Widget + 'static>(&self) -> Result<Option<TypedId<W>>> {
+        ViewContextExt::unique_child(self)
+    }
+
+    pub fn children_of_type<W: Widget + 'static>(&self) -> Vec<TypedId<W>> {
+        ViewContextExt::children_of_type(self)
+    }
+
+    pub fn unique_descendant<W: Widget + 'static>(&self) -> Result<Option<TypedId<W>>> {
+        ViewContextExt::unique_descendant(self)
+    }
+
+    pub fn descendants_of_type<W: Widget + 'static>(&self) -> Vec<TypedId<W>> {
+        ViewContextExt::descendants_of_type(self)
+    }
+
+    pub fn focused_descendant<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
+        ViewContextExt::focused_descendant(self)
+    }
+
+    pub fn focused_or_first_descendant<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
+        ViewContextExt::focused_or_first_descendant(self)
+    }
+
+    pub fn first_leaf(&self, root: impl Into<NodeId>) -> Option<NodeId> {
+        ViewContextExt::first_leaf(self, root)
+    }
+}
+
+/// Return whether a node stores the requested concrete widget type.
+fn node_matches_type<W: Widget + 'static, C: ViewContext + ?Sized>(
+    context: &C,
+    node: NodeId,
+) -> bool {
+    context.type_id_of(node) == Some(TypeId::of::<W>())
+}
+
+/// Convert a node stream into zero or one typed identifier.
+fn unique_typed<W: Widget + 'static, C: ViewContext + ?Sized>(
+    context: &C,
+    ids: impl Iterator<Item = NodeId>,
+) -> Result<Option<TypedId<W>>> {
+    let mut found = None;
+    for id in ids.filter(|id| node_matches_type::<W, _>(context, *id)) {
+        if found.is_some() {
+            return Err(Error::MultipleMatches);
+        }
+        found = Some(TypedId::new(id));
+    }
+    Ok(found)
 }
 
 /// Subtree used by a focus traversal operation.
@@ -458,6 +545,23 @@ pub enum FocusScope {
     Root,
     /// A subtree rooted at an explicit node.
     Node(NodeId),
+}
+
+/// Direction for focus movement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, crate::CommandEnum)]
+pub enum FocusDirection {
+    /// Move to the next focusable node.
+    Next,
+    /// Move to the previous focusable node.
+    Prev,
+    /// Move focus up.
+    Up,
+    /// Move focus down.
+    Down,
+    /// Move focus left.
+    Left,
+    /// Move focus right.
+    Right,
 }
 
 impl FocusScope {
@@ -472,16 +576,10 @@ impl FocusScope {
 }
 
 /// Mutable context available to widgets during event handling.
-pub trait Context: ViewContext {
-    /// Commit configured composition topology and semantic keys before mount.
-    #[doc(hidden)]
-    fn attach_composed(
-        &mut self,
-        parent: NodeId,
-        roots: &[(NodeId, Option<&str>)],
-        keys: &[(NodeId, NodeId, String)],
-    ) -> Result<()>;
-
+///
+/// Applications consume contexts supplied by Canopy and cannot implement this
+/// trait themselves.
+pub trait Context: ViewContext + sealed::Context {
     /// Assign a unique semantic key within a containing subtree scope.
     fn set_semantic_key(&mut self, node: NodeId, scope: NodeId, key: &str) -> Result<()>;
 
@@ -492,16 +590,11 @@ pub trait Context: ViewContext {
     fn set_focus(&mut self, node: NodeId) -> Result<ChangeOutcome>;
 
     /// Move focus in a direction within an explicit scope.
-    fn focus_dir(&mut self, scope: FocusScope, dir: Direction) -> Result<ChangeOutcome>;
+    fn focus_move(&mut self, scope: FocusScope, direction: FocusDirection)
+    -> Result<ChangeOutcome>;
 
     /// Focus the first focusable node within an explicit scope.
     fn focus_first(&mut self, scope: FocusScope) -> Result<ChangeOutcome>;
-
-    /// Focus the next focusable node within an explicit scope.
-    fn focus_next(&mut self, scope: FocusScope) -> Result<ChangeOutcome>;
-
-    /// Focus the previous focusable node within an explicit scope.
-    fn focus_prev(&mut self, scope: FocusScope) -> Result<ChangeOutcome>;
 
     /// Capture mouse events for the current node.
     fn capture_mouse(&mut self) -> Result<ChangeOutcome>;
@@ -543,43 +636,41 @@ pub trait Context: ViewContext {
     /// Remove one exclusive binding frame.
     fn pop_exclusive_bindings(&mut self, token: ExclusiveFrameToken) -> Result<()>;
 
-    /// Scroll the view to the specified position. Returns `true` if movement
-    /// occurred.
-    fn scroll_to(&mut self, x: u32, y: u32) -> bool;
+    /// Scroll the view to the specified position.
+    fn scroll_to(&mut self, x: u32, y: u32) -> ChangeOutcome;
 
-    /// Scroll the view by the given offsets. Returns `true` if movement
-    /// occurred.
-    fn scroll_by(&mut self, x: i32, y: i32) -> bool;
+    /// Scroll the view by the given offsets.
+    fn scroll_by(&mut self, x: i32, y: i32) -> ChangeOutcome;
 
-    /// Scroll the view up by one page. Returns `true` if movement occurred.
-    fn page_up(&mut self) -> bool {
+    /// Scroll the view up by one page.
+    fn page_up(&mut self) -> ChangeOutcome {
         let view = self.view();
-        self.scroll_to(view.tl.x, view.tl.y.saturating_sub(view.content.h))
+        self.scroll_to(view.scroll.x, view.scroll.y.saturating_sub(view.content.h))
     }
 
-    /// Scroll the view down by one page. Returns `true` if movement occurred.
-    fn page_down(&mut self) -> bool {
+    /// Scroll the view down by one page.
+    fn page_down(&mut self) -> ChangeOutcome {
         let view = self.view();
-        self.scroll_to(view.tl.x, view.tl.y.saturating_add(view.content.h))
+        self.scroll_to(view.scroll.x, view.scroll.y.saturating_add(view.content.h))
     }
 
-    /// Scroll the view up by one line. Returns `true` if movement occurred.
-    fn scroll_up(&mut self) -> bool {
+    /// Scroll the view up by one line.
+    fn scroll_up(&mut self) -> ChangeOutcome {
         self.scroll_by(0, -1)
     }
 
-    /// Scroll the view down by one line. Returns `true` if movement occurred.
-    fn scroll_down(&mut self) -> bool {
+    /// Scroll the view down by one line.
+    fn scroll_down(&mut self) -> ChangeOutcome {
         self.scroll_by(0, 1)
     }
 
-    /// Scroll the view left by one line. Returns `true` if movement occurred.
-    fn scroll_left(&mut self) -> bool {
+    /// Scroll the view left by one line.
+    fn scroll_left(&mut self) -> ChangeOutcome {
         self.scroll_by(-1, 0)
     }
 
-    /// Scroll the view right by one line. Returns `true` if movement occurred.
-    fn scroll_right(&mut self) -> bool {
+    /// Scroll the view right by one line.
+    fn scroll_right(&mut self) -> ChangeOutcome {
         self.scroll_by(1, 0)
     }
 
@@ -629,51 +720,23 @@ pub trait Context: ViewContext {
 
     /// Execute a closure with mutable access to a widget and its node-bound
     /// context.
-    fn with_widget_mut(
+    fn with_widget_dyn_mut(
         &mut self,
         node: NodeId,
         f: &mut dyn FnMut(&mut dyn Widget, &mut dyn Context) -> Result<()>,
     ) -> Result<()>;
 
     /// Dispatch according to an explicit target policy.
-    fn dispatch_target(
+    fn dispatch(
         &mut self,
         target: CommandTarget,
         cmd: &CommandInvocation,
     ) -> StdResult<ArgValue, CommandError>;
-
-    /// Invoke only the specified command owner.
-    fn dispatch_exact(
-        &mut self,
-        node: NodeId,
-        cmd: &CommandInvocation,
-    ) -> StdResult<ArgValue, CommandError> {
-        self.dispatch_target(CommandTarget::Exact(node), cmd)
-    }
-
-    /// Search the supplied origin subtree, then its ancestors.
-    fn dispatch_from(
-        &mut self,
-        node: NodeId,
-        cmd: &CommandInvocation,
-    ) -> StdResult<ArgValue, CommandError> {
-        self.dispatch_target(CommandTarget::From(node), cmd)
-    }
 
     /// Invoke with explicit target and input scope.
-    fn dispatch_target_scoped(
+    fn dispatch_scoped(
         &mut self,
         target: CommandTarget,
-        frame: CommandScopeFrame,
-        cmd: &CommandInvocation,
-    ) -> StdResult<ArgValue, CommandError>;
-
-    /// Dispatch a command relative to this node.
-    fn dispatch_command(&mut self, cmd: &CommandInvocation) -> StdResult<ArgValue, CommandError>;
-
-    /// Dispatch a command with an explicit command-scope frame.
-    fn dispatch_command_scoped(
-        &mut self,
         frame: CommandScopeFrame,
         cmd: &CommandInvocation,
     ) -> StdResult<ArgValue, CommandError>;
@@ -693,7 +756,7 @@ pub trait Context: ViewContext {
 
     /// Add a boxed widget as a keyed child of a specific parent and return the
     /// new node ID.
-    fn add_child_to_keyed_boxed(
+    fn add_child_to_slot_boxed(
         &mut self,
         parent: NodeId,
         key: &str,
@@ -704,7 +767,7 @@ pub trait Context: ViewContext {
     fn attach(&mut self, parent: NodeId, child: NodeId) -> Result<()>;
 
     /// Attach a detached child to a parent using a unique key.
-    fn attach_keyed(&mut self, parent: NodeId, key: &str, child: NodeId) -> Result<()>;
+    fn attach_slot(&mut self, parent: NodeId, key: &str, child: NodeId) -> Result<()>;
 
     /// Detach a child from its parent.
     fn detach(&mut self, child: NodeId) -> Result<()>;
@@ -758,41 +821,39 @@ pub trait Context: ViewContext {
     fn request_diagnostic_dump(&mut self, target: NodeId);
 }
 
-impl dyn Context + '_ {
+/// Typed mutation and composition helpers for contexts.
+pub trait ContextExt: Context + ViewContextExt {
+    /// Invoke only the specified command owner.
+    fn dispatch_exact(
+        &mut self,
+        node: NodeId,
+        command: &CommandInvocation,
+    ) -> StdResult<ArgValue, CommandError> {
+        self.dispatch(CommandTarget::Exact(node), command)
+    }
+
     /// Build detached children and attach them after configuration succeeds.
     /// Structural rollback follows [`Context::edit_structure`].
-    pub fn compose<R>(
+    fn compose<R>(
         &mut self,
         parent: NodeId,
         build: impl FnOnce(&mut crate::ChildBuilder<'_>) -> Result<R>,
     ) -> Result<R> {
-        super::children::compose(self, parent, build)
+        super::children::compose(sealed::Context::as_context(self), parent, build)
     }
 
     /// Set the layout for the current node.
-    pub fn set_layout(&mut self, layout: Layout) -> Result<()> {
+    fn set_layout(&mut self, layout: Layout) -> Result<()> {
         self.set_layout_of(self.node_id(), layout)
     }
 
     /// Set the layout for a specific node.
-    pub fn set_layout_of(&mut self, node: impl Into<NodeId>, layout: Layout) -> Result<()> {
+    fn set_layout_of(&mut self, node: impl Into<NodeId>, layout: Layout) -> Result<()> {
         Context::set_layout_override_of(self, node.into(), LayoutOverride::full(layout))
     }
 
-    /// Execute a closure with mutable access through a typed widget ID.
-    pub fn with_widget<W, R>(
-        &mut self,
-        node: TypedId<W>,
-        f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
-    ) -> Result<R>
-    where
-        W: Widget + 'static,
-    {
-        self.with_node(node, f)
-    }
-
     /// Execute a closure with mutable access to a runtime-checked widget node.
-    pub fn with_node<W, R>(
+    fn with_widget_mut<W, R>(
         &mut self,
         node: impl Into<NodeId>,
         f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
@@ -804,7 +865,7 @@ impl dyn Context + '_ {
         checked_typed_id::<W, _>(&*self, node)?;
         let mut output = None;
         let mut f = Some(f);
-        self.with_widget_mut(node, &mut |widget, ctx| {
+        self.with_widget_dyn_mut(node, &mut |widget, ctx| {
             let any = widget as &mut dyn Any;
             let widget = any
                 .downcast_mut::<W>()
@@ -819,20 +880,20 @@ impl dyn Context + '_ {
     }
 
     /// Create a widget node detached from the tree.
-    pub fn create_detached<W: Widget + 'static>(&mut self, widget: W) -> Result<TypedId<W>> {
+    fn create_detached<W: Widget + 'static>(&mut self, widget: W) -> Result<TypedId<W>> {
         let id = self.create_detached_boxed(widget.into())?;
         Ok(TypedId::new(id))
     }
 
     /// Add a widget as a child of the current node and return the new typed
     /// node ID.
-    pub fn add_child<W: Widget + 'static>(&mut self, widget: W) -> Result<TypedId<W>> {
+    fn add_child<W: Widget + 'static>(&mut self, widget: W) -> Result<TypedId<W>> {
         self.add_child_to(self.node_id(), widget)
     }
 
     /// Add a widget as a child of a specific parent and return the new typed
     /// node ID.
-    pub fn add_child_to<W: Widget + 'static>(
+    fn add_child_to<W: Widget + 'static>(
         &mut self,
         parent: impl Into<NodeId>,
         widget: W,
@@ -842,119 +903,251 @@ impl dyn Context + '_ {
     }
 
     /// Execute a closure with a keyed child of type `W`.
-    pub fn with_keyed<W: Widget + 'static, R>(
+    fn with_slot<W: Widget + 'static, R>(
         &mut self,
         key: &str,
         f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
     ) -> Result<R> {
         let node = self
-            .child_keyed(key)
+            .child_slot(key)
             .ok_or_else(|| Error::NotFound(format!("key {key}")))?;
-        self.with_node(node, f)
+        self.with_widget_mut(node, f)
     }
 
     /// Check if a typed keyed child exists.
-    pub fn has_child<K: ChildKey>(&self) -> Result<bool> {
-        self.get_child::<K>().map(|child| child.is_some())
+    fn has_slot<K: ChildSlot>(&self) -> Result<bool> {
+        self.get_slot::<K>().map(|child| child.is_some())
     }
 
     /// Get a typed keyed child's node ID.
-    pub fn get_child<K: ChildKey>(&self) -> Result<Option<TypedId<K::Widget>>> {
-        self.child_keyed(K::KEY)
+    fn get_slot<K: ChildSlot>(&self) -> Result<Option<TypedId<K::Widget>>> {
+        self.child_slot(K::KEY)
             .map(|node| checked_typed_id(self, node))
             .transpose()
     }
 
     /// Get a typed keyed child's node ID from a specific parent.
-    pub fn get_child_in<K: ChildKey>(
+    fn get_slot_of<K: ChildSlot>(
         &self,
         parent: impl Into<NodeId>,
     ) -> Result<Option<TypedId<K::Widget>>> {
-        ViewContext::child_keyed_in(self, parent.into(), K::KEY)
+        ViewContext::child_slot_of(self, parent.into(), K::KEY)
             .map(|node| checked_typed_id(self, node))
             .transpose()
     }
 
     /// Get or create the keyed child under the current node.
-    pub fn get_or_create<K: ChildKey>(
+    fn get_or_create_slot<K: ChildSlot>(
         &mut self,
         make: impl FnOnce() -> K::Widget,
     ) -> Result<TypedId<K::Widget>> {
         let parent = self.node_id();
-        self.get_or_create_in::<K>(parent, make)
+        self.get_or_create_slot_of::<K>(parent, make)
     }
 
     /// Get or create the keyed child under a specific parent node.
-    pub fn get_or_create_in<K: ChildKey>(
+    fn get_or_create_slot_of<K: ChildSlot>(
         &mut self,
         parent: impl Into<NodeId>,
         make: impl FnOnce() -> K::Widget,
     ) -> Result<TypedId<K::Widget>> {
         let parent = parent.into();
-        if let Some(id) = self.get_child_in::<K>(parent)? {
+        if let Some(id) = self.get_slot_of::<K>(parent)? {
             return Ok(id);
         }
-        self.add_keyed_to(parent, K::KEY, make())
+        self.add_slot_to(parent, K::KEY, make())
     }
 
     /// Add a typed keyed child to the current node and return its typed node
     /// ID.
-    pub fn add_keyed<K: ChildKey>(&mut self, widget: K::Widget) -> Result<TypedId<K::Widget>> {
-        self.add_keyed_to(self.node_id(), K::KEY, widget)
+    fn add_slot<K: ChildSlot>(&mut self, widget: K::Widget) -> Result<TypedId<K::Widget>> {
+        self.add_slot_to(self.node_id(), K::KEY, widget)
     }
 
     /// Add a typed keyed child to a specific parent and return its typed node
     /// ID.
-    pub fn add_keyed_to<W: Widget + 'static>(
+    fn add_slot_to<W: Widget + 'static>(
         &mut self,
         parent: impl Into<NodeId>,
         key: &str,
         widget: W,
     ) -> Result<TypedId<W>> {
-        let id = self.add_child_to_keyed_boxed(parent.into(), key, widget.into())?;
+        let id = self.add_child_to_slot_boxed(parent.into(), key, widget.into())?;
         Ok(TypedId::new(id))
     }
 
     /// Execute a closure with a typed keyed child.
-    pub fn with_child<K: ChildKey, R>(
+    fn with_typed_slot<K: ChildSlot, R>(
         &mut self,
         f: impl FnOnce(&mut K::Widget, &mut dyn Context) -> Result<R>,
     ) -> Result<R> {
-        self.with_keyed(K::KEY, f)
+        self.with_slot(K::KEY, f)
     }
 
     /// Execute a closure with a typed keyed child if it exists.
-    pub fn try_with_child<K: ChildKey, R>(
+    fn try_with_typed_slot<K: ChildSlot, R>(
         &mut self,
         f: impl FnOnce(&mut K::Widget, &mut dyn Context) -> Result<R>,
     ) -> Result<Option<R>> {
-        let Some(node) = self.child_keyed(K::KEY) else {
+        let Some(node) = self.child_slot(K::KEY) else {
             return Ok(None);
         };
-        self.with_node(node, f).map(Some)
+        self.with_widget_mut(node, f).map(Some)
     }
 
     /// Execute a closure with the unique descendant of type `W`.
-    pub fn with_unique_descendant<W: Widget + 'static, R>(
+    fn with_unique_descendant<W: Widget + 'static, R>(
         &mut self,
         f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
     ) -> Result<R> {
-        let node = (self as &dyn ViewContext)
+        let node = self
             .unique_descendant::<W>()?
             .ok_or_else(|| Error::NotFound(type_name::<W>().to_string()))?;
-        self.with_widget(node, f)
+        self.with_widget_mut(node, f)
     }
 
     /// Execute a closure with the unique descendant of type `W` if it exists.
-    pub fn try_with_unique_descendant<W: Widget + 'static, R>(
+    fn try_with_unique_descendant<W: Widget + 'static, R>(
         &mut self,
         f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
     ) -> Result<Option<R>> {
-        let node = (self as &dyn ViewContext).unique_descendant::<W>()?;
+        let node = self.unique_descendant::<W>()?;
         let Some(node) = node else {
             return Ok(None);
         };
-        self.with_widget(node, f).map(Some)
+        self.with_widget_mut(node, f).map(Some)
+    }
+}
+
+impl<T: Context + ?Sized> ContextExt for T {}
+
+#[allow(missing_docs)]
+impl dyn Context + '_ {
+    pub fn dispatch_exact(
+        &mut self,
+        node: NodeId,
+        command: &CommandInvocation,
+    ) -> StdResult<ArgValue, CommandError> {
+        ContextExt::dispatch_exact(self, node, command)
+    }
+
+    pub fn compose<R>(
+        &mut self,
+        parent: NodeId,
+        build: impl FnOnce(&mut crate::ChildBuilder<'_>) -> Result<R>,
+    ) -> Result<R> {
+        ContextExt::compose(self, parent, build)
+    }
+
+    pub fn set_layout(&mut self, layout: Layout) -> Result<()> {
+        ContextExt::set_layout(self, layout)
+    }
+
+    pub fn set_layout_of(&mut self, node: impl Into<NodeId>, layout: Layout) -> Result<()> {
+        ContextExt::set_layout_of(self, node, layout)
+    }
+
+    pub fn with_widget_mut<W: Widget + 'static, R>(
+        &mut self,
+        node: impl Into<NodeId>,
+        callback: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
+    ) -> Result<R> {
+        ContextExt::with_widget_mut(self, node, callback)
+    }
+
+    pub fn create_detached<W: Widget + 'static>(&mut self, widget: W) -> Result<TypedId<W>> {
+        ContextExt::create_detached(self, widget)
+    }
+
+    pub fn add_child<W: Widget + 'static>(&mut self, widget: W) -> Result<TypedId<W>> {
+        ContextExt::add_child(self, widget)
+    }
+
+    pub fn add_child_to<W: Widget + 'static>(
+        &mut self,
+        parent: impl Into<NodeId>,
+        widget: W,
+    ) -> Result<TypedId<W>> {
+        ContextExt::add_child_to(self, parent, widget)
+    }
+
+    pub fn with_slot<W: Widget + 'static, R>(
+        &mut self,
+        slot: &str,
+        callback: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
+    ) -> Result<R> {
+        ContextExt::with_slot(self, slot, callback)
+    }
+
+    pub fn has_slot<K: ChildSlot>(&self) -> Result<bool> {
+        ContextExt::has_slot::<K>(self)
+    }
+
+    pub fn get_slot<K: ChildSlot>(&self) -> Result<Option<TypedId<K::Widget>>> {
+        ContextExt::get_slot::<K>(self)
+    }
+
+    pub fn get_slot_of<K: ChildSlot>(
+        &self,
+        parent: impl Into<NodeId>,
+    ) -> Result<Option<TypedId<K::Widget>>> {
+        ContextExt::get_slot_of::<K>(self, parent)
+    }
+
+    pub fn get_or_create_slot<K: ChildSlot>(
+        &mut self,
+        make: impl FnOnce() -> K::Widget,
+    ) -> Result<TypedId<K::Widget>> {
+        ContextExt::get_or_create_slot::<K>(self, make)
+    }
+
+    pub fn get_or_create_slot_of<K: ChildSlot>(
+        &mut self,
+        parent: impl Into<NodeId>,
+        make: impl FnOnce() -> K::Widget,
+    ) -> Result<TypedId<K::Widget>> {
+        ContextExt::get_or_create_slot_of::<K>(self, parent, make)
+    }
+
+    pub fn add_slot<K: ChildSlot>(&mut self, widget: K::Widget) -> Result<TypedId<K::Widget>> {
+        ContextExt::add_slot::<K>(self, widget)
+    }
+
+    pub fn add_slot_to<W: Widget + 'static>(
+        &mut self,
+        parent: impl Into<NodeId>,
+        slot: &str,
+        widget: W,
+    ) -> Result<TypedId<W>> {
+        ContextExt::add_slot_to(self, parent, slot, widget)
+    }
+
+    pub fn with_typed_slot<K: ChildSlot, R>(
+        &mut self,
+        callback: impl FnOnce(&mut K::Widget, &mut dyn Context) -> Result<R>,
+    ) -> Result<R> {
+        ContextExt::with_typed_slot::<K, R>(self, callback)
+    }
+
+    pub fn try_with_typed_slot<K: ChildSlot, R>(
+        &mut self,
+        callback: impl FnOnce(&mut K::Widget, &mut dyn Context) -> Result<R>,
+    ) -> Result<Option<R>> {
+        ContextExt::try_with_typed_slot::<K, R>(self, callback)
+    }
+
+    pub fn with_unique_descendant<W: Widget + 'static, R>(
+        &mut self,
+        callback: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
+    ) -> Result<R> {
+        ContextExt::with_unique_descendant::<W, R>(self, callback)
+    }
+
+    pub fn try_with_unique_descendant<W: Widget + 'static, R>(
+        &mut self,
+        callback: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
+    ) -> Result<Option<R>> {
+        ContextExt::try_with_unique_descendant::<W, R>(self, callback)
     }
 }
 
@@ -980,6 +1173,8 @@ impl<C> NodeCtx<C> {
     }
 }
 
+impl<C: Deref<Target = Core>> sealed::ViewContext for NodeCtx<C> {}
+
 impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
     fn node_id(&self) -> NodeId {
         self.node_id
@@ -989,21 +1184,21 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
         self.core.root
     }
 
-    fn node_view(&self, node: NodeId) -> Option<View> {
+    fn view_of(&self, node: NodeId) -> Option<View> {
         self.core.nodes.get(node).map(|n| n.view)
     }
 
-    fn node_layout(&self, node: NodeId) -> Option<Layout> {
+    fn layout_of(&self, node: NodeId) -> Option<Layout> {
         self.core.nodes.get(node).map(|n| n.layout)
     }
 
-    fn read_widget(
+    fn with_widget_dyn(
         &self,
         node: NodeId,
         callback: &mut dyn FnMut(&dyn Widget) -> Result<()>,
     ) -> Result<()> {
         self.core
-            .with_widget_read(node, WidgetOperation::access("read widget"), |widget, _| {
+            .with_widget(node, WidgetOperation::access("read widget"), |widget, _| {
                 callback(widget)
             })?
     }
@@ -1016,16 +1211,8 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
         commands::command_status(&self.core, target, invocation)
     }
 
-    fn action_status(
-        &self,
-        target: CommandTarget,
-        invocation: &CommandInvocation,
-    ) -> Result<CommandStatus> {
-        commands::action_status(&self.core, target, invocation)
-    }
-
-    fn find_key(&self, scope: NodeId, key: &str) -> Result<Option<NodeId>> {
-        self.core.find_key(scope, key)
+    fn find_identity(&self, scope: NodeId, key: &str) -> Result<Option<NodeId>> {
+        self.core.find_identity(scope, key)
     }
 
     fn semantic_identity(&self, node: NodeId) -> Option<SemanticIdentity> {
@@ -1035,7 +1222,7 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
             .and_then(|entry| entry.semantic_identity.clone())
     }
 
-    fn node_type_id(&self, node: NodeId) -> Option<TypeId> {
+    fn type_id_of(&self, node: NodeId) -> Option<TypeId> {
         self.core.nodes.get(node).map(|n| n.widget_type)
     }
 
@@ -1047,7 +1234,7 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
             .unwrap_or_default()
     }
 
-    fn node_is_focused(&self, node: NodeId) -> bool {
+    fn is_focused_of(&self, node: NodeId) -> bool {
         self.core.is_focused(node)
     }
 
@@ -1055,7 +1242,7 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
         self.core.focus
     }
 
-    fn node_is_on_focus_path(&self, node: NodeId) -> bool {
+    fn is_on_focus_path_of(&self, node: NodeId) -> bool {
         self.core.is_on_focus_path(node)
     }
 
@@ -1075,24 +1262,28 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
         self.core.modal_is_open(token)
     }
 
-    fn node_is_attached(&self, node: NodeId) -> bool {
+    fn is_attached_of(&self, node: NodeId) -> bool {
         self.core.is_attached_to_root(node)
     }
 
-    fn node_path(&self, root: NodeId, node: NodeId) -> Path {
-        self.core.node_path(root, node)
+    fn path_of(&self, root: NodeId, node: NodeId) -> Path {
+        self.core.path_of(root, node)
     }
 
     fn locate(&self, root: NodeId, point: Point) -> Result<Option<NodeId>> {
         self.core.locate_node(root, point)
     }
 
-    fn child_keyed_in(&self, parent: NodeId, key: &str) -> Option<NodeId> {
-        self.core.child_keyed(parent, key)
+    fn child_slot_of(&self, parent: NodeId, key: &str) -> Option<NodeId> {
+        self.core.child_slot(parent, key)
     }
 }
 
-impl Context for NodeCtx<&mut Core> {
+impl sealed::Context for NodeCtx<&mut Core> {
+    fn as_context(&mut self) -> &mut dyn Context {
+        self
+    }
+
     fn attach_composed(
         &mut self,
         parent: NodeId,
@@ -1101,7 +1292,9 @@ impl Context for NodeCtx<&mut Core> {
     ) -> Result<()> {
         self.core.attach_composed(parent, roots, keys)
     }
+}
 
+impl Context for NodeCtx<&mut Core> {
     fn set_semantic_key(&mut self, node: NodeId, scope: NodeId, key: &str) -> Result<()> {
         self.core.set_semantic_key(node, scope, key)
     }
@@ -1114,20 +1307,16 @@ impl Context for NodeCtx<&mut Core> {
         self.core.set_focus(node)
     }
 
-    fn focus_dir(&mut self, scope: FocusScope, dir: Direction) -> Result<ChangeOutcome> {
-        self.core.focus_dir(scope.resolve(self), dir)
-    }
-
     fn focus_first(&mut self, scope: FocusScope) -> Result<ChangeOutcome> {
         self.core.focus_first(scope.resolve(self))
     }
 
-    fn focus_next(&mut self, scope: FocusScope) -> Result<ChangeOutcome> {
-        self.core.focus_next(scope.resolve(self))
-    }
-
-    fn focus_prev(&mut self, scope: FocusScope) -> Result<ChangeOutcome> {
-        self.core.focus_prev(scope.resolve(self))
+    fn focus_move(
+        &mut self,
+        scope: FocusScope,
+        direction: FocusDirection,
+    ) -> Result<ChangeOutcome> {
+        self.core.focus_move(scope.resolve(self), direction)
     }
 
     fn capture_mouse(&mut self) -> Result<ChangeOutcome> {
@@ -1171,11 +1360,11 @@ impl Context for NodeCtx<&mut Core> {
         self.core.input_map.pop_exclusive_bindings(token)
     }
 
-    fn scroll_to(&mut self, x: u32, y: u32) -> bool {
+    fn scroll_to(&mut self, x: u32, y: u32) -> ChangeOutcome {
         update_scroll(self.core, self.node_id, |_| Point { x, y })
     }
 
-    fn scroll_by(&mut self, x: i32, y: i32) -> bool {
+    fn scroll_by(&mut self, x: i32, y: i32) -> ChangeOutcome {
         update_scroll(self.core, self.node_id, |scroll| scroll.scroll(x, y))
     }
 
@@ -1220,7 +1409,7 @@ impl Context for NodeCtx<&mut Core> {
         })
     }
 
-    fn with_widget_mut(
+    fn with_widget_dyn_mut(
         &mut self,
         node: NodeId,
         f: &mut dyn FnMut(&mut dyn Widget, &mut dyn Context) -> Result<()>,
@@ -1229,7 +1418,7 @@ impl Context for NodeCtx<&mut Core> {
             .with_widget_ctx(node, |widget, ctx| f(widget, ctx))?
     }
 
-    fn dispatch_target(
+    fn dispatch(
         &mut self,
         target: CommandTarget,
         cmd: &CommandInvocation,
@@ -1237,7 +1426,7 @@ impl Context for NodeCtx<&mut Core> {
         commands::dispatch_target(self.core, target, cmd)
     }
 
-    fn dispatch_target_scoped(
+    fn dispatch_scoped(
         &mut self,
         target: CommandTarget,
         frame: CommandScopeFrame,
@@ -1245,26 +1434,6 @@ impl Context for NodeCtx<&mut Core> {
     ) -> StdResult<ArgValue, CommandError> {
         let guard = self.core.push_command_scope(frame);
         let result = commands::dispatch_target(self.core, target, cmd);
-        self.core.pop_command_scope(guard);
-        result
-    }
-
-    fn dispatch_command(&mut self, cmd: &CommandInvocation) -> StdResult<ArgValue, CommandError> {
-        let frame = self
-            .core
-            .current_command_scope()
-            .cloned()
-            .unwrap_or_default();
-        self.dispatch_command_scoped(frame, cmd)
-    }
-
-    fn dispatch_command_scoped(
-        &mut self,
-        frame: CommandScopeFrame,
-        cmd: &CommandInvocation,
-    ) -> StdResult<ArgValue, CommandError> {
-        let guard = self.core.push_command_scope(frame);
-        let result = commands::dispatch(self.core, self.node_id, cmd);
         self.core.pop_command_scope(guard);
         result
     }
@@ -1291,21 +1460,21 @@ impl Context for NodeCtx<&mut Core> {
         self.core.add_child_to_boxed(parent, widget)
     }
 
-    fn add_child_to_keyed_boxed(
+    fn add_child_to_slot_boxed(
         &mut self,
         parent: NodeId,
         key: &str,
         widget: Box<dyn Widget>,
     ) -> Result<NodeId> {
-        self.core.add_child_to_keyed_boxed(parent, key, widget)
+        self.core.add_child_to_slot_boxed(parent, key, widget)
     }
 
     fn attach(&mut self, parent: NodeId, child: NodeId) -> Result<()> {
         self.core.attach(parent, child)
     }
 
-    fn attach_keyed(&mut self, parent: NodeId, key: &str, child: NodeId) -> Result<()> {
-        self.core.attach_keyed(parent, key, child)
+    fn attach_slot(&mut self, parent: NodeId, key: &str, child: NodeId) -> Result<()> {
+        self.core.attach_slot(parent, key, child)
     }
 
     fn detach(&mut self, child: NodeId) -> Result<()> {
@@ -1372,14 +1541,14 @@ impl Context for NodeCtx<&mut Core> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ChildKey, Widget};
+    use crate::{ChildSlot, Widget};
 
-    key!(Editor);
+    slot!(Editor);
     impl Widget for Editor {}
 
     pub struct Modal;
     impl Widget for Modal {}
-    key!(pub ModalSlot: Modal);
+    slot!(pub ModalSlot: Modal);
 
     #[test]
     fn key_macro_names_the_slot_after_the_key_type() {
@@ -1403,20 +1572,20 @@ mod tests {
             node.canvas = Size::new(10, u32::MAX);
             node.view.content.h = height;
             node.scroll = Point { x: 2, y: 0 };
-            node.view.tl = node.scroll;
+            node.view.scroll = node.scroll;
             let mut context = CoreContext::new(&mut core, root);
             for step in 1u32..=2 {
-                let before = context.view().tl.y;
+                let before = context.view().scroll.y;
                 let expected = height.saturating_mul(step).min(max_y);
-                assert_eq!(context.page_down(), before != expected);
-                assert_eq!(context.view().tl, Point { x: 2, y: expected });
+                assert_eq!(context.page_down().changed(), before != expected);
+                assert_eq!(context.view().scroll, Point { x: 2, y: expected });
             }
             context.scroll_to(2, max_y);
             let expected = max_y.saturating_sub(height);
-            assert_eq!(context.page_up(), max_y != expected);
-            assert_eq!(context.view().tl, Point { x: 2, y: expected });
+            assert_eq!(context.page_up().changed(), max_y != expected);
+            assert_eq!(context.view().scroll, Point { x: 2, y: expected });
             context.scroll_to(2, 0);
-            assert!(!context.page_up());
+            assert!(!context.page_up().changed());
         }
     }
 }

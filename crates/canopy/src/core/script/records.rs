@@ -178,11 +178,11 @@ pub(super) fn node_info_to_arg(
         ),
         (
             "focused".to_string(),
-            ArgValue::Bool(root_ctx.node_is_focused(node_id)),
+            ArgValue::Bool(root_ctx.is_focused_of(node_id)),
         ),
         (
             "on_focus_path".to_string(),
-            ArgValue::Bool(root_ctx.node_is_on_focus_path(node_id)),
+            ArgValue::Bool(root_ctx.is_on_focus_path_of(node_id)),
         ),
         ("hidden".to_string(), ArgValue::Bool(node.hidden)),
         ("visible".to_string(), ArgValue::Bool(!node.hidden)),
@@ -459,7 +459,7 @@ fn rendered_buffer(canopy: &mut Canopy) -> Result<&TermBuf> {
     canopy.flush()?;
     canopy
         .buf()
-        .ok_or_else(|| error::Error::Script("screen unavailable before render".into()))
+        .ok_or_else(|| error::Error::script("screen unavailable before render"))
 }
 
 /// Convert the current rendered screen buffer into its scripting record.
@@ -717,7 +717,10 @@ pub(super) fn script_journal_to_arg(canopy: &Canopy) -> ArgValue {
             .map(|entry| {
                 ArgValue::Map(BTreeMap::from([
                     ("id".to_string(), ArgValue::UInt(entry.id)),
-                    ("origin".to_string(), ArgValue::String(entry.origin.clone())),
+                    (
+                        "origin".to_string(),
+                        ArgValue::String(entry.origin.to_string()),
+                    ),
                     ("source".to_string(), ArgValue::String(entry.source.clone())),
                     ("ok".to_string(), ArgValue::Bool(entry.ok)),
                     (

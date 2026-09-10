@@ -3,7 +3,7 @@ use crate::{
     core::text,
     error::Result,
     geom,
-    style::{Effect, ResolvedStyle, Style, StyleManager, StyleMap},
+    style::{ResolvedStyle, Style, StyleManager, StyleMap, effects::Effect},
 };
 
 /// The trait implemented by renderers.

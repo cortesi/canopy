@@ -138,7 +138,7 @@ impl Harness {
 
     /// Execute a script on the app under test.
     pub fn script(&mut self, script: &str) -> Result<()> {
-        self.canopy.eval_script(script)
+        self.canopy.eval_script(script).map(|_| ())
     }
 
     /// Execute a closure with mutable access to a widget by node id.
@@ -153,7 +153,7 @@ impl Harness {
         let node_id = node_id.into();
         self.canopy
             .with_context(node_id, |ctx| {
-                ctx.with_node(node_id, |widget, _| Ok(f(widget)))
+                ctx.with_widget_mut(node_id, |widget, _| Ok(f(widget)))
             })
             .expect("with_widget failed")
     }
@@ -176,7 +176,8 @@ impl Harness {
         W: Widget + 'static,
     {
         let root = self.root;
-        self.canopy.with_root_context(|ctx| ctx.with_node(root, f))
+        self.canopy
+            .with_root_context(|ctx| ctx.with_widget_mut(root, f))
     }
 
     /// Get a BufTest instance that references the current buffer.

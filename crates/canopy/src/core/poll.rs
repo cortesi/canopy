@@ -209,15 +209,12 @@ impl Poller {
 
 #[cfg(test)]
 mod tests {
-    use slotmap::SlotMap;
-
     use super::*;
-    use crate::testing::ManualClock;
+    use crate::{core::id::testing_node_id, testing::ManualClock};
 
     fn stamp() -> WorkStamp {
-        let mut nodes: SlotMap<NodeId, ()> = SlotMap::with_key();
         WorkStamp {
-            node: nodes.insert(()),
+            node: testing_node_id(),
             incarnation: 1,
             attachment: None,
         }

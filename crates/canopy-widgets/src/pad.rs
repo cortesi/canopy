@@ -1,13 +1,10 @@
 //! Padding container widget.
 
 use canopy::{
-    Context, NodeId, Widget, derive_commands,
-    error::Result,
+    Widget, derive_commands,
     layout::{Edges, Layout},
     state::NodeName,
 };
-
-use crate::wrap::wrap;
 
 /// Container that adds padding around its child.
 pub struct Pad {
@@ -25,12 +22,6 @@ impl Pad {
     /// Create a pad with uniform padding on all sides.
     pub fn uniform(padding: u32) -> Self {
         Self::new(Edges::all(padding))
-    }
-
-    /// Wrap an existing child node in a configured pad and return the pad node
-    /// ID.
-    pub fn wrap_with(c: &mut dyn Context, child: impl Into<NodeId>, pad: Self) -> Result<NodeId> {
-        Ok(wrap(c, child, pad)?.into())
     }
 }
 

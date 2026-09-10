@@ -10,9 +10,10 @@ use ruau::vm::{HostArgCursor, MarshaledPair, MultiValue, OwnedValue, ScopedValue
 
 use super::{base_api::read_node_id, bridge::REENTRANT_CANOPY, *};
 use crate::{
-    Widget, command,
-    core::testing::model::trace_result,
+    Widget,
+    core::{id::testing_node_id, testing::model::trace_result},
     derive_commands,
+    error::Result,
     state::NodeName,
     testing::ttree::{get_state, run_ttree},
 };
@@ -357,7 +358,7 @@ fn live_and_marshaled_value_policy_agree_without_erasing_node_identity() {
         let owned = marshaled_to_arg_value(&marshaled).expect("ordinary marshaled value converts");
         assert_eq!(live, owned);
 
-        let node_id = NodeId::default();
+        let node_id = testing_node_id();
         let nested_node = scope.create_table()?;
         nested_node.set(scope, "target", scope.create_userdata(node_id)?)?;
         assert_eq!(
@@ -463,7 +464,7 @@ fn node_handle_marshal_hook_returns_external_token_record() -> Result<()> {
                 marshaled = Some(scope.marshal(value)?);
                 Ok(())
             })
-            .map_err(|err| error::Error::Script(err.to_string()))?;
+            .map_err(|err| error::Error::script(err.to_string()))?;
 
         assert_eq!(
             marshaled.expect("marshaled value"),
@@ -496,7 +497,7 @@ fn retained_node_handle_is_rejected_after_removal() -> Result<()> {
                 }));
                 Ok(())
             })
-            .map_err(|error| error::Error::Script(error.to_string()))?;
+            .map_err(|error| error::Error::script(error.to_string()))?;
         assert_eq!(c.script_context_stack.pop(), Some(anchor));
         Ok(())
     })
@@ -550,8 +551,7 @@ fn script_identifier_exhaustion_is_reported() -> Result<()> {
 #[test]
 fn wait_for_returns_when_predicate_is_truthy() -> Result<()> {
     run_ttree(|c, _, _| {
-        let value =
-            c.eval_script_value("return canopy.wait_for(function() return true end, 10)")?;
+        let value = c.eval_script("return canopy.wait_for(function() return true end, 10)")?;
         assert_eq!(value, ArgValue::Bool(true));
         Ok(())
     })
@@ -561,7 +561,7 @@ fn wait_for_returns_when_predicate_is_truthy() -> Result<()> {
 fn wait_for_timeout_surfaces_as_script_timeout() -> Result<()> {
     run_ttree(|c, _, _| {
         let error = c
-            .eval_script_value("return canopy.wait_for(function() return false end, 1)")
+            .eval_script("return canopy.wait_for(function() return false end, 1)")
             .expect_err("wait should time out");
         assert!(matches!(
             error,
@@ -621,7 +621,13 @@ fn truntime_error_returns_script_error() -> Result<()> {
         let scr = c.script_host.compile(r#"canopy.assert(false, "boom")"#)?;
         let host = c.script_host.clone();
         let err = host.execute(c, tree.b_a, scr, None);
-        assert!(matches!(err, Err(error::Error::Script(_))));
+        assert!(matches!(
+            err,
+            Err(error::Error::ScriptStructured {
+                kind: error::ScriptErrorKind::Canopy,
+                ..
+            })
+        ));
         Ok(())
     })
 }
@@ -633,7 +639,13 @@ fn script_context_stack_pops_after_runtime_error() -> Result<()> {
         let scr = c.script_host.compile(r#"error("boom")"#)?;
         let host = c.script_host.clone();
         let err = host.execute(c, tree.a, scr, None);
-        assert!(matches!(err, Err(error::Error::Script(_))));
+        assert!(matches!(
+            err,
+            Err(error::Error::ScriptStructured {
+                kind: error::ScriptErrorKind::Canopy,
+                ..
+            })
+        ));
         assert!(c.script_context_stack.is_empty());
         Ok(())
     })
@@ -723,12 +735,12 @@ fn wait_for_node_preserves_registration_and_focus_resolution() -> Result<()> {
             .add_child_to_boxed(tree.root, Box::new(WaitFreeOwner))?;
         canopy.core.set_focus(tree.root)?;
         assert_eq!(
-            canopy.eval_script_value(r#"return canopy.wait_for_node("ba_la", 10)"#)?,
+            canopy.eval_script(r#"return canopy.wait_for_node("ba_la", 10)"#)?,
             ArgValue::Bool(true)
         );
         for owner in ["ba", "wait_free", "missing"] {
             let error = canopy
-                .eval_script_value(&format!("return canopy.wait_for_node({owner:?}, 1)"))
+                .eval_script(&format!("return canopy.wait_for_node({owner:?}, 1)"))
                 .expect_err("unregistered or absent node owner must time out");
             assert!(matches!(
                 error,
@@ -737,7 +749,7 @@ fn wait_for_node_preserves_registration_and_focus_resolution() -> Result<()> {
         }
         canopy.core.set_focus(tree.b)?;
         let error = canopy
-            .eval_script_value(r#"return canopy.wait_for_node("ba_la", 1)"#)
+            .eval_script(r#"return canopy.wait_for_node("ba_la", 1)"#)
             .expect_err("owner outside focus subtree and ancestors must time out");
         assert!(matches!(
             error,
@@ -745,7 +757,7 @@ fn wait_for_node_preserves_registration_and_focus_resolution() -> Result<()> {
         ));
         canopy.core.set_focus(tree.a_a)?;
         assert_eq!(
-            canopy.eval_script_value(r#"return canopy.wait_for_node("ba_la", 10)"#)?,
+            canopy.eval_script(r#"return canopy.wait_for_node("ba_la", 10)"#)?,
             ArgValue::Bool(true)
         );
         Ok(())
@@ -814,7 +826,7 @@ fn script_call_probes() -> Result<(Canopy, NodeId, NodeId)> {
 #[test]
 fn explicit_script_targets_match_discovery_and_survive_owner_insertion() -> Result<()> {
     let (mut canopy, first, second) = script_call_probes()?;
-    assert_eq!(canopy.eval_script_value(r#"
+    assert_eq!(canopy.eval_script(r#"
         local children = canopy.children(canopy.root())
         local first, second = children[1], children[2]
         assert(first and second)
@@ -837,7 +849,7 @@ fn explicit_script_targets_match_discovery_and_survive_owner_insertion() -> Resu
         .core
         .set_children(canopy.core.root_id(), vec![extra, first, second])?;
     assert_eq!(
-        canopy.eval_script_value(
+        canopy.eval_script(
             r#"
         local second = canopy.children(canopy.root())[3]
         assert(canopy.call_from(canopy.root(), "script_call_probe::identify") == 3)
@@ -847,7 +859,7 @@ fn explicit_script_targets_match_discovery_and_survive_owner_insertion() -> Resu
         ArgValue::Int(2)
     );
     let error = canopy
-        .eval_script_value(
+        .eval_script(
             r#"
         return canopy.call_exact(canopy.root(), "script_call_probe::identify")
     "#,
@@ -866,7 +878,7 @@ fn explicit_script_targets_match_discovery_and_survive_owner_insertion() -> Resu
 #[test]
 fn explicit_script_arguments_do_not_infer_named_maps() -> Result<()> {
     let (mut canopy, _, _) = script_call_probes()?;
-    assert_eq!(canopy.eval_script_value(r#"
+    assert_eq!(canopy.eval_script(r#"
         local root = canopy.root()
         local empty = canopy.call_from(root, "script_call_probe::echo", {})
         assert(next(empty) == nil)
@@ -889,7 +901,7 @@ fn explicit_script_arguments_do_not_infer_named_maps() -> Result<()> {
         r#"canopy.call_named("script_call_probe::echo", {options = 1}, {kind = "focus", node = canopy.root()})"#,
     ] {
         assert!(
-            canopy.eval_script_value(source).is_err(),
+            canopy.eval_script(source).is_err(),
             "accepted invalid explicit call: {source}"
         );
     }
@@ -914,7 +926,7 @@ fn declarative_script_binding_exposes_arguments_phase_and_route_target() -> Resu
     "#)?;
     canopy.key(None, 'x')?;
     assert_eq!(
-        canopy.eval_script_value(r#"return canopy.call_focus("script_call_probe::identify")"#)?,
+        canopy.eval_script(r#"return canopy.call_focus("script_call_probe::identify")"#)?,
         ArgValue::Int(7)
     );
     assert!(canopy.eval_script(r#"canopy.bind_mouse("LeftDown", {description = "Bad phase", phase = "before_widget"}, function() end)"#).is_err());
@@ -924,7 +936,7 @@ fn declarative_script_binding_exposes_arguments_phase_and_route_target() -> Resu
 #[test]
 fn script_discovery_separates_disabled_state_and_missing_input() -> Result<()> {
     let (mut canopy, _, _) = script_call_probes()?;
-    let ArgValue::Array(availability) = canopy.eval_script_value(
+    let ArgValue::Array(availability) = canopy.eval_script(
         r#"
         canopy.call_focus("script_call_probe::set_value", -1)
         return canopy.commands({kind = "focus"})
@@ -971,14 +983,14 @@ fn script_discovery_separates_disabled_state_and_missing_input() -> Result<()> {
         )]))
     );
     assert!(matches!(
-        canopy.eval_script_value(r#"return canopy.call_focus("script_call_probe::set_value", 1)"#),
+        canopy.eval_script(r#"return canopy.call_focus("script_call_probe::set_value", 1)"#),
         Err(error::Error::ScriptStructured {
             kind: error::ScriptErrorKind::DisabledCommand,
             ..
         }),
     ));
     assert!(matches!(
-        canopy.eval_script_value(r#"return canopy.call_focus("script_call_probe::needs_mouse")"#),
+        canopy.eval_script(r#"return canopy.call_focus("script_call_probe::needs_mouse")"#),
         Err(error::Error::ScriptStructured {
             kind: error::ScriptErrorKind::MissingInjected,
             ..

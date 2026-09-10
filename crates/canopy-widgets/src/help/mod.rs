@@ -7,7 +7,7 @@ mod tests;
 
 pub use binding_list::BindingList;
 use canopy::{
-    Canopy, ChildKey, Context, EventOutcome, Loader, NodeId, TypedId, ViewContext, Widget,
+    Canopy, ChildSlot, Context, EventOutcome, Loader, NodeId, TypedId, ViewContext, Widget,
     derive_commands,
     error::{Error, Result},
     event::Event,
@@ -19,11 +19,11 @@ use panel::{ControlFooter, HelpPanel};
 
 use crate::{center::Center, frame::Frame};
 
-canopy::key!(pub(crate) ModalSlot: Center);
-canopy::key!(pub(crate) FrameSlot: Frame);
-canopy::key!(pub(crate) PanelSlot: HelpPanel);
-canopy::key!(pub(crate) BindingListSlot: BindingList);
-canopy::key!(pub(crate) FooterSlot: ControlFooter);
+canopy::slot!(pub(crate) ModalSlot: Center);
+canopy::slot!(pub(crate) FrameSlot: Frame);
+canopy::slot!(pub(crate) PanelSlot: HelpPanel);
+canopy::slot!(pub(crate) BindingListSlot: BindingList);
+canopy::slot!(pub(crate) FooterSlot: ControlFooter);
 
 /// Opaque overlay that owns the help modal subtree.
 pub struct Help;
@@ -36,11 +36,11 @@ impl Help {
         let footer = context.create_detached(ControlFooter::new())?;
 
         let panel = context.create_detached(HelpPanel::new())?;
-        context.attach_keyed(panel.into(), BindingListSlot::KEY, bindings.into())?;
-        context.attach_keyed(panel.into(), FooterSlot::KEY, footer.into())?;
+        context.attach_slot(panel.into(), BindingListSlot::KEY, bindings.into())?;
+        context.attach_slot(panel.into(), FooterSlot::KEY, footer.into())?;
 
         let frame = context.create_detached(Frame::new().with_title("Keyboard shortcuts"))?;
-        context.attach_keyed(frame.into(), PanelSlot::KEY, panel.into())?;
+        context.attach_slot(frame.into(), PanelSlot::KEY, panel.into())?;
         context.with_layout_of(frame.into(), &mut |layout| {
             *layout = Layout::fill()
                 .max_width(72)
@@ -49,7 +49,7 @@ impl Help {
         })?;
 
         let modal = context.create_detached(Center::new())?;
-        context.attach_keyed(modal.into(), FrameSlot::KEY, frame.into())?;
+        context.attach_slot(modal.into(), FrameSlot::KEY, frame.into())?;
         context.with_layout_of(modal.into(), &mut |layout| {
             *layout = Layout::fill()
                 .direction(Direction::Stack)
@@ -59,7 +59,7 @@ impl Help {
         })?;
 
         let help = context.create_detached(Self)?;
-        context.attach_keyed(help.into(), ModalSlot::KEY, modal.into())?;
+        context.attach_slot(help.into(), ModalSlot::KEY, modal.into())?;
         Ok(help.into())
     }
 
@@ -70,22 +70,22 @@ impl Help {
     ) -> Result<TypedId<BindingList>> {
         let panel = Self::panel_id(context, help)?;
         context
-            .get_child_in::<BindingListSlot>(panel)?
+            .get_slot_of::<BindingListSlot>(panel)?
             .ok_or_else(|| Error::NotFound("binding_list".to_string()))
     }
 
     /// Return the panel node within an installed help subtree.
     fn panel_id(context: &dyn Context, help: NodeId) -> Result<NodeId> {
         let modal = context
-            .get_child_in::<ModalSlot>(help)?
+            .get_slot_of::<ModalSlot>(help)?
             .map(NodeId::from)
             .ok_or_else(|| Error::NotFound("modal".to_string()))?;
         let frame = context
-            .get_child_in::<FrameSlot>(modal)?
+            .get_slot_of::<FrameSlot>(modal)?
             .map(NodeId::from)
             .ok_or_else(|| Error::NotFound("frame".to_string()))?;
         context
-            .get_child_in::<PanelSlot>(frame)?
+            .get_slot_of::<PanelSlot>(frame)?
             .map(NodeId::from)
             .ok_or_else(|| Error::NotFound("help_panel".to_string()))
     }

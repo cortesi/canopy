@@ -1,6 +1,6 @@
 use crate::{
     error::Result,
-    geom::{Error as GeometryError, Point, PointI32, Rect, RectI32, Size},
+    geom::{Point, PointI32, Rect, RectI32, Size},
 };
 
 /// Render-time view information for a node.
@@ -11,7 +11,7 @@ pub struct View {
     /// Content rect in screen coordinates (outer inset by padding).
     pub content: RectI32,
     /// Viewport offset in content coordinates (scroll position).
-    pub tl: Point,
+    pub scroll: Point,
     /// Canvas size in content coordinates.
     pub canvas: Size,
 }
@@ -20,64 +20,64 @@ impl View {
     /// Convert a screen point to viewport-local coordinates, before scroll.
     /// Returns a geometry error if the result is outside the signed range.
     pub fn screen_to_viewport(&self, point: PointI32) -> Result<PointI32> {
-        signed_point(
+        Ok(PointI32::try_from_i64(
             i64::from(point.x) - i64::from(self.content.tl.x),
             i64::from(point.y) - i64::from(self.content.tl.y),
-        )
+        )?)
     }
 
     /// Convert a viewport-local point to scrolled content coordinates.
     /// Returns a geometry error if the result is outside the signed range.
     pub fn viewport_to_content(&self, point: PointI32) -> Result<PointI32> {
-        signed_point(
-            i64::from(point.x) + i64::from(self.tl.x),
-            i64::from(point.y) + i64::from(self.tl.y),
-        )
+        Ok(PointI32::try_from_i64(
+            i64::from(point.x) + i64::from(self.scroll.x),
+            i64::from(point.y) + i64::from(self.scroll.y),
+        )?)
     }
 
     /// Convert a viewport-local point to outer-local coordinates, including
     /// padding. Returns a geometry error if the result is outside the signed
     /// range.
     pub fn viewport_to_outer(&self, point: PointI32) -> Result<PointI32> {
-        signed_point(
+        Ok(PointI32::try_from_i64(
             i64::from(point.x) + i64::from(self.content.tl.x) - i64::from(self.outer.tl.x),
             i64::from(point.y) + i64::from(self.content.tl.y) - i64::from(self.outer.tl.y),
-        )
+        )?)
     }
 
     /// Convert a scrolled content point to screen coordinates.
     /// Returns a geometry error if the result is outside the signed range.
     pub fn content_to_screen(&self, point: PointI32) -> Result<PointI32> {
-        signed_point(
-            i64::from(point.x) + i64::from(self.content.tl.x) - i64::from(self.tl.x),
-            i64::from(point.y) + i64::from(self.content.tl.y) - i64::from(self.tl.y),
-        )
+        Ok(PointI32::try_from_i64(
+            i64::from(point.x) + i64::from(self.content.tl.x) - i64::from(self.scroll.x),
+            i64::from(point.y) + i64::from(self.content.tl.y) - i64::from(self.scroll.y),
+        )?)
     }
 
     /// Convert an outer-local point to scrolled content coordinates.
     /// Returns a geometry error if the result is outside the signed range.
     pub fn outer_to_content(&self, point: PointI32) -> Result<PointI32> {
-        signed_point(
+        Ok(PointI32::try_from_i64(
             i64::from(point.x) + i64::from(self.outer.tl.x) - i64::from(self.content.tl.x)
-                + i64::from(self.tl.x),
+                + i64::from(self.scroll.x),
             i64::from(point.y) + i64::from(self.outer.tl.y) - i64::from(self.content.tl.y)
-                + i64::from(self.tl.y),
-        )
+                + i64::from(self.scroll.y),
+        )?)
     }
 
     /// Size of the outer rect.
     pub fn outer_size(&self) -> Size {
-        Size::new(self.outer.w, self.outer.h)
+        self.outer.size()
     }
 
     /// Size of the content rect.
     pub fn content_size(&self) -> Size {
-        Size::new(self.content.w, self.content.h)
+        self.content.size()
     }
 
-    /// True if the view is zero-sized.
-    pub fn is_zero(&self) -> bool {
-        self.outer.w == 0 || self.outer.h == 0
+    /// True if the view has no visible cells.
+    pub fn is_empty(&self) -> bool {
+        self.outer.is_empty()
     }
 
     /// Offset from the outer origin to the content origin, in local
@@ -90,7 +90,7 @@ impl View {
 
     /// Visible view rectangle in content coordinates.
     pub fn view_rect(&self) -> Rect {
-        Rect::new(self.tl.x, self.tl.y, self.content.w, self.content.h)
+        Rect::new(self.scroll.x, self.scroll.y, self.content.w, self.content.h)
     }
 
     /// Visible view rectangle in local outer coordinates.
@@ -106,11 +106,11 @@ impl View {
 
     /// Build a view from signed outer and content rects, a scroll offset, and a
     /// canvas size.
-    pub fn new(outer: RectI32, content: RectI32, tl: Point, canvas: Size) -> Self {
+    pub fn new(outer: RectI32, content: RectI32, scroll: Point, canvas: Size) -> Self {
         Self {
             outer,
             content,
-            tl,
+            scroll,
             canvas,
         }
     }
@@ -152,21 +152,12 @@ impl View {
     }
 }
 
-/// Check the complete translation so intermediate offsets retain their sign.
-fn signed_point(x: i64, y: i64) -> Result<PointI32> {
-    let error = GeometryError::CoordinateOutOfRange { x, y };
-    Ok(PointI32 {
-        x: i32::try_from(x).map_err(|_| error.clone())?,
-        y: i32::try_from(y).map_err(|_| error)?,
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::error::Error;
+    use crate::{error::Error, geom::Error as GeomError};
 
     #[test]
     fn signed_coordinate_conversions_preserve_padding_scroll_and_offscreen_points() {
@@ -216,7 +207,7 @@ mod tests {
                 x: i32::MAX,
                 y: i32::MAX
             }),
-            Err(Error::Geometry(GeometryError::CoordinateOutOfRange { .. })),
+            Err(Error::Geometry(GeomError::CoordinateOutOfRange { .. })),
         ));
         assert!(view.viewport_to_content(PointI32::default()).is_err());
         assert!(view.content_to_screen(PointI32::default()).is_err());
@@ -242,11 +233,11 @@ mod tests {
         );
     }
 
-    fn view_for_sizes(content: Size, canvas: Size, tl: Point) -> View {
+    fn view_for_sizes(content: Size, canvas: Size, scroll: Point) -> View {
         View::new(
             RectI32::new(0, 0, content.w, content.h),
             RectI32::new(0, 0, content.w, content.h),
-            tl,
+            scroll,
             canvas,
         )
     }
@@ -329,7 +320,7 @@ mod tests {
 
     #[test]
     fn scrollbars_are_absent_when_canvas_matches_view() {
-        let view = view_for_sizes(Size::new(10, 5), Size::new(10, 5), Point::zero());
+        let view = view_for_sizes(Size::new(10, 5), Size::new(10, 5), Point::ZERO);
         assert!(view.vactive(Rect::new(0, 0, 1, 5)).unwrap().is_none());
         assert!(view.hactive(Rect::new(0, 0, 10, 1)).unwrap().is_none());
     }
@@ -344,7 +335,7 @@ mod tests {
             let view = View::new(
                 RectI32::new(outer, outer, 10, 10),
                 RectI32::new(content, content, 4, 3),
-                Point::zero(),
+                Point::ZERO,
                 Size::new(4, 3),
             );
             assert_eq!(

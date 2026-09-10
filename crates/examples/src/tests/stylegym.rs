@@ -1,26 +1,23 @@
 use canopy::{
+    error::Result,
     prelude::*,
     style::{Attr, AttrSet, PartialStyle, ResolvedStyle},
     testing::harness::Harness,
 };
 use canopy_widgets::{Root, Selector};
 
-use crate::stylegym::{EffectOption, Stylegym, setup_bindings};
+use super::root_harness;
+use crate::stylegym::{EffectOption, Stylegym, binding_setup};
 
 fn setup_harness(size: Size) -> Result<Harness> {
-    let mut harness = Harness::builder(Stylegym::new())
-        .size(size.w, size.h)
-        .build()?;
-    setup_bindings(&mut harness.canopy)?;
-    harness.render()?;
-    Ok(harness)
+    root_harness(Stylegym::new(), binding_setup, size)
 }
 
 #[test]
 fn installed_stylegym_keeps_controls_beside_demo() -> Result<()> {
     let mut canopy = Canopy::new();
     Stylegym::load(&mut canopy)?;
-    let app = Root::install_app(&mut canopy, Stylegym::new())?;
+    let app = Root::new().install(&mut canopy, Stylegym::new())?;
     let mut harness = Harness::from_canopy(canopy, Size::new(80, 24))?;
     harness.render()?;
 
@@ -29,8 +26,8 @@ fn installed_stylegym_keeps_controls_beside_demo() -> Result<()> {
         let [controls, demo] = children.as_slice() else {
             panic!("stylegym must have controls and demo children");
         };
-        let controls = context.node_view(*controls).expect("controls view").outer;
-        let demo = context.node_view(*demo).expect("demo view").outer;
+        let controls = context.view_of(*controls).expect("controls view").outer;
+        let demo = context.view_of(*demo).expect("demo view").outer;
 
         assert_eq!(controls.top(), demo.top());
         assert_eq!(controls.h, demo.h);
@@ -68,7 +65,7 @@ fn demo_color_and_frame_style(harness: &Harness) -> (ResolvedStyle, ResolvedStyl
     let frame = harness.canopy.with_root_view(|ctx| {
         let right = ctx.children()[1];
         let frame = ctx.children_of(right)[0];
-        ctx.node_view(frame).expect("demo frame view").outer
+        ctx.view_of(frame).expect("demo frame view").outer
     });
     let content = Point {
         x: (frame.left() + 1) as u32,

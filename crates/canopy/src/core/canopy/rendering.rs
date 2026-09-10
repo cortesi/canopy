@@ -14,7 +14,7 @@ use crate::{
     geom::{Point, Rect, Size},
     layout::Display,
     render::{Render, RenderBackend},
-    style::{Effect, StyleManager},
+    style::{StyleManager, effects::Effect},
 };
 
 /// Rendering traversal scratch state shared across recursion.
@@ -241,9 +241,9 @@ impl Canopy {
         let mut current = self.core.focus;
         let mut cursor_spec: Option<(View, cursor::Cursor)> = None;
         while let Some(id) = current {
-            let cursor =
-                self.core
-                    .with_widget_read(id, WidgetOperation::render("cursor"), |w, _| w.cursor())?;
+            let cursor = self
+                .core
+                .with_widget(id, WidgetOperation::render("cursor"), |w, _| w.cursor())?;
             if let Some(node_cursor) = cursor
                 && let Some(node) = self.core.nodes.get(id)
             {
@@ -271,7 +271,7 @@ impl Canopy {
     /// Prepare and publish pending state without writing to a backend.
     pub(super) fn prepare_frame(&mut self, force: bool) -> Result<bool> {
         if !self.driver.startup_attempted {
-            self.run_startup_scripts()?;
+            self.run_startup_scripts_inner()?;
         }
         if !force
             && !self.render_pending

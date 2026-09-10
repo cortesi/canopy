@@ -5,9 +5,9 @@ mod tests {
     use std::any::TypeId;
 
     use anyhow::Result as AnyResult;
-    use canopy::{event::key::KeyCode, prelude::*, testing::harness::Harness};
+    use canopy::{error::Result, event::key::KeyCode, prelude::*, testing::harness::Harness};
     use canopy_widgets::{Input, List};
-    use todo::{TodoEntry, create_app_with_store, store::Store};
+    use todo::{TodoEntry, create_app, store::Store};
 
     fn add(h: &mut Harness, text: &str) -> Result<()> {
         h.key('a')?;
@@ -37,7 +37,7 @@ mod tests {
     /// Build an app over a fresh in-memory database.
     fn app() -> AnyResult<(Harness, Store)> {
         let store = Store::open(":memory:")?;
-        let canopy = create_app_with_store(store.clone(), None)?;
+        let canopy = create_app(store.clone(), None)?;
         let mut h = Harness::from_canopy(canopy, Size::new(100, 100))?;
         h.render()?;
         Ok((h, store))
@@ -190,7 +190,7 @@ mod tests {
     fn modal_focused(h: &Harness) -> bool {
         h.canopy.with_root_view(|ctx| {
             ctx.focused_node()
-                .is_some_and(|node| ctx.node_type_id(node) == Some(TypeId::of::<Input>()))
+                .is_some_and(|node| ctx.type_id_of(node) == Some(TypeId::of::<Input>()))
         })
     }
 
@@ -303,7 +303,7 @@ mod tests {
         harness.canopy.apply_fixture("empty")?;
         let error = harness
             .canopy
-            .with_root_context(|ctx| Ok(ctx.dispatch_target(target, &invocation)))?
+            .with_root_context(|ctx| Ok(ctx.dispatch(target, &invocation)))?
             .unwrap_err();
         assert!(matches!(error, CommandError::Disabled { .. }));
         assert!(store.todos()?.is_empty());

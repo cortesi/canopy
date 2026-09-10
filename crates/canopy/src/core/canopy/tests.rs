@@ -12,13 +12,13 @@ use futures::{StreamExt, executor::block_on};
 
 use super::*;
 use crate::{
-    Context, ViewContext,
-    commands::{CommandId, CommandInvocation, CommandNode, CommandSpec},
+    Context, FocusDirection, ViewContext,
+    commands::{CommandNode, CommandSpec},
     core::world::test_support::assert_error_context,
     derive_commands,
     error::{Error, NodeOperationKind, Result},
     event::{Event, key, mouse},
-    geom::{Direction, Point, RectI32},
+    geom::{Point, RectI32},
     layout::Layout,
     path::Path,
     render::{NopBackend, Render},
@@ -89,7 +89,7 @@ fn cross_thread_automation_request_completes_via_service_path() -> Result<()> {
     let handle = canopy.automation_handle();
     let worker = thread::spawn(move || handle.request(|_| Ok(42)));
 
-    assert!(matches!(block_on(events.next()), Some(Event::Wake)));
+    assert!(matches!(block_on(events.next()), Some(AdapterEvent::Wake)));
     assert_eq!(canopy.service_automation(), 1);
     assert_eq!(worker.join().expect("request worker should not panic")?, 42);
     Ok(())
@@ -279,7 +279,7 @@ impl Widget for CaptureWidget {
 }
 
 fn set_outcome<T: Any + OutcomeTarget>(core: &mut Core, id: NodeId, outcome: EventOutcome) {
-    let _ignored = core.with_widget_mut(id, |w, _| {
+    let _ignored = core.with_widget_dyn_mut(id, |w, _| {
         let any = w as &mut dyn Any;
         if let Some(node) = any.downcast_mut::<T>() {
             node.set_outcome(outcome);
@@ -288,7 +288,7 @@ fn set_outcome<T: Any + OutcomeTarget>(core: &mut Core, id: NodeId, outcome: Eve
 }
 
 fn capture_drag_count(core: &mut Core, id: NodeId) -> usize {
-    core.with_widget_mut(id, |w, _| {
+    core.with_widget_dyn_mut(id, |w, _| {
         let any = w as &mut dyn Any;
         any.downcast_mut::<CaptureWidget>()
             .map(|widget| widget.drags)
@@ -326,7 +326,7 @@ fn render_errors_include_operation_node_and_path() -> Result<()> {
         .replace_subtree(canopy.core.root, FailRenderWidget)?;
     canopy.set_root_size(Size::new(10, 2))?;
     let node_id = canopy.core.root;
-    let path = canopy.core.node_path(canopy.core.root, node_id).to_string();
+    let path = canopy.core.path_of(canopy.core.root, node_id).to_string();
 
     let error = canopy
         .render(&mut render)
@@ -362,7 +362,7 @@ fn ignored_mouse_callback_conservatively_requests_render() -> Result<()> {
         modifiers: key::Empty,
         location: Point { x: 1, y: 1 },
     };
-    canopy.event(Event::Mouse(event))?;
+    canopy.event(&Event::Mouse(event))?;
     assert!(canopy.render_if_pending(&mut render)?);
     assert!(!canopy.render_if_pending(&mut render)?);
     Ok(())
@@ -381,7 +381,7 @@ fn mouse_capture_routes_drag_outside() -> Result<()> {
     canopy.render(&mut render)?;
 
     let down = make_mouse_event(&canopy.core, app_id);
-    canopy.event(Event::Mouse(down))?;
+    canopy.event(&Event::Mouse(down))?;
 
     let drag = mouse::MouseEvent {
         action: mouse::Action::Drag,
@@ -389,7 +389,7 @@ fn mouse_capture_routes_drag_outside() -> Result<()> {
         modifiers: key::Empty,
         location: Point { x: 50, y: 50 },
     };
-    canopy.event(Event::Mouse(drag))?;
+    canopy.event(&Event::Mouse(drag))?;
 
     assert_eq!(capture_drag_count(&mut canopy.core, app_id), 1);
 
@@ -399,7 +399,7 @@ fn mouse_capture_routes_drag_outside() -> Result<()> {
         modifiers: key::Empty,
         location: Point { x: 50, y: 50 },
     };
-    canopy.event(Event::Mouse(up))?;
+    canopy.event(&Event::Mouse(up))?;
 
     Ok(())
 }
@@ -415,9 +415,9 @@ fn mouse_routing_clears_a_stale_internal_capture() -> Result<()> {
         action: mouse::Action::Moved,
         button: mouse::Button::None,
         modifiers: key::Empty,
-        location: Point::zero(),
+        location: Point::ZERO,
     };
-    canopy.event(Event::Mouse(event))?;
+    canopy.event(&Event::Mouse(event))?;
     assert_eq!(canopy.core.mouse_capture, None);
     Ok(())
 }
@@ -516,13 +516,15 @@ fn framework_command_bindings_share_route_resolution_and_command_scope() -> Resu
         let group = inputmap::FrameworkBindingGroup::new("test.modal");
         let binding = c.bind_framework(
             group,
-            inputmap::InputSpec::Key('h'.into()),
-            "/r/**/",
-            "Framework root command",
-            CommandInvocation {
-                id: CommandId("r::c_root"),
-                args: Default::default(),
+            'h',
+            inputmap::BindingOptions {
+                path: Some("/r/**/".parse()?),
+                scope: inputmap::BindingScope::Exclusive(group),
+                description: "Framework root command".to_string(),
+                source: None,
+                phase: None,
             },
+            R::call_c_root(),
         )?;
         let token = c.core.input_map.push_exclusive_bindings(group, tree.root)?;
         c.core.set_focus(tree.a_a)?;
@@ -555,7 +557,7 @@ fn explicit_binding_phases_override_the_same_selector_and_change_route_trace() -
             c.bind_command(
                 'h',
                 inputmap::BindingOptions {
-                    path: "/r/**/".into(),
+                    path: Some("/r/**/".parse()?),
                     scope: inputmap::BindingScope::Default,
                     description: "Root action".into(),
                     source: None,
@@ -927,15 +929,15 @@ fn tshift_right() -> Result<()> {
     run_ttree(|c, mut tr, tree| {
         tr.render(c)?;
         c.core.set_focus(tree.a_a)?;
-        c.core.focus_dir(c.core.root, Direction::Right)?;
+        c.core.focus_move(c.core.root, FocusDirection::Right)?;
         assert!(c.core.is_focused(tree.b_a));
-        c.core.focus_dir(c.core.root, Direction::Right)?;
+        c.core.focus_move(c.core.root, FocusDirection::Right)?;
         assert!(c.core.is_focused(tree.b_a));
 
         c.core.set_focus(tree.a_b)?;
-        c.core.focus_dir(c.core.root, Direction::Right)?;
+        c.core.focus_move(c.core.root, FocusDirection::Right)?;
         assert!(c.core.is_focused(tree.b_b));
-        c.core.focus_dir(c.core.root, Direction::Right)?;
+        c.core.focus_move(c.core.root, FocusDirection::Right)?;
         assert!(c.core.is_focused(tree.b_b));
         Ok(())
     })?;

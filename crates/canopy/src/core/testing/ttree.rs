@@ -2,7 +2,7 @@
 use std::cell::RefCell;
 
 use crate::{
-    Canopy, Context, NodeId, ViewContext, command,
+    Canopy, Context, NodeId, ViewContext,
     core::Core,
     derive_commands,
     error::Result,

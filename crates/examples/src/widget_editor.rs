@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use canopy::{CanopyBuilder, layout::Edges, prelude::*};
+use canopy::{CanopyBuilder, error::Result, layout::Edges, prelude::*};
 use canopy_widgets::{
     Frame, Pad,
     editor::{EditMode, Editor, EditorConfig, WrapMode, highlight::SyntectHighlighter},
@@ -63,12 +63,6 @@ impl Loader for WidgetEditor {
         c.add_commands::<Editor>()?;
         Ok(())
     }
-}
-
-/// Install key bindings for the widget editor example.
-pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
-    cnpy.eval_script(DEFAULT_BINDINGS)?;
-    Ok(())
 }
 
 /// Return a lowercase file extension hint for syntax selection.

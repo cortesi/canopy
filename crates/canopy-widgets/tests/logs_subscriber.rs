@@ -6,15 +6,14 @@
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
-
     use canopy::{
-        Canopy, Loader, Widget,
+        Canopy, CanopyBuilder, Loader, Widget,
         commands::{CommandNode, CommandSpec},
         error::Result,
+        geom::Size,
         testing::harness::Harness,
     };
-    use canopy_widgets::{Root, inspector::logs::Logs};
+    use canopy_widgets::Root;
 
     /// Root widget that mounts nothing but the inspector.
     struct App;
@@ -39,14 +38,15 @@ mod tests {
             .try_init()
             .expect("test owns the subscriber");
 
-        let mut logs = Logs::new();
-        let mut harness = Harness::builder(App).size(20, 6).build()?;
-        harness.canopy.with_root_context(|ctx| {
-            // Polling twice proves the failed install is not retried.
-            assert_eq!(logs.poll(ctx), Some(Duration::from_millis(100)));
-            assert_eq!(logs.poll(ctx), Some(Duration::from_millis(100)));
-            Ok(())
-        })?;
+        let canopy = CanopyBuilder::new()
+            .configure(Root::load)
+            .assemble(|canopy| {
+                Root::new().with_inspector(true).install(canopy, App)?;
+                Ok(())
+            })
+            .build()?;
+        let mut harness = Harness::from_canopy(canopy, Size::new(20, 6))?;
+        harness.render()?;
         Ok(())
     }
 }

@@ -4,7 +4,7 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, ViewContext, Widget, WidgetSemantics, command,
+        Canopy, ViewContext, Widget, WidgetSemantics,
         commands::ArgValue,
         derive_commands,
         error::Result,
@@ -50,7 +50,7 @@ mod tests {
         assert!(canopy.snapshot().is_none());
         canopy.set_root_size(Size::new(8, 2))?;
         assert_eq!(
-            canopy.eval_script_value(
+            canopy.eval_script(
                 r#"
             local old = canopy.snapshot()
             if old == nil then error("first eval must prepare") end
@@ -85,7 +85,7 @@ mod tests {
     fn snapshot_is_nil_until_a_viewport_can_be_published() -> Result<()> {
         let mut canopy = Canopy::new();
         assert_eq!(
-            canopy.eval_script_value("return canopy.snapshot() == nil")?,
+            canopy.eval_script("return canopy.snapshot() == nil")?,
             ArgValue::Bool(true)
         );
         Ok(())

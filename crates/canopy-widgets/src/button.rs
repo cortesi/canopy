@@ -1,7 +1,7 @@
 //! Button widget.
 
 use canopy::{
-    Context, EventOutcome, ViewContext, Widget, WidgetSemantics, command,
+    Context, EventOutcome, ViewContext, Widget, WidgetSemantics,
     commands::{CommandAction, CommandCall, CommandStatus, CommandTarget},
     derive_commands,
     error::Result,
@@ -18,9 +18,9 @@ use crate::{
     boxed::{BoxGlyphs, SINGLE},
 };
 
-canopy::key!(LabelSlot: Text);
-canopy::key!(BoxSlot: Border);
-canopy::key!(CenterSlot: Center);
+canopy::slot!(LabelSlot: Text);
+canopy::slot!(BoxSlot: Border);
+canopy::slot!(CenterSlot: Center);
 
 /// Button widget that triggers a command when clicked.
 pub struct Button {
@@ -67,7 +67,7 @@ impl Button {
     #[command]
     pub fn press(&mut self, ctx: &mut dyn Context) -> Result<()> {
         if let Some(command) = self.command.as_ref() {
-            ctx.dispatch_target(
+            ctx.dispatch(
                 command.target.unwrap_or(CommandTarget::From(ctx.node_id())),
                 &command.invocation,
             )?;
@@ -95,14 +95,14 @@ impl Button {
     }
 
     /// Read command eligibility without conflating it with the active state.
-    fn action_status(&self, ctx: &dyn ViewContext) -> Result<Option<CommandStatus>> {
-        if self.command.is_some() && !ctx.node_is_attached(ctx.node_id()) {
+    fn command_status(&self, ctx: &dyn ViewContext) -> Result<Option<CommandStatus>> {
+        if self.command.is_some() && !ctx.is_attached_of(ctx.node_id()) {
             return Ok(Some(CommandStatus::Disabled("Button is detached".into())));
         }
         self.command
             .as_ref()
             .map(|command| {
-                ctx.action_status(
+                ctx.command_status(
                     command.target.unwrap_or(CommandTarget::From(ctx.node_id())),
                     &command.invocation,
                 )
@@ -112,18 +112,18 @@ impl Button {
 
     /// Sync the label text widget to the current label.
     fn sync_label(&self, ctx: &mut dyn Context) -> Result<()> {
-        let box_id = ctx.get_or_create::<BoxSlot>(|| {
+        let box_id = ctx.get_or_create_slot::<BoxSlot>(|| {
             Border::new()
                 .with_glyphs(self.glyphs)
                 .with_border_style(roles::BUTTON_BORDER)
                 .with_fill()
         })?;
-        let center_id = ctx.get_or_create_in::<CenterSlot>(box_id, Center::new)?;
-        let label_id = ctx.get_or_create_in::<LabelSlot>(center_id, || {
+        let center_id = ctx.get_or_create_slot_of::<CenterSlot>(box_id, Center::new)?;
+        let label_id = ctx.get_or_create_slot_of::<LabelSlot>(center_id, || {
             Text::new(self.label.clone()).with_style(roles::BUTTON_LABEL)
         })?;
-        ctx.with_widget(label_id, |text, _| {
-            text.set_raw(self.label.clone());
+        ctx.with_widget_mut(label_id, |text: &mut Text, _| {
+            text.set_text(self.label.clone());
             Ok(())
         })?;
         ctx.set_layout_of(label_id, Layout::column().max_width(self.label_width()))?;
@@ -136,7 +136,7 @@ impl Widget for Button {
         Ok(WidgetSemantics {
             role: Some("button".into()),
             label: Some(self.label.clone()),
-            action_status: self.action_status(ctx)?,
+            action_status: self.command_status(ctx)?,
             ..WidgetSemantics::default()
         })
     }
@@ -153,13 +153,11 @@ impl Widget for Button {
         rndr.push_layer(roles::BUTTON);
         if self.active {
             rndr.push_layer(WidgetState::Pressed.layer());
-        } else {
-            rndr.push_layer(WidgetState::Inactive.layer());
         }
         if ctx.is_on_focus_path() {
             rndr.push_layer(WidgetState::Focused.layer());
         }
-        if matches!(self.action_status(ctx)?, Some(CommandStatus::Disabled(_))) {
+        if matches!(self.command_status(ctx)?, Some(CommandStatus::Disabled(_))) {
             rndr.push_layer(WidgetState::Disabled.layer());
         }
         Ok(())
@@ -224,7 +222,7 @@ mod tests {
             .with_root_view(|ctx| ctx.unique_descendant::<Button>())?
             .expect("button mounted");
         harness.canopy.with_context(button, |ctx| {
-            ctx.with_widget(button, |button, ctx| {
+            ctx.with_widget_mut(button, |button: &mut Button, ctx| {
                 let active = button.semantics(ctx)?;
                 button.set_active(false);
                 let inactive = button.semantics(ctx)?;
@@ -329,13 +327,11 @@ mod tests {
         let before = label_style(&harness);
         harness.with_root_context(|_: &mut ActionOwner, ctx| {
             ctx.with_unique_descendant::<Button, _>(|_, ctx| {
-                let border = ctx.get_child::<BoxSlot>()?.expect("button border");
+                let border = ctx.get_slot::<BoxSlot>()?.expect("button border");
                 let center = ctx
-                    .get_child_in::<CenterSlot>(border)?
+                    .get_slot_of::<CenterSlot>(border)?
                     .expect("label center");
-                let label = ctx
-                    .get_child_in::<LabelSlot>(center)?
-                    .expect("button label");
+                let label = ctx.get_slot_of::<LabelSlot>(center)?.expect("button label");
                 ctx.edit_structure(&mut |ctx| {
                     let wrapper = ctx.create_detached(Center::new())?;
                     ctx.detach(label.into())?;

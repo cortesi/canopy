@@ -6,7 +6,7 @@ use super::{Core, focus::is_focus_candidate};
 use crate::{
     FrameworkBindingGroup, Invalidation, NodeId,
     error::{Error, Result},
-    style::{Effect, effects},
+    style::effects::{self, Effect},
 };
 
 /// Opaque identity of one modal scope, unique across applications.
@@ -313,7 +313,7 @@ mod tests {
                 bindings: ModalBindings::Application,
             })?;
             reset_state();
-            canopy.event(Event::Key('z'.into()))?;
+            canopy.event(&Event::Key('z'.into()))?;
             assert_eq!(
                 get_state().path.len(),
                 2,
@@ -328,7 +328,7 @@ mod tests {
             canopy.core.capture_mouse(tree.b_a)?;
             let location = Point::try_from(canopy.core.nodes[tree.a_a].view.content.tl)?;
             reset_state();
-            canopy.event(Event::Mouse(mouse::MouseEvent {
+            canopy.event(&Event::Mouse(mouse::MouseEvent {
                 action: mouse::Action::Down,
                 button: mouse::Button::Left,
                 modifiers: key::Empty,

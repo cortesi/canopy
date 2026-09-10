@@ -1,7 +1,8 @@
 use std::time::Duration;
 
 use canopy::{
-    CanopyBuilder, command, derive_commands,
+    CanopyBuilder, derive_commands,
+    error::Result,
     layout::Edges,
     prelude::*,
     style::{AttrSet, solarized},
@@ -36,7 +37,7 @@ canopy.bind_command("q", { phase = "after_widget", path = "intervals", descripti
 "#;
 
 /// Counter widget that increments on a timer.
-pub struct CounterItem {
+pub(crate) struct CounterItem {
     /// Current counter value.
     value: u64,
     /// Selection state.
@@ -107,7 +108,7 @@ impl CounterItem {
     fn sync_label(&self, ctx: &mut dyn Context) -> Result<()> {
         let label = self.label();
         let _ = ctx.try_with_unique_descendant::<Text, _>(|text, _ctx| {
-            text.set_raw(label.clone());
+            text.set_text(label.clone());
             Ok(())
         })?;
         self.update_box_layout(ctx)?;
@@ -151,7 +152,7 @@ impl Widget for CounterItem {
 }
 
 /// Status bar widget for the intervals demo.
-pub struct StatusBar;
+pub(crate) struct StatusBar;
 
 impl Widget for StatusBar {
     fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
@@ -191,7 +192,7 @@ impl Intervals {
 
     #[command]
     /// Append a new list item.
-    pub fn add_item(&mut self, c: &mut dyn Context) -> Result<()> {
+    pub(crate) fn add_item(&self, c: &mut dyn Context) -> Result<()> {
         self.with_list(c, |list, ctx| {
             list.append(ctx, CounterItem::new())?;
             Ok(())
@@ -235,7 +236,7 @@ impl Widget for Intervals {
             .ok()?;
 
         for item_id in item_ids {
-            c.with_widget(item_id, |item: &mut CounterItem, ctx| item.tick(ctx))
+            c.with_widget_mut(item_id, |item: &mut CounterItem, ctx| item.tick(ctx))
                 .ok();
         }
 
@@ -249,13 +250,6 @@ impl Loader for Intervals {
         c.add_commands::<List<CounterItem>>()?;
         Ok(())
     }
-}
-
-/// Install key bindings for the intervals demo.
-pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
-    setup_style(cnpy);
-    cnpy.eval_script(DEFAULT_BINDINGS)?;
-    Ok(())
 }
 
 /// Install native styles during the configuration phase.

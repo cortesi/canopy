@@ -149,7 +149,7 @@ mod tests {
     #[test]
     fn failed_delete_preserves_selected_widget_and_storage() -> Result<()> {
         let store = Store::open(":memory:")?;
-        let mut canopy = crate::create_app_with_store(store.clone(), None)?;
+        let mut canopy = crate::create_app(store.clone(), None)?;
         canopy.apply_fixture("with_items")?;
         store.conn.execute_batch(
             "CREATE TRIGGER reject_delete BEFORE DELETE ON todo

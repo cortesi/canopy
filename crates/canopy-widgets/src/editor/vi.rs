@@ -7,10 +7,10 @@ use canopy::{
 use unicode_segmentation::UnicodeSegmentation;
 
 use super::{
-    Selection, TextPosition, TextRange,
     search::SearchDirection,
     widget::{Editor, is_word_char},
 };
+use crate::text_buffer::{Selection, TextPosition, TextRange};
 
 /// Vi mode state for the editor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

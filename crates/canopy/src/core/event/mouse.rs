@@ -1,6 +1,6 @@
-use std::fmt;
+use std::{fmt, str::FromStr};
 
-use crate::{event::key, geom::Point};
+use crate::{error::ParseError, event::key, geom::Point};
 
 /// An abstract specification for a mouse action.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -75,8 +75,8 @@ impl From<MouseEvent> for Mouse {
 
 impl Mouse {
     /// Parse a mouse specification such as `ScrollUp` or `ctrl-LeftDown`.
-    pub fn parse_spec(spec: &str) -> Result<Self, String> {
-        let (modifiers, body) = key::parse_spec_parts(spec, &['-'])?;
+    pub fn parse_spec(spec: &str) -> Result<Self, ParseError> {
+        let (modifiers, body) = key::parse_spec_parts(spec, &['-']).map_err(ParseError::new)?;
 
         let lower = body.to_ascii_lowercase();
         let action = [
@@ -91,7 +91,7 @@ impl Mouse {
         ]
         .into_iter()
         .find_map(|(suffix, action)| lower.ends_with(suffix).then_some((suffix, action)))
-        .ok_or_else(|| format!("unknown mouse action: {spec}"))?;
+        .ok_or_else(|| ParseError::new(format!("unknown mouse action: {spec}")))?;
 
         let button = match &body[..body.len() - action.0.len()] {
             "" => {
@@ -104,7 +104,7 @@ impl Mouse {
             prefix if prefix.eq_ignore_ascii_case("left") => Button::Left,
             prefix if prefix.eq_ignore_ascii_case("right") => Button::Right,
             prefix if prefix.eq_ignore_ascii_case("middle") => Button::Middle,
-            other => return Err(format!("unknown mouse button: {other}")),
+            other => return Err(ParseError::new(format!("unknown mouse button: {other}"))),
         };
 
         Ok(Self {
@@ -112,6 +112,14 @@ impl Mouse {
             button,
             modifiers,
         })
+    }
+}
+
+impl FromStr for Mouse {
+    type Err = ParseError;
+
+    fn from_str(spec: &str) -> Result<Self, Self::Err> {
+        Self::parse_spec(spec)
     }
 }
 

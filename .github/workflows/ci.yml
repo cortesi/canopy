@@ -34,9 +34,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Install the pinned tools
-        run: |
-          cargo install cargo-nextest --version 0.9.99 --locked
-          cargo install ruskel --version 0.0.11 --locked
+        run: cargo install cargo-nextest --version 0.9.99 --locked
 
       # Select members explicitly: --all also formats sibling path dependencies.
       - name: Check formatting
@@ -52,7 +50,7 @@ jobs:
       - name: Check isolated widget capabilities
         run: cargo xtask feature-check
 
-      - name: Check API and Luau declarations
+      - name: Check Luau declarations
         run: cargo xtask checks
 
       - name: Compile benchmarks

@@ -1,5 +1,6 @@
 use canopy::{
-    CanopyBuilder, command, derive_commands, geom,
+    CanopyBuilder, FocusDirection, derive_commands,
+    error::Result,
     layout::{CanvasContext, Edges},
     prelude::*,
 };
@@ -107,7 +108,10 @@ impl EditorColumn {
 
 impl Widget for EditorColumn {
     fn layout(&self) -> Layout {
-        Layout::column().flex_horizontal(1).gap(1).overflow_y()
+        Layout::column()
+            .flex_horizontal(1)
+            .gap(1)
+            .overflow_y(MeasureOverflow::Unbounded)
     }
 }
 
@@ -130,19 +134,19 @@ impl EditorGym {
     #[command]
     /// Scroll the outer pane by one line in the specified direction.
     /// @param dir The direction to scroll.
-    pub fn scroll(&mut self, c: &mut dyn Context, dir: geom::Direction) {
+    pub(crate) fn scroll(&self, c: &mut dyn Context, dir: FocusDirection) {
         match dir {
-            geom::Direction::Up => c.scroll_up(),
-            geom::Direction::Down => c.scroll_down(),
-            geom::Direction::Left => c.scroll_left(),
-            geom::Direction::Right => c.scroll_right(),
+            FocusDirection::Up | FocusDirection::Prev => c.scroll_up(),
+            FocusDirection::Down | FocusDirection::Next => c.scroll_down(),
+            FocusDirection::Left => c.scroll_left(),
+            FocusDirection::Right => c.scroll_right(),
         };
     }
 
     #[command]
     /// Page the outer pane. Negative values move up; positive values move down.
     /// @param delta Signed page delta.
-    pub fn page(&mut self, c: &mut dyn Context, delta: i32) {
+    pub(crate) fn page(&self, c: &mut dyn Context, delta: i32) {
         if delta < 0 {
             c.page_up();
         } else if delta > 0 {
@@ -152,7 +156,7 @@ impl EditorGym {
 
     #[command]
     /// Scroll the outer pane to an absolute content position.
-    pub fn scroll_to(&mut self, c: &mut dyn Context, x: u32, y: u32) {
+    pub(crate) fn scroll_to(&self, c: &mut dyn Context, x: u32, y: u32) {
         c.scroll_to(x, y);
     }
 
@@ -289,7 +293,10 @@ impl EditorGym {
 
 impl Widget for EditorGym {
     fn layout(&self) -> Layout {
-        Layout::fill().direction(Direction::Row).gap(1).overflow_y()
+        Layout::fill()
+            .direction(Direction::Row)
+            .gap(1)
+            .overflow_y(MeasureOverflow::Unbounded)
     }
 
     fn canvas(&self, view: Size, ctx: &CanvasContext) -> Size {
@@ -310,12 +317,6 @@ impl Loader for EditorGym {
         c.add_commands::<Editor>()?;
         Ok(())
     }
-}
-
-/// Install key bindings for the editor gym demo.
-pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
-    cnpy.eval_script(DEFAULT_BINDINGS)?;
-    Ok(())
 }
 
 /// Queue this demo's bindings and native configuration in their builder phases.

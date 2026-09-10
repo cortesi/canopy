@@ -8,10 +8,8 @@ use canopy::{
     render::Render,
 };
 
-use super::{
-    Selection, TextBuffer, TextPosition, TextRange,
-    widget::{Editor, prompt_text},
-};
+use super::widget::{Editor, prompt_text};
+use crate::text_buffer::{Selection, TextBuffer, TextPosition, TextRange};
 
 /// Search direction for navigation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -1,7 +1,7 @@
-use canopy::{geom, layout::Edges, prelude::*, testing::harness::Harness};
-use canopy_widgets::Root;
+use canopy::{error::Result, geom, layout::Edges, prelude::*, testing::harness::Harness};
 
-use crate::framegym::{FrameGym, TestPattern, setup_bindings};
+use super::root_harness;
+use crate::framegym::{FrameGym, TestPattern, binding_setup};
 
 struct ViewMetrics {
     outer: geom::RectI32,
@@ -19,24 +19,16 @@ fn metrics(ctx: &dyn ViewContext) -> ViewMetrics {
 }
 
 fn framegym_harness() -> Result<Harness> {
-    let mut canopy = Canopy::new();
-    Root::load(&mut canopy)?;
-    FrameGym::load(&mut canopy)?;
-    setup_bindings(&mut canopy)?;
-    canopy.finalize_api()?;
-    canopy.replace_root(FrameGym::new())?;
-    let mut harness = Harness::from_canopy(canopy, Size::new(20, 20))?;
-    harness.render()?;
-    Ok(harness)
+    root_harness(FrameGym::new(), binding_setup, Size::new(20, 20))
 }
 
 fn frame_views(harness: &mut Harness) -> Result<(ViewMetrics, ViewMetrics, Layout)> {
     harness.with_root_context(|_root: &mut FrameGym, ctx| {
-        ctx.with_keyed::<canopy_widgets::Frame, _>("FrameSlot", |_frame, frame_ctx| {
+        ctx.with_slot::<canopy_widgets::Frame, _>("FrameSlot", |_frame, frame_ctx| {
             let frame_view = metrics(frame_ctx);
             let frame_layout = frame_ctx.layout();
             let pattern_view = frame_ctx
-                .with_keyed::<TestPattern, _>("PatternSlot", |_pattern, pattern_ctx| {
+                .with_slot::<TestPattern, _>("PatternSlot", |_pattern, pattern_ctx| {
                     Ok(metrics(pattern_ctx))
                 })?;
             Ok((frame_view, pattern_view, frame_layout))
@@ -46,9 +38,9 @@ fn frame_views(harness: &mut Harness) -> Result<(ViewMetrics, ViewMetrics, Layou
 
 fn pattern_scroll(harness: &mut Harness) -> Result<geom::Point> {
     harness.with_root_context(|_root: &mut FrameGym, ctx| {
-        ctx.with_keyed::<canopy_widgets::Frame, _>("FrameSlot", |_frame, frame_ctx| {
-            frame_ctx.with_keyed::<TestPattern, _>("PatternSlot", |_pattern, pattern_ctx| {
-                Ok(pattern_ctx.view().tl)
+        ctx.with_slot::<canopy_widgets::Frame, _>("FrameSlot", |_frame, frame_ctx| {
+            frame_ctx.with_slot::<TestPattern, _>("PatternSlot", |_pattern, pattern_ctx| {
+                Ok(pattern_ctx.view().scroll)
             })
         })
     })

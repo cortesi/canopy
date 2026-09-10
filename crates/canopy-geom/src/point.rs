@@ -1,5 +1,3 @@
-use std::ops::Add;
-
 /// A 2D point in integer cell coordinates.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Default)]
 pub struct Point {
@@ -10,10 +8,14 @@ pub struct Point {
 }
 
 impl Point {
-    /// Return the origin point.
-    pub fn zero() -> Self {
-        (0, 0).into()
+    /// Origin point.
+    pub const ZERO: Self = Self { x: 0, y: 0 };
+
+    /// Construct a point from its coordinates.
+    pub const fn new(x: u32, y: u32) -> Self {
+        Self { x, y }
     }
+
     /// Shift the point by an offset, avoiding under- or overflow.
     pub fn scroll(&self, x: i32, y: i32) -> Self {
         let nx = if x < 0 {
@@ -30,48 +32,9 @@ impl Point {
     }
 }
 
-impl Add for Point {
-    type Output = Self;
-
-    fn add(self, other: Self) -> Self {
-        Self {
-            x: self.x.saturating_add(other.x),
-            y: self.y.saturating_add(other.y),
-        }
-    }
-}
-
 impl From<(u32, u32)> for Point {
     #[inline]
     fn from(v: (u32, u32)) -> Self {
         Self { x: v.0, y: v.1 }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::Result;
-
-    #[test]
-    fn add() -> Result<()> {
-        assert_eq!(Point::zero() + (1u32, 1u32).into(), (1u32, 1u32).into());
-        assert_eq!(Point::zero() + (1u32, 0u32).into(), (1u32, 0u32).into());
-        assert_eq!(Point::zero() + (0u32, 1u32).into(), (0u32, 1u32).into());
-        Ok(())
-    }
-
-    #[test]
-    fn addition_saturates() {
-        assert_eq!(
-            Point {
-                x: u32::MAX,
-                y: u32::MAX - 1,
-            } + Point { x: 1, y: 2 },
-            Point {
-                x: u32::MAX,
-                y: u32::MAX,
-            }
-        );
     }
 }

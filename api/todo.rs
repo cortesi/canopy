@@ -45,29 +45,15 @@ pub mod todo {
     /// Widget for a todo entry.
     pub struct TodoEntry {}
 
-    /// Create a fully configured todo application backed by `db_path`.
-    pub fn create_app(db_path: &str) -> anyhow::Result<Canopy> {}
-
-    /// Create a todo canopy app with optional user config.
-    pub fn create_app_with_config(
-        db_path: &str,
-        config: Option<&std::path::Path>,
-    ) -> anyhow::Result<Canopy> {
-    }
+    /// Build the todo command and fixture API without assembling a widget tree.
+    pub fn api_app() -> canopy::error::Result<Canopy> {}
 
     /// Create a todo application with an explicit database and optional user
     /// config.
-    pub fn create_app_with_store(
+    pub fn create_app(
         store: store::Store,
         config: Option<&std::path::Path>,
     ) -> anyhow::Result<Canopy> {
-    }
-
-    /// Register and finalize the todo application API with default bindings.
-    pub fn setup_app() -> Result<Canopy> {}
-
-    impl CommandNode for TodoEntry {
-        fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
     }
 
     impl Selectable for TodoEntry {

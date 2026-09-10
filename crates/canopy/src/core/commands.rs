@@ -19,7 +19,6 @@ use crate::{
     },
     error::Result as CoreResult,
     event::{Event, mouse::MouseEvent},
-    geom::Direction,
 };
 
 /// Canonical dynamic representation for command arguments and return values.
@@ -45,23 +44,6 @@ pub enum ArgValue {
     Map(BTreeMap<String, Self>),
 }
 
-/// Direction for focus movement commands.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, CommandEnum)]
-pub enum FocusDirection {
-    /// Move to the next focusable node.
-    Next,
-    /// Move to the previous focusable node.
-    Prev,
-    /// Move focus up.
-    Up,
-    /// Move focus down.
-    Down,
-    /// Move focus left.
-    Left,
-    /// Move focus right.
-    Right,
-}
-
 /// Direction for zoom commands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, CommandEnum)]
 pub enum ZoomDirection {
@@ -69,47 +51,6 @@ pub enum ZoomDirection {
     In,
     /// Zoom out.
     Out,
-}
-
-impl ToArgValue for Direction {
-    fn to_arg_value(self) -> ArgValue {
-        ArgValue::String(
-            match self {
-                Self::Up => "Up",
-                Self::Down => "Down",
-                Self::Left => "Left",
-                Self::Right => "Right",
-            }
-            .to_string(),
-        )
-    }
-}
-
-impl FromArgValue for Direction {
-    fn from_arg_value(v: &ArgValue) -> Result<Self, CommandError> {
-        if let ArgValue::String(s) = v {
-            if s.eq_ignore_ascii_case("Up") {
-                return Ok(Self::Up);
-            }
-            if s.eq_ignore_ascii_case("Down") {
-                return Ok(Self::Down);
-            }
-            if s.eq_ignore_ascii_case("Left") {
-                return Ok(Self::Left);
-            }
-            if s.eq_ignore_ascii_case("Right") {
-                return Ok(Self::Right);
-            }
-            return Err(CommandError::Conversion {
-                param: "direction".to_string(),
-                message: format!("unknown direction: {}", s),
-            });
-        }
-        Err(CommandError::Conversion {
-            param: "direction".to_string(),
-            message: "expected string for direction".to_string(),
-        })
-    }
 }
 
 impl ArgValue {
@@ -492,12 +433,6 @@ macro_rules! impl_number_command_type {
 }
 
 impl_number_command_type!(i8, i16, i32, i64, isize, u8, u16, u32, u64, usize, f32, f64);
-
-impl CommandType for Direction {
-    fn luau_ty() -> declaration::Type {
-        declaration::Type::literals(["Up", "Down", "Left", "Right"])
-    }
-}
 
 impl<T: CommandType> CommandType for Option<T> {
     fn luau_ty() -> declaration::Type {
@@ -1558,24 +1493,8 @@ fn checked_resolution(
     })
 }
 
-/// Inspect eligibility without extracting or mutating the target widget.
-pub(crate) fn command_status(
-    core: &Core,
-    target: CommandTarget,
-    inv: &CommandInvocation,
-) -> CoreResult<CommandStatus> {
-    let spec = core
-        .commands
-        .get(inv.id.0)
-        .ok_or_else(|| CommandError::UnknownCommand {
-            id: inv.id.0.to_string(),
-        })?;
-    let resolution = checked_resolution(&CommandResolver::for_target(core, target), spec)?;
-    status_at(core, spec, resolution)
-}
-
 /// Report unavailable action targets as disabled without hiding hook failures.
-pub(crate) fn action_status(
+pub(crate) fn command_status(
     core: &Core,
     target: CommandTarget,
     inv: &CommandInvocation,
@@ -1604,7 +1523,7 @@ fn status_at(
     let (Some(status), Some(node)) = (spec.status, resolution.target()) else {
         return Ok(CommandStatus::Enabled);
     };
-    core.with_widget_read(
+    core.with_widget(
         node,
         WidgetOperation::access("command status"),
         |widget, core| status(widget as &dyn Any, &CoreViewContext::new(core, node)),
@@ -1700,7 +1619,7 @@ mod tests {
     use serde::{Serialize, ser};
 
     use super::*;
-    use crate::{Widget, error::Error, state::NodeName};
+    use crate::{Widget, core::id::testing_node_id, error::Error, state::NodeName};
 
     struct StatusOwner;
 
@@ -1731,7 +1650,7 @@ mod tests {
     static FAILING_COMMANDS: &[&CommandSpec] = &[&FAILING_STATUS];
 
     #[test]
-    fn action_status_disables_resolution_failures_but_preserves_hook_errors() -> CoreResult<()> {
+    fn command_status_disables_resolution_failures_but_preserves_hook_errors() -> CoreResult<()> {
         let mut core = Core::new();
         core.commands.add(FAILING_COMMANDS)?;
         let owner = core.create_detached(StatusOwner)?;
@@ -1743,27 +1662,22 @@ mod tests {
         };
         let context = CoreViewContext::new(&core, core.root);
         assert!(matches!(
-            context.action_status(CommandTarget::Exact(missing), &invocation)?,
+            context.command_status(CommandTarget::Exact(missing), &invocation)?,
             CommandStatus::Disabled(_)
         ));
-        assert!(
-            context
-                .command_status(CommandTarget::Exact(missing), &invocation)
-                .is_err()
-        );
         assert!(matches!(
-            context.action_status(CommandTarget::Exact(core.root), &invocation)?,
+            context.command_status(CommandTarget::Exact(core.root), &invocation)?,
             CommandStatus::Disabled(_)
         ));
         assert!(
-            matches!(context.action_status(CommandTarget::Exact(owner), &invocation), Err(Error::Invalid(message)) if message == "eligibility hook failed")
+            matches!(context.command_status(CommandTarget::Exact(owner), &invocation), Err(Error::Invalid(message)) if message == "eligibility hook failed")
         );
         let unknown = CommandInvocation {
             id: CommandId("unknown.action"),
             args: CommandArgs::default(),
         };
         assert!(matches!(
-            context.action_status(CommandTarget::Exact(owner), &unknown)?,
+            context.command_status(CommandTarget::Exact(owner), &unknown)?,
             CommandStatus::Disabled(_)
         ));
         Ok(())
@@ -1904,7 +1818,7 @@ mod tests {
 
     #[test]
     fn node_arg_json_requires_external_mode() {
-        let value = ArgValue::Node(NodeId::default());
+        let value = ArgValue::Node(testing_node_id());
 
         assert!(arg_value_to_json(&value, NodeJson::Reject).is_err());
 

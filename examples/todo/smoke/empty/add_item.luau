@@ -13,7 +13,7 @@ canopy.assert(todo_scope ~= nil, "todo scope must exist")
 if todo_scope == nil then
     return
 end
-local list = canopy.find_key("todo.list", todo_scope)
+local list = canopy.find_identity("todo.list", todo_scope)
 canopy.assert(list ~= nil, "todo list must have a semantic key")
 if list ~= nil then
     local found = false

@@ -1,4 +1,4 @@
-use canopy::{CanopyBuilder, command, derive_commands, prelude::*};
+use canopy::{CanopyBuilder, derive_commands, error::Result, prelude::*};
 use canopy_widgets::Root;
 
 /// Default bindings for the focus gym demo.
@@ -40,7 +40,7 @@ end)
 "#;
 
 /// A focusable block that can split into children.
-pub struct Block {
+pub(crate) struct Block {
     /// True for horizontal layout.
     horizontal: bool,
 }
@@ -60,7 +60,7 @@ impl Block {
     /// Adjust flex factors by the requested deltas and apply the updated
     /// layout.
     fn adjust_flex(&self, c: &mut dyn Context, delta: i32) -> Result<()> {
-        if let Some(view) = c.node_view(c.node_id())
+        if let Some(view) = c.view_of(c.node_id())
             && (view.outer.w <= 1 || view.outer.h <= 1)
             && delta < 0
         {
@@ -109,9 +109,9 @@ impl Block {
     /// Add a nested block if space permits.
     fn add(&self, c: &mut dyn Context) -> Result<()> {
         if let Some(first_child) = c.children().first().copied()
-            && let Some(view) = c.node_view(first_child)
+            && let Some(view) = c.view_of(first_child)
         {
-            let size = Size::new(view.outer.w, view.outer.h);
+            let size = view.outer.size();
             if self.size_limited(size) {
                 return Ok(());
             }
@@ -124,11 +124,11 @@ impl Block {
     /// Split into two child blocks.
     fn split(&self, c: &mut dyn Context) -> Result<()> {
         let view = c.view();
-        let size = Size::new(view.outer.w, view.outer.h);
+        let size = view.outer.size();
         if !self.size_limited(size) && c.children().is_empty() {
             c.add_child(Self::new(!self.horizontal))?;
             c.add_child(Self::new(!self.horizontal))?;
-            c.focus_next(FocusScope::Current)?;
+            c.focus_move(FocusScope::Current, FocusDirection::Next)?;
         }
         Ok(())
     }
@@ -163,7 +163,7 @@ impl Widget for Block {
         if ctx.children().is_empty() {
             let bc = if ctx.is_focused() { "violet" } else { "blue" };
             let rect = ctx.view().outer_rect_local();
-            if rect.is_zero() {
+            if rect.is_empty() {
                 return Ok(());
             }
             r.fill(bc, rect, '\u{2588}')?;
@@ -232,11 +232,6 @@ impl Loader for FocusGym {
         c.add_commands::<Block>()?;
         Ok(())
     }
-}
-
-/// Install key bindings for the focus gym demo.
-pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
-    cnpy.eval_script(DEFAULT_BINDINGS)
 }
 
 /// Queue this demo's bindings and native configuration in their builder phases.

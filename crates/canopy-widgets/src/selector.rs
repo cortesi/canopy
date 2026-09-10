@@ -1,10 +1,11 @@
 //! Selector widget for multi-value selection with checkbox-style items.
 
 use canopy::{
-    Context, EventOutcome, ViewContext, Widget, command, derive_commands,
+    Context, EventOutcome, ViewContext, Widget, derive_commands,
     error::Result,
     event::{Event, mouse},
-    layout::{MeasureConstraints, Measurement, Size},
+    geom::Size,
+    layout::{MeasureConstraints, Measurement},
     render::Render,
     state::NodeName,
     text,
@@ -117,7 +118,7 @@ where
         if event.action != mouse::Action::Down || event.button != mouse::Button::Left {
             return Ok(());
         }
-        let clicked_row = event.location.y.saturating_add(c.view().tl.y) as usize;
+        let clicked_row = event.location.y.saturating_add(c.view().scroll.y) as usize;
         if clicked_row < self.items.len() {
             self.focused = clicked_row;
             self.toggle(c)?;
@@ -177,8 +178,8 @@ where
         let rect = view.view_rect_local();
         let is_widget_focused = ctx.is_focused();
 
-        for (idx, item) in self.items.iter().enumerate().skip(view.tl.y as usize) {
-            let Ok(row) = u32::try_from(idx - view.tl.y as usize) else {
+        for (idx, item) in self.items.iter().enumerate().skip(view.scroll.y as usize) {
+            let Ok(row) = u32::try_from(idx - view.scroll.y as usize) else {
                 break;
             };
             if row >= rect.h {
@@ -193,12 +194,12 @@ where
             let prefix = if is_selected { "[x] " } else { "[ ] " };
             let display = format!("{}{}", prefix, label);
             let (display, _) =
-                text::slice_by_columns(&display, view.tl.x as usize, rect.w as usize);
+                text::slice_by_columns(&display, view.scroll.x as usize, rect.w as usize);
 
             // Show focus highlight only when the widget has focus
             if is_item_focused && is_widget_focused {
                 // Focused item - highlight background
-                rndr.fill("selector/focus", line_rect.into(), ' ')?;
+                rndr.fill("selector/focus", line_rect.rect(), ' ')?;
                 if is_selected {
                     rndr.text("selector/focus/selected", line_rect, display)?;
                 } else {

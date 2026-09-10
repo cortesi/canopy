@@ -12,8 +12,15 @@ pub struct Rect {
 }
 
 impl Rect {
+    /// Empty rectangle at the origin.
+    pub const ZERO: Self = Self {
+        tl: Point::ZERO,
+        w: 0,
+        h: 0,
+    };
+
     /// Construct a rectangle from coordinates and size.
-    pub fn new(x: u32, y: u32, w: u32, h: u32) -> Self {
+    pub const fn new(x: u32, y: u32, w: u32, h: u32) -> Self {
         Self {
             tl: Point { x, y },
             w,
@@ -21,35 +28,19 @@ impl Rect {
         }
     }
 
-    /// Create a zero-sized `Rect` at the origin.
-    pub fn zero() -> Self {
-        Self::new(0, 0, 0, 0)
-    }
-
-    /// Carve a rectangle with a fixed width out of the end of the horizontal
-    /// extent of this rect. Returns `(left, right)`. Right is either empty or
-    /// has the exact width specified.
-    pub fn carve_hend(&self, width: u32) -> (Self, Self) {
-        let (h, t) = self.hextent().carve_end(width);
-        // We can unwrap, because both extents are within our range by
-        // definition.
-        (self.hslice(h).unwrap(), self.hslice(t).unwrap())
-    }
-
     /// Return the exclusive right edge using widened arithmetic.
-    pub fn right(&self) -> u64 {
+    fn right(&self) -> u64 {
         u64::from(self.tl.x) + u64::from(self.w)
     }
 
     /// Return the exclusive bottom edge using widened arithmetic.
-    pub fn bottom(&self) -> u64 {
+    fn bottom(&self) -> u64 {
         u64::from(self.tl.y) + u64::from(self.h)
     }
 
     /// Does this half-open rectangle contain the point?
-    pub fn contains_point(&self, p: impl Into<Point>) -> bool {
-        let p = p.into();
-        if self.is_zero() {
+    pub fn contains_point(&self, p: Point) -> bool {
+        if self.is_empty() {
             false
         } else {
             p.x >= self.tl.x
@@ -98,24 +89,6 @@ impl Rect {
         Some(Self::new(h.off, v.off, h.len, v.len))
     }
 
-    /// Splits the rectangle horizontally into n sections, as close to equally
-    /// sized as possible.
-    pub fn split_horizontal(&self, n: u32) -> Result<Vec<Self>> {
-        if n == 0 {
-            return Err(Error::ZeroSections);
-        }
-        let width = self.w / n;
-        let remainder = self.w % n;
-        let mut off = self.tl.x;
-        let mut ret = Vec::with_capacity(n as usize);
-        for i in 0..n {
-            let width = width + u32::from(i < remainder);
-            ret.push(Self::new(off, self.tl.y, width, self.h));
-            off = off.saturating_add(width);
-        }
-        Ok(ret)
-    }
-
     /// Extract a slice of this rect based on a vertical extent.
     pub fn vslice(&self, e: LineSegment) -> Result<Self> {
         if !self.vextent().contains(e) {
@@ -137,6 +110,9 @@ impl Rect {
     }
 
     /// Return a line with a given offset in the rectangle.
+    ///
+    /// This remains fallible because an empty rectangle has no valid line and
+    /// silently moving an out-of-range render request would hide layout bugs.
     pub fn line(&self, off: u32) -> Result<Line> {
         if off >= self.h {
             return Err(Error::LineOffsetOutside {
@@ -151,24 +127,14 @@ impl Rect {
     }
 
     /// Does this rect have a zero size?
-    pub fn is_zero(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.w == 0 || self.h == 0
     }
 
     /// Return the `Size` of this rectangle, which has the same size as the
     /// `Rect` but no location.
-    pub fn expanse(&self) -> Size {
+    pub const fn size(&self) -> Size {
         Size::new(self.w, self.h)
-    }
-}
-
-impl From<Line> for Rect {
-    fn from(l: Line) -> Self {
-        Self {
-            tl: l.tl,
-            w: l.w,
-            h: 1,
-        }
     }
 }
 
@@ -204,26 +170,10 @@ mod tests {
     }
 
     #[test]
-    fn carve() -> Result<()> {
-        let r = Rect::new(5, 5, 10, 10);
-
-        assert_eq!(
-            r.carve_hend(2),
-            (Rect::new(5, 5, 8, 10), Rect::new(13, 5, 2, 10))
-        );
-        assert_eq!(
-            r.carve_hend(20),
-            (Rect::new(5, 5, 10, 10), Rect::new(15, 5, 0, 10))
-        );
-
-        Ok(())
-    }
-
-    #[test]
     fn extreme_rect_arithmetic_saturates() {
         let rect = Rect::new(u32::MAX - 1, u32::MAX - 1, 10, 10);
-        assert!(rect.contains_point((u32::MAX - 1, u32::MAX - 1)));
-        assert!(!rect.contains_point((0, 0)));
+        assert!(rect.contains_point((u32::MAX - 1, u32::MAX - 1).into()));
+        assert!(!rect.contains_point((0, 0).into()));
     }
 
     proptest! {
@@ -235,11 +185,11 @@ mod tests {
             let intersection = a.intersect(b);
             prop_assert_eq!(intersection, b.intersect(a));
             if let Some(intersection) = intersection {
-                prop_assert!(!intersection.is_zero());
+                prop_assert!(!intersection.is_empty());
                 prop_assert!(a.contains_rect(intersection));
                 prop_assert!(b.contains_rect(intersection));
             }
-            if a.contains_rect(b) && !b.is_zero() {
+            if a.contains_rect(b) && !b.is_empty() {
                 prop_assert_eq!(a.intersect(b), Some(b));
             }
         }
@@ -253,14 +203,6 @@ mod tests {
                 prop_assert!(a.contains_rect(intersection));
                 prop_assert!(b.contains_rect(intersection));
             }
-        }
-
-        #[test]
-        fn split_horizontal_covers_original_width(rect in rect_strategy(), n in 1u32..20) {
-            let parts = rect.split_horizontal(n).expect("non-zero split count should succeed");
-            let total: u32 = parts.iter().map(|part| part.w).sum();
-            prop_assert_eq!(total, rect.w);
-            prop_assert!(parts.iter().all(|part| part.h == rect.h));
         }
 
     }
@@ -291,52 +233,20 @@ mod tests {
     #[test]
     fn contains() -> Result<()> {
         let r = Rect::new(10, 10, 10, 10);
-        assert!(r.contains_point((10, 10)));
-        assert!(!r.contains_point((9, 10)));
-        assert!(!r.contains_point((20, 20)));
-        assert!(r.contains_point((19, 19)));
-        assert!(!r.contains_point((20, 21)));
+        assert!(r.contains_point((10, 10).into()));
+        assert!(!r.contains_point((9, 10).into()));
+        assert!(!r.contains_point((20, 20).into()));
+        assert!(r.contains_point((19, 19).into()));
+        assert!(!r.contains_point((20, 21).into()));
 
         assert!(r.contains_rect(Rect::new(10, 10, 1, 1)));
         assert!(r.contains_rect(Rect::new(10, 10, 0, 0)));
         assert!(r.contains_rect(r));
 
         let r = Rect::new(0, 0, 0, 0);
-        assert!(!r.contains_point((0, 0)));
+        assert!(!r.contains_point((0, 0).into()));
         assert!(r.contains_rect(r));
 
         Ok(())
-    }
-    #[test]
-    fn horizontal_splits_preserve_order_and_boundaries() {
-        assert_eq!(
-            Rect::new(4, 2, 8, 3).split_horizontal(3).unwrap(),
-            [
-                Rect::new(4, 2, 3, 3),
-                Rect::new(7, 2, 3, 3),
-                Rect::new(10, 2, 2, 3),
-            ]
-        );
-        assert_eq!(
-            Rect::new(4, 2, 1, 3).split_horizontal(3).unwrap(),
-            [
-                Rect::new(4, 2, 1, 3),
-                Rect::new(5, 2, 0, 3),
-                Rect::new(5, 2, 0, 3),
-            ]
-        );
-        assert!(matches!(
-            Rect::new(0, 0, 1, 1).split_horizontal(0),
-            Err(Error::ZeroSections)
-        ));
-        assert_eq!(
-            Rect::new(u32::MAX - 1, 2, 4, 3)
-                .split_horizontal(2)
-                .unwrap(),
-            [
-                Rect::new(u32::MAX - 1, 2, 2, 3),
-                Rect::new(u32::MAX, 2, 2, 3),
-            ]
-        );
     }
 }

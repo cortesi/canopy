@@ -34,7 +34,7 @@ mod tests {
         ]
         .map(String::from)
         .to_vec();
-        let root = SnapshotRoot::new(Dropdown::new(items));
+        let root = SnapshotRoot::new(Dropdown::new(items)?);
         let mut harness = Harness::builder(root).size(10, 4).build()?;
         harness.with_root_context(|_root: &mut SnapshotRoot<Dropdown<String>>, ctx| {
             ctx.with_unique_descendant::<Dropdown<String>, _>(|dropdown, ctx| dropdown.toggle(ctx))
@@ -48,7 +48,7 @@ mod tests {
         harness.render()?;
         harness.with_root_context(|_root: &mut SnapshotRoot<Dropdown<String>>, ctx| {
             ctx.with_unique_descendant::<Dropdown<String>, _>(|_, ctx| {
-                assert!(ctx.scroll_to(3, 2));
+                assert!(ctx.scroll_to(3, 2).changed());
                 Ok(())
             })
         })?;
@@ -81,7 +81,7 @@ mod tests {
         harness.render()?;
         harness.with_root_context(|_root: &mut SnapshotRoot<Selector<String>>, ctx| {
             ctx.with_unique_descendant::<Selector<String>, _>(|_, ctx| {
-                assert!(ctx.scroll_to(4, 2));
+                assert!(ctx.scroll_to(4, 2).changed());
                 Ok(())
             })
         })?;
@@ -201,7 +201,7 @@ mod tests {
         harness.with_root_context(|_root: &mut SnapshotRoot<List<Text>>, ctx| {
             let view = ctx as &dyn ViewContext;
             let list_id = view.typed_id::<List<Text>>(view.find_one("**/list")?)?;
-            ctx.with_widget::<List<Text>, _>(list_id, |list, ctx| {
+            ctx.with_widget_mut::<List<Text>, _>(list_id, |list, ctx| {
                 list.append(ctx, Text::new("One"))?;
                 list.append(ctx, Text::new("Two"))?;
                 list.append(ctx, Text::new("Three"))?;

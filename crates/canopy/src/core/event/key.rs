@@ -1,5 +1,7 @@
 //! This module contains the core primitives to represent keyboard input.
-use std::{fmt, ops::Add};
+use std::{fmt, ops::Add, str::FromStr};
+
+use crate::error::ParseError;
 
 /// Modifier key state.
 #[derive(Default, Debug, PartialEq, Eq, Clone, Copy, Hash)]
@@ -291,13 +293,21 @@ impl Key {
     }
 
     /// Parse a key specification such as `ctrl-s`, `PageDown`, or `A`.
-    pub fn parse_spec(spec: &str) -> Result<Self, String> {
+    pub fn parse_spec(spec: &str) -> Result<Self, ParseError> {
         let spec = spec.trim();
         if spec.chars().count() == 1 {
-            return Ok(Self::from(parse_key_code(spec)?).normalize());
+            return Ok(Self::from(parse_key_code(spec).map_err(ParseError::new)?).normalize());
         }
-        let (mods, key_part) = parse_spec_parts(spec, &['-', '+'])?;
-        Ok((mods + parse_key_code(key_part)?).normalize())
+        let (mods, key_part) = parse_spec_parts(spec, &['-', '+']).map_err(ParseError::new)?;
+        Ok((mods + parse_key_code(key_part).map_err(ParseError::new)?).normalize())
+    }
+}
+
+impl FromStr for Key {
+    type Err = ParseError;
+
+    fn from_str(spec: &str) -> Result<Self, Self::Err> {
+        Self::parse_spec(spec)
     }
 }
 

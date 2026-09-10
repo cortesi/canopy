@@ -10,45 +10,48 @@ use std::{
 use canopy::AutomationHandle;
 use ruau_script_api::{ScriptApiError, ScriptApiQuery, ScriptApiResponse};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
-use tmcp::{Server, ToolError, ToolResult, mcp_server, schema::CallToolResult};
+use tmcp::{Server, ToolError, ToolResult, mcp_server, schema::CallToolResult, tool_params};
 use tokio::{net::UnixListener, runtime::Builder, sync::oneshot, task::block_in_place};
 
 use crate::{
-    AppFactory, AppMetadata, BootstrapRequest, Error, LiveContext, Result,
+    AppFactory, AppMetadata, BootstrapRequest, Error, Result,
+    metadata::LiveContext,
     script::{
-        AppEvaluator, ScriptEvalRequest, bootstrap_for_canopy, evaluate_live_request,
-        query_script_api, validate_live_viewport,
+        ScriptEvalRequest, bootstrap_for_canopy, evaluate_live_request, query_script_api,
+        validate_live_viewport,
     },
 };
 
-/// Build an MCP tool result with structured and text JSON payloads.
-pub fn json_tool_result(value: serde_json::Value) -> CallToolResult {
-    let text = value.to_string();
-    CallToolResult::new()
-        .with_structured_content(value)
-        .with_text_content(text)
+/// Encode a typed payload as an MCP structured result.
+fn to_tool_result(value: impl Serialize) -> ToolResult<CallToolResult> {
+    CallToolResult::structured(value).map_err(|error| ToolError::internal(error.to_string()))
 }
 
 /// Minimal stdio MCP server for canopy automation.
 #[derive(Clone)]
 struct CanopyMcpServer {
     /// Headless evaluator shared by all tool calls.
-    evaluator: AppEvaluator,
+    evaluator: AppFactory,
 }
 
 /// Request payload for applying a named fixture to a live app.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[tool_params]
 pub struct ApplyFixtureRequest {
     /// Registered fixture name.
     pub name: String,
 }
 
+/// Response returned after a fixture is applied to a live app.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, schemars::JsonSchema)]
+pub struct ApplyFixtureResponse {
+    /// Name of the applied fixture.
+    pub applied: String,
+}
+
 /// Construct the MCP server for an app factory.
 fn canopy_mcp_server(factory: AppFactory) -> CanopyMcpServer {
-    CanopyMcpServer {
-        evaluator: AppEvaluator::new(factory),
-    }
+    CanopyMcpServer { evaluator: factory }
 }
 
 /// Live MCP server that proxies tool calls onto a running canopy UI thread.
@@ -81,9 +84,7 @@ impl CanopyMcpServer {
             .evaluator
             .bootstrap_with_request(&params)
             .map_err(|error| ToolError::internal(error.to_string()))?;
-        let value = serde_json::to_value(bootstrap)
-            .map_err(|error| ToolError::internal(error.to_string()))?;
-        Ok(json_tool_result(value))
+        to_tool_result(bootstrap)
     }
 
     #[tool]
@@ -109,9 +110,7 @@ impl CanopyMcpServer {
             .evaluator
             .fixtures()
             .map_err(|error| ToolError::internal(error.to_string()))?;
-        let value = serde_json::to_value(fixtures)
-            .map_err(|error| ToolError::internal(error.to_string()))?;
-        Ok(json_tool_result(value))
+        to_tool_result(fixtures)
     }
 }
 
@@ -125,16 +124,13 @@ impl LiveCanopyMcpServer {
         let context = self.context.clone();
         let bootstrap = block_in_place(move || {
             automation.request(move |canopy| {
-                canopy.finalize_api()?;
                 let metadata = context.metadata(canopy)?;
                 validate_live_viewport(params.viewport, &metadata)?;
                 bootstrap_for_canopy(canopy, metadata)
             })
         })
         .map_err(|error| ToolError::internal(error.to_string()))?;
-        let value = serde_json::to_value(bootstrap)
-            .map_err(|error| ToolError::internal(error.to_string()))?;
-        Ok(json_tool_result(value))
+        to_tool_result(bootstrap)
     }
 
     #[tool]
@@ -163,9 +159,7 @@ impl LiveCanopyMcpServer {
         let fixtures =
             block_in_place(move || automation.request(|canopy| Ok(canopy.fixture_infos())))
                 .map_err(|error| ToolError::internal(error.to_string()))?;
-        let value = serde_json::to_value(fixtures)
-            .map_err(|error| ToolError::internal(error.to_string()))?;
-        Ok(json_tool_result(value))
+        to_tool_result(fixtures)
     }
 
     #[tool]
@@ -183,8 +177,9 @@ impl LiveCanopyMcpServer {
             })
         })
         .map_err(|error| ToolError::internal(error.to_string()))?;
-        let value = json!({ "applied": applied_name });
-        Ok(json_tool_result(value))
+        to_tool_result(ApplyFixtureResponse {
+            applied: applied_name,
+        })
     }
 }
 
@@ -214,7 +209,7 @@ fn script_api_tool_result(
 /// Serve `bootstrap`, `script_eval`, `script_api`, and `fixtures` over stdio
 /// for an app factory.
 /// This low-level entry point grants trusted-local access to all exposed native
-/// actions. Use `launch_with_options` to enforce an application launch policy.
+/// actions. Calling this function is the application's automation opt-in.
 pub fn serve_stdio(factory: AppFactory) -> Result<()> {
     Server::new(move || canopy_mcp_server(factory.clone()))
         .serve_stdio_blocking()
@@ -266,12 +261,9 @@ impl Drop for UdsServerHandle {
 pub fn serve_uds(
     socket_path: impl AsRef<Path>,
     automation: AutomationHandle,
+    metadata: AppMetadata,
 ) -> Result<UdsServerHandle> {
-    serve_uds_with_context(
-        socket_path,
-        automation,
-        LiveContext::new(AppMetadata::default()),
-    )
+    serve_uds_with_context(socket_path, automation, LiveContext::new(metadata))
 }
 
 /// Serve a live application with an explicit identity retained across
@@ -356,13 +348,13 @@ mod tests {
     };
 
     use canopy::{
-        Fixture, command, derive_commands, error::Result as CanopyResult, geom::Size, prelude::*,
-        testing::contracts,
+        CanopyBuilder, Fixture, derive_commands, error::Result as CanopyResult, geom::Size,
+        prelude::*, testing::contracts,
     };
     use tokio::net::UnixStream;
 
     use super::*;
-    use crate::app_factory;
+    use crate::metadata::test_app_factory as app_factory;
 
     #[test]
     fn uds_preserves_non_socket_paths() -> crate::Result<()> {
@@ -376,7 +368,7 @@ mod tests {
         let folder = directory.path().join("folder");
         fs::create_dir(&folder)?;
         for path in [&file, &link, &dangling, &folder] {
-            let error = serve_uds(path, Canopy::new().automation_handle())
+            let error = serve_uds(path, Canopy::new().automation_handle(), AppMetadata::test())
                 .err()
                 .expect("reject non-socket");
             assert!(
@@ -397,7 +389,11 @@ mod tests {
             if stale {
                 drop(StdUnixListener::bind(&path)?);
             }
-            let server = serve_uds(&path, Canopy::new().automation_handle())?;
+            let server = serve_uds(
+                &path,
+                Canopy::new().automation_handle(),
+                AppMetadata::test(),
+            )?;
             assert!(fs::symlink_metadata(&path)?.file_type().is_socket());
             server.stop()?;
             assert!(!path.exists());
@@ -456,16 +452,21 @@ mod tests {
 
     fn server() -> CanopyMcpServer {
         canopy_mcp_server(app_factory(|| {
-            let mut canopy = Canopy::new();
-            EchoNode::load(&mut canopy)?;
-            canopy.register_fixture(Fixture::new(
-                "seeded",
-                "Set echo_node to a known value",
-                |canopy| canopy.eval_script("echo_node.set(41)"),
-            ))?;
-            canopy.finalize_api()?;
-            canopy.replace_root(EchoNode::new())?;
-            Ok(canopy)
+            CanopyBuilder::new()
+                .configure(|canopy| {
+                    EchoNode::load(canopy)?;
+                    canopy.register_fixture(Fixture::new(
+                        "seeded",
+                        "Set echo_node to a known value",
+                        |canopy| canopy.eval_script("echo_node.set(41)").map(|_| ()),
+                    ))
+                })
+                .assemble(|canopy| {
+                    canopy.replace_root(EchoNode::new())?;
+                    Ok(())
+                })
+                .build()
+                .map_err(Into::into)
         }))
     }
 
@@ -515,10 +516,15 @@ mod tests {
             .expect("bootstrap");
         let payload = result.structured_content.expect("structured content");
         assert!(payload.get("api").is_none());
-        assert!(!payload["api_digest"].as_str().expect("digest").is_empty());
+        assert!(
+            !payload["metadata"]["api_digest"]
+                .as_str()
+                .expect("digest")
+                .is_empty()
+        );
         assert_eq!(payload["api_sources"][0]["source"], "canopy");
         assert!(
-            payload["commands"]
+            payload["focus_commands"]
                 .as_array()
                 .expect("commands")
                 .iter()
@@ -529,21 +535,20 @@ mod tests {
 
     #[tokio::test]
     async fn shared_trace_through_direct_mcp_handler() -> crate::Result<()> {
-        let server = canopy_mcp_server(app_factory(|| Ok(contracts::app()?)).with_metadata(
+        let server = canopy_mcp_server(AppFactory::new(
             AppMetadata {
                 app: "contract".into(),
                 reset: crate::ResetPolicy::Isolated,
             },
+            || Ok(contracts::app()?),
         ));
         let response = server
             .script_eval(ScriptEvalRequest {
-                script: contracts::SCRIPT.into(),
-                fixture: None,
-                timeout_ms: None,
                 viewport: Some(crate::Viewport {
                     width: 12,
                     height: 3,
                 }),
+                ..ScriptEvalRequest::new(contracts::SCRIPT)
             })
             .await
             .expect("direct MCP evaluation");
@@ -623,12 +628,7 @@ mod tests {
         let outcome: crate::ScriptEvalOutcome = client
             .call_tool_structured(
                 "script_eval",
-                ScriptEvalRequest {
-                    script: "return echo_node.get()".into(),
-                    fixture: None,
-                    timeout_ms: None,
-                    viewport: None,
-                },
+                ScriptEvalRequest::new("return echo_node.get()"),
             )
             .await?;
         assert!(outcome.success);
@@ -664,7 +664,7 @@ mod tests {
         canopy.register_fixture(Fixture::new(
             "scripted",
             "Attempt recursive top-level evaluation",
-            |canopy| canopy.eval_script("echo_node.set(99)"),
+            |canopy| canopy.eval_script("echo_node.set(99)").map(|_| ()),
         ))?;
         canopy.finalize_api()?;
         canopy.replace_root(EchoNode::new())?;
@@ -711,12 +711,9 @@ mod tests {
     #[tokio::test]
     async fn script_eval_returns_json_payload() {
         let result = server()
-            .script_eval(ScriptEvalRequest {
-                script: "return echo_node.ping()".to_string(),
-                fixture: None,
-                timeout_ms: None,
-                viewport: None,
-            })
+            .script_eval(ScriptEvalRequest::new(
+                "return echo_node.ping()".to_string(),
+            ))
             .await
             .expect("script_eval");
         let payload = result.structured_content.expect("structured content");
@@ -731,10 +728,8 @@ mod tests {
     async fn script_eval_applies_headless_fixture() {
         let result = server()
             .script_eval(ScriptEvalRequest {
-                script: "return echo_node.get()".to_string(),
                 fixture: Some("seeded".to_string()),
-                timeout_ms: None,
-                viewport: None,
+                ..ScriptEvalRequest::new("return echo_node.get()")
             })
             .await
             .expect("script_eval");
@@ -760,12 +755,7 @@ mod tests {
     #[tokio::test]
     async fn script_eval_reports_typecheck_errors() {
         let result = server()
-            .script_eval(ScriptEvalRequest {
-                script: "echo_node.ping(1)".to_string(),
-                fixture: None,
-                timeout_ms: None,
-                viewport: None,
-            })
+            .script_eval(ScriptEvalRequest::new("echo_node.ping(1)".to_string()))
             .await
             .expect("script_eval");
         let payload = result.structured_content.expect("structured content");
@@ -809,13 +799,10 @@ mod tests {
             .take_event_receiver()
             .expect("test owns event receiver");
         let server =
-            live_canopy_mcp_server(automation.clone(), LiveContext::new(AppMetadata::default()));
+            live_canopy_mcp_server(automation.clone(), LiveContext::new(AppMetadata::test()));
         let worker = thread::spawn(move || {
             let runtime = Builder::new_current_thread().enable_all().build().unwrap();
-            runtime.block_on(server.script_eval(ScriptEvalRequest {
-                script: "echo_node.signal_started(); canopy.wait_for(function() return echo_node.get() == 7 end); return echo_node.get()".to_string(),
-                fixture: None, timeout_ms: None, viewport: None,
-            })).expect("live eval transport")
+            runtime.block_on(server.script_eval(ScriptEvalRequest::new("echo_node.signal_started(); canopy.wait_for(function() return echo_node.get() == 7 end); return echo_node.get()".to_string()))).expect("live eval transport")
         });
         while started_rx.try_recv().is_err() {
             executor::block_on(events.next()).expect("queued work wakes the UI");

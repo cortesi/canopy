@@ -1,5 +1,5 @@
-use canopy::{CanopyBuilder, layout::Edges, prelude::*};
-use canopy_widgets::{CanvasWidth, Frame, Pad, Selectable, Text, VStack};
+use canopy::{CanopyBuilder, error::Result, layout::Edges, prelude::*};
+use canopy_widgets::{CanvasWidth, Frame, Pad, Selectable, Text, VStack, wrap};
 
 /// Text sample using the default tab stop.
 const DEFAULT_TEXT: &str = concat!(
@@ -103,15 +103,15 @@ impl Widget for TextGym {
 fn section(c: &mut dyn Context, title: &str, text: Text, width: u32) -> Result<NodeId> {
     let text_id = c.create_detached(text)?;
     c.set_layout_of(text_id, Layout::fill())?;
-    let frame_id = Frame::wrap_with(c, text_id, Frame::new().with_title(title))?;
-    let pad_id = Pad::wrap_with(c, frame_id, Pad::uniform(OUTER_PADDING))?;
+    let frame_id = wrap(c, text_id, Frame::new().with_title(title))?;
+    let pad_id = wrap(c, frame_id, Pad::uniform(OUTER_PADDING))?;
     c.set_layout_of(
         pad_id,
         Layout::fill()
             .fixed_width(width.saturating_add(2 * OUTER_PADDING))
             .padding(Edges::all(OUTER_PADDING)),
     )?;
-    Ok(pad_id)
+    Ok(pad_id.into())
 }
 
 impl Loader for TextGym {}
@@ -120,11 +120,6 @@ impl Loader for TextGym {}
 const DEFAULT_BINDINGS: &str = r#"
 canopy.bind_command("q", { phase = "after_widget", path = "root", description = "Quit" }, "root::quit")
 "#;
-
-/// Install key bindings for the text gym demo.
-pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
-    cnpy.eval_script(DEFAULT_BINDINGS)
-}
 
 /// Queue this demo's bindings and native configuration in their builder phases.
 #[must_use]

@@ -1,7 +1,8 @@
 use canopy::{
-    CanopyBuilder, command, derive_commands,
-    error::Error,
-    layout::{CanvasContext, MeasureConstraints, Measurement, Size},
+    CanopyBuilder, derive_commands,
+    error::{Error, Result},
+    geom::Size,
+    layout::{CanvasContext, MeasureConstraints, Measurement},
     prelude::*,
     style::solarized,
 };
@@ -54,7 +55,7 @@ canopy.bind_command("PageUp", { phase = "after_widget", path = "list_gym", descr
 "#;
 
 /// Focusable list entry that renders text content.
-pub struct ListEntry {
+pub(crate) struct ListEntry {
     /// Text content for the entry.
     text: Text,
 }
@@ -109,7 +110,7 @@ fn list_item(index: usize) -> ListEntry {
 }
 
 /// Status bar widget for the list gym demo.
-pub struct StatusBar;
+pub(crate) struct StatusBar;
 
 impl StatusBar {
     /// Construct a status bar.
@@ -131,7 +132,7 @@ impl StatusBar {
         let total = columns.len();
         let focused = columns
             .iter()
-            .position(|node| ctx.node_is_on_focus_path(*node));
+            .position(|node| ctx.is_on_focus_path_of(*node));
 
         match (focused, total) {
             (Some(idx), total) if total > 0 => {
@@ -181,7 +182,7 @@ impl ListGym {
             List::<ListEntry>::new().with_selection_indicator("list/selected", "█ ", true),
         )?;
         // Add initial items
-        c.with_widget(list_id, |list: &mut List<ListEntry>, ctx| {
+        c.with_widget_mut(list_id, |list: &mut List<ListEntry>, ctx| {
             for i in 0..10 {
                 list.append(ctx, list_item(i))?;
             }
@@ -196,7 +197,7 @@ impl ListGym {
         F: FnMut(&mut List<ListEntry>, &mut dyn Context) -> Result<R>,
     {
         let list_id = self.list_id(c)?;
-        c.with_widget(list_id, |list: &mut List<ListEntry>, ctx| f(list, ctx))
+        c.with_widget_mut(list_id, |list: &mut List<ListEntry>, ctx| f(list, ctx))
     }
 
     /// Find the list to target for list commands.
@@ -208,7 +209,7 @@ impl ListGym {
 
     #[command]
     /// Add an item after the current focus.
-    pub fn add_item(&mut self, c: &mut dyn Context) -> Result<()> {
+    pub(crate) fn add_item(&self, c: &mut dyn Context) -> Result<()> {
         self.with_list(c, |list, ctx| {
             let index = list.selected_index().unwrap_or(0) + 1;
             list.insert(ctx, index, list_item(index))?;
@@ -218,7 +219,7 @@ impl ListGym {
 
     #[command]
     /// Add an item at the end of the list.
-    pub fn append_item(&mut self, c: &mut dyn Context) -> Result<()> {
+    pub(crate) fn append_item(&self, c: &mut dyn Context) -> Result<()> {
         self.with_list(c, |list, ctx| {
             let index = list.len();
             list.append(ctx, list_item(index))?;
@@ -228,7 +229,7 @@ impl ListGym {
 
     #[command]
     /// Clear all items from the list.
-    pub fn clear(&mut self, c: &mut dyn Context) -> Result<()> {
+    pub(crate) fn clear(&self, c: &mut dyn Context) -> Result<()> {
         self.with_list(c, |list, ctx| {
             list.clear(ctx)?;
             Ok(())
@@ -237,14 +238,14 @@ impl ListGym {
 
     #[command]
     /// Add a new column containing a list.
-    pub fn add_column(&mut self, c: &mut dyn Context) -> Result<()> {
+    pub(crate) fn add_column(&self, c: &mut dyn Context) -> Result<()> {
         let frame_id = Self::create_column(c)?;
         c.with_unique_descendant::<Panes, _>(|panes, ctx| panes.insert_col(ctx, frame_id))
     }
 
     #[command]
     /// Delete the focused column.
-    pub fn delete_column(&mut self, c: &mut dyn Context) -> Result<()> {
+    pub(crate) fn delete_column(&self, c: &mut dyn Context) -> Result<()> {
         c.with_unique_descendant::<Panes, _>(|panes, ctx| panes.delete_focus(ctx))?;
         Ok(())
     }
@@ -265,7 +266,7 @@ impl Widget for ListGym {
         )?;
 
         let frame_id = Self::create_column(c)?;
-        c.with_widget(panes_id, |panes: &mut Panes, ctx| {
+        c.with_widget_mut(panes_id, |panes: &mut Panes, ctx| {
             panes.insert_col(ctx, frame_id)
         })?;
         Ok(())
@@ -279,13 +280,6 @@ impl Loader for ListGym {
         c.add_commands::<Self>()?;
         Ok(())
     }
-}
-
-/// Install key bindings for the list gym demo.
-pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
-    setup_style(cnpy);
-    cnpy.eval_script(DEFAULT_BINDINGS)?;
-    Ok(())
 }
 
 /// Install native styles during the configuration phase.

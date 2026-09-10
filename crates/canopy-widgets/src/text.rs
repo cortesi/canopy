@@ -1,10 +1,10 @@
 use std::cell::RefCell;
 
 use canopy::{
-    Context, ViewContext, Widget, command, derive_commands,
+    Context, FocusDirection, ViewContext, Widget, derive_commands,
     error::Result,
-    geom::{Direction, Line},
-    layout::{Constraint, MeasureConstraints, Measurement, Size},
+    geom::{Line, Size},
+    layout::{Constraint, MeasureConstraints, Measurement},
     render::Render,
     state::NodeName,
     text,
@@ -99,7 +99,7 @@ impl Text {
     }
 
     /// Replace the raw text content.
-    pub fn set_raw(&mut self, raw: impl Into<String>) {
+    pub fn set_text(&mut self, raw: impl Into<String>) {
         self.raw = raw.into();
         self.wrap_cache.borrow_mut().take();
     }
@@ -113,12 +113,12 @@ impl Text {
     /// Scroll by one line in the specified direction.
     /// @param dir The direction to scroll.
     #[command]
-    pub fn scroll(&mut self, c: &mut dyn Context, dir: Direction) {
+    pub fn scroll(&mut self, c: &mut dyn Context, dir: FocusDirection) {
         match dir {
-            Direction::Up => c.scroll_up(),
-            Direction::Down => c.scroll_down(),
-            Direction::Left => c.scroll_left(),
-            Direction::Right => c.scroll_right(),
+            FocusDirection::Up | FocusDirection::Prev => c.scroll_up(),
+            FocusDirection::Down | FocusDirection::Next => c.scroll_down(),
+            FocusDirection::Left => c.scroll_left(),
+            FocusDirection::Right => c.scroll_right(),
         };
     }
 

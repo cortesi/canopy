@@ -23,20 +23,20 @@ mod tests {
             Ok((first, first_item, second))
         })?;
         let source = r#"
-            local first = canopy.find_key("first")
-            local second = canopy.find_key("second")
+            local first = canopy.find_identity("first")
+            local second = canopy.find_identity("second")
             if first == nil or second == nil then error("missing scope") end
-            local first_item = canopy.find_key("item", first)
-            local second_item = canopy.find_key("item", second)
+            local first_item = canopy.find_identity("item", first)
+            local second_item = canopy.find_identity("item", second)
             if first_item == nil or second_item == nil then error("missing item") end
             canopy.assert(first_item ~= second_item)
-            canopy.assert(canopy.find_key("item") == nil)
+            canopy.assert(canopy.find_identity("item") == nil)
             local identity = canopy.node_info(first_item).semantic_identity
             if identity == nil then error("missing identity") end
             canopy.assert(identity.key == "item")
             return true
         "#;
-        assert_eq!(canopy.eval_script_value(source)?, ArgValue::Bool(true));
+        assert_eq!(canopy.eval_script(source)?, ArgValue::Bool(true));
         canopy.with_root_context(|ctx| {
             ctx.edit_structure(&mut |ctx| {
                 let wrapper = NodeId::from(ctx.create_detached(Marker)?);
@@ -45,12 +45,12 @@ mod tests {
                 ctx.attach(first, wrapper)
             })
         })?;
-        assert_eq!(canopy.eval_script_value(source)?, ArgValue::Bool(true));
+        assert_eq!(canopy.eval_script(source)?, ArgValue::Bool(true));
         canopy.with_root_context(|ctx| {
             ctx.clear_semantic_key(first_item)?;
             ctx.detach(first_item)?;
             ctx.attach(second, first_item)?;
-            assert_eq!(ctx.find_key(first, "item")?, None);
+            assert_eq!(ctx.find_identity(first, "item")?, None);
             Ok(())
         })?;
         Ok(())

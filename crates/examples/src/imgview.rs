@@ -1,4 +1,4 @@
-use canopy::{CanopyBuilder, prelude::*};
+use canopy::CanopyBuilder;
 
 /// Default bindings for the image viewer demo.
 const DEFAULT_BINDINGS: &str = r#"
@@ -14,12 +14,6 @@ canopy.bind_command("Right", { phase = "before_widget", path = "image_view/", de
 canopy.bind_command("Up", { phase = "before_widget", path = "image_view/", description = "Pan up" }, "image_view::pan", "Up")
 canopy.bind_command("Down", { phase = "before_widget", path = "image_view/", description = "Pan down" }, "image_view::pan", "Down")
 "#;
-
-/// Configure key bindings for the image viewer.
-pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
-    cnpy.eval_script(DEFAULT_BINDINGS)?;
-    Ok(())
-}
 
 /// Queue this demo's bindings and native configuration in their builder phases.
 #[must_use]

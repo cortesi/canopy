@@ -7,13 +7,17 @@ use std::{
     time::Duration,
 };
 
-use canopy::{CanopyBuilder, prelude::*};
+use canopy::{
+    CanopyBuilder,
+    error::{self, Result},
+    prelude::*,
+};
 use canopy_examples::{
     imgview, print_luau_api,
     widget::{DemoHost, DemoSize, FontDemo, FontSource, ListDemo, TermDemo},
     widget_editor::{self, WidgetEditor},
 };
-use canopy_widgets::{FontEffects, ImageView};
+use canopy_widgets::font::{FontEffects, ImageView};
 use clap::{Parser, Subcommand};
 
 /// Default text for the font demo.
@@ -142,7 +146,7 @@ fn main() -> Result<()> {
     let builder = widget_builder(&args.command);
 
     if args.api {
-        print_luau_api(&mut builder.build()?)?;
+        print!("{}", print_luau_api(&mut builder.build()?)?);
         return Ok(());
     }
 

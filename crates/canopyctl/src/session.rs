@@ -5,7 +5,8 @@ use std::path::Path;
 use anyhow::{Context, Result, bail};
 use canopy::FixtureInfo;
 use canopy_mcp::{
-    ApplyFixtureRequest, BootstrapRequest, BootstrapResponse, ScriptEvalOutcome, ScriptEvalRequest,
+    ApplyFixtureRequest, ApplyFixtureResponse, BootstrapRequest, BootstrapResponse,
+    ScriptEvalOutcome, ScriptEvalRequest,
 };
 use ruau_script_api::ScriptApiQuery;
 use tmcp::{
@@ -133,6 +134,9 @@ impl Session {
                             .unwrap_or_else(|| "apply_fixture failed".to_owned())
                     );
                 }
+                let _: ApplyFixtureResponse = result
+                    .extract_as(ToolResultMode::Structured)
+                    .context("decode structured apply_fixture response")?;
             }
             SessionKind::Headless => {
                 self.default_fixture = Some(name);
@@ -227,8 +231,8 @@ pub mod tests {
 
     use canopy::testing::contracts;
     use canopy_mcp::{
-        AppEvaluator, ExecutionMetadata, ExecutionMode, ResetPolicy, ScriptErrorInfo,
-        ScriptTaskState, ScriptTiming, Viewport, app_factory, json_tool_result,
+        AppFactory, AppMetadata, ExecutionMetadata, ExecutionMode, ResetPolicy, ScriptErrorInfo,
+        ScriptErrorType, ScriptTaskState, ScriptTiming, Viewport,
     };
     use serde_json::{Value, json};
     use tmcp::{Server, ToolError, ToolResult, mcp_server};
@@ -245,7 +249,7 @@ pub mod tests {
     #[derive(Clone)]
     struct EvaluatorPeer {
         /// The same public evaluator used by headless MCP applications.
-        evaluator: AppEvaluator,
+        evaluator: AppFactory,
         /// Sources observed at the transport boundary.
         calls: Arc<Mutex<Vec<String>>>,
     }
@@ -262,10 +266,8 @@ pub mod tests {
         async fn bootstrap(&self, request: BootstrapRequest) -> ToolResult<CallToolResult> {
             let response = block_in_place(|| self.evaluator.bootstrap_with_request(&request))
                 .map_err(|error| ToolError::internal(error.to_string()))?;
-            Ok(json_tool_result(
-                serde_json::to_value(response)
-                    .map_err(|error| ToolError::internal(error.to_string()))?,
-            ))
+            CallToolResult::structured(response)
+                .map_err(|error| ToolError::internal(error.to_string()))
         }
 
         #[tool]
@@ -274,10 +276,8 @@ pub mod tests {
                 .evaluator
                 .fixtures()
                 .map_err(|error| ToolError::internal(error.to_string()))?;
-            Ok(json_tool_result(
-                serde_json::to_value(fixtures)
-                    .map_err(|error| ToolError::internal(error.to_string()))?,
-            ))
+            CallToolResult::structured(fixtures)
+                .map_err(|error| ToolError::internal(error.to_string()))
         }
     }
 
@@ -285,7 +285,13 @@ pub mod tests {
     pub async fn evaluator_session() -> Result<(Session, Arc<Mutex<Vec<String>>>, JoinHandle<()>)> {
         let calls = Arc::new(Mutex::new(Vec::new()));
         let peer = EvaluatorPeer {
-            evaluator: AppEvaluator::new(app_factory(|| contracts::app().map_err(Into::into))),
+            evaluator: AppFactory::new(
+                AppMetadata {
+                    app: "canopyctl-test".into(),
+                    reset: ResetPolicy::Isolated,
+                },
+                || contracts::app().map_err(Into::into),
+            ),
             calls: Arc::clone(&calls),
         };
         let (client_stream, server_stream) = duplex(65536);
@@ -341,7 +347,7 @@ pub mod tests {
                     app: "test".into(),
                     execution: ExecutionMode::LiveSession,
                     session_id: "test-session".into(),
-                    viewport: Viewport::default(),
+                    viewport: Some(Viewport::default()),
                     reset: ResetPolicy::External,
                     api_digest: Some("test-digest".into()),
                 },
@@ -354,11 +360,10 @@ pub mod tests {
                 timing: ScriptTiming::default(),
                 error: (!success).then(|| ScriptErrorInfo {
                     error_type: if state == ScriptTaskState::TimedOut {
-                        "timeout"
+                        ScriptErrorType::Timeout
                     } else {
-                        "runtime"
-                    }
-                    .to_owned(),
+                        ScriptErrorType::Runtime
+                    },
                     kind: None,
                     command: None,
                     owner: None,
@@ -375,7 +380,10 @@ pub mod tests {
                     .with_is_error(true)
                     .with_text_content("fixture rejected")
             } else {
-                CallToolResult::new()
+                CallToolResult::structured(ApplyFixtureResponse {
+                    applied: request.name,
+                })
+                .map_err(|error| ToolError::internal(error.to_string()))?
             })
         }
     }
@@ -407,12 +415,7 @@ pub mod tests {
     }
 
     pub fn request(script: &str) -> ScriptEvalRequest {
-        ScriptEvalRequest {
-            script: script.to_owned(),
-            fixture: None,
-            timeout_ms: None,
-            viewport: None,
-        }
+        ScriptEvalRequest::new(script.to_owned())
     }
 
     pub async fn manager_with_session(session: Session) -> Result<Arc<SessionManager>> {

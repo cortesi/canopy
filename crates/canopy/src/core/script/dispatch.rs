@@ -12,7 +12,7 @@ use ruau::{
 };
 
 use super::{
-    ArgValue, Canopy, CommandArgs, CommandInvocation, CommandSpec, NodeId, Result,
+    ArgValue, Canopy, CommandArgs, CommandInvocation, CommandSpec, Context, NodeId, Result,
     StoredFunctionTarget, arg_value_to_scoped, commands, error, retained_runtime_error_to_canopy,
     runtime_error_to_canopy, scoped_to_arg_value, script_error_to_canopy, with_current_canopy,
 };
@@ -104,11 +104,7 @@ pub(super) fn dispatch_explicit(
         })?;
         let invocation = CommandInvocation { id: spec.id, args };
         let mut ctx = super::CoreContext::new(&mut canopy.core, anchor);
-        Ok(super::Context::dispatch_target(
-            &mut ctx,
-            target,
-            &invocation,
-        )?)
+        Ok(ctx.dispatch(target, &invocation)?)
     })
 }
 
@@ -210,7 +206,7 @@ pub(super) fn call_in_scope<'s>(
                 .next()
                 .unwrap_or(ScopedValue::Nil);
             scoped_to_arg_value(scope, value)
-                .map_err(|message| error::Error::Script(format!("{label}: {message}")))
+                .map_err(|message| error::Error::script(format!("{label}: {message}")))
         }
         Ok(Err(script_error)) => Err(script_error_to_canopy(scope, &script_error, label, timeout)),
         Err(runtime_error) => Err(runtime_error_to_canopy(&runtime_error, label, timeout)),

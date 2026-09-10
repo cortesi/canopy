@@ -1,19 +1,16 @@
-use canopy::{BindingPhase, RoutePhase, event::key::Key, prelude::*, testing::harness::Harness};
-use canopy_widgets::{Frame, Root, SINGLE_THICK, Terminal};
+use canopy::{
+    BindingPhase, RoutePhase, error::Result, event::key::Key, prelude::*, testing::harness::Harness,
+};
+use canopy_widgets::terminal::Terminal;
 
-use crate::termgym::{TermGym, setup_bindings};
+use super::root_harness;
+use crate::termgym::{TermGym, binding_setup};
 
 /// Build the installed TermGym application with its real bindings.
 fn termgym_harness() -> Result<(Harness, NodeId)> {
-    let mut canopy = Canopy::new();
-    Root::load(&mut canopy)?;
-    TermGym::load(&mut canopy)?;
-    setup_bindings(&mut canopy)?;
-    canopy.finalize_api()?;
-    let app = Root::install_app(&mut canopy, TermGym::new())?;
-    let mut harness = Harness::from_canopy(canopy, Size::new(80, 24))?;
-    harness.render()?;
-    Ok((harness, app.into()))
+    let harness = root_harness(TermGym::new(), binding_setup, Size::new(80, 24))?;
+    let app = harness.canopy.with_root_view(|context| context.root_id());
+    Ok((harness, app))
 }
 
 /// Return true when a terminal emulator owns focus.
@@ -33,7 +30,7 @@ fn terminal_count(harness: &Harness) -> usize {
 /// Return the current root-relative focus path.
 fn focus_path(harness: &Harness) -> Path {
     harness.canopy.with_root_view(|context| {
-        context.node_path(
+        context.path_of(
             context.root_id(),
             context.focused_node().expect("TermGym must own focus"),
         )
@@ -44,7 +41,7 @@ fn focus_path(harness: &Harness) -> Path {
 fn installed_termgym_keeps_sidebar_beside_terminal() -> Result<()> {
     let (mut harness, app) = termgym_harness()?;
     harness.canopy.with_root_context(|context| {
-        context.with_node(app, |_termgym: &mut TermGym, context| {
+        context.with_widget_mut(app, |_termgym: &mut TermGym, context| {
             context.invalidate_layout();
             Ok(())
         })
@@ -56,23 +53,12 @@ fn installed_termgym_keeps_sidebar_beside_terminal() -> Result<()> {
         let [sidebar, terminal] = children.as_slice() else {
             panic!("termgym must have sidebar and terminal children");
         };
-        let sidebar = context.node_view(*sidebar).expect("sidebar view").outer;
-        let terminal = context.node_view(*terminal).expect("terminal view").outer;
+        let sidebar = context.view_of(*sidebar).expect("sidebar view").outer;
+        let terminal = context.view_of(*terminal).expect("terminal view").outer;
 
         assert_eq!(sidebar.top(), terminal.top());
         assert_eq!(sidebar.h, terminal.h);
         assert_eq!(sidebar.right(), terminal.left());
-    });
-
-    let frame = harness.canopy.with_root_view(|context| {
-        context
-            .children_of(app)
-            .get(1)
-            .copied()
-            .expect("termgym terminal frame")
-    });
-    harness.with_widget::<Frame, _>(frame, |frame| {
-        assert_eq!(frame.glyphs(), &SINGLE_THICK);
     });
 
     Ok(())

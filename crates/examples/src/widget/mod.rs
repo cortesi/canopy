@@ -5,7 +5,7 @@ use std::time::Duration;
 use canopy::{
     Context, NodeId, TypedId, Widget,
     error::{Error, Result},
-    layout::{Edges, Layout},
+    layout::{Edges, Layout, MeasureOverflow},
     state::NodeName,
     style::{Color, Paint, StyleMap},
 };
@@ -195,9 +195,11 @@ impl Widget for ListDemo {
 
         let center_id = ctx.add_child(Center::new())?;
         let list_id = ctx.add_child_to(center_id, List::<Text>::new())?;
-        let list_layout = Layout::column().overflow_x().fixed_width(max_width);
+        let list_layout = Layout::column()
+            .overflow_x(MeasureOverflow::Unbounded)
+            .fixed_width(max_width);
         ctx.set_layout_of(list_id, list_layout)?;
-        ctx.with_widget(list_id, |list: &mut List<Text>, ctx| {
+        ctx.with_widget_mut(list_id, |list: &mut List<Text>, ctx| {
             for item in item_texts {
                 let text = Text::new(item)
                     .with_style(LIST_STYLE_PATH)
@@ -218,7 +220,7 @@ impl Widget for ListDemo {
             self.started = true;
             return Some(interval);
         }
-        ctx.with_widget(list_id, |list: &mut List<Text>, ctx| {
+        ctx.with_widget_mut(list_id, |list: &mut List<Text>, ctx| {
             let len = list.len();
             if len == 0 {
                 return Ok(());

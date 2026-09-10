@@ -155,10 +155,10 @@ fn zero_width_and_right_clipped_graphemes_are_no_ops() -> Result<()> {
 fn cursor_overlay_styles_complete_graphemes() -> Result<()> {
     let style = def_style();
     let mut buf = TermBuf::new(Size::new(2, 1), '\0', def_style())?;
-    buf.put_grapheme(Point::zero(), "界", style)?;
+    buf.put_grapheme(Point::ZERO, "界", style)?;
     buf.overlay_cursor(Point { x: 1, y: 0 }, cursor::CursorShape::Block);
 
-    let base = buf.get(Point::zero()).expect("missing wide base");
+    let base = buf.get(Point::ZERO).expect("missing wide base");
     let continuation = buf.get(Point { x: 1, y: 0 }).expect("missing continuation");
     assert_eq!(base.ch, '界');
     assert!(continuation.continuation);

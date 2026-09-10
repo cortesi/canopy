@@ -1,5 +1,5 @@
 use canopy::{ViewContext, commands::CommandStatus, error::Result, event::Event};
-use canopy_derive::{command, derive_commands};
+use canopy_derive::derive_commands;
 
 struct App;
 

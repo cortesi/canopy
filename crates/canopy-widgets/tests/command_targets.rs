@@ -5,7 +5,7 @@ mod tests {
     use std::any::Any;
 
     use canopy::{
-        Canopy, Loader, NodeId, TypedId, ViewContext, Widget, command,
+        Canopy, Loader, NodeId, TypedId, ViewContext, Widget,
         commands::{CommandStatus, CommandTarget, ListRowContext},
         derive_commands,
         error::Result,
@@ -75,7 +75,7 @@ mod tests {
         Root::load(&mut canopy)?;
         canopy.add_commands::<Counter>()?;
         canopy.add_commands::<Button>()?;
-        let app = Root::install_app(&mut canopy, App)?;
+        let app = Root::new().install(&mut canopy, App)?;
         let (first, second) = canopy.with_context(app, |ctx| {
             let first = ctx.add_child(Counter::default())?;
             let second = ctx.add_child(Counter::default())?;
@@ -132,12 +132,12 @@ mod tests {
         })?;
         canopy.with_root_view(|ctx| {
             for id in [first, extra] {
-                ctx.with_widget_read(id, |counter| {
+                ctx.with_widget(id, |counter| {
                     assert_eq!(counter.presses, 0);
                     Ok(())
                 })?;
             }
-            ctx.with_widget_read(second, |counter| {
+            ctx.with_widget(second, |counter| {
                 assert_eq!(counter.presses, 3);
                 Ok(())
             })
@@ -160,7 +160,9 @@ mod tests {
                         .with_target(CommandTarget::Exact(second.into())),
                 ),
             )?;
-            let row = ctx.with_widget(list, |list, ctx| list.append(ctx, Text::new("Activate")))?;
+            let row = ctx.with_widget_mut(list, |list: &mut List<Text>, ctx| {
+                list.append(ctx, Text::new("Activate"))
+            })?;
             Ok((list, row))
         })?;
         let mut harness = Harness::from_canopy(canopy, Size::new(60, 8))?;
@@ -170,7 +172,7 @@ mod tests {
             }
             harness.render()?;
             let location = harness.canopy.with_root_view(|ctx| {
-                let view = ctx.node_view(row.into()).expect("row view");
+                let view = ctx.view_of(row.into()).expect("row view");
                 Point {
                     x: view.outer.tl.x.try_into().unwrap(),
                     y: view.outer.tl.y.try_into().unwrap(),
@@ -187,7 +189,7 @@ mod tests {
         }
         harness.canopy.with_root_view(|ctx| {
             for child in ctx.children_of(app.into()) {
-                ctx.read_widget(child, &mut |widget| {
+                ctx.with_widget_dyn(child, &mut |widget| {
                     let counter = (widget as &dyn Any).downcast_ref::<Counter>().unwrap();
                     if child == NodeId::from(second) {
                         assert_eq!(counter.rows, vec![(list.into(), 0), (list.into(), 0)]);

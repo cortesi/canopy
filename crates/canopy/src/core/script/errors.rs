@@ -40,7 +40,7 @@ pub(super) fn prepare_graph_error_to_canopy(error: &PrepareGraphError) -> error:
     if let Some(error) = error.compile_error() {
         return compile_error_to_canopy(error);
     }
-    error::Error::Script(format!("preparing script graph failed: {error}"))
+    error::Error::script(format!("preparing script graph failed: {error}"))
 }
 
 /// Convert a canopy error into a structured Ruau runtime error.
@@ -252,7 +252,7 @@ fn vm_error_to_canopy<E: VmErrorInfo>(
     if let Some(payload) = error.payload_ref::<CanopyErrorPayload>() {
         return payload.to_canopy_error(label, error.traceback());
     }
-    error::Error::Script(labelled_failure(label, &message(), error.traceback()))
+    error::Error::script(labelled_failure(label, &message(), error.traceback()))
 }
 
 /// Convert a caught script error into a canopy error.
@@ -279,11 +279,11 @@ fn exec_error_to_canopy(error: &ExecError, label: &str, timeout: Option<Duration
     match error {
         ExecError::Script(error) => marshaled_script_error_to_canopy(error, label, timeout),
         ExecError::Stopped(_) => script_timeout(timeout),
-        ExecError::PanicPoison => error::Error::Script(format!(
+        ExecError::PanicPoison => error::Error::script(format!(
             "{label} failed: script VM is poisoned and refuses further work"
         )),
-        ExecError::Entry { message } => error::Error::Script(format!("{label} failed: {message}")),
-        ExecError::Marshal { message } => error::Error::Script(format!(
+        ExecError::Entry { message } => error::Error::script(format!("{label} failed: {message}")),
+        ExecError::Marshal { message } => error::Error::script(format!(
             "{label} failed: marshaling script result failed: {message}"
         )),
     }
@@ -304,7 +304,7 @@ pub(super) fn retained_runtime_error_to_canopy(
         | LifecycleError::Load(_)
         | LifecycleError::PreparedLoad(_)
         | LifecycleError::BindEnvironment(_) => {
-            error::Error::Script(format!("{label} failed: {error}"))
+            error::Error::script(format!("{label} failed: {error}"))
         }
     }
 }

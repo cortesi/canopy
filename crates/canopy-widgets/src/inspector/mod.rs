@@ -1,5 +1,4 @@
-/// Log panel widget.
-pub mod logs;
+mod logs;
 /// Inspector view layout.
 mod view;
 
@@ -46,12 +45,6 @@ impl Inspector {
         context.set_children_of(inspector_id.into(), vec![frame_id.into()])?;
 
         Ok(inspector_id.into())
-    }
-}
-
-impl Default for Inspector {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

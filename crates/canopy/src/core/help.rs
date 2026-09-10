@@ -77,7 +77,7 @@ impl Core {
     pub(crate) fn available_bindings(&self, requested: Option<NodeId>) -> Result<BindingSnapshot> {
         let focus = requested.or(self.focus).unwrap_or(self.root);
         self.validate_attached_node(focus)?;
-        let focus_path = self.node_path(self.root, focus);
+        let focus_path = self.path_of(self.root, focus);
         let mut bindings = Vec::new();
 
         for key in self.input_map.eligible_keys() {
@@ -161,9 +161,8 @@ mod tests {
 
     use super::*;
     use crate::{
-        command,
-        commands::{CommandArgs, CommandId, CommandInvocation},
-        core::inputmap::{BindingTarget, InputSpec},
+        commands::{CommandAction, CommandArgs, CommandId, CommandInvocation},
+        core::inputmap::{BindingOptions, BindingTarget, InputSpec},
         error::Error,
         script::LuauFunctionId,
         state::NodeName,
@@ -190,7 +189,7 @@ mod tests {
             InputSpec::Key(key.into()),
             crate::BindingOptions {
                 scope,
-                path: path.into(),
+                path: Some(path.parse()?),
                 description: description.into(),
                 source: Some("test".to_string()),
                 phase: None,
@@ -290,7 +289,7 @@ mod tests {
         core.input_map.replace_application_action(
             InputSpec::Key('u'.into()),
             BindingOptions {
-                path: "eligible_leaf/".into(),
+                path: Some("eligible_leaf/".parse()?),
                 scope: BindingScope::Default,
                 description: "Update selection".into(),
                 source: None,
@@ -353,12 +352,20 @@ mod tests {
         let group = FrameworkBindingGroup::new("root.help");
         core.input_map.bind_framework(
             group,
-            InputSpec::Key('j'.into()),
-            "/root/help/**/",
-            "Scroll down",
-            CommandInvocation {
-                id: CommandId("binding_list::scroll_down"),
-                args: CommandArgs::default(),
+            'j',
+            BindingOptions {
+                path: Some("/root/help/**/".parse()?),
+                scope: BindingScope::Exclusive(group),
+                description: "Scroll down".to_string(),
+                source: None,
+                phase: None,
+            },
+            CommandAction {
+                invocation: CommandInvocation {
+                    id: CommandId("binding_list::scroll_down"),
+                    args: CommandArgs::default(),
+                },
+                target: None,
             },
         )?;
         let token = core.input_map.push_exclusive_bindings(group, core.root)?;

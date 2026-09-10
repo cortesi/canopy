@@ -1,7 +1,7 @@
 use std::{any::TypeId, cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
-    core::{id::NodeId, style::Effect, view::View},
+    core::{id::NodeId, style::effects::Effect, view::View},
     geom::{Point, Rect, Size},
     layout::{Layout, LayoutOverride},
     state::NodeName,
@@ -98,10 +98,10 @@ impl Node {
             layout,
             base_layout: layout,
             layout_override: LayoutOverride::default(),
-            rect: Rect::zero(),
+            rect: Rect::ZERO,
             content_size: Size::default(),
             canvas: Size::default(),
-            scroll: Point::zero(),
+            scroll: Point::ZERO,
             view: View::default(),
             hidden: false,
             name,

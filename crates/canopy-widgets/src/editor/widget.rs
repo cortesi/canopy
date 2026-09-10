@@ -1,11 +1,11 @@
 use std::{collections::HashMap, time::Duration};
 
 use canopy::{
-    Context, EventOutcome, ViewContext, Widget, command, cursor, derive_commands,
+    Context, EventOutcome, FocusDirection, ViewContext, Widget, cursor, derive_commands,
     error::Result,
     event::{Event, key, mouse},
-    geom::{Direction, Line, Point, PointI32, Rect},
-    layout::{CanvasContext, Constraint, MeasureConstraints, Measurement, Size},
+    geom::{Line, Point, PointI32, Rect, Size},
+    layout::{CanvasContext, Constraint, MeasureConstraints, Measurement},
     render::Render,
     state::NodeName,
     style::Style,
@@ -13,14 +13,16 @@ use canopy::{
 use unicode_segmentation::UnicodeSegmentation;
 
 use super::{
-    EditMode, EditorConfig, LineNumbers, Selection, TextBuffer, TextPosition, TextRange, WrapMode,
-    display_width,
+    EditMode, EditorConfig, LineNumbers, WrapMode, display_width,
     highlight::{HighlightSpan, Highlighter},
     layout::{LayoutCache, WrapSegment, layout_line},
     search::{PromptState, SearchDirection, SearchState},
     vi::{ViMode, ViState},
 };
-use crate::click::ClickTracker;
+use crate::{
+    click::ClickTracker,
+    text_buffer::{Selection, TextBuffer, TextPosition, TextRange},
+};
 
 /// Maximum delay between clicks to count as multi-click selection.
 const DOUBLE_CLICK_MS: u64 = 500;
@@ -812,20 +814,20 @@ impl Editor {
     /// Move the cursor.
     /// @param dir The direction to move the cursor.
     #[command]
-    pub fn cursor(&mut self, ctx: &mut dyn Context, dir: Direction) {
+    pub fn move_cursor(&mut self, ctx: &mut dyn Context, dir: FocusDirection) {
         match dir {
-            Direction::Left => {
+            FocusDirection::Left | FocusDirection::Prev => {
                 let _ = self.buffer.move_left(self.config.multiline);
                 self.update_preferred_column();
             }
-            Direction::Right => {
+            FocusDirection::Right | FocusDirection::Next => {
                 let _ = self.buffer.move_right(self.config.multiline);
                 self.update_preferred_column();
             }
-            Direction::Up => {
+            FocusDirection::Up => {
                 self.move_vertical(-1);
             }
-            Direction::Down => {
+            FocusDirection::Down => {
                 self.move_vertical(1);
             }
         }
@@ -942,16 +944,16 @@ impl Widget for Editor {
     fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
         if let Event::Mouse(mouse_event) = event {
             match mouse_event.action {
-                mouse::Action::ScrollUp if ctx.scroll_by(0, -WHEEL_SCROLL_LINES) => {
+                mouse::Action::ScrollUp if ctx.scroll_by(0, -WHEEL_SCROLL_LINES).changed() => {
                     return Ok(EventOutcome::Handle);
                 }
-                mouse::Action::ScrollDown if ctx.scroll_by(0, WHEEL_SCROLL_LINES) => {
+                mouse::Action::ScrollDown if ctx.scroll_by(0, WHEEL_SCROLL_LINES).changed() => {
                     return Ok(EventOutcome::Handle);
                 }
-                mouse::Action::ScrollLeft if ctx.scroll_by(-WHEEL_SCROLL_LINES, 0) => {
+                mouse::Action::ScrollLeft if ctx.scroll_by(-WHEEL_SCROLL_LINES, 0).changed() => {
                     return Ok(EventOutcome::Handle);
                 }
-                mouse::Action::ScrollRight if ctx.scroll_by(WHEEL_SCROLL_LINES, 0) => {
+                mouse::Action::ScrollRight if ctx.scroll_by(WHEEL_SCROLL_LINES, 0).changed() => {
                     return Ok(EventOutcome::Handle);
                 }
                 _ => {}

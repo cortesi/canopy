@@ -3,11 +3,11 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, Context, Loader, ViewContext, Widget, command, derive_commands,
+        Canopy, Context, Loader, ViewContext, Widget, derive_commands,
         error::Result,
         event::key,
-        geom::Line,
-        layout::{CanvasContext, Size},
+        geom::{Line, Size},
+        layout::CanvasContext,
         render::Render,
         state::NodeName,
         testing::harness::Harness,
@@ -39,11 +39,11 @@ mod tests {
             let view_height = view.content.h;
             let view_width = view.content.w;
 
-            let line1 = format!("Scroll position: ({}, {})", view.tl.x, view.tl.y);
+            let line1 = format!("Scroll position: ({}, {})", view.scroll.x, view.scroll.y);
             r.text("text", Line::new(origin.x, origin.y, view_width), &line1)?;
 
             for y in 1..view_height.min(5) {
-                let content = format!("Line {}", view.tl.y + y);
+                let content = format!("Line {}", view.scroll.y + y);
                 r.text(
                     "text",
                     Line::new(origin.x, origin.y + y, view_width),

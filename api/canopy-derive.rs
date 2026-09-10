@@ -3,14 +3,24 @@
 pub mod canopy_derive {
     //! Proc-macro support for canopy commands and nodes.
 
-    /// Derive the CommandArg marker trait for serde-backed types.
+    /// Derive command record support for a named-field struct.
+    ///
+    /// This emits `CommandArg`, `CommandType`, and `ToArgValue` implementations.
+    /// The struct must also derive or implement both `serde::Serialize` and
+    /// `serde::Deserialize` so command arguments can cross the scripting bridge.
     #[proc_macro_derive(CommandArg)]
     pub fn CommandArg(input: proc_macro::TokenStream) -> proc_macro::TokenStream {}
-    /// Derive command enum conversions from/to ArgValue.
+    /// Derive command conversions for a fieldless enum.
+    ///
+    /// This emits `CommandType`, `ToArgValue`, and `FromArgValue`
+    /// implementations. Variant names are matched case-insensitively and exposed
+    /// as string literals in the generated Luau type.
     #[proc_macro_derive(CommandEnum)]
     pub fn CommandEnum(input: proc_macro::TokenStream) -> proc_macro::TokenStream {}
-    /// Mark a method as a command. This macro should be used to decorate methods in
-    /// an `impl` block that uses the `derive_commands` macro.
+    /// Mark a method as a command inside an impl using `#[derive_commands]`.
+    ///
+    /// The outer macro consumes this attribute. Using `#[command]` on its own is
+    /// an error because no command metadata or dispatch wrapper would be emitted.
     #[proc_macro_attribute]
     pub fn command(
         attr: proc_macro::TokenStream,
@@ -25,6 +35,12 @@ pub mod canopy_derive {
     /// `#[command(enabled = "method")]` adds a read-only eligibility hook. The
     /// method takes `&self` and `&dyn canopy::ViewContext` and returns
     /// `canopy::error::Result<canopy::commands::CommandStatus>`.
+    /// `#[command(ignore_result)]` declares that a non-unit return value is
+    /// intentionally discarded instead of published in command metadata.
+    ///
+    /// Method documentation may use `@param name text` lines to document user
+    /// parameters and `@return text` to document the returned value. These tagged
+    /// lines are removed from the command's main documentation.
     #[proc_macro_attribute]
     pub fn derive_commands(
         attr: proc_macro::TokenStream,

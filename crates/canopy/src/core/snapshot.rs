@@ -100,7 +100,7 @@ pub(super) fn capture(core: &Core, frame_id: FrameId, buffer: &TermBuf) -> Resul
                 .is_some();
         let child_clip = clip.and_then(|clip| node.view.content.intersect_rect(clip));
         let semantics =
-            core.with_widget_read(id, WidgetOperation::access("semantics"), |widget, core| {
+            core.with_widget(id, WidgetOperation::access("semantics"), |widget, core| {
                 widget.semantics(&CoreViewContext::new(core, id))
             })??;
         nodes.push(NodeSnapshot {

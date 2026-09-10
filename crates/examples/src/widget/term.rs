@@ -3,7 +3,7 @@
 use std::env;
 
 use canopy::{
-    Context, NodeId, TypedId, ViewContext, Widget, command, derive_commands,
+    Context, NodeId, TypedId, ViewContext, Widget, derive_commands,
     error::{Error, Result},
     layout::{Direction, Edges, Layout},
     render::Render,
@@ -11,7 +11,10 @@ use canopy::{
     state::NodeName,
     style::{Color, Paint, StyleMap},
 };
-use canopy_widgets::{Button, Frame, ROUND, Terminal, TerminalConfig};
+use canopy_widgets::{
+    Button, Frame, ROUND,
+    terminal::{Terminal, TerminalConfig},
+};
 
 /// Tab labels shown in the demo.
 const TAB_LABELS: [&str; 3] = ["claude", "codex", "gemini"];
@@ -104,7 +107,7 @@ impl TermDemo {
 
         for (idx, tab_id) in self.tab_ids.iter().enumerate() {
             let active = idx == self.active;
-            ctx.with_widget(*tab_id, |tab: &mut Button, _ctx| {
+            ctx.with_widget_mut(*tab_id, |tab: &mut Button, _ctx| {
                 tab.set_active(active);
                 Ok(())
             })?;
@@ -116,7 +119,7 @@ impl TermDemo {
                 *layout = if active {
                     Layout::fill().padding(Edges::all(1))
                 } else {
-                    Layout::fill().none()
+                    Layout::fill().hidden()
                 };
             })?;
         }
@@ -130,7 +133,7 @@ impl TermDemo {
 
     /// Cycle to the next tab.
     #[command]
-    pub fn next_tab(&mut self, ctx: &mut dyn Context) -> Result<()> {
+    pub(crate) fn next_tab(&mut self, ctx: &mut dyn Context) -> Result<()> {
         if self.terminal_ids.is_empty() {
             return Ok(());
         }

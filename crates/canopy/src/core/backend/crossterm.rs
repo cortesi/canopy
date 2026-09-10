@@ -17,7 +17,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use crate::{
     Canopy, Work,
     backend::{BackendControl, TerminalSession},
-    core::{Core, dump::dump, text},
+    core::{Core, canopy::AdapterEvent, dump::dump, text},
     error::{self, Result},
     event::{Event, key, mouse},
     geom::{Point, Size},
@@ -76,9 +76,9 @@ struct EventSource<S> {
     /// Cancellable terminal event stream owned by the run loop.
     terminal: S,
     /// Framework event receiver channel.
-    internal: UnboundedReceiver<Event>,
+    internal: UnboundedReceiver<AdapterEvent>,
     /// Buffered non-move event encountered while coalescing.
-    pending: Option<Event>,
+    pending: Option<AdapterEvent>,
     /// Alternate terminal and framework input when both remain ready.
     prefer_internal: bool,
 }
@@ -88,7 +88,7 @@ where
     S: Stream<Item = io::Result<cevent::Event>> + Unpin,
 {
     /// Construct a new event source.
-    fn new(terminal: S, internal: UnboundedReceiver<Event>) -> Self {
+    fn new(terminal: S, internal: UnboundedReceiver<AdapterEvent>) -> Self {
         Self {
             terminal,
             internal,
@@ -98,7 +98,11 @@ where
     }
 
     /// Poll one input source, preserving stream errors and termination.
-    fn poll_source(&mut self, cx: &mut Context<'_>, internal: bool) -> Poll<Result<Option<Event>>> {
+    fn poll_source(
+        &mut self,
+        cx: &mut Context<'_>,
+        internal: bool,
+    ) -> Poll<Result<Option<AdapterEvent>>> {
         if internal {
             Pin::new(&mut self.internal).poll_next(cx).map(|event| {
                 event
@@ -109,11 +113,12 @@ where
             Pin::new(&mut self.terminal)
                 .poll_next(cx)
                 .map(terminal_event)
+                .map(|result| result.map(|event| event.map(AdapterEvent::Input)))
         }
     }
 
     /// Poll fairly while bounding ignored terminal events in one executor turn.
-    fn poll_uncoalesced(&mut self, cx: &mut Context<'_>) -> Poll<Result<Event>> {
+    fn poll_uncoalesced(&mut self, cx: &mut Context<'_>) -> Poll<Result<AdapterEvent>> {
         for _ in 0..64 {
             let first = self.prefer_internal;
             let (result, internal) = match self.poll_source(cx, first) {
@@ -136,17 +141,17 @@ where
     }
 
     /// Await one event from either the terminal or framework channel.
-    async fn next_uncoalesced(&mut self) -> Result<Event> {
+    async fn next_uncoalesced(&mut self) -> Result<AdapterEvent> {
         poll_fn(|cx| self.poll_uncoalesced(cx)).await
     }
 
     /// Take one event that is already available without waiting.
-    fn next_ready(&mut self) -> Result<Option<Event>> {
+    fn next_ready(&mut self) -> Result<Option<AdapterEvent>> {
         self.next_uncoalesced().now_or_never().transpose()
     }
 
     /// Await the next event, coalescing consecutive ready mouse moves.
-    async fn next(&mut self) -> Result<Event> {
+    async fn next(&mut self) -> Result<AdapterEvent> {
         if let Some(event) = self.pending.take() {
             return Ok(event);
         }
@@ -154,10 +159,10 @@ where
         let mut event = self.next_uncoalesced().await?;
         if matches!(
             event,
-            Event::Mouse(mouse::MouseEvent {
+            AdapterEvent::Input(Event::Mouse(mouse::MouseEvent {
                 action: mouse::Action::Moved,
                 ..
-            })
+            }))
         ) {
             for _ in 0..64 {
                 let Some(next) = self.next_ready()? else {
@@ -165,10 +170,10 @@ where
                 };
                 if matches!(
                     next,
-                    Event::Mouse(mouse::MouseEvent {
+                    AdapterEvent::Input(Event::Mouse(mouse::MouseEvent {
                         action: mouse::Action::Moved,
                         ..
-                    })
+                    }))
                 ) {
                     event = next;
                 } else {
@@ -190,7 +195,7 @@ async fn select_work<E, W, D>(
     next_source: &mut usize,
 ) -> Result<Work>
 where
-    E: Future<Output = Result<Event>>,
+    E: Future<Output = Result<AdapterEvent>>,
     W: Future<Output = Result<()>>,
     D: Future<Output = ()>,
 {
@@ -199,7 +204,12 @@ where
         for offset in 0..3 {
             let source = (*next_source + offset) % 3;
             let ready = match source {
-                0 => event.as_mut().poll(cx).map(|event| event.map(Work::Input)),
+                0 => event.as_mut().poll(cx).map(|event| {
+                    event.map(|event| match event {
+                        AdapterEvent::Input(event) => Work::Input(event),
+                        AdapterEvent::Wake => Work::Wake,
+                    })
+                }),
                 1 => wake.as_mut().poll(cx).map(|wake| wake.map(|()| Work::Wake)),
                 _ => deadline.as_mut().poll(cx).map(|()| Ok(Work::Wake)),
             };
@@ -1258,11 +1268,11 @@ mod tests {
         };
         let (internal_tx, internal_rx) = unbounded();
         internal_tx
-            .unbounded_send(Event::Wake)
+            .unbounded_send(AdapterEvent::Wake)
             .expect("internal event receiver should be open");
         let mut events = EventSource::new(terminal, internal_rx);
 
-        assert!(matches!(block_on(events.next()), Ok(Event::Wake)));
+        assert!(matches!(block_on(events.next()), Ok(AdapterEvent::Wake)));
         drop(events);
         assert!(dropped.load(Ordering::Relaxed));
     }
@@ -1303,10 +1313,10 @@ mod tests {
         for _ in 0..2 {
             assert!(matches!(
                 block_on(events.next())?,
-                Event::Key(key::Key {
+                AdapterEvent::Input(Event::Key(key::Key {
                     key: key::KeyCode::Char('a'),
                     ..
-                })
+                }))
             ));
         }
         assert!(matches!(
@@ -1356,23 +1366,26 @@ mod tests {
         let mut events = EventSource::new(terminal, rx);
         assert!(matches!(
             block_on(events.next())?,
-            Event::Mouse(mouse::MouseEvent {
+            AdapterEvent::Input(Event::Mouse(mouse::MouseEvent {
                 location: Point { x: 2, y: 0 },
                 ..
-            })
+            }))
         ));
-        assert!(matches!(block_on(events.next())?, Event::Key(_)));
+        assert!(matches!(
+            block_on(events.next())?,
+            AdapterEvent::Input(Event::Key(_))
+        ));
         Ok(())
     }
 
     #[test]
     fn event_source_release_does_not_consume_framework_wake() -> Result<()> {
         let (tx, rx) = unbounded();
-        tx.unbounded_send(Event::Wake).unwrap();
+        tx.unbounded_send(AdapterEvent::Wake).unwrap();
         let terminal = stream::iter([Ok(terminal_key(cevent::KeyEventKind::Release))])
             .chain(stream::pending());
         let mut events = EventSource::new(terminal, rx);
-        assert!(matches!(block_on(events.next())?, Event::Wake));
+        assert!(matches!(block_on(events.next())?, AdapterEvent::Wake));
         Ok(())
     }
 
@@ -1381,7 +1394,7 @@ mod tests {
         let mut next_source = 0;
         for expected_source in 0..3 {
             let work = block_on(select_work(
-                ready(Ok(Event::FocusGained)),
+                ready(Ok(AdapterEvent::Input(Event::FocusGained))),
                 ready(Ok(())),
                 ready(()),
                 &mut next_source,
@@ -1400,7 +1413,7 @@ mod tests {
     fn adapter_services_deadlines_without_terminal_input() -> Result<()> {
         let mut next_source = 0;
         let work = block_on(select_work(
-            pending::<Result<Event>>(),
+            pending::<Result<AdapterEvent>>(),
             pending::<Result<()>>(),
             ready(()),
             &mut next_source,
@@ -1412,18 +1425,24 @@ mod tests {
     #[test]
     fn event_source_alternates_ready_terminal_and_internal_events() -> Result<()> {
         let (tx, rx) = unbounded();
-        tx.unbounded_send(Event::Wake).unwrap();
-        tx.unbounded_send(Event::Wake).unwrap();
+        tx.unbounded_send(AdapterEvent::Wake).unwrap();
+        tx.unbounded_send(AdapterEvent::Wake).unwrap();
         let terminal = stream::iter([
             Ok(terminal_key(cevent::KeyEventKind::Press)),
             Ok(terminal_key(cevent::KeyEventKind::Press)),
         ])
         .chain(stream::pending());
         let mut events = EventSource::new(terminal, rx);
-        assert!(matches!(block_on(events.next())?, Event::Key(_)));
-        assert!(matches!(block_on(events.next())?, Event::Wake));
-        assert!(matches!(block_on(events.next())?, Event::Key(_)));
-        assert!(matches!(block_on(events.next())?, Event::Wake));
+        assert!(matches!(
+            block_on(events.next())?,
+            AdapterEvent::Input(Event::Key(_))
+        ));
+        assert!(matches!(block_on(events.next())?, AdapterEvent::Wake));
+        assert!(matches!(
+            block_on(events.next())?,
+            AdapterEvent::Input(Event::Key(_))
+        ));
+        assert!(matches!(block_on(events.next())?, AdapterEvent::Wake));
         Ok(())
     }
 }

@@ -9,9 +9,6 @@ pub type Result<T> = StdResult<T, Error>;
 /// Errors returned by `canopy-mcp`.
 #[derive(Debug, Error)]
 pub enum Error {
-    /// The requested transport conflicts with explicit disabled automation.
-    #[error("automation is disabled by launch policy")]
-    AutomationDisabled,
     /// A canopy runtime error.
     #[error(transparent)]
     Canopy(#[from] CanopyError),

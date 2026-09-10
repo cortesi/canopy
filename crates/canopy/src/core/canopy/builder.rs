@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use ruau::source::{ModuleId, Source};
 
-use super::Canopy;
+use super::{Canopy, ScriptOrigin};
 use crate::{
     error::{Error, Result},
     script::ScriptModuleRoots,
@@ -125,7 +125,7 @@ impl CanopyBuilder {
 
     /// Consume all setup phases, returning the application only on success.
     pub fn build(self) -> Result<Canopy> {
-        let mut canopy = Canopy::new();
+        let mut canopy = Canopy::empty();
         for configure in self.configure {
             configure(&mut canopy)?;
         }
@@ -134,18 +134,18 @@ impl CanopyBuilder {
         // defaults.
         canopy.script_module_roots = ScriptModuleRoots::new();
         if let Some((path, ScriptTrust::TrustedLocal)) = self.user_root {
-            canopy.set_user_script_root(path)?;
+            canopy.set_user_script_root_inner(path)?;
         }
         if let Some((path, ScriptTrust::TrustedLocal)) = self.project_root {
-            canopy.set_project_script_root(path)?;
+            canopy.set_project_script_root_inner(path)?;
         }
-        canopy.finalize_api()?;
+        canopy.finalize_api_inner()?;
         for source in self.sources {
             match source {
                 SetupSource::Bindings { name, source } => {
                     evaluate_bindings(&mut canopy, &name, &source)?
                 }
-                SetupSource::Config(path) => canopy.run_config(&path)?,
+                SetupSource::Config(path) => canopy.run_config_inner(&path)?,
             }
         }
         for assemble in self.assemble {
@@ -170,7 +170,12 @@ fn evaluate_bindings(canopy: &mut Canopy, name: &str, text: &str) -> Result<()> 
         host.execute(canopy, canopy.root_id(), script, None)
             .map(|_| ())
     })();
-    canopy.record_script_journal(format!("bindings:{name}"), text, baseline, &result);
+    canopy.record_script_journal(
+        ScriptOrigin::Bindings(name.to_owned()),
+        text,
+        baseline,
+        &result,
+    );
     result
 }
 
@@ -237,9 +242,9 @@ mod tests {
         assert!(canopy.snapshot().is_none());
         let journal = canopy.script_journal();
         assert_eq!(journal.len(), 3);
-        assert_eq!(journal[0].origin, "bindings:first");
-        assert!(journal[1].origin.starts_with("config:"));
-        assert_eq!(journal[2].origin, "bindings:last");
+        assert_eq!(journal[0].origin.to_string(), "bindings:first");
+        assert!(journal[1].origin.to_string().starts_with("config:"));
+        assert_eq!(journal[2].origin.to_string(), "bindings:last");
         canopy.set_root_size(Size::new(10, 3))?;
         canopy.turn(Work::Prepare)?;
         assert_eq!(canopy.input_mode(), "startup");
@@ -329,7 +334,7 @@ mod tests {
             canopy.turn(Work::Prepare)?;
             assert!(
                 canopy
-                    .eval_script_value(&format!("return require(\"@{namespace}/payload\")"))
+                    .eval_script(&format!("return require(\"@{namespace}/payload\")"))
                     .is_err()
             );
         }

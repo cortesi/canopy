@@ -11,7 +11,6 @@ pub mod canopy_widgets {
         reason = "Editor methods are split by rendering, vi, and prompt concerns."
     )]
     pub mod editor {
-        //! Experimental editor API with syntax highlighting and vi mode.
         //! Editor widget and supporting types.
 
         pub mod highlight {
@@ -93,16 +92,6 @@ pub mod canopy_widgets {
             pub tab_stop: usize,
         }
 
-        /// Information about how an edit changed logical line counts.
-        pub struct LineChange {
-            /// First affected line index.
-            pub start_line: usize,
-            /// Number of lines replaced.
-            pub old_line_count: usize,
-            /// Number of lines inserted.
-            pub new_line_count: usize,
-        }
-
         /// Line number rendering mode.
         pub enum LineNumbers {
             /// Do not render line numbers.
@@ -111,28 +100,6 @@ pub mod canopy_widgets {
             Absolute,
             /// Render relative line numbers (current line stays absolute).
             Relative,
-        }
-
-        /// A text selection expressed as an anchor and head position.
-        pub struct Selection {}
-
-        /// Rope-backed text buffer with selection and undo/redo support.
-        pub struct TextBuffer {}
-
-        /// A position in the text buffer expressed as a logical line and a char index.
-        pub struct TextPosition {
-            /// Logical line index (0-based).
-            pub line: usize,
-            /// Char index within the line (0-based).
-            pub column: usize,
-        }
-
-        /// A half-open text range expressed in buffer coordinates.
-        pub struct TextRange {
-            /// Range start position (inclusive).
-            pub start: TextPosition,
-            /// Range end position (exclusive).
-            pub end: TextPosition,
         }
 
         /// Wrapping behavior for the editor.
@@ -204,23 +171,6 @@ pub mod canopy_widgets {
             pub fn new() -> Self {}
         }
 
-        impl Clone for LineChange {
-            fn clone(&self) -> LineChange {}
-        }
-
-        impl Debug for LineChange {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for LineChange {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for LineChange {
-            fn eq(&self, other: &LineChange) -> bool {}
-        }
-
         impl Clone for LineNumbers {
             fn clone(&self) -> LineNumbers {}
         }
@@ -236,230 +186,6 @@ pub mod canopy_widgets {
 
         impl PartialEq for LineNumbers {
             fn eq(&self, other: &LineNumbers) -> bool {}
-        }
-
-        impl Clone for Selection {
-            fn clone(&self) -> Selection {}
-        }
-
-        impl Debug for Selection {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for Selection {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for Selection {
-            fn eq(&self, other: &Selection) -> bool {}
-        }
-
-        impl Selection {
-            /// Construct a collapsed selection at a position.
-            pub fn caret(position: TextPosition) -> Self {}
-
-            /// Construct a selection from anchor and head positions.
-            pub fn new(anchor: TextPosition, head: TextPosition) -> Self {}
-
-            /// Return the anchor position.
-            pub fn anchor(self) -> TextPosition {}
-
-            /// Return the head position.
-            pub fn head(self) -> TextPosition {}
-
-            /// Return the selection range as a normalized text range.
-            pub fn range(self) -> TextRange {}
-
-            /// Return true if the selection is empty.
-            pub fn is_empty(self) -> bool {}
-
-            /// Update the head position.
-            pub fn set_head(&mut self, head: TextPosition) {}
-        }
-
-        impl Clone for TextBuffer {
-            fn clone(&self) -> TextBuffer {}
-        }
-
-        impl Debug for TextBuffer {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl TextBuffer {
-            /// Begin a grouped transaction that commits when the guard is dropped.
-            pub fn transaction(&mut self) -> TextTransaction<'_> {}
-
-            /// Begin a grouped transaction.
-            pub fn begin_transaction(&mut self) {}
-
-            /// Commit the active transaction, if any.
-            pub fn commit_transaction(&mut self) {}
-
-            /// Create a new buffer from an initial string.
-            pub fn new(text: impl Into<String>) -> Self {}
-
-            /// Delete the selection or the grapheme after the cursor.
-            pub fn delete_forward(&mut self, allow_line_wrap: bool) -> bool {}
-
-            /// Delete the selection or the grapheme before the cursor.
-            pub fn delete_backward(&mut self, allow_line_wrap: bool) -> bool {}
-
-            /// Insert text at the cursor, replacing any selection.
-            pub fn insert_text(&mut self, text: &str) {}
-
-            /// Move the cursor left by one grapheme.
-            pub fn move_left(&mut self, allow_line_wrap: bool) -> bool {}
-
-            /// Move the cursor right by one grapheme.
-            pub fn move_right(&mut self, allow_line_wrap: bool) -> bool {}
-
-            /// Move the cursor to the end of the current line.
-            pub fn move_line_end(&mut self) {}
-
-            /// Move the cursor to the first non-whitespace character in the line.
-            pub fn move_line_first_non_ws(&mut self) {}
-
-            /// Move the cursor to the start of the current line.
-            pub fn move_line_start(&mut self) {}
-
-            /// Redo the most recently undone transaction.
-            pub fn redo(&mut self) -> bool {}
-
-            /// Replace a range with the provided text.
-            pub fn replace_range(&mut self, range: TextRange, text: &str) {}
-
-            /// Replace the cursor and collapse the selection.
-            pub fn set_cursor(&mut self, pos: TextPosition) {}
-
-            /// Replace the selection, clamping to bounds.
-            pub fn set_selection(&mut self, selection: Selection) {}
-
-            /// Return the closest position for a display column within a line.
-            pub fn position_for_column(
-                &self,
-                line: usize,
-                column: usize,
-                tab_stop: usize,
-            ) -> TextPosition {
-            }
-
-            /// Return the current buffer revision.
-            pub fn revision(&self) -> u64 {}
-
-            /// Return the current selection.
-            pub fn selection(&self) -> Selection {}
-
-            /// Return the cursor position (selection head).
-            pub fn cursor(&self) -> TextPosition {}
-
-            /// Return the display column for a position.
-            pub fn column_for_position(&self, pos: TextPosition, tab_stop: usize) -> usize {}
-
-            /// Return the end position for a line, optionally including the newline.
-            pub fn line_end_position(&self, line: usize, include_newline: bool) -> TextPosition {}
-
-            /// Return the full buffer contents as a string.
-            pub fn text(&self) -> String {}
-
-            /// Return the line length in chars, excluding any trailing newline.
-            pub fn line_char_len(&self, line: usize) -> usize {}
-
-            /// Return the range a forward delete at `from` would remove.
-            ///
-            /// At the end of a line the range joins the next line when
-            /// `allow_line_wrap` is set. Returns `None` when there is nothing after
-            /// the position to delete.
-            pub fn forward_delete_range(
-                &self,
-                from: TextPosition,
-                allow_line_wrap: bool,
-            ) -> Option<TextRange> {
-            }
-
-            /// Return the text in a range.
-            pub fn range_text(&self, range: TextRange) -> String {}
-
-            /// Return the text of a logical line without a trailing newline.
-            pub fn line_text(&self, line: usize) -> String {}
-
-            /// Return the total number of logical lines.
-            pub fn line_count(&self) -> usize {}
-
-            /// Take the pending line change, if any.
-            ///
-            /// Returns `Some` only when exactly one edit has landed since the last
-            /// sync. Multiple edits drain as `None` so the layout cache rebuilds.
-            pub fn take_change(&mut self) -> Option<LineChange> {}
-
-            /// Undo the most recent transaction.
-            pub fn undo(&mut self) -> bool {}
-        }
-
-        impl Clone for TextPosition {
-            fn clone(&self) -> TextPosition {}
-        }
-
-        impl Debug for TextPosition {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for TextPosition {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl Hash for TextPosition {
-            fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-        }
-
-        impl Ord for TextPosition {
-            fn cmp(&self, other: &Self) -> Ordering {}
-        }
-
-        impl PartialEq for TextPosition {
-            fn eq(&self, other: &TextPosition) -> bool {}
-        }
-
-        impl PartialOrd for TextPosition {
-            fn partial_cmp(&self, other: &Self) -> Option<Ordering> {}
-        }
-
-        impl TextPosition {
-            /// Create a new text position.
-            pub fn new(line: usize, column: usize) -> Self {}
-        }
-
-        impl Clone for TextRange {
-            fn clone(&self) -> TextRange {}
-        }
-
-        impl Debug for TextRange {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for TextRange {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl Hash for TextRange {
-            fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-        }
-
-        impl PartialEq for TextRange {
-            fn eq(&self, other: &TextRange) -> bool {}
-        }
-
-        impl TextRange {
-            /// Construct a text range.
-            pub fn new(start: TextPosition, end: TextPosition) -> Self {}
-
-            /// Return a range with start/end ordered.
-            pub fn normalized(self) -> Self {}
-
-            /// Return true if the range is empty.
-            pub fn is_empty(self) -> bool {}
         }
 
         impl Clone for WrapMode {
@@ -511,7 +237,7 @@ pub mod canopy_widgets {
 
             /// Move the cursor.
             /// @param dir The direction to move the cursor.
-            pub fn cursor(&mut self, ctx: &mut dyn Context, dir: Direction) {}
+            pub fn move_cursor(&mut self, ctx: &mut dyn Context, dir: FocusDirection) {}
 
             /// Redo the last undone edit.
             pub fn redo(&mut self, _ctx: &mut dyn Context) {}
@@ -535,7 +261,7 @@ pub mod canopy_widgets {
             pub fn undo(&mut self, _ctx: &mut dyn Context) {}
 
             /// Build a positional call with typed user arguments.
-            pub fn call_cursor(dir: Direction) -> canopy::commands::CommandCall {}
+            pub fn call_move_cursor(dir: FocusDirection) -> canopy::commands::CommandCall {}
 
             /// Build a positional call with typed user arguments.
             pub fn call_redo() -> canopy::commands::CommandCall {}
@@ -544,7 +270,7 @@ pub mod canopy_widgets {
             pub fn call_undo() -> canopy::commands::CommandCall {}
 
             /// Return a typed command reference for this command.
-            pub fn cmd_cursor() -> &'static canopy::commands::CommandSpec {}
+            pub fn cmd_move_cursor() -> &'static canopy::commands::CommandSpec {}
 
             /// Return a typed command reference for this command.
             pub fn cmd_redo() -> &'static canopy::commands::CommandSpec {}
@@ -554,152 +280,270 @@ pub mod canopy_widgets {
         }
     }
 
-    pub mod inspector {
-        //! Experimental inspector overlay internals.
+    pub mod font {
+        //! ASCII font rasterization helpers.
 
-        pub mod logs {
-            //! Log panel widget.
-            //! Log panel for the inspector widget.
+        /// Rasterized font data for terminal rendering.
+        pub struct Font {}
 
-            /// Widget for displaying a single log entry.
-            pub struct LogEntry {}
+        /// Render large ASCII-font text into a bounded region.
+        pub struct FontBanner {}
 
-            /// Inspector log panel.
-            pub struct Logs {}
+        /// A rendered font cell with coverage weights for foreground and background.
+        pub struct FontCell {
+            /// Rendered character for this cell.
+            pub ch: char,
+            /// Foreground coverage weight (0-255).
+            pub fg_coverage: u8,
+            /// Background coverage weight (0-255).
+            pub bg_coverage: u8,
+        }
 
-            impl CommandNode for LogEntry {
-                fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-            }
+        /// Rendering effects applied to font output.
+        pub struct FontEffects {
+            /// Thicken strokes by adding extra coverage.
+            pub bold: bool,
+            /// Slant glyphs to the right.
+            pub italic: bool,
+            /// Draw an underline through the glyphs.
+            pub underline: bool,
+            /// Reduce contrast by dimming coverage.
+            pub dim: bool,
+            /// Draw an overline through the glyphs.
+            pub overline: bool,
+            /// Draw a strike-through line through the glyphs.
+            pub strike: bool,
+        }
 
-            impl LogEntry {
-                /// Construct a log entry from text.
-                pub fn new(text: impl Into<String>) -> Self {}
-            }
+        /// Cached layout for rasterized font text.
+        pub struct FontLayout {
+            /// Target canvas size.
+            pub size: canopy::geom::Size,
+            /// Size of the rendered content before clipping.
+            pub content_size: canopy::geom::Size,
+            /// Rendered cell data for each row.
+            pub cells: Vec<Vec<FontCell>>,
+        }
 
-            impl Selectable for LogEntry {
-                fn set_selected(&mut self, selected: bool) {}
-            }
+        /// Renderer that converts fonts into terminal text.
+        pub struct FontRenderer {}
 
-            impl Widget for LogEntry {
-                fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
+        /// Glyph raster data rendered to pixel coverage.
+        pub struct Glyph {
+            /// Rasterized coverage mask, row-major, 0-255 per pixel.
+            pub bitmap: Vec<u8>,
+            /// Glyph width in pixels.
+            pub width: u32,
+            /// Glyph height in pixels.
+            pub height: u32,
+            /// Horizontal bearing to the left of the glyph origin, in pixels.
+            pub bearing_left: i32,
+            /// Vertical bearing to the bottom of the glyph relative to the baseline, in
+            /// pixels.
+            pub bearing_bottom: i32,
+            /// Horizontal advance width in pixels.
+            pub advance: f32,
+        }
 
-                fn layout(&self) -> Layout {}
+        /// Widget that renders an image into terminal cells.
+        pub struct ImageView {}
 
-                fn measure(&self, c: MeasureConstraints) -> Measurement {}
+        /// Alignment configuration for font layouts.
+        pub struct LayoutOptions {
+            /// Horizontal alignment within the target canvas.
+            pub h_align: canopy::layout::Align,
+            /// Vertical alignment within the target canvas.
+            pub v_align: canopy::layout::Align,
+        }
 
-                fn name(&self) -> NodeName {}
+        /// Compute an offset for aligning content inside a span.
+        pub fn align_offset(content: u32, available: u32, align: canopy::layout::Align) -> u32 {}
 
-                fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
-            }
+        impl Clone for Font {
+            fn clone(&self) -> Font {}
+        }
 
-            impl CommandNode for Logs {
-                fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-            }
+        impl Font {
+            /// Load a font from in-memory bytes.
+            pub fn from_bytes(data: impl AsRef<[u8]>) -> Result<Self> {}
 
-            impl Default for Logs {
-                fn default() -> Self {}
-            }
+            /// Return the font name, if provided in metadata.
+            pub fn name(&self) -> Option<&str> {}
+        }
 
-            impl Loader for Logs {
-                fn load(c: &mut Canopy) -> Result<()> {}
-            }
+        impl Clone for FontCell {
+            fn clone(&self) -> FontCell {}
+        }
 
-            impl Logs {
-                /// Clear all items.
-                pub fn clear(&self, c: &mut dyn Context) -> Result<()> {}
+        impl Debug for FontCell {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
+        }
 
-                /// Construct a log panel.
-                pub fn new() -> Self {}
+        impl PartialEq for FontCell {
+            fn eq(&self, other: &FontCell) -> bool {}
+        }
 
-                /// Delete the currently selected item.
-                pub fn delete_selected(&self, c: &mut dyn Context) -> Result<()> {}
+        impl Clone for FontEffects {
+            fn clone(&self) -> FontEffects {}
+        }
 
-                /// Move selection by a signed offset.
-                pub fn select_by(&self, c: &mut dyn Context, delta: i32) -> Result<()> {}
+        impl Debug for FontEffects {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
+        }
 
-                /// Move selection to the first item.
-                pub fn select_first(&self, c: &mut dyn Context) -> Result<()> {}
+        impl Default for FontEffects {
+            fn default() -> FontEffects {}
+        }
 
-                /// Move selection to the last item.
-                pub fn select_last(&self, c: &mut dyn Context) -> Result<()> {}
+        impl Eq for FontEffects {
+            #[doc(hidden)]
+            fn assert_fields_are_eq(&self) {}
+        }
 
-                /// Page through the log view.
-                /// Positive values move down; negative values move up.
-                /// @param delta Signed page delta. Positive moves down and negative moves
-                /// up.
-                pub fn page(&self, c: &mut dyn Context, delta: i32) -> Result<()> {}
+        impl PartialEq for FontEffects {
+            fn eq(&self, other: &FontEffects) -> bool {}
+        }
 
-                /// Scroll the view by one line in the specified direction.
-                /// @param dir The direction to scroll.
-                pub fn scroll(&self, c: &mut dyn Context, dir: Direction) -> Result<()> {}
+        impl Clone for FontLayout {
+            fn clone(&self) -> FontLayout {}
+        }
 
-                /// Build a positional call with typed user arguments.
-                pub fn call_clear() -> canopy::commands::CommandCall {}
+        impl Debug for FontLayout {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
+        }
 
-                /// Build a positional call with typed user arguments.
-                pub fn call_delete_selected() -> canopy::commands::CommandCall {}
+        impl Clone for Glyph {
+            fn clone(&self) -> Glyph {}
+        }
 
-                /// Build a positional call with typed user arguments.
-                pub fn call_page(delta: i32) -> canopy::commands::CommandCall {}
+        impl Debug for Glyph {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
+        }
 
-                /// Build a positional call with typed user arguments.
-                pub fn call_scroll(dir: Direction) -> canopy::commands::CommandCall {}
+        impl Clone for LayoutOptions {
+            fn clone(&self) -> LayoutOptions {}
+        }
 
-                /// Build a positional call with typed user arguments.
-                pub fn call_select_by(delta: i32) -> canopy::commands::CommandCall {}
+        impl Debug for LayoutOptions {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
+        }
 
-                /// Build a positional call with typed user arguments.
-                pub fn call_select_first() -> canopy::commands::CommandCall {}
+        impl Default for LayoutOptions {
+            fn default() -> LayoutOptions {}
+        }
 
-                /// Build a positional call with typed user arguments.
-                pub fn call_select_last() -> canopy::commands::CommandCall {}
+        impl Eq for LayoutOptions {
+            #[doc(hidden)]
+            fn assert_fields_are_eq(&self) {}
+        }
 
-                /// Return a typed command reference for this command.
-                pub fn cmd_clear() -> &'static canopy::commands::CommandSpec {}
+        impl PartialEq for LayoutOptions {
+            fn eq(&self, other: &LayoutOptions) -> bool {}
+        }
 
-                /// Return a typed command reference for this command.
-                pub fn cmd_delete_selected() -> &'static canopy::commands::CommandSpec {}
+        impl CommandNode for ImageView {
+            fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
+        }
 
-                /// Return a typed command reference for this command.
-                pub fn cmd_page() -> &'static canopy::commands::CommandSpec {}
+        impl ImageView {
+            /// Create a new image view widget from a file path.
+            pub fn from_path(path: impl AsRef<Path>) -> Result<Self> {}
 
-                /// Return a typed command reference for this command.
-                pub fn cmd_scroll() -> &'static canopy::commands::CommandSpec {}
+            /// Create a new image view widget.
+            pub fn new(image: &RgbaImage) -> Self {}
 
-                /// Return a typed command reference for this command.
-                pub fn cmd_select_by() -> &'static canopy::commands::CommandSpec {}
+            /// Pan by one step in the specified direction.
+            /// @param dir The pan direction.
+            pub fn pan(&mut self, ctx: &mut dyn Context, dir: FocusDirection) -> Result<()> {}
 
-                /// Return a typed command reference for this command.
-                pub fn cmd_select_first() -> &'static canopy::commands::CommandSpec {}
+            /// Zoom around the view center.
+            /// @param dir The zoom direction.
+            pub fn zoom(&mut self, ctx: &mut dyn Context, dir: ZoomDirection) -> Result<()> {}
 
-                /// Return a typed command reference for this command.
-                pub fn cmd_select_last() -> &'static canopy::commands::CommandSpec {}
-            }
+            /// Build a positional call with typed user arguments.
+            pub fn call_pan(dir: FocusDirection) -> canopy::commands::CommandCall {}
 
-            impl Widget for Logs {
-                fn canvas(&self, view: Size, _ctx: &CanvasContext<'_>) -> Size {}
+            /// Build a positional call with typed user arguments.
+            pub fn call_zoom(dir: ZoomDirection) -> canopy::commands::CommandCall {}
 
-                fn layout(&self) -> Layout {}
+            /// Return a typed command reference for this command.
+            pub fn cmd_pan() -> &'static canopy::commands::CommandSpec {}
 
-                fn measure(&self, c: MeasureConstraints) -> Measurement {}
+            /// Return a typed command reference for this command.
+            pub fn cmd_zoom() -> &'static canopy::commands::CommandSpec {}
+        }
 
-                fn name(&self) -> NodeName {}
+        impl Loader for ImageView {
+            /// Register commands for the image viewer widget.
+            fn load(cnpy: &mut Canopy) -> Result<()> {}
+        }
 
-                fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {}
+        impl Widget for ImageView {
+            /// Accept focus so key bindings apply to this widget.
+            fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
-                fn render(&mut self, rndr: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
+            /// Fill the available space in the terminal view.
+            fn layout(&self) -> Layout {}
+
+            /// Render the current image view into the terminal buffer.
+            fn render(&mut self, render: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
+
+            fn canvas(&self, view: Size, _ctx: &CanvasContext<'_>) -> Size {}
+        }
+
+        impl FontBanner {
+            /// Configure layout options for the banner.
+            pub fn with_layout_options(self, options: LayoutOptions) -> Self {}
+
+            /// Configure rendering effects for the banner.
+            pub fn with_effects(self, effects: FontEffects) -> Self {}
+
+            /// Configure the banner style path.
+            pub fn with_style(self, style: impl Into<String>) -> Self {}
+
+            /// Construct a banner with text and a renderer.
+            pub fn new(text: impl Into<String>, renderer: FontRenderer) -> Self {}
+
+            /// Update rendering effects for the banner.
+            pub fn set_effects(&mut self, effects: FontEffects) {}
+
+            /// Update the banner renderer.
+            pub fn set_renderer(&mut self, renderer: FontRenderer) {}
+
+            /// Update the banner text.
+            pub fn set_text(&mut self, text: impl Into<String>) {}
+        }
+
+        impl Widget for FontBanner {
+            fn layout(&self) -> Layout {}
+
+            fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
+        }
+
+        impl FontRenderer {
+            /// Create a renderer for the provided font.
+            pub fn new(font: Font) -> Self {}
+
+            /// Render text into a layout that fits within the target canvas.
+            pub fn layout(
+                &mut self,
+                text: &str,
+                size: Size,
+                options: LayoutOptions,
+                effects: FontEffects,
+            ) -> FontLayout {
             }
         }
+    }
+
+    pub mod inspector {
+        //! Experimental inspector overlay internals.
 
         /// Inspector overlay widget.
         pub struct Inspector;
 
         impl CommandNode for Inspector {
             fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-        }
-
-        impl Default for Inspector {
-            fn default() -> Self {}
         }
 
         impl Loader for Inspector {
@@ -712,6 +556,75 @@ pub mod canopy_widgets {
             fn name(&self) -> NodeName {}
 
             fn render(&mut self, r: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
+        }
+    }
+
+    pub mod terminal {
+        //! Terminal emulation widget.
+
+        /// Terminal widget backed by `itty`.
+        pub struct Terminal {}
+
+        /// Terminal widget configuration.
+        pub struct TerminalConfig {}
+
+        impl CommandNode for Terminal {
+            fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
+        }
+
+        impl Terminal {
+            /// Construct a new terminal widget with the provided configuration.
+            pub fn new(config: TerminalConfig) -> Self {}
+        }
+
+        impl Widget for Terminal {
+            fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
+
+            fn canvas(&self, view: Size, _ctx: &CanvasContext<'_>) -> Size {}
+
+            fn cursor(&self) -> Option<cursor::Cursor> {}
+
+            fn measure(&self, c: MeasureConstraints) -> Measurement {}
+
+            fn name(&self) -> NodeName {}
+
+            fn on_event(
+                &mut self,
+                event: &event::Event,
+                ctx: &mut dyn Context,
+            ) -> Result<EventOutcome> {
+            }
+
+            fn on_mount(&mut self, _ctx: &mut dyn Context) -> Result<()> {}
+
+            fn poll(&mut self, _ctx: &mut dyn Context) -> Option<Duration> {}
+
+            fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
+        }
+
+        impl Default for TerminalConfig {
+            fn default() -> TerminalConfig {}
+        }
+
+        impl TerminalConfig {
+            /// Configure the child exit callback.
+            pub fn with_on_exit<F>(self, on_exit: F) -> Self
+            where
+                F: 'static + Fn(i32) + Send + Sync, {
+            }
+
+            /// Configure the command argv to run instead of the default shell.
+            pub fn with_command<I, S>(self, command: I) -> Self
+            where
+                I: IntoIterator<Item = S>,
+                S: Into<String>, {
+            }
+
+            /// Configure the working directory for the terminal process.
+            pub fn with_cwd(self, cwd: impl Into<PathBuf>) -> Self {}
+
+            /// Construct a default terminal configuration.
+            pub fn new() -> Self {}
         }
     }
 
@@ -1062,47 +975,11 @@ pub mod canopy_widgets {
     where
         T: Label, {}
 
-    /// Experimental ASCII font rendering API.
-    pub struct Font {}
-
-    /// Render large ASCII-font text into a bounded region.
-    pub struct FontBanner {}
-
-    /// Experimental ASCII font rendering API.
-    pub struct FontEffects {
-        /// Thicken strokes by adding extra coverage.
-        pub bold: bool,
-        /// Slant glyphs to the right.
-        pub italic: bool,
-        /// Draw an underline through the glyphs.
-        pub underline: bool,
-        /// Reduce contrast by dimming coverage.
-        pub dim: bool,
-        /// Draw an overline through the glyphs.
-        pub overline: bool,
-        /// Draw a strike-through line through the glyphs.
-        pub strike: bool,
-    }
-
-    /// Experimental ASCII font rendering API.
-    pub struct FontRenderer {}
-
     /// A frame around an element with optional title and indicators.
     pub struct Frame {}
 
-    /// Widget that renders an image into terminal cells.
-    pub struct ImageView {}
-
     /// Single-line text input widget.
     pub struct Input {}
-
-    /// Experimental ASCII font rendering API.
-    pub struct LayoutOptions {
-        /// Horizontal alignment within the target canvas.
-        pub h_align: canopy::layout::Align,
-        /// Vertical alignment within the target canvas.
-        pub v_align: canopy::layout::Align,
-    }
 
     /// A typed list container for widget items.
     ///
@@ -1129,12 +1006,6 @@ pub mod canopy_widgets {
     pub struct Selector<T>
     where
         T: Label, {}
-
-    /// Terminal widget backed by `itty`.
-    pub struct Terminal {}
-
-    /// Terminal widget configuration.
-    pub struct TerminalConfig {}
 
     /// Multiline text widget with wrapping and scrolling.
     pub struct Text {}
@@ -1180,6 +1051,17 @@ pub mod canopy_widgets {
 
     /// Single line thick Unicode box drawing set.
     pub const SINGLE_THICK: BoxGlyphs = _;
+
+    /// Wrap `child` in a new `widget` node and return the wrapper's typed id.
+    ///
+    /// The child keeps its identity: it is detached from its current parent and
+    /// reattached under the wrapper.
+    pub fn wrap<W: 'static + Widget>(
+        c: &mut dyn Context,
+        child: impl Into<canopy::NodeId>,
+        widget: W,
+    ) -> canopy::error::Result<canopy::TypedId<W>> {
+    }
 
     impl Border {
         /// Build a box with a specified glyph set.
@@ -1330,60 +1212,6 @@ pub mod canopy_widgets {
         fn eq(&self, other: &CanvasWidth) -> bool {}
     }
 
-    impl Clone for Font {
-        fn clone(&self) -> Font {}
-    }
-
-    impl Font {
-        /// Load a font from in-memory bytes.
-        pub fn from_bytes(data: impl AsRef<[u8]>) -> Result<Self> {}
-
-        /// Return the font name, if provided in metadata.
-        pub fn name(&self) -> Option<&str> {}
-    }
-
-    impl Clone for FontEffects {
-        fn clone(&self) -> FontEffects {}
-    }
-
-    impl Debug for FontEffects {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Default for FontEffects {
-        fn default() -> FontEffects {}
-    }
-
-    impl Eq for FontEffects {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl PartialEq for FontEffects {
-        fn eq(&self, other: &FontEffects) -> bool {}
-    }
-
-    impl Clone for LayoutOptions {
-        fn clone(&self) -> LayoutOptions {}
-    }
-
-    impl Debug for LayoutOptions {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Default for LayoutOptions {
-        fn default() -> LayoutOptions {}
-    }
-
-    impl Eq for LayoutOptions {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl PartialEq for LayoutOptions {
-        fn eq(&self, other: &LayoutOptions) -> bool {}
-    }
-
     impl Clone for ValueExposure {
         fn clone(&self) -> ValueExposure {}
     }
@@ -1422,18 +1250,6 @@ pub mod canopy_widgets {
 
         /// Construct a frame.
         pub fn new() -> Self {}
-
-        /// Return the glyph set used by the frame.
-        pub fn glyphs(&self) -> &BoxGlyphs {}
-
-        /// Wrap an existing child node in a configured frame and return the frame
-        /// node ID.
-        pub fn wrap_with(
-            c: &mut dyn Context,
-            child: impl Into<NodeId>,
-            frame: Self,
-        ) -> Result<NodeId> {
-        }
     }
 
     impl Widget for Frame {
@@ -1446,66 +1262,6 @@ pub mod canopy_widgets {
         fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
     }
 
-    impl CommandNode for ImageView {
-        fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-    }
-
-    impl ImageView {
-        /// Create a new image view widget from a file path.
-        pub fn from_path(path: impl AsRef<Path>) -> canopy_error::Result<Self> {}
-
-        /// Create a new image view widget.
-        pub fn new(image: &RgbaImage) -> Self {}
-
-        /// Pan by one step in the specified direction.
-        /// @param dir The pan direction.
-        pub fn pan(&mut self, ctx: &mut dyn Context, dir: Direction) -> canopy_error::Result<()> {}
-
-        /// Zoom around the view center.
-        /// @param dir The zoom direction.
-        pub fn zoom(
-            &mut self,
-            ctx: &mut dyn Context,
-            dir: ZoomDirection,
-        ) -> canopy_error::Result<()> {
-        }
-
-        /// Build a positional call with typed user arguments.
-        pub fn call_pan(dir: Direction) -> canopy::commands::CommandCall {}
-
-        /// Build a positional call with typed user arguments.
-        pub fn call_zoom(dir: ZoomDirection) -> canopy::commands::CommandCall {}
-
-        /// Return a typed command reference for this command.
-        pub fn cmd_pan() -> &'static canopy::commands::CommandSpec {}
-
-        /// Return a typed command reference for this command.
-        pub fn cmd_zoom() -> &'static canopy::commands::CommandSpec {}
-    }
-
-    impl Loader for ImageView {
-        /// Register commands for the image viewer widget.
-        fn load(cnpy: &mut Canopy) -> canopy_error::Result<()> {}
-    }
-
-    impl Widget for ImageView {
-        /// Accept focus so key bindings apply to this widget.
-        fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
-
-        /// Fill the available space in the terminal view.
-        fn layout(&self) -> Layout {}
-
-        /// Render the current image view into the terminal buffer.
-        fn render(
-            &mut self,
-            render: &mut Render<'_>,
-            ctx: &dyn ViewContext,
-        ) -> canopy_error::Result<()> {
-        }
-
-        fn canvas(&self, view: Size, _ctx: &CanvasContext<'_>) -> Size {}
-    }
-
     impl CommandNode for Input {
         fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
     }
@@ -1516,6 +1272,15 @@ pub mod canopy_widgets {
 
         /// Construct a new input with initial text.
         pub fn new(txt: impl Into<String>) -> Self {}
+
+        /// Delete a character at the input location.
+        pub fn backspace(&mut self, _c: &mut dyn Context) {}
+
+        /// Move the cursor left.
+        pub fn left(&mut self, _c: &mut dyn Context) {}
+
+        /// Move the cursor right.
+        pub fn right(&mut self, _c: &mut dyn Context) {}
 
         /// Replace the input value and reset the cursor.
         pub fn set_value(&mut self, value: impl Into<String>) {}
@@ -1575,15 +1340,6 @@ pub mod canopy_widgets {
 
         /// Create a pad with uniform padding on all sides.
         pub fn uniform(padding: u32) -> Self {}
-
-        /// Wrap an existing child node in a configured pad and return the pad node
-        /// ID.
-        pub fn wrap_with(
-            c: &mut dyn Context,
-            child: impl Into<NodeId>,
-            pad: Self,
-        ) -> Result<NodeId> {
-        }
     }
 
     impl Widget for Pad {
@@ -1630,34 +1386,24 @@ pub mod canopy_widgets {
         fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
     }
 
+    impl Default for Root {
+        fn default() -> Self {}
+    }
+
     impl Loader for Root {
         fn load(c: &mut Canopy) -> Result<()> {}
     }
 
     impl Root {
+        /// Construct a root widget wrapping the application and inspector nodes.
+        pub fn new() -> Self {}
+
         /// Dump diagnostic information about the tree, focus, and bindings.
         pub fn dump_diagnostics(&mut self, c: &mut dyn Context) -> Result<()> {}
 
         /// Exit from the program, restoring terminal state. If help or inspector is
         /// open, close them first.
         pub fn quit(&mut self, c: &mut dyn Context) -> Result<()> {}
-
-        /// Helper to install a root widget into a canopy app.
-        pub fn install_app<W>(canopy: &mut Canopy, app: W) -> Result<TypedId<W>>
-        where
-            W: 'static + Widget, {
-        }
-
-        /// Helper to install a root widget into the canopy with an optional
-        /// inspector pane.
-        pub fn install_app_with_inspector<W>(
-            canopy: &mut Canopy,
-            app: W,
-            inspector_active: bool,
-        ) -> Result<TypedId<W>>
-        where
-            W: 'static + Widget, {
-        }
 
         /// Hide the help modal.
         pub fn hide_help(&mut self, c: &mut dyn Context) -> Result<()> {}
@@ -1669,6 +1415,12 @@ pub mod canopy_widgets {
         /// pane instead.
         pub fn focus_app(&mut self, c: &mut dyn Context) -> Result<()> {}
 
+        /// Install the application, shared help, and enabled developer tools.
+        pub fn install<W>(self, canopy: &mut Canopy, app: W) -> Result<TypedId<W>>
+        where
+            W: 'static + Widget, {
+        }
+
         /// Move focus in the specified direction.
         /// @param direction The direction to move focus.
         pub fn focus(&mut self, c: &mut dyn Context, direction: FocusDirection) -> Result<()> {}
@@ -1677,16 +1429,16 @@ pub mod canopy_widgets {
         pub fn show_help(&mut self, c: &mut dyn Context) -> Result<()> {}
 
         /// Show the inspector.
-        pub fn activate_inspector(&mut self, c: &mut dyn Context) -> Result<()> {}
+        pub fn show_inspector(&mut self, c: &mut dyn Context) -> Result<()> {}
+
+        /// Start with the inspector open.
+        pub fn with_inspector(self, state: bool) -> Self {}
 
         /// Toggle help modal visibility.
         pub fn toggle_help(&mut self, c: &mut dyn Context) -> Result<()> {}
 
         /// Toggle inspector visibility.
         pub fn toggle_inspector(&mut self, c: &mut dyn Context) -> Result<()> {}
-
-        /// Build a positional call with typed user arguments.
-        pub fn call_activate_inspector() -> canopy::commands::CommandCall {}
 
         /// Build a positional call with typed user arguments.
         pub fn call_dump_diagnostics() -> canopy::commands::CommandCall {}
@@ -1710,13 +1462,13 @@ pub mod canopy_widgets {
         pub fn call_show_help() -> canopy::commands::CommandCall {}
 
         /// Build a positional call with typed user arguments.
+        pub fn call_show_inspector() -> canopy::commands::CommandCall {}
+
+        /// Build a positional call with typed user arguments.
         pub fn call_toggle_help() -> canopy::commands::CommandCall {}
 
         /// Build a positional call with typed user arguments.
         pub fn call_toggle_inspector() -> canopy::commands::CommandCall {}
-
-        /// Return a typed command reference for this command.
-        pub fn cmd_activate_inspector() -> &'static canopy::commands::CommandSpec {}
 
         /// Return a typed command reference for this command.
         pub fn cmd_dump_diagnostics() -> &'static canopy::commands::CommandSpec {}
@@ -1740,6 +1492,9 @@ pub mod canopy_widgets {
         pub fn cmd_show_help() -> &'static canopy::commands::CommandSpec {}
 
         /// Return a typed command reference for this command.
+        pub fn cmd_show_inspector() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return a typed command reference for this command.
         pub fn cmd_toggle_help() -> &'static canopy::commands::CommandSpec {}
 
         /// Return a typed command reference for this command.
@@ -1750,43 +1505,6 @@ pub mod canopy_widgets {
         fn layout(&self) -> Layout {}
 
         fn name(&self) -> NodeName {}
-    }
-
-    impl CommandNode for Terminal {
-        fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-    }
-
-    impl Terminal {
-        /// Construct a new terminal widget with the provided configuration.
-        pub fn new(config: TerminalConfig) -> Self {}
-
-        /// Return the attached `itty` driver handle for scripting integrations.
-        pub fn driver_handle(&self) -> Option<Arc<DriverHandle>> {}
-    }
-
-    impl Widget for Terminal {
-        fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
-
-        fn canvas(&self, view: Size, _ctx: &CanvasContext<'_>) -> Size {}
-
-        fn cursor(&self) -> Option<cursor::Cursor> {}
-
-        fn measure(&self, c: MeasureConstraints) -> Measurement {}
-
-        fn name(&self) -> NodeName {}
-
-        fn on_event(
-            &mut self,
-            event: &event::Event,
-            ctx: &mut dyn Context,
-        ) -> Result<EventOutcome> {
-        }
-
-        fn on_mount(&mut self, _ctx: &mut dyn Context) -> Result<()> {}
-
-        fn poll(&mut self, _ctx: &mut dyn Context) -> Option<Duration> {}
-
-        fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
     }
 
     impl CommandNode for Text {
@@ -1814,11 +1532,11 @@ pub mod canopy_widgets {
         pub fn page(&mut self, c: &mut dyn Context, delta: i32) {}
 
         /// Replace the raw text content.
-        pub fn set_raw(&mut self, raw: impl Into<String>) {}
+        pub fn set_text(&mut self, raw: impl Into<String>) {}
 
         /// Scroll by one line in the specified direction.
         /// @param dir The direction to scroll.
-        pub fn scroll(&mut self, c: &mut dyn Context, dir: Direction) {}
+        pub fn scroll(&mut self, c: &mut dyn Context, dir: FocusDirection) {}
 
         /// Scroll to an absolute content position.
         pub fn scroll_to(&mut self, c: &mut dyn Context, x: u32, y: u32) {}
@@ -1836,7 +1554,7 @@ pub mod canopy_widgets {
         pub fn call_page(delta: i32) -> canopy::commands::CommandCall {}
 
         /// Build a positional call with typed user arguments.
-        pub fn call_scroll(dir: Direction) -> canopy::commands::CommandCall {}
+        pub fn call_scroll(dir: FocusDirection) -> canopy::commands::CommandCall {}
 
         /// Build a positional call with typed user arguments.
         pub fn call_scroll_to(x: u32, y: u32) -> canopy::commands::CommandCall {}
@@ -1888,75 +1606,6 @@ pub mod canopy_widgets {
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {}
     }
 
-    impl Default for TerminalConfig {
-        fn default() -> TerminalConfig {}
-    }
-
-    impl TerminalConfig {
-        /// Configure the child exit callback.
-        pub fn with_on_exit<F>(self, on_exit: F) -> Self
-        where
-            F: 'static + Fn(i32) + Send + Sync, {
-        }
-
-        /// Configure the command argv to run instead of the default shell.
-        pub fn with_command<I, S>(self, command: I) -> Self
-        where
-            I: IntoIterator<Item = S>,
-            S: Into<String>, {
-        }
-
-        /// Configure the working directory for the terminal process.
-        pub fn with_cwd(self, cwd: impl Into<PathBuf>) -> Self {}
-
-        /// Construct a default terminal configuration.
-        pub fn new() -> Self {}
-    }
-
-    impl FontBanner {
-        /// Configure layout options for the banner.
-        pub fn with_layout_options(self, options: LayoutOptions) -> Self {}
-
-        /// Configure rendering effects for the banner.
-        pub fn with_effects(self, effects: FontEffects) -> Self {}
-
-        /// Configure the banner style path.
-        pub fn with_style(self, style: impl Into<String>) -> Self {}
-
-        /// Construct a banner with text and a renderer.
-        pub fn new(text: impl Into<String>, renderer: FontRenderer) -> Self {}
-
-        /// Update rendering effects for the banner.
-        pub fn set_effects(&mut self, effects: FontEffects) {}
-
-        /// Update the banner renderer.
-        pub fn set_renderer(&mut self, renderer: FontRenderer) {}
-
-        /// Update the banner text.
-        pub fn set_text(&mut self, text: impl Into<String>) {}
-    }
-
-    impl Widget for FontBanner {
-        fn layout(&self) -> Layout {}
-
-        fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
-    }
-
-    impl FontRenderer {
-        /// Create a renderer for the provided font.
-        pub fn new(font: Font) -> Self {}
-
-        /// Render text into a layout that fits within the target canvas.
-        pub fn layout(
-            &mut self,
-            text: &str,
-            size: Size,
-            options: LayoutOptions,
-            effects: FontEffects,
-        ) -> FontLayout {
-        }
-    }
-
     impl<T> CommandNode for Dropdown<T>
     where
         T: 'static + Label,
@@ -1976,8 +1625,8 @@ pub mod canopy_widgets {
 
         /// Create a new dropdown with the given items.
         ///
-        /// Panics if items is empty.
-        pub fn new(items: Vec<T>) -> Self {}
+        /// Returns an error if `items` is empty.
+        pub fn new(items: Vec<T>) -> Result<Self> {}
 
         /// Get the currently selected index.
         pub fn selected_index(&self) -> usize {}
@@ -2212,9 +1861,6 @@ pub mod canopy_widgets {
         /// Return the stable key of the selected row.
         pub fn selected_key(&self) -> Option<&K> {}
 
-        /// Return the widget for a domain key.
-        pub fn item_for_key(&self, key: &K) -> Option<TypedId<W>> {}
-
         /// Returns the currently selected index.
         pub fn selected_index(&self) -> Option<usize> {}
 
@@ -2232,7 +1878,7 @@ pub mod canopy_widgets {
 
         /// Scroll the view by one line in the specified direction.
         /// @param dir The direction to scroll.
-        pub fn scroll(&mut self, c: &mut dyn Context, dir: Direction) {}
+        pub fn scroll(&mut self, c: &mut dyn Context, dir: FocusDirection) {}
 
         /// Select a domain key, returning an error when it is absent.
         pub fn select_key(&mut self, ctx: &mut dyn Context, key: &K) -> Result<()> {}
@@ -2253,7 +1899,7 @@ pub mod canopy_widgets {
         pub fn call_page(delta: i32) -> canopy::commands::CommandCall {}
 
         /// Build a positional call with typed user arguments.
-        pub fn call_scroll(dir: Direction) -> canopy::commands::CommandCall {}
+        pub fn call_scroll(dir: FocusDirection) -> canopy::commands::CommandCall {}
 
         /// Build a positional call with typed user arguments.
         pub fn call_select_by(delta: i32) -> canopy::commands::CommandCall {}

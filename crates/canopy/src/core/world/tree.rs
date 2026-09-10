@@ -411,7 +411,7 @@ impl Core {
     /// Validate core invariants using a caller-specific widget slot policy.
     fn validate_invariants_with(&self, widget_slot_policy: WidgetSlotPolicy) -> Result<()> {
         self.validate_root()?;
-        for (node_id, node) in &self.nodes {
+        for (node_id, node) in self.nodes.iter() {
             validate_slot(node_id, node, widget_slot_policy)?;
             self.validate_node_links(node_id, node)?;
             self.validate_parent_chain(node_id)?;
@@ -617,10 +617,10 @@ impl Core {
                 node.view.canvas, node.canvas
             )));
         }
-        if node.view.tl != node.scroll {
+        if node.view.scroll != node.scroll {
             return Err(invariant_violation(format!(
                 "node {node_id:?} view scroll {:?} does not match node scroll {:?}",
-                node.view.tl, node.scroll
+                node.view.scroll, node.scroll
             )));
         }
         if node.view.outer.w != node.rect.w || node.view.outer.h != node.rect.h {
@@ -684,7 +684,7 @@ impl Core {
 
     /// Add a boxed widget as a keyed child of a specific parent and return the
     /// new node ID.
-    pub fn add_child_to_keyed_boxed(
+    pub fn add_child_to_slot_boxed(
         &mut self,
         parent: impl Into<NodeId>,
         key: &str,
@@ -692,7 +692,7 @@ impl Core {
     ) -> Result<NodeId> {
         let parent = parent.into();
         self.with_tree_edit("add keyed child", |core| {
-            if core.child_keyed(parent, key).is_some() {
+            if core.child_slot(parent, key).is_some() {
                 return Err(Error::DuplicateChildKey(key.to_string()));
             }
             let child = core.create_detached_boxed(widget)?;
@@ -702,7 +702,7 @@ impl Core {
     }
 
     /// Return the keyed child under a parent.
-    pub fn child_keyed(&self, parent: impl Into<NodeId>, key: &str) -> Option<NodeId> {
+    pub fn child_slot(&self, parent: impl Into<NodeId>, key: &str) -> Option<NodeId> {
         self.nodes
             .get(parent.into())
             .and_then(|node| node.child_keys.get(key).copied())
@@ -716,7 +716,7 @@ impl Core {
     }
 
     /// Attach a detached child under a parent with a unique key.
-    pub fn attach_keyed(
+    pub fn attach_slot(
         &mut self,
         parent: impl Into<NodeId>,
         key: &str,
@@ -1126,7 +1126,7 @@ impl Core {
 
     /// Ensure one widget slot is present and not held by a callback.
     fn ensure_widget_slot_available(&self, node_id: NodeId, operation: &'static str) -> Result<()> {
-        self.with_widget_read(
+        self.with_widget(
             node_id,
             WidgetOperation::access(operation),
             |_widget, _core| (),
@@ -1176,7 +1176,7 @@ impl Core {
     }
 
     /// Return the path for a node relative to a root.
-    pub fn node_path(&self, root: impl Into<NodeId>, node_id: impl Into<NodeId>) -> Path {
+    pub fn path_of(&self, root: impl Into<NodeId>, node_id: impl Into<NodeId>) -> Path {
         let root = root.into();
         let node_id = node_id.into();
         let mut parts = Vec::new();

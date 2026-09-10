@@ -1,0 +1,5 @@
+error: #[command] requires #[derive_commands] on the containing impl
+ --> tests/ui/bare_command.rs:7:5
+  |
+7 |     fn update(&mut self) {}
+  |     ^^^^^^^^^^^^^^^^^^^^^^^

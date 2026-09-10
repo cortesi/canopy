@@ -59,7 +59,7 @@ impl Core {
     }
 
     /// Find a registered key within an explicit live arena scope.
-    pub(crate) fn find_key(&self, scope: NodeId, key: &str) -> Result<Option<NodeId>> {
+    pub(crate) fn find_identity(&self, scope: NodeId, key: &str) -> Result<Option<NodeId>> {
         if !self.nodes.contains_key(scope) {
             return Err(Error::NodeNotFound(scope));
         }
@@ -100,7 +100,7 @@ impl Core {
 
     /// Check the bidirectional identity index and settled scope membership.
     pub(super) fn validate_semantic_keys(&self) -> Result<()> {
-        for (node, entry) in &self.nodes {
+        for (node, entry) in self.nodes.iter() {
             if let Some(identity) = &entry.semantic_identity {
                 if self
                     .semantic_keys
@@ -165,7 +165,7 @@ mod tests {
             core.attach(a, wrapper)?;
             Ok(())
         })?;
-        assert_eq!(core.find_key(a, "field")?, Some(child));
+        assert_eq!(core.find_identity(a, "field")?, Some(child));
         let failure: Result<()> = core.with_tree_edit("outer failure", |core| {
             core.detach(child)?;
             core.attach(b, child)?;
@@ -175,23 +175,23 @@ mod tests {
                 Err(Error::Invalid("rollback inner".into()))
             });
             assert!(nested.is_err());
-            assert_eq!(core.find_key(a, "field")?, Some(child));
-            assert_eq!(core.find_key(b, "provisional")?, None);
+            assert_eq!(core.find_identity(a, "field")?, Some(child));
+            assert_eq!(core.find_identity(b, "provisional")?, None);
             Err(Error::Invalid("rollback outer".into()))
         });
         assert!(failure.is_err());
-        assert_eq!(core.find_key(a, "field")?, Some(child));
+        assert_eq!(core.find_identity(a, "field")?, Some(child));
         core.with_tree_edit("move", |core| {
             core.detach(child)?;
             core.attach(b, child)
         })?;
-        assert_eq!(core.find_key(a, "field")?, None);
+        assert_eq!(core.find_identity(a, "field")?, None);
         core.set_semantic_key(child, b, "child")?;
         core.replace_subtree(child, Leaf)?;
-        assert_eq!(core.find_key(b, "child")?, None);
+        assert_eq!(core.find_identity(b, "child")?, None);
         core.set_semantic_key(child, b, "child")?;
         core.remove_subtree(child)?;
-        assert_eq!(core.find_key(b, "child")?, None);
+        assert_eq!(core.find_identity(b, "child")?, None);
         core.validate_semantic_keys()
     }
 
@@ -200,7 +200,7 @@ mod tests {
         let mut core = Core::new();
         let scope = core.create_detached(Leaf)?;
         let child = core.create_detached(Leaf)?;
-        core.attach_keyed(scope, "slot", child)?;
+        core.attach_slot(scope, "slot", child)?;
         let root = core.root_id();
         {
             let mut context = CoreContext::new(&mut core, scope);
@@ -213,10 +213,10 @@ mod tests {
                 })
             );
             context.attach(root, scope)?;
-            assert_eq!(context.find_key(scope, "field")?, Some(child));
+            assert_eq!(context.find_identity(scope, "field")?, Some(child));
             context.clear_semantic_key(child)?;
-            assert_eq!(context.find_key(scope, "field")?, None);
-            assert_eq!(context.child_keyed_in(scope, "slot"), Some(child));
+            assert_eq!(context.find_identity(scope, "field")?, None);
+            assert_eq!(context.child_slot_of(scope, "slot"), Some(child));
         }
         core.validate_semantic_keys()
     }

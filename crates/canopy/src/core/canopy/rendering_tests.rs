@@ -35,7 +35,7 @@ fn app() -> Result<Canopy> {
 fn paint(canopy: &mut Canopy, character: char) -> Result<()> {
     canopy.with_root_context(|ctx| {
         let root = ctx.node_id();
-        ctx.with_node(root, |widget: &mut Paint, _| {
+        ctx.with_widget_mut(root, |widget: &mut Paint, _| {
             widget.0 = character;
             Ok(())
         })
@@ -51,7 +51,7 @@ fn script_snapshot_refresh_preserves_backend_diff_baseline() -> Result<()> {
 
     paint(&mut canopy, 'b')?;
     assert_eq!(
-        canopy.eval_script_value("return canopy.screen_text()")?,
+        canopy.eval_script("return canopy.screen_text()")?,
         ArgValue::String("b".into())
     );
     assert_eq!(canopy.buf().unwrap().screen_text(), "b");

@@ -14,9 +14,6 @@ pub mod canopy_examples {
         /// Queue this demo's bindings and native configuration in their builder phases.
         pub fn binding_setup(builder: canopy::CanopyBuilder) -> canopy::CanopyBuilder {}
 
-        /// Install key bindings for the chargym demo.
-        pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {}
-
         impl CharGym {
             /// Construct a new chargym demo.
             pub fn new() -> Self {}
@@ -47,9 +44,6 @@ pub mod canopy_examples {
         /// Queue this demo's bindings and native configuration in their builder phases.
         pub fn binding_setup(builder: canopy::CanopyBuilder) -> canopy::CanopyBuilder {}
 
-        /// Install key bindings for the editor gym demo.
-        pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {}
-
         impl CommandNode for EditorGym {
             fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
         }
@@ -62,22 +56,11 @@ pub mod canopy_examples {
             /// Construct a new editor gym demo.
             pub fn new() -> Self {}
 
-            /// Page the outer pane. Negative values move up; positive values move down.
-            /// @param delta Signed page delta.
-            pub fn page(&mut self, c: &mut dyn Context, delta: i32) {}
-
-            /// Scroll the outer pane by one line in the specified direction.
-            /// @param dir The direction to scroll.
-            pub fn scroll(&mut self, c: &mut dyn Context, dir: geom::Direction) {}
-
-            /// Scroll the outer pane to an absolute content position.
-            pub fn scroll_to(&mut self, c: &mut dyn Context, x: u32, y: u32) {}
-
             /// Build a positional call with typed user arguments.
             pub fn call_page(delta: i32) -> canopy::commands::CommandCall {}
 
             /// Build a positional call with typed user arguments.
-            pub fn call_scroll(dir: geom::Direction) -> canopy::commands::CommandCall {}
+            pub fn call_scroll(dir: FocusDirection) -> canopy::commands::CommandCall {}
 
             /// Build a positional call with typed user arguments.
             pub fn call_scroll_to(x: u32, y: u32) -> canopy::commands::CommandCall {}
@@ -108,62 +91,12 @@ pub mod canopy_examples {
     pub mod focusgym {
         //! Focus gym example nodes.
 
-        /// A focusable block that can split into children.
-        pub struct Block {}
-
         /// Root node for the focus gym demo.
         pub struct FocusGym;
 
         #[must_use]
         /// Queue this demo's bindings and native configuration in their builder phases.
         pub fn binding_setup(builder: canopy::CanopyBuilder) -> canopy::CanopyBuilder {}
-
-        /// Install key bindings for the focus gym demo.
-        pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {}
-
-        impl Block {
-            /// Build a positional call with typed user arguments.
-            pub fn call_add() -> canopy::commands::CommandCall {}
-
-            /// Build a positional call with typed user arguments.
-            pub fn call_flex_grow_dec() -> canopy::commands::CommandCall {}
-
-            /// Build a positional call with typed user arguments.
-            pub fn call_flex_grow_inc() -> canopy::commands::CommandCall {}
-
-            /// Build a positional call with typed user arguments.
-            pub fn call_focus() -> canopy::commands::CommandCall {}
-
-            /// Build a positional call with typed user arguments.
-            pub fn call_split() -> canopy::commands::CommandCall {}
-
-            /// Return a typed command reference for this command.
-            pub fn cmd_add() -> &'static canopy::commands::CommandSpec {}
-
-            /// Return a typed command reference for this command.
-            pub fn cmd_flex_grow_dec() -> &'static canopy::commands::CommandSpec {}
-
-            /// Return a typed command reference for this command.
-            pub fn cmd_flex_grow_inc() -> &'static canopy::commands::CommandSpec {}
-
-            /// Return a typed command reference for this command.
-            pub fn cmd_focus() -> &'static canopy::commands::CommandSpec {}
-
-            /// Return a typed command reference for this command.
-            pub fn cmd_split() -> &'static canopy::commands::CommandSpec {}
-        }
-
-        impl CommandNode for Block {
-            fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-        }
-
-        impl Widget for Block {
-            fn accept_focus(&self, ctx: &dyn ViewContext) -> bool {}
-
-            fn layout(&self) -> Layout {}
-
-            fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
-        }
 
         impl CommandNode for FocusGym {
             fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
@@ -203,9 +136,6 @@ pub mod canopy_examples {
         /// Queue this demo's bindings and native configuration in their builder phases.
         pub fn binding_setup(builder: canopy::CanopyBuilder) -> canopy::CanopyBuilder {}
 
-        /// Install key bindings for focus navigation.
-        pub fn setup_bindings(c: &mut canopy::Canopy) -> canopy::error::Result<()> {}
-
         impl Default for FontGym {
             fn default() -> Self {}
         }
@@ -230,69 +160,9 @@ pub mod canopy_examples {
         /// Root node for the frame gym demo.
         pub struct FrameGym;
 
-        /// A widget that renders a test pattern.
-        pub struct TestPattern {}
-
         #[must_use]
         /// Queue this demo's bindings and native configuration in their builder phases.
         pub fn binding_setup(builder: canopy::CanopyBuilder) -> canopy::CanopyBuilder {}
-
-        /// Install key bindings for the frame gym demo.
-        pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {}
-
-        impl CommandNode for TestPattern {
-            fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-        }
-
-        impl Default for TestPattern {
-            fn default() -> Self {}
-        }
-
-        impl TestPattern {
-            /// Construct the test pattern node.
-            pub fn new() -> Self {}
-
-            /// Page the view. Negative values move up; positive values move down.
-            /// @param delta Signed page delta.
-            pub fn page(&mut self, c: &mut dyn Context, delta: i32) {}
-
-            /// Scroll by one line in the specified direction.
-            /// @param dir The direction to scroll.
-            pub fn scroll(&mut self, c: &mut dyn Context, dir: Direction) {}
-
-            /// Scroll to an absolute content position.
-            pub fn scroll_to(&mut self, c: &mut dyn Context, x: u32, y: u32) {}
-
-            /// Build a positional call with typed user arguments.
-            pub fn call_page(delta: i32) -> canopy::commands::CommandCall {}
-
-            /// Build a positional call with typed user arguments.
-            pub fn call_scroll(dir: Direction) -> canopy::commands::CommandCall {}
-
-            /// Build a positional call with typed user arguments.
-            pub fn call_scroll_to(x: u32, y: u32) -> canopy::commands::CommandCall {}
-
-            /// Return a typed command reference for this command.
-            pub fn cmd_page() -> &'static canopy::commands::CommandSpec {}
-
-            /// Return a typed command reference for this command.
-            pub fn cmd_scroll() -> &'static canopy::commands::CommandSpec {}
-
-            /// Return a typed command reference for this command.
-            pub fn cmd_scroll_to() -> &'static canopy::commands::CommandSpec {}
-        }
-
-        impl Widget for TestPattern {
-            fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
-
-            fn canvas(&self, _view: Size, _ctx: &CanvasContext<'_>) -> Size {}
-
-            fn layout(&self) -> Layout {}
-
-            fn measure(&self, c: MeasureConstraints) -> Measurement {}
-
-            fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
-        }
 
         impl Default for FrameGym {
             fn default() -> Self {}
@@ -318,29 +188,17 @@ pub mod canopy_examples {
         #[must_use]
         /// Queue this demo's bindings and native configuration in their builder phases.
         pub fn binding_setup(builder: canopy::CanopyBuilder) -> canopy::CanopyBuilder {}
-
-        /// Configure key bindings for the image viewer.
-        pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {}
     }
 
     pub mod intervals {
         //! Intervals example nodes.
 
-        /// Counter widget that increments on a timer.
-        pub struct CounterItem {}
-
         /// Root node for the intervals demo.
         pub struct Intervals;
-
-        /// Status bar widget for the intervals demo.
-        pub struct StatusBar;
 
         #[must_use]
         /// Queue this demo's bindings and native configuration in their builder phases.
         pub fn binding_setup(builder: canopy::CanopyBuilder) -> canopy::CanopyBuilder {}
-
-        /// Install key bindings for the intervals demo.
-        pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {}
 
         impl CommandNode for Intervals {
             fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
@@ -351,9 +209,6 @@ pub mod canopy_examples {
         }
 
         impl Intervals {
-            /// Append a new list item.
-            pub fn add_item(&mut self, c: &mut dyn Context) -> Result<()> {}
-
             /// Construct a new intervals demo.
             pub fn new() -> Self {}
 
@@ -377,60 +232,17 @@ pub mod canopy_examples {
 
             fn render(&mut self, r: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
         }
-
-        impl CounterItem {
-            /// Construct a new counter item.
-            pub fn new() -> Self {}
-
-            /// Increment the counter.
-            pub fn tick(&mut self, ctx: &mut dyn Context) -> Result<()> {}
-        }
-
-        impl Default for CounterItem {
-            fn default() -> Self {}
-        }
-
-        impl Selectable for CounterItem {
-            fn set_selected(&mut self, selected: bool) {}
-        }
-
-        impl Widget for CounterItem {
-            fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
-
-            fn layout(&self) -> Layout {}
-
-            fn measure(&self, c: MeasureConstraints) -> Measurement {}
-
-            fn name(&self) -> NodeName {}
-
-            fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {}
-
-            fn render(&mut self, rndr: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
-        }
-
-        impl Widget for StatusBar {
-            fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
-        }
     }
 
     pub mod listgym {
         //! List gym example nodes.
 
-        /// Focusable list entry that renders text content.
-        pub struct ListEntry {}
-
         /// Root node for the list gym demo.
         pub struct ListGym;
-
-        /// Status bar widget for the list gym demo.
-        pub struct StatusBar;
 
         #[must_use]
         /// Queue this demo's bindings and native configuration in their builder phases.
         pub fn binding_setup(builder: canopy::CanopyBuilder) -> canopy::CanopyBuilder {}
-
-        /// Install key bindings for the list gym demo.
-        pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {}
 
         impl CommandNode for ListGym {
             fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
@@ -441,23 +253,8 @@ pub mod canopy_examples {
         }
 
         impl ListGym {
-            /// Add a new column containing a list.
-            pub fn add_column(&mut self, c: &mut dyn Context) -> Result<()> {}
-
-            /// Add an item after the current focus.
-            pub fn add_item(&mut self, c: &mut dyn Context) -> Result<()> {}
-
-            /// Add an item at the end of the list.
-            pub fn append_item(&mut self, c: &mut dyn Context) -> Result<()> {}
-
-            /// Clear all items from the list.
-            pub fn clear(&mut self, c: &mut dyn Context) -> Result<()> {}
-
             /// Construct a new list gym demo.
             pub fn new() -> Self {}
-
-            /// Delete the focused column.
-            pub fn delete_column(&mut self, c: &mut dyn Context) -> Result<()> {}
 
             /// Build a positional call with typed user arguments.
             pub fn call_add_column() -> canopy::commands::CommandCall {}
@@ -499,40 +296,6 @@ pub mod canopy_examples {
 
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
         }
-
-        impl Default for StatusBar {
-            fn default() -> Self {}
-        }
-
-        impl StatusBar {
-            /// Construct a status bar.
-            pub fn new() -> Self {}
-        }
-
-        impl Widget for StatusBar {
-            fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
-        }
-
-        impl ListEntry {
-            /// Construct a new list entry from a text widget.
-            pub fn new(text: Text) -> Self {}
-        }
-
-        impl Selectable for ListEntry {
-            fn set_selected(&mut self, selected: bool) {}
-        }
-
-        impl Widget for ListEntry {
-            fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
-
-            fn canvas(&self, view: Size, ctx: &CanvasContext<'_>) -> Size {}
-
-            fn measure(&self, c: MeasureConstraints) -> Measurement {}
-
-            fn name(&self) -> NodeName {}
-
-            fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
-        }
     }
 
     pub mod pager {
@@ -544,9 +307,6 @@ pub mod canopy_examples {
         #[must_use]
         /// Queue this demo's bindings and native configuration in their builder phases.
         pub fn binding_setup(builder: canopy::CanopyBuilder) -> canopy::CanopyBuilder {}
-
-        /// Install key bindings for the pager demo.
-        pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {}
 
         impl Loader for Pager {
             fn load(c: &mut Canopy) -> Result<()> {}
@@ -571,50 +331,12 @@ pub mod canopy_examples {
         //! This example showcases themes, effects, and modal overlays in a two-pane
         //! layout.
 
-        /// The demo content pane showing styled samples.
-        pub struct DemoContent;
-
-        /// Effect option for the selector.
-        pub struct EffectOption {
-            /// Effect display name.
-            pub name: &'static str,
-            /// Style effect applied when this option is selected.
-            pub effect: canopy::style::effects::Effect,
-        }
-
         /// Root widget for the stylegym demo.
         pub struct Stylegym {}
-
-        /// Theme option for the dropdown.
-        pub struct ThemeOption {
-            /// Theme display name.
-            pub name: &'static str,
-            /// Function to build the theme's StyleMap.
-            pub builder: fn() -> canopy::style::StyleMap,
-        }
 
         #[must_use]
         /// Queue this demo's bindings and native configuration in their builder phases.
         pub fn binding_setup(builder: canopy::CanopyBuilder) -> canopy::CanopyBuilder {}
-
-        /// Set up key bindings for the stylegym demo.
-        pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {}
-
-        impl Clone for EffectOption {
-            fn clone(&self) -> EffectOption {}
-        }
-
-        impl Label for EffectOption {
-            fn label(&self) -> &str {}
-        }
-
-        impl Clone for ThemeOption {
-            fn clone(&self) -> ThemeOption {}
-        }
-
-        impl Label for ThemeOption {
-            fn label(&self) -> &str {}
-        }
 
         impl CommandNode for Stylegym {
             fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
@@ -629,20 +351,8 @@ pub mod canopy_examples {
         }
 
         impl Stylegym {
-            /// Apply the selected effects from the selector to the demo pane.
-            pub fn apply_effects(&mut self, c: &mut dyn Context) -> Result<()> {}
-
-            /// Apply the selected theme from the dropdown.
-            pub fn apply_theme(&mut self, c: &mut dyn Context) -> Result<()> {}
-
             /// Create a new stylegym instance.
             pub fn new() -> Self {}
-
-            /// Hide the modal overlay.
-            pub fn hide_modal(&mut self, c: &mut dyn Context) -> Result<()> {}
-
-            /// Show the modal overlay.
-            pub fn show_modal(&mut self, c: &mut dyn Context) -> Result<()> {}
 
             /// Build a positional call with typed user arguments.
             pub fn call_apply_effects() -> canopy::commands::CommandCall {}
@@ -674,12 +384,6 @@ pub mod canopy_examples {
 
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
         }
-
-        impl Widget for DemoContent {
-            fn layout(&self) -> Layout {}
-
-            fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
-        }
     }
 
     pub mod termgym {
@@ -691,9 +395,6 @@ pub mod canopy_examples {
         #[must_use]
         /// Queue this demo's bindings and native configuration in their builder phases.
         pub fn binding_setup(builder: canopy::CanopyBuilder) -> canopy::CanopyBuilder {}
-
-        /// Install key bindings and styles for the terminal gym demo.
-        pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {}
 
         impl CommandNode for TermGym {
             fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
@@ -708,32 +409,8 @@ pub mod canopy_examples {
         }
 
         impl TermGym {
-            /// Activate a terminal from a sidebar row selection.
-            pub fn activate_terminal(&mut self, c: &mut dyn Context, index: usize) -> Result<()> {}
-
-            /// Close the active terminal and keep focus on the sidebar.
-            pub fn delete_terminal(&mut self, c: &mut dyn Context) -> Result<()> {}
-
             /// Construct the terminal gym demo.
             pub fn new() -> Self {}
-
-            /// Create a new terminal instance while keeping focus on the sidebar.
-            pub fn new_terminal_sidebar(&mut self, c: &mut dyn Context) -> Result<()> {}
-
-            /// Create a new terminal instance.
-            pub fn new_terminal(&mut self, c: &mut dyn Context) -> Result<()> {}
-
-            /// Focus the active terminal instance.
-            pub fn focus_active_terminal(&mut self, c: &mut dyn Context) -> Result<()> {}
-
-            /// Switch to the next terminal while keeping focus on the sidebar.
-            pub fn next_terminal_sidebar(&mut self, c: &mut dyn Context) -> Result<()> {}
-
-            /// Switch to the previous terminal while keeping focus on the sidebar.
-            pub fn prev_terminal_sidebar(&mut self, c: &mut dyn Context) -> Result<()> {}
-
-            /// Toggle focus between the terminal list and the active terminal.
-            pub fn toggle_terminal_focus(&mut self, c: &mut dyn Context) -> Result<()> {}
 
             /// Build a positional call with typed user arguments.
             pub fn call_activate_terminal(index: usize) -> canopy::commands::CommandCall {}
@@ -804,9 +481,6 @@ pub mod canopy_examples {
         #[must_use]
         /// Queue this demo's bindings and native configuration in their builder phases.
         pub fn binding_setup(builder: canopy::CanopyBuilder) -> canopy::CanopyBuilder {}
-
-        /// Install key bindings for the text gym demo.
-        pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {}
 
         impl Default for TextGym {
             fn default() -> Self {}
@@ -892,9 +566,6 @@ pub mod canopy_examples {
         impl TermDemo {
             /// Construct a terminal demo.
             pub fn new() -> Self {}
-
-            /// Cycle to the next tab.
-            pub fn next_tab(&mut self, ctx: &mut dyn Context) -> Result<()> {}
 
             /// Build a positional call with typed user arguments.
             pub fn call_next_tab() -> canopy::commands::CommandCall {}
@@ -989,9 +660,6 @@ pub mod canopy_examples {
         /// Return a short title for the editor frame.
         pub fn file_title(path: &std::path::Path) -> String {}
 
-        /// Install key bindings for the widget editor example.
-        pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {}
-
         impl Loader for WidgetEditor {
             fn load(c: &mut Canopy) -> Result<()> {}
         }
@@ -1015,8 +683,8 @@ pub mod canopy_examples {
     /// Start demo registration with Root and its first-preparation help setup.
     pub fn demo_canopy() -> canopy::CanopyBuilder {}
 
-    /// Finalize and print the Luau API definitions for a demo app.
-    pub fn print_luau_api(cnpy: &mut canopy::Canopy) -> canopy::error::Result<()> {}
+    /// Return the Luau API definitions for a built demo app.
+    pub fn print_luau_api(cnpy: &mut canopy::Canopy) -> canopy::error::Result<String> {}
 
     /// Install one demo app under a root and run the terminal loop.
     pub fn run_demo<T: 'static + Widget>(
@@ -1034,7 +702,4 @@ pub mod canopy_examples {
         options: canopy::terminal::RunOptions,
     ) -> canopy::error::Result<i32> {
     }
-
-    /// Render the shared scroll bindings for one receiver and binding path.
-    pub fn text_scroll_bindings(receiver: &str, path: &str) -> String {}
 }

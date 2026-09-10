@@ -40,10 +40,10 @@ fn native_style_and_scroll_changes_mark_publication() -> Result<()> {
     core.nodes[root].content_size = (1, 1).into();
     core.nodes[root].canvas = (10, 10).into();
     core.changes = ChangeSet::default();
-    assert!(CoreContext::new(&mut core, root).scroll_to(2, 3));
+    assert!(CoreContext::new(&mut core, root).scroll_to(2, 3).changed());
     assert!(core.changes.layout);
     core.changes = ChangeSet::default();
-    assert!(!CoreContext::new(&mut core, root).scroll_to(2, 3));
+    assert!(!CoreContext::new(&mut core, root).scroll_to(2, 3).changed());
     assert!(!core.changes.is_pending());
     CoreContext::new(&mut core, root).set_style(StyleMap::default());
     assert!(core.changes.paint);

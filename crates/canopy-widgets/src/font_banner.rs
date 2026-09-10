@@ -124,7 +124,7 @@ impl Widget for FontBanner {
         if view_rect.w == 0 || view_rect.h == 0 {
             return Ok(());
         }
-        let size = Size::new(view_rect.w, view_rect.h);
+        let size = view_rect.size();
         self.refresh_layout(size);
         let options = self.options;
         let style = &self.style;

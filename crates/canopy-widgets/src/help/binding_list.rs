@@ -3,7 +3,7 @@
 use std::mem;
 
 use canopy::{
-    Canopy, Context, EventOutcome, Loader, ViewContext, Widget, command,
+    Canopy, Context, EventOutcome, Loader, ViewContext, Widget,
     commands::CommandStatus,
     derive_commands,
     error::Result,
@@ -12,9 +12,9 @@ use canopy::{
         key::{Empty, KeyCode},
         mouse,
     },
-    geom::{Line, Rect},
+    geom::{Line, Rect, Size},
     help::{AvailableBinding, BindingSnapshot},
-    layout::{CanvasContext, Layout, Size},
+    layout::{CanvasContext, Layout, MeasureOverflow},
     render::Render,
     state::NodeName,
 };
@@ -147,7 +147,7 @@ impl Widget for BindingList {
     }
 
     fn layout(&self) -> Layout {
-        Layout::fill().overflow_y()
+        Layout::fill().overflow_y(MeasureOverflow::Unbounded)
     }
 
     fn canvas(&self, view: Size, _context: &CanvasContext) -> Size {
@@ -192,7 +192,7 @@ impl Widget for BindingList {
         let view = context.view();
         let rect = view.outer_rect_local();
         render.fill("help/panel", rect, ' ')?;
-        let lines = self.viewport_lines(Size::new(view.content.w, view.content.h));
+        let lines = self.viewport_lines(view.content.size());
         let viewport = view.view_rect();
         for (index, line) in lines
             .iter()

@@ -1,14 +1,14 @@
 use std::env;
 
 use canopy::{
-    CanopyBuilder, command, derive_commands,
-    error::Error,
+    CanopyBuilder, derive_commands,
+    error::{Error, Result},
     prelude::*,
     style::{Attr, AttrSet, solarized},
 };
 use canopy_widgets::{
-    Border, Button, Center, Frame, List, SINGLE, SINGLE_THICK, Selectable, Terminal,
-    TerminalConfig, Text, VStack,
+    Border, Button, Center, Frame, List, SINGLE, SINGLE_THICK, Selectable, Text, VStack,
+    terminal::{Terminal, TerminalConfig},
 };
 use unicode_width::UnicodeWidthStr;
 
@@ -199,11 +199,11 @@ impl TermGym {
 
         for (idx, terminal_id) in terminals.iter().enumerate() {
             let active = self.active;
-            c.with_layout_of(*terminal_id, &mut |node_layout| {
-                *node_layout = if idx == active {
+            c.with_layout_of(*terminal_id, &mut |layout_of| {
+                *layout_of = if idx == active {
                     Layout::fill()
                 } else {
-                    Layout::fill().none()
+                    Layout::fill().hidden()
                 };
             })?;
         }
@@ -294,13 +294,13 @@ impl TermGym {
 
     #[command]
     /// Create a new terminal instance.
-    pub fn new_terminal(&mut self, c: &mut dyn Context) -> Result<()> {
+    pub(crate) fn new_terminal(&mut self, c: &mut dyn Context) -> Result<()> {
         self.add_terminal(c)
     }
 
     #[command]
     /// Create a new terminal instance while keeping focus on the sidebar.
-    pub fn new_terminal_sidebar(&mut self, c: &mut dyn Context) -> Result<()> {
+    pub(crate) fn new_terminal_sidebar(&mut self, c: &mut dyn Context) -> Result<()> {
         self.add_terminal(c)?;
         self.focus_sidebar_list(c)?;
         Ok(())
@@ -308,19 +308,19 @@ impl TermGym {
 
     #[command]
     /// Switch to the next terminal while keeping focus on the sidebar.
-    pub fn next_terminal_sidebar(&mut self, c: &mut dyn Context) -> Result<()> {
+    pub(crate) fn next_terminal_sidebar(&mut self, c: &mut dyn Context) -> Result<()> {
         self.shift_terminal_in_sidebar(c, true)
     }
 
     #[command]
     /// Switch to the previous terminal while keeping focus on the sidebar.
-    pub fn prev_terminal_sidebar(&mut self, c: &mut dyn Context) -> Result<()> {
+    pub(crate) fn prev_terminal_sidebar(&mut self, c: &mut dyn Context) -> Result<()> {
         self.shift_terminal_in_sidebar(c, false)
     }
 
     #[command]
     /// Close the active terminal and keep focus on the sidebar.
-    pub fn delete_terminal(&mut self, c: &mut dyn Context) -> Result<()> {
+    pub(crate) fn delete_terminal(&mut self, c: &mut dyn Context) -> Result<()> {
         let terminals = self.terminal_ids(c)?;
         if terminals.len() <= 1 {
             return Ok(());
@@ -334,7 +334,7 @@ impl TermGym {
 
     #[command]
     /// Focus the active terminal instance.
-    pub fn focus_active_terminal(&mut self, c: &mut dyn Context) -> Result<()> {
+    pub(crate) fn focus_active_terminal(&self, c: &mut dyn Context) -> Result<()> {
         let terminals = self.terminal_ids(c)?;
         if let Some(active_id) = terminals.get(self.active).copied() {
             c.set_focus(active_id)?;
@@ -344,11 +344,11 @@ impl TermGym {
 
     #[command]
     /// Toggle focus between the terminal list and the active terminal.
-    pub fn toggle_terminal_focus(&mut self, c: &mut dyn Context) -> Result<()> {
+    pub(crate) fn toggle_terminal_focus(&self, c: &mut dyn Context) -> Result<()> {
         let terminals = self.terminal_ids(c)?;
         if terminals
             .iter()
-            .any(|terminal| c.node_is_on_focus_path(*terminal))
+            .any(|terminal| c.is_on_focus_path_of(*terminal))
         {
             self.focus_sidebar_list(c)
         } else {
@@ -358,7 +358,7 @@ impl TermGym {
 
     #[command]
     /// Activate a terminal from a sidebar row selection.
-    pub fn activate_terminal(&mut self, c: &mut dyn Context, index: usize) -> Result<()> {
+    pub(crate) fn activate_terminal(&mut self, c: &mut dyn Context, index: usize) -> Result<()> {
         self.set_active(c, index)?;
         self.focus_sidebar_list(c)?;
         Ok(())
@@ -416,13 +416,6 @@ impl Loader for TermGym {
         c.add_commands::<List<TermEntry>>()?;
         Ok(())
     }
-}
-
-/// Install key bindings and styles for the terminal gym demo.
-pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
-    setup_style(cnpy);
-    cnpy.eval_script(DEFAULT_BINDINGS)?;
-    Ok(())
 }
 
 /// Install native styles during the configuration phase.

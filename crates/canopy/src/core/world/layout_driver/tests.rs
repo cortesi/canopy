@@ -13,18 +13,21 @@ use super::{
 };
 use crate::{
     NodeId,
-    core::world::{
-        Core,
-        test_support::{
-            LayoutWidget, TestWidget, assert_error_context, attach_root_child, fixed_leaf,
-            wrap_node,
+    core::{
+        id::testing_node_id,
+        world::{
+            Core,
+            test_support::{
+                LayoutWidget, TestWidget, assert_error_context, attach_root_child, fixed_leaf,
+                wrap_node,
+            },
         },
     },
     error::{Error, NodeOperationKind, Result},
     geom::{Point, Rect, Size},
     layout::{
         Align, Constraint, Direction, Direction as LayoutDirection, Display, Edges, Layout,
-        MeasureConstraints, Measurement, Sizing,
+        MeasureConstraints, MeasureOverflow, Measurement, Sizing,
     },
     view::View,
 };
@@ -271,7 +274,7 @@ fn wrap_gap_counts_only_visible_children() -> Result<()> {
     core.set_children(parent, vec![child1, child2, child3])?;
     attach_root_child(&mut core, parent)?;
     core.set_layout_of(parent, Layout::column().gap(2))?;
-    core.set_layout_of(child2, Layout::column().none())?;
+    core.set_layout_of(child2, Layout::column().hidden())?;
     core.update_layout(Size::new(20, 20))?;
     let node = &core.nodes[parent];
     assert_eq!(node.content_size.h, 4);
@@ -356,7 +359,7 @@ proptest! {
         let parent_layout = Layout::fill().padding(Edges::all(padding));
         prop_assert!(core.set_layout_of(parent, parent_layout).is_ok());
         let child_layout = if display_none {
-            Layout::fill().none()
+            Layout::fill().hidden()
         } else {
             Layout::fill()
         };
@@ -378,7 +381,7 @@ proptest! {
             prop_assert_eq!(child_node.rect.w, 0);
             prop_assert_eq!(child_node.rect.h, 0);
             prop_assert_eq!(child_node.canvas, Size::ZERO);
-            prop_assert!(child_node.view.is_zero());
+            prop_assert!(child_node.view.is_empty());
         } else {
             prop_assert!(child_node.rect.w <= parent_node.content_size.w);
             prop_assert!(child_node.rect.h <= parent_node.content_size.h);
@@ -423,7 +426,9 @@ proptest! {
             .direction(direction);
         prop_assert_eq!(layout, equivalent);
         if overflow {
-            layout = layout.overflow_x().overflow_y();
+            layout = layout
+                .overflow_x(MeasureOverflow::Unbounded)
+                .overflow_y(MeasureOverflow::Unbounded);
         }
 
         let mut core = Core::new();
@@ -444,7 +449,7 @@ proptest! {
         core.set_layout_of(
             last,
             if remove_last {
-                Layout::column().fixed_width(2).fixed_height(1).none()
+                Layout::column().fixed_width(2).fixed_height(1).hidden()
             } else {
                 Layout::column().fixed_width(2).fixed_height(1)
             },
@@ -460,7 +465,7 @@ proptest! {
         let available_main = direction.main_size(content);
         let available_cross = direction.cross_size(content);
         let children_main = visible.iter().fold(0u32, |total, node| {
-            total.saturating_add(direction.main_size(core.nodes[*node].rect.expanse()))
+            total.saturating_add(direction.main_size(core.nodes[*node].rect.size()))
         });
         let gap_total = gap.saturating_mul(u32::try_from(visible.len().saturating_sub(1)).unwrap_or(u32::MAX));
         let group_main = children_main.saturating_add(gap_total);
@@ -473,10 +478,10 @@ proptest! {
             prop_assert_eq!(actual_main, expected_main);
             prop_assert_eq!(
                 actual_cross,
-                align_offset(direction.cross_size(rect.expanse()), available_cross, align(cross_align))
+                align_offset(direction.cross_size(rect.size()), available_cross, align(cross_align))
             );
             expected_main = expected_main
-                .saturating_add(direction.main_size(rect.expanse()))
+                .saturating_add(direction.main_size(rect.size()))
                 .saturating_add(gap);
         }
     }
@@ -974,14 +979,14 @@ fn measure_errors_include_operation_node_and_path() -> Result<()> {
     let mut core = Core::new();
     let child = fixed_leaf(&mut core, 1, 1)?;
     attach_root_child(&mut core, child)?;
-    let path = core.node_path(core.root, child).to_string();
+    let path = core.path_of(core.root, child).to_string();
     let constraints = MeasureConstraints {
         width: Constraint::AtMost(1),
         height: Constraint::AtMost(1),
     };
 
     let error = core
-        .with_widget_mut(child, |_widget, core| {
+        .with_widget_dyn_mut(child, |_widget, core| {
             let mut pass = LayoutPass::new(core);
             pass.measure_cached(child, constraints)
         })?
@@ -1003,10 +1008,10 @@ fn canvas_errors_include_operation_node_and_path() -> Result<()> {
     let mut core = Core::new();
     let child = fixed_leaf(&mut core, 1, 1)?;
     attach_root_child(&mut core, child)?;
-    let path = core.node_path(core.root, child).to_string();
+    let path = core.path_of(core.root, child).to_string();
 
     let error = core
-        .with_widget_mut(child, |_widget, core| {
+        .with_widget_dyn_mut(child, |_widget, core| {
             let pass = LayoutPass::new(core);
             pass.compute_canvas(child, Size::new(1, 1))
         })?
@@ -1047,26 +1052,26 @@ fn excluded_subtrees_clear_previously_computed_layout() -> Result<()> {
         core.update_layout(Size::new(10, 10))?;
         core.nodes[child].scroll = Point { x: 4, y: 5 };
         core.update_layout(Size::new(10, 10))?;
-        assert!(!core.nodes[grandchild].view.is_zero());
+        assert!(!core.nodes[grandchild].view.is_empty());
         assert_eq!(core.nodes[child].scroll, Point { x: 4, y: 5 });
         if display_none {
-            core.set_layout_of(parent, Layout::fill().none())?;
+            core.set_layout_of(parent, Layout::fill().hidden())?;
         } else {
             core.set_hidden(parent, true)?;
         }
         core.update_layout(Size::new(10, 10))?;
         for id in [parent, child, grandchild] {
             let node = &core.nodes[id];
-            assert_eq!(node.rect, Rect::zero());
+            assert_eq!(node.rect, Rect::ZERO);
             assert_eq!(node.content_size, Size::ZERO);
             assert_eq!(node.canvas, Size::ZERO);
-            assert_eq!(node.scroll, Point::zero());
+            assert_eq!(node.scroll, Point::ZERO);
             assert_eq!(node.view, View::default());
         }
         core.set_hidden(parent, false)?;
         core.set_layout_of(parent, Layout::fill())?;
         core.update_layout(Size::new(10, 10))?;
-        assert!(!core.nodes[grandchild].view.is_zero());
+        assert!(!core.nodes[grandchild].view.is_empty());
         assert_eq!(core.nodes[child].canvas, Size::new(50, 50));
     }
     Ok(())
@@ -1147,14 +1152,18 @@ fn bounded_descendant_stops_inherited_measurement_overflow() -> Result<()> {
     use crate::layout::MeasureOverflow;
 
     let mut core = Core::new();
-    let parent = core.create_detached(LayoutWidget(Layout::column().overflow_x().overflow_y()))?;
+    let parent = core.create_detached(LayoutWidget(
+        Layout::column()
+            .overflow_x(MeasureOverflow::Unbounded)
+            .overflow_y(MeasureOverflow::Unbounded),
+    ))?;
     let (widget, calls) = TestWidget::new(|constraints| constraints.clamp(Size::new(100, 100)));
     let child = core.create_detached(widget)?;
     core.set_layout_of(
         child,
         Layout::column()
-            .measure_overflow_x(MeasureOverflow::Bounded)
-            .measure_overflow_y(MeasureOverflow::Bounded),
+            .overflow_x(MeasureOverflow::Bounded)
+            .overflow_y(MeasureOverflow::Bounded),
     )?;
     core.set_children(parent, vec![child])?;
     attach_root_child(&mut core, parent)?;
@@ -1167,7 +1176,7 @@ fn bounded_descendant_stops_inherited_measurement_overflow() -> Result<()> {
             .iter()
             .all(|c| c.width != Constraint::Unbounded && c.height != Constraint::Unbounded)
     );
-    assert_eq!(core.nodes[child].rect.expanse(), Size::new(10, 5));
+    assert_eq!(core.nodes[child].rect.size(), Size::new(10, 5));
     Ok(())
 }
 
@@ -1184,7 +1193,7 @@ fn structural_failure_restores_layout_base_and_override() -> Result<()> {
     let result: Result<()> = core.with_tree_edit("layout rollback test", |core| {
         core.replace_subtree(node, LayoutWidget(Layout::row()))?;
         core.set_layout_override_of(node, LayoutOverride::new().fixed_height(7))?;
-        Err(Error::NodeNotFound(NodeId::default()))
+        Err(Error::NodeNotFound(testing_node_id()))
     });
     assert!(result.is_err());
     assert_eq!(core.nodes[node].base_layout, base);

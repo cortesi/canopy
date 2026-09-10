@@ -1,7 +1,8 @@
 use canopy::geom::Point;
 use unicode_segmentation::UnicodeSegmentation;
 
-use super::{LineChange, TextBuffer, TextPosition, WrapMode, display_width};
+use super::{WrapMode, display_width};
+use crate::text_buffer::{LineChange, TextBuffer, TextPosition};
 
 /// A wrapped segment of a logical line.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -368,7 +369,7 @@ pub fn layout_line(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::editor::TextRange;
+    use crate::text_buffer::TextRange;
 
     #[test]
     fn wrap_layout_splits_lines() {

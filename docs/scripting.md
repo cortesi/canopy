@@ -189,9 +189,8 @@ An explicit `config(path)` call selects that local file for execution.
 
 Trusted scripts can exercise the application's exposed native actions,
 including filesystem and database effects. VM limits bound script execution;
-they do not restrict the authority of those native actions. MCP launch options
-likewise default to `AutomationPolicy::Disabled`; explicit MCP modes select
-`TrustedLocal`. A trusted socket requires an appropriate directory and host
+they do not restrict the authority of those native actions. Explicit MCP launch
+modes opt into trusted-local automation. A trusted socket requires an appropriate directory and host
 filesystem permissions. Raw `serve_uds` is an explicitly trusted low-level API.
 
 Canopy can mount existing user and project directories at `@user` and

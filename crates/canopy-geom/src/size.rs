@@ -14,7 +14,7 @@ impl Size {
     pub const ZERO: Self = Self { w: 0, h: 0 };
 
     /// Create a new size with the given width and height.
-    pub fn new(w: u32, h: u32) -> Self {
+    pub const fn new(w: u32, h: u32) -> Self {
         Self { w, h }
     }
 

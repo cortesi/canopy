@@ -1,7 +1,6 @@
 //! Declared application state contracts and execution identities.
 
 use std::{
-    ops::Deref,
     process,
     sync::{
         Arc,
@@ -65,9 +64,9 @@ impl Default for Viewport {
 impl Viewport {
     /// Reject empty or excessive headless dimensions before constructing an
     /// app.
-    pub fn validate(self) -> CanopyResult<()> {
+    pub fn validate(self) -> crate::Result<()> {
         if self.width == 0 || self.height == 0 {
-            return Err(Error::Invalid("viewport dimensions must be nonzero".into()));
+            return Err(Error::Invalid("viewport dimensions must be nonzero".into()).into());
         }
         RenderLimits::default().cell_count(self.into())?;
         Ok(())
@@ -98,15 +97,6 @@ pub struct AppMetadata {
     pub reset: ResetPolicy,
 }
 
-impl Default for AppMetadata {
-    fn default() -> Self {
-        Self {
-            app: "canopy".into(),
-            reset: ResetPolicy::External,
-        }
-    }
-}
-
 /// Shared application constructor with an explicit domain-state declaration.
 #[derive(Clone)]
 pub struct AppFactory {
@@ -117,10 +107,27 @@ pub struct AppFactory {
 }
 
 impl AppFactory {
-    /// Declare application identity and reset behavior.
-    pub fn with_metadata(mut self, metadata: AppMetadata) -> Self {
-        self.metadata = metadata;
-        self
+    /// Declare application metadata and the constructor for built instances.
+    pub fn new<F>(metadata: AppMetadata, factory: F) -> Self
+    where
+        F: Fn() -> crate::Result<Canopy> + Send + Sync + 'static,
+    {
+        Self {
+            factory: Arc::new(factory),
+            metadata,
+        }
+    }
+
+    /// Build one fully configured application instance.
+    pub fn build(&self) -> crate::Result<Canopy> {
+        let canopy = (self.factory)()?;
+        if !canopy.is_api_finalized() {
+            return Err(Error::InvalidOperation(
+                "AppFactory must return an application built by CanopyBuilder".into(),
+            )
+            .into());
+        }
+        Ok(canopy)
     }
 
     /// Read the application declaration without constructing its UI.
@@ -129,27 +136,53 @@ impl AppFactory {
     }
 }
 
-impl Deref for AppFactory {
-    type Target = dyn Fn() -> crate::Result<Canopy> + Send + Sync;
-    fn deref(&self) -> &Self::Target {
-        self.factory.as_ref()
-    }
-}
-
-impl AsRef<dyn Fn() -> crate::Result<Canopy> + Send + Sync> for AppFactory {
-    fn as_ref(&self) -> &(dyn Fn() -> crate::Result<Canopy> + Send + Sync + 'static) {
-        self.factory.as_ref()
-    }
-}
-
-/// Wrap a constructor with a conservative external-state declaration.
-pub fn app_factory<F>(factory: F) -> AppFactory
+/// Construct an isolated factory with stable metadata for crate tests.
+#[cfg(test)]
+pub fn test_app_factory<F>(factory: F) -> AppFactory
 where
     F: Fn() -> crate::Result<Canopy> + Send + Sync + 'static,
 {
-    AppFactory {
-        factory: Arc::new(factory),
-        metadata: AppMetadata::default(),
+    AppFactory::new(
+        AppMetadata {
+            app: "canopy-test".into(),
+            reset: ResetPolicy::Isolated,
+        },
+        factory,
+    )
+}
+
+#[cfg(test)]
+impl AppMetadata {
+    pub(crate) fn test() -> Self {
+        Self {
+            app: "canopy-test".into(),
+            reset: ResetPolicy::Isolated,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn factory_rejects_an_application_that_bypasses_the_builder() {
+        let factory = AppFactory::new(
+            AppMetadata {
+                app: "test".into(),
+                reset: ResetPolicy::Isolated,
+            },
+            || Ok(Canopy::new()),
+        );
+        let error = match factory.build() {
+            Ok(_) => panic!("raw Canopy should be rejected"),
+            Err(error) => error,
+        };
+        assert!(
+            error
+                .to_string()
+                .contains("application built by CanopyBuilder")
+        );
     }
 }
 
@@ -163,8 +196,9 @@ pub struct ExecutionMetadata {
     /// Opaque identity of the application session, not a durable node
     /// reference.
     pub session_id: String,
-    /// Evaluated or requested viewport.
-    pub viewport: Viewport,
+    /// Evaluated or requested viewport, absent when live metadata could not be
+    /// observed.
+    pub viewport: Option<Viewport>,
     /// Effective domain reset contract.
     pub reset: ResetPolicy,
     /// Generated API identity, absent only when preparation could not obtain
@@ -195,7 +229,7 @@ impl ExecutionMetadata {
             app: app.app.clone(),
             execution: ExecutionMode::FreshAppPerEval,
             session_id: session_id(),
-            viewport,
+            viewport: Some(viewport),
             reset: app.reset,
             api_digest: None,
         }
@@ -215,7 +249,7 @@ pub struct LiveContext {
 
 impl LiveContext {
     /// Create one context per running app session, then clone it for requests.
-    pub fn new(app: AppMetadata) -> Self {
+    pub(crate) fn new(app: AppMetadata) -> Self {
         Self {
             app,
             session_id: session_id(),
@@ -224,7 +258,7 @@ impl LiveContext {
     }
 
     /// Record a successful explicit domain fixture application.
-    pub fn fixture_applied(&self) {
+    pub(crate) fn fixture_applied(&self) {
         self.fixture_applied.store(true, Ordering::Relaxed);
     }
 
@@ -234,10 +268,7 @@ impl LiveContext {
             app: self.app.app.clone(),
             execution: ExecutionMode::LiveSession,
             session_id: self.session_id.clone(),
-            viewport: Viewport {
-                width: 0,
-                height: 0,
-            },
+            viewport: None,
             reset: if self.fixture_applied.load(Ordering::Relaxed) {
                 ResetPolicy::Fixture
             } else {
@@ -252,7 +283,7 @@ impl LiveContext {
     pub(crate) fn metadata(&self, canopy: &Canopy) -> CanopyResult<ExecutionMetadata> {
         let mut metadata = self.unavailable_metadata();
         if let Some(snapshot) = canopy.snapshot() {
-            metadata.viewport = snapshot.viewport.into();
+            metadata.viewport = Some(snapshot.viewport.into());
         }
         metadata.api_digest = Some(stable_digest(canopy.script_api()?));
         Ok(metadata)

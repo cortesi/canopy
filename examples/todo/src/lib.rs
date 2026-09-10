@@ -5,14 +5,19 @@ use std::{collections::HashMap, fmt::Display, path::Path};
 
 use anyhow::Result as AnyResult;
 use canopy::{
-    CanopyBuilder, InteractionToken, ModalBindings, ModalOptions, command, commands::CommandStatus,
-    derive_commands, error::Error, layout::LayoutOverride, prelude::*, style::solarized,
+    CanopyBuilder, InteractionToken, ModalBindings, ModalOptions,
+    commands::CommandStatus,
+    derive_commands,
+    error::{Error, Result},
+    layout::LayoutOverride,
+    prelude::*,
+    style::solarized,
 };
 use canopy_widgets::{Center, Frame, Input, List, Root, Selectable, ValueExposure};
 
 // Typed keys for keyed children
-canopy::key!(MainSlot: MainContent);
-canopy::key!(ModalSlot: Center);
+canopy::slot!(MainSlot: MainContent);
+canopy::slot!(ModalSlot: Center);
 
 pub mod store;
 
@@ -40,7 +45,6 @@ impl Selectable for TodoEntry {
     }
 }
 
-#[derive_commands]
 impl TodoEntry {
     /// Create a new todo entry widget.
     pub(crate) fn new(t: store::Todo) -> Self {
@@ -163,7 +167,7 @@ impl Todo {
 
     /// Build the Todo widget subtree once.
     fn ensure_tree(&mut self, c: &mut dyn Context) -> Result<()> {
-        if c.has_child::<MainSlot>()? {
+        if c.has_slot::<MainSlot>()? {
             if !self.pending.is_empty() {
                 self.reconcile_items(c, self.pending.clone())?;
                 self.pending.clear();
@@ -199,7 +203,7 @@ impl Todo {
 
     /// Build the add-item modal once.
     fn ensure_modal(&self, c: &mut dyn Context) -> Result<()> {
-        if c.has_child::<ModalSlot>()? {
+        if c.has_slot::<ModalSlot>()? {
             return Ok(());
         }
 
@@ -248,7 +252,7 @@ impl Todo {
                 keys,
                 |key| Ok(TodoEntry::new(items[key].clone())),
                 |key, id, ctx| {
-                    ctx.with_widget(id, |entry: &mut TodoEntry, _| {
+                    ctx.with_widget_mut(id, |entry: &mut TodoEntry, _| {
                         entry.todo = items[key].clone();
                         Ok(())
                     })
@@ -264,9 +268,9 @@ impl Todo {
         F: FnOnce(&mut List<TodoEntry, i64>, &mut dyn Context) -> Result<R>,
     {
         let id = c
-            .find_key(c.node_id(), "todo.list")?
+            .find_identity(c.node_id(), "todo.list")?
             .ok_or_else(|| Error::Internal("todo list is not initialized".into()))?;
-        c.with_node(id, f)
+        c.with_widget_mut(id, f)
     }
 
     /// Run a mutation against the unique modal input.
@@ -275,9 +279,9 @@ impl Todo {
         F: FnOnce(&mut Input) -> Result<R>,
     {
         let id = c
-            .find_key(c.node_id(), "todo.input")?
+            .find_identity(c.node_id(), "todo.input")?
             .ok_or_else(|| Error::Internal("todo input is not initialized".into()))?;
-        c.with_node(id, |input: &mut Input, _| f(input))
+        c.with_widget_mut(id, |input: &mut Input, _| f(input))
     }
 
     /// Replace list state and set the requested modal state for a fixture.
@@ -322,11 +326,11 @@ impl Todo {
             Ok(())
         })?;
         let input = c
-            .find_key(c.node_id(), "todo.input")?
+            .find_identity(c.node_id(), "todo.input")?
             .ok_or_else(|| Error::Internal("todo input is not initialized".into()))?;
         if !self.adder.is_some_and(|token| c.modal_is_open(token)) {
-            let modal = c.get_child::<ModalSlot>()?.expect("modal initialized");
-            let main = c.get_child::<MainSlot>()?.expect("main initialized");
+            let modal = c.get_slot::<ModalSlot>()?.expect("modal initialized");
+            let main = c.get_slot::<MainSlot>()?.expect("main initialized");
             self.adder = Some(c.open_modal(ModalOptions {
                 owner: c.node_id(),
                 modal: modal.into(),
@@ -342,10 +346,10 @@ impl Todo {
 
     /// Delete eligibility follows the current list selection.
     fn can_delete(&self, ctx: &dyn ViewContext) -> Result<CommandStatus> {
-        let Some(list) = ctx.find_key(ctx.node_id(), "todo.list")? else {
+        let Some(list) = ctx.find_identity(ctx.node_id(), "todo.list")? else {
             return Ok(CommandStatus::Disabled("No item selected".into()));
         };
-        ctx.with_widget_read(ctx.typed_id::<List<TodoEntry, i64>>(list)?, |list| {
+        ctx.with_widget(ctx.typed_id::<List<TodoEntry, i64>>(list)?, |list| {
             Ok(if list.selected_item().is_some() {
                 CommandStatus::Enabled
             } else {
@@ -483,8 +487,8 @@ fn store_error(error: impl Display) -> Error {
     Error::Invalid(error.to_string())
 }
 
-/// Register and finalize the todo application API with default bindings.
-pub fn setup_app() -> Result<Canopy> {
+/// Build the todo command and fixture API without assembling a widget tree.
+pub fn api_app() -> Result<Canopy> {
     app_builder(None).build()
 }
 
@@ -554,23 +558,13 @@ fn app_builder(config: Option<&Path>) -> CanopyBuilder {
     }
 }
 
-/// Create a fully configured todo application backed by `db_path`.
-pub fn create_app(db_path: &str) -> AnyResult<Canopy> {
-    create_app_with_config(db_path, None)
-}
-
-/// Create a todo canopy app with optional user config.
-pub fn create_app_with_config(db_path: &str, config: Option<&Path>) -> AnyResult<Canopy> {
-    create_app_with_store(store::Store::open(db_path)?, config)
-}
-
 /// Create a todo application with an explicit database and optional user
 /// config.
-pub fn create_app_with_store(store: store::Store, config: Option<&Path>) -> AnyResult<Canopy> {
+pub fn create_app(store: store::Store, config: Option<&Path>) -> AnyResult<Canopy> {
     Ok(app_builder(config)
         .assemble(move |cnpy| {
             let todo = Todo::new(store).map_err(store_error)?;
-            Root::install_app(cnpy, todo)?;
+            Root::new().install(cnpy, todo)?;
             Ok(())
         })
         .build()?)
@@ -647,10 +641,10 @@ mod tests {
         let store = store::Store::open(":memory:")?;
         let first = store.add_todo("first")?;
         let second = store.add_todo("second")?;
-        let mut canopy = create_app_with_store(store, None)?;
+        let mut canopy = create_app(store, None)?;
         with_todo(&mut canopy, |todo, ctx| {
             let scope = ctx.node_id();
-            let list = ctx.find_key(scope, "todo.list")?.expect("keyed list");
+            let list = ctx.find_identity(scope, "todo.list")?.expect("keyed list");
             let frame = ctx.parent_of(list).expect("list frame");
             ctx.edit_structure(&mut |ctx| {
                 let wrapper = ctx.create_detached(Frame::new())?;
@@ -658,7 +652,7 @@ mod tests {
                 ctx.attach(wrapper.into(), list)?;
                 ctx.attach(frame, wrapper.into())
             })?;
-            assert_eq!(ctx.find_key(scope, "todo.list")?, Some(list));
+            assert_eq!(ctx.find_identity(scope, "todo.list")?, Some(list));
             let first_node = todo.with_list(ctx, |list, ctx| {
                 list.select_key(ctx, &first.id)?;
                 Ok(list.selected_item().expect("first entry"))
@@ -671,7 +665,9 @@ mod tests {
                 Ok(())
             })?;
             todo.open_adder(ctx)?;
-            let input = ctx.find_key(scope, "todo.input")?.expect("keyed input");
+            let input = ctx
+                .find_identity(scope, "todo.input")?
+                .expect("keyed input");
             assert_eq!(ctx.focused_node(), Some(input));
             todo.close_adder(ctx)
         })?;
@@ -680,9 +676,10 @@ mod tests {
 
     #[test]
     fn repeated_modal_opening_keeps_one_dimming_effect() -> AnyResult<()> {
-        let mut harness = Harness::from_canopy(create_app(":memory:")?, Size::new(80, 24))?;
+        let store = store::Store::open(":memory:")?;
+        let mut harness = Harness::from_canopy(create_app(store, None)?, Size::new(80, 24))?;
         with_todo(&mut harness.canopy, |_, ctx| {
-            let main = ctx.get_child::<MainSlot>()?.expect("main initialized");
+            let main = ctx.get_slot::<MainSlot>()?.expect("main initialized");
             ctx.push_effect(main.into(), effects::brightness(0.8))?;
             Ok(())
         })?;

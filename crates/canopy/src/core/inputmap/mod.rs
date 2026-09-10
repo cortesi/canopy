@@ -4,7 +4,7 @@ use std::{cmp::Ordering, collections::HashSet, fmt};
 
 use crate::{
     ModalBindings,
-    commands::{CommandAction, CommandInvocation},
+    commands::CommandAction,
     core::NodeId,
     error::{Error, Result},
     event::{key::Key, mouse::Mouse},
@@ -110,8 +110,8 @@ impl BindingScope {
 /// Options shared by native and scripted application bindings.
 #[derive(Clone, Debug)]
 pub struct BindingOptions {
-    /// Path selector, with an empty string matching the current route.
-    pub path: String,
+    /// Optional validated path selector. Omission matches the current route.
+    pub path: Option<PathFilter>,
     /// Application scope and optional named mode.
     pub scope: BindingScope,
     /// Required user-facing description.
@@ -223,6 +223,24 @@ impl InputSpec {
     }
 }
 
+impl From<Key> for InputSpec {
+    fn from(key: Key) -> Self {
+        Self::Key(key)
+    }
+}
+
+impl From<char> for InputSpec {
+    fn from(key: char) -> Self {
+        Self::Key(key.into())
+    }
+}
+
+impl From<Mouse> for InputSpec {
+    fn from(mouse: Mouse) -> Self {
+        Self::Mouse(mouse)
+    }
+}
+
 impl fmt::Display for InputSpec {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -298,10 +316,11 @@ impl InputMap {
         options: BindingOptions,
         target: BindingTarget,
     ) -> Result<(BindingId, Vec<(BindingId, BindingTarget)>)> {
-        validate_application_scope(&options.scope, &options.path)?;
+        let path_filter = options.path.as_ref().map_or("", PathFilter::as_str);
+        validate_application_scope(&options.scope, path_filter)?;
         validate_description(&options.description)?;
         validate_phase(input, options.phase)?;
-        let path_matcher = PathFilter::new(&options.path)?;
+        let path_matcher = options.path.clone().unwrap_or(PathFilter::new("")?);
         let id = self.allocate_binding_id()?;
         let insertion_id = self.allocate_insertion_id()?;
         let input = input.normalize();
@@ -309,7 +328,7 @@ impl InputMap {
             input,
             &BindingSelector {
                 scope: Some(options.scope.clone()),
-                path_filter: Some(&options.path),
+                path_filter: Some(path_filter),
             },
         );
         self.records.push(BindingRecord {
@@ -331,33 +350,11 @@ impl InputMap {
     pub fn bind_framework(
         &mut self,
         group: FrameworkBindingGroup,
-        input: InputSpec,
-        path_filter: &str,
-        description: &str,
-        command: CommandInvocation,
-    ) -> Result<BindingId> {
-        self.bind_framework_with_options(
-            group,
-            input,
-            BindingOptions {
-                path: path_filter.to_string(),
-                scope: BindingScope::Exclusive(group),
-                description: description.to_string(),
-                source: None,
-                phase: None,
-            },
-            command,
-        )
-    }
-
-    /// Store an idempotent framework binding with an explicit phase and source.
-    pub fn bind_framework_with_options(
-        &mut self,
-        group: FrameworkBindingGroup,
-        input: InputSpec,
+        input: impl Into<InputSpec>,
         options: BindingOptions,
-        command: CommandInvocation,
+        command: CommandAction,
     ) -> Result<BindingId> {
+        let input = input.into();
         validate_description(&options.description)?;
         validate_phase(input, options.phase)?;
         let scope = BindingScope::Exclusive(group);
@@ -366,13 +363,9 @@ impl InputMap {
                 "framework binding scope must match its exclusive group".to_string(),
             ));
         }
-        let path_filter = options.path.as_str();
-        let path_matcher = PathFilter::new(path_filter)?;
+        let path_filter = options.path.as_ref().map_or("", PathFilter::as_str);
+        let path_matcher = options.path.clone().unwrap_or(PathFilter::new("")?);
         let input = input.normalize();
-        let command = CommandAction {
-            invocation: command,
-            target: None,
-        };
         if let Some(existing) = self.records.iter().find(|record| {
             record.owner == BindingOwner::Framework(group)
                 && record.input == input

@@ -3,10 +3,11 @@
 use std::path::Path;
 
 use canopy::{
-    Canopy, Context, Loader, ViewContext, Widget, command,
+    Canopy, Context, FocusDirection, Loader, ViewContext, Widget,
     commands::ZoomDirection,
-    derive_commands, error as canopy_error,
-    geom::{Direction, Point, Rect, Size},
+    derive_commands,
+    error::{Error, Result},
+    geom::{Point, Rect, Size},
     layout::{CanvasContext, Layout},
     render::Render,
     style::{AttrSet, Color, Style},
@@ -293,7 +294,7 @@ impl ImageView {
         origin: Point,
         offset: (f32, f32),
         zoom: f32,
-    ) -> canopy_error::Result<()> {
+    ) -> Result<()> {
         let (offset_x, offset_y) = offset;
         let bounds = Rect::new(origin.x, origin.y, view.w, view.h);
 
@@ -338,9 +339,9 @@ impl ImageView {
     }
 
     /// Create a new image view widget from a file path.
-    pub fn from_path(path: impl AsRef<Path>) -> canopy_error::Result<Self> {
+    pub fn from_path(path: impl AsRef<Path>) -> Result<Self> {
         let image = image::open(path.as_ref())
-            .map_err(|err| canopy_error::Error::Invalid(format!("image error: {err}")))?;
+            .map_err(|err| Error::Invalid(format!("image error: {err}")))?;
         let rgba = image.to_rgba8();
         Ok(Self::new(&rgba))
     }
@@ -348,7 +349,7 @@ impl ImageView {
     /// Zoom around the view center.
     /// @param dir The zoom direction.
     #[command]
-    pub fn zoom(&mut self, ctx: &mut dyn Context, dir: ZoomDirection) -> canopy_error::Result<()> {
+    pub fn zoom(&mut self, ctx: &mut dyn Context, dir: ZoomDirection) -> Result<()> {
         let view = ctx.view();
         let view_size = view.content_size();
         self.zoom = self.effective_zoom(view_size);
@@ -357,7 +358,7 @@ impl ImageView {
             ZoomDirection::In => ZOOM_STEP,
             ZoomDirection::Out => 1.0 / ZOOM_STEP,
         };
-        let scroll = self.zoom_by(view_size, view.tl, factor);
+        let scroll = self.zoom_by(view_size, view.scroll, factor);
         ctx.scroll_to(scroll.x, scroll.y);
         Ok(())
     }
@@ -365,19 +366,19 @@ impl ImageView {
     /// Pan by one step in the specified direction.
     /// @param dir The pan direction.
     #[command]
-    pub fn pan(&mut self, ctx: &mut dyn Context, dir: Direction) -> canopy_error::Result<()> {
+    pub fn pan(&mut self, ctx: &mut dyn Context, dir: FocusDirection) -> Result<()> {
         self.auto_fit = false;
         match dir {
-            Direction::Left => {
+            FocusDirection::Left | FocusDirection::Prev => {
                 ctx.scroll_by(-PAN_STEP_COLUMNS, 0);
             }
-            Direction::Right => {
+            FocusDirection::Right | FocusDirection::Next => {
                 ctx.scroll_by(PAN_STEP_COLUMNS, 0);
             }
-            Direction::Up => {
+            FocusDirection::Up => {
                 ctx.scroll_by(0, -PAN_STEP_ROWS);
             }
-            Direction::Down => {
+            FocusDirection::Down => {
                 ctx.scroll_by(0, PAN_STEP_ROWS);
             }
         }
@@ -392,7 +393,7 @@ impl Widget for ImageView {
     }
 
     fn canvas(&self, view: Size, _ctx: &CanvasContext) -> Size {
-        let view_size = Size::new(view.w, view.h);
+        let view_size = view;
         let zoom = self.effective_zoom(view_size);
         let width = (self.image_width_f32() * zoom).ceil() as u32;
         let height = ((self.image_height_f32() * zoom) / 2.0).ceil() as u32;
@@ -400,7 +401,7 @@ impl Widget for ImageView {
     }
 
     /// Render the current image view into the terminal buffer.
-    fn render(&mut self, render: &mut Render, ctx: &dyn ViewContext) -> canopy_error::Result<()> {
+    fn render(&mut self, render: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
         let view_rect = view.view_rect();
         if view_rect.w == 0 || view_rect.h == 0 {
@@ -422,7 +423,7 @@ impl Widget for ImageView {
 
 impl Loader for ImageView {
     /// Register commands for the image viewer widget.
-    fn load(cnpy: &mut Canopy) -> canopy_error::Result<()> {
+    fn load(cnpy: &mut Canopy) -> Result<()> {
         cnpy.add_commands::<Self>()?;
         Ok(())
     }
@@ -433,7 +434,10 @@ mod tests {
     use std::sync::Arc;
 
     use canopy::{
-        style::{Effect, GradientSpec, GradientStop, Paint, StyleEffect, effects},
+        style::{
+            GradientSpec, GradientStop, Paint,
+            effects::{self, Effect, StyleEffect},
+        },
         testing::harness::Harness,
     };
     use image::Rgba;
@@ -444,7 +448,7 @@ mod tests {
         Size::new(width, height)
     }
 
-    fn render_effect_image(effects: Vec<Effect>) -> canopy_error::Result<canopy::TermBuf> {
+    fn render_effect_image(effects: Vec<Effect>) -> Result<canopy::TermBuf> {
         let image = RgbaImage::from_fn(2, 2, |x, y| {
             if y == 0 {
                 Rgba([200, 100, 40, if x == 0 { 255 } else { 128 }])
@@ -467,7 +471,7 @@ mod tests {
     }
 
     #[test]
-    fn image_cells_inherit_effects_once_on_both_pixel_channels() -> canopy_error::Result<()> {
+    fn image_cells_inherit_effects_once_on_both_pixel_channels() -> Result<()> {
         let plain = render_effect_image(vec![])?;
         let dimmed = render_effect_image(vec![effects::brightness(0.5), effects::bold()])?;
         for x in 0..2 {
@@ -546,7 +550,7 @@ mod tests {
     }
 
     #[test]
-    fn image_effects_can_replace_solid_paint_with_a_gradient() -> canopy_error::Result<()> {
+    fn image_effects_can_replace_solid_paint_with_a_gradient() -> Result<()> {
         let buf = render_effect_image(vec![Arc::new(PixelGradient)])?;
         for x in 0..2 {
             let cell = buf.get(Point { x, y: 0 }).expect("pixel cell");

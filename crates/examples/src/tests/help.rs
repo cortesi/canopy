@@ -6,6 +6,21 @@ use canopy_widgets::Root;
 
 use crate::{demo_canopy, termgym, widget_editor};
 
+fn wrapped_harness<W>(app: W, setup: fn(CanopyBuilder) -> CanopyBuilder) -> Result<Harness>
+where
+    W: Widget + Loader + 'static,
+{
+    let canopy = setup(demo_canopy().configure(W::load))
+        .assemble(move |canopy| {
+            Root::new().install(canopy, app)?;
+            Ok(())
+        })
+        .build()?;
+    let mut harness = Harness::from_canopy(canopy, Size::new(80, 24))?;
+    harness.render()?;
+    Ok(harness)
+}
+
 #[test]
 fn demo_api_build_does_not_assemble_or_publish() -> Result<()> {
     let canopy = termgym::binding_setup(demo_canopy().configure(termgym::TermGym::load)).build()?;
@@ -16,21 +31,6 @@ fn demo_api_build_does_not_assemble_or_publish() -> Result<()> {
             .is_empty()
     );
     Ok(())
-}
-
-fn root_harness<W>(app: W, setup: fn(CanopyBuilder) -> CanopyBuilder) -> Result<Harness>
-where
-    W: Widget + Loader + 'static,
-{
-    let canopy = setup(demo_canopy().configure(W::load))
-        .assemble(move |canopy| {
-            Root::install_app(canopy, app)?;
-            Ok(())
-        })
-        .build()?;
-    let mut harness = Harness::from_canopy(canopy, Size::new(80, 24))?;
-    harness.render()?;
-    Ok(harness)
 }
 
 fn add_scroll_rows(canopy: &mut canopy::Canopy) -> Result<()> {
@@ -51,7 +51,7 @@ fn add_scroll_rows(canopy: &mut canopy::Canopy) -> Result<()> {
         end)
         "#,
     );
-    canopy.eval_script(&source)
+    canopy.eval_script(&source).map(|_| ())
 }
 
 fn prove_help_flow(mut harness: Harness) -> Result<()> {
@@ -152,13 +152,13 @@ fn prove_help_flow(mut harness: Harness) -> Result<()> {
 
 #[test]
 fn termgym_help_opens_over_a_consuming_terminal_and_restores_input() -> Result<()> {
-    let harness = root_harness(termgym::TermGym::new(), termgym::binding_setup)?;
+    let harness = wrapped_harness(termgym::TermGym::new(), termgym::binding_setup)?;
     prove_help_flow(harness)
 }
 
 #[test]
 fn widget_editor_help_opens_over_a_consuming_editor_and_restores_input() -> Result<()> {
-    let harness = root_harness(
+    let harness = wrapped_harness(
         widget_editor::WidgetEditor::new("fn main() {}\n", "rs", "test.rs"),
         widget_editor::binding_setup,
     )?;

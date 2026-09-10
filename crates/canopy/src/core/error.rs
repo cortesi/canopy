@@ -1,5 +1,7 @@
 use std::{error::Error as StdError, fmt, io, result::Result as StdResult, sync::mpsc};
 
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{commands::CommandError, core::id::NodeId, geom, layout::LayoutValidationError};
@@ -78,7 +80,8 @@ impl fmt::Display for NodeOperationKind {
 }
 
 /// Stable category for a structured script or command failure.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub enum ScriptErrorKind {
     /// Cooperative execution timeout.
     Timeout,
@@ -95,6 +98,7 @@ pub enum ScriptErrorKind {
     /// Operation requires an unwound widget callback boundary.
     InvalidPhase,
     /// Unclassified Canopy failure.
+    #[serde(rename = "canopy_error")]
     Canopy,
     /// Unknown command identifier.
     UnknownCommand,
@@ -107,14 +111,18 @@ pub enum ScriptErrorKind {
     /// An exact node does not own the command.
     WrongOwner,
     /// The command is currently disabled.
+    #[serde(rename = "command_disabled")]
     DisabledCommand,
     /// A command node handle is stale.
+    #[serde(rename = "node_invalid")]
     InvalidNode,
     /// Positional argument count mismatch.
     ArityMismatch,
     /// Required named argument is missing.
+    #[serde(rename = "missing_named_arg")]
     MissingNamedArgument,
     /// An unknown named argument was supplied.
+    #[serde(rename = "unknown_named_arg")]
     UnknownNamedArgument,
     /// Argument conversion failed.
     Conversion,
@@ -123,9 +131,12 @@ pub enum ScriptErrorKind {
     /// The routed target has the wrong widget type.
     TargetTypeMismatch,
     /// Command implementation returned an error.
+    #[serde(rename = "command_exec")]
     CommandExecution,
     /// Another top-level script evaluation is active.
     ScriptBusy,
+    /// Script evaluation was explicitly cancelled.
+    ScriptCancelled,
 }
 
 impl ScriptErrorKind {
@@ -155,6 +166,7 @@ impl ScriptErrorKind {
             Self::TargetTypeMismatch => "target_type_mismatch",
             Self::CommandExecution => "command_exec",
             Self::ScriptBusy => "script_busy",
+            Self::ScriptCancelled => "script_cancelled",
         }
     }
 }
@@ -313,11 +325,7 @@ pub enum Error {
 
     #[error("parse error: {0}")]
     /// Parsing failure.
-    Parse(#[source] ParseError),
-
-    #[error("script run error: {0}")]
-    /// Script execution failure.
-    Script(String),
+    Parse(#[from] ParseError),
 
     /// Script execution failure with stable host category fields.
     #[error("script run error: {message}")]
@@ -345,6 +353,18 @@ pub enum Error {
     /// Node exists but is not attached to the root tree.
     #[error("node is detached: {0:?}")]
     NodeDetached(NodeId),
+}
+
+impl Error {
+    /// Construct an unclassified structured script failure.
+    pub(crate) fn script(message: impl Into<String>) -> Self {
+        Self::ScriptStructured {
+            kind: ScriptErrorKind::Canopy,
+            command: None,
+            owner: None,
+            message: message.into(),
+        }
+    }
 }
 
 impl From<mpsc::RecvError> for Error {

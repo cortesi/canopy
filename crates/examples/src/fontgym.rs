@@ -1,12 +1,12 @@
 use std::{f32::consts::TAU, time::Duration};
 
 use canopy::{
-    Canopy, CanopyBuilder, Context, EventOutcome, Loader, NodeId, ViewContext, Widget,
+    CanopyBuilder, ChangeOutcome, Context, EventOutcome, Loader, NodeId, ViewContext, Widget,
     cursor::{Cursor, CursorShape},
     error::Result,
     event::{Event, key},
-    geom::{Line, Point},
-    layout::{Align, Edges, Layout, MeasureConstraints, Measurement, Size},
+    geom::{Line, Point, Size},
+    layout::{Align, Edges, Layout, MeasureConstraints, Measurement},
     render::Render,
     rgb,
     state::NodeName,
@@ -14,8 +14,9 @@ use canopy::{
     text,
 };
 use canopy_widgets::{
-    Font, FontBanner, FontEffects, FontRenderer, Frame, LayoutOptions, List, Pad, SINGLE_THICK,
-    Selectable, Text, VStack,
+    Frame, List, Pad, SINGLE_THICK, Selectable, Text, VStack,
+    font::{Font, FontBanner, FontEffects, FontRenderer, LayoutOptions},
+    wrap,
 };
 
 /// Initial text rendered by the banners.
@@ -143,7 +144,7 @@ impl Widget for FontGym {
         let list_id = ctx.create_detached(List::new())?;
         ctx.set_layout_of(list_id, Layout::fill())?;
 
-        let blocks = ctx.with_widget(list_id, |list: &mut List<FontBlock>, ctx| {
+        let blocks = ctx.with_widget_mut(list_id, |list: &mut List<FontBlock>, ctx| {
             let mut ids = Vec::new();
             let centered = LayoutOptions {
                 h_align: Align::Center,
@@ -193,7 +194,7 @@ impl Widget for FontGym {
         ))?;
         ctx.set_layout_of(input_id, Layout::fill())?;
 
-        let input_frame = Frame::wrap_with(ctx, input_id, Frame::new().with_title("Text input"))?;
+        let input_frame = wrap(ctx, input_id, Frame::new().with_title("Text input"))?;
         let stack = VStack::new()
             .push_fixed(input_frame, INPUT_HEIGHT)
             .push_fixed(status_row_id, STATUS_HEIGHT)
@@ -232,9 +233,11 @@ impl FocusFrame {
     fn scroll_list(
         &self,
         ctx: &mut dyn Context,
-        action: impl FnOnce(&mut dyn Context) -> bool,
+        action: impl FnOnce(&mut dyn Context) -> ChangeOutcome,
     ) -> Result<bool> {
-        ctx.with_widget(self.list_id, |_, list_ctx| Ok(action(list_ctx)))
+        ctx.with_widget_mut(self.list_id, |_: &mut List<Text>, list_ctx| {
+            Ok(action(list_ctx).changed())
+        })
     }
 }
 
@@ -301,7 +304,7 @@ impl FontBlock {
     /// Update the banner text.
     fn set_text(&mut self, ctx: &mut dyn Context, text: String) -> Result<()> {
         if let Some(banner_id) = self.banner_id {
-            ctx.with_widget(banner_id, |banner, _| {
+            ctx.with_widget_mut(banner_id, |banner: &mut FontBanner, _| {
                 banner.set_text(text);
                 Ok(())
             })?;
@@ -314,7 +317,7 @@ impl FontBlock {
     /// Update the banner effects.
     fn set_effects(&mut self, ctx: &mut dyn Context, effects: FontEffects) -> Result<()> {
         if let Some(banner_id) = self.banner_id {
-            ctx.with_widget(banner_id, |banner, _| {
+            ctx.with_widget_mut(banner_id, |banner: &mut FontBanner, _| {
                 banner.set_effects(effects);
                 Ok(())
             })?;
@@ -497,7 +500,9 @@ impl FontGymInput {
     /// Push the current text into all target banners.
     fn sync_targets(&self, ctx: &mut dyn Context) -> Result<()> {
         for target in &self.targets {
-            ctx.with_widget(*target, |block, ctx| block.set_text(ctx, self.text.clone()))?;
+            ctx.with_widget_mut(*target, |block: &mut FontBlock, ctx| {
+                block.set_text(ctx, self.text.clone())
+            })?;
         }
         Ok(())
     }
@@ -505,7 +510,7 @@ impl FontGymInput {
     /// Update block layouts to the current height.
     fn sync_heights(&self, ctx: &mut dyn Context) -> Result<()> {
         for target in &self.targets {
-            ctx.with_widget(*target, |block, ctx| {
+            ctx.with_widget_mut(*target, |block: &mut FontBlock, ctx| {
                 block.set_banner_height(ctx, self.banner_height)
             })?;
             ctx.set_layout_of(*target, block_layout(self.banner_height))?;
@@ -517,7 +522,9 @@ impl FontGymInput {
     fn sync_effects(&self, ctx: &mut dyn Context) -> Result<()> {
         let effects = self.style_state;
         for target in &self.targets {
-            ctx.with_widget(*target, |block, ctx| block.set_effects(ctx, effects))?;
+            ctx.with_widget_mut(*target, |block: &mut FontBlock, ctx| {
+                block.set_effects(ctx, effects)
+            })?;
         }
         Ok(())
     }
@@ -555,8 +562,8 @@ impl FontGymInput {
     /// Update the status panel contents.
     fn sync_status(&self, ctx: &mut dyn Context) -> Result<()> {
         let status = status_text(self.banner_height, self.style_state);
-        ctx.with_widget(self.status_text, |text, _| {
-            text.set_raw(status);
+        ctx.with_widget_mut(self.status_text, |text: &mut Text, _| {
+            text.set_text(status);
             Ok(())
         })?;
         Ok(())
@@ -859,12 +866,12 @@ fn panel(
     title: &str,
     min_width: u32,
 ) -> Result<NodeId> {
-    let pad = Pad::wrap_with(
+    let pad = wrap(
         ctx,
         child,
         Pad::new(Edges::symmetric(PANEL_PADDING_V, PANEL_PADDING_H)),
     )?;
-    let frame = Frame::wrap_with(
+    let frame = wrap(
         ctx,
         pad,
         Frame::new().with_title(title).with_glyphs(SINGLE_THICK),
@@ -876,7 +883,7 @@ fn panel(
             .min_width(min_width)
             .padding(Edges::all(1)),
     )?;
-    Ok(frame)
+    Ok(frame.into())
 }
 
 /// Build a label string for a font.
@@ -946,12 +953,6 @@ fn status_text(height: u32, state: FontEffects) -> String {
     .join("\n")
 }
 
-/// Install key bindings for focus navigation.
-pub fn setup_bindings(c: &mut Canopy) -> Result<()> {
-    c.eval_script(DEFAULT_BINDINGS)?;
-    Ok(())
-}
-
 /// Focus controls shared by eager and builder setup.
 const DEFAULT_BINDINGS: &str = r#"
 canopy.bind_command("Tab", { phase = "after_widget", description = "Next focus" }, "root::focus", "Next")
@@ -972,7 +973,7 @@ mod tests {
 
     #[test]
     fn input_cursor_and_measurement_use_display_columns() -> Result<()> {
-        let mut canopy = Canopy::new();
+        let mut canopy = canopy::Canopy::new();
         let status = canopy.create_detached(Text::new(""))?;
         for (text, columns, width) in [
             ("界a", vec![0, 2, 3], 3),

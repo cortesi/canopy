@@ -217,14 +217,13 @@ mod tests {
     };
 
     use futures::task::{ArcWake, waker};
-    use slotmap::SlotMap;
 
     use super::*;
+    use crate::core::id::testing_node_id;
 
     fn owner() -> WorkStamp {
-        let mut nodes: SlotMap<NodeId, ()> = SlotMap::with_key();
         WorkStamp {
-            node: nodes.insert(()),
+            node: testing_node_id(),
             incarnation: 1,
             attachment: Some(1),
         }

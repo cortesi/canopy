@@ -65,12 +65,14 @@ pub mod world;
 // Public exports from internal modules
 pub use canopy::{
     AutomationCallback, AutomationHandle, Canopy, CanopyBuilder, EvalId, EvalOutcome, EvalRequest,
-    EvalTicket, FrameId, Loader, RoutePhase, RouteTraceEntry, ScriptJournalEntry, ScriptTrust,
-    TurnOutcome, Work,
+    EvalTicket, FrameId, Loader, RoutePhase, RouteTraceEntry, ScriptJournalEntry, ScriptOrigin,
+    ScriptTrust, TurnOutcome, Work,
 };
 pub use change::{ChangeOutcome, ChangeSet, Invalidation};
 pub use children::{ChildBuilder, ChildConfig, KeyedChildren};
-pub use context::{ChildKey, Context, FocusScope, ViewContext};
+pub use context::{
+    ChildSlot, Context, ContextExt, FocusDirection, FocusScope, ViewContext, ViewContextExt,
+};
 pub use fixture::{Fixture, FixtureInfo};
 pub use id::{NodeId, TypedId};
 pub use inputmap::{

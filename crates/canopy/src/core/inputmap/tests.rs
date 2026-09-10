@@ -1,8 +1,7 @@
-use slotmap::Key as _;
-
 use super::*;
 use crate::{
-    commands::{CommandArgs, CommandId, CommandTarget},
+    commands::{CommandArgs, CommandId, CommandInvocation, CommandTarget},
+    core::id::testing_node_id,
     error::Result,
     event::key,
 };
@@ -21,6 +20,31 @@ fn command(id: &'static str) -> CommandInvocation {
     }
 }
 
+fn bind_framework(
+    map: &mut InputMap,
+    group: FrameworkBindingGroup,
+    input: impl Into<InputSpec>,
+    path: &str,
+    description: &str,
+    command: CommandInvocation,
+) -> Result<BindingId> {
+    map.bind_framework(
+        group,
+        input,
+        BindingOptions {
+            path: Some(path.parse()?),
+            scope: BindingScope::Exclusive(group),
+            description: description.to_string(),
+            source: None,
+            phase: None,
+        },
+        CommandAction {
+            invocation: command,
+            target: None,
+        },
+    )
+}
+
 fn bind(
     map: &mut InputMap,
     scope: BindingScope,
@@ -33,7 +57,11 @@ fn bind(
         InputSpec::Key(key.into()),
         BindingOptions {
             scope,
-            path: path.to_string(),
+            path: if path.is_empty() {
+                None
+            } else {
+                Some(path.parse()?)
+            },
             description: description.to_string(),
             source: Some("test:1".to_string()),
             phase: None,
@@ -174,14 +202,16 @@ fn global_bindings_require_both_path_anchors() {
 #[test]
 fn framework_registration_is_idempotent_and_rejects_conflicts() -> Result<()> {
     let mut map = InputMap::new();
-    let first = map.bind_framework(
+    let first = bind_framework(
+        &mut map,
         HELP,
         InputSpec::Key('j'.into()),
         "/root/help/**/",
         "Scroll down",
         command("binding_list::scroll_down"),
     )?;
-    let second = map.bind_framework(
+    let second = bind_framework(
+        &mut map,
         HELP,
         InputSpec::Key('j'.into()),
         "/root/help/**/",
@@ -190,7 +220,8 @@ fn framework_registration_is_idempotent_and_rejects_conflicts() -> Result<()> {
     )?;
     assert_eq!(first, second);
     assert!(
-        map.bind_framework(
+        bind_framework(
+            &mut map,
             HELP,
             InputSpec::Key('j'.into()),
             "/root/help/**/",
@@ -206,14 +237,16 @@ fn framework_registration_is_idempotent_and_rejects_conflicts() -> Result<()> {
 fn newest_exclusive_frame_blocks_all_application_tiers() -> Result<()> {
     let mut map = InputMap::new();
     bind(&mut map, BindingScope::Default, 'j', "", "Application", 1)?;
-    map.bind_framework(
+    bind_framework(
+        &mut map,
         HELP,
         InputSpec::Key('j'.into()),
         "/root/help/**/",
         "Help down",
         command("binding_list::scroll_down"),
     )?;
-    map.bind_framework(
+    bind_framework(
+        &mut map,
         OTHER,
         InputSpec::Key('x'.into()),
         "/root/other/**/",
@@ -221,7 +254,7 @@ fn newest_exclusive_frame_blocks_all_application_tiers() -> Result<()> {
         command("other::close"),
     )?;
 
-    let owner = NodeId::null();
+    let owner = testing_node_id();
     let help = map.push_exclusive_bindings(HELP, owner)?;
     assert_eq!(
         target(&map, "/root/help/binding_list", 'j'),
@@ -247,7 +280,8 @@ fn newest_exclusive_frame_blocks_all_application_tiers() -> Result<()> {
 fn application_mutation_cannot_remove_framework_records() -> Result<()> {
     let mut map = InputMap::new();
     let app = bind(&mut map, BindingScope::Default, 'a', "", "App", 1)?;
-    let framework = map.bind_framework(
+    let framework = bind_framework(
+        &mut map,
         HELP,
         InputSpec::Key('j'.into()),
         "/root/help/**/",
@@ -268,14 +302,15 @@ fn startup_restore_preserves_framework_records_and_frames() -> Result<()> {
     bind(&mut map, BindingScope::Default, 'a', "", "Before", 1)?;
     let snapshot = map.snapshot_application();
     bind(&mut map, BindingScope::Default, 'b', "", "Transient", 2)?;
-    map.bind_framework(
+    bind_framework(
+        &mut map,
         HELP,
         InputSpec::Key('j'.into()),
         "/root/help/**/",
         "Help down",
         command("binding_list::scroll_down"),
     )?;
-    let token = map.push_exclusive_bindings(HELP, NodeId::null())?;
+    let token = map.push_exclusive_bindings(HELP, testing_node_id())?;
 
     map.restore_application(snapshot);
     assert_eq!(map.bindings().len(), 2);
@@ -403,14 +438,15 @@ fn diagnostics_distinguish_scope_path_insertion_route_and_exclusive_causes() -> 
         "path does not match route"
     );
 
-    map.bind_framework(
+    bind_framework(
+        &mut map,
         HELP,
         InputSpec::Key('j'.into()),
         "/root/help/**/",
         "Help down",
         command("binding_list::scroll_down"),
     )?;
-    let token = map.push_exclusive_bindings(HELP, NodeId::null())?;
+    let token = map.push_exclusive_bindings(HELP, testing_node_id())?;
     assert_eq!(
         map.diagnostic_state(global, &route),
         "blocked by exclusive group root.help"
@@ -421,7 +457,11 @@ fn diagnostics_distinguish_scope_path_insertion_route_and_exclusive_causes() -> 
 
 fn options(path: &str, phase: Option<BindingPhase>) -> BindingOptions {
     BindingOptions {
-        path: path.to_string(),
+        path: if path.is_empty() {
+            None
+        } else {
+            Some(path.parse().expect("valid path filter"))
+        },
         scope: BindingScope::Default,
         description: "Test action".to_string(),
         source: None,
@@ -533,7 +573,7 @@ fn application_snapshot_and_clear_include_commands() -> Result<()> {
     let mut map = InputMap::new();
     let action = BindingTarget::Command(CommandAction {
         invocation: command("editor::undo"),
-        target: Some(CommandTarget::Exact(NodeId::null())),
+        target: Some(CommandTarget::Exact(testing_node_id())),
     });
     let (command_id, _) = map.replace_application_action(
         InputSpec::Key('x'.into()),
@@ -568,22 +608,23 @@ fn framework_binding_options_preserve_explicit_phase() -> Result<()> {
     let mut options = options("/root/help/**/", Some(BindingPhase::AfterIgnore));
     options.scope = BindingScope::Exclusive(HELP);
     let input = InputSpec::Key('j'.into());
-    let invocation = command("binding_list::scroll_down");
-    let id = map.bind_framework_with_options(HELP, input, options.clone(), invocation.clone())?;
+    let action = CommandAction {
+        invocation: command("binding_list::scroll_down"),
+        target: Some(CommandTarget::Focus),
+    };
+    let id = map.bind_framework(HELP, input, options.clone(), action.clone())?;
     assert_eq!(
-        map.bind_framework_with_options(HELP, input, options.clone(), invocation.clone())?,
+        map.bind_framework(HELP, input, options.clone(), action.clone())?,
         id
     );
-    map.push_exclusive_bindings(HELP, NodeId::null())?;
+    map.push_exclusive_bindings(HELP, testing_node_id())?;
     let resolved = map
         .resolve_match(&Path::from("/root/help/list"), input)
         .unwrap();
     assert_eq!(resolved.phase, BindingPhase::AfterIgnore);
+    assert_eq!(resolved.target, BindingTarget::Command(action.clone()));
     options.phase = Some(BindingPhase::BeforeWidget);
-    assert!(
-        map.bind_framework_with_options(HELP, input, options, invocation)
-            .is_err()
-    );
+    assert!(map.bind_framework(HELP, input, options, action).is_err());
     assert_eq!(
         map.binding(id).unwrap().phase,
         Some(BindingPhase::AfterIgnore)

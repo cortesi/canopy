@@ -27,7 +27,7 @@ impl Widget for Form {
 fn minimum_forms_have_help_and_no_inspector() -> Result<()> {
     let mut app = Canopy::new();
     Root::load(&mut app)?;
-    Root::install_app(&mut app, Form)?;
+    Root::new().install(&mut app, Form)?;
     app.finalize_api()?;
     app.set_root_size(Size::new(30, 10))?;
     app.flush()?;

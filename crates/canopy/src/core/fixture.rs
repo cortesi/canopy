@@ -14,7 +14,7 @@ pub struct Fixture {
     /// Human-readable fixture description.
     pub description: String,
     /// Setup closure applied to the current canopy instance.
-    pub setup: FixtureSetup,
+    pub(crate) setup: FixtureSetup,
 }
 
 impl Fixture {

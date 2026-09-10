@@ -5,7 +5,7 @@ mod tests {
     use std::{cell::Cell, rc::Rc};
 
     use canopy::{
-        Canopy, Context, Loader, Widget, command,
+        Canopy, Context, Loader, Widget,
         commands::CommandTarget,
         derive_commands,
         error::{Error, Result},
@@ -41,7 +41,7 @@ mod tests {
 
         fn pre_remove(&mut self, ctx: &mut dyn Context) -> Result<()> {
             for child in ctx.children() {
-                ctx.read_widget(child, &mut |_| Ok(()))?;
+                ctx.with_widget_dyn(child, &mut |_| Ok(()))?;
             }
             self.removed.set(true);
             Ok(())
@@ -55,7 +55,7 @@ mod tests {
             Root::load(&mut canopy)?;
             canopy.add_commands::<Dialog>()?;
             canopy.add_commands::<Button>()?;
-            let app = Root::install_app(&mut canopy, App)?;
+            let app = Root::new().install(&mut canopy, App)?;
             let removed = Rc::new(Cell::new(false));
             let (dialog, button) = canopy.with_context(app, |ctx| {
                 let dialog = ctx.add_child(Dialog {
@@ -78,8 +78,8 @@ mod tests {
             assert_eq!(outcome.is_err(), fail);
             assert_eq!(removed.get(), !fail);
             canopy.with_root_view(|ctx| {
-                assert_eq!(ctx.node_type_id(dialog.into()).is_some(), fail);
-                assert_eq!(ctx.node_type_id(button.into()).is_some(), fail);
+                assert_eq!(ctx.type_id_of(dialog.into()).is_some(), fail);
+                assert_eq!(ctx.type_id_of(button.into()).is_some(), fail);
             });
         }
         Ok(())

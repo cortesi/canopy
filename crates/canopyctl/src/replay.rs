@@ -90,6 +90,9 @@ impl ReplayEnvelope {
             .api_digest
             .as_deref()
             .ok_or_else(|| anyhow!("target bootstrap has no API digest"))?;
+        let viewport = target
+            .viewport
+            .ok_or_else(|| anyhow!("target bootstrap has no viewport"))?;
         let reset = if self.fixture.is_some() && target.reset != ResetPolicy::Isolated {
             ResetPolicy::Fixture
         } else {
@@ -107,7 +110,7 @@ impl ReplayEnvelope {
             (
                 "viewport",
                 serde_json::to_string(&self.viewport)?,
-                serde_json::to_string(&target.viewport)?,
+                serde_json::to_string(&viewport)?,
             ),
             (
                 "reset",
@@ -137,7 +140,9 @@ impl ReplayEnvelope {
                 .clone()
                 .ok_or_else(|| anyhow!("cannot record replay without an API digest"))?,
             execution: metadata.execution,
-            viewport: metadata.viewport,
+            viewport: metadata
+                .viewport
+                .ok_or_else(|| anyhow!("cannot record replay without a viewport"))?,
             fixture,
             reset: metadata.reset,
             steps: vec![ReplayStep {
@@ -351,10 +356,10 @@ mod tests {
             api_digest: Some("different".into()),
             execution: ExecutionMode::LiveSession,
             session_id: "nondurable".into(),
-            viewport: Viewport {
+            viewport: Some(Viewport {
                 width: 14,
                 height: 4,
-            },
+            }),
             reset: ResetPolicy::Isolated,
         };
         let differences = envelope.mismatches(&metadata)?;

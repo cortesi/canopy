@@ -4,11 +4,10 @@
 use std::{path::PathBuf, process};
 
 use anyhow::Result;
-use canopy_mcp::{
-    AppFactory, AppMetadata, Error as McpError, LaunchMode, ResetPolicy, app_factory, launch,
-};
+use canopy::terminal::RunOptions;
+use canopy_mcp::{AppFactory, AppMetadata, Error as McpError, LaunchMode, ResetPolicy, launch};
 use clap::{Parser, Subcommand};
-use todo::create_app_with_config;
+use todo::{create_app, store::Store};
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -54,11 +53,16 @@ fn make_factory(path: String, config: Option<PathBuf>) -> AppFactory {
     } else {
         ResetPolicy::External
     };
-    app_factory(move || create_app_with_config(&path, config.as_deref()).map_err(McpError::app))
-        .with_metadata(AppMetadata {
+    AppFactory::new(
+        AppMetadata {
             app: "todo".into(),
             reset,
-        })
+        },
+        move || {
+            let store = Store::open(&path).map_err(McpError::app)?;
+            create_app(store, config.as_deref()).map_err(McpError::app)
+        },
+    )
 }
 
 fn main() -> Result<()> {
@@ -66,11 +70,15 @@ fn main() -> Result<()> {
 
     if args.api {
         let code = launch(
-            app_factory(|| Ok(todo::setup_app()?)).with_metadata(AppMetadata {
-                app: "todo".into(),
-                reset: ResetPolicy::Isolated,
-            }),
+            AppFactory::new(
+                AppMetadata {
+                    app: "todo".into(),
+                    reset: ResetPolicy::Isolated,
+                },
+                || Ok(todo::api_app()?),
+            ),
             LaunchMode::Api,
+            RunOptions::default(),
         )?;
         if code != 0 {
             process::exit(code);
@@ -79,15 +87,17 @@ fn main() -> Result<()> {
     }
 
     let code = match args.command {
-        Some(Command::Mcp { path, config }) => {
-            launch(make_factory(path, config), LaunchMode::HeadlessMcp)?
-        }
+        Some(Command::Mcp { path, config }) => launch(
+            make_factory(path, config),
+            LaunchMode::HeadlessMcp,
+            RunOptions::default(),
+        )?,
         None => {
             if let Some(path) = args.path {
                 let mode = LaunchMode::Run {
                     mcp_socket: args.mcp,
                 };
-                launch(make_factory(path, args.config), mode)?
+                launch(make_factory(path, args.config), mode, RunOptions::default())?
             } else {
                 println!("Specify a file path");
                 0

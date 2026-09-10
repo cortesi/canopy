@@ -6,7 +6,7 @@ canopy.assert(scope ~= nil, "todo scope must exist")
 if scope == nil then
     return
 end
-local input = canopy.find_key("todo.input", scope)
+local input = canopy.find_identity("todo.input", scope)
 canopy.assert(input ~= nil, "modal fixture must create a keyed input")
 canopy.assert(frame.focus == input, "modal_open must focus its keyed input")
 local found = false

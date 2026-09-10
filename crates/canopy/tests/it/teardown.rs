@@ -5,7 +5,7 @@ mod tests {
     use std::{cell::RefCell, rc::Rc};
 
     use canopy::{
-        Canopy, Context, NodeId, Widget, command, derive_commands,
+        Canopy, Context, NodeId, Widget, derive_commands,
         error::{Error, Result},
         state::NodeName,
     };
@@ -30,7 +30,7 @@ mod tests {
 
         fn pre_remove(&mut self, ctx: &mut dyn Context) -> Result<()> {
             for child in ctx.children() {
-                ctx.read_widget(child, &mut |_| Ok(()))?;
+                ctx.with_widget_dyn(child, &mut |_| Ok(()))?;
             }
             self.log.borrow_mut().push("pre_remove");
             Ok(())
@@ -52,7 +52,7 @@ mod tests {
         #[command]
         fn press(&self, ctx: &mut dyn Context) -> Result<()> {
             ctx.dispatch_exact(self.dialog, &Dialog::call_close().invocation())?;
-            assert!(ctx.node_type_id(self.dialog).is_some());
+            assert!(ctx.type_id_of(self.dialog).is_some());
             self.log.borrow_mut().push("press returned");
             if self.fail {
                 Err(Error::Invalid("action failed".into()))
@@ -92,7 +92,7 @@ mod tests {
                 })?;
                 canopy.finalize_api()?;
                 let outcome = if script {
-                    canopy.eval_script("trigger.press()")
+                    canopy.eval_script("trigger.press()").map(|_| ())
                 } else {
                     canopy.with_root_context(|ctx| {
                         ctx.dispatch_exact(trigger.into(), &Trigger::call_press().invocation())?;
@@ -101,8 +101,8 @@ mod tests {
                 };
                 assert_eq!(outcome.is_err(), fail);
                 canopy.with_root_view(|ctx| {
-                    assert_eq!(ctx.node_type_id(dialog.into()).is_some(), fail);
-                    assert_eq!(ctx.node_type_id(trigger.into()).is_some(), fail);
+                    assert_eq!(ctx.type_id_of(dialog.into()).is_some(), fail);
+                    assert_eq!(ctx.type_id_of(trigger.into()).is_some(), fail);
                 });
                 if fail {
                     assert_eq!(*log.borrow(), ["close", "press returned"]);

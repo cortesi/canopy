@@ -21,8 +21,8 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use canopy_mcp::{
-    ApplyFixtureRequest, BootstrapRequest, ScriptEvalOutcome, ScriptEvalRequest, SuiteConfig,
-    Viewport, discover_scripts, fixture_for_script, json_tool_result,
+    ApplyFixtureRequest, ApplyFixtureResponse, BootstrapRequest, ScriptEvalOutcome,
+    ScriptEvalRequest, SuiteConfig, Viewport, discover_scripts, fixture_for_script,
 };
 use clap::{Args, Parser, Subcommand};
 use ruau_script_api::{ScriptApiQuery, ScriptApiResponse};
@@ -236,8 +236,7 @@ impl CanopyctlMcpServer {
     async fn bootstrap(&self, request: BootstrapRequest) -> ToolResult<CallToolResult> {
         self.touch().await;
         let bootstrap = self.sessions.bootstrap(request).await.map_err(tool_error)?;
-        let value = serde_json::to_value(bootstrap).map_err(tool_error)?;
-        Ok(json_tool_result(value))
+        to_tool_result(bootstrap)
     }
 
     #[tool]
@@ -248,8 +247,9 @@ impl CanopyctlMcpServer {
             .apply_fixture(params.name.clone())
             .await
             .map_err(tool_error)?;
-        let value = serde_json::json!({ "applied": params.name });
-        Ok(json_tool_result(value))
+        to_tool_result(ApplyFixtureResponse {
+            applied: params.name,
+        })
     }
 
     #[tool(read_only, output_schema = ScriptApiResponse)]
@@ -264,8 +264,7 @@ impl CanopyctlMcpServer {
     async fn fixtures(&self) -> ToolResult<CallToolResult> {
         self.touch().await;
         let fixtures = self.sessions.fixtures().await.map_err(tool_error)?;
-        let value = serde_json::to_value(fixtures).map_err(tool_error)?;
-        Ok(json_tool_result(value))
+        to_tool_result(fixtures)
     }
 }
 
@@ -319,38 +318,30 @@ async fn smoke_command(config: LoadedConfig, args: SmokeArgs) -> Result<()> {
     let suite_dir = config.smoke_suite_dir(args.suite.as_deref());
     let mut suite = SuiteConfig::new(&suite_dir);
     suite.scripts = args.scripts;
-    let scripts = discover_scripts(&suite)?;
-    let timeout_ms = config.smoke_timeout_ms(args.timeout_ms);
-    let fail_fast = config.smoke_fail_fast(args.fail_fast);
+    suite.timeout_ms = config.smoke_timeout_ms(args.timeout_ms);
+    suite.fail_fast = config.smoke_fail_fast(args.fail_fast);
 
-    smoke_scripts(&session, &suite_dir, scripts, timeout_ms, fail_fast).await
+    smoke_scripts(&session, &suite).await
 }
 
 /// Run resolved smoke scripts through one connected session.
-async fn smoke_scripts(
-    session: &Session,
-    suite_dir: &Path,
-    scripts: Vec<PathBuf>,
-    timeout_ms: Option<u64>,
-    fail_fast: bool,
-) -> Result<()> {
+async fn smoke_scripts(session: &Session, suite: &SuiteConfig) -> Result<()> {
     let mut failed = 0usize;
-    for path in scripts {
+    for path in discover_scripts(suite)? {
         let source =
             fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
-        let script_fixture = fixture_for_script(suite_dir, &path);
+        let script_fixture = fixture_for_script(&suite.suite_dir, &path);
         let started = Instant::now();
         let outcome = session
             .eval(ScriptEvalRequest {
-                script: source,
                 fixture: script_fixture.clone(),
-                timeout_ms,
-                viewport: None,
+                timeout_ms: suite.timeout_ms,
+                ..ScriptEvalRequest::new(source)
             })
             .await?;
         let elapsed = started.elapsed().as_millis();
         let fixture = script_fixture.as_deref().unwrap_or("-");
-        let test_name = smoke_test_name(suite_dir, &path, script_fixture.as_deref());
+        let test_name = smoke_test_name(&suite.suite_dir, &path, script_fixture.as_deref());
         if outcome.success {
             println!("PASS fixture={fixture} test={test_name} ({elapsed}ms)");
         } else {
@@ -359,7 +350,7 @@ async fn smoke_scripts(
             if let Some(error) = outcome.error {
                 println!("  {}", error.message);
             }
-            if fail_fast {
+            if suite.fail_fast {
                 break;
             }
         }
@@ -412,7 +403,12 @@ async fn replay_file(session: &mut Session, input: ReplayFile, args: &ReplayArgs
                     viewport: requested,
                 })
                 .await?;
-            validate_viewport(target.metadata.viewport)?;
+            validate_viewport(
+                target
+                    .metadata
+                    .viewport
+                    .context("target bootstrap has no viewport")?,
+            )?;
             if let Some(name) = &envelope.fixture
                 && !target.fixtures.iter().any(|fixture| fixture.name == *name)
             {
@@ -523,10 +519,10 @@ async fn replay_entries(
         }
         let outcome = session
             .eval(ScriptEvalRequest {
-                script: step.source,
                 fixture: fixture.clone(),
                 timeout_ms: args.timeout_ms,
                 viewport,
+                ..ScriptEvalRequest::new(step.source)
             })
             .await?;
         if outcome.success == step.expect.success {
@@ -598,10 +594,10 @@ async fn eval_command(config: LoadedConfig, args: EvalArgs) -> Result<()> {
     let session = Session::spawn_headless(&command).await?;
     let outcome = session
         .eval(ScriptEvalRequest {
-            script: script.clone(),
             fixture: args.fixture.clone(),
             timeout_ms: args.timeout_ms,
             viewport: args.viewport,
+            ..ScriptEvalRequest::new(script.clone())
         })
         .await?;
     write_eval_output(
@@ -724,6 +720,11 @@ fn tool_error(error: impl Display) -> ToolError {
     ToolError::internal(error.to_string())
 }
 
+/// Encode a typed MCP response.
+fn to_tool_result(value: impl serde::Serialize) -> ToolResult<CallToolResult> {
+    CallToolResult::structured(value).map_err(tool_error)
+}
+
 #[cfg(test)]
 mod tests {
     use std::{
@@ -736,7 +737,7 @@ mod tests {
     };
 
     use canopy::{Canopy, Fixture, Work, geom::Size, testing::contracts};
-    use canopy_mcp::{ExecutionMode, ResetPolicy, serve_uds};
+    use canopy_mcp::{AppMetadata, ExecutionMode, ResetPolicy, serve_uds};
     use futures::{StreamExt, executor};
     use tmcp::schema::ToolResultMode;
     use tokio::runtime::Builder;
@@ -763,7 +764,14 @@ mod tests {
         let mut events = canopy.take_event_receiver().expect("test owns events");
         let directory = tempfile::tempdir()?;
         let socket = directory.path().join("replay.sock");
-        let listener = serve_uds(&socket, automation.clone())?;
+        let listener = serve_uds(
+            &socket,
+            automation.clone(),
+            AppMetadata {
+                app: "canopyctl-test".into(),
+                reset: ResetPolicy::External,
+            },
+        )?;
         let (done_tx, done_rx) = mpsc::channel();
         let worker = thread::spawn(move || {
             let result = catch_unwind(AssertUnwindSafe(|| -> Result<()> {
@@ -774,7 +782,8 @@ mod tests {
                     let envelope = ReplayEnvelope {
                         schema: "canopy.replay/1".into(), app: bootstrap.metadata.app,
                         api_digest: bootstrap.metadata.api_digest.expect("live digest"),
-                        execution: ExecutionMode::LiveSession, viewport: bootstrap.metadata.viewport,
+                        execution: ExecutionMode::LiveSession,
+                        viewport: bootstrap.metadata.viewport.context("live viewport")?,
                         fixture: Some("seed".into()), reset: ResetPolicy::Fixture,
                         steps: [
                             "canopy.assert(canopy.input_mode() == \"seed\"); canopy.set_mode(\"first\")",
@@ -852,9 +861,9 @@ mod tests {
             app: "wrong app".into(),
             api_digest: "wrong digest".into(),
             execution: ExecutionMode::LiveSession,
-            viewport: target.metadata.viewport,
+            viewport: target.metadata.viewport.context("target viewport")?,
             fixture: None,
-            reset: ResetPolicy::Isolated,
+            reset: ResetPolicy::External,
             steps: vec![ReplayStep {
                 source: contracts::SCRIPT.into(),
                 expect: ReplayExpectation { success: true },
@@ -868,7 +877,7 @@ mod tests {
         .await
         .unwrap_err();
         for field in ["app:", "api_digest:", "execution:", "reset:"] {
-            assert!(error.to_string().contains(field));
+            assert!(error.to_string().contains(field), "{error:#}");
         }
         assert!(calls.lock().await.is_empty());
         let args = ReplayArgs {
@@ -966,9 +975,10 @@ mod tests {
         fs::write(&scripts[1], "success")?;
         for fail_fast in [false, true] {
             let (session, calls, peer) = peer_session().await?;
-            let error = smoke_scripts(&session, directory.path(), scripts.clone(), None, fail_fast)
-                .await
-                .unwrap_err();
+            let mut suite = SuiteConfig::new(directory.path());
+            suite.scripts = scripts.clone();
+            suite.fail_fast = fail_fast;
+            let error = smoke_scripts(&session, &suite).await.unwrap_err();
             assert_eq!(error.to_string(), "1 smoke script(s) failed");
             assert_eq!(
                 *calls.lock().await,

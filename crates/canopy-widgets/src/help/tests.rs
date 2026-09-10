@@ -242,8 +242,8 @@ fn wheel_indicator_and_resize_keep_scroll_within_the_exact_canvas() -> Result<()
     })?;
     let after_wheel = harness
         .canopy
-        .with_root_view(|context| context.node_view(harness.root).expect("list view"));
-    assert_eq!(after_wheel.tl.y, 1);
+        .with_root_view(|context| context.view_of(harness.root).expect("list view"));
+    assert_eq!(after_wheel.scroll.y, 1);
 
     harness.mouse(mouse::MouseEvent {
         action: mouse::Action::Down,
@@ -253,9 +253,9 @@ fn wheel_indicator_and_resize_keep_scroll_within_the_exact_canvas() -> Result<()
     })?;
     let after_click = harness
         .canopy
-        .with_root_view(|context| context.node_view(harness.root).expect("list view"));
+        .with_root_view(|context| context.view_of(harness.root).expect("list view"));
     assert_eq!(
-        after_click.tl.y,
+        after_click.scroll.y,
         after_click.canvas.h.saturating_sub(after_click.content.h)
     );
 
@@ -263,9 +263,9 @@ fn wheel_indicator_and_resize_keep_scroll_within_the_exact_canvas() -> Result<()
     harness.render()?;
     let resized = harness
         .canopy
-        .with_root_view(|context| context.node_view(harness.root).expect("list view"));
+        .with_root_view(|context| context.view_of(harness.root).expect("list view"));
     assert_eq!(
-        resized.tl.y,
+        resized.scroll.y,
         resized.canvas.h.saturating_sub(resized.content.h)
     );
     Ok(())

@@ -5,9 +5,9 @@ mod tests {
     use std::{fs, path::Path};
 
     use canopy::{
-        Canopy, CommandArg, Context, EventOutcome, FrameworkBindingGroup, InputSpec, Loader,
-        NodeId, ViewContext, Widget, command,
-        commands::{ArgValue, CommandArgs, CommandId, CommandInvocation},
+        BindingOptions, BindingScope, Canopy, CommandArg, Context, EventOutcome,
+        FrameworkBindingGroup, Loader, NodeId, ViewContext, Widget,
+        commands::ArgValue,
         derive_commands,
         error::{Error, Result, ScriptErrorKind},
         event::{Event, key::Key, mouse},
@@ -269,13 +269,15 @@ mod tests {
         let group = FrameworkBindingGroup::new("test.framework");
         let id = harness.canopy.bind_framework(
             group,
-            InputSpec::Key(Key::parse_spec("F1").map_err(Error::Invalid)?),
-            "/api_root/**/",
-            "Framework action",
-            CommandInvocation {
-                id: CommandId("api_leaf::get"),
-                args: CommandArgs::default(),
+            Key::parse_spec("F1")?,
+            BindingOptions {
+                path: Some("/api_root/**/".parse()?),
+                scope: BindingScope::Exclusive(group),
+                description: "Framework action".to_string(),
+                source: None,
+                phase: None,
             },
+            ApiLeaf::call_get(),
         )?;
         harness.render()?;
 
@@ -468,10 +470,10 @@ mod tests {
         let journal = canopy.script_journal();
         assert_eq!(journal.len(), 2);
         let nested = &journal[0];
-        assert_eq!(nested.origin, "default-bindings:api_leaf");
+        assert_eq!(nested.origin.to_string(), "default-bindings:api_leaf");
         assert_eq!(nested.logs, vec!["from bindings".to_string()]);
         let outer = &journal[1];
-        assert_eq!(outer.origin, "eval");
+        assert_eq!(outer.origin.to_string(), "eval");
         assert_eq!(
             outer.logs,
             vec![
@@ -560,7 +562,7 @@ mod tests {
 
         assert_eq!(canopy.run_startup_scripts()?, 3);
         assert_eq!(
-            canopy.eval_script_value("return api_leaf.get()")?,
+            canopy.eval_script("return api_leaf.get()")?,
             ArgValue::Int(33)
         );
         assert_eq!(canopy.run_startup_scripts()?, 0);
@@ -604,7 +606,7 @@ mod tests {
 
         assert_eq!(canopy.run_startup_scripts()?, 1);
         assert_eq!(
-            canopy.eval_script_value("return api_leaf.get()")?,
+            canopy.eval_script("return api_leaf.get()")?,
             ArgValue::Int(1)
         );
         Ok(())
@@ -628,7 +630,7 @@ mod tests {
             .expect_err("startup execution should fail");
         canopy.eval_script(r#"canopy.send_key("x")"#)?;
         assert_eq!(
-            canopy.eval_script_value("return api_leaf.get()")?,
+            canopy.eval_script("return api_leaf.get()")?,
             ArgValue::Int(0)
         );
         Ok(())
@@ -662,20 +664,20 @@ mod tests {
             .run_startup_scripts()
             .expect_err("second startup should fail");
         assert_eq!(
-            canopy.eval_script_value("return api_leaf.get()")?,
+            canopy.eval_script("return api_leaf.get()")?,
             ArgValue::Int(11)
         );
         canopy
             .run_startup_scripts()
             .expect_err("second startup retry should fail");
         assert_eq!(
-            canopy.eval_script_value("return api_leaf.get()")?,
+            canopy.eval_script("return api_leaf.get()")?,
             ArgValue::Int(21)
         );
 
         canopy.eval_script(r#"canopy.send_key("x")"#)?;
         assert_eq!(
-            canopy.eval_script_value("return api_leaf.get()")?,
+            canopy.eval_script("return api_leaf.get()")?,
             ArgValue::Int(7)
         );
 
@@ -683,19 +685,19 @@ mod tests {
         canopy.set_root_size(Size::new(10, 1))?;
         canopy.render(&mut render)?;
         assert_eq!(
-            canopy.eval_script_value("return api_leaf.get()")?,
+            canopy.eval_script("return api_leaf.get()")?,
             ArgValue::Int(7)
         );
 
         let first_runs = canopy
             .script_journal()
             .iter()
-            .filter(|entry| entry.origin == "startup:first")
+            .filter(|entry| entry.origin.to_string() == "startup:first")
             .count();
         let second_runs = canopy
             .script_journal()
             .iter()
-            .filter(|entry| entry.origin == "startup:second")
+            .filter(|entry| entry.origin.to_string() == "startup:second")
             .count();
         assert_eq!(first_runs, 1);
         assert_eq!(second_runs, 2);
@@ -770,7 +772,7 @@ mod tests {
         canopy.run_config(&config)?;
 
         assert_eq!(
-            canopy.eval_script_value("return api_leaf.get()")?,
+            canopy.eval_script("return api_leaf.get()")?,
             ArgValue::Int(44)
         );
 
@@ -782,12 +784,12 @@ mod tests {
         );
         canopy.eval_script(r#"canopy.send_key("x")"#)?;
         assert_eq!(
-            canopy.eval_script_value("return api_leaf.get()")?,
+            canopy.eval_script("return api_leaf.get()")?,
             ArgValue::Int(44)
         );
         canopy.run_config(&config)?;
         assert_eq!(
-            canopy.eval_script_value("return api_leaf.get()")?,
+            canopy.eval_script("return api_leaf.get()")?,
             ArgValue::Int(45)
         );
 
@@ -926,7 +928,7 @@ mod tests {
     fn command_discovery_reports_contract_and_availability() -> Result<()> {
         let mut harness = Harness::builder(ScriptTarget::new()).size(10, 1).build()?;
 
-        let command = harness.canopy.eval_script_value(
+        let command = harness.canopy.eval_script(
             r#"
             local found: any = nil
             for _, command in ipairs(canopy.commands()) do
@@ -956,10 +958,10 @@ mod tests {
 
         let resolved = harness
             .canopy
-            .eval_script_value(r#"return canopy.resolve("script_target") ~= nil"#)?;
+            .eval_script(r#"return canopy.resolve("script_target") ~= nil"#)?;
         assert_eq!(resolved, ArgValue::Bool(true));
 
-        let forged_node = harness.canopy.eval_script_value(
+        let forged_node = harness.canopy.eval_script(
             r#"
             local forged: any = 1
             local ok, err = pcall(function()
@@ -982,7 +984,7 @@ mod tests {
             Some(&ArgValue::String("NodeId".to_string()))
         );
 
-        let error = harness.canopy.eval_script_value(
+        let error = harness.canopy.eval_script(
             r#"
             local ok, err = pcall(function()
                 canopy.cmd("missing::command")
@@ -1004,7 +1006,7 @@ mod tests {
             Some(&ArgValue::String("missing::command".to_string()))
         );
 
-        let payload_param = harness.canopy.eval_script_value(
+        let payload_param = harness.canopy.eval_script(
             r#"
             for _, command in ipairs(canopy.commands()) do
                 if command.name == "set_payload" then
@@ -1031,7 +1033,7 @@ mod tests {
 
         let value = harness
             .canopy
-            .eval_script_value(r#"canopy.log("hello"); canopy.assert(true, "ok"); return 7"#)?;
+            .eval_script(r#"canopy.log("hello"); canopy.assert(true, "ok"); return 7"#)?;
         assert_eq!(value, ArgValue::Int(7));
         assert_eq!(harness.canopy.take_script_logs(), vec!["hello"]);
 

@@ -1,0 +1,49 @@
+# Public API design budget
+
+The generated files in `api/` are the canonical review record for Canopy's
+public Rust API. Run `ncode api` after public API changes and review the
+semantic diff. Run `ncode api --check` to verify that the checked-in captures
+are current.
+
+The captures cover public workspace libraries and proc macros with Ncode's
+configured feature profile. They do not promise compatibility: Canopy favors a
+smaller, clearer breaking surface while the API is still evolving.
+
+## Review budgets
+
+These budgets are advisory review thresholds. Crossing one calls for an API
+review; it does not fail the build. Counts use methods in the trait definition
+or inherent implementation shown in `api/`. Extension traits are counted as
+part of the context surface they extend.
+
+| Surface | Review threshold | Review rule |
+| --- | ---: | --- |
+| `Canopy` | 56 | Add only application lifecycle operations that cannot live on a context. |
+| `ViewContext` and `ViewContextExt` | 34 | New queries must replace or generalize an existing query. |
+| `Context` and `ContextExt` | 60 | New mutations must replace or generalize an existing mutation. |
+| `Editor` | 24 | Keep editing policy on the editor and buffer mechanics on `TextBuffer`. |
+
+Generated line counts are coarse complexity signals because documentation and
+re-export expansion affect them. Growth past a threshold triggers review;
+shrinkage needs no compatibility work.
+
+| Capture | Review threshold | Intended responsibility |
+| --- | ---: | --- |
+| `canopy.rs` | 8,826 | Retained tree, layout, input, rendering, scripting, and runtime facade. |
+| `canopy-widgets.rs` | 2,050 | Reusable widgets and the editor. |
+| `canopy-mcp.rs` | 1,050 | Automation protocol, evaluation, launch, and smoke helpers. |
+| `canopy-geom.rs` | 575 | Geometry values and checked operations. |
+| `canopy-examples.rs` | 1,050 | Demo APIs used by example tests and binaries. |
+| `todo.rs` | 225 | Todo example construction and store integration. |
+| `canopy-derive.rs` | 40 | Command proc macros. |
+
+Headroom is for a demonstrated capability rather than an alias. If a change
+crosses a threshold, record why consolidation would make the API less clear in
+the change that updates the captures.
+
+## Accepted dependency coupling
+
+`EvalTicket::completion` exposes `futures::channel::oneshot::Receiver` directly.
+Evaluation completion is a single-consumer event with the receiver's existing
+polling and cancellation semantics, so a framework wrapper would add surface
+without changing the contract.

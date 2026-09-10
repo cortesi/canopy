@@ -2,7 +2,7 @@
 
 use ruau::vm::Scope;
 
-use super::{AUTOMATION_SERVICE_BUDGET, Canopy, RoutePhase, RouteTraceEntry};
+use super::{AUTOMATION_SERVICE_BUDGET, AdapterEvent, Canopy, RoutePhase, RouteTraceEntry};
 use crate::{
     NodeId, commands,
     core::{Core, inputmap},
@@ -94,7 +94,7 @@ impl Canopy {
             if self.core.validate_attached_node(capture).is_ok()
                 && self.core.interaction_admits(capture)
             {
-                return Ok((Some(capture), self.core.node_path(self.core.root, capture)));
+                return Ok((Some(capture), self.core.path_of(self.core.root, capture)));
             } else {
                 self.core.clear_mouse_capture()?;
             }
@@ -102,7 +102,7 @@ impl Canopy {
 
         let target = self.core.locate_node(self.core.root, location)?;
         let path = target
-            .map(|id| self.core.node_path(self.core.root, id))
+            .map(|id| self.core.path_of(self.core.root, id))
             .unwrap_or_else(Path::empty);
         Ok((target, path))
     }
@@ -306,7 +306,7 @@ impl Canopy {
         T: Into<key::Key>,
     {
         let start = self.focus_or_root()?;
-        let path = self.core.node_path(self.core.root, start);
+        let path = self.core.path_of(self.core.root, start);
         let changed = self.route_input(Some(start), path, RoutedInput::Key(tk.into()), scope)?;
         if changed {
             self.render_pending = true;
@@ -331,19 +331,9 @@ impl Canopy {
         Ok(())
     }
 
-    /// Handle poll events by executing callbacks on each node in the list.
-    fn poll(&mut self, ids: &[NodeId]) -> Result<()> {
-        for id in ids {
-            if self.core.nodes.contains_key(*id) {
-                self.poll_node(*id)?;
-            }
-        }
-        Ok(())
-    }
-
     /// Service a bounded batch of callbacks marshalled onto the UI thread.
     ///
-    /// The in-crate run loop calls this after receiving [`Event::Wake`]. The
+    /// The in-crate run loop calls this after receiving an adapter wake. The
     /// return value is the number of callbacks executed during this turn.
     pub(crate) fn service_automation(&mut self) -> usize {
         let mut serviced = 0;
@@ -355,13 +345,13 @@ impl Canopy {
             serviced += 1;
         }
         if serviced == AUTOMATION_SERVICE_BUDGET {
-            let _receiver_closed = self.event_tx.unbounded_send(Event::Wake);
+            let _receiver_closed = self.event_tx.unbounded_send(AdapterEvent::Wake);
         }
         serviced
     }
 
     /// Propagate an event through the tree.
-    pub(crate) fn event(&mut self, e: Event) -> Result<()> {
+    pub(crate) fn event(&mut self, e: &Event) -> Result<()> {
         let checkpoint = self.core.begin_dispatch();
         let result = self.dispatch_input(e);
         let completion = self.core.finish_dispatch(checkpoint, result.is_ok());
@@ -369,22 +359,17 @@ impl Canopy {
     }
 
     /// Dispatch an event inside its completion boundary.
-    fn dispatch_input(&mut self, e: Event) -> Result<()> {
+    fn dispatch_input(&mut self, e: &Event) -> Result<()> {
         match e {
-            Event::Key(k) => self.key(None, k),
-            Event::Mouse(m) => self.mouse(None, m),
+            Event::Key(k) => self.key(None, *k),
+            Event::Mouse(m) => self.mouse(None, *m),
             Event::Resize(s) => {
                 self.render_pending = true;
-                self.set_root_size(s)
+                self.set_root_size(*s)
             }
-            Event::Poll(ids) => {
-                self.render_pending = true;
-                self.poll(&ids)
-            }
-            Event::Wake => Ok(()),
             Event::Paste(_) | Event::FocusGained | Event::FocusLost => {
                 self.render_pending = true;
-                self.dispatch_focus_event(&e)
+                self.dispatch_focus_event(e)
             }
         }
     }

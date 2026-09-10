@@ -1,5 +1,5 @@
 use canopy::{
-    Context, NodeId, ViewContext, Widget, command,
+    Context, NodeId, ViewContext, Widget,
     commands::{CommandNode, CommandSpec},
     derive_commands,
     error::Result,
@@ -85,7 +85,7 @@ impl Panes {
     fn focus_coords(&self, c: &dyn Context) -> Option<(usize, usize)> {
         for (x, col) in self.columns.iter().enumerate() {
             for (y, row) in col.iter().enumerate() {
-                if c.node_is_on_focus_path(*row) {
+                if c.is_on_focus_path_of(*row) {
                     return Some((x, y));
                 }
             }

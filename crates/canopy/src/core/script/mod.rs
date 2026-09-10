@@ -604,7 +604,7 @@ impl LuauHost {
         let mut state = self.state.borrow_mut();
         if state.finalize_failure == Some(step) {
             state.finalize_failure = None;
-            Err(error::Error::Script(format!(
+            Err(error::Error::script(format!(
                 "fault injected at finalization step {step:?}"
             )))
         } else {
@@ -769,14 +769,14 @@ impl LuauHost {
             builder = builder.module(module);
         }
         let surface = builder.build().map_err(|err| {
-            error::Error::Script(format!("building script surface failed: {err}"))
+            error::Error::script(format!("building script surface failed: {err}"))
         })?;
         let mut startup_surface = surface.clone();
         for requirement in &self.state.borrow().startup_requirements {
             startup_surface
                 .require_global(&requirement.name, &requirement.type_text)
                 .map_err(|err| {
-                    error::Error::Script(format!("building startup script checker failed: {err}"))
+                    error::Error::script(format!("building startup script checker failed: {err}"))
                 })?;
         }
         self.finalize_checkpoint(FinalizeStep::SurfacePrepared)?;
@@ -801,7 +801,7 @@ impl LuauHost {
             surface.clone(),
             &VmConfig::untrusted(Ambient::production(0), default_vm_limits()),
         )
-        .map_err(|err| error::Error::Script(format!("building script VM failed: {err}")))?;
+        .map_err(|err| error::Error::script(format!("building script VM failed: {err}")))?;
         self.finalize_checkpoint(FinalizeStep::RuntimeBuilt)?;
 
         let pending = self
@@ -954,9 +954,9 @@ impl LuauHost {
             )
         };
         let source =
-            source.ok_or_else(|| error::Error::Script(format!("script {sid} not found")))?;
+            source.ok_or_else(|| error::Error::script(format!("script {sid} not found")))?;
         let mut runtime_cell = self.runtime.try_borrow_mut().map_err(|_| {
-            error::Error::Script("cannot load a script while the script VM is executing".into())
+            error::Error::script("cannot load a script while the script VM is executing")
         })?;
         let runtime = runtime_cell.as_mut().ok_or_else(|| {
             error::Error::InvalidOperation("cannot load scripts before finalize_api()".to_string())
@@ -998,7 +998,7 @@ impl LuauHost {
             return Ok(root);
         }
         if !self.state.borrow().scripts.contains(sid) {
-            return Err(error::Error::Script(format!("script {sid} not found")));
+            return Err(error::Error::script(format!("script {sid} not found")));
         }
         self.load_script(sid)
     }
@@ -1045,7 +1045,7 @@ impl LuauHost {
                 .enable_time()
                 .build()
                 .map_err(|error| {
-                    error::Error::Script(format!("script async runtime failed: {error}"))
+                    error::Error::script(format!("script async runtime failed: {error}"))
                 })?;
             runtime.block_on(future)
         };
@@ -1062,7 +1062,7 @@ impl LuauHost {
         sid: ScriptId,
     ) -> Result<()> {
         let root = self.state.borrow().scripts.root(sid).ok_or_else(|| {
-            error::Error::Script(format!(
+            error::Error::script(format!(
                 "script {sid} is not loaded for reentrant execution"
             ))
         })?;
@@ -1078,7 +1078,7 @@ impl LuauHost {
         let runtime = self
             .runtime
             .try_borrow_mut()
-            .map_err(|_| error::Error::Script(busy.to_string()))?;
+            .map_err(|_| error::Error::script(busy.to_string()))?;
         RefMut::filter_map(runtime, Option::as_mut).map_err(|_| {
             error::Error::InvalidOperation(
                 "cannot execute scripts before finalize_api()".to_string(),
@@ -1110,7 +1110,7 @@ impl LuauHost {
             Ok(()) => {
                 synchronized?;
                 outcome.unwrap_or_else(|| {
-                    Err(error::Error::Script(format!("{label} produced no result")))
+                    Err(error::Error::script(format!("{label} produced no result")))
                 })
             }
             Err(error) => Err(retained_runtime_error_to_canopy(&error, label, timeout)),
@@ -1179,7 +1179,7 @@ impl LuauHost {
             .borrow()
             .closures
             .target(id)
-            .ok_or_else(|| error::Error::Script(format!("Luau function {id:?} not found")))?;
+            .ok_or_else(|| error::Error::script(format!("Luau function {id:?} not found")))?;
         let label = format!("Luau binding on node {node_id:?}");
         self.run_target(canopy, node_id, target, &label, None)
             .map(|_| ())
@@ -1197,7 +1197,7 @@ impl LuauHost {
             .borrow()
             .closures
             .target(id)
-            .ok_or_else(|| error::Error::Script(format!("Luau function {id:?} not found")))?;
+            .ok_or_else(|| error::Error::script(format!("Luau function {id:?} not found")))?;
         let label = format!("Luau binding on node {node_id:?}");
         self.run_target_in_scope(scope, node_id, &CallTarget::Stored(target), &label, None)
             .map(|_| ())

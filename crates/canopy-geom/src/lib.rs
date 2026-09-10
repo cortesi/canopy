@@ -41,16 +41,3 @@ pub use point_i32::PointI32;
 pub use rect::Rect;
 pub use rect_i32::RectI32;
 pub use size::Size;
-
-/// Cardinal directions.
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub enum Direction {
-    /// Upward direction.
-    Up,
-    /// Downward direction.
-    Down,
-    /// Leftward direction.
-    Left,
-    /// Rightward direction.
-    Right,
-}

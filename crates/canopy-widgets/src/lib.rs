@@ -14,12 +14,11 @@ mod center;
 mod click;
 /// Dropdown selection widget.
 mod dropdown;
-/// Experimental editor API with syntax highlighting and vi mode.
 #[cfg(feature = "editor")]
 pub mod editor;
 /// ASCII font rasterization helpers.
 #[cfg(feature = "graphics")]
-mod font;
+pub mod font;
 /// Banner widget that renders ASCII fonts.
 #[cfg(feature = "graphics")]
 mod font_banner;
@@ -48,7 +47,7 @@ mod root;
 mod selector;
 /// Terminal emulation widget.
 #[cfg(feature = "terminal-widget")]
-mod terminal;
+pub mod terminal;
 /// Multiline text widget.
 mod text;
 /// Shared text editing machinery for Input and Editor.
@@ -62,14 +61,7 @@ pub use boxed::{Border, BoxGlyphs, DOUBLE, ROUND, SINGLE, SINGLE_THICK};
 pub use button::Button;
 pub use center::Center;
 pub use dropdown::Dropdown;
-/// Experimental ASCII font rendering API.
-#[cfg(feature = "graphics")]
-pub use font::{Font, FontEffects, FontRenderer, LayoutOptions};
-#[cfg(feature = "graphics")]
-pub use font_banner::FontBanner;
 pub use frame::Frame;
-#[cfg(feature = "graphics")]
-pub use image_view::ImageView;
 pub use input::{Input, ValueExposure};
 pub use label::Label;
 pub use list::{AutoKey, List, Selectable};
@@ -77,10 +69,9 @@ pub use pad::Pad;
 pub use panes::Panes;
 pub use root::Root;
 pub use selector::Selector;
-#[cfg(feature = "terminal-widget")]
-pub use terminal::{Terminal, TerminalConfig};
 pub use text::{CanvasWidth, Text};
 pub use vstack::VStack;
+pub use wrap::wrap;
 
 #[cfg(test)]
 mod render_tests;

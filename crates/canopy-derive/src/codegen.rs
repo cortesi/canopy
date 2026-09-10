@@ -1,10 +1,119 @@
 use quote::quote;
-use syn::{ImplItem, ItemImpl};
+use syn::{FnArg, GenericArgument, ImplItem, ItemImpl, PathArguments, ReturnType, Type};
 
 use crate::{
     model::{CommandMeta, ParamKind, ParamMeta, ReturnKind, ReturnMeta, UserBindingSource},
     parse::{cfg_attributes, owner_name, parse_command_method},
 };
+
+/// Validate enabled hooks at their declarations so failures point to the
+/// method that must change instead of generated adapter code.
+fn validate_enabled_hooks(input: &ItemImpl, commands: &[CommandMeta]) -> syn::Result<()> {
+    for command in commands {
+        // The proc macro runs before cfg expansion, so a disabled command can
+        // legitimately name a hook (and types) that do not exist in this
+        // build. Active conditional commands are still checked by the
+        // generated status adapter.
+        if !command.cfg_attrs.is_empty() {
+            continue;
+        }
+        let Some(enabled) = &command.enabled else {
+            continue;
+        };
+        let Some(method) = input.items.iter().find_map(|item| match item {
+            ImplItem::Fn(method) if method.sig.ident == *enabled => Some(method),
+            _ => None,
+        }) else {
+            return Err(syn::Error::new_spanned(
+                enabled,
+                "enabled hook must name a method in the same impl",
+            ));
+        };
+
+        let mut inputs = method.sig.inputs.iter();
+        let Some(FnArg::Receiver(receiver)) = inputs.next() else {
+            return Err(syn::Error::new_spanned(
+                &method.sig,
+                "enabled hook must take &self and &dyn ViewContext",
+            ));
+        };
+        if receiver.reference.is_none() || receiver.mutability.is_some() {
+            return Err(syn::Error::new_spanned(
+                receiver,
+                "enabled hook receiver must be &self",
+            ));
+        }
+        let Some(FnArg::Typed(context)) = inputs.next() else {
+            return Err(syn::Error::new_spanned(
+                &method.sig,
+                "enabled hook must take &dyn ViewContext after &self",
+            ));
+        };
+        if inputs.next().is_some() || !is_immutable_view_context(&context.ty) {
+            return Err(syn::Error::new_spanned(
+                context,
+                "enabled hook must take exactly one &dyn ViewContext argument",
+            ));
+        }
+        if !is_command_status_result(&method.sig.output) {
+            return Err(syn::Error::new_spanned(
+                &method.sig.output,
+                "enabled hook must return Result<CommandStatus>",
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Return whether a hook parameter is an immutable `dyn ViewContext` reference.
+fn is_immutable_view_context(ty: &Type) -> bool {
+    let Type::Reference(reference) = ty else {
+        return false;
+    };
+    if reference.mutability.is_some() {
+        return false;
+    }
+    let Type::TraitObject(object) = &*reference.elem else {
+        return false;
+    };
+    object.bounds.iter().any(|bound| {
+        let syn::TypeParamBound::Trait(bound) = bound else {
+            return false;
+        };
+        bound
+            .path
+            .segments
+            .last()
+            .is_some_and(|segment| segment.ident == "ViewContext")
+    })
+}
+
+/// Return whether a hook output is a `Result` whose success type is
+/// `CommandStatus`.
+fn is_command_status_result(output: &ReturnType) -> bool {
+    let ReturnType::Type(_, ty) = output else {
+        return false;
+    };
+    let Type::Path(result) = &**ty else {
+        return false;
+    };
+    let Some(segment) = result.path.segments.last() else {
+        return false;
+    };
+    if segment.ident != "Result" {
+        return false;
+    }
+    let PathArguments::AngleBracketed(args) = &segment.arguments else {
+        return false;
+    };
+    let Some(GenericArgument::Type(Type::Path(ok))) = args.args.first() else {
+        return false;
+    };
+    ok.path
+        .segments
+        .last()
+        .is_some_and(|segment| segment.ident == "CommandStatus")
+}
 
 /// Render an `Option<&str>` metadata field from an optional string.
 fn opt_str_tokens(value: Option<&str>) -> proc_macro2::TokenStream {
@@ -580,6 +689,7 @@ pub fn expand_derive_commands(input: &ItemImpl) -> syn::Result<proc_macro2::Toke
             commands.push(command);
         }
     }
+    validate_enabled_hooks(input, &commands)?;
 
     let mut generated = proc_macro2::TokenStream::new();
     let mut spec_refs = Vec::new();
@@ -587,6 +697,13 @@ pub fn expand_derive_commands(input: &ItemImpl) -> syn::Result<proc_macro2::Toke
     for command in &commands {
         spec_refs.push(command.spec_ref_tokens());
         generated.extend(command.generated_items());
+    }
+
+    let mut cleaned_input = input.clone();
+    for item in &mut cleaned_input.items {
+        if let ImplItem::Fn(method) = item {
+            method.attrs.retain(|attr| !attr.path().is_ident("command"));
+        }
     }
 
     let commands_const_ident = syn::Ident::new("__CANOPY_COMMANDS", proc_macro2::Span::call_site());
@@ -597,7 +714,7 @@ pub fn expand_derive_commands(input: &ItemImpl) -> syn::Result<proc_macro2::Toke
     });
 
     Ok(quote! {
-        #input
+        #cleaned_input
 
         #(#cfg_attrs)*
         impl #impl_generics #name #where_clause {

@@ -16,13 +16,10 @@ Builder script roots use `ScriptTrust::Disabled` or `ScriptTrust::TrustedLocal`.
 Disabled roots are not mounted, required, or executed. Register a trusted root
 only when its contents have the same authority as the application user.
 
-`LaunchOptions::default()` disables automation. With `launch_with_options`,
-requesting stdio MCP or a live socket while automation is disabled returns
-`AutomationDisabled` before constructing the app or opening a listener. Set
-`automation: AutomationPolicy::TrustedLocal` to permit a requested transport.
-The convenience `launch` function treats explicit `LaunchMode::HeadlessMcp`
-and `LaunchMode::Run { mcp_socket: Some(...) }` choices as trusted-local opt-ins.
-Ordinary interactive and API-output modes open no automation listener.
+Passing `LaunchMode::HeadlessMcp` or `LaunchMode::Run { mcp_socket: Some(...) }`
+to `launch` opts into trusted-local automation. Ordinary interactive and
+API-output modes open no automation listener. The third `launch` argument is a
+`RunOptions` value that controls terminal input behavior.
 
 Low-level `serve_stdio` and `serve_uds` calls are explicit trusted-local
 operations. Socket placement and host filesystem permissions are deployment

@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     AppFactory, Error, Result,
-    script::{AppEvaluator, ScriptEvalOutcome, ScriptEvalRequest},
+    script::{ScriptEvalOutcome, ScriptEvalRequest},
 };
 
 /// Configuration for a smoke-suite run.
@@ -19,6 +19,10 @@ pub struct SuiteConfig {
     /// Optional subset of scripts to run. Relative paths are resolved against
     /// `suite_dir`.
     pub scripts: Vec<PathBuf>,
+    /// Optional per-script timeout in milliseconds.
+    pub timeout_ms: Option<u64>,
+    /// Stop after the first failed script.
+    pub fail_fast: bool,
 }
 
 impl SuiteConfig {
@@ -27,13 +31,15 @@ impl SuiteConfig {
         Self {
             suite_dir: suite_dir.into(),
             scripts: Vec::new(),
+            timeout_ms: None,
+            fail_fast: false,
         }
     }
 }
 
 /// Result of running one smoke script.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ScriptResult {
+pub struct ScriptOutcome {
     /// Script path on disk.
     pub path: PathBuf,
     /// Fixture derived for this script, if any.
@@ -44,12 +50,12 @@ pub struct ScriptResult {
 
 /// Aggregated result for a smoke suite.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SuiteResult {
+pub struct SuiteOutcome {
     /// Per-script results in execution order.
-    pub scripts: Vec<ScriptResult>,
+    pub scripts: Vec<ScriptOutcome>,
 }
 
-impl SuiteResult {
+impl SuiteOutcome {
     /// Return true when all smoke scripts passed.
     pub fn success(&self) -> bool {
         self.scripts.iter().all(|script| script.outcome.success)
@@ -57,26 +63,27 @@ impl SuiteResult {
 }
 
 /// Run a smoke suite against fresh headless app instances.
-pub fn run_suite(factory: AppFactory, config: &SuiteConfig) -> Result<SuiteResult> {
-    let evaluator = AppEvaluator::new(factory);
+pub fn run_suite(factory: &AppFactory, config: &SuiteConfig) -> Result<SuiteOutcome> {
     let scripts = discover_scripts(config)?;
     let mut results = Vec::with_capacity(scripts.len());
     for path in scripts {
         let fixture = fixture_for_script(&config.suite_dir, &path);
         let source = fs::read_to_string(&path)?;
-        let outcome = evaluator.evaluate(&ScriptEvalRequest {
-            script: source,
+        let outcome = factory.evaluate(&ScriptEvalRequest {
             fixture: fixture.clone(),
-            timeout_ms: None,
-            viewport: None,
+            timeout_ms: config.timeout_ms,
+            ..ScriptEvalRequest::new(source)
         });
-        results.push(ScriptResult {
+        results.push(ScriptOutcome {
             path,
             fixture,
             outcome,
         });
+        if config.fail_fast && !results.last().expect("just pushed").outcome.success {
+            break;
+        }
     }
-    Ok(SuiteResult { scripts: results })
+    Ok(SuiteOutcome { scripts: results })
 }
 
 /// Derive a fixture name from the first path component under the suite root.
@@ -125,7 +132,7 @@ pub fn discover_scripts(config: &SuiteConfig) -> Result<Vec<PathBuf>> {
 }
 
 /// Recursively collect `.luau` scripts under a directory.
-pub fn collect_luau_scripts(root: &Path, output: &mut Vec<PathBuf>) -> Result<()> {
+fn collect_luau_scripts(root: &Path, output: &mut Vec<PathBuf>) -> Result<()> {
     for entry in fs::read_dir(root)? {
         let entry = entry?;
         let path = entry.path();
@@ -145,6 +152,7 @@ pub fn collect_luau_scripts(root: &Path, output: &mut Vec<PathBuf>) -> Result<()
 mod tests {
     use std::fs;
 
+    use canopy::testing::contracts;
     use tempfile::TempDir;
 
     use super::*;
@@ -215,5 +223,34 @@ mod tests {
             fixture_for_script(suite, Path::new("smoke/../outside/navigation.luau")),
             None
         );
+    }
+
+    #[test]
+    fn suite_timeout_and_fail_fast_share_the_request_path() -> Result<()> {
+        let dir = unique_dir();
+        let first = dir.path().join("first.luau");
+        let second = dir.path().join("second.luau");
+        fs::write(&first, "while true do end")?;
+        fs::write(&second, "return true")?;
+        let factory = AppFactory::new(
+            crate::AppMetadata {
+                app: "smoke-test".into(),
+                reset: crate::ResetPolicy::Isolated,
+            },
+            || Ok(contracts::app()?),
+        );
+        let mut config = SuiteConfig::new(dir.path());
+        config.scripts = vec![first, second];
+        config.timeout_ms = Some(1);
+        config.fail_fast = true;
+
+        let outcome = run_suite(&factory, &config)?;
+
+        assert_eq!(outcome.scripts.len(), 1);
+        assert_eq!(
+            outcome.scripts[0].outcome.state,
+            crate::ScriptTaskState::TimedOut
+        );
+        Ok(())
     }
 }

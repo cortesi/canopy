@@ -42,9 +42,6 @@ pub enum Error {
         /// Rectangle height.
         height: u32,
     },
-    /// A split requested zero sections.
-    #[error("cannot split a length into zero sections")]
-    ZeroSections,
 }
 
 /// Result type for geometry operations.

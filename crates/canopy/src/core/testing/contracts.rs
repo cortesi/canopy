@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    Canopy, Context, EventOutcome, ViewContext, Widget, WidgetSemantics, command,
+    Canopy, Context, EventOutcome, ViewContext, Widget, WidgetSemantics,
     commands::ArgValue,
     derive_commands,
     error::Result,

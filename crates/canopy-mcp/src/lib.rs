@@ -1,4 +1,8 @@
 #![deny(unsafe_code)]
+#![expect(
+    clippy::multiple_inherent_impl,
+    reason = "AppFactory construction and evaluation live in their owning modules."
+)]
 
 //! MCP and smoke-test helpers for canopy applications.
 
@@ -16,21 +20,17 @@ mod server;
 mod smoke;
 
 pub use error::{Error, Result};
-pub use launch::{AutomationPolicy, LaunchMode, LaunchOptions, launch, launch_with_options};
+pub use launch::{LaunchMode, launch};
 pub use metadata::{
-    AppFactory, AppMetadata, ExecutionMetadata, ExecutionMode, LiveContext, ResetPolicy, Viewport,
-    app_factory,
+    AppFactory, AppMetadata, ExecutionMetadata, ExecutionMode, ResetPolicy, Viewport,
 };
 pub use script::{
-    AppEvaluator, BootstrapCommand, BootstrapJournalEntry, BootstrapRequest, BootstrapResponse,
-    ScriptErrorInfo, ScriptEvalOutcome, ScriptEvalRequest, ScriptTaskState, ScriptTiming,
-    evaluate_live,
+    BootstrapCommand, BootstrapJournalEntry, BootstrapRequest, BootstrapResponse, ScriptErrorInfo,
+    ScriptErrorType, ScriptEvalOutcome, ScriptEvalRequest, ScriptTaskState, ScriptTiming,
 };
 pub use server::{
-    ApplyFixtureRequest, UdsServerHandle, json_tool_result, serve_stdio, serve_uds,
-    serve_uds_with_context,
+    ApplyFixtureRequest, ApplyFixtureResponse, UdsServerHandle, serve_stdio, serve_uds,
 };
 pub use smoke::{
-    ScriptResult, SuiteConfig, SuiteResult, collect_luau_scripts, discover_scripts,
-    fixture_for_script, run_suite,
+    ScriptOutcome, SuiteConfig, SuiteOutcome, discover_scripts, fixture_for_script, run_suite,
 };

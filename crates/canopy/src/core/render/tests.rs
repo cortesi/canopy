@@ -42,7 +42,7 @@ impl TestTarget {
             &mut self.style,
             &mut self.buf,
             self.clip,
-            geom::Point::zero(),
+            geom::Point::ZERO,
         );
         f(&mut render)
     }

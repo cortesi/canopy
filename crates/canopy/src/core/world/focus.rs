@@ -1,9 +1,9 @@
 use super::Core;
 use crate::{
-    ChangeOutcome,
+    ChangeOutcome, FocusDirection,
     core::{id::NodeId, widget_access},
     error::{Error, Result},
-    geom::{Direction, RectI32},
+    geom::RectI32,
     layout::Display,
     path::Path,
 };
@@ -69,7 +69,7 @@ impl Core {
     /// Return the focus path for the subtree under `root`.
     pub fn focus_path(&self, root: NodeId) -> Path {
         self.focus
-            .map_or_else(Path::empty, |focus| self.node_path(root, focus))
+            .map_or_else(Path::empty, |focus| self.path_of(root, focus))
     }
 
     /// Collect the focusable leaves under `root` in pre-order.
@@ -118,8 +118,17 @@ impl Core {
         self.transition_focus(find_last_focusable(self, root))
     }
 
+    /// Move focus within the subtree at `root`.
+    pub fn focus_move(&mut self, root: NodeId, direction: FocusDirection) -> Result<ChangeOutcome> {
+        match direction {
+            FocusDirection::Next => self.focus_next(root),
+            FocusDirection::Prev => self.focus_prev(root),
+            direction => self.focus_dir(root, direction),
+        }
+    }
+
     /// Move focus in a specified direction within the subtree at root.
-    pub fn focus_dir(&mut self, root: NodeId, dir: Direction) -> Result<ChangeOutcome> {
+    fn focus_dir(&mut self, root: NodeId, dir: FocusDirection) -> Result<ChangeOutcome> {
         let focusables = self.focusable_leaves(root);
 
         let current = match self.focus {
@@ -408,7 +417,7 @@ pub(super) fn is_focus_candidate(core: &Core, node_id: NodeId, require_view: boo
         }
         current = ancestor.parent;
     }
-    if require_view && node.view.is_zero() {
+    if require_view && node.view.is_empty() {
         return false;
     }
     widget_access::accepts_focus(core, node_id)
@@ -416,36 +425,41 @@ pub(super) fn is_focus_candidate(core: &Core, node_id: NodeId, require_view: boo
 
 /// Return the focus sort key for a candidate, or `None` if it is not in `dir`.
 fn focus_dir_key(
-    dir: Direction,
+    dir: FocusDirection,
     current_rect: RectI32,
     current_center: (i64, i64),
     rect: RectI32,
 ) -> Option<u64> {
     let center = rect.center();
     match dir {
-        Direction::Right => (center.0 > current_center.0 && rect.overlaps_vertical(current_rect))
-            .then(|| {
+        FocusDirection::Right => {
+            (center.0 > current_center.0 && rect.overlaps_vertical(current_rect)).then(|| {
                 let edge_dist = (rect.left() - current_rect.right()).max(0) as u64;
                 let vert_center_dist = current_center.1.abs_diff(center.1);
                 edge_dist * 10000 + vert_center_dist
-            }),
-        Direction::Left => (center.0 < current_center.0 && rect.overlaps_vertical(current_rect))
-            .then(|| {
+            })
+        }
+        FocusDirection::Left => {
+            (center.0 < current_center.0 && rect.overlaps_vertical(current_rect)).then(|| {
                 let edge_dist = (current_rect.left() - rect.right()).max(0) as u64;
                 let vert_center_dist = current_center.1.abs_diff(center.1);
                 edge_dist * 10000 + vert_center_dist
-            }),
-        Direction::Down => (center.1 > current_center.1 && rect.overlaps_horizontal(current_rect))
-            .then(|| {
+            })
+        }
+        FocusDirection::Down => {
+            (center.1 > current_center.1 && rect.overlaps_horizontal(current_rect)).then(|| {
                 let edge_dist = (rect.top() - current_rect.bottom()).max(0) as u64;
                 let horiz_center_dist = current_center.0.abs_diff(center.0);
                 edge_dist * 10000 + horiz_center_dist
-            }),
-        Direction::Up => (center.1 < current_center.1 && rect.overlaps_horizontal(current_rect))
-            .then(|| {
+            })
+        }
+        FocusDirection::Up => {
+            (center.1 < current_center.1 && rect.overlaps_horizontal(current_rect)).then(|| {
                 let edge_dist = (current_rect.top() - rect.bottom()).max(0) as u64;
                 let horiz_center_dist = current_center.0.abs_diff(center.0);
                 edge_dist * 10000 + horiz_center_dist
-            }),
+            })
+        }
+        FocusDirection::Next | FocusDirection::Prev => None,
     }
 }

@@ -124,7 +124,7 @@ fn with_canopy<R>(scope: &Scope<'_>, f: impl FnOnce(&mut Canopy) -> Result<R>) -
         return f(&mut canopy);
     }
     with_reentrant_canopy(f)
-        .unwrap_or_else(|| Err(error::Error::Script("no active canopy context".into())))
+        .unwrap_or_else(|| Err(error::Error::script("no active canopy context")))
 }
 
 /// Push the active script anchor.
@@ -162,7 +162,7 @@ pub(super) fn with_current_canopy<R>(
             .script_context_stack
             .last()
             .copied()
-            .ok_or_else(|| error::Error::Script("no active script context".into()))?;
+            .ok_or_else(|| error::Error::script("no active script context"))?;
         f(canopy, node_id)
     })
 }

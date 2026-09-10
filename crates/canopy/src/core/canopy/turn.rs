@@ -23,7 +23,7 @@ use tokio::{
     time::sleep,
 };
 
-use super::Canopy;
+use super::{AdapterEvent, Canopy};
 use crate::{
     NodeId,
     commands::ArgValue,
@@ -46,6 +46,10 @@ impl EvalId {
     }
 }
 /// Completion receiver that is awaited outside the UI thread.
+///
+/// The public receiver is intentionally the futures oneshot type: evaluation
+/// completion is a single-consumer event, and wrapping it would duplicate the
+/// same polling and cancellation contract.
 pub struct EvalTicket {
     /// Accepted queue identity, including failed admission results.
     pub id: EvalId,
@@ -96,6 +100,14 @@ pub struct EvalOutcome {
     pub logs: Vec<String>,
     /// Assertions isolated to this evaluation.
     pub assertions: Vec<script::ScriptAssertion>,
+}
+
+impl EvalOutcome {
+    /// Take the evaluation result when this outcome has no other owner.
+    pub fn into_result(self) -> Result<ArgValue> {
+        Arc::try_unwrap(self.result)
+            .map_err(|_| Error::Internal("evaluation result is still shared".into()))?
+    }
 }
 /// Observable effects of one turn.
 #[derive(Default)]
@@ -205,7 +217,7 @@ struct VmWake {
     /// Whether a poll is due.
     ready: AtomicBool,
     /// Adapter notification channel.
-    tx: UnboundedSender<Event>,
+    tx: UnboundedSender<AdapterEvent>,
 }
 impl Wake for VmWake {
     fn wake(self: Arc<Self>) {
@@ -213,7 +225,7 @@ impl Wake for VmWake {
     }
     fn wake_by_ref(self: &Arc<Self>) {
         if !self.ready.swap(true, Ordering::AcqRel) {
-            let _closed = self.tx.unbounded_send(Event::Wake);
+            let _closed = self.tx.unbounded_send(AdapterEvent::Wake);
         }
     }
 }
@@ -251,7 +263,7 @@ pub(super) struct Driver {
 }
 impl Driver {
     /// Construct an idle driver.
-    pub(super) fn new(tx: UnboundedSender<Event>) -> Self {
+    pub(super) fn new(tx: UnboundedSender<AdapterEvent>) -> Self {
         Self {
             active: None,
             wake: Arc::new(VmWake {
@@ -296,7 +308,12 @@ impl Canopy {
             Ok(prepared) => prepared,
             Err(error) => {
                 let result: Result<()> = Err(error);
-                self.record_script_journal("eval", &request.source, baseline, &result);
+                self.record_script_journal(
+                    super::ScriptOrigin::Eval,
+                    &request.source,
+                    baseline,
+                    &result,
+                );
                 return result;
             }
         };
@@ -386,7 +403,7 @@ impl Canopy {
         self.driver.publication.advance(self.now());
         match work {
             Work::Input(event) => {
-                dispatch_error = self.event(event).err();
+                dispatch_error = self.event(&event).err();
             }
             Work::StartEval(request) => {
                 let id = EvalId::next();
@@ -466,7 +483,7 @@ impl Canopy {
             self.script_journal_next_id += 1;
             self.script_journal.push(super::ScriptJournalEntry {
                 id,
-                origin: "eval".into(),
+                origin: super::ScriptOrigin::Eval,
                 source: active.request.source,
                 ok: result.is_ok(),
                 error: result.as_ref().err().map(ToString::to_string),
@@ -535,19 +552,10 @@ impl super::AutomationHandle {
 impl Canopy {
     /// Drive the shared runtime until one synchronous headless evaluation
     /// completes.
-    pub(super) fn eval_headless(
-        &mut self,
-        source: &str,
-        timeout: Option<Duration>,
-    ) -> Result<ArgValue> {
+    pub(super) fn eval_headless(&mut self, request: EvalRequest) -> Result<EvalOutcome> {
         if self.driver.in_turn || self.driver.active.is_some() || script::in_live_scope(self) {
             return Err(busy());
         }
-        let request = EvalRequest {
-            source: source.to_owned(),
-            timeout,
-            anchor: self.root_id(),
-        };
         let runtime = if Handle::try_current().is_ok() {
             None
         } else {
@@ -566,9 +574,7 @@ impl Canopy {
             loop {
                 if let Some(index) = outcome.completed.iter().position(|done| done.id == id) {
                     let completion = outcome.completed.swap_remove(index);
-                    return Arc::try_unwrap(completion.result).map_err(|_| {
-                        Error::Internal("headless completion unexpectedly shared".into())
-                    })?;
+                    return Ok(completion);
                 }
                 let work = {
                     let deadline = self.next_deadline();
@@ -587,7 +593,10 @@ impl Canopy {
                     futures::select! {
                         result = notified => { result?; Work::Wake },
                         () = timer => Work::Wake,
-                        event = event => Work::Input(event.ok_or_else(||Error::RunLoop("headless event channel closed".into()))?),
+                        event = event => match event.ok_or_else(|| Error::RunLoop("headless event channel closed".into()))? {
+                            AdapterEvent::Input(event) => Work::Input(event),
+                            AdapterEvent::Wake => Work::Wake,
+                        },
                     }
                 };
                 // All waiting futures release application references before
@@ -611,7 +620,7 @@ impl Canopy {
             self.driver.publication.clear_waiters();
             self.driver.wake.ready.store(false, Ordering::Release);
             self.record_script_journal(
-                "eval",
+                super::ScriptOrigin::Eval,
                 &active.request.source,
                 super::ScriptJournalBaseline {
                     started: active.started,

@@ -314,14 +314,14 @@ impl LuauHost {
         let poll = step.poll.map(|result| match result {
             Ok(values) => marshaled_to_arg_value(values.first().unwrap_or(&ValueSnapshot::Nil))
                 .map_err(|message| {
-                    error::Error::Script(format!("{}: {message}", invocation.label))
+                    error::Error::script(format!("{}: {message}", invocation.label))
                 }),
             Err(InvocationError::Lifecycle(error)) => Err(retained_runtime_error_to_canopy(
                 &error,
                 &invocation.label,
                 invocation.reporting_timeout,
             )),
-            Err(InvocationError::Completion(error)) => Err(error::Error::Script(format!(
+            Err(InvocationError::Completion(error)) => Err(error::Error::script(format!(
                 "{}: {}",
                 invocation.label,
                 error.message()

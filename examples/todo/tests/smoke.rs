@@ -6,18 +6,22 @@ mod tests {
 
     use anyhow::Result;
     use canopy_mcp::{
-        AppMetadata, Error as McpError, ResetPolicy, SuiteConfig, app_factory, run_suite,
+        AppFactory, AppMetadata, Error as McpError, ResetPolicy, SuiteConfig, run_suite,
     };
-    use todo::create_app;
+    use todo::{create_app, store::Store};
 
     #[test]
     fn luau_smoke_suite_passes() -> Result<()> {
         let suite_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("smoke");
         let result = run_suite(
-            app_factory(|| create_app(":memory:").map_err(McpError::app)).with_metadata(
+            &AppFactory::new(
                 AppMetadata {
                     app: "todo".into(),
                     reset: ResetPolicy::Isolated,
+                },
+                || {
+                    let store = Store::open(":memory:").map_err(McpError::app)?;
+                    create_app(store, None).map_err(McpError::app)
                 },
             ),
             &SuiteConfig::new(suite_dir),

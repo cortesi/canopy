@@ -1,4 +1,4 @@
-use canopy_derive::{command, derive_commands};
+use canopy_derive::derive_commands;
 
 struct App;
 

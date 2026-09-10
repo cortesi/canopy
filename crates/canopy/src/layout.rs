@@ -4,7 +4,7 @@ use std::result::Result;
 
 use thiserror::Error;
 
-use crate::geom::{Rect, Size as GeomSize};
+use crate::geom::{Rect, Size};
 
 /// Stack direction for children.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -152,9 +152,6 @@ impl Edges {
         self.top.saturating_add(self.bottom)
     }
 }
-
-/// Size with width and height.
-pub type Size = GeomSize;
 
 impl Direction {
     /// Size along the main axis.
@@ -445,7 +442,7 @@ impl Layout {
     }
 
     /// Remove this node from layout and rendering.
-    pub fn none(mut self) -> Self {
+    pub fn hidden(mut self) -> Self {
         self.display = Display::None;
         self
     }
@@ -490,27 +487,21 @@ impl Layout {
         self
     }
 
-    /// Allow horizontal overflow during measurement.
-    pub fn overflow_x(mut self) -> Self {
-        self.overflow_x = MeasureOverflow::Unbounded;
-        self
-    }
-
-    /// Allow vertical overflow during measurement.
-    pub fn overflow_y(mut self) -> Self {
-        self.overflow_y = MeasureOverflow::Unbounded;
-        self
-    }
-
-    /// Set the horizontal measurement policy.
-    pub fn measure_overflow_x(mut self, policy: MeasureOverflow) -> Self {
+    /// Set the horizontal measurement overflow policy.
+    pub fn overflow_x(mut self, policy: MeasureOverflow) -> Self {
         self.overflow_x = policy;
         self
     }
 
-    /// Set the vertical measurement policy.
-    pub fn measure_overflow_y(mut self, policy: MeasureOverflow) -> Self {
+    /// Set the vertical measurement overflow policy.
+    pub fn overflow_y(mut self, policy: MeasureOverflow) -> Self {
         self.overflow_y = policy;
+        self
+    }
+
+    /// Set whether this node participates in layout and rendering.
+    pub fn display(mut self, display: Display) -> Self {
+        self.display = display;
         self
     }
 

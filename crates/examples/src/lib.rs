@@ -49,11 +49,9 @@ pub mod widget;
 /// Widget editor example nodes.
 pub mod widget_editor;
 
-/// Finalize and print the Luau API definitions for a demo app.
-pub fn print_luau_api(cnpy: &mut Canopy) -> Result<()> {
-    cnpy.finalize_api()?;
-    print!("{}", cnpy.script_api()?);
-    Ok(())
+/// Return the Luau API definitions for a built demo app.
+pub fn print_luau_api(cnpy: &mut Canopy) -> Result<String> {
+    cnpy.script_api().map(str::to_owned)
 }
 
 /// Build a four-stop gradient paint at a fixed angle, evenly weighted toward
@@ -96,7 +94,7 @@ canopy.bind_command("q", { phase = "after_widget", path = "root", description = 
 "#;
 
 /// Render the shared scroll bindings for one receiver and binding path.
-pub fn text_scroll_bindings(receiver: &str, path: &str) -> String {
+pub(crate) fn text_scroll_bindings(receiver: &str, path: &str) -> String {
     TEXT_SCROLL_BINDINGS
         .replace("{receiver}", receiver)
         .replace("{path}", path)
@@ -137,7 +135,7 @@ pub fn run_demo_with_options<T: Widget + 'static>(
 ) -> Result<i32> {
     let canopy = builder
         .assemble(move |cnpy| {
-            Root::install_app_with_inspector(cnpy, app, inspector)?;
+            Root::new().with_inspector(inspector).install(cnpy, app)?;
             Ok(())
         })
         .build()?;

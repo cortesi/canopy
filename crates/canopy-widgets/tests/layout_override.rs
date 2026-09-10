@@ -15,7 +15,7 @@ mod tests {
     fn frame_override_survives_refresh_and_clears_to_widget_defaults() -> Result<()> {
         let mut canopy = Canopy::new();
         Root::load(&mut canopy)?;
-        let frame = Root::install_app(&mut canopy, Frame::new())?;
+        let frame = Root::new().install(&mut canopy, Frame::new())?;
         canopy.with_context(frame, |ctx| {
             let text = ctx.create_detached(Text::new("retained"))?;
             ctx.attach(frame.into(), text.into())?;
@@ -32,11 +32,11 @@ mod tests {
             })?;
             harness.render()?;
             harness.canopy.with_root_view(|ctx| {
-                let layout = ctx.node_layout(frame.into()).expect("frame layout");
+                let layout = ctx.layout_of(frame.into()).expect("frame layout");
                 assert_eq!(layout.min_height, Some(3));
                 assert_eq!(layout.max_height, Some(3));
                 assert_eq!(layout.padding, Frame::new().layout().padding);
-                let view = ctx.node_view(frame.into()).expect("frame view");
+                let view = ctx.view_of(frame.into()).expect("frame view");
                 assert_eq!(view.outer_size(), Size::new(20, 3));
                 assert_eq!(view.content_size(), Size::new(18, 1));
                 assert_eq!(view.content_origin(), Point { x: 1, y: 1 });
@@ -50,8 +50,8 @@ mod tests {
             .with_root_context(|ctx| ctx.clear_layout_override_of(frame.into()))?;
         harness.render()?;
         harness.canopy.with_root_view(|ctx| {
-            assert_eq!(ctx.node_layout(frame.into()), Some(Frame::new().layout()));
-            let view = ctx.node_view(frame.into()).expect("frame view");
+            assert_eq!(ctx.layout_of(frame.into()), Some(Frame::new().layout()));
+            let view = ctx.view_of(frame.into()).expect("frame view");
             assert_eq!(view.outer_size(), Size::new(20, 8));
             assert_eq!(view.content_size(), Size::new(18, 6));
         });

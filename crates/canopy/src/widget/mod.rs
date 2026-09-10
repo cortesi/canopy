@@ -11,7 +11,8 @@ use crate::{
     cursor,
     error::Result,
     event::Event,
-    layout::{CanvasContext, Layout, MeasureConstraints, Measurement, Size},
+    geom::Size,
+    layout::{CanvasContext, Layout, MeasureConstraints, Measurement},
     render::Render,
     state::NodeName,
 };

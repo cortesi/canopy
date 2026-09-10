@@ -9,7 +9,7 @@ use canopy::{
 use canopy_widgets::editor::{EditMode, Editor, EditorConfig, LineNumbers, WrapMode};
 use criterion::{Criterion, criterion_group, criterion_main};
 
-canopy::key!(EditorSlot: Editor);
+canopy::slot!(EditorSlot: Editor);
 
 /// Wrapper node used for editor render benchmarks.
 struct BenchmarkEditorWrapper {
@@ -35,7 +35,7 @@ impl Widget for BenchmarkEditorWrapper {
             .with_line_numbers(LineNumbers::Absolute);
         let editor = Editor::with_config(self.text.clone(), config);
         let editor_id = c
-            .add_keyed::<EditorSlot>(editor)
+            .add_slot::<EditorSlot>(editor)
             .expect("Failed to attach editor");
 
         c.set_layout(Layout::fill()).expect("Failed to style root");

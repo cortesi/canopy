@@ -9,10 +9,10 @@ use std::{
 };
 
 use canopy::{
-    Canopy, Context, Loader, ViewContext, Widget, command, derive_commands,
+    Canopy, Context, FocusDirection, Loader, ViewContext, Widget, derive_commands,
     error::{Error, Result},
-    geom::{Direction, Rect},
-    layout::{CanvasContext, Constraint, Layout, MeasureConstraints, Measurement, Size},
+    geom::{Rect, Size},
+    layout::{CanvasContext, Constraint, Layout, MeasureConstraints, Measurement},
     render::Render,
     state::NodeName,
 };
@@ -21,10 +21,10 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::{List, Selectable};
 
-canopy::key!(ListSlot: List<LogEntry>);
+canopy::slot!(ListSlot: List<LogEntry>);
 
 /// Widget for displaying a single log entry.
-pub struct LogEntry {
+struct LogEntry {
     /// Text content.
     text: String,
     /// Selection state.
@@ -40,7 +40,7 @@ impl Selectable for LogEntry {
 #[derive_commands]
 impl LogEntry {
     /// Construct a log entry from text.
-    pub fn new(text: impl Into<String>) -> Self {
+    fn new(text: impl Into<String>) -> Self {
         Self {
             text: text.into(),
             selected: false,
@@ -66,7 +66,7 @@ impl Widget for LogEntry {
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
 
-        if view.is_zero() {
+        if view.is_empty() {
             return Ok(());
         }
 
@@ -211,7 +211,7 @@ impl Widget for Logs {
 #[derive_commands]
 impl Logs {
     /// Construct a log panel.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             install: InstallState::Unattempted,
             buf: Arc::new(Mutex::new(vec![])),
@@ -220,11 +220,11 @@ impl Logs {
 
     /// Ensure the list widget is mounted.
     fn ensure_tree(&self, c: &mut dyn Context) -> Result<()> {
-        if c.has_child::<ListSlot>()? {
+        if c.has_slot::<ListSlot>()? {
             return Ok(());
         }
 
-        let list_id = c.add_keyed::<ListSlot>(List::<LogEntry>::new())?;
+        let list_id = c.add_slot::<ListSlot>(List::<LogEntry>::new())?;
         c.set_layout_of(list_id, Layout::fill())?;
         Ok(())
     }
@@ -234,10 +234,10 @@ impl Logs {
     where
         F: FnOnce(&mut List<LogEntry>, &mut dyn Context) -> Result<R>,
     {
-        if !c.has_child::<ListSlot>()? {
+        if !c.has_slot::<ListSlot>()? {
             return Err(Error::Internal("logs list not initialized".into()));
         }
-        c.with_child::<ListSlot, _>(f)
+        c.with_typed_slot::<ListSlot, _>(f)
     }
 
     /// Drain buffered log lines into the list.
@@ -294,7 +294,7 @@ impl Logs {
     /// Scroll the view by one line in the specified direction.
     /// @param dir The direction to scroll.
     #[command]
-    pub fn scroll(&self, c: &mut dyn Context, dir: Direction) -> Result<()> {
+    pub fn scroll(&self, c: &mut dyn Context, dir: FocusDirection) -> Result<()> {
         self.with_list(c, |list, ctx| {
             list.scroll(ctx, dir);
             Ok(())

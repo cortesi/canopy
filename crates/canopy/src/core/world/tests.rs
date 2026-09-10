@@ -369,7 +369,7 @@ fn with_callback_core(
     node: NodeId,
     f: impl FnOnce(&mut Core) -> Result<()>,
 ) -> Result<Result<()>> {
-    core.with_widget_mut(node, |_widget, core| f(core))
+    core.with_widget_dyn_mut(node, |_widget, core| f(core))
 }
 
 fn property_nodes(core: &mut Core) -> Result<Vec<Option<NodeId>>> {
@@ -784,11 +784,11 @@ fn read_only_widget_access_allows_nested_reads() -> Result<()> {
     let mut core = Core::new();
     let child = core.create_detached(simple_widget())?;
 
-    let nested = core.with_widget_read(
+    let nested = core.with_widget(
         child,
         WidgetOperation::access("outer read"),
         |_widget, core| {
-            core.with_widget_read(
+            core.with_widget(
                 child,
                 WidgetOperation::access("inner read"),
                 |_widget, _core| true,
@@ -805,11 +805,11 @@ fn widget_read_errors_include_operation_node_and_path() -> Result<()> {
     let mut core = Core::new();
     let child = core.create_detached(simple_widget())?;
     attach_root_child(&mut core, child)?;
-    let path = core.node_path(core.root, child).to_string();
+    let path = core.path_of(core.root, child).to_string();
 
     let error = core
-        .with_widget_mut(child, |_widget, core| {
-            core.with_widget_read(
+        .with_widget_dyn_mut(child, |_widget, core| {
+            core.with_widget(
                 child,
                 WidgetOperation::access("test read"),
                 |_widget, _core| (),
@@ -833,8 +833,8 @@ fn widget_slot_restores_after_nested_access_error() -> Result<()> {
     let mut core = Core::new();
     let child = core.create_detached(simple_widget())?;
 
-    core.with_widget_mut(child, |_widget, core| {
-        let nested = core.with_widget_mut(child, |_widget, _core| ());
+    core.with_widget_dyn_mut(child, |_widget, core| {
+        let nested = core.with_widget_dyn_mut(child, |_widget, _core| ());
         let error = nested.expect_err("nested mutation should fail");
         assert!(matches!(
             error,
@@ -845,7 +845,7 @@ fn widget_slot_restores_after_nested_access_error() -> Result<()> {
         ));
         assert_error_context(&error, "mutation callback", child, "<detached>");
     })?;
-    core.with_widget_mut(child, |_widget, _core| ())?;
+    core.with_widget_dyn_mut(child, |_widget, _core| ())?;
 
     Ok(())
 }
@@ -855,11 +855,11 @@ fn layout_refresh_errors_include_operation_node_and_path() -> Result<()> {
     let mut core = Core::new();
     let child = core.create_detached(simple_widget())?;
     attach_root_child(&mut core, child)?;
-    let path = core.node_path(core.root, child).to_string();
+    let path = core.path_of(core.root, child).to_string();
     core.nodes[child].layout_dirty = true;
 
     let error = core
-        .with_widget_mut(child, |_widget, core| refresh_layouts(core))?
+        .with_widget_dyn_mut(child, |_widget, core| refresh_layouts(core))?
         .expect_err("layout refresh should fail while the widget is extracted");
 
     assert!(matches!(
@@ -878,11 +878,11 @@ fn widget_slot_restores_after_callback_error() -> Result<()> {
     let mut core = Core::new();
     let child = core.create_detached(simple_widget())?;
 
-    let result = core.with_widget_mut(child, |_widget, _core| -> Result<()> {
+    let result = core.with_widget_dyn_mut(child, |_widget, _core| -> Result<()> {
         Err(Error::Invalid("callback failed".into()))
     })?;
     assert!(matches!(result, Err(Error::Invalid(_))));
-    core.with_widget_mut(child, |_widget, _core| ())?;
+    core.with_widget_dyn_mut(child, |_widget, _core| ())?;
 
     Ok(())
 }
@@ -893,20 +893,20 @@ fn widget_slot_restores_after_callback_panic() -> Result<()> {
     let child = core.create_detached(simple_widget())?;
 
     let result = catch_unwind(AssertUnwindSafe(|| {
-        let _ignored = core.with_widget_mut(child, |_widget, _core| {
+        let _ignored = core.with_widget_dyn_mut(child, |_widget, _core| {
             panic!("callback panic");
         });
     }));
 
     assert!(result.is_err());
-    core.with_widget_mut(child, |_widget, _core| ())?;
+    core.with_widget_dyn_mut(child, |_widget, _core| ())?;
     Ok(())
 }
 
 #[test]
 fn callback_cannot_remove_current_node() -> Result<()> {
     let (mut core, nodes) = callback_mutation_tree()?;
-    let path = core.node_path(core.root, nodes.current).to_string();
+    let path = core.path_of(core.root, nodes.current).to_string();
 
     let error = with_callback_context(&mut core, nodes.current, |ctx| {
         ctx.remove_subtree(nodes.current)
@@ -928,7 +928,7 @@ fn callback_cannot_remove_current_node() -> Result<()> {
 #[test]
 fn callback_cannot_replace_current_node() -> Result<()> {
     let (mut core, nodes) = callback_mutation_tree()?;
-    let path = core.node_path(core.root, nodes.current).to_string();
+    let path = core.path_of(core.root, nodes.current).to_string();
 
     let error = with_callback_core(&mut core, nodes.current, |core| {
         core.replace_subtree(nodes.current, simple_widget())
@@ -953,7 +953,7 @@ fn callback_cannot_replace_current_node() -> Result<()> {
 #[test]
 fn callback_cannot_remove_parent_containing_current_node() -> Result<()> {
     let (mut core, nodes) = callback_mutation_tree()?;
-    let path = core.node_path(core.root, nodes.current).to_string();
+    let path = core.path_of(core.root, nodes.current).to_string();
 
     let error = with_callback_context(&mut core, nodes.current, |ctx| {
         ctx.remove_subtree(nodes.parent)
@@ -976,7 +976,7 @@ fn callback_cannot_remove_parent_containing_current_node() -> Result<()> {
 #[test]
 fn callback_cannot_replace_parent_containing_current_node() -> Result<()> {
     let (mut core, nodes) = callback_mutation_tree()?;
-    let path = core.node_path(core.root, nodes.current).to_string();
+    let path = core.path_of(core.root, nodes.current).to_string();
 
     let error = with_callback_core(&mut core, nodes.current, |core| {
         core.replace_subtree(nodes.parent, simple_widget())
@@ -1202,17 +1202,17 @@ fn keyed_children_require_unique_keys() -> Result<()> {
     let parent = wrap_node(&mut core)?;
     core.attach(core.root, parent)?;
     let (child_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let child = core.add_child_to_keyed_boxed(parent, "slot", Box::new(child_widget))?;
+    let child = core.add_child_to_slot_boxed(parent, "slot", Box::new(child_widget))?;
     let node_count = core.nodes.len();
 
     let (other_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
     let err = core
-        .add_child_to_keyed_boxed(parent, "slot", Box::new(other_widget))
+        .add_child_to_slot_boxed(parent, "slot", Box::new(other_widget))
         .unwrap_err();
 
     assert!(matches!(err, Error::DuplicateChildKey(_)));
     assert_eq!(core.nodes.len(), node_count);
-    assert_eq!(core.child_keyed(parent, "slot"), Some(child));
+    assert_eq!(core.child_slot(parent, "slot"), Some(child));
     Ok(())
 }
 
@@ -1222,11 +1222,11 @@ fn detach_clears_keyed_mapping() -> Result<()> {
     let parent = wrap_node(&mut core)?;
     core.attach(core.root, parent)?;
     let (child_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let child = core.add_child_to_keyed_boxed(parent, "slot", Box::new(child_widget))?;
+    let child = core.add_child_to_slot_boxed(parent, "slot", Box::new(child_widget))?;
 
     core.detach(child)?;
 
-    assert!(core.child_keyed(parent, "slot").is_none());
+    assert!(core.child_slot(parent, "slot").is_none());
     assert!(core.nodes[child].parent.is_none());
     Ok(())
 }
@@ -1402,12 +1402,12 @@ fn keyed_child_add_rolls_back_key_and_node_on_mount_failure() -> Result<()> {
     core.attach(core.root, parent)?;
 
     let error = assert_structural_rollback(&mut core, |core| {
-        core.add_child_to_keyed_boxed(parent, "fault", Box::new(MountFailWidget))?;
+        core.add_child_to_slot_boxed(parent, "fault", Box::new(MountFailWidget))?;
         Ok(())
     });
 
     assert!(matches!(error, Error::Invalid(_)));
-    assert!(core.child_keyed(parent, "fault").is_none());
+    assert!(core.child_slot(parent, "fault").is_none());
     Ok(())
 }
 
@@ -1610,7 +1610,7 @@ fn focus_recovery_excludes_hidden_ancestor_subtrees() -> Result<()> {
             }
             core.set_focus(child)?;
             if display_none {
-                core.set_layout_of(parent, Layout::fill().none())?;
+                core.set_layout_of(parent, Layout::fill().hidden())?;
                 core.ensure_focus_valid(None)?;
             } else {
                 core.set_hidden(parent, true)?;

@@ -3,9 +3,9 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, FocusScope, NodeId, ViewContext, Widget,
+        Canopy, FocusDirection, FocusScope, NodeId, ViewContext, Widget,
         error::{Error, Result},
-        geom::{Direction, Size},
+        geom::Size,
         layout::Layout,
         state::NodeName,
         testing::grid::Grid,
@@ -16,7 +16,7 @@ mod tests {
         canopy.with_root_view(|context| {
             let root = context.root_id();
             let focused = context.focused_leaf(root)?;
-            let mut path = context.node_path(root, focused);
+            let mut path = context.path_of(root, focused);
             path.pop().filter(|name| name.starts_with("cell_"))
         })
     }
@@ -27,10 +27,10 @@ mod tests {
     }
 
     /// Move focus one step in a direction within a subtree.
-    fn focus_dir(canopy: &mut Canopy, root: NodeId, direction: Direction) -> Result<()> {
+    fn focus_dir(canopy: &mut Canopy, root: NodeId, direction: FocusDirection) -> Result<()> {
         canopy.with_root_context(|context| {
             context
-                .focus_dir(FocusScope::Node(root), direction)
+                .focus_move(FocusScope::Node(root), direction)
                 .map(|_| ())
         })
     }
@@ -75,9 +75,9 @@ mod tests {
             // rows right to left.
             let forward = row % 2 == 0;
             let step = if forward {
-                Direction::Right
+                FocusDirection::Right
             } else {
-                Direction::Left
+                FocusDirection::Left
             };
             let cols: Vec<usize> = if forward {
                 (0..grid_width).collect()
@@ -121,7 +121,7 @@ mod tests {
 
             if row < grid_height - 1 {
                 let before = focused_cell(canopy);
-                focus_dir(canopy, grid.root, Direction::Down)?;
+                focus_dir(canopy, grid.root, FocusDirection::Down)?;
                 let after = focused_cell(canopy);
 
                 if before == after {
@@ -162,16 +162,16 @@ mod tests {
         focus_first(&mut canopy, grid.root)?;
         assert_eq!(focused_cell(&canopy), Some("cell_0_0".to_string()));
 
-        focus_dir(&mut canopy, grid.root, Direction::Right)?;
+        focus_dir(&mut canopy, grid.root, FocusDirection::Right)?;
         assert_eq!(focused_cell(&canopy), Some("cell_1_0".to_string()));
 
-        focus_dir(&mut canopy, grid.root, Direction::Down)?;
+        focus_dir(&mut canopy, grid.root, FocusDirection::Down)?;
         assert_eq!(focused_cell(&canopy), Some("cell_1_1".to_string()));
 
-        focus_dir(&mut canopy, grid.root, Direction::Left)?;
+        focus_dir(&mut canopy, grid.root, FocusDirection::Left)?;
         assert_eq!(focused_cell(&canopy), Some("cell_0_1".to_string()));
 
-        focus_dir(&mut canopy, grid.root, Direction::Up)?;
+        focus_dir(&mut canopy, grid.root, FocusDirection::Up)?;
         assert_eq!(focused_cell(&canopy), Some("cell_0_0".to_string()));
 
         Ok(())

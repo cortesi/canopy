@@ -1,16 +1,13 @@
-error[E0596]: cannot borrow data in a `&` reference as mutable
- --> tests/ui/status_mutable_receiver.rs:6:1
+error: enabled hook receiver must be &self
+ --> tests/ui/status_mutable_receiver.rs:8:19
   |
-6 | #[derive_commands]
-  | ^^^^^^^^^^^^^^^^^^ `target` is a `&` reference, so it cannot be borrowed as mutable
+8 |     fn can_update(&mut self, _ctx: &dyn ViewContext) -> Result<CommandStatus> {
+  |                   ^^^^^^^^^
+
+warning: unused imports: `ViewContext`, `commands::CommandStatus`, and `error::Result`
+ --> tests/ui/status_mutable_receiver.rs:1:14
   |
-  = note: this error originates in the attribute macro `derive_commands` (in Nightly builds, run with -Z macro-backtrace for more info)
-help: consider annotating `App` with `#[derive(Clone)]`
+1 | use canopy::{ViewContext, commands::CommandStatus, error::Result};
+  |              ^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^
   |
-4 + #[derive(Clone)]
-5 | struct App;
-  |
-help: consider specifying this binding's type
-  |
-6 | #[derive_commands]: &mut App
-  |                   ++++++++++
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default

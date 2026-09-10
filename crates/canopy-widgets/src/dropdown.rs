@@ -1,10 +1,11 @@
 //! Dropdown widget for single-value selection with expand/collapse behavior.
 
 use canopy::{
-    Context, EventOutcome, ViewContext, Widget, command, derive_commands,
-    error::Result,
+    Context, EventOutcome, ViewContext, Widget, derive_commands,
+    error::{Error, Result},
     event::{Event, mouse},
-    layout::{MeasureConstraints, Measurement, Size},
+    geom::Size,
+    layout::{MeasureConstraints, Measurement},
     render::Render,
     state::NodeName,
     text,
@@ -38,15 +39,19 @@ where
 {
     /// Create a new dropdown with the given items.
     ///
-    /// Panics if items is empty.
-    pub fn new(items: Vec<T>) -> Self {
-        assert!(!items.is_empty(), "Dropdown must have at least one item");
-        Self {
+    /// Returns an error if `items` is empty.
+    pub fn new(items: Vec<T>) -> Result<Self> {
+        if items.is_empty() {
+            return Err(Error::Invalid(
+                "Dropdown must have at least one item".into(),
+            ));
+        }
+        Ok(Self {
             items,
             selected: 0,
             expanded: false,
             highlighted: 0,
-        }
+        })
     }
 
     /// Get the currently selected item.
@@ -102,7 +107,7 @@ where
         if event.action != mouse::Action::Down || event.button != mouse::Button::Left {
             return Ok(());
         }
-        let clicked_row = event.location.y.saturating_add(c.view().tl.y) as usize;
+        let clicked_row = event.location.y.saturating_add(c.view().scroll.y) as usize;
         if !self.expanded {
             return self.toggle(c);
         }
@@ -170,8 +175,8 @@ where
 
         if self.expanded {
             // Render visible items
-            for (idx, item) in self.items.iter().enumerate().skip(view.tl.y as usize) {
-                let Ok(row) = u32::try_from(idx - view.tl.y as usize) else {
+            for (idx, item) in self.items.iter().enumerate().skip(view.scroll.y as usize) {
+                let Ok(row) = u32::try_from(idx - view.scroll.y as usize) else {
                     break;
                 };
                 if row >= rect.h {
@@ -179,11 +184,11 @@ where
                 }
                 let line_rect = rect.line(row)?;
                 let (label, _) =
-                    text::slice_by_columns(item.label(), view.tl.x as usize, rect.w as usize);
+                    text::slice_by_columns(item.label(), view.scroll.x as usize, rect.w as usize);
 
                 if idx == self.highlighted {
                     // Highlighted item - inverse colors
-                    rndr.fill("dropdown/highlight", line_rect.into(), ' ')?;
+                    rndr.fill("dropdown/highlight", line_rect.rect(), ' ')?;
                     rndr.text("dropdown/highlight", line_rect, label)?;
                 } else if idx == self.selected {
                     // Selected but not highlighted
@@ -201,7 +206,7 @@ where
             let indicator = " ▼";
             let display = format!("{}{}", label, indicator);
             let (display, _) =
-                text::slice_by_columns(&display, view.tl.x as usize, rect.w as usize);
+                text::slice_by_columns(&display, view.scroll.x as usize, rect.w as usize);
             rndr.text("dropdown", rect.line(0)?, display)?;
         }
 
@@ -244,7 +249,7 @@ mod tests {
     #[test]
     fn test_dropdown_creation() {
         let items = vec!["Option 1".to_string(), "Option 2".to_string()];
-        let dropdown = Dropdown::new(items);
+        let dropdown = Dropdown::new(items).expect("nonempty dropdown");
         assert_eq!(dropdown.selected_index(), 0);
         assert!(!dropdown.expanded);
     }
@@ -256,7 +261,7 @@ mod tests {
             "Option 2".to_string(),
             "Option 3".to_string(),
         ];
-        let mut dropdown = Dropdown::new(items);
+        let mut dropdown = Dropdown::new(items).expect("nonempty dropdown");
         dropdown.selected = 1;
         dropdown.highlighted = 1;
         assert_eq!(dropdown.selected_index(), 1);
@@ -264,10 +269,9 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Dropdown must have at least one item")]
-    fn test_dropdown_empty_panics() {
+    fn test_dropdown_rejects_empty_items() {
         let items: Vec<String> = vec![];
-        let _ = Dropdown::new(items);
+        assert!(Dropdown::new(items).is_err());
     }
 
     #[test]
@@ -277,7 +281,7 @@ mod tests {
             "Option 2".to_string(),
             "Option 3".to_string(),
         ];
-        let root = Dropdown::new(items);
+        let root = Dropdown::new(items)?;
         let mut harness = Harness::builder(root).size(20, 6).build()?;
         harness.render()?;
         harness.script(include_str!("../tests/luau/dropdown_select_second.luau"))?;
@@ -295,7 +299,7 @@ mod tests {
             "Option 2".to_string(),
             "Option 3".to_string(),
         ];
-        let mut dropdown = Dropdown::new(items);
+        let mut dropdown = Dropdown::new(items)?;
         let mut ctx = DummyContext::default();
 
         assert!(dropdown.selection_invariant_holds());

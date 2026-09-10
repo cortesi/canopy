@@ -3,7 +3,7 @@ pub mod key;
 /// Mouse event types.
 pub mod mouse;
 
-use crate::{NodeId, geom::Size};
+use crate::geom::Size;
 
 /// This enum represents all the event types that drive the application.
 #[derive(Debug, Clone)]
@@ -14,14 +14,10 @@ pub enum Event {
     Mouse(mouse::MouseEvent),
     /// Terminal resize
     Resize(Size),
-    /// A poll event
-    Poll(Vec<NodeId>),
     /// Terminal has gained focus
     FocusGained,
     /// Terminal has lost focus
     FocusLost,
     /// Cut and paste
     Paste(String),
-    /// Internal wake event used to service queued automation work.
-    Wake,
 }

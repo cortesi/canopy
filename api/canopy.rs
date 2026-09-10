@@ -335,22 +335,6 @@ pub mod canopy {
         /// [`DeclRegistry::begin`] before recursing into field types.
         pub struct DeclRegistry<'a> {}
 
-        /// Direction for focus movement commands.
-        pub enum FocusDirection {
-            /// Move to the next focusable node.
-            Next,
-            /// Move to the previous focusable node.
-            Prev,
-            /// Move focus up.
-            Up,
-            /// Move focus down.
-            Down,
-            /// Move focus left.
-            Left,
-            /// Move focus right.
-            Right,
-        }
-
         /// Erased invoke function signature.
         pub type InvokeFn = fn(
             target: Option<&mut dyn Any>,
@@ -739,40 +723,6 @@ pub mod canopy {
             fn eq(&self, other: &Self) -> bool {}
         }
 
-        impl Clone for FocusDirection {
-            fn clone(&self) -> FocusDirection {}
-        }
-
-        impl CommandType for FocusDirection {
-            fn luau_decls(registry: &mut canopy::commands::DeclRegistry<'_>) {}
-
-            fn luau_ty() -> canopy::commands::declaration::Type {}
-        }
-
-        impl Debug for FocusDirection {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for FocusDirection {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl FromArgValue for FocusDirection {
-            fn from_arg_value(
-                v: &canopy::commands::ArgValue,
-            ) -> ::std::result::Result<Self, canopy::commands::CommandError> {
-            }
-        }
-
-        impl PartialEq for FocusDirection {
-            fn eq(&self, other: &FocusDirection) -> bool {}
-        }
-
-        impl ToArgValue for FocusDirection {
-            fn to_arg_value(self) -> canopy::commands::ArgValue {}
-        }
-
         impl Clone for ListRowContext {
             fn clone(&self) -> ListRowContext {}
         }
@@ -1110,9 +1060,6 @@ pub mod canopy {
             #[error("parse error: {0}")]
             /// Parsing failure.
             Parse(ParseError),
-            #[error("script run error: {0}")]
-            /// Script execution failure.
-            Script(String),
             #[error("script run error: {message}")]
             /// Script execution failure with stable host category fields.
             ScriptStructured {
@@ -1162,6 +1109,7 @@ pub mod canopy {
         /// Result type for canopy operations.
         pub type Result<T> = std::result::Result<T, Error>;
 
+        #[serde(rename_all = "snake_case")]
         /// Stable category for a structured script or command failure.
         pub enum ScriptErrorKind {
             /// Cooperative execution timeout.
@@ -1178,6 +1126,7 @@ pub mod canopy {
             Invalid,
             /// Operation requires an unwound widget callback boundary.
             InvalidPhase,
+            #[serde(rename = "canopy_error")]
             /// Unclassified Canopy failure.
             Canopy,
             /// Unknown command identifier.
@@ -1190,14 +1139,18 @@ pub mod canopy {
             NoTarget,
             /// An exact node does not own the command.
             WrongOwner,
+            #[serde(rename = "command_disabled")]
             /// The command is currently disabled.
             DisabledCommand,
+            #[serde(rename = "node_invalid")]
             /// A command node handle is stale.
             InvalidNode,
             /// Positional argument count mismatch.
             ArityMismatch,
+            #[serde(rename = "missing_named_arg")]
             /// Required named argument is missing.
             MissingNamedArgument,
+            #[serde(rename = "unknown_named_arg")]
             /// An unknown named argument was supplied.
             UnknownNamedArgument,
             /// Argument conversion failed.
@@ -1206,10 +1159,13 @@ pub mod canopy {
             MissingInjected,
             /// The routed target has the wrong widget type.
             TargetTypeMismatch,
+            #[serde(rename = "command_exec")]
             /// Command implementation returned an error.
             CommandExecution,
             /// Another top-level script evaluation is active.
             ScriptBusy,
+            /// Script evaluation was explicitly cancelled.
+            ScriptCancelled,
         }
 
         /// Convert a canopy error into a structured Ruau runtime error.
@@ -1247,6 +1203,10 @@ pub mod canopy {
 
         impl From<LayoutValidationError> for Error {
             fn from(source: LayoutValidationError) -> Self {}
+        }
+
+        impl From<ParseError> for Error {
+            fn from(source: ParseError) -> Self {}
         }
 
         impl From<RecvError> for Error {
@@ -1291,6 +1251,10 @@ pub mod canopy {
             fn assert_fields_are_eq(&self) {}
         }
 
+        impl From<ParseError> for Error {
+            fn from(source: ParseError) -> Self {}
+        }
+
         impl ParseError {
             /// Construct a parse error from a message.
             pub fn new(message: impl Into<String>) -> Self {}
@@ -1325,6 +1289,16 @@ pub mod canopy {
             fn assert_fields_are_eq(&self) {}
         }
 
+        impl JsonSchema for ScriptErrorKind {
+            fn inline_schema() -> bool {}
+
+            fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
+
+            fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+            fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+        }
+
         impl PartialEq for ScriptErrorKind {
             fn eq(&self, other: &ScriptErrorKind) -> bool {}
         }
@@ -1332,6 +1306,25 @@ pub mod canopy {
         impl ScriptErrorKind {
             /// Return the stable protocol label for this category.
             pub const fn as_str(self) -> &'static str {}
+        }
+
+        impl Serialize for ScriptErrorKind {
+            fn serialize<__S>(
+                &self,
+                __serializer: __S,
+            ) -> _serde::__private228::Result<__S::Ok, __S::Error>
+            where
+                __S: _serde::Serializer, {
+            }
+        }
+
+        impl<'de> Deserialize<'de> for ScriptErrorKind {
+            fn deserialize<__D>(
+                __deserializer: __D,
+            ) -> _serde::__private228::Result<Self, __D::Error>
+            where
+                __D: _serde::Deserializer<'de>, {
+            }
         }
     }
 
@@ -1605,12 +1598,22 @@ pub mod canopy {
                 fn assert_fields_are_eq(&self) {}
             }
 
+            impl From<Key> for InputSpec {
+                fn from(key: Key) -> Self {}
+            }
+
             impl From<KeyCode> for Key {
                 fn from(c: KeyCode) -> Self {}
             }
 
             impl From<char> for Key {
                 fn from(c: char) -> Self {}
+            }
+
+            impl FromStr for Key {
+                fn from_str(spec: &str) -> Result<Self, Self::Err> {}
+
+                type Err = ParseError;
             }
 
             impl Hash for Key {
@@ -1666,7 +1669,7 @@ pub mod canopy {
                 pub fn normalize(&self) -> Self {}
 
                 /// Parse a key specification such as `ctrl-s`, `PageDown`, or `A`.
-                pub fn parse_spec(spec: &str) -> Result<Self, String> {}
+                pub fn parse_spec(spec: &str) -> Result<Self, ParseError> {}
             }
 
             impl PartialEq for Key {
@@ -1863,8 +1866,18 @@ pub mod canopy {
                 fn assert_fields_are_eq(&self) {}
             }
 
+            impl From<Mouse> for InputSpec {
+                fn from(mouse: Mouse) -> Self {}
+            }
+
             impl From<MouseEvent> for Mouse {
                 fn from(o: MouseEvent) -> Self {}
+            }
+
+            impl FromStr for Mouse {
+                fn from_str(spec: &str) -> Result<Self, Self::Err> {}
+
+                type Err = ParseError;
             }
 
             impl Hash for Mouse {
@@ -1873,7 +1886,7 @@ pub mod canopy {
 
             impl Mouse {
                 /// Parse a mouse specification such as `ScrollUp` or `ctrl-LeftDown`.
-                pub fn parse_spec(spec: &str) -> Result<Self, String> {}
+                pub fn parse_spec(spec: &str) -> Result<Self, ParseError> {}
             }
 
             impl PartialEq for Mouse {
@@ -1907,16 +1920,12 @@ pub mod canopy {
             Mouse(mouse::MouseEvent),
             /// Terminal resize
             Resize(crate::geom::Size),
-            /// A poll event
-            Poll(Vec<crate::NodeId>),
             /// Terminal has gained focus
             FocusGained,
             /// Terminal has lost focus
             FocusLost,
             /// Cut and paste
             Paste(String),
-            /// Internal wake event used to service queued automation work.
-            Wake,
         }
 
         impl Clone for Event {
@@ -2034,7 +2043,7 @@ pub mod canopy {
             /// Child outer rect relative to this node's content origin.
             pub rect: crate::geom::Rect,
             /// Child canvas size in the child's content coordinates.
-            pub canvas: Size,
+            pub canvas: crate::geom::Size,
         }
 
         /// Canvas context for computing scrollable extents.
@@ -2202,13 +2211,10 @@ pub mod canopy {
         /// Result of measuring a widget's content box.
         pub enum Measurement {
             /// Fixed content size for leaf widgets.
-            Fixed(Size),
+            Fixed(crate::geom::Size),
             /// Wrap children: engine computes content size from children.
             Wrap,
         }
-
-        /// Size with width and height.
-        pub type Size = crate::geom::Size;
 
         /// Sizing strategy for a single axis.
         pub enum Sizing {
@@ -2395,12 +2401,6 @@ pub mod canopy {
         }
 
         impl Layout {
-            /// Allow horizontal overflow during measurement.
-            pub fn overflow_x(self) -> Self {}
-
-            /// Allow vertical overflow during measurement.
-            pub fn overflow_y(self) -> Self {}
-
             /// Center children both horizontally and vertically.
             pub fn align_center(self) -> Self {}
 
@@ -2417,7 +2417,7 @@ pub mod canopy {
             pub fn fill() -> Self {}
 
             /// Remove this node from layout and rendering.
-            pub fn none(self) -> Self {}
+            pub fn hidden(self) -> Self {}
 
             /// Row layout with measured sizing on both axes.
             pub fn row() -> Self {}
@@ -2436,8 +2436,8 @@ pub mod canopy {
             /// Set padding edges.
             pub fn padding(self, edges: Edges) -> Self {}
 
-            /// Set the horizontal measurement policy.
-            pub fn measure_overflow_x(self, policy: MeasureOverflow) -> Self {}
+            /// Set the horizontal measurement overflow policy.
+            pub fn overflow_x(self, policy: MeasureOverflow) -> Self {}
 
             /// Set the layout direction.
             pub fn direction(self, direction: Direction) -> Self {}
@@ -2457,11 +2457,14 @@ pub mod canopy {
             /// Set the minimum outer width.
             pub fn min_width(self, n: u32) -> Self {}
 
-            /// Set the vertical measurement policy.
-            pub fn measure_overflow_y(self, policy: MeasureOverflow) -> Self {}
+            /// Set the vertical measurement overflow policy.
+            pub fn overflow_y(self, policy: MeasureOverflow) -> Self {}
 
             /// Set vertical alignment of children within content area.
             pub fn align_vertical(self, align: Align) -> Self {}
+
+            /// Set whether this node participates in layout and rendering.
+            pub fn display(self, display: Display) -> Self {}
 
             /// Set width sizing strategy directly.
             pub fn width(self, sizing: Sizing) -> Self {}
@@ -2733,574 +2736,6 @@ pub mod canopy {
     pub mod prelude {
         //! Convenience re-exports for common Canopy types.
 
-        pub mod error {
-            //! Core error types.
-
-            /// Core error type.
-            pub enum Error {
-                #[error("script evaluation cancelled")]
-                /// Evaluation explicitly cancelled by its caller.
-                ScriptCancelled,
-                #[error("render target width {requested} exceeds limit {limit}")]
-                /// A render target exceeds its configured width limit.
-                RenderWidthLimit {
-                    /// Requested target width.
-                    requested: u32,
-                    /// Configured maximum width.
-                    limit: u32,
-                },
-                #[error("render target height {requested} exceeds limit {limit}")]
-                /// A render target exceeds its configured height limit.
-                RenderHeightLimit {
-                    /// Requested target height.
-                    requested: u32,
-                    /// Configured maximum height.
-                    limit: u32,
-                },
-                #[error("render target {width}x{height} cell count overflows usize")]
-                /// Render-target dimensions cannot be represented as a cell count.
-                RenderCellCountOverflow {
-                    /// Requested target width.
-                    width: u32,
-                    /// Requested target height.
-                    height: u32,
-                },
-                #[error("render target cell count {requested} exceeds limit {limit}")]
-                /// A render target exceeds its configured total-cell limit.
-                RenderCellLimit {
-                    /// Requested target cell count.
-                    requested: usize,
-                    /// Configured maximum cell count.
-                    limit: usize,
-                },
-                #[error("could not allocate render target with {cells} cells")]
-                /// Render-target backing storage could not be reserved.
-                RenderAllocation {
-                    /// Requested target cell count.
-                    cells: usize,
-                },
-                #[error("single-cell drawing character {ch:?} has terminal width {width}")]
-                /// A single-cell drawing API received a character with an invalid width.
-                InvalidCellCharacter {
-                    /// Rejected character.
-                    ch: char,
-                    /// Computed terminal width.
-                    width: usize,
-                },
-                #[error(transparent)]
-                /// Geometry failure.
-                Geometry(geom::Error),
-                #[error(transparent)]
-                /// Invalid layout configuration.
-                InvalidLayout(crate::layout::LayoutValidationError),
-                #[error("terminal I/O failed: {0}")]
-                /// Terminal I/O failure.
-                TerminalIo(io::Error),
-                #[error("runloop: {0}")]
-                /// Run loop failure.
-                RunLoop(String),
-                #[error("internal: {0}")]
-                /// Internal error.
-                Internal(String),
-                #[error("invariant violation: {0}")]
-                /// Core invariant violation.
-                Invariant(String),
-                #[error("re-entrant widget borrow: {0:?}")]
-                /// Re-entrant widget borrow attempt.
-                ReentrantWidgetBorrow(crate::core::id::NodeId),
-                #[error("{kind} {operation} for node {node:?} at {path}: {source}")]
-                /// Node-bound widget operation failure with its original source.
-                NodeOperation {
-                    /// Operation phase.
-                    kind: NodeOperationKind,
-                    /// Stable operation name.
-                    operation: &'static str,
-                    /// Node being operated on.
-                    node: crate::core::id::NodeId,
-                    /// Node path at the time of failure.
-                    path: String,
-                    #[source]
-                    /// Original typed failure.
-                    source: Box<Self>,
-                },
-                #[error("invalid: {0}")]
-                /// Invalid input error.
-                Invalid(String),
-                #[error("not found: {0}")]
-                /// Requested item was not found.
-                NotFound(String),
-                #[error("node {node:?} does not store {expected}")]
-                /// A live node stores a different widget type than requested.
-                NodeTypeMismatch {
-                    /// Node whose widget type was checked.
-                    node: crate::core::id::NodeId,
-                    /// Requested widget type.
-                    expected: &'static str,
-                },
-                #[error("multiple matches")]
-                /// A query matched multiple nodes.
-                MultipleMatches,
-                #[error("duplicate child key: {0}")]
-                /// Duplicate child key under the same parent.
-                DuplicateChildKey(String),
-                #[error("duplicate child {child:?} under parent {parent:?}")]
-                /// Duplicate child under the same parent.
-                DuplicateChild {
-                    /// Parent node.
-                    parent: crate::core::id::NodeId,
-                    /// Child node.
-                    child: crate::core::id::NodeId,
-                },
-                #[error("already attached: {0:?}")]
-                /// Child is already attached to a parent.
-                AlreadyAttached(crate::core::id::NodeId),
-                #[error("would create cycle: parent {parent:?}, child {child:?}")]
-                /// Attaching would create a parent/child cycle.
-                WouldCreateCycle {
-                    /// Parent node involved in the cycle.
-                    parent: crate::core::id::NodeId,
-                    /// Child node involved in the cycle.
-                    child: crate::core::id::NodeId,
-                },
-                #[error("invalid operation: {0}")]
-                /// Invalid structural operation.
-                InvalidOperation(String),
-                #[error("{operation} is not allowed during a widget mutation callback")]
-                /// Operation attempted before a mutable widget callback returned.
-                InvalidPhase {
-                    /// Operation requiring an unwound callback boundary.
-                    operation: &'static str,
-                },
-                #[error("tree edit {operation} is not allowed during rollback")]
-                /// Structural mutation attempted while a failed edit is unwinding.
-                TreeEditDuringRollback {
-                    /// Requested tree operation.
-                    operation: &'static str,
-                },
-                #[error(transparent)]
-                /// Command dispatch failure.
-                Command(crate::commands::CommandError),
-                #[error("parse error: {0}")]
-                /// Parsing failure.
-                Parse(ParseError),
-                #[error("script run error: {0}")]
-                /// Script execution failure.
-                Script(String),
-                #[error("script run error: {message}")]
-                /// Script execution failure with stable host category fields.
-                ScriptStructured {
-                    /// Stable script-visible category.
-                    kind: ScriptErrorKind,
-                    /// Command id when the error came from command dispatch.
-                    command: Option<String>,
-                    /// Owner name when the error came from node-target resolution.
-                    owner: Option<String>,
-                    /// Human-readable error message.
-                    message: String,
-                },
-                #[error("script evaluation exceeded {timeout_ms}ms")]
-                /// Script execution exceeded its cooperative timeout.
-                ScriptTimeout {
-                    /// Requested timeout in milliseconds.
-                    timeout_ms: u64,
-                },
-                #[error("node not found: {0:?}")]
-                /// Node not found in the arena.
-                NodeNotFound(crate::core::id::NodeId),
-                #[error("node is detached: {0:?}")]
-                /// Node exists but is not attached to the root tree.
-                NodeDetached(crate::core::id::NodeId),
-            }
-
-            /// Phase in which a node-bound widget operation failed.
-            pub enum NodeOperationKind {
-                /// Widget access or lifecycle callback.
-                Access,
-                /// Widget measurement or layout.
-                Layout,
-                /// Widget rendering.
-                Render,
-            }
-
-            /// Parse error marker type.
-            pub struct ParseError {
-                /// Parse error message.
-                pub message: String,
-                /// One-based source line, when known.
-                pub line: Option<usize>,
-                /// One-based source column, when known.
-                pub column: Option<usize>,
-            }
-
-            /// Result type for canopy operations.
-            pub type Result<T> = std::result::Result<T, Error>;
-
-            /// Stable category for a structured script or command failure.
-            pub enum ScriptErrorKind {
-                /// Cooperative execution timeout.
-                Timeout,
-                /// Node lookup failed.
-                NodeNotFound,
-                /// A node exists but is detached.
-                NodeDetached,
-                /// A value or widget type did not match.
-                TypeMismatch,
-                /// A requested value was not found.
-                NotFound,
-                /// Invalid input or operation.
-                Invalid,
-                /// Operation requires an unwound widget callback boundary.
-                InvalidPhase,
-                /// Unclassified Canopy failure.
-                Canopy,
-                /// Unknown command identifier.
-                UnknownCommand,
-                /// Conflicting command definition.
-                ConflictingCommand,
-                /// Invalid command definition.
-                InvalidCommand,
-                /// No command target was found.
-                NoTarget,
-                /// An exact node does not own the command.
-                WrongOwner,
-                /// The command is currently disabled.
-                DisabledCommand,
-                /// A command node handle is stale.
-                InvalidNode,
-                /// Positional argument count mismatch.
-                ArityMismatch,
-                /// Required named argument is missing.
-                MissingNamedArgument,
-                /// An unknown named argument was supplied.
-                UnknownNamedArgument,
-                /// Argument conversion failed.
-                Conversion,
-                /// An injected value is missing.
-                MissingInjected,
-                /// The routed target has the wrong widget type.
-                TargetTypeMismatch,
-                /// Command implementation returned an error.
-                CommandExecution,
-                /// Another top-level script evaluation is active.
-                ScriptBusy,
-            }
-
-            /// Convert a canopy error into a structured Ruau runtime error.
-            impl From<Error> for ruau::vm::RuntimeError {
-                fn from(error: error::Error) -> Self {}
-            }
-
-            impl Debug for Error {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-            }
-
-            impl Display for Error {
-                fn fmt(&self, __formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                }
-            }
-
-            impl Error for Error {
-                fn source(
-                    &self,
-                ) -> ::core::option::Option<&(dyn ::thiserror::__private18::Error + 'static)>
-                {
-                }
-            }
-
-            impl From<&Error> for CanopyErrorPayload {
-                fn from(err: &error::Error) -> Self {}
-            }
-
-            impl From<CommandError> for Error {
-                fn from(source: CommandError) -> Self {}
-            }
-
-            impl From<Error> for Error {
-                fn from(source: geom::Error) -> Self {}
-            }
-
-            impl From<LayoutValidationError> for Error {
-                fn from(source: LayoutValidationError) -> Self {}
-            }
-
-            impl From<RecvError> for Error {
-                fn from(e: mpsc::RecvError) -> Self {}
-            }
-
-            impl Clone for NodeOperationKind {
-                fn clone(&self) -> NodeOperationKind {}
-            }
-
-            impl Debug for NodeOperationKind {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-            }
-
-            impl Display for NodeOperationKind {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-            }
-
-            impl Eq for NodeOperationKind {
-                #[doc(hidden)]
-                fn assert_fields_are_eq(&self) {}
-            }
-
-            impl PartialEq for NodeOperationKind {
-                fn eq(&self, other: &NodeOperationKind) -> bool {}
-            }
-
-            impl Clone for ParseError {
-                fn clone(&self) -> ParseError {}
-            }
-
-            impl Debug for ParseError {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-            }
-
-            impl Display for ParseError {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-            }
-
-            impl Eq for ParseError {
-                #[doc(hidden)]
-                fn assert_fields_are_eq(&self) {}
-            }
-
-            impl ParseError {
-                /// Construct a parse error from a message.
-                pub fn new(message: impl Into<String>) -> Self {}
-
-                /// Construct a parse error with optional line and column information.
-                pub fn with_position(
-                    message: impl Into<String>,
-                    line: Option<usize>,
-                    column: Option<usize>,
-                ) -> Self {
-                }
-            }
-
-            impl PartialEq for ParseError {
-                fn eq(&self, other: &ParseError) -> bool {}
-            }
-
-            impl Clone for ScriptErrorKind {
-                fn clone(&self) -> ScriptErrorKind {}
-            }
-
-            impl Debug for ScriptErrorKind {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-            }
-
-            impl Display for ScriptErrorKind {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-            }
-
-            impl Eq for ScriptErrorKind {
-                #[doc(hidden)]
-                fn assert_fields_are_eq(&self) {}
-            }
-
-            impl PartialEq for ScriptErrorKind {
-                fn eq(&self, other: &ScriptErrorKind) -> bool {}
-            }
-
-            impl ScriptErrorKind {
-                /// Return the stable protocol label for this category.
-                pub const fn as_str(self) -> &'static str {}
-            }
-        }
-
-        pub mod mouse {
-            //! Mouse event types.
-
-            /// Mouse action kinds.
-            pub enum Action {
-                /// Button press.
-                Down,
-                /// Button release.
-                Up,
-                /// Mouse drag with button held.
-                Drag,
-                /// Mouse moved without button.
-                Moved,
-                /// Scroll wheel down.
-                ScrollDown,
-                /// Scroll wheel up.
-                ScrollUp,
-                /// Horizontal scroll left.
-                ScrollLeft,
-                /// Horizontal scroll right.
-                ScrollRight,
-            }
-
-            /// Mouse button codes.
-            pub enum Button {
-                /// Left mouse button.
-                Left,
-                /// Right mouse button.
-                Right,
-                /// Middle mouse button.
-                Middle,
-                /// No button (for move/scroll).
-                None,
-            }
-
-            /// An abstract specification for a mouse action.
-            pub struct Mouse {
-                /// Mouse action type.
-                pub action: Action,
-                /// Mouse button.
-                pub button: Button,
-                /// Keyboard modifiers.
-                pub modifiers: key::Mods,
-            }
-
-            /// A mouse input event. This has the same fields as the `Mouse` event
-            /// specification, but also includes a location.
-            pub struct MouseEvent {
-                /// Mouse action type.
-                pub action: Action,
-                /// Mouse button.
-                pub button: Button,
-                /// Keyboard modifiers.
-                pub modifiers: key::Mods,
-                /// Cursor location in screen coordinates for incoming events, and relative
-                /// to the node's content origin for events delivered to widgets.
-                /// Coordinates before the content origin saturate to zero, including
-                /// captured events and events in padding, so the conversion is not
-                /// always reversible.
-                pub location: crate::geom::Point,
-            }
-
-            impl Action {
-                /// Is this a button-driven action?
-                pub fn is_button(&self) -> bool {}
-            }
-
-            impl Clone for Action {
-                fn clone(&self) -> Action {}
-            }
-
-            impl Debug for Action {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-            }
-
-            impl Eq for Action {
-                #[doc(hidden)]
-                fn assert_fields_are_eq(&self) {}
-            }
-
-            impl Hash for Action {
-                fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-            }
-
-            impl PartialEq for Action {
-                fn eq(&self, other: &Action) -> bool {}
-            }
-
-            impl PartialOrd for Action {
-                fn partial_cmp(&self, other: &Action) -> option::Option<cmp::Ordering> {}
-            }
-
-            impl Clone for Button {
-                fn clone(&self) -> Button {}
-            }
-
-            impl Debug for Button {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-            }
-
-            impl Eq for Button {
-                #[doc(hidden)]
-                fn assert_fields_are_eq(&self) {}
-            }
-
-            impl Hash for Button {
-                fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-            }
-
-            impl PartialEq for Button {
-                fn eq(&self, other: &Button) -> bool {}
-            }
-
-            impl PartialOrd for Button {
-                fn partial_cmp(&self, other: &Button) -> option::Option<cmp::Ordering> {}
-            }
-
-            impl Clone for Mouse {
-                fn clone(&self) -> Mouse {}
-            }
-
-            impl Debug for Mouse {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-            }
-
-            impl Display for Mouse {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-            }
-
-            impl Eq for Mouse {
-                #[doc(hidden)]
-                fn assert_fields_are_eq(&self) {}
-            }
-
-            impl From<MouseEvent> for Mouse {
-                fn from(o: MouseEvent) -> Self {}
-            }
-
-            impl Hash for Mouse {
-                fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-            }
-
-            impl Mouse {
-                /// Parse a mouse specification such as `ScrollUp` or `ctrl-LeftDown`.
-                pub fn parse_spec(spec: &str) -> Result<Self, String> {}
-            }
-
-            impl PartialEq for Mouse {
-                fn eq(&self, other: &Mouse) -> bool {}
-            }
-
-            impl Clone for MouseEvent {
-                fn clone(&self) -> MouseEvent {}
-            }
-
-            impl Debug for MouseEvent {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-            }
-
-            impl From<MouseEvent> for Mouse {
-                fn from(o: MouseEvent) -> Self {}
-            }
-
-            impl Inject for crate::event::mouse::MouseEvent {
-                fn inject(ctx: &dyn Context) -> Option<Self> {}
-
-                fn requirement() -> Option<CommandRequirement> {}
-            }
-        }
-
-        #[macro_export]
-        /// Define a typed key for keyed children.
-        ///
-        /// # Examples
-        ///
-        /// ```
-        /// use canopy::{ChildKey, Widget, key};
-        ///
-        /// key!(Editor);
-        /// impl Widget for Editor {}
-        ///
-        /// pub struct Modal;
-        /// impl Widget for Modal {}
-        /// key!(pub ModalSlot: Modal);
-        ///
-        /// assert_eq!(Editor::KEY, "Editor");
-        /// assert_eq!(ModalSlot::KEY, "ModalSlot");
-        /// ```
-        macro_rules! key {
-    ($vis:vis $name:ident) => { ... };
-    ($vis:vis $name:ident : $widget:ty) => { ... };
-}
         /// Alignment along an axis.
         pub enum Align {
             #[default]
@@ -3363,16 +2798,12 @@ pub mod canopy {
             Mouse(mouse::MouseEvent),
             /// Terminal resize
             Resize(crate::geom::Size),
-            /// A poll event
-            Poll(Vec<crate::NodeId>),
             /// Terminal has gained focus
             FocusGained,
             /// Terminal has lost focus
             FocusLost,
             /// Cut and paste
             Paste(String),
-            /// Internal wake event used to service queued automation work.
-            Wake,
         }
 
         /// The result of an event handler.
@@ -3383,6 +2814,22 @@ pub mod canopy {
             Consume,
             /// The event was not handled and will bubble up the tree.
             Ignore,
+        }
+
+        /// Direction for focus movement.
+        pub enum FocusDirection {
+            /// Move to the next focusable node.
+            Next,
+            /// Move to the previous focusable node.
+            Prev,
+            /// Move focus up.
+            Up,
+            /// Move focus down.
+            Down,
+            /// Move focus left.
+            Left,
+            /// Move focus right.
+            Right,
         }
 
         /// Subtree used by a focus traversal operation.
@@ -3449,15 +2896,25 @@ pub mod canopy {
             pub height: Constraint,
         }
 
+        /// Per-axis policy for measurement beyond the available viewport.
+        pub enum MeasureOverflow {
+            #[default]
+            /// Use the enclosing layout's policy, bounded at the root.
+            Inherit,
+            /// Measure within the available space, even under an unbounded parent.
+            Bounded,
+            /// Allow measurement beyond the available space.
+            Unbounded,
+        }
+
         /// Result of measuring a widget's content box.
         pub enum Measurement {
             /// Fixed content size for leaf widgets.
-            Fixed(Size),
+            Fixed(crate::geom::Size),
             /// Wrap children: engine computes content size from children.
             Wrap,
         }
 
-        #[repr(transparent)]
         /// Opaque identifier for a node stored in the Core arena.
         pub struct NodeId(_);
 
@@ -3489,9 +2946,6 @@ pub mod canopy {
             /// Maximum total number of materialized terminal cells.
             pub max_cells: usize,
         }
-
-        /// Common result alias for Canopy operations.
-        pub type Result<T> = error::Result<T>;
 
         pub use crate::geom::Size;
         /// Sizing strategy for a single axis.
@@ -3527,25 +2981,23 @@ pub mod canopy {
         /// Type-safe wrapper around a node identifier tied to a widget type.
         pub struct TypedId<T> {}
 
-        pub use crate::command;
-        pub use crate::derive_commands;
-        /// A typed key for keyed children.
+        /// A typed slot for keyed children.
         ///
         /// This trait associates a string key with a specific widget type, providing
         /// compile-time type safety for keyed child access.
         ///
-        /// Use the [`crate::key!`] macro to define keys:
+        /// Use the [`crate::slot!`] macro to define keys:
         ///
         /// ```
-        /// use canopy::{ChildKey, Widget, key};
+        /// use canopy::{ChildSlot, Widget, slot};
         ///
         /// pub struct Modal;
         /// impl Widget for Modal {}
         ///
-        /// key!(ModalSlot: Modal);
+        /// slot!(ModalSlot: Modal);
         /// assert_eq!(ModalSlot::KEY, "ModalSlot");
         /// ```
-        pub trait ChildKey {
+        pub trait ChildSlot {
             /// The string key used for storage.
             const KEY: &'static str;
             /// The widget type associated with this key.
@@ -3553,7 +3005,10 @@ pub mod canopy {
         }
 
         /// Mutable context available to widgets during event handling.
-        pub trait Context: ViewContext {
+        ///
+        /// Applications consume contexts supplied by Canopy and cannot implement this
+        /// trait themselves.
+        pub trait Context: ViewContext + sealed::Context {
             /// Add a boxed widget as a child of a specific parent and return the new
             /// node ID.
             fn add_child_to_boxed(
@@ -3564,7 +3019,7 @@ pub mod canopy {
 
             /// Add a boxed widget as a keyed child of a specific parent and return the
             /// new node ID.
-            fn add_child_to_keyed_boxed(
+            fn add_child_to_slot_boxed(
                 &mut self,
                 parent: NodeId,
                 key: &str,
@@ -3574,17 +3029,8 @@ pub mod canopy {
             /// Attach a detached child to a parent.
             fn attach(&mut self, parent: NodeId, child: NodeId) -> Result<()>;
 
-            #[doc(hidden)]
-            /// Commit configured composition topology and semantic keys before mount.
-            fn attach_composed(
-                &mut self,
-                parent: NodeId,
-                roots: &[(NodeId, Option<&str>)],
-                keys: &[(NodeId, NodeId, String)],
-            ) -> Result<()>;
-
             /// Attach a detached child to a parent using a unique key.
-            fn attach_keyed(&mut self, parent: NodeId, key: &str, child: NodeId) -> Result<()>;
+            fn attach_slot(&mut self, parent: NodeId, key: &str, child: NodeId) -> Result<()>;
 
             /// Return effective key bindings for a node or the current focus.
             fn available_bindings(&self, node: Option<NodeId>) -> Result<BindingSnapshot>;
@@ -3619,44 +3065,15 @@ pub mod canopy {
             /// Detach a child from its parent.
             fn detach(&mut self, child: NodeId) -> Result<()>;
 
-            /// Dispatch a command relative to this node.
-            fn dispatch_command(
-                &mut self,
-                cmd: &CommandInvocation,
-            ) -> StdResult<ArgValue, CommandError>;
-
-            /// Dispatch a command with an explicit command-scope frame.
-            fn dispatch_command_scoped(
-                &mut self,
-                frame: CommandScopeFrame,
-                cmd: &CommandInvocation,
-            ) -> StdResult<ArgValue, CommandError>;
-
-            /// Invoke only the specified command owner.
-            fn dispatch_exact(
-                &mut self,
-                node: NodeId,
-                cmd: &CommandInvocation,
-            ) -> StdResult<ArgValue, CommandError> {
-            }
-
-            /// Search the supplied origin subtree, then its ancestors.
-            fn dispatch_from(
-                &mut self,
-                node: NodeId,
-                cmd: &CommandInvocation,
-            ) -> StdResult<ArgValue, CommandError> {
-            }
-
             /// Dispatch according to an explicit target policy.
-            fn dispatch_target(
+            fn dispatch(
                 &mut self,
                 target: CommandTarget,
                 cmd: &CommandInvocation,
             ) -> StdResult<ArgValue, CommandError>;
 
             /// Invoke with explicit target and input scope.
-            fn dispatch_target_scoped(
+            fn dispatch_scoped(
                 &mut self,
                 target: CommandTarget,
                 frame: CommandScopeFrame,
@@ -3683,17 +3100,15 @@ pub mod canopy {
             /// Request a cooperative shutdown with the provided status code.
             fn exit(&mut self, code: i32);
 
-            /// Move focus in a direction within an explicit scope.
-            fn focus_dir(&mut self, scope: FocusScope, dir: Direction) -> Result<ChangeOutcome>;
-
             /// Focus the first focusable node within an explicit scope.
             fn focus_first(&mut self, scope: FocusScope) -> Result<ChangeOutcome>;
 
-            /// Focus the next focusable node within an explicit scope.
-            fn focus_next(&mut self, scope: FocusScope) -> Result<ChangeOutcome>;
-
-            /// Focus the previous focusable node within an explicit scope.
-            fn focus_prev(&mut self, scope: FocusScope) -> Result<ChangeOutcome>;
+            /// Move focus in a direction within an explicit scope.
+            fn focus_move(
+                &mut self,
+                scope: FocusScope,
+                direction: FocusDirection,
+            ) -> Result<ChangeOutcome>;
 
             /// Record changes for the next runtime preparation.
             fn invalidate(&mut self, _invalidation: crate::Invalidation) {}
@@ -3704,11 +3119,11 @@ pub mod canopy {
             /// Open a modal scope that owns focus, input admission, and visual effects.
             fn open_modal(&mut self, options: ModalOptions) -> Result<InteractionToken> {}
 
-            /// Scroll the view down by one page. Returns `true` if movement occurred.
-            fn page_down(&mut self) -> bool {}
+            /// Scroll the view down by one page.
+            fn page_down(&mut self) -> ChangeOutcome {}
 
-            /// Scroll the view up by one page. Returns `true` if movement occurred.
-            fn page_up(&mut self) -> bool {}
+            /// Scroll the view up by one page.
+            fn page_up(&mut self) -> ChangeOutcome {}
 
             /// Remove one exclusive binding frame.
             fn pop_exclusive_bindings(&mut self, token: ExclusiveFrameToken) -> Result<()>;
@@ -3743,25 +3158,23 @@ pub mod canopy {
             /// Restore mouse capture to an attached node.
             fn restore_mouse_capture(&mut self, node: NodeId) -> Result<ChangeOutcome>;
 
-            /// Scroll the view by the given offsets. Returns `true` if movement
-            /// occurred.
-            fn scroll_by(&mut self, x: i32, y: i32) -> bool;
+            /// Scroll the view by the given offsets.
+            fn scroll_by(&mut self, x: i32, y: i32) -> ChangeOutcome;
 
-            /// Scroll the view down by one line. Returns `true` if movement occurred.
-            fn scroll_down(&mut self) -> bool {}
+            /// Scroll the view down by one line.
+            fn scroll_down(&mut self) -> ChangeOutcome {}
 
-            /// Scroll the view left by one line. Returns `true` if movement occurred.
-            fn scroll_left(&mut self) -> bool {}
+            /// Scroll the view left by one line.
+            fn scroll_left(&mut self) -> ChangeOutcome {}
 
-            /// Scroll the view right by one line. Returns `true` if movement occurred.
-            fn scroll_right(&mut self) -> bool {}
+            /// Scroll the view right by one line.
+            fn scroll_right(&mut self) -> ChangeOutcome {}
 
-            /// Scroll the view to the specified position. Returns `true` if movement
-            /// occurred.
-            fn scroll_to(&mut self, x: u32, y: u32) -> bool;
+            /// Scroll the view to the specified position.
+            fn scroll_to(&mut self, x: u32, y: u32) -> ChangeOutcome;
 
-            /// Scroll the view up by one line. Returns `true` if movement occurred.
-            fn scroll_up(&mut self) -> bool {}
+            /// Scroll the view up by one line.
+            fn scroll_up(&mut self) -> ChangeOutcome {}
 
             /// Replace the children list for the current node.
             fn set_children(&mut self, children: Vec<NodeId>) -> Result<()> {}
@@ -3812,11 +3225,141 @@ pub mod canopy {
 
             /// Execute a closure with mutable access to a widget and its node-bound
             /// context.
-            fn with_widget_mut(
+            fn with_widget_dyn_mut(
                 &mut self,
                 node: NodeId,
                 f: &mut dyn FnMut(&mut dyn Widget, &mut dyn Context) -> Result<()>,
             ) -> Result<()>;
+        }
+
+        /// Typed mutation and composition helpers for contexts.
+        pub trait ContextExt: Context + ViewContextExt {
+            /// Add a widget as a child of the current node and return the new typed
+            /// node ID.
+            fn add_child<W: 'static + Widget>(&mut self, widget: W) -> Result<TypedId<W>> {}
+
+            /// Add a widget as a child of a specific parent and return the new typed
+            /// node ID.
+            fn add_child_to<W: 'static + Widget>(
+                &mut self,
+                parent: impl Into<NodeId>,
+                widget: W,
+            ) -> Result<TypedId<W>> {
+            }
+
+            /// Add a typed keyed child to the current node and return its typed node
+            /// ID.
+            fn add_slot<K: ChildSlot>(&mut self, widget: K::Widget) -> Result<TypedId<K::Widget>> {}
+
+            /// Add a typed keyed child to a specific parent and return its typed node
+            /// ID.
+            fn add_slot_to<W: 'static + Widget>(
+                &mut self,
+                parent: impl Into<NodeId>,
+                key: &str,
+                widget: W,
+            ) -> Result<TypedId<W>> {
+            }
+
+            /// Build detached children and attach them after configuration succeeds.
+            /// Structural rollback follows [`Context::edit_structure`].
+            fn compose<R>(
+                &mut self,
+                parent: NodeId,
+                build: impl FnOnce(&mut crate::ChildBuilder<'_>) -> Result<R>,
+            ) -> Result<R> {
+            }
+
+            /// Create a widget node detached from the tree.
+            fn create_detached<W: 'static + Widget>(&mut self, widget: W) -> Result<TypedId<W>> {}
+
+            /// Invoke only the specified command owner.
+            fn dispatch_exact(
+                &mut self,
+                node: NodeId,
+                command: &CommandInvocation,
+            ) -> StdResult<ArgValue, CommandError> {
+            }
+
+            /// Get or create the keyed child under the current node.
+            fn get_or_create_slot<K: ChildSlot>(
+                &mut self,
+                make: impl FnOnce() -> K::Widget,
+            ) -> Result<TypedId<K::Widget>> {
+            }
+
+            /// Get or create the keyed child under a specific parent node.
+            fn get_or_create_slot_of<K: ChildSlot>(
+                &mut self,
+                parent: impl Into<NodeId>,
+                make: impl FnOnce() -> K::Widget,
+            ) -> Result<TypedId<K::Widget>> {
+            }
+
+            /// Get a typed keyed child's node ID.
+            fn get_slot<K: ChildSlot>(&self) -> Result<Option<TypedId<K::Widget>>> {}
+
+            /// Get a typed keyed child's node ID from a specific parent.
+            fn get_slot_of<K: ChildSlot>(
+                &self,
+                parent: impl Into<NodeId>,
+            ) -> Result<Option<TypedId<K::Widget>>> {
+            }
+
+            /// Check if a typed keyed child exists.
+            fn has_slot<K: ChildSlot>(&self) -> Result<bool> {}
+
+            /// Set the layout for the current node.
+            fn set_layout(&mut self, layout: Layout) -> Result<()> {}
+
+            /// Set the layout for a specific node.
+            fn set_layout_of(&mut self, node: impl Into<NodeId>, layout: Layout) -> Result<()> {}
+
+            /// Execute a closure with a typed keyed child if it exists.
+            fn try_with_typed_slot<K: ChildSlot, R>(
+                &mut self,
+                f: impl FnOnce(&mut K::Widget, &mut dyn Context) -> Result<R>,
+            ) -> Result<Option<R>> {
+            }
+
+            /// Execute a closure with the unique descendant of type `W` if it exists.
+            fn try_with_unique_descendant<W: 'static + Widget, R>(
+                &mut self,
+                f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
+            ) -> Result<Option<R>> {
+            }
+
+            /// Execute a closure with a keyed child of type `W`.
+            fn with_slot<W: 'static + Widget, R>(
+                &mut self,
+                key: &str,
+                f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
+            ) -> Result<R> {
+            }
+
+            /// Execute a closure with a typed keyed child.
+            fn with_typed_slot<K: ChildSlot, R>(
+                &mut self,
+                f: impl FnOnce(&mut K::Widget, &mut dyn Context) -> Result<R>,
+            ) -> Result<R> {
+            }
+
+            /// Execute a closure with the unique descendant of type `W`.
+            fn with_unique_descendant<W: 'static + Widget, R>(
+                &mut self,
+                f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
+            ) -> Result<R> {
+            }
+
+            /// Execute a closure with mutable access to a runtime-checked widget node.
+            fn with_widget_mut<W, R>(
+                &mut self,
+                node: impl Into<NodeId>,
+                f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
+            ) -> Result<R>
+            where
+                W: 'static + Widget, {
+            }
         }
 
         /// A trait that allows widgets to perform recursive initialization of
@@ -3828,23 +3371,15 @@ pub mod canopy {
         }
 
         /// Read-only context available to widgets during render and measure.
-        pub trait ViewContext {
-            /// Inspect an action for display. Built-in contexts report registry and
-            /// target resolution failures as disabled reasons, while eligibility
-            /// hook errors remain errors. Custom contexts default to their command
-            /// status behavior.
-            fn action_status(
-                &self,
-                target: CommandTarget,
-                invocation: &CommandInvocation,
-            ) -> Result<CommandStatus> {
-            }
-
+        ///
+        /// Applications consume contexts supplied by Canopy and cannot implement this
+        /// trait themselves.
+        pub trait ViewContext: sealed::ViewContext {
             /// Return a keyed child relative to the current node.
-            fn child_keyed(&self, key: &str) -> Option<NodeId> {}
+            fn child_slot(&self, key: &str) -> Option<NodeId> {}
 
             /// Return a keyed child relative to a specific parent node.
-            fn child_keyed_in(&self, parent: NodeId, key: &str) -> Option<NodeId>;
+            fn child_slot_of(&self, parent: NodeId, key: &str) -> Option<NodeId>;
 
             /// Children of the current node in tree order.
             fn children(&self) -> Vec<NodeId> {}
@@ -3852,7 +3387,9 @@ pub mod canopy {
             /// Children of a specific node in tree order.
             fn children_of(&self, node: NodeId) -> Vec<NodeId>;
 
-            /// Inspect the current eligibility of an explicitly targeted command.
+            /// Inspect a command for display. Registry and target resolution failures
+            /// are returned as disabled reasons; eligibility hook failures remain
+            /// errors.
             fn command_status(
                 &self,
                 target: CommandTarget,
@@ -3860,7 +3397,7 @@ pub mod canopy {
             ) -> Result<CommandStatus>;
 
             /// Resolve a semantic key in an explicit live subtree scope.
-            fn find_key(&self, scope: NodeId, key: &str) -> Result<Option<NodeId>>;
+            fn find_identity(&self, scope: NodeId, key: &str) -> Result<Option<NodeId>>;
 
             /// Find the first node whose path matches the validated filter.
             fn find_node_matching(&self, path_filter: &PathFilter) -> Option<NodeId> {}
@@ -3883,14 +3420,26 @@ pub mod canopy {
             /// Return the currently focused node, including one not yet laid out.
             fn focused_node(&self) -> Option<NodeId>;
 
+            /// Return whether a node exists and is attached to the root tree.
+            fn is_attached_of(&self, node: NodeId) -> bool;
+
             /// Does the current node have focus?
             fn is_focused(&self) -> bool {}
+
+            /// Does the specified node have focus?
+            fn is_focused_of(&self, node: NodeId) -> bool;
 
             /// Is the current node on the focus path?
             fn is_on_focus_path(&self) -> bool {}
 
+            /// Is the specified node on the focus path?
+            fn is_on_focus_path_of(&self, node: NodeId) -> bool;
+
             /// Cached layout configuration for the current node.
             fn layout(&self) -> Layout {}
+
+            /// Layout configuration for a specific node.
+            fn layout_of(&self, node: NodeId) -> Option<Layout>;
 
             /// Locate the deepest visible node at a point within a subtree.
             fn locate(&self, root: NodeId, point: Point) -> Result<Option<NodeId>>;
@@ -3901,39 +3450,14 @@ pub mod canopy {
             /// The node currently being rendered.
             fn node_id(&self) -> NodeId;
 
-            /// Return whether a node exists and is attached to the root tree.
-            fn node_is_attached(&self, node: NodeId) -> bool;
-
-            /// Does the specified node have focus?
-            fn node_is_focused(&self, node: NodeId) -> bool;
-
-            /// Is the specified node on the focus path?
-            fn node_is_on_focus_path(&self, node: NodeId) -> bool;
-
-            /// Layout configuration for a specific node.
-            fn node_layout(&self, node: NodeId) -> Option<Layout>;
-
-            /// Return the path for a node relative to a root.
-            fn node_path(&self, root: NodeId, node: NodeId) -> Path;
-
-            /// Widget type identifier for a specific node.
-            fn node_type_id(&self, node: NodeId) -> Option<TypeId>;
-
-            /// View information for a specific node.
-            fn node_view(&self, node: NodeId) -> Option<View>;
-
             /// Local outer rectangle for this node.
             fn outer_rect_local(&self) -> Rect {}
 
             /// Return the parent of a node, or `None` if it is the root or not found.
             fn parent_of(&self, node: NodeId) -> Option<NodeId>;
 
-            /// Read a widget without extracting its slot or marking it changed.
-            fn read_widget(
-                &self,
-                node: NodeId,
-                callback: &mut dyn FnMut(&dyn Widget) -> Result<()>,
-            ) -> Result<()>;
+            /// Return the path for a node relative to a root.
+            fn path_of(&self, root: NodeId, node: NodeId) -> Path;
 
             /// The root node of the tree.
             fn root_id(&self) -> NodeId;
@@ -3941,14 +3465,84 @@ pub mod canopy {
             /// Return a node's independently assigned semantic identity.
             fn semantic_identity(&self, node: NodeId) -> Option<SemanticIdentity>;
 
+            /// Widget type identifier for a specific node.
+            fn type_id_of(&self, node: NodeId) -> Option<TypeId>;
+
             /// View information for the current node.
             fn view(&self) -> View {}
+
+            /// View information for a specific node.
+            fn view_of(&self, node: NodeId) -> Option<View>;
 
             /// Visible view rectangle in content coordinates.
             fn view_rect(&self) -> Rect {}
 
             /// Visible view rectangle in local outer coordinates.
             fn view_rect_local(&self) -> Rect {}
+
+            /// Read a widget without extracting its slot or marking it changed.
+            fn with_widget_dyn(
+                &self,
+                node: NodeId,
+                callback: &mut dyn FnMut(&dyn Widget) -> Result<()>,
+            ) -> Result<()>;
+        }
+
+        /// Typed helpers shared by read-only and mutable contexts.
+        pub trait ViewContextExt: ViewContext {
+            /// Return all widgets of type `W` anywhere in the tree, including the root.
+            fn all_in_tree<W: 'static + Widget>(&self) -> Vec<TypedId<W>> {}
+
+            /// Return all direct children of type `W`.
+            fn children_of_type<W: 'static + Widget>(&self) -> Vec<TypedId<W>> {}
+
+            /// Return all descendants of type `W` (excluding self).
+            fn descendants_of_type<W: 'static + Widget>(&self) -> Vec<TypedId<W>> {}
+
+            /// Find exactly one node matching a path filter.
+            fn find_one(&self, path: &str) -> Result<NodeId> {}
+
+            /// Return the first widget of type `W` anywhere in the tree, including the
+            /// root.
+            fn first_in_tree<W: 'static + Widget>(&self) -> Option<TypedId<W>> {}
+
+            /// Return the first leaf node under `root` using pre-order traversal.
+            ///
+            /// A leaf is a node with no children.
+            fn first_leaf(&self, root: impl Into<NodeId>) -> Option<NodeId> {}
+
+            /// Return the descendant of type `W` that is on the focus path, if any.
+            fn focused_descendant<W: 'static + Widget>(&self) -> Option<TypedId<W>> {}
+
+            /// Return the descendant of type `W` on the focus path, or the first if
+            /// none focused.
+            ///
+            /// This searches only within the current node's subtree. Use the tree-wide
+            /// helpers on `ViewContext` if you need to search from an arbitrary
+            /// root.
+            fn focused_or_first_descendant<W: 'static + Widget>(&self) -> Option<TypedId<W>> {}
+
+            /// Pre-order traversal of the subtree rooted at `root`.
+            fn preorder(&self, root: impl Into<NodeId>) -> impl '_ + Iterator<Item = NodeId> {}
+
+            /// Validate an untyped node ID and return its typed form.
+            fn typed_id<W: 'static + Widget>(&self, node: impl Into<NodeId>) -> Result<TypedId<W>> {
+            }
+
+            /// Return the unique child of type `W`, or error if more than one exists.
+            fn unique_child<W: 'static + Widget>(&self) -> Result<Option<TypedId<W>>> {}
+
+            /// Return the unique descendant of type `W`, or error if more than one
+            /// exists.
+            fn unique_descendant<W: 'static + Widget>(&self) -> Result<Option<TypedId<W>>> {}
+
+            /// Read a typed widget while preserving immutable access and borrow errors.
+            fn with_widget<W: 'static + Widget, R>(
+                &self,
+                node: TypedId<W>,
+                callback: impl FnOnce(&W) -> Result<R>,
+            ) -> Result<R> {
+            }
         }
 
         /// Widgets are the behavior attached to nodes in the Core arena.
@@ -4171,6 +3765,40 @@ pub mod canopy {
             fn eq(&self, other: &EventOutcome) -> bool {}
         }
 
+        impl Clone for FocusDirection {
+            fn clone(&self) -> FocusDirection {}
+        }
+
+        impl CommandType for FocusDirection {
+            fn luau_decls(registry: &mut canopy::commands::DeclRegistry<'_>) {}
+
+            fn luau_ty() -> canopy::commands::declaration::Type {}
+        }
+
+        impl Debug for FocusDirection {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
+        }
+
+        impl Eq for FocusDirection {
+            #[doc(hidden)]
+            fn assert_fields_are_eq(&self) {}
+        }
+
+        impl FromArgValue for FocusDirection {
+            fn from_arg_value(
+                v: &canopy::commands::ArgValue,
+            ) -> ::std::result::Result<Self, canopy::commands::CommandError> {
+            }
+        }
+
+        impl PartialEq for FocusDirection {
+            fn eq(&self, other: &FocusDirection) -> bool {}
+        }
+
+        impl ToArgValue for FocusDirection {
+            fn to_arg_value(self) -> canopy::commands::ArgValue {}
+        }
+
         impl Clone for FocusScope {
             fn clone(&self) -> FocusScope {}
         }
@@ -4205,12 +3833,22 @@ pub mod canopy {
             fn assert_fields_are_eq(&self) {}
         }
 
+        impl From<Key> for InputSpec {
+            fn from(key: Key) -> Self {}
+        }
+
         impl From<KeyCode> for Key {
             fn from(c: KeyCode) -> Self {}
         }
 
         impl From<char> for Key {
             fn from(c: char) -> Self {}
+        }
+
+        impl FromStr for Key {
+            fn from_str(spec: &str) -> Result<Self, Self::Err> {}
+
+            type Err = ParseError;
         }
 
         impl Hash for Key {
@@ -4266,7 +3904,7 @@ pub mod canopy {
             pub fn normalize(&self) -> Self {}
 
             /// Parse a key specification such as `ctrl-s`, `PageDown`, or `A`.
-            pub fn parse_spec(spec: &str) -> Result<Self, String> {}
+            pub fn parse_spec(spec: &str) -> Result<Self, ParseError> {}
         }
 
         impl PartialEq for Key {
@@ -4296,12 +3934,6 @@ pub mod canopy {
         }
 
         impl Layout {
-            /// Allow horizontal overflow during measurement.
-            pub fn overflow_x(self) -> Self {}
-
-            /// Allow vertical overflow during measurement.
-            pub fn overflow_y(self) -> Self {}
-
             /// Center children both horizontally and vertically.
             pub fn align_center(self) -> Self {}
 
@@ -4318,7 +3950,7 @@ pub mod canopy {
             pub fn fill() -> Self {}
 
             /// Remove this node from layout and rendering.
-            pub fn none(self) -> Self {}
+            pub fn hidden(self) -> Self {}
 
             /// Row layout with measured sizing on both axes.
             pub fn row() -> Self {}
@@ -4337,8 +3969,8 @@ pub mod canopy {
             /// Set padding edges.
             pub fn padding(self, edges: Edges) -> Self {}
 
-            /// Set the horizontal measurement policy.
-            pub fn measure_overflow_x(self, policy: MeasureOverflow) -> Self {}
+            /// Set the horizontal measurement overflow policy.
+            pub fn overflow_x(self, policy: MeasureOverflow) -> Self {}
 
             /// Set the layout direction.
             pub fn direction(self, direction: Direction) -> Self {}
@@ -4358,11 +3990,14 @@ pub mod canopy {
             /// Set the minimum outer width.
             pub fn min_width(self, n: u32) -> Self {}
 
-            /// Set the vertical measurement policy.
-            pub fn measure_overflow_y(self, policy: MeasureOverflow) -> Self {}
+            /// Set the vertical measurement overflow policy.
+            pub fn overflow_y(self, policy: MeasureOverflow) -> Self {}
 
             /// Set vertical alignment of children within content area.
             pub fn align_vertical(self, align: Align) -> Self {}
+
+            /// Set whether this node participates in layout and rendering.
+            pub fn display(self, display: Display) -> Self {}
 
             /// Set width sizing strategy directly.
             pub fn width(self, sizing: Sizing) -> Self {}
@@ -4419,6 +4054,27 @@ pub mod canopy {
             fn eq(&self, other: &MeasureConstraints) -> bool {}
         }
 
+        impl Clone for MeasureOverflow {
+            fn clone(&self) -> MeasureOverflow {}
+        }
+
+        impl Debug for MeasureOverflow {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
+        }
+
+        impl Default for MeasureOverflow {
+            fn default() -> MeasureOverflow {}
+        }
+
+        impl Eq for MeasureOverflow {
+            #[doc(hidden)]
+            fn assert_fields_are_eq(&self) {}
+        }
+
+        impl PartialEq for MeasureOverflow {
+            fn eq(&self, other: &MeasureOverflow) -> bool {}
+        }
+
         impl Clone for Measurement {
             fn clone(&self) -> Measurement {}
         }
@@ -4447,20 +4103,12 @@ pub mod canopy {
         }
 
         impl Debug for NodeId {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Default for NodeId {
-            fn default() -> NodeId {}
+            fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {}
         }
 
         impl Eq for NodeId {
             #[doc(hidden)]
             fn assert_fields_are_eq(&self) {}
-        }
-
-        impl From<KeyData> for NodeId {
-            fn from(k: KeyData) -> Self {}
         }
 
         impl FromArgValue for crate::core::NodeId {
@@ -4469,10 +4117,6 @@ pub mod canopy {
 
         impl Hash for NodeId {
             fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-        }
-
-        impl Key for NodeId {
-            fn data(&self) -> KeyData {}
         }
 
         impl Ord for NodeId {
@@ -4493,6 +4137,16 @@ pub mod canopy {
 
         impl<T> From<TypedId<T>> for NodeId {
             fn from(value: TypedId<T>) -> Self {}
+        }
+
+        impl<T> Index<NodeId> for NodeArena<T> {
+            fn index(&self, id: NodeId) -> &Self::Output {}
+
+            type Output = T;
+        }
+
+        impl<T> IndexMut<NodeId> for NodeArena<T> {
+            fn index_mut(&mut self, id: NodeId) -> &mut Self::Output {}
         }
 
         impl Clone for NodeName {
@@ -4743,15 +4397,6 @@ pub mod canopy {
             /// Build a diagnostic dump with tree, focus, and binding details.
             pub fn diagnostic_dump(&self, target: NodeId) -> String {}
 
-            /// Configure the `@project` persistent script root.
-            pub fn set_project_script_root(&mut self, root: impl Into<PathBuf>) -> Result<()> {}
-
-            /// Configure the `@user` persistent script root.
-            pub fn set_user_script_root(&mut self, root: impl Into<PathBuf>) -> Result<()> {}
-
-            /// Construct a new Canopy instance.
-            pub fn new() -> Self {}
-
             /// Create a detached widget node.
             pub fn create_detached<W>(&mut self, widget: W) -> Result<TypedId<W>>
             where
@@ -4760,54 +4405,28 @@ pub mod canopy {
 
             /// Drain and return assertion outcomes from the most recent script
             /// evaluation.
-            pub fn take_script_assertions(&self) -> Vec<script::ScriptAssertion> {}
+            pub fn take_script_assertions(&mut self) -> Vec<script::ScriptAssertion> {}
 
             /// Drain and return log lines recorded by the most recent script
             /// evaluation.
-            pub fn take_script_logs(&self) -> Vec<String> {}
+            pub fn take_script_logs(&mut self) -> Vec<String> {}
 
-            /// Evaluate a Luau config file from disk.
-            pub fn run_config(&mut self, path: &FsPath) -> Result<()> {}
+            /// Evaluate a Luau source string at the root and return its value.
+            pub fn eval_script(&mut self, source: &str) -> Result<commands::ArgValue> {}
 
-            /// Evaluate a Luau source string and return its value.
-            pub fn eval_script_value(&mut self, source: &str) -> Result<commands::ArgValue> {}
-
-            /// Evaluate a Luau source string in the current app context.
-            pub fn eval_script(&mut self, source: &str) -> Result<()> {}
-
-            /// Evaluate a Luau source string with a cooperative timeout.
-            pub fn eval_script_value_with_timeout(
-                &mut self,
-                source: &str,
-                timeout: Duration,
-            ) -> Result<commands::ArgValue> {
-            }
-
-            /// Finalize the script API surface for this app.
-            pub fn finalize_api(&mut self) -> Result<()> {}
+            /// Evaluate a configured request and return its value and diagnostics.
+            pub fn eval(&mut self, request: EvalRequest) -> Result<EvalOutcome> {}
 
             /// Get a reference to the current render buffer, if any.
             pub fn buf(&self) -> Option<&TermBuf> {}
-
-            /// Install an idempotent framework binding with an explicit phase and
-            /// source.
-            pub fn bind_framework_with_options(
-                &mut self,
-                group: inputmap::FrameworkBindingGroup,
-                input: inputmap::InputSpec,
-                options: inputmap::BindingOptions,
-                command: commands::CommandInvocation,
-            ) -> Result<inputmap::BindingId> {
-            }
 
             /// Install an idempotent framework-owned command binding.
             pub fn bind_framework(
                 &mut self,
                 group: inputmap::FrameworkBindingGroup,
-                input: inputmap::InputSpec,
-                path: &str,
-                description: &str,
-                command: commands::CommandInvocation,
+                input: impl Into<inputmap::InputSpec>,
+                options: inputmap::BindingOptions,
+                command: commands::CommandCall,
             ) -> Result<inputmap::BindingId> {
             }
 
@@ -4816,7 +4435,7 @@ pub mod canopy {
             /// An omitted command target resolves from the node where the binding wins.
             pub fn bind_command(
                 &mut self,
-                key: impl Into<Key>,
+                input: impl Into<inputmap::InputSpec>,
                 options: inputmap::BindingOptions,
                 command: commands::CommandCall,
             ) -> Result<inputmap::BindingId> {
@@ -4842,6 +4461,10 @@ pub mod canopy {
             pub fn pop_input_mode(&mut self) -> &str {}
 
             /// Prepare pending changes after widget mutation callbacks have returned.
+            ///
+            /// This is the synchronous boundary for native callers that need snapshots
+            /// or geometry before the next driver turn. `turn(Work::Prepare)` also
+            /// services queued automation and advances the driver lifecycle.
             pub fn flush(&mut self) -> Result<()> {}
 
             /// Push an input mode above the current mode.
@@ -4887,21 +4510,6 @@ pub mod canopy {
             /// Return a handle for submitting automation work to this app's UI thread.
             pub fn automation_handle(&self) -> AutomationHandle {}
 
-            /// Return command availability by searching a node's subtree, then
-            /// ancestors.
-            pub fn command_availability_from_node(
-                &self,
-                start: NodeId,
-            ) -> Result<Vec<commands::CommandAvailability<'_>>> {
-            }
-
-            /// Return command availability from the current focus, or root if
-            /// unfocused.
-            pub fn command_availability_from_focus(
-                &self,
-            ) -> Result<Vec<commands::CommandAvailability<'_>>> {
-            }
-
             /// Return command availability using an explicit target policy.
             pub fn command_availability(
                 &self,
@@ -4941,6 +4549,9 @@ pub mod canopy {
             /// Return the root node ID.
             pub fn root_id(&self) -> NodeId {}
 
+            /// Return whether the application API has been finalized by its builder.
+            pub fn is_api_finalized(&self) -> bool {}
+
             /// Run a closure against a mutable context bound to a node.
             pub fn with_context<R>(
                 &mut self,
@@ -4958,9 +4569,6 @@ pub mod canopy {
                 f: impl FnOnce(&mut dyn crate::Context) -> Result<R>,
             ) -> Result<R> {
             }
-
-            /// Run app, user, and project startup scripts once.
-            pub fn run_startup_scripts(&mut self) -> Result<usize> {}
 
             /// Set the active input mode.
             pub fn set_input_mode(&mut self, mode: &str) -> Result<()> {}
@@ -5756,9 +5364,6 @@ pub mod canopy {
             AnsiValue(u8),
         }
 
-        /// Shared handle for effects stored on nodes and stacked during rendering.
-        pub type Effect = std::sync::Arc<dyn StyleEffect>;
-
         /// A gradient paint specification.
         pub struct GradientSpec {
             /// Gradient angle in degrees (0 = left to right, 90 = top to bottom).
@@ -5925,17 +5530,6 @@ pub mod canopy {
             Disabled,
             /// The widget is pressed or explicitly active.
             Pressed,
-            /// Compatibility state for a button that is not active.
-            Inactive,
-        }
-
-        /// A style transformation that can be applied during rendering.
-        ///
-        /// Effects are stacked and applied in order during render traversal.
-        /// They inherit through the tree unless explicitly cleared.
-        pub trait StyleEffect: Debug + Send + Sync {
-            /// Apply this effect to a style, returning the transformed style.
-            fn apply(&self, style: Style) -> Style;
         }
 
         #[doc(hidden)]
@@ -6491,7 +6085,7 @@ pub mod canopy {
             /// Content rect in screen coordinates (outer inset by padding).
             pub content: crate::geom::RectI32,
             /// Viewport offset in content coordinates (scroll position).
-            pub tl: crate::geom::Point,
+            pub scroll: crate::geom::Point,
             /// Canvas size in content coordinates.
             pub canvas: crate::geom::Size,
         }
@@ -6520,7 +6114,7 @@ pub mod canopy {
         impl View {
             /// Build a view from signed outer and content rects, a scroll offset, and a
             /// canvas size.
-            pub fn new(outer: RectI32, content: RectI32, tl: Point, canvas: Size) -> Self {}
+            pub fn new(outer: RectI32, content: RectI32, scroll: Point, canvas: Size) -> Self {}
 
             /// Calculates the (pre, active, post) rectangles needed to draw a
             /// horizontal scroll bar for this view in the specified margin rect.
@@ -6564,8 +6158,8 @@ pub mod canopy {
             /// Size of the outer rect.
             pub fn outer_size(&self) -> Size {}
 
-            /// True if the view is zero-sized.
-            pub fn is_zero(&self) -> bool {}
+            /// True if the view has no visible cells.
+            pub fn is_empty(&self) -> bool {}
 
             /// Visible view rectangle in content coordinates.
             pub fn view_rect(&self) -> Rect {}
@@ -6576,32 +6170,32 @@ pub mod canopy {
     }
 
     #[macro_export]
-    /// Define a typed key for keyed children.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use canopy::{ChildKey, Widget, key};
-    ///
-    /// key!(Editor);
-    /// impl Widget for Editor {}
-    ///
-    /// pub struct Modal;
-    /// impl Widget for Modal {}
-    /// key!(pub ModalSlot: Modal);
-    ///
-    /// assert_eq!(Editor::KEY, "Editor");
-    /// assert_eq!(ModalSlot::KEY, "ModalSlot");
-    /// ```
-    macro_rules! key {
-    ($vis:vis $name:ident) => { ... };
-    ($vis:vis $name:ident : $widget:ty) => { ... };
-}
-    #[macro_export]
     /// Build a [`Color`](crate::style::Color) from a `#RRGGBB` or `RRGGBB` literal
     /// at compile time.
     macro_rules! rgb {
     ($hex:literal) => { ... };
+}
+    #[macro_export]
+    /// Define a typed slot for keyed children.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use canopy::{ChildSlot, Widget, slot};
+    ///
+    /// slot!(Editor);
+    /// impl Widget for Editor {}
+    ///
+    /// pub struct Modal;
+    /// impl Widget for Modal {}
+    /// slot!(pub ModalSlot: Modal);
+    ///
+    /// assert_eq!(Editor::KEY, "Editor");
+    /// assert_eq!(ModalSlot::KEY, "ModalSlot");
+    /// ```
+    macro_rules! slot {
+    ($vis:vis $name:ident) => { ... };
+    ($vis:vis $name:ident : $widget:ty) => { ... };
 }
     /// Callback marshalled onto the UI thread for live automation.
     pub type AutomationCallback = Box<dyn FnOnce(&mut Canopy) + Send + 'static>;
@@ -6614,8 +6208,8 @@ pub mod canopy {
 
     /// Options shared by native and scripted application bindings.
     pub struct BindingOptions {
-        /// Path selector, with an empty string matching the current route.
-        pub path: String,
+        /// Optional validated path selector. Omission matches the current route.
+        pub path: Option<crate::path::PathFilter>,
         /// Application scope and optional named mode.
         pub scope: BindingScope,
         /// Required user-facing description.
@@ -6747,6 +6341,10 @@ pub mod canopy {
     }
 
     /// Completion receiver that is awaited outside the UI thread.
+    ///
+    /// The public receiver is intentionally the futures oneshot type: evaluation
+    /// completion is a single-consumer event, and wrapping it would duplicate the
+    /// same polling and cancellation contract.
     pub struct EvalTicket {
         /// Accepted queue identity, including failed admission results.
         pub id: EvalId,
@@ -6773,10 +6371,6 @@ pub mod canopy {
         pub name: String,
         /// Human-readable fixture description.
         pub description: String,
-        /// Setup closure applied to the current canopy instance.
-        pub setup: std::sync::Arc<
-            dyn Fn(&mut super::canopy::Canopy) -> crate::error::Result<()> + Send + Sync,
-        >,
     }
 
     /// Serializable metadata about a registered fixture.
@@ -6785,6 +6379,22 @@ pub mod canopy {
         pub name: String,
         /// Human-readable fixture description.
         pub description: String,
+    }
+
+    /// Direction for focus movement.
+    pub enum FocusDirection {
+        /// Move to the next focusable node.
+        Next,
+        /// Move to the previous focusable node.
+        Prev,
+        /// Move focus up.
+        Up,
+        /// Move focus down.
+        Down,
+        /// Move focus left.
+        Left,
+        /// Move focus right.
+        Right,
     }
 
     /// Subtree used by a focus traversal operation.
@@ -6869,7 +6479,6 @@ pub mod canopy {
         pub bindings: ModalBindings,
     }
 
-    #[repr(transparent)]
     /// Opaque identifier for a node stored in the Core arena.
     pub struct NodeId(_);
 
@@ -6957,8 +6566,8 @@ pub mod canopy {
     pub struct ScriptJournalEntry {
         /// Monotonic journal id.
         pub id: u64,
-        /// Script origin such as `eval`, `config:<path>`, or `startup:app`.
-        pub origin: String,
+        /// Typed origin serialized as the established journal string.
+        pub origin: ScriptOrigin,
         /// Evaluated source text.
         pub source: String,
         /// Whether the evaluation completed successfully.
@@ -6971,6 +6580,23 @@ pub mod canopy {
         pub assertions: Vec<script::ScriptAssertion>,
         /// Wall-clock duration in milliseconds.
         pub duration_ms: u64,
+    }
+
+    #[serde(from = "String", into = "String")]
+    /// Typed source of one script-journal entry.
+    pub enum ScriptOrigin {
+        /// Top-level application evaluation.
+        Eval,
+        /// Builder configuration loaded from a path.
+        Config(String),
+        /// Application or mounted startup source.
+        Startup(String),
+        /// Builder-owned binding source.
+        Bindings(String),
+        /// Widget default-binding source.
+        DefaultBindings(String),
+        /// Origin retained from a journal written by another producer.
+        Other(String),
     }
 
     /// Authority granted to scripts loaded from an application-declared root.
@@ -7060,23 +6686,23 @@ pub mod canopy {
     pub use canopy_derive::command;
     pub use canopy_derive::derive_commands;
     pub use canopy_geom as geom;
-    /// A typed key for keyed children.
+    /// A typed slot for keyed children.
     ///
     /// This trait associates a string key with a specific widget type, providing
     /// compile-time type safety for keyed child access.
     ///
-    /// Use the [`crate::key!`] macro to define keys:
+    /// Use the [`crate::slot!`] macro to define keys:
     ///
     /// ```
-    /// use canopy::{ChildKey, Widget, key};
+    /// use canopy::{ChildSlot, Widget, slot};
     ///
     /// pub struct Modal;
     /// impl Widget for Modal {}
     ///
-    /// key!(ModalSlot: Modal);
+    /// slot!(ModalSlot: Modal);
     /// assert_eq!(ModalSlot::KEY, "ModalSlot");
     /// ```
-    pub trait ChildKey {
+    pub trait ChildSlot {
         /// The string key used for storage.
         const KEY: &'static str;
         /// The widget type associated with this key.
@@ -7084,7 +6710,10 @@ pub mod canopy {
     }
 
     /// Mutable context available to widgets during event handling.
-    pub trait Context: ViewContext {
+    ///
+    /// Applications consume contexts supplied by Canopy and cannot implement this
+    /// trait themselves.
+    pub trait Context: ViewContext + sealed::Context {
         /// Add a boxed widget as a child of a specific parent and return the new
         /// node ID.
         fn add_child_to_boxed(&mut self, parent: NodeId, widget: Box<dyn Widget>)
@@ -7092,7 +6721,7 @@ pub mod canopy {
 
         /// Add a boxed widget as a keyed child of a specific parent and return the
         /// new node ID.
-        fn add_child_to_keyed_boxed(
+        fn add_child_to_slot_boxed(
             &mut self,
             parent: NodeId,
             key: &str,
@@ -7102,17 +6731,8 @@ pub mod canopy {
         /// Attach a detached child to a parent.
         fn attach(&mut self, parent: NodeId, child: NodeId) -> Result<()>;
 
-        #[doc(hidden)]
-        /// Commit configured composition topology and semantic keys before mount.
-        fn attach_composed(
-            &mut self,
-            parent: NodeId,
-            roots: &[(NodeId, Option<&str>)],
-            keys: &[(NodeId, NodeId, String)],
-        ) -> Result<()>;
-
         /// Attach a detached child to a parent using a unique key.
-        fn attach_keyed(&mut self, parent: NodeId, key: &str, child: NodeId) -> Result<()>;
+        fn attach_slot(&mut self, parent: NodeId, key: &str, child: NodeId) -> Result<()>;
 
         /// Return effective key bindings for a node or the current focus.
         fn available_bindings(&self, node: Option<NodeId>) -> Result<BindingSnapshot>;
@@ -7147,44 +6767,15 @@ pub mod canopy {
         /// Detach a child from its parent.
         fn detach(&mut self, child: NodeId) -> Result<()>;
 
-        /// Dispatch a command relative to this node.
-        fn dispatch_command(
-            &mut self,
-            cmd: &CommandInvocation,
-        ) -> StdResult<ArgValue, CommandError>;
-
-        /// Dispatch a command with an explicit command-scope frame.
-        fn dispatch_command_scoped(
-            &mut self,
-            frame: CommandScopeFrame,
-            cmd: &CommandInvocation,
-        ) -> StdResult<ArgValue, CommandError>;
-
-        /// Invoke only the specified command owner.
-        fn dispatch_exact(
-            &mut self,
-            node: NodeId,
-            cmd: &CommandInvocation,
-        ) -> StdResult<ArgValue, CommandError> {
-        }
-
-        /// Search the supplied origin subtree, then its ancestors.
-        fn dispatch_from(
-            &mut self,
-            node: NodeId,
-            cmd: &CommandInvocation,
-        ) -> StdResult<ArgValue, CommandError> {
-        }
-
         /// Dispatch according to an explicit target policy.
-        fn dispatch_target(
+        fn dispatch(
             &mut self,
             target: CommandTarget,
             cmd: &CommandInvocation,
         ) -> StdResult<ArgValue, CommandError>;
 
         /// Invoke with explicit target and input scope.
-        fn dispatch_target_scoped(
+        fn dispatch_scoped(
             &mut self,
             target: CommandTarget,
             frame: CommandScopeFrame,
@@ -7211,17 +6802,15 @@ pub mod canopy {
         /// Request a cooperative shutdown with the provided status code.
         fn exit(&mut self, code: i32);
 
-        /// Move focus in a direction within an explicit scope.
-        fn focus_dir(&mut self, scope: FocusScope, dir: Direction) -> Result<ChangeOutcome>;
-
         /// Focus the first focusable node within an explicit scope.
         fn focus_first(&mut self, scope: FocusScope) -> Result<ChangeOutcome>;
 
-        /// Focus the next focusable node within an explicit scope.
-        fn focus_next(&mut self, scope: FocusScope) -> Result<ChangeOutcome>;
-
-        /// Focus the previous focusable node within an explicit scope.
-        fn focus_prev(&mut self, scope: FocusScope) -> Result<ChangeOutcome>;
+        /// Move focus in a direction within an explicit scope.
+        fn focus_move(
+            &mut self,
+            scope: FocusScope,
+            direction: FocusDirection,
+        ) -> Result<ChangeOutcome>;
 
         /// Record changes for the next runtime preparation.
         fn invalidate(&mut self, _invalidation: crate::Invalidation) {}
@@ -7232,11 +6821,11 @@ pub mod canopy {
         /// Open a modal scope that owns focus, input admission, and visual effects.
         fn open_modal(&mut self, options: ModalOptions) -> Result<InteractionToken> {}
 
-        /// Scroll the view down by one page. Returns `true` if movement occurred.
-        fn page_down(&mut self) -> bool {}
+        /// Scroll the view down by one page.
+        fn page_down(&mut self) -> ChangeOutcome {}
 
-        /// Scroll the view up by one page. Returns `true` if movement occurred.
-        fn page_up(&mut self) -> bool {}
+        /// Scroll the view up by one page.
+        fn page_up(&mut self) -> ChangeOutcome {}
 
         /// Remove one exclusive binding frame.
         fn pop_exclusive_bindings(&mut self, token: ExclusiveFrameToken) -> Result<()>;
@@ -7271,25 +6860,23 @@ pub mod canopy {
         /// Restore mouse capture to an attached node.
         fn restore_mouse_capture(&mut self, node: NodeId) -> Result<ChangeOutcome>;
 
-        /// Scroll the view by the given offsets. Returns `true` if movement
-        /// occurred.
-        fn scroll_by(&mut self, x: i32, y: i32) -> bool;
+        /// Scroll the view by the given offsets.
+        fn scroll_by(&mut self, x: i32, y: i32) -> ChangeOutcome;
 
-        /// Scroll the view down by one line. Returns `true` if movement occurred.
-        fn scroll_down(&mut self) -> bool {}
+        /// Scroll the view down by one line.
+        fn scroll_down(&mut self) -> ChangeOutcome {}
 
-        /// Scroll the view left by one line. Returns `true` if movement occurred.
-        fn scroll_left(&mut self) -> bool {}
+        /// Scroll the view left by one line.
+        fn scroll_left(&mut self) -> ChangeOutcome {}
 
-        /// Scroll the view right by one line. Returns `true` if movement occurred.
-        fn scroll_right(&mut self) -> bool {}
+        /// Scroll the view right by one line.
+        fn scroll_right(&mut self) -> ChangeOutcome {}
 
-        /// Scroll the view to the specified position. Returns `true` if movement
-        /// occurred.
-        fn scroll_to(&mut self, x: u32, y: u32) -> bool;
+        /// Scroll the view to the specified position.
+        fn scroll_to(&mut self, x: u32, y: u32) -> ChangeOutcome;
 
-        /// Scroll the view up by one line. Returns `true` if movement occurred.
-        fn scroll_up(&mut self) -> bool {}
+        /// Scroll the view up by one line.
+        fn scroll_up(&mut self) -> ChangeOutcome {}
 
         /// Replace the children list for the current node.
         fn set_children(&mut self, children: Vec<NodeId>) -> Result<()> {}
@@ -7333,11 +6920,141 @@ pub mod canopy {
 
         /// Execute a closure with mutable access to a widget and its node-bound
         /// context.
-        fn with_widget_mut(
+        fn with_widget_dyn_mut(
             &mut self,
             node: NodeId,
             f: &mut dyn FnMut(&mut dyn Widget, &mut dyn Context) -> Result<()>,
         ) -> Result<()>;
+    }
+
+    /// Typed mutation and composition helpers for contexts.
+    pub trait ContextExt: Context + ViewContextExt {
+        /// Add a widget as a child of the current node and return the new typed
+        /// node ID.
+        fn add_child<W: 'static + Widget>(&mut self, widget: W) -> Result<TypedId<W>> {}
+
+        /// Add a widget as a child of a specific parent and return the new typed
+        /// node ID.
+        fn add_child_to<W: 'static + Widget>(
+            &mut self,
+            parent: impl Into<NodeId>,
+            widget: W,
+        ) -> Result<TypedId<W>> {
+        }
+
+        /// Add a typed keyed child to the current node and return its typed node
+        /// ID.
+        fn add_slot<K: ChildSlot>(&mut self, widget: K::Widget) -> Result<TypedId<K::Widget>> {}
+
+        /// Add a typed keyed child to a specific parent and return its typed node
+        /// ID.
+        fn add_slot_to<W: 'static + Widget>(
+            &mut self,
+            parent: impl Into<NodeId>,
+            key: &str,
+            widget: W,
+        ) -> Result<TypedId<W>> {
+        }
+
+        /// Build detached children and attach them after configuration succeeds.
+        /// Structural rollback follows [`Context::edit_structure`].
+        fn compose<R>(
+            &mut self,
+            parent: NodeId,
+            build: impl FnOnce(&mut crate::ChildBuilder<'_>) -> Result<R>,
+        ) -> Result<R> {
+        }
+
+        /// Create a widget node detached from the tree.
+        fn create_detached<W: 'static + Widget>(&mut self, widget: W) -> Result<TypedId<W>> {}
+
+        /// Invoke only the specified command owner.
+        fn dispatch_exact(
+            &mut self,
+            node: NodeId,
+            command: &CommandInvocation,
+        ) -> StdResult<ArgValue, CommandError> {
+        }
+
+        /// Get or create the keyed child under the current node.
+        fn get_or_create_slot<K: ChildSlot>(
+            &mut self,
+            make: impl FnOnce() -> K::Widget,
+        ) -> Result<TypedId<K::Widget>> {
+        }
+
+        /// Get or create the keyed child under a specific parent node.
+        fn get_or_create_slot_of<K: ChildSlot>(
+            &mut self,
+            parent: impl Into<NodeId>,
+            make: impl FnOnce() -> K::Widget,
+        ) -> Result<TypedId<K::Widget>> {
+        }
+
+        /// Get a typed keyed child's node ID.
+        fn get_slot<K: ChildSlot>(&self) -> Result<Option<TypedId<K::Widget>>> {}
+
+        /// Get a typed keyed child's node ID from a specific parent.
+        fn get_slot_of<K: ChildSlot>(
+            &self,
+            parent: impl Into<NodeId>,
+        ) -> Result<Option<TypedId<K::Widget>>> {
+        }
+
+        /// Check if a typed keyed child exists.
+        fn has_slot<K: ChildSlot>(&self) -> Result<bool> {}
+
+        /// Set the layout for the current node.
+        fn set_layout(&mut self, layout: Layout) -> Result<()> {}
+
+        /// Set the layout for a specific node.
+        fn set_layout_of(&mut self, node: impl Into<NodeId>, layout: Layout) -> Result<()> {}
+
+        /// Execute a closure with a typed keyed child if it exists.
+        fn try_with_typed_slot<K: ChildSlot, R>(
+            &mut self,
+            f: impl FnOnce(&mut K::Widget, &mut dyn Context) -> Result<R>,
+        ) -> Result<Option<R>> {
+        }
+
+        /// Execute a closure with the unique descendant of type `W` if it exists.
+        fn try_with_unique_descendant<W: 'static + Widget, R>(
+            &mut self,
+            f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
+        ) -> Result<Option<R>> {
+        }
+
+        /// Execute a closure with a keyed child of type `W`.
+        fn with_slot<W: 'static + Widget, R>(
+            &mut self,
+            key: &str,
+            f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
+        ) -> Result<R> {
+        }
+
+        /// Execute a closure with a typed keyed child.
+        fn with_typed_slot<K: ChildSlot, R>(
+            &mut self,
+            f: impl FnOnce(&mut K::Widget, &mut dyn Context) -> Result<R>,
+        ) -> Result<R> {
+        }
+
+        /// Execute a closure with the unique descendant of type `W`.
+        fn with_unique_descendant<W: 'static + Widget, R>(
+            &mut self,
+            f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
+        ) -> Result<R> {
+        }
+
+        /// Execute a closure with mutable access to a runtime-checked widget node.
+        fn with_widget_mut<W, R>(
+            &mut self,
+            node: impl Into<NodeId>,
+            f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
+        ) -> Result<R>
+        where
+            W: 'static + Widget, {
+        }
     }
 
     /// A trait that allows widgets to perform recursive initialization of
@@ -7349,23 +7066,15 @@ pub mod canopy {
     }
 
     /// Read-only context available to widgets during render and measure.
-    pub trait ViewContext {
-        /// Inspect an action for display. Built-in contexts report registry and
-        /// target resolution failures as disabled reasons, while eligibility
-        /// hook errors remain errors. Custom contexts default to their command
-        /// status behavior.
-        fn action_status(
-            &self,
-            target: CommandTarget,
-            invocation: &CommandInvocation,
-        ) -> Result<CommandStatus> {
-        }
-
+    ///
+    /// Applications consume contexts supplied by Canopy and cannot implement this
+    /// trait themselves.
+    pub trait ViewContext: sealed::ViewContext {
         /// Return a keyed child relative to the current node.
-        fn child_keyed(&self, key: &str) -> Option<NodeId> {}
+        fn child_slot(&self, key: &str) -> Option<NodeId> {}
 
         /// Return a keyed child relative to a specific parent node.
-        fn child_keyed_in(&self, parent: NodeId, key: &str) -> Option<NodeId>;
+        fn child_slot_of(&self, parent: NodeId, key: &str) -> Option<NodeId>;
 
         /// Children of the current node in tree order.
         fn children(&self) -> Vec<NodeId> {}
@@ -7373,7 +7082,9 @@ pub mod canopy {
         /// Children of a specific node in tree order.
         fn children_of(&self, node: NodeId) -> Vec<NodeId>;
 
-        /// Inspect the current eligibility of an explicitly targeted command.
+        /// Inspect a command for display. Registry and target resolution failures
+        /// are returned as disabled reasons; eligibility hook failures remain
+        /// errors.
         fn command_status(
             &self,
             target: CommandTarget,
@@ -7381,7 +7092,7 @@ pub mod canopy {
         ) -> Result<CommandStatus>;
 
         /// Resolve a semantic key in an explicit live subtree scope.
-        fn find_key(&self, scope: NodeId, key: &str) -> Result<Option<NodeId>>;
+        fn find_identity(&self, scope: NodeId, key: &str) -> Result<Option<NodeId>>;
 
         /// Find the first node whose path matches the validated filter.
         fn find_node_matching(&self, path_filter: &PathFilter) -> Option<NodeId> {}
@@ -7404,14 +7115,26 @@ pub mod canopy {
         /// Return the currently focused node, including one not yet laid out.
         fn focused_node(&self) -> Option<NodeId>;
 
+        /// Return whether a node exists and is attached to the root tree.
+        fn is_attached_of(&self, node: NodeId) -> bool;
+
         /// Does the current node have focus?
         fn is_focused(&self) -> bool {}
+
+        /// Does the specified node have focus?
+        fn is_focused_of(&self, node: NodeId) -> bool;
 
         /// Is the current node on the focus path?
         fn is_on_focus_path(&self) -> bool {}
 
+        /// Is the specified node on the focus path?
+        fn is_on_focus_path_of(&self, node: NodeId) -> bool;
+
         /// Cached layout configuration for the current node.
         fn layout(&self) -> Layout {}
+
+        /// Layout configuration for a specific node.
+        fn layout_of(&self, node: NodeId) -> Option<Layout>;
 
         /// Locate the deepest visible node at a point within a subtree.
         fn locate(&self, root: NodeId, point: Point) -> Result<Option<NodeId>>;
@@ -7422,39 +7145,14 @@ pub mod canopy {
         /// The node currently being rendered.
         fn node_id(&self) -> NodeId;
 
-        /// Return whether a node exists and is attached to the root tree.
-        fn node_is_attached(&self, node: NodeId) -> bool;
-
-        /// Does the specified node have focus?
-        fn node_is_focused(&self, node: NodeId) -> bool;
-
-        /// Is the specified node on the focus path?
-        fn node_is_on_focus_path(&self, node: NodeId) -> bool;
-
-        /// Layout configuration for a specific node.
-        fn node_layout(&self, node: NodeId) -> Option<Layout>;
-
-        /// Return the path for a node relative to a root.
-        fn node_path(&self, root: NodeId, node: NodeId) -> Path;
-
-        /// Widget type identifier for a specific node.
-        fn node_type_id(&self, node: NodeId) -> Option<TypeId>;
-
-        /// View information for a specific node.
-        fn node_view(&self, node: NodeId) -> Option<View>;
-
         /// Local outer rectangle for this node.
         fn outer_rect_local(&self) -> Rect {}
 
         /// Return the parent of a node, or `None` if it is the root or not found.
         fn parent_of(&self, node: NodeId) -> Option<NodeId>;
 
-        /// Read a widget without extracting its slot or marking it changed.
-        fn read_widget(
-            &self,
-            node: NodeId,
-            callback: &mut dyn FnMut(&dyn Widget) -> Result<()>,
-        ) -> Result<()>;
+        /// Return the path for a node relative to a root.
+        fn path_of(&self, root: NodeId, node: NodeId) -> Path;
 
         /// The root node of the tree.
         fn root_id(&self) -> NodeId;
@@ -7462,14 +7160,83 @@ pub mod canopy {
         /// Return a node's independently assigned semantic identity.
         fn semantic_identity(&self, node: NodeId) -> Option<SemanticIdentity>;
 
+        /// Widget type identifier for a specific node.
+        fn type_id_of(&self, node: NodeId) -> Option<TypeId>;
+
         /// View information for the current node.
         fn view(&self) -> View {}
+
+        /// View information for a specific node.
+        fn view_of(&self, node: NodeId) -> Option<View>;
 
         /// Visible view rectangle in content coordinates.
         fn view_rect(&self) -> Rect {}
 
         /// Visible view rectangle in local outer coordinates.
         fn view_rect_local(&self) -> Rect {}
+
+        /// Read a widget without extracting its slot or marking it changed.
+        fn with_widget_dyn(
+            &self,
+            node: NodeId,
+            callback: &mut dyn FnMut(&dyn Widget) -> Result<()>,
+        ) -> Result<()>;
+    }
+
+    /// Typed helpers shared by read-only and mutable contexts.
+    pub trait ViewContextExt: ViewContext {
+        /// Return all widgets of type `W` anywhere in the tree, including the root.
+        fn all_in_tree<W: 'static + Widget>(&self) -> Vec<TypedId<W>> {}
+
+        /// Return all direct children of type `W`.
+        fn children_of_type<W: 'static + Widget>(&self) -> Vec<TypedId<W>> {}
+
+        /// Return all descendants of type `W` (excluding self).
+        fn descendants_of_type<W: 'static + Widget>(&self) -> Vec<TypedId<W>> {}
+
+        /// Find exactly one node matching a path filter.
+        fn find_one(&self, path: &str) -> Result<NodeId> {}
+
+        /// Return the first widget of type `W` anywhere in the tree, including the
+        /// root.
+        fn first_in_tree<W: 'static + Widget>(&self) -> Option<TypedId<W>> {}
+
+        /// Return the first leaf node under `root` using pre-order traversal.
+        ///
+        /// A leaf is a node with no children.
+        fn first_leaf(&self, root: impl Into<NodeId>) -> Option<NodeId> {}
+
+        /// Return the descendant of type `W` that is on the focus path, if any.
+        fn focused_descendant<W: 'static + Widget>(&self) -> Option<TypedId<W>> {}
+
+        /// Return the descendant of type `W` on the focus path, or the first if
+        /// none focused.
+        ///
+        /// This searches only within the current node's subtree. Use the tree-wide
+        /// helpers on `ViewContext` if you need to search from an arbitrary
+        /// root.
+        fn focused_or_first_descendant<W: 'static + Widget>(&self) -> Option<TypedId<W>> {}
+
+        /// Pre-order traversal of the subtree rooted at `root`.
+        fn preorder(&self, root: impl Into<NodeId>) -> impl '_ + Iterator<Item = NodeId> {}
+
+        /// Validate an untyped node ID and return its typed form.
+        fn typed_id<W: 'static + Widget>(&self, node: impl Into<NodeId>) -> Result<TypedId<W>> {}
+
+        /// Return the unique child of type `W`, or error if more than one exists.
+        fn unique_child<W: 'static + Widget>(&self) -> Result<Option<TypedId<W>>> {}
+
+        /// Return the unique descendant of type `W`, or error if more than one
+        /// exists.
+        fn unique_descendant<W: 'static + Widget>(&self) -> Result<Option<TypedId<W>>> {}
+
+        /// Read a typed widget while preserving immutable access and borrow errors.
+        fn with_widget<W: 'static + Widget, R>(
+            &self,
+            node: TypedId<W>,
+            callback: impl FnOnce(&W) -> Result<R>,
+        ) -> Result<R> {
+        }
     }
 
     /// Widgets are the behavior attached to nodes in the Core arena.
@@ -7732,7 +7499,7 @@ pub mod canopy {
 
     impl ChildBuilder<'_> {
         /// Configure a child occupying a typed structural slot.
-        pub fn keyed<K: crate::ChildKey>(
+        pub fn keyed<K: crate::ChildSlot>(
             &mut self,
             widget: K::Widget,
             configure: impl FnOnce(&mut ChildConfig<'_, K::Widget>) -> Result<()>,
@@ -7839,6 +7606,11 @@ pub mod canopy {
 
     impl Clone for EvalOutcome {
         fn clone(&self) -> EvalOutcome {}
+    }
+
+    impl EvalOutcome {
+        /// Take the evaluation result when this outcome has no other owner.
+        pub fn into_result(self) -> Result<ArgValue> {}
     }
 
     impl Clone for EvalRequest {
@@ -7948,6 +7720,40 @@ pub mod canopy {
         }
     }
 
+    impl Clone for FocusDirection {
+        fn clone(&self) -> FocusDirection {}
+    }
+
+    impl CommandType for FocusDirection {
+        fn luau_decls(registry: &mut canopy::commands::DeclRegistry<'_>) {}
+
+        fn luau_ty() -> canopy::commands::declaration::Type {}
+    }
+
+    impl Debug for FocusDirection {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
+    }
+
+    impl Eq for FocusDirection {
+        #[doc(hidden)]
+        fn assert_fields_are_eq(&self) {}
+    }
+
+    impl FromArgValue for FocusDirection {
+        fn from_arg_value(
+            v: &canopy::commands::ArgValue,
+        ) -> ::std::result::Result<Self, canopy::commands::CommandError> {
+        }
+    }
+
+    impl PartialEq for FocusDirection {
+        fn eq(&self, other: &FocusDirection) -> bool {}
+    }
+
+    impl ToArgValue for FocusDirection {
+        fn to_arg_value(self) -> canopy::commands::ArgValue {}
+    }
+
     impl Clone for FocusScope {
         fn clone(&self) -> FocusScope {}
     }
@@ -8044,6 +7850,18 @@ pub mod canopy {
         fn assert_fields_are_eq(&self) {}
     }
 
+    impl From<Key> for InputSpec {
+        fn from(key: Key) -> Self {}
+    }
+
+    impl From<Mouse> for InputSpec {
+        fn from(mouse: Mouse) -> Self {}
+    }
+
+    impl From<char> for InputSpec {
+        fn from(key: char) -> Self {}
+    }
+
     impl Hash for InputSpec {
         fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
     }
@@ -8127,20 +7945,12 @@ pub mod canopy {
     }
 
     impl Debug for NodeId {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Default for NodeId {
-        fn default() -> NodeId {}
+        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {}
     }
 
     impl Eq for NodeId {
         #[doc(hidden)]
         fn assert_fields_are_eq(&self) {}
-    }
-
-    impl From<KeyData> for NodeId {
-        fn from(k: KeyData) -> Self {}
     }
 
     impl FromArgValue for crate::core::NodeId {
@@ -8149,10 +7959,6 @@ pub mod canopy {
 
     impl Hash for NodeId {
         fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-    }
-
-    impl Key for NodeId {
-        fn data(&self) -> KeyData {}
     }
 
     impl Ord for NodeId {
@@ -8173,6 +7979,16 @@ pub mod canopy {
 
     impl<T> From<TypedId<T>> for NodeId {
         fn from(value: TypedId<T>) -> Self {}
+    }
+
+    impl<T> Index<NodeId> for NodeArena<T> {
+        fn index(&self, id: NodeId) -> &Self::Output {}
+
+        type Output = T;
+    }
+
+    impl<T> IndexMut<NodeId> for NodeArena<T> {
+        fn index_mut(&mut self, id: NodeId) -> &mut Self::Output {}
     }
 
     impl Clone for NodeSnapshot {
@@ -8287,6 +8103,52 @@ pub mod canopy {
     }
 
     impl<'de> Deserialize<'de> for ScriptJournalEntry {
+        fn deserialize<__D>(__deserializer: __D) -> _serde::__private228::Result<Self, __D::Error>
+        where
+            __D: _serde::Deserializer<'de>, {
+        }
+    }
+
+    impl Clone for ScriptOrigin {
+        fn clone(&self) -> ScriptOrigin {}
+    }
+
+    impl Debug for ScriptOrigin {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
+    }
+
+    impl Display for ScriptOrigin {
+        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {}
+    }
+
+    impl Eq for ScriptOrigin {
+        #[doc(hidden)]
+        fn assert_fields_are_eq(&self) {}
+    }
+
+    impl From<ScriptOrigin> for String {
+        fn from(origin: ScriptOrigin) -> Self {}
+    }
+
+    impl From<String> for ScriptOrigin {
+        fn from(origin: String) -> Self {}
+    }
+
+    impl PartialEq for ScriptOrigin {
+        fn eq(&self, other: &ScriptOrigin) -> bool {}
+    }
+
+    impl Serialize for ScriptOrigin {
+        fn serialize<__S>(
+            &self,
+            __serializer: __S,
+        ) -> _serde::__private228::Result<__S::Ok, __S::Error>
+        where
+            __S: _serde::Serializer, {
+        }
+    }
+
+    impl<'de> Deserialize<'de> for ScriptOrigin {
         fn deserialize<__D>(__deserializer: __D) -> _serde::__private228::Result<Self, __D::Error>
         where
             __D: _serde::Deserializer<'de>, {
@@ -8487,15 +8349,6 @@ pub mod canopy {
         /// Build a diagnostic dump with tree, focus, and binding details.
         pub fn diagnostic_dump(&self, target: NodeId) -> String {}
 
-        /// Configure the `@project` persistent script root.
-        pub fn set_project_script_root(&mut self, root: impl Into<PathBuf>) -> Result<()> {}
-
-        /// Configure the `@user` persistent script root.
-        pub fn set_user_script_root(&mut self, root: impl Into<PathBuf>) -> Result<()> {}
-
-        /// Construct a new Canopy instance.
-        pub fn new() -> Self {}
-
         /// Create a detached widget node.
         pub fn create_detached<W>(&mut self, widget: W) -> Result<TypedId<W>>
         where
@@ -8504,54 +8357,28 @@ pub mod canopy {
 
         /// Drain and return assertion outcomes from the most recent script
         /// evaluation.
-        pub fn take_script_assertions(&self) -> Vec<script::ScriptAssertion> {}
+        pub fn take_script_assertions(&mut self) -> Vec<script::ScriptAssertion> {}
 
         /// Drain and return log lines recorded by the most recent script
         /// evaluation.
-        pub fn take_script_logs(&self) -> Vec<String> {}
+        pub fn take_script_logs(&mut self) -> Vec<String> {}
 
-        /// Evaluate a Luau config file from disk.
-        pub fn run_config(&mut self, path: &FsPath) -> Result<()> {}
+        /// Evaluate a Luau source string at the root and return its value.
+        pub fn eval_script(&mut self, source: &str) -> Result<commands::ArgValue> {}
 
-        /// Evaluate a Luau source string and return its value.
-        pub fn eval_script_value(&mut self, source: &str) -> Result<commands::ArgValue> {}
-
-        /// Evaluate a Luau source string in the current app context.
-        pub fn eval_script(&mut self, source: &str) -> Result<()> {}
-
-        /// Evaluate a Luau source string with a cooperative timeout.
-        pub fn eval_script_value_with_timeout(
-            &mut self,
-            source: &str,
-            timeout: Duration,
-        ) -> Result<commands::ArgValue> {
-        }
-
-        /// Finalize the script API surface for this app.
-        pub fn finalize_api(&mut self) -> Result<()> {}
+        /// Evaluate a configured request and return its value and diagnostics.
+        pub fn eval(&mut self, request: EvalRequest) -> Result<EvalOutcome> {}
 
         /// Get a reference to the current render buffer, if any.
         pub fn buf(&self) -> Option<&TermBuf> {}
-
-        /// Install an idempotent framework binding with an explicit phase and
-        /// source.
-        pub fn bind_framework_with_options(
-            &mut self,
-            group: inputmap::FrameworkBindingGroup,
-            input: inputmap::InputSpec,
-            options: inputmap::BindingOptions,
-            command: commands::CommandInvocation,
-        ) -> Result<inputmap::BindingId> {
-        }
 
         /// Install an idempotent framework-owned command binding.
         pub fn bind_framework(
             &mut self,
             group: inputmap::FrameworkBindingGroup,
-            input: inputmap::InputSpec,
-            path: &str,
-            description: &str,
-            command: commands::CommandInvocation,
+            input: impl Into<inputmap::InputSpec>,
+            options: inputmap::BindingOptions,
+            command: commands::CommandCall,
         ) -> Result<inputmap::BindingId> {
         }
 
@@ -8560,7 +8387,7 @@ pub mod canopy {
         /// An omitted command target resolves from the node where the binding wins.
         pub fn bind_command(
             &mut self,
-            key: impl Into<Key>,
+            input: impl Into<inputmap::InputSpec>,
             options: inputmap::BindingOptions,
             command: commands::CommandCall,
         ) -> Result<inputmap::BindingId> {
@@ -8585,6 +8412,10 @@ pub mod canopy {
         pub fn pop_input_mode(&mut self) -> &str {}
 
         /// Prepare pending changes after widget mutation callbacks have returned.
+        ///
+        /// This is the synchronous boundary for native callers that need snapshots
+        /// or geometry before the next driver turn. `turn(Work::Prepare)` also
+        /// services queued automation and advances the driver lifecycle.
         pub fn flush(&mut self) -> Result<()> {}
 
         /// Push an input mode above the current mode.
@@ -8630,21 +8461,6 @@ pub mod canopy {
         /// Return a handle for submitting automation work to this app's UI thread.
         pub fn automation_handle(&self) -> AutomationHandle {}
 
-        /// Return command availability by searching a node's subtree, then
-        /// ancestors.
-        pub fn command_availability_from_node(
-            &self,
-            start: NodeId,
-        ) -> Result<Vec<commands::CommandAvailability<'_>>> {
-        }
-
-        /// Return command availability from the current focus, or root if
-        /// unfocused.
-        pub fn command_availability_from_focus(
-            &self,
-        ) -> Result<Vec<commands::CommandAvailability<'_>>> {
-        }
-
         /// Return command availability using an explicit target policy.
         pub fn command_availability(
             &self,
@@ -8684,6 +8500,9 @@ pub mod canopy {
         /// Return the root node ID.
         pub fn root_id(&self) -> NodeId {}
 
+        /// Return whether the application API has been finalized by its builder.
+        pub fn is_api_finalized(&self) -> bool {}
+
         /// Run a closure against a mutable context bound to a node.
         pub fn with_context<R>(
             &mut self,
@@ -8701,9 +8520,6 @@ pub mod canopy {
             f: impl FnOnce(&mut dyn crate::Context) -> Result<R>,
         ) -> Result<R> {
         }
-
-        /// Run app, user, and project startup scripts once.
-        pub fn run_startup_scripts(&mut self) -> Result<usize> {}
 
         /// Set the active input mode.
         pub fn set_input_mode(&mut self, mode: &str) -> Result<()> {}
@@ -8799,7 +8615,7 @@ pub mod canopy {
 
     impl<W: 'static + Widget> ChildConfig<'_, W> {
         /// Configure a descendant in a typed structural slot.
-        pub fn keyed<K: crate::ChildKey>(
+        pub fn keyed<K: crate::ChildSlot>(
             &mut self,
             widget: K::Widget,
             configure: impl FnOnce(&mut ChildConfig<'_, K::Widget>) -> Result<()>,

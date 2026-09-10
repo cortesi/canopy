@@ -47,7 +47,7 @@ mod tests {
         assert!(canopy.turn(Work::Prepare)?.frame.is_some());
         for (text, fail) in [("new", false), ("failed", true)] {
             let result = canopy.with_root_context(|ctx| {
-                ctx.with_widget(widget, |widget, _| {
+                ctx.with_widget_mut(widget, |widget: &mut TextWidget, _| {
                     widget.text = text.into();
                     if fail {
                         Err(Error::Invalid("callback failed".into()))
@@ -77,8 +77,8 @@ mod tests {
         canopy.set_root_size(Size::new(8, 3))?;
         assert!(canopy.turn(Work::Prepare)?.frame.is_some());
         canopy.with_root_view(|ctx| {
-            assert!(ctx.node_view(widget.into()).is_some());
-            ctx.with_widget_read(widget, |widget| {
+            assert!(ctx.view_of(widget.into()).is_some());
+            ctx.with_widget(widget, |widget| {
                 assert_eq!(widget.text, "visible");
                 Ok(())
             })
@@ -116,7 +116,7 @@ mod tests {
         assert!(parked.completed.is_empty());
         assert!(parked.frame.is_none());
         canopy.with_root_context(|ctx| {
-            ctx.with_widget(widget, |widget, _| {
+            ctx.with_widget_mut(widget, |widget: &mut TextWidget, _| {
                 widget.text = "ready".into();
                 Ok(())
             })

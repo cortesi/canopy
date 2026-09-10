@@ -7,8 +7,8 @@
 use std::{collections::HashSet, hash::Hash};
 
 use canopy::{
-    Context, EventOutcome, KeyedChildren, NodeId, TypedId, ViewContext, Widget, WidgetSemantics,
-    command,
+    Context, EventOutcome, FocusDirection, KeyedChildren, NodeId, TypedId, ViewContext, Widget,
+    WidgetSemantics,
     commands::{
         ArgValue, CommandAction, CommandArgs, CommandCall, CommandInvocation, CommandScopeFrame,
         CommandStatus, CommandTarget, ListRowContext, ToArgValue,
@@ -16,8 +16,10 @@ use canopy::{
     derive_commands,
     error::{Error, Result},
     event::{Event, mouse},
-    geom::{Direction, Line, Point, PointI32},
-    layout::{CanvasContext, Constraint, Edges, Layout, MeasureConstraints, Measurement, Size},
+    geom::{Line, Point, PointI32, Size},
+    layout::{
+        CanvasContext, Constraint, Edges, Layout, MeasureConstraints, MeasureOverflow, Measurement,
+    },
     render::Render,
     state::NodeName,
 };
@@ -142,17 +144,17 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
     }
 
     /// Inspect the selected row's configured activation command.
-    fn action_status(&self, ctx: &dyn ViewContext) -> Result<Option<CommandStatus>> {
+    fn command_status(&self, ctx: &dyn ViewContext) -> Result<Option<CommandStatus>> {
         let Some(action) = self.on_activate.as_ref() else {
             return Ok(None);
         };
-        if !ctx.node_is_attached(ctx.node_id()) {
+        if !ctx.is_attached_of(ctx.node_id()) {
             return Ok(Some(CommandStatus::Disabled("List is detached".into())));
         }
         let Some(index) = self.selected_index() else {
             return Ok(Some(CommandStatus::Disabled("No item selected".into())));
         };
-        ctx.action_status(
+        ctx.command_status(
             action.target.unwrap_or(CommandTarget::From(ctx.node_id())),
             &invocation_with_index(&action.invocation, index),
         )
@@ -219,7 +221,8 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
     }
 
     /// Return the widget for a domain key.
-    pub fn item_for_key(&self, key: &K) -> Option<TypedId<W>> {
+    #[cfg(test)]
+    pub(crate) fn item_for_key(&self, key: &K) -> Option<TypedId<W>> {
         self.items.id_for(key)
     }
 
@@ -260,11 +263,11 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
         }
         let selected = self.selection_after_reconcile(&desired);
         let selection_changed = selected != self.selected;
-        let had_focus = ctx.node_is_on_focus_path(ctx.node_id());
+        let had_focus = ctx.is_on_focus_path_of(ctx.node_id());
         let previous_focus = ctx.focused_node();
         let ordered = self.items.reconcile(ctx, desired, create, |key, id, ctx| {
             update(key, id, ctx)?;
-            ctx.with_widget(id, |widget: &mut W, _| {
+            ctx.with_widget_mut(id, |widget: &mut W, _| {
                 widget.set_selected(selected.as_ref() == Some(key));
                 Ok(())
             })
@@ -281,7 +284,7 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
         if selection_changed && had_focus {
             self.focus_selected(ctx)?;
         } else if let Some(focus) = previous_focus
-            && ctx.node_is_attached(focus)
+            && ctx.is_attached_of(focus)
         {
             ctx.set_focus(focus)?;
         }
@@ -368,14 +371,14 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
         }
 
         if let Some(old_id) = old_id {
-            ctx.with_widget(old_id, |w: &mut W, _| {
+            ctx.with_widget_mut(old_id, |w: &mut W, _| {
                 w.set_selected(false);
                 Ok(())
             })?;
         }
 
         if let Some(new_id) = new_id {
-            ctx.with_widget(new_id, |w: &mut W, _| {
+            ctx.with_widget_mut(new_id, |w: &mut W, _| {
                 w.set_selected(true);
                 Ok(())
             })?;
@@ -495,7 +498,7 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
     /// Set focus on the currently selected item.
     fn focus_selected(&self, c: &mut dyn Context) -> Result<()> {
         if let Some(id) = self.selected_item()
-            && c.node_is_attached(id.into())
+            && c.is_attached_of(id.into())
         {
             c.set_focus(id.into())?;
         }
@@ -517,7 +520,7 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
             }),
         };
         let invocation = invocation_with_index(&config.invocation, index);
-        c.dispatch_target_scoped(
+        c.dispatch_scoped(
             config.target.unwrap_or(CommandTarget::From(c.node_id())),
             frame,
             &invocation,
@@ -528,18 +531,18 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
     /// Scroll the view by one line in the specified direction.
     /// @param dir The direction to scroll.
     #[command]
-    pub fn scroll(&mut self, c: &mut dyn Context, dir: Direction) {
+    pub fn scroll(&mut self, c: &mut dyn Context, dir: FocusDirection) {
         match dir {
-            Direction::Up => {
+            FocusDirection::Up | FocusDirection::Prev => {
                 c.scroll_up();
             }
-            Direction::Down => {
+            FocusDirection::Down | FocusDirection::Next => {
                 c.scroll_down();
             }
-            Direction::Left => {
+            FocusDirection::Left => {
                 c.scroll_left();
             }
-            Direction::Right => {
+            FocusDirection::Right => {
                 c.scroll_right();
             }
         }
@@ -628,7 +631,7 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
         let mut y_offset = 0u32;
 
         for id in self.items.iter_ids() {
-            let height = c.node_view(id.into()).map(|v| v.outer.h).unwrap_or(1);
+            let height = c.view_of(id.into()).map(|v| v.outer.h).unwrap_or(1);
             metrics.push((y_offset, height));
             y_offset = y_offset.saturating_add(height);
         }
@@ -717,13 +720,13 @@ impl<W: Selectable + 'static, K: Eq + Hash + Clone + ToArgValue + 'static> Widge
                 .cloned()
                 .map(ToArgValue::to_arg_value)
                 .collect(),
-            action_status: self.action_status(ctx)?,
+            action_status: self.command_status(ctx)?,
             ..WidgetSemantics::default()
         })
     }
 
     fn layout(&self) -> Layout {
-        let mut layout = Layout::fill().overflow_x();
+        let mut layout = Layout::fill().overflow_x(MeasureOverflow::Unbounded);
         if let Some(indicator) = &self.selection_indicator
             && indicator.width > 0
         {
@@ -874,7 +877,7 @@ mod tests {
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
             let list =
                 ctx.add_child(List::<Text>::new().with_on_activate(Self::cmd_activate().call()))?;
-            ctx.with_widget::<List<Text>, _>(list, |list, ctx| {
+            ctx.with_widget_mut::<List<Text>, _>(list, |list, ctx| {
                 list.append(ctx, Text::new("First row"))?;
                 Ok(())
             })
@@ -1116,7 +1119,7 @@ mod tests {
                         .with_target(CommandTarget::Exact(ctx.node_id())),
                 ),
             )?;
-            ctx.with_widget(list, |list, ctx| {
+            ctx.with_widget_mut(list, |list: &mut List<Text, i64>, ctx| {
                 list.reconcile(
                     ctx,
                     [10, 20],

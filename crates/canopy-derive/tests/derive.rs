@@ -14,7 +14,7 @@ mod tests {
         event::{Event, mouse::MouseEvent},
         testing::dummyctx::DummyContext,
     };
-    use canopy_derive::{command, derive_commands};
+    use canopy_derive::derive_commands;
     use pretty_assertions::assert_eq;
     use serde::de::DeserializeOwned;
 

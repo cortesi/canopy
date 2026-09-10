@@ -10,8 +10,8 @@ use canopy::{
     Context, EventOutcome, ViewContext, Widget, cursor, derive_commands,
     error::{Error, Result},
     event::{self, key, mouse},
-    geom,
-    layout::{CanvasContext, MeasureConstraints, Measurement, Size},
+    geom::{self, Size},
+    layout::{CanvasContext, MeasureConstraints, Measurement},
     render::Render,
     rgb,
     state::NodeName,
@@ -98,6 +98,7 @@ impl DriverRuntime {
     }
 
     /// Return a clone of the attached driver handle.
+    #[cfg(test)]
     fn handle(&self) -> Arc<DriverHandle> {
         Arc::clone(&self.handle)
     }
@@ -332,7 +333,8 @@ impl Terminal {
     }
 
     /// Return the attached `itty` driver handle for scripting integrations.
-    pub fn driver_handle(&self) -> Option<Arc<DriverHandle>> {
+    #[cfg(test)]
+    pub(crate) fn driver_handle(&self) -> Option<Arc<DriverHandle>> {
         self.driver.as_ref().map(DriverRuntime::handle)
     }
 
@@ -1080,7 +1082,8 @@ mod tests {
         event::{key, mouse},
         layout::Layout,
         style::{
-            Effect, GradientSpec, GradientStop, Paint, StyleEffect, StyleManager, StyleMap, effects,
+            GradientSpec, GradientStop, Paint, StyleManager, StyleMap,
+            effects::{self, Effect, StyleEffect},
         },
         testing::harness::Harness,
     };

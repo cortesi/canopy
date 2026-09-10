@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use super::*;
 use crate::{
     core::view::View,
-    geom::{Point, Rect, RectI32, Size},
+    geom::{Point, PointI32, Rect, RectI32, Size},
     layout::{
         Align, CanvasChild, CanvasContext, Constraint, Direction as LayoutDirection, Display,
         Layout, MeasureConstraints, MeasureOverflow, Measurement, Sizing,
@@ -20,7 +20,7 @@ impl Core {
         let screen_view = View::new(
             RectI32::new(0, 0, screen_size.w, screen_size.h),
             RectI32::new(0, 0, screen_size.w, screen_size.h),
-            Point::zero(),
+            Point::ZERO,
             screen_size,
         );
         pass.update_views(root, screen_view)?;
@@ -42,7 +42,7 @@ impl Core {
         let clip = root_view
             .outer
             .intersect_rect(Rect::new(0, 0, root_view.outer.w, root_view.outer.h))
-            .unwrap_or_else(Rect::zero);
+            .unwrap_or(Rect::ZERO);
         locate_recursive(self, root, point, clip)
     }
 }
@@ -55,7 +55,7 @@ pub(super) fn refresh_layouts(core: &mut Core) -> Result<()> {
         .filter_map(|(node_id, node)| node.layout_dirty.then_some(node_id))
         .collect::<Vec<_>>();
     for node_id in dirty {
-        let layout = core.with_widget_read(
+        let layout = core.with_widget(
             node_id,
             WidgetOperation::layout("layout refresh"),
             |widget, _core| widget.layout(),
@@ -177,22 +177,19 @@ impl<'a> LayoutPass<'a> {
         }
 
         let outer_x = i64::from(parent_view.content.tl.x) + i64::from(node.rect.tl.x)
-            - i64::from(parent_view.tl.x);
+            - i64::from(parent_view.scroll.x);
         let outer_y = i64::from(parent_view.content.tl.y) + i64::from(node.rect.tl.y)
-            - i64::from(parent_view.tl.y);
+            - i64::from(parent_view.scroll.y);
 
-        let outer = RectI32::new(
-            clamp_i64_to_i32(outer_x),
-            clamp_i64_to_i32(outer_y),
-            node.rect.w,
-            node.rect.h,
-        );
+        let outer_tl = PointI32::clamped_from_i64(outer_x, outer_y);
+        let outer = RectI32::new(outer_tl.x, outer_tl.y, node.rect.w, node.rect.h);
 
         let content_x = i64::from(outer.tl.x) + i64::from(node.layout.padding.left);
         let content_y = i64::from(outer.tl.y) + i64::from(node.layout.padding.top);
+        let content_tl = PointI32::clamped_from_i64(content_x, content_y);
         let content = RectI32::new(
-            clamp_i64_to_i32(content_x),
-            clamp_i64_to_i32(content_y),
+            content_tl.x,
+            content_tl.y,
             node.content_size.w,
             node.content_size.h,
         );
@@ -628,7 +625,7 @@ impl<'a> LayoutPass<'a> {
             canvas_children.push(CanvasChild::new(node.rect, child_canvas));
         }
         let ctx = CanvasContext::new(&canvas_children);
-        let canvas = self.core.with_widget_read(
+        let canvas = self.core.with_widget(
             node_id,
             WidgetOperation::layout("canvas"),
             |widget, _core| widget.canvas(view_size, &ctx),
@@ -691,7 +688,7 @@ impl<'a> LayoutPass<'a> {
         if let Some(m) = self.measure_cache.get(&key) {
             return Ok(*m);
         }
-        let measured = self.core.with_widget_read(
+        let measured = self.core.with_widget(
             node_id,
             WidgetOperation::layout("measure"),
             |widget, _core| widget.measure(constraints),
@@ -707,10 +704,10 @@ impl<'a> LayoutPass<'a> {
             .nodes
             .get_mut(node_id)
             .ok_or(Error::NodeNotFound(node_id))?;
-        node.rect = Rect::zero();
+        node.rect = Rect::ZERO;
         node.content_size = Size::default();
         node.canvas = Size::default();
-        node.scroll = Point::zero();
+        node.scroll = Point::ZERO;
         node.view = View::default();
         let children = node.children.clone();
         for child in children {
@@ -885,15 +882,6 @@ fn cross_alignment(layout: Layout) -> Align {
         LayoutDirection::Column => layout.align_horizontal,
         LayoutDirection::Stack => unreachable!(),
     }
-}
-
-/// Clamp a widened coordinate to the signed view coordinate domain.
-fn clamp_i64_to_i32(value: i64) -> i32 {
-    i32::try_from(value).unwrap_or(if value.is_negative() {
-        i32::MIN
-    } else {
-        i32::MAX
-    })
 }
 
 /// Depth-first search for a node at a screen-space point.

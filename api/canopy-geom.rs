@@ -15,18 +15,6 @@ pub mod canopy_geom {
     //! rectangles extending beyond `u32::MAX` retain their full mathematical
     //! extent. Signed-to-unsigned conversions clamp to `0..=u32::MAX`.
 
-    /// Cardinal directions.
-    pub enum Direction {
-        /// Upward direction.
-        Up,
-        /// Downward direction.
-        Down,
-        /// Leftward direction.
-        Left,
-        /// Rightward direction.
-        Right,
-    }
-
     /// Geometry error type.
     pub enum Error {
         #[error("point ({x}, {y}) is outside the destination coordinate range")]
@@ -64,9 +52,6 @@ pub mod canopy_geom {
             /// Rectangle height.
             height: u32,
         },
-        #[error("cannot split a length into zero sections")]
-        /// A split requested zero sections.
-        ZeroSections,
     }
 
     /// A frame's border regions extracted from a rectangle.
@@ -158,82 +143,6 @@ pub mod canopy_geom {
         pub h: u32,
     }
 
-    impl Add for Point {
-        fn add(self, other: Self) -> Self {}
-
-        type Output = Point;
-    }
-
-    impl Clone for Point {
-        fn clone(&self) -> Point {}
-    }
-
-    impl Debug for Point {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Default for Point {
-        fn default() -> Point {}
-    }
-
-    impl Eq for Point {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl From<(u32, u32)> for Point {
-        fn from(v: (u32, u32)) -> Self {}
-    }
-
-    impl Hash for Point {
-        fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-    }
-
-    impl PartialEq for Point {
-        fn eq(&self, other: &Point) -> bool {}
-    }
-
-    impl Point {
-        /// Return the origin point.
-        pub fn zero() -> Self {}
-
-        /// Shift the point by an offset, avoiding under- or overflow.
-        pub fn scroll(&self, x: i32, y: i32) -> Self {}
-    }
-
-    impl TryFrom<Point> for PointI32 {
-        fn try_from(point: Point) -> Result<Self, Self::Error> {}
-
-        type Error = Error;
-    }
-
-    impl TryFrom<PointI32> for crate::Point {
-        fn try_from(point: PointI32) -> Result<Self, Self::Error> {}
-
-        type Error = Error;
-    }
-
-    impl Clone for Direction {
-        fn clone(&self) -> Direction {}
-    }
-
-    impl Debug for Direction {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for Direction {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl Hash for Direction {
-        fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-    }
-
-    impl PartialEq for Direction {
-        fn eq(&self, other: &Direction) -> bool {}
-    }
-
     impl Clone for Error {
         fn clone(&self) -> Error {}
     }
@@ -303,10 +212,6 @@ pub mod canopy_geom {
         fn assert_fields_are_eq(&self) {}
     }
 
-    impl From<Line> for Rect {
-        fn from(l: Line) -> Self {}
-    }
-
     impl Hash for Line {
         fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
     }
@@ -341,29 +246,71 @@ pub mod canopy_geom {
     }
 
     impl LineSegment {
-        /// Carve off a fixed-size portion from the end of this LineSegment,
-        /// returning a (head, tail) tuple. If the segment is too short to carve out
-        /// the width specified, the length of the tail will be zero.
-        pub fn carve_end(&self, n: u32) -> (Self, Self) {}
+        /// Construct a line segment from its offset and length.
+        pub const fn new(off: u32, len: u32) -> Self {}
 
         /// Does other lie completely within this extent.
         pub fn contains(&self, other: Self) -> bool {}
-
-        /// Return the intersection between this line segment and other. The line
-        /// segment returned will always have a non-zero length.
-        pub fn intersection(&self, other: Self) -> Option<Self> {}
 
         /// Split this extent into (pre, active, post) extents, based on the
         /// position of a window within a view. The main use for this function is
         /// computation of the active indicator size and position in a scrollbar.
         pub fn split_active(&self, window: Self, view: Self) -> Result<(Self, Self, Self)> {}
-
-        /// The exclusive far edge of the extent using widened arithmetic.
-        pub fn end(&self) -> u64 {}
     }
 
     impl PartialEq for LineSegment {
         fn eq(&self, other: &LineSegment) -> bool {}
+    }
+
+    impl Clone for Point {
+        fn clone(&self) -> Point {}
+    }
+
+    impl Debug for Point {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
+    }
+
+    impl Default for Point {
+        fn default() -> Point {}
+    }
+
+    impl Eq for Point {
+        #[doc(hidden)]
+        fn assert_fields_are_eq(&self) {}
+    }
+
+    impl From<(u32, u32)> for Point {
+        fn from(v: (u32, u32)) -> Self {}
+    }
+
+    impl Hash for Point {
+        fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
+    }
+
+    impl PartialEq for Point {
+        fn eq(&self, other: &Point) -> bool {}
+    }
+
+    impl Point {
+        /// Construct a point from its coordinates.
+        pub const fn new(x: u32, y: u32) -> Self {}
+
+        /// Origin point.
+        pub const ZERO: Self = _;
+        /// Shift the point by an offset, avoiding under- or overflow.
+        pub fn scroll(&self, x: i32, y: i32) -> Self {}
+    }
+
+    impl TryFrom<Point> for PointI32 {
+        fn try_from(point: Point) -> Result<Self, Self::Error> {}
+
+        type Error = Error;
+    }
+
+    impl TryFrom<PointI32> for crate::Point {
+        fn try_from(point: PointI32) -> Result<Self, Self::Error> {}
+
+        type Error = Error;
     }
 
     impl Clone for PointI32 {
@@ -389,6 +336,20 @@ pub mod canopy_geom {
 
     impl PartialEq for PointI32 {
         fn eq(&self, other: &PointI32) -> bool {}
+    }
+
+    impl PointI32 {
+        /// Clamp widened coordinates to the signed point range.
+        pub fn clamped_from_i64(x: i64, y: i64) -> Self {}
+
+        /// Construct a point from its coordinates.
+        pub const fn new(x: i32, y: i32) -> Self {}
+
+        /// Convert widened coordinates without losing out-of-range information.
+        pub fn try_from_i64(x: i64, y: i64) -> Result<Self, Error> {}
+
+        /// Origin point.
+        pub const ZERO: Self = _;
     }
 
     impl TryFrom<Point> for PointI32 {
@@ -420,10 +381,6 @@ pub mod canopy_geom {
         fn assert_fields_are_eq(&self) {}
     }
 
-    impl From<Line> for Rect {
-        fn from(l: Line) -> Self {}
-    }
-
     impl Hash for Rect {
         fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
     }
@@ -436,22 +393,14 @@ pub mod canopy_geom {
         /// Calculate the intersection of this rectangle and another.
         pub fn intersect(&self, other: Self) -> Option<Self> {}
 
-        /// Carve a rectangle with a fixed width out of the end of the horizontal
-        /// extent of this rect. Returns `(left, right)`. Right is either empty or
-        /// has the exact width specified.
-        pub fn carve_hend(&self, width: u32) -> (Self, Self) {}
-
         /// Construct a rectangle from coordinates and size.
-        pub fn new(x: u32, y: u32, w: u32, h: u32) -> Self {}
-
-        /// Create a zero-sized `Rect` at the origin.
-        pub fn zero() -> Self {}
+        pub const fn new(x: u32, y: u32, w: u32, h: u32) -> Self {}
 
         /// Does this half-open rectangle contain the point?
-        pub fn contains_point(&self, p: impl Into<Point>) -> bool {}
+        pub fn contains_point(&self, p: Point) -> bool {}
 
         /// Does this rect have a zero size?
-        pub fn is_zero(&self) -> bool {}
+        pub fn is_empty(&self) -> bool {}
 
         /// Does this rectangle completely enclose the other's half-open bounds?
         ///
@@ -460,6 +409,8 @@ pub mod canopy_geom {
         /// bounds, including the far edge.
         pub fn contains_rect(&self, other: Self) -> bool {}
 
+        /// Empty rectangle at the origin.
+        pub const ZERO: Self = _;
         /// Extract a horizontal section of this rect based on an extent.
         pub fn hslice(&self, e: LineSegment) -> Result<Self> {}
 
@@ -467,27 +418,32 @@ pub mod canopy_geom {
         pub fn vslice(&self, e: LineSegment) -> Result<Self> {}
 
         /// Return a line with a given offset in the rectangle.
+        ///
+        /// This remains fallible because an empty rectangle has no valid line and
+        /// silently moving an out-of-range render request would hide layout bugs.
         pub fn line(&self, off: u32) -> Result<Line> {}
 
         /// Return the `Size` of this rectangle, which has the same size as the
         /// `Rect` but no location.
-        pub fn expanse(&self) -> Size {}
-
-        /// Return the exclusive bottom edge using widened arithmetic.
-        pub fn bottom(&self) -> u64 {}
-
-        /// Return the exclusive right edge using widened arithmetic.
-        pub fn right(&self) -> u64 {}
-
-        /// Splits the rectangle horizontally into n sections, as close to equally
-        /// sized as possible.
-        pub fn split_horizontal(&self, n: u32) -> Result<Vec<Self>> {}
+        pub const fn size(&self) -> Size {}
 
         /// The horizontal extent of this rect.
         pub fn hextent(&self) -> LineSegment {}
 
         /// The vertical extent of this rect.
         pub fn vextent(&self) -> LineSegment {}
+    }
+
+    impl TryFrom<Rect> for RectI32 {
+        fn try_from(rect: Rect) -> Result<Self, Self::Error> {}
+
+        type Error = Error;
+    }
+
+    impl TryFrom<RectI32> for super::Rect {
+        fn try_from(rect: RectI32) -> Result<Self, Self::Error> {}
+
+        type Error = Error;
     }
 
     impl Clone for RectI32 {
@@ -519,7 +475,10 @@ pub mod canopy_geom {
         /// Bottom edge of the rect.
         pub fn bottom(&self) -> i64 {}
 
-        /// Center point of the rect.
+        /// Center point as widened coordinates.
+        ///
+        /// The tuple preserves centers beyond `i32` when a large unsigned size
+        /// extends from a signed origin.
         pub fn center(&self) -> (i64, i64) {}
 
         /// Construct a rectangle from coordinates and size.
@@ -530,14 +489,19 @@ pub mod canopy_geom {
         pub fn to_local_point(&self, p: Point) -> Point {}
 
         /// Does this rect have a zero size?
-        pub fn is_zero(&self) -> bool {}
+        pub fn is_empty(&self) -> bool {}
 
+        /// Empty rectangle at the origin.
+        pub const ZERO: Self = _;
         /// Intersect this signed rect with an unsigned rect in the same coordinate
         /// space.
         pub fn intersect_rect(&self, other: Rect) -> Option<Rect> {}
 
         /// Left edge of the rect.
         pub fn left(&self) -> i64 {}
+
+        /// Return the rectangle's dimensions without its origin.
+        pub const fn size(&self) -> Size {}
 
         /// Return true if this rect overlaps another horizontally.
         pub fn overlaps_horizontal(&self, other: Self) -> bool {}
@@ -550,6 +514,21 @@ pub mod canopy_geom {
 
         /// Top edge of the rect.
         pub fn top(&self) -> i64 {}
+
+        /// Translate the origin, rejecting a result outside signed coordinates.
+        pub fn translate(self, offset: PointI32) -> Result<Self, Error> {}
+    }
+
+    impl TryFrom<Rect> for RectI32 {
+        fn try_from(rect: Rect) -> Result<Self, Self::Error> {}
+
+        type Error = Error;
+    }
+
+    impl TryFrom<RectI32> for super::Rect {
+        fn try_from(rect: RectI32) -> Result<Self, Self::Error> {}
+
+        type Error = Error;
     }
 
     impl Clone for Size {
@@ -583,7 +562,7 @@ pub mod canopy_geom {
 
     impl Size {
         /// Create a new size with the given width and height.
-        pub fn new(w: u32, h: u32) -> Self {}
+        pub const fn new(w: u32, h: u32) -> Self {}
 
         /// Return a `Rect` with the same dimensions as the `Size`, but a location
         /// at (0, 0).

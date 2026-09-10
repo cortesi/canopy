@@ -1,6 +1,6 @@
 //! Chargym: A Unicode width and wide character demo.
 
-use canopy::{CanopyBuilder, prelude::*};
+use canopy::{CanopyBuilder, error::Result, prelude::*};
 use canopy_widgets::{CanvasWidth, Frame, Text};
 use unicode_width::UnicodeWidthStr;
 
@@ -207,12 +207,6 @@ impl Loader for CharGym {
         c.add_commands::<Text>()?;
         Ok(())
     }
-}
-
-/// Install key bindings for the chargym demo.
-pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
-    cnpy.eval_script(&crate::text_scroll_bindings("text", "char_gym"))?;
-    Ok(())
 }
 
 /// Queue this demo's bindings and native configuration in their builder phases.

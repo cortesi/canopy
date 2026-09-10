@@ -14,7 +14,6 @@ pub mod solarized;
 use std::collections::HashMap;
 
 pub use color::{Color, hex_byte};
-pub use effects::{Effect, StyleEffect};
 pub use palette::{Palette, theme};
 
 use crate::geom;
@@ -46,8 +45,6 @@ pub enum WidgetState {
     Disabled,
     /// The widget is pressed or explicitly active.
     Pressed,
-    /// Compatibility state for a button that is not active.
-    Inactive,
 }
 
 impl WidgetState {
@@ -58,7 +55,6 @@ impl WidgetState {
             Self::Selected => "selected",
             Self::Disabled => "disabled",
             Self::Pressed => "active",
-            Self::Inactive => "inactive",
         }
     }
 }
@@ -808,22 +804,21 @@ mod tests {
     fn disabled_selected_and_focused_layers_remain_distinct() {
         let mut map = StyleMap::new();
         map.rules()
-            .fg("button/inactive/text", Color::White)
-            .fg("button/inactive/focused/text", Color::Blue)
-            .fg("button/inactive/focused/selected/text", Color::Green)
-            .fg("button/inactive/focused/selected/disabled/text", Color::Red)
+            .fg("button/text", Color::White)
+            .fg("button/focused/text", Color::Blue)
+            .fg("button/focused/selected/text", Color::Green)
+            .fg("button/focused/selected/disabled/text", Color::Red)
             .apply();
         let mut manager = StyleManager::new();
         manager.push_layer(roles::BUTTON);
-        manager.push_layer(WidgetState::Inactive.layer());
-        let inactive = manager.get(&map, roles::BUTTON_LABEL);
+        let ordinary = manager.get(&map, roles::BUTTON_LABEL);
         manager.push_layer(WidgetState::Focused.layer());
         let focused = manager.get(&map, roles::BUTTON_LABEL);
         manager.push_layer(WidgetState::Selected.layer());
         let selected = manager.get(&map, roles::BUTTON_LABEL);
         manager.push_layer(WidgetState::Disabled.layer());
         let disabled = manager.get(&map, roles::BUTTON_LABEL);
-        assert_ne!(inactive, focused);
+        assert_ne!(ordinary, focused);
         assert_ne!(focused, selected);
         assert_ne!(selected, disabled);
     }

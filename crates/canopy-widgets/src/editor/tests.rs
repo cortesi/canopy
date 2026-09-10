@@ -4,7 +4,7 @@ use std::sync::{
 };
 
 use canopy::{
-    Canopy, Context, FocusScope, Loader, Widget, buf, command, derive_commands,
+    Canopy, Context, FocusScope, Loader, Widget, buf, derive_commands,
     error::Result,
     event::{key, mouse},
     geom::Point,
@@ -15,16 +15,18 @@ use canopy::{
 };
 
 use super::{
-    Selection, TextPosition, TextRange,
     search::{PromptState, SearchDirection, find_matches},
     vi::ViMode,
 };
-use crate::editor::{
-    EditMode, Editor, EditorConfig, LineNumbers, WrapMode,
-    highlight::{HighlightSpan, Highlighter},
+use crate::{
+    editor::{
+        EditMode, Editor, EditorConfig, LineNumbers, WrapMode,
+        highlight::{HighlightSpan, Highlighter},
+    },
+    text_buffer::{Selection, TextPosition, TextRange},
 };
 
-canopy::key!(EditorSlot: Editor);
+canopy::slot!(EditorSlot: Editor);
 
 /// Host widget that mounts an editor as its only child.
 struct EditorHost {
@@ -62,7 +64,7 @@ impl EditorHost {
 impl Widget for EditorHost {
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         let editor = Editor::with_config(self.text.clone(), self.config.clone());
-        let editor_id = c.add_keyed::<EditorSlot>(editor)?;
+        let editor_id = c.add_slot::<EditorSlot>(editor)?;
         c.set_layout(Layout::fill())?;
         c.set_layout_of(editor_id, Layout::fill())?;
         Ok(())
@@ -101,7 +103,7 @@ fn build_harness(text: &str, config: EditorConfig, width: u32, height: u32) -> H
 fn with_editor<R>(harness: &mut Harness, f: impl FnOnce(&mut Editor) -> R) -> R {
     harness
         .with_root_context(|_root: &mut EditorHost, ctx| {
-            ctx.with_child::<EditorSlot, _>(|editor, _| Ok(f(editor)))
+            ctx.with_typed_slot::<EditorSlot, _>(|editor, _| Ok(f(editor)))
         })
         .expect("editor missing")
 }
@@ -133,7 +135,7 @@ fn editor_cursor_location(harness: &mut Harness) -> Point {
 fn editor_view_scroll(harness: &mut Harness) -> Point {
     harness
         .with_root_context(|_root: &mut EditorHost, ctx| {
-            ctx.with_child::<EditorSlot, _>(|_editor, ctx| Ok(ctx.view().tl))
+            ctx.with_typed_slot::<EditorSlot, _>(|_editor, ctx| Ok(ctx.view().scroll))
         })
         .expect("editor missing")
 }
@@ -141,7 +143,7 @@ fn editor_view_scroll(harness: &mut Harness) -> Point {
 fn scroll_editor_to(harness: &mut Harness, x: u32, y: u32) {
     harness
         .with_root_context(|_root: &mut EditorHost, ctx| {
-            ctx.with_child::<EditorSlot, _>(|_editor, ctx| {
+            ctx.with_typed_slot::<EditorSlot, _>(|_editor, ctx| {
                 ctx.scroll_to(x, y);
                 Ok(())
             })
@@ -564,7 +566,7 @@ fn nested_padding_scroll_and_captured_pointer_agree_on_wide_grapheme() {
     harness
         .with_root_context(|_root: &mut EditorHost, ctx| {
             ctx.set_layout(Layout::fill().padding(Edges::all(1)))?;
-            ctx.with_child::<EditorSlot, _>(|_editor, ctx| {
+            ctx.with_typed_slot::<EditorSlot, _>(|_editor, ctx| {
                 ctx.set_layout(Layout::fill().padding(Edges::all(1)))
             })
         })
@@ -591,7 +593,7 @@ fn nested_padding_scroll_and_captured_pointer_agree_on_wide_grapheme() {
     assert_eq!(editor_cursor(&mut harness), TextPosition::new(2, 2));
     harness
         .with_root_context(|_root: &mut EditorHost, ctx| {
-            ctx.with_child::<EditorSlot, _>(|_editor, ctx| ctx.capture_mouse())
+            ctx.with_typed_slot::<EditorSlot, _>(|_editor, ctx| ctx.capture_mouse())
         })
         .unwrap();
     // Captured input still uses viewport-local coordinates at the trailing
@@ -608,7 +610,7 @@ fn nested_padding_scroll_and_captured_pointer_agree_on_wide_grapheme() {
     harness.mouse(mouse_event(mouse::Action::Up, 0, 2)).unwrap();
     harness
         .with_root_context(|_root: &mut EditorHost, ctx| {
-            ctx.with_child::<EditorSlot, _>(|_editor, ctx| ctx.release_mouse())
+            ctx.with_typed_slot::<EditorSlot, _>(|_editor, ctx| ctx.release_mouse())
         })
         .unwrap();
 }
@@ -627,7 +629,7 @@ fn padded_editor_mouse_uses_content_coordinates_with_gutter_and_scroll() {
         let mut harness = build_harness(&text, config, 18, 6);
         harness
             .with_root_context(|_root: &mut EditorHost, ctx| {
-                ctx.with_child::<EditorSlot, _>(|_editor, ctx| {
+                ctx.with_typed_slot::<EditorSlot, _>(|_editor, ctx| {
                     ctx.set_layout(Layout::fill().padding(Edges::all(1)))
                 })
             })
@@ -809,7 +811,7 @@ fn binding_precedence_blocks_text_entry() {
         .canopy
         .eval_script(
             r#"
-canopy.bind_command("x", { phase = "before_widget", path = "editor", description = "Cursor left" }, "editor::cursor", "Left")
+canopy.bind_command("x", { phase = "before_widget", path = "editor", description = "Cursor left" }, "editor::move_cursor", "Left")
 "#,
         )
         .unwrap();

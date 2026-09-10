@@ -9,8 +9,6 @@ use std::{
     rc::Rc,
 };
 
-use slotmap::SlotMap;
-
 use self::focus::FocusRecoveryHint;
 use super::{
     inputmap::{ExclusiveFrameToken, InputMap},
@@ -20,7 +18,11 @@ use super::{
 use crate::{
     ChangeOutcome,
     commands::{CommandScopeFrame, CommandSet},
-    core::{context::CoreContext, id::NodeId, node::Node},
+    core::{
+        context::CoreContext,
+        id::{NodeArena, NodeId},
+        node::Node,
+    },
     error::{Error, NodeOperationKind, Result},
     layout::Layout,
     state::NodeName,
@@ -55,7 +57,7 @@ pub struct Core {
     /// Changes awaiting frame publication.
     pub(crate) changes: crate::ChangeSet,
     /// Node storage arena.
-    pub(crate) nodes: SlotMap<NodeId, Node>,
+    pub(crate) nodes: NodeArena<Node>,
     /// Application keys unique within explicit arena scopes.
     semantic_keys: HashMap<(NodeId, String), NodeId>,
     /// Runtime-owned modal interaction scopes.
@@ -139,7 +141,7 @@ struct TreeStateSnapshot {
     /// Requests preceding this structural checkpoint.
     removal_checkpoint: usize,
     /// Arena contents and all node metadata.
-    nodes: SlotMap<NodeId, Node>,
+    nodes: NodeArena<Node>,
     /// Scoped identities captured with arena metadata.
     semantic_keys: HashMap<(NodeId, String), NodeId>,
     /// Modal scopes captured with structural state.
@@ -202,7 +204,7 @@ impl WidgetOperation {
 impl Core {
     /// Create a new Core with a default root node.
     pub fn new() -> Self {
-        let mut nodes = SlotMap::with_key();
+        let mut nodes = NodeArena::new();
         let mut root_node = Node::new(Box::new(RootContainer), 1);
         root_node.attachment_generation = Some(1);
         let root = nodes.insert(root_node);
@@ -281,7 +283,7 @@ impl Core {
     }
 
     /// Take a mutable reference to a widget for a single call.
-    pub(crate) fn with_widget_mut<R>(
+    pub(crate) fn with_widget_dyn_mut<R>(
         &mut self,
         node_id: NodeId,
         f: impl FnOnce(&mut dyn Widget, &mut Self) -> R,
@@ -310,14 +312,14 @@ impl Core {
         node_id: NodeId,
         f: impl FnOnce(&mut dyn Widget, &mut CoreContext<'_>) -> R,
     ) -> Result<R> {
-        self.with_widget_mut(node_id, |widget, core| {
+        self.with_widget_dyn_mut(node_id, |widget, core| {
             let mut ctx = CoreContext::new(core, node_id);
             f(widget, &mut ctx)
         })
     }
 
     /// Borrow a widget immutably for a read-only core query.
-    pub(crate) fn with_widget_read<R>(
+    pub(crate) fn with_widget<R>(
         &self,
         node_id: NodeId,
         operation: WidgetOperation,
@@ -377,7 +379,7 @@ impl Core {
         if !self.nodes.contains_key(node_id) {
             return "<missing>".into();
         }
-        let path = self.node_path(self.root, node_id).to_string();
+        let path = self.path_of(self.root, node_id).to_string();
         if path == "/" && node_id != self.root {
             "<detached>".into()
         } else {

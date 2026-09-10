@@ -10,7 +10,7 @@ use canopy::{
     state::NodeName,
     style::StyleMap,
 };
-use canopy_widgets::{Font, FontBanner, FontEffects, FontRenderer, LayoutOptions};
+use canopy_widgets::font::{Font, FontBanner, FontEffects, FontRenderer, LayoutOptions};
 
 /// Style path used for widget demo text.
 const FONT_STYLE_PATH: &str = "widget/font";
@@ -101,7 +101,7 @@ impl FontDemo {
             .banner_id
             .ok_or_else(|| Error::Internal("font banner missing".into()))?;
         let renderer = self.renderer_for(index)?;
-        ctx.with_widget(banner_id, |banner: &mut FontBanner, _ctx| {
+        ctx.with_widget_mut(banner_id, |banner: &mut FontBanner, _ctx| {
             banner.set_renderer(renderer);
             Ok(())
         })?;

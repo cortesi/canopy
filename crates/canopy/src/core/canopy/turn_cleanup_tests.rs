@@ -10,9 +10,9 @@ use std::{
 
 use futures::{channel::mpsc::UnboundedSender, task::noop_waker};
 
-use super::{Canopy, EvalRequest, Work};
+use super::{AdapterEvent, Canopy, EvalRequest, Work};
 use crate::{
-    Context, ViewContext, command,
+    Context, ViewContext,
     commands::ArgValue,
     derive_commands,
     error::{Error, Result},
@@ -24,7 +24,7 @@ use crate::{
 /// Input fixture that makes its mutation observable even when dispatch fails.
 struct CleanupProbe {
     /// Queue used by the script predicate to request a failing input event.
-    events: UnboundedSender<Event>,
+    events: UnboundedSender<AdapterEvent>,
     /// Mutation counter that must survive adapter cleanup.
     mutations: Arc<AtomicUsize>,
 }
@@ -35,7 +35,7 @@ impl CleanupProbe {
     #[command]
     fn queue_failure(&self) -> Result<()> {
         self.events
-            .unbounded_send(Event::Key('x'.into()))
+            .unbounded_send(AdapterEvent::Input(Event::Key('x'.into())))
             .map_err(|error| Error::RunLoop(error.to_string()))
     }
 }
@@ -104,7 +104,7 @@ fn headless_input_failure_releases_parked_eval_and_preserves_mutation() -> Resul
     let (mut canopy, mutations) = application()?;
     let source = "canopy.wait_for(function() cleanup_probe.queue_failure(); return false end)";
     let error = canopy
-        .eval_script_value(source)
+        .eval_script(source)
         .expect_err("queued input fails while evaluation waits");
     assert!(error.to_string().contains("input failed after mutation"));
     assert_eq!(mutations.load(Ordering::Relaxed), 1);
@@ -122,7 +122,7 @@ fn headless_input_failure_releases_parked_eval_and_preserves_mutation() -> Resul
             .poll_runtime_wake(&TaskContext::from_waker(&waker))
             .is_pending()
     );
-    assert_eq!(canopy.eval_script_value("return 7")?, ArgValue::Int(7));
+    assert_eq!(canopy.eval_script("return 7")?, ArgValue::Int(7));
     assert_eq!(mutations.load(Ordering::Relaxed), 1);
     assert_eq!(
         canopy

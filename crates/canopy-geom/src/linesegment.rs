@@ -10,36 +10,14 @@ pub struct LineSegment {
 }
 
 impl LineSegment {
-    /// The exclusive far edge of the extent using widened arithmetic.
-    pub fn end(&self) -> u64 {
-        u64::from(self.off) + u64::from(self.len)
+    /// Construct a line segment from its offset and length.
+    pub const fn new(off: u32, len: u32) -> Self {
+        Self { off, len }
     }
 
-    /// Carve off a fixed-size portion from the end of this LineSegment,
-    /// returning a (head, tail) tuple. If the segment is too short to carve out
-    /// the width specified, the length of the tail will be zero.
-    pub fn carve_end(&self, n: u32) -> (Self, Self) {
-        if self.len < n {
-            (
-                *self,
-                Self {
-                    off: u32::try_from(self.end()).unwrap_or(u32::MAX),
-                    len: 0,
-                },
-            )
-        } else {
-            let s = Self {
-                off: self.off,
-                len: self.len - n,
-            };
-            (
-                s,
-                Self {
-                    off: u32::try_from(s.end()).unwrap_or(u32::MAX),
-                    len: n,
-                },
-            )
-        }
+    /// The exclusive far edge of the extent using widened arithmetic.
+    pub(crate) fn end(&self) -> u64 {
+        u64::from(self.off) + u64::from(self.len)
     }
 
     /// Does other lie completely within this extent.
@@ -49,7 +27,7 @@ impl LineSegment {
 
     /// Return the intersection between this line segment and other. The line
     /// segment returned will always have a non-zero length.
-    pub fn intersection(&self, other: Self) -> Option<Self> {
+    pub(crate) fn intersection(&self, other: Self) -> Option<Self> {
         if self.len == 0 || other.len == 0 {
             None
         } else if self.contains(other) {
@@ -150,34 +128,6 @@ mod tests {
             }
         }
 
-        #[test]
-        fn carve_end_preserves_original_extent(segment in segment_strategy(), n in 0u32..150) {
-            let (head, tail) = segment.carve_end(n);
-            prop_assert_eq!(head.off, segment.off);
-            prop_assert!(segment.contains(head));
-            prop_assert_eq!(head.len.saturating_add(tail.len), segment.len);
-        }
-    }
-
-    #[test]
-    fn carve() -> Result<()> {
-        let s = LineSegment { off: 5, len: 5 };
-        assert_eq!(
-            s.carve_end(2),
-            (
-                LineSegment { off: 5, len: 3 },
-                LineSegment { off: 8, len: 2 }
-            )
-        );
-        assert_eq!(
-            s.carve_end(10),
-            (
-                LineSegment { off: 5, len: 5 },
-                LineSegment { off: 10, len: 0 }
-            )
-        );
-
-        Ok(())
     }
 
     #[test]

@@ -3,7 +3,9 @@
 use std::hint::black_box;
 
 use canopy::{
-    Canopy, Context, NodeId, TermBuf, ViewContext, Widget, command, derive_commands,
+    Canopy, Context, NodeId, TermBuf, ViewContext, Widget,
+    commands::CommandTarget,
+    derive_commands,
     error::Result,
     geom::{Line, Point, Size},
     layout::{Layout, MeasureConstraints, Measurement},
@@ -267,7 +269,9 @@ fn bench_render_diffing(c: &mut Criterion) {
 fn bench_command_resolution(c: &mut Criterion) {
     c.bench_function("command_resolution", |b| {
         let app = build_command_tree().expect("command benchmark tree should build");
-        b.iter(|| black_box(app.command_availability_from_node(black_box(app.root_id()))));
+        b.iter(|| {
+            black_box(app.command_availability(CommandTarget::From(black_box(app.root_id()))))
+        });
     });
 }
 

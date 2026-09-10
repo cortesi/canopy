@@ -1,9 +1,9 @@
 use canopy::{
-    Context, EventOutcome, ViewContext, Widget, WidgetSemantics, command, cursor, derive_commands,
+    Context, EventOutcome, ViewContext, Widget, WidgetSemantics, cursor, derive_commands,
     error::Result,
     event::{Event, key},
-    geom::{Line, Point},
-    layout::{MeasureConstraints, Measurement, Size},
+    geom::{Line, Point, Size},
+    layout::{MeasureConstraints, Measurement},
     render::Render,
     state::NodeName,
     style::{WidgetState, roles},
@@ -210,19 +210,19 @@ impl Input {
 
     /// Move the cursor left.
     #[command]
-    fn left(&mut self, _c: &mut dyn Context) {
+    pub fn left(&mut self, _c: &mut dyn Context) {
         self.buffer.left();
     }
 
     /// Move the cursor right.
     #[command]
-    fn right(&mut self, _c: &mut dyn Context) {
+    pub fn right(&mut self, _c: &mut dyn Context) {
         self.buffer.right();
     }
 
     /// Delete a character at the input location.
     #[command]
-    fn backspace(&mut self, _c: &mut dyn Context) {
+    pub fn backspace(&mut self, _c: &mut dyn Context) {
         self.buffer.backspace();
     }
 }

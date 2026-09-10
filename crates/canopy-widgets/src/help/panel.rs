@@ -3,8 +3,8 @@
 use canopy::{
     ViewContext, Widget,
     error::Result,
-    geom::Line,
-    layout::{Constraint, Direction, Edges, Layout, MeasureConstraints, Measurement, Size, Sizing},
+    geom::{Line, Size},
+    layout::{Constraint, Direction, Edges, Layout, MeasureConstraints, Measurement, Sizing},
     render::Render,
     state::NodeName,
 };

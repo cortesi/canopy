@@ -16,11 +16,10 @@ data. Each headless eval receives a new session ID; a live listener keeps its ID
 across evaluations and client reconnects.
 
 Factories declare identity and reset behavior with
-`app_factory(build).with_metadata(AppMetadata { app, reset })`.
+`AppFactory::new(AppMetadata { app, reset }, build)`.
 `ResetPolicy::External` permits persistent domain state, `Isolated` declares
 independent state per factory call, and `Fixture` describes an explicitly applied
-domain fixture. The conservative factory default is app `canopy` with external
-state; application integrations should supply their own declaration.
+domain fixture. Every application integration supplies its own declaration.
 
 Todo declares `isolated` for `:memory:` and `external` for file databases.
 An explicitly applied fixture changes an external headless request's effective

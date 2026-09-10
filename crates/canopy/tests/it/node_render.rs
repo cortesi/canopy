@@ -139,9 +139,9 @@ mod tests {
 
         let bottom_view = h
             .canopy
-            .with_root_view(|context| context.node_view(bottom))
+            .with_root_view(|context| context.view_of(bottom))
             .expect("node missing");
-        assert!(bottom_view.outer.is_zero());
+        assert!(bottom_view.outer.is_empty());
         assert_eq!(bottom_view.outer.tl.y, 10);
 
         Ok(())
@@ -170,9 +170,9 @@ mod tests {
                 for child in context.children_of(node_id).into_iter().rev() {
                     stack.push(child);
                 }
-                let layout = context.node_layout(node_id).expect("node layout");
-                let view = context.node_view(node_id).expect("node view");
-                let path = context.node_path(h.root, node_id);
+                let layout = context.layout_of(node_id).expect("node layout");
+                let view = context.view_of(node_id).expect("node view");
+                let path = context.path_of(h.root, node_id);
                 if let Some(min_width) = layout.min_width
                     && min_width >= 1
                 {

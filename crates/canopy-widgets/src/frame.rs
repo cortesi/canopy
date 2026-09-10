@@ -11,7 +11,6 @@ use canopy::{
 use unicode_width::UnicodeWidthStr;
 
 use super::boxed::{BoxGlyphs, ROUND};
-use crate::wrap::wrap;
 
 /// Active vertical scrollbar indicator.
 const SCROLL_VERTICAL: char = '█';
@@ -89,17 +88,6 @@ impl Frame {
         self.title = Some(title.into());
         self
     }
-
-    /// Return the glyph set used by the frame.
-    pub fn glyphs(&self) -> &BoxGlyphs {
-        &self.box_glyphs
-    }
-
-    /// Wrap an existing child node in a configured frame and return the frame
-    /// node ID.
-    pub fn wrap_with(c: &mut dyn Context, child: impl Into<NodeId>, frame: Self) -> Result<NodeId> {
-        Ok(wrap(c, child, frame)?.into())
-    }
 }
 
 impl Default for Frame {
@@ -139,7 +127,7 @@ impl Widget for Frame {
 
         let child = ctx.children().into_iter().next();
         if let Some(child_id) = child
-            && let Some(child_view) = ctx.node_view(child_id)
+            && let Some(child_view) = ctx.view_of(child_id)
         {
             if let Some((_, active, _)) = child_view.vactive(f.right)? {
                 rndr.fill("frame/active", active, SCROLL_VERTICAL)?;
@@ -161,7 +149,7 @@ impl Widget for Frame {
         let Some(child_id) = ctx.children().into_iter().next() else {
             return Ok(EventOutcome::Ignore);
         };
-        let Some(child_view) = ctx.node_view(child_id) else {
+        let Some(child_view) = ctx.view_of(child_id) else {
             return Ok(EventOutcome::Ignore);
         };
 
@@ -239,7 +227,7 @@ impl Widget for Frame {
                     let pos = outer_location.y.saturating_sub(frame.right.tl.y);
                     let target_y =
                         scroll_offset_for_click(pos, frame.right.h, canvas_size.h, view_size.h);
-                    if scroll_child_to(ctx, child_id, child_view.tl.x, target_y) {
+                    if scroll_child_to(ctx, child_id, child_view.scroll.x, target_y) {
                         return Ok(EventOutcome::Handle);
                     }
                     consumed = true;
@@ -261,7 +249,7 @@ impl Widget for Frame {
                     let pos = outer_location.x.saturating_sub(frame.bottom.tl.x);
                     let target_x =
                         scroll_offset_for_click(pos, frame.bottom.w, canvas_size.w, view_size.w);
-                    if scroll_child_to(ctx, child_id, target_x, child_view.tl.y) {
+                    if scroll_child_to(ctx, child_id, target_x, child_view.scroll.y) {
                         return Ok(EventOutcome::Handle);
                     }
                     consumed = true;
@@ -295,8 +283,8 @@ fn scrollable(view_len: u32, canvas_len: u32) -> bool {
 fn scroll_child_by(ctx: &mut dyn Context, child: NodeId, dx: i32, dy: i32) -> bool {
     let mut changed = false;
     if ctx
-        .with_widget_mut(child, &mut |_widget, child_ctx| {
-            changed = child_ctx.scroll_by(dx, dy);
+        .with_widget_dyn_mut(child, &mut |_widget, child_ctx| {
+            changed = child_ctx.scroll_by(dx, dy).changed();
             Ok(())
         })
         .is_err()
@@ -310,8 +298,8 @@ fn scroll_child_by(ctx: &mut dyn Context, child: NodeId, dx: i32, dy: i32) -> bo
 fn scroll_child_to(ctx: &mut dyn Context, child: NodeId, x: u32, y: u32) -> bool {
     let mut changed = false;
     if ctx
-        .with_widget_mut(child, &mut |_widget, child_ctx| {
-            changed = child_ctx.scroll_to(x, y);
+        .with_widget_dyn_mut(child, &mut |_widget, child_ctx| {
+            changed = child_ctx.scroll_to(x, y).changed();
             Ok(())
         })
         .is_err()
@@ -414,8 +402,8 @@ fn handle_scroll_drag(
         view_len,
     );
     let changed = match drag.axis {
-        ScrollAxis::Vertical => scroll_child_to(ctx, child_id, child_view.tl.x, target),
-        ScrollAxis::Horizontal => scroll_child_to(ctx, child_id, target, child_view.tl.y),
+        ScrollAxis::Vertical => scroll_child_to(ctx, child_id, child_view.scroll.x, target),
+        ScrollAxis::Horizontal => scroll_child_to(ctx, child_id, target, child_view.scroll.y),
     };
 
     Some(if changed {

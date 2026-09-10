@@ -111,7 +111,7 @@ where
         let mut planned_map = HashMap::with_capacity(self.map.len() + desired.len());
         for (key, typed_id) in &self.map {
             let node_id = NodeId::from(*typed_id);
-            let Some(actual_type) = ctx.node_type_id(node_id) else {
+            let Some(actual_type) = ctx.type_id_of(node_id) else {
                 continue;
             };
             if actual_type != expected_type {
@@ -172,7 +172,7 @@ where
                     .copied()
                     .ok_or_else(|| Error::Internal("reconcile candidate missing".into()))?;
                 let node_id = NodeId::from(typed_id);
-                if ctx.node_type_id(node_id) != Some(expected_type) {
+                if ctx.type_id_of(node_id) != Some(expected_type) {
                     return Err(Error::Invalid(
                         "keyed child became stale during update".into(),
                     ));
@@ -186,7 +186,7 @@ where
                     continue;
                 };
                 let node_id = NodeId::from(typed_id);
-                if ctx.node_type_id(node_id).is_none() {
+                if ctx.type_id_of(node_id).is_none() {
                     working_map.remove(key);
                     continue;
                 }
@@ -196,7 +196,7 @@ where
 
             for typed_id in &ordered {
                 let node_id = NodeId::from(*typed_id);
-                if ctx.node_type_id(node_id) != Some(expected_type) {
+                if ctx.type_id_of(node_id) != Some(expected_type) {
                     return Err(Error::Invalid(
                         "keyed child became stale before commit".into(),
                     ));
@@ -282,12 +282,12 @@ impl ChildBuilder<'_> {
     }
 
     /// Configure a child occupying a typed structural slot.
-    pub fn keyed<K: crate::ChildKey>(
+    pub fn keyed<K: crate::ChildSlot>(
         &mut self,
         widget: K::Widget,
         configure: impl FnOnce(&mut ChildConfig<'_, K::Widget>) -> Result<()>,
     ) -> Result<TypedId<K::Widget>> {
-        if self.ctx.child_keyed_in(self.parent, K::KEY).is_some()
+        if self.ctx.child_slot_of(self.parent, K::KEY).is_some()
             || self.roots.iter().any(|(_, key)| *key == Some(K::KEY))
         {
             return Err(Error::Invalid(format!("duplicate child key {:?}", K::KEY)));
@@ -311,7 +311,7 @@ impl<W: Widget + 'static> ChildConfig<'_, W> {
 
     /// Register this node's semantic key after its completed tree is attached.
     pub fn semantic_key(&mut self, scope: NodeId, key: &str) -> Result<()> {
-        if self.ctx.node_type_id(scope).is_none() {
+        if self.ctx.type_id_of(scope).is_none() {
             return Err(Error::NodeNotFound(scope));
         }
         self.semantic_keys
@@ -332,16 +332,16 @@ impl<W: Widget + 'static> ChildConfig<'_, W> {
     }
 
     /// Configure a descendant in a typed structural slot.
-    pub fn keyed<K: crate::ChildKey>(
+    pub fn keyed<K: crate::ChildSlot>(
         &mut self,
         widget: K::Widget,
         configure: impl FnOnce(&mut ChildConfig<'_, K::Widget>) -> Result<()>,
     ) -> Result<TypedId<K::Widget>> {
-        if self.ctx.child_keyed_in(self.id.into(), K::KEY).is_some() {
+        if self.ctx.child_slot_of(self.id.into(), K::KEY).is_some() {
             return Err(Error::Invalid(format!("duplicate child key {:?}", K::KEY)));
         }
         let id = configured_child(self.ctx, self.semantic_keys, widget, configure)?;
-        self.ctx.attach_keyed(self.id.into(), K::KEY, id.into())?;
+        self.ctx.attach_slot(self.id.into(), K::KEY, id.into())?;
         Ok(id)
     }
 }
@@ -355,7 +355,7 @@ pub(super) fn compose<R>(
     parent: NodeId,
     build: impl FnOnce(&mut ChildBuilder<'_>) -> Result<R>,
 ) -> Result<R> {
-    if context.node_type_id(parent).is_none() {
+    if context.type_id_of(parent).is_none() {
         return Err(Error::NodeNotFound(parent));
     }
     let mut build = Some(build);
@@ -372,9 +372,12 @@ pub(super) fn compose<R>(
             .ok_or_else(|| Error::Internal("composition already consumed".into()))?(
             &mut builder
         )?;
-        builder
-            .ctx
-            .attach_composed(parent, &builder.roots, &builder.semantic_keys)?;
+        super::context::sealed::Context::attach_composed(
+            builder.ctx,
+            parent,
+            &builder.roots,
+            &builder.semantic_keys,
+        )?;
         result = Some(output);
         Ok(())
     })?;
@@ -393,7 +396,7 @@ mod tests {
 
     struct Leaf;
     impl Widget for Leaf {}
-    crate::key!(Slot: Leaf);
+    crate::slot!(Slot: Leaf);
 
     struct Mounted {
         label: &'static str,
@@ -402,7 +405,10 @@ mod tests {
     }
     impl Widget for Mounted {
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
-            assert_eq!(ctx.find_key(self.scope, self.label)?, Some(ctx.node_id()));
+            assert_eq!(
+                ctx.find_identity(self.scope, self.label)?,
+                Some(ctx.node_id())
+            );
             assert_eq!(ctx.layout().max_height, Some(3));
             if self.label == "parent" {
                 assert_eq!(ctx.children().len(), 1);
@@ -479,8 +485,8 @@ mod tests {
         });
         assert!(result.is_err());
         assert_eq!(ctx.children(), before);
-        assert!(ctx.child_keyed("Slot").is_none());
-        assert!(ctx.node_type_id(created.unwrap().into()).is_none());
+        assert!(ctx.child_slot("Slot").is_none());
+        assert!(ctx.type_id_of(created.unwrap().into()).is_none());
         let result: Result<()> = ctx.compose(root, |builder| {
             builder.child(Leaf, |child| {
                 child.child(Leaf, |_| Err(Error::Invalid("configuration failed".into())))?;
