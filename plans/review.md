@@ -185,7 +185,7 @@ Runtime facade:
 - [x] C141: `View::content_to_screen` and `outer_to_content` zero consumers
 - [x] C142: Impossible `Error::Internal` path in default binding compilation
 - [x] C143: `BindingTarget` re-exported with no public-signature role
-- [ ] Refresh `api/canopy.rs` and `api/canopy-widgets.rs`
+- [x] Refresh `api/canopy.rs` and `api/canopy-widgets.rs`
 
 ### Stage 2: Unattended cleanups in widgets, automation, examples, tooling
 

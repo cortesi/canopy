@@ -359,14 +359,6 @@ pub mod canopy {
         pub type StatusFn =
             fn(_: &dyn Any, _: &dyn ViewContext) -> crate::error::Result<CommandStatus>;
 
-        /// Direction for zoom commands.
-        pub enum ZoomDirection {
-            /// Zoom in.
-            In,
-            /// Zoom out.
-            Out,
-        }
-
         pub use ruau::declaration;
         /// Marker trait for serde-backed command arguments.
         pub trait CommandArg: 'static + DeserializeOwned + Serialize {}
@@ -741,40 +733,6 @@ pub mod canopy {
             fn eq(&self, other: &ListRowContext) -> bool {}
         }
 
-        impl Clone for ZoomDirection {
-            fn clone(&self) -> ZoomDirection {}
-        }
-
-        impl CommandType for ZoomDirection {
-            fn luau_decls(registry: &mut canopy::commands::DeclRegistry<'_>) {}
-
-            fn luau_ty() -> canopy::commands::declaration::Type {}
-        }
-
-        impl Debug for ZoomDirection {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for ZoomDirection {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl FromArgValue for ZoomDirection {
-            fn from_arg_value(
-                v: &canopy::commands::ArgValue,
-            ) -> ::std::result::Result<Self, canopy::commands::CommandError> {
-            }
-        }
-
-        impl PartialEq for ZoomDirection {
-            fn eq(&self, other: &ZoomDirection) -> bool {}
-        }
-
-        impl ToArgValue for ZoomDirection {
-            fn to_arg_value(self) -> canopy::commands::ArgValue {}
-        }
-
         impl CommandError {
             #[doc(hidden)]
             /// Preserve a command implementation's concrete error as the execution
@@ -1109,34 +1067,45 @@ pub mod canopy {
         /// Result type for canopy operations.
         pub type Result<T> = std::result::Result<T, Error>;
 
-        #[serde(rename_all = "snake_case")]
         /// Stable category for a structured script or command failure.
         pub enum ScriptErrorKind {
+            #[serde(rename = "timeout")]
             /// Cooperative execution timeout.
             Timeout,
+            #[serde(rename = "node_not_found")]
             /// Node lookup failed.
             NodeNotFound,
+            #[serde(rename = "node_detached")]
             /// A node exists but is detached.
             NodeDetached,
+            #[serde(rename = "type_mismatch")]
             /// A value or widget type did not match.
             TypeMismatch,
+            #[serde(rename = "not_found")]
             /// A requested value was not found.
             NotFound,
+            #[serde(rename = "invalid")]
             /// Invalid input or operation.
             Invalid,
+            #[serde(rename = "invalid_phase")]
             /// Operation requires an unwound widget callback boundary.
             InvalidPhase,
             #[serde(rename = "canopy_error")]
             /// Unclassified Canopy failure.
             Canopy,
+            #[serde(rename = "unknown_command")]
             /// Unknown command identifier.
             UnknownCommand,
+            #[serde(rename = "conflicting_command")]
             /// Conflicting command definition.
             ConflictingCommand,
+            #[serde(rename = "invalid_command")]
             /// Invalid command definition.
             InvalidCommand,
+            #[serde(rename = "no_target")]
             /// No command target was found.
             NoTarget,
+            #[serde(rename = "wrong_owner")]
             /// An exact node does not own the command.
             WrongOwner,
             #[serde(rename = "command_disabled")]
@@ -1145,6 +1114,7 @@ pub mod canopy {
             #[serde(rename = "node_invalid")]
             /// A command node handle is stale.
             InvalidNode,
+            #[serde(rename = "arity_mismatch")]
             /// Positional argument count mismatch.
             ArityMismatch,
             #[serde(rename = "missing_named_arg")]
@@ -1153,17 +1123,22 @@ pub mod canopy {
             #[serde(rename = "unknown_named_arg")]
             /// An unknown named argument was supplied.
             UnknownNamedArgument,
+            #[serde(rename = "conversion")]
             /// Argument conversion failed.
             Conversion,
+            #[serde(rename = "missing_injected")]
             /// An injected value is missing.
             MissingInjected,
+            #[serde(rename = "target_type_mismatch")]
             /// The routed target has the wrong widget type.
             TargetTypeMismatch,
             #[serde(rename = "command_exec")]
             /// Command implementation returned an error.
             CommandExecution,
+            #[serde(rename = "script_busy")]
             /// Another top-level script evaluation is active.
             ScriptBusy,
+            #[serde(rename = "script_cancelled")]
             /// Script evaluation was explicitly cancelled.
             ScriptCancelled,
         }
@@ -1610,12 +1585,6 @@ pub mod canopy {
                 fn from(c: char) -> Self {}
             }
 
-            impl FromStr for Key {
-                fn from_str(spec: &str) -> Result<Self, Self::Err> {}
-
-                type Err = ParseError;
-            }
-
             impl Hash for Key {
                 fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
             }
@@ -1794,11 +1763,6 @@ pub mod canopy {
                 pub location: crate::geom::Point,
             }
 
-            impl Action {
-                /// Is this a button-driven action?
-                pub fn is_button(&self) -> bool {}
-            }
-
             impl Clone for Action {
                 fn clone(&self) -> Action {}
             }
@@ -1872,12 +1836,6 @@ pub mod canopy {
 
             impl From<MouseEvent> for Mouse {
                 fn from(o: MouseEvent) -> Self {}
-            }
-
-            impl FromStr for Mouse {
-                fn from_str(spec: &str) -> Result<Self, Self::Err> {}
-
-                type Err = ParseError;
             }
 
             impl Hash for Mouse {
@@ -2272,9 +2230,6 @@ pub mod canopy {
         }
 
         impl Constraint {
-            /// Return the maximum bound implied by the constraint.
-            pub fn max_bound(self) -> u32 {}
-
             /// Return true if this constraint is exact.
             pub fn is_exact(self) -> bool {}
         }
@@ -3661,9 +3616,6 @@ pub mod canopy {
         }
 
         impl Constraint {
-            /// Return the maximum bound implied by the constraint.
-            pub fn max_bound(self) -> u32 {}
-
             /// Return true if this constraint is exact.
             pub fn is_exact(self) -> bool {}
         }
@@ -3843,12 +3795,6 @@ pub mod canopy {
 
         impl From<char> for Key {
             fn from(c: char) -> Self {}
-        }
-
-        impl FromStr for Key {
-            fn from_str(spec: &str) -> Result<Self, Self::Err> {}
-
-            type Err = ParseError;
         }
 
         impl Hash for Key {
@@ -4388,6 +4334,10 @@ pub mod canopy {
             /// Return the next time at which the adapter must deliver a wake.
             pub fn next_deadline(&mut self) -> Option<Instant> {}
 
+            /// Drive the shared runtime until one synchronous headless evaluation
+            /// completes.
+            pub fn eval(&mut self, request: EvalRequest) -> Result<EvalOutcome> {}
+
             /// Set the size on the root node.
             pub fn set_root_size(&mut self, size: Size) -> Result<()> {}
 
@@ -4413,9 +4363,6 @@ pub mod canopy {
 
             /// Evaluate a Luau source string at the root and return its value.
             pub fn eval_script(&mut self, source: &str) -> Result<commands::ArgValue> {}
-
-            /// Evaluate a configured request and return its value and diagnostics.
-            pub fn eval(&mut self, request: EvalRequest) -> Result<EvalOutcome> {}
 
             /// Get a reference to the current render buffer, if any.
             pub fn buf(&self) -> Option<&TermBuf> {}
@@ -4468,7 +4415,7 @@ pub mod canopy {
             pub fn flush(&mut self) -> Result<()> {}
 
             /// Push an input mode above the current mode.
-            pub fn push_input_mode(&mut self, mode: &str) -> Result<()> {}
+            pub fn push_input_mode(&mut self, mode: &str) {}
 
             /// Read the last publication without running widget hooks or refreshing
             /// state.
@@ -4571,7 +4518,7 @@ pub mod canopy {
             }
 
             /// Set the active input mode.
-            pub fn set_input_mode(&mut self, mode: &str) -> Result<()> {}
+            pub fn set_input_mode(&mut self, mode: &str) {}
 
             /// Set the maximum number of retained script journal entries.
             ///
@@ -4624,15 +4571,6 @@ pub mod canopy {
 
             /// Resolve a style by name and apply the current effect stack.
             pub fn resolve_style(&self, name: &str) -> Style {}
-
-            /// Resolve a style by name at a point within bounds.
-            pub fn resolve_style_name_at(
-                &self,
-                name: &str,
-                bounds: geom::Rect,
-                point: geom::Point,
-            ) -> ResolvedStyle {
-            }
 
             /// Write a grapheme with a resolved style, including continuation cells.
             pub fn put_grapheme(
@@ -4771,15 +4709,6 @@ pub mod canopy {
             /// Resolve a style by name and apply the current effect stack.
             pub fn resolve_style(&self, name: &str) -> Style {}
 
-            /// Resolve a style by name at a point within bounds.
-            pub fn resolve_style_name_at(
-                &self,
-                name: &str,
-                bounds: geom::Rect,
-                point: geom::Point,
-            ) -> ResolvedStyle {
-            }
-
             /// Write a grapheme with a resolved style, including continuation cells.
             pub fn put_grapheme(
                 &mut self,
@@ -4835,9 +4764,6 @@ pub mod canopy {
 
         /// Stable result returned by Luau typechecking APIs.
         pub struct ScriptCheckResult {}
-
-        /// Script identifier.
-        pub type ScriptId = u64;
 
         impl Clone for LuauFunctionId {
             fn clone(&self) -> LuauFunctionId {}
@@ -4979,9 +4905,6 @@ pub mod canopy {
         }
 
         impl ScriptCheckResult {
-            /// Construct a result from checker diagnostics.
-            pub fn from_diagnostics(diagnostics: Vec<ScriptCheckDiagnostic>) -> Self {}
-
             /// Consume the result and return its diagnostics.
             pub fn into_diagnostics(self) -> Vec<ScriptCheckDiagnostic> {}
 
@@ -5056,42 +4979,6 @@ pub mod canopy {
             //!
             //! Based on the Dracula theme: <https://draculatheme.com>
 
-            /// Background.
-            pub const BACKGROUND: super::Color = _;
-
-            /// Comment color (also used for subtle elements).
-            pub const COMMENT: super::Color = _;
-
-            /// Current line / selection background.
-            pub const CURRENT_LINE: super::Color = _;
-
-            /// Cyan.
-            pub const CYAN: super::Color = _;
-
-            /// Foreground.
-            pub const FOREGROUND: super::Color = _;
-
-            /// Green.
-            pub const GREEN: super::Color = _;
-
-            /// Orange.
-            pub const ORANGE: super::Color = _;
-
-            /// Pink.
-            pub const PINK: super::Color = _;
-
-            /// Purple.
-            pub const PURPLE: super::Color = _;
-
-            /// Red.
-            pub const RED: super::Color = _;
-
-            /// Selection.
-            pub const SELECTION: super::Color = _;
-
-            /// Yellow.
-            pub const YELLOW: super::Color = _;
-
             /// Build a Dracula style map.
             pub fn dracula() -> super::StyleMap {}
         }
@@ -5139,66 +5026,6 @@ pub mod canopy {
             //! Gruvbox theme - a retro groove color scheme.
             //!
             //! Based on the gruvbox theme by morhetz: <https://github.com/morhetz/gruvbox>
-
-            /// Bright aqua/cyan.
-            pub const AQUA: super::Color = _;
-
-            /// Bright blue.
-            pub const BLUE: super::Color = _;
-
-            /// Dark background (default).
-            pub const DARK0: super::Color = _;
-
-            /// Dark background (hard contrast).
-            pub const DARK0_HARD: super::Color = _;
-
-            /// Dark background (soft contrast).
-            pub const DARK0_SOFT: super::Color = _;
-
-            /// Dark background 1.
-            pub const DARK1: super::Color = _;
-
-            /// Dark background 2.
-            pub const DARK2: super::Color = _;
-
-            /// Dark background 3.
-            pub const DARK3: super::Color = _;
-
-            /// Dark background 4.
-            pub const DARK4: super::Color = _;
-
-            /// Gray.
-            pub const GRAY: super::Color = _;
-
-            /// Bright green.
-            pub const GREEN: super::Color = _;
-
-            /// Light foreground 0.
-            pub const LIGHT0: super::Color = _;
-
-            /// Light foreground 1.
-            pub const LIGHT1: super::Color = _;
-
-            /// Light foreground 2.
-            pub const LIGHT2: super::Color = _;
-
-            /// Light foreground 3.
-            pub const LIGHT3: super::Color = _;
-
-            /// Light foreground 4.
-            pub const LIGHT4: super::Color = _;
-
-            /// Bright orange.
-            pub const ORANGE: super::Color = _;
-
-            /// Bright purple.
-            pub const PURPLE: super::Color = _;
-
-            /// Bright red.
-            pub const RED: super::Color = _;
-
-            /// Bright yellow.
-            pub const YELLOW: super::Color = _;
 
             /// Build a dark gruvbox style map.
             pub fn gruvbox_dark() -> super::StyleMap {}
@@ -6062,7 +5889,7 @@ pub mod canopy {
         //! Text utilities.
 
         /// Expand tabs into spaces using the configured tab stop.
-        pub fn expand_tabs(s: &str, tab_stop: usize) -> String {}
+        pub fn expand_tabs(s: &str, tab_stop: usize) -> std::borrow::Cow<'_, str> {}
 
         /// Return the display width of a grapheme cluster, capped at terminal cell
         /// widths.
@@ -6128,10 +5955,6 @@ pub mod canopy {
             /// Returns a geometry error if the result is outside the signed range.
             pub fn screen_to_viewport(&self, point: PointI32) -> Result<PointI32> {}
 
-            /// Convert a scrolled content point to screen coordinates.
-            /// Returns a geometry error if the result is outside the signed range.
-            pub fn content_to_screen(&self, point: PointI32) -> Result<PointI32> {}
-
             /// Convert a viewport-local point to outer-local coordinates, including
             /// padding. Returns a geometry error if the result is outside the signed
             /// range.
@@ -6140,10 +5963,6 @@ pub mod canopy {
             /// Convert a viewport-local point to scrolled content coordinates.
             /// Returns a geometry error if the result is outside the signed range.
             pub fn viewport_to_content(&self, point: PointI32) -> Result<PointI32> {}
-
-            /// Convert an outer-local point to scrolled content coordinates.
-            /// Returns a geometry error if the result is outside the signed range.
-            pub fn outer_to_content(&self, point: PointI32) -> Result<PointI32> {}
 
             /// Local outer rectangle with origin at (0,0).
             pub fn outer_rect_local(&self) -> Rect {}
@@ -6246,14 +6065,6 @@ pub mod canopy {
         Default,
         /// Framework-only exclusive group.
         Exclusive(FrameworkBindingGroup),
-    }
-
-    /// Action executed by a binding.
-    pub enum BindingTarget {
-        /// Stored Luau callback.
-        Script(crate::script::LuauFunctionId),
-        /// Rust command invocation.
-        Command(crate::commands::CommandAction),
     }
 
     /// Application runtime state and renderer coordination.
@@ -7364,23 +7175,6 @@ pub mod canopy {
         fn eq(&self, other: &BindingScope) -> bool {}
     }
 
-    impl BindingTarget {
-        /// Return a stable target-kind label.
-        pub fn label(&self) -> &'static str {}
-    }
-
-    impl Clone for BindingTarget {
-        fn clone(&self) -> BindingTarget {}
-    }
-
-    impl Debug for BindingTarget {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl PartialEq for BindingTarget {
-        fn eq(&self, other: &BindingTarget) -> bool {}
-    }
-
     impl CanopyBuilder {
         #[must_use]
         /// Construct widgets after the finalized setup sources have run.
@@ -8340,6 +8134,10 @@ pub mod canopy {
         /// Return the next time at which the adapter must deliver a wake.
         pub fn next_deadline(&mut self) -> Option<Instant> {}
 
+        /// Drive the shared runtime until one synchronous headless evaluation
+        /// completes.
+        pub fn eval(&mut self, request: EvalRequest) -> Result<EvalOutcome> {}
+
         /// Set the size on the root node.
         pub fn set_root_size(&mut self, size: Size) -> Result<()> {}
 
@@ -8365,9 +8163,6 @@ pub mod canopy {
 
         /// Evaluate a Luau source string at the root and return its value.
         pub fn eval_script(&mut self, source: &str) -> Result<commands::ArgValue> {}
-
-        /// Evaluate a configured request and return its value and diagnostics.
-        pub fn eval(&mut self, request: EvalRequest) -> Result<EvalOutcome> {}
 
         /// Get a reference to the current render buffer, if any.
         pub fn buf(&self) -> Option<&TermBuf> {}
@@ -8419,7 +8214,7 @@ pub mod canopy {
         pub fn flush(&mut self) -> Result<()> {}
 
         /// Push an input mode above the current mode.
-        pub fn push_input_mode(&mut self, mode: &str) -> Result<()> {}
+        pub fn push_input_mode(&mut self, mode: &str) {}
 
         /// Read the last publication without running widget hooks or refreshing
         /// state.
@@ -8522,7 +8317,7 @@ pub mod canopy {
         }
 
         /// Set the active input mode.
-        pub fn set_input_mode(&mut self, mode: &str) -> Result<()> {}
+        pub fn set_input_mode(&mut self, mode: &str) {}
 
         /// Set the maximum number of retained script journal entries.
         ///
