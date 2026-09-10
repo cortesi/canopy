@@ -190,7 +190,6 @@ mod tests {
         let started = canopy.turn(Work::StartEval(waiting_request(&canopy, Some(timeout))))?;
         let id = started.started.unwrap();
         assert!(started.completed.is_empty());
-        assert_eq!(canopy.next_deadline(), Some(clock.now() + timeout));
         clock.advance(Duration::from_millis(9))?;
         assert!(canopy.turn(Work::Wake)?.completed.is_empty());
         clock.advance(Duration::from_millis(1))?;
@@ -201,7 +200,6 @@ mod tests {
             expired.completed[0].result.as_ref(),
             Err(Error::ScriptTimeout { timeout_ms: 10 })
         ));
-        assert!(canopy.next_deadline().is_none());
         Ok(())
     }
 

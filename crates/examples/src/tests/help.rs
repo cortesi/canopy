@@ -11,7 +11,7 @@ fn demo_api_build_does_not_assemble_or_publish() -> Result<()> {
     assert!(canopy.snapshot().is_none());
     assert!(
         canopy
-            .with_root_view(|context| context.find_nodes("root/termgym"))
+            .with_root_view(|context| context.find_nodes("root/termgym"))?
             .is_empty()
     );
     Ok(())
@@ -61,7 +61,7 @@ fn prove_help_flow(mut harness: Harness) -> Result<()> {
     harness.render()?;
 
     let list = harness
-        .find_nodes("root/help/**/binding_list")
+        .find_nodes("root/help/**/binding_list")?
         .into_iter()
         .next()
         .expect("help binding list");

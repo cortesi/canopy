@@ -233,12 +233,11 @@ pub trait ViewContext: sealed::ViewContext {
     /// Find all nodes whose paths match the filter, relative to the current
     /// node.
     ///
-    /// The filter is normalized to match full paths.
-    fn find_nodes(&self, path_filter: &str) -> Vec<NodeId> {
-        let Ok(filter) = PathFilter::normalized(path_filter) else {
-            return Vec::new();
-        };
-        self.find_nodes_matching(&filter)
+    /// The filter is normalized to match full paths. An invalid filter returns
+    /// the parse error.
+    fn find_nodes(&self, path_filter: &str) -> Result<Vec<NodeId>> {
+        let filter = PathFilter::normalized(path_filter)?;
+        Ok(self.find_nodes_matching(&filter))
     }
 
     /// Find all nodes whose paths match the validated filter.

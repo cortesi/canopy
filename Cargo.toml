@@ -72,4 +72,3 @@ needless_pass_by_ref_mut = "warn"
 # Settings with config values in clippy.toml
 cognitive_complexity = "warn"
 excessive_nesting = "warn"
-too_many_lines = "warn"

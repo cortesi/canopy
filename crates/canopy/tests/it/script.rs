@@ -102,7 +102,9 @@ mod tests {
     }
 
     fn leaf_ids(harness: &Harness) -> Vec<NodeId> {
-        harness.find_nodes("api_root/api_leaf")
+        harness
+            .find_nodes("api_root/api_leaf")
+            .expect("valid path filter")
     }
 
     fn leaf_values(harness: &mut Harness) -> Vec<i32> {

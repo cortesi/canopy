@@ -2,7 +2,9 @@
 //! tools.
 #![cfg(not(feature = "devtools"))]
 
-use canopy::{Canopy, Context, Loader, Widget, commands::CommandNode, error::Result, geom::Size};
+use canopy::{
+    Canopy, Context, Loader, Widget, Work, commands::CommandNode, error::Result, geom::Size,
+};
 use canopy_widgets::{Input, List, Root, Selectable};
 
 struct Row;
@@ -30,7 +32,7 @@ fn minimum_forms_have_help_and_no_inspector() -> Result<()> {
     Root::new().install(&mut app, Form)?;
     app.finalize_api()?;
     app.set_root_size(Size::new(30, 10))?;
-    app.flush()?;
+    app.turn(Work::Prepare)?;
     let snapshot = app.snapshot().unwrap();
     assert!(snapshot.nodes.iter().any(|node| node.name == "input"));
     assert!(snapshot.nodes.iter().any(|node| node.name == "list"));

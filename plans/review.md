@@ -275,7 +275,7 @@ Supporting crates, examples, tooling:
 - [x] C9: `plan_suite`; legacy replay removal if confirmed
 - [ ] C10 if approved
 - [ ] C105: recalibrate `docs/api-budget.md`
-- [ ] C109, C110 second line, C33 as decided
+- [x] C109, C110 second line, C33 as decided
 - [ ] C112, C113, C114, C115, C116 second part as decided
   - [x] C112: colourless `Ctrl+C` tree dump; drop `termcolor`
   - [x] C114: palette items crate-private
@@ -291,8 +291,10 @@ Supporting crates, examples, tooling:
   - [x] C133: `NodeSnapshot.view` replaces four flattened fields
   - [x] C136: `register_fixture` compares setup identity
 - [ ] C126 and C127 taken together
-- [ ] C138 visibility with C128
+- [x] C138 visibility with C128
 - [ ] Remaining structural candidates C12 to C32 as each decision is made
+- [x] C13: `ViewContext::find_nodes` returns `Result`; an invalid filter
+      propagates its parse error through `Harness::find_nodes` and callers.
 - [x] C17: drop `NodeInfo.visible`
 - [x] C18: drop `kind = "anchor"` command targets
 - [x] C19: remove unbindable media and modifier key codes
@@ -1877,7 +1879,7 @@ starts after the decisions listed in C3, C9, C10, and C105 are made.
 - [x] C9: `plan_suite` in `canopy_mcp::smoke`. Legacy replay removal if
       confirmed. `discover_scripts` and `fixture_for_script` to `pub(crate)`.
 - [ ] C10 if approved.
-- [ ] C109, C110 second line, C33 as decided.
+- [x] C109, C110 second line, C33 as decided.
 - [ ] C112, C114, C115, C116 second part as decided, and C113 if the shared seam
       is judged clearer.
   - [x] C112: colourless `Ctrl+C` tree dump; drop `termcolor`.

@@ -513,7 +513,7 @@ impl Canopy {
     /// This is the synchronous boundary for native callers that need snapshots
     /// or geometry before the next driver turn. `turn(Work::Prepare)` also
     /// services queued automation and advances the driver lifecycle.
-    pub fn flush(&mut self) -> Result<()> {
+    pub(crate) fn flush(&mut self) -> Result<()> {
         if self.core.callback_depth != 0 {
             return Err(error::Error::InvalidPhase { operation: "flush" });
         }
@@ -570,6 +570,7 @@ impl Canopy {
     /// `None` to invalidate every root. Returns the new source epoch, or
     /// `None` when no module source is configured or the named root is
     /// unknown.
+    #[cfg(any(test, feature = "testing"))]
     pub fn invalidate_script_modules(&mut self, root: Option<&str>) -> Result<Option<u64>> {
         if self.script_host.is_eval_active() {
             return Err(error::Error::script_structured(
@@ -593,7 +594,8 @@ impl Canopy {
 
     /// Register an audited Ruau native module on the same surface as Canopy
     /// commands.
-    pub fn register_script_module(&mut self, module: Arc<dyn NativeModule>) -> Result<()> {
+    #[cfg(test)]
+    pub(crate) fn register_script_module(&mut self, module: Arc<dyn NativeModule>) -> Result<()> {
         self.ensure_api_unfinalized("script native module registration")?;
         self.script_native_modules.push(module);
         Ok(())
@@ -629,6 +631,7 @@ impl Canopy {
     }
 
     /// Require every startup script root to define a typed global.
+    #[cfg(any(test, feature = "testing"))]
     pub fn require_startup_global(&mut self, name: &str, type_text: &str) -> Result<()> {
         self.ensure_api_unfinalized("startup global requirement")?;
         self.script_host.require_startup_global(name, type_text)
@@ -921,6 +924,7 @@ impl Canopy {
     ///
     /// When the journal exceeds the limit the oldest entries are evicted. A
     /// limit of zero disables retention entirely.
+    #[cfg(any(test, feature = "testing"))]
     pub fn set_script_journal_limit(&mut self, limit: usize) {
         self.script_journal_limit = limit;
         self.enforce_script_journal_limit();
@@ -1002,7 +1006,7 @@ impl Canopy {
     /// Remove an application binding by ID.
     ///
     /// A framework-owned ID returns an error.
-    pub fn unbind(&mut self, id: inputmap::BindingId) -> Result<bool> {
+    pub(crate) fn unbind(&mut self, id: inputmap::BindingId) -> Result<bool> {
         let Some(target) = self.core.input_map.unbind(id)? else {
             return Ok(false);
         };
@@ -1023,7 +1027,7 @@ impl Canopy {
     }
 
     /// Remove all bindings from all modes.
-    pub fn clear_bindings(&mut self) -> usize {
+    pub(crate) fn clear_bindings(&mut self) -> usize {
         let removed = self.core.input_map.clear_application();
         self.release_removed_bindings(removed)
     }
@@ -1405,7 +1409,7 @@ impl Canopy {
     }
 
     /// Build a diagnostic dump with tree, focus, and binding details.
-    pub fn diagnostic_dump(&self, target: NodeId) -> String {
+    pub(crate) fn diagnostic_dump(&self, target: NodeId) -> String {
         let mut out = String::new();
         let input_mode = self.core.input_map.current_mode();
         let target = if self.core.nodes.contains_key(target) {

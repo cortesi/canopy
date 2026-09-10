@@ -186,7 +186,7 @@ impl Harness {
     }
 
     /// Find all nodes whose paths match the filter, relative to the root.
-    pub fn find_nodes(&self, path_filter: &str) -> Vec<NodeId> {
+    pub fn find_nodes(&self, path_filter: &str) -> Result<Vec<NodeId>> {
         self.canopy
             .with_root_view(|context| context.find_nodes(path_filter))
     }

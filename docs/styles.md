@@ -8,7 +8,7 @@ Custom string layers remain supported.
 | Component layer | Role constant | Paint path | Example rule |
 | --- | --- | --- | --- |
 | `button` | `roles::BUTTON_LABEL` | `text` | `button/active/text` |
-| `button` | `roles::BUTTON_BORDER` | `border` | `button/inactive/border` |
+| `button` | `roles::BUTTON_BORDER` | `border` | `button/active/border` |
 | `input` | `roles::INPUT_TEXT` | `text` | `input/text` |
 | `input` | `roles::INPUT_CURSOR` | `text/cursor` | `input/focused/text/cursor` |
 
@@ -28,9 +28,8 @@ continuations. An absent cursor rule falls back to the input text role.
 | `Selected` | `selected` |
 | `Disabled` | `disabled` |
 | `Pressed` | `active` |
-| `Inactive` | `inactive` |
 
-Button pushes `button`, then `active` or `inactive`, then `focused` when focus is
+Button pushes `button`, then `active` when active, then `focused` when focus is
 within the button, then `disabled` when its configured command is disabled.
 For example, `button/active/focused/disabled/text` targets a disabled active
 button label with focus. Active state does not imply command eligibility or

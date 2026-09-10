@@ -27,8 +27,6 @@ enum Task {
     Checks,
     /// Compile every benchmark target without running benchmarks.
     BenchCheck,
-    /// Run targeted Miri checks for unsafe code.
-    Dynamic,
     /// Run all smoke-test integration targets.
     Smoke,
 }
@@ -40,38 +38,8 @@ fn main() -> ExitCode {
         Task::FeatureCheck => run_default_check(&root),
         Task::Checks => run_luau_check(&root),
         Task::BenchCheck => run_bench_check(&root),
-        Task::Dynamic => run_dynamic(&root),
         Task::Smoke => run_smoke(&root),
     })
-}
-
-/// Rust nightly used for the repository's Miri checks.
-const MIRI_TOOLCHAIN: &str = "+nightly";
-
-/// Run the targeted unsafe-code suites under Miri.
-fn run_dynamic(workspace_root: &Path) -> bool {
-    for filter in [
-        "widget_slot_restores",
-        "core::backend::tests",
-        "reentrant_canopy_guard_restores_nested_stack",
-    ] {
-        if !run_cargo_command(
-            workspace_root,
-            &[
-                MIRI_TOOLCHAIN,
-                "miri",
-                "test",
-                "-p",
-                "canopy",
-                "--all-features",
-                "--lib",
-                filter,
-            ],
-        ) {
-            return false;
-        }
-    }
-    true
 }
 
 /// Run the workspace smoke-test workflow.

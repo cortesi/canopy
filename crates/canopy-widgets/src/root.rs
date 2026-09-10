@@ -490,8 +490,9 @@ mod tests {
     }
 
     fn binding_list_id(canopy: &Canopy) -> NodeId {
-        let matches =
-            canopy.with_root_view(|context| context.find_nodes("root/help/**/binding_list"));
+        let matches = canopy
+            .with_root_view(|context| context.find_nodes("root/help/**/binding_list"))
+            .expect("valid binding filter");
         assert_eq!(matches.len(), 1);
         matches[0]
     }
@@ -789,7 +790,7 @@ mod tests {
     fn failed_open_preserves_focus_capture_and_token_balance() -> Result<()> {
         let (mut canopy, _backend, left, _right) = setup_root_tree()?;
         let help = canopy
-            .with_root_view(|context| context.find_nodes("root/help"))
+            .with_root_view(|context| context.find_nodes("root/help"))?
             .into_iter()
             .next()
             .expect("help node");

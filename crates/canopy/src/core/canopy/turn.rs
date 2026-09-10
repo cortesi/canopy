@@ -354,7 +354,7 @@ impl Canopy {
         self.core.wake_registry.poll_notified(cx)
     }
     /// Return the next time at which the adapter must deliver a wake.
-    pub fn next_deadline(&mut self) -> Option<Instant> {
+    pub(crate) fn next_deadline(&mut self) -> Option<Instant> {
         [
             self.poller.next_deadline(),
             self.driver.active.as_ref().and_then(|a| a.deadline),
