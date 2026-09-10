@@ -1,5 +1,5 @@
 //! This module contains the core primitives to represent keyboard input.
-use std::{fmt, ops::Add, str::FromStr};
+use std::{fmt, ops::Add};
 
 use crate::error::ParseError;
 
@@ -300,14 +300,6 @@ impl Key {
         }
         let (mods, key_part) = parse_spec_parts(spec, &['-', '+']).map_err(ParseError::new)?;
         Ok((mods + parse_key_code(key_part).map_err(ParseError::new)?).normalize())
-    }
-}
-
-impl FromStr for Key {
-    type Err = ParseError;
-
-    fn from_str(spec: &str) -> Result<Self, Self::Err> {
-        Self::parse_spec(spec)
     }
 }
 

@@ -120,8 +120,8 @@ fn resolution_uses_global_then_newest_mode_then_default() -> Result<()> {
     )?;
     bind(&mut map, BindingScope::Global, '?', "/root/**/", "Help", 4)?;
 
-    map.push_mode("normal")?;
-    map.push_mode("modal")?;
+    map.push_mode("normal");
+    map.push_mode("modal");
     assert_eq!(
         target(&map, "/root/editor", 'a'),
         Some(BindingTarget::Script(script(3)))

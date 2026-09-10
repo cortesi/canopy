@@ -293,8 +293,18 @@ fn translate_result<T>(e: io::Result<T>) -> Result<T> {
     e.map_err(error::Error::TerminalIo)
 }
 
+/// Convert a terminal cell coordinate into the crossterm `u16` range.
+fn cell_coord(value: u32) -> io::Result<u16> {
+    u16::try_from(value).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "terminal coordinate exceeds u16",
+        )
+    })
+}
+
 /// Terminal operations needed to acquire and restore a session.
-trait TerminalOperations: io::Write {
+trait TerminalOperations {
     /// Enable terminal raw mode.
     fn enable_raw_mode(&mut self) -> io::Result<()>;
     /// Disable terminal raw mode.
@@ -567,18 +577,8 @@ impl CrosstermRender {
     /// Write text at a position.
     fn text(&mut self, loc: Point, txt: &str) -> io::Result<()> {
         for run in positioned_text_runs(loc, txt) {
-            let x = u16::try_from(run.location.x).map_err(|_| {
-                io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "terminal x coordinate exceeds u16",
-                )
-            })?;
-            let y = u16::try_from(run.location.y).map_err(|_| {
-                io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "terminal y coordinate exceeds u16",
-                )
-            })?;
+            let x = cell_coord(run.location.x)?;
+            let y = cell_coord(run.location.y)?;
             self.fp.queue(ccursor::MoveTo(x, y))?;
             self.fp.queue(style::Print(run.text))?;
         }
@@ -674,7 +674,9 @@ impl RenderBackend for CrosstermRender {
         }
 
         let count_abs = count.unsigned_abs().min(u16::MAX as u32) as u16;
-        translate_result(self.fp.queue(ccursor::MoveTo(loc.x as u16, loc.y as u16)))?;
+        let x = translate_result(cell_coord(loc.x))?;
+        let y = translate_result(cell_coord(loc.y))?;
+        translate_result(self.fp.queue(ccursor::MoveTo(x, y)))?;
         let seq = if count > 0 {
             format!("\x1b[{count_abs}@")
         } else {
@@ -684,12 +686,12 @@ impl RenderBackend for CrosstermRender {
         Ok(())
     }
 
-    fn shift_lines(&mut self, _top: u32, _bottom: u32, count: i32) -> Result<()> {
+    fn shift_lines(&mut self, top: u32, bottom: u32, count: i32) -> Result<()> {
         if count == 0 {
             return Ok(());
         }
-        let top = _top.min(u16::MAX as u32) as u16;
-        let bottom = _bottom.min(u16::MAX as u32) as u16;
+        let top = top.min(u16::MAX as u32) as u16;
+        let bottom = bottom.min(u16::MAX as u32) as u16;
         if top > bottom {
             return Ok(());
         }
@@ -919,7 +921,6 @@ pub fn runloop_with_options(mut cnpy: Canopy, options: RunOptions) -> Result<i32
 mod tests {
     use std::{
         future::ready,
-        io::Write,
         pin::Pin,
         sync::{
             Arc,
@@ -1098,16 +1099,6 @@ mod tests {
         /// Record an infallible release.
         fn release(&mut self, name: &'static str) -> io::Result<()> {
             self.calls.push(name);
-            Ok(())
-        }
-    }
-
-    impl Write for FakeTerminal {
-        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-            Ok(bytes.len())
-        }
-
-        fn flush(&mut self) -> io::Result<()> {
             Ok(())
         }
     }

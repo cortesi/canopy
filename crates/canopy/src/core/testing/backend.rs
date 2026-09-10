@@ -1,4 +1,4 @@
-use crate::{Canopy, error::Result, geom::Point, render::RenderBackend, style::ResolvedStyle};
+use crate::{error::Result, geom::Point, render::RenderBackend, style::ResolvedStyle};
 
 /// A render backend for testing, which logs the text it is asked to draw.
 #[derive(Default)]
@@ -11,12 +11,6 @@ impl TestRender {
     /// Construct a backend with an empty capture buffer.
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Render a node tree into the capture buffer.
-    pub fn render(&mut self, c: &mut Canopy) -> Result<()> {
-        c.render(self)?;
-        Ok(())
     }
 
     /// Return true if no text has been captured.

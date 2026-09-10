@@ -1,4 +1,4 @@
-use std::{fmt, str::FromStr};
+use std::fmt;
 
 use crate::{error::ParseError, event::key, geom::Point};
 
@@ -49,7 +49,7 @@ pub enum Action {
 
 impl Action {
     /// Is this a button-driven action?
-    pub fn is_button(&self) -> bool {
+    fn is_button(&self) -> bool {
         match self {
             Self::Down => true,
             Self::Up => true,
@@ -112,14 +112,6 @@ impl Mouse {
             button,
             modifiers,
         })
-    }
-}
-
-impl FromStr for Mouse {
-    type Err = ParseError;
-
-    fn from_str(spec: &str) -> Result<Self, Self::Err> {
-        Self::parse_spec(spec)
     }
 }
 

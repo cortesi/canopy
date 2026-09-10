@@ -163,16 +163,6 @@ impl<'a> Render<'a> {
         self.apply_effects(base)
     }
 
-    /// Resolve a style by name at a point within bounds.
-    pub fn resolve_style_name_at(
-        &self,
-        name: &str,
-        bounds: geom::Rect,
-        point: geom::Point,
-    ) -> ResolvedStyle {
-        self.resolve_style(name).resolve_at(bounds, point)
-    }
-
     /// Push a style layer.
     pub fn push_layer(&mut self, name: &str) {
         self.style.push_layer(name);
@@ -182,7 +172,7 @@ impl<'a> Render<'a> {
     /// text.
     pub fn restyle(&mut self, style: &str, point: geom::Point) {
         if self.clip.contains_point(point) {
-            let style = self.resolve_style_name_at(style, self.clip, point);
+            let style = self.resolve_style(style).resolve_at(self.clip, point);
             self.buf
                 .restyle_grapheme(self.translate_point(point), style);
         }

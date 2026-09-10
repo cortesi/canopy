@@ -755,7 +755,8 @@ mod tests {
         let observed = Arc::clone(&applications);
         canopy.register_fixture(Fixture::new("seed", "Seed live state", move |canopy| {
             observed.fetch_add(1, Ordering::Relaxed);
-            canopy.set_input_mode("seed")
+            canopy.set_input_mode("seed");
+            Ok(())
         }))?;
         canopy.finalize_api()?;
         canopy.set_root_size(Size::new(20, 5))?;

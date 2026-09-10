@@ -222,7 +222,7 @@ mod tests {
             "Global",
             3,
         )?;
-        core.input_map.push_mode("insert")?;
+        core.input_map.push_mode("insert");
 
         let snapshot = core.available_bindings(None)?;
 

@@ -1041,13 +1041,13 @@ impl Canopy {
     }
 
     /// Set the active input mode.
-    pub fn set_input_mode(&mut self, mode: &str) -> Result<()> {
-        self.core.input_map.set_mode(mode)
+    pub fn set_input_mode(&mut self, mode: &str) {
+        self.core.input_map.set_mode(mode);
     }
 
     /// Push an input mode above the current mode.
-    pub fn push_input_mode(&mut self, mode: &str) -> Result<()> {
-        self.core.input_map.push_mode(mode)
+    pub fn push_input_mode(&mut self, mode: &str) {
+        self.core.input_map.push_mode(mode);
     }
 
     /// Pop the top input mode and return the new active mode.

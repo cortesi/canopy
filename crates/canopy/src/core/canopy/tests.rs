@@ -432,11 +432,11 @@ fn set_widget_resets_initialization() -> Result<()> {
     canopy.set_root_size(Size::new(10, 10))?;
 
     let mut render = TestRender::new();
-    render.render(&mut canopy)?;
+    canopy.render(&mut render)?;
     assert_eq!(POLL_COUNT.load(Ordering::SeqCst), 1);
 
     canopy.core.replace_subtree(node_id, PollWidget::new())?;
-    render.render(&mut canopy)?;
+    canopy.render(&mut render)?;
     assert_eq!(POLL_COUNT.load(Ordering::SeqCst), 2);
     Ok(())
 }
@@ -768,7 +768,7 @@ fn tmouse() -> Result<()> {
     run_ttree(|c, mut tr, tree| {
         c.core.set_focus(tree.root)?;
         set_outcome::<R>(&mut c.core, tree.root, EventOutcome::Handle);
-        tr.render(c)?;
+        c.render(&mut tr)?;
         let evt = make_mouse_event(&c.core, tree.a_a);
         c.mouse(None, evt)?;
         let s = get_state();
@@ -781,7 +781,7 @@ fn tmouse() -> Result<()> {
 
     run_ttree(|c, mut tr, tree| {
         set_outcome::<BaLa>(&mut c.core, tree.a_a, EventOutcome::Handle);
-        tr.render(c)?;
+        c.render(&mut tr)?;
         let evt = make_mouse_event(&c.core, tree.a_a);
         c.mouse(None, evt)?;
         let s = get_state();
@@ -797,7 +797,7 @@ fn tresize() -> Result<()> {
     run_ttree(|c, mut tr, tree| {
         let size: u32 = 100;
         let half = i32::try_from(size / 2).expect("size fits i32");
-        tr.render(c)?;
+        c.render(&mut tr)?;
         assert_eq!(
             c.core.nodes[tree.root].view.outer,
             RectI32::new(0, 0, size, size)
@@ -812,7 +812,7 @@ fn tresize() -> Result<()> {
         );
 
         c.set_root_size(Size::new(50, 50))?;
-        tr.render(c)?;
+        c.render(&mut tr)?;
         assert_eq!(c.core.nodes[tree.b].view.outer, RectI32::new(25, 0, 25, 50));
         Ok(())
     })?;
@@ -822,31 +822,31 @@ fn tresize() -> Result<()> {
 #[test]
 fn trender() -> Result<()> {
     run_ttree(|c, mut tr, tree| {
-        tr.render(c)?;
+        c.render(&mut tr)?;
         assert!(!tr.buf_empty());
 
-        tr.render(c)?;
+        c.render(&mut tr)?;
         assert!(tr.buf_empty());
-        tr.render(c)?;
-        tr.render(c)?;
-        tr.render(c)?;
+        c.render(&mut tr)?;
+        c.render(&mut tr)?;
+        c.render(&mut tr)?;
 
-        tr.render(c)?;
+        c.render(&mut tr)?;
         assert!(tr.buf_empty());
 
         c.core.set_focus(tree.a_a)?;
-        tr.render(c)?;
+        c.render(&mut tr)?;
         assert!(tr.buf_empty());
 
         c.core.focus_next(c.core.root)?;
-        tr.render(c)?;
+        c.render(&mut tr)?;
         assert!(tr.buf_empty());
 
         c.core.focus_prev(c.core.root)?;
-        tr.render(c)?;
+        c.render(&mut tr)?;
         assert!(tr.buf_empty());
 
-        tr.render(c)?;
+        c.render(&mut tr)?;
         assert!(tr.buf_empty());
 
         Ok(())
@@ -927,7 +927,7 @@ fn focus_prev() -> Result<()> {
 #[test]
 fn tshift_right() -> Result<()> {
     run_ttree(|c, mut tr, tree| {
-        tr.render(c)?;
+        c.render(&mut tr)?;
         c.core.set_focus(tree.a_a)?;
         c.core.focus_move(c.core.root, FocusDirection::Right)?;
         assert!(c.core.is_focused(tree.b_a));

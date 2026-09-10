@@ -640,14 +640,6 @@ impl Constraint {
     pub fn is_exact(self) -> bool {
         matches!(self, Self::Exact(_))
     }
-
-    /// Return the maximum bound implied by the constraint.
-    pub fn max_bound(self) -> u32 {
-        match self {
-            Self::Unbounded => u32::MAX,
-            Self::AtMost(n) | Self::Exact(n) => n,
-        }
-    }
 }
 
 /// Constraints for measuring a widget's content box.

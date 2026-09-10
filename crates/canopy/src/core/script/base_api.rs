@@ -1491,7 +1491,7 @@ fn host_set_mode<'s>(
     let mut args = HostArgCursor::new(scope, args);
     let mode = args.required::<String>("mode")?;
     with_current_canopy(scope, |canopy, _| {
-        canopy.set_input_mode(&mode)?;
+        canopy.set_input_mode(&mode);
         Ok(())
     })?;
     Ok(ret_none())
@@ -1505,7 +1505,7 @@ fn host_push_mode<'s>(
     let mut args = HostArgCursor::new(scope, args);
     let mode = args.required::<String>("mode")?;
     with_current_canopy(scope, |canopy, _| {
-        canopy.push_input_mode(&mode)?;
+        canopy.push_input_mode(&mode);
         Ok(())
     })?;
     Ok(ret_none())

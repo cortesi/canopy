@@ -1,4 +1,4 @@
-use std::mem;
+use std::{mem, ops::Range};
 
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -238,20 +238,22 @@ impl TermBuf {
         y.checked_mul(width)?.checked_add(x)
     }
 
-    /// Clear the complete grapheme occupying one cell index.
-    fn clear_grapheme_at(&mut self, index: usize, style: ResolvedStyle) {
-        let Ok(width) = usize::try_from(self.size.w) else {
-            return;
-        };
+    /// Return the absolute cell range of the complete grapheme at a cell index.
+    fn grapheme_span(&self, index: usize) -> Option<Range<usize>> {
+        let width = usize::try_from(self.size.w).ok()?;
         if width == 0 || index >= self.cells.len() {
-            return;
+            return None;
         }
         let row_start = index / width * width;
         let row_end = row_start.saturating_add(width).min(self.cells.len());
-        let x = index - row_start;
-        let range = grapheme_range(&self.cells[row_start..row_end], x, 1);
-        if let Some((start, end)) = range {
-            self.cells[row_start + start..row_start + end].fill(Cell::new(NULL, style));
+        let (start, end) = grapheme_range(&self.cells[row_start..row_end], index - row_start, 1)?;
+        Some(row_start + start..row_start + end)
+    }
+
+    /// Clear the complete grapheme occupying one cell index.
+    fn clear_grapheme_at(&mut self, index: usize, style: ResolvedStyle) {
+        if let Some(range) = self.grapheme_span(index) {
+            self.cells[range].fill(Cell::new(NULL, style));
         }
     }
 
@@ -338,15 +340,10 @@ impl TermBuf {
         let Some(idx) = self.idx(location) else {
             return;
         };
-        let width = self.size.w as usize;
-        let row_start = idx / width * width;
-        let row_end = row_start.saturating_add(width).min(self.cells.len());
-        let Some((start, end)) =
-            grapheme_range(&self.cells[row_start..row_end], idx - row_start, 1)
-        else {
+        let Some(range) = self.grapheme_span(idx) else {
             return;
         };
-        for cell in &mut self.cells[row_start + start..row_start + end] {
+        for cell in &mut self.cells[range] {
             cell.style = style;
         }
     }
@@ -359,17 +356,10 @@ impl TermBuf {
         if self.cells[idx].is_empty() {
             self.cells[idx] = Cell::new(' ', self.cells[idx].style);
         }
-        let Ok(width) = usize::try_from(self.size.w) else {
+        let Some(range) = self.grapheme_span(idx) else {
             return;
         };
-        let row_start = idx / width * width;
-        let row_end = row_start.saturating_add(width).min(self.cells.len());
-        let Some((start, end)) =
-            grapheme_range(&self.cells[row_start..row_end], idx - row_start, 1)
-        else {
-            return;
-        };
-        for cell in &mut self.cells[row_start + start..row_start + end] {
+        for cell in &mut self.cells[range] {
             match shape {
                 cursor::CursorShape::Underscore => {
                     cell.style.attrs = cell.style.attrs.with(Attr::Underline);

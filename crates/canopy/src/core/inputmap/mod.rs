@@ -650,20 +650,18 @@ impl InputMap {
     }
 
     /// Set the active input mode.
-    pub fn set_mode(&mut self, mode: &str) -> Result<()> {
+    pub fn set_mode(&mut self, mode: &str) {
         self.mode_stack.clear();
         if !mode.is_empty() {
             self.mode_stack.push(mode.to_string());
         }
-        Ok(())
     }
 
     /// Push a named input mode.
-    pub fn push_mode(&mut self, mode: &str) -> Result<()> {
+    pub fn push_mode(&mut self, mode: &str) {
         if !mode.is_empty() {
             self.mode_stack.push(mode.to_string());
         }
-        Ok(())
     }
 
     /// Pop the newest input mode and return the active mode.

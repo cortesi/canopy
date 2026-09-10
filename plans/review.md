@@ -155,15 +155,15 @@ Scripting and commands:
 
 Rendering, terminal buffer, input, layout:
 
-- [ ] C46: Infallible `Result` on input mode setters
-- [ ] C47: `TermBuf` computes the row-local grapheme span three times
-- [ ] C48: Unused `io::Write` supertrait on `TerminalOperations`
-- [ ] C49: Zero-consumer event surface
-- [ ] C50: `Constraint::max_bound` has zero consumers
-- [ ] C51: `Render::resolve_style_name_at` has one consumer
-- [ ] C52: Two replay models in termbuf tests
-- [ ] C53: `TestRender::render(&mut Canopy)` inverts the receiver
-- [ ] C54: Crossterm shift parameter names and coordinate casts
+- [x] C46: Infallible `Result` on input mode setters
+- [x] C47: `TermBuf` computes the row-local grapheme span three times
+- [x] C48: Unused `io::Write` supertrait on `TerminalOperations`
+- [x] C49: Zero-consumer event surface
+- [x] C50: `Constraint::max_bound` has zero consumers
+- [x] C51: `Render::resolve_style_name_at` has one consumer
+- [x] C52: Two replay models in termbuf tests
+- [x] C53: `TestRender::render(&mut Canopy)` inverts the receiver
+- [x] C54: Crossterm shift parameter names and coordinate casts
 
 Core support files:
 

@@ -145,7 +145,7 @@ impl Widget for FontBanner {
                     continue;
                 }
                 let point = Point { x, y };
-                let resolved = rndr.resolve_style_name_at(style, bounds, point);
+                let resolved = rndr.resolve_style(style).resolve_at(bounds, point);
                 let blended = blend_style(resolved, cell.fg_coverage, cell.bg_coverage);
                 rndr.put_cell(blended, point, cell.ch)?;
             }
