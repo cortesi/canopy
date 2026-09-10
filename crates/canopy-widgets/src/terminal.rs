@@ -1,9 +1,4 @@
-use std::{
-    path::PathBuf,
-    result::Result as StdResult,
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use canopy::{
     Context, EventOutcome, ViewContext, Widget, cursor, derive_commands,
@@ -19,7 +14,7 @@ use canopy::{
 };
 use itty_core::{
     SelectionSnapshot, SelectionSpec, Session,
-    clipboard::ClipboardHandler,
+    clipboard::{ClipboardHandler, SystemClipboard},
     config::{EguiTTYConfig, EguiTTYConfigBuilder, Hex, PaletteConfig, PaletteKind, PaletteMeta},
     driver::{self, DriverHandle, DriverHost},
     inspect::{StyledRunPublic, TerminalState},
@@ -39,34 +34,6 @@ const DEFAULT_SCROLLBACK: usize = 10_000;
 const POLL_INTERVAL_MS: u64 = 16;
 /// Maximum delay between clicks to count as a multi-click selection.
 const DOUBLE_CLICK_MS: u64 = 400;
-
-/// Shared clipboard shim that `itty` requires.
-struct SharedClipboard {
-    /// Stored clipboard contents.
-    text: Mutex<String>,
-}
-
-impl SharedClipboard {
-    /// Construct an empty clipboard bridge.
-    fn new() -> Arc<Self> {
-        Arc::new(Self {
-            text: Mutex::new(String::new()),
-        })
-    }
-}
-
-impl ClipboardHandler for SharedClipboard {
-    fn set_text(&self, text: &str) -> StdResult<(), String> {
-        let mut guard = self.text.lock().map_err(|error| error.to_string())?;
-        *guard = text.to_string();
-        Ok(())
-    }
-
-    fn get_text(&self) -> StdResult<String, String> {
-        let guard = self.text.lock().map_err(|error| error.to_string())?;
-        Ok(guard.clone())
-    }
-}
 
 /// Runtime and handles required to drive an attached terminal session.
 struct DriverRuntime {
@@ -168,8 +135,6 @@ pub struct TerminalConfig {
     command: Option<Vec<String>>,
     /// Working directory for the terminal process.
     cwd: Option<PathBuf>,
-    /// Optional callback invoked when the child process exits.
-    on_exit: Option<Arc<dyn Fn(i32) + Send + Sync>>,
 }
 
 impl TerminalConfig {
@@ -193,15 +158,6 @@ impl TerminalConfig {
         self.cwd = Some(cwd.into());
         self
     }
-
-    /// Configure the child exit callback.
-    pub fn with_on_exit<F>(mut self, on_exit: F) -> Self
-    where
-        F: Fn(i32) + Send + Sync + 'static,
-    {
-        self.on_exit = Some(Arc::new(on_exit));
-        self
-    }
 }
 
 /// Terminal widget backed by `itty`.
@@ -222,8 +178,6 @@ pub struct Terminal {
     selection_anchor: Option<geom::Point>,
     /// Multi-click tracking state.
     last_click: ClickTracker,
-    /// Whether the child exit callback has been invoked.
-    exit_notified: bool,
 }
 
 #[derive_commands]
@@ -242,7 +196,6 @@ impl Terminal {
             selection_active: false,
             selection_anchor: None,
             last_click: ClickTracker::new(Duration::from_millis(DOUBLE_CLICK_MS)),
-            exit_notified: false,
         }
     }
 
@@ -261,10 +214,9 @@ impl Terminal {
         let cfg = terminal_config(&self.config, self.last_size);
         let mut session =
             Session::from_config(&cfg).map_err(|error| Error::Internal(error.to_string()))?;
-        session.set_clipboard_handler(SharedClipboard::new());
+        session.set_clipboard_handler(Arc::new(SystemClipboard));
         let driver = DriverRuntime::attach(&mut session)?;
 
-        self.exit_notified = false;
         self.session = Some(session);
         self.driver = Some(driver);
         Ok(())
@@ -470,7 +422,10 @@ impl Terminal {
 
     /// Swallow Ctrl+Shift+C so the chord does not reach the PTY.
     fn copy_selection(&self) {
-        let _ = self.session().and_then(Session::copy_selection);
+        let Some(text) = self.session().and_then(Session::copy_selection) else {
+            return;
+        };
+        drop(SystemClipboard.set_text(&text));
     }
 
     /// Send pasted content to the PTY.
@@ -516,22 +471,6 @@ impl Terminal {
             return true;
         }
         false
-    }
-
-    /// Sync exit bookkeeping and invoke the configured callback exactly once.
-    fn sync_exit_status(&mut self) {
-        let Some(session) = self.session() else {
-            return;
-        };
-        if !session.child_exited() || self.exit_notified {
-            return;
-        }
-
-        let code = session.child_exit_code().unwrap_or(1);
-        self.exit_notified = true;
-        if let Some(callback) = &self.config.on_exit {
-            callback(code);
-        }
     }
 
     /// Return the focus report the terminal expects, if it enabled focus
@@ -712,7 +651,6 @@ impl Widget for Terminal {
 
     fn poll(&mut self, _ctx: &mut dyn Context) -> Option<Duration> {
         self.poll_driver();
-        self.sync_exit_status();
         Some(Duration::from_millis(POLL_INTERVAL_MS))
     }
 
@@ -1015,7 +953,6 @@ mod tests {
     fn wait_for_driver_signal<T>(terminal: &mut Terminal, rx: &mpsc::Receiver<T>) -> Option<T> {
         loop {
             terminal.poll_driver();
-            terminal.sync_exit_status();
             match rx.try_recv() {
                 Ok(value) => return Some(value),
                 Err(TryRecvError::Empty) => thread::yield_now(),
@@ -1362,10 +1299,7 @@ mod tests {
     #[test]
     #[ignore = "owner: terminal; run cargo test -p canopy-widgets itty_script_can_drive_attached_handle -- --ignored"]
     fn itty_script_can_drive_attached_handle() {
-        let (exit_tx, exit_rx) = mpsc::channel();
-        let mut terminal = Terminal::new(TerminalConfig::new().with_on_exit(move |_| {
-            exit_tx.send(()).expect("exit receiver alive");
-        }));
+        let mut terminal = Terminal::new(TerminalConfig::new());
         terminal
             .mount_session()
             .expect("mount itty-backed terminal");
@@ -1407,11 +1341,10 @@ mod tests {
             .expect("session")
             .send_input_bytes(b"exit\r".to_vec(), "test")
             .expect("send exit");
-        wait_for_driver_signal(&mut terminal, &exit_rx).expect("exit callback signals");
-        assert!(
-            terminal.session().is_some_and(Session::child_exited),
-            "attached shell did not exit in time"
-        );
+        while !terminal.session().is_some_and(Session::child_exited) {
+            terminal.poll_driver();
+            thread::yield_now();
+        }
     }
 
     #[test]

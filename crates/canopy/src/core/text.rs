@@ -95,7 +95,6 @@ pub fn tab_width(column: usize, tab_stop: usize) -> usize {
 }
 
 /// Return the display width of a string in terminal cells.
-#[cfg(test)]
 pub fn display_width(s: &str) -> usize {
     s.graphemes(true).map(grapheme_width).sum()
 }

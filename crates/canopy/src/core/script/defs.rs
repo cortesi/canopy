@@ -137,10 +137,10 @@ pub(super) fn register_framework_declarations(builder: &mut module::Builder) {
         declaration::Type::table([
             declaration::Field::new(
                 "kind",
-                declaration::Type::literals(["anchor", "exact", "from", "focus"]),
+                declaration::Type::literals(["exact", "from", "focus"]),
             ),
             declaration::Field::new("node", declaration::Type::named("NodeId").optional())
-                .doc("Required for exact and from; omitted for anchor and focus."),
+                .doc("Required for exact and from; omitted for focus."),
         ]),
     ));
     builder.alias(declaration::Alias::new(
@@ -525,8 +525,6 @@ fn node_info_fields(
             .doc("True when this node lies on the path to the focused node."),
         declaration::Field::new("hidden", declaration::Type::Boolean)
             .doc("True when the node's hidden flag is set."),
-        declaration::Field::new("visible", declaration::Type::Boolean)
-            .doc("True when the node is visible."),
         declaration::Field::new("children", children).doc(children_doc),
         declaration::Field::new("rect", declaration::Type::named("Rect").optional())
             .doc("Outer rectangle on screen, or nil for zero-sized nodes."),

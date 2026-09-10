@@ -251,7 +251,13 @@ where
 /// Translate one terminal stream item or report reader termination.
 fn terminal_event(event: Option<io::Result<cevent::Event>>) -> Result<Option<Event>> {
     match event {
-        Some(Ok(cevent::Event::Key(event))) if event.kind == cevent::KeyEventKind::Release => {
+        Some(Ok(cevent::Event::Key(event)))
+            if event.kind == cevent::KeyEventKind::Release
+                || matches!(
+                    event.code,
+                    cevent::KeyCode::Media(_) | cevent::KeyCode::Modifier(_)
+                ) =>
+        {
             Ok(None)
         }
         Some(Ok(event)) => Ok(Some(translate_event(event))),
@@ -759,37 +765,9 @@ fn translate_event(e: cevent::Event) -> Event {
                 cevent::KeyCode::Pause => key::KeyCode::Pause,
                 cevent::KeyCode::Menu => key::KeyCode::Menu,
                 cevent::KeyCode::KeypadBegin => key::KeyCode::KeypadBegin,
-                cevent::KeyCode::Media(k) => key::KeyCode::Media(match k {
-                    cevent::MediaKeyCode::Play => key::MediaKeyCode::Play,
-                    cevent::MediaKeyCode::Pause => key::MediaKeyCode::Pause,
-                    cevent::MediaKeyCode::PlayPause => key::MediaKeyCode::PlayPause,
-                    cevent::MediaKeyCode::Reverse => key::MediaKeyCode::Reverse,
-                    cevent::MediaKeyCode::Stop => key::MediaKeyCode::Stop,
-                    cevent::MediaKeyCode::FastForward => key::MediaKeyCode::FastForward,
-                    cevent::MediaKeyCode::Rewind => key::MediaKeyCode::Rewind,
-                    cevent::MediaKeyCode::TrackNext => key::MediaKeyCode::TrackNext,
-                    cevent::MediaKeyCode::TrackPrevious => key::MediaKeyCode::TrackPrevious,
-                    cevent::MediaKeyCode::Record => key::MediaKeyCode::Record,
-                    cevent::MediaKeyCode::LowerVolume => key::MediaKeyCode::LowerVolume,
-                    cevent::MediaKeyCode::RaiseVolume => key::MediaKeyCode::RaiseVolume,
-                    cevent::MediaKeyCode::MuteVolume => key::MediaKeyCode::MuteVolume,
-                }),
-                cevent::KeyCode::Modifier(m) => key::KeyCode::Modifier(match m {
-                    cevent::ModifierKeyCode::LeftShift => key::ModifierKeyCode::LeftShift,
-                    cevent::ModifierKeyCode::LeftControl => key::ModifierKeyCode::LeftControl,
-                    cevent::ModifierKeyCode::LeftAlt => key::ModifierKeyCode::LeftAlt,
-                    cevent::ModifierKeyCode::LeftSuper => key::ModifierKeyCode::LeftSuper,
-                    cevent::ModifierKeyCode::LeftHyper => key::ModifierKeyCode::LeftHyper,
-                    cevent::ModifierKeyCode::LeftMeta => key::ModifierKeyCode::LeftMeta,
-                    cevent::ModifierKeyCode::RightShift => key::ModifierKeyCode::RightShift,
-                    cevent::ModifierKeyCode::RightControl => key::ModifierKeyCode::RightControl,
-                    cevent::ModifierKeyCode::RightAlt => key::ModifierKeyCode::RightAlt,
-                    cevent::ModifierKeyCode::RightSuper => key::ModifierKeyCode::RightSuper,
-                    cevent::ModifierKeyCode::RightHyper => key::ModifierKeyCode::RightHyper,
-                    cevent::ModifierKeyCode::RightMeta => key::ModifierKeyCode::RightMeta,
-                    cevent::ModifierKeyCode::IsoLevel3Shift => key::ModifierKeyCode::IsoLevel3Shift,
-                    cevent::ModifierKeyCode::IsoLevel5Shift => key::ModifierKeyCode::IsoLevel5Shift,
-                }),
+                cevent::KeyCode::Media(_) | cevent::KeyCode::Modifier(_) => {
+                    unreachable!("media and modifier keys are filtered before translation")
+                }
             },
         }),
         cevent::Event::Mouse(m) => {

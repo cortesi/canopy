@@ -397,7 +397,7 @@ impl Widget for FontLabel {
         if view_rect.w == 0 || view_rect.h == 0 {
             return Ok(());
         }
-        let full_width = text::slice_by_columns(&self.text, 0, usize::MAX).1 as u32;
+        let full_width = text::display_width(&self.text) as u32;
         let available = view_rect.w.max(1);
         let offset = if full_width >= available {
             0
@@ -414,7 +414,7 @@ impl Widget for FontLabel {
     }
 
     fn measure(&self, c: MeasureConstraints) -> Measurement {
-        let width = text::slice_by_columns(&self.text, 0, usize::MAX).1.max(1) as u32;
+        let width = text::display_width(&self.text).max(1) as u32;
         c.clamp(Size::new(width, 1))
     }
 
@@ -685,7 +685,7 @@ impl Widget for FontGymInput {
     }
 
     fn measure(&self, c: MeasureConstraints) -> Measurement {
-        let width = text::slice_by_columns(&self.text, 0, usize::MAX).1.max(1) as u32;
+        let width = text::display_width(&self.text).max(1) as u32;
         c.clamp(Size::new(width, 1))
     }
 

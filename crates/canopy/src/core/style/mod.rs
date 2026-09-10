@@ -14,7 +14,7 @@ pub mod solarized;
 use std::collections::HashMap;
 
 pub use color::{Color, hex_byte};
-pub use palette::{Palette, theme};
+pub(crate) use palette::{Palette, theme};
 
 use crate::geom;
 

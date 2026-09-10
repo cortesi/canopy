@@ -9,7 +9,6 @@ use canopy::{
     state::NodeName,
     text,
 };
-use unicode_width::UnicodeWidthStr;
 
 use crate::Selectable;
 
@@ -139,7 +138,7 @@ impl Text {
     fn raw_width(&self) -> u32 {
         text::expand_tabs(&self.raw, self.tab_stop)
             .lines()
-            .map(UnicodeWidthStr::width)
+            .map(text::display_width)
             .max()
             .unwrap_or(0) as u32
     }
@@ -162,7 +161,7 @@ impl Text {
                 .collect::<Vec<_>>();
             let max_width = lines
                 .iter()
-                .map(|line| UnicodeWidthStr::width(line.as_str()))
+                .map(|line| text::display_width(line))
                 .max()
                 .unwrap_or(0) as u32;
             *cache = Some(WrapCache {

@@ -277,10 +277,25 @@ Supporting crates, examples, tooling:
 - [ ] C105: recalibrate `docs/api-budget.md`
 - [ ] C109, C110 second line, C33 as decided
 - [ ] C112, C113, C114, C115, C116 second part as decided
+  - [x] C112: colourless `Ctrl+C` tree dump; drop `termcolor`
+  - [x] C114: palette items crate-private
+    - Note: `Palette`/`theme` stay `pub` inside the private `palette` module and
+      are re-exported with `pub(crate) use`, which keeps them crate-only while
+      avoiding the `redundant_pub_crate` lint.
+  - [x] C115: `WidgetSlotGuard::drop` invariant asserts
+  - [x] C116 first part: public `display_width`; fontgym and `Text` widths
 - [ ] C20 (a) or (b), then C125 to C136 as decided
 - [ ] C126 and C127 taken together
 - [ ] C138 visibility with C128
 - [ ] Remaining structural candidates C12 to C32 as each decision is made
+- [x] C17: drop `NodeInfo.visible`
+- [x] C18: drop `kind = "anchor"` command targets
+- [x] C19: remove unbindable media and modifier key codes
+- [x] C23: remove `TerminalConfig::with_on_exit`
+- [x] C24: install `SystemClipboard`; write `copy_selection` through it
+  - Note: itty's `Session::copy_selection` returns text without writing it, so
+    the widget writes the selection through `SystemClipboard` directly.
+- [x] C25: trim the `image` feature list to jpeg, png, gif, webp
 - [ ] C16 and C20 cross-repo changes coordinated with `ruau` and `itty`
 
 ## Changes
@@ -1860,7 +1875,17 @@ starts after the decisions listed in C3, C9, C10, and C105 are made.
 - [ ] C109, C110 second line, C33 as decided.
 - [ ] C112, C114, C115, C116 second part as decided, and C113 if the shared seam
       is judged clearer.
+  - [x] C112: colourless `Ctrl+C` tree dump; drop `termcolor`.
+  - [x] C114: palette items crate-private (`pub(crate) use`).
+  - [x] C115: `WidgetSlotGuard::drop` invariant asserts.
+  - [x] C116 first part: public `display_width`; fontgym and `Text` widths.
 - [ ] C20 (a) or (b), then C125 to C136 as decided. Take C126 and C127
       together, and C138 visibility with C128.
 - [ ] Remaining structural candidates C12 to C32 as each decision is made. C16
       and C20 need coordinated changes in `ruau` and `itty`.
+  - [x] C17: drop `NodeInfo.visible`.
+  - [x] C18: drop `kind = "anchor"` command targets.
+  - [x] C19: remove unbindable media and modifier key codes.
+  - [x] C23: remove `TerminalConfig::with_on_exit`.
+  - [x] C24: install `SystemClipboard`; write `copy_selection` through it.
+  - [x] C25: trim the `image` feature list to jpeg, png, gif, webp.

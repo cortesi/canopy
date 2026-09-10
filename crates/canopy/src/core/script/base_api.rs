@@ -1006,7 +1006,6 @@ fn parse_command_target<'s>(
         return Err(RuntimeError::runtime("unknown command target field"));
     }
     match (kind.as_str(), node) {
-        ("anchor", None) => Ok(commands::CommandTarget::From(anchor)),
         ("focus", None) => Ok(commands::CommandTarget::Focus),
         ("exact" | "from", Some(ArgValue::Node(node))) => {
             with_current_canopy(scope, |canopy, _| validate_node_handle(&canopy.core, node))?;
@@ -1017,7 +1016,7 @@ fn parse_command_target<'s>(
             })
         }
         _ => Err(RuntimeError::runtime(
-            "target requires kind 'anchor' or 'focus', or kind 'exact' or 'from' with a node",
+            "target requires kind 'focus', or kind 'exact' or 'from' with a node",
         )),
     }
 }

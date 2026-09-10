@@ -111,10 +111,18 @@ impl WidgetSlotGuard {
 
 impl Drop for WidgetSlotGuard {
     fn drop(&mut self) {
-        if let Ok(mut slot) = self.slot.try_borrow_mut()
-            && slot.is_none()
-        {
-            *slot = self.widget.take();
+        match self.slot.try_borrow_mut() {
+            Ok(mut slot) if slot.is_none() => {
+                *slot = self.widget.take();
+            }
+            Ok(_) => {
+                debug_assert!(false, "widget slot was not empty during slot guard drop");
+                tracing::error!("widget slot was not empty during slot guard drop");
+            }
+            Err(_) => {
+                debug_assert!(false, "widget slot was borrowed during slot guard drop");
+                tracing::error!("widget slot was borrowed during slot guard drop");
+            }
         }
     }
 }

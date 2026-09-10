@@ -90,8 +90,8 @@ canopy.call_named("app::configure", { options = { options = "dark" } }, {
 })
 ```
 
-Target tables accept `{ kind = "anchor" }`, `{ kind = "exact", node = id }`,
-`{ kind = "from", node = id }`, or `{ kind = "focus" }`. Omission also uses the
+Target tables accept `{ kind = "exact", node = id }`,
+`{ kind = "from", node = id }`, or `{ kind = "focus" }`. Omission uses the
 current script anchor.
 `canopy.commands(target?)` uses the same target policies. Exact dispatch
 rejects stale nodes, wrong owners, and free commands. It never searches for a
@@ -351,8 +351,8 @@ about occlusion. Widget semantics expose only declared roles, labels, selection,
 action status, and explicitly enabled values. Sensitive input values are omitted.
 
 Legacy `screen`, `screen_cells`, and `screen_text` queries still prepare pending
-changes. Legacy `node_info.visible` describes the node's own hidden flag; use a
-snapshot for attachment, ancestor visibility, and clipping decisions.
+changes. Use a snapshot for attachment, ancestor visibility, and clipping
+decisions.
 
 The generated API is test-covered by an exact golden tail that includes command
 enums, optional named arguments, fixtures, and default bindings.

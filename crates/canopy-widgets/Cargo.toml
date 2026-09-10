@@ -23,20 +23,9 @@ textwrap.workspace = true
 unicode-width.workspace = true
 unicode-segmentation.workspace = true
 image = { version = "0.25.10", optional = true, default-features = false, features = [
-    "rayon",
-    "bmp",
-    "dds",
-    "exr",
-    "ff",
     "gif",
-    "hdr",
-    "ico",
     "jpeg",
     "png",
-    "pnm",
-    "qoi",
-    "tga",
-    "tiff",
     "webp",
 ] }
 ropey = "1.6.1"

@@ -183,7 +183,6 @@ pub(super) fn node_info_to_arg(
             ArgValue::Bool(root_ctx.is_on_focus_path_of(node_id)),
         ),
         ("hidden".to_string(), ArgValue::Bool(node.hidden)),
-        ("visible".to_string(), ArgValue::Bool(!node.hidden)),
         (
             "children".to_string(),
             node_list_to_arg(node.children.iter().copied()),
