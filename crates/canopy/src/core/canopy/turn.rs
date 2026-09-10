@@ -479,24 +479,16 @@ impl Canopy {
             let (logs, assertions) = active.invocation.take_diagnostics();
             self.script_host
                 .set_diagnostics(logs.clone(), assertions.clone());
-            let id = self.script_journal_next_id;
-            self.script_journal_next_id += 1;
-            self.script_journal.push(super::ScriptJournalEntry {
-                id,
-                origin: super::ScriptOrigin::Eval,
-                source: active.request.source,
-                ok: result.is_ok(),
-                error: result.as_ref().err().map(ToString::to_string),
-                logs: logs.clone(),
-                assertions: assertions.clone(),
-                duration_ms: u64::try_from(
-                    self.now()
-                        .saturating_duration_since(active.started)
-                        .as_millis(),
-                )
-                .unwrap_or(u64::MAX),
-            });
-            self.enforce_script_journal_limit();
+            self.record_script_journal(
+                super::ScriptOrigin::Eval,
+                &active.request.source,
+                super::ScriptJournalBaseline {
+                    started: active.started,
+                    logs: 0,
+                    assertions: 0,
+                },
+                &result,
+            );
             let completion = EvalOutcome {
                 id: active.id,
                 result: Arc::new(result),
@@ -552,7 +544,7 @@ impl super::AutomationHandle {
 impl Canopy {
     /// Drive the shared runtime until one synchronous headless evaluation
     /// completes.
-    pub(super) fn eval_headless(&mut self, request: EvalRequest) -> Result<EvalOutcome> {
+    pub fn eval(&mut self, request: EvalRequest) -> Result<EvalOutcome> {
         if self.driver.in_turn || self.driver.active.is_some() || script::in_live_scope(self) {
             return Err(busy());
         }

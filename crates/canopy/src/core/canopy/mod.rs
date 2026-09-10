@@ -530,11 +530,6 @@ impl Canopy {
         outcome.into_result()
     }
 
-    /// Evaluate a configured request and return its value and diagnostics.
-    pub fn eval(&mut self, request: EvalRequest) -> Result<EvalOutcome> {
-        self.eval_headless(request)
-    }
-
     /// Finalize the script API surface if an evaluation needs it.
     fn ensure_finalized(&mut self) -> Result<()> {
         if self.script_host.is_finalized() {
@@ -1290,7 +1285,7 @@ impl Canopy {
             (0, 0)
         };
         ScriptJournalBaseline {
-            started: Instant::now(),
+            started: self.now(),
             logs,
             assertions,
         }
@@ -1304,7 +1299,12 @@ impl Canopy {
         baseline: ScriptJournalBaseline,
         result: &Result<T>,
     ) {
-        let duration_ms = u64::try_from(baseline.started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        let duration_ms = u64::try_from(
+            self.now()
+                .saturating_duration_since(baseline.started)
+                .as_millis(),
+        )
+        .unwrap_or(u64::MAX);
         let mut logs = self.script_host.logs();
         let logs = logs.split_off(baseline.logs.min(logs.len()));
         let mut assertions = self.script_host.assertions();
@@ -1340,13 +1340,9 @@ impl Canopy {
     /// Compile any registered default binding scripts after finalization.
     fn compile_registered_default_bindings(&mut self) -> Result<()> {
         let host = self.script_host.clone();
-        let mut owners = self.default_bindings.keys().cloned().collect::<Vec<_>>();
-        owners.sort();
-        for owner in owners {
-            let script = self
-                .default_bindings
-                .get_mut(&owner)
-                .ok_or_else(|| error::Error::Internal("default binding disappeared".into()))?;
+        let mut scripts = self.default_bindings.iter_mut().collect::<Vec<_>>();
+        scripts.sort_by_key(|(a, _)| a.as_str());
+        for (_, script) in scripts {
             if script.script_id.is_none() {
                 script.script_id = Some(host.compile(&script.source)?);
             }

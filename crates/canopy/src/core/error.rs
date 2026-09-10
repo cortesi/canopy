@@ -79,96 +79,79 @@ impl fmt::Display for NodeOperationKind {
     }
 }
 
-/// Stable category for a structured script or command failure.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum ScriptErrorKind {
-    /// Cooperative execution timeout.
-    Timeout,
-    /// Node lookup failed.
-    NodeNotFound,
-    /// A node exists but is detached.
-    NodeDetached,
-    /// A value or widget type did not match.
-    TypeMismatch,
-    /// A requested value was not found.
-    NotFound,
-    /// Invalid input or operation.
-    Invalid,
-    /// Operation requires an unwound widget callback boundary.
-    InvalidPhase,
-    /// Unclassified Canopy failure.
-    #[serde(rename = "canopy_error")]
-    Canopy,
-    /// Unknown command identifier.
-    UnknownCommand,
-    /// Conflicting command definition.
-    ConflictingCommand,
-    /// Invalid command definition.
-    InvalidCommand,
-    /// No command target was found.
-    NoTarget,
-    /// An exact node does not own the command.
-    WrongOwner,
-    /// The command is currently disabled.
-    #[serde(rename = "command_disabled")]
-    DisabledCommand,
-    /// A command node handle is stale.
-    #[serde(rename = "node_invalid")]
-    InvalidNode,
-    /// Positional argument count mismatch.
-    ArityMismatch,
-    /// Required named argument is missing.
-    #[serde(rename = "missing_named_arg")]
-    MissingNamedArgument,
-    /// An unknown named argument was supplied.
-    #[serde(rename = "unknown_named_arg")]
-    UnknownNamedArgument,
-    /// Argument conversion failed.
-    Conversion,
-    /// An injected value is missing.
-    MissingInjected,
-    /// The routed target has the wrong widget type.
-    TargetTypeMismatch,
-    /// Command implementation returned an error.
-    #[serde(rename = "command_exec")]
-    CommandExecution,
-    /// Another top-level script evaluation is active.
-    ScriptBusy,
-    /// Script evaluation was explicitly cancelled.
-    ScriptCancelled,
+/// Define the structured script error categories and their protocol labels.
+macro_rules! script_error_kinds {
+    ($( $(#[$meta:meta])* $variant:ident => $label:literal ),* $(,)?) => {
+        /// Stable category for a structured script or command failure.
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+        pub enum ScriptErrorKind {
+            $(
+                $(#[$meta])*
+                #[serde(rename = $label)]
+                $variant,
+            )*
+        }
+
+        impl ScriptErrorKind {
+            /// Return the stable protocol label for this category.
+            pub const fn as_str(self) -> &'static str {
+                match self {
+                    $( Self::$variant => $label, )*
+                }
+            }
+        }
+    };
 }
 
-impl ScriptErrorKind {
-    /// Return the stable protocol label for this category.
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Timeout => "timeout",
-            Self::NodeNotFound => "node_not_found",
-            Self::NodeDetached => "node_detached",
-            Self::TypeMismatch => "type_mismatch",
-            Self::NotFound => "not_found",
-            Self::Invalid => "invalid",
-            Self::InvalidPhase => "invalid_phase",
-            Self::Canopy => "canopy_error",
-            Self::UnknownCommand => "unknown_command",
-            Self::ConflictingCommand => "conflicting_command",
-            Self::InvalidCommand => "invalid_command",
-            Self::NoTarget => "no_target",
-            Self::WrongOwner => "wrong_owner",
-            Self::DisabledCommand => "command_disabled",
-            Self::InvalidNode => "node_invalid",
-            Self::ArityMismatch => "arity_mismatch",
-            Self::MissingNamedArgument => "missing_named_arg",
-            Self::UnknownNamedArgument => "unknown_named_arg",
-            Self::Conversion => "conversion",
-            Self::MissingInjected => "missing_injected",
-            Self::TargetTypeMismatch => "target_type_mismatch",
-            Self::CommandExecution => "command_exec",
-            Self::ScriptBusy => "script_busy",
-            Self::ScriptCancelled => "script_cancelled",
-        }
-    }
+script_error_kinds! {
+    /// Cooperative execution timeout.
+    Timeout => "timeout",
+    /// Node lookup failed.
+    NodeNotFound => "node_not_found",
+    /// A node exists but is detached.
+    NodeDetached => "node_detached",
+    /// A value or widget type did not match.
+    TypeMismatch => "type_mismatch",
+    /// A requested value was not found.
+    NotFound => "not_found",
+    /// Invalid input or operation.
+    Invalid => "invalid",
+    /// Operation requires an unwound widget callback boundary.
+    InvalidPhase => "invalid_phase",
+    /// Unclassified Canopy failure.
+    Canopy => "canopy_error",
+    /// Unknown command identifier.
+    UnknownCommand => "unknown_command",
+    /// Conflicting command definition.
+    ConflictingCommand => "conflicting_command",
+    /// Invalid command definition.
+    InvalidCommand => "invalid_command",
+    /// No command target was found.
+    NoTarget => "no_target",
+    /// An exact node does not own the command.
+    WrongOwner => "wrong_owner",
+    /// The command is currently disabled.
+    DisabledCommand => "command_disabled",
+    /// A command node handle is stale.
+    InvalidNode => "node_invalid",
+    /// Positional argument count mismatch.
+    ArityMismatch => "arity_mismatch",
+    /// Required named argument is missing.
+    MissingNamedArgument => "missing_named_arg",
+    /// An unknown named argument was supplied.
+    UnknownNamedArgument => "unknown_named_arg",
+    /// Argument conversion failed.
+    Conversion => "conversion",
+    /// An injected value is missing.
+    MissingInjected => "missing_injected",
+    /// The routed target has the wrong widget type.
+    TargetTypeMismatch => "target_type_mismatch",
+    /// Command implementation returned an error.
+    CommandExecution => "command_exec",
+    /// Another top-level script evaluation is active.
+    ScriptBusy => "script_busy",
+    /// Script evaluation was explicitly cancelled.
+    ScriptCancelled => "script_cancelled",
 }
 
 impl fmt::Display for ScriptErrorKind {

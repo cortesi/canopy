@@ -45,26 +45,6 @@ impl View {
         )?)
     }
 
-    /// Convert a scrolled content point to screen coordinates.
-    /// Returns a geometry error if the result is outside the signed range.
-    pub fn content_to_screen(&self, point: PointI32) -> Result<PointI32> {
-        Ok(PointI32::try_from_i64(
-            i64::from(point.x) + i64::from(self.content.tl.x) - i64::from(self.scroll.x),
-            i64::from(point.y) + i64::from(self.content.tl.y) - i64::from(self.scroll.y),
-        )?)
-    }
-
-    /// Convert an outer-local point to scrolled content coordinates.
-    /// Returns a geometry error if the result is outside the signed range.
-    pub fn outer_to_content(&self, point: PointI32) -> Result<PointI32> {
-        Ok(PointI32::try_from_i64(
-            i64::from(point.x) + i64::from(self.outer.tl.x) - i64::from(self.content.tl.x)
-                + i64::from(self.scroll.x),
-            i64::from(point.y) + i64::from(self.outer.tl.y) - i64::from(self.content.tl.y)
-                + i64::from(self.scroll.y),
-        )?)
-    }
-
     /// Size of the outer rect.
     pub fn outer_size(&self) -> Size {
         self.outer.size()
@@ -176,18 +156,9 @@ mod tests {
         );
         let content = view.viewport_to_content(viewport).unwrap();
         assert_eq!(content, PointI32 { x: 2, y: 4 });
-        assert_eq!(view.content_to_screen(content).unwrap(), screen);
-        assert_eq!(
-            view.outer_to_content(PointI32 { x: 3, y: 2 }).unwrap(),
-            content
-        );
         assert_eq!(
             view.screen_to_viewport(PointI32 { x: 9, y: 3 }).unwrap(),
             PointI32 { x: -2, y: -2 },
-        );
-        assert_eq!(
-            view.outer_to_content(PointI32 { x: 0, y: 0 }).unwrap(),
-            PointI32 { x: -1, y: 2 },
         );
     }
 
@@ -210,8 +181,6 @@ mod tests {
             Err(Error::Geometry(GeomError::CoordinateOutOfRange { .. })),
         ));
         assert!(view.viewport_to_content(PointI32::default()).is_err());
-        assert!(view.content_to_screen(PointI32::default()).is_err());
-        assert!(view.outer_to_content(PointI32::default()).is_err());
         assert!(
             view.viewport_to_outer(PointI32 { x: i32::MAX, y: 0 })
                 .is_err()

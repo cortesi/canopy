@@ -1716,7 +1716,7 @@ fn host_node_region<'s>(
     let mut args = HostArgCursor::new(scope, args);
     let node_id = read_node_id(scope, &mut args, "id")?;
     let text = with_current_canopy(scope, |canopy, _| {
-        canopy.refresh_snapshot()?;
+        canopy.flush()?;
         let view = canopy
             .core
             .nodes

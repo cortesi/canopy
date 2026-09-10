@@ -98,7 +98,7 @@ fn failed_flush_keeps_successful_baseline_for_retry() -> Result<()> {
     let mut backend = FlushFailure::default();
     canopy.render(&mut backend)?;
     paint(&mut canopy, 'b')?;
-    canopy.refresh_snapshot()?;
+    canopy.flush()?;
 
     backend.fail_flush = true;
     assert!(

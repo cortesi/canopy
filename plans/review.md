@@ -178,13 +178,13 @@ Core support files:
 
 Runtime facade:
 
-- [ ] C137: Journal recording duplicated with inconsistent clocks
-- [ ] C138: `refresh_snapshot` alias of `flush` removed (alias only)
-- [ ] C139: `ScriptErrorKind` labels live in two tables
-- [ ] C140: `Canopy::eval` is a one-line alias of `eval_headless`
-- [ ] C141: `View::content_to_screen` and `outer_to_content` zero consumers
-- [ ] C142: Impossible `Error::Internal` path in default binding compilation
-- [ ] C143: `BindingTarget` re-exported with no public-signature role
+- [x] C137: Journal recording duplicated with inconsistent clocks
+- [x] C138: `refresh_snapshot` alias of `flush` removed (alias only)
+- [x] C139: `ScriptErrorKind` labels live in two tables
+- [x] C140: `Canopy::eval` is a one-line alias of `eval_headless`
+- [x] C141: `View::content_to_screen` and `outer_to_content` zero consumers
+- [x] C142: Impossible `Error::Internal` path in default binding compilation
+- [x] C143: `BindingTarget` re-exported with no public-signature role
 - [ ] Refresh `api/canopy.rs` and `api/canopy-widgets.rs`
 
 ### Stage 2: Unattended cleanups in widgets, automation, examples, tooling

@@ -38,11 +38,6 @@ impl Canopy {
         Ok(true)
     }
 
-    /// Refresh observation data without advancing terminal output history.
-    pub(crate) fn refresh_snapshot(&mut self) -> Result<()> {
-        self.flush()
-    }
-
     /// Poll one node and schedule its next callback.
     pub(crate) fn poll_node(&mut self, node_id: NodeId) -> Result<()> {
         let entry = self

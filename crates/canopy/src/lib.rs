@@ -34,8 +34,8 @@ pub use core::testing;
 // Stable app-author surface.
 pub use core::{
     AutomationCallback, AutomationHandle, BindingId, BindingOptions, BindingOwner, BindingPhase,
-    BindingScope, BindingTarget, Canopy, CanopyBuilder, ChangeOutcome, ChangeSet, ChildBuilder,
-    ChildConfig, ChildSlot, Context, ContextExt, EvalId, EvalOutcome, EvalRequest, EvalTicket,
+    BindingScope, Canopy, CanopyBuilder, ChangeOutcome, ChangeSet, ChildBuilder, ChildConfig,
+    ChildSlot, Context, ContextExt, EvalId, EvalOutcome, EvalRequest, EvalTicket,
     ExclusiveFrameToken, Fixture, FixtureInfo, FocusDirection, FocusScope, FrameId, FrameSnapshot,
     FrameworkBindingGroup, InputSpec, InteractionToken, Invalidation, KeyedChildren, Loader,
     ModalBindings, ModalOptions, NodeId, NodeSnapshot, NodeWakeHandle, RoutePhase, RouteTraceEntry,

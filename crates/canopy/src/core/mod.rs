@@ -76,8 +76,8 @@ pub use context::{
 pub use fixture::{Fixture, FixtureInfo};
 pub use id::{NodeId, TypedId};
 pub use inputmap::{
-    BindingId, BindingOptions, BindingOwner, BindingPhase, BindingScope, BindingTarget,
-    ExclusiveFrameToken, FrameworkBindingGroup, InputSpec,
+    BindingId, BindingOptions, BindingOwner, BindingPhase, BindingScope, ExclusiveFrameToken,
+    FrameworkBindingGroup, InputSpec,
 };
 pub use node::SemanticIdentity;
 pub use snapshot::{FrameSnapshot, NodeSnapshot, WidgetSemantics};
