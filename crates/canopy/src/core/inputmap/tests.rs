@@ -234,7 +234,7 @@ fn framework_registration_is_idempotent_and_rejects_conflicts() -> Result<()> {
 }
 
 #[test]
-fn newest_exclusive_frame_blocks_all_application_tiers() -> Result<()> {
+fn modal_bindings_block_all_application_tiers() -> Result<()> {
     let mut map = InputMap::new();
     bind(&mut map, BindingScope::Default, 'j', "", "Application", 1)?;
     bind_framework(
@@ -254,8 +254,7 @@ fn newest_exclusive_frame_blocks_all_application_tiers() -> Result<()> {
         command("other::close"),
     )?;
 
-    let owner = testing_node_id();
-    let help = map.push_exclusive_bindings(HELP, owner)?;
+    map.set_modal_bindings(Some(ModalBindings::Framework(HELP)));
     assert_eq!(
         target(&map, "/root/help/binding_list", 'j'),
         Some(BindingTarget::Command(CommandAction {
@@ -264,11 +263,10 @@ fn newest_exclusive_frame_blocks_all_application_tiers() -> Result<()> {
         }))
     );
     assert_eq!(target(&map, "/root/help/binding_list", 'x'), None);
-    let other = map.push_exclusive_bindings(OTHER, owner)?;
+    map.set_modal_bindings(Some(ModalBindings::Framework(OTHER)));
     assert_eq!(target(&map, "/root/help/binding_list", 'j'), None);
-    map.pop_exclusive_bindings(help)?;
-    assert_eq!(map.active_exclusive_group(), Some(OTHER));
-    map.pop_exclusive_bindings(other)?;
+    map.set_modal_bindings(None);
+    assert_eq!(map.active_exclusive_group(), None);
     assert_eq!(
         target(&map, "/root/help/binding_list", 'j'),
         Some(BindingTarget::Script(script(1)))
@@ -297,7 +295,7 @@ fn application_mutation_cannot_remove_framework_records() -> Result<()> {
 }
 
 #[test]
-fn startup_restore_preserves_framework_records_and_frames() -> Result<()> {
+fn startup_restore_preserves_framework_records_and_modal_bindings() -> Result<()> {
     let mut map = InputMap::new();
     bind(&mut map, BindingScope::Default, 'a', "", "Before", 1)?;
     let snapshot = map.snapshot_application();
@@ -310,12 +308,11 @@ fn startup_restore_preserves_framework_records_and_frames() -> Result<()> {
         "Help down",
         command("binding_list::scroll_down"),
     )?;
-    let token = map.push_exclusive_bindings(HELP, testing_node_id())?;
+    map.set_modal_bindings(Some(ModalBindings::Framework(HELP)));
 
     map.restore_application(snapshot);
     assert_eq!(map.bindings().len(), 2);
     assert_eq!(map.active_exclusive_group(), Some(HELP));
-    map.pop_exclusive_bindings(token)?;
     Ok(())
 }
 
@@ -446,12 +443,12 @@ fn diagnostics_distinguish_scope_path_insertion_route_and_exclusive_causes() -> 
         "Help down",
         command("binding_list::scroll_down"),
     )?;
-    let token = map.push_exclusive_bindings(HELP, testing_node_id())?;
+    map.set_modal_bindings(Some(ModalBindings::Framework(HELP)));
     assert_eq!(
         map.diagnostic_state(global, &route),
         "blocked by exclusive group root.help"
     );
-    map.pop_exclusive_bindings(token)?;
+    map.set_modal_bindings(None);
     Ok(())
 }
 
@@ -617,7 +614,7 @@ fn framework_binding_options_preserve_explicit_phase() -> Result<()> {
         map.bind_framework(HELP, input, options.clone(), action.clone())?,
         id
     );
-    map.push_exclusive_bindings(HELP, testing_node_id())?;
+    map.set_modal_bindings(Some(ModalBindings::Framework(HELP)));
     let resolved = map
         .resolve_match(&Path::from("/root/help/list"), input)
         .unwrap();

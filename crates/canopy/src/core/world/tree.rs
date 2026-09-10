@@ -59,8 +59,6 @@ impl TreeEditJournal {
             before: TreeStateSnapshot::capture(core),
             mounted: Vec::new(),
             unmounted: HashSet::new(),
-            replaced_binding_owners: HashSet::new(),
-            exclusive_frames_before: core.input_map.exclusive_frame_tokens(),
         }
     }
 }
@@ -221,11 +219,6 @@ impl Core {
         }
         self.focus_hint = focus_hint;
         self.ensure_invariants(removed_focus_root)?;
-        self.tree_edit
-            .as_mut()
-            .expect("widget replacement must run inside a tree edit")
-            .replaced_binding_owners
-            .insert(node_id);
         Ok(())
     }
 
@@ -270,13 +263,9 @@ impl Core {
         self.invalidate(crate::Invalidation::Layout);
         if self.tree_edit.is_some() {
             let before = TreeStateSnapshot::capture(self);
-            let (mounted_len, unmounted_before, replaced_owners_before) = {
+            let (mounted_len, unmounted_before) = {
                 let journal = self.tree_edit.as_ref().expect("tree edit journal missing");
-                (
-                    journal.mounted.len(),
-                    journal.unmounted.clone(),
-                    journal.replaced_binding_owners.clone(),
-                )
+                (journal.mounted.len(), journal.unmounted.clone())
             };
             let result = f(self);
             return match result {
@@ -287,7 +276,6 @@ impl Core {
                         let mounted = journal.mounted.split_off(mounted_len);
                         let unmounted = journal.unmounted.clone();
                         journal.unmounted = unmounted_before;
-                        journal.replaced_binding_owners = replaced_owners_before;
                         (mounted, unmounted)
                     };
                     self.unwind_mounted_widgets(&mounted, &unmounted);
@@ -308,16 +296,6 @@ impl Core {
                 self.prune_semantic_keys();
                 self.refresh_attachment_generations();
                 self.sync_work_stamps()?;
-                let attached = self
-                    .nodes
-                    .keys()
-                    .filter(|node| self.is_attached_to_root(*node))
-                    .collect();
-                self.input_map.retain_exclusive_owners(&attached);
-                self.input_map.remove_replaced_exclusive_owners(
-                    &journal.replaced_binding_owners,
-                    &journal.exclusive_frames_before,
-                );
                 self.retire_invalid_interactions()?;
                 Ok(value)
             }

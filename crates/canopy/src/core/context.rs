@@ -9,7 +9,6 @@ use super::{
     commands,
     help::BindingSnapshot,
     id::{NodeId, TypedId},
-    inputmap::{ExclusiveFrameToken, FrameworkBindingGroup},
     style::effects::Effect,
     view::View,
     world::{Core, WidgetOperation, layout_driver::clamp_scroll},
@@ -626,15 +625,6 @@ pub trait Context: ViewContext + sealed::Context {
             "modal interaction is unavailable".into(),
         ))
     }
-
-    /// Push an exclusive framework binding frame owned by the current node.
-    fn push_exclusive_bindings(
-        &mut self,
-        group: FrameworkBindingGroup,
-    ) -> Result<ExclusiveFrameToken>;
-
-    /// Remove one exclusive binding frame.
-    fn pop_exclusive_bindings(&mut self, token: ExclusiveFrameToken) -> Result<()>;
 
     /// Scroll the view to the specified position.
     fn scroll_to(&mut self, x: u32, y: u32) -> ChangeOutcome;
@@ -1344,19 +1334,6 @@ impl Context for NodeCtx<&mut Core> {
 
     fn close_modal(&mut self, token: InteractionToken) -> Result<()> {
         self.core.close_modal(token)
-    }
-
-    fn push_exclusive_bindings(
-        &mut self,
-        group: FrameworkBindingGroup,
-    ) -> Result<ExclusiveFrameToken> {
-        self.core
-            .input_map
-            .push_exclusive_bindings(group, self.node_id)
-    }
-
-    fn pop_exclusive_bindings(&mut self, token: ExclusiveFrameToken) -> Result<()> {
-        self.core.input_map.pop_exclusive_bindings(token)
     }
 
     fn scroll_to(&mut self, x: u32, y: u32) -> ChangeOutcome {

@@ -526,7 +526,9 @@ fn framework_command_bindings_share_route_resolution_and_command_scope() -> Resu
             },
             R::call_c_root(),
         )?;
-        let token = c.core.input_map.push_exclusive_bindings(group, tree.root)?;
+        c.core
+            .input_map
+            .set_modal_bindings(Some(crate::ModalBindings::Framework(group)));
         c.core.set_focus(tree.a_a)?;
 
         let snapshot = c.available_bindings(None)?;
@@ -541,7 +543,7 @@ fn framework_command_bindings_share_route_resolution_and_command_scope() -> Resu
         assert!(c.route_trace().iter().any(|entry| {
             entry.phase == RoutePhase::BindingExecution && entry.detail == "Framework root command"
         }));
-        c.core.input_map.pop_exclusive_bindings(token)?;
+        c.core.input_map.set_modal_bindings(None);
         Ok(())
     })
 }

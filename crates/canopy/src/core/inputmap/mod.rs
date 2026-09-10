@@ -5,7 +5,6 @@ use std::{cmp::Ordering, collections::HashSet, fmt};
 use crate::{
     ModalBindings,
     commands::CommandAction,
-    core::NodeId,
     error::{Error, Result},
     event::{key::Key, mouse::Mouse},
     path::{Path, PathFilter, PathMatch},
@@ -50,18 +49,6 @@ impl FrameworkBindingGroup {
 impl fmt::Display for FrameworkBindingGroup {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(self.0)
-    }
-}
-
-/// Opaque token for one active exclusive binding frame.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct ExclusiveFrameToken(u64);
-
-impl ExclusiveFrameToken {
-    /// Construct a placeholder token for test contexts.
-    #[cfg(any(test, feature = "testing"))]
-    pub(crate) const fn for_test(id: u64) -> Self {
-        Self(id)
     }
 }
 
@@ -278,17 +265,6 @@ pub struct ApplicationBindingSnapshot {
     mode_stack: Vec<String>,
 }
 
-/// One active exclusive binding frame.
-#[derive(Clone, Copy, Debug)]
-struct ExclusiveFrame {
-    /// Unique token used for ordered removal.
-    token: ExclusiveFrameToken,
-    /// Framework group admitted by this frame.
-    group: FrameworkBindingGroup,
-    /// Node that owns the frame.
-    owner: NodeId,
-}
-
 /// Registry for application bindings, framework controls, and active modes.
 #[derive(Clone, Debug)]
 pub struct InputMap {
@@ -296,16 +272,12 @@ pub struct InputMap {
     records: Vec<BindingRecord>,
     /// Active application modes in push order.
     mode_stack: Vec<String>,
-    /// Active exclusive framework frames in push order.
-    exclusive_frames: Vec<ExclusiveFrame>,
-    /// Admission imposed by the active modal, overriding legacy frames.
+    /// Admission imposed by the active modal.
     modal_bindings: Option<ModalBindings>,
     /// Next binding identifier.
     next_id: u64,
     /// Next insertion-order identifier.
     next_insertion_id: u64,
-    /// Next exclusive-frame token.
-    next_token: u64,
 }
 
 impl Default for InputMap {
@@ -320,11 +292,9 @@ impl InputMap {
         Self {
             records: Vec::new(),
             mode_stack: Vec::new(),
-            exclusive_frames: Vec::new(),
             modal_bindings: None,
             next_id: 1,
             next_insertion_id: 1,
-            next_token: 1,
         }
     }
 
@@ -597,75 +567,17 @@ impl InputMap {
         }
     }
 
-    /// Push one exclusive frame for its owning node.
-    pub fn push_exclusive_bindings(
-        &mut self,
-        group: FrameworkBindingGroup,
-        owner: NodeId,
-    ) -> Result<ExclusiveFrameToken> {
-        let token = ExclusiveFrameToken(self.next_token);
-        self.next_token = self.next_token.checked_add(1).ok_or_else(|| {
-            Error::InvalidOperation("exclusive frame token space exhausted".to_string())
-        })?;
-        self.exclusive_frames.push(ExclusiveFrame {
-            token,
-            group,
-            owner,
-        });
-        Ok(token)
-    }
-
-    /// Remove one exclusive frame without disturbing newer frames.
-    pub fn pop_exclusive_bindings(&mut self, token: ExclusiveFrameToken) -> Result<()> {
-        let Some(index) = self
-            .exclusive_frames
-            .iter()
-            .position(|frame| frame.token == token)
-        else {
-            return Err(Error::InvalidOperation(
-                "exclusive binding frame token is not active".to_string(),
-            ));
-        };
-        self.exclusive_frames.remove(index);
-        Ok(())
-    }
-
     /// Apply or remove the admission owned by the top modal scope.
     pub(crate) fn set_modal_bindings(&mut self, bindings: Option<ModalBindings>) {
         self.modal_bindings = bindings;
     }
 
-    /// Return the newest active exclusive group.
+    /// Return the active exclusive group admitted by the top modal scope.
     pub fn active_exclusive_group(&self) -> Option<FrameworkBindingGroup> {
         match self.modal_bindings {
             Some(ModalBindings::Framework(group)) => Some(group),
-            Some(ModalBindings::Application) => None,
-            None => self.exclusive_frames.last().map(|frame| frame.group),
+            Some(ModalBindings::Application) | None => None,
         }
-    }
-
-    /// Remove frames whose owner is not attached to the active tree.
-    pub(crate) fn retain_exclusive_owners(&mut self, attached: &HashSet<NodeId>) {
-        self.exclusive_frames
-            .retain(|frame| attached.contains(&frame.owner));
-    }
-
-    /// Return active exclusive tokens for a tree-edit baseline.
-    pub(crate) fn exclusive_frame_tokens(&self) -> HashSet<ExclusiveFrameToken> {
-        self.exclusive_frames
-            .iter()
-            .map(|frame| frame.token)
-            .collect()
-    }
-
-    /// Remove pre-edit frames whose owning widget identity was replaced.
-    pub(crate) fn remove_replaced_exclusive_owners(
-        &mut self,
-        owners: &HashSet<NodeId>,
-        before: &HashSet<ExclusiveFrameToken>,
-    ) {
-        self.exclusive_frames
-            .retain(|frame| !before.contains(&frame.token) || !owners.contains(&frame.owner));
     }
 
     /// Set the active input mode.

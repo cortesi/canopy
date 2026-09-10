@@ -12,7 +12,7 @@ use super::{
     *,
 };
 use crate::{
-    Context, KeyedChildren, ViewContext,
+    Context, KeyedChildren, ModalBindings, ModalOptions, ViewContext,
     core::{
         context::{CoreContext, CoreViewContext},
         inputmap::FrameworkBindingGroup,
@@ -1429,58 +1429,87 @@ fn pre_remove_veto_leaves_subtree_mounted() -> Result<()> {
 }
 
 #[test]
-fn successful_detach_prunes_exclusive_frames_owned_by_the_subtree() -> Result<()> {
+fn successful_detach_prunes_modal_bindings_owned_by_the_subtree() -> Result<()> {
     let mut core = Core::new();
-    let owner = core.create_detached(simple_widget())?;
-    core.attach(core.root, owner)?;
+    let modal = core.create_detached(FocusableWidget)?;
+    core.attach(core.root, modal)?;
     let group = FrameworkBindingGroup::new("test.modal");
-    core.input_map.push_exclusive_bindings(group, owner)?;
+    core.open_modal(ModalOptions {
+        owner: core.root,
+        modal,
+        initial_focus: modal,
+        dim_target: None,
+        bindings: ModalBindings::Framework(group),
+    })?;
 
-    core.detach(owner)?;
+    core.detach(modal)?;
 
     assert_eq!(core.input_map.active_exclusive_group(), None);
     Ok(())
 }
 
 #[test]
-fn failed_removal_keeps_the_restored_owners_exclusive_frame() -> Result<()> {
+fn failed_removal_keeps_the_restored_owners_modal_bindings() -> Result<()> {
     let mut core = Core::new();
     let log = Arc::new(Mutex::new(Vec::new()));
-    let owner = core
-        .create_detached(FaultWidget::new("owner", log).with_pre_remove(PreRemoveAction::Fail))?;
-    core.attach(core.root, owner)?;
+    let modal = core.create_detached(FocusableWidget)?;
+    core.attach(core.root, modal)?;
+    let child = core.create_detached(
+        FaultWidget::new("child", log).with_pre_remove(PreRemoveAction::Fail),
+    )?;
+    core.set_children(modal, vec![child])?;
     let group = FrameworkBindingGroup::new("test.modal");
-    let token = core.input_map.push_exclusive_bindings(group, owner)?;
+    core.open_modal(ModalOptions {
+        owner: core.root,
+        modal,
+        initial_focus: modal,
+        dim_target: None,
+        bindings: ModalBindings::Framework(group),
+    })?;
 
-    assert!(core.remove_subtree(owner).is_err());
+    assert!(core.remove_subtree(modal).is_err());
 
     assert_eq!(core.input_map.active_exclusive_group(), Some(group));
-    core.input_map.pop_exclusive_bindings(token)?;
     Ok(())
 }
 
 #[test]
-fn successful_widget_replacement_retires_the_old_owners_frame() -> Result<()> {
+fn successful_widget_replacement_retires_the_old_owners_modal_bindings() -> Result<()> {
     let mut core = Core::new();
+    let modal = core.create_detached(FocusableWidget)?;
+    core.attach(core.root, modal)?;
     let group = FrameworkBindingGroup::new("test.modal");
-    core.input_map.push_exclusive_bindings(group, core.root)?;
+    core.open_modal(ModalOptions {
+        owner: core.root,
+        modal,
+        initial_focus: modal,
+        dim_target: None,
+        bindings: ModalBindings::Framework(group),
+    })?;
 
-    core.replace_subtree(core.root, FocusableWidget)?;
+    core.replace_subtree(modal, FocusableWidget)?;
 
     assert_eq!(core.input_map.active_exclusive_group(), None);
     Ok(())
 }
 
 #[test]
-fn failed_widget_replacement_keeps_the_old_owners_frame() -> Result<()> {
+fn failed_widget_replacement_keeps_the_old_owners_modal_bindings() -> Result<()> {
     let mut core = Core::new();
+    let modal = core.create_detached(FocusableWidget)?;
+    core.attach(core.root, modal)?;
     let group = FrameworkBindingGroup::new("test.modal");
-    let token = core.input_map.push_exclusive_bindings(group, core.root)?;
+    core.open_modal(ModalOptions {
+        owner: core.root,
+        modal,
+        initial_focus: modal,
+        dim_target: None,
+        bindings: ModalBindings::Framework(group),
+    })?;
 
-    assert!(core.replace_subtree(core.root, MountFailWidget).is_err());
+    assert!(core.replace_subtree(modal, MountFailWidget).is_err());
 
     assert_eq!(core.input_map.active_exclusive_group(), Some(group));
-    core.input_map.pop_exclusive_bindings(token)?;
     Ok(())
 }
 

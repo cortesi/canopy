@@ -368,7 +368,8 @@ mod tests {
                 target: None,
             },
         )?;
-        let token = core.input_map.push_exclusive_bindings(group, core.root)?;
+        core.input_map
+            .set_modal_bindings(Some(crate::ModalBindings::Framework(group)));
 
         let snapshot = core.available_bindings(Some(leaf))?;
 
@@ -380,7 +381,6 @@ mod tests {
                 .iter()
                 .any(|record| { matches!(record.target, BindingTarget::Command(_)) })
         );
-        core.input_map.pop_exclusive_bindings(token)?;
         Ok(())
     }
 }

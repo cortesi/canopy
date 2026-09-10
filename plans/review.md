@@ -253,7 +253,7 @@ Supporting crates, examples, tooling:
 
 ### Stage 3: Deslop batch items that need no decision
 
-- [ ] C1: delete the exclusive frame stack
+- [x] C1: delete the exclusive frame stack
 - [ ] C2: delete both `impl dyn` blocks
 - [ ] C3 unattended part: five zero-consumer methods, two test-only methods,
       three `View` aliases and 47 call sites
@@ -1827,7 +1827,7 @@ starts after the decisions listed in C3, C9, C10, and C105 are made.
 
 ### Stage 3: Deslop batch items that need no decision
 
-- [ ] C1: delete the exclusive frame stack. Migrate inputmap and world tests.
+- [x] C1: delete the exclusive frame stack. Migrate inputmap and world tests.
       rewrite the three `architecture.md` passages and the `root.rs` comment
       and test name.
 - [ ] C2: delete both `impl dyn` blocks. Add extension-trait imports where the

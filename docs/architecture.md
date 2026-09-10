@@ -112,7 +112,8 @@ per owner and stores no producer-result queue.
 Structural success commits lifetime expiration and cancels obsolete polling.
 Provisional registrations allow workers started by mount hooks to wake before
 commit. Rollback removes provisional registrations and preserves valid earlier
-wakes. Successful edits also drop exclusive binding frames with detached owners.
+wakes. Successful edits also retire modal scopes whose owner or modal widget is
+detached or replaced.
 
 ## Invariants
 
@@ -253,8 +254,8 @@ normalized input, owner, scope, path matcher, description, source, target, and
 insertion order. Application targets call Luau functions or dispatch stored
 commands. Framework targets dispatch commands.
 
-The resolver checks the newest exclusive framework frame first. Without an
-exclusive frame, it checks the global scope, active modes from newest to
+The resolver checks the framework binding group admitted by the top modal scope
+first. Without one, it checks the global scope, active modes from newest to
 oldest, and then the default scope. Path specificity and insertion order select
 a winner within one scope. An explicit binding phase chooses dispatch before
 widget input or after the widget ignores it. Omitted phases retain the
@@ -265,7 +266,7 @@ Key routing and `available_bindings` call the same resolver at each node in the
 focus-to-root route. Availability returns an owned snapshot with one effective
 winner per normalized key. It does not include mouse bindings. Diagnostic
 binding output uses the same registry and reports why records are active,
-shadowed, blocked by an exclusive frame, or unmatched.
+shadowed, blocked by the top modal's framework group, or unmatched.
 
 Mouse events go to the capture node when capture is active; otherwise hit-
 testing chooses the target.
@@ -273,11 +274,12 @@ testing chooses the target.
 Widget events bubble from target to root until a widget handles or consumes
 them. Command scopes expose the originating event and target.
 
-Root captures a help snapshot before it pushes the `root.help` exclusive
-framework frame. The frame admits only Root-owned help controls until the modal
-closes. Root then removes the exact frame token and restores the original focus
-when that node remains live. Removing or replacing a subtree also removes
-framework groups owned by that subtree.
+Root captures a help snapshot before it opens a modal with `ModalOptions` and
+`ModalBindings::Framework(HELP_BINDINGS)`. The scope admits only Root-owned help
+controls until the modal closes. Root then calls `close_modal` with the returned
+`InteractionToken` and restores the original focus when that node remains live.
+Removing or replacing a subtree retires modal scopes whose owner or modal widget
+no longer belongs to the tree.
 
 ## Focus and Mouse Capture
 

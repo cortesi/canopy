@@ -35,8 +35,8 @@ pub use core::testing;
 pub use core::{
     AutomationCallback, AutomationHandle, BindingId, BindingOptions, BindingOwner, BindingPhase,
     BindingScope, Canopy, CanopyBuilder, ChangeOutcome, ChangeSet, ChildBuilder, ChildConfig,
-    ChildSlot, Context, ContextExt, EvalId, EvalOutcome, EvalRequest, EvalTicket,
-    ExclusiveFrameToken, Fixture, FixtureInfo, FocusDirection, FocusScope, FrameId, FrameSnapshot,
+    ChildSlot, Context, ContextExt, EvalId, EvalOutcome, EvalRequest, EvalTicket, Fixture,
+    FixtureInfo, FocusDirection, FocusScope, FrameId, FrameSnapshot,
     FrameworkBindingGroup, InputSpec, InteractionToken, Invalidation, KeyedChildren, Loader,
     ModalBindings, ModalOptions, NodeId, NodeSnapshot, NodeWakeHandle, RoutePhase, RouteTraceEntry,
     ScriptJournalEntry, ScriptOrigin, ScriptTrust, SemanticIdentity, TurnOutcome, TypedId,

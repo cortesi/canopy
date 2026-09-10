@@ -11,7 +11,7 @@ use std::{
 
 use self::focus::FocusRecoveryHint;
 use super::{
-    inputmap::{ExclusiveFrameToken, InputMap},
+    inputmap::InputMap,
     wake::WakeRegistry,
     widget_access::{WidgetMutGuard, WidgetReadGuard, WidgetSlotGuard},
 };
@@ -105,10 +105,6 @@ struct TreeEditJournal {
     mounted: Vec<MountedWidget>,
     /// Mounted widgets already unmounted by a later nested edit.
     unmounted: HashSet<usize>,
-    /// Node owners whose widget identity was replaced during the edit.
-    replaced_binding_owners: HashSet<NodeId>,
-    /// Exclusive frames that existed before the outer edit.
-    exclusive_frames_before: HashSet<ExclusiveFrameToken>,
 }
 
 /// A successfully mounted widget retained for reverse-order cleanup.

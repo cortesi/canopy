@@ -337,7 +337,7 @@ impl Loader for Root {
     }
 }
 
-/// Register the Root-owned controls admitted by the help exclusive frame.
+/// Register the Root-owned controls admitted by the help modal.
 fn register_help_bindings(canopy: &mut Canopy) -> Result<()> {
     let bindings: [(&str, &str, CommandCall); 13] = [
         ("Up", "Scroll up", BindingList::call_scroll_up()),
@@ -812,7 +812,7 @@ mod tests {
     }
 
     #[test]
-    fn replacing_an_open_root_retires_its_exclusive_frame() -> Result<()> {
+    fn replacing_an_open_root_retires_its_modal_bindings() -> Result<()> {
         let (mut canopy, _backend, _left, _right) = setup_root_tree()?;
         install_help_trigger(&mut canopy)?;
         send_key(&mut canopy, "?")?;

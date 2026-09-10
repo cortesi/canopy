@@ -11,7 +11,6 @@ use crate::{
         context::sealed,
         help::BindingSnapshot,
         id::testing_node_id,
-        inputmap::{ExclusiveFrameToken, FrameworkBindingGroup},
         style::effects::Effect,
         view::View,
     },
@@ -193,17 +192,6 @@ impl Context for DummyContext {
             exclusive_group: None,
             bindings: Vec::new(),
         })
-    }
-
-    fn push_exclusive_bindings(
-        &mut self,
-        _group: FrameworkBindingGroup,
-    ) -> Result<ExclusiveFrameToken> {
-        Ok(ExclusiveFrameToken::for_test(0))
-    }
-
-    fn pop_exclusive_bindings(&mut self, _token: ExclusiveFrameToken) -> Result<()> {
-        Ok(())
     }
 
     fn scroll_to(&mut self, _x: u32, _y: u32) -> ChangeOutcome {
