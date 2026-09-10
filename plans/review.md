@@ -261,7 +261,7 @@ Supporting crates, examples, tooling:
     (listgym.rs, tests/listgym.rs); the report's zero-consumer claim was wrong,
     so they were kept. The three `View` aliases had no call sites.
 - [x] C4: synchronous session input; remove runtime and two production deps
-- [ ] C5: one `apply_edit`; single key destructure; undo-after-repeat assertion
+- [x] C5: one `apply_edit`; single key destructure; undo-after-repeat assertion
 - [x] C6: remove the two checkpoint fields; trim two doc sentences
 - [x] C7: label methods, shared eligibility and target declarations
 - [x] C8: `List<Text>` logs, list in `on_mount`, remove `View`, private module

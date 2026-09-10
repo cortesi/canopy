@@ -489,6 +489,8 @@ fn repeat_empty_open_below_enters_another_new_line() {
     harness.type_text("X").unwrap();
     harness.key(key::KeyCode::Esc).unwrap();
     assert_eq!(editor_text(&mut harness), "one\n\nX\ntwo");
+    harness.key('u').unwrap();
+    assert_eq!(editor_text(&mut harness), "one\n\ntwo");
 }
 
 #[test]
