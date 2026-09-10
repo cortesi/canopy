@@ -498,6 +498,11 @@ pub mod canopy {
             fn clone(&self) -> CommandDispatchKind {}
         }
 
+        impl CommandDispatchKind {
+            /// Return the owner name for node-routed commands.
+            pub fn owner(&self) -> Option<&'static str> {}
+        }
+
         impl Debug for CommandDispatchKind {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
         }
@@ -579,6 +584,11 @@ pub mod canopy {
 
         impl Clone for CommandRequirement {
             fn clone(&self) -> CommandRequirement {}
+        }
+
+        impl CommandRequirement {
+            /// Return the stable scripting label.
+            pub fn as_str(self) -> &'static str {}
         }
 
         impl Debug for CommandRequirement {
@@ -663,6 +673,11 @@ pub mod canopy {
 
         impl Clone for CommandStatus {
             fn clone(&self) -> CommandStatus {}
+        }
+
+        impl CommandStatus {
+            /// Return the stable scripting label.
+            pub fn label(&self) -> &'static str {}
         }
 
         impl Debug for CommandStatus {
@@ -2996,9 +3011,6 @@ pub mod canopy {
             /// Clear all effects on a node.
             fn clear_effects(&mut self, node: NodeId) -> Result<()>;
 
-            /// Clear parent constraints and restore the widget's base layout.
-            fn clear_layout_override_of(&mut self, node: NodeId) -> Result<()>;
-
             /// Remove the semantic identity of a live node.
             fn clear_semantic_key(&mut self, node: NodeId) -> Result<()>;
 
@@ -3039,9 +3051,8 @@ pub mod canopy {
             ///
             /// Rollback restores arena metadata, topology, child keys, layouts, views,
             /// lifecycle flags, root, focus, mouse capture, focus recovery hints, exit
-            /// requests, pending styles, command registry and scope, and diagnostic
-            /// requests. Each failed nested edit restores its own structural
-            /// checkpoint.
+            /// requests, pending styles, and diagnostic requests. Each failed nested
+            /// edit restores its own structural checkpoint.
             ///
             /// Widget slots are shared with the checkpoint: widget-owned mutations
             /// survive. Binding registration and external effects also survive and
@@ -3065,9 +3076,6 @@ pub mod canopy {
                 direction: FocusDirection,
             ) -> Result<ChangeOutcome>;
 
-            /// Record changes for the next runtime preparation.
-            fn invalidate(&mut self, _invalidation: crate::Invalidation) {}
-
             /// Mark this node dirty so the next frame re-runs layout.
             fn invalidate_layout(&mut self);
 
@@ -3080,18 +3088,9 @@ pub mod canopy {
             /// Scroll the view up by one page.
             fn page_up(&mut self) -> ChangeOutcome {}
 
-            /// Remove one exclusive binding frame.
-            fn pop_exclusive_bindings(&mut self, token: ExclusiveFrameToken) -> Result<()>;
-
             /// Add an effect to a node that will be applied during rendering.
             /// Effects stack and inherit through the tree.
             fn push_effect(&mut self, node: NodeId, effect: Effect) -> Result<()>;
-
-            /// Push an exclusive framework binding frame owned by the current node.
-            fn push_exclusive_bindings(
-                &mut self,
-                group: FrameworkBindingGroup,
-            ) -> Result<ExclusiveFrameToken>;
 
             /// Release mouse capture if held by the current node.
             fn release_mouse(&mut self) -> Result<ChangeOutcome>;
@@ -3109,9 +3108,6 @@ pub mod canopy {
 
             /// Request a diagnostic dump for a target node.
             fn request_diagnostic_dump(&mut self, target: NodeId);
-
-            /// Restore mouse capture to an attached node.
-            fn restore_mouse_capture(&mut self, node: NodeId) -> Result<ChangeOutcome>;
 
             /// Scroll the view by the given offsets.
             fn scroll_by(&mut self, x: i32, y: i32) -> ChangeOutcome;
@@ -3270,26 +3266,11 @@ pub mod canopy {
             /// Set the layout for a specific node.
             fn set_layout_of(&mut self, node: impl Into<NodeId>, layout: Layout) -> Result<()> {}
 
-            /// Execute a closure with a typed keyed child if it exists.
-            fn try_with_typed_slot<K: ChildSlot, R>(
-                &mut self,
-                f: impl FnOnce(&mut K::Widget, &mut dyn Context) -> Result<R>,
-            ) -> Result<Option<R>> {
-            }
-
             /// Execute a closure with the unique descendant of type `W` if it exists.
             fn try_with_unique_descendant<W: 'static + Widget, R>(
                 &mut self,
                 f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
             ) -> Result<Option<R>> {
-            }
-
-            /// Execute a closure with a keyed child of type `W`.
-            fn with_slot<W: 'static + Widget, R>(
-                &mut self,
-                key: &str,
-                f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
-            ) -> Result<R> {
             }
 
             /// Execute a closure with a typed keyed child.
@@ -3405,9 +3386,6 @@ pub mod canopy {
             /// The node currently being rendered.
             fn node_id(&self) -> NodeId;
 
-            /// Local outer rectangle for this node.
-            fn outer_rect_local(&self) -> Rect {}
-
             /// Return the parent of a node, or `None` if it is the root or not found.
             fn parent_of(&self, node: NodeId) -> Option<NodeId>;
 
@@ -3428,12 +3406,6 @@ pub mod canopy {
 
             /// View information for a specific node.
             fn view_of(&self, node: NodeId) -> Option<View>;
-
-            /// Visible view rectangle in content coordinates.
-            fn view_rect(&self) -> Rect {}
-
-            /// Visible view rectangle in local outer coordinates.
-            fn view_rect_local(&self) -> Rect {}
 
             /// Read a widget without extracting its slot or marking it changed.
             fn with_widget_dyn(
@@ -6173,9 +6145,6 @@ pub mod canopy {
         Ignore,
     }
 
-    /// Opaque token for one active exclusive binding frame.
-    pub struct ExclusiveFrameToken(_);
-
     /// A named, reproducible application state.
     pub struct Fixture {
         /// Fixture name.
@@ -6554,9 +6523,6 @@ pub mod canopy {
         /// Clear all effects on a node.
         fn clear_effects(&mut self, node: NodeId) -> Result<()>;
 
-        /// Clear parent constraints and restore the widget's base layout.
-        fn clear_layout_override_of(&mut self, node: NodeId) -> Result<()>;
-
         /// Remove the semantic identity of a live node.
         fn clear_semantic_key(&mut self, node: NodeId) -> Result<()>;
 
@@ -6597,9 +6563,8 @@ pub mod canopy {
         ///
         /// Rollback restores arena metadata, topology, child keys, layouts, views,
         /// lifecycle flags, root, focus, mouse capture, focus recovery hints, exit
-        /// requests, pending styles, command registry and scope, and diagnostic
-        /// requests. Each failed nested edit restores its own structural
-        /// checkpoint.
+        /// requests, pending styles, and diagnostic requests. Each failed nested
+        /// edit restores its own structural checkpoint.
         ///
         /// Widget slots are shared with the checkpoint: widget-owned mutations
         /// survive. Binding registration and external effects also survive and
@@ -6623,9 +6588,6 @@ pub mod canopy {
             direction: FocusDirection,
         ) -> Result<ChangeOutcome>;
 
-        /// Record changes for the next runtime preparation.
-        fn invalidate(&mut self, _invalidation: crate::Invalidation) {}
-
         /// Mark this node dirty so the next frame re-runs layout.
         fn invalidate_layout(&mut self);
 
@@ -6638,18 +6600,9 @@ pub mod canopy {
         /// Scroll the view up by one page.
         fn page_up(&mut self) -> ChangeOutcome {}
 
-        /// Remove one exclusive binding frame.
-        fn pop_exclusive_bindings(&mut self, token: ExclusiveFrameToken) -> Result<()>;
-
         /// Add an effect to a node that will be applied during rendering.
         /// Effects stack and inherit through the tree.
         fn push_effect(&mut self, node: NodeId, effect: Effect) -> Result<()>;
-
-        /// Push an exclusive framework binding frame owned by the current node.
-        fn push_exclusive_bindings(
-            &mut self,
-            group: FrameworkBindingGroup,
-        ) -> Result<ExclusiveFrameToken>;
 
         /// Release mouse capture if held by the current node.
         fn release_mouse(&mut self) -> Result<ChangeOutcome>;
@@ -6667,9 +6620,6 @@ pub mod canopy {
 
         /// Request a diagnostic dump for a target node.
         fn request_diagnostic_dump(&mut self, target: NodeId);
-
-        /// Restore mouse capture to an attached node.
-        fn restore_mouse_capture(&mut self, node: NodeId) -> Result<ChangeOutcome>;
 
         /// Scroll the view by the given offsets.
         fn scroll_by(&mut self, x: i32, y: i32) -> ChangeOutcome;
@@ -6821,26 +6771,11 @@ pub mod canopy {
         /// Set the layout for a specific node.
         fn set_layout_of(&mut self, node: impl Into<NodeId>, layout: Layout) -> Result<()> {}
 
-        /// Execute a closure with a typed keyed child if it exists.
-        fn try_with_typed_slot<K: ChildSlot, R>(
-            &mut self,
-            f: impl FnOnce(&mut K::Widget, &mut dyn Context) -> Result<R>,
-        ) -> Result<Option<R>> {
-        }
-
         /// Execute a closure with the unique descendant of type `W` if it exists.
         fn try_with_unique_descendant<W: 'static + Widget, R>(
             &mut self,
             f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
         ) -> Result<Option<R>> {
-        }
-
-        /// Execute a closure with a keyed child of type `W`.
-        fn with_slot<W: 'static + Widget, R>(
-            &mut self,
-            key: &str,
-            f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
-        ) -> Result<R> {
         }
 
         /// Execute a closure with a typed keyed child.
@@ -6956,9 +6891,6 @@ pub mod canopy {
         /// The node currently being rendered.
         fn node_id(&self) -> NodeId;
 
-        /// Local outer rectangle for this node.
-        fn outer_rect_local(&self) -> Rect {}
-
         /// Return the parent of a node, or `None` if it is the root or not found.
         fn parent_of(&self, node: NodeId) -> Option<NodeId>;
 
@@ -6979,12 +6911,6 @@ pub mod canopy {
 
         /// View information for a specific node.
         fn view_of(&self, node: NodeId) -> Option<View>;
-
-        /// Visible view rectangle in content coordinates.
-        fn view_rect(&self) -> Rect {}
-
-        /// Visible view rectangle in local outer coordinates.
-        fn view_rect_local(&self) -> Rect {}
 
         /// Read a widget without extracting its slot or marking it changed.
         fn with_widget_dyn(
@@ -7144,6 +7070,31 @@ pub mod canopy {
 
     impl PartialEq for BindingId {
         fn eq(&self, other: &BindingId) -> bool {}
+    }
+
+    impl BindingPhase {
+        /// Parse a scripting label into a binding phase.
+        pub fn parse(value: &str) -> Option<Self> {}
+
+        /// Return a stable scripting and diagnostic label.
+        pub fn label(&self) -> &'static str {}
+    }
+
+    impl Clone for BindingPhase {
+        fn clone(&self) -> BindingPhase {}
+    }
+
+    impl Debug for BindingPhase {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
+    }
+
+    impl Eq for BindingPhase {
+        #[doc(hidden)]
+        fn assert_fields_are_eq(&self) {}
+    }
+
+    impl PartialEq for BindingPhase {
+        fn eq(&self, other: &BindingPhase) -> bool {}
     }
 
     impl BindingScope {
@@ -7360,23 +7311,6 @@ pub mod canopy {
         fn eq(&self, other: &BindingOwner) -> bool {}
     }
 
-    impl Clone for BindingPhase {
-        fn clone(&self) -> BindingPhase {}
-    }
-
-    impl Debug for BindingPhase {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for BindingPhase {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl PartialEq for BindingPhase {
-        fn eq(&self, other: &BindingPhase) -> bool {}
-    }
-
     impl Clone for EvalId {
         fn clone(&self) -> EvalId {}
     }
@@ -7430,27 +7364,6 @@ pub mod canopy {
 
     impl PartialEq for EventOutcome {
         fn eq(&self, other: &EventOutcome) -> bool {}
-    }
-
-    impl Clone for ExclusiveFrameToken {
-        fn clone(&self) -> ExclusiveFrameToken {}
-    }
-
-    impl Debug for ExclusiveFrameToken {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for ExclusiveFrameToken {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl Hash for ExclusiveFrameToken {
-        fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-    }
-
-    impl PartialEq for ExclusiveFrameToken {
-        fn eq(&self, other: &ExclusiveFrameToken) -> bool {}
     }
 
     impl Clone for Fixture {

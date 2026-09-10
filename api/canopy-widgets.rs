@@ -452,29 +452,6 @@ pub mod canopy_widgets {
         }
     }
 
-    pub mod inspector {
-        //! Experimental inspector overlay internals.
-
-        /// Inspector overlay widget.
-        pub struct Inspector;
-
-        impl CommandNode for Inspector {
-            fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-        }
-
-        impl Loader for Inspector {
-            fn load(c: &mut Canopy) -> Result<()> {}
-        }
-
-        impl Widget for Inspector {
-            fn layout(&self) -> Layout {}
-
-            fn name(&self) -> NodeName {}
-
-            fn render(&mut self, r: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
-        }
-    }
-
     pub mod terminal {
         //! Terminal emulation widget.
 
