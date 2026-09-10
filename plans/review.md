@@ -1913,6 +1913,8 @@ starts after the decisions listed in C3, C9, C10, and C105 are made.
   - [x] C17: drop `NodeInfo.visible`.
   - [x] C18: drop `kind = "anchor"` command targets.
   - [x] C19: remove unbindable media and modifier key codes.
+  - [x] C21: scripted driving through `itty-script` is not supported; delete
+        the `DriverHost`/`DriverHandle` bridge and the ignored test.
   - [x] C23: remove `TerminalConfig::with_on_exit`.
   - [x] C24: install `SystemClipboard`; write `copy_selection` through it.
   - [x] C25: trim the `image` feature list to jpeg, png, gif, webp.

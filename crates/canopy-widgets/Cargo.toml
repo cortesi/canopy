@@ -38,8 +38,6 @@ itty-core = { workspace = true, optional = true }
 canopy = { path = "../canopy", features = ["testing"] }
 criterion.workspace = true
 proptest.workspace = true
-tokio = { workspace = true, features = ["rt-multi-thread"] }
-itty-script.workspace = true
 
 
 [[bench]]

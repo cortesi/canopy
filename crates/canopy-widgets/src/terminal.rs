@@ -16,7 +16,6 @@ use itty_core::{
     SelectionSnapshot, SelectionSpec, Session,
     clipboard::{ClipboardHandler, SystemClipboard},
     config::{EguiTTYConfig, EguiTTYConfigBuilder, Hex, PaletteConfig, PaletteKind, PaletteMeta},
-    driver::{self, DriverHandle, DriverHost},
     inspect::{StyledRunPublic, TerminalState},
     key::{Key as IttyKey, KeyCode as IttyKeyCode, Modifiers as IttyModifiers},
 };
@@ -34,37 +33,6 @@ const DEFAULT_SCROLLBACK: usize = 10_000;
 const POLL_INTERVAL_MS: u64 = 16;
 /// Maximum delay between clicks to count as a multi-click selection.
 const DOUBLE_CLICK_MS: u64 = 400;
-
-/// Runtime and handles required to drive an attached terminal session.
-struct DriverRuntime {
-    /// Driver host polled from Canopy's UI loop.
-    host: DriverHost,
-    /// Cloneable driver handle exposed to integrations.
-    #[cfg_attr(not(test), allow(dead_code))]
-    handle: Arc<DriverHandle>,
-}
-
-impl DriverRuntime {
-    /// Attach a driver runtime to a session.
-    fn attach(session: &mut Session) -> Result<Self> {
-        let (host, handle) = driver::attach(session);
-        Ok(Self {
-            host,
-            handle: Arc::new(handle),
-        })
-    }
-
-    /// Return a clone of the attached driver handle.
-    #[cfg(test)]
-    fn handle(&self) -> Arc<DriverHandle> {
-        Arc::clone(&self.handle)
-    }
-
-    /// Drive any pending backend work once from Canopy's poll loop.
-    fn poll(&mut self, session: &mut Session) {
-        let _ = self.host.poll_nonblocking(session);
-    }
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// Terminal grid sizing metadata.
@@ -166,8 +134,6 @@ pub struct Terminal {
     config: TerminalConfig,
     /// Backend terminal session.
     session: Option<Session>,
-    /// Runtime and handles for the attached terminal driver.
-    driver: Option<DriverRuntime>,
     /// Most recent terminal size.
     last_size: TerminalSize,
     /// Cached cursor for rendering.
@@ -187,7 +153,6 @@ impl Terminal {
         Self {
             config,
             session: None,
-            driver: None,
             last_size: TerminalSize {
                 columns: DEFAULT_COLUMNS,
                 rows: DEFAULT_LINES,
@@ -199,13 +164,7 @@ impl Terminal {
         }
     }
 
-    /// Return the attached `itty` driver handle for scripting integrations.
-    #[cfg(test)]
-    pub(crate) fn driver_handle(&self) -> Option<Arc<DriverHandle>> {
-        self.driver.as_ref().map(DriverRuntime::handle)
-    }
-
-    /// Lazily create the backend session and driver bridge.
+    /// Lazily create the backend session.
     fn mount_session(&mut self) -> Result<()> {
         if self.session.is_some() {
             return Ok(());
@@ -215,10 +174,8 @@ impl Terminal {
         let mut session =
             Session::from_config(&cfg).map_err(|error| Error::Internal(error.to_string()))?;
         session.set_clipboard_handler(Arc::new(SystemClipboard));
-        let driver = DriverRuntime::attach(&mut session)?;
 
         self.session = Some(session);
-        self.driver = Some(driver);
         Ok(())
     }
 
@@ -230,13 +187,6 @@ impl Terminal {
     /// Borrow the live backend session mutably.
     fn session_mut(&mut self) -> Option<&mut Session> {
         self.session.as_mut()
-    }
-
-    /// Drive any pending backend work once from Canopy's poll loop.
-    fn poll_driver(&mut self) {
-        if let (Some(driver), Some(session)) = (self.driver.as_mut(), self.session.as_mut()) {
-            driver.poll(session);
-        }
     }
 
     /// Ensure the terminal grid matches the current view.
@@ -650,7 +600,6 @@ impl Widget for Terminal {
     }
 
     fn poll(&mut self, _ctx: &mut dyn Context) -> Option<Duration> {
-        self.poll_driver();
         Some(Duration::from_millis(POLL_INTERVAL_MS))
     }
 
@@ -913,14 +862,7 @@ fn encode_mouse(event: &mouse::MouseEvent, state: &TerminalState) -> Option<Vec<
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        collections::BTreeMap,
-        sync::{
-            Arc,
-            mpsc::{self, TryRecvError},
-        },
-        thread,
-    };
+    use std::sync::Arc;
 
     use canopy::{
         ContextExt, TermBuf,
@@ -933,11 +875,6 @@ mod tests {
         testing::harness::Harness,
     };
     use itty_core::{colors::Rgba8, palette::builtin};
-    use itty_script::{
-        RunMetrics, ScriptExecPolicy, SharedScriptSurfaceFactory, TermModuleBuilder,
-        default_script_surface, run_source,
-    };
-    use tokio::runtime::Builder;
 
     use super::*;
 
@@ -948,17 +885,6 @@ mod tests {
         let mut terminal = Terminal::new(TerminalConfig::default());
         terminal.session = Some(session);
         (terminal, receiver)
-    }
-
-    fn wait_for_driver_signal<T>(terminal: &mut Terminal, rx: &mpsc::Receiver<T>) -> Option<T> {
-        loop {
-            terminal.poll_driver();
-            match rx.try_recv() {
-                Ok(value) => return Some(value),
-                Err(TryRecvError::Empty) => thread::yield_now(),
-                Err(TryRecvError::Disconnected) => return None,
-            }
-        }
     }
 
     #[test]
@@ -1294,57 +1220,6 @@ mod tests {
             .expect("disable focus reports");
         assert_eq!(terminal.focus_report(true), None);
         assert_eq!(terminal.focus_report(false), None);
-    }
-
-    #[test]
-    #[ignore = "owner: terminal; run cargo test -p canopy-widgets itty_script_can_drive_attached_handle -- --ignored"]
-    fn itty_script_can_drive_attached_handle() {
-        let mut terminal = Terminal::new(TerminalConfig::new());
-        terminal
-            .mount_session()
-            .expect("mount itty-backed terminal");
-        let handle = terminal.driver_handle().expect("driver handle");
-        let (script_tx, script_rx) = mpsc::channel();
-
-        let runner = thread::spawn(move || {
-            let runtime = Arc::new(
-                Builder::new_multi_thread()
-                    .worker_threads(1)
-                    .enable_all()
-                    .build()
-                    .expect("script runtime"),
-            );
-            let metrics = Arc::new(RunMetrics::new());
-            let builder = TermModuleBuilder::new(&runtime, &handle, &metrics);
-            let setup: SharedScriptSurfaceFactory = Arc::new(default_script_surface);
-            let result = run_source(
-                builder.context(),
-                &setup,
-                ScriptExecPolicy::default(),
-                None,
-                "attached_test.luau",
-                "local t = term.open()\nlocal marker = 'CANOPY_SCRIPT_READY'\nt:paste(\"printf 'CANOPY_SCRIPT_%s\\\\n' 'READY'\", { submit = 'enter' })\nt:wait_text(marker)\n",
-                BTreeMap::new(),
-            );
-            script_tx.send(()).expect("script receiver alive");
-            result
-        });
-
-        wait_for_driver_signal(&mut terminal, &script_rx).expect("script thread signals");
-        runner
-            .join()
-            .expect("script thread")
-            .expect("script succeeds");
-
-        terminal
-            .session()
-            .expect("session")
-            .send_input_bytes(b"exit\r".to_vec(), "test")
-            .expect("send exit");
-        while !terminal.session().is_some_and(Session::child_exited) {
-            terminal.poll_driver();
-            thread::yield_now();
-        }
     }
 
     #[test]

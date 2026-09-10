@@ -359,12 +359,10 @@ dependencies = [
  "fontdue",
  "image",
  "itty-core",
- "itty-script",
  "proptest",
  "ropey",
  "syntect",
  "textwrap",
- "tokio",
  "tracing-subscriber",
  "unicode-segmentation",
  "unicode-width",
@@ -1541,21 +1539,6 @@ dependencies = [
 [[package]]
 name = "itty-recording-api"
 version = "0.1.0"
-
-[[package]]
-name = "itty-script"
-version = "0.1.0"
-dependencies = [
- "itty-core",
- "parking_lot",
- "regex",
- "ruau",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "unicode-width",
-]
 
 [[package]]
 name = "jni"
