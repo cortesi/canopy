@@ -210,24 +210,24 @@ Widgets:
 
 Automation stack:
 
-- [ ] C71: `Todo.pending` and an unreachable branch
-- [ ] C72: `luau_check.rs` duplicates the smoke suite's typecheck gate
-- [ ] C73: `serve_uds_with_context` is `serve_uds`
-- [ ] C74: `SessionManager` forwarders and repeated `touch()`
-- [ ] C75: `ReplayEntry` deserializes five unread fields (skip if C9 lands)
-- [ ] C76: Replay option validation runs three times (skip if C9 lands)
-- [ ] C77: Headless viewport validated twice with a `Size` round trip
-- [ ] C78: `HeadlessSession` exists to carry a zero-sized `NopBackend`
-- [ ] C79: Fixture re-rejected by an inner function
-- [ ] C80: `AppFactory::bootstrap()` has one test consumer
-- [ ] C81: Unused `Serialize`/`Deserialize` on smoke outcomes
-- [ ] C82: Todo `main.rs` duplicates flags and exit handling
-- [ ] C83: `validate_viewport` wraps `Viewport::validate`
-- [ ] C84: Nine identical `ToolError::internal` closures
-- [ ] C85: `open_adder` resolves `todo.input` twice
-- [ ] C86: `script.rs` local redundancies
-- [ ] C87: Duplicated test metadata literal
-- [ ] C88: `.canopyctl.toml` restates three defaults
+- [x] C71: `Todo.pending` and an unreachable branch
+- [x] C72: `luau_check.rs` duplicates the smoke suite's typecheck gate
+- [x] C73: `serve_uds_with_context` is `serve_uds`
+- [x] C74: `SessionManager` forwarders and repeated `touch()`
+- [ ] C75: `ReplayEntry` deserializes five unread fields (deferred: subsumed by C9)
+- [ ] C76: Replay option validation runs three times (deferred: subsumed by C9)
+- [x] C77: Headless viewport validated twice with a `Size` round trip
+- [x] C78: `HeadlessSession` exists to carry a zero-sized `NopBackend`
+- [x] C79: Fixture re-rejected by an inner function
+- [x] C80: `AppFactory::bootstrap()` has one test consumer
+- [x] C81: Unused `Serialize`/`Deserialize` on smoke outcomes
+- [x] C82: Todo `main.rs` duplicates flags and exit handling
+- [x] C83: `validate_viewport` wraps `Viewport::validate`
+- [x] C84: Nine identical `ToolError::internal` closures
+- [x] C85: `open_adder` resolves `todo.input` twice
+- [x] C86: `script.rs` local redundancies
+- [x] C87: Duplicated test metadata literal
+- [x] C88: `.canopyctl.toml` restates three defaults
 
 Supporting crates, examples, tooling:
 

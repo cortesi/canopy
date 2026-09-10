@@ -27,13 +27,12 @@ use canopy_mcp::{
 use clap::{Args, Parser, Subcommand};
 use ruau_script_api::{ScriptApiQuery, ScriptApiResponse};
 use tmcp::{ToolError, ToolResult, mcp_server, schema::CallToolResult, tool_params};
-use tokio::{net::UnixStream, sync::Mutex, time::sleep};
+use tokio::{net::UnixStream, time::sleep};
 
 use crate::{
     config::LoadedConfig,
     replay::{
-        ReplayEnvelope, ReplayExpectation, ReplayFile, ReplayStep, load_replay, validate_viewport,
-        write_replay,
+        ReplayEnvelope, ReplayExpectation, ReplayFile, ReplayStep, load_replay, write_replay,
     },
     session::{Session, SessionKind, SessionManager},
 };
@@ -185,8 +184,6 @@ struct EvalArgs {
 struct CanopyctlMcpServer {
     /// Shared session manager for tool calls.
     sessions: Arc<SessionManager>,
-    /// Last observed tool activity time.
-    last_activity: Arc<Mutex<Instant>>,
 }
 
 /// Tool params for the `connect` tool.
@@ -199,15 +196,9 @@ struct ConnectRequest {
 
 #[mcp_server]
 impl CanopyctlMcpServer {
-    /// Record activity so the idle watchdog does not terminate the server.
-    async fn touch(&self) {
-        *self.last_activity.lock().await = Instant::now();
-    }
-
     #[tool]
     /// Connect to a live canopy UDS socket.
     async fn connect(&self, params: ConnectRequest) -> ToolResult<CallToolResult> {
-        self.touch().await;
         self.sessions
             .connect_live(Path::new(&params.socket))
             .await
@@ -218,7 +209,6 @@ impl CanopyctlMcpServer {
     #[tool]
     /// Disconnect the current session and shut down any managed child process.
     async fn disconnect(&self) -> ToolResult<CallToolResult> {
-        self.touch().await;
         self.sessions.disconnect().await.map_err(tool_error)?;
         Ok(CallToolResult::new().with_text_content("disconnected"))
     }
@@ -226,24 +216,24 @@ impl CanopyctlMcpServer {
     #[tool]
     /// Evaluate a script on the active session.
     async fn script_eval(&self, params: ScriptEvalRequest) -> ToolResult<CallToolResult> {
-        self.touch().await;
-        let outcome = self.sessions.eval(params).await.map_err(tool_error)?;
+        let session = self.sessions.session().await.map_err(tool_error)?;
+        let outcome = session.eval(params).await.map_err(tool_error)?;
         Ok(outcome.to_tool_result())
     }
 
     #[tool]
     /// Return bootstrap information for the active session.
     async fn bootstrap(&self, request: BootstrapRequest) -> ToolResult<CallToolResult> {
-        self.touch().await;
-        let bootstrap = self.sessions.bootstrap(request).await.map_err(tool_error)?;
+        let session = self.sessions.session().await.map_err(tool_error)?;
+        let bootstrap = session.bootstrap(request).await.map_err(tool_error)?;
         to_tool_result(bootstrap)
     }
 
     #[tool]
     /// Apply a fixture to the active session.
     async fn apply_fixture(&self, params: ApplyFixtureRequest) -> ToolResult<CallToolResult> {
-        self.touch().await;
-        self.sessions
+        let mut session = self.sessions.session().await.map_err(tool_error)?;
+        session
             .apply_fixture(params.name.clone())
             .await
             .map_err(tool_error)?;
@@ -255,15 +245,15 @@ impl CanopyctlMcpServer {
     #[tool(read_only, output_schema = ScriptApiResponse)]
     /// Return shared API discovery for the active session.
     async fn script_api(&self, params: ScriptApiQuery) -> ToolResult<CallToolResult> {
-        self.touch().await;
-        self.sessions.api(&params).await.map_err(tool_error)
+        let session = self.sessions.session().await.map_err(tool_error)?;
+        session.api(&params).await.map_err(tool_error)
     }
 
     #[tool]
     /// Return the fixture catalog for the active session.
     async fn fixtures(&self) -> ToolResult<CallToolResult> {
-        self.touch().await;
-        let fixtures = self.sessions.fixtures().await.map_err(tool_error)?;
+        let session = self.sessions.session().await.map_err(tool_error)?;
+        let fixtures = session.fixtures().await.map_err(tool_error)?;
         to_tool_result(fixtures)
     }
 }
@@ -371,7 +361,7 @@ fn parse_viewport(text: &str) -> result::Result<Viewport, String> {
         width: width.parse().map_err(|_| "invalid viewport width")?,
         height: height.parse().map_err(|_| "invalid viewport height")?,
     };
-    validate_viewport(viewport).map_err(|error| error.to_string())?;
+    viewport.validate().map_err(|error| error.to_string())?;
     Ok(viewport)
 }
 
@@ -403,12 +393,11 @@ async fn replay_file(session: &mut Session, input: ReplayFile, args: &ReplayArgs
                     viewport: requested,
                 })
                 .await?;
-            validate_viewport(
-                target
-                    .metadata
-                    .viewport
-                    .context("target bootstrap has no viewport")?,
-            )?;
+            target
+                .metadata
+                .viewport
+                .context("target bootstrap has no viewport")?
+                .validate()?;
             if let Some(name) = &envelope.fixture
                 && !target.fixtures.iter().any(|fixture| fixture.name == *name)
             {
@@ -428,7 +417,7 @@ async fn replay_file(session: &mut Session, input: ReplayFile, args: &ReplayArgs
                 "LEGACY replay: metadata is incomplete; complete reproduction is not claimed"
             );
             if let Some(viewport) = args.viewport {
-                validate_viewport(viewport)?;
+                viewport.validate()?;
             }
             if session.kind() == SessionKind::Live && args.viewport.is_some() {
                 bail!("legacy viewport selection is only supported by headless sessions");
@@ -660,13 +649,12 @@ async fn api_command(config: LoadedConfig, args: ApiArgs) -> Result<()> {
 /// Execute `canopyctl mcp`.
 async fn mcp_command(config: LoadedConfig) -> Result<()> {
     let sessions = Arc::new(SessionManager::new(config.clone()));
-    let last_activity = Arc::new(Mutex::new(Instant::now()));
     let idle_timeout = config.idle_shutdown_after();
-    let watchdog_activity = last_activity.clone();
+    let watchdog_sessions = sessions.clone();
     tokio::spawn(async move {
         loop {
             sleep(Duration::from_secs(1)).await;
-            if watchdog_activity.lock().await.elapsed() >= idle_timeout {
+            if watchdog_sessions.last_activity.lock().await.elapsed() >= idle_timeout {
                 exit(0);
             }
         }
@@ -674,7 +662,6 @@ async fn mcp_command(config: LoadedConfig) -> Result<()> {
 
     tmcp::Server::new(move || CanopyctlMcpServer {
         sessions: sessions.clone(),
-        last_activity: last_activity.clone(),
     })
     .serve_stdio()
     .await?;
@@ -820,7 +807,6 @@ mod tests {
         let (session, _, peer) = evaluator_session().await?;
         let proxy = CanopyctlMcpServer {
             sessions: manager_with_session(session).await?,
-            last_activity: Arc::new(Mutex::new(Instant::now())),
         };
         let mut request = request(contracts::SCRIPT);
         request.viewport = Some(Viewport {
@@ -1063,7 +1049,6 @@ mod tests {
         let (session, _, peer) = peer_session().await?;
         let server = CanopyctlMcpServer {
             sessions: manager_with_session(session).await?,
-            last_activity: Arc::new(Mutex::new(Instant::now())),
         };
         assert!(
             server

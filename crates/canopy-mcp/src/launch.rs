@@ -4,8 +4,7 @@ use canopy::terminal::{RunOptions, runloop_with_options};
 
 use crate::{
     AppFactory, Result,
-    metadata::LiveContext,
-    server::{serve_stdio, serve_uds_with_context},
+    server::{serve_stdio, serve_uds},
 };
 
 /// Launcher mode for a Canopy application.
@@ -51,13 +50,7 @@ fn run_interactive(
     let canopy = factory.build()?;
     let automation = canopy.automation_handle();
     let live_server = mcp_socket
-        .map(|socket_path| {
-            serve_uds_with_context(
-                socket_path,
-                automation,
-                LiveContext::new(factory.metadata().clone()),
-            )
-        })
+        .map(|socket_path| serve_uds(socket_path, automation, factory.metadata().clone()))
         .transpose()?;
 
     let run_result = runloop_with_options(canopy, options);

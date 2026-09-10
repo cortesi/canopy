@@ -142,13 +142,7 @@ pub fn test_app_factory<F>(factory: F) -> AppFactory
 where
     F: Fn() -> crate::Result<Canopy> + Send + Sync + 'static,
 {
-    AppFactory::new(
-        AppMetadata {
-            app: "canopy-test".into(),
-            reset: ResetPolicy::Isolated,
-        },
-        factory,
-    )
+    AppFactory::new(AppMetadata::test(), factory)
 }
 
 #[cfg(test)]

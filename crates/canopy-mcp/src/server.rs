@@ -1,4 +1,5 @@
 use std::{
+    fmt::Display,
     fs, io,
     os::unix::fs::FileTypeExt,
     path::{Path, PathBuf},
@@ -22,9 +23,14 @@ use crate::{
     },
 };
 
+/// Convert an arbitrary error into a tmcp tool error.
+fn tool_error(error: impl Display) -> ToolError {
+    ToolError::internal(error.to_string())
+}
+
 /// Encode a typed payload as an MCP structured result.
 fn to_tool_result(value: impl Serialize) -> ToolResult<CallToolResult> {
-    CallToolResult::structured(value).map_err(|error| ToolError::internal(error.to_string()))
+    CallToolResult::structured(value).map_err(tool_error)
 }
 
 /// Minimal stdio MCP server for canopy automation.
@@ -49,11 +55,6 @@ pub struct ApplyFixtureResponse {
     pub applied: String,
 }
 
-/// Construct the MCP server for an app factory.
-fn canopy_mcp_server(factory: AppFactory) -> CanopyMcpServer {
-    CanopyMcpServer { evaluator: factory }
-}
-
 /// Live MCP server that proxies tool calls onto a running canopy UI thread.
 #[derive(Clone)]
 struct LiveCanopyMcpServer {
@@ -63,27 +64,13 @@ struct LiveCanopyMcpServer {
     context: LiveContext,
 }
 
-/// Construct the live MCP server for a running canopy app.
-fn live_canopy_mcp_server(
-    automation: AutomationHandle,
-    context: LiveContext,
-) -> LiveCanopyMcpServer {
-    LiveCanopyMcpServer {
-        automation,
-        context,
-    }
-}
-
 #[mcp_server]
 impl CanopyMcpServer {
     #[tool]
     /// Return the operating guide, generated API, fixtures, availability, and
     /// journal summary.
     async fn bootstrap(&self, params: BootstrapRequest) -> ToolResult<CallToolResult> {
-        let bootstrap = self
-            .evaluator
-            .bootstrap_with_request(&params)
-            .map_err(|error| ToolError::internal(error.to_string()))?;
+        let bootstrap = self.evaluator.bootstrap(&params).map_err(tool_error)?;
         to_tool_result(bootstrap)
     }
 
@@ -96,20 +83,14 @@ impl CanopyMcpServer {
     #[tool(read_only, output_schema = ScriptApiResponse)]
     /// Return shared discovery for the generated app API.
     async fn script_api(&self, params: ScriptApiQuery) -> ToolResult<CallToolResult> {
-        let api = self
-            .evaluator
-            .script_api()
-            .map_err(|error| ToolError::internal(error.to_string()))?;
+        let api = self.evaluator.script_api().map_err(tool_error)?;
         script_api_tool_result(query_script_api(api, &params))
     }
 
     #[tool]
     /// List the application's registered fixtures.
     async fn fixtures(&self) -> ToolResult<CallToolResult> {
-        let fixtures = self
-            .evaluator
-            .fixtures()
-            .map_err(|error| ToolError::internal(error.to_string()))?;
+        let fixtures = self.evaluator.fixtures().map_err(tool_error)?;
         to_tool_result(fixtures)
     }
 }
@@ -129,7 +110,7 @@ impl LiveCanopyMcpServer {
                 bootstrap_for_canopy(canopy, metadata)
             })
         })
-        .map_err(|error| ToolError::internal(error.to_string()))?;
+        .map_err(tool_error)?;
         to_tool_result(bootstrap)
     }
 
@@ -148,7 +129,7 @@ impl LiveCanopyMcpServer {
         let api = block_in_place(move || {
             automation.request(|canopy| canopy.script_api().map(str::to_string))
         })
-        .map_err(|error| ToolError::internal(error.to_string()))?;
+        .map_err(tool_error)?;
         script_api_tool_result(query_script_api(api, &params))
     }
 
@@ -158,7 +139,7 @@ impl LiveCanopyMcpServer {
         let automation = self.automation.clone();
         let fixtures =
             block_in_place(move || automation.request(|canopy| Ok(canopy.fixture_infos())))
-                .map_err(|error| ToolError::internal(error.to_string()))?;
+                .map_err(tool_error)?;
         to_tool_result(fixtures)
     }
 
@@ -176,7 +157,7 @@ impl LiveCanopyMcpServer {
                 Ok(())
             })
         })
-        .map_err(|error| ToolError::internal(error.to_string()))?;
+        .map_err(tool_error)?;
         to_tool_result(ApplyFixtureResponse {
             applied: applied_name,
         })
@@ -189,15 +170,13 @@ fn script_api_tool_result(
 ) -> ToolResult<CallToolResult> {
     match result {
         Ok(response) => {
-            let structured = serde_json::to_value(&response)
-                .map_err(|error| ToolError::internal(error.to_string()))?;
+            let structured = serde_json::to_value(&response).map_err(tool_error)?;
             Ok(CallToolResult::new()
                 .with_structured_content(structured)
                 .with_text_content(response.content))
         }
         Err(error) => {
-            let structured = serde_json::to_value(&error)
-                .map_err(|error| ToolError::internal(error.to_string()))?;
+            let structured = serde_json::to_value(&error).map_err(tool_error)?;
             Ok(CallToolResult::new()
                 .with_is_error(true)
                 .with_structured_content(structured)
@@ -211,9 +190,11 @@ fn script_api_tool_result(
 /// This low-level entry point grants trusted-local access to all exposed native
 /// actions. Calling this function is the application's automation opt-in.
 pub fn serve_stdio(factory: AppFactory) -> Result<()> {
-    Server::new(move || canopy_mcp_server(factory.clone()))
-        .serve_stdio_blocking()
-        .map_err(Error::from)
+    Server::new(move || CanopyMcpServer {
+        evaluator: factory.clone(),
+    })
+    .serve_stdio_blocking()
+    .map_err(Error::from)
 }
 
 /// Handle for a running live UDS MCP listener.
@@ -263,16 +244,7 @@ pub fn serve_uds(
     automation: AutomationHandle,
     metadata: AppMetadata,
 ) -> Result<UdsServerHandle> {
-    serve_uds_with_context(socket_path, automation, LiveContext::new(metadata))
-}
-
-/// Serve a live application with an explicit identity retained across
-/// reconnects.
-pub fn serve_uds_with_context(
-    socket_path: impl AsRef<Path>,
-    automation: AutomationHandle,
-    context: LiveContext,
-) -> Result<UdsServerHandle> {
+    let context = LiveContext::new(metadata);
     let socket_path = socket_path.as_ref().to_path_buf();
     match fs::symlink_metadata(&socket_path) {
         Ok(metadata) if metadata.file_type().is_socket() => fs::remove_file(&socket_path)?,
@@ -315,9 +287,12 @@ pub fn serve_uds_with_context(
                         let context = context.clone();
                         tokio::spawn(async move {
                             let (reader, writer) = stream.into_split();
-                            let _ignored = Server::new(move || live_canopy_mcp_server(automation.clone(), context.clone()))
-                                .serve_stream(reader, writer)
-                                .await;
+                            let _ignored = Server::new(move || LiveCanopyMcpServer {
+                                automation: automation.clone(),
+                                context: context.clone(),
+                            })
+                            .serve_stream(reader, writer)
+                            .await;
                         });
                     }
                 }
@@ -451,23 +426,25 @@ mod tests {
     }
 
     fn server() -> CanopyMcpServer {
-        canopy_mcp_server(app_factory(|| {
-            CanopyBuilder::new()
-                .configure(|canopy| {
-                    EchoNode::load(canopy)?;
-                    canopy.register_fixture(Fixture::new(
-                        "seeded",
-                        "Set echo_node to a known value",
-                        |canopy| canopy.eval_script("echo_node.set(41)").map(|_| ()),
-                    ))
-                })
-                .assemble(|canopy| {
-                    canopy.replace_root(EchoNode::new())?;
-                    Ok(())
-                })
-                .build()
-                .map_err(Into::into)
-        }))
+        CanopyMcpServer {
+            evaluator: app_factory(|| {
+                CanopyBuilder::new()
+                    .configure(|canopy| {
+                        EchoNode::load(canopy)?;
+                        canopy.register_fixture(Fixture::new(
+                            "seeded",
+                            "Set echo_node to a known value",
+                            |canopy| canopy.eval_script("echo_node.set(41)").map(|_| ()),
+                        ))
+                    })
+                    .assemble(|canopy| {
+                        canopy.replace_root(EchoNode::new())?;
+                        Ok(())
+                    })
+                    .build()
+                    .map_err(Into::into)
+            }),
+        }
     }
 
     #[tokio::test]
@@ -535,13 +512,15 @@ mod tests {
 
     #[tokio::test]
     async fn shared_trace_through_direct_mcp_handler() -> crate::Result<()> {
-        let server = canopy_mcp_server(AppFactory::new(
-            AppMetadata {
-                app: "contract".into(),
-                reset: crate::ResetPolicy::Isolated,
-            },
-            || Ok(contracts::app()?),
-        ));
+        let server = CanopyMcpServer {
+            evaluator: AppFactory::new(
+                AppMetadata {
+                    app: "contract".into(),
+                    reset: crate::ResetPolicy::Isolated,
+                },
+                || Ok(contracts::app()?),
+            ),
+        };
         let response = server
             .script_eval(ScriptEvalRequest {
                 viewport: Some(crate::Viewport {
@@ -674,13 +653,13 @@ mod tests {
         let mut events = canopy.take_event_receiver().expect("test owns events");
         let directory = tempfile::tempdir()?;
         let socket = directory.path().join("metadata.sock");
-        let server = serve_uds_with_context(
+        let server = serve_uds(
             &socket,
             automation.clone(),
-            LiveContext::new(AppMetadata {
+            AppMetadata {
                 app: "live-test".into(),
                 reset: crate::ResetPolicy::External,
-            }),
+            },
         )?;
         let (done_tx, done_rx) = mpsc::channel();
         let worker = thread::spawn(move || {
@@ -798,8 +777,10 @@ mod tests {
         let mut events = canopy
             .take_event_receiver()
             .expect("test owns event receiver");
-        let server =
-            live_canopy_mcp_server(automation.clone(), LiveContext::new(AppMetadata::test()));
+        let server = LiveCanopyMcpServer {
+            automation: automation.clone(),
+            context: LiveContext::new(AppMetadata::test()),
+        };
         let worker = thread::spawn(move || {
             let runtime = Builder::new_current_thread().enable_all().build().unwrap();
             runtime.block_on(server.script_eval(ScriptEvalRequest::new("echo_node.signal_started(); canopy.wait_for(function() return echo_node.get() == 7 end); return echo_node.get()".to_string()))).expect("live eval transport")

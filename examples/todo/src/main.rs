@@ -3,7 +3,7 @@
 
 use std::{path::PathBuf, process};
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use canopy::terminal::RunOptions;
 use canopy_mcp::{AppFactory, AppMetadata, Error as McpError, LaunchMode, ResetPolicy, launch};
 use clap::{Parser, Subcommand};
@@ -22,7 +22,7 @@ struct Args {
     api: bool,
 
     /// Path to a Luau config file
-    #[clap(short, long)]
+    #[clap(short, long, global = true)]
     config: Option<PathBuf>,
 
     /// Serve live MCP automation over the given Unix-domain socket path.
@@ -40,9 +40,6 @@ enum Command {
     Mcp {
         /// SQLite database path for the todo app.
         path: String,
-        /// Optional Luau config file applied before each request.
-        #[clap(short, long)]
-        config: Option<PathBuf>,
     },
 }
 
@@ -68,8 +65,13 @@ fn make_factory(path: String, config: Option<PathBuf>) -> AppFactory {
 fn main() -> Result<()> {
     let args = Args::parse();
 
-    if args.api {
-        let code = launch(
+    let code = match args.command {
+        Some(Command::Mcp { path }) => launch(
+            make_factory(path, args.config),
+            LaunchMode::HeadlessMcp,
+            RunOptions::default(),
+        )?,
+        None if args.api => launch(
             AppFactory::new(
                 AppMetadata {
                     app: "todo".into(),
@@ -79,29 +81,15 @@ fn main() -> Result<()> {
             ),
             LaunchMode::Api,
             RunOptions::default(),
-        )?;
-        if code != 0 {
-            process::exit(code);
-        }
-        return Ok(());
-    }
-
-    let code = match args.command {
-        Some(Command::Mcp { path, config }) => launch(
-            make_factory(path, config),
-            LaunchMode::HeadlessMcp,
-            RunOptions::default(),
         )?,
         None => {
-            if let Some(path) = args.path {
-                let mode = LaunchMode::Run {
-                    mcp_socket: args.mcp,
-                };
-                launch(make_factory(path, args.config), mode, RunOptions::default())?
-            } else {
-                println!("Specify a file path");
-                0
-            }
+            let Some(path) = args.path else {
+                bail!("specify a SQLite database path, --api, or the mcp subcommand");
+            };
+            let mode = LaunchMode::Run {
+                mcp_socket: args.mcp,
+            };
+            launch(make_factory(path, args.config), mode, RunOptions::default())?
         }
     };
     if code != 0 {

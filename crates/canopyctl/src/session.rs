@@ -1,6 +1,6 @@
 //! MCP client sessions and the manager shared by the CLI and the proxy server.
 
-use std::path::Path;
+use std::{path::Path, time::Instant};
 
 use anyhow::{Context, Result, bail};
 use canopy::FixtureInfo;
@@ -152,6 +152,8 @@ pub struct SessionManager {
     config: LoadedConfig,
     /// Current session, if any.
     state: Mutex<Option<Session>>,
+    /// Last observed tool activity time.
+    pub(crate) last_activity: Mutex<Instant>,
 }
 
 impl SessionManager {
@@ -160,11 +162,13 @@ impl SessionManager {
         Self {
             config,
             state: Mutex::new(None),
+            last_activity: Mutex::new(Instant::now()),
         }
     }
 
     /// Connect to a live UDS session, replacing any existing session.
     pub async fn connect_live(&self, socket: &Path) -> Result<()> {
+        *self.last_activity.lock().await = Instant::now();
         let mut state = self.state.lock().await;
         let previous = state.take();
         if let Some(previous) = previous {
@@ -177,6 +181,7 @@ impl SessionManager {
 
     /// Drop and shut down the current session, if any.
     pub async fn disconnect(&self) -> Result<()> {
+        *self.last_activity.lock().await = Instant::now();
         let mut state = self.state.lock().await;
         if let Some(session) = state.take() {
             session.shutdown().await;
@@ -184,33 +189,9 @@ impl SessionManager {
         Ok(())
     }
 
-    /// Evaluate a script on the active session.
-    pub async fn eval(&self, request: ScriptEvalRequest) -> Result<ScriptEvalOutcome> {
-        self.session().await?.eval(request).await
-    }
-
-    /// Request API discovery on the active session.
-    pub async fn api(&self, query: &ScriptApiQuery) -> Result<CallToolResult> {
-        self.session().await?.api(query).await
-    }
-
-    /// Request bootstrap information on the active session.
-    pub async fn bootstrap(&self, request: BootstrapRequest) -> Result<BootstrapResponse> {
-        self.session().await?.bootstrap(request).await
-    }
-
-    /// Request the fixture catalog on the active session.
-    pub async fn fixtures(&self) -> Result<Vec<FixtureInfo>> {
-        self.session().await?.fixtures().await
-    }
-
-    /// Apply a fixture on the active session.
-    pub async fn apply_fixture(&self, name: String) -> Result<()> {
-        self.session().await?.apply_fixture(name).await
-    }
-
     /// Lock the active session, spawning a headless one when none is connected.
-    async fn session(&self) -> Result<MappedMutexGuard<'_, Session>> {
+    pub async fn session(&self) -> Result<MappedMutexGuard<'_, Session>> {
+        *self.last_activity.lock().await = Instant::now();
         let mut state = self.state.lock().await;
         if state.is_none() {
             let command = self.config.headless_command(&[])?;
@@ -264,7 +245,7 @@ pub mod tests {
 
         #[tool]
         async fn bootstrap(&self, request: BootstrapRequest) -> ToolResult<CallToolResult> {
-            let response = block_in_place(|| self.evaluator.bootstrap_with_request(&request))
+            let response = block_in_place(|| self.evaluator.bootstrap(&request))
                 .map_err(|error| ToolError::internal(error.to_string()))?;
             CallToolResult::structured(response)
                 .map_err(|error| ToolError::internal(error.to_string()))
@@ -525,7 +506,14 @@ pub mod tests {
                 if disconnect {
                     operation_manager.disconnect().await?;
                 } else {
-                    assert!(operation_manager.eval(request("success")).await?.success);
+                    assert!(
+                        operation_manager
+                            .session()
+                            .await?
+                            .eval(request("success"))
+                            .await?
+                            .success
+                    );
                 }
                 operation_finished.store(true, Ordering::SeqCst);
                 Ok::<_, anyhow::Error>(())

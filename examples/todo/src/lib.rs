@@ -147,8 +147,6 @@ impl Widget for MainContent {}
 pub(crate) struct Todo {
     /// Database owned by this application.
     store: store::Store,
-    /// Entries waiting for the widget tree to mount.
-    pending: Vec<store::Todo>,
     /// Owned interaction scope for the add-item modal.
     adder: Option<InteractionToken>,
 }
@@ -156,22 +154,13 @@ pub(crate) struct Todo {
 #[derive_commands]
 impl Todo {
     /// Load a todo widget from its database.
-    pub(crate) fn new(store: store::Store) -> AnyResult<Self> {
-        let pending = store.todos()?;
-        Ok(Self {
-            store,
-            pending,
-            adder: None,
-        })
+    pub(crate) fn new(store: store::Store) -> Self {
+        Self { store, adder: None }
     }
 
     /// Build the Todo widget subtree once.
-    fn ensure_tree(&mut self, c: &mut dyn Context) -> Result<()> {
+    fn ensure_tree(&self, c: &mut dyn Context) -> Result<()> {
         if c.has_slot::<MainSlot>()? {
-            if !self.pending.is_empty() {
-                self.reconcile_items(c, self.pending.clone())?;
-                self.pending.clear();
-            }
             return Ok(());
         }
 
@@ -194,8 +183,8 @@ impl Todo {
             })?;
             Ok(())
         })?;
-        self.reconcile_items(c, self.pending.clone())?;
-        self.pending.clear();
+        let items = self.store.todos().map_err(store_error)?;
+        self.reconcile_items(c, items)?;
         self.with_list(c, |list, ctx| list.select_first(ctx))?;
 
         Ok(())
@@ -262,14 +251,24 @@ impl Todo {
         })
     }
 
+    /// Resolve the node for the unique todo list.
+    fn list_id(&self, c: &dyn ViewContext) -> Result<NodeId> {
+        c.find_identity(c.node_id(), "todo.list")?
+            .ok_or_else(|| Error::Internal("todo list is not initialized".into()))
+    }
+
+    /// Resolve the node for the unique modal input.
+    fn input_id(&self, c: &dyn ViewContext) -> Result<NodeId> {
+        c.find_identity(c.node_id(), "todo.input")?
+            .ok_or_else(|| Error::Internal("todo input is not initialized".into()))
+    }
+
     /// Run a mutation against the unique todo list.
     fn with_list<F, R>(&self, c: &mut dyn Context, f: F) -> Result<R>
     where
         F: FnOnce(&mut List<TodoEntry, i64>, &mut dyn Context) -> Result<R>,
     {
-        let id = c
-            .find_identity(c.node_id(), "todo.list")?
-            .ok_or_else(|| Error::Internal("todo list is not initialized".into()))?;
+        let id = self.list_id(c)?;
         c.with_widget_mut(id, f)
     }
 
@@ -278,9 +277,7 @@ impl Todo {
     where
         F: FnOnce(&mut Input) -> Result<R>,
     {
-        let id = c
-            .find_identity(c.node_id(), "todo.input")?
-            .ok_or_else(|| Error::Internal("todo input is not initialized".into()))?;
+        let id = self.input_id(c)?;
         c.with_widget_mut(id, |input: &mut Input, _| f(input))
     }
 
@@ -325,9 +322,7 @@ impl Todo {
             input.set_value("");
             Ok(())
         })?;
-        let input = c
-            .find_identity(c.node_id(), "todo.input")?
-            .ok_or_else(|| Error::Internal("todo input is not initialized".into()))?;
+        let input = self.input_id(c)?;
         if !self.adder.is_some_and(|token| c.modal_is_open(token)) {
             let modal = c.get_slot::<ModalSlot>()?.expect("modal initialized");
             let main = c.get_slot::<MainSlot>()?.expect("main initialized");
@@ -346,7 +341,7 @@ impl Todo {
 
     /// Delete eligibility follows the current list selection.
     fn can_delete(&self, ctx: &dyn ViewContext) -> Result<CommandStatus> {
-        let Some(list) = ctx.find_identity(ctx.node_id(), "todo.list")? else {
+        let Ok(list) = self.list_id(ctx) else {
             return Ok(CommandStatus::Disabled("No item selected".into()));
         };
         ctx.with_widget(ctx.typed_id::<List<TodoEntry, i64>>(list)?, |list| {
@@ -563,7 +558,7 @@ fn app_builder(config: Option<&Path>) -> CanopyBuilder {
 pub fn create_app(store: store::Store, config: Option<&Path>) -> AnyResult<Canopy> {
     Ok(app_builder(config)
         .assemble(move |cnpy| {
-            let todo = Todo::new(store).map_err(store_error)?;
+            let todo = Todo::new(store);
             Root::new().install(cnpy, todo)?;
             Ok(())
         })

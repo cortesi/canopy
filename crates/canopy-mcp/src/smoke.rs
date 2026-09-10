@@ -3,8 +3,6 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-use serde::{Deserialize, Serialize};
-
 use crate::{
     AppFactory, Error, Result,
     script::{ScriptEvalOutcome, ScriptEvalRequest},
@@ -38,7 +36,7 @@ impl SuiteConfig {
 }
 
 /// Result of running one smoke script.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ScriptOutcome {
     /// Script path on disk.
     pub path: PathBuf,
@@ -49,7 +47,7 @@ pub struct ScriptOutcome {
 }
 
 /// Aggregated result for a smoke suite.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SuiteOutcome {
     /// Per-script results in execution order.
     pub scripts: Vec<ScriptOutcome>,

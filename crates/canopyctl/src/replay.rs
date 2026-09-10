@@ -67,7 +67,7 @@ impl ReplayEnvelope {
         if self.app.trim().is_empty() || self.api_digest.trim().is_empty() {
             bail!("replay app and api_digest must be nonempty");
         }
-        validate_viewport(self.viewport)?;
+        self.viewport.validate()?;
         if self.steps.is_empty() {
             bail!("replay must contain at least one step");
         }
@@ -155,12 +155,6 @@ impl ReplayEnvelope {
         envelope.validate()?;
         Ok(envelope)
     }
-}
-
-/// Validate dimensions before either strict or legacy replay can execute.
-pub fn validate_viewport(viewport: Viewport) -> Result<()> {
-    viewport.validate()?;
-    Ok(())
 }
 
 /// Parse a versioned envelope, permitting old shapes only with explicit legacy

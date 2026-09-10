@@ -7,7 +7,6 @@ use canopy::{
     AutomationHandle, Canopy, EvalRequest, FixtureInfo, ScriptOrigin,
     commands::{ArgValue, CommandDispatchKind, CommandRequirement, CommandStatus, CommandTarget},
     error::{Error as CanopyError, Result as CanopyResult, ScriptErrorKind},
-    geom::Size,
     render::NopBackend,
     script::{ScriptAssertion, ScriptCheckDiagnostic},
 };
@@ -296,18 +295,13 @@ impl AppFactory {
         Ok(canopy.fixture_infos())
     }
 
-    /// Return bootstrap information for a fresh headless app instance.
-    pub fn bootstrap(&self) -> Result<BootstrapResponse> {
-        self.bootstrap_with_request(&BootstrapRequest::default())
-    }
-
     /// Bootstrap at requested dimensions, validated before factory invocation.
-    pub fn bootstrap_with_request(&self, request: &BootstrapRequest) -> Result<BootstrapResponse> {
+    pub fn bootstrap(&self, request: &BootstrapRequest) -> Result<BootstrapResponse> {
         let viewport = request.viewport.unwrap_or_default();
         viewport.validate()?;
         let mut metadata = ExecutionMetadata::fresh(self.metadata(), viewport);
-        let session = HeadlessSession::new(self, viewport.into(), None, &mut metadata)?;
-        Ok(bootstrap_for_canopy(&session.canopy, metadata)?)
+        let canopy = build_headless(self, viewport, None, &mut metadata)?;
+        Ok(bootstrap_for_canopy(&canopy, metadata)?)
     }
 
     /// Evaluate a Luau script against a fresh headless app.
@@ -324,25 +318,20 @@ impl AppFactory {
                 );
             }
             let total_start = Instant::now();
-            let mut session = match HeadlessSession::new(
-                self,
-                viewport.into(),
-                request.fixture.as_deref(),
-                &mut metadata,
-            ) {
-                Ok(session) => session,
-                Err(error) => {
-                    return ScriptEvalOutcome::error_only(
-                        ScriptErrorType::Build,
-                        error.to_string(),
-                        Vec::new(),
-                        ScriptTiming::default(),
-                    );
-                }
-            };
-            let build_ms = total_start.elapsed().as_millis() as u64;
-            let HeadlessSession { canopy, backend } = &mut session;
-            evaluate_in(canopy, request, build_ms, total_start, Some(backend))
+            let mut canopy =
+                match build_headless(self, viewport, request.fixture.as_deref(), &mut metadata) {
+                    Ok(canopy) => canopy,
+                    Err(error) => {
+                        return ScriptEvalOutcome::error_only(
+                            ScriptErrorType::Build,
+                            error.to_string(),
+                            Vec::new(),
+                            ScriptTiming::default(),
+                        );
+                    }
+                };
+            let build_ms = elapsed_ms(total_start);
+            evaluate_in(&mut canopy, request, build_ms, total_start, true)
         })();
         outcome.with_metadata(metadata)
     }
@@ -354,8 +343,9 @@ pub fn bootstrap_for_canopy(
     mut metadata: ExecutionMetadata,
 ) -> CanopyResult<BootstrapResponse> {
     let api = canopy.script_api()?.to_string();
+    metadata.api_digest = Some(stable_digest(&api));
     let catalog =
-        script_api_catalog(api.clone()).map_err(|error| CanopyError::Invalid(error.to_string()))?;
+        script_api_catalog(api).map_err(|error| CanopyError::Invalid(error.to_string()))?;
     let ScriptApiResolution::Response(overview) = catalog
         .query(&ScriptApiQuery::default())
         .map_err(|error| CanopyError::Invalid(error.to_string()))?
@@ -364,7 +354,6 @@ pub fn bootstrap_for_canopy(
     };
     let focus_commands = bootstrap_commands(canopy, CommandTarget::Focus)?;
     let default_commands = bootstrap_commands(canopy, CommandTarget::From(canopy.root_id()))?;
-    metadata.api_digest = Some(stable_digest(&api));
     Ok(BootstrapResponse {
         metadata,
         guide: format!("{BOOTSTRAP_GUIDE} Call script_api for declarations."),
@@ -513,7 +502,7 @@ pub fn evaluate_live(
         }
     };
     let outcome = match validate_live_request(request, &metadata) {
-        Ok(()) => evaluate_in(canopy, request, 0, Instant::now(), None),
+        Ok(()) => evaluate_in(canopy, request, 0, Instant::now(), false),
         Err(error) => ScriptEvalOutcome::error_only(
             ScriptErrorType::Invalid,
             error.to_string(),
@@ -569,14 +558,11 @@ pub async fn evaluate_live_request(
         metadata_handle.request(move |canopy| observed_context.metadata(canopy))
     })
     .await
+    .map_err(|error| error.to_string())
+    .and_then(|result| result.map_err(|error| error.to_string()))
     {
-        Ok(Ok(metadata)) => metadata,
-        result => {
-            let message = match result {
-                Ok(Err(error)) => error.to_string(),
-                Err(error) => error.to_string(),
-                Ok(Ok(_)) => unreachable!("successful metadata handled above"),
-            };
+        Ok(metadata) => metadata,
+        Err(message) => {
             return ScriptEvalOutcome::error_only(
                 ScriptErrorType::Runtime,
                 message,
@@ -606,27 +592,11 @@ async fn evaluate_live_request_inner(
     request: ScriptEvalRequest,
 ) -> ScriptEvalOutcome {
     let total_start = Instant::now();
-    if request.fixture.is_some() {
-        return ScriptEvalOutcome::error_only(
-            ScriptErrorType::Invalid,
-            "live sessions do not support eval(fixture=...); use apply_fixture instead",
-            Vec::new(),
-            ScriptTiming::default(),
-        );
-    }
     let preflight_handle = automation.clone();
     let source = request.script.clone();
     let preflight = spawn_blocking(move || {
         preflight_handle.request(move |canopy| {
-            let gate = typecheck_for_eval(
-                canopy,
-                &source,
-                ScriptTiming {
-                    build_ms: 0,
-                    exec_ms: 0,
-                    total_ms: elapsed_ms(total_start),
-                },
-            );
+            let gate = typecheck_for_eval(canopy, &source, live_timing(total_start, total_start));
             Ok((canopy.root_id(), gate))
         })
     })
@@ -742,7 +712,7 @@ fn evaluate_in(
     request: &ScriptEvalRequest,
     build_ms: u64,
     total_start: Instant,
-    render: Option<&mut NopBackend>,
+    render: bool,
 ) -> ScriptEvalOutcome {
     let diagnostics = match typecheck_for_eval(
         canopy,
@@ -750,7 +720,7 @@ fn evaluate_in(
         ScriptTiming {
             build_ms,
             exec_ms: 0,
-            total_ms: total_start.elapsed().as_millis() as u64,
+            total_ms: elapsed_ms(total_start),
         },
     ) {
         TypecheckGate::Ready(diagnostics) => diagnostics,
@@ -759,16 +729,16 @@ fn evaluate_in(
 
     let exec_start = Instant::now();
     let eval_result = eval_script(canopy, &request.script, request.timeout_ms).and_then(|value| {
-        if let Some(backend) = render {
-            canopy.render(backend)?;
+        if render {
+            canopy.render(&mut NopBackend::new())?;
         }
         Ok(value.to_external_json_value()?)
     });
-    let exec_ms = exec_start.elapsed().as_millis() as u64;
+    let exec_ms = elapsed_ms(exec_start);
     let timing = ScriptTiming {
         build_ms,
         exec_ms,
-        total_ms: total_start.elapsed().as_millis() as u64,
+        total_ms: elapsed_ms(total_start),
     };
     let logs = canopy.take_script_logs();
     let assertions = canopy.take_script_assertions();
@@ -789,36 +759,24 @@ fn evaluate_in(
     }
 }
 
-/// Headless canopy session used while evaluating one script request.
-struct HeadlessSession {
-    /// The app instance under test.
-    canopy: Canopy,
-    /// No-op renderer used to drive layout and event dispatch.
-    backend: NopBackend,
-}
-
-impl HeadlessSession {
-    /// Build and render a fresh headless canopy session.
-    fn new(
-        factory: &AppFactory,
-        view_size: Size,
-        fixture: Option<&str>,
-        metadata: &mut ExecutionMetadata,
-    ) -> Result<Self> {
-        Viewport::from(view_size).validate()?;
-        let mut canopy = factory.build()?;
-        metadata.api_digest = Some(stable_digest(canopy.script_api()?));
-        canopy.set_root_size(view_size)?;
-        if let Some(fixture) = fixture {
-            canopy.apply_fixture(fixture)?;
-            if metadata.reset != ResetPolicy::Isolated {
-                metadata.reset = ResetPolicy::Fixture;
-            }
+/// Build and initially render a fresh headless app for one script request.
+fn build_headless(
+    factory: &AppFactory,
+    viewport: Viewport,
+    fixture: Option<&str>,
+    metadata: &mut ExecutionMetadata,
+) -> Result<Canopy> {
+    let mut canopy = factory.build()?;
+    metadata.api_digest = Some(stable_digest(canopy.script_api()?));
+    canopy.set_root_size(viewport.into())?;
+    if let Some(fixture) = fixture {
+        canopy.apply_fixture(fixture)?;
+        if metadata.reset != ResetPolicy::Isolated {
+            metadata.reset = ResetPolicy::Fixture;
         }
-        let mut backend = NopBackend::new();
-        canopy.render(&mut backend)?;
-        Ok(Self { canopy, backend })
     }
+    canopy.render(&mut NopBackend::new())?;
+    Ok(canopy)
 }
 
 /// Evaluate a script with an optional cooperative timeout.
@@ -1103,7 +1061,7 @@ mod tests {
         ] {
             assert!(
                 evaluator
-                    .bootstrap_with_request(&BootstrapRequest {
+                    .bootstrap(&BootstrapRequest {
                         viewport: Some(viewport)
                     })
                     .is_err()
@@ -1214,7 +1172,7 @@ mod tests {
     #[test]
     fn bootstrap_declares_script_default() -> crate::Result<()> {
         let evaluator = test_factory();
-        let bootstrap = evaluator.bootstrap()?;
+        let bootstrap = evaluator.bootstrap(&BootstrapRequest::default())?;
         assert_eq!(bootstrap.default_target, "root");
         assert!(
             bootstrap
