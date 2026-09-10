@@ -15,8 +15,8 @@ canopy.bind_command("Tab", { phase = "after_widget", path = "frame_gym", descrip
 "#;
 
 // Typed keys for keyed children
-canopy::slot!(FrameSlot: Frame);
-canopy::slot!(PatternSlot: TestPattern);
+canopy::slot!(pub(crate) FrameSlot: Frame);
+canopy::slot!(pub(crate) PatternSlot: TestPattern);
 
 /// A widget that renders a test pattern.
 pub(crate) struct TestPattern {

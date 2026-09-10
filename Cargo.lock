@@ -1700,6 +1700,7 @@ dependencies = [
 name = "itty-gifski"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "gifski",
  "imgref",
  "itty-recording-api",

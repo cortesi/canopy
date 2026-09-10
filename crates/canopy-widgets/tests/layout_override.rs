@@ -45,9 +45,9 @@ mod tests {
             assert!(harness.tbuf().contains_text("╰──────────────────╯"));
         }
 
-        harness
-            .canopy
-            .with_root_context(|ctx| ctx.clear_layout_override_of(frame.into()))?;
+        harness.canopy.with_root_context(|ctx| {
+            ctx.set_layout_override_of(frame.into(), LayoutOverride::default())
+        })?;
         harness.render()?;
         harness.canopy.with_root_view(|ctx| {
             assert_eq!(ctx.layout_of(frame.into()), Some(Frame::new().layout()));

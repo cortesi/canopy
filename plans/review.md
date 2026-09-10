@@ -255,8 +255,11 @@ Supporting crates, examples, tooling:
 
 - [x] C1: delete the exclusive frame stack
 - [x] C2: delete both `impl dyn` blocks
-- [ ] C3 unattended part: five zero-consumer methods, two test-only methods,
+- [x] C3 unattended part: five zero-consumer methods, two test-only methods,
       three `View` aliases and 47 call sites
+  - Note: `all_in_tree` and `focused_or_first_descendant` have example consumers
+    (listgym.rs, tests/listgym.rs); the report's zero-consumer claim was wrong,
+    so they were kept. The three `View` aliases had no call sites.
 - [ ] C4: synchronous session input; remove runtime and two production deps
 - [ ] C5: one `apply_edit`; single key destructure; undo-after-repeat assertion
 - [x] C6: remove the two checkpoint fields; trim two doc sentences

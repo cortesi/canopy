@@ -180,10 +180,6 @@ impl Context for DummyContext {
         Ok(None)
     }
 
-    fn restore_mouse_capture(&mut self, _node: NodeId) -> Result<ChangeOutcome> {
-        Ok(ChangeOutcome::Unchanged)
-    }
-
     fn available_bindings(&self, _node: Option<NodeId>) -> Result<BindingSnapshot> {
         Ok(BindingSnapshot {
             focus: self.root_id,
@@ -205,10 +201,6 @@ impl Context for DummyContext {
     fn invalidate_layout(&mut self) {}
 
     fn set_layout_override_of(&mut self, _node: NodeId, _overrides: LayoutOverride) -> Result<()> {
-        Ok(())
-    }
-
-    fn clear_layout_override_of(&mut self, _node: NodeId) -> Result<()> {
         Ok(())
     }
 

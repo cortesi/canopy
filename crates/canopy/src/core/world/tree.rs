@@ -144,6 +144,7 @@ impl Core {
     }
 
     /// Restore the widget's base layout.
+    #[cfg(test)]
     pub fn clear_layout_override_of(&mut self, node: NodeId) -> Result<()> {
         self.set_layout_override_of(node, LayoutOverride::default())
     }

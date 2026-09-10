@@ -21,7 +21,7 @@ use crate::{
     },
     error::{Error, Result},
     event::{Event, mouse::MouseEvent},
-    geom::{Point, Rect},
+    geom::Point,
     layout::{Layout, LayoutOverride},
     path::{Path, PathFilter},
     style::StyleMap,
@@ -165,21 +165,6 @@ pub trait ViewContext: sealed::ViewContext {
 
     /// Return a node's independently assigned semantic identity.
     fn semantic_identity(&self, node: NodeId) -> Option<SemanticIdentity>;
-
-    /// Visible view rectangle in content coordinates.
-    fn view_rect(&self) -> Rect {
-        self.view().view_rect()
-    }
-
-    /// Visible view rectangle in local outer coordinates.
-    fn view_rect_local(&self) -> Rect {
-        self.view().view_rect_local()
-    }
-
-    /// Local outer rectangle for this node.
-    fn outer_rect_local(&self) -> Rect {
-        self.view().outer_rect_local()
-    }
 
     /// Children of the current node in tree order.
     fn children(&self) -> Vec<NodeId> {
@@ -545,9 +530,6 @@ pub trait Context: ViewContext + sealed::Context {
     /// Clear and return the current mouse-capture target.
     fn take_mouse_capture(&mut self) -> Result<Option<NodeId>>;
 
-    /// Restore mouse capture to an attached node.
-    fn restore_mouse_capture(&mut self, node: NodeId) -> Result<ChangeOutcome>;
-
     /// Return effective key bindings for a node or the current focus.
     fn available_bindings(&self, node: Option<NodeId>) -> Result<BindingSnapshot>;
 
@@ -608,11 +590,6 @@ pub trait Context: ViewContext + sealed::Context {
     /// Mark this node dirty so the next frame re-runs layout.
     fn invalidate_layout(&mut self);
 
-    /// Record changes for the next runtime preparation.
-    fn invalidate(&mut self, _invalidation: crate::Invalidation) {
-        self.invalidate_layout();
-    }
-
     /// Update the layout for the current node.
     fn with_layout(&mut self, f: &mut dyn FnMut(&mut Layout)) -> Result<()> {
         let node = self.node_id();
@@ -625,9 +602,6 @@ pub trait Context: ViewContext + sealed::Context {
     /// Replace persistent parent constraints without replacing widget layout
     /// fields.
     fn set_layout_override_of(&mut self, node: NodeId, overrides: LayoutOverride) -> Result<()>;
-
-    /// Clear parent constraints and restore the widget's base layout.
-    fn clear_layout_override_of(&mut self, node: NodeId) -> Result<()>;
 
     /// Create a new widget node detached from the tree.
     fn create_detached_boxed(&mut self, widget: Box<dyn Widget>) -> Result<NodeId>;
@@ -832,18 +806,6 @@ pub trait ContextExt: Context + ViewContextExt {
         Ok(TypedId::new(id))
     }
 
-    /// Execute a closure with a keyed child of type `W`.
-    fn with_slot<W: Widget + 'static, R>(
-        &mut self,
-        key: &str,
-        f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
-    ) -> Result<R> {
-        let node = self
-            .child_slot(key)
-            .ok_or_else(|| Error::NotFound(format!("key {key}")))?;
-        self.with_widget_mut(node, f)
-    }
-
     /// Check if a typed keyed child exists.
     fn has_slot<K: ChildSlot>(&self) -> Result<bool> {
         self.get_slot::<K>().map(|child| child.is_some())
@@ -911,18 +873,10 @@ pub trait ContextExt: Context + ViewContextExt {
         &mut self,
         f: impl FnOnce(&mut K::Widget, &mut dyn Context) -> Result<R>,
     ) -> Result<R> {
-        self.with_slot(K::KEY, f)
-    }
-
-    /// Execute a closure with a typed keyed child if it exists.
-    fn try_with_typed_slot<K: ChildSlot, R>(
-        &mut self,
-        f: impl FnOnce(&mut K::Widget, &mut dyn Context) -> Result<R>,
-    ) -> Result<Option<R>> {
-        let Some(node) = self.child_slot(K::KEY) else {
-            return Ok(None);
-        };
-        self.with_widget_mut(node, f).map(Some)
+        let node = self
+            .child_slot(K::KEY)
+            .ok_or_else(|| Error::NotFound(format!("key {}", K::KEY)))?;
+        self.with_widget_mut(node, f)
     }
 
     /// Execute a closure with the unique descendant of type `W`.
@@ -1131,10 +1085,6 @@ impl Context for NodeCtx<&mut Core> {
         self.core.take_mouse_capture()
     }
 
-    fn restore_mouse_capture(&mut self, node: NodeId) -> Result<ChangeOutcome> {
-        self.core.capture_mouse(node)
-    }
-
     fn available_bindings(&self, node: Option<NodeId>) -> Result<BindingSnapshot> {
         self.core.available_bindings(node)
     }
@@ -1155,13 +1105,6 @@ impl Context for NodeCtx<&mut Core> {
         update_scroll(self.core, self.node_id, |scroll| scroll.scroll(x, y))
     }
 
-    fn invalidate(&mut self, invalidation: crate::Invalidation) {
-        self.core.invalidate(invalidation);
-        if invalidation == crate::Invalidation::Layout {
-            self.invalidate_layout();
-        }
-    }
-
     fn invalidate_layout(&mut self) {
         self.core.invalidate(crate::Invalidation::Layout);
         if let Some(node) = self.core.nodes.get_mut(self.node_id) {
@@ -1171,10 +1114,6 @@ impl Context for NodeCtx<&mut Core> {
 
     fn set_layout_override_of(&mut self, node: NodeId, overrides: LayoutOverride) -> Result<()> {
         self.core.set_layout_override_of(node, overrides)
-    }
-
-    fn clear_layout_override_of(&mut self, node: NodeId) -> Result<()> {
-        self.core.clear_layout_override_of(node)
     }
 
     fn with_layout_of(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Layout)) -> Result<()> {
