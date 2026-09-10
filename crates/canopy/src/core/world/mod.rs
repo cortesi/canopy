@@ -159,10 +159,6 @@ struct TreeStateSnapshot {
     mouse_capture: Option<NodeId>,
     /// Focus recovery candidates.
     focus_hint: Option<FocusRecoveryHint>,
-    /// Registered commands.
-    commands: CommandSet,
-    /// Active command-dispatch scopes.
-    command_scope: Vec<CommandScopeFrame>,
     /// Pending diagnostic target.
     pending_diagnostic_dump: Option<NodeId>,
 }

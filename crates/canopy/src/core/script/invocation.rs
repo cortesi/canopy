@@ -159,12 +159,10 @@ impl LuauHost {
     /// Check admission before compilation, reload, or diagnostics mutation.
     pub(crate) fn ensure_eval_idle(&self) -> Result<()> {
         if self.is_eval_active() {
-            return Err(error::Error::ScriptStructured {
-                kind: error::ScriptErrorKind::ScriptBusy,
-                command: None,
-                owner: None,
-                message: "a script evaluation is already active".to_string(),
-            });
+            return Err(error::Error::script_structured(
+                error::ScriptErrorKind::ScriptBusy,
+                "a script evaluation is already active",
+            ));
         }
         Ok(())
     }
@@ -236,35 +234,29 @@ impl LuauHost {
         remaining_timeout: Option<Duration>,
     ) -> Result<ScriptPoll> {
         let anchor = invocation.anchor;
-        let entry =
-            canopy
-                .core
-                .nodes
-                .get(anchor)
-                .ok_or_else(|| error::Error::ScriptStructured {
-                    kind: error::ScriptErrorKind::InvalidNode,
-                    command: None,
-                    owner: Some(format!("{anchor:?}")),
-                    message: "script anchor no longer exists".to_string(),
-                })?;
+        let entry = canopy.core.nodes.get(anchor).ok_or_else(|| {
+            error::Error::script_structured(
+                error::ScriptErrorKind::InvalidNode,
+                "script anchor no longer exists",
+            )
+            .with_owner(format!("{anchor:?}"))
+        })?;
         if invocation
             .anchor_incarnation
             .is_some_and(|incarnation| incarnation != entry.incarnation)
         {
-            return Err(error::Error::ScriptStructured {
-                kind: error::ScriptErrorKind::InvalidNode,
-                command: None,
-                owner: Some(format!("{anchor:?}")),
-                message: "script anchor widget was replaced".to_string(),
-            });
+            return Err(error::Error::script_structured(
+                error::ScriptErrorKind::InvalidNode,
+                "script anchor widget was replaced",
+            )
+            .with_owner(format!("{anchor:?}")));
         }
         if !canopy.core.is_attached_to_root(anchor) {
-            return Err(error::Error::ScriptStructured {
-                kind: error::ScriptErrorKind::NodeDetached,
-                command: None,
-                owner: Some(format!("{anchor:?}")),
-                message: "script anchor is detached".to_string(),
-            });
+            return Err(error::Error::script_structured(
+                error::ScriptErrorKind::NodeDetached,
+                "script anchor is detached",
+            )
+            .with_owner(format!("{anchor:?}")));
         }
         invocation.anchor_incarnation = Some(entry.incarnation);
         let handle = invocation.handle.ok_or_else(|| {

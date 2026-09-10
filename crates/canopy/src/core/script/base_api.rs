@@ -627,13 +627,10 @@ fn parse_bind_options<'s>(
     };
     let phase = match field("phase")?.as_deref() {
         None => None,
-        Some("before_widget") => Some(inputmap::BindingPhase::BeforeWidget),
-        Some("after_widget") => Some(inputmap::BindingPhase::AfterIgnore),
-        Some(other) => {
-            return Err(RuntimeError::runtime(format!(
-                "unknown binding phase: {other}"
-            )));
-        }
+        Some(label) => Some(
+            inputmap::BindingPhase::parse(label)
+                .ok_or_else(|| RuntimeError::runtime(format!("unknown binding phase: {label}")))?,
+        ),
     };
     Ok(inputmap::BindingOptions {
         scope: binding_scope,

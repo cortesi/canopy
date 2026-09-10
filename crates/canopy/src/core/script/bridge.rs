@@ -173,21 +173,18 @@ pub(super) fn node_handle_type() -> HostType {
         .class(&commands::declaration::Class::new("NodeId"))
         .eq_by(|left, right| left == right)
         .marshal(node_handle_marshal)
-        .tostring(|node_id| node_token(*node_id))
+        .tostring(|node_id| commands::node_token(*node_id))
         .build()
-}
-
-/// Return the external automation token for a node id.
-fn node_token(node_id: NodeId) -> String {
-    format!("{node_id:?}")
 }
 
 /// Marshal a node handle to the external automation token record.
 pub(super) fn node_handle_marshal(node_id: &NodeId) -> ValueSnapshot {
-    ValueSnapshot::Table(vec![
-        marshaled_string_pair("type", "NodeId"),
-        marshaled_string_pair("token", node_token(*node_id)),
-    ])
+    ValueSnapshot::Table(
+        commands::node_token_fields(*node_id)
+            .into_iter()
+            .map(|(key, value)| marshaled_string_pair(key, value))
+            .collect(),
+    )
 }
 
 /// Build a string-keyed marshaled table pair.

@@ -70,7 +70,7 @@ restores its own checkpoint, even when the enclosing edit handles the error.
 The checkpoint captures every arena node, including detached nodes. It restores
 node metadata, topology, child keys, layout and view caches, and lifecycle flags.
 It also restores root, focus, mouse capture, focus recovery hints, exit requests,
-pending style changes, command registry and scope, and pending diagnostic requests.
+pending style changes, and pending diagnostic requests.
 Layout metadata includes the widget base layout and persistent override.
 
 The checkpoint shares widget slots with the live arena. Widget-owned mutations

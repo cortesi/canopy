@@ -572,12 +572,10 @@ impl Canopy {
     /// unknown.
     pub fn invalidate_script_modules(&mut self, root: Option<&str>) -> Result<Option<u64>> {
         if self.script_host.is_eval_active() {
-            return Err(error::Error::ScriptStructured {
-                kind: error::ScriptErrorKind::ScriptBusy,
-                command: None,
-                owner: None,
-                message: "cannot reload modules while evaluation is active".into(),
-            });
+            return Err(error::Error::script_structured(
+                error::ScriptErrorKind::ScriptBusy,
+                "cannot reload modules while evaluation is active",
+            ));
         }
         let Some(source) = self.script_module_source.as_ref() else {
             return Ok(None);

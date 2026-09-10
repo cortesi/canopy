@@ -45,14 +45,12 @@ fn snapshot_node_to_arg(node: &NodeSnapshot) -> ArgValue {
         .action_status
         .as_ref()
         .map(|status| {
-            let (kind, reason) = match status {
-                commands::CommandStatus::Enabled => ("enabled", ArgValue::Null),
-                commands::CommandStatus::Disabled(reason) => {
-                    ("disabled", ArgValue::String(reason.clone()))
-                }
+            let reason = match status {
+                commands::CommandStatus::Enabled => ArgValue::Null,
+                commands::CommandStatus::Disabled(reason) => ArgValue::String(reason.clone()),
             };
             ArgValue::Map(BTreeMap::from([
-                ("kind".into(), ArgValue::String(kind.into())),
+                ("kind".into(), ArgValue::String(status.label().into())),
                 ("reason".into(), reason),
             ]))
         })
@@ -280,11 +278,10 @@ pub(super) fn binding_info_to_arg(binding: &inputmap::BindingRecord) -> ArgValue
         ),
     ]);
     if let Some(phase) = binding.phase {
-        let phase = match phase {
-            inputmap::BindingPhase::BeforeWidget => "before_widget",
-            inputmap::BindingPhase::AfterIgnore => "after_widget",
-        };
-        record.insert("phase".to_string(), ArgValue::String(phase.to_string()));
+        record.insert(
+            "phase".to_string(),
+            ArgValue::String(phase.label().to_string()),
+        );
     }
     if let inputmap::BindingTarget::Command(action) = &binding.target {
         insert_command_action(&mut record, action);
@@ -327,20 +324,22 @@ fn insert_command_action(
     record.insert("command_target".to_string(), ArgValue::Map(target));
 }
 
-/// Add eligibility without conflating it with target resolution or missing
-/// context.
-fn insert_command_eligibility(
+/// Add availability and eligibility without conflating them with target
+/// resolution or missing context.
+fn insert_command_availability(
     record: &mut BTreeMap<String, ArgValue>,
     status: Option<&commands::CommandStatus>,
     missing: &[commands::CommandRequirement],
+    available: bool,
+    target: Option<NodeId>,
 ) {
+    record.insert("available".to_string(), ArgValue::Bool(available));
     if let Some(status) = status {
-        let (label, reason) = match status {
-            commands::CommandStatus::Enabled => ("enabled", None),
-            commands::CommandStatus::Disabled(reason) => ("disabled", Some(reason)),
-        };
-        record.insert("status".to_string(), ArgValue::String(label.to_string()));
-        if let Some(reason) = reason {
+        record.insert(
+            "status".to_string(),
+            ArgValue::String(status.label().to_string()),
+        );
+        if let commands::CommandStatus::Disabled(reason) = status {
             record.insert(
                 "disabled_reason".to_string(),
                 ArgValue::String(reason.clone()),
@@ -352,19 +351,13 @@ fn insert_command_eligibility(
         ArgValue::Array(
             missing
                 .iter()
-                .map(|requirement| {
-                    ArgValue::String(
-                        match requirement {
-                            commands::CommandRequirement::Event => "event",
-                            commands::CommandRequirement::Mouse => "mouse",
-                            commands::CommandRequirement::ListRow => "list_row",
-                        }
-                        .to_string(),
-                    )
-                })
+                .map(|requirement| ArgValue::String(requirement.as_str().to_string()))
                 .collect(),
         ),
     );
+    if let Some(target) = target {
+        record.insert("target".to_string(), ArgValue::Node(target));
+    }
 }
 
 /// Convert a command parameter specification into its scripting record.
@@ -392,14 +385,9 @@ fn command_param_to_arg(param: &commands::CommandParamSpec) -> ArgValue {
         ("optional".to_string(), ArgValue::Bool(param.optional)),
     ]);
     if let Some(requirement) = param.requirement.and_then(|requirement| requirement()) {
-        let name = match requirement {
-            commands::CommandRequirement::Event => "event",
-            commands::CommandRequirement::Mouse => "mouse",
-            commands::CommandRequirement::ListRow => "list_row",
-        };
         record.insert(
             "requirement".to_string(),
-            ArgValue::String(name.to_string()),
+            ArgValue::String(requirement.as_str().to_string()),
         );
     }
     if let Some(doc) = param.ty.doc {
@@ -416,10 +404,7 @@ pub(super) fn command_info_to_arg(availability: commands::CommandAvailability<'_
         status,
         missing_requirements,
     } = availability;
-    let owner = match spec.dispatch {
-        commands::CommandDispatchKind::Node { owner } => owner,
-        commands::CommandDispatchKind::Free => "",
-    };
+    let owner = spec.dispatch.owner().unwrap_or("");
     let mut record = BTreeMap::from([
         ("name".to_string(), ArgValue::String(spec.name.to_string())),
         ("owner".to_string(), ArgValue::String(owner.to_string())),
@@ -434,12 +419,14 @@ pub(super) fn command_info_to_arg(availability: commands::CommandAvailability<'_
                 commands::CommandReturnSpec::Value(ty) => ty.luau_ty().render(),
             }),
         ),
-        (
-            "available".to_string(),
-            ArgValue::Bool(resolution.is_some()),
-        ),
     ]);
-    insert_command_eligibility(&mut record, status.as_ref(), &missing_requirements);
+    insert_command_availability(
+        &mut record,
+        status.as_ref(),
+        &missing_requirements,
+        resolution.is_some(),
+        resolution.and_then(commands::CommandResolution::target),
+    );
     if let Some(doc) = spec.doc {
         record.insert("doc".to_string(), ArgValue::String(doc.to_string()));
     }
@@ -447,9 +434,6 @@ pub(super) fn command_info_to_arg(availability: commands::CommandAvailability<'_
         && let Some(doc) = ty.doc
     {
         record.insert("ret_doc".to_string(), ArgValue::String(doc.to_string()));
-    }
-    if let Some(target) = resolution.and_then(commands::CommandResolution::target) {
-        record.insert("target".to_string(), ArgValue::Node(target));
     }
     ArgValue::Map(record)
 }
@@ -632,45 +616,27 @@ pub(super) fn available_bindings_to_arg(
                 ),
                 (
                     "phase".to_string(),
-                    ArgValue::String(
-                        match binding.phase {
-                            inputmap::BindingPhase::BeforeWidget => "before_widget",
-                            inputmap::BindingPhase::AfterIgnore => "after_widget",
-                        }
-                        .to_string(),
-                    ),
+                    ArgValue::String(binding.phase.label().to_string()),
                 ),
             ]);
             if let Some(phase) = binding.declared_phase {
                 record.insert(
                     "declared_phase".to_string(),
-                    ArgValue::String(
-                        match phase {
-                            inputmap::BindingPhase::BeforeWidget => "before_widget",
-                            inputmap::BindingPhase::AfterIgnore => "after_widget",
-                        }
-                        .to_string(),
-                    ),
+                    ArgValue::String(phase.label().to_string()),
                 );
             }
             if let Some(command) = binding.command {
                 let mut detail = BTreeMap::new();
                 insert_command_action(&mut detail, &command.action);
-                insert_command_eligibility(
+                insert_command_availability(
                     &mut detail,
                     command.status.as_ref(),
                     &command.missing_requirements,
+                    command.resolution.is_some(),
+                    command
+                        .resolution
+                        .and_then(commands::CommandResolution::target),
                 );
-                detail.insert(
-                    "available".to_string(),
-                    ArgValue::Bool(command.resolution.is_some()),
-                );
-                if let Some(target) = command
-                    .resolution
-                    .and_then(commands::CommandResolution::target)
-                {
-                    detail.insert("target".to_string(), ArgValue::Node(target));
-                }
                 record.insert("command".to_string(), ArgValue::Map(detail));
             }
             if let Some(mode) = binding.scope.mode() {

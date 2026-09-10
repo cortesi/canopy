@@ -5,7 +5,7 @@ use std::{
 
 use canopy::{
     AutomationHandle, Canopy, EvalRequest, FixtureInfo, ScriptOrigin,
-    commands::{ArgValue, CommandDispatchKind, CommandRequirement, CommandStatus, CommandTarget},
+    commands::{ArgValue, CommandStatus, CommandTarget},
     error::{Error as CanopyError, Result as CanopyResult, ScriptErrorKind},
     render::NopBackend,
     script::{ScriptAssertion, ScriptCheckDiagnostic},
@@ -419,14 +419,14 @@ fn bootstrap_commands(
         .command_availability(target)?
         .into_iter()
         .map(|availability| {
-            let owner = match availability.spec.dispatch {
-                CommandDispatchKind::Node { owner } => owner,
-                CommandDispatchKind::Free => "",
-            };
-            let (status, disabled_reason) = match availability.status {
-                Some(CommandStatus::Enabled) => (Some("enabled".to_string()), None),
-                Some(CommandStatus::Disabled(reason)) => {
-                    (Some("disabled".to_string()), Some(reason))
+            let owner = availability.spec.dispatch.owner().unwrap_or("");
+            let (status, disabled_reason) = match &availability.status {
+                Some(status) => {
+                    let reason = match status {
+                        CommandStatus::Disabled(reason) => Some(reason.clone()),
+                        CommandStatus::Enabled => None,
+                    };
+                    (Some(status.label().to_string()), reason)
                 }
                 None => (None, None),
             };
@@ -439,14 +439,7 @@ fn bootstrap_commands(
                 missing_requirements: availability
                     .missing_requirements
                     .into_iter()
-                    .map(|requirement| {
-                        match requirement {
-                            CommandRequirement::Event => "event",
-                            CommandRequirement::Mouse => "mouse",
-                            CommandRequirement::ListRow => "list_row",
-                        }
-                        .to_string()
-                    })
+                    .map(|requirement| requirement.as_str().to_string())
                     .collect(),
             }
         })

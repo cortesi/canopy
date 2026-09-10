@@ -144,6 +144,16 @@ pub(super) fn register_framework_declarations(builder: &mut module::Builder) {
         ]),
     ));
     builder.alias(declaration::Alias::new(
+        "CommandTargetInfo",
+        declaration::Type::table([
+            declaration::Field::new(
+                "kind",
+                declaration::Type::literals(["route", "exact", "from", "focus"]),
+            ),
+            declaration::Field::new("node", declaration::Type::named("NodeId").optional()),
+        ]),
+    ));
+    builder.alias(declaration::Alias::new(
         "BindOptions",
         declaration::Type::table([
             declaration::Field::new("description", declaration::Type::String)
@@ -216,14 +226,7 @@ fn register_binding_info(builder: &mut module::Builder) {
             declaration::Field::new("arguments", declaration::Type::Any.optional()),
             declaration::Field::new(
                 "command_target",
-                declaration::Type::table([
-                    declaration::Field::new(
-                        "kind",
-                        declaration::Type::literals(["route", "exact", "from", "focus"]),
-                    ),
-                    declaration::Field::new("node", declaration::Type::named("NodeId").optional()),
-                ])
-                .optional(),
+                declaration::Type::named("CommandTargetInfo").optional(),
             ),
             declaration::Field::new("description", declaration::Type::String)
                 .doc("Required user-facing description."),
@@ -257,36 +260,25 @@ fn register_command_info(builder: &mut module::Builder) {
                 .doc("True when the caller may omit the parameter."),
         ]),
     ));
+    let mut fields = vec![
+        declaration::Field::new("name", declaration::Type::String)
+            .doc("Command name relative to its owner table."),
+        declaration::Field::new("owner", declaration::Type::String)
+            .doc("Widget owner name, or the empty string for free commands."),
+        declaration::Field::new("doc", declaration::Type::String.optional()),
+        declaration::Field::new(
+            "params",
+            declaration::Type::named("CommandParamInfo").array(),
+        )
+        .doc("Parameter metadata in declaration order."),
+        declaration::Field::new("ret", declaration::Type::String)
+            .doc("Luau return type rendered for this command."),
+        declaration::Field::new("ret_doc", declaration::Type::String.optional()),
+    ];
+    fields.extend(command_availability_fields());
     builder.alias(declaration::Alias::new(
         "CommandInfo",
-        declaration::Type::table([
-            declaration::Field::new("name", declaration::Type::String)
-                .doc("Command name relative to its owner table."),
-            declaration::Field::new("owner", declaration::Type::String)
-                .doc("Widget owner name, or the empty string for free commands."),
-            declaration::Field::new("doc", declaration::Type::String.optional()),
-            declaration::Field::new(
-                "params",
-                declaration::Type::named("CommandParamInfo").array(),
-            )
-            .doc("Parameter metadata in declaration order."),
-            declaration::Field::new("ret", declaration::Type::String)
-                .doc("Luau return type rendered for this command."),
-            declaration::Field::new("ret_doc", declaration::Type::String.optional()),
-            declaration::Field::new("available", declaration::Type::Boolean)
-                .doc("True when the command can resolve from the current script anchor."),
-            declaration::Field::new("target", declaration::Type::named("NodeId").optional())
-                .doc("Current target node, when a node command can resolve."),
-            declaration::Field::new(
-                "status",
-                declaration::Type::literals(["enabled", "disabled"]).optional(),
-            ),
-            declaration::Field::new("disabled_reason", declaration::Type::String.optional()),
-            declaration::Field::new(
-                "missing_requirements",
-                declaration::Type::literals(["event", "mouse", "list_row"]).array(),
-            ),
-        ]),
+        declaration::Type::table(fields),
     ));
 }
 
@@ -332,40 +324,18 @@ fn register_observation_info(builder: &mut module::Builder) {
             ),
             declaration::Field::new(
                 "command",
-                declaration::Type::table([
-                    declaration::Field::new("command", declaration::Type::String),
-                    declaration::Field::new("arguments", declaration::Type::Any),
-                    declaration::Field::new(
-                        "command_target",
-                        declaration::Type::table([
-                            declaration::Field::new(
-                                "kind",
-                                declaration::Type::literals(["route", "exact", "from", "focus"]),
-                            ),
-                            declaration::Field::new(
-                                "node",
-                                declaration::Type::named("NodeId").optional(),
-                            ),
-                        ]),
-                    ),
-                    declaration::Field::new("available", declaration::Type::Boolean),
-                    declaration::Field::new(
-                        "target",
-                        declaration::Type::named("NodeId").optional(),
-                    ),
-                    declaration::Field::new(
-                        "status",
-                        declaration::Type::literals(["enabled", "disabled"]).optional(),
-                    ),
-                    declaration::Field::new(
-                        "disabled_reason",
-                        declaration::Type::String.optional(),
-                    ),
-                    declaration::Field::new(
-                        "missing_requirements",
-                        declaration::Type::literals(["event", "mouse", "list_row"]).array(),
-                    ),
-                ])
+                declaration::Type::table({
+                    let mut fields = vec![
+                        declaration::Field::new("command", declaration::Type::String),
+                        declaration::Field::new("arguments", declaration::Type::Any),
+                        declaration::Field::new(
+                            "command_target",
+                            declaration::Type::named("CommandTargetInfo"),
+                        ),
+                    ];
+                    fields.extend(command_availability_fields());
+                    fields
+                })
                 .optional(),
             ),
             declaration::Field::new("description", declaration::Type::String),
@@ -568,5 +538,24 @@ fn node_info_fields(
             .doc("Current viewport origin within the canvas."),
         declaration::Field::new("accept_focus", declaration::Type::Boolean)
             .doc("True when the widget reports that it can accept focus."),
+    ]
+}
+
+/// Shared command availability fields for command and binding records.
+fn command_availability_fields() -> Vec<declaration::Field> {
+    vec![
+        declaration::Field::new("available", declaration::Type::Boolean)
+            .doc("True when the command can resolve from the current script anchor."),
+        declaration::Field::new("target", declaration::Type::named("NodeId").optional())
+            .doc("Current target node, when a node command can resolve."),
+        declaration::Field::new(
+            "status",
+            declaration::Type::literals(["enabled", "disabled"]).optional(),
+        ),
+        declaration::Field::new("disabled_reason", declaration::Type::String.optional()),
+        declaration::Field::new(
+            "missing_requirements",
+            declaration::Type::literals(["event", "mouse", "list_row"]).array(),
+        ),
     ]
 }

@@ -182,6 +182,25 @@ pub enum BindingPhase {
     AfterIgnore,
 }
 
+impl BindingPhase {
+    /// Return a stable scripting and diagnostic label.
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::BeforeWidget => "before_widget",
+            Self::AfterIgnore => "after_widget",
+        }
+    }
+
+    /// Parse a scripting label into a binding phase.
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "before_widget" => Some(Self::BeforeWidget),
+            "after_widget" => Some(Self::AfterIgnore),
+            _ => None,
+        }
+    }
+}
+
 /// Winner returned by the shared resolver.
 #[derive(Clone, Debug)]
 pub struct ResolvedBinding {

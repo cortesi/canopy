@@ -514,12 +514,10 @@ impl Canopy {
 }
 /// Structured admission error shared by driver entry points.
 fn busy() -> Error {
-    Error::ScriptStructured {
-        kind: ScriptErrorKind::ScriptBusy,
-        command: None,
-        owner: None,
-        message: "another runtime turn or evaluation is active".into(),
-    }
+    Error::script_structured(
+        ScriptErrorKind::ScriptBusy,
+        "another runtime turn or evaluation is active",
+    )
 }
 
 impl super::AutomationHandle {

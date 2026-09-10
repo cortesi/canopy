@@ -705,9 +705,8 @@ pub trait Context: ViewContext + sealed::Context {
     ///
     /// Rollback restores arena metadata, topology, child keys, layouts, views,
     /// lifecycle flags, root, focus, mouse capture, focus recovery hints, exit
-    /// requests, pending styles, command registry and scope, and diagnostic
-    /// requests. Each failed nested edit restores its own structural
-    /// checkpoint.
+    /// requests, pending styles, and diagnostic requests. Each failed nested
+    /// edit restores its own structural checkpoint.
     ///
     /// Widget slots are shared with the checkpoint: widget-owned mutations
     /// survive. Binding registration and external effects also survive and

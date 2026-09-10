@@ -33,7 +33,7 @@ mod image_view;
 mod input;
 /// Experimental inspector overlay internals.
 #[cfg(feature = "devtools")]
-pub mod inspector;
+mod inspector;
 mod label;
 /// Typed list container with selection.
 mod list;

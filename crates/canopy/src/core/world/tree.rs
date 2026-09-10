@@ -31,8 +31,6 @@ impl TreeStateSnapshot {
             pending_style: core.pending_style.clone(),
             mouse_capture: core.mouse_capture,
             focus_hint: core.focus_hint,
-            commands: core.commands.clone(),
-            command_scope: core.command_scope.clone(),
             pending_diagnostic_dump: core.pending_diagnostic_dump,
         }
     }
@@ -50,8 +48,6 @@ impl TreeStateSnapshot {
         core.pending_style = self.pending_style;
         core.mouse_capture = self.mouse_capture;
         core.focus_hint = self.focus_hint;
-        core.commands = self.commands;
-        core.command_scope = self.command_scope;
         core.pending_diagnostic_dump = self.pending_diagnostic_dump;
     }
 }

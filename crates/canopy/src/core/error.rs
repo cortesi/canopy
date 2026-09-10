@@ -339,14 +339,27 @@ pub enum Error {
 }
 
 impl Error {
-    /// Construct an unclassified structured script failure.
-    pub(crate) fn script(message: impl Into<String>) -> Self {
+    /// Construct a structured script failure.
+    pub(crate) fn script_structured(kind: ScriptErrorKind, message: impl Into<String>) -> Self {
         Self::ScriptStructured {
-            kind: ScriptErrorKind::Canopy,
+            kind,
             command: None,
             owner: None,
             message: message.into(),
         }
+    }
+
+    /// Attach an owner name to a structured script failure.
+    pub(crate) fn with_owner(mut self, owner: impl Into<String>) -> Self {
+        if let Self::ScriptStructured { owner: slot, .. } = &mut self {
+            *slot = Some(owner.into());
+        }
+        self
+    }
+
+    /// Construct an unclassified structured script failure.
+    pub(crate) fn script(message: impl Into<String>) -> Self {
+        Self::script_structured(ScriptErrorKind::Canopy, message)
     }
 }
 

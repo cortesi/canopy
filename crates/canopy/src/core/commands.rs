@@ -529,10 +529,12 @@ fn arg_value_to_json(value: &ArgValue, node_json: NodeJson) -> Result<JsonValue,
                     "NodeId is not representable as JSON",
                 ));
             }
-            NodeJson::Token => JsonValue::Object(JsonMap::from_iter([
-                ("type".to_string(), JsonValue::String("NodeId".to_string())),
-                ("token".to_string(), JsonValue::String(format!("{id:?}"))),
-            ])),
+            NodeJson::Token => JsonValue::Object(
+                node_token_fields(*id)
+                    .into_iter()
+                    .map(|(key, value)| (key.to_string(), JsonValue::String(value)))
+                    .collect(),
+            ),
         },
         ArgValue::Array(values) => JsonValue::Array(
             values
@@ -557,6 +559,19 @@ enum NodeJson {
     Reject,
     /// Render node handles as opaque reporting tokens.
     Token,
+}
+
+/// Render the external automation token for a node handle.
+pub(crate) fn node_token(node_id: NodeId) -> String {
+    format!("{node_id:?}")
+}
+
+/// Build the external automation token record for a node handle.
+pub(crate) fn node_token_fields(node_id: NodeId) -> [(&'static str, String); 2] {
+    [
+        ("type", "NodeId".to_string()),
+        ("token", node_token(node_id)),
+    ]
 }
 
 /// Convert a JSON value into ArgValue for serde interop.
@@ -733,6 +748,17 @@ pub enum CommandRequirement {
     ListRow,
 }
 
+impl CommandRequirement {
+    /// Return the stable scripting label.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Event => "event",
+            Self::Mouse => "mouse",
+            Self::ListRow => "list_row",
+        }
+    }
+}
+
 /// Current command eligibility, separate from authorization and resolution.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CommandStatus {
@@ -740,6 +766,16 @@ pub enum CommandStatus {
     Enabled,
     /// The action cannot run, with a user-facing reason.
     Disabled(String),
+}
+
+impl CommandStatus {
+    /// Return the stable scripting label.
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Enabled => "enabled",
+            Self::Disabled(_) => "disabled",
+        }
+    }
 }
 
 /// Read-only, erased command eligibility hook.
@@ -791,6 +827,16 @@ pub enum CommandDispatchKind {
         /// Owner node name.
         owner: &'static str,
     },
+}
+
+impl CommandDispatchKind {
+    /// Return the owner name for node-routed commands.
+    pub fn owner(&self) -> Option<&'static str> {
+        match self {
+            Self::Node { owner } => Some(owner),
+            Self::Free => None,
+        }
+    }
 }
 
 /// Static metadata for a command.
@@ -1448,17 +1494,11 @@ fn checked_resolution(
         CommandTarget::Exact(node) => CommandError::WrongOwner {
             id: spec.id.0.to_string(),
             node,
-            expected: match spec.dispatch {
-                CommandDispatchKind::Node { owner } => Some(owner.to_string()),
-                CommandDispatchKind::Free => None,
-            },
+            expected: spec.dispatch.owner().map(str::to_string),
         },
         _ => CommandError::NoTarget {
             id: spec.id.0.to_string(),
-            owner: match spec.dispatch {
-                CommandDispatchKind::Node { owner } => owner.to_string(),
-                CommandDispatchKind::Free => String::new(),
-            },
+            owner: spec.dispatch.owner().unwrap_or_default().to_string(),
         },
     })
 }

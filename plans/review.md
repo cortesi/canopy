@@ -259,9 +259,9 @@ Supporting crates, examples, tooling:
       three `View` aliases and 47 call sites
 - [ ] C4: synchronous session input; remove runtime and two production deps
 - [ ] C5: one `apply_edit`; single key destructure; undo-after-repeat assertion
-- [ ] C6: remove the two checkpoint fields; trim two doc sentences
-- [ ] C7: label methods, shared eligibility and target declarations
-- [ ] C8: `List<Text>` logs, list in `on_mount`, remove `View`, private module
+- [x] C6: remove the two checkpoint fields; trim two doc sentences
+- [x] C7: label methods, shared eligibility and target declarations
+- [x] C8: `List<Text>` logs, list in `on_mount`, remove `View`, private module
 - [ ] C106: `docs/architecture.md` drift (unattended items)
 - [ ] C107: `docs/agent-loop.md` and served guide text
 - [ ] C108: `docs/scripting.md` drift (parts not tied to decisions)
@@ -1839,10 +1839,10 @@ starts after the decisions listed in C3, C9, C10, and C105 are made.
       dependencies. Update the feature table in `architecture.md`.
 - [ ] C5: one `apply_edit`. Destructure keys once. Add the undo-after-repeat
       assertion.
-- [ ] C6: remove the two checkpoint fields. Trim the two doc sentences.
-- [ ] C7: label methods, shared eligibility and target declarations, one token
+- [x] C6: remove the two checkpoint fields. Trim the two doc sentences.
+- [x] C7: label methods, shared eligibility and target declarations, one token
       builder, one `ScriptStructured` constructor.
-- [ ] C8: `List<Text>` logs, list created in `on_mount`, `View` node removed,
+- [x] C8: `List<Text>` logs, list created in `on_mount`, `View` node removed,
       `mod inspector` private, one wrapping snapshot test.
 - [ ] C106 unattended items and C107, C108 (the parts not tied to open
       decisions).

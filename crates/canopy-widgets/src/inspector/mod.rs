@@ -1,6 +1,4 @@
 mod logs;
-/// Inspector view layout.
-mod view;
 
 use canopy::{
     Canopy, Context, Loader, NodeId, ViewContext, Widget, derive_commands, error::Result,
@@ -37,9 +35,9 @@ impl Inspector {
 
     /// Build the inspector subtree and return its node id.
     pub(crate) fn install(context: &mut dyn Context) -> Result<NodeId> {
-        let view_id = view::View::install(context)?;
+        let logs_id = context.create_detached(Logs::new())?;
         let frame_id = context.create_detached(frame::Frame::new())?;
-        context.set_children_of(frame_id.into(), vec![view_id])?;
+        context.set_children_of(frame_id.into(), vec![logs_id.into()])?;
 
         let inspector_id = context.create_detached(Self::new())?;
         context.set_children_of(inspector_id.into(), vec![frame_id.into()])?;

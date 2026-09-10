@@ -10,99 +10,17 @@ use std::{
 
 use canopy::{
     Canopy, Context, FocusDirection, Loader, ViewContext, Widget, derive_commands,
-    error::{Error, Result},
-    geom::{Rect, Size},
+    error::Result,
+    geom::Size,
     layout::{CanvasContext, Constraint, Layout, MeasureConstraints, Measurement},
     render::Render,
     state::NodeName,
 };
 use tracing_subscriber::fmt;
-use unicode_width::UnicodeWidthStr;
 
-use crate::{List, Selectable};
+use crate::{List, Text};
 
-canopy::slot!(ListSlot: List<LogEntry>);
-
-/// Widget for displaying a single log entry.
-struct LogEntry {
-    /// Text content.
-    text: String,
-    /// Selection state.
-    selected: bool,
-}
-
-impl Selectable for LogEntry {
-    fn set_selected(&mut self, selected: bool) {
-        self.selected = selected;
-    }
-}
-
-#[derive_commands]
-impl LogEntry {
-    /// Construct a log entry from text.
-    fn new(text: impl Into<String>) -> Self {
-        Self {
-            text: text.into(),
-            selected: false,
-        }
-    }
-}
-
-impl Widget for LogEntry {
-    fn layout(&self) -> Layout {
-        Layout::fill()
-    }
-
-    fn measure(&self, c: MeasureConstraints) -> Measurement {
-        let available_width = match c.width {
-            Constraint::Exact(n) | Constraint::AtMost(n) => n,
-            Constraint::Unbounded => 80,
-        };
-        let text_width = available_width.saturating_sub(2).max(1) as usize;
-        let lines = textwrap::wrap(&self.text, text_width);
-        c.clamp(Size::new(available_width, lines.len() as u32))
-    }
-
-    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
-        let view = ctx.view();
-
-        if view.is_empty() {
-            return Ok(());
-        }
-
-        // Wrap text based on view width, then render at canvas coordinates
-        let text_width = view.content.w.saturating_sub(2).max(1) as usize;
-        let lines: Vec<_> = textwrap::wrap(&self.text, text_width).into_iter().collect();
-        let height = lines.len().max(1) as u32;
-
-        // Render in canvas coordinates (0,0 is top-left of content).
-        // Column 0: Selection indicator (when selected)
-        if self.selected {
-            let indicator_rect = Rect::new(0, 0, 1, height);
-            rndr.fill("list/selected", indicator_rect, '\u{2588}')?;
-        }
-
-        // Column 1: Spacer
-        let spacer = Rect::new(1, 0, 1, height);
-        rndr.fill("", spacer, ' ')?;
-
-        // Text content starts at column 2
-        for (idx, line) in lines.iter().enumerate() {
-            let line_rect = Rect::new(2, idx as u32, UnicodeWidthStr::width(&**line) as u32, 1);
-            rndr.text("text", line_rect.line(0)?, line)?;
-        }
-
-        Ok(())
-    }
-
-    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
-        true
-    }
-
-    fn name(&self) -> NodeName {
-        NodeName::convert("log_entry")
-    }
-}
+canopy::slot!(ListSlot: List<Text>);
 
 /// Log writer that appends to a shared buffer.
 struct LogWriter {
@@ -173,9 +91,16 @@ impl Widget for Logs {
         view
     }
 
-    fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {
-        self.ensure_tree(c).ok()?;
+    fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
+        c.add_slot::<ListSlot>(List::<Text>::new().with_selection_indicator(
+            "list/selected",
+            "█ ",
+            true,
+        ))?;
+        Ok(())
+    }
 
+    fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {
         if self.install == InstallState::Unattempted {
             let format = fmt::format()
                 .with_level(true)
@@ -203,6 +128,10 @@ impl Widget for Logs {
         Some(Duration::from_millis(100))
     }
 
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+        true
+    }
+
     fn name(&self) -> NodeName {
         NodeName::convert("logs")
     }
@@ -218,25 +147,11 @@ impl Logs {
         }
     }
 
-    /// Ensure the list widget is mounted.
-    fn ensure_tree(&self, c: &mut dyn Context) -> Result<()> {
-        if c.has_slot::<ListSlot>()? {
-            return Ok(());
-        }
-
-        let list_id = c.add_slot::<ListSlot>(List::<LogEntry>::new())?;
-        c.set_layout_of(list_id, Layout::fill())?;
-        Ok(())
-    }
-
     /// Execute a closure with the list widget.
     fn with_list<F, R>(&self, c: &mut dyn Context, f: F) -> Result<R>
     where
-        F: FnOnce(&mut List<LogEntry>, &mut dyn Context) -> Result<R>,
+        F: FnOnce(&mut List<Text>, &mut dyn Context) -> Result<R>,
     {
-        if !c.has_slot::<ListSlot>()? {
-            return Err(Error::Internal("logs list not initialized".into()));
-        }
         c.with_typed_slot::<ListSlot, _>(f)
     }
 
@@ -249,7 +164,7 @@ impl Logs {
 
         self.with_list(c, |list, ctx| {
             for line in lines {
-                list.append(ctx, LogEntry::new(line))?;
+                list.append(ctx, Text::new(line).with_wrap_width(78))?;
             }
             Ok(())
         })
@@ -320,7 +235,9 @@ impl Loader for Logs {
 
 #[cfg(test)]
 mod tests {
-    use super::{InstallState, after_install};
+    use canopy::{error::Result, testing::harness::Harness};
+
+    use super::{InstallState, Logs, after_install};
 
     #[test]
     fn a_successful_install_takes_ownership() {
@@ -333,5 +250,22 @@ mod tests {
             after_install(Err("a global subscriber is already set".to_string())),
             InstallState::Unavailable("a global subscriber is already set".to_string())
         );
+    }
+
+    #[test]
+    fn a_long_log_line_wraps_to_the_wrap_width() -> Result<()> {
+        let mut harness = Harness::builder(Logs::new()).size(80, 4).build()?;
+        harness.with_root_context(|logs: &mut Logs, ctx| {
+            logs.buf.lock().unwrap().push("a".repeat(80));
+            logs.flush_buffer(ctx)
+        })?;
+        harness.render()?;
+        harness.render()?;
+
+        let full = format!("█ {}", "a".repeat(78));
+        harness
+            .tbuf()
+            .assert_matches(&[full.as_str(), "█ aa", "", ""]);
+        Ok(())
     }
 }
