@@ -214,8 +214,8 @@ Automation stack:
 - [x] C72: `luau_check.rs` duplicates the smoke suite's typecheck gate
 - [x] C73: `serve_uds_with_context` is `serve_uds`
 - [x] C74: `SessionManager` forwarders and repeated `touch()`
-- [ ] C75: `ReplayEntry` deserializes five unread fields (deferred: subsumed by C9)
-- [ ] C76: Replay option validation runs three times (deferred: subsumed by C9)
+- [x] C75: `ReplayEntry` deserializes five unread fields (deferred: subsumed by C9)
+- [x] C76: Replay option validation runs three times (deferred: subsumed by C9)
 - [x] C77: Headless viewport validated twice with a `Size` round trip
 - [x] C78: `HeadlessSession` exists to carry a zero-sized `NopBackend`
 - [x] C79: Fixture re-rejected by an inner function
@@ -272,7 +272,7 @@ Supporting crates, examples, tooling:
 ### Stage 4: Items gated on decisions
 
 - [ ] C3 twin policy decided, then C11 as decided; record in `api-budget.md`
-- [ ] C9: `plan_suite`; legacy replay removal if confirmed
+- [x] C9: `plan_suite`; legacy replay removal if confirmed
 - [ ] C10 if approved
 - [ ] C105: recalibrate `docs/api-budget.md`
 - [ ] C109, C110 second line, C33 as decided
@@ -1854,7 +1854,7 @@ starts after the decisions listed in C3, C9, C10, and C105 are made.
 
 - [ ] C3 twin policy, then C11 as decided. Record the outcome in
       `docs/api-budget.md` and recalibrate every threshold (C105).
-- [ ] C9: `plan_suite` in `canopy_mcp::smoke`. Legacy replay removal if
+- [x] C9: `plan_suite` in `canopy_mcp::smoke`. Legacy replay removal if
       confirmed. `discover_scripts` and `fixture_for_script` to `pub(crate)`.
 - [ ] C10 if approved.
 - [ ] C109, C110 second line, C33 as decided.

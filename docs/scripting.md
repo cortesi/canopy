@@ -413,15 +413,5 @@ Selected steps compare actual success with `expect.success`: an expected
 failure passes when evaluation fails, and fails when evaluation succeeds.
 `--fail-fast` stops at the first outcome that differs from its expectation.
 
-Old object journals and bare arrays require `--legacy`. Headless legacy replay
-also requires `--viewport WIDTHxHEIGHT`; `--fixture NAME` selects a reset
-fixture, and omitting it means no fixture. These files lack enough metadata to
-claim complete reproduction:
-
-```sh
-canopyctl replay old-journal.json --legacy --viewport 120x40 \
-  --fixture with_items -- todo mcp :memory:
-```
-
 Source strings are durable replay steps. Live node tokens and session IDs are
 not durable node references; use semantic keys and application identifiers.

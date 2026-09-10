@@ -60,21 +60,48 @@ impl SuiteOutcome {
     }
 }
 
+/// One planned smoke script with its resolved fixture and evaluation request.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SuiteScript {
+    /// Script path on disk.
+    pub path: PathBuf,
+    /// Fixture derived for this script, if any.
+    pub fixture: Option<String>,
+    /// Evaluation request carrying the script source and suite options.
+    pub request: ScriptEvalRequest,
+}
+
+/// Resolve the ordered smoke scripts for a suite run into evaluation requests.
+///
+/// Reading the source and deriving the fixture happen here so `run_suite` and
+/// external runners share one plan.
+pub fn plan_suite(config: &SuiteConfig) -> Result<Vec<SuiteScript>> {
+    discover_scripts(config)?
+        .into_iter()
+        .map(|path| {
+            let fixture = fixture_for_script(&config.suite_dir, &path);
+            let source = fs::read_to_string(&path)?;
+            Ok(SuiteScript {
+                path,
+                fixture: fixture.clone(),
+                request: ScriptEvalRequest {
+                    fixture,
+                    timeout_ms: config.timeout_ms,
+                    ..ScriptEvalRequest::new(source)
+                },
+            })
+        })
+        .collect()
+}
+
 /// Run a smoke suite against fresh headless app instances.
 pub fn run_suite(factory: &AppFactory, config: &SuiteConfig) -> Result<SuiteOutcome> {
-    let scripts = discover_scripts(config)?;
-    let mut results = Vec::with_capacity(scripts.len());
-    for path in scripts {
-        let fixture = fixture_for_script(&config.suite_dir, &path);
-        let source = fs::read_to_string(&path)?;
-        let outcome = factory.evaluate(&ScriptEvalRequest {
-            fixture: fixture.clone(),
-            timeout_ms: config.timeout_ms,
-            ..ScriptEvalRequest::new(source)
-        });
+    let mut results = Vec::new();
+    for script in plan_suite(config)? {
+        let outcome = factory.evaluate(&script.request);
         results.push(ScriptOutcome {
-            path,
-            fixture,
+            path: script.path,
+            fixture: script.fixture,
             outcome,
         });
         if config.fail_fast && !results.last().expect("just pushed").outcome.success {

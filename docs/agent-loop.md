@@ -192,11 +192,10 @@ reports compatibility overrides; malformed envelopes, invalid viewports, and
 missing fixtures remain errors. `--include-failed` executes recorded expected
 failures and compares the result with their expectation.
 
-Old journals require `--legacy` and explicit fixture/viewport options where
-needed. They do not claim complete reproduction. Each fresh-app step is a
+Each fresh-app step is a
 separate eval; put a stateful sequence into one eval source when its steps must
-share a fresh app. Live replay applies its explicit fixture through
-`apply_fixture`, then runs against the same live session.
+share a fresh app. Live replay applies its fixture through `apply_fixture`, then
+runs against the same live session.
 
 Live fixture callbacks must use native mutation or typed dispatch. They execute
 inside a runtime turn, so a nested synchronous eval returns `ScriptBusy`.

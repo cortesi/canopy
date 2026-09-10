@@ -3,7 +3,6 @@
 use std::{fs, path::Path};
 
 use anyhow::{Context, Result, anyhow, bail};
-use canopy::script::ScriptAssertion;
 use canopy_mcp::{ExecutionMetadata, ExecutionMode, ResetPolicy, ScriptEvalOutcome, Viewport};
 use serde::{Deserialize, Serialize};
 
@@ -48,14 +47,6 @@ pub struct ReplayStep {
 pub struct ReplayExpectation {
     /// A selected expected failure passes when evaluation fails.
     pub success: bool,
-}
-
-/// Parsed input whose completeness remains explicit to the caller.
-pub enum ReplayFile {
-    /// Fully described versioned replay.
-    Versioned(ReplayEnvelope),
-    /// Explicitly selected legacy entries with incomplete metadata.
-    Legacy(Vec<ReplayEntry>),
 }
 
 impl ReplayEnvelope {
@@ -157,29 +148,21 @@ impl ReplayEnvelope {
     }
 }
 
-/// Parse a versioned envelope, permitting old shapes only with explicit legacy
-/// mode.
-pub fn parse_replay(contents: &str, legacy: bool) -> Result<ReplayFile> {
+/// Parse a versioned `canopy.replay/1` envelope.
+pub fn parse_replay(contents: &str) -> Result<ReplayEnvelope> {
     let value: serde_json::Value = serde_json::from_str(contents)?;
-    if value.get("schema").is_some() {
-        let envelope: ReplayEnvelope = serde_json::from_value(value)?;
-        envelope.validate()?;
-        return Ok(ReplayFile::Versioned(envelope));
+    if value.get("schema").is_none() {
+        bail!("expected canopy.replay/1 envelope");
     }
-    if !legacy {
-        bail!("legacy journal requires --legacy; expected canopy.replay/1 envelope");
-    }
-    let entries = serde_json::from_value::<ReplayInput>(value)?.into_entries();
-    for entry in &entries {
-        entry.source()?;
-    }
-    Ok(ReplayFile::Legacy(entries))
+    let envelope: ReplayEnvelope = serde_json::from_value(value)?;
+    envelope.validate()?;
+    Ok(envelope)
 }
 
 /// Read and validate a replay before contacting its target.
-pub fn load_replay(path: &Path, legacy: bool) -> Result<ReplayFile> {
+pub fn load_replay(path: &Path) -> Result<ReplayEnvelope> {
     let contents = fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
-    parse_replay(&contents, legacy).with_context(|| format!("parse {}", path.display()))
+    parse_replay(&contents).with_context(|| format!("parse {}", path.display()))
 }
 
 /// Write a complete versioned envelope.
@@ -193,90 +176,6 @@ pub fn write_replay(path: &Path, envelope: &ReplayEnvelope) -> Result<()> {
     }
     fs::write(path, serde_json::to_string_pretty(envelope)?)
         .with_context(|| format!("write {}", path.display()))
-}
-
-/// JSON replay journal accepted by `canopyctl replay`.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ReplayJournal {
-    /// Recorded script evaluations.
-    journal: Vec<ReplayEntry>,
-}
-
-/// One replayable script evaluation.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ReplayEntry {
-    /// Optional monotonic source journal id.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    id: Option<u64>,
-    /// Script origin such as `eval` or `startup:app`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    origin: Option<String>,
-    /// Evaluated Luau source text.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    source: Option<String>,
-    /// Alternate source field accepted for hand-written replay files.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    script: Option<String>,
-    /// Whether the original evaluation completed successfully.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    ok: Option<bool>,
-    /// Error message from the original evaluation.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    error: Option<String>,
-    /// Logs emitted by the original evaluation.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    logs: Vec<String>,
-    /// Assertions emitted by the original evaluation.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    assertions: Vec<ScriptAssertion>,
-    /// Original wall-clock duration in milliseconds.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    duration_ms: Option<u64>,
-}
-
-impl ReplayEntry {
-    /// Return true when the recorded evaluation failed.
-    pub fn originally_failed(&self) -> bool {
-        self.ok == Some(false)
-    }
-
-    /// Return a stable human-readable origin.
-    pub fn origin(&self) -> &str {
-        self.origin.as_deref().unwrap_or("journal")
-    }
-
-    /// Return the script source for this replay entry.
-    pub fn source(&self) -> Result<&str> {
-        self.source
-            .as_deref()
-            .or(self.script.as_deref())
-            .ok_or_else(|| {
-                anyhow!(
-                    "replay entry from {} has no source/script field",
-                    self.origin()
-                )
-            })
-    }
-}
-
-/// Accepted top-level JSON shapes for replay journals.
-#[derive(Debug, Clone, Deserialize)]
-#[serde(untagged)]
-pub enum ReplayInput {
-    /// Object form emitted by `canopyctl eval --journal-out`.
-    Object(ReplayJournal),
-    /// Bare array accepted for simple hand-authored replays.
-    Entries(Vec<ReplayEntry>),
-}
-
-impl ReplayInput {
-    /// Convert into replay entries.
-    pub fn into_entries(self) -> Vec<ReplayEntry> {
-        match self {
-            Self::Object(journal) => journal.journal,
-            Self::Entries(entries) => entries,
-        }
-    }
 }
 
 #[cfg(test)]
@@ -296,7 +195,7 @@ mod tests {
     }
 
     #[test]
-    fn malformed_versioned_files_cannot_be_enabled_by_legacy_mode() {
+    fn malformed_versioned_files_are_rejected() {
         for malformed in [
             {
                 let mut value = envelope_json();
@@ -324,22 +223,14 @@ mod tests {
                 value
             },
         ] {
-            for legacy in [false, true] {
-                assert!(parse_replay(&malformed.to_string(), legacy).is_err());
-            }
+            assert!(parse_replay(&malformed.to_string()).is_err());
         }
     }
 
     #[test]
-    fn unversioned_input_requires_explicit_legacy_selection() -> Result<()> {
+    fn unversioned_input_is_rejected() {
         let source = "{\"journal\":[{\"source\":\"return true\",\"ok\":false}]}";
-        assert!(parse_replay(source, false).is_err());
-        let ReplayFile::Legacy(entries) = parse_replay(source, true)? else {
-            panic!("legacy input");
-        };
-        assert!(entries[0].originally_failed());
-        assert!(parse_replay("{\"journal\":[{}]}", true).is_err());
-        Ok(())
+        assert!(parse_replay(source).is_err());
     }
 
     #[test]

@@ -31,6 +31,4 @@ pub use script::{
 pub use server::{
     ApplyFixtureRequest, ApplyFixtureResponse, UdsServerHandle, serve_stdio, serve_uds,
 };
-pub use smoke::{
-    ScriptOutcome, SuiteConfig, SuiteOutcome, discover_scripts, fixture_for_script, run_suite,
-};
+pub use smoke::{ScriptOutcome, SuiteConfig, SuiteOutcome, SuiteScript, plan_suite, run_suite};
