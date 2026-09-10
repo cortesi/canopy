@@ -246,9 +246,6 @@ pub mod canopy_geom {
     }
 
     impl LineSegment {
-        /// Construct a line segment from its offset and length.
-        pub const fn new(off: u32, len: u32) -> Self {}
-
         /// Does other lie completely within this extent.
         pub fn contains(&self, other: Self) -> bool {}
 
@@ -342,14 +339,8 @@ pub mod canopy_geom {
         /// Clamp widened coordinates to the signed point range.
         pub fn clamped_from_i64(x: i64, y: i64) -> Self {}
 
-        /// Construct a point from its coordinates.
-        pub const fn new(x: i32, y: i32) -> Self {}
-
         /// Convert widened coordinates without losing out-of-range information.
         pub fn try_from_i64(x: i64, y: i64) -> Result<Self, Error> {}
-
-        /// Origin point.
-        pub const ZERO: Self = _;
     }
 
     impl TryFrom<Point> for PointI32 {
@@ -434,18 +425,6 @@ pub mod canopy_geom {
         pub fn vextent(&self) -> LineSegment {}
     }
 
-    impl TryFrom<Rect> for RectI32 {
-        fn try_from(rect: Rect) -> Result<Self, Self::Error> {}
-
-        type Error = Error;
-    }
-
-    impl TryFrom<RectI32> for super::Rect {
-        fn try_from(rect: RectI32) -> Result<Self, Self::Error> {}
-
-        type Error = Error;
-    }
-
     impl Clone for RectI32 {
         fn clone(&self) -> RectI32 {}
     }
@@ -491,8 +470,6 @@ pub mod canopy_geom {
         /// Does this rect have a zero size?
         pub fn is_empty(&self) -> bool {}
 
-        /// Empty rectangle at the origin.
-        pub const ZERO: Self = _;
         /// Intersect this signed rect with an unsigned rect in the same coordinate
         /// space.
         pub fn intersect_rect(&self, other: Rect) -> Option<Rect> {}
@@ -514,21 +491,6 @@ pub mod canopy_geom {
 
         /// Top edge of the rect.
         pub fn top(&self) -> i64 {}
-
-        /// Translate the origin, rejecting a result outside signed coordinates.
-        pub fn translate(self, offset: PointI32) -> Result<Self, Error> {}
-    }
-
-    impl TryFrom<Rect> for RectI32 {
-        fn try_from(rect: Rect) -> Result<Self, Self::Error> {}
-
-        type Error = Error;
-    }
-
-    impl TryFrom<RectI32> for super::Rect {
-        fn try_from(rect: RectI32) -> Result<Self, Self::Error> {}
-
-        type Error = Error;
     }
 
     impl Clone for Size {

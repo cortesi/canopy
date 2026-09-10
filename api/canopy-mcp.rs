@@ -393,20 +393,13 @@ pub mod canopy_mcp {
         pub fn metadata(&self) -> &AppMetadata {}
 
         /// Bootstrap at requested dimensions, validated before factory invocation.
-        pub fn bootstrap_with_request(
-            &self,
-            request: &BootstrapRequest,
-        ) -> Result<BootstrapResponse> {
-        }
+        pub fn bootstrap(&self, request: &BootstrapRequest) -> Result<BootstrapResponse> {}
 
         /// Evaluate a Luau script against a fresh headless app.
         pub fn evaluate(&self, request: &ScriptEvalRequest) -> ScriptEvalOutcome {}
 
         /// Render and return the app's Luau API definition.
         pub fn script_api(&self) -> Result<String> {}
-
-        /// Return bootstrap information for a fresh headless app instance.
-        pub fn bootstrap(&self) -> Result<BootstrapResponse> {}
 
         /// Return the evaluator's registered fixture catalog.
         pub fn fixtures(&self) -> Result<Vec<FixtureInfo>> {}
@@ -1012,23 +1005,6 @@ pub mod canopy_mcp {
         fn eq(&self, other: &ScriptOutcome) -> bool {}
     }
 
-    impl Serialize for ScriptOutcome {
-        fn serialize<__S>(
-            &self,
-            __serializer: __S,
-        ) -> _serde::__private228::Result<__S::Ok, __S::Error>
-        where
-            __S: _serde::Serializer, {
-        }
-    }
-
-    impl<'de> Deserialize<'de> for ScriptOutcome {
-        fn deserialize<__D>(__deserializer: __D) -> _serde::__private228::Result<Self, __D::Error>
-        where
-            __D: _serde::Deserializer<'de>, {
-        }
-    }
-
     impl Clone for ScriptTaskState {
         fn clone(&self) -> ScriptTaskState {}
     }
@@ -1154,26 +1130,9 @@ pub mod canopy_mcp {
         fn eq(&self, other: &SuiteOutcome) -> bool {}
     }
 
-    impl Serialize for SuiteOutcome {
-        fn serialize<__S>(
-            &self,
-            __serializer: __S,
-        ) -> _serde::__private228::Result<__S::Ok, __S::Error>
-        where
-            __S: _serde::Serializer, {
-        }
-    }
-
     impl SuiteOutcome {
         /// Return true when all smoke scripts passed.
         pub fn success(&self) -> bool {}
-    }
-
-    impl<'de> Deserialize<'de> for SuiteOutcome {
-        fn deserialize<__D>(__deserializer: __D) -> _serde::__private228::Result<Self, __D::Error>
-        where
-            __D: _serde::Deserializer<'de>, {
-        }
     }
 
     impl Clone for Viewport {

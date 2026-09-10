@@ -683,9 +683,6 @@ pub mod canopy_examples {
     /// Start demo registration with Root and its first-preparation help setup.
     pub fn demo_canopy() -> canopy::CanopyBuilder {}
 
-    /// Return the Luau API definitions for a built demo app.
-    pub fn print_luau_api(cnpy: &mut canopy::Canopy) -> canopy::error::Result<String> {}
-
     /// Install one demo app under a root and run the terminal loop.
     pub fn run_demo<T: 'static + Widget>(
         builder: canopy::CanopyBuilder,

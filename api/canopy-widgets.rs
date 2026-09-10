@@ -229,9 +229,6 @@ pub mod canopy_widgets {
             /// Construct an editor with a configuration.
             pub fn with_config(text: impl Into<String>, config: EditorConfig) -> Self {}
 
-            /// Construct an editor with default configuration.
-            pub fn new(text: impl Into<String>) -> Self {}
-
             /// Install a syntax highlighter.
             pub fn set_highlighter(&mut self, highlighter: Option<Box<dyn Highlighter>>) {}
 
@@ -253,9 +250,6 @@ pub mod canopy_widgets {
 
             /// Return the current editor configuration.
             pub fn config(&self) -> &EditorConfig {}
-
-            /// Return the current selection.
-            pub fn selection(&self) -> Selection {}
 
             /// Undo the last edit.
             pub fn undo(&mut self, _ctx: &mut dyn Context) {}
@@ -289,16 +283,6 @@ pub mod canopy_widgets {
         /// Render large ASCII-font text into a bounded region.
         pub struct FontBanner {}
 
-        /// A rendered font cell with coverage weights for foreground and background.
-        pub struct FontCell {
-            /// Rendered character for this cell.
-            pub ch: char,
-            /// Foreground coverage weight (0-255).
-            pub fg_coverage: u8,
-            /// Background coverage weight (0-255).
-            pub bg_coverage: u8,
-        }
-
         /// Rendering effects applied to font output.
         pub struct FontEffects {
             /// Thicken strokes by adding extra coverage.
@@ -315,35 +299,8 @@ pub mod canopy_widgets {
             pub strike: bool,
         }
 
-        /// Cached layout for rasterized font text.
-        pub struct FontLayout {
-            /// Target canvas size.
-            pub size: canopy::geom::Size,
-            /// Size of the rendered content before clipping.
-            pub content_size: canopy::geom::Size,
-            /// Rendered cell data for each row.
-            pub cells: Vec<Vec<FontCell>>,
-        }
-
         /// Renderer that converts fonts into terminal text.
         pub struct FontRenderer {}
-
-        /// Glyph raster data rendered to pixel coverage.
-        pub struct Glyph {
-            /// Rasterized coverage mask, row-major, 0-255 per pixel.
-            pub bitmap: Vec<u8>,
-            /// Glyph width in pixels.
-            pub width: u32,
-            /// Glyph height in pixels.
-            pub height: u32,
-            /// Horizontal bearing to the left of the glyph origin, in pixels.
-            pub bearing_left: i32,
-            /// Vertical bearing to the bottom of the glyph relative to the baseline, in
-            /// pixels.
-            pub bearing_bottom: i32,
-            /// Horizontal advance width in pixels.
-            pub advance: f32,
-        }
 
         /// Widget that renders an image into terminal cells.
         pub struct ImageView {}
@@ -356,9 +313,6 @@ pub mod canopy_widgets {
             pub v_align: canopy::layout::Align,
         }
 
-        /// Compute an offset for aligning content inside a span.
-        pub fn align_offset(content: u32, available: u32, align: canopy::layout::Align) -> u32 {}
-
         impl Clone for Font {
             fn clone(&self) -> Font {}
         }
@@ -369,18 +323,6 @@ pub mod canopy_widgets {
 
             /// Return the font name, if provided in metadata.
             pub fn name(&self) -> Option<&str> {}
-        }
-
-        impl Clone for FontCell {
-            fn clone(&self) -> FontCell {}
-        }
-
-        impl Debug for FontCell {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl PartialEq for FontCell {
-            fn eq(&self, other: &FontCell) -> bool {}
         }
 
         impl Clone for FontEffects {
@@ -402,22 +344,6 @@ pub mod canopy_widgets {
 
         impl PartialEq for FontEffects {
             fn eq(&self, other: &FontEffects) -> bool {}
-        }
-
-        impl Clone for FontLayout {
-            fn clone(&self) -> FontLayout {}
-        }
-
-        impl Debug for FontLayout {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Clone for Glyph {
-            fn clone(&self) -> Glyph {}
-        }
-
-        impl Debug for Glyph {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
         }
 
         impl Clone for LayoutOptions {
@@ -523,16 +449,6 @@ pub mod canopy_widgets {
         impl FontRenderer {
             /// Create a renderer for the provided font.
             pub fn new(font: Font) -> Self {}
-
-            /// Render text into a layout that fits within the target canvas.
-            pub fn layout(
-                &mut self,
-                text: &str,
-                size: Size,
-                options: LayoutOptions,
-                effects: FontEffects,
-            ) -> FontLayout {
-            }
         }
     }
 
@@ -632,16 +548,6 @@ pub mod canopy_widgets {
         //! Shared text editing machinery for Input and Editor.
         //! Feature-independent rope storage, editing, and selection helpers.
 
-        /// Information about how an edit changed logical line counts.
-        pub struct LineChange {
-            /// First affected line index.
-            pub start_line: usize,
-            /// Number of lines replaced.
-            pub old_line_count: usize,
-            /// Number of lines inserted.
-            pub new_line_count: usize,
-        }
-
         /// A text selection expressed as an anchor and head position.
         pub struct Selection {}
 
@@ -666,23 +572,6 @@ pub mod canopy_widgets {
 
         /// Scoped text edit transaction.
         pub struct TextTransaction<'a> {}
-
-        impl Clone for LineChange {
-            fn clone(&self) -> LineChange {}
-        }
-
-        impl Debug for LineChange {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for LineChange {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for LineChange {
-            fn eq(&self, other: &LineChange) -> bool {}
-        }
 
         impl Clone for Selection {
             fn clone(&self) -> Selection {}
@@ -832,12 +721,6 @@ pub mod canopy_widgets {
             /// Return the total number of logical lines.
             pub fn line_count(&self) -> usize {}
 
-            /// Take the pending line change, if any.
-            ///
-            /// Returns `Some` only when exactly one edit has landed since the last
-            /// sync. Multiple edits drain as `None` so the layout cache rebuilds.
-            pub fn take_change(&mut self) -> Option<LineChange> {}
-
             /// Undo the most recent transaction.
             pub fn undo(&mut self) -> bool {}
         }
@@ -977,6 +860,9 @@ pub mod canopy_widgets {
 
     /// A frame around an element with optional title and indicators.
     pub struct Frame {}
+
+    /// Widget that renders an image into terminal cells.
+    pub struct ImageView {}
 
     /// Single-line text input widget.
     pub struct Input {}
@@ -1262,6 +1148,56 @@ pub mod canopy_widgets {
         fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
     }
 
+    impl CommandNode for ImageView {
+        fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
+    }
+
+    impl ImageView {
+        /// Create a new image view widget from a file path.
+        pub fn from_path(path: impl AsRef<Path>) -> Result<Self> {}
+
+        /// Create a new image view widget.
+        pub fn new(image: &RgbaImage) -> Self {}
+
+        /// Pan by one step in the specified direction.
+        /// @param dir The pan direction.
+        pub fn pan(&mut self, ctx: &mut dyn Context, dir: FocusDirection) -> Result<()> {}
+
+        /// Zoom around the view center.
+        /// @param dir The zoom direction.
+        pub fn zoom(&mut self, ctx: &mut dyn Context, dir: ZoomDirection) -> Result<()> {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_pan(dir: FocusDirection) -> canopy::commands::CommandCall {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_zoom(dir: ZoomDirection) -> canopy::commands::CommandCall {}
+
+        /// Return a typed command reference for this command.
+        pub fn cmd_pan() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return a typed command reference for this command.
+        pub fn cmd_zoom() -> &'static canopy::commands::CommandSpec {}
+    }
+
+    impl Loader for ImageView {
+        /// Register commands for the image viewer widget.
+        fn load(cnpy: &mut Canopy) -> Result<()> {}
+    }
+
+    impl Widget for ImageView {
+        /// Accept focus so key bindings apply to this widget.
+        fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
+
+        /// Fill the available space in the terminal view.
+        fn layout(&self) -> Layout {}
+
+        /// Render the current image view into the terminal buffer.
+        fn render(&mut self, render: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
+
+        fn canvas(&self, view: Size, _ctx: &CanvasContext<'_>) -> Size {}
+    }
+
     impl CommandNode for Input {
         fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
     }
@@ -1328,10 +1264,6 @@ pub mod canopy_widgets {
 
     impl CommandNode for Pad {
         fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-    }
-
-    impl Default for Pad {
-        fn default() -> Self {}
     }
 
     impl Pad {
@@ -1854,9 +1786,6 @@ pub mod canopy_widgets {
             I: IntoIterator<Item = K>,
             U: FnMut(&K, TypedId<W>, &mut dyn Context) -> Result<()>, {
         }
-
-        /// Remove the item at the specified index.
-        pub fn remove(&mut self, ctx: &mut dyn Context, index: usize) -> Result<bool> {}
 
         /// Return the stable key of the selected row.
         pub fn selected_key(&self) -> Option<&K> {}
