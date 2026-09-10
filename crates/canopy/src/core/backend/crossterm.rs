@@ -961,7 +961,7 @@ mod tests {
         }
         assert_eq!(outcome.completed.len(), 1);
         assert_eq!(
-            outcome.completed[0].result.as_ref().as_ref().unwrap(),
+            outcome.completed[0].result.as_ref().unwrap(),
             &contracts::expected()
         );
         canopy.emit_frame(&mut backend)?;

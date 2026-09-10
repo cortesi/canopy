@@ -55,6 +55,20 @@ fn snapshot_node_to_arg(node: &NodeSnapshot) -> ArgValue {
             ]))
         })
         .unwrap_or(ArgValue::Null);
+    let (rect, content_rect, scroll, canvas) = match node.view {
+        Some(view) => (
+            rect_to_arg(view.outer),
+            rect_to_arg(view.content),
+            point_to_arg(view.scroll),
+            size_to_arg(view.canvas),
+        ),
+        None => (
+            ArgValue::Null,
+            ArgValue::Null,
+            ArgValue::Null,
+            ArgValue::Null,
+        ),
+    };
     ArgValue::Map(BTreeMap::from([
         ("id".into(), ArgValue::Node(node.id)),
         (
@@ -84,16 +98,10 @@ fn snapshot_node_to_arg(node: &NodeSnapshot) -> ArgValue {
             "intersects_viewport".into(),
             ArgValue::Bool(node.intersects_viewport),
         ),
-        (
-            "rect".into(),
-            node.rect.map(rect_to_arg).unwrap_or(ArgValue::Null),
-        ),
-        (
-            "content_rect".into(),
-            node.content_rect.map(rect_to_arg).unwrap_or(ArgValue::Null),
-        ),
-        ("scroll".into(), point_to_arg(node.scroll)),
-        ("canvas".into(), size_to_arg(node.canvas)),
+        ("rect".into(), rect),
+        ("content_rect".into(), content_rect),
+        ("scroll".into(), scroll),
+        ("canvas".into(), canvas),
         ("focused".into(), ArgValue::Bool(node.focused)),
         (
             "semantics".into(),

@@ -808,7 +808,7 @@ impl Canopy {
             return Err(error::Error::Invalid("fixture name cannot be empty".into()));
         }
         if let Some(existing) = self.fixtures.get(&fixture.name) {
-            if existing.description == fixture.description {
+            if Arc::ptr_eq(&existing.setup, &fixture.setup) {
                 return Ok(());
             }
             return Err(error::Error::Invalid(format!(

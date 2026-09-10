@@ -104,7 +104,7 @@ impl Widget for Help {
 
     fn on_event(&mut self, event: &Event, _context: &mut dyn Context) -> Result<EventOutcome> {
         if matches!(event, Event::Mouse(_)) {
-            Ok(EventOutcome::Consume)
+            Ok(EventOutcome::Handle)
         } else {
             Ok(EventOutcome::Ignore)
         }

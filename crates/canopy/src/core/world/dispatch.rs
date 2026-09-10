@@ -32,7 +32,7 @@ impl Core {
         while let Some(id) = target {
             let outcome = self.with_widget_ctx(id, |w, ctx| w.on_event(event, ctx))??;
             match outcome {
-                EventOutcome::Handle | EventOutcome::Consume => return Ok(outcome),
+                EventOutcome::Handle => return Ok(outcome),
                 EventOutcome::Ignore => {
                     target = self.nodes[id].parent;
                 }

@@ -146,19 +146,22 @@ fn capture_distinguishes_attachment_display_and_accumulated_clipping() -> Result
     let child_entry = snapshot.nodes.iter().find(|node| node.id == child).unwrap();
     assert!(child_entry.attached && child_entry.displayed);
     assert!(!child_entry.intersects_viewport);
-    assert_eq!(child_entry.rect, Some(RectI32::new(4, 0, 2, 2)));
+    assert_eq!(
+        child_entry.view.map(|view| view.outer),
+        Some(RectI32::new(4, 0, 2, 2))
+    );
     let detached_entry = snapshot
         .nodes
         .iter()
         .find(|node| node.id == detached)
         .unwrap();
     assert!(!detached_entry.attached && !detached_entry.displayed);
-    assert!(detached_entry.rect.is_none());
+    assert!(detached_entry.view.is_none());
     app.core.nodes[parent].hidden = true;
     let hidden = capture(&app)?;
     let child_entry = hidden.nodes.iter().find(|node| node.id == child).unwrap();
     assert!(child_entry.attached && !child_entry.displayed);
-    assert!(child_entry.rect.is_none());
+    assert!(child_entry.view.is_none());
     app.core.nodes[parent].hidden = false;
     app.core.nodes[parent].layout = Layout {
         display: Display::None,

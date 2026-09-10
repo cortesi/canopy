@@ -285,6 +285,11 @@ Supporting crates, examples, tooling:
   - [x] C115: `WidgetSlotGuard::drop` invariant asserts
   - [x] C116 first part: public `display_width`; fontgym and `Text` widths
 - [ ] C20 (a) or (b), then C125 to C136 as decided
+  - [x] C129: delete the dead `cancel_eval` path and its docs
+  - [x] C130: ticket-or-push completion; unshared `EvalOutcome.result`
+  - [x] C131: remove `EventOutcome::Consume`, use `Handle`
+  - [x] C133: `NodeSnapshot.view` replaces four flattened fields
+  - [x] C136: `register_fixture` compares setup identity
 - [ ] C126 and C127 taken together
 - [ ] C138 visibility with C128
 - [ ] Remaining structural candidates C12 to C32 as each decision is made
@@ -1881,6 +1886,11 @@ starts after the decisions listed in C3, C9, C10, and C105 are made.
   - [x] C116 first part: public `display_width`; fontgym and `Text` widths.
 - [ ] C20 (a) or (b), then C125 to C136 as decided. Take C126 and C127
       together, and C138 visibility with C128.
+  - [x] C129: delete the dead `cancel_eval` path and its docs
+  - [x] C130: ticket-or-push completion; unshared `EvalOutcome.result`
+  - [x] C131: remove `EventOutcome::Consume`, use `Handle`
+  - [x] C133: `NodeSnapshot.view` replaces four flattened fields
+  - [x] C136: `register_fixture` compares setup identity
 - [ ] Remaining structural candidates C12 to C32 as each decision is made. C16
       and C20 need coordinated changes in `ruau` and `itty`.
   - [x] C17: drop `NodeInfo.visible`.

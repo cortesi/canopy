@@ -88,7 +88,8 @@ fn prove_help_flow(mut harness: Harness) -> Result<()> {
         .nodes
         .iter()
         .find(|node| node.name == "help_panel")
-        .and_then(|node| node.rect)
+        .and_then(|node| node.view)
+        .map(|view| view.outer)
         .expect("visible help panel");
     let cell = |x, y| &frame.cells[(y * frame.viewport.w + x) as usize];
     let background = cell(panel.tl.x as u32, panel.tl.y as u32).style.bg;

@@ -129,7 +129,7 @@ mod tests {
         assert_eq!(resumed.completed.len(), 1);
         assert_eq!(resumed.completed[0].id, id);
         assert_eq!(
-            resumed.completed[0].result.as_ref().as_ref().unwrap(),
+            resumed.completed[0].result.as_ref().unwrap(),
             &ArgValue::Bool(true)
         );
         assert!(canopy.turn(Work::Wake)?.completed.is_empty());
@@ -177,7 +177,7 @@ mod tests {
         assert_ne!(restarted.started, Some(id));
         assert_eq!(restarted.completed.len(), 1);
         assert_eq!(
-            restarted.completed[0].result.as_ref().as_ref().unwrap(),
+            restarted.completed[0].result.as_ref().unwrap(),
             &ArgValue::Int(7)
         );
         Ok(())

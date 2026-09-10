@@ -201,7 +201,7 @@ impl Canopy {
             };
 
             match outcome {
-                EventOutcome::Handle | EventOutcome::Consume => {
+                EventOutcome::Handle => {
                     self.trace_route(RoutePhase::Handled, Some(id), &path, format!("{outcome:?}"));
                     return Ok(true);
                 }

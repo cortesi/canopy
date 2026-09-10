@@ -1006,7 +1006,7 @@ fn tkey_no_render() -> Result<()> {
 
         fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {
             let outcome = match event {
-                Event::Key(_) => EventOutcome::Consume,
+                Event::Key(_) => EventOutcome::Handle,
                 _ => EventOutcome::Ignore,
             };
             Ok(outcome)

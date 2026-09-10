@@ -6,10 +6,8 @@ use std::{
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, AtomicU64, Ordering},
-        mpsc,
     },
     task::{Context, Poll, Wake, Waker},
-    thread,
     time::{Duration, Instant},
 };
 
@@ -62,8 +60,6 @@ pub(super) enum AutomationMessage {
     Callback(super::AutomationCallback),
     /// Evaluation submission, retaining no application borrow.
     Eval(EvalId, EvalRequest, oneshot::Sender<EvalOutcome>),
-    /// Cancellation request with a synchronous acknowledgement.
-    Cancel(EvalId, mpsc::Sender<Result<crate::ChangeOutcome>>),
 }
 
 /// One top-level script request.
@@ -90,12 +86,11 @@ pub enum Work {
     Prepare,
 }
 /// Completed script value or failure.
-#[derive(Clone)]
 pub struct EvalOutcome {
     /// Evaluation that completed.
     pub id: EvalId,
-    /// Shared completion, also delivered to an automation ticket.
-    pub result: Arc<Result<ArgValue>>,
+    /// Completion value or failure.
+    pub result: Result<ArgValue>,
     /// Output isolated to this evaluation.
     pub logs: Vec<String>,
     /// Assertions isolated to this evaluation.
@@ -103,10 +98,9 @@ pub struct EvalOutcome {
 }
 
 impl EvalOutcome {
-    /// Take the evaluation result when this outcome has no other owner.
+    /// Return the evaluation result.
     pub fn into_result(self) -> Result<ArgValue> {
-        Arc::try_unwrap(self.result)
-            .map_err(|_| Error::Internal("evaluation result is still shared".into()))?
+        self.result
     }
 }
 /// Observable effects of one turn.
@@ -116,7 +110,7 @@ pub struct TurnOutcome {
     pub frame: Option<FrameId>,
     /// Evaluation accepted by this turn.
     pub started: Option<EvalId>,
-    /// Evaluations completed after publication.
+    /// Evaluations completed after publication without an automation ticket.
     pub completed: Vec<EvalOutcome>,
     /// Requested application exit status.
     pub exit_code: Option<i32>,
@@ -258,8 +252,6 @@ pub(super) struct Driver {
     pub(super) startup_attempted: bool,
     /// Live completion receivers awaiting a terminal evaluation outcome.
     tickets: HashMap<EvalId, oneshot::Sender<EvalOutcome>>,
-    /// Cancellation requested by typed automation.
-    cancel: Option<EvalId>,
 }
 impl Driver {
     /// Construct an idle driver.
@@ -274,7 +266,6 @@ impl Driver {
             in_turn: false,
             startup_attempted: false,
             tickets: Default::default(),
-            cancel: None,
         }
     }
 }
@@ -339,23 +330,12 @@ impl Canopy {
                 Err(error) => {
                     let _closed = sender.send(EvalOutcome {
                         id,
-                        result: Arc::new(Err(error)),
+                        result: Err(error),
                         logs: Vec::new(),
                         assertions: Vec::new(),
                     });
                 }
             },
-            AutomationMessage::Cancel(id, sender) => {
-                let changed = self.driver.active.as_ref().is_some_and(|a| a.id == id);
-                if changed {
-                    self.driver.cancel = Some(id);
-                }
-                let _closed = sender.send(Ok(if changed {
-                    crate::ChangeOutcome::Changed
-                } else {
-                    crate::ChangeOutcome::Unchanged
-                }));
-            }
         }
     }
     /// Return the current driver clock.
@@ -420,13 +400,6 @@ impl Canopy {
             Work::Wake | Work::Prepare => {}
         }
         self.service_automation();
-        if let Some(id) = self.driver.cancel.take()
-            && self.driver.active.as_ref().is_some_and(|a| a.id == id)
-        {
-            let mut active = self.driver.active.take().expect("active evaluation exists");
-            self.script_host.abort_invocation(&mut active.invocation)?;
-            completed = Some((active, Err(Error::ScriptCancelled)));
-        }
         self.poller
             .retain(|stamp| self.core.work_stamp_valid(stamp));
         let mut due = self.poller.collect_due();
@@ -491,14 +464,15 @@ impl Canopy {
             );
             let completion = EvalOutcome {
                 id: active.id,
-                result: Arc::new(result),
+                result,
                 logs,
                 assertions,
             };
             if let Some(sender) = self.driver.tickets.remove(&active.id) {
-                let _closed = sender.send(completion.clone());
+                let _closed = sender.send(completion);
+            } else {
+                outcome.completed.push(completion);
             }
-            outcome.completed.push(completion);
         } else {
             prepared?;
         }
@@ -527,15 +501,6 @@ impl super::AutomationHandle {
         let (sender, completion) = oneshot::channel();
         self.submit_message(AutomationMessage::Eval(id, request, sender))?;
         Ok(EvalTicket { id, completion })
-    }
-    /// Request cancellation and wait only for driver admission.
-    pub fn cancel_eval(&self, id: EvalId) -> Result<crate::ChangeOutcome> {
-        if thread::current().id() == self.ui_thread {
-            return Err(busy());
-        }
-        let (sender, receiver) = mpsc::channel();
-        self.submit_message(AutomationMessage::Cancel(id, sender))?;
-        receiver.recv()?
     }
 }
 
@@ -634,9 +599,9 @@ impl Drop for Canopy {
         for (id, sender) in self.driver.tickets.drain() {
             let _closed = sender.send(EvalOutcome {
                 id,
-                result: Arc::new(Err(Error::RunLoop(
+                result: Err(Error::RunLoop(
                     "application stopped before evaluation completed".into(),
-                ))),
+                )),
                 logs: Vec::new(),
                 assertions: Vec::new(),
             });

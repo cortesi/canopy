@@ -60,8 +60,7 @@ Only one top-level evaluation may run at a time. Another evaluation or module
 reload fails with structured `ScriptBusy`. Live callers submit an `EvalRequest`
 through `AutomationHandle::submit_eval` and await the returned `EvalTicket` outside
 the UI thread. Its completion contains the value or error, logs, and assertions.
-`AutomationHandle::cancel_eval(id)` waits for cancellation admission. Completion
-arrives through the original ticket after runtime preparation.
+Completion arrives through the original ticket after runtime preparation.
 
 Script-created node IDs, binding IDs, and function handles are runtime
 capabilities. They are valid only while the app, node, script host, and

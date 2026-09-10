@@ -172,7 +172,7 @@ impl Widget for Frame {
                     }
                     self.scroll_drag = None;
                     ctx.release_mouse()?;
-                    return Ok(EventOutcome::Consume);
+                    return Ok(EventOutcome::Handle);
                 }
                 mouse::Action::Up if m.button == mouse::Button::Left => {
                     self.scroll_drag = None;
@@ -256,7 +256,7 @@ impl Widget for Frame {
                 }
 
                 if consumed {
-                    return Ok(EventOutcome::Consume);
+                    return Ok(EventOutcome::Handle);
                 }
             }
             _ => {}
@@ -385,7 +385,7 @@ fn handle_scroll_drag(
     };
 
     if !scrollable(view_len, canvas_len) {
-        return Some(EventOutcome::Consume);
+        return Some(EventOutcome::Handle);
     }
 
     let active = scroll_active_rect(child_view, track, drag.axis)?;
@@ -401,16 +401,16 @@ fn handle_scroll_drag(
         canvas_len,
         view_len,
     );
-    let changed = match drag.axis {
-        ScrollAxis::Vertical => scroll_child_to(ctx, child_id, child_view.scroll.x, target),
-        ScrollAxis::Horizontal => scroll_child_to(ctx, child_id, target, child_view.scroll.y),
-    };
+    match drag.axis {
+        ScrollAxis::Vertical => {
+            scroll_child_to(ctx, child_id, child_view.scroll.x, target);
+        }
+        ScrollAxis::Horizontal => {
+            scroll_child_to(ctx, child_id, target, child_view.scroll.y);
+        }
+    }
 
-    Some(if changed {
-        EventOutcome::Handle
-    } else {
-        EventOutcome::Consume
-    })
+    Some(EventOutcome::Handle)
 }
 
 /// Return the length of a scrollbar track for the given axis.

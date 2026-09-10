@@ -158,11 +158,11 @@ impl Widget for BindingList {
         match mouse.action {
             mouse::Action::ScrollUp => {
                 context.scroll_up();
-                Ok(EventOutcome::Consume)
+                Ok(EventOutcome::Handle)
             }
             mouse::Action::ScrollDown => {
                 context.scroll_down();
-                Ok(EventOutcome::Consume)
+                Ok(EventOutcome::Handle)
             }
             mouse::Action::Down if mouse.button == mouse::Button::Left => {
                 let view = context.view();
@@ -176,7 +176,7 @@ impl Widget for BindingList {
                     let target =
                         maximum.saturating_mul(mouse.location.y.min(denominator)) / denominator;
                     context.scroll_to(0, target);
-                    return Ok(EventOutcome::Consume);
+                    return Ok(EventOutcome::Handle);
                 }
                 Ok(EventOutcome::Ignore)
             }

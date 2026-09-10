@@ -3,13 +3,14 @@
 use super::{
     context::CoreViewContext,
     termbuf::TermBuf,
+    view::View,
     world::{Core, WidgetOperation},
 };
 use crate::{
     Cell, FrameId, NodeId, SemanticIdentity,
     commands::{ArgValue, CommandStatus},
     error::Result,
-    geom::{Point, Rect, RectI32, Size},
+    geom::{Rect, Size},
     layout::Display,
 };
 
@@ -49,14 +50,8 @@ pub struct NodeSnapshot {
     pub displayed: bool,
     /// Intersection with the viewport and all ancestor content clips.
     pub intersects_viewport: bool,
-    /// Current signed screen rectangle, absent when not displayed.
-    pub rect: Option<RectI32>,
-    /// Current signed content rectangle, absent when not displayed.
-    pub content_rect: Option<RectI32>,
-    /// Content scroll offset.
-    pub scroll: Point,
-    /// Content canvas size.
-    pub canvas: Size,
+    /// Current view geometry, absent when not displayed.
+    pub view: Option<View>,
     /// Whether this node owns focus.
     pub focused: bool,
     /// Widget-provided observations captured after paint.
@@ -112,10 +107,7 @@ pub(super) fn capture(core: &Core, frame_id: FrameId, buffer: &TermBuf) -> Resul
             attached,
             displayed,
             intersects_viewport,
-            rect: displayed.then_some(node.view.outer),
-            content_rect: displayed.then_some(node.view.content),
-            scroll: node.scroll,
-            canvas: node.canvas,
+            view: displayed.then_some(node.view),
             focused: core.focus == Some(id),
             semantics,
         });

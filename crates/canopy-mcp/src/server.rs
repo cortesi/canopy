@@ -757,7 +757,6 @@ mod tests {
     fn live_pending_eval_allows_native_progress_and_reports_busy() -> crate::Result<()> {
         use canopy::{
             EvalRequest, Work,
-            commands::ArgValue,
             error::{Error as CanopyError, ScriptErrorKind},
             geom::Size,
         };
@@ -813,7 +812,7 @@ mod tests {
                 .expect("mutation observer connected");
         }))?;
         executor::block_on(events.next()).expect("native mutation wakes the UI");
-        let mut outcome = canopy.turn(Work::Wake)?;
+        canopy.turn(Work::Wake)?;
         mutation_rx.recv().expect("native callback ran")?;
         let busy_result = executor::block_on(busy.completion).expect("busy request completed");
         assert!(matches!(
@@ -823,14 +822,9 @@ mod tests {
                 ..
             })
         ));
-        while outcome.completed.is_empty() {
-            executor::block_on(events.next()).expect("publication wakes the waiting script");
-            outcome = canopy.turn(Work::Wake)?;
+        while !worker.is_finished() {
+            canopy.turn(Work::Wake)?;
         }
-        assert!(matches!(
-            outcome.completed[0].result.as_ref(),
-            Ok(ArgValue::Int(7))
-        ));
         let response = worker.join().expect("MCP worker exits");
         let payload = response
             .structured_content

@@ -229,8 +229,9 @@ rendering. Rendering must not rely on stale views.
 
 `Canopy::turn(Work)` drives input, background wakes, evaluation start or cancellation,
 and explicit preparation. `TurnOutcome` reports the published `FrameId`, evaluation
-admission and completion, and exit status. Crossterm, headless evaluation, and the
-test harness use this driver.
+admission, unticketed completion, and exit status. Ticket-backed evaluations complete
+through their `EvalTicket`. Crossterm, headless evaluation, and the test harness use
+this driver.
 
 Dispatch completion restores widget slots and applies queued removals before layout.
 The driver services bounded native automation work, due polls, node wakes, and
@@ -310,8 +311,7 @@ alive.
 MCP and live automation cross the event-loop boundary. Work submitted from another
 thread must marshal back to the UI thread before touching `Canopy` or `Core`.
 `AutomationHandle::submit_eval` queues an `EvalRequest` and returns an `EvalTicket`.
-Await its completion outside the UI thread. `cancel_eval(id)` requests cancellation
-and waits only for driver admission. The queue applies bounded backpressure.
+Await its completion outside the UI thread. The queue applies bounded backpressure.
 
 Only one top-level evaluation may be active. Another evaluation or module reload
 receives `ScriptBusy`. Input and bounded native automation continue during parked
