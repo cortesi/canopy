@@ -260,7 +260,7 @@ Supporting crates, examples, tooling:
   - Note: `all_in_tree` and `focused_or_first_descendant` have example consumers
     (listgym.rs, tests/listgym.rs); the report's zero-consumer claim was wrong,
     so they were kept. The three `View` aliases had no call sites.
-- [ ] C4: synchronous session input; remove runtime and two production deps
+- [x] C4: synchronous session input; remove runtime and two production deps
 - [ ] C5: one `apply_edit`; single key destructure; undo-after-repeat assertion
 - [x] C6: remove the two checkpoint fields; trim two doc sentences
 - [x] C7: label methods, shared eligibility and target declarations
@@ -1838,7 +1838,7 @@ starts after the decisions listed in C3, C9, C10, and C105 are made.
 - [ ] C3 unattended part: the five zero-consumer methods, the two test-only
       methods with replacements, and the three `View` aliases with their 47
       call sites.
-- [ ] C4: synchronous session input. Remove the runtime and the two production
+- [x] C4: synchronous session input. Remove the runtime and the two production
       dependencies. Update the feature table in `architecture.md`.
 - [ ] C5: one `apply_edit`. Destructure keys once. Add the undo-after-repeat
       assertion.

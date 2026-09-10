@@ -11,7 +11,7 @@ doctest = false
 [features]
 default = ["editor", "terminal-widget", "graphics", "devtools"]
 editor = ["dep:syntect"]
-terminal-widget = ["dep:itty-core", "dep:itty-script", "dep:tokio"]
+terminal-widget = ["dep:itty-core"]
 graphics = ["dep:image", "dep:fontdue"]
 devtools = ["dep:tracing-subscriber"]
 
@@ -43,14 +43,14 @@ ropey = "1.6.1"
 syntect = { version = "5.3.0", optional = true }
 tracing-subscriber = { workspace = true, optional = true }
 fontdue = { version = "0.9.3", optional = true }
-tokio = { workspace = true, optional = true, features = ["rt-multi-thread", "time", "sync"] }
 itty-core = { workspace = true, optional = true }
-itty-script = { workspace = true, optional = true }
 
 [dev-dependencies]
 canopy = { path = "../canopy", features = ["testing"] }
 criterion.workspace = true
 proptest.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+itty-script.workspace = true
 
 
 [[bench]]

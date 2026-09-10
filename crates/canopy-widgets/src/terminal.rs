@@ -1,5 +1,4 @@
 use std::{
-    mem,
     path::PathBuf,
     result::Result as StdResult,
     sync::{Arc, Mutex},
@@ -26,7 +25,6 @@ use itty_core::{
     inspect::{StyledRunPublic, TerminalState},
     key::{Key as IttyKey, KeyCode as IttyKeyCode, Modifiers as IttyModifiers},
 };
-use tokio::runtime::{Builder, Runtime};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::click::ClickTracker;
@@ -75,25 +73,17 @@ struct DriverRuntime {
     /// Driver host polled from Canopy's UI loop.
     host: DriverHost,
     /// Cloneable driver handle exposed to integrations.
+    #[cfg_attr(not(test), allow(dead_code))]
     handle: Arc<DriverHandle>,
-    /// Runtime used to enqueue async driver operations without blocking UI
-    /// events.
-    runtime: Runtime,
 }
 
 impl DriverRuntime {
     /// Attach a driver runtime to a session.
     fn attach(session: &mut Session) -> Result<Self> {
         let (host, handle) = driver::attach(session);
-        let runtime = Builder::new_multi_thread()
-            .worker_threads(1)
-            .enable_all()
-            .build()
-            .map_err(|error| Error::Internal(error.to_string()))?;
         Ok(Self {
             host,
             handle: Arc::new(handle),
-            runtime,
         })
     }
 
@@ -106,14 +96,6 @@ impl DriverRuntime {
     /// Drive any pending backend work once from Canopy's poll loop.
     fn poll(&mut self, session: &mut Session) {
         let _ = self.host.poll_nonblocking(session);
-    }
-
-    /// Queue raw input bytes through the attached driver.
-    fn queue_input(&self, bytes: Vec<u8>) {
-        let handle = Arc::clone(&self.handle);
-        mem::drop(self.runtime.spawn(async move {
-            drop(handle.send_input(bytes).await);
-        }));
     }
 }
 
@@ -474,21 +456,16 @@ impl Terminal {
         true
     }
 
-    /// Queue raw input bytes through the attached driver without blocking the
-    /// UI thread.
-    fn queue_input(&self, bytes: Vec<u8>) {
-        let Some(driver) = &self.driver else {
-            return;
-        };
-        driver.queue_input(bytes);
-    }
-
     /// Send a mouse input sequence to the terminal when mouse reporting is
     /// enabled.
     fn send_mouse_sequence(&self, event: &mouse::MouseEvent, state: &TerminalState) {
-        if let Some(bytes) = encode_mouse(event, state) {
-            self.queue_input(bytes);
-        }
+        let Some(bytes) = encode_mouse(event, state) else {
+            return;
+        };
+        let Some(session) = self.session() else {
+            return;
+        };
+        drop(session.send_input_bytes(bytes, "mouse"));
     }
 
     /// Swallow Ctrl+Shift+C so the chord does not reach the PTY.
@@ -572,8 +549,11 @@ impl Terminal {
 
     /// Forward a focus change to the terminal as a focus report.
     fn sync_focus(&self, focused: bool) {
-        if let Some(bytes) = self.focus_report(focused) {
-            self.queue_input(bytes);
+        if self.focus_report(focused).is_none() {
+            return;
+        }
+        if let Some(session) = self.session() {
+            session.send_focus_report(focused);
         }
     }
 }
@@ -1019,6 +999,7 @@ mod tests {
         RunMetrics, ScriptExecPolicy, SharedScriptSurfaceFactory, TermModuleBuilder,
         default_script_surface, run_source,
     };
+    use tokio::runtime::Builder;
 
     use super::*;
 
@@ -1421,7 +1402,11 @@ mod tests {
             .expect("script thread")
             .expect("script succeeds");
 
-        terminal.queue_input(b"exit\r".to_vec());
+        terminal
+            .session()
+            .expect("session")
+            .send_input_bytes(b"exit\r".to_vec(), "test")
+            .expect("send exit");
         wait_for_driver_signal(&mut terminal, &exit_rx).expect("exit callback signals");
         assert!(
             terminal.session().is_some_and(Session::child_exited),

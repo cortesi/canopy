@@ -38,7 +38,7 @@ retains its existing buffer re-exports when enabled.
 | Feature | Additional widgets and dependencies |
 | --- | --- |
 | `editor` | Editor and Syntect syntax highlighting |
-| `terminal-widget` | Terminal, Itty, and its runtime support |
+| `terminal-widget` | Terminal and `itty-core` |
 | `graphics` | Images, fonts, `image`, and `fontdue` |
 | `devtools` | Inspector and tracing subscriber support |
 
