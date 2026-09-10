@@ -11,6 +11,7 @@ mod selection;
 /// Grapheme and display-width helpers.
 mod util;
 
+#[cfg(feature = "editor")]
 pub(crate) use buffer::LineChange;
 pub use buffer::{TextBuffer, TextTransaction};
 pub use position::{TextPosition, TextRange};

@@ -89,6 +89,7 @@ impl Root {
     }
 
     /// Application node id (inside main pane).
+    #[cfg(feature = "devtools")]
     fn app_id(&self, c: &dyn Context) -> Result<NodeId> {
         let main_pane = self.main_pane_id(c)?;
         c.child_slot_of(main_pane, KEY_APP)
