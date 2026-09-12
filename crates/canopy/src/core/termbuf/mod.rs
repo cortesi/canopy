@@ -537,6 +537,7 @@ impl TermBuf {
         }
         let width = self.size.w as usize;
         let can_shift = backend.supports_char_shift();
+        let mut text = String::new();
         for y in 0..self.size.h {
             let row_start = y as usize * width;
             let row_end = row_start + width;
@@ -554,10 +555,10 @@ impl TermBuf {
                 let gap = shift.unsigned_abs() as usize;
                 backend.shift_chars(Point { x: 0, y }, shift)?;
                 if shift > 0 {
-                    render_line_range(backend, current_row, y, 0, gap)?;
+                    render_line_range(backend, current_row, y, 0, gap, &mut text)?;
                 } else {
                     let start = width.saturating_sub(gap);
-                    render_line_range(backend, current_row, y, start, gap)?;
+                    render_line_range(backend, current_row, y, start, gap, &mut text)?;
                 }
                 wrote = true;
                 continue;
@@ -587,7 +588,7 @@ impl TermBuf {
                     continue;
                 }
 
-                render_line_range(backend, current_row, y, start_x, end_x - start_x)?;
+                render_line_range(backend, current_row, y, start_x, end_x - start_x, &mut text)?;
                 wrote = true;
                 x = end_x;
             }
@@ -604,11 +605,12 @@ impl TermBuf {
         self.validate_canonical()?;
         let mut wrote = false;
         let width = self.size.w as usize;
+        let mut text = String::new();
         for y in 0..self.size.h {
             let row_start = y as usize * width;
             let row_end = row_start + width;
             let row = &self.cells[row_start..row_end];
-            render_line_range(backend, row, y, 0, width)?;
+            render_line_range(backend, row, y, 0, width, &mut text)?;
             wrote = true;
         }
         if wrote {
@@ -795,10 +797,11 @@ fn render_shifted_rect<R: RenderBackend>(
     };
     // The backend scrolls the full terminal width, so repaint the whole exposed
     // row.
+    let mut text = String::new();
     for y in exposed {
         let row_start = y as usize * width;
         let row = &buf.cells[row_start..row_start + width];
-        render_line_range(backend, row, y, 0, width)?;
+        render_line_range(backend, row, y, 0, width, &mut text)?;
     }
     backend.flush()
 }
@@ -880,6 +883,7 @@ fn render_line_range<R: RenderBackend>(
     y: u32,
     start: usize,
     len: usize,
+    text: &mut String,
 ) -> Result<()> {
     let Some((start, end)) = grapheme_range(row, start, len) else {
         return Ok(());
@@ -887,7 +891,7 @@ fn render_line_range<R: RenderBackend>(
 
     let mut x = start;
     while x < end {
-        x = render_styled_cells(backend, row, y, x, end)?;
+        x = render_styled_cells(backend, row, y, x, end, text)?;
     }
     Ok(())
 }
@@ -899,9 +903,10 @@ fn render_styled_cells<R: RenderBackend>(
     y: u32,
     start: usize,
     end: usize,
+    text: &mut String,
 ) -> Result<usize> {
     let style = &row[start].style;
-    let mut text = String::new();
+    text.clear();
     let mut x = start;
     let mut split_after_wide = false;
 
@@ -919,7 +924,7 @@ fn render_styled_cells<R: RenderBackend>(
         }
 
         let width = cell.rendered_width();
-        cell.push_text(&mut text);
+        cell.push_text(text);
         split_after_wide = width > 1;
         x += 1;
     }
@@ -930,7 +935,7 @@ fn render_styled_cells<R: RenderBackend>(
         return Ok(x.max(start + 1));
     }
 
-    backend.text(Point { x: start as u32, y }, &text)?;
+    backend.text(Point { x: start as u32, y }, text)?;
     Ok(x)
 }
 

@@ -264,6 +264,43 @@ fn bench_render_diffing(c: &mut Criterion) {
     });
 }
 
+/// Benchmark the short style runs used by image previews and color gradients.
+fn bench_render_color_cells(c: &mut Criterion) {
+    let mut current =
+        TermBuf::new((160, 60), ' ', style()).expect("benchmark buffer should allocate");
+    for y in 0..60 {
+        for x in 0..160 {
+            let mut cell_style = style();
+            cell_style.fg = Color::Rgb {
+                r: x as u8,
+                g: y as u8,
+                b: 128,
+            };
+            current
+                .text(&cell_style, Line::new(x, y, 1), "▀")
+                .expect("benchmark cell should fit");
+        }
+    }
+    let previous = TermBuf::new((160, 60), ' ', style()).expect("benchmark buffer should allocate");
+    let mut backend = CountingBackend::default();
+    c.bench_function("render_color_cells_full", |b| {
+        b.iter(|| {
+            current
+                .render(black_box(&mut backend))
+                .expect("full render should succeed");
+            black_box(backend.text_bytes);
+        });
+    });
+    c.bench_function("render_color_cells_diff", |b| {
+        b.iter(|| {
+            current
+                .diff(black_box(&previous), black_box(&mut backend))
+                .expect("diff render should succeed");
+            black_box(backend.text_bytes);
+        });
+    });
+}
+
 /// Benchmark command target resolution through the synthetic subtree.
 fn bench_command_resolution(c: &mut Criterion) {
     c.bench_function("command_resolution", |b| {
@@ -342,6 +379,7 @@ criterion_group!(
     bench_tree_edit,
     bench_layout,
     bench_render_diffing,
+    bench_render_color_cells,
     bench_command_resolution,
     bench_script_startup,
     bench_text_buffer,

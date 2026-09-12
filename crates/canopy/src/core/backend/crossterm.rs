@@ -1,7 +1,7 @@
 use std::{
     future::{Future, pending, poll_fn},
     io::{self, Stderr, Write},
-    mem,
+    iter,
     pin::Pin,
     task::{Context, Poll},
     time::Instant,
@@ -607,57 +607,44 @@ fn flush_frame(writer: &mut impl Write, pending: &mut Vec<u8>) -> io::Result<()>
 
 /// A string fragment with an absolute terminal-cell location.
 #[derive(Debug, PartialEq, Eq)]
-struct PositionedTextRun {
+struct PositionedTextRun<'a> {
     /// Location where the text run should be printed.
     location: Point,
     /// Text to print at the location.
-    text: String,
+    text: &'a str,
 }
 
-/// Split text into absolute-positioned runs at wide grapheme boundaries.
-fn positioned_text_runs(loc: Point, txt: &str) -> Vec<PositionedTextRun> {
-    let mut runs = Vec::new();
-    let mut run = String::new();
-    let mut run_x = loc.x;
+/// Borrow absolute-positioned runs, isolating wide graphemes and omitting
+/// zero-width graphemes without allocating intermediate strings.
+fn positioned_text_runs(loc: Point, txt: &str) -> impl Iterator<Item = PositionedTextRun<'_>> {
+    let mut graphemes = txt.grapheme_indices(true).peekable();
     let mut x = loc.x;
 
-    for grapheme in txt.graphemes(true) {
-        let width = text::grapheme_width(grapheme);
-        if width == 0 {
-            continue;
-        }
+    iter::from_fn(move || {
+        loop {
+            let (start, grapheme) = graphemes.next()?;
+            let width = text::grapheme_width(grapheme);
+            if width == 0 {
+                continue;
+            }
 
-        if width > 1 {
-            push_positioned_text_run(&mut runs, Point { x: run_x, y: loc.y }, &mut run);
-            runs.push(PositionedTextRun {
-                location: Point { x, y: loc.y },
-                text: grapheme.to_string(),
-            });
+            let location = Point { x, y: loc.y };
+            let mut end = start + grapheme.len();
             x = x.saturating_add(width as u32);
-            run_x = x;
-            continue;
+            if width == 1 {
+                while let Some((offset, following)) =
+                    graphemes.next_if(|(_, next)| text::grapheme_width(next) == 1)
+                {
+                    end = offset + following.len();
+                    x = x.saturating_add(1);
+                }
+            }
+            return Some(PositionedTextRun {
+                location,
+                text: &txt[start..end],
+            });
         }
-
-        if run.is_empty() {
-            run_x = x;
-        }
-        run.push_str(grapheme);
-        x = x.saturating_add(width as u32);
-    }
-
-    push_positioned_text_run(&mut runs, Point { x: run_x, y: loc.y }, &mut run);
-    runs
-}
-
-/// Add a non-empty positioned text run.
-fn push_positioned_text_run(runs: &mut Vec<PositionedTextRun>, location: Point, text: &mut String) {
-    if text.is_empty() {
-        return;
-    }
-    runs.push(PositionedTextRun {
-        location,
-        text: mem::take(text),
-    });
+    })
 }
 
 impl Default for CrosstermRender {
@@ -1243,16 +1230,16 @@ mod tests {
         }
     }
 
-    fn text_run(x: u32, y: u32, text: &str) -> PositionedTextRun {
+    fn text_run(x: u32, y: u32, text: &str) -> PositionedTextRun<'_> {
         PositionedTextRun {
             location: Point { x, y },
-            text: text.to_string(),
+            text,
         }
     }
 
     #[test]
     fn positioned_text_runs_split_after_wide_graphemes() {
-        let runs = positioned_text_runs(Point { x: 5, y: 2 }, "a界bc");
+        let runs: Vec<_> = positioned_text_runs(Point { x: 5, y: 2 }, "a界bc").collect();
 
         assert_eq!(
             runs,
@@ -1354,9 +1341,48 @@ mod tests {
 
     #[test]
     fn positioned_text_runs_keep_combining_graphemes_in_run() {
-        let runs = positioned_text_runs(Point { x: 1, y: 3 }, "e\u{0301}x");
+        let runs: Vec<_> = positioned_text_runs(Point { x: 1, y: 3 }, "e\u{0301}x").collect();
 
         assert_eq!(runs, vec![text_run(1, 3, "e\u{0301}x")]);
+    }
+
+    #[test]
+    fn positioned_text_runs_skip_zero_width_without_losing_columns() {
+        let runs: Vec<_> = positioned_text_runs(
+            Point { x: 0, y: 2 },
+            "\u{200b}a\u{200b}b\u{0301}界\u{200b}x",
+        )
+        .collect();
+        assert_eq!(
+            runs,
+            [
+                text_run(0, 2, "a"),
+                text_run(1, 2, "b\u{0301}"),
+                text_run(2, 2, "界"),
+                text_run(4, 2, "x"),
+            ]
+        );
+        assert!(
+            positioned_text_runs(Point::default(), "\u{200b}")
+                .next()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn positioned_text_runs_saturate_coordinates() {
+        let runs: Vec<_> = positioned_text_runs(
+            Point {
+                x: u32::MAX - 1,
+                y: 0,
+            },
+            "界x",
+        )
+        .collect();
+        assert_eq!(
+            runs,
+            [text_run(u32::MAX - 1, 0, "界"), text_run(u32::MAX, 0, "x")]
+        );
     }
     fn terminal_key(kind: cevent::KeyEventKind) -> cevent::Event {
         cevent::Event::Key(cevent::KeyEvent::new_with_kind(
