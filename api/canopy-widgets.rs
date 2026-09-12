@@ -248,15 +248,45 @@ pub mod canopy_widgets {
         }
 
         impl ImageView {
+            #[must_use]
+            /// Create an image view with nothing to show yet.
+            ///
+            /// The view holds a single transparent pixel until [`Self::set_image`] or
+            /// [`Self::set_path`] gives it real content. Callers that mount a viewer
+            /// before they have an image should keep it hidden until then.
+            pub fn empty() -> Self {}
+
             /// Create a new image view widget from a file path.
             pub fn from_path(path: impl AsRef<Path>) -> Result<Self> {}
 
             /// Create a new image view widget.
             pub fn new(image: &RgbaImage) -> Self {}
 
+            /// Load a thumbnail within `bounds`, preserving its aspect ratio.
+            ///
+            /// Small images keep their original pixels. Larger images are averaged
+            /// after compositing transparency onto black. Zooming uses the thumbnail;
+            /// use [`Self::set_path`] to retain full-resolution zooming instead.
+            ///
+            /// The source is limited to 32 * 1024 * 1024 pixels and the decoder has a
+            /// 128 MiB allocation budget. Conversion can allocate one additional RGBA
+            /// source buffer. The sampling tables use at most 24 * (bounds.w + 1) *
+            /// (bounds.h + 1) bytes. Zero bounds are invalid. On failure, the current
+            /// image is preserved. Callers should also bound the encoded file size.
+            pub fn set_preview_path(&mut self, path: impl AsRef<Path>, bounds: Size) -> Result<()> {
+            }
+
             /// Pan by one step in the specified direction.
             /// @param dir The pan direction.
             pub fn pan(&mut self, ctx: &mut dyn Context, dir: FocusDirection) -> Result<()> {}
+
+            /// Show a different image, returning the view to its auto-fitted state.
+            pub fn set_image(&mut self, image: &RgbaImage) {}
+
+            /// Show the image at `path`, returning the view to its auto-fitted state.
+            ///
+            /// The view keeps its current image when the file cannot be read.
+            pub fn set_path(&mut self, path: impl AsRef<Path>) -> Result<()> {}
 
             /// Zoom around the view center.
             /// @param dir The zoom direction.
@@ -853,15 +883,44 @@ pub mod canopy_widgets {
     }
 
     impl ImageView {
+        #[must_use]
+        /// Create an image view with nothing to show yet.
+        ///
+        /// The view holds a single transparent pixel until [`Self::set_image`] or
+        /// [`Self::set_path`] gives it real content. Callers that mount a viewer
+        /// before they have an image should keep it hidden until then.
+        pub fn empty() -> Self {}
+
         /// Create a new image view widget from a file path.
         pub fn from_path(path: impl AsRef<Path>) -> Result<Self> {}
 
         /// Create a new image view widget.
         pub fn new(image: &RgbaImage) -> Self {}
 
+        /// Load a thumbnail within `bounds`, preserving its aspect ratio.
+        ///
+        /// Small images keep their original pixels. Larger images are averaged
+        /// after compositing transparency onto black. Zooming uses the thumbnail;
+        /// use [`Self::set_path`] to retain full-resolution zooming instead.
+        ///
+        /// The source is limited to 32 * 1024 * 1024 pixels and the decoder has a
+        /// 128 MiB allocation budget. Conversion can allocate one additional RGBA
+        /// source buffer. The sampling tables use at most 24 * (bounds.w + 1) *
+        /// (bounds.h + 1) bytes. Zero bounds are invalid. On failure, the current
+        /// image is preserved. Callers should also bound the encoded file size.
+        pub fn set_preview_path(&mut self, path: impl AsRef<Path>, bounds: Size) -> Result<()> {}
+
         /// Pan by one step in the specified direction.
         /// @param dir The pan direction.
         pub fn pan(&mut self, ctx: &mut dyn Context, dir: FocusDirection) -> Result<()> {}
+
+        /// Show a different image, returning the view to its auto-fitted state.
+        pub fn set_image(&mut self, image: &RgbaImage) {}
+
+        /// Show the image at `path`, returning the view to its auto-fitted state.
+        ///
+        /// The view keeps its current image when the file cannot be read.
+        pub fn set_path(&mut self, path: impl AsRef<Path>) -> Result<()> {}
 
         /// Zoom around the view center.
         /// @param dir The zoom direction.

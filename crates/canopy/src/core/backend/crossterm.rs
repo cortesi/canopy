@@ -534,12 +534,14 @@ impl Drop for CrosstermControl {
 pub struct CrosstermRender {
     /// Stderr handle used for rendering output.
     fp: Stderr,
+    /// Encoded commands for the current frame, discarded if emission fails.
+    pending: Vec<u8>,
 }
 
 impl CrosstermRender {
     /// Flush pending output.
     fn flush(&mut self) -> io::Result<()> {
-        self.fp.flush()
+        flush_frame(&mut self.fp.lock(), &mut self.pending)
     }
 
     /// Apply a style to subsequent output.
@@ -547,34 +549,36 @@ impl CrosstermRender {
         // Always reset first to clear any previous attributes, then set colors
         // and attrs. Order is important: reset clears everything, so we
         // must set colors after.
-        self.fp
+        self.pending
             .queue(style::SetAttribute(style::Attribute::Reset))?;
-        self.fp
+        self.pending
             .queue(style::SetForegroundColor(translate_color(s.fg)))?;
-        self.fp
+        self.pending
             .queue(style::SetBackgroundColor(translate_color(s.bg)))?;
 
         // Now add the desired attributes
         if s.attrs.bold {
-            self.fp.queue(style::SetAttribute(style::Attribute::Bold))?;
+            self.pending
+                .queue(style::SetAttribute(style::Attribute::Bold))?;
         }
         if s.attrs.crossedout {
-            self.fp
+            self.pending
                 .queue(style::SetAttribute(style::Attribute::CrossedOut))?;
         }
         if s.attrs.dim {
-            self.fp.queue(style::SetAttribute(style::Attribute::Dim))?;
+            self.pending
+                .queue(style::SetAttribute(style::Attribute::Dim))?;
         }
         if s.attrs.italic {
-            self.fp
+            self.pending
                 .queue(style::SetAttribute(style::Attribute::Italic))?;
         }
         if s.attrs.overline {
-            self.fp
+            self.pending
                 .queue(style::SetAttribute(style::Attribute::OverLined))?;
         }
         if s.attrs.underline {
-            self.fp
+            self.pending
                 .queue(style::SetAttribute(style::Attribute::Underlined))?;
         }
         Ok(())
@@ -585,11 +589,21 @@ impl CrosstermRender {
         for run in positioned_text_runs(loc, txt) {
             let x = cell_coord(run.location.x)?;
             let y = cell_coord(run.location.y)?;
-            self.fp.queue(ccursor::MoveTo(x, y))?;
-            self.fp.queue(style::Print(run.text))?;
+            self.pending.queue(ccursor::MoveTo(x, y))?;
+            self.pending.queue(style::Print(run.text))?;
         }
         Ok(())
     }
+}
+
+/// Write one frame and discard its bytes even on a partial write or flush
+/// error. The caller retains the last successful frame and can encode a fresh
+/// retry.
+fn flush_frame(writer: &mut impl Write, pending: &mut Vec<u8>) -> io::Result<()> {
+    let result = writer.write_all(pending);
+    pending.clear();
+    result?;
+    writer.flush()
 }
 
 /// A string fragment with an absolute terminal-cell location.
@@ -649,11 +663,19 @@ fn push_positioned_text_run(runs: &mut Vec<PositionedTextRun>, location: Point, 
 
 impl Default for CrosstermRender {
     fn default() -> Self {
-        Self { fp: io::stderr() }
+        Self {
+            fp: io::stderr(),
+            pending: Vec::with_capacity(64 * 1024),
+        }
     }
 }
 
 impl RenderBackend for CrosstermRender {
+    fn reset(&mut self) -> Result<()> {
+        self.pending.clear();
+        Ok(())
+    }
+
     fn flush(&mut self) -> Result<()> {
         translate_result(self.flush())
     }
@@ -682,13 +704,13 @@ impl RenderBackend for CrosstermRender {
         let count_abs = count.unsigned_abs().min(u16::MAX as u32) as u16;
         let x = translate_result(cell_coord(loc.x))?;
         let y = translate_result(cell_coord(loc.y))?;
-        translate_result(self.fp.queue(ccursor::MoveTo(x, y)))?;
+        translate_result(self.pending.queue(ccursor::MoveTo(x, y)))?;
         let seq = if count > 0 {
             format!("\x1b[{count_abs}@")
         } else {
             format!("\x1b[{count_abs}P")
         };
-        translate_result(self.fp.queue(style::Print(seq)))?;
+        translate_result(self.pending.queue(style::Print(seq)))?;
         Ok(())
     }
 
@@ -703,15 +725,15 @@ impl RenderBackend for CrosstermRender {
         }
         let count_abs = count.unsigned_abs().min(u16::MAX as u32) as u16;
         let region = format!("\x1b[{};{}r", top + 1, bottom + 1);
-        translate_result(self.fp.queue(style::Print(region)))?;
-        translate_result(self.fp.queue(ccursor::MoveTo(0, top)))?;
+        translate_result(self.pending.queue(style::Print(region)))?;
+        translate_result(self.pending.queue(ccursor::MoveTo(0, top)))?;
         let seq = if count > 0 {
             format!("\x1b[{count_abs}T")
         } else {
             format!("\x1b[{count_abs}S")
         };
-        translate_result(self.fp.queue(style::Print(seq)))?;
-        translate_result(self.fp.queue(style::Print("\x1b[r")))?;
+        translate_result(self.pending.queue(style::Print(seq)))?;
+        translate_result(self.pending.queue(style::Print("\x1b[r")))?;
         Ok(())
     }
 }
@@ -914,6 +936,91 @@ mod tests {
         EvalRequest,
         testing::{backend::TestRender, contracts},
     };
+
+    #[derive(Default)]
+    struct FrameCapture {
+        bytes: Vec<u8>,
+        writes: usize,
+        flushes: usize,
+        fail_after: Option<usize>,
+        fail_flush: bool,
+    }
+
+    impl Write for FrameCapture {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            self.writes += 1;
+            let len = self.fail_after.map_or(bytes.len(), |limit| {
+                limit.saturating_sub(self.bytes.len()).min(bytes.len())
+            });
+            if len == 0 && !bytes.is_empty() {
+                return Err(io::Error::other("injected frame write failure"));
+            }
+            self.bytes.extend_from_slice(&bytes[..len]);
+            Ok(len)
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            self.flushes += 1;
+            if self.fail_flush {
+                Err(io::Error::other("injected frame flush failure"))
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    #[test]
+    fn terminal_frame_batches_text_and_shifts_until_flush() -> Result<()> {
+        let mut backend = CrosstermRender::default();
+        backend.text(Point { x: 1, y: 2 }, "hi").unwrap();
+        backend.shift_chars(Point { x: 3, y: 2 }, 2)?;
+        backend.shift_lines(2, 4, -1)?;
+        let expected = b"\x1b[3;2Hhi\x1b[3;4H\x1b[2@\x1b[3;5r\x1b[3;1H\x1b[1S\x1b[r";
+        assert_eq!(backend.pending, expected);
+
+        let mut capture = FrameCapture::default();
+        flush_frame(&mut capture, &mut backend.pending).unwrap();
+        assert_eq!(capture.bytes, expected);
+        assert_eq!((capture.writes, capture.flushes), (1, 1));
+        assert!(backend.pending.is_empty());
+
+        backend.text(Point::default(), "discarded").unwrap();
+        backend.reset()?;
+        assert!(backend.pending.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn terminal_frame_failure_discards_bytes_before_a_fresh_retry() {
+        for fail_after in [None, Some(3)] {
+            let mut capture = FrameCapture {
+                fail_after,
+                fail_flush: fail_after.is_none(),
+                ..FrameCapture::default()
+            };
+            let mut pending = b"first frame".to_vec();
+            assert!(flush_frame(&mut capture, &mut pending).is_err());
+            assert!(
+                pending.is_empty(),
+                "failed output must not survive for drop or retry"
+            );
+            assert_eq!(
+                capture.bytes,
+                if fail_after.is_some() {
+                    &b"fir"[..]
+                } else {
+                    &b"first frame"[..]
+                }
+            );
+
+            capture.bytes.clear();
+            capture.fail_after = None;
+            capture.fail_flush = false;
+            pending.extend_from_slice(b"fresh frame");
+            flush_frame(&mut capture, &mut pending).unwrap();
+            assert_eq!(capture.bytes, b"fresh frame");
+        }
+    }
 
     #[test]
     fn shared_trace_crosses_terminal_ingestion_driver_and_emission() -> Result<()> {

@@ -38,6 +38,7 @@ itty-core = { workspace = true, optional = true }
 canopy = { path = "../canopy", features = ["testing"] }
 criterion.workspace = true
 proptest.workspace = true
+tempfile.workspace = true
 
 
 [[bench]]

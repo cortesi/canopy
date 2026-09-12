@@ -362,6 +362,7 @@ dependencies = [
  "proptest",
  "ropey",
  "syntect",
+ "tempfile",
  "textwrap",
  "tracing-subscriber",
  "unicode-segmentation",
