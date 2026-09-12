@@ -14,6 +14,9 @@ use crate::{
     error::{Error, Result},
 };
 
+/// Minimum timer delay. Explicit node wakes can still poll immediately.
+const MIN_POLL_INTERVAL: Duration = Duration::from_millis(1);
+
 /// Monotonic time source shared by driver scheduling and deterministic tests.
 pub trait Clock: Debug + Send + Sync {
     /// Return the current monotonic time.
@@ -158,11 +161,12 @@ impl Poller {
         self.clock.now()
     }
 
-    /// Replace the pending callback for this owner.
+    /// Replace the pending callback, allowing the adapter to sleep between
+    /// polls.
     pub(crate) fn schedule(&mut self, stamp: WorkStamp, duration: Duration) -> Result<()> {
         let deadline = self
             .now()
-            .checked_add(duration)
+            .checked_add(duration.max(MIN_POLL_INTERVAL))
             .ok_or_else(|| Error::RunLoop("poll deadline overflow".into()))?;
         self.pending.schedule(stamp, deadline);
         Ok(())
@@ -256,14 +260,17 @@ mod tests {
 
     #[test]
     fn lifetime_cancellation_discards_due_work() -> Result<()> {
-        let mut poller = Poller::new();
+        let clock = Arc::new(ManualClock::new());
+        let mut poller = Poller::with_clock(clock.clone());
         let owner = WorkStamp {
             attachment: Some(4),
             ..stamp()
         };
         poller.schedule(owner, Duration::ZERO)?;
+        clock.advance(MIN_POLL_INTERVAL)?;
         poller.retain(|stamp| stamp.attachment.is_none());
         assert!(poller.collect_due().is_empty());
+        assert_eq!(poller.next_deadline(), None);
         Ok(())
     }
 }

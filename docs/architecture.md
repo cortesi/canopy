@@ -110,6 +110,11 @@ on detach. Reattachment starts a new attachment generation. Hiding ends neither
 lifetime. `Widget::poll_lifetime()` defaults to node lifetime, preserving detached
 terminal polling. Attachment polling initializes again after reattachment.
 
+Each `Widget::poll` result replaces its previous timer. `Some(delay)` schedules
+another poll, with delays below one millisecond rounded up to let the adapter
+sleep. `None` cancels scheduled polling, including when an early node wake
+triggered the callback. Explicit wakes remain immediate.
+
 `Context::wake_handle(lifetime)` creates a `Send + Sync` `NodeWakeHandle` for the
 current widget incarnation. Attachment handles require an attached owner.
 `wake()` returns `Queued`, `Coalesced`, or `Expired` and requests one owner poll.

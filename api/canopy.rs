@@ -3611,6 +3611,12 @@ pub mod canopy {
         fn on_unmount(&mut self, _ctx: &mut dyn Context) {}
 
         /// Scheduled poll endpoint.
+        ///
+        /// Return `Some(delay)` to replace the pending timer. Delays below one
+        /// millisecond round up to one millisecond so the runtime can sleep.
+        /// Return `None` to stop scheduled polling, including a timer pending when
+        /// an explicit wake triggered this callback. Node wakes can still request
+        /// an immediate poll without waiting for a timer.
         fn poll(&mut self, _ctx: &mut dyn Context) -> Option<Duration> {}
 
         /// Lifetime of scheduled polling. Hiding never stops polling.

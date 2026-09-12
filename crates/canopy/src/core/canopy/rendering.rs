@@ -59,6 +59,9 @@ impl Canopy {
             incarnation: entry.incarnation,
             attachment,
         };
+        // An explicit wake can arrive before the existing timer. Consume that
+        // timer too, so the callback's return value decides all future polling.
+        self.poller.cancel_owner(stamp.node, stamp.incarnation);
         let result = self.with_dispatch_boundary(|canopy| {
             canopy
                 .core
