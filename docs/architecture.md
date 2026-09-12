@@ -207,6 +207,12 @@ times in one pass.
 Canvas calculation is also infallible. It returns the scrollable content extent,
 which is at least the content size. Layout clamps scroll after every pass.
 
+`Context::scroll_into_view()` queues a content rectangle to reveal after canvas
+sizing, before views are published. This lets a widget expand and reveal a row
+in the same turn. The latest request wins and explicit scrolling cancels it.
+Requests survive hidden, detached, and zero-sized views, but widget replacement
+clears them. A successful nonempty layout consumes each request once.
+
 Hidden nodes and `Display::None` nodes do not participate in visible layout.
 Layout clears their subtree caches.
 

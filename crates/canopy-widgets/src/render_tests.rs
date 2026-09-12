@@ -97,6 +97,80 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn selector_navigation_reveals_the_active_row() -> Result<()> {
+        let items = ["First", "Second", "Third", "Fourth", "Fifth"]
+            .map(String::from)
+            .to_vec();
+        let mut harness = Harness::builder(SnapshotRoot::new(Selector::new(items)))
+            .size(12, 2)
+            .build()?;
+        harness.render()?;
+        harness.with_root_context(|_: &mut SnapshotRoot<Selector<String>>, ctx| {
+            ctx.with_unique_descendant::<Selector<String>, _>(|selector, ctx| {
+                selector.select_last(ctx)
+            })
+        })?;
+        harness.render()?;
+        assert!(harness.tbuf().contains_text("[ ] Fifth"));
+        harness.with_root_context(|_: &mut SnapshotRoot<Selector<String>>, ctx| {
+            ctx.with_unique_descendant::<Selector<String>, _>(|selector, ctx| {
+                selector.toggle(ctx)?;
+                selector.select_by(ctx, -3)
+            })
+        })?;
+        harness.render()?;
+        assert!(harness.tbuf().contains_text("[ ] Second"));
+        harness.with_root_context(|_: &mut SnapshotRoot<Selector<String>>, ctx| {
+            ctx.with_unique_descendant::<Selector<String>, _>(|selector, ctx| {
+                assert_eq!(selector.selected_items(), [&"Fifth".to_string()]);
+                selector.select_first(ctx)
+            })
+        })?;
+        harness.render()?;
+        assert!(harness.tbuf().contains_text("[ ] First"));
+        Ok(())
+    }
+
+    #[test]
+    fn dropdown_navigation_reveals_the_active_row_after_expanding() -> Result<()> {
+        let items = ["First", "Second", "Third", "Fourth", "Fifth"]
+            .map(String::from)
+            .to_vec();
+        let mut harness = Harness::builder(SnapshotRoot::new(Dropdown::new(items)?))
+            .size(12, 2)
+            .build()?;
+        harness.render()?;
+        // Expansion and navigation can happen in the same command turn,
+        // before the expanded canvas has been measured.
+        harness.with_root_context(|_: &mut SnapshotRoot<Dropdown<String>>, ctx| {
+            ctx.with_unique_descendant::<Dropdown<String>, _>(|dropdown, ctx| {
+                dropdown.toggle(ctx)?;
+                dropdown.select_by(ctx, 4)
+            })
+        })?;
+        harness.render()?;
+        assert!(harness.tbuf().contains_text("Fifth"));
+        harness.with_root_context(|_: &mut SnapshotRoot<Dropdown<String>>, ctx| {
+            ctx.with_unique_descendant::<Dropdown<String>, _>(|dropdown, ctx| dropdown.confirm(ctx))
+        })?;
+        harness.render()?;
+        assert!(harness.tbuf().contains_text("Fifth ▼"));
+        harness.with_root_context(|_: &mut SnapshotRoot<Dropdown<String>>, ctx| {
+            ctx.with_unique_descendant::<Dropdown<String>, _>(|dropdown, ctx| dropdown.toggle(ctx))
+        })?;
+        harness.render()?;
+        assert!(harness.tbuf().contains_text("Fifth"));
+        harness.with_root_context(|_: &mut SnapshotRoot<Dropdown<String>>, ctx| {
+            ctx.with_unique_descendant::<Dropdown<String>, _>(|dropdown, ctx| {
+                dropdown.select_by(ctx, -4)
+            })
+        })?;
+        harness.render()?;
+        assert!(harness.tbuf().contains_text("First"));
+        Ok(())
+    }
+
     const ASCII_BOX: BoxGlyphs = BoxGlyphs {
         topleft: '+',
         topright: '+',

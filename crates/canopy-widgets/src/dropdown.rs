@@ -4,7 +4,7 @@ use canopy::{
     Context, EventOutcome, NodeName, Render, ViewContext, Widget, derive_commands,
     error::{Error, Result},
     event::{Event, mouse},
-    geom::Size,
+    geom::{Rect, Size},
     layout::{MeasureConstraints, Measurement},
     text,
 };
@@ -16,6 +16,7 @@ use crate::label::Label;
 ///
 /// When collapsed, displays the currently selected item with a dropdown
 /// indicator. When expanded, displays all options for selection.
+/// Opening and navigation scroll the highlighted row into view after layout.
 pub struct Dropdown<T>
 where
     T: Label,
@@ -69,13 +70,16 @@ where
         self.highlighted = self.selected;
         // Mark layout dirty so parent can resize
         c.invalidate_layout();
+        if self.expanded {
+            self.reveal_highlighted(c);
+        }
         debug_assert!(self.selection_invariant_holds());
         Ok(())
     }
 
     /// Move highlight by a signed offset (when expanded).
     #[command]
-    pub fn select_by(&mut self, _c: &mut dyn Context, delta: i32) -> Result<()> {
+    pub fn select_by(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {
         if !self.expanded {
             return Ok(());
         }
@@ -84,6 +88,7 @@ where
             .highlighted
             .saturating_add_signed(delta as isize)
             .min(self.items.len() - 1);
+        self.reveal_highlighted(c);
         debug_assert!(self.selection_invariant_holds());
         Ok(())
     }
@@ -98,6 +103,11 @@ where
         }
         debug_assert!(self.selection_invariant_holds());
         Ok(())
+    }
+
+    /// Reveal the highlighted row after expansion or navigation is laid out.
+    fn reveal_highlighted(&self, c: &mut dyn Context) {
+        c.scroll_into_view(Rect::new(c.view().scroll.x, self.highlighted as u32, 1, 1));
     }
 
     /// Confirm the clicked row when expanded, or expand when collapsed.

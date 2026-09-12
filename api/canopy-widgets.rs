@@ -734,6 +734,7 @@ pub mod canopy_widgets {
     ///
     /// When collapsed, displays the currently selected item with a dropdown
     /// indicator. When expanded, displays all options for selection.
+    /// Opening and navigation scroll the highlighted row into view after layout.
     pub struct Dropdown<T>
     where
         T: Label, {}
@@ -773,6 +774,7 @@ pub mod canopy_widgets {
     ///
     /// Items can be toggled on/off independently. The selected indices are tracked
     /// in the order they were selected, allowing for ordered selection if needed.
+    /// Navigation scrolls the focused row into view after layout.
     pub struct Selector<T>
     where
         T: Label, {}
@@ -1384,7 +1386,7 @@ pub mod canopy_widgets {
         pub fn selected(&self) -> &T {}
 
         /// Move highlight by a signed offset (when expanded).
-        pub fn select_by(&mut self, _c: &mut dyn Context, delta: i32) -> Result<()> {}
+        pub fn select_by(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {}
 
         /// Toggle the dropdown expanded state.
         pub fn toggle(&mut self, c: &mut dyn Context) -> Result<()> {}
@@ -1452,13 +1454,13 @@ pub mod canopy_widgets {
         pub fn selected_items(&self) -> Vec<&T> {}
 
         /// Move focus by a signed offset.
-        pub fn select_by(&mut self, _c: &mut dyn Context, delta: i32) -> Result<()> {}
+        pub fn select_by(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {}
 
         /// Move focus to the first item.
-        pub fn select_first(&mut self, _c: &mut dyn Context) -> Result<()> {}
+        pub fn select_first(&mut self, c: &mut dyn Context) -> Result<()> {}
 
         /// Move focus to the last item.
-        pub fn select_last(&mut self, _c: &mut dyn Context) -> Result<()> {}
+        pub fn select_last(&mut self, c: &mut dyn Context) -> Result<()> {}
 
         /// Select all items.
         pub fn select_all(&mut self, _c: &mut dyn Context) -> Result<()> {}

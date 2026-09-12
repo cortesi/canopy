@@ -12,7 +12,7 @@ use crate::{
     },
     error::{Error, Result},
     event::{Event, mouse::MouseEvent},
-    geom::Point,
+    geom::{Point, Rect},
     layout::{Layout, LayoutOverride},
     path::Path,
     style::StyleMap,
@@ -191,6 +191,10 @@ impl Context for DummyContext {
     }
 
     fn scroll_by(&mut self, _x: i32, _y: i32) -> ChangeOutcome {
+        ChangeOutcome::Unchanged
+    }
+
+    fn scroll_into_view(&mut self, _area: Rect) -> ChangeOutcome {
         ChangeOutcome::Unchanged
     }
 

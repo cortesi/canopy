@@ -57,6 +57,8 @@ pub struct Node {
     pub(crate) canvas: Size,
     /// Scroll offset in content coordinates.
     pub(crate) scroll: Point,
+    /// Content rectangle to reveal after the next nonempty layout.
+    pub(crate) pending_reveal: Option<Rect>,
     /// View information in screen coordinates.
     pub(crate) view: View,
 
@@ -102,6 +104,7 @@ impl Node {
             content_size: Size::default(),
             canvas: Size::default(),
             scroll: Point::ZERO,
+            pending_reveal: None,
             view: View::default(),
             hidden: false,
             name,

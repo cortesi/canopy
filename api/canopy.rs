@@ -3217,6 +3217,19 @@ pub mod canopy {
         /// Scroll the view down by one line.
         fn scroll_down(&mut self) -> ChangeOutcome {}
 
+        /// Request the smallest scroll that reveals a content-coordinate rectangle.
+        ///
+        /// The request runs after the next nonempty layout, using the new canvas
+        /// and viewport sizes. A target larger than the viewport is revealed as far
+        /// as possible without moving a viewport already inside it.
+        ///
+        /// The latest request wins. Empty rectangles are ignored. Explicit
+        /// [`Context::scroll_to`] or [`Context::scroll_by`] calls cancel the
+        /// pending request. Hidden or detached widgets retain it until laid
+        /// out; replacing the widget discards it. Returns whether the pending
+        /// request changed.
+        fn scroll_into_view(&mut self, area: Rect) -> ChangeOutcome;
+
         /// Scroll the view left by one line.
         fn scroll_left(&mut self) -> ChangeOutcome {}
 

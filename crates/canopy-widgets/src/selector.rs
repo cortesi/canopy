@@ -4,7 +4,7 @@ use canopy::{
     Context, EventOutcome, NodeName, Render, ViewContext, Widget, derive_commands,
     error::Result,
     event::{Event, mouse},
-    geom::Size,
+    geom::{Rect, Size},
     layout::{MeasureConstraints, Measurement},
     text,
 };
@@ -16,6 +16,7 @@ use crate::label::Label;
 ///
 /// Items can be toggled on/off independently. The selected indices are tracked
 /// in the order they were selected, allowing for ordered selection if needed.
+/// Navigation scrolls the focused row into view after layout.
 pub struct Selector<T>
 where
     T: Label,
@@ -70,7 +71,7 @@ where
 
     /// Move focus by a signed offset.
     #[command]
-    pub fn select_by(&mut self, _c: &mut dyn Context, delta: i32) -> Result<()> {
+    pub fn select_by(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {
         if self.items.is_empty() {
             return Ok(());
         }
@@ -79,15 +80,17 @@ where
             .focused
             .saturating_add_signed(delta as isize)
             .min(self.items.len() - 1);
+        self.reveal_focused(c);
         debug_assert!(self.selection_invariant_holds());
         Ok(())
     }
 
     /// Move focus to the first item.
     #[command]
-    pub fn select_first(&mut self, _c: &mut dyn Context) -> Result<()> {
+    pub fn select_first(&mut self, c: &mut dyn Context) -> Result<()> {
         if !self.items.is_empty() {
             self.focused = 0;
+            self.reveal_focused(c);
         }
         debug_assert!(self.selection_invariant_holds());
         Ok(())
@@ -95,9 +98,10 @@ where
 
     /// Move focus to the last item.
     #[command]
-    pub fn select_last(&mut self, _c: &mut dyn Context) -> Result<()> {
+    pub fn select_last(&mut self, c: &mut dyn Context) -> Result<()> {
         if !self.items.is_empty() {
             self.focused = self.items.len() - 1;
+            self.reveal_focused(c);
         }
         debug_assert!(self.selection_invariant_holds());
         Ok(())
@@ -109,6 +113,11 @@ where
         self.selected.clear();
         debug_assert!(self.selection_invariant_holds());
         Ok(())
+    }
+
+    /// Reveal the focused row without changing horizontal scroll.
+    fn reveal_focused(&self, c: &mut dyn Context) {
+        c.scroll_into_view(Rect::new(c.view().scroll.x, self.focused as u32, 1, 1));
     }
 
     /// Focus and toggle the clicked row.

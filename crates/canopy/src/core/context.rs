@@ -21,7 +21,7 @@ use crate::{
     },
     error::{Error, Result},
     event::{Event, mouse::MouseEvent},
-    geom::Point,
+    geom::{Point, Rect},
     layout::{Layout, LayoutOverride},
     path::{Path, PathFilter},
     style::StyleMap,
@@ -283,10 +283,11 @@ fn update_scroll(
         return ChangeOutcome::Unchanged;
     };
     let before = node.scroll;
+    let cancelled_reveal = node.pending_reveal.take().is_some();
     node.scroll = f(before);
     clamp_scroll(&mut node.scroll, node.content_size, node.canvas);
     node.view.scroll = node.scroll;
-    let changed = before != node.scroll;
+    let changed = before != node.scroll || cancelled_reveal;
     if changed {
         core.invalidate(crate::Invalidation::Layout);
     }
@@ -553,6 +554,19 @@ pub trait Context: ViewContext + sealed::Context {
 
     /// Scroll the view by the given offsets.
     fn scroll_by(&mut self, x: i32, y: i32) -> ChangeOutcome;
+
+    /// Request the smallest scroll that reveals a content-coordinate rectangle.
+    ///
+    /// The request runs after the next nonempty layout, using the new canvas
+    /// and viewport sizes. A target larger than the viewport is revealed as far
+    /// as possible without moving a viewport already inside it.
+    ///
+    /// The latest request wins. Empty rectangles are ignored. Explicit
+    /// [`Context::scroll_to`] or [`Context::scroll_by`] calls cancel the
+    /// pending request. Hidden or detached widgets retain it until laid
+    /// out; replacing the widget discards it. Returns whether the pending
+    /// request changed.
+    fn scroll_into_view(&mut self, area: Rect) -> ChangeOutcome;
 
     /// Scroll the view up by one page.
     fn page_up(&mut self) -> ChangeOutcome {
@@ -1102,6 +1116,21 @@ impl Context for NodeCtx<&mut Core> {
 
     fn scroll_by(&mut self, x: i32, y: i32) -> ChangeOutcome {
         update_scroll(self.core, self.node_id, |scroll| scroll.scroll(x, y))
+    }
+
+    fn scroll_into_view(&mut self, area: Rect) -> ChangeOutcome {
+        if area.is_empty() {
+            return ChangeOutcome::Unchanged;
+        }
+        let Some(node) = self.core.nodes.get_mut(self.node_id) else {
+            return ChangeOutcome::Unchanged;
+        };
+        if node.pending_reveal == Some(area) {
+            return ChangeOutcome::Unchanged;
+        }
+        node.pending_reveal = Some(area);
+        self.core.invalidate(crate::Invalidation::Layout);
+        ChangeOutcome::Changed
     }
 
     fn invalidate_layout(&mut self) {

@@ -172,6 +172,15 @@ impl<'a> LayoutPass<'a> {
             return self.clear_layout(node_id);
         }
 
+        if node.content_size.w > 0
+            && node.content_size.h > 0
+            && let Some(area) = node.pending_reveal.take()
+        {
+            node.scroll.x = reveal_offset(node.scroll.x, node.content_size.w, area.tl.x, area.w);
+            node.scroll.y = reveal_offset(node.scroll.y, node.content_size.h, area.tl.y, area.h);
+            clamp_scroll(&mut node.scroll, node.content_size, node.canvas);
+        }
+
         let outer_x = i64::from(parent_view.content.tl.x) + i64::from(node.rect.tl.x)
             - i64::from(parent_view.scroll.x);
         let outer_y = i64::from(parent_view.content.tl.y) + i64::from(node.rect.tl.y)
@@ -767,6 +776,16 @@ fn constraint_for_axis(
             Constraint::AtMost(effective_max_content)
         }
     }
+}
+
+/// Find the nearest offset that contains the target, or puts the viewport
+/// inside an oversized target. Wide arithmetic keeps end coordinates intact.
+fn reveal_offset(offset: u32, view: u32, start: u32, length: u32) -> u32 {
+    let start = u64::from(start);
+    let end_aligned = (start + u64::from(length)).saturating_sub(u64::from(view));
+    u64::from(offset)
+        .clamp(start.min(end_aligned), start.max(end_aligned))
+        .min(u64::from(u32::MAX)) as u32
 }
 
 /// Clamp a scroll offset so it stays within view/canvas bounds.
