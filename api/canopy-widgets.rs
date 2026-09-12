@@ -270,9 +270,11 @@ pub mod canopy_widgets {
             ///
             /// The source is limited to 32 * 1024 * 1024 pixels and the decoder has a
             /// 128 MiB allocation budget. Conversion can allocate one additional RGBA
-            /// source buffer. The sampling tables use at most 24 * (bounds.w + 1) *
-            /// (bounds.h + 1) bytes. Zero bounds are invalid. On failure, the current
-            /// image is preserved. Callers should also bound the encoded file size.
+            /// source buffer. Each thumbnail edge is capped at 1024 pixels, even when
+            /// `bounds` is larger. Sampling tables use at most 24 * (width + 1) *
+            /// (height + 1) bytes for the thumbnail dimensions. Zero bounds are invalid.
+            /// On failure, the current image is preserved. Callers should also bound
+            /// the encoded file size.
             pub fn set_preview_path(&mut self, path: impl AsRef<Path>, bounds: Size) -> Result<()> {
             }
 
@@ -905,9 +907,11 @@ pub mod canopy_widgets {
         ///
         /// The source is limited to 32 * 1024 * 1024 pixels and the decoder has a
         /// 128 MiB allocation budget. Conversion can allocate one additional RGBA
-        /// source buffer. The sampling tables use at most 24 * (bounds.w + 1) *
-        /// (bounds.h + 1) bytes. Zero bounds are invalid. On failure, the current
-        /// image is preserved. Callers should also bound the encoded file size.
+        /// source buffer. Each thumbnail edge is capped at 1024 pixels, even when
+        /// `bounds` is larger. Sampling tables use at most 24 * (width + 1) *
+        /// (height + 1) bytes for the thumbnail dimensions. Zero bounds are invalid.
+        /// On failure, the current image is preserved. Callers should also bound
+        /// the encoded file size.
         pub fn set_preview_path(&mut self, path: impl AsRef<Path>, bounds: Size) -> Result<()> {}
 
         /// Pan by one step in the specified direction.

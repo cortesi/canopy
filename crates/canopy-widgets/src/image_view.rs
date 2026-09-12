@@ -37,6 +37,8 @@ const PAN_STEP_ROWS: i32 = 1;
 const PREVIEW_MAX_PIXELS: u64 = 32 * 1024 * 1024;
 /// Decoder allocation budget for thumbnail previews, excluding conversion.
 const PREVIEW_DECODE_BYTES: u64 = 128 * 1024 * 1024;
+/// Largest retained thumbnail edge, regardless of caller-provided bounds.
+const PREVIEW_MAX_EDGE: u32 = 1024;
 
 /// Summed-area table for fast image region sampling.
 struct IntegralImage {
@@ -125,6 +127,10 @@ fn read_preview(path: &Path, bounds: Size) -> Result<RgbaImage> {
             "image preview bounds must be nonzero".into(),
         ));
     }
+    let bounds = Size::new(
+        bounds.w.min(PREVIEW_MAX_EDGE),
+        bounds.h.min(PREVIEW_MAX_EDGE),
+    );
     let image_error = |err| Error::Invalid(format!("image error: {err}"));
     let mut reader = image::ImageReader::open(path)
         .map_err(|err| Error::Invalid(format!("image error: {err}")))?;
@@ -443,9 +449,11 @@ impl ImageView {
     ///
     /// The source is limited to 32 * 1024 * 1024 pixels and the decoder has a
     /// 128 MiB allocation budget. Conversion can allocate one additional RGBA
-    /// source buffer. The sampling tables use at most 24 * (bounds.w + 1) *
-    /// (bounds.h + 1) bytes. Zero bounds are invalid. On failure, the current
-    /// image is preserved. Callers should also bound the encoded file size.
+    /// source buffer. Each thumbnail edge is capped at 1024 pixels, even when
+    /// `bounds` is larger. Sampling tables use at most 24 * (width + 1) *
+    /// (height + 1) bytes for the thumbnail dimensions. Zero bounds are
+    /// invalid. On failure, the current image is preserved. Callers should
+    /// also bound the encoded file size.
     pub fn set_preview_path(&mut self, path: impl AsRef<Path>, bounds: Size) -> Result<()> {
         self.set_image(&read_preview(path.as_ref(), bounds)?);
         Ok(())
@@ -677,6 +685,18 @@ mod tests {
         assert!(error.to_string().contains("image preview limited to"));
         assert_eq!((view.image_width, view.image_height), (1, 1));
         assert_eq!(view.integral.red.len(), 4);
+    }
+
+    #[test]
+    fn oversized_preview_bounds_still_cap_retained_tables() -> Result<()> {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("image.png");
+        image::GrayImage::new(2048, 1024).save(&path).unwrap();
+        let mut view = ImageView::empty();
+        view.set_preview_path(path, Size::new(u32::MAX, u32::MAX))?;
+        assert_eq!((view.image_width, view.image_height), (1024, 512));
+        assert_eq!(view.integral.red.len(), 1025 * 513);
+        Ok(())
     }
 
     fn render_effect_image(effects: Vec<Effect>) -> Result<canopy::TermBuf> {
