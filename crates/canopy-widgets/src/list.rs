@@ -603,10 +603,9 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
             start.saturating_sub(page)
         };
 
-        if let Some(target_idx) = Self::index_at_y(&metrics, target_y) {
-            self.select_and_reveal(c, target_idx)?;
-        }
-        Ok(())
+        // Keyboard paging clamps at the last row; mouse hit testing does not.
+        let target_idx = Self::index_at_y(&metrics, target_y).unwrap_or(self.items.len() - 1);
+        self.select_and_reveal(c, target_idx)
     }
 
     /// Find the item index at a viewport-local location.
@@ -638,16 +637,9 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
 
     /// Find the item index covering a y coordinate.
     fn index_at_y(metrics: &[(u32, u32)], y: u32) -> Option<usize> {
-        for (idx, (start, height)) in metrics.iter().enumerate() {
-            if y < start.saturating_add(*height) {
-                return Some(idx);
-            }
-        }
-        if metrics.is_empty() {
-            None
-        } else {
-            Some(metrics.len() - 1)
-        }
+        metrics
+            .iter()
+            .position(|(start, height)| *start <= y && y < start.saturating_add(*height))
     }
     /// Reconcile the list order without creating new widgets.
     fn reconcile_order(
@@ -1132,6 +1124,70 @@ mod tests {
         fn load(canopy: &mut Canopy) -> Result<()> {
             canopy.add_commands::<Self>()
         }
+    }
+
+    #[test]
+    fn blank_space_below_rows_neither_selects_nor_activates() -> Result<()> {
+        for press_y in [1, 2, 4] {
+            let mut harness = Harness::builder(KeyedActivationRoot::default())
+                .size(20, 5)
+                .build()?;
+            harness.render()?;
+            let mut event = mouse::MouseEvent {
+                action: mouse::Action::Down,
+                button: mouse::Button::Left,
+                modifiers: key::Empty,
+                location: Point { x: 0, y: press_y },
+            };
+            harness.mouse(event)?;
+            if press_y >= 2 {
+                harness.with_root_context(|_: &mut KeyedActivationRoot, ctx| {
+                    assert_eq!(
+                        ctx.take_mouse_capture()?,
+                        None,
+                        "blank space cannot capture"
+                    );
+                    Ok(())
+                })?;
+            }
+            event.action = mouse::Action::Up;
+            event.location.y = 4;
+            harness.mouse(event)?;
+            harness.with_root_context(|root: &mut KeyedActivationRoot, ctx| {
+                assert_eq!(
+                    root.activation, None,
+                    "release outside a row cannot activate"
+                );
+                assert_eq!(ctx.take_mouse_capture()?, None);
+                ctx.with_unique_descendant::<List<Text, i64>, _>(|list, _| {
+                    let expected = if press_y == 1 { 20 } else { 10 };
+                    assert_eq!(list.selected_key(), Some(&expected));
+                    Ok(())
+                })
+            })?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn paging_beyond_short_list_clamps_to_first_and_last_rows() -> Result<()> {
+        let mut harness = Harness::builder(KeyedActivationRoot::default())
+            .size(20, 5)
+            .build()?;
+        harness.render()?;
+        harness.with_root_context(|_: &mut KeyedActivationRoot, ctx| {
+            ctx.with_unique_descendant::<List<Text, i64>, _>(|list, ctx| {
+                list.page(ctx, 1)?;
+                assert_eq!(list.selected_key(), Some(&20));
+                list.page(ctx, 1)?;
+                assert_eq!(list.selected_key(), Some(&20));
+                list.page(ctx, -1)?;
+                assert_eq!(list.selected_key(), Some(&10));
+                list.page(ctx, -1)?;
+                assert_eq!(list.selected_key(), Some(&10));
+                Ok(())
+            })
+        })
     }
 
     #[test]
