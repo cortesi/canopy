@@ -15,7 +15,6 @@ pub mod canopy_widgets {
 
         pub mod highlight {
             //! Syntax highlighting helpers.
-            //! Syntax highlighting helpers.
             //!
             //! [`SyntectHighlighter`] resolves a syntax from a file name or from the text
             //! itself, then highlights lines incrementally. Highlighting a line needs the
@@ -35,6 +34,10 @@ pub mod canopy_widgets {
             }
 
             /// A syntect-backed highlighter.
+            ///
+            /// Language detection uses the file name or extension, then the first source
+            /// line. Parser state is retained for at most 4,000 lines; later lines
+            /// highlight independently.
             #[derive(Debug)]
             pub struct SyntectHighlighter {}
 

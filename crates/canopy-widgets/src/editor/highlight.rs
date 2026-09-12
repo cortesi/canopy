@@ -8,7 +8,13 @@
 //! actually asked for, and multi-line constructs such as block comments keep
 //! their state.
 
-use std::{cell::RefCell, fmt, ops::Range, path::Path, sync::OnceLock};
+use std::{
+    cell::{Cell, RefCell},
+    fmt,
+    ops::Range,
+    path::Path,
+    sync::OnceLock,
+};
 
 use canopy::style::{Attr, AttrSet, Color, Paint, Style};
 use syntect::{
@@ -103,6 +109,8 @@ fn theme(name: &str) -> &'static Theme {
 
 /// One source text and the highlighting walked over it so far.
 struct Source {
+    /// Syntax resolved for this source, including an inferred first-line hint.
+    syntax: &'static SyntaxReference,
     /// Lines of the source, including the trailing newline syntect expects.
     lines: Vec<String>,
     /// Highlighter positioned after the last cached line.
@@ -117,7 +125,7 @@ impl Source {
     /// Returns `None` when the line lies outside the source or beyond the
     /// stateful walking limit.
     fn spans_for(&mut self, line: usize) -> Option<Vec<HighlightSpan>> {
-        if line >= self.lines.len() || line >= MAX_STATEFUL_LINES {
+        if line >= self.lines.len() {
             return None;
         }
         while self.spans.len() <= line {
@@ -134,11 +142,15 @@ impl Source {
 }
 
 /// A syntect-backed highlighter.
+///
+/// Language detection uses the file name or extension, then the first source
+/// line. Parser state is retained for at most 4,000 lines; later lines
+/// highlight independently.
 pub struct SyntectHighlighter {
     /// Theme used for highlighting.
     theme: &'static Theme,
-    /// Syntax used for the current source.
-    syntax: RefCell<&'static SyntaxReference>,
+    /// Syntax selected by the file name or extension, before source detection.
+    syntax: Cell<&'static SyntaxReference>,
     /// The source being highlighted, once one is prepared.
     source: RefCell<Option<Source>>,
 }
@@ -149,7 +161,7 @@ impl SyntectHighlighter {
     pub fn new(extension: impl AsRef<str>) -> Self {
         let highlighter = Self {
             theme: theme(DEFAULT_THEME),
-            syntax: RefCell::new(plain_text()),
+            syntax: Cell::new(plain_text()),
             source: RefCell::new(None),
         };
         highlighter.set_extension(extension.as_ref());
@@ -168,7 +180,10 @@ impl SyntectHighlighter {
     #[must_use]
     pub fn with_theme(mut self, name: impl AsRef<str>) -> Self {
         self.theme = theme(name.as_ref());
-        self.source.replace(None);
+        if let Some(source) = self.source.get_mut().as_mut() {
+            source.engine = HighlightLines::new(source.syntax, self.theme);
+            source.spans.clear();
+        }
         self
     }
 
@@ -197,12 +212,21 @@ impl SyntectHighlighter {
     /// Return the name of the syntax in use.
     #[must_use]
     pub fn syntax_name(&self) -> String {
-        self.syntax.borrow().name.clone()
+        self.current_syntax().name.clone()
+    }
+
+    /// Return the prepared source syntax, or the configured hint before
+    /// preparation.
+    fn current_syntax(&self) -> &'static SyntaxReference {
+        self.source
+            .borrow()
+            .as_ref()
+            .map_or(self.syntax.get(), |source| source.syntax)
     }
 
     /// Install `syntax` and drop state built with the previous one.
     fn set_syntax(&self, syntax: &'static SyntaxReference) {
-        *self.syntax.borrow_mut() = syntax;
+        self.syntax.set(syntax);
         self.source.replace(None);
     }
 }
@@ -211,18 +235,23 @@ impl Highlighter for SyntectHighlighter {
     fn prepare(&self, text: &str) {
         // A plain-text syntax may still be a recognizable script, so consult
         // the first line before committing to it.
-        if self.syntax.borrow().name == plain_text().name
-            && let Some(syntax) = syntax_set().find_syntax_by_first_line(text)
-        {
-            *self.syntax.borrow_mut() = syntax;
-        }
+        let hint = self.syntax.get();
+        let syntax = if hint.name == plain_text().name {
+            syntax_set()
+                .find_syntax_by_first_line(text.lines().next().unwrap_or_default())
+                .unwrap_or(hint)
+        } else {
+            hint
+        };
         let lines = text
             .split_inclusive('\n')
+            .take(MAX_STATEFUL_LINES)
             .map(str::to_string)
             .collect::<Vec<_>>();
         *self.source.borrow_mut() = Some(Source {
+            syntax,
             lines,
-            engine: HighlightLines::new(*self.syntax.borrow(), self.theme),
+            engine: HighlightLines::new(syntax, self.theme),
             spans: Vec::new(),
         });
     }
@@ -234,7 +263,7 @@ impl Highlighter for SyntectHighlighter {
             return spans;
         }
         // No prepared source, or a line beyond it: highlight on its own.
-        let mut engine = HighlightLines::new(*self.syntax.borrow(), self.theme);
+        let mut engine = HighlightLines::new(self.current_syntax(), self.theme);
         let ranges = engine
             .highlight_line(text, syntax_set())
             .unwrap_or_default();
@@ -245,7 +274,7 @@ impl Highlighter for SyntectHighlighter {
 impl fmt::Debug for SyntectHighlighter {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SyntectHighlighter")
-            .field("syntax", &self.syntax.borrow().name)
+            .field("syntax", &self.current_syntax().name)
             .finish_non_exhaustive()
     }
 }
@@ -407,6 +436,65 @@ mod tests {
             unknown.syntax_name(),
             "Bourne Again Shell (bash)",
             "a shebang names the syntax when the file name does not"
+        );
+    }
+
+    #[test]
+    fn syntax_detection_only_uses_the_first_line() {
+        let highlighter = SyntectHighlighter::new("");
+        highlighter.prepare("Ordinary notes\n#!/usr/bin/env python3\nprint('hello')\n");
+        assert_eq!(highlighter.syntax_name(), "Plain Text");
+    }
+
+    #[test]
+    fn preparing_a_new_source_rechecks_inferred_syntax() {
+        let highlighter = SyntectHighlighter::new("");
+        highlighter.prepare("#!/bin/bash\necho hello\n");
+        assert_eq!(highlighter.syntax_name(), "Bourne Again Shell (bash)");
+        highlighter.prepare("#!/usr/bin/env python3\nprint('hello')\n");
+        assert_eq!(highlighter.syntax_name(), "Python");
+        highlighter.prepare("Ordinary notes\n");
+        assert_eq!(highlighter.syntax_name(), "Plain Text");
+
+        highlighter.set_extension("rs");
+        highlighter.prepare("#!/usr/bin/env python3\n");
+        assert_eq!(highlighter.syntax_name(), "Rust", "the explicit hint wins");
+    }
+
+    #[test]
+    fn changing_theme_preserves_the_prepared_source() {
+        let source = "/* a comment\nstill inside */\n";
+        let highlighter = SyntectHighlighter::new("rs");
+        highlighter.prepare(source);
+        let _before = colors(&highlighter, 1, "still inside */");
+        let highlighter = highlighter.with_theme("Solarized (light)");
+
+        let expected = SyntectHighlighter::new("rs").with_theme("Solarized (light)");
+        expected.prepare(source);
+        assert_eq!(
+            colors(&highlighter, 1, "still inside */"),
+            colors(&expected, 1, "still inside */")
+        );
+    }
+
+    #[test]
+    fn preparing_large_sources_only_retains_stateful_lines() {
+        let highlighter = SyntectHighlighter::new("rs");
+        let source = "// a source line\n".repeat(MAX_STATEFUL_LINES * 10);
+        highlighter.prepare(&source);
+        {
+            let prepared = highlighter.source.borrow();
+            let prepared = prepared.as_ref().expect("source was prepared");
+            assert_eq!(prepared.lines.len(), MAX_STATEFUL_LINES);
+            assert!(
+                prepared.spans.is_empty(),
+                "preparation must not parse lines"
+            );
+        }
+        assert_eq!(
+            colors(&highlighter, MAX_STATEFUL_LINES + 1, "let x = 1;"),
+            colors(&SyntectHighlighter::new("rs"), 0, "let x = 1;"),
+            "uncached lines retain stateless highlighting"
         );
     }
 

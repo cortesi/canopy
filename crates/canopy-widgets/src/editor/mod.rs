@@ -4,7 +4,6 @@
 )]
 //! Editor widget and supporting types.
 
-/// Syntax highlighting helpers.
 pub mod highlight;
 /// Layout and wrapping cache.
 mod layout;

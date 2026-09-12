@@ -6,7 +6,10 @@ use canopy::{
     Canopy, Context, ContextExt, Loader, Widget, derive_commands, error::Result, layout::Layout,
     testing::harness::Harness,
 };
-use canopy_widgets::editor::{EditMode, Editor, EditorConfig, LineNumbers, WrapMode};
+use canopy_widgets::editor::{
+    EditMode, Editor, EditorConfig, LineNumbers, WrapMode,
+    highlight::{Highlighter, SyntectHighlighter},
+};
 use criterion::{Criterion, criterion_group, criterion_main};
 
 canopy::slot!(EditorSlot: Editor);
@@ -82,9 +85,20 @@ fn benchmark_editor_rendering(c: &mut Criterion) {
     });
 }
 
+/// Measure preparation independently of lazy syntax parsing and grammar
+/// loading.
+fn benchmark_highlight_preparation(c: &mut Criterion) {
+    let source = "let value = 42; // a source line\n".repeat(100_000);
+    let highlighter = SyntectHighlighter::new("rs");
+    highlighter.prepare(&source);
+    c.bench_function("highlight_prepare_large_source", |b| {
+        b.iter(|| highlighter.prepare(black_box(&source)));
+    });
+}
+
 criterion_group! {
     name = benches;
     config = Criterion::default().sample_size(10);
-    targets = benchmark_editor_rendering
+    targets = benchmark_editor_rendering, benchmark_highlight_preparation
 }
 criterion_main!(benches);
