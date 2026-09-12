@@ -214,7 +214,9 @@ Rendering consumes current layout and view state. Canopy renders visible nodes i
 tree order into an offscreen buffer and applies the cursor overlay. Published
 snapshots and backend output use separate buffers. Observation can refresh the
 published snapshot without changing the backend diff baseline. The baseline
-advances only after output and backend flush succeed.
+advances only after output and backend flush succeed. Any backend failure
+invalidates it, so the next attempt repaints in full. A failed write may have
+already changed the terminal, making a repeated diff unsafe.
 
 Widgets draw through `Render` in local coordinates. The runtime clips to the view,
 translates to terminal coordinates, and applies style effects.

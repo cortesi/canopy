@@ -300,15 +300,16 @@ impl Canopy {
         Ok(true)
     }
 
-    /// Emit published cells. Failed writes preserve the last successful
-    /// baseline.
+    /// Emit published cells. After a backend failure, repaint the next frame
+    /// in full because some output may already have reached the terminal.
     pub(crate) fn emit_frame<R: RenderBackend>(&mut self, be: &mut R) -> Result<()> {
         let Some(next) = &self.termbuf else {
             return Ok(());
         };
+        let previous = self.emitted_buf.take();
         be.reset()?;
-        if let Some(previous) = &self.emitted_buf {
-            next.diff(previous, be)?;
+        if let Some(previous) = previous {
+            next.diff(&previous, be)?;
         } else {
             next.render(be)?;
         }

@@ -114,7 +114,7 @@ pub struct Canopy {
     termbuf: Option<TermBuf>,
     /// Last successfully prepared immutable observation.
     snapshot: Option<Arc<FrameSnapshot>>,
-    /// Last successfully emitted terminal frame.
+    /// Last successfully emitted terminal frame, invalidated by output failure.
     emitted_buf: Option<TermBuf>,
     /// Adapter-independent runtime progress.
     driver: turn::Driver,

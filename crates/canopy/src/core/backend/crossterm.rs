@@ -597,8 +597,7 @@ impl CrosstermRender {
 }
 
 /// Write one frame and discard its bytes even on a partial write or flush
-/// error. The caller retains the last successful frame and can encode a fresh
-/// retry.
+/// error. The caller can then encode a full repaint for the next attempt.
 fn flush_frame(writer: &mut impl Write, pending: &mut Vec<u8>) -> io::Result<()> {
     let result = writer.write_all(pending);
     pending.clear();
