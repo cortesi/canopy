@@ -83,9 +83,15 @@ fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
-/// Build the full workspace and isolated minimum and independent widget
-/// profiles.
+/// Build the production profile, the full workspace, and isolated minimum and
+/// independent widget profiles.
 fn run_default_check(workspace_root: &Path) -> bool {
+    // The production profile omits `--all-targets` and `--all-features` on
+    // purpose. Either flag pulls in dev-dependencies, which re-enable the
+    // `testing` feature and hide the warnings this step exists to catch.
+    if !run_cargo_command(workspace_root, &["clippy", "--workspace", "--", "-D", "warnings"]) {
+        return false;
+    }
     if !run_cargo_command(workspace_root, &["check", "--workspace", "--all-targets"]) {
         return false;
     }

@@ -618,6 +618,7 @@ impl LuauHost {
     }
 
     /// Add a required global definition for startup script roots.
+    #[cfg(any(test, feature = "testing"))]
     pub fn require_startup_global(&self, name: &str, type_text: &str) -> Result<()> {
         let mut state = self.state.borrow_mut();
         if state.finalized {

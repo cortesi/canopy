@@ -1033,6 +1033,7 @@ impl Canopy {
     }
 
     /// Remove application bindings and callbacks from the current source epoch.
+    #[cfg(any(test, feature = "testing"))]
     fn clear_script_callbacks(&mut self) {
         let removed = self.core.input_map.clear_application();
         self.release_removed_bindings(removed);
