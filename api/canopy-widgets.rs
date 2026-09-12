@@ -1568,8 +1568,8 @@ pub mod canopy_widgets {
         /// Move selection by a signed offset.
         pub fn select_by(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {}
 
-        /// Move selection by pages.
-        /// Positive values move down; negative values move up.
+        /// Move selection by one page.
+        /// Positive values move down; negative values move up. Zero is a no-op.
         /// @param delta Signed page delta. Positive moves down and negative moves
         /// up.
         pub fn page(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {}

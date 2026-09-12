@@ -545,13 +545,16 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
         }
     }
 
-    /// Move selection by pages.
-    /// Positive values move down; negative values move up.
+    /// Move selection by one page.
+    /// Positive values move down; negative values move up. Zero is a no-op.
     /// @param delta Signed page delta. Positive moves down and negative moves
     /// up.
     #[command]
     pub fn page(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {
-        self.page_shift(c, delta >= 0)
+        if delta == 0 {
+            return Ok(());
+        }
+        self.page_shift(c, delta > 0)
     }
 
     /// Ensure the selected item is visible in the view.
@@ -1177,6 +1180,8 @@ mod tests {
         harness.render()?;
         harness.with_root_context(|_: &mut KeyedActivationRoot, ctx| {
             ctx.with_unique_descendant::<List<Text, i64>, _>(|list, ctx| {
+                list.page(ctx, 0)?;
+                assert_eq!(list.selected_key(), Some(&10));
                 list.page(ctx, 1)?;
                 assert_eq!(list.selected_key(), Some(&20));
                 list.page(ctx, 1)?;
