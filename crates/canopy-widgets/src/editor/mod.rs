@@ -68,6 +68,8 @@ pub struct EditorConfig {
     pub mode: EditMode,
     /// Whether the editor is read-only.
     pub read_only: bool,
+    /// Whether the editor accepts focus.
+    pub focusable: bool,
     /// Line number rendering mode.
     pub line_numbers: LineNumbers,
     /// Tab stop width in columns.
@@ -84,6 +86,7 @@ impl Default for EditorConfig {
             max_height: None,
             mode: EditMode::Text,
             read_only: false,
+            focusable: true,
             line_numbers: LineNumbers::None,
             tab_stop: 4,
         }
@@ -135,6 +138,15 @@ impl EditorConfig {
     /// Configure read-only behavior.
     pub fn with_read_only(mut self, read_only: bool) -> Self {
         self.read_only = read_only;
+        self
+    }
+
+    /// Configure whether the editor accepts focus.
+    ///
+    /// A read-only view embedded for display alone should decline focus so
+    /// that focus traversal skips over it.
+    pub fn with_focusable(mut self, focusable: bool) -> Self {
+        self.focusable = focusable;
         self
     }
 

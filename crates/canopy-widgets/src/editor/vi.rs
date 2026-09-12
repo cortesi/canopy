@@ -298,7 +298,7 @@ impl Editor {
                 if self.config.read_only {
                     return EventOutcome::Handle;
                 }
-                self.buffer.undo();
+                self.undo_edit();
                 self.update_preferred_column();
                 self.ensure_cursor_visible(ctx);
                 EventOutcome::Handle
@@ -307,7 +307,7 @@ impl Editor {
                 if self.config.read_only {
                     return EventOutcome::Handle;
                 }
-                self.buffer.redo();
+                self.redo_edit();
                 self.update_preferred_column();
                 self.ensure_cursor_visible(ctx);
                 EventOutcome::Handle
@@ -672,7 +672,7 @@ impl Editor {
                     range = self.linewise_range(range);
                 }
                 self.set_yank(range, linewise);
-                self.buffer.replace_range(range, "");
+                self.replace_range(range, "");
                 self.update_preferred_column();
                 self.exit_visual();
                 self.vi.set_last_edit(RepeatableEdit::DeleteChar);
@@ -706,7 +706,7 @@ impl Editor {
                 }
                 self.set_yank(range, linewise);
                 self.begin_text_entry_transaction();
-                self.buffer.replace_range(range, "");
+                self.replace_range(range, "");
                 self.exit_visual();
                 self.vi.begin_insert();
                 self.vi.set_last_edit(RepeatableEdit::ChangeLine);
@@ -839,7 +839,7 @@ impl Editor {
             yank_range
         };
         self.set_yank(yank_range, true);
-        self.buffer.replace_range(delete_range, "");
+        self.replace_range(delete_range, "");
         if cursor.line + 1 == line_count && cursor.line > 0 {
             let prev_line = cursor.line.saturating_sub(1);
             self.buffer.set_cursor(TextPosition::new(prev_line, 0));
@@ -859,7 +859,7 @@ impl Editor {
             return;
         }
         self.set_yank(range, false);
-        self.buffer.replace_range(range, "");
+        self.replace_range(range, "");
         self.update_preferred_column();
     }
 

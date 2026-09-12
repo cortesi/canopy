@@ -167,6 +167,73 @@ fn render_with_line_numbers() {
     harness.tbuf().assert_matches(buf!["1 hi  " "2 ok  "]);
 }
 
+/// Text that every read-only check must leave untouched.
+const READ_ONLY_TEXT: &str = "alpha\nbeta\ngamma";
+
+/// Drive `keys` against an editor and return its contents and revision.
+fn drive(mode: EditMode, read_only: bool, keys: &[key::KeyCode]) -> (String, u64) {
+    let config = EditorConfig::new()
+        .with_mode(mode)
+        .with_read_only(read_only);
+    let mut harness = build_harness(READ_ONLY_TEXT, config, 20, 6);
+    for code in keys {
+        harness.key(*code).expect("key dispatch");
+    }
+    with_editor(&mut harness, |editor| {
+        (editor.buffer().text(), editor.buffer().revision())
+    })
+}
+
+#[test]
+fn read_only_text_mode_ignores_every_edit_key() {
+    let mut keys = vec![
+        key::KeyCode::Enter,
+        key::KeyCode::Backspace,
+        key::KeyCode::Delete,
+        key::KeyCode::Tab,
+    ];
+    keys.extend("xyz".chars().map(key::KeyCode::Char));
+    let (text, revision) = drive(EditMode::Text, true, &keys);
+    assert_eq!(text, READ_ONLY_TEXT);
+    assert_eq!(revision, 0, "a read-only buffer records no edit");
+
+    let (edited, _) = drive(EditMode::Text, false, &keys);
+    assert_ne!(
+        edited, READ_ONLY_TEXT,
+        "the same keys edit a writable buffer, so the check above means something"
+    );
+}
+
+#[test]
+fn read_only_vi_mode_ignores_every_edit_command() {
+    // Deletes, changes, puts, opens, joins, indents, insert entry, and undo.
+    let sequence = "xXddDCccSsppPoOJ>><<rzi!\u{1b}aA!u";
+    let mut keys: Vec<key::KeyCode> = sequence.chars().map(key::KeyCode::Char).collect();
+    keys.push(key::KeyCode::Esc);
+    keys.push(key::KeyCode::Backspace);
+    keys.push(key::KeyCode::Delete);
+
+    let (text, revision) = drive(EditMode::Vi, true, &keys);
+    assert_eq!(text, READ_ONLY_TEXT);
+    assert_eq!(revision, 0, "a read-only buffer records no edit");
+
+    let (edited, _) = drive(EditMode::Vi, false, &keys);
+    assert_ne!(
+        edited, READ_ONLY_TEXT,
+        "the same keys edit a writable buffer, so the check above means something"
+    );
+}
+
+#[test]
+fn read_only_editor_can_decline_focus() {
+    let config = EditorConfig::new()
+        .with_read_only(true)
+        .with_focusable(false);
+    let harness = build_harness(READ_ONLY_TEXT, config, 20, 6);
+    let focused = harness.canopy.with_root_view(|view| view.focused_node());
+    assert!(focused.is_none(), "an unfocusable editor is skipped");
+}
+
 #[test]
 fn vi_x_deletes_forward_and_yanks_for_put() {
     let config = EditorConfig::new().with_mode(EditMode::Vi);

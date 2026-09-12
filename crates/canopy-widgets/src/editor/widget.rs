@@ -139,12 +139,15 @@ impl HighlightCache {
         self.lines.clear();
     }
 
-    /// Reset the cache when the buffer revision changes.
-    fn sync_revision(&mut self, revision: u64) {
-        if self.revision != revision {
-            self.revision = revision;
-            self.lines.clear();
+    /// Reset the cache when the buffer revision changes, reporting whether it
+    /// did.
+    fn sync_revision(&mut self, revision: u64) -> bool {
+        if self.revision == revision {
+            return false;
         }
+        self.revision = revision;
+        self.lines.clear();
+        true
     }
 
     /// Return cached spans for a line or compute and store them.
@@ -205,18 +208,68 @@ impl Editor {
         self.highlight_cache.clear();
         self.layout = LayoutCache::new();
         self.search = SearchState::new();
+        self.prepare_highlighter();
     }
 
     /// Install a syntax highlighter.
     pub fn set_highlighter(&mut self, highlighter: Option<Box<dyn Highlighter>>) {
         self.highlighter = highlighter;
         self.highlight_cache.clear();
+        self.prepare_highlighter();
+    }
+
+    /// Hand the current contents to the highlighter, which needs the whole
+    /// source to carry parser state between lines.
+    fn prepare_highlighter(&self) {
+        if let Some(highlighter) = &self.highlighter {
+            highlighter.prepare(&self.buffer.text());
+        }
     }
 
     /// Return a reference to the internal buffer.
     #[cfg(test)]
     pub(crate) fn buffer(&self) -> &TextBuffer {
         &self.buffer
+    }
+
+    /// Return the buffer for editing, or `None` when the editor is read-only.
+    ///
+    /// Every path that changes buffer contents goes through this accessor, so
+    /// read-only is decided in one place instead of at each call site.
+    pub(super) fn editable(&mut self) -> Option<&mut TextBuffer> {
+        if self.config.read_only {
+            return None;
+        }
+        Some(&mut self.buffer)
+    }
+
+    /// Replace `range` with `text`, reporting whether the edit was applied.
+    ///
+    /// Does nothing when the editor is read-only.
+    pub(super) fn replace_range(&mut self, range: TextRange, text: &str) -> bool {
+        let Some(buffer) = self.editable() else {
+            return false;
+        };
+        buffer.replace_range(range, text);
+        true
+    }
+
+    /// Undo the last edit unless the editor is read-only.
+    pub(super) fn undo_edit(&mut self) -> bool {
+        let Some(buffer) = self.editable() else {
+            return false;
+        };
+        buffer.undo();
+        true
+    }
+
+    /// Redo the last undone edit unless the editor is read-only.
+    pub(super) fn redo_edit(&mut self) -> bool {
+        let Some(buffer) = self.editable() else {
+            return false;
+        };
+        buffer.redo();
+        true
     }
 
     /// Compute the line-number gutter width.
@@ -362,10 +415,10 @@ impl Editor {
     /// normalized text that was inserted, or an empty string when read-only.
     pub(super) fn handle_insert_text(&mut self, text: &str) -> String {
         let content = self.normalize_insert_text(text);
-        if self.config.read_only {
+        let Some(buffer) = self.editable() else {
             return String::new();
-        }
-        self.buffer.insert_text(&content);
+        };
+        buffer.insert_text(&content);
         self.update_preferred_column();
         content
     }
@@ -381,10 +434,11 @@ impl Editor {
 
     /// Delete backward respecting selection and multiline rules.
     pub(super) fn handle_delete_backward(&mut self) -> bool {
-        if self.config.read_only {
+        let multiline = self.config.multiline;
+        let Some(buffer) = self.editable() else {
             return false;
-        }
-        let deleted = self.buffer.delete_backward(self.config.multiline);
+        };
+        let deleted = buffer.delete_backward(multiline);
         if deleted {
             self.update_preferred_column();
         }
@@ -393,10 +447,11 @@ impl Editor {
 
     /// Delete forward respecting selection and multiline rules.
     pub(super) fn handle_delete_forward(&mut self) -> bool {
-        if self.config.read_only {
+        let multiline = self.config.multiline;
+        let Some(buffer) = self.editable() else {
             return false;
-        }
-        let deleted = self.buffer.delete_forward(self.config.multiline);
+        };
+        let deleted = buffer.delete_forward(multiline);
         if deleted {
             self.update_preferred_column();
         }
@@ -416,7 +471,7 @@ impl Editor {
             return false;
         };
         self.set_yank(range, false);
-        self.buffer.replace_range(range, "");
+        self.replace_range(range, "");
         self.update_preferred_column();
         true
     }
@@ -798,27 +853,21 @@ impl Editor {
     /// Undo the last edit.
     #[command]
     pub fn undo(&mut self, _ctx: &mut dyn Context) {
-        if self.config.read_only {
-            return;
-        }
-        self.buffer.undo();
+        self.undo_edit();
         self.update_preferred_column();
     }
 
     /// Redo the last undone edit.
     #[command]
     pub fn redo(&mut self, _ctx: &mut dyn Context) {
-        if self.config.read_only {
-            return;
-        }
-        self.buffer.redo();
+        self.redo_edit();
         self.update_preferred_column();
     }
 }
 
 impl Widget for Editor {
     fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
-        true
+        self.config.focusable
     }
 
     fn cursor(&self) -> Option<cursor::Cursor> {
@@ -839,7 +888,9 @@ impl Widget for Editor {
         let origin = view.content_origin();
         let gutter_width = self.gutter_width();
         self.update_layout(view_rect, gutter_width);
-        self.highlight_cache.sync_revision(self.buffer.revision());
+        if self.highlight_cache.sync_revision(self.buffer.revision()) {
+            self.prepare_highlighter();
+        }
 
         self.search.update(&self.buffer);
 

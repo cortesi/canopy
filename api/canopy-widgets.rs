@@ -15,6 +15,15 @@ pub mod canopy_widgets {
 
         pub mod highlight {
             //! Syntax highlighting helpers.
+            //! Syntax highlighting helpers.
+            //!
+            //! [`SyntectHighlighter`] resolves a syntax from a file name or from the text
+            //! itself, then highlights lines incrementally. Highlighting a line needs the
+            //! parser state left by every line above it, so the highlighter walks forward
+            //! from the last line it has seen and caches the spans it produces. A source
+            //! set through [`Highlighter::prepare`] therefore costs only the lines that are
+            //! actually asked for, and multi-line constructs such as block comments keep
+            //! their state.
 
             /// A highlighted span for a single line.
             #[derive(Clone, Debug)]
@@ -25,23 +34,56 @@ pub mod canopy_widgets {
                 pub style: canopy::style::Style,
             }
 
-            /// A basic syntect-backed highlighter.
-            #[derive(Clone, Debug)]
+            /// A syntect-backed highlighter.
+            #[derive(Debug)]
             pub struct SyntectHighlighter {}
 
             /// Trait for providing syntax highlighting spans.
             pub trait Highlighter {
                 /// Return highlight spans for a line of text.
                 fn highlight_line(&self, line: usize, text: &str) -> Vec<HighlightSpan>;
+
+                /// Adopt `text` as the source being highlighted, discarding earlier state.
+                ///
+                /// Highlighters that carry parser state between lines need the whole
+                /// source. The default implementation ignores it.
+                fn prepare(&self, text: &str) {}
             }
 
+            /// Theme used when the caller names none.
+            pub const DEFAULT_THEME: &str = "Solarized (dark)";
+
             impl Highlighter for SyntectHighlighter {
-                fn highlight_line(&self, _line: usize, text: &str) -> Vec<HighlightSpan> {}
+                fn highlight_line(&self, line: usize, text: &str) -> Vec<HighlightSpan> {}
+
+                fn prepare(&self, text: &str) {}
             }
 
             impl SyntectHighlighter {
-                /// Construct a new syntect highlighter for the provided extension.
-                pub fn new(extension: impl Into<String>) -> Self {}
+                #[must_use]
+                /// Construct a highlighter for the file at `path`.
+                pub fn for_path(path: impl AsRef<Path>) -> Self {}
+
+                #[must_use]
+                /// Construct a highlighter for the provided file extension.
+                pub fn new(extension: impl AsRef<str>) -> Self {}
+
+                #[must_use]
+                /// Return the name of the syntax in use.
+                pub fn syntax_name(&self) -> String {}
+
+                #[must_use]
+                /// Use the named theme, falling back to [`DEFAULT_THEME`].
+                pub fn with_theme(self, name: impl AsRef<str>) -> Self {}
+
+                /// Select the syntax for `extension`, discarding any prepared source.
+                pub fn set_extension(&self, extension: &str) {}
+
+                /// Select the syntax for `path`, discarding any prepared source.
+                ///
+                /// A file name is tried first, so `Makefile` and `Dockerfile` resolve, then
+                /// the extension.
+                pub fn set_path(&self, path: impl AsRef<Path>) {}
             }
         }
 
@@ -74,6 +116,8 @@ pub mod canopy_widgets {
             pub mode: EditMode,
             /// Whether the editor is read-only.
             pub read_only: bool,
+            /// Whether the editor accepts focus.
+            pub focusable: bool,
             /// Line number rendering mode.
             pub line_numbers: LineNumbers,
             /// Tab stop width in columns.
@@ -192,6 +236,12 @@ pub mod canopy_widgets {
 
             /// Configure the tab stop width.
             pub fn with_tab_stop(self, tab_stop: usize) -> Self {}
+
+            /// Configure whether the editor accepts focus.
+            ///
+            /// A read-only view embedded for display alone should decline focus so
+            /// that focus traversal skips over it.
+            pub fn with_focusable(self, focusable: bool) -> Self {}
 
             /// Configure wrapping mode.
             pub fn with_wrap(self, wrap: WrapMode) -> Self {}
