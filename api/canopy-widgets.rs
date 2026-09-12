@@ -698,6 +698,9 @@ pub mod canopy_widgets {
     }
 
     /// Button widget that triggers a command when clicked.
+    ///
+    /// Mouse clicks are consumed without dispatching when the command is disabled.
+    /// Calling [`Button::press`] directly still reports command errors.
     pub struct Button {}
 
     /// Canvas width behavior for text widgets.

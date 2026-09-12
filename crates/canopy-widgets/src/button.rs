@@ -21,6 +21,9 @@ canopy::slot!(BoxSlot: Border);
 canopy::slot!(CenterSlot: Center);
 
 /// Button widget that triggers a command when clicked.
+///
+/// Mouse clicks are consumed without dispatching when the command is disabled.
+/// Calling [`Button::press`] directly still reports command errors.
 pub struct Button {
     /// Button label.
     label: String,
@@ -76,7 +79,9 @@ impl Button {
     /// Handle a mouse click event.
     fn handle_click(&mut self, ctx: &mut dyn Context, event: mouse::MouseEvent) -> Result<bool> {
         if event.button == mouse::Button::Left && event.action == mouse::Action::Down {
-            self.press(ctx)?;
+            if !matches!(self.command_status(ctx)?, Some(CommandStatus::Disabled(_))) {
+                self.press(ctx)?;
+            }
             return Ok(true);
         }
         Ok(false)
@@ -177,20 +182,39 @@ impl Widget for Button {
 
 #[cfg(test)]
 mod tests {
-    use canopy::{Canopy, Loader, ViewContextExt, style::Color, testing::harness::Harness};
+    use canopy::{
+        Canopy, Loader, ViewContextExt, commands::CommandError, error::Error, event::key,
+        geom::Point, style::Color, testing::harness::Harness,
+    };
 
     use super::*;
 
-    struct ActionOwner;
+    #[derive(Default)]
+    struct ActionOwner {
+        enabled: bool,
+        fail: bool,
+        activations: usize,
+    }
 
     #[derive_commands]
     impl ActionOwner {
         fn eligibility(&self, _ctx: &dyn ViewContext) -> Result<CommandStatus> {
-            Ok(CommandStatus::Disabled("Unavailable".into()))
+            Ok(if self.enabled {
+                CommandStatus::Enabled
+            } else {
+                CommandStatus::Disabled("Unavailable".into())
+            })
         }
 
         #[command(enabled = "eligibility")]
-        fn activate(&self) {}
+        fn activate(&mut self) -> Result<()> {
+            self.activations += 1;
+            if self.fail {
+                Err(Error::Invalid("action failed".into()))
+            } else {
+                Ok(())
+            }
+        }
     }
 
     impl Widget for ActionOwner {
@@ -214,7 +238,9 @@ mod tests {
 
     #[test]
     fn semantic_eligibility_is_independent_of_active_state() -> Result<()> {
-        let mut harness = Harness::builder(ActionOwner).size(20, 4).build()?;
+        let mut harness = Harness::builder(ActionOwner::default())
+            .size(20, 4)
+            .build()?;
         let button = harness
             .canopy
             .with_root_view(|ctx| ctx.unique_descendant::<Button>())?
@@ -241,7 +267,7 @@ mod tests {
 
     impl Widget for ActionScene {
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
-            let owner = ctx.add_child(ActionOwner)?;
+            let owner = ctx.add_child(ActionOwner::default())?;
             ctx.add_child(
                 Button::new("External action").with_command(
                     ActionOwner::cmd_activate()
@@ -303,7 +329,9 @@ mod tests {
 
     #[test]
     fn button_label_role_survives_an_extra_center() -> Result<()> {
-        let mut harness = Harness::builder(ActionOwner).size(20, 4).build()?;
+        let mut harness = Harness::builder(ActionOwner::default())
+            .size(20, 4)
+            .build()?;
         harness
             .canopy
             .style_mut()
@@ -340,6 +368,64 @@ mod tests {
         })?;
         harness.render()?;
         assert_eq!(label_style(&harness), before);
+        Ok(())
+    }
+
+    fn click() -> mouse::MouseEvent {
+        mouse::MouseEvent {
+            action: mouse::Action::Down,
+            button: mouse::Button::Left,
+            modifiers: key::Empty,
+            location: Point { x: 0, y: 0 },
+        }
+    }
+
+    #[test]
+    fn disabled_mouse_clicks_are_inert_and_recheck_eligibility() -> Result<()> {
+        let mut harness = Harness::builder(ActionOwner::default())
+            .size(20, 4)
+            .build()?;
+        harness.render()?;
+        harness.mouse(click())?;
+        harness.with_root_widget(|owner: &mut ActionOwner| {
+            assert_eq!(owner.activations, 0);
+            owner.enabled = true;
+        });
+        // Eligibility can change after the frame was rendered.
+        harness.mouse(click())?;
+        harness.with_root_widget(|owner: &mut ActionOwner| {
+            assert_eq!(owner.activations, 1);
+            owner.enabled = false;
+        });
+        harness.mouse(click())?;
+        harness.with_root_widget(|owner: &mut ActionOwner| assert_eq!(owner.activations, 1));
+        let button = harness
+            .canopy
+            .with_root_view(|ctx| ctx.unique_descendant::<Button>())?
+            .expect("button mounted");
+        harness.canopy.with_context(button, |ctx| {
+            ctx.with_widget_mut(button, |button: &mut Button, ctx| {
+                assert!(matches!(
+                    button.press(ctx),
+                    Err(Error::Command(CommandError::Disabled { .. }))
+                ));
+                Ok(())
+            })
+        })?;
+        Ok(())
+    }
+
+    #[test]
+    fn enabled_mouse_clicks_still_propagate_action_errors() -> Result<()> {
+        let mut harness = Harness::builder(ActionOwner {
+            enabled: true,
+            fail: true,
+            ..ActionOwner::default()
+        })
+        .size(20, 4)
+        .build()?;
+        assert!(harness.mouse(click()).is_err());
+        harness.with_root_widget(|owner: &mut ActionOwner| assert_eq!(owner.activations, 1));
         Ok(())
     }
 }
