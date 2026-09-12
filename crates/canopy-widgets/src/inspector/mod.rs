@@ -24,6 +24,8 @@ canopy.bind_command("Up", { phase = "after_widget", path = "logs", description =
 "#;
 
 /// Inspector overlay widget.
+///
+/// Keeps the latest 1,000 log entries, truncating each to 4,096 UTF-8 bytes.
 pub struct Inspector;
 
 #[derive_commands]

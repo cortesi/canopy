@@ -194,6 +194,11 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
         self.items.len()
     }
 
+    /// Borrow the stable keys in display order.
+    pub fn keys(&self) -> &[K] {
+        self.items.keys()
+    }
+
     /// Returns the typed ID of the item at the given index.
     pub fn item(&self, index: usize) -> Option<TypedId<W>> {
         self.items.id_at(index)

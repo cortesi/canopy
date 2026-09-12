@@ -1545,6 +1545,9 @@ pub mod canopy_widgets {
     }
 
     impl<W: Selectable, K: 'static + Clone + Eq + Hash + ToArgValue> List<W, K> {
+        /// Borrow the stable keys in display order.
+        pub fn keys(&self) -> &[K] {}
+
         /// Build a list that dispatches a command when a row is activated.
         pub fn with_on_activate(self, command: CommandCall) -> Self {}
 
