@@ -50,6 +50,8 @@ pub mod canopy_widgets {
                 ///
                 /// Highlighters that carry parser state between lines need the whole
                 /// source. The default implementation ignores it.
+                /// The editor calls this during rendering, before requesting spans, when
+                /// its source or highlighter has changed.
                 fn prepare(&self, text: &str) {}
             }
 
@@ -172,6 +174,10 @@ pub mod canopy_widgets {
             pub fn with_config(text: impl Into<String>, config: EditorConfig) -> Self {}
 
             /// Install a syntax highlighter.
+            ///
+            /// Preparation is deferred until the next render, using the latest buffer
+            /// contents. Repeated changes before rendering prepare only the final
+            /// state.
             pub fn set_highlighter(&mut self, highlighter: Option<Box<dyn Highlighter>>) {}
 
             /// Move the cursor.

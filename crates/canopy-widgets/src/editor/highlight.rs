@@ -60,6 +60,8 @@ pub trait Highlighter {
     ///
     /// Highlighters that carry parser state between lines need the whole
     /// source. The default implementation ignores it.
+    /// The editor calls this during rendering, before requesting spans, when
+    /// its source or highlighter has changed.
     fn prepare(&self, text: &str) {
         let _ = text;
     }

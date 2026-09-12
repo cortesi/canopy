@@ -119,8 +119,8 @@ impl<'a, 'b> RenderLineContext<'a, 'b> {
 /// Cache of syntax highlight spans keyed by buffer revision and line index.
 #[derive(Debug, Clone)]
 pub(super) struct HighlightCache {
-    /// Buffer revision the cache corresponds to.
-    revision: u64,
+    /// Prepared buffer revision, or `None` when preparation is pending.
+    revision: Option<u64>,
     /// Cached spans per line.
     lines: HashMap<usize, Vec<HighlightSpan>>,
 }
@@ -129,23 +129,24 @@ impl HighlightCache {
     /// Construct an empty highlight cache.
     fn new() -> Self {
         Self {
-            revision: 0,
+            revision: None,
             lines: HashMap::new(),
         }
     }
 
-    /// Clear cached spans.
+    /// Invalidate preparation and cached spans.
     fn clear(&mut self) {
+        self.revision = None;
         self.lines.clear();
     }
 
     /// Reset the cache when the buffer revision changes, reporting whether it
     /// did.
     fn sync_revision(&mut self, revision: u64) -> bool {
-        if self.revision == revision {
+        if self.revision == Some(revision) {
             return false;
         }
-        self.revision = revision;
+        self.revision = Some(revision);
         self.lines.clear();
         true
     }
@@ -208,22 +209,16 @@ impl Editor {
         self.highlight_cache.clear();
         self.layout = LayoutCache::new();
         self.search = SearchState::new();
-        self.prepare_highlighter();
     }
 
     /// Install a syntax highlighter.
+    ///
+    /// Preparation is deferred until the next render, using the latest buffer
+    /// contents. Repeated changes before rendering prepare only the final
+    /// state.
     pub fn set_highlighter(&mut self, highlighter: Option<Box<dyn Highlighter>>) {
         self.highlighter = highlighter;
         self.highlight_cache.clear();
-        self.prepare_highlighter();
-    }
-
-    /// Hand the current contents to the highlighter, which needs the whole
-    /// source to carry parser state between lines.
-    fn prepare_highlighter(&self) {
-        if let Some(highlighter) = &self.highlighter {
-            highlighter.prepare(&self.buffer.text());
-        }
     }
 
     /// Return a reference to the internal buffer.
@@ -888,8 +883,10 @@ impl Widget for Editor {
         let origin = view.content_origin();
         let gutter_width = self.gutter_width();
         self.update_layout(view_rect, gutter_width);
-        if self.highlight_cache.sync_revision(self.buffer.revision()) {
-            self.prepare_highlighter();
+        if self.highlight_cache.sync_revision(self.buffer.revision())
+            && let Some(highlighter) = &self.highlighter
+        {
+            highlighter.prepare(&self.buffer.text());
         }
 
         self.search.update(&self.buffer);

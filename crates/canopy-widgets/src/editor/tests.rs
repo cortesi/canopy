@@ -1,6 +1,10 @@
-use std::sync::{
-    Arc,
-    atomic::{AtomicUsize, Ordering},
+use std::{
+    cell::RefCell,
+    rc::Rc,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
 };
 
 use canopy::{
@@ -1011,6 +1015,79 @@ fn highlight_spans_cached_by_revision() {
     harness.render().unwrap();
     let second = counter.load(Ordering::SeqCst);
     assert_eq!(first, second);
+}
+
+#[test]
+fn highlight_preparation_batches_updates_until_render() {
+    let config = EditorConfig::new().with_mode(EditMode::Text);
+    let mut harness = build_harness("original", config, 20, 2);
+    let prepared = Rc::new(RefCell::new(Vec::new()));
+    with_editor(&mut harness, |editor| {
+        editor.set_highlighter(Some(Box::new(RecordingHighlighter {
+            prepared: prepared.clone(),
+        })));
+        editor.set_text("intermediate");
+        editor.set_text("final");
+    });
+    assert!(prepared.borrow().is_empty());
+    harness.render().unwrap();
+    assert_eq!(*prepared.borrow(), ["final"]);
+    harness.render().unwrap();
+    assert_eq!(*prepared.borrow(), ["final"]);
+
+    harness.key('!').unwrap();
+    assert_eq!(*prepared.borrow(), ["final", "!final"]);
+    // Replacing an edited buffer resets its revision to zero.
+    with_editor(&mut harness, |editor| editor.set_text("replacement"));
+    assert_eq!(prepared.borrow().len(), 2);
+    harness.render().unwrap();
+    assert_eq!(*prepared.borrow(), ["final", "!final", "replacement"]);
+    harness.render().unwrap();
+    assert_eq!(prepared.borrow().len(), 3);
+}
+
+#[test]
+fn replacing_highlighter_prepares_unchanged_buffer() {
+    let mut harness = build_harness("unchanged", EditorConfig::new(), 20, 2);
+    let first = Rc::new(RefCell::new(Vec::new()));
+    let second = Rc::new(RefCell::new(Vec::new()));
+    for prepared in [&first, &second] {
+        with_editor(&mut harness, |editor| {
+            editor.set_highlighter(Some(Box::new(RecordingHighlighter {
+                prepared: prepared.clone(),
+            })));
+        });
+        assert!(prepared.borrow().is_empty());
+        harness.render().unwrap();
+        assert_eq!(*prepared.borrow(), ["unchanged"]);
+    }
+    with_editor(&mut harness, |editor| {
+        editor.set_highlighter(None);
+        editor.set_text("plain");
+    });
+    harness.render().unwrap();
+    assert_eq!(*first.borrow(), ["unchanged"]);
+    assert_eq!(*second.borrow(), ["unchanged"]);
+}
+
+/// Record preparation and verify that line callbacks see the current source.
+struct RecordingHighlighter {
+    prepared: Rc<RefCell<Vec<String>>>,
+}
+
+impl Highlighter for RecordingHighlighter {
+    fn prepare(&self, text: &str) {
+        self.prepared.borrow_mut().push(text.to_owned());
+    }
+
+    fn highlight_line(&self, line: usize, text: &str) -> Vec<HighlightSpan> {
+        let prepared = self.prepared.borrow();
+        let source = prepared
+            .last()
+            .expect("prepare must precede line callbacks");
+        assert_eq!(source.lines().nth(line), Some(text));
+        Vec::new()
+    }
 }
 
 #[test]
