@@ -89,7 +89,10 @@ fn run_default_check(workspace_root: &Path) -> bool {
     // The production profile omits `--all-targets` and `--all-features` on
     // purpose. Either flag pulls in dev-dependencies, which re-enable the
     // `testing` feature and hide the warnings this step exists to catch.
-    if !run_cargo_command(workspace_root, &["clippy", "--workspace", "--", "-D", "warnings"]) {
+    if !run_cargo_command(
+        workspace_root,
+        &["clippy", "--workspace", "--", "-D", "warnings"],
+    ) {
         return false;
     }
     if !run_cargo_command(workspace_root, &["check", "--workspace", "--all-targets"]) {
@@ -154,7 +157,9 @@ fn validate_luau_inventory(workspace_root: &Path) -> Result<(), String> {
     for file in files.lines() {
         let owned = file == "crates/canopy/luau/preamble.d.luau"
             || file.starts_with("crates/canopy-widgets/tests/luau/")
-            || file.starts_with("examples/todo/smoke/");
+            || file.starts_with("examples/todo/smoke/")
+            || file.starts_with("examples/hello/smoke/")
+            || file == "examples/hello/src/default_bindings.luau";
         if !owned {
             return Err(format!("tracked Luau file has no checker owner: {file}"));
         }

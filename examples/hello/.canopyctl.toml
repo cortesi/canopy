@@ -1,0 +1,9 @@
+[app]
+headless = ["cargo", "run", "-p", "hello", "--", "--no-config", "mcp"]
+run = ["cargo", "run", "-p", "hello", "--"]
+mcp_args = ["--mcp={socket}"]
+
+[smoke]
+suite = "smoke"
+fail_fast = true
+timeout_ms = 5000
