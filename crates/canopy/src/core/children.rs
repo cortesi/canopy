@@ -124,8 +124,11 @@ where
             }
         }
 
-        let managed: HashSet<NodeId> = planned_map.values().map(|id| NodeId::from(*id)).collect();
-        if children.iter().any(|node| !managed.contains(node)) {
+        let managed: HashMap<NodeId, &K> = planned_map
+            .iter()
+            .map(|(key, id)| (NodeId::from(*id), key))
+            .collect();
+        if children.iter().any(|node| !managed.contains_key(node)) {
             return Err(Error::Invalid(
                 "keyed collection parent contains unmanaged children".into(),
             ));
@@ -141,12 +144,8 @@ where
         let removed: Vec<K> = children
             .iter()
             .filter_map(|node_id| {
-                planned_map
-                    .iter()
-                    .find(|(key, mapped)| {
-                        NodeId::from(**mapped) == *node_id && !seen.contains(*key)
-                    })
-                    .map(|(key, _)| key.clone())
+                let key = *managed.get(node_id)?;
+                (!seen.contains(key)).then(|| key.clone())
             })
             .collect();
         let mut planned_map = Some(planned_map);

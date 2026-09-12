@@ -3,7 +3,8 @@
 use std::hint::black_box;
 
 use canopy::{
-    Canopy, Context, ContextExt, NodeId, NodeName, Render, TermBuf, ViewContext, Widget,
+    Canopy, Context, ContextExt, KeyedChildren, NodeId, NodeName, Render, TermBuf, ViewContext,
+    Widget,
     commands::CommandTarget,
     derive_commands,
     error::Result,
@@ -374,6 +375,41 @@ fn bench_large_tree_render(c: &mut Criterion) {
     });
 }
 
+/// Benchmark stable and rolling key sets against an existing 1,000-row tree.
+fn bench_keyed_reconciliation(c: &mut Criterion) {
+    for (name, step) in [
+        ("keyed_reconcile_unchanged_1000", 0),
+        ("keyed_reconcile_rolling_1000", 1),
+    ] {
+        let mut app = Canopy::new();
+        let mut items = KeyedChildren::<usize, BenchNode>::new();
+        app.with_root_context(|ctx| {
+            items.reconcile(
+                ctx,
+                0..1_000,
+                |key| Ok(BenchNode::leaf(*key)),
+                |_, _, _| Ok(()),
+            )
+        })
+        .expect("keyed benchmark tree should build");
+        let mut start = 0;
+        c.bench_function(name, |b| {
+            b.iter(|| {
+                start += step;
+                app.with_root_context(|ctx| {
+                    items.reconcile(
+                        ctx,
+                        black_box(start..start + 1_000),
+                        |key| Ok(BenchNode::leaf(*key)),
+                        |_, _, _| Ok(()),
+                    )
+                })
+                .expect("keyed reconciliation should succeed")
+            });
+        });
+    }
+}
+
 criterion_group!(
     benches,
     bench_tree_edit,
@@ -383,6 +419,7 @@ criterion_group!(
     bench_command_resolution,
     bench_script_startup,
     bench_text_buffer,
-    bench_large_tree_render
+    bench_large_tree_render,
+    bench_keyed_reconciliation
 );
 criterion_main!(benches);

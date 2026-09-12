@@ -1513,6 +1513,45 @@ fn failed_widget_replacement_keeps_the_old_owners_modal_bindings() -> Result<()>
 }
 
 #[test]
+fn keyed_reconcile_removes_in_current_child_order() -> Result<()> {
+    let mut core = Core::new();
+    let parent = core.create_detached(simple_widget())?;
+    core.attach(core.root, parent)?;
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let mut keyed = KeyedChildren::<&'static str, FaultWidget>::new();
+    let mut ctx = CoreContext::new(&mut core, parent);
+    let rows = keyed.reconcile(
+        &mut ctx,
+        ["a", "b", "c", "d"],
+        |key| Ok(FaultWidget::new(key, Arc::clone(&log))),
+        |_, _, _| Ok(()),
+    )?;
+    ctx.set_children([2, 0, 3, 1].map(|index| rows[index].into()).to_vec())?;
+    log.lock().unwrap().clear();
+    let retained = keyed.reconcile(
+        &mut ctx,
+        ["b"],
+        |_| panic!("all requested keys already exist"),
+        |_, _, _| Ok(()),
+    )?;
+    assert_eq!(retained, [rows[1]]);
+    let removed: Vec<_> = log
+        .lock()
+        .unwrap()
+        .iter()
+        .filter_map(|event| {
+            if let HookEvent::PreRemove(name) = event {
+                Some(*name)
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(removed, ["c", "a", "d"]);
+    Ok(())
+}
+
+#[test]
 fn keyed_reconcile_update_failure_preserves_core_and_helper_state() -> Result<()> {
     let mut core = Core::new();
     let parent = core.create_detached(simple_widget())?;
