@@ -17,6 +17,7 @@ pub mod canopy_widgets {
             //! Syntax highlighting helpers.
 
             /// A highlighted span for a single line.
+            #[derive(Clone, Debug)]
             pub struct HighlightSpan {
                 /// Character range covered by the span.
                 pub range: std::ops::Range<usize>,
@@ -25,28 +26,13 @@ pub mod canopy_widgets {
             }
 
             /// A basic syntect-backed highlighter.
+            #[derive(Clone, Debug)]
             pub struct SyntectHighlighter {}
 
             /// Trait for providing syntax highlighting spans.
             pub trait Highlighter {
                 /// Return highlight spans for a line of text.
                 fn highlight_line(&self, line: usize, text: &str) -> Vec<HighlightSpan>;
-            }
-
-            impl Clone for HighlightSpan {
-                fn clone(&self) -> HighlightSpan {}
-            }
-
-            impl Debug for HighlightSpan {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-            }
-
-            impl Clone for SyntectHighlighter {
-                fn clone(&self) -> SyntectHighlighter {}
-            }
-
-            impl Debug for SyntectHighlighter {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
             }
 
             impl Highlighter for SyntectHighlighter {
@@ -60,6 +46,7 @@ pub mod canopy_widgets {
         }
 
         /// Editing mode for the editor widget.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub enum EditMode {
             /// Text entry mode with direct insertion.
             Text,
@@ -71,6 +58,7 @@ pub mod canopy_widgets {
         pub struct Editor {}
 
         /// Configuration for the editor widget.
+        #[derive(Clone, Debug, Default)]
         pub struct EditorConfig {
             /// Allow multi-line content.
             pub multiline: bool,
@@ -93,6 +81,7 @@ pub mod canopy_widgets {
         }
 
         /// Line number rendering mode.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub enum LineNumbers {
             /// Do not render line numbers.
             None,
@@ -103,106 +92,12 @@ pub mod canopy_widgets {
         }
 
         /// Wrapping behavior for the editor.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub enum WrapMode {
             /// No wrapping; horizontal scrolling is enabled.
             None,
             /// Soft wrapping at the view width.
             Soft,
-        }
-
-        impl Clone for EditMode {
-            fn clone(&self) -> EditMode {}
-        }
-
-        impl Debug for EditMode {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for EditMode {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for EditMode {
-            fn eq(&self, other: &EditMode) -> bool {}
-        }
-
-        impl Clone for EditorConfig {
-            fn clone(&self) -> EditorConfig {}
-        }
-
-        impl Debug for EditorConfig {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Default for EditorConfig {
-            fn default() -> Self {}
-        }
-
-        impl EditorConfig {
-            /// Configure auto-grow behavior.
-            pub fn with_auto_grow(self, auto_grow: bool) -> Self {}
-
-            /// Configure line number rendering.
-            pub fn with_line_numbers(self, line_numbers: LineNumbers) -> Self {}
-
-            /// Configure multiline behavior.
-            pub fn with_multiline(self, multiline: bool) -> Self {}
-
-            /// Configure read-only behavior.
-            pub fn with_read_only(self, read_only: bool) -> Self {}
-
-            /// Configure the edit mode.
-            pub fn with_mode(self, mode: EditMode) -> Self {}
-
-            /// Configure the maximum height.
-            pub fn with_max_height(self, max_height: Option<u32>) -> Self {}
-
-            /// Configure the minimum height.
-            pub fn with_min_height(self, min_height: u32) -> Self {}
-
-            /// Configure the tab stop width.
-            pub fn with_tab_stop(self, tab_stop: usize) -> Self {}
-
-            /// Configure wrapping mode.
-            pub fn with_wrap(self, wrap: WrapMode) -> Self {}
-
-            /// Construct a default editor configuration.
-            pub fn new() -> Self {}
-        }
-
-        impl Clone for LineNumbers {
-            fn clone(&self) -> LineNumbers {}
-        }
-
-        impl Debug for LineNumbers {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for LineNumbers {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for LineNumbers {
-            fn eq(&self, other: &LineNumbers) -> bool {}
-        }
-
-        impl Clone for WrapMode {
-            fn clone(&self) -> WrapMode {}
-        }
-
-        impl Debug for WrapMode {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for WrapMode {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for WrapMode {
-            fn eq(&self, other: &WrapMode) -> bool {}
         }
 
         impl CommandNode for Editor {
@@ -272,18 +167,52 @@ pub mod canopy_widgets {
             /// Return a typed command reference for this command.
             pub fn cmd_undo() -> &'static canopy::commands::CommandSpec {}
         }
+
+        impl EditorConfig {
+            /// Configure auto-grow behavior.
+            pub fn with_auto_grow(self, auto_grow: bool) -> Self {}
+
+            /// Configure line number rendering.
+            pub fn with_line_numbers(self, line_numbers: LineNumbers) -> Self {}
+
+            /// Configure multiline behavior.
+            pub fn with_multiline(self, multiline: bool) -> Self {}
+
+            /// Configure read-only behavior.
+            pub fn with_read_only(self, read_only: bool) -> Self {}
+
+            /// Configure the edit mode.
+            pub fn with_mode(self, mode: EditMode) -> Self {}
+
+            /// Configure the maximum height.
+            pub fn with_max_height(self, max_height: Option<u32>) -> Self {}
+
+            /// Configure the minimum height.
+            pub fn with_min_height(self, min_height: u32) -> Self {}
+
+            /// Configure the tab stop width.
+            pub fn with_tab_stop(self, tab_stop: usize) -> Self {}
+
+            /// Configure wrapping mode.
+            pub fn with_wrap(self, wrap: WrapMode) -> Self {}
+
+            /// Construct a default editor configuration.
+            pub fn new() -> Self {}
+        }
     }
 
     pub mod font {
         //! ASCII font rasterization helpers.
 
         /// Rasterized font data for terminal rendering.
+        #[derive(Clone)]
         pub struct Font {}
 
         /// Render large ASCII-font text into a bounded region.
         pub struct FontBanner {}
 
         /// Rendering effects applied to font output.
+        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
         pub struct FontEffects {
             /// Thicken strokes by adding extra coverage.
             pub bold: bool,
@@ -306,65 +235,12 @@ pub mod canopy_widgets {
         pub struct ImageView {}
 
         /// Alignment configuration for font layouts.
+        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
         pub struct LayoutOptions {
             /// Horizontal alignment within the target canvas.
             pub h_align: canopy::layout::Align,
             /// Vertical alignment within the target canvas.
             pub v_align: canopy::layout::Align,
-        }
-
-        impl Clone for Font {
-            fn clone(&self) -> Font {}
-        }
-
-        impl Font {
-            /// Load a font from in-memory bytes.
-            pub fn from_bytes(data: impl AsRef<[u8]>) -> Result<Self> {}
-
-            /// Return the font name, if provided in metadata.
-            pub fn name(&self) -> Option<&str> {}
-        }
-
-        impl Clone for FontEffects {
-            fn clone(&self) -> FontEffects {}
-        }
-
-        impl Debug for FontEffects {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Default for FontEffects {
-            fn default() -> FontEffects {}
-        }
-
-        impl Eq for FontEffects {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for FontEffects {
-            fn eq(&self, other: &FontEffects) -> bool {}
-        }
-
-        impl Clone for LayoutOptions {
-            fn clone(&self) -> LayoutOptions {}
-        }
-
-        impl Debug for LayoutOptions {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Default for LayoutOptions {
-            fn default() -> LayoutOptions {}
-        }
-
-        impl Eq for LayoutOptions {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for LayoutOptions {
-            fn eq(&self, other: &LayoutOptions) -> bool {}
         }
 
         impl CommandNode for ImageView {
@@ -417,6 +293,14 @@ pub mod canopy_widgets {
             fn canvas(&self, view: Size, _ctx: &CanvasContext<'_>) -> Size {}
         }
 
+        impl Font {
+            /// Load a font from in-memory bytes.
+            pub fn from_bytes(data: impl AsRef<[u8]>) -> Result<Self> {}
+
+            /// Return the font name, if provided in metadata.
+            pub fn name(&self) -> Option<&str> {}
+        }
+
         impl FontBanner {
             /// Configure layout options for the banner.
             pub fn with_layout_options(self, options: LayoutOptions) -> Self {}
@@ -459,6 +343,7 @@ pub mod canopy_widgets {
         pub struct Terminal {}
 
         /// Terminal widget configuration.
+        #[derive(Default)]
         pub struct TerminalConfig {}
 
         impl CommandNode for Terminal {
@@ -495,10 +380,6 @@ pub mod canopy_widgets {
             fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
         }
 
-        impl Default for TerminalConfig {
-            fn default() -> TerminalConfig {}
-        }
-
         impl TerminalConfig {
             /// Configure the command argv to run instead of the default shell.
             pub fn with_command<I, S>(self, command: I) -> Self
@@ -520,12 +401,15 @@ pub mod canopy_widgets {
         //! Feature-independent rope storage, editing, and selection helpers.
 
         /// A text selection expressed as an anchor and head position.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct Selection {}
 
         /// Rope-backed text buffer with selection and undo/redo support.
+        #[derive(Clone, Debug)]
         pub struct TextBuffer {}
 
         /// A position in the text buffer expressed as a logical line and a char index.
+        #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
         pub struct TextPosition {
             /// Logical line index (0-based).
             pub line: usize,
@@ -534,6 +418,7 @@ pub mod canopy_widgets {
         }
 
         /// A half-open text range expressed in buffer coordinates.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
         pub struct TextRange {
             /// Range start position (inclusive).
             pub start: TextPosition,
@@ -544,21 +429,18 @@ pub mod canopy_widgets {
         /// Scoped text edit transaction.
         pub struct TextTransaction<'a> {}
 
-        impl Clone for Selection {
-            fn clone(&self) -> Selection {}
+        impl Deref for TextTransaction<'_> {
+            fn deref(&self) -> &Self::Target {}
+
+            type Target = TextBuffer;
         }
 
-        impl Debug for Selection {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
+        impl DerefMut for TextTransaction<'_> {
+            fn deref_mut(&mut self) -> &mut Self::Target {}
         }
 
-        impl Eq for Selection {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for Selection {
-            fn eq(&self, other: &Selection) -> bool {}
+        impl Drop for TextTransaction<'_> {
+            fn drop(&mut self) {}
         }
 
         impl Selection {
@@ -582,14 +464,6 @@ pub mod canopy_widgets {
 
             /// Update the head position.
             pub fn set_head(&mut self, head: TextPosition) {}
-        }
-
-        impl Clone for TextBuffer {
-            fn clone(&self) -> TextBuffer {}
-        }
-
-        impl Debug for TextBuffer {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
         }
 
         impl TextBuffer {
@@ -696,59 +570,9 @@ pub mod canopy_widgets {
             pub fn undo(&mut self) -> bool {}
         }
 
-        impl Clone for TextPosition {
-            fn clone(&self) -> TextPosition {}
-        }
-
-        impl Debug for TextPosition {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for TextPosition {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl Hash for TextPosition {
-            fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-        }
-
-        impl Ord for TextPosition {
-            fn cmp(&self, other: &Self) -> Ordering {}
-        }
-
-        impl PartialEq for TextPosition {
-            fn eq(&self, other: &TextPosition) -> bool {}
-        }
-
-        impl PartialOrd for TextPosition {
-            fn partial_cmp(&self, other: &Self) -> Option<Ordering> {}
-        }
-
         impl TextPosition {
             /// Create a new text position.
             pub fn new(line: usize, column: usize) -> Self {}
-        }
-
-        impl Clone for TextRange {
-            fn clone(&self) -> TextRange {}
-        }
-
-        impl Debug for TextRange {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for TextRange {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl Hash for TextRange {
-            fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-        }
-
-        impl PartialEq for TextRange {
-            fn eq(&self, other: &TextRange) -> bool {}
         }
 
         impl TextRange {
@@ -761,29 +585,18 @@ pub mod canopy_widgets {
             /// Return true if the range is empty.
             pub fn is_empty(self) -> bool {}
         }
-
-        impl Deref for TextTransaction<'_> {
-            fn deref(&self) -> &Self::Target {}
-
-            type Target = TextBuffer;
-        }
-
-        impl DerefMut for TextTransaction<'_> {
-            fn deref_mut(&mut self) -> &mut Self::Target {}
-        }
-
-        impl Drop for TextTransaction<'_> {
-            fn drop(&mut self) {}
-        }
     }
 
     /// Monotonic key for list items.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
     pub struct AutoKey(_);
 
     /// A simple box container around its children.
+    #[derive(Default)]
     pub struct Border {}
 
     /// Defines the set of glyphs used to draw the box.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub struct BoxGlyphs {
         /// Top-left corner glyph.
         pub topleft: char,
@@ -803,6 +616,7 @@ pub mod canopy_widgets {
     pub struct Button {}
 
     /// Canvas width behavior for text widgets.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub enum CanvasWidth {
         /// Match the view width.
         View,
@@ -819,6 +633,7 @@ pub mod canopy_widgets {
     /// stays at full brightness because it is a sibling of the dimmed content, not
     /// a descendant. Insert it as a sibling inside a parent that uses `Stack`
     /// layout so it can overlay the existing view.
+    #[derive(Default)]
     pub struct Center;
 
     /// A dropdown widget for single-value selection.
@@ -830,6 +645,7 @@ pub mod canopy_widgets {
         T: Label, {}
 
     /// A frame around an element with optional title and indicators.
+    #[derive(Default)]
     pub struct Frame {}
 
     /// Widget that renders an image into terminal cells.
@@ -845,15 +661,18 @@ pub mod canopy_widgets {
     ///
     /// Items must implement the [`Selectable`] trait so the list can manage their
     /// selection state independently of focus.
+    #[derive(Default)]
     pub struct List<W: Selectable, K: 'static + Clone + Eq + Hash + ToArgValue = AutoKey> {}
 
     /// Container that adds padding around its child.
     pub struct Pad {}
 
     /// Panes manages a set of child nodes arranged in a 2d grid.
+    #[derive(Default)]
     pub struct Panes {}
 
     /// A Root widget that lives at the base of a Canopy app.
+    #[derive(Default)]
     pub struct Root {}
 
     /// A multi-select widget with checkbox-style items.
@@ -868,9 +687,11 @@ pub mod canopy_widgets {
     pub struct Text {}
 
     /// A vertical stack that arranges children with fixed or flex heights.
+    #[derive(Default)]
     pub struct VStack {}
 
     /// Policy for publishing an input value in semantic snapshots.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
     pub enum ValueExposure {
         #[default]
         /// Omit the value from semantics.
@@ -938,10 +759,6 @@ pub mod canopy_widgets {
         fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
     }
 
-    impl Default for Border {
-        fn default() -> Self {}
-    }
-
     impl Widget for Border {
         fn layout(&self) -> Layout {}
 
@@ -1000,102 +817,14 @@ pub mod canopy_widgets {
         fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
     }
 
-    impl Default for Center {
-        fn default() -> Self {}
-    }
-
     impl Widget for Center {
         fn layout(&self) -> Layout {}
 
         fn name(&self) -> NodeName {}
     }
 
-    impl Clone for AutoKey {
-        fn clone(&self) -> AutoKey {}
-    }
-
-    impl Debug for AutoKey {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for AutoKey {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl Hash for AutoKey {
-        fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-    }
-
-    impl PartialEq for AutoKey {
-        fn eq(&self, other: &AutoKey) -> bool {}
-    }
-
-    impl ToArgValue for AutoKey {
-        fn to_arg_value(self) -> ArgValue {}
-    }
-
-    impl Clone for BoxGlyphs {
-        fn clone(&self) -> BoxGlyphs {}
-    }
-
-    impl Debug for BoxGlyphs {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for BoxGlyphs {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl PartialEq for BoxGlyphs {
-        fn eq(&self, other: &BoxGlyphs) -> bool {}
-    }
-
-    impl Clone for CanvasWidth {
-        fn clone(&self) -> CanvasWidth {}
-    }
-
-    impl Debug for CanvasWidth {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for CanvasWidth {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl PartialEq for CanvasWidth {
-        fn eq(&self, other: &CanvasWidth) -> bool {}
-    }
-
-    impl Clone for ValueExposure {
-        fn clone(&self) -> ValueExposure {}
-    }
-
-    impl Debug for ValueExposure {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Default for ValueExposure {
-        fn default() -> ValueExposure {}
-    }
-
-    impl Eq for ValueExposure {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl PartialEq for ValueExposure {
-        fn eq(&self, other: &ValueExposure) -> bool {}
-    }
-
     impl CommandNode for Frame {
         fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-    }
-
-    impl Default for Frame {
-        fn default() -> Self {}
     }
 
     impl Frame {
@@ -1255,10 +984,6 @@ pub mod canopy_widgets {
         fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
     }
 
-    impl Default for Panes {
-        fn default() -> Self {}
-    }
-
     impl Panes {
         /// Construct panes with no children.
         pub fn new() -> Self {}
@@ -1287,10 +1012,6 @@ pub mod canopy_widgets {
 
     impl CommandNode for Root {
         fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-    }
-
-    impl Default for Root {
-        fn default() -> Self {}
     }
 
     impl Loader for Root {
@@ -1486,10 +1207,6 @@ pub mod canopy_widgets {
         fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
     }
 
-    impl Default for VStack {
-        fn default() -> Self {}
-    }
-
     impl VStack {
         /// Add a fixed-height row.
         pub fn push_fixed(self, node: impl Into<NodeId>, height: u32) -> Self {}
@@ -1507,6 +1224,10 @@ pub mod canopy_widgets {
         fn name(&self) -> NodeName {}
 
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {}
+    }
+
+    impl ToArgValue for AutoKey {
+        fn to_arg_value(self) -> ArgValue {}
     }
 
     impl<T> CommandNode for Dropdown<T>
@@ -1694,10 +1415,6 @@ pub mod canopy_widgets {
 
     impl<W: Selectable, K: 'static + Clone + Eq + Hash + ToArgValue> CommandNode for List<W, K> {
         fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-    }
-
-    impl<W: Selectable, K: 'static + Clone + Eq + Hash + ToArgValue> Default for List<W, K> {
-        fn default() -> Self {}
     }
 
     impl<W: Selectable, K: 'static + Clone + Eq + Hash + ToArgValue> List<W, K> {

@@ -8,6 +8,7 @@ pub mod canopy_examples {
         //! Chargym: A Unicode width and wide character demo.
 
         /// Root node for the chargym demo.
+        #[derive(Default)]
         pub struct CharGym {}
 
         #[must_use]
@@ -17,10 +18,6 @@ pub mod canopy_examples {
         impl CharGym {
             /// Construct a new chargym demo.
             pub fn new() -> Self {}
-        }
-
-        impl Default for CharGym {
-            fn default() -> Self {}
         }
 
         impl Loader for CharGym {
@@ -38,6 +35,7 @@ pub mod canopy_examples {
         //! Editor gym example nodes.
 
         /// Root widget for the editor gym demo.
+        #[derive(Default)]
         pub struct EditorGym;
 
         #[must_use]
@@ -46,10 +44,6 @@ pub mod canopy_examples {
 
         impl CommandNode for EditorGym {
             fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-        }
-
-        impl Default for EditorGym {
-            fn default() -> Self {}
         }
 
         impl EditorGym {
@@ -92,6 +86,7 @@ pub mod canopy_examples {
         //! Focus gym example nodes.
 
         /// Root node for the focus gym demo.
+        #[derive(Default)]
         pub struct FocusGym;
 
         #[must_use]
@@ -100,10 +95,6 @@ pub mod canopy_examples {
 
         impl CommandNode for FocusGym {
             fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-        }
-
-        impl Default for FocusGym {
-            fn default() -> FocusGym {}
         }
 
         impl FocusGym {
@@ -130,15 +121,12 @@ pub mod canopy_examples {
         //! Font gym example nodes.
 
         /// Demo node that renders ASCII font banners.
+        #[derive(Default)]
         pub struct FontGym {}
 
         #[must_use]
         /// Queue this demo's bindings and native configuration in their builder phases.
         pub fn binding_setup(builder: canopy::CanopyBuilder) -> canopy::CanopyBuilder {}
-
-        impl Default for FontGym {
-            fn default() -> Self {}
-        }
 
         impl FontGym {
             /// Construct a new font gym demo.
@@ -158,15 +146,12 @@ pub mod canopy_examples {
         //! Frame gym example nodes.
 
         /// Root node for the frame gym demo.
+        #[derive(Default)]
         pub struct FrameGym;
 
         #[must_use]
         /// Queue this demo's bindings and native configuration in their builder phases.
         pub fn binding_setup(builder: canopy::CanopyBuilder) -> canopy::CanopyBuilder {}
-
-        impl Default for FrameGym {
-            fn default() -> Self {}
-        }
 
         impl FrameGym {
             /// Construct a new frame gym.
@@ -194,6 +179,7 @@ pub mod canopy_examples {
         //! Intervals example nodes.
 
         /// Root node for the intervals demo.
+        #[derive(Default)]
         pub struct Intervals;
 
         #[must_use]
@@ -202,10 +188,6 @@ pub mod canopy_examples {
 
         impl CommandNode for Intervals {
             fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-        }
-
-        impl Default for Intervals {
-            fn default() -> Self {}
         }
 
         impl Intervals {
@@ -238,6 +220,7 @@ pub mod canopy_examples {
         //! List gym example nodes.
 
         /// Root node for the list gym demo.
+        #[derive(Default)]
         pub struct ListGym;
 
         #[must_use]
@@ -246,10 +229,6 @@ pub mod canopy_examples {
 
         impl CommandNode for ListGym {
             fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-        }
-
-        impl Default for ListGym {
-            fn default() -> Self {}
         }
 
         impl ListGym {
@@ -332,6 +311,7 @@ pub mod canopy_examples {
         //! layout.
 
         /// Root widget for the stylegym demo.
+        #[derive(Default)]
         pub struct Stylegym {}
 
         #[must_use]
@@ -340,10 +320,6 @@ pub mod canopy_examples {
 
         impl CommandNode for Stylegym {
             fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-        }
-
-        impl Default for Stylegym {
-            fn default() -> Self {}
         }
 
         impl Loader for Stylegym {
@@ -390,6 +366,7 @@ pub mod canopy_examples {
         //! Terminal gym example nodes.
 
         /// Multi-terminal demo widget.
+        #[derive(Default)]
         pub struct TermGym {}
 
         #[must_use]
@@ -398,10 +375,6 @@ pub mod canopy_examples {
 
         impl CommandNode for TermGym {
             fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-        }
-
-        impl Default for TermGym {
-            fn default() -> Self {}
         }
 
         impl Loader for TermGym {
@@ -476,15 +449,12 @@ pub mod canopy_examples {
         //! Text gym example nodes.
 
         /// Demo node that displays multiple text variants.
+        #[derive(Default)]
         pub struct TextGym;
 
         #[must_use]
         /// Queue this demo's bindings and native configuration in their builder phases.
         pub fn binding_setup(builder: canopy::CanopyBuilder) -> canopy::CanopyBuilder {}
-
-        impl Default for TextGym {
-            fn default() -> Self {}
-        }
 
         impl TextGym {
             /// Construct a new text gym demo.
@@ -506,6 +476,7 @@ pub mod canopy_examples {
         pub struct DemoHost {}
 
         /// Common sizing configuration for widget demos.
+        #[derive(Clone, Copy, Debug, Default)]
         pub struct DemoSize {
             /// Optional fixed width override.
             pub width: Option<u32>,
@@ -517,50 +488,18 @@ pub mod canopy_examples {
         pub struct FontDemo {}
 
         /// Font source data for demo cycling.
+        #[derive(Clone, Debug)]
         pub struct FontSource {}
 
         /// List widget configuration.
         pub struct ListDemo {}
 
         /// Terminal demo widget with three commands.
+        #[derive(Default)]
         pub struct TermDemo {}
-
-        impl Clone for DemoSize {
-            fn clone(&self) -> DemoSize {}
-        }
-
-        impl Debug for DemoSize {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Default for DemoSize {
-            fn default() -> DemoSize {}
-        }
-
-        impl DemoSize {
-            /// Create sizing overrides.
-            pub fn new(width: Option<u32>, height: Option<u32>) -> Self {}
-        }
-
-        impl Clone for FontSource {
-            fn clone(&self) -> FontSource {}
-        }
-
-        impl Debug for FontSource {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl FontSource {
-            /// Build a font source from raw bytes.
-            pub fn new(label: impl Into<String>, bytes: Vec<u8>) -> Self {}
-        }
 
         impl CommandNode for TermDemo {
             fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-        }
-
-        impl Default for TermDemo {
-            fn default() -> Self {}
         }
 
         impl TermDemo {
@@ -603,6 +542,11 @@ pub mod canopy_examples {
             fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {}
         }
 
+        impl DemoSize {
+            /// Create sizing overrides.
+            pub fn new(width: Option<u32>, height: Option<u32>) -> Self {}
+        }
+
         impl FontDemo {
             /// Build a font demo widget.
             pub fn new(
@@ -623,6 +567,11 @@ pub mod canopy_examples {
             fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {}
 
             fn poll(&mut self, ctx: &mut dyn Context) -> Option<Duration> {}
+        }
+
+        impl FontSource {
+            /// Build a font source from raw bytes.
+            pub fn new(label: impl Into<String>, bytes: Vec<u8>) -> Self {}
         }
 
         impl ListDemo {

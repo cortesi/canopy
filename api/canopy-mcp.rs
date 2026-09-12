@@ -8,9 +8,11 @@ pub mod canopy_mcp {
     //! MCP and smoke-test helpers for canopy applications.
 
     /// Shared application constructor with an explicit domain-state declaration.
+    #[derive(Clone)]
     pub struct AppFactory {}
 
     /// Identity and domain reset behavior declared by an application factory.
+    #[derive(Clone, Debug, Eq, PartialEq)]
     pub struct AppMetadata {
         /// Stable application name used by replay compatibility checks.
         pub app: String,
@@ -21,18 +23,21 @@ pub mod canopy_mcp {
     #[serde(crate = "::tmcp::__private::serde")]
     #[schemars(crate = "::tmcp::__private::schemars")]
     /// Request payload for applying a named fixture to a live app.
+    #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
     pub struct ApplyFixtureRequest {
         /// Registered fixture name.
         pub name: String,
     }
 
     /// Response returned after a fixture is applied to a live app.
+    #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
     pub struct ApplyFixtureResponse {
         /// Name of the applied fixture.
         pub applied: String,
     }
 
     /// Compact command availability record returned by bootstrap.
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct BootstrapCommand {
         /// Command name relative to its owner.
         pub name: String,
@@ -49,6 +54,7 @@ pub mod canopy_mcp {
     }
 
     /// Compact script journal record returned by bootstrap.
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct BootstrapJournalEntry {
         /// Monotonic journal id.
         pub id: u64,
@@ -68,6 +74,7 @@ pub mod canopy_mcp {
     #[serde(crate = "::tmcp::__private::serde")]
     #[schemars(crate = "::tmcp::__private::schemars")]
     /// Optional dimensions for bootstrap replay preflight.
+    #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
     pub struct BootstrapRequest {
         #[serde(skip_serializing_if = "Option::is_none")]
         /// Requested headless viewport, or a live viewport compatibility check.
@@ -75,6 +82,7 @@ pub mod canopy_mcp {
     }
 
     /// Bootstrap payload for an agent entering a Canopy app.
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct BootstrapResponse {
         /// Execution identity and domain reset behavior for this bootstrap
         /// instance.
@@ -96,6 +104,7 @@ pub mod canopy_mcp {
     }
 
     /// Errors returned by `canopy-mcp`.
+    #[derive(Debug, Display, Error)]
     pub enum Error {
         #[error(transparent)]
         /// A canopy runtime error.
@@ -124,6 +133,7 @@ pub mod canopy_mcp {
     }
 
     /// Owned execution metadata returned even when an evaluation fails.
+    #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
     pub struct ExecutionMetadata {
         /// Stable application identity.
         pub app: String,
@@ -144,6 +154,7 @@ pub mod canopy_mcp {
 
     #[serde(rename_all = "kebab-case")]
     /// Whether evaluation constructs a new UI or uses the running application.
+    #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
     pub enum ExecutionMode {
         #[default]
         /// Each evaluation constructs a fresh application UI.
@@ -167,6 +178,7 @@ pub mod canopy_mcp {
 
     #[serde(rename_all = "snake_case")]
     /// Application-declared reset behavior for domain data.
+    #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
     pub enum ResetPolicy {
         #[default]
         /// Domain state can persist outside the UI instance.
@@ -181,6 +193,7 @@ pub mod canopy_mcp {
     pub type Result<T> = std::result::Result<T, Error>;
 
     /// Error details included in a failed script evaluation.
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct ScriptErrorInfo {
         #[serde(rename = "type")]
         /// Pipeline stage that failed.
@@ -201,6 +214,7 @@ pub mod canopy_mcp {
 
     #[serde(rename_all = "snake_case")]
     /// Pipeline stage that caused a script evaluation to fail.
+    #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
     pub enum ScriptErrorType {
         /// Application construction or initial rendering failed.
         Build,
@@ -217,6 +231,7 @@ pub mod canopy_mcp {
     }
 
     /// Structured response for the `script_eval` tool and smoke runner.
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct ScriptEvalOutcome {
         /// Execution identity and domain reset behavior for this request.
         pub metadata: crate::ExecutionMetadata,
@@ -246,6 +261,7 @@ pub mod canopy_mcp {
     #[serde(crate = "::tmcp::__private::serde")]
     #[schemars(crate = "::tmcp::__private::schemars")]
     /// Request payload for the `script_eval` tool.
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct ScriptEvalRequest {
         /// Luau source code to execute.
         pub script: String,
@@ -262,6 +278,7 @@ pub mod canopy_mcp {
     }
 
     /// Result of running one smoke script.
+    #[derive(Clone, Debug, PartialEq)]
     pub struct ScriptOutcome {
         /// Script path on disk.
         pub path: std::path::PathBuf,
@@ -273,6 +290,7 @@ pub mod canopy_mcp {
 
     #[serde(rename_all = "snake_case")]
     /// Evaluation task state exposed to automation callers.
+    #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
     pub enum ScriptTaskState {
         /// Evaluation completed successfully.
         Completed,
@@ -285,6 +303,7 @@ pub mod canopy_mcp {
     }
 
     /// Timing information for a script evaluation.
+    #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
     pub struct ScriptTiming {
         /// Time spent constructing and rendering the headless app.
         pub build_ms: u64,
@@ -295,6 +314,7 @@ pub mod canopy_mcp {
     }
 
     /// Configuration for a smoke-suite run.
+    #[derive(Clone, Debug, PartialEq)]
     pub struct SuiteConfig {
         /// Root directory to scan for `.luau` scripts when no explicit script list
         /// is provided.
@@ -309,12 +329,14 @@ pub mod canopy_mcp {
     }
 
     /// Aggregated result for a smoke suite.
+    #[derive(Clone, Debug, PartialEq)]
     pub struct SuiteOutcome {
         /// Per-script results in execution order.
         pub scripts: Vec<ScriptOutcome>,
     }
 
     /// One planned smoke script with its resolved fixture and evaluation request.
+    #[derive(Clone, Debug, PartialEq)]
     pub struct SuiteScript {
         /// Script path on disk.
         pub path: std::path::PathBuf,
@@ -328,6 +350,7 @@ pub mod canopy_mcp {
     pub struct UdsServerHandle {}
 
     /// Terminal dimensions in cells, serialized independently of internal geometry.
+    #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
     pub struct Viewport {
         /// Number of columns.
         pub width: u32,
@@ -404,823 +427,13 @@ pub mod canopy_mcp {
         pub fn fixtures(&self) -> Result<Vec<FixtureInfo>> {}
     }
 
-    impl Clone for AppFactory {
-        fn clone(&self) -> AppFactory {}
+    impl Drop for UdsServerHandle {
+        fn drop(&mut self) {}
     }
 
-    impl Clone for AppMetadata {
-        fn clone(&self) -> AppMetadata {}
-    }
-
-    impl Debug for AppMetadata {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for AppMetadata {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl PartialEq for AppMetadata {
-        fn eq(&self, other: &AppMetadata) -> bool {}
-    }
-
-    impl Clone for ApplyFixtureRequest {
-        fn clone(&self) -> ApplyFixtureRequest {}
-    }
-
-    impl Debug for ApplyFixtureRequest {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for ApplyFixtureRequest {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl JsonSchema for ApplyFixtureRequest {
-        fn inline_schema() -> bool {}
-
-        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
-
-        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-
-        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-    }
-
-    impl PartialEq for ApplyFixtureRequest {
-        fn eq(&self, other: &ApplyFixtureRequest) -> bool {}
-    }
-
-    impl Serialize for ApplyFixtureRequest {
-        fn serialize<__S>(
-            &self,
-            __serializer: __S,
-        ) -> _serde::__private228::Result<__S::Ok, __S::Error>
-        where
-            __S: _serde::Serializer, {
-        }
-    }
-
-    impl<'de> Deserialize<'de> for ApplyFixtureRequest {
-        fn deserialize<__D>(__deserializer: __D) -> _serde::__private228::Result<Self, __D::Error>
-        where
-            __D: _serde::Deserializer<'de>, {
-        }
-    }
-
-    impl Clone for ApplyFixtureResponse {
-        fn clone(&self) -> ApplyFixtureResponse {}
-    }
-
-    impl Debug for ApplyFixtureResponse {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for ApplyFixtureResponse {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl JsonSchema for ApplyFixtureResponse {
-        fn inline_schema() -> bool {}
-
-        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
-
-        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-
-        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-    }
-
-    impl PartialEq for ApplyFixtureResponse {
-        fn eq(&self, other: &ApplyFixtureResponse) -> bool {}
-    }
-
-    impl Serialize for ApplyFixtureResponse {
-        fn serialize<__S>(
-            &self,
-            __serializer: __S,
-        ) -> _serde::__private228::Result<__S::Ok, __S::Error>
-        where
-            __S: _serde::Serializer, {
-        }
-    }
-
-    impl<'de> Deserialize<'de> for ApplyFixtureResponse {
-        fn deserialize<__D>(__deserializer: __D) -> _serde::__private228::Result<Self, __D::Error>
-        where
-            __D: _serde::Deserializer<'de>, {
-        }
-    }
-
-    impl Clone for BootstrapCommand {
-        fn clone(&self) -> BootstrapCommand {}
-    }
-
-    impl Debug for BootstrapCommand {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl JsonSchema for BootstrapCommand {
-        fn inline_schema() -> bool {}
-
-        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
-
-        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-
-        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-    }
-
-    impl PartialEq for BootstrapCommand {
-        fn eq(&self, other: &BootstrapCommand) -> bool {}
-    }
-
-    impl Serialize for BootstrapCommand {
-        fn serialize<__S>(
-            &self,
-            __serializer: __S,
-        ) -> _serde::__private228::Result<__S::Ok, __S::Error>
-        where
-            __S: _serde::Serializer, {
-        }
-    }
-
-    impl<'de> Deserialize<'de> for BootstrapCommand {
-        fn deserialize<__D>(__deserializer: __D) -> _serde::__private228::Result<Self, __D::Error>
-        where
-            __D: _serde::Deserializer<'de>, {
-        }
-    }
-
-    impl Clone for BootstrapJournalEntry {
-        fn clone(&self) -> BootstrapJournalEntry {}
-    }
-
-    impl Debug for BootstrapJournalEntry {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl JsonSchema for BootstrapJournalEntry {
-        fn inline_schema() -> bool {}
-
-        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
-
-        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-
-        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-    }
-
-    impl PartialEq for BootstrapJournalEntry {
-        fn eq(&self, other: &BootstrapJournalEntry) -> bool {}
-    }
-
-    impl Serialize for BootstrapJournalEntry {
-        fn serialize<__S>(
-            &self,
-            __serializer: __S,
-        ) -> _serde::__private228::Result<__S::Ok, __S::Error>
-        where
-            __S: _serde::Serializer, {
-        }
-    }
-
-    impl<'de> Deserialize<'de> for BootstrapJournalEntry {
-        fn deserialize<__D>(__deserializer: __D) -> _serde::__private228::Result<Self, __D::Error>
-        where
-            __D: _serde::Deserializer<'de>, {
-        }
-    }
-
-    impl Clone for BootstrapRequest {
-        fn clone(&self) -> BootstrapRequest {}
-    }
-
-    impl Debug for BootstrapRequest {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Default for BootstrapRequest {
-        fn default() -> BootstrapRequest {}
-    }
-
-    impl JsonSchema for BootstrapRequest {
-        fn inline_schema() -> bool {}
-
-        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
-
-        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-
-        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-    }
-
-    impl PartialEq for BootstrapRequest {
-        fn eq(&self, other: &BootstrapRequest) -> bool {}
-    }
-
-    impl Serialize for BootstrapRequest {
-        fn serialize<__S>(
-            &self,
-            __serializer: __S,
-        ) -> _serde::__private228::Result<__S::Ok, __S::Error>
-        where
-            __S: _serde::Serializer, {
-        }
-    }
-
-    impl<'de> Deserialize<'de> for BootstrapRequest {
-        fn deserialize<__D>(__deserializer: __D) -> _serde::__private228::Result<Self, __D::Error>
-        where
-            __D: _serde::Deserializer<'de>, {
-        }
-    }
-
-    impl Clone for BootstrapResponse {
-        fn clone(&self) -> BootstrapResponse {}
-    }
-
-    impl Debug for BootstrapResponse {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl JsonSchema for BootstrapResponse {
-        fn inline_schema() -> bool {}
-
-        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
-
-        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-
-        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-    }
-
-    impl PartialEq for BootstrapResponse {
-        fn eq(&self, other: &BootstrapResponse) -> bool {}
-    }
-
-    impl Serialize for BootstrapResponse {
-        fn serialize<__S>(
-            &self,
-            __serializer: __S,
-        ) -> _serde::__private228::Result<__S::Ok, __S::Error>
-        where
-            __S: _serde::Serializer, {
-        }
-    }
-
-    impl<'de> Deserialize<'de> for BootstrapResponse {
-        fn deserialize<__D>(__deserializer: __D) -> _serde::__private228::Result<Self, __D::Error>
-        where
-            __D: _serde::Deserializer<'de>, {
-        }
-    }
-
-    impl Clone for ExecutionMetadata {
-        fn clone(&self) -> ExecutionMetadata {}
-    }
-
-    impl Debug for ExecutionMetadata {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Default for ExecutionMetadata {
-        fn default() -> ExecutionMetadata {}
-    }
-
-    impl Eq for ExecutionMetadata {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl JsonSchema for ExecutionMetadata {
-        fn inline_schema() -> bool {}
-
-        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
-
-        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-
-        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-    }
-
-    impl PartialEq for ExecutionMetadata {
-        fn eq(&self, other: &ExecutionMetadata) -> bool {}
-    }
-
-    impl Serialize for ExecutionMetadata {
-        fn serialize<__S>(
-            &self,
-            __serializer: __S,
-        ) -> _serde::__private228::Result<__S::Ok, __S::Error>
-        where
-            __S: _serde::Serializer, {
-        }
-    }
-
-    impl<'de> Deserialize<'de> for ExecutionMetadata {
-        fn deserialize<__D>(__deserializer: __D) -> _serde::__private228::Result<Self, __D::Error>
-        where
-            __D: _serde::Deserializer<'de>, {
-        }
-    }
-
-    impl Clone for ExecutionMode {
-        fn clone(&self) -> ExecutionMode {}
-    }
-
-    impl Debug for ExecutionMode {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Default for ExecutionMode {
-        fn default() -> ExecutionMode {}
-    }
-
-    impl Eq for ExecutionMode {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl JsonSchema for ExecutionMode {
-        fn inline_schema() -> bool {}
-
-        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
-
-        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-
-        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-    }
-
-    impl PartialEq for ExecutionMode {
-        fn eq(&self, other: &ExecutionMode) -> bool {}
-    }
-
-    impl Serialize for ExecutionMode {
-        fn serialize<__S>(
-            &self,
-            __serializer: __S,
-        ) -> _serde::__private228::Result<__S::Ok, __S::Error>
-        where
-            __S: _serde::Serializer, {
-        }
-    }
-
-    impl<'de> Deserialize<'de> for ExecutionMode {
-        fn deserialize<__D>(__deserializer: __D) -> _serde::__private228::Result<Self, __D::Error>
-        where
-            __D: _serde::Deserializer<'de>, {
-        }
-    }
-
-    impl Clone for ResetPolicy {
-        fn clone(&self) -> ResetPolicy {}
-    }
-
-    impl Debug for ResetPolicy {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Default for ResetPolicy {
-        fn default() -> ResetPolicy {}
-    }
-
-    impl Eq for ResetPolicy {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl JsonSchema for ResetPolicy {
-        fn inline_schema() -> bool {}
-
-        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
-
-        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-
-        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-    }
-
-    impl PartialEq for ResetPolicy {
-        fn eq(&self, other: &ResetPolicy) -> bool {}
-    }
-
-    impl Serialize for ResetPolicy {
-        fn serialize<__S>(
-            &self,
-            __serializer: __S,
-        ) -> _serde::__private228::Result<__S::Ok, __S::Error>
-        where
-            __S: _serde::Serializer, {
-        }
-    }
-
-    impl<'de> Deserialize<'de> for ResetPolicy {
-        fn deserialize<__D>(__deserializer: __D) -> _serde::__private228::Result<Self, __D::Error>
-        where
-            __D: _serde::Deserializer<'de>, {
-        }
-    }
-
-    impl Clone for ScriptErrorInfo {
-        fn clone(&self) -> ScriptErrorInfo {}
-    }
-
-    impl Debug for ScriptErrorInfo {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl JsonSchema for ScriptErrorInfo {
-        fn inline_schema() -> bool {}
-
-        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
-
-        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-
-        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-    }
-
-    impl PartialEq for ScriptErrorInfo {
-        fn eq(&self, other: &ScriptErrorInfo) -> bool {}
-    }
-
-    impl Serialize for ScriptErrorInfo {
-        fn serialize<__S>(
-            &self,
-            __serializer: __S,
-        ) -> _serde::__private228::Result<__S::Ok, __S::Error>
-        where
-            __S: _serde::Serializer, {
-        }
-    }
-
-    impl<'de> Deserialize<'de> for ScriptErrorInfo {
-        fn deserialize<__D>(__deserializer: __D) -> _serde::__private228::Result<Self, __D::Error>
-        where
-            __D: _serde::Deserializer<'de>, {
-        }
-    }
-
-    impl Clone for ScriptErrorType {
-        fn clone(&self) -> ScriptErrorType {}
-    }
-
-    impl Debug for ScriptErrorType {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for ScriptErrorType {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl From<ScriptErrorType> for ScriptTaskState {
-        fn from(error_type: ScriptErrorType) -> Self {}
-    }
-
-    impl JsonSchema for ScriptErrorType {
-        fn inline_schema() -> bool {}
-
-        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
-
-        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-
-        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-    }
-
-    impl PartialEq for ScriptErrorType {
-        fn eq(&self, other: &ScriptErrorType) -> bool {}
-    }
-
-    impl Serialize for ScriptErrorType {
-        fn serialize<__S>(
-            &self,
-            __serializer: __S,
-        ) -> _serde::__private228::Result<__S::Ok, __S::Error>
-        where
-            __S: _serde::Serializer, {
-        }
-    }
-
-    impl<'de> Deserialize<'de> for ScriptErrorType {
-        fn deserialize<__D>(__deserializer: __D) -> _serde::__private228::Result<Self, __D::Error>
-        where
-            __D: _serde::Deserializer<'de>, {
-        }
-    }
-
-    impl Clone for ScriptEvalOutcome {
-        fn clone(&self) -> ScriptEvalOutcome {}
-    }
-
-    impl Debug for ScriptEvalOutcome {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl JsonSchema for ScriptEvalOutcome {
-        fn inline_schema() -> bool {}
-
-        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
-
-        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-
-        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-    }
-
-    impl PartialEq for ScriptEvalOutcome {
-        fn eq(&self, other: &ScriptEvalOutcome) -> bool {}
-    }
-
-    impl ScriptEvalOutcome {
-        /// Encode the outcome as an MCP tool result.
-        pub fn to_tool_result(&self) -> CallToolResult {}
-    }
-
-    impl Serialize for ScriptEvalOutcome {
-        fn serialize<__S>(
-            &self,
-            __serializer: __S,
-        ) -> _serde::__private228::Result<__S::Ok, __S::Error>
-        where
-            __S: _serde::Serializer, {
-        }
-    }
-
-    impl<'de> Deserialize<'de> for ScriptEvalOutcome {
-        fn deserialize<__D>(__deserializer: __D) -> _serde::__private228::Result<Self, __D::Error>
-        where
-            __D: _serde::Deserializer<'de>, {
-        }
-    }
-
-    impl Clone for ScriptEvalRequest {
-        fn clone(&self) -> ScriptEvalRequest {}
-    }
-
-    impl Debug for ScriptEvalRequest {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl JsonSchema for ScriptEvalRequest {
-        fn inline_schema() -> bool {}
-
-        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
-
-        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-
-        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-    }
-
-    impl PartialEq for ScriptEvalRequest {
-        fn eq(&self, other: &ScriptEvalRequest) -> bool {}
-    }
-
-    impl ScriptEvalRequest {
-        /// Construct a request with default fixture, timeout, and viewport options.
-        pub fn new(script: impl Into<String>) -> Self {}
-    }
-
-    impl Serialize for ScriptEvalRequest {
-        fn serialize<__S>(
-            &self,
-            __serializer: __S,
-        ) -> _serde::__private228::Result<__S::Ok, __S::Error>
-        where
-            __S: _serde::Serializer, {
-        }
-    }
-
-    impl<'de> Deserialize<'de> for ScriptEvalRequest {
-        fn deserialize<__D>(__deserializer: __D) -> _serde::__private228::Result<Self, __D::Error>
-        where
-            __D: _serde::Deserializer<'de>, {
-        }
-    }
-
-    impl Clone for ScriptOutcome {
-        fn clone(&self) -> ScriptOutcome {}
-    }
-
-    impl Debug for ScriptOutcome {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl PartialEq for ScriptOutcome {
-        fn eq(&self, other: &ScriptOutcome) -> bool {}
-    }
-
-    impl Clone for ScriptTaskState {
-        fn clone(&self) -> ScriptTaskState {}
-    }
-
-    impl Debug for ScriptTaskState {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for ScriptTaskState {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl From<ScriptErrorType> for ScriptTaskState {
-        fn from(error_type: ScriptErrorType) -> Self {}
-    }
-
-    impl JsonSchema for ScriptTaskState {
-        fn inline_schema() -> bool {}
-
-        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
-
-        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-
-        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-    }
-
-    impl PartialEq for ScriptTaskState {
-        fn eq(&self, other: &ScriptTaskState) -> bool {}
-    }
-
-    impl Serialize for ScriptTaskState {
-        fn serialize<__S>(
-            &self,
-            __serializer: __S,
-        ) -> _serde::__private228::Result<__S::Ok, __S::Error>
-        where
-            __S: _serde::Serializer, {
-        }
-    }
-
-    impl<'de> Deserialize<'de> for ScriptTaskState {
-        fn deserialize<__D>(__deserializer: __D) -> _serde::__private228::Result<Self, __D::Error>
-        where
-            __D: _serde::Deserializer<'de>, {
-        }
-    }
-
-    impl Clone for ScriptTiming {
-        fn clone(&self) -> ScriptTiming {}
-    }
-
-    impl Debug for ScriptTiming {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Default for ScriptTiming {
-        fn default() -> ScriptTiming {}
-    }
-
-    impl Eq for ScriptTiming {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl JsonSchema for ScriptTiming {
-        fn inline_schema() -> bool {}
-
-        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
-
-        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-
-        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-    }
-
-    impl PartialEq for ScriptTiming {
-        fn eq(&self, other: &ScriptTiming) -> bool {}
-    }
-
-    impl Serialize for ScriptTiming {
-        fn serialize<__S>(
-            &self,
-            __serializer: __S,
-        ) -> _serde::__private228::Result<__S::Ok, __S::Error>
-        where
-            __S: _serde::Serializer, {
-        }
-    }
-
-    impl<'de> Deserialize<'de> for ScriptTiming {
-        fn deserialize<__D>(__deserializer: __D) -> _serde::__private228::Result<Self, __D::Error>
-        where
-            __D: _serde::Deserializer<'de>, {
-        }
-    }
-
-    impl Clone for SuiteConfig {
-        fn clone(&self) -> SuiteConfig {}
-    }
-
-    impl Debug for SuiteConfig {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl PartialEq for SuiteConfig {
-        fn eq(&self, other: &SuiteConfig) -> bool {}
-    }
-
-    impl SuiteConfig {
-        /// Construct a config using a suite directory and default options.
-        pub fn new(suite_dir: impl Into<PathBuf>) -> Self {}
-    }
-
-    impl Clone for SuiteOutcome {
-        fn clone(&self) -> SuiteOutcome {}
-    }
-
-    impl Debug for SuiteOutcome {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl PartialEq for SuiteOutcome {
-        fn eq(&self, other: &SuiteOutcome) -> bool {}
-    }
-
-    impl SuiteOutcome {
-        /// Return true when all smoke scripts passed.
-        pub fn success(&self) -> bool {}
-    }
-
-    impl Clone for SuiteScript {
-        fn clone(&self) -> SuiteScript {}
-    }
-
-    impl Debug for SuiteScript {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl PartialEq for SuiteScript {
-        fn eq(&self, other: &SuiteScript) -> bool {}
-    }
-
-    impl Clone for Viewport {
-        fn clone(&self) -> Viewport {}
-    }
-
-    impl Debug for Viewport {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Default for Viewport {
-        fn default() -> Self {}
-    }
-
-    impl Eq for Viewport {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl From<Size> for Viewport {
-        fn from(size: Size) -> Self {}
-    }
-
-    impl From<Viewport> for canopy::geom::Size {
-        fn from(viewport: Viewport) -> Self {}
-    }
-
-    impl JsonSchema for Viewport {
-        fn inline_schema() -> bool {}
-
-        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
-
-        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-
-        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-    }
-
-    impl PartialEq for Viewport {
-        fn eq(&self, other: &Viewport) -> bool {}
-    }
-
-    impl Serialize for Viewport {
-        fn serialize<__S>(
-            &self,
-            __serializer: __S,
-        ) -> _serde::__private228::Result<__S::Ok, __S::Error>
-        where
-            __S: _serde::Serializer, {
-        }
-    }
-
-    impl Viewport {
-        /// Reject empty or excessive headless dimensions before constructing an
-        /// app.
-        pub fn validate(self) -> crate::Result<()> {}
-    }
-
-    impl<'de> Deserialize<'de> for Viewport {
-        fn deserialize<__D>(__deserializer: __D) -> _serde::__private228::Result<Self, __D::Error>
-        where
-            __D: _serde::Deserializer<'de>, {
-        }
-    }
-
-    impl Debug for Error {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Display for Error {
-        fn fmt(&self, __formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {}
-    }
-
-    impl Error for Error {
-        fn source(
-            &self,
-        ) -> ::core::option::Option<&(dyn ::thiserror::__private18::Error + 'static)> {
-        }
+    impl UdsServerHandle {
+        /// Stop the listener and remove the socket path.
+        pub fn stop(self) -> Result<()> {}
     }
 
     impl Error {
@@ -1244,12 +457,205 @@ pub mod canopy_mcp {
         fn from(source: tmcp::Error) -> Self {}
     }
 
-    impl Drop for UdsServerHandle {
-        fn drop(&mut self) {}
+    impl From<ScriptErrorType> for ScriptTaskState {
+        fn from(error_type: ScriptErrorType) -> Self {}
     }
 
-    impl UdsServerHandle {
-        /// Stop the listener and remove the socket path.
-        pub fn stop(self) -> Result<()> {}
+    impl JsonSchema for ScriptErrorType {
+        fn inline_schema() -> bool {}
+
+        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
+
+        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+    }
+
+    impl From<ScriptErrorType> for ScriptTaskState {
+        fn from(error_type: ScriptErrorType) -> Self {}
+    }
+
+    impl JsonSchema for ScriptTaskState {
+        fn inline_schema() -> bool {}
+
+        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
+
+        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+    }
+
+    impl From<Size> for Viewport {
+        fn from(size: Size) -> Self {}
+    }
+
+    impl From<Viewport> for canopy::geom::Size {
+        fn from(viewport: Viewport) -> Self {}
+    }
+
+    impl JsonSchema for Viewport {
+        fn inline_schema() -> bool {}
+
+        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
+
+        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+    }
+
+    impl Viewport {
+        /// Reject empty or excessive headless dimensions before constructing an
+        /// app.
+        pub fn validate(self) -> crate::Result<()> {}
+    }
+
+    impl JsonSchema for ApplyFixtureRequest {
+        fn inline_schema() -> bool {}
+
+        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
+
+        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+    }
+
+    impl JsonSchema for ApplyFixtureResponse {
+        fn inline_schema() -> bool {}
+
+        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
+
+        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+    }
+
+    impl JsonSchema for BootstrapCommand {
+        fn inline_schema() -> bool {}
+
+        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
+
+        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+    }
+
+    impl JsonSchema for BootstrapJournalEntry {
+        fn inline_schema() -> bool {}
+
+        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
+
+        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+    }
+
+    impl JsonSchema for BootstrapRequest {
+        fn inline_schema() -> bool {}
+
+        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
+
+        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+    }
+
+    impl JsonSchema for BootstrapResponse {
+        fn inline_schema() -> bool {}
+
+        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
+
+        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+    }
+
+    impl JsonSchema for ExecutionMetadata {
+        fn inline_schema() -> bool {}
+
+        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
+
+        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+    }
+
+    impl JsonSchema for ExecutionMode {
+        fn inline_schema() -> bool {}
+
+        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
+
+        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+    }
+
+    impl JsonSchema for ResetPolicy {
+        fn inline_schema() -> bool {}
+
+        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
+
+        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+    }
+
+    impl JsonSchema for ScriptErrorInfo {
+        fn inline_schema() -> bool {}
+
+        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
+
+        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+    }
+
+    impl JsonSchema for ScriptEvalOutcome {
+        fn inline_schema() -> bool {}
+
+        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
+
+        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+    }
+
+    impl ScriptEvalOutcome {
+        /// Encode the outcome as an MCP tool result.
+        pub fn to_tool_result(&self) -> CallToolResult {}
+    }
+
+    impl JsonSchema for ScriptEvalRequest {
+        fn inline_schema() -> bool {}
+
+        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
+
+        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+    }
+
+    impl ScriptEvalRequest {
+        /// Construct a request with default fixture, timeout, and viewport options.
+        pub fn new(script: impl Into<String>) -> Self {}
+    }
+
+    impl JsonSchema for ScriptTiming {
+        fn inline_schema() -> bool {}
+
+        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
+
+        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+    }
+
+    impl SuiteConfig {
+        /// Construct a config using a suite directory and default options.
+        pub fn new(suite_dir: impl Into<PathBuf>) -> Self {}
+    }
+
+    impl SuiteOutcome {
+        /// Return true when all smoke scripts passed.
+        pub fn success(&self) -> bool {}
     }
 }

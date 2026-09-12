@@ -22,6 +22,7 @@ pub mod canopy {
         //! Command definition and dispatch.
 
         /// Canonical dynamic representation for command arguments and return values.
+        #[derive(Clone, Debug, PartialEq)]
         pub enum ArgValue {
             /// Null value.
             Null,
@@ -44,6 +45,7 @@ pub mod canopy {
         }
 
         /// Stored action with an optional explicit target policy.
+        #[derive(Clone, Debug, PartialEq)]
         pub struct CommandAction {
             /// Command and its encoded arguments.
             pub invocation: CommandInvocation,
@@ -52,6 +54,7 @@ pub mod canopy {
         }
 
         /// Canonical argument container for command invocation.
+        #[derive(Clone, Debug, Default, PartialEq)]
         pub enum CommandArgs {
             /// Positional arguments.
             Positional(Vec<ArgValue>),
@@ -60,6 +63,7 @@ pub mod canopy {
         }
 
         /// Command availability from a given focus context.
+        #[derive(Clone, Debug)]
         pub struct CommandAvailability<'a> {
             /// Command specification.
             pub spec: &'a CommandSpec,
@@ -72,9 +76,11 @@ pub mod canopy {
         }
 
         /// Builder for a command invocation.
+        #[derive(Clone, Debug)]
         pub struct CommandCall {}
 
         /// Command dispatch routing.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub enum CommandDispatchKind {
             /// Invoke with `target = None`.
             Free,
@@ -86,6 +92,7 @@ pub mod canopy {
         }
 
         /// Error type for command dispatch and conversion.
+        #[derive(Debug, Display, Error)]
         pub enum CommandError {
             #[error("unknown command: {id}")]
             /// Unknown command identifier.
@@ -196,9 +203,11 @@ pub mod canopy {
         }
 
         /// Identifier for a command.
+        #[derive(Clone, Copy, Debug, Display, Eq, Hash, PartialEq)]
         pub struct CommandId(pub &'static str);
 
         /// A command invocation with encoded arguments.
+        #[derive(Clone, Debug, PartialEq)]
         pub struct CommandInvocation {
             /// Command identifier.
             pub id: CommandId,
@@ -207,6 +216,7 @@ pub mod canopy {
         }
 
         /// Identifies how a command parameter is provided.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub enum CommandParamKind {
             /// Provided by injection.
             Injected,
@@ -215,6 +225,7 @@ pub mod canopy {
         }
 
         /// Static metadata for a command parameter.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct CommandParamSpec {
             /// Parameter name for named argument binding.
             pub name: &'static str,
@@ -229,6 +240,7 @@ pub mod canopy {
         }
 
         /// Event context required by a command parameter.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub enum CommandRequirement {
             /// An originating input event.
             Event,
@@ -239,6 +251,7 @@ pub mod canopy {
         }
 
         /// Resolution of a command dispatch target.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub enum CommandResolution {
             /// Command is free (no target).
             Free,
@@ -260,6 +273,7 @@ pub mod canopy {
         }
 
         /// Static metadata for a command return type.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub enum CommandReturnSpec {
             /// Unit return.
             Unit,
@@ -268,6 +282,7 @@ pub mod canopy {
         }
 
         /// Command scope frame for injection.
+        #[derive(Clone, Debug, Default)]
         pub struct CommandScopeFrame {
             /// Event snapshot.
             pub event: Option<crate::event::Event>,
@@ -278,6 +293,7 @@ pub mod canopy {
         }
 
         /// Static metadata for a command.
+        #[derive(Clone, Copy, Debug)]
         pub struct CommandSpec {
             /// Command identifier.
             pub id: CommandId,
@@ -298,6 +314,7 @@ pub mod canopy {
         }
 
         /// Current command eligibility, separate from authorization and resolution.
+        #[derive(Clone, Debug, Eq, PartialEq)]
         pub enum CommandStatus {
             /// The action can currently run.
             Enabled,
@@ -306,6 +323,7 @@ pub mod canopy {
         }
 
         /// Policy for resolving a command owner.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub enum CommandTarget {
             /// Require this exact node to own the command.
             Exact(crate::core::NodeId),
@@ -316,6 +334,7 @@ pub mod canopy {
         }
 
         /// Static metadata for a type in command signatures.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct CommandTypeSpec {
             /// Rust type name for introspection.
             pub rust: &'static str,
@@ -343,6 +362,7 @@ pub mod canopy {
         ) -> Result<ArgValue, CommandError>;
 
         /// Context passed to list row injections.
+        #[derive(Clone, Debug, PartialEq)]
         pub struct ListRowContext {
             /// Owning list node id.
             pub list: crate::core::NodeId,
@@ -419,64 +439,16 @@ pub mod canopy {
             pub fn to_external_json_value(&self) -> Result<JsonValue, CommandError> {}
         }
 
-        impl Clone for ArgValue {
-            fn clone(&self) -> ArgValue {}
-        }
-
         impl CommandType for ArgValue {
             fn luau_ty() -> declaration::Type {}
-        }
-
-        impl Debug for ArgValue {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
         }
 
         impl FromArgValue for ArgValue {
             fn from_arg_value(v: &ArgValue) -> Result<Self, CommandError> {}
         }
 
-        impl PartialEq for ArgValue {
-            fn eq(&self, other: &ArgValue) -> bool {}
-        }
-
         impl ToArgValue for ArgValue {
             fn to_arg_value(self) -> ArgValue {}
-        }
-
-        impl Clone for CommandAction {
-            fn clone(&self) -> CommandAction {}
-        }
-
-        impl Debug for CommandAction {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl PartialEq for CommandAction {
-            fn eq(&self, other: &CommandAction) -> bool {}
-        }
-
-        impl Clone for CommandArgs {
-            fn clone(&self) -> CommandArgs {}
-        }
-
-        impl Debug for CommandArgs {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Default for CommandArgs {
-            fn default() -> Self {}
-        }
-
-        impl From<()> for CommandArgs {
-            fn from(_: ()) -> Self {}
-        }
-
-        impl PartialEq for CommandArgs {
-            fn eq(&self, other: &CommandArgs) -> bool {}
-        }
-
-        impl Clone for CommandCall {
-            fn clone(&self) -> CommandCall {}
         }
 
         impl CommandCall {
@@ -490,262 +462,9 @@ pub mod canopy {
             pub fn action(self) -> CommandAction {}
         }
 
-        impl Debug for CommandCall {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Clone for CommandDispatchKind {
-            fn clone(&self) -> CommandDispatchKind {}
-        }
-
         impl CommandDispatchKind {
             /// Return the owner name for node-routed commands.
             pub fn owner(&self) -> Option<&'static str> {}
-        }
-
-        impl Debug for CommandDispatchKind {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for CommandDispatchKind {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for CommandDispatchKind {
-            fn eq(&self, other: &CommandDispatchKind) -> bool {}
-        }
-
-        impl Clone for CommandId {
-            fn clone(&self) -> CommandId {}
-        }
-
-        impl Debug for CommandId {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Display for CommandId {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for CommandId {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl Hash for CommandId {
-            fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-        }
-
-        impl PartialEq for CommandId {
-            fn eq(&self, other: &CommandId) -> bool {}
-        }
-
-        impl Clone for CommandInvocation {
-            fn clone(&self) -> CommandInvocation {}
-        }
-
-        impl Debug for CommandInvocation {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl PartialEq for CommandInvocation {
-            fn eq(&self, other: &CommandInvocation) -> bool {}
-        }
-
-        impl Clone for CommandParamKind {
-            fn clone(&self) -> CommandParamKind {}
-        }
-
-        impl Debug for CommandParamKind {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for CommandParamKind {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for CommandParamKind {
-            fn eq(&self, other: &CommandParamKind) -> bool {}
-        }
-
-        impl Clone for CommandParamSpec {
-            fn clone(&self) -> CommandParamSpec {}
-        }
-
-        impl Debug for CommandParamSpec {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl PartialEq for CommandParamSpec {
-            fn eq(&self, other: &Self) -> bool {}
-        }
-
-        impl Clone for CommandRequirement {
-            fn clone(&self) -> CommandRequirement {}
-        }
-
-        impl CommandRequirement {
-            /// Return the stable scripting label.
-            pub fn as_str(self) -> &'static str {}
-        }
-
-        impl Debug for CommandRequirement {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for CommandRequirement {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for CommandRequirement {
-            fn eq(&self, other: &CommandRequirement) -> bool {}
-        }
-
-        impl Clone for CommandResolution {
-            fn clone(&self) -> CommandResolution {}
-        }
-
-        impl CommandResolution {
-            /// Return the resolved node target, if this command dispatches to a node.
-            pub fn target(self) -> Option<NodeId> {}
-        }
-
-        impl Debug for CommandResolution {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for CommandResolution {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for CommandResolution {
-            fn eq(&self, other: &CommandResolution) -> bool {}
-        }
-
-        impl Clone for CommandReturnSpec {
-            fn clone(&self) -> CommandReturnSpec {}
-        }
-
-        impl Debug for CommandReturnSpec {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for CommandReturnSpec {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for CommandReturnSpec {
-            fn eq(&self, other: &CommandReturnSpec) -> bool {}
-        }
-
-        impl Clone for CommandScopeFrame {
-            fn clone(&self) -> CommandScopeFrame {}
-        }
-
-        impl Debug for CommandScopeFrame {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Default for CommandScopeFrame {
-            fn default() -> CommandScopeFrame {}
-        }
-
-        impl Clone for CommandSpec {
-            fn clone(&self) -> CommandSpec {}
-        }
-
-        impl CommandSpec {
-            /// Build a call to this command with no arguments.
-            pub fn call(&self) -> CommandCall {}
-
-            /// Build a call to this command.
-            pub fn call_with(&self, args: impl Into<CommandArgs>) -> CommandCall {}
-        }
-
-        impl Debug for CommandSpec {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Clone for CommandStatus {
-            fn clone(&self) -> CommandStatus {}
-        }
-
-        impl CommandStatus {
-            /// Return the stable scripting label.
-            pub fn label(&self) -> &'static str {}
-        }
-
-        impl Debug for CommandStatus {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for CommandStatus {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for CommandStatus {
-            fn eq(&self, other: &CommandStatus) -> bool {}
-        }
-
-        impl Clone for CommandTarget {
-            fn clone(&self) -> CommandTarget {}
-        }
-
-        impl Debug for CommandTarget {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for CommandTarget {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for CommandTarget {
-            fn eq(&self, other: &CommandTarget) -> bool {}
-        }
-
-        impl Clone for CommandTypeSpec {
-            fn clone(&self) -> CommandTypeSpec {}
-        }
-
-        impl CommandTypeSpec {
-            /// Registers declaration dependencies for this type.
-            pub fn luau_decls(self, registry: &mut DeclRegistry<'_>) {}
-
-            /// Returns the Luau type expression.
-            pub fn luau_ty(self) -> declaration::Type {}
-        }
-
-        impl Debug for CommandTypeSpec {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl PartialEq for CommandTypeSpec {
-            fn eq(&self, other: &Self) -> bool {}
-        }
-
-        impl Clone for ListRowContext {
-            fn clone(&self) -> ListRowContext {}
-        }
-
-        impl Debug for ListRowContext {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Inject for ListRowContext {
-            fn inject(ctx: &dyn Context) -> Option<Self> {}
-
-            fn requirement() -> Option<CommandRequirement> {}
-        }
-
-        impl PartialEq for ListRowContext {
-            fn eq(&self, other: &ListRowContext) -> bool {}
         }
 
         impl CommandError {
@@ -764,22 +483,6 @@ pub mod canopy {
             pub fn with_param(self, param: &str) -> Self {}
         }
 
-        impl Debug for CommandError {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Display for CommandError {
-            fn fmt(&self, __formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {}
-        }
-
-        impl Error for CommandError {
-            fn source(
-                &self,
-            ) -> ::core::option::Option<&(dyn ::thiserror::__private18::Error + 'static)>
-            {
-            }
-        }
-
         impl From<&CommandError> for CanopyErrorPayload {
             fn from(err: &commands::CommandError) -> Self {}
         }
@@ -788,12 +491,45 @@ pub mod canopy {
             fn from(source: CommandError) -> Self {}
         }
 
-        impl<'a> Clone for CommandAvailability<'a> {
-            fn clone(&self) -> CommandAvailability<'a> {}
+        impl CommandRequirement {
+            /// Return the stable scripting label.
+            pub fn as_str(self) -> &'static str {}
         }
 
-        impl<'a> Debug for CommandAvailability<'a> {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
+        impl CommandResolution {
+            /// Return the resolved node target, if this command dispatches to a node.
+            pub fn target(self) -> Option<NodeId> {}
+        }
+
+        impl CommandSpec {
+            /// Build a call to this command with no arguments.
+            pub fn call(&self) -> CommandCall {}
+
+            /// Build a call to this command.
+            pub fn call_with(&self, args: impl Into<CommandArgs>) -> CommandCall {}
+        }
+
+        impl CommandStatus {
+            /// Return the stable scripting label.
+            pub fn label(&self) -> &'static str {}
+        }
+
+        impl CommandTypeSpec {
+            /// Registers declaration dependencies for this type.
+            pub fn luau_decls(self, registry: &mut DeclRegistry<'_>) {}
+
+            /// Returns the Luau type expression.
+            pub fn luau_ty(self) -> declaration::Type {}
+        }
+
+        impl From<()> for CommandArgs {
+            fn from(_: ()) -> Self {}
+        }
+
+        impl Inject for ListRowContext {
+            fn inject(ctx: &dyn Context) -> Option<Self> {}
+
+            fn requirement() -> Option<CommandRequirement> {}
         }
 
         impl<'a> DeclRegistry<'a> {
@@ -823,6 +559,7 @@ pub mod canopy {
         //! Cursor and position helpers.
 
         /// Cursor position and shape.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
         pub struct Cursor {
             /// Location of the cursor, relative to (0, 0) in the node view rect.
             pub location: geom::Point,
@@ -831,6 +568,7 @@ pub mod canopy {
         }
 
         /// Cursor glyph shape variants.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
         pub enum CursorShape {
             /// Underscore cursor.
             Underscore,
@@ -839,54 +577,13 @@ pub mod canopy {
             /// Block cursor.
             Block,
         }
-
-        impl Clone for Cursor {
-            fn clone(&self) -> Cursor {}
-        }
-
-        impl Debug for Cursor {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for Cursor {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl Hash for Cursor {
-            fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-        }
-
-        impl PartialEq for Cursor {
-            fn eq(&self, other: &Cursor) -> bool {}
-        }
-
-        impl Clone for CursorShape {
-            fn clone(&self) -> CursorShape {}
-        }
-
-        impl Debug for CursorShape {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for CursorShape {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl Hash for CursorShape {
-            fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-        }
-
-        impl PartialEq for CursorShape {
-            fn eq(&self, other: &CursorShape) -> bool {}
-        }
     }
 
     pub mod error {
         //! Core error types.
 
         /// Core error type.
+        #[derive(Debug, Display, Error)]
         pub enum Error {
             #[error("script evaluation cancelled")]
             /// Evaluation explicitly cancelled by its caller.
@@ -1060,6 +757,7 @@ pub mod canopy {
         }
 
         /// Phase in which a node-bound widget operation failed.
+        #[derive(Clone, Copy, Debug, Display, Eq, PartialEq)]
         pub enum NodeOperationKind {
             /// Widget access or lifecycle callback.
             Access,
@@ -1070,6 +768,7 @@ pub mod canopy {
         }
 
         /// Parse error marker type.
+        #[derive(Clone, Debug, Display, Eq, Error, PartialEq)]
         pub struct ParseError {
             /// Parse error message.
             pub message: String,
@@ -1083,6 +782,7 @@ pub mod canopy {
         pub type Result<T> = std::result::Result<T, Error>;
 
         /// Stable category for a structured script or command failure.
+        #[derive(Clone, Copy, Debug, Deserialize, Display, Eq, PartialEq, Serialize)]
         pub enum ScriptErrorKind {
             #[serde(rename = "timeout")]
             /// Cooperative execution timeout.
@@ -1163,22 +863,6 @@ pub mod canopy {
             fn from(error: error::Error) -> Self {}
         }
 
-        impl Debug for Error {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Display for Error {
-            fn fmt(&self, __formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {}
-        }
-
-        impl Error for Error {
-            fn source(
-                &self,
-            ) -> ::core::option::Option<&(dyn ::thiserror::__private18::Error + 'static)>
-            {
-            }
-        }
-
         impl From<&Error> for CanopyErrorPayload {
             fn from(err: &error::Error) -> Self {}
         }
@@ -1203,44 +887,6 @@ pub mod canopy {
             fn from(e: mpsc::RecvError) -> Self {}
         }
 
-        impl Clone for NodeOperationKind {
-            fn clone(&self) -> NodeOperationKind {}
-        }
-
-        impl Debug for NodeOperationKind {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Display for NodeOperationKind {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for NodeOperationKind {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for NodeOperationKind {
-            fn eq(&self, other: &NodeOperationKind) -> bool {}
-        }
-
-        impl Clone for ParseError {
-            fn clone(&self) -> ParseError {}
-        }
-
-        impl Debug for ParseError {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Display for ParseError {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for ParseError {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
         impl From<ParseError> for Error {
             fn from(source: ParseError) -> Self {}
         }
@@ -1258,27 +904,6 @@ pub mod canopy {
             }
         }
 
-        impl PartialEq for ParseError {
-            fn eq(&self, other: &ParseError) -> bool {}
-        }
-
-        impl Clone for ScriptErrorKind {
-            fn clone(&self) -> ScriptErrorKind {}
-        }
-
-        impl Debug for ScriptErrorKind {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Display for ScriptErrorKind {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for ScriptErrorKind {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
         impl JsonSchema for ScriptErrorKind {
             fn inline_schema() -> bool {}
 
@@ -1289,32 +914,9 @@ pub mod canopy {
             fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
         }
 
-        impl PartialEq for ScriptErrorKind {
-            fn eq(&self, other: &ScriptErrorKind) -> bool {}
-        }
-
         impl ScriptErrorKind {
             /// Return the stable protocol label for this category.
             pub const fn as_str(self) -> &'static str {}
-        }
-
-        impl Serialize for ScriptErrorKind {
-            fn serialize<__S>(
-                &self,
-                __serializer: __S,
-            ) -> _serde::__private228::Result<__S::Ok, __S::Error>
-            where
-                __S: _serde::Serializer, {
-            }
-        }
-
-        impl<'de> Deserialize<'de> for ScriptErrorKind {
-            fn deserialize<__D>(
-                __deserializer: __D,
-            ) -> _serde::__private228::Result<Self, __D::Error>
-            where
-                __D: _serde::Deserializer<'de>, {
-            }
         }
     }
 
@@ -1326,6 +928,7 @@ pub mod canopy {
             //! This module contains the core primitives to represent keyboard input.
 
             /// A keystroke along with modifiers.
+            #[derive(Clone, Copy, Debug, Display, Eq, Hash, PartialEq)]
             pub struct Key {
                 /// Modifier state.
                 pub mods: Mods,
@@ -1334,6 +937,7 @@ pub mod canopy {
             }
 
             /// Logical key codes.
+            #[derive(Clone, Copy, Debug, Display, Eq, Hash, PartialEq, PartialOrd)]
             pub enum KeyCode {
                 /// Backspace key.
                 Backspace,
@@ -1392,6 +996,7 @@ pub mod canopy {
             }
 
             /// Modifier key state.
+            #[derive(Clone, Copy, Debug, Default, Display, Eq, Hash, PartialEq)]
             pub struct Mods {
                 /// Shift is active.
                 pub shift: bool,
@@ -1431,58 +1036,10 @@ pub mod canopy {
                 type Output = Key;
             }
 
-            impl Clone for Mods {
-                fn clone(&self) -> Mods {}
-            }
-
-            impl Debug for Mods {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-            }
-
-            impl Default for Mods {
-                fn default() -> Mods {}
-            }
-
-            impl Display for Mods {
-                /// Write the active modifiers as `Ctrl+Alt+Shift`, or nothing when none are
-                /// set.
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-            }
-
-            impl Eq for Mods {
-                #[doc(hidden)]
-                fn assert_fields_are_eq(&self) {}
-            }
-
-            impl Hash for Mods {
-                fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-            }
-
-            impl PartialEq for Mods {
-                fn eq(&self, other: &Mods) -> bool {}
-            }
-
             impl Add<KeyCode> for Mods {
                 fn add(self, key: KeyCode) -> Self::Output {}
 
                 type Output = Key;
-            }
-
-            impl Clone for KeyCode {
-                fn clone(&self) -> KeyCode {}
-            }
-
-            impl Debug for KeyCode {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-            }
-
-            impl Display for KeyCode {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-            }
-
-            impl Eq for KeyCode {
-                #[doc(hidden)]
-                fn assert_fields_are_eq(&self) {}
             }
 
             impl From<KeyCode> for Key {
@@ -1491,35 +1048,6 @@ pub mod canopy {
 
             impl From<char> for KeyCode {
                 fn from(c: char) -> Self {}
-            }
-
-            impl Hash for KeyCode {
-                fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-            }
-
-            impl PartialEq for KeyCode {
-                fn eq(&self, other: &KeyCode) -> bool {}
-            }
-
-            impl PartialOrd for KeyCode {
-                fn partial_cmp(&self, other: &KeyCode) -> option::Option<cmp::Ordering> {}
-            }
-
-            impl Clone for Key {
-                fn clone(&self) -> Key {}
-            }
-
-            impl Debug for Key {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-            }
-
-            impl Display for Key {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-            }
-
-            impl Eq for Key {
-                #[doc(hidden)]
-                fn assert_fields_are_eq(&self) {}
             }
 
             impl From<Key> for InputSpec {
@@ -1532,10 +1060,6 @@ pub mod canopy {
 
             impl From<char> for Key {
                 fn from(c: char) -> Self {}
-            }
-
-            impl Hash for Key {
-                fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
             }
 
             impl Key {
@@ -1589,21 +1113,13 @@ pub mod canopy {
                 /// Parse a key specification such as `ctrl-s`, `PageDown`, or `A`.
                 pub fn parse_spec(spec: &str) -> Result<Self, ParseError> {}
             }
-
-            impl PartialEq for Key {
-                fn eq(&self, other: &Key) -> bool {}
-            }
-
-            impl PartialEq<char> for Key {
-                /// An unmodified key matches the character it produces.
-                fn eq(&self, c: &char) -> bool {}
-            }
         }
 
         pub mod mouse {
             //! Mouse event types.
 
             /// Mouse action kinds.
+            #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd)]
             pub enum Action {
                 /// Button press.
                 Down,
@@ -1624,6 +1140,7 @@ pub mod canopy {
             }
 
             /// Mouse button codes.
+            #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd)]
             pub enum Button {
                 /// Left mouse button.
                 Left,
@@ -1636,6 +1153,7 @@ pub mod canopy {
             }
 
             /// An abstract specification for a mouse action.
+            #[derive(Clone, Copy, Debug, Display, Eq, Hash, PartialEq)]
             pub struct Mouse {
                 /// Mouse action type.
                 pub action: Action,
@@ -1647,6 +1165,7 @@ pub mod canopy {
 
             /// A mouse input event. This has the same fields as the `Mouse` event
             /// specification, but also includes a location.
+            #[derive(Clone, Copy, Debug)]
             pub struct MouseEvent {
                 /// Mouse action type.
                 pub action: Action,
@@ -1662,73 +1181,6 @@ pub mod canopy {
                 pub location: crate::geom::Point,
             }
 
-            impl Clone for Action {
-                fn clone(&self) -> Action {}
-            }
-
-            impl Debug for Action {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-            }
-
-            impl Eq for Action {
-                #[doc(hidden)]
-                fn assert_fields_are_eq(&self) {}
-            }
-
-            impl Hash for Action {
-                fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-            }
-
-            impl PartialEq for Action {
-                fn eq(&self, other: &Action) -> bool {}
-            }
-
-            impl PartialOrd for Action {
-                fn partial_cmp(&self, other: &Action) -> option::Option<cmp::Ordering> {}
-            }
-
-            impl Clone for Button {
-                fn clone(&self) -> Button {}
-            }
-
-            impl Debug for Button {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-            }
-
-            impl Eq for Button {
-                #[doc(hidden)]
-                fn assert_fields_are_eq(&self) {}
-            }
-
-            impl Hash for Button {
-                fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-            }
-
-            impl PartialEq for Button {
-                fn eq(&self, other: &Button) -> bool {}
-            }
-
-            impl PartialOrd for Button {
-                fn partial_cmp(&self, other: &Button) -> option::Option<cmp::Ordering> {}
-            }
-
-            impl Clone for Mouse {
-                fn clone(&self) -> Mouse {}
-            }
-
-            impl Debug for Mouse {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-            }
-
-            impl Display for Mouse {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-            }
-
-            impl Eq for Mouse {
-                #[doc(hidden)]
-                fn assert_fields_are_eq(&self) {}
-            }
-
             impl From<Mouse> for InputSpec {
                 fn from(mouse: Mouse) -> Self {}
             }
@@ -1737,25 +1189,9 @@ pub mod canopy {
                 fn from(o: MouseEvent) -> Self {}
             }
 
-            impl Hash for Mouse {
-                fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-            }
-
             impl Mouse {
                 /// Parse a mouse specification such as `ScrollUp` or `ctrl-LeftDown`.
                 pub fn parse_spec(spec: &str) -> Result<Self, ParseError> {}
-            }
-
-            impl PartialEq for Mouse {
-                fn eq(&self, other: &Mouse) -> bool {}
-            }
-
-            impl Clone for MouseEvent {
-                fn clone(&self) -> MouseEvent {}
-            }
-
-            impl Debug for MouseEvent {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
             }
 
             impl From<MouseEvent> for Mouse {
@@ -1770,6 +1206,7 @@ pub mod canopy {
         }
 
         /// This enum represents all the event types that drive the application.
+        #[derive(Clone, Debug)]
         pub enum Event {
             /// A keystroke
             Key(key::Key),
@@ -1785,14 +1222,6 @@ pub mod canopy {
             Paste(String),
         }
 
-        impl Clone for Event {
-            fn clone(&self) -> Event {}
-        }
-
-        impl Debug for Event {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
         impl Inject for crate::event::Event {
             fn inject(ctx: &dyn Context) -> Option<Self> {}
 
@@ -1805,6 +1234,7 @@ pub mod canopy {
         //! Contextual binding discovery.
 
         /// One effective key binding in a contextual snapshot.
+        #[derive(Clone, Debug)]
         pub struct AvailableBinding {
             /// Stable binding identifier.
             pub id: crate::core::inputmap::BindingId,
@@ -1831,6 +1261,7 @@ pub mod canopy {
         }
 
         /// Owned command details captured with an effective key binding.
+        #[derive(Clone, Debug)]
         pub struct BindingCommand {
             /// Stored invocation, arguments, and target policy.
             pub action: crate::commands::CommandAction,
@@ -1843,6 +1274,7 @@ pub mod canopy {
         }
 
         /// Owned snapshot of the effective key bindings for one focus context.
+        #[derive(Clone, Debug)]
         pub struct BindingSnapshot {
             /// Node used as the discovery focus.
             pub focus: crate::core::NodeId,
@@ -1855,36 +1287,13 @@ pub mod canopy {
             /// Effective key bindings, with one winner per normalized key.
             pub bindings: Vec<AvailableBinding>,
         }
-
-        impl Clone for AvailableBinding {
-            fn clone(&self) -> AvailableBinding {}
-        }
-
-        impl Debug for AvailableBinding {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Clone for BindingCommand {
-            fn clone(&self) -> BindingCommand {}
-        }
-
-        impl Debug for BindingCommand {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Clone for BindingSnapshot {
-            fn clone(&self) -> BindingSnapshot {}
-        }
-
-        impl Debug for BindingSnapshot {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
     }
 
     pub mod layout {
         //! Layout types for configuring node positioning and sizing.
 
         /// Alignment along an axis.
+        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
         pub enum Align {
             #[default]
             /// Align to the start of the axis.
@@ -1896,6 +1305,7 @@ pub mod canopy {
         }
 
         /// Child layout results for canvas computations.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct CanvasChild {
             /// Child outer rect relative to this node's content origin.
             pub rect: crate::geom::Rect,
@@ -1907,6 +1317,7 @@ pub mod canopy {
         pub struct CanvasContext<'a> {}
 
         /// Content-box measurement constraints.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
         pub enum Constraint {
             /// No constraint on this axis.
             Unbounded,
@@ -1917,6 +1328,7 @@ pub mod canopy {
         }
 
         /// Stack direction for children.
+        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
         pub enum Direction {
             #[default]
             /// Stack children vertically (column).
@@ -1929,6 +1341,7 @@ pub mod canopy {
         }
 
         /// Display mode for layout participation.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub enum Display {
             /// Node participates in layout and rendering.
             Block,
@@ -1937,6 +1350,7 @@ pub mod canopy {
         }
 
         /// Edge insets for padding.
+        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
         pub struct Edges {
             /// Top edge.
             pub top: u32,
@@ -1949,6 +1363,7 @@ pub mod canopy {
         }
 
         /// Layout configuration for a node.
+        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
         pub struct Layout {
             /// Whether this node participates in layout/render.
             pub display: Display,
@@ -1989,6 +1404,7 @@ pub mod canopy {
         /// Persistent parent constraints applied after the widget's base layout.
         ///
         /// `None` inherits a field. For optional bounds, `Some(None)` clears the bound.
+        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
         pub struct LayoutOverride {
             /// Override for [`Layout::display`].
             pub display: Option<Display>,
@@ -2021,6 +1437,7 @@ pub mod canopy {
         }
 
         /// Invalid layout configuration.
+        #[derive(Clone, Debug, Display, Eq, Error, PartialEq)]
         pub enum LayoutValidationError {
             #[error("{axis} minimum {min} exceeds maximum {max}")]
             /// A minimum bound exceeds the corresponding maximum bound.
@@ -2047,6 +1464,7 @@ pub mod canopy {
         }
 
         /// Constraints for measuring a widget's content box.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
         pub struct MeasureConstraints {
             /// Width constraint.
             pub width: Constraint,
@@ -2055,6 +1473,7 @@ pub mod canopy {
         }
 
         /// Per-axis policy for measurement beyond the available viewport.
+        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
         pub enum MeasureOverflow {
             #[default]
             /// Use the enclosing layout's policy, bounded at the root.
@@ -2066,6 +1485,7 @@ pub mod canopy {
         }
 
         /// Result of measuring a widget's content box.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub enum Measurement {
             /// Fixed content size for leaf widgets.
             Fixed(crate::geom::Size),
@@ -2074,6 +1494,7 @@ pub mod canopy {
         }
 
         /// Sizing strategy for a single axis.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub enum Sizing {
             /// Size derives from `measure()` or wrapping children.
             Measure,
@@ -2086,80 +1507,9 @@ pub mod canopy {
             pub fn new(rect: Rect, canvas: Size) -> Self {}
         }
 
-        impl Clone for CanvasChild {
-            fn clone(&self) -> CanvasChild {}
-        }
-
-        impl Debug for CanvasChild {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for CanvasChild {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for CanvasChild {
-            fn eq(&self, other: &CanvasChild) -> bool {}
-        }
-
-        impl Clone for Align {
-            fn clone(&self) -> Align {}
-        }
-
-        impl Debug for Align {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Default for Align {
-            fn default() -> Align {}
-        }
-
-        impl Eq for Align {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for Align {
-            fn eq(&self, other: &Align) -> bool {}
-        }
-
-        impl Clone for Constraint {
-            fn clone(&self) -> Constraint {}
-        }
-
         impl Constraint {
             /// Return true if this constraint is exact.
             pub fn is_exact(self) -> bool {}
-        }
-
-        impl Debug for Constraint {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for Constraint {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl Hash for Constraint {
-            fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-        }
-
-        impl PartialEq for Constraint {
-            fn eq(&self, other: &Constraint) -> bool {}
-        }
-
-        impl Clone for Direction {
-            fn clone(&self) -> Direction {}
-        }
-
-        impl Debug for Direction {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Default for Direction {
-            fn default() -> Direction {}
         }
 
         impl Direction {
@@ -2171,44 +1521,6 @@ pub mod canopy {
 
             /// Size along the main axis.
             pub fn main_size(&self, size: Size) -> u32 {}
-        }
-
-        impl Eq for Direction {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for Direction {
-            fn eq(&self, other: &Direction) -> bool {}
-        }
-
-        impl Clone for Display {
-            fn clone(&self) -> Display {}
-        }
-
-        impl Debug for Display {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for Display {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for Display {
-            fn eq(&self, other: &Display) -> bool {}
-        }
-
-        impl Clone for Edges {
-            fn clone(&self) -> Edges {}
-        }
-
-        impl Debug for Edges {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Default for Edges {
-            fn default() -> Edges {}
         }
 
         impl Edges {
@@ -2228,30 +1540,8 @@ pub mod canopy {
             pub fn vertical(&self) -> u32 {}
         }
 
-        impl Eq for Edges {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for Edges {
-            fn eq(&self, other: &Edges) -> bool {}
-        }
-
-        impl Clone for Layout {
-            fn clone(&self) -> Layout {}
-        }
-
-        impl Debug for Layout {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Default for Layout {
-            fn default() -> Self {}
-        }
-
-        impl Eq for Layout {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
+        impl From<LayoutValidationError> for Error {
+            fn from(source: LayoutValidationError) -> Self {}
         }
 
         impl Layout {
@@ -2332,27 +1622,6 @@ pub mod canopy {
             pub fn validate(&self) -> Result<(), LayoutValidationError> {}
         }
 
-        impl PartialEq for Layout {
-            fn eq(&self, other: &Layout) -> bool {}
-        }
-
-        impl Clone for LayoutOverride {
-            fn clone(&self) -> LayoutOverride {}
-        }
-
-        impl Debug for LayoutOverride {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Default for LayoutOverride {
-            fn default() -> LayoutOverride {}
-        }
-
-        impl Eq for LayoutOverride {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
         impl LayoutOverride {
             /// Apply constraints and validate both the widget and resulting layout.
             pub fn apply(self, base: Layout) -> Result<Layout, LayoutValidationError> {}
@@ -2368,52 +1637,6 @@ pub mod canopy {
 
             /// Set both outer width bounds.
             pub fn fixed_width(self, value: u32) -> Self {}
-        }
-
-        impl PartialEq for LayoutOverride {
-            fn eq(&self, other: &LayoutOverride) -> bool {}
-        }
-
-        impl Clone for LayoutValidationError {
-            fn clone(&self) -> LayoutValidationError {}
-        }
-
-        impl Debug for LayoutValidationError {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Display for LayoutValidationError {
-            fn fmt(&self, __formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {}
-        }
-
-        impl Eq for LayoutValidationError {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl From<LayoutValidationError> for Error {
-            fn from(source: LayoutValidationError) -> Self {}
-        }
-
-        impl PartialEq for LayoutValidationError {
-            fn eq(&self, other: &LayoutValidationError) -> bool {}
-        }
-
-        impl Clone for MeasureConstraints {
-            fn clone(&self) -> MeasureConstraints {}
-        }
-
-        impl Debug for MeasureConstraints {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for MeasureConstraints {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl Hash for MeasureConstraints {
-            fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
         }
 
         impl MeasureConstraints {
@@ -2434,65 +1657,6 @@ pub mod canopy {
             pub fn main(&self, direction: Direction) -> Constraint {}
         }
 
-        impl PartialEq for MeasureConstraints {
-            fn eq(&self, other: &MeasureConstraints) -> bool {}
-        }
-
-        impl Clone for MeasureOverflow {
-            fn clone(&self) -> MeasureOverflow {}
-        }
-
-        impl Debug for MeasureOverflow {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Default for MeasureOverflow {
-            fn default() -> MeasureOverflow {}
-        }
-
-        impl Eq for MeasureOverflow {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for MeasureOverflow {
-            fn eq(&self, other: &MeasureOverflow) -> bool {}
-        }
-
-        impl Clone for Measurement {
-            fn clone(&self) -> Measurement {}
-        }
-
-        impl Debug for Measurement {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for Measurement {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for Measurement {
-            fn eq(&self, other: &Measurement) -> bool {}
-        }
-
-        impl Clone for Sizing {
-            fn clone(&self) -> Sizing {}
-        }
-
-        impl Debug for Sizing {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for Sizing {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for Sizing {
-            fn eq(&self, other: &Sizing) -> bool {}
-        }
-
         impl<'a> CanvasContext<'a> {
             /// Child layout results in this node's content coordinate space.
             pub fn children(&self) -> &[CanvasChild] {}
@@ -2509,37 +1673,18 @@ pub mod canopy {
         //! Path and traversal helpers.
 
         /// A path of node name components.
+        #[derive(Clone, Debug, Display, Eq, PartialEq)]
         pub struct Path {}
 
         /// A validated path filter used to search node paths.
         ///
         /// Filters support `*` for one component and `**` for zero or more components.
         /// Literal components must be valid [`NodeName`] values.
+        #[derive(Clone, Debug, FromStr)]
         pub struct PathFilter {}
-
-        impl Clone for Path {
-            fn clone(&self) -> Path {}
-        }
-
-        impl Debug for Path {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Display for Path {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for Path {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
 
         impl From<&str> for Path {
             fn from(v: &str) -> Self {}
-        }
-
-        impl PartialEq for Path {
-            fn eq(&self, other: &Path) -> bool {}
         }
 
         impl Path {
@@ -2556,20 +1701,6 @@ pub mod canopy {
             /// Pop an item off the end of the path, modifying it in place. Return None
             /// if the path is empty.
             pub fn pop(&mut self) -> Option<String> {}
-        }
-
-        impl Clone for PathFilter {
-            fn clone(&self) -> PathFilter {}
-        }
-
-        impl Debug for PathFilter {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl FromStr for PathFilter {
-            fn from_str(s: &str) -> Result<Self> {}
-
-            type Err = Error;
         }
 
         impl PathFilter {
@@ -2594,6 +1725,7 @@ pub mod canopy {
         ///
         /// Rendering through this backend refreshes the terminal buffer without
         /// producing user-visible output, so callers can inspect the buffer directly.
+        #[derive(Default)]
         pub struct NopBackend;
 
         /// The trait implemented by renderers.
@@ -2626,10 +1758,6 @@ pub mod canopy {
             fn text(&mut self, loc: geom::Point, txt: &str) -> Result<()>;
         }
 
-        impl Default for NopBackend {
-            fn default() -> Self {}
-        }
-
         impl NopBackend {
             /// Construct a no-op backend.
             pub fn new() -> Self {}
@@ -2652,9 +1780,11 @@ pub mod canopy {
         //! Scripting support.
 
         /// Stable handle for a stored Luau closure.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
         pub struct LuauFunctionId(_);
 
         /// Recorded assertion outcome for a script evaluation.
+        #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
         pub struct ScriptAssertion {
             /// Whether the assertion passed.
             pub passed: bool,
@@ -2663,6 +1793,7 @@ pub mod canopy {
         }
 
         /// Structured Luau typecheck diagnostic.
+        #[derive(Clone, Debug, Deserialize, Display, Eq, PartialEq, Serialize)]
         pub struct ScriptCheckDiagnostic {
             /// Diagnostic source name, when the diagnostic belongs to a named source.
             pub source: Option<String>,
@@ -2678,41 +1809,8 @@ pub mod canopy {
         }
 
         /// Stable result returned by Luau typechecking APIs.
+        #[derive(Clone, Debug, Eq, PartialEq)]
         pub struct ScriptCheckResult {}
-
-        impl Clone for LuauFunctionId {
-            fn clone(&self) -> LuauFunctionId {}
-        }
-
-        impl Debug for LuauFunctionId {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for LuauFunctionId {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl Hash for LuauFunctionId {
-            fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-        }
-
-        impl PartialEq for LuauFunctionId {
-            fn eq(&self, other: &LuauFunctionId) -> bool {}
-        }
-
-        impl Clone for ScriptAssertion {
-            fn clone(&self) -> ScriptAssertion {}
-        }
-
-        impl Debug for ScriptAssertion {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for ScriptAssertion {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
 
         impl JsonSchema for ScriptAssertion {
             fn inline_schema() -> bool {}
@@ -2722,46 +1820,6 @@ pub mod canopy {
             fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
 
             fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-        }
-
-        impl PartialEq for ScriptAssertion {
-            fn eq(&self, other: &ScriptAssertion) -> bool {}
-        }
-
-        impl Serialize for ScriptAssertion {
-            fn serialize<__S>(
-                &self,
-                __serializer: __S,
-            ) -> _serde::__private228::Result<__S::Ok, __S::Error>
-            where
-                __S: _serde::Serializer, {
-            }
-        }
-
-        impl<'de> Deserialize<'de> for ScriptAssertion {
-            fn deserialize<__D>(
-                __deserializer: __D,
-            ) -> _serde::__private228::Result<Self, __D::Error>
-            where
-                __D: _serde::Deserializer<'de>, {
-            }
-        }
-
-        impl Clone for ScriptCheckDiagnostic {
-            fn clone(&self) -> ScriptCheckDiagnostic {}
-        }
-
-        impl Debug for ScriptCheckDiagnostic {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Display for ScriptCheckDiagnostic {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for ScriptCheckDiagnostic {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
         }
 
         impl JsonSchema for ScriptCheckDiagnostic {
@@ -2774,49 +1832,9 @@ pub mod canopy {
             fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
         }
 
-        impl PartialEq for ScriptCheckDiagnostic {
-            fn eq(&self, other: &ScriptCheckDiagnostic) -> bool {}
-        }
-
         impl ScriptCheckDiagnostic {
             /// Return true if this diagnostic should fail script evaluation.
             pub fn is_error(&self) -> bool {}
-        }
-
-        impl Serialize for ScriptCheckDiagnostic {
-            fn serialize<__S>(
-                &self,
-                __serializer: __S,
-            ) -> _serde::__private228::Result<__S::Ok, __S::Error>
-            where
-                __S: _serde::Serializer, {
-            }
-        }
-
-        impl<'de> Deserialize<'de> for ScriptCheckDiagnostic {
-            fn deserialize<__D>(
-                __deserializer: __D,
-            ) -> _serde::__private228::Result<Self, __D::Error>
-            where
-                __D: _serde::Deserializer<'de>, {
-            }
-        }
-
-        impl Clone for ScriptCheckResult {
-            fn clone(&self) -> ScriptCheckResult {}
-        }
-
-        impl Debug for ScriptCheckResult {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for ScriptCheckResult {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for ScriptCheckResult {
-            fn eq(&self, other: &ScriptCheckResult) -> bool {}
         }
 
         impl ScriptCheckResult {
@@ -2979,6 +1997,7 @@ pub mod canopy {
         }
 
         /// A text attribute.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub enum Attr {
             /// Bold text.
             Bold,
@@ -2995,6 +2014,7 @@ pub mod canopy {
         }
 
         /// A set of active text attributes.
+        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
         pub struct AttrSet {
             /// Bold flag.
             pub bold: bool,
@@ -3011,6 +2031,7 @@ pub mod canopy {
         }
 
         /// A terminal color value.
+        #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
         pub enum Color {
             /// Black.
             Black,
@@ -3059,6 +2080,7 @@ pub mod canopy {
         }
 
         /// A gradient paint specification.
+        #[derive(Clone, Debug, PartialEq)]
         pub struct GradientSpec {
             /// Gradient angle in degrees (0 = left to right, 90 = top to bottom).
             pub angle_deg: f32,
@@ -3067,6 +2089,7 @@ pub mod canopy {
         }
 
         /// A gradient stop in a paint specification.
+        #[derive(Clone, Debug, PartialEq)]
         pub struct GradientStop {
             /// Offset along the gradient (0.0-1.0).
             pub offset: f32,
@@ -3075,6 +2098,7 @@ pub mod canopy {
         }
 
         /// A paint definition for a style channel.
+        #[derive(Clone, Debug, PartialEq)]
         pub enum Paint {
             /// Solid color fill.
             Solid(Color),
@@ -3084,6 +2108,7 @@ pub mod canopy {
 
         /// A possibly partial style specification, which is stored in a StyleManager.
         /// Partial styles are completely resolved during the style resolution process.
+        #[derive(Clone, Debug, Default, PartialEq)]
         pub struct PartialStyle {
             /// Optional foreground paint.
             pub fg: Option<Paint>,
@@ -3094,6 +2119,7 @@ pub mod canopy {
         }
 
         /// A resolved style specification stored in terminal buffers.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct ResolvedStyle {
             /// Foreground color.
             pub fg: Color,
@@ -3104,6 +2130,7 @@ pub mod canopy {
         }
 
         /// A paint-based style specification.
+        #[derive(Clone, Debug, PartialEq)]
         pub struct Style {
             /// Foreground paint.
             pub fg: Paint,
@@ -3130,6 +2157,7 @@ pub mod canopy {
         /// let mut style_map = StyleMap::new();
         /// style_map.rules().style("item/selected", selected).apply();
         /// ```
+        #[derive(Clone, Debug, Default, PartialEq)]
         pub struct StyleBuilder {}
 
         /// A hierarchical style manager.
@@ -3159,9 +2187,11 @@ pub mod canopy {
         /// So given a layer stack ["foo"], and an attempt to look up "frame/selected",
         /// we try the following lookups in order: ["foo/frame/selected",
         /// "frame/selected", "foo/frame", "frame", "foo", ""].
+        #[derive(Clone, Debug, Default, Eq, PartialEq)]
         pub struct StyleManager {}
 
         /// Map of style paths to partial styles, keyed by canonical path.
+        #[derive(Clone, Debug, Default)]
         pub struct StyleMap {}
 
         #[must_use = "call .apply() to commit rules"]
@@ -3172,6 +2202,7 @@ pub mod canopy {
         pub struct StyleRules<'a> {}
 
         /// Independent widget states mapped onto the existing style layer stack.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub enum WidgetState {
             /// The widget or its descendant holds focus.
             Focused,
@@ -3198,49 +2229,6 @@ pub mod canopy {
             pub fn new(attr: Attr) -> Self {}
         }
 
-        impl Clone for AttrSet {
-            fn clone(&self) -> AttrSet {}
-        }
-
-        impl Debug for AttrSet {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Default for AttrSet {
-            /// Construct an empty set of text attributes.
-            fn default() -> Self {}
-        }
-
-        impl Eq for AttrSet {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for AttrSet {
-            fn eq(&self, other: &AttrSet) -> bool {}
-        }
-
-        impl Clone for Attr {
-            fn clone(&self) -> Attr {}
-        }
-
-        impl Debug for Attr {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for Attr {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for Attr {
-            fn eq(&self, other: &Attr) -> bool {}
-        }
-
-        impl Clone for Color {
-            fn clone(&self) -> Color {}
-        }
-
         impl Color {
             /// Adjust saturation. 0.0 = grayscale, 1.0 = unchanged, 2.0 = double
             /// saturation.
@@ -3265,85 +2253,8 @@ pub mod canopy {
             pub fn shift_hue(self, degrees: f32) -> Self {}
         }
 
-        impl Debug for Color {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for Color {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
         impl From<Color> for Paint {
             fn from(color: Color) -> Self {}
-        }
-
-        impl Hash for Color {
-            fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-        }
-
-        impl Ord for Color {
-            fn cmp(&self, other: &Color) -> cmp::Ordering {}
-        }
-
-        impl PartialEq for Color {
-            fn eq(&self, other: &Color) -> bool {}
-        }
-
-        impl PartialOrd for Color {
-            fn partial_cmp(&self, other: &Color) -> option::Option<cmp::Ordering> {}
-        }
-
-        impl Clone for GradientSpec {
-            fn clone(&self) -> GradientSpec {}
-        }
-
-        impl Debug for GradientSpec {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl From<GradientSpec> for Paint {
-            fn from(spec: GradientSpec) -> Self {}
-        }
-
-        impl GradientSpec {
-            /// Construct a gradient from explicit stops.
-            pub fn with_stops(angle_deg: f32, stops: Vec<GradientStop>) -> Self {}
-
-            /// Map all colors in this gradient through a transform.
-            pub fn map_colors(&self, f: impl Fn(Color) -> Color) -> Self {}
-
-            /// Resolve a gradient color at a point within a rectangle.
-            pub fn color_at(&self, rect: geom::Rect, point: geom::Point) -> Color {}
-        }
-
-        impl PartialEq for GradientSpec {
-            fn eq(&self, other: &GradientSpec) -> bool {}
-        }
-
-        impl Clone for GradientStop {
-            fn clone(&self) -> GradientStop {}
-        }
-
-        impl Debug for GradientStop {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl GradientStop {
-            /// Construct a gradient stop, clamping the offset to 0.0-1.0.
-            pub fn new(offset: f32, color: Color) -> Self {}
-        }
-
-        impl PartialEq for GradientStop {
-            fn eq(&self, other: &GradientStop) -> bool {}
-        }
-
-        impl Clone for Paint {
-            fn clone(&self) -> Paint {}
-        }
-
-        impl Debug for Paint {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
         }
 
         impl From<Color> for Paint {
@@ -3371,28 +2282,23 @@ pub mod canopy {
             pub fn solid_color(&self) -> Option<Color> {}
         }
 
-        impl PartialEq for Paint {
-            fn eq(&self, other: &Paint) -> bool {}
+        impl From<GradientSpec> for Paint {
+            fn from(spec: GradientSpec) -> Self {}
         }
 
-        impl Clone for PartialStyle {
-            fn clone(&self) -> PartialStyle {}
-        }
+        impl GradientSpec {
+            /// Construct a gradient from explicit stops.
+            pub fn with_stops(angle_deg: f32, stops: Vec<GradientStop>) -> Self {}
 
-        impl Debug for PartialStyle {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
+            /// Map all colors in this gradient through a transform.
+            pub fn map_colors(&self, f: impl Fn(Color) -> Color) -> Self {}
 
-        impl Default for PartialStyle {
-            fn default() -> PartialStyle {}
+            /// Resolve a gradient color at a point within a rectangle.
+            pub fn color_at(&self, rect: geom::Rect, point: geom::Point) -> Color {}
         }
 
         impl From<StyleBuilder> for PartialStyle {
             fn from(s: StyleBuilder) -> Self {}
-        }
-
-        impl PartialEq for PartialStyle {
-            fn eq(&self, other: &PartialStyle) -> bool {}
         }
 
         impl PartialStyle {
@@ -3406,66 +2312,8 @@ pub mod canopy {
             pub fn attrs(attrs: AttrSet) -> Self {}
         }
 
-        impl Clone for ResolvedStyle {
-            fn clone(&self) -> ResolvedStyle {}
-        }
-
-        impl Debug for ResolvedStyle {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for ResolvedStyle {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for ResolvedStyle {
-            fn eq(&self, other: &ResolvedStyle) -> bool {}
-        }
-
-        impl ResolvedStyle {
-            /// Construct a resolved style from components.
-            pub fn new(fg: Color, bg: Color, attrs: AttrSet) -> Self {}
-        }
-
-        impl Clone for Style {
-            fn clone(&self) -> Style {}
-        }
-
-        impl Debug for Style {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl PartialEq for Style {
-            fn eq(&self, other: &Style) -> bool {}
-        }
-
-        impl Style {
-            /// Resolve the style at a location within a rectangle.
-            pub fn resolve_at(&self, rect: geom::Rect, point: geom::Point) -> ResolvedStyle {}
-
-            /// Resolve the style to a solid variant if both paints are solid.
-            pub fn resolve_solid(&self) -> Option<ResolvedStyle> {}
-        }
-
-        impl Clone for StyleBuilder {
-            fn clone(&self) -> StyleBuilder {}
-        }
-
-        impl Debug for StyleBuilder {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Default for StyleBuilder {
-            fn default() -> StyleBuilder {}
-        }
-
         impl From<StyleBuilder> for PartialStyle {
             fn from(s: StyleBuilder) -> Self {}
-        }
-
-        impl PartialEq for StyleBuilder {
-            fn eq(&self, other: &StyleBuilder) -> bool {}
         }
 
         impl StyleBuilder {
@@ -3485,25 +2333,22 @@ pub mod canopy {
             pub fn fg(self, paint: impl Into<Paint>) -> Self {}
         }
 
-        impl Clone for StyleManager {
-            fn clone(&self) -> StyleManager {}
+        impl GradientStop {
+            /// Construct a gradient stop, clamping the offset to 0.0-1.0.
+            pub fn new(offset: f32, color: Color) -> Self {}
         }
 
-        impl Debug for StyleManager {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
+        impl ResolvedStyle {
+            /// Construct a resolved style from components.
+            pub fn new(fg: Color, bg: Color, attrs: AttrSet) -> Self {}
         }
 
-        impl Default for StyleManager {
-            fn default() -> Self {}
-        }
+        impl Style {
+            /// Resolve the style at a location within a rectangle.
+            pub fn resolve_at(&self, rect: geom::Rect, point: geom::Point) -> ResolvedStyle {}
 
-        impl Eq for StyleManager {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for StyleManager {
-            fn eq(&self, other: &StyleManager) -> bool {}
+            /// Resolve the style to a solid variant if both paints are solid.
+            pub fn resolve_solid(&self) -> Option<ResolvedStyle> {}
         }
 
         impl StyleManager {
@@ -3521,18 +2366,6 @@ pub mod canopy {
 
             /// Resolve a style path.
             pub fn get(&self, smap: &StyleMap, path: &str) -> Style {}
-        }
-
-        impl Clone for StyleMap {
-            fn clone(&self) -> StyleMap {}
-        }
-
-        impl Debug for StyleMap {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Default for StyleMap {
-            fn default() -> Self {}
         }
 
         impl StyleMap {
@@ -3554,23 +2387,6 @@ pub mod canopy {
 
             /// Construct a style map with defaults.
             pub fn new() -> Self {}
-        }
-
-        impl Clone for WidgetState {
-            fn clone(&self) -> WidgetState {}
-        }
-
-        impl Debug for WidgetState {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Eq for WidgetState {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for WidgetState {
-            fn eq(&self, other: &WidgetState) -> bool {}
         }
 
         impl WidgetState {
@@ -3626,6 +2442,7 @@ pub mod canopy {
         //! Crossterm terminal run-loop integration.
 
         /// Host handling of terminal Ctrl+C input.
+        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
         pub enum InterruptPolicy {
             #[default]
             /// Restore the terminal and exit the host loop with status 130.
@@ -3635,6 +2452,7 @@ pub mod canopy {
         }
 
         /// Terminal adapter policy, applied before application input dispatch.
+        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
         pub struct RunOptions {
             /// Policy for Ctrl+C.
             pub interrupt_policy: InterruptPolicy,
@@ -3653,48 +2471,6 @@ pub mod canopy {
             cnpy: crate::Canopy,
             options: RunOptions,
         ) -> crate::error::Result<i32> {
-        }
-
-        impl Clone for InterruptPolicy {
-            fn clone(&self) -> InterruptPolicy {}
-        }
-
-        impl Debug for InterruptPolicy {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Default for InterruptPolicy {
-            fn default() -> InterruptPolicy {}
-        }
-
-        impl Eq for InterruptPolicy {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for InterruptPolicy {
-            fn eq(&self, other: &InterruptPolicy) -> bool {}
-        }
-
-        impl Clone for RunOptions {
-            fn clone(&self) -> RunOptions {}
-        }
-
-        impl Debug for RunOptions {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-        }
-
-        impl Default for RunOptions {
-            fn default() -> RunOptions {}
-        }
-
-        impl Eq for RunOptions {
-            #[doc(hidden)]
-            fn assert_fields_are_eq(&self) {}
-        }
-
-        impl PartialEq for RunOptions {
-            fn eq(&self, other: &RunOptions) -> bool {}
         }
     }
 
@@ -3750,12 +2526,15 @@ pub mod canopy {
     pub type AutomationCallback = Box<dyn FnOnce(&mut Canopy) + Send + 'static>;
 
     /// Handle for submitting automation work to a live canopy runloop.
+    #[derive(Clone)]
     pub struct AutomationHandle {}
 
     /// Monotonic identifier for a binding.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
     pub struct BindingId(_);
 
     /// Options shared by native and scripted application bindings.
+    #[derive(Clone, Debug)]
     pub struct BindingOptions {
         /// Optional validated path selector. Omission matches the current route.
         pub path: Option<crate::path::PathFilter>,
@@ -3770,6 +2549,7 @@ pub mod canopy {
     }
 
     /// Owner of one binding record.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
     pub enum BindingOwner {
         /// Application-owned binding that script APIs can mutate.
         Application,
@@ -3778,6 +2558,7 @@ pub mod canopy {
     }
 
     /// Binding phase relative to widget input handling.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub enum BindingPhase {
         /// Execute before the focused widget.
         BeforeWidget,
@@ -3786,6 +2567,7 @@ pub mod canopy {
     }
 
     /// Resolution scope for one binding.
+    #[derive(Clone, Debug, Eq, Hash, PartialEq)]
     pub enum BindingScope {
         /// Highest-priority application tier.
         Global,
@@ -3811,9 +2593,11 @@ pub mod canopy {
     /// A failed build returns no application. Native or database effects performed
     /// by callbacks are not rolled back. Retrying requires a fresh builder and
     /// application resources suitable for retry.
+    #[derive(Default)]
     pub struct CanopyBuilder {}
 
     /// A terminal cell with glyph and style.
+    #[derive(Clone, Debug, PartialEq)]
     pub struct Cell {
         /// Base glyph character.
         pub ch: char,
@@ -3826,6 +2610,7 @@ pub mod canopy {
     }
 
     /// Outcome of an accepted state mutation.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub enum ChangeOutcome {
         /// The requested state was already active.
         Unchanged,
@@ -3834,6 +2619,7 @@ pub mod canopy {
     }
 
     /// Pending work accumulated independently of adapter scheduling.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
     pub struct ChangeSet {
         /// Geometry must be recomputed.
         pub layout: bool,
@@ -3857,6 +2643,7 @@ pub mod canopy {
     pub use canopy_derive::CommandArg;
     pub use canopy_derive::CommandEnum;
     /// Globally unique evaluation identifier, never reused by another application.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
     pub struct EvalId(pub u64);
 
     /// Completed script value or failure.
@@ -3872,6 +2659,7 @@ pub mod canopy {
     }
 
     /// One top-level script request.
+    #[derive(Clone, Debug)]
     pub struct EvalRequest {
         /// Owned Luau source.
         pub source: String,
@@ -3894,6 +2682,7 @@ pub mod canopy {
     }
 
     /// The result of an event handler.
+    #[derive(Clone, Debug, Eq, PartialEq)]
     pub enum EventOutcome {
         /// The event was processed and propagation stops.
         Handle,
@@ -3902,6 +2691,7 @@ pub mod canopy {
     }
 
     /// A named, reproducible application state.
+    #[derive(Clone)]
     pub struct Fixture {
         /// Fixture name.
         pub name: String,
@@ -3910,6 +2700,7 @@ pub mod canopy {
     }
 
     /// Serializable metadata about a registered fixture.
+    #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
     pub struct FixtureInfo {
         /// Fixture name.
         pub name: String,
@@ -3918,6 +2709,7 @@ pub mod canopy {
     }
 
     /// Direction for focus movement.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub enum FocusDirection {
         /// Move to the next focusable node.
         Next,
@@ -3934,6 +2726,7 @@ pub mod canopy {
     }
 
     /// Subtree used by a focus traversal operation.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub enum FocusScope {
         /// The current widget's subtree.
         Current,
@@ -3944,9 +2737,11 @@ pub mod canopy {
     }
 
     /// Identifier of an immutable publication.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub struct FrameId(pub u64);
 
     /// Immutable data from one successfully prepared frame.
+    #[derive(Clone, Debug, PartialEq)]
     pub struct FrameSnapshot {
         /// Publication generation shared with turn outcomes.
         pub frame_id: crate::FrameId,
@@ -3961,9 +2756,11 @@ pub mod canopy {
     }
 
     /// Stable name for one framework-owned binding group.
+    #[derive(Clone, Copy, Debug, Display, Eq, Hash, PartialEq)]
     pub struct FrameworkBindingGroup(_);
 
     /// Input event used for bindings.
+    #[derive(Clone, Copy, Debug, Display, Eq, Hash, PartialEq)]
     pub enum InputSpec {
         /// Mouse input.
         Mouse(crate::event::mouse::Mouse),
@@ -3972,9 +2769,11 @@ pub mod canopy {
     }
 
     /// Opaque identity of one modal scope, unique across applications.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub struct InteractionToken(_);
 
     /// Work invalidated by a mutation.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub enum Invalidation {
         /// Recompute layout, paint, cursor and observations.
         Layout,
@@ -3991,9 +2790,11 @@ pub mod canopy {
     /// on a desired key list. The collection owns all children of its context node;
     /// unmanaged children are rejected before callbacks run. Place persistent
     /// headers and footers outside a dedicated collection container.
+    #[derive(Debug, Default)]
     pub struct KeyedChildren<K, W> {}
 
     /// Bindings admitted within a modal's route to its owner.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub enum ModalBindings {
         /// Admit only this framework binding group.
         Framework(crate::FrameworkBindingGroup),
@@ -4002,6 +2803,7 @@ pub mod canopy {
     }
 
     /// Nodes and binding admission owned by one modal scope.
+    #[derive(Clone, Copy, Debug)]
     pub struct ModalOptions {
         /// Ancestor that owns the modal lifetime and bounds binding routing.
         pub owner: crate::NodeId,
@@ -4016,13 +2818,16 @@ pub mod canopy {
     }
 
     /// Opaque identifier for a node stored in the Core arena.
+    #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
     pub struct NodeId(_);
 
     /// A node name, which consists of lowercase ASCII alphanumeric characters, plus
     /// underscores.
+    #[derive(Clone, Debug, Display, Eq, Hash, PartialEq)]
     pub struct NodeName {}
 
     /// Owned identity, geometry, and semantics for one live arena node.
+    #[derive(Clone, Debug, PartialEq)]
     pub struct NodeSnapshot {
         /// Arena identity at publication, retained even after removal.
         pub id: crate::NodeId,
@@ -4052,6 +2857,7 @@ pub mod canopy {
     ///
     /// Producers keep results in their own bounded channels. This handle never owns
     /// the application or widget and expires when its registered lifetime ends.
+    #[derive(Clone, Debug)]
     pub struct NodeWakeHandle {}
 
     /// A renderer that only renders to a specific rectangle within the target
@@ -4059,6 +2865,7 @@ pub mod canopy {
     pub struct Render<'a> {}
 
     /// Limits for a materialized visible render target.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
     pub struct RenderLimits {
         /// Maximum visible render-target width.
         pub max_width: u32,
@@ -4069,6 +2876,7 @@ pub mod canopy {
     }
 
     /// A phase in key or mouse event routing.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub enum RoutePhase {
         /// The initial routing target was selected.
         Target,
@@ -4089,6 +2897,7 @@ pub mod canopy {
     }
 
     /// One entry in the most recent input route trace.
+    #[derive(Clone, Debug, Eq, PartialEq)]
     pub struct RouteTraceEntry {
         /// Routing phase.
         pub phase: RoutePhase,
@@ -4101,6 +2910,7 @@ pub mod canopy {
     }
 
     /// Replayable record of one script evaluation.
+    #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct ScriptJournalEntry {
         /// Monotonic journal id.
         pub id: u64,
@@ -4122,6 +2932,7 @@ pub mod canopy {
 
     #[serde(from = "String", into = "String")]
     /// Typed source of one script-journal entry.
+    #[derive(Clone, Debug, Deserialize, Display, Eq, PartialEq, Serialize)]
     pub enum ScriptOrigin {
         /// Top-level application evaluation.
         Eval,
@@ -4138,6 +2949,7 @@ pub mod canopy {
     }
 
     /// Authority granted to scripts loaded from an application-declared root.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
     pub enum ScriptTrust {
         #[default]
         /// Do not mount, inspect, require, or execute this root.
@@ -4147,6 +2959,7 @@ pub mod canopy {
     }
 
     /// Application identity unique within an explicit arena subtree.
+    #[derive(Clone, Debug, Eq, PartialEq)]
     pub struct SemanticIdentity {
         /// Scope root, which may itself be detached.
         pub scope: crate::core::id::NodeId,
@@ -4155,9 +2968,11 @@ pub mod canopy {
     }
 
     /// A 2D terminal buffer of styled cells.
+    #[derive(Clone, Debug)]
     pub struct TermBuf {}
 
     /// Observable effects of one turn.
+    #[derive(Default)]
     pub struct TurnOutcome {
         /// Frame published by this turn, if any.
         pub frame: Option<FrameId>,
@@ -4170,9 +2985,11 @@ pub mod canopy {
     }
 
     /// Type-safe wrapper around a node identifier tied to a widget type.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
     pub struct TypedId<T> {}
 
     /// Render-time view information for a node.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
     pub struct View {
         /// Outer rect in screen coordinates (signed for scroll translations).
         pub outer: crate::geom::RectI32,
@@ -4185,6 +3002,7 @@ pub mod canopy {
     }
 
     /// Result of requesting a poll through a node wake handle.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub enum WakeOutcome {
         /// The owner now has pending work.
         Queued,
@@ -4195,6 +3013,7 @@ pub mod canopy {
     }
 
     /// Optional application observations, without arbitrary widget serialization.
+    #[derive(Clone, Debug, Default, PartialEq)]
     pub struct WidgetSemantics {
         /// Application role independent of structural wrappers.
         pub role: Option<String>,
@@ -4225,6 +3044,7 @@ pub mod canopy {
     }
 
     /// Lifetime of runtime-managed widget work.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
     pub enum WorkLifetime {
         #[default]
         /// Continue while the widget exists, including while hidden or detached.
@@ -4822,27 +3642,6 @@ pub mod canopy {
         pub fn as_u64(self) -> u64 {}
     }
 
-    impl Clone for BindingId {
-        fn clone(&self) -> BindingId {}
-    }
-
-    impl Debug for BindingId {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for BindingId {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl Hash for BindingId {
-        fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-    }
-
-    impl PartialEq for BindingId {
-        fn eq(&self, other: &BindingId) -> bool {}
-    }
-
     impl BindingPhase {
         /// Parse a scripting label into a binding phase.
         pub fn parse(value: &str) -> Option<Self> {}
@@ -4851,50 +3650,12 @@ pub mod canopy {
         pub fn label(&self) -> &'static str {}
     }
 
-    impl Clone for BindingPhase {
-        fn clone(&self) -> BindingPhase {}
-    }
-
-    impl Debug for BindingPhase {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for BindingPhase {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl PartialEq for BindingPhase {
-        fn eq(&self, other: &BindingPhase) -> bool {}
-    }
-
     impl BindingScope {
         /// Return a stable scripting and diagnostic label.
         pub fn label(&self) -> &'static str {}
 
         /// Return the named mode, if this is a mode scope.
         pub fn mode(&self) -> Option<&str> {}
-    }
-
-    impl Clone for BindingScope {
-        fn clone(&self) -> BindingScope {}
-    }
-
-    impl Debug for BindingScope {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for BindingScope {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl Hash for BindingScope {
-        fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-    }
-
-    impl PartialEq for BindingScope {
-        fn eq(&self, other: &BindingScope) -> bool {}
     }
 
     impl CanopyBuilder {
@@ -4941,47 +3702,14 @@ pub mod canopy {
         pub fn build(self) -> Result<Canopy> {}
     }
 
-    impl Default for CanopyBuilder {
-        fn default() -> CanopyBuilder {}
-    }
-
     impl Cell {
         /// Return this cell's rendered text.
         pub fn rendered_text(&self) -> String {}
     }
 
-    impl Clone for Cell {
-        fn clone(&self) -> Cell {}
-    }
-
-    impl Debug for Cell {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl PartialEq for Cell {
-        fn eq(&self, other: &Cell) -> bool {}
-    }
-
     impl ChangeOutcome {
         /// Return whether the request changed state.
         pub fn changed(self) -> bool {}
-    }
-
-    impl Clone for ChangeOutcome {
-        fn clone(&self) -> ChangeOutcome {}
-    }
-
-    impl Debug for ChangeOutcome {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for ChangeOutcome {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl PartialEq for ChangeOutcome {
-        fn eq(&self, other: &ChangeOutcome) -> bool {}
     }
 
     impl ChangeSet {
@@ -4990,27 +3718,6 @@ pub mod canopy {
 
         /// Whether any work remains to be published.
         pub fn is_pending(self) -> bool {}
-    }
-
-    impl Clone for ChangeSet {
-        fn clone(&self) -> ChangeSet {}
-    }
-
-    impl Debug for ChangeSet {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Default for ChangeSet {
-        fn default() -> ChangeSet {}
-    }
-
-    impl Eq for ChangeSet {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl PartialEq for ChangeSet {
-        fn eq(&self, other: &ChangeSet) -> bool {}
     }
 
     impl ChildBuilder<'_> {
@@ -5031,178 +3738,10 @@ pub mod canopy {
         }
     }
 
-    impl Clone for AutomationHandle {
-        fn clone(&self) -> AutomationHandle {}
-    }
-
-    impl super::AutomationHandle {
-        /// Submit evaluation work without blocking the UI thread while it runs.
-        pub fn submit_eval(&self, request: EvalRequest) -> Result<EvalTicket> {}
-
-        /// Execute a closure on the UI thread and wait for its result.
-        pub fn request<R, F>(&self, callback: F) -> Result<R>
-        where
-            F: 'static + FnOnce(&mut Canopy) -> Result<R> + Send,
-            R: 'static + Send, {
-        }
-
-        /// Queue a callback to run on the UI thread.
-        pub fn submit(&self, callback: AutomationCallback) -> Result<()> {}
-    }
-
-    impl Clone for BindingOptions {
-        fn clone(&self) -> BindingOptions {}
-    }
-
-    impl Debug for BindingOptions {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Clone for BindingOwner {
-        fn clone(&self) -> BindingOwner {}
-    }
-
-    impl Debug for BindingOwner {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for BindingOwner {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl Hash for BindingOwner {
-        fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-    }
-
-    impl PartialEq for BindingOwner {
-        fn eq(&self, other: &BindingOwner) -> bool {}
-    }
-
-    impl Clone for EvalId {
-        fn clone(&self) -> EvalId {}
-    }
-
-    impl Debug for EvalId {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for EvalId {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl Hash for EvalId {
-        fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-    }
-
-    impl PartialEq for EvalId {
-        fn eq(&self, other: &EvalId) -> bool {}
-    }
-
-    impl Clone for EvalRequest {
-        fn clone(&self) -> EvalRequest {}
-    }
-
-    impl Debug for EvalRequest {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Clone for EventOutcome {
-        fn clone(&self) -> EventOutcome {}
-    }
-
-    impl Debug for EventOutcome {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for EventOutcome {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl PartialEq for EventOutcome {
-        fn eq(&self, other: &EventOutcome) -> bool {}
-    }
-
-    impl Clone for Fixture {
-        fn clone(&self) -> Fixture {}
-    }
-
-    impl Fixture {
-        /// Construct a fixture from owned name/description values.
-        pub fn new(
-            name: impl Into<String>,
-            description: impl Into<String>,
-            setup: impl 'static + Fn(&mut Canopy) -> Result<()> + Send + Sync,
-        ) -> Self {
-        }
-
-        /// Return fixture metadata without the setup closure.
-        pub fn info(&self) -> FixtureInfo {}
-    }
-
-    impl Clone for FixtureInfo {
-        fn clone(&self) -> FixtureInfo {}
-    }
-
-    impl Debug for FixtureInfo {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for FixtureInfo {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl JsonSchema for FixtureInfo {
-        fn inline_schema() -> bool {}
-
-        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
-
-        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-
-        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-    }
-
-    impl PartialEq for FixtureInfo {
-        fn eq(&self, other: &FixtureInfo) -> bool {}
-    }
-
-    impl Serialize for FixtureInfo {
-        fn serialize<__S>(
-            &self,
-            __serializer: __S,
-        ) -> _serde::__private228::Result<__S::Ok, __S::Error>
-        where
-            __S: _serde::Serializer, {
-        }
-    }
-
-    impl<'de> Deserialize<'de> for FixtureInfo {
-        fn deserialize<__D>(__deserializer: __D) -> _serde::__private228::Result<Self, __D::Error>
-        where
-            __D: _serde::Deserializer<'de>, {
-        }
-    }
-
-    impl Clone for FocusDirection {
-        fn clone(&self) -> FocusDirection {}
-    }
-
     impl CommandType for FocusDirection {
         fn luau_decls(registry: &mut canopy::commands::DeclRegistry<'_>) {}
 
         fn luau_ty() -> canopy::commands::declaration::Type {}
-    }
-
-    impl Debug for FocusDirection {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for FocusDirection {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
     }
 
     impl FromArgValue for FocusDirection {
@@ -5212,196 +3751,8 @@ pub mod canopy {
         }
     }
 
-    impl PartialEq for FocusDirection {
-        fn eq(&self, other: &FocusDirection) -> bool {}
-    }
-
     impl ToArgValue for FocusDirection {
         fn to_arg_value(self) -> canopy::commands::ArgValue {}
-    }
-
-    impl Clone for FocusScope {
-        fn clone(&self) -> FocusScope {}
-    }
-
-    impl Debug for FocusScope {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for FocusScope {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl PartialEq for FocusScope {
-        fn eq(&self, other: &FocusScope) -> bool {}
-    }
-
-    impl Clone for FrameId {
-        fn clone(&self) -> FrameId {}
-    }
-
-    impl Debug for FrameId {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for FrameId {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl PartialEq for FrameId {
-        fn eq(&self, other: &FrameId) -> bool {}
-    }
-
-    impl Clone for FrameSnapshot {
-        fn clone(&self) -> FrameSnapshot {}
-    }
-
-    impl Debug for FrameSnapshot {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl PartialEq for FrameSnapshot {
-        fn eq(&self, other: &FrameSnapshot) -> bool {}
-    }
-
-    impl Clone for FrameworkBindingGroup {
-        fn clone(&self) -> FrameworkBindingGroup {}
-    }
-
-    impl Debug for FrameworkBindingGroup {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Display for FrameworkBindingGroup {
-        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for FrameworkBindingGroup {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl FrameworkBindingGroup {
-        /// Construct a framework binding group.
-        pub const fn new(name: &'static str) -> Self {}
-
-        /// Return the diagnostic group name.
-        pub const fn as_str(self) -> &'static str {}
-    }
-
-    impl Hash for FrameworkBindingGroup {
-        fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-    }
-
-    impl PartialEq for FrameworkBindingGroup {
-        fn eq(&self, other: &FrameworkBindingGroup) -> bool {}
-    }
-
-    impl Clone for InputSpec {
-        fn clone(&self) -> InputSpec {}
-    }
-
-    impl Debug for InputSpec {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Display for InputSpec {
-        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for InputSpec {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl From<Key> for InputSpec {
-        fn from(key: Key) -> Self {}
-    }
-
-    impl From<Mouse> for InputSpec {
-        fn from(mouse: Mouse) -> Self {}
-    }
-
-    impl From<char> for InputSpec {
-        fn from(key: char) -> Self {}
-    }
-
-    impl Hash for InputSpec {
-        fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-    }
-
-    impl InputSpec {
-        /// Normalize key variants for matching.
-        pub fn normalize(self) -> Self {}
-    }
-
-    impl PartialEq for InputSpec {
-        fn eq(&self, other: &InputSpec) -> bool {}
-    }
-
-    impl Clone for InteractionToken {
-        fn clone(&self) -> InteractionToken {}
-    }
-
-    impl Debug for InteractionToken {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for InteractionToken {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl PartialEq for InteractionToken {
-        fn eq(&self, other: &InteractionToken) -> bool {}
-    }
-
-    impl Clone for Invalidation {
-        fn clone(&self) -> Invalidation {}
-    }
-
-    impl Debug for Invalidation {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for Invalidation {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl PartialEq for Invalidation {
-        fn eq(&self, other: &Invalidation) -> bool {}
-    }
-
-    impl Clone for ModalBindings {
-        fn clone(&self) -> ModalBindings {}
-    }
-
-    impl Debug for ModalBindings {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for ModalBindings {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl PartialEq for ModalBindings {
-        fn eq(&self, other: &ModalBindings) -> bool {}
-    }
-
-    impl Clone for ModalOptions {
-        fn clone(&self) -> ModalOptions {}
-    }
-
-    impl Debug for ModalOptions {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Clone for NodeId {
-        fn clone(&self) -> NodeId {}
     }
 
     impl CommandType for crate::core::NodeId {
@@ -5410,33 +3761,8 @@ pub mod canopy {
         fn luau_ty() -> declaration::Type {}
     }
 
-    impl Debug for NodeId {
-        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for NodeId {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
     impl FromArgValue for crate::core::NodeId {
         fn from_arg_value(v: &ArgValue) -> Result<Self, CommandError> {}
-    }
-
-    impl Hash for NodeId {
-        fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-    }
-
-    impl Ord for NodeId {
-        fn cmp(&self, other: &NodeId) -> cmp::Ordering {}
-    }
-
-    impl PartialEq for NodeId {
-        fn eq(&self, other: &NodeId) -> bool {}
-    }
-
-    impl PartialOrd for NodeId {
-        fn partial_cmp(&self, other: &NodeId) -> option::Option<cmp::Ordering> {}
     }
 
     impl ToArgValue for crate::core::NodeId {
@@ -5455,451 +3781,6 @@ pub mod canopy {
 
     impl<T> IndexMut<NodeId> for NodeArena<T> {
         fn index_mut(&mut self, id: NodeId) -> &mut Self::Output {}
-    }
-
-    impl Clone for NodeName {
-        fn clone(&self) -> NodeName {}
-    }
-
-    impl Debug for NodeName {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Display for NodeName {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for NodeName {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl Hash for NodeName {
-        fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-    }
-
-    impl NodeName {
-        /// Create a new NodeName, returning an error if the string contains invalid
-        /// characters.
-        pub fn new(name: &str) -> Result<Self> {}
-
-        /// Takes a string and munges it into a valid node name. It does this by
-        /// first converting the string to snake case, then removing all invalid
-        /// characters.
-        pub fn convert(name: &str) -> Self {}
-    }
-
-    impl PartialEq for NodeName {
-        fn eq(&self, other: &NodeName) -> bool {}
-    }
-
-    impl PartialEq<&str> for NodeName {
-        fn eq(&self, other: &&str) -> bool {}
-    }
-
-    impl Clone for NodeSnapshot {
-        fn clone(&self) -> NodeSnapshot {}
-    }
-
-    impl Debug for NodeSnapshot {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl PartialEq for NodeSnapshot {
-        fn eq(&self, other: &NodeSnapshot) -> bool {}
-    }
-
-    impl Clone for NodeWakeHandle {
-        fn clone(&self) -> NodeWakeHandle {}
-    }
-
-    impl Debug for NodeWakeHandle {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl NodeWakeHandle {
-        /// Queue one owner poll, coalesce with existing work, or report expiration.
-        pub fn wake(&self) -> Result<WakeOutcome> {}
-    }
-
-    impl Clone for RenderLimits {
-        fn clone(&self) -> RenderLimits {}
-    }
-
-    impl Debug for RenderLimits {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Default for RenderLimits {
-        fn default() -> Self {}
-    }
-
-    impl Eq for RenderLimits {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl PartialEq for RenderLimits {
-        fn eq(&self, other: &RenderLimits) -> bool {}
-    }
-
-    impl RenderLimits {
-        /// Construct explicit visible render-target limits.
-        pub const fn new(max_width: u32, max_height: u32, max_cells: usize) -> Self {}
-
-        /// Validate a visible target size and return its exact cell count.
-        pub fn cell_count(self, size: Size) -> Result<usize> {}
-    }
-
-    impl Clone for RoutePhase {
-        fn clone(&self) -> RoutePhase {}
-    }
-
-    impl Debug for RoutePhase {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for RoutePhase {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl PartialEq for RoutePhase {
-        fn eq(&self, other: &RoutePhase) -> bool {}
-    }
-
-    impl RoutePhase {
-        /// Return a stable diagnostic label for this phase.
-        pub fn as_str(self) -> &'static str {}
-    }
-
-    impl Clone for RouteTraceEntry {
-        fn clone(&self) -> RouteTraceEntry {}
-    }
-
-    impl Debug for RouteTraceEntry {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for RouteTraceEntry {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl PartialEq for RouteTraceEntry {
-        fn eq(&self, other: &RouteTraceEntry) -> bool {}
-    }
-
-    impl Clone for ScriptJournalEntry {
-        fn clone(&self) -> ScriptJournalEntry {}
-    }
-
-    impl Debug for ScriptJournalEntry {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Serialize for ScriptJournalEntry {
-        fn serialize<__S>(
-            &self,
-            __serializer: __S,
-        ) -> _serde::__private228::Result<__S::Ok, __S::Error>
-        where
-            __S: _serde::Serializer, {
-        }
-    }
-
-    impl<'de> Deserialize<'de> for ScriptJournalEntry {
-        fn deserialize<__D>(__deserializer: __D) -> _serde::__private228::Result<Self, __D::Error>
-        where
-            __D: _serde::Deserializer<'de>, {
-        }
-    }
-
-    impl Clone for ScriptOrigin {
-        fn clone(&self) -> ScriptOrigin {}
-    }
-
-    impl Debug for ScriptOrigin {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Display for ScriptOrigin {
-        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for ScriptOrigin {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl From<ScriptOrigin> for String {
-        fn from(origin: ScriptOrigin) -> Self {}
-    }
-
-    impl From<String> for ScriptOrigin {
-        fn from(origin: String) -> Self {}
-    }
-
-    impl PartialEq for ScriptOrigin {
-        fn eq(&self, other: &ScriptOrigin) -> bool {}
-    }
-
-    impl Serialize for ScriptOrigin {
-        fn serialize<__S>(
-            &self,
-            __serializer: __S,
-        ) -> _serde::__private228::Result<__S::Ok, __S::Error>
-        where
-            __S: _serde::Serializer, {
-        }
-    }
-
-    impl<'de> Deserialize<'de> for ScriptOrigin {
-        fn deserialize<__D>(__deserializer: __D) -> _serde::__private228::Result<Self, __D::Error>
-        where
-            __D: _serde::Deserializer<'de>, {
-        }
-    }
-
-    impl Clone for ScriptTrust {
-        fn clone(&self) -> ScriptTrust {}
-    }
-
-    impl Debug for ScriptTrust {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Default for ScriptTrust {
-        fn default() -> ScriptTrust {}
-    }
-
-    impl Eq for ScriptTrust {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl PartialEq for ScriptTrust {
-        fn eq(&self, other: &ScriptTrust) -> bool {}
-    }
-
-    impl Clone for SemanticIdentity {
-        fn clone(&self) -> SemanticIdentity {}
-    }
-
-    impl Debug for SemanticIdentity {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for SemanticIdentity {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl PartialEq for SemanticIdentity {
-        fn eq(&self, other: &SemanticIdentity) -> bool {}
-    }
-
-    impl Clone for TermBuf {
-        fn clone(&self) -> TermBuf {}
-    }
-
-    impl Debug for TermBuf {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl TermBuf {
-        /// Construct a buffer filled with the given character and style.
-        pub fn new(size: impl Into<Size>, ch: char, style: ResolvedStyle) -> Result<Self> {}
-
-        /// Construct a buffer with explicit visible render-target limits.
-        pub fn new_with_limits(
-            size: impl Into<Size>,
-            ch: char,
-            style: ResolvedStyle,
-            limits: RenderLimits,
-        ) -> Result<Self> {
-        }
-
-        /// Diff this terminal buffer against a previous state, emitting changes
-        /// to the provided render backend.
-        pub fn diff<R: RenderBackend>(&self, prev: &Self, backend: &mut R) -> Result<()> {}
-
-        /// Draw text clipped to the given line.
-        pub fn text(&mut self, style: &ResolvedStyle, l: Line, txt: &str) -> Result<()> {}
-
-        /// Fill a rectangle with a glyph and style.
-        pub fn fill(&mut self, style: &ResolvedStyle, r: Rect, ch: char) -> Result<()> {}
-
-        /// Fill a rectangle, resolving the style separately for each cell.
-        pub fn fill_with(
-            &mut self,
-            r: Rect,
-            ch: char,
-            style_at: impl Fn(Point) -> ResolvedStyle,
-        ) -> Result<()> {
-        }
-
-        /// Get a cell by position.
-        pub fn get(&self, p: Point) -> Option<&Cell> {}
-
-        /// Overlay a cursor on a cell by adjusting its style.
-        pub fn overlay_cursor(&mut self, location: Point, shape: cursor::CursorShape) {}
-
-        /// Render this terminal buffer in full using the provided backend,
-        /// batching runs of text with the same style.
-        pub fn render<R: RenderBackend>(&self, backend: &mut R) -> Result<()> {}
-
-        /// Return the buffer bounds as a rectangle.
-        pub fn rect(&self) -> Rect {}
-
-        /// Return the buffer size.
-        pub fn size(&self) -> Size {}
-
-        /// Return the rendered screen as newline-joined plain text.
-        pub fn screen_text(&self) -> String {}
-
-        /// Return the rendered screen as rows of cell strings.
-        pub fn rows(&self) -> Vec<Vec<String>> {}
-
-        /// Write text along a line, resolving the style separately for each cell.
-        ///
-        /// The text is clipped to the line and padded with spaces to the line's
-        /// width.
-        pub fn text_with(
-            &mut self,
-            l: Line,
-            txt: &str,
-            style_at: impl Fn(Point) -> ResolvedStyle,
-        ) -> Result<()> {
-        }
-    }
-
-    impl Clone for View {
-        fn clone(&self) -> View {}
-    }
-
-    impl Debug for View {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Default for View {
-        fn default() -> View {}
-    }
-
-    impl Eq for View {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl PartialEq for View {
-        fn eq(&self, other: &View) -> bool {}
-    }
-
-    impl View {
-        /// Build a view from signed outer and content rects, a scroll offset, and a
-        /// canvas size.
-        pub fn new(outer: RectI32, content: RectI32, scroll: Point, canvas: Size) -> Self {}
-
-        /// Calculates the (pre, active, post) rectangles needed to draw a
-        /// horizontal scroll bar for this view in the specified margin rect.
-        pub fn hactive(&self, margin: Rect) -> Result<Option<(Rect, Rect, Rect)>> {}
-
-        /// Calculates the (pre, active, post) rectangles needed to draw a vertical
-        /// scroll bar for this view in the specified margin rect.
-        pub fn vactive(&self, margin: Rect) -> Result<Option<(Rect, Rect, Rect)>> {}
-
-        /// Convert a screen point to viewport-local coordinates, before scroll.
-        /// Returns a geometry error if the result is outside the signed range.
-        pub fn screen_to_viewport(&self, point: PointI32) -> Result<PointI32> {}
-
-        /// Convert a viewport-local point to outer-local coordinates, including
-        /// padding. Returns a geometry error if the result is outside the signed
-        /// range.
-        pub fn viewport_to_outer(&self, point: PointI32) -> Result<PointI32> {}
-
-        /// Convert a viewport-local point to scrolled content coordinates.
-        /// Returns a geometry error if the result is outside the signed range.
-        pub fn viewport_to_content(&self, point: PointI32) -> Result<PointI32> {}
-
-        /// Local outer rectangle with origin at (0,0).
-        pub fn outer_rect_local(&self) -> Rect {}
-
-        /// Offset from the outer origin to the content origin, in local
-        /// coordinates.
-        pub fn content_origin(&self) -> Point {}
-
-        /// Size of the content rect.
-        pub fn content_size(&self) -> Size {}
-
-        /// Size of the outer rect.
-        pub fn outer_size(&self) -> Size {}
-
-        /// True if the view has no visible cells.
-        pub fn is_empty(&self) -> bool {}
-
-        /// Visible view rectangle in content coordinates.
-        pub fn view_rect(&self) -> Rect {}
-
-        /// Visible view rectangle in local outer coordinates.
-        pub fn view_rect_local(&self) -> Rect {}
-    }
-
-    impl Clone for WakeOutcome {
-        fn clone(&self) -> WakeOutcome {}
-    }
-
-    impl Debug for WakeOutcome {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for WakeOutcome {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl PartialEq for WakeOutcome {
-        fn eq(&self, other: &WakeOutcome) -> bool {}
-    }
-
-    impl Clone for WidgetSemantics {
-        fn clone(&self) -> WidgetSemantics {}
-    }
-
-    impl Debug for WidgetSemantics {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Default for WidgetSemantics {
-        fn default() -> WidgetSemantics {}
-    }
-
-    impl PartialEq for WidgetSemantics {
-        fn eq(&self, other: &WidgetSemantics) -> bool {}
-    }
-
-    impl Clone for WorkLifetime {
-        fn clone(&self) -> WorkLifetime {}
-    }
-
-    impl Debug for WorkLifetime {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Default for WorkLifetime {
-        fn default() -> WorkLifetime {}
-    }
-
-    impl Eq for WorkLifetime {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl PartialEq for WorkLifetime {
-        fn eq(&self, other: &WorkLifetime) -> bool {}
-    }
-
-    impl Default for TurnOutcome {
-        fn default() -> TurnOutcome {}
     }
 
     impl Drop for super::Canopy {
@@ -6079,6 +3960,222 @@ pub mod canopy {
         pub fn into_result(self) -> Result<ArgValue> {}
     }
 
+    impl Fixture {
+        /// Construct a fixture from owned name/description values.
+        pub fn new(
+            name: impl Into<String>,
+            description: impl Into<String>,
+            setup: impl 'static + Fn(&mut Canopy) -> Result<()> + Send + Sync,
+        ) -> Self {
+        }
+
+        /// Return fixture metadata without the setup closure.
+        pub fn info(&self) -> FixtureInfo {}
+    }
+
+    impl FrameworkBindingGroup {
+        /// Construct a framework binding group.
+        pub const fn new(name: &'static str) -> Self {}
+
+        /// Return the diagnostic group name.
+        pub const fn as_str(self) -> &'static str {}
+    }
+
+    impl From<Key> for InputSpec {
+        fn from(key: Key) -> Self {}
+    }
+
+    impl From<Mouse> for InputSpec {
+        fn from(mouse: Mouse) -> Self {}
+    }
+
+    impl From<char> for InputSpec {
+        fn from(key: char) -> Self {}
+    }
+
+    impl InputSpec {
+        /// Normalize key variants for matching.
+        pub fn normalize(self) -> Self {}
+    }
+
+    impl From<ScriptOrigin> for String {
+        fn from(origin: ScriptOrigin) -> Self {}
+    }
+
+    impl From<String> for ScriptOrigin {
+        fn from(origin: String) -> Self {}
+    }
+
+    impl JsonSchema for FixtureInfo {
+        fn inline_schema() -> bool {}
+
+        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
+
+        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+    }
+
+    impl NodeName {
+        /// Create a new NodeName, returning an error if the string contains invalid
+        /// characters.
+        pub fn new(name: &str) -> Result<Self> {}
+
+        /// Takes a string and munges it into a valid node name. It does this by
+        /// first converting the string to snake case, then removing all invalid
+        /// characters.
+        pub fn convert(name: &str) -> Self {}
+    }
+
+    impl NodeWakeHandle {
+        /// Queue one owner poll, coalesce with existing work, or report expiration.
+        pub fn wake(&self) -> Result<WakeOutcome> {}
+    }
+
+    impl RenderLimits {
+        /// Construct explicit visible render-target limits.
+        pub const fn new(max_width: u32, max_height: u32, max_cells: usize) -> Self {}
+
+        /// Validate a visible target size and return its exact cell count.
+        pub fn cell_count(self, size: Size) -> Result<usize> {}
+    }
+
+    impl RoutePhase {
+        /// Return a stable diagnostic label for this phase.
+        pub fn as_str(self) -> &'static str {}
+    }
+
+    impl TermBuf {
+        /// Construct a buffer filled with the given character and style.
+        pub fn new(size: impl Into<Size>, ch: char, style: ResolvedStyle) -> Result<Self> {}
+
+        /// Construct a buffer with explicit visible render-target limits.
+        pub fn new_with_limits(
+            size: impl Into<Size>,
+            ch: char,
+            style: ResolvedStyle,
+            limits: RenderLimits,
+        ) -> Result<Self> {
+        }
+
+        /// Diff this terminal buffer against a previous state, emitting changes
+        /// to the provided render backend.
+        pub fn diff<R: RenderBackend>(&self, prev: &Self, backend: &mut R) -> Result<()> {}
+
+        /// Draw text clipped to the given line.
+        pub fn text(&mut self, style: &ResolvedStyle, l: Line, txt: &str) -> Result<()> {}
+
+        /// Fill a rectangle with a glyph and style.
+        pub fn fill(&mut self, style: &ResolvedStyle, r: Rect, ch: char) -> Result<()> {}
+
+        /// Fill a rectangle, resolving the style separately for each cell.
+        pub fn fill_with(
+            &mut self,
+            r: Rect,
+            ch: char,
+            style_at: impl Fn(Point) -> ResolvedStyle,
+        ) -> Result<()> {
+        }
+
+        /// Get a cell by position.
+        pub fn get(&self, p: Point) -> Option<&Cell> {}
+
+        /// Overlay a cursor on a cell by adjusting its style.
+        pub fn overlay_cursor(&mut self, location: Point, shape: cursor::CursorShape) {}
+
+        /// Render this terminal buffer in full using the provided backend,
+        /// batching runs of text with the same style.
+        pub fn render<R: RenderBackend>(&self, backend: &mut R) -> Result<()> {}
+
+        /// Return the buffer bounds as a rectangle.
+        pub fn rect(&self) -> Rect {}
+
+        /// Return the buffer size.
+        pub fn size(&self) -> Size {}
+
+        /// Return the rendered screen as newline-joined plain text.
+        pub fn screen_text(&self) -> String {}
+
+        /// Return the rendered screen as rows of cell strings.
+        pub fn rows(&self) -> Vec<Vec<String>> {}
+
+        /// Write text along a line, resolving the style separately for each cell.
+        ///
+        /// The text is clipped to the line and padded with spaces to the line's
+        /// width.
+        pub fn text_with(
+            &mut self,
+            l: Line,
+            txt: &str,
+            style_at: impl Fn(Point) -> ResolvedStyle,
+        ) -> Result<()> {
+        }
+    }
+
+    impl View {
+        /// Build a view from signed outer and content rects, a scroll offset, and a
+        /// canvas size.
+        pub fn new(outer: RectI32, content: RectI32, scroll: Point, canvas: Size) -> Self {}
+
+        /// Calculates the (pre, active, post) rectangles needed to draw a
+        /// horizontal scroll bar for this view in the specified margin rect.
+        pub fn hactive(&self, margin: Rect) -> Result<Option<(Rect, Rect, Rect)>> {}
+
+        /// Calculates the (pre, active, post) rectangles needed to draw a vertical
+        /// scroll bar for this view in the specified margin rect.
+        pub fn vactive(&self, margin: Rect) -> Result<Option<(Rect, Rect, Rect)>> {}
+
+        /// Convert a screen point to viewport-local coordinates, before scroll.
+        /// Returns a geometry error if the result is outside the signed range.
+        pub fn screen_to_viewport(&self, point: PointI32) -> Result<PointI32> {}
+
+        /// Convert a viewport-local point to outer-local coordinates, including
+        /// padding. Returns a geometry error if the result is outside the signed
+        /// range.
+        pub fn viewport_to_outer(&self, point: PointI32) -> Result<PointI32> {}
+
+        /// Convert a viewport-local point to scrolled content coordinates.
+        /// Returns a geometry error if the result is outside the signed range.
+        pub fn viewport_to_content(&self, point: PointI32) -> Result<PointI32> {}
+
+        /// Local outer rectangle with origin at (0,0).
+        pub fn outer_rect_local(&self) -> Rect {}
+
+        /// Offset from the outer origin to the content origin, in local
+        /// coordinates.
+        pub fn content_origin(&self) -> Point {}
+
+        /// Size of the content rect.
+        pub fn content_size(&self) -> Size {}
+
+        /// Size of the outer rect.
+        pub fn outer_size(&self) -> Size {}
+
+        /// True if the view has no visible cells.
+        pub fn is_empty(&self) -> bool {}
+
+        /// Visible view rectangle in content coordinates.
+        pub fn view_rect(&self) -> Rect {}
+
+        /// Visible view rectangle in local outer coordinates.
+        pub fn view_rect_local(&self) -> Rect {}
+    }
+
+    impl super::AutomationHandle {
+        /// Submit evaluation work without blocking the UI thread while it runs.
+        pub fn submit_eval(&self, request: EvalRequest) -> Result<EvalTicket> {}
+
+        /// Execute a closure on the UI thread and wait for its result.
+        pub fn request<R, F>(&self, callback: F) -> Result<R>
+        where
+            F: 'static + FnOnce(&mut Canopy) -> Result<R> + Send,
+            R: 'static + Send, {
+        }
+
+        /// Queue a callback to run on the UI thread.
+        pub fn submit(&self, callback: AutomationCallback) -> Result<()> {}
+    }
+
     impl<'a> Render<'a> {
         /// Apply a named style to the painted grapheme at a point, preserving its
         /// text.
@@ -6129,10 +4226,6 @@ pub mod canopy {
         pub fn put_cell(&mut self, style: ResolvedStyle, p: geom::Point, ch: char) -> Result<()> {}
     }
 
-    impl<K, W> Default for KeyedChildren<K, W> {
-        fn default() -> Self {}
-    }
-
     impl<K, W> KeyedChildren<K, W>
     where
         K: Clone + Eq + Hash,
@@ -6179,28 +4272,8 @@ pub mod canopy {
         pub fn is_empty(&self) -> bool {}
     }
 
-    impl<K: fmt::Debug, W: fmt::Debug> Debug for KeyedChildren<K, W> {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl<T> Clone for TypedId<T> {
-        fn clone(&self) -> Self {}
-    }
-
-    impl<T> Debug for TypedId<T> {
-        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
     impl<T> From<TypedId<T>> for NodeId {
         fn from(value: TypedId<T>) -> Self {}
-    }
-
-    impl<T> Hash for TypedId<T> {
-        fn hash<H: Hasher>(&self, state: &mut H) {}
-    }
-
-    impl<T> PartialEq for TypedId<T> {
-        fn eq(&self, other: &Self) -> bool {}
     }
 
     impl<W: 'static + Widget> ChildConfig<'_, W> {

@@ -7,22 +7,16 @@ pub mod todo {
         //! SQLite storage for the todo example.
 
         /// Cloneable handle to one todo database.
+        #[derive(Clone, Debug)]
         pub struct Store {}
 
         /// A persisted todo record.
+        #[derive(Clone, Debug)]
         pub struct Todo {
             /// Database identifier.
             pub id: i64,
             /// User-provided todo text.
             pub item: String,
-        }
-
-        impl Clone for Store {
-            fn clone(&self) -> Store {}
-        }
-
-        impl Debug for Store {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
         }
 
         impl Store {
@@ -31,14 +25,6 @@ pub mod todo {
 
             /// Open or initialize a SQLite store.
             pub fn open(path: &str) -> Result<Self> {}
-        }
-
-        impl Clone for Todo {
-            fn clone(&self) -> Todo {}
-        }
-
-        impl Debug for Todo {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
         }
     }
 

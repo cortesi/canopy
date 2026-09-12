@@ -16,6 +16,7 @@ pub mod canopy_geom {
     //! extent. Signed-to-unsigned conversions clamp to `0..=u32::MAX`.
 
     /// Geometry error type.
+    #[derive(Clone, Debug, Display, Eq, Error, PartialEq)]
     pub enum Error {
         #[error("point ({x}, {y}) is outside the destination coordinate range")]
         /// A point cannot be represented in the destination coordinate type.
@@ -59,6 +60,7 @@ pub mod canopy_geom {
     /// This struct represents the decomposition of a rectangle into its border
     /// regions: top, bottom, left, right, and corner rectangles. It's useful for
     /// drawing box borders or frame decorations.
+    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
     pub struct FrameRects {
         /// The top of the frame, not including corners
         pub top: super::Rect,
@@ -81,6 +83,7 @@ pub mod canopy_geom {
     }
 
     /// A horizontal line, one character high - essentially a Rect with height 1.
+    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
     pub struct Line {
         /// Top-left point for the line.
         pub tl: super::Point,
@@ -89,6 +92,7 @@ pub mod canopy_geom {
     }
 
     /// A half-open, directionless one-dimensional line segment.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
     pub struct LineSegment {
         /// The offset of this extent.
         pub off: u32,
@@ -97,6 +101,7 @@ pub mod canopy_geom {
     }
 
     /// A 2D point in integer cell coordinates.
+    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
     pub struct Point {
         /// X coordinate.
         pub x: u32,
@@ -105,6 +110,7 @@ pub mod canopy_geom {
     }
 
     /// A signed 2D point in integer cell coordinates.
+    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
     pub struct PointI32 {
         /// X coordinate.
         pub x: i32,
@@ -113,6 +119,7 @@ pub mod canopy_geom {
     }
 
     /// A half-open rectangle with an unsigned origin and size.
+    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
     pub struct Rect {
         /// Top-left corner
         pub tl: super::Point,
@@ -123,6 +130,7 @@ pub mod canopy_geom {
     }
 
     /// A half-open rectangle with a signed origin and unsigned size.
+    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
     pub struct RectI32 {
         /// Top-left corner.
         pub tl: super::PointI32,
@@ -136,49 +144,12 @@ pub mod canopy_geom {
     pub type Result<T> = std::result::Result<T, Error>;
 
     /// Size with width and height.
+    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
     pub struct Size {
         /// Width component.
         pub w: u32,
         /// Height component.
         pub h: u32,
-    }
-
-    impl Clone for Error {
-        fn clone(&self) -> Error {}
-    }
-
-    impl Debug for Error {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Display for Error {
-        fn fmt(&self, __formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {}
-    }
-
-    impl Eq for Error {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl PartialEq for Error {
-        fn eq(&self, other: &Error) -> bool {}
-    }
-
-    impl Clone for FrameRects {
-        fn clone(&self) -> FrameRects {}
-    }
-
-    impl Debug for FrameRects {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Default for FrameRects {
-        fn default() -> FrameRects {}
-    }
-
-    impl Eq for FrameRects {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
     }
 
     impl FrameRects {
@@ -187,105 +158,8 @@ pub mod canopy_geom {
         pub fn new(rect: Rect, border: u32) -> Self {}
     }
 
-    impl Hash for FrameRects {
-        fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-    }
-
-    impl PartialEq for FrameRects {
-        fn eq(&self, other: &FrameRects) -> bool {}
-    }
-
-    impl Clone for Line {
-        fn clone(&self) -> Line {}
-    }
-
-    impl Debug for Line {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Default for Line {
-        fn default() -> Line {}
-    }
-
-    impl Eq for Line {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl Hash for Line {
-        fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-    }
-
-    impl Line {
-        /// Construct a line from coordinates and width.
-        pub fn new(x: u32, y: u32, w: u32) -> Self {}
-
-        /// Convert the line into a rectangle of height 1.
-        pub fn rect(&self) -> Rect {}
-    }
-
-    impl PartialEq for Line {
-        fn eq(&self, other: &Line) -> bool {}
-    }
-
-    impl Clone for LineSegment {
-        fn clone(&self) -> LineSegment {}
-    }
-
-    impl Debug for LineSegment {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Eq for LineSegment {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl Hash for LineSegment {
-        fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-    }
-
-    impl LineSegment {
-        /// Does other lie completely within this extent.
-        pub fn contains(&self, other: Self) -> bool {}
-
-        /// Split this extent into (pre, active, post) extents, based on the
-        /// position of a window within a view. The main use for this function is
-        /// computation of the active indicator size and position in a scrollbar.
-        pub fn split_active(&self, window: Self, view: Self) -> Result<(Self, Self, Self)> {}
-    }
-
-    impl PartialEq for LineSegment {
-        fn eq(&self, other: &LineSegment) -> bool {}
-    }
-
-    impl Clone for Point {
-        fn clone(&self) -> Point {}
-    }
-
-    impl Debug for Point {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Default for Point {
-        fn default() -> Point {}
-    }
-
-    impl Eq for Point {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
     impl From<(u32, u32)> for Point {
         fn from(v: (u32, u32)) -> Self {}
-    }
-
-    impl Hash for Point {
-        fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-    }
-
-    impl PartialEq for Point {
-        fn eq(&self, other: &Point) -> bool {}
     }
 
     impl Point {
@@ -310,29 +184,38 @@ pub mod canopy_geom {
         type Error = Error;
     }
 
-    impl Clone for PointI32 {
-        fn clone(&self) -> PointI32 {}
+    impl From<(u32, u32)> for Size {
+        fn from(v: (u32, u32)) -> Self {}
     }
 
-    impl Debug for PointI32 {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
+    impl Size {
+        /// Create a new size with the given width and height.
+        pub const fn new(w: u32, h: u32) -> Self {}
+
+        /// Return a `Rect` with the same dimensions as the `Size`, but a location
+        /// at (0, 0).
+        pub fn rect(&self) -> Rect {}
+
+        /// Zero size.
+        pub const ZERO: Self = _;
     }
 
-    impl Default for PointI32 {
-        fn default() -> PointI32 {}
+    impl Line {
+        /// Construct a line from coordinates and width.
+        pub fn new(x: u32, y: u32, w: u32) -> Self {}
+
+        /// Convert the line into a rectangle of height 1.
+        pub fn rect(&self) -> Rect {}
     }
 
-    impl Eq for PointI32 {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
+    impl LineSegment {
+        /// Does other lie completely within this extent.
+        pub fn contains(&self, other: Self) -> bool {}
 
-    impl Hash for PointI32 {
-        fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-    }
-
-    impl PartialEq for PointI32 {
-        fn eq(&self, other: &PointI32) -> bool {}
+        /// Split this extent into (pre, active, post) extents, based on the
+        /// position of a window within a view. The main use for this function is
+        /// computation of the active indicator size and position in a scrollbar.
+        pub fn split_active(&self, window: Self, view: Self) -> Result<(Self, Self, Self)> {}
     }
 
     impl PointI32 {
@@ -353,31 +236,6 @@ pub mod canopy_geom {
         fn try_from(point: PointI32) -> Result<Self, Self::Error> {}
 
         type Error = Error;
-    }
-
-    impl Clone for Rect {
-        fn clone(&self) -> Rect {}
-    }
-
-    impl Debug for Rect {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Default for Rect {
-        fn default() -> Rect {}
-    }
-
-    impl Eq for Rect {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl Hash for Rect {
-        fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-    }
-
-    impl PartialEq for Rect {
-        fn eq(&self, other: &Rect) -> bool {}
     }
 
     impl Rect {
@@ -425,31 +283,6 @@ pub mod canopy_geom {
         pub fn vextent(&self) -> LineSegment {}
     }
 
-    impl Clone for RectI32 {
-        fn clone(&self) -> RectI32 {}
-    }
-
-    impl Debug for RectI32 {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Default for RectI32 {
-        fn default() -> RectI32 {}
-    }
-
-    impl Eq for RectI32 {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl Hash for RectI32 {
-        fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-    }
-
-    impl PartialEq for RectI32 {
-        fn eq(&self, other: &RectI32) -> bool {}
-    }
-
     impl RectI32 {
         /// Bottom edge of the rect.
         pub fn bottom(&self) -> i64 {}
@@ -491,46 +324,5 @@ pub mod canopy_geom {
 
         /// Top edge of the rect.
         pub fn top(&self) -> i64 {}
-    }
-
-    impl Clone for Size {
-        fn clone(&self) -> Size {}
-    }
-
-    impl Debug for Size {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {}
-    }
-
-    impl Default for Size {
-        fn default() -> Size {}
-    }
-
-    impl Eq for Size {
-        #[doc(hidden)]
-        fn assert_fields_are_eq(&self) {}
-    }
-
-    impl From<(u32, u32)> for Size {
-        fn from(v: (u32, u32)) -> Self {}
-    }
-
-    impl Hash for Size {
-        fn hash<__H: hash::Hasher>(&self, state: &mut __H) {}
-    }
-
-    impl PartialEq for Size {
-        fn eq(&self, other: &Size) -> bool {}
-    }
-
-    impl Size {
-        /// Create a new size with the given width and height.
-        pub const fn new(w: u32, h: u32) -> Self {}
-
-        /// Return a `Rect` with the same dimensions as the `Size`, but a location
-        /// at (0, 0).
-        pub fn rect(&self) -> Rect {}
-
-        /// Zero size.
-        pub const ZERO: Self = _;
     }
 }
