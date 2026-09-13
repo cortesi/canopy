@@ -626,11 +626,9 @@ fn parse_bind_options<'s>(
         }
     };
     let phase = match field("phase")?.as_deref() {
-        None => None,
-        Some(label) => Some(
-            inputmap::BindingPhase::parse(label)
-                .ok_or_else(|| RuntimeError::runtime(format!("unknown binding phase: {label}")))?,
-        ),
+        None => inputmap::BindingPhase::default(),
+        Some(label) => inputmap::BindingPhase::parse(label)
+            .ok_or_else(|| RuntimeError::runtime(format!("unknown binding phase: {label}")))?,
     };
     Ok(inputmap::BindingOptions {
         scope: binding_scope,

@@ -5,7 +5,7 @@ mod tests {
     use std::{fs, path::Path};
 
     use canopy::{
-        BindingOptions, BindingScope, Canopy, CommandArg, Context, ContextExt, EventOutcome,
+        BindingOptions, BindingPhase, BindingScope, Canopy, CommandArg, Context, ContextExt, EventOutcome,
         FrameworkBindingGroup, Loader, NodeId, Render, ViewContext, Widget,
         commands::ArgValue,
         derive_commands,
@@ -276,7 +276,7 @@ mod tests {
                 scope: BindingScope::Exclusive(group),
                 description: "Framework action".to_string(),
                 source: None,
-                phase: None,
+                phase: BindingPhase::AfterWidget,
             },
             ApiLeaf::call_get(),
         )?;

@@ -12,7 +12,7 @@ pub mod hello {
     pub struct Hello {}
 
     /// Default keymap copied to a user's configuration directory on first use.
-    pub const DEFAULT_BINDINGS: &str = "root.default_bindings()\n\ncanopy.bind_command(\"?\", {\n    phase = \"before_widget\",\n    description = \"Show key bindings\",\n    path = \"/root/**/\",\n    tier = \"global\",\n}, \"root::toggle_help\")\n\ncanopy.bind_command(\"+\", {\n    phase = \"after_widget\",\n    description = \"Count up\",\n}, \"hello::bump\", 1)\n\ncanopy.bind_command(\"-\", {\n    phase = \"after_widget\",\n    description = \"Count down\",\n}, \"hello::bump\", -1)\n";
+    pub const DEFAULT_BINDINGS: &str = "root.default_bindings()\n\ncanopy.bind_command(\"?\", {\n    phase = \"before_widget\",\n    description = \"Show key bindings\",\n    path = \"/root/**/\",\n    tier = \"global\",\n}, \"root::toggle_help\")\n\ncanopy.bind_command(\"+\", {\n    description = \"Count up\",\n}, \"hello::bump\", 1)\n\ncanopy.bind_command(\"-\", {\n    description = \"Count down\",\n}, \"hello::bump\", -1)\n";
 
     /// Startup module that loads the editable user keymap.
     pub const DEFAULT_INIT: &str = r#"local bindings = require("./bindings")

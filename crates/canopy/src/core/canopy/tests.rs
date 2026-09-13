@@ -497,7 +497,10 @@ fn tbindings() -> Result<()> {
         c.core.set_focus(tree.a_a)?;
         c.key(None, 'x')?;
         let s = get_state();
-        assert_eq!(s.path, vec!["ba_la@key->ignore", "r.c_root()"]);
+        assert_eq!(
+            s.path,
+            vec!["ba_la@key->ignore", "ba@key->ignore", "r.c_root()"]
+        );
 
         reset_state();
         c.core.set_focus(tree.root)?;
@@ -522,7 +525,7 @@ fn framework_command_bindings_share_route_resolution_and_command_scope() -> Resu
                 scope: inputmap::BindingScope::Exclusive(group),
                 description: "Framework root command".to_string(),
                 source: None,
-                phase: None,
+                phase: inputmap::BindingPhase::BeforeWidget,
             },
             R::call_c_root(),
         )?;
@@ -554,7 +557,7 @@ fn explicit_binding_phases_override_the_same_selector_and_change_route_trace() -
         c.core.set_focus(tree.a_a)?;
         for phase in [
             inputmap::BindingPhase::BeforeWidget,
-            inputmap::BindingPhase::AfterIgnore,
+            inputmap::BindingPhase::AfterWidget,
         ] {
             c.bind_command(
                 'h',
@@ -563,7 +566,7 @@ fn explicit_binding_phases_override_the_same_selector_and_change_route_trace() -
                     scope: inputmap::BindingScope::Default,
                     description: "Root action".into(),
                     source: None,
-                    phase: Some(phase),
+                    phase,
                 },
                 R::call_c_root(),
             )?;
@@ -574,7 +577,6 @@ fn explicit_binding_phases_override_the_same_selector_and_change_route_trace() -
                 .find(|binding| binding.key == 'h')
                 .unwrap();
             assert_eq!(binding.phase, phase);
-            assert_eq!(binding.declared_phase, Some(phase));
             assert_eq!(binding.path_filter, "/r/**/");
             reset_state();
             c.key(None, 'h')?;

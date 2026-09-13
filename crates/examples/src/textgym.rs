@@ -122,7 +122,7 @@ impl Loader for TextGym {}
 
 /// Default bindings for the text gym demo.
 const DEFAULT_BINDINGS: &str = r#"
-canopy.bind_command("q", { phase = "after_widget", path = "root", description = "Quit" }, "root::quit")
+canopy.bind_command("q", { path = "root", description = "Quit" }, "root::quit")
 "#;
 
 /// Queue this demo's bindings and native configuration in their builder phases.

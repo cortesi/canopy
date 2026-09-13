@@ -105,8 +105,8 @@ pub struct BindingOptions {
     pub description: String,
     /// Optional diagnostic source.
     pub source: Option<String>,
-    /// Explicit routing phase, or the legacy selector-derived phase.
-    pub phase: Option<BindingPhase>,
+    /// Phase that sets when the binding runs relative to the widget.
+    pub phase: BindingPhase,
 }
 
 /// Action executed by a binding.
@@ -143,8 +143,8 @@ pub struct BindingRecord {
     pub description: String,
     /// Optional diagnostic source.
     pub source: Option<String>,
-    /// Explicit phase override, if supplied at registration.
-    pub phase: Option<BindingPhase>,
+    /// Phase that sets when the binding runs relative to the widget.
+    pub phase: BindingPhase,
     /// Binding target.
     pub target: BindingTarget,
     /// Monotonic insertion order.
@@ -161,12 +161,13 @@ impl BindingRecord {
 }
 
 /// Binding phase relative to widget input handling.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum BindingPhase {
     /// Execute before the focused widget.
     BeforeWidget,
     /// Execute only after the widget ignores the input.
-    AfterIgnore,
+    #[default]
+    AfterWidget,
 }
 
 impl BindingPhase {
@@ -174,7 +175,7 @@ impl BindingPhase {
     pub fn label(&self) -> &'static str {
         match self {
             Self::BeforeWidget => "before_widget",
-            Self::AfterIgnore => "after_widget",
+            Self::AfterWidget => "after_widget",
         }
     }
 
@@ -182,7 +183,7 @@ impl BindingPhase {
     pub fn parse(value: &str) -> Option<Self> {
         match value {
             "before_widget" => Some(Self::BeforeWidget),
-            "after_widget" => Some(Self::AfterIgnore),
+            "after_widget" => Some(Self::AfterWidget),
             _ => None,
         }
     }
@@ -474,7 +475,7 @@ impl InputMap {
         Some(ResolvedBinding {
             id: winner.0.id,
             target: winner.0.target.clone(),
-            phase: winner.0.phase.unwrap_or_else(|| binding_phase(winner.1)),
+            phase: winner.0.phase,
             description: winner.0.description.clone(),
         })
     }
@@ -711,18 +712,9 @@ fn compare_candidates(
         .then_with(|| left.0.insertion_id.cmp(&right.0.insertion_id))
 }
 
-/// Classify one path match for routing and help presentation.
-fn binding_phase(path_match: PathMatch) -> BindingPhase {
-    if path_match.anchored_end {
-        BindingPhase::BeforeWidget
-    } else {
-        BindingPhase::AfterIgnore
-    }
-}
-
 /// Reject pre-widget mouse bindings, which the mouse route cannot execute.
-fn validate_phase(input: InputSpec, phase: Option<BindingPhase>) -> Result<()> {
-    if matches!(input, InputSpec::Mouse(_)) && phase == Some(BindingPhase::BeforeWidget) {
+fn validate_phase(input: InputSpec, phase: BindingPhase) -> Result<()> {
+    if matches!(input, InputSpec::Mouse(_)) && phase == BindingPhase::BeforeWidget {
         return Err(Error::InvalidOperation(
             "mouse bindings cannot use the before_widget phase".to_string(),
         ));

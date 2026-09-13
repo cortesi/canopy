@@ -166,7 +166,7 @@ pub(super) fn register_framework_declarations(builder: &mut module::Builder) {
                 "phase",
                 declaration::Type::literals(["before_widget", "after_widget"]).optional(),
             )
-            .doc("Explicit key dispatch phase. Mouse bindings accept only after_widget."),
+            .doc("Key dispatch phase. The default is after_widget. Mouse bindings accept only after_widget."),
             declaration::Field::new("tier", declaration::Type::literals(["global"]).optional())
                 .doc("Use the global tier. A global binding cannot name a mode."),
         ]),
@@ -220,8 +220,9 @@ fn register_binding_info(builder: &mut module::Builder) {
                 .doc("Path filter string used when matching the focused path."),
             declaration::Field::new(
                 "phase",
-                declaration::Type::literals(["before_widget", "after_widget"]).optional(),
-            ),
+                declaration::Type::literals(["before_widget", "after_widget"]),
+            )
+            .doc("Phase relative to widget input handling."),
             declaration::Field::new("command", declaration::Type::String.optional()),
             declaration::Field::new("arguments", declaration::Type::Any.optional()),
             declaration::Field::new(
@@ -318,10 +319,6 @@ fn register_observation_info(builder: &mut module::Builder) {
             declaration::Field::new("id", declaration::Type::Number)
                 .doc("Stable numeric binding identifier."),
             declaration::Field::new("input", declaration::Type::String).doc("Normalized key spec."),
-            declaration::Field::new(
-                "declared_phase",
-                declaration::Type::literals(["before_widget", "after_widget"]).optional(),
-            ),
             declaration::Field::new(
                 "command",
                 declaration::Type::table({

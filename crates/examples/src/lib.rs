@@ -113,12 +113,12 @@ const TEXT_SCROLL_BINDINGS: &str = r#"
 canopy.bind_command("g", { phase = "{phase}", path = "{path}", description = "Top" }, "{receiver}::scroll_to", 0, 0)
 canopy.bind_command("j", { phase = "{phase}", path = "{path}", description = "Scroll down" }, "{receiver}::scroll", "Down")
 canopy.bind_command("Down", { phase = "{phase}", path = "{path}", description = "Scroll down" }, "{receiver}::scroll", "Down")
-canopy.bind_mouse("ScrollDown", { phase = "after_widget", path = "{path}", description = "Scroll down" }, function()
+canopy.bind_mouse("ScrollDown", { path = "{path}", description = "Scroll down" }, function()
     {receiver}.scroll("Down")
 end)
 canopy.bind_command("k", { phase = "{phase}", path = "{path}", description = "Scroll up" }, "{receiver}::scroll", "Up")
 canopy.bind_command("Up", { phase = "{phase}", path = "{path}", description = "Scroll up" }, "{receiver}::scroll", "Up")
-canopy.bind_mouse("ScrollUp", { phase = "after_widget", path = "{path}", description = "Scroll up" }, function()
+canopy.bind_mouse("ScrollUp", { path = "{path}", description = "Scroll up" }, function()
     {receiver}.scroll("Up")
 end)
 canopy.bind_command("h", { phase = "{phase}", path = "{path}", description = "Scroll left" }, "{receiver}::scroll", "Left")
@@ -128,7 +128,7 @@ canopy.bind_command("Right", { phase = "{phase}", path = "{path}", description =
 canopy.bind_command("PageDown", { phase = "{phase}", path = "{path}", description = "Page down" }, "{receiver}::page", 1)
 canopy.bind_command("Space", { phase = "{phase}", path = "{path}", description = "Page down" }, "{receiver}::page", 1)
 canopy.bind_command("PageUp", { phase = "{phase}", path = "{path}", description = "Page up" }, "{receiver}::page", -1)
-canopy.bind_command("q", { phase = "after_widget", path = "root", description = "Quit" }, "root::quit")
+canopy.bind_command("q", { path = "root", description = "Quit" }, "root::quit")
 "#;
 
 /// Render the shared scroll bindings for one receiver and binding path.

@@ -149,8 +149,8 @@ Button, List, or native binding stores the action.
 
 Set `phase = "before_widget"` to run before widget input, or `phase =
 "after_widget"` to run after the widget ignores input. Mouse bindings accept
-only `after_widget`. Omitted phases retain the legacy path-match rule. Explicit
-phases do not change scope, specificity, or insertion ordering.
+only `after_widget`. The default phase is `after_widget`. Explicit phases do
+not change scope, specificity, or insertion ordering.
 
 The registry keeps one flat record format for application and framework
 bindings. `canopy.bindings()` returns all records, including normalized input,

@@ -10,17 +10,17 @@ use crate::frame;
 
 /// Default inspector bindings exposed through `inspector.default_bindings()`.
 const DEFAULT_BINDINGS: &str = r#"
-canopy.bind_command("C", { phase = "after_widget", path = "logs", description = "Clear log entry" }, "logs::clear")
-canopy.bind_command("d", { phase = "after_widget", path = "logs", description = "Delete selected log entry" }, "logs::delete_selected")
-canopy.bind_command("j", { phase = "after_widget", path = "logs", description = "Next log entry" }, "logs::select_by", 1)
-canopy.bind_command("k", { phase = "after_widget", path = "logs", description = "Previous log entry" }, "logs::select_by", -1)
-canopy.bind_command("g", { phase = "after_widget", path = "logs", description = "First log entry" }, "logs::select_first")
-canopy.bind_command("G", { phase = "after_widget", path = "logs", description = "Last log entry" }, "logs::select_last")
-canopy.bind_command("Space", { phase = "after_widget", path = "logs", description = "Page down" }, "logs::page", 1)
-canopy.bind_command("PageDown", { phase = "after_widget", path = "logs", description = "Page down" }, "logs::page", 1)
-canopy.bind_command("PageUp", { phase = "after_widget", path = "logs", description = "Page up" }, "logs::page", -1)
-canopy.bind_command("Down", { phase = "after_widget", path = "logs", description = "Next log entry" }, "logs::select_by", 1)
-canopy.bind_command("Up", { phase = "after_widget", path = "logs", description = "Previous log entry" }, "logs::select_by", -1)
+canopy.bind_command("C", { path = "logs", description = "Clear log entry" }, "logs::clear")
+canopy.bind_command("d", { path = "logs", description = "Delete selected log entry" }, "logs::delete_selected")
+canopy.bind_command("j", { path = "logs", description = "Next log entry" }, "logs::select_by", 1)
+canopy.bind_command("k", { path = "logs", description = "Previous log entry" }, "logs::select_by", -1)
+canopy.bind_command("g", { path = "logs", description = "First log entry" }, "logs::select_first")
+canopy.bind_command("G", { path = "logs", description = "Last log entry" }, "logs::select_last")
+canopy.bind_command("Space", { path = "logs", description = "Page down" }, "logs::page", 1)
+canopy.bind_command("PageDown", { path = "logs", description = "Page down" }, "logs::page", 1)
+canopy.bind_command("PageUp", { path = "logs", description = "Page up" }, "logs::page", -1)
+canopy.bind_command("Down", { path = "logs", description = "Next log entry" }, "logs::select_by", 1)
+canopy.bind_command("Up", { path = "logs", description = "Previous log entry" }, "logs::select_by", -1)
 "#;
 
 /// Inspector overlay widget.

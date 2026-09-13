@@ -280,10 +280,10 @@ commands. Framework targets dispatch commands.
 The resolver checks the framework binding group admitted by the top modal scope
 first. Without one, it checks the global scope, active modes from newest to
 oldest, and then the default scope. Path specificity and insertion order select
-a winner within one scope. An explicit binding phase chooses dispatch before
-widget input or after the widget ignores it. Omitted phases retain the
-path-derived rule: a match that consumes the route terminus runs before the
-widget. Mouse bindings run after ignored widget input.
+a winner within one scope. The binding phase chooses dispatch before widget
+input or after the widget ignores it. The default phase is `after_widget`, and
+the path filter has no effect on the phase. Mouse bindings run after ignored
+widget input.
 
 Key routing and `available_bindings` call the same resolver at each node in the
 focus-to-root route. Availability returns an owned snapshot with one effective

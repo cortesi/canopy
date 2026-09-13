@@ -2,7 +2,7 @@ use canopy::CanopyBuilder;
 
 /// Default bindings for the image viewer demo.
 const DEFAULT_BINDINGS: &str = r#"
-canopy.bind_command("q", { phase = "after_widget", description = "Quit" }, "root::quit")
+canopy.bind_command("q", { description = "Quit" }, "root::quit")
 canopy.bind_command("i", { phase = "before_widget", path = "image_view/", description = "Zoom in" }, "image_view::zoom", "In")
 canopy.bind_command("o", { phase = "before_widget", path = "image_view/", description = "Zoom out" }, "image_view::zoom", "Out")
 canopy.bind_command("h", { phase = "before_widget", path = "image_view/", description = "Pan left" }, "image_view::pan", "Left")

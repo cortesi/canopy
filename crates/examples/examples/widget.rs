@@ -279,7 +279,7 @@ fn load_font_sources(path: &Path) -> Result<Vec<FontSource>> {
 
 /// Terminal controls evaluated after API registration and before assembly.
 const TERM_BINDINGS: &str = r#"
-canopy.bind("ctrl-Tab", { path = "term_demo/**/", description = "Next tab" }, function()
+canopy.bind("ctrl-Tab", { path = "term_demo/**/", phase = "before_widget", description = "Next tab" }, function()
     term_demo.next_tab()
 end)
 "#;

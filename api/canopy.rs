@@ -1252,8 +1252,6 @@ pub mod canopy {
             pub route_path: crate::path::Path,
             /// Phase relative to widget input handling.
             pub phase: crate::core::inputmap::BindingPhase,
-            /// Explicit registration phase, absent for legacy selector-derived phases.
-            pub declared_phase: Option<crate::core::inputmap::BindingPhase>,
             /// Declarative command details, absent for opaque script callbacks.
             pub command: Option<BindingCommand>,
             /// Optional diagnostic source.
@@ -2544,8 +2542,8 @@ pub mod canopy {
         pub description: String,
         /// Optional diagnostic source.
         pub source: Option<String>,
-        /// Explicit routing phase, or the legacy selector-derived phase.
-        pub phase: Option<BindingPhase>,
+        /// Phase that sets when the binding runs relative to the widget.
+        pub phase: BindingPhase,
     }
 
     /// Owner of one binding record.
@@ -2558,12 +2556,13 @@ pub mod canopy {
     }
 
     /// Binding phase relative to widget input handling.
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
     pub enum BindingPhase {
         /// Execute before the focused widget.
         BeforeWidget,
+        #[default]
         /// Execute only after the widget ignores the input.
-        AfterIgnore,
+        AfterWidget,
     }
 
     /// Resolution scope for one binding.

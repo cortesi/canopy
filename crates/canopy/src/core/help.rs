@@ -51,8 +51,6 @@ pub struct AvailableBinding {
     pub route_path: Path,
     /// Phase relative to widget input handling.
     pub phase: BindingPhase,
-    /// Explicit registration phase, absent for legacy selector-derived phases.
-    pub declared_phase: Option<BindingPhase>,
     /// Declarative command details, absent for opaque script callbacks.
     pub command: Option<BindingCommand>,
     /// Optional diagnostic source.
@@ -132,7 +130,6 @@ impl Core {
                     path_filter: record.path_filter().to_string(),
                     route_path: route_path.clone(),
                     phase: resolved.phase,
-                    declared_phase: record.phase,
                     command,
                     source: record.source.clone(),
                 });
@@ -192,7 +189,7 @@ mod tests {
                 path: Some(path.parse()?),
                 description: description.into(),
                 source: Some("test".to_string()),
-                phase: None,
+                phase: BindingPhase::AfterWidget,
             },
             BindingTarget::Script(LuauFunctionId::for_test(target)),
         )?;
@@ -235,7 +232,7 @@ mod tests {
             .iter()
             .find(|binding| binding.key == 'a')
             .expect("fallback binding");
-        assert_eq!(fallback.phase, BindingPhase::AfterIgnore);
+        assert_eq!(fallback.phase, BindingPhase::AfterWidget);
         let global = snapshot
             .bindings
             .iter()
@@ -293,14 +290,13 @@ mod tests {
                 scope: BindingScope::Default,
                 description: "Update selection".into(),
                 source: None,
-                phase: Some(BindingPhase::AfterIgnore),
+                phase: BindingPhase::AfterWidget,
             },
             BindingTarget::Command(action.clone()),
         )?;
         let snapshot = core.available_bindings(Some(leaf))?;
         let binding = &snapshot.bindings[0];
-        assert_eq!(binding.phase, BindingPhase::AfterIgnore);
-        assert_eq!(binding.declared_phase, Some(BindingPhase::AfterIgnore));
+        assert_eq!(binding.phase, BindingPhase::AfterWidget);
         let command = binding.command.as_ref().expect("command details");
         assert_eq!(command.action, action);
         assert_eq!(
@@ -358,7 +354,7 @@ mod tests {
                 scope: BindingScope::Exclusive(group),
                 description: "Scroll down".to_string(),
                 source: None,
-                phase: None,
+                phase: BindingPhase::AfterWidget,
             },
             CommandAction {
                 invocation: CommandInvocation {

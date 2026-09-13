@@ -15,7 +15,7 @@ use crate::inspector::Inspector;
 
 /// Default root bindings exposed through `root.default_bindings()`.
 const DEFAULT_BINDINGS: &str = r#"
-canopy.bind_command("q", { phase = "after_widget", path = "root", description = "Quit" }, "root::quit")
+canopy.bind_command("q", { path = "root", description = "Quit" }, "root::quit")
 "#;
 
 /// Additional root bindings installed with developer tools.
@@ -23,8 +23,8 @@ canopy.bind_command("q", { phase = "after_widget", path = "root", description = 
 const DEVTOOLS_BINDINGS: &str = r#"
 inspector.default_bindings()
 
-canopy.bind_command("ctrl-Right", { phase = "after_widget", path = "root", description = "Toggle inspector" }, "root::toggle_inspector")
-canopy.bind_command("a", { phase = "after_widget", path = "inspector", description = "Focus app" }, "root::focus_app")
+canopy.bind_command("ctrl-Right", { path = "root", description = "Toggle inspector" }, "root::toggle_inspector")
+canopy.bind_command("a", { path = "inspector", description = "Focus app" }, "root::focus_app")
 "#;
 
 /// Framework binding group used while contextual help is open.
@@ -364,7 +364,7 @@ fn register_help_bindings(canopy: &mut Canopy) -> Result<()> {
                 scope: canopy::BindingScope::Exclusive(HELP_BINDINGS),
                 description: description.to_string(),
                 source: None,
-                phase: Some(canopy::BindingPhase::BeforeWidget),
+                phase: canopy::BindingPhase::BeforeWidget,
             },
             command,
         )?;
@@ -658,7 +658,7 @@ mod tests {
             local keys: {string} = { "b", "c", "d", "e", "f", "g", "h", "i", "j", "k",
                 "l", "m", "n", "o", "p", "r", "s", "t", "u", "v", "w", "x", "y", "z" }
             for _, key: string in keys do
-                canopy.bind(key, { phase = "after_widget", description = "Extra binding" }, function() end)
+                canopy.bind(key, { description = "Extra binding" }, function() end)
             end
             "#,
         )?;
@@ -703,13 +703,13 @@ mod tests {
         install_help_trigger(&mut canopy)?;
         canopy.eval_script(
             r#"
-            canopy.bind("x", { phase = "after_widget", description = "Leak sentinel" }, function()
+            canopy.bind("x", { description = "Leak sentinel" }, function()
                 canopy.set_mode("leaked")
             end)
             local keys: {string} = { "b", "c", "d", "e", "f", "g", "h", "i", "j", "k",
                 "l", "m", "n", "o", "p", "r", "s", "t", "u", "v", "w", "y", "z" }
             for _, key: string in keys do
-                canopy.bind(key, { phase = "after_widget", description = "Extra binding" }, function() end)
+                canopy.bind(key, { description = "Extra binding" }, function() end)
             end
             "#,
         )?;
@@ -836,7 +836,7 @@ mod tests {
         let first = modal_snapshot(&mut canopy)?;
         send_key(&mut canopy, "?")?;
         canopy
-            .eval_script(r#"canopy.bind("z", { phase = "after_widget", description = "Added later" }, function() end)"#)?;
+            .eval_script(r#"canopy.bind("z", { description = "Added later" }, function() end)"#)?;
 
         send_key(&mut canopy, "?")?;
         let second = modal_snapshot(&mut canopy)?;

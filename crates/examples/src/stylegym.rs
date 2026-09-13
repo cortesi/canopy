@@ -35,7 +35,7 @@ end)
 canopy.bind_command("Space", { phase = "before_widget", path = "dropdown", description = "Toggle dropdown" }, "dropdown::toggle")
 canopy.bind_command("Down", { phase = "before_widget", path = "dropdown", description = "Next option" }, "dropdown::select_by", 1)
 canopy.bind_command("Up", { phase = "before_widget", path = "dropdown", description = "Previous option" }, "dropdown::select_by", -1)
-canopy.bind_mouse("LeftDown", { phase = "after_widget", path = "dropdown", description = "Apply theme" }, function()
+canopy.bind_mouse("LeftDown", { path = "dropdown", description = "Apply theme" }, function()
     stylegym.apply_theme()
 end)
 
@@ -49,7 +49,7 @@ canopy.bind("Enter", { phase = "before_widget", path = "selector", description =
 end)
 canopy.bind_command("Down", { phase = "before_widget", path = "selector", description = "Next effect" }, "selector::select_by", 1)
 canopy.bind_command("Up", { phase = "before_widget", path = "selector", description = "Previous effect" }, "selector::select_by", -1)
-canopy.bind_mouse("LeftDown", { phase = "after_widget", path = "selector", description = "Apply effects" }, function()
+canopy.bind_mouse("LeftDown", { path = "selector", description = "Apply effects" }, function()
     stylegym.apply_effects()
 end)
 "#;

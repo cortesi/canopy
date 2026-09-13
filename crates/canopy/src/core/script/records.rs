@@ -284,12 +284,10 @@ pub(super) fn binding_info_to_arg(binding: &inputmap::BindingRecord) -> ArgValue
             ArgValue::String(binding.target.label().to_string()),
         ),
     ]);
-    if let Some(phase) = binding.phase {
-        record.insert(
-            "phase".to_string(),
-            ArgValue::String(phase.label().to_string()),
-        );
-    }
+    record.insert(
+        "phase".to_string(),
+        ArgValue::String(binding.phase.label().to_string()),
+    );
     if let inputmap::BindingTarget::Command(action) = &binding.target {
         insert_command_action(&mut record, action);
     }
@@ -626,12 +624,6 @@ pub(super) fn available_bindings_to_arg(
                     ArgValue::String(binding.phase.label().to_string()),
                 ),
             ]);
-            if let Some(phase) = binding.declared_phase {
-                record.insert(
-                    "declared_phase".to_string(),
-                    ArgValue::String(phase.label().to_string()),
-                );
-            }
             if let Some(command) = binding.command {
                 let mut detail = BTreeMap::new();
                 insert_command_action(&mut detail, &command.action);

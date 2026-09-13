@@ -27,7 +27,6 @@ fn binding(
         path_filter: String::new(),
         route_path: Path::from("/root/editor"),
         phase,
-        declared_phase: Some(phase),
         command: None,
         source: Some("test".to_string()),
     }
@@ -99,7 +98,7 @@ fn rows_sort_by_key_category_without_routing_details() {
         binding(3, '2', "Digit", BindingPhase::BeforeWidget),
         binding(4, 'B', "Upper", BindingPhase::BeforeWidget),
         binding(5, 'a', "Lower", BindingPhase::BeforeWidget),
-        binding(6, 'z', "Fallback", BindingPhase::AfterIgnore),
+        binding(6, 'z', "Fallback", BindingPhase::AfterWidget),
     ]);
     let lines = list.display_lines(60);
     let keys = lines
@@ -132,7 +131,7 @@ fn normal_and_empty_buffers_are_stable() -> Result<()> {
         5,
         vec![
             binding(1, 'a', "Alpha", BindingPhase::BeforeWidget),
-            binding(2, 'b', "Beta", BindingPhase::AfterIgnore),
+            binding(2, 'b', "Beta", BindingPhase::AfterWidget),
         ],
     )?;
     normal.tbuf().assert_matches(buf![
