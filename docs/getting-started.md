@@ -439,10 +439,10 @@ canopy.bind("?", {
     description = "Show key bindings",
 }, command.root.toggle_help())
 
-canopy.keymap {
+canopy.keymap({
     { key = "+", description = "Count up", action = command.hello.bump(1) },
     { key = "-", description = "Count down", action = command.hello.bump(-1) },
-}
+})
 ```
 
 The root needs an `init.luau` that defines `setup`. Keep the top level to

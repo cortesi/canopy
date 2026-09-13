@@ -20,7 +20,7 @@ use canopy_widgets::{Center, Dropdown, Frame, Label, Root, Selector};
 const DEFAULT_BINDINGS: &str = r#"
 root.default_bindings()
 
-canopy.keymap {
+canopy.keymap({
     path = "stylegym/",
     phase = "before_widget",
     { key = "q", description = "Quit", action = command.root.quit() },
@@ -32,9 +32,9 @@ canopy.keymap {
     },
     { key = "m", description = "Show modal", action = command.stylegym.show_modal() },
     { key = "Esc", description = "Hide modal", action = command.stylegym.hide_modal() },
-}
+})
 
-canopy.keymap {
+canopy.keymap({
     path = "dropdown",
     phase = "before_widget",
     {
@@ -48,12 +48,12 @@ canopy.keymap {
     { key = "Space", description = "Toggle dropdown", action = command.dropdown.toggle() },
     { key = "Down", description = "Next option", action = command.dropdown.select_by(1) },
     { key = "Up", description = "Previous option", action = command.dropdown.select_by(-1) },
-}
+})
 canopy.bind_mouse("LeftDown", { path = "dropdown", description = "Apply theme" }, function()
     stylegym.apply_theme()
 end)
 
-canopy.keymap {
+canopy.keymap({
     path = "selector",
     phase = "before_widget",
     {
@@ -74,7 +74,7 @@ canopy.keymap {
     },
     { key = "Down", description = "Next effect", action = command.selector.select_by(1) },
     { key = "Up", description = "Previous effect", action = command.selector.select_by(-1) },
-}
+})
 canopy.bind_mouse("LeftDown", { path = "selector", description = "Apply effects" }, function()
     stylegym.apply_effects()
 end)

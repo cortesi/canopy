@@ -32,7 +32,7 @@ canopy.bind("F6", {
     phase = "before_widget",
     description = "Toggle terminal list",
 }, command.term_gym.toggle_terminal_focus())
-canopy.keymap {
+canopy.keymap({
     path = "term_gym/**/list/**/",
     phase = "before_widget",
     { key = "n", description = "New terminal", action = command.term_gym.new_terminal_sidebar() },
@@ -56,7 +56,7 @@ canopy.keymap {
         description = "Close terminal",
         action = command.term_gym.delete_terminal(),
     },
-}
+})
 "#;
 
 /// List item widget for the terminal sidebar.

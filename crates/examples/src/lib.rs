@@ -111,7 +111,7 @@ pub(crate) fn selectable_entry_styles<'a>(rules: StyleRules<'a>, prefix: &str) -
 ///
 /// `{receiver}` is the Luau command owner. `{path}` is the binding path.
 const TEXT_SCROLL_BINDINGS: &str = r#"
-canopy.keymap {
+canopy.keymap({
     path = "{path}",
     { key = "g", description = "Top", action = command.{receiver}.scroll_to(0, 0) },
     {
@@ -130,7 +130,7 @@ canopy.keymap {
     { key = { "l", "Right" }, description = "Scroll right", action = command.{receiver}.scroll("Right") },
     { key = { "PageDown", "Space" }, description = "Page down", action = command.{receiver}.page(1) },
     { key = "PageUp", description = "Page up", action = command.{receiver}.page(-1) },
-}
+})
 canopy.bind("q", { path = "root", description = "Quit" }, command.root.quit())
 "#;
 

@@ -437,7 +437,7 @@ canopy.bind("?", {
     tier = "global",
     description = "Show key bindings",
 }, command.root.toggle_help())
-canopy.keymap {
+canopy.keymap({
     { key = "q", description = "Quit", action = command.root.quit() },
     { key = "d", description = "Delete item", action = command.todo.delete_item() },
     { key = "a", description = "Add item", action = command.todo.enter_item() },
@@ -460,9 +460,9 @@ canopy.keymap {
             todo.select_by(1)
         end,
     },
-}
+})
 
-canopy.keymap {
+canopy.keymap({
     path = "input",
     phase = "before_widget",
     { key = "Left", description = "Cursor left", action = command.input.left() },
@@ -470,7 +470,7 @@ canopy.keymap {
     { key = "Backspace", description = "Delete char", action = command.input.backspace() },
     { key = "Enter", description = "Confirm new item", action = command.todo.accept_add() },
     { key = "Escape", description = "Cancel add", action = command.todo.cancel_add() },
-}
+})
 "#;
 
 /// Install the todo application's style rules.

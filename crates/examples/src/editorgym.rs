@@ -16,7 +16,7 @@ use canopy_widgets::{
 const DEFAULT_BINDINGS: &str = r#"
 root.default_bindings()
 
-canopy.keymap {
+canopy.keymap({
     path = "editor_gym",
     { key = "Tab", description = "Next focus", action = command.root.focus("Next") },
     { key = "BackTab", description = "Previous focus", action = command.root.focus("Prev") },
@@ -37,7 +37,7 @@ canopy.keymap {
             editor_gym.scroll("Up")
         end,
     },
-}
+})
 canopy.bind("q", { path = "root", description = "Quit" }, command.root.quit())
 "#;
 

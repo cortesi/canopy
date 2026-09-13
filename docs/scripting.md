@@ -144,7 +144,7 @@ specs), `mouse` (one mouse spec or an array), a required `description`, and an
 ```luau
 local fs = command.file_select
 
-canopy.keymap {
+canopy.keymap({
     mode = "preview",
     { key = "j", description = "Scroll down", action = fs.pan_preview("Down") },
     { key = { "k", "Up" }, mouse = "ScrollUp", description = "Scroll up", action = fs.pan_preview("Up") },
@@ -155,7 +155,7 @@ canopy.keymap {
             canopy.set_mode("")
         end,
     },
-}
+})
 ```
 
 `canopy.keymap` validates every option and entry before it installs a binding.

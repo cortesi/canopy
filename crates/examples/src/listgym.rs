@@ -19,7 +19,7 @@ const COLORS: &[&str] = &["red", "blue"];
 const DEFAULT_BINDINGS: &str = r#"
 root.default_bindings()
 
-canopy.keymap {
+canopy.keymap({
     path = "list_gym",
     {
         key = "p",
@@ -61,7 +61,7 @@ canopy.keymap {
     { key = "BackTab", description = "Previous column", action = command.panes.focus_column(-1) },
     { key = { "PageDown", "Space" }, description = "Page down", action = command.list.page(1) },
     { key = "PageUp", description = "Page up", action = command.list.page(-1) },
-}
+})
 "#;
 
 /// Focusable list entry that renders text content.

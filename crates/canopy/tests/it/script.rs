@@ -357,7 +357,7 @@ mod tests {
             r#"
             local leaves = canopy.find_nodes("api_root/api_leaf")
             canopy.set_focus(leaves[1])
-            local ids = canopy.keymap {
+            local ids = canopy.keymap({
                 {
                     key = { "a", "b" },
                     mouse = "ScrollUp",
@@ -365,7 +365,7 @@ mod tests {
                     action = command.api_leaf.set(1),
                 },
                 { key = "c", description = "Set two", action = function() api_leaf.set(2) end },
-            }
+            })
             canopy.assert(#ids == 4, "one binding per key and mouse spec")
             for index = 2, #ids do
                 canopy.assert(ids[index] > ids[index - 1], "ids follow entry order")
@@ -385,7 +385,7 @@ mod tests {
                 canopy.assert(source == sources[1], "every binding records the keymap call site")
             end
             canopy.assert(inputs[3] == "ScrollUp", "key bindings come before mouse bindings")
-            canopy.assert(#canopy.keymap {} == 0, "an empty keymap installs nothing")
+            canopy.assert(#canopy.keymap({}) == 0, "an empty keymap installs nothing")
             "#,
         )?;
         harness.script(r#"canopy.send_key("c")"#)?;
@@ -399,9 +399,9 @@ mod tests {
         // A later keymap replaces an earlier binding with the same selector.
         harness.canopy.eval_script(
             r#"
-            canopy.keymap {
+            canopy.keymap({
                 { key = "a", description = "Set nine", action = command.api_leaf.set(9) },
-            }
+            })
             "#,
         )?;
         harness.script(r#"canopy.send_key("a")"#)?;
@@ -421,56 +421,56 @@ mod tests {
         )?;
         for (source, expected) in [
             (
-                r#"canopy.keymap { mdoe = "preview", { key = "x", description = "Set", action = command.api_leaf.set(1) } }"#,
+                r#"canopy.keymap({ mdoe = "preview", { key = "x", description = "Set", action = command.api_leaf.set(1) } })"#,
                 "",
             ),
             (
-                r#"canopy.keymap { { key = "x", mosue = "ScrollUp", description = "Set", action = command.api_leaf.set(1) } }"#,
+                r#"canopy.keymap({ { key = "x", mosue = "ScrollUp", description = "Set", action = command.api_leaf.set(1) } })"#,
                 "keymap entry 1 has an unknown field `mosue`",
             ),
             (
-                r#"canopy.keymap { { description = "Set", action = command.api_leaf.set(1) } }"#,
+                r#"canopy.keymap({ { description = "Set", action = command.api_leaf.set(1) } })"#,
                 "keymap entry 1 has neither `key` nor `mouse`",
             ),
             (
-                r#"canopy.keymap { { key = {}, description = "Set", action = command.api_leaf.set(1) } }"#,
+                r#"canopy.keymap({ { key = {}, description = "Set", action = command.api_leaf.set(1) } })"#,
                 "is an empty array",
             ),
             (
-                r#"canopy.keymap { { key = "Ctrl+", description = "Set", action = command.api_leaf.set(1) } }"#,
+                r#"canopy.keymap({ { key = "Ctrl+", description = "Set", action = command.api_leaf.set(1) } })"#,
                 "invalid key spec",
             ),
             (
-                r#"canopy.keymap {
+                r#"canopy.keymap({
                     { key = "x", description = "A", action = command.api_leaf.set(1) },
                     { key = "x", description = "B", action = command.api_leaf.set(2) },
-                }"#,
+                })"#,
                 "keymap entry 2 binds `x` more than once",
             ),
             (
-                r#"canopy.keymap {
+                r#"canopy.keymap({
                     phase = "before_widget",
                     { key = "x", description = "Set", action = command.api_leaf.set(1) },
                     { mouse = "ScrollUp", description = "Set", action = command.api_leaf.set(1) },
-                }"#,
+                })"#,
                 "before_widget",
             ),
             (
-                r#"canopy.keymap { { key = "x", action = command.api_leaf.set(1) } }"#,
+                r#"canopy.keymap({ { key = "x", action = command.api_leaf.set(1) } })"#,
                 "",
             ),
             (
-                r#"canopy.keymap { tier = "global", { key = "x", description = "Set", action = command.api_leaf.set(1) } }"#,
+                r#"canopy.keymap({ tier = "global", { key = "x", description = "Set", action = command.api_leaf.set(1) } })"#,
                 "anchored",
             ),
             (
                 r#"local bad: any = "api_leaf::set"
-                   canopy.keymap { { key = "x", description = "Set", action = bad } }"#,
+                   canopy.keymap({ { key = "x", description = "Set", action = bad } })"#,
                 "must be a CommandCall or a function",
             ),
             (
                 r#"local bad: any = "oops"
-                   canopy.keymap { { key = "x", description = "Set", action = command.api_leaf.set(bad) } }"#,
+                   canopy.keymap({ { key = "x", description = "Set", action = command.api_leaf.set(bad) } })"#,
                 "type mismatch",
             ),
             (

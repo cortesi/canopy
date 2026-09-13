@@ -3,7 +3,7 @@ use canopy::CanopyBuilder;
 /// Default bindings for the image viewer demo.
 const DEFAULT_BINDINGS: &str = r#"
 canopy.bind("q", { description = "Quit" }, command.root.quit())
-canopy.keymap {
+canopy.keymap({
     path = "image_view/",
     phase = "before_widget",
     { key = "i", description = "Zoom in", action = command.image_view.zoom("In") },
@@ -16,7 +16,7 @@ canopy.keymap {
         description = "Pan right",
         action = command.image_view.pan("Right"),
     },
-}
+})
 "#;
 
 /// Queue this demo's bindings and native configuration in their builder phases.

@@ -14,7 +14,7 @@ root.default_bindings()
 canopy.bind("p", { description = "Log demo message" }, function()
     canopy.log("focus gym")
 end)
-canopy.keymap {
+canopy.keymap({
     path = "focus_gym",
     { key = "Tab", description = "Next focus", action = command.root.focus("Next") },
     {
@@ -40,16 +40,16 @@ canopy.keymap {
         description = "Delete focused block",
         action = command.focus_gym.delete_focused(),
     },
-}
-canopy.keymap {
+})
+canopy.keymap({
     path = "block",
     phase = "before_widget",
     { key = "s", description = "Split block", action = command.block.split() },
     { key = "a", description = "Add child block", action = command.block.add() },
     { key = "[", description = "Decrease grow", action = command.block.flex_grow_dec() },
     { key = "]", description = "Increase grow", action = command.block.flex_grow_inc() },
-}
-canopy.keymap {
+})
+canopy.keymap({
     path = "block",
     {
         mouse = "LeftDown",
@@ -72,7 +72,7 @@ canopy.keymap {
             block.add()
         end,
     },
-}
+})
 "#;
 
 /// A focusable block that can split into children.

@@ -18,7 +18,7 @@ const ENTRY_HEIGHT: u32 = 1 + ENTRY_PADDING * 2;
 
 /// Default bindings for the intervals demo.
 const DEFAULT_BINDINGS: &str = r#"
-canopy.keymap {
+canopy.keymap({
     path = "intervals",
     { key = "a", description = "Add item", action = command.intervals.add_item() },
     { key = "g", description = "First item", action = command.list.select_first() },
@@ -42,7 +42,7 @@ canopy.keymap {
     { key = { "PageDown", "Space" }, description = "Page down", action = command.list.page(1) },
     { key = "PageUp", description = "Page up", action = command.list.page(-1) },
     { key = "q", description = "Quit", action = command.root.quit() },
-}
+})
 "#;
 
 /// Counter widget that increments on a timer.

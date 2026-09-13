@@ -10,7 +10,7 @@ use crate::frame;
 
 /// Default inspector bindings exposed through `inspector.default_bindings()`.
 const DEFAULT_BINDINGS: &str = r#"
-canopy.keymap {
+canopy.keymap({
     path = "logs",
     { key = "C", description = "Clear log entry", action = command.logs.clear() },
     {
@@ -28,7 +28,7 @@ canopy.keymap {
     { key = "G", description = "Last log entry", action = command.logs.select_last() },
     { key = { "Space", "PageDown" }, description = "Page down", action = command.logs.page(1) },
     { key = "PageUp", description = "Page up", action = command.logs.page(-1) },
-}
+})
 "#;
 
 /// Inspector overlay widget.
