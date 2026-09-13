@@ -476,6 +476,8 @@ pub struct DeclRegistry<'a> {
     builder: &'a mut module::Builder,
     /// Names currently being declared during this registration pass.
     seen: HashSet<declaration::Text>,
+    /// Register alias names as external types that another module declares.
+    extern_only: bool,
 }
 
 impl<'a> DeclRegistry<'a> {
@@ -484,6 +486,19 @@ impl<'a> DeclRegistry<'a> {
         Self {
             builder,
             seen: HashSet::new(),
+            extern_only: false,
+        }
+    }
+
+    /// Wrap a builder whose dependent types another module declares.
+    ///
+    /// Every alias registers as an external type name, so the surface has one
+    /// definition of each type.
+    pub(crate) fn extern_module(builder: &'a mut module::Builder) -> Self {
+        Self {
+            builder,
+            seen: HashSet::new(),
+            extern_only: true,
         }
     }
 
@@ -495,9 +510,14 @@ impl<'a> DeclRegistry<'a> {
         self.seen.insert(name.to_string().into())
     }
 
-    /// Registers an alias declaration.
+    /// Registers an alias declaration, or its name as an external type when
+    /// another module declares it.
     pub fn alias(&mut self, alias: declaration::Alias) {
-        self.builder.alias(alias);
+        if self.extern_only {
+            self.builder.extern_ty(alias.name.into_owned());
+        } else {
+            self.builder.alias(alias);
+        }
     }
 
     /// Registers an external type name.
@@ -817,6 +837,12 @@ pub type InvokeFn = fn(
     inv: &CommandInvocation,
 ) -> Result<ArgValue, CommandError>;
 
+/// Erased argument check signature.
+///
+/// The check applies the arity bounds and parameter conversions of the
+/// command's invoke function. It needs no target, context, or call.
+pub type CheckFn = fn(args: &CommandArgs) -> Result<(), CommandError>;
+
 /// Command dispatch routing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CommandDispatchKind {
@@ -856,6 +882,8 @@ pub struct CommandSpec {
     pub doc: Option<&'static str>,
     /// Erased invoke entrypoint.
     pub invoke: InvokeFn,
+    /// Erased argument check entrypoint.
+    pub check: CheckFn,
     /// Optional read-only node eligibility hook.
     pub status: Option<StatusFn>,
 }
@@ -1031,6 +1059,7 @@ impl CommandSpec {
             && self.ret == other.ret
             && self.doc == other.doc
             && ptr::fn_addr_eq(self.invoke, other.invoke)
+            && ptr::fn_addr_eq(self.check, other.check)
             && match (self.status, other.status) {
                 (Some(a), Some(b)) => ptr::fn_addr_eq(a, b),
                 (None, None) => true,
@@ -1654,6 +1683,7 @@ mod tests {
         ret: CommandReturnSpec::Unit,
         doc: None,
         invoke: registry_invoke,
+        check: registry_check,
         status: Some(failed_status),
     };
 
@@ -1701,6 +1731,10 @@ mod tests {
         Ok(ArgValue::Null)
     }
 
+    fn registry_check(_args: &CommandArgs) -> Result<(), CommandError> {
+        Ok(())
+    }
+
     static REGISTRY_A: CommandSpec = CommandSpec {
         id: CommandId("registry.a"),
         name: "a",
@@ -1709,6 +1743,7 @@ mod tests {
         ret: CommandReturnSpec::Unit,
         doc: Some("a"),
         invoke: registry_invoke,
+        check: registry_check,
         status: None,
     };
     static REGISTRY_A_CONFLICT: CommandSpec = CommandSpec {
@@ -1719,6 +1754,7 @@ mod tests {
         ret: CommandReturnSpec::Unit,
         doc: Some("conflict"),
         invoke: registry_invoke,
+        check: registry_check,
         status: None,
     };
     static REGISTRY_B: CommandSpec = CommandSpec {
@@ -1729,6 +1765,7 @@ mod tests {
         ret: CommandReturnSpec::Unit,
         doc: None,
         invoke: registry_invoke,
+        check: registry_check,
         status: None,
     };
     static REGISTRY_A_BATCH: &[&CommandSpec] = &[&REGISTRY_A];

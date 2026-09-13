@@ -70,7 +70,7 @@ mod records;
 /// Conversions between Luau values and command argument values.
 mod value;
 
-use base_api::{build_base_module, build_owner_modules};
+use base_api::{build_base_module, build_command_module, build_owner_modules};
 use bridge::*;
 pub(crate) use bridge::{in_live_scope, validate_node_handle};
 use dispatch::*;
@@ -756,6 +756,7 @@ impl LuauHost {
         let mut modules = vec![build_base_module()?];
         modules.extend(extra_modules.iter().map(Arc::clone));
         modules.extend(build_owner_modules(commands, default_binding_owners)?);
+        modules.push(build_command_module(commands)?);
         let definitions = defs::render_definitions(&modules, fixtures);
 
         let mut builder = Surface::builder();

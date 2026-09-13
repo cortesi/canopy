@@ -431,35 +431,46 @@ impl Loader for Todo {
 
 /// Default Luau bindings for the todo app.
 pub(crate) const DEFAULT_BINDINGS: &str = r#"
-canopy.bind_command("?", { phase = "before_widget",
-    description = "Show key bindings",
+canopy.bind("?", {
     path = "/root/**/",
+    phase = "before_widget",
     tier = "global",
-}, "root::toggle_help")
-canopy.bind_command("q", { description = "Quit" }, "root::quit")
-canopy.bind_command("d", { description = "Delete item" }, "todo::delete_item")
-canopy.bind_command("a", { description = "Add item" }, "todo::enter_item")
-canopy.bind_command("g", { description = "First item" }, "todo::select_first")
-canopy.bind_command("j", { description = "Next item" }, "todo::select_by", 1)
-canopy.bind_command("Down", { description = "Next item" }, "todo::select_by", 1)
-canopy.bind_command("k", { description = "Previous item" }, "todo::select_by", -1)
-canopy.bind_command("Up", { description = "Previous item" }, "todo::select_by", -1)
-canopy.bind_command("Space", { description = "Page down" }, "todo::page", 1)
-canopy.bind_command("PageDown", { description = "Page down" }, "todo::page", 1)
-canopy.bind_command("PageUp", { description = "Page up" }, "todo::page", -1)
+    description = "Show key bindings",
+}, command.root.toggle_help())
+canopy.keymap {
+    { key = "q", description = "Quit", action = command.root.quit() },
+    { key = "d", description = "Delete item", action = command.todo.delete_item() },
+    { key = "a", description = "Add item", action = command.todo.enter_item() },
+    { key = "g", description = "First item", action = command.todo.select_first() },
+    { key = { "j", "Down" }, description = "Next item", action = command.todo.select_by(1) },
+    { key = { "k", "Up" }, description = "Previous item", action = command.todo.select_by(-1) },
+    { key = { "Space", "PageDown" }, description = "Page down", action = command.todo.page(1) },
+    { key = "PageUp", description = "Page up", action = command.todo.page(-1) },
+    {
+        mouse = "ScrollUp",
+        description = "Previous item",
+        action = function()
+            todo.select_by(-1)
+        end,
+    },
+    {
+        mouse = "ScrollDown",
+        description = "Next item",
+        action = function()
+            todo.select_by(1)
+        end,
+    },
+}
 
-canopy.bind_mouse("ScrollUp", { description = "Previous item" }, function()
-    todo.select_by(-1)
-end)
-canopy.bind_mouse("ScrollDown", { description = "Next item" }, function()
-    todo.select_by(1)
-end)
-
-canopy.bind_command("Left", { phase = "before_widget", path = "input", description = "Cursor left" }, "input::left")
-canopy.bind_command("Right", { phase = "before_widget", path = "input", description = "Cursor right" }, "input::right")
-canopy.bind_command("Backspace", { phase = "before_widget", path = "input", description = "Delete char" }, "input::backspace")
-canopy.bind_command("Enter", { phase = "before_widget", path = "input", description = "Confirm new item" }, "todo::accept_add")
-canopy.bind_command("Escape", { phase = "before_widget", path = "input", description = "Cancel add" }, "todo::cancel_add")
+canopy.keymap {
+    path = "input",
+    phase = "before_widget",
+    { key = "Left", description = "Cursor left", action = command.input.left() },
+    { key = "Right", description = "Cursor right", action = command.input.right() },
+    { key = "Backspace", description = "Delete char", action = command.input.backspace() },
+    { key = "Enter", description = "Confirm new item", action = command.todo.accept_add() },
+    { key = "Escape", description = "Cancel add", action = command.todo.cancel_add() },
+}
 "#;
 
 /// Install the todo application's style rules.

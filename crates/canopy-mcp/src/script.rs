@@ -1214,6 +1214,16 @@ declare script_target: {
     set: (value: number) -> (),
 }
 
+--- Command constructors, grouped by owner. Each constructor checks its arguments and returns a
+--- CommandCall for use as a binding action.
+declare command: {
+    script_target: {
+        choose: (direction: FocusDirection, count: number?) -> CommandCall,
+        get: () -> CommandCall,
+        set: (value: number) -> CommandCall,
+    },
+}
+
 -- ===== Fixtures =====
 -- seeded: Set script_target to a known value"#;
 

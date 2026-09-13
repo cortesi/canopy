@@ -15,7 +15,7 @@ use crate::inspector::Inspector;
 
 /// Default root bindings exposed through `root.default_bindings()`.
 const DEFAULT_BINDINGS: &str = r#"
-canopy.bind_command("q", { path = "root", description = "Quit" }, "root::quit")
+canopy.bind("q", { path = "root", description = "Quit" }, command.root.quit())
 "#;
 
 /// Additional root bindings installed with developer tools.
@@ -23,8 +23,11 @@ canopy.bind_command("q", { path = "root", description = "Quit" }, "root::quit")
 const DEVTOOLS_BINDINGS: &str = r#"
 inspector.default_bindings()
 
-canopy.bind_command("ctrl-Right", { path = "root", description = "Toggle inspector" }, "root::toggle_inspector")
-canopy.bind_command("a", { path = "inspector", description = "Focus app" }, "root::focus_app")
+canopy.bind("ctrl-Right", {
+    path = "root",
+    description = "Toggle inspector",
+}, command.root.toggle_inspector())
+canopy.bind("a", { path = "inspector", description = "Focus app" }, command.root.focus_app())
 "#;
 
 /// Framework binding group used while contextual help is open.
@@ -479,11 +482,12 @@ mod tests {
         canopy
             .eval_script(
                 r#"
-            canopy.bind_command("?", { phase = "before_widget",
-                description = "Show key bindings",
+            canopy.bind("?", {
                 path = "/root/**/",
+                phase = "before_widget",
                 tier = "global",
-            }, "root::toggle_help")
+                description = "Show key bindings",
+            }, command.root.toggle_help())
             "#,
             )
             .map(|_| ())

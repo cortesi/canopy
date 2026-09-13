@@ -5,8 +5,8 @@ mod tests {
     use std::{fs, path::Path};
 
     use canopy::{
-        BindingOptions, BindingPhase, BindingScope, Canopy, CommandArg, Context, ContextExt, EventOutcome,
-        FrameworkBindingGroup, Loader, NodeId, Render, ViewContext, Widget,
+        BindingOptions, BindingPhase, BindingScope, Canopy, CommandArg, Context, ContextExt,
+        EventOutcome, FrameworkBindingGroup, Loader, NodeId, Render, ViewContext, Widget,
         commands::ArgValue,
         derive_commands,
         error::{Error, Result, ScriptErrorKind},
@@ -240,6 +240,255 @@ mod tests {
         harness.script(r#"canopy.send_key("c")"#)?;
         assert_eq!(leaf_values(&mut harness), vec![7, 0]);
 
+        Ok(())
+    }
+
+    #[test]
+    fn command_values_bind_keys_and_mouse_and_report_their_arguments() -> Result<()> {
+        let mut harness = Harness::builder(ApiRoot).size(20, 5).build()?;
+        harness.render()?;
+        harness.canopy.eval_script(
+            r#"
+            local leaves = canopy.find_nodes("api_root/api_leaf")
+            canopy.set_focus(leaves[1])
+            local id = canopy.bind("x", { description = "Set three" }, command.api_leaf.set(3))
+            canopy.bind_mouse("ScrollUp", { description = "Set five" }, command.api_leaf.set(5))
+            local found = false
+            for _, binding in canopy.bindings() do
+                if binding.id == id then
+                    found = binding.target == "command"
+                        and binding.command == "api_leaf::set"
+                        and binding.arguments[1] == 3
+                        and binding.phase == "after_widget"
+                end
+            end
+            canopy.assert(found, "a command binding reports its command and arguments")
+            canopy.assert(
+                tostring(command.api_leaf.set(3)) == "api_leaf::set(3)",
+                "a CommandCall prints its command and arguments"
+            )
+            canopy.assert(command.api_leaf.set(3) == command.api_leaf.set(3), "equal calls compare equal")
+            "#,
+        )?;
+        harness.script(r#"canopy.send_key("x")"#)?;
+        assert_eq!(leaf_values(&mut harness), vec![3, 0]);
+        harness.script(r#"canopy.send_scroll("Up", 1, 1)"#)?;
+        assert_eq!(leaf_values(&mut harness), vec![5, 0]);
+        Ok(())
+    }
+
+    #[test]
+    fn command_constructors_reject_bad_arguments_before_any_binding_installs() -> Result<()> {
+        let mut harness = Harness::builder(ApiRoot).size(20, 5).build()?;
+        harness.render()?;
+        let runtime_type = harness
+            .canopy
+            .eval_script(
+                r#"
+                local bad: any = "oops"
+                canopy.bind("x", { description = "Bad" }, command.api_leaf.set(bad))
+                "#,
+            )
+            .expect_err("a string argument for a number parameter must fail");
+        assert!(
+            runtime_type.to_string().contains("type mismatch"),
+            "{runtime_type}"
+        );
+        let runtime_arity = harness
+            .canopy
+            .eval_script(
+                r#"
+                local set: any = command.api_leaf.set
+                canopy.bind("x", { description = "Bad" }, set())
+                "#,
+            )
+            .expect_err("a missing argument must fail");
+        assert!(
+            runtime_arity.to_string().contains("arity mismatch"),
+            "{runtime_arity}"
+        );
+        for source in [
+            // The typechecker rejects a wrong literal argument.
+            r#"canopy.bind("x", { description = "Bad" }, command.api_leaf.set("1"))"#,
+            // An owner function call runs at once and returns no action.
+            r#"canopy.bind("x", { description = "Bad" }, api_leaf.get())"#,
+            // bind_command no longer exists.
+            r#"canopy.bind_command("x", { description = "Old" }, "api_leaf::set", 1)"#,
+            // An action must be a CommandCall or a function.
+            r#"local bad: any = "api_leaf::set"
+               canopy.bind("x", { description = "Bad" }, bad)"#,
+        ] {
+            harness
+                .canopy
+                .eval_script(source)
+                .expect_err("invalid binding action should fail");
+        }
+        harness.script(r#"canopy.send_key("x")"#)?;
+        assert_eq!(leaf_values(&mut harness), vec![0, 0]);
+        Ok(())
+    }
+
+    #[test]
+    fn owner_named_command_fails_api_finalization() -> Result<()> {
+        struct Command;
+
+        #[derive_commands]
+        impl Command {
+            #[command]
+            fn run(&self) {}
+        }
+
+        impl Widget for Command {}
+
+        let mut canopy = Canopy::new();
+        canopy.add_commands::<Command>()?;
+        let error = canopy
+            .finalize_api()
+            .expect_err("an owner named command collides with the command global");
+        assert!(error.to_string().contains("reserved"), "{error}");
+        Ok(())
+    }
+
+    #[test]
+    fn keymap_installs_every_entry_in_order() -> Result<()> {
+        let mut harness = Harness::builder(ApiRoot).size(20, 5).build()?;
+        harness.render()?;
+        harness.canopy.eval_script(
+            r#"
+            local leaves = canopy.find_nodes("api_root/api_leaf")
+            canopy.set_focus(leaves[1])
+            local ids = canopy.keymap {
+                {
+                    key = { "a", "b" },
+                    mouse = "ScrollUp",
+                    description = "Set one",
+                    action = command.api_leaf.set(1),
+                },
+                { key = "c", description = "Set two", action = function() api_leaf.set(2) end },
+            }
+            canopy.assert(#ids == 4, "one binding per key and mouse spec")
+            for index = 2, #ids do
+                canopy.assert(ids[index] > ids[index - 1], "ids follow entry order")
+            end
+            local sources = {}
+            local inputs = {}
+            for _, binding in canopy.bindings() do
+                for _, id in ids do
+                    if binding.id == id then
+                        table.insert(sources, binding.source)
+                        table.insert(inputs, binding.input)
+                    end
+                end
+            end
+            canopy.assert(#sources == 4, "every binding is reported")
+            for _, source in sources do
+                canopy.assert(source == sources[1], "every binding records the keymap call site")
+            end
+            canopy.assert(inputs[3] == "ScrollUp", "key bindings come before mouse bindings")
+            canopy.assert(#canopy.keymap {} == 0, "an empty keymap installs nothing")
+            "#,
+        )?;
+        harness.script(r#"canopy.send_key("c")"#)?;
+        assert_eq!(leaf_values(&mut harness), vec![2, 0]);
+        harness.script(r#"canopy.send_key("b")"#)?;
+        assert_eq!(leaf_values(&mut harness), vec![1, 0]);
+        harness.script(r#"canopy.send_key("c")"#)?;
+        harness.script(r#"canopy.send_scroll("Up", 1, 1)"#)?;
+        assert_eq!(leaf_values(&mut harness), vec![1, 0]);
+
+        // A later keymap replaces an earlier binding with the same selector.
+        harness.canopy.eval_script(
+            r#"
+            canopy.keymap {
+                { key = "a", description = "Set nine", action = command.api_leaf.set(9) },
+            }
+            "#,
+        )?;
+        harness.script(r#"canopy.send_key("a")"#)?;
+        assert_eq!(leaf_values(&mut harness), vec![9, 0]);
+        Ok(())
+    }
+
+    #[test]
+    fn keymap_rejects_invalid_input_and_installs_nothing() -> Result<()> {
+        let mut harness = Harness::builder(ApiRoot).size(20, 5).build()?;
+        harness.render()?;
+        harness.canopy.eval_script(
+            r#"
+            local leaves = canopy.find_nodes("api_root/api_leaf")
+            canopy.set_focus(leaves[1])
+            "#,
+        )?;
+        for (source, expected) in [
+            (
+                r#"canopy.keymap { mdoe = "preview", { key = "x", description = "Set", action = command.api_leaf.set(1) } }"#,
+                "",
+            ),
+            (
+                r#"canopy.keymap { { key = "x", mosue = "ScrollUp", description = "Set", action = command.api_leaf.set(1) } }"#,
+                "keymap entry 1 has an unknown field `mosue`",
+            ),
+            (
+                r#"canopy.keymap { { description = "Set", action = command.api_leaf.set(1) } }"#,
+                "keymap entry 1 has neither `key` nor `mouse`",
+            ),
+            (
+                r#"canopy.keymap { { key = {}, description = "Set", action = command.api_leaf.set(1) } }"#,
+                "is an empty array",
+            ),
+            (
+                r#"canopy.keymap { { key = "Ctrl+", description = "Set", action = command.api_leaf.set(1) } }"#,
+                "invalid key spec",
+            ),
+            (
+                r#"canopy.keymap {
+                    { key = "x", description = "A", action = command.api_leaf.set(1) },
+                    { key = "x", description = "B", action = command.api_leaf.set(2) },
+                }"#,
+                "keymap entry 2 binds `x` more than once",
+            ),
+            (
+                r#"canopy.keymap {
+                    phase = "before_widget",
+                    { key = "x", description = "Set", action = command.api_leaf.set(1) },
+                    { mouse = "ScrollUp", description = "Set", action = command.api_leaf.set(1) },
+                }"#,
+                "before_widget",
+            ),
+            (
+                r#"canopy.keymap { { key = "x", action = command.api_leaf.set(1) } }"#,
+                "",
+            ),
+            (
+                r#"canopy.keymap { tier = "global", { key = "x", description = "Set", action = command.api_leaf.set(1) } }"#,
+                "anchored",
+            ),
+            (
+                r#"local bad: any = "api_leaf::set"
+                   canopy.keymap { { key = "x", description = "Set", action = bad } }"#,
+                "must be a CommandCall or a function",
+            ),
+            (
+                r#"local bad: any = "oops"
+                   canopy.keymap { { key = "x", description = "Set", action = command.api_leaf.set(bad) } }"#,
+                "type mismatch",
+            ),
+            (
+                r#"local entries: any = { { key = "x", description = "Set", action = command.api_leaf.set(1) } }
+                   entries[3] = entries[1]
+                   canopy.keymap(entries)"#,
+                "dense array",
+            ),
+        ] {
+            let error = harness
+                .canopy
+                .eval_script(source)
+                .expect_err("invalid keymap should fail");
+            assert!(error.to_string().contains(expected), "{source}: {error}");
+        }
+        harness.script(r#"canopy.send_key("x")"#)?;
+        harness.script(r#"canopy.send_scroll("Up", 1, 1)"#)?;
+        assert_eq!(leaf_values(&mut harness), vec![0, 0]);
         Ok(())
     }
 

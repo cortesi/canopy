@@ -19,39 +19,49 @@ const COLORS: &[&str] = &["red", "blue"];
 const DEFAULT_BINDINGS: &str = r#"
 root.default_bindings()
 
-canopy.bind("p", { path = "list_gym", description = "Log demo message" }, function()
-    canopy.log("list gym")
-end)
-canopy.bind_command("a", { path = "list_gym", description = "Add item" }, "list_gym::add_item")
-canopy.bind_command("A", { path = "list_gym", description = "Append item" }, "list_gym::append_item")
-canopy.bind_command("C", { path = "list_gym", description = "Clear list" }, "list_gym::clear")
-canopy.bind_command("q", { path = "list_gym", description = "Quit" }, "root::quit")
-canopy.bind_command("g", { path = "list_gym", description = "First item" }, "list::select_first")
-canopy.bind_command("G", { path = "list_gym", description = "Last item" }, "list::select_last")
-canopy.bind_command("d", { path = "list_gym", description = "Delete item" }, "list::delete_selected")
-canopy.bind_command("j", { path = "list_gym", description = "Next item" }, "list::select_by", 1)
-canopy.bind_command("k", { path = "list_gym", description = "Previous item" }, "list::select_by", -1)
-canopy.bind_mouse("ScrollDown", { path = "list_gym", description = "Next item" }, function()
-    list.select_by(1)
-end)
-canopy.bind_mouse("ScrollUp", { path = "list_gym", description = "Previous item" }, function()
-    list.select_by(-1)
-end)
-canopy.bind_command("Down", { path = "list_gym", description = "Next item" }, "list::select_by", 1)
-canopy.bind_command("Up", { path = "list_gym", description = "Previous item" }, "list::select_by", -1)
-canopy.bind_command("J", { path = "list_gym", description = "Scroll down" }, "list::scroll", "Down")
-canopy.bind_command("K", { path = "list_gym", description = "Scroll up" }, "list::scroll", "Up")
-canopy.bind_command("h", { path = "list_gym", description = "Scroll left" }, "list::scroll", "Left")
-canopy.bind_command("l", { path = "list_gym", description = "Scroll right" }, "list::scroll", "Right")
-canopy.bind_command("Left", { path = "list_gym", description = "Scroll left" }, "list::scroll", "Left")
-canopy.bind_command("Right", { path = "list_gym", description = "Scroll right" }, "list::scroll", "Right")
-canopy.bind_command("s", { path = "list_gym", description = "Add column" }, "list_gym::add_column")
-canopy.bind_command("x", { path = "list_gym", description = "Delete column" }, "list_gym::delete_column")
-canopy.bind_command("Tab", { path = "list_gym", description = "Next column" }, "panes::focus_column", 1)
-canopy.bind_command("BackTab", { path = "list_gym", description = "Previous column" }, "panes::focus_column", -1)
-canopy.bind_command("PageDown", { path = "list_gym", description = "Page down" }, "list::page", 1)
-canopy.bind_command("Space", { path = "list_gym", description = "Page down" }, "list::page", 1)
-canopy.bind_command("PageUp", { path = "list_gym", description = "Page up" }, "list::page", -1)
+canopy.keymap {
+    path = "list_gym",
+    {
+        key = "p",
+        description = "Log demo message",
+        action = function()
+            canopy.log("list gym")
+        end,
+    },
+    { key = "a", description = "Add item", action = command.list_gym.add_item() },
+    { key = "A", description = "Append item", action = command.list_gym.append_item() },
+    { key = "C", description = "Clear list", action = command.list_gym.clear() },
+    { key = "q", description = "Quit", action = command.root.quit() },
+    { key = "g", description = "First item", action = command.list.select_first() },
+    { key = "G", description = "Last item", action = command.list.select_last() },
+    { key = "d", description = "Delete item", action = command.list.delete_selected() },
+    {
+        key = { "j", "Down" },
+        mouse = "ScrollDown",
+        description = "Next item",
+        action = command.list.select_by(1),
+    },
+    {
+        key = { "k", "Up" },
+        mouse = "ScrollUp",
+        description = "Previous item",
+        action = command.list.select_by(-1),
+    },
+    { key = "J", description = "Scroll down", action = command.list.scroll("Down") },
+    { key = "K", description = "Scroll up", action = command.list.scroll("Up") },
+    { key = { "h", "Left" }, description = "Scroll left", action = command.list.scroll("Left") },
+    {
+        key = { "l", "Right" },
+        description = "Scroll right",
+        action = command.list.scroll("Right"),
+    },
+    { key = "s", description = "Add column", action = command.list_gym.add_column() },
+    { key = "x", description = "Delete column", action = command.list_gym.delete_column() },
+    { key = "Tab", description = "Next column", action = command.panes.focus_column(1) },
+    { key = "BackTab", description = "Previous column", action = command.panes.focus_column(-1) },
+    { key = { "PageDown", "Space" }, description = "Page down", action = command.list.page(1) },
+    { key = "PageUp", description = "Page up", action = command.list.page(-1) },
+}
 "#;
 
 /// Focusable list entry that renders text content.

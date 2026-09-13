@@ -14,7 +14,7 @@ const PATTERN: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
 const FRAMEGYM_PREFIX: &str = r#"
 root.default_bindings()
 
-canopy.bind_command("Tab", { path = "frame_gym", description = "Next focus" }, "root::focus", "Next")
+canopy.bind("Tab", { path = "frame_gym", description = "Next focus" }, command.root.focus("Next"))
 "#;
 
 // Typed keys for keyed children

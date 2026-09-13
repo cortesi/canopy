@@ -14,11 +14,12 @@ use canopy_widgets::Root;
 /// Shared global contextual-help trigger for Root-based demos.
 const HELP_BINDING: &str = r#"
 function setup()
-    canopy.bind_command("?", { phase = "before_widget",
-        description = "Show key bindings",
+    canopy.bind("?", {
         path = "/root/**/",
+        phase = "before_widget",
         tier = "global",
-    }, "root::toggle_help")
+        description = "Show key bindings",
+    }, command.root.toggle_help())
 end
 "#;
 
@@ -110,25 +111,27 @@ pub(crate) fn selectable_entry_styles<'a>(rules: StyleRules<'a>, prefix: &str) -
 ///
 /// `{receiver}` is the Luau command owner. `{path}` is the binding path.
 const TEXT_SCROLL_BINDINGS: &str = r#"
-canopy.bind_command("g", { phase = "{phase}", path = "{path}", description = "Top" }, "{receiver}::scroll_to", 0, 0)
-canopy.bind_command("j", { phase = "{phase}", path = "{path}", description = "Scroll down" }, "{receiver}::scroll", "Down")
-canopy.bind_command("Down", { phase = "{phase}", path = "{path}", description = "Scroll down" }, "{receiver}::scroll", "Down")
-canopy.bind_mouse("ScrollDown", { path = "{path}", description = "Scroll down" }, function()
-    {receiver}.scroll("Down")
-end)
-canopy.bind_command("k", { phase = "{phase}", path = "{path}", description = "Scroll up" }, "{receiver}::scroll", "Up")
-canopy.bind_command("Up", { phase = "{phase}", path = "{path}", description = "Scroll up" }, "{receiver}::scroll", "Up")
-canopy.bind_mouse("ScrollUp", { path = "{path}", description = "Scroll up" }, function()
-    {receiver}.scroll("Up")
-end)
-canopy.bind_command("h", { phase = "{phase}", path = "{path}", description = "Scroll left" }, "{receiver}::scroll", "Left")
-canopy.bind_command("Left", { phase = "{phase}", path = "{path}", description = "Scroll left" }, "{receiver}::scroll", "Left")
-canopy.bind_command("l", { phase = "{phase}", path = "{path}", description = "Scroll right" }, "{receiver}::scroll", "Right")
-canopy.bind_command("Right", { phase = "{phase}", path = "{path}", description = "Scroll right" }, "{receiver}::scroll", "Right")
-canopy.bind_command("PageDown", { phase = "{phase}", path = "{path}", description = "Page down" }, "{receiver}::page", 1)
-canopy.bind_command("Space", { phase = "{phase}", path = "{path}", description = "Page down" }, "{receiver}::page", 1)
-canopy.bind_command("PageUp", { phase = "{phase}", path = "{path}", description = "Page up" }, "{receiver}::page", -1)
-canopy.bind_command("q", { path = "root", description = "Quit" }, "root::quit")
+canopy.keymap {
+    path = "{path}",
+    { key = "g", description = "Top", action = command.{receiver}.scroll_to(0, 0) },
+    {
+        key = { "j", "Down" },
+        mouse = "ScrollDown",
+        description = "Scroll down",
+        action = command.{receiver}.scroll("Down"),
+    },
+    {
+        key = { "k", "Up" },
+        mouse = "ScrollUp",
+        description = "Scroll up",
+        action = command.{receiver}.scroll("Up"),
+    },
+    { key = { "h", "Left" }, description = "Scroll left", action = command.{receiver}.scroll("Left") },
+    { key = { "l", "Right" }, description = "Scroll right", action = command.{receiver}.scroll("Right") },
+    { key = { "PageDown", "Space" }, description = "Page down", action = command.{receiver}.page(1) },
+    { key = "PageUp", description = "Page up", action = command.{receiver}.page(-1) },
+}
+canopy.bind("q", { path = "root", description = "Quit" }, command.root.quit())
 "#;
 
 /// Render the shared scroll bindings for one receiver and binding path.
@@ -136,14 +139,6 @@ pub(crate) fn text_scroll_bindings(receiver: &str, path: &str) -> String {
     TEXT_SCROLL_BINDINGS
         .replace("{receiver}", receiver)
         .replace("{path}", path)
-        .replace(
-            "{phase}",
-            if path.ends_with('/') {
-                "before_widget"
-            } else {
-                "after_widget"
-            },
-        )
 }
 
 /// Start demo registration with Root and its first-preparation help setup.

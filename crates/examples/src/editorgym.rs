@@ -16,18 +16,29 @@ use canopy_widgets::{
 const DEFAULT_BINDINGS: &str = r#"
 root.default_bindings()
 
-canopy.bind_command("Tab", { path = "editor_gym", description = "Next focus" }, "root::focus", "Next")
-canopy.bind_command("BackTab", { path = "editor_gym", description = "Previous focus" }, "root::focus", "Prev")
-canopy.bind_command("PageDown", { path = "editor_gym", description = "Page down" }, "editor_gym::page", 1)
-canopy.bind_command("PageUp", { path = "editor_gym", description = "Page up" }, "editor_gym::page", -1)
-canopy.bind_command("Home", { path = "editor_gym", description = "Top" }, "editor_gym::scroll_to", 0, 0)
-canopy.bind_mouse("ScrollDown", { path = "editor_gym", description = "Scroll down" }, function()
-    editor_gym.scroll("Down")
-end)
-canopy.bind_mouse("ScrollUp", { path = "editor_gym", description = "Scroll up" }, function()
-    editor_gym.scroll("Up")
-end)
-canopy.bind_command("q", { path = "root", description = "Quit" }, "root::quit")
+canopy.keymap {
+    path = "editor_gym",
+    { key = "Tab", description = "Next focus", action = command.root.focus("Next") },
+    { key = "BackTab", description = "Previous focus", action = command.root.focus("Prev") },
+    { key = "PageDown", description = "Page down", action = command.editor_gym.page(1) },
+    { key = "PageUp", description = "Page up", action = command.editor_gym.page(-1) },
+    { key = "Home", description = "Top", action = command.editor_gym.scroll_to(0, 0) },
+    {
+        mouse = "ScrollDown",
+        description = "Scroll down",
+        action = function()
+            editor_gym.scroll("Down")
+        end,
+    },
+    {
+        mouse = "ScrollUp",
+        description = "Scroll up",
+        action = function()
+            editor_gym.scroll("Up")
+        end,
+    },
+}
+canopy.bind("q", { path = "root", description = "Quit" }, command.root.quit())
 "#;
 
 /// Seed text for the single-line editor sample.

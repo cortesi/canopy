@@ -44,6 +44,12 @@ pub mod canopy {
             Map(std::collections::BTreeMap<String, Self>),
         }
 
+        /// Erased argument check signature.
+        ///
+        /// The check applies the arity bounds and parameter conversions of the
+        /// command's invoke function. It needs no target, context, or call.
+        pub type CheckFn = fn(args: &CommandArgs) -> Result<(), CommandError>;
+
         /// Stored action with an optional explicit target policy.
         #[derive(Clone, Debug, PartialEq)]
         pub struct CommandAction {
@@ -309,6 +315,8 @@ pub mod canopy {
             pub doc: Option<&'static str>,
             /// Erased invoke entrypoint.
             pub invoke: InvokeFn,
+            /// Erased argument check entrypoint.
+            pub check: CheckFn,
             /// Optional read-only node eligibility hook.
             pub status: Option<StatusFn>,
         }
@@ -539,7 +547,8 @@ pub mod canopy {
             /// caller must skip both recursion and registration.
             pub fn begin(&mut self, name: &str) -> bool {}
 
-            /// Registers an alias declaration.
+            /// Registers an alias declaration, or its name as an external type when
+            /// another module declares it.
             pub fn alias(&mut self, alias: declaration::Alias) {}
 
             /// Registers an external type name.

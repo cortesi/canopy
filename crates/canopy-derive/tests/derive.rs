@@ -461,6 +461,27 @@ mod tests {
     }
 
     #[test]
+    fn check_applies_arity_and_type_rules_without_a_target() {
+        let check = Foo::cmd_naked_isize().check;
+        assert!(matches!(
+            check(&CommandArgs::Positional(vec![])),
+            Err(CommandError::ArityMismatch { .. })
+        ));
+        assert!(matches!(
+            check(&CommandArgs::Positional(vec![ArgValue::String("x".into())])),
+            Err(CommandError::TypeMismatch { .. })
+        ));
+        assert!(matches!(
+            check(&CommandArgs::Positional(vec![
+                ArgValue::Int(1),
+                ArgValue::Int(2)
+            ])),
+            Err(CommandError::ArityMismatch { .. })
+        ));
+        assert!(check(&CommandArgs::Positional(vec![ArgValue::Int(3)])).is_ok());
+    }
+
+    #[test]
     fn ignored_result_wraps_errors() {
         let mut f = Foo::default();
         let mut ctx = DummyContext::default();

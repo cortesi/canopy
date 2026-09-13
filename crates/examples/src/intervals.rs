@@ -18,23 +18,31 @@ const ENTRY_HEIGHT: u32 = 1 + ENTRY_PADDING * 2;
 
 /// Default bindings for the intervals demo.
 const DEFAULT_BINDINGS: &str = r#"
-canopy.bind_command("a", { path = "intervals", description = "Add item" }, "intervals::add_item")
-canopy.bind_command("g", { path = "intervals", description = "First item" }, "list::select_first")
-canopy.bind_command("j", { path = "intervals", description = "Next item" }, "list::select_by", 1)
-canopy.bind_command("Down", { path = "intervals", description = "Next item" }, "list::select_by", 1)
-canopy.bind_mouse("ScrollDown", { path = "intervals", description = "Next item" }, function()
-    list.select_by(1)
-end)
-canopy.bind_command("k", { path = "intervals", description = "Previous item" }, "list::select_by", -1)
-canopy.bind_command("Up", { path = "intervals", description = "Previous item" }, "list::select_by", -1)
-canopy.bind_mouse("ScrollUp", { path = "intervals", description = "Previous item" }, function()
-    list.select_by(-1)
-end)
-canopy.bind_command("d", { path = "intervals", description = "Delete item" }, "list::delete_selected")
-canopy.bind_command("PageDown", { path = "intervals", description = "Page down" }, "list::page", 1)
-canopy.bind_command("Space", { path = "intervals", description = "Page down" }, "list::page", 1)
-canopy.bind_command("PageUp", { path = "intervals", description = "Page up" }, "list::page", -1)
-canopy.bind_command("q", { path = "intervals", description = "Quit" }, "root::quit")
+canopy.keymap {
+    path = "intervals",
+    { key = "a", description = "Add item", action = command.intervals.add_item() },
+    { key = "g", description = "First item", action = command.list.select_first() },
+    { key = { "j", "Down" }, description = "Next item", action = command.list.select_by(1) },
+    {
+        mouse = "ScrollDown",
+        description = "Next item",
+        action = function()
+            list.select_by(1)
+        end,
+    },
+    { key = { "k", "Up" }, description = "Previous item", action = command.list.select_by(-1) },
+    {
+        mouse = "ScrollUp",
+        description = "Previous item",
+        action = function()
+            list.select_by(-1)
+        end,
+    },
+    { key = "d", description = "Delete item", action = command.list.delete_selected() },
+    { key = { "PageDown", "Space" }, description = "Page down", action = command.list.page(1) },
+    { key = "PageUp", description = "Page up", action = command.list.page(-1) },
+    { key = "q", description = "Quit", action = command.root.quit() },
+}
 "#;
 
 /// Counter widget that increments on a timer.

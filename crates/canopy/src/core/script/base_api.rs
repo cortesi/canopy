@@ -1,7 +1,7 @@
 //! Base `canopy` scripting API declarations and native registration.
 
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeSet, HashSet},
     future::poll_fn,
     iter,
     result::Result as StdResult,
@@ -21,13 +21,14 @@ use ruau::{
 
 use super::{
     ArgValue, Canopy, ChangeOutcome, CommandSet, Context, CoreContext, CoreViewContext, FocusScope,
-    NodeId, PathFilter, Pin, Point, RectI32, ReentrantCanopyGuard, Result, ViewContext,
-    available_bindings_to_arg, base_api, binding_info_to_arg, command_info_to_arg, commands, defs,
-    dispatch_command, dispatch_command_by_name, dispatch_explicit, error, fixtures_to_arg,
-    host_return, host_value, inputmap, key, luau_global_owner_name, mouse, node_handle_type,
-    node_id_from_value, node_info_to_arg, node_list_to_arg, owned_truthy, ret_arg, ret_none,
-    ret_one, route_trace_to_arg, screen_cells_to_arg, screen_text, screen_text_for_rect,
-    screen_to_arg, script_callback_label, script_journal_to_arg, snapshot_to_arg, tree_node_to_arg,
+    NodeId, PathFilter, Pin, Point, RectI32, ReentrantCanopyGuard, Result, ScriptCommandCall,
+    ViewContext, available_bindings_to_arg, base_api, binding_info_to_arg, command_call_from_value,
+    command_call_type, command_info_to_arg, commands, defs, dispatch_command,
+    dispatch_command_by_name, dispatch_explicit, error, fixtures_to_arg, host_return, host_value,
+    inputmap, key, luau_global_owner_name, mouse, node_handle_type, node_id_from_value,
+    node_info_to_arg, node_list_to_arg, owned_truthy, ret_arg, ret_none, ret_one,
+    route_trace_to_arg, screen_cells_to_arg, screen_text, screen_text_for_rect, screen_to_arg,
+    script_callback_label, script_journal_to_arg, snapshot_to_arg, tree_node_to_arg,
     validate_node_handle, values_to_args, with_current_canopy,
 };
 use crate::{FocusDirection, geom::PointI32};
@@ -422,39 +423,53 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "bind",
-        docs: Some("Bind a key spec with required discovery metadata."),
-        signature: || {
-            FunctionSignature::new()
-                .param(("key", Type::String))
-                .param(("options", Type::named("BindOptions")))
-                .param(("handler", Type::func(FunctionSignature::new())))
-                .ret(Type::Number)
-        },
-        handler: Handler::Sync(host_bind),
-    },
-    BaseFunction {
-        name: "bind_command",
         docs: Some(
-            "Bind a key to one command with positional arguments and the binding route origin.",
+            "Bind a key spec to a CommandCall or a function, with required discovery metadata.",
         ),
         signature: || {
             FunctionSignature::new()
                 .param(("key", Type::String))
                 .param(("options", Type::named("BindOptions")))
-                .param(("id", Type::String))
-                .varargs(Type::Any)
+                .param((
+                    "action",
+                    Type::union([
+                        Type::named("CommandCall"),
+                        Type::func(FunctionSignature::new()),
+                    ]),
+                ))
                 .ret(Type::Number)
         },
-        handler: Handler::Sync(host_bind_command),
+        handler: Handler::Sync(host_bind),
+    },
+    BaseFunction {
+        name: "keymap",
+        docs: Some(
+            "Install a keymap: shared options in the named fields, and entries in the array part. \
+             Every entry is validated before any binding installs. Returns the binding IDs in entry order.",
+        ),
+        signature: || {
+            FunctionSignature::new()
+                .param(("keymap", Type::named("Keymap")))
+                .ret(Type::Number.array())
+        },
+        handler: Handler::Sync(host_keymap),
     },
     BaseFunction {
         name: "bind_mouse",
-        docs: Some("Bind a mouse spec with required discovery metadata."),
+        docs: Some(
+            "Bind a mouse spec to a CommandCall or a function, with required discovery metadata.",
+        ),
         signature: || {
             FunctionSignature::new()
                 .param(("mouse", Type::named("MouseSpec")))
                 .param(("options", Type::named("BindOptions")))
-                .param(("handler", Type::func(FunctionSignature::new())))
+                .param((
+                    "action",
+                    Type::union([
+                        Type::named("CommandCall"),
+                        Type::func(FunctionSignature::new()),
+                    ]),
+                ))
                 .ret(Type::Number)
         },
         handler: Handler::Sync(host_bind_mouse),
@@ -941,6 +956,25 @@ fn install_function_binding<'s>(
                 Err(err)
             }
         }
+    })
+    .map_err(RuntimeError::from)
+}
+
+/// Install a command binding, replacing any binding with the same selector.
+fn install_command_binding(
+    scope: &Scope<'_>,
+    action: commands::CommandAction,
+    input: inputmap::InputSpec,
+    options: &inputmap::BindingOptions,
+) -> StdResult<i64, RuntimeError> {
+    with_current_canopy(scope, |canopy, _| {
+        let (binding_id, removed) = canopy.core.input_map.replace_application_action(
+            input,
+            options.clone(),
+            inputmap::BindingTarget::Command(action),
+        )?;
+        canopy.release_removed_bindings(removed);
+        Ok(binding_id.as_u64() as i64)
     })
     .map_err(RuntimeError::from)
 }
@@ -1512,7 +1546,50 @@ fn host_pop_mode<'s>(
     Ok(ret_one(ScopedValue::String(scope.create_string(&mode)?)))
 }
 
-/// Bind one key or mouse spec to a Luau callback.
+/// A binding action read from a script: a command value or a callback.
+enum ScriptAction<'s> {
+    /// A `CommandCall` built by a `command` constructor.
+    Command(ScriptCommandCall),
+    /// A Luau function.
+    Function(Function<'s>),
+}
+
+/// Read a binding action argument, which is a `CommandCall` or a function.
+fn read_action<'s>(
+    scope: &Scope<'s>,
+    args: &mut HostArgCursor<'_, 's>,
+) -> StdResult<ScriptAction<'s>, RuntimeError> {
+    let value = args
+        .raw()
+        .ok_or_else(|| RuntimeError::runtime("argument `action` is required"))?;
+    if let Some(call) = command_call_from_value(scope, &value)? {
+        return Ok(ScriptAction::Command(call));
+    }
+    match value {
+        ScopedValue::Function(function) => Ok(ScriptAction::Function(function)),
+        other => Err(RuntimeError::runtime(format!(
+            "argument `action` must be a CommandCall or a function, got {}",
+            other.type_name()
+        ))),
+    }
+}
+
+/// Install a binding for a script action.
+fn install_action_binding<'s>(
+    scope: &Scope<'s>,
+    action: ScriptAction<'s>,
+    input: inputmap::InputSpec,
+    options: &inputmap::BindingOptions,
+) -> StdResult<i64, RuntimeError> {
+    match action {
+        ScriptAction::Command(call) => install_command_binding(scope, call.0, input, options),
+        ScriptAction::Function(function) => {
+            install_function_binding(scope, function, input, options)
+        }
+    }
+}
+
+/// Bind one key or mouse spec to a command value or a Luau callback.
 fn host_bind_input<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
@@ -1522,9 +1599,9 @@ fn host_bind_input<'s>(
     let mut args = HostArgCursor::new(scope, args);
     let spec = args.required::<String>(field)?;
     let options = parse_bind_options(scope, args.optional::<Table<'_>>("options")?)?;
-    let function = args.required::<Function<'_>>("handler")?;
+    let action = read_action(scope, &mut args)?;
     let input = make_input(&spec)?;
-    let id = install_function_binding(scope, function, input, &options)?;
+    let id = install_action_binding(scope, action, input, &options)?;
     Ok(ret_one(ScopedValue::Number(id as f64)))
 }
 
@@ -1540,28 +1617,239 @@ fn host_bind<'s>(
     })
 }
 
-/// `canopy.bind_command`: install one inspectable positional command action.
-fn host_bind_command<'s>(
+/// Keymap option fields, which are the `BindOptions` fields other than
+/// `description`.
+const KEYMAP_OPTIONS: [&str; 4] = ["mode", "path", "phase", "tier"];
+
+/// Keymap entry fields.
+const KEYMAP_ENTRY_FIELDS: [&str; 4] = ["key", "mouse", "description", "action"];
+
+/// One validated binding that a keymap call will install.
+struct PlannedBinding<'s> {
+    /// Normalized input.
+    input: inputmap::InputSpec,
+    /// Complete binding options, including the entry description.
+    options: inputmap::BindingOptions,
+    /// Action shared by every binding of the entry.
+    action: ScriptAction<'s>,
+}
+
+impl Clone for ScriptAction<'_> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Command(call) => Self::Command(call.clone()),
+            Self::Function(function) => Self::Function(*function),
+        }
+    }
+}
+
+/// Read a field that is one string or an array of strings.
+fn string_or_array<'s>(
+    scope: &Scope<'s>,
+    value: ScopedValue<'s>,
+    context: &str,
+) -> StdResult<Vec<String>, RuntimeError> {
+    match value {
+        ScopedValue::Nil => Ok(Vec::new()),
+        ScopedValue::String(_) => Ok(vec![String::from_lua(value, scope)?]),
+        ScopedValue::Table(table) => {
+            let items = Vec::<ScopedValue<'_>>::from_lua(ScopedValue::Table(table), scope)
+                .map_err(|_| {
+                    RuntimeError::runtime(format!(
+                        "{context} must be a string or an array of strings"
+                    ))
+                })?;
+            if items.is_empty() {
+                return Err(RuntimeError::runtime(format!(
+                    "{context} is an empty array"
+                )));
+            }
+            items
+                .into_iter()
+                .map(|item| {
+                    String::from_lua(item, scope).map_err(|_| {
+                        RuntimeError::runtime(format!(
+                            "{context} must be a string or an array of strings"
+                        ))
+                    })
+                })
+                .collect()
+        }
+        other => Err(RuntimeError::runtime(format!(
+            "{context} must be a string or an array of strings, got {}",
+            other.type_name()
+        ))),
+    }
+}
+
+/// Split a keymap table into its option fields and its dense entry array.
+fn split_keymap<'s>(
+    scope: &Scope<'s>,
+    table: Table<'s>,
+) -> StdResult<(Table<'s>, Vec<Table<'s>>), RuntimeError> {
+    let options = scope.create_table()?;
+    let mut entries = Vec::new();
+    for (key, value) in table.pairs(scope)? {
+        match key {
+            ScopedValue::String(_) => {
+                let name = String::from_lua(key, scope)?;
+                if !KEYMAP_OPTIONS.contains(&name.as_str()) {
+                    return Err(RuntimeError::runtime(format!(
+                        "keymap has an unknown field `{name}`"
+                    )));
+                }
+                options.set(scope, name.as_str(), value)?;
+            }
+            ScopedValue::Integer(_) | ScopedValue::Number(_) => {
+                let index = i64::from_lua(key, scope)
+                    .map_err(|_| RuntimeError::runtime("keymap entries must be a dense array"))?;
+                let entry = match value {
+                    ScopedValue::Table(entry) => entry,
+                    other => {
+                        return Err(RuntimeError::runtime(format!(
+                            "keymap entry {index} must be a table, got {}",
+                            other.type_name()
+                        )));
+                    }
+                };
+                entries.push((index, entry));
+            }
+            other => {
+                return Err(RuntimeError::runtime(format!(
+                    "keymap has a field with an unsupported key type {}",
+                    other.type_name()
+                )));
+            }
+        }
+    }
+    entries.sort_by_key(|(index, _)| *index);
+    for (position, (index, _)) in entries.iter().enumerate() {
+        if *index != i64::try_from(position + 1).unwrap_or(i64::MAX) {
+            return Err(RuntimeError::runtime(
+                "keymap entries must be a dense array",
+            ));
+        }
+    }
+    Ok((
+        options,
+        entries.into_iter().map(|(_, entry)| entry).collect(),
+    ))
+}
+
+/// Parse and validate one keymap entry into its planned bindings.
+fn plan_keymap_entry<'s>(
+    scope: &Scope<'s>,
+    index: usize,
+    entry: Table<'s>,
+    options: &inputmap::BindingOptions,
+) -> StdResult<Vec<PlannedBinding<'s>>, RuntimeError> {
+    let entry_error =
+        |message: String| RuntimeError::runtime(format!("keymap entry {index} {message}"));
+    for (key, _) in entry.pairs(scope)? {
+        let name = match key {
+            ScopedValue::String(_) => String::from_lua(key, scope)?,
+            other => {
+                return Err(entry_error(format!(
+                    "has a field with an unsupported key type {}",
+                    other.type_name()
+                )));
+            }
+        };
+        if !KEYMAP_ENTRY_FIELDS.contains(&name.as_str()) {
+            return Err(entry_error(format!("has an unknown field `{name}`")));
+        }
+    }
+    let keys = string_or_array(
+        scope,
+        entry.get(scope, "key")?,
+        &format!("keymap entry {index} `key`"),
+    )?;
+    let mice = string_or_array(
+        scope,
+        entry.get(scope, "mouse")?,
+        &format!("keymap entry {index} `mouse`"),
+    )?;
+    if keys.is_empty() && mice.is_empty() {
+        return Err(entry_error("has neither `key` nor `mouse`".to_string()));
+    }
+    let description = optional_string_field(scope, &entry, "description")?
+        .ok_or_else(|| entry_error("has no `description`".to_string()))?;
+    let action = match entry.get::<_, ScopedValue<'_>>(scope, "action")? {
+        ScopedValue::Nil => return Err(entry_error("has no `action`".to_string())),
+        value => match command_call_from_value(scope, &value)? {
+            Some(call) => ScriptAction::Command(call),
+            None => match value {
+                ScopedValue::Function(function) => ScriptAction::Function(function),
+                other => {
+                    return Err(entry_error(format!(
+                        "`action` must be a CommandCall or a function, got {}",
+                        other.type_name()
+                    )));
+                }
+            },
+        },
+    };
+    let mut options = options.clone();
+    options.description = description;
+    let mut planned = Vec::new();
+    let mut push = |input: inputmap::InputSpec| -> StdResult<(), RuntimeError> {
+        inputmap::validate_application_binding(input, &options)
+            .map_err(|err| entry_error(format!("is invalid: {err}")))?;
+        planned.push(PlannedBinding {
+            input: input.normalize(),
+            options: options.clone(),
+            action: action.clone(),
+        });
+        Ok(())
+    };
+    for spec in &keys {
+        let key = key::Key::parse_spec(spec)
+            .map_err(|err| entry_error(format!("has an invalid key spec `{spec}`: {err}")))?;
+        push(inputmap::InputSpec::Key(key))?;
+    }
+    for spec in &mice {
+        let mouse = mouse::Mouse::parse_spec(spec)
+            .map_err(|err| entry_error(format!("has an invalid mouse spec `{spec}`: {err}")))?;
+        push(inputmap::InputSpec::Mouse(mouse))?;
+    }
+    Ok(planned)
+}
+
+/// `canopy.keymap`: install many bindings that share one option set.
+///
+/// Every option and entry is validated before the first binding installs, so
+/// a keymap with an error installs nothing.
+fn host_keymap<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
     let mut args = HostArgCursor::new(scope, args);
-    let key_spec = args.required::<String>("key")?;
-    let options = parse_bind_options(scope, args.optional::<Table<'_>>("options")?)?;
-    let name = args.required::<String>("id")?;
-    let values = values_to_args(scope, iter::from_fn(|| args.raw()).collect())?;
-    let key = key::Key::parse_spec(&key_spec).map_err(error::Error::from)?;
-    let id = with_current_canopy(scope, |canopy, _| {
-        let spec = canopy.core.commands.get(&name).ok_or_else(|| {
-            error::Error::from(commands::CommandError::UnknownCommand { id: name.clone() })
-        })?;
-        canopy.bind_command(
-            key,
-            options,
-            spec.call_with(commands::CommandArgs::Positional(values)),
-        )
-    })?;
-    Ok(ret_one(ScopedValue::Number(id.as_u64() as f64)))
+    let table = args.required::<Table<'_>>("keymap")?;
+    let (options, entries) = split_keymap(scope, table)?;
+    // The shared options carry a placeholder description that each entry
+    // replaces before validation.
+    options.set(scope, "description", "keymap")?;
+    let options = parse_bind_options(scope, Some(options))?;
+    let mut planned = Vec::new();
+    let mut seen = HashSet::new();
+    for (position, entry) in entries.into_iter().enumerate() {
+        let index = position + 1;
+        for binding in plan_keymap_entry(scope, index, entry, &options)? {
+            if !seen.insert(binding.input) {
+                return Err(RuntimeError::runtime(format!(
+                    "keymap entry {index} binds `{}` more than once in this keymap",
+                    binding.input
+                )));
+            }
+            planned.push(binding);
+        }
+    }
+    let mut ids = Vec::with_capacity(planned.len());
+    for binding in planned {
+        let id = install_action_binding(scope, binding.action, binding.input, &binding.options)?;
+        ids.push(ArgValue::Int(id));
+    }
+    ret_arg(scope, &ArgValue::Array(ids))
 }
 
 /// `canopy.bind_mouse`: bind a mouse spec to a Luau callback.
@@ -1808,9 +2096,99 @@ pub(super) fn build_base_module() -> Result<Arc<dyn NativeModule>> {
         commands::declaration::Class::new("NodeId"),
         Arc::new(node_handle_type()),
     );
+    builder.host_type(
+        commands::declaration::Class::new("CommandCall"),
+        Arc::new(command_call_type()),
+    );
     base_api::register(&mut builder);
     builder.build().map_err(|error| {
         error::Error::script(format!("building base script module failed: {error}"))
+    })
+}
+
+/// Luau global that holds the command constructors.
+pub(super) const COMMAND_GLOBAL: &str = "command";
+
+/// Build the `command` module: one constructor per node command, grouped by
+/// owner, each returning a `CommandCall`.
+///
+/// The constructors of each owner live in a hidden table. A trusted source
+/// value assembles the `command` global from those tables, so the rendered
+/// declaration is one table of owner tables.
+pub(super) fn build_command_module(commands: &CommandSet) -> Result<Arc<dyn NativeModule>> {
+    use commands::declaration::{Field, Type};
+
+    let mut builder = module::Builder::new(COMMAND_GLOBAL);
+    builder.extern_ty("CommandCall");
+    let mut owner_fields = Vec::new();
+    let mut inputs = Vec::new();
+    for (owner, specs) in defs::owner_command_specs(commands, &BTreeSet::new()) {
+        if specs.is_empty() {
+            continue;
+        }
+        let global_name = luau_global_owner_name(&owner);
+        if global_name == COMMAND_GLOBAL {
+            return Err(error::Error::script(format!(
+                "owner `{owner}` collides with the reserved `{COMMAND_GLOBAL}` global"
+            )));
+        }
+        defs::register_extern_dependencies(&mut builder, &specs);
+        let hidden = format!("{COMMAND_GLOBAL}.{global_name}");
+        let mut fields = Vec::new();
+        for spec in specs {
+            let mut field = Field::new(spec.name, Type::func(defs::command_call_sig(spec)));
+            if let Some(documentation) = defs::command_doc(spec) {
+                field = field.doc(documentation);
+            }
+            fields.push(field);
+            builder.borrowed_function(
+                spec.name,
+                Binding::hidden(hidden.clone()),
+                move |scope: &Scope<'_>, args: MultiValue<'_>| {
+                    let mut args = HostArgCursor::new(scope, args);
+                    let values = values_to_args(scope, iter::from_fn(|| args.raw()).collect())?;
+                    let args = commands::CommandArgs::Positional(values);
+                    (spec.check)(&args)
+                        .map_err(|err| RuntimeError::from(error::Error::from(err)))?;
+                    let call = ScriptCommandCall(commands::CommandAction {
+                        invocation: commands::CommandInvocation { id: spec.id, args },
+                        target: None,
+                    });
+                    Ok(ret_one(ScopedValue::Userdata(scope.create_userdata(call)?)))
+                },
+            );
+        }
+        owner_fields.push(Field::new(global_name.clone(), Type::table(fields)));
+        inputs.push((global_name, hidden));
+    }
+    let locals = inputs
+        .iter()
+        .map(|(name, _)| name.as_str())
+        .collect::<Vec<_>>();
+    let source = if locals.is_empty() {
+        "return {}".to_string()
+    } else {
+        format!(
+            "local {} = ...\nreturn {{ {} }}",
+            locals.join(", "),
+            locals
+                .iter()
+                .map(|name| format!("{name} = {name}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    };
+    builder.source_value_with(
+        COMMAND_GLOBAL,
+        Binding::global(Type::table(owner_fields)).doc(
+            "Command constructors, grouped by owner. Each constructor checks its arguments \
+             and returns a CommandCall for use as a binding action.",
+        ),
+        source,
+        inputs.into_iter().map(|(_, hidden)| hidden),
+    );
+    builder.build().map_err(|error| {
+        error::Error::script(format!("building command script module failed: {error}"))
     })
 }
 

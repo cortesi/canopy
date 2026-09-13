@@ -14,35 +14,65 @@ root.default_bindings()
 canopy.bind("p", { description = "Log demo message" }, function()
     canopy.log("focus gym")
 end)
-canopy.bind_command("Tab", { path = "focus_gym", description = "Next focus" }, "root::focus", "Next")
-canopy.bind_mouse("ScrollDown", { path = "focus_gym", description = "Next focus" }, function()
-    root.focus("Next")
-end)
-canopy.bind_mouse("ScrollUp", { path = "focus_gym", description = "Previous focus" }, function()
-    root.focus("Prev")
-end)
-canopy.bind_command("Right", { path = "focus_gym", description = "Focus right" }, "root::focus", "Right")
-canopy.bind_command("l", { path = "focus_gym", description = "Focus right" }, "root::focus", "Right")
-canopy.bind_command("Left", { path = "focus_gym", description = "Focus left" }, "root::focus", "Left")
-canopy.bind_command("h", { path = "focus_gym", description = "Focus left" }, "root::focus", "Left")
-canopy.bind_command("Up", { path = "focus_gym", description = "Focus up" }, "root::focus", "Up")
-canopy.bind_command("k", { path = "focus_gym", description = "Focus up" }, "root::focus", "Up")
-canopy.bind_command("Down", { path = "focus_gym", description = "Focus down" }, "root::focus", "Down")
-canopy.bind_command("j", { path = "focus_gym", description = "Focus down" }, "root::focus", "Down")
-canopy.bind_command("x", { path = "focus_gym", description = "Delete focused block" }, "focus_gym::delete_focused")
-canopy.bind_command("s", { phase = "before_widget", path = "block", description = "Split block" }, "block::split")
-canopy.bind_command("a", { phase = "before_widget", path = "block", description = "Add child block" }, "block::add")
-canopy.bind_command("[", { phase = "before_widget", path = "block", description = "Decrease grow" }, "block::flex_grow_dec")
-canopy.bind_command("]", { phase = "before_widget", path = "block", description = "Increase grow" }, "block::flex_grow_inc")
-canopy.bind_mouse("LeftDown", { path = "block", description = "Focus block" }, function()
-    block.focus()
-end)
-canopy.bind_mouse("MiddleDown", { path = "block", description = "Split block" }, function()
-    block.split()
-end)
-canopy.bind_mouse("RightDown", { path = "block", description = "Add child block" }, function()
-    block.add()
-end)
+canopy.keymap {
+    path = "focus_gym",
+    { key = "Tab", description = "Next focus", action = command.root.focus("Next") },
+    {
+        mouse = "ScrollDown",
+        description = "Next focus",
+        action = function()
+            root.focus("Next")
+        end,
+    },
+    {
+        mouse = "ScrollUp",
+        description = "Previous focus",
+        action = function()
+            root.focus("Prev")
+        end,
+    },
+    { key = { "Right", "l" }, description = "Focus right", action = command.root.focus("Right") },
+    { key = { "Left", "h" }, description = "Focus left", action = command.root.focus("Left") },
+    { key = { "Up", "k" }, description = "Focus up", action = command.root.focus("Up") },
+    { key = { "Down", "j" }, description = "Focus down", action = command.root.focus("Down") },
+    {
+        key = "x",
+        description = "Delete focused block",
+        action = command.focus_gym.delete_focused(),
+    },
+}
+canopy.keymap {
+    path = "block",
+    phase = "before_widget",
+    { key = "s", description = "Split block", action = command.block.split() },
+    { key = "a", description = "Add child block", action = command.block.add() },
+    { key = "[", description = "Decrease grow", action = command.block.flex_grow_dec() },
+    { key = "]", description = "Increase grow", action = command.block.flex_grow_inc() },
+}
+canopy.keymap {
+    path = "block",
+    {
+        mouse = "LeftDown",
+        description = "Focus block",
+        action = function()
+            block.focus()
+        end,
+    },
+    {
+        mouse = "MiddleDown",
+        description = "Split block",
+        action = function()
+            block.split()
+        end,
+    },
+    {
+        mouse = "RightDown",
+        description = "Add child block",
+        action = function()
+            block.add()
+        end,
+    },
+}
 "#;
 
 /// A focusable block that can split into children.

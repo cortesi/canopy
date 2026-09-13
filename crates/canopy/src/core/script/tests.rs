@@ -703,6 +703,10 @@ fn wait_command_invoke(
     Ok(ArgValue::Null)
 }
 
+fn wait_command_check(_args: &CommandArgs) -> StdResult<(), commands::CommandError> {
+    Ok(())
+}
+
 static WAIT_EXTRA_NODE: CommandSpec = CommandSpec {
     id: commands::CommandId("ba_la::wait_extra"),
     name: "wait_extra",
@@ -711,6 +715,7 @@ static WAIT_EXTRA_NODE: CommandSpec = CommandSpec {
     ret: commands::CommandReturnSpec::Unit,
     doc: None,
     invoke: wait_command_invoke,
+    check: wait_command_check,
     status: None,
 };
 
@@ -722,6 +727,7 @@ static WAIT_FREE: CommandSpec = CommandSpec {
     ret: commands::CommandReturnSpec::Unit,
     doc: None,
     invoke: wait_command_invoke,
+    check: wait_command_check,
     status: None,
 };
 
@@ -911,8 +917,12 @@ fn explicit_script_arguments_do_not_infer_named_maps() -> Result<()> {
 #[test]
 fn declarative_script_binding_exposes_arguments_phase_and_route_target() -> Result<()> {
     let (mut canopy, _, _) = script_call_probes()?;
-    canopy.eval_script(r#"
-        canopy.bind_command("x", {description = "Set value", phase = "before_widget"}, "script_call_probe::set_value", 7)
+    canopy.eval_script(
+        r#"
+        canopy.bind("x", {
+            phase = "before_widget",
+            description = "Set value",
+        }, command.script_call_probe.set_value(7))
         for _, binding in canopy.bindings() do
             if binding.input == "x" then
                 assert(binding.target == "command")
@@ -923,7 +933,8 @@ fn declarative_script_binding_exposes_arguments_phase_and_route_target() -> Resu
                 assert(binding.phase == "before_widget")
             end
         end
-    "#)?;
+    "#,
+    )?;
     canopy.key(None, 'x')?;
     assert_eq!(
         canopy.eval_script(r#"return canopy.call_focus("script_call_probe::identify")"#)?,

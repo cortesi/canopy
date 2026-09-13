@@ -20,35 +20,61 @@ use canopy_widgets::{Center, Dropdown, Frame, Label, Root, Selector};
 const DEFAULT_BINDINGS: &str = r#"
 root.default_bindings()
 
-canopy.bind_command("q", { phase = "before_widget", path = "stylegym/", description = "Quit" }, "root::quit")
-canopy.bind_command("Tab", { phase = "before_widget", path = "stylegym/", description = "Next focus" }, "root::focus", "Next")
-canopy.bind_command("BackTab", { phase = "before_widget", path = "stylegym/", description = "Previous focus" }, "root::focus", "Prev")
-canopy.bind_command("m", { phase = "before_widget", path = "stylegym/", description = "Show modal" }, "stylegym::show_modal")
-canopy.bind_command("Esc", { phase = "before_widget", path = "stylegym/", description = "Hide modal" }, "stylegym::hide_modal")
-canopy.bind_command("j", { phase = "before_widget", path = "stylegym/", description = "Next focus" }, "root::focus", "Next")
-canopy.bind_command("k", { phase = "before_widget", path = "stylegym/", description = "Previous focus" }, "root::focus", "Prev")
+canopy.keymap {
+    path = "stylegym/",
+    phase = "before_widget",
+    { key = "q", description = "Quit", action = command.root.quit() },
+    { key = { "Tab", "j" }, description = "Next focus", action = command.root.focus("Next") },
+    {
+        key = { "BackTab", "k" },
+        description = "Previous focus",
+        action = command.root.focus("Prev"),
+    },
+    { key = "m", description = "Show modal", action = command.stylegym.show_modal() },
+    { key = "Esc", description = "Hide modal", action = command.stylegym.hide_modal() },
+}
 
-canopy.bind("Enter", { phase = "before_widget", path = "dropdown", description = "Apply theme" }, function()
-    dropdown.confirm()
-    stylegym.apply_theme()
-end)
-canopy.bind_command("Space", { phase = "before_widget", path = "dropdown", description = "Toggle dropdown" }, "dropdown::toggle")
-canopy.bind_command("Down", { phase = "before_widget", path = "dropdown", description = "Next option" }, "dropdown::select_by", 1)
-canopy.bind_command("Up", { phase = "before_widget", path = "dropdown", description = "Previous option" }, "dropdown::select_by", -1)
+canopy.keymap {
+    path = "dropdown",
+    phase = "before_widget",
+    {
+        key = "Enter",
+        description = "Apply theme",
+        action = function()
+            dropdown.confirm()
+            stylegym.apply_theme()
+        end,
+    },
+    { key = "Space", description = "Toggle dropdown", action = command.dropdown.toggle() },
+    { key = "Down", description = "Next option", action = command.dropdown.select_by(1) },
+    { key = "Up", description = "Previous option", action = command.dropdown.select_by(-1) },
+}
 canopy.bind_mouse("LeftDown", { path = "dropdown", description = "Apply theme" }, function()
     stylegym.apply_theme()
 end)
 
-canopy.bind("Space", { phase = "before_widget", path = "selector", description = "Toggle effect" }, function()
-    selector.toggle()
-    stylegym.apply_effects()
-end)
-canopy.bind("Enter", { phase = "before_widget", path = "selector", description = "Toggle effect" }, function()
-    selector.toggle()
-    stylegym.apply_effects()
-end)
-canopy.bind_command("Down", { phase = "before_widget", path = "selector", description = "Next effect" }, "selector::select_by", 1)
-canopy.bind_command("Up", { phase = "before_widget", path = "selector", description = "Previous effect" }, "selector::select_by", -1)
+canopy.keymap {
+    path = "selector",
+    phase = "before_widget",
+    {
+        key = "Space",
+        description = "Toggle effect",
+        action = function()
+            selector.toggle()
+            stylegym.apply_effects()
+        end,
+    },
+    {
+        key = "Enter",
+        description = "Toggle effect",
+        action = function()
+            selector.toggle()
+            stylegym.apply_effects()
+        end,
+    },
+    { key = "Down", description = "Next effect", action = command.selector.select_by(1) },
+    { key = "Up", description = "Previous effect", action = command.selector.select_by(-1) },
+}
 canopy.bind_mouse("LeftDown", { path = "selector", description = "Apply effects" }, function()
     stylegym.apply_effects()
 end)

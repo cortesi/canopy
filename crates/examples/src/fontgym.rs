@@ -956,8 +956,10 @@ fn status_text(height: u32, state: FontEffects) -> String {
 
 /// Focus controls shared by eager and builder setup.
 const DEFAULT_BINDINGS: &str = r#"
-canopy.bind_command("Tab", { description = "Next focus" }, "root::focus", "Next")
-canopy.bind_command("BackTab", { description = "Previous focus" }, "root::focus", "Prev")
+canopy.keymap {
+    { key = "Tab", description = "Next focus", action = command.root.focus("Next") },
+    { key = "BackTab", description = "Previous focus", action = command.root.focus("Prev") },
+}
 "#;
 
 /// Queue this demo's bindings and native configuration in their builder phases.

@@ -1,16 +1,13 @@
 root.default_bindings()
 
-canopy.bind_command("?", {
-    phase = "before_widget",
-    description = "Show key bindings",
+canopy.bind("?", {
     path = "/root/**/",
+    phase = "before_widget",
     tier = "global",
-}, "root::toggle_help")
+    description = "Show key bindings",
+}, command.root.toggle_help())
 
-canopy.bind_command("+", {
-    description = "Count up",
-}, "hello::bump", 1)
-
-canopy.bind_command("-", {
-    description = "Count down",
-}, "hello::bump", -1)
+canopy.keymap {
+    { key = "+", description = "Count up", action = command.hello.bump(1) },
+    { key = "-", description = "Count down", action = command.hello.bump(-1) },
+}

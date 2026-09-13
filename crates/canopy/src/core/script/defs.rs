@@ -66,19 +66,29 @@ pub(super) fn owner_command_specs(
 
 /// Build a Luau function signature for a command.
 pub(super) fn command_fn_sig(spec: &CommandSpec) -> declaration::FunctionSignature {
-    let params = spec
-        .params
+    let params = command_params_sig(spec);
+    match spec.ret {
+        CommandReturnSpec::Unit => params,
+        CommandReturnSpec::Value(ty) => params.ret(ty.luau_ty()),
+    }
+}
+
+/// Build the Luau signature of a command constructor: the user parameters of
+/// the command, returning a `CommandCall`.
+pub(super) fn command_call_sig(spec: &CommandSpec) -> declaration::FunctionSignature {
+    command_params_sig(spec).ret(declaration::Type::named("CommandCall"))
+}
+
+/// Build a signature that takes the user parameters of a command.
+fn command_params_sig(spec: &CommandSpec) -> declaration::FunctionSignature {
+    spec.params
         .iter()
         .filter(|param| param.kind == CommandParamKind::User)
         .map(|param| declaration::Parameter::new(param.name, param.ty.luau_ty()))
         .fold(
             declaration::FunctionSignature::new(),
             declaration::FunctionSignature::param,
-        );
-    match spec.ret {
-        CommandReturnSpec::Unit => params,
-        CommandReturnSpec::Value(ty) => params.ret(ty.luau_ty()),
-    }
+        )
 }
 
 /// Register framework-owned record and alias declarations.
@@ -171,6 +181,65 @@ pub(super) fn register_framework_declarations(builder: &mut module::Builder) {
                 .doc("Use the global tier. A global binding cannot name a mode."),
         ]),
     ));
+    let action_type = declaration::Type::union([
+        declaration::Type::named("CommandCall"),
+        declaration::Type::func(declaration::FunctionSignature::new()),
+    ]);
+    builder.alias(
+        declaration::Alias::new(
+            "KeymapEntry",
+            declaration::Type::table([
+                declaration::Field::new(
+                    "key",
+                    declaration::Type::union([
+                        declaration::Type::String,
+                        declaration::Type::String.array(),
+                    ])
+                    .optional(),
+                )
+                .doc("One key spec, or an array of key specs. Each spec makes one binding."),
+                declaration::Field::new(
+                    "mouse",
+                    declaration::Type::union([
+                        declaration::Type::named("MouseSpec"),
+                        declaration::Type::named("MouseSpec").array(),
+                    ])
+                    .optional(),
+                )
+                .doc("One mouse spec, or an array of mouse specs. Each spec makes one binding."),
+                declaration::Field::new("description", declaration::Type::String)
+                    .doc("User-facing description of every binding the entry makes."),
+                declaration::Field::new("action", action_type)
+                    .doc("A CommandCall from the `command` table, or a function."),
+            ]),
+        )
+        .doc("One keymap entry. An entry needs `key`, `mouse`, or both."),
+    );
+    builder.alias(
+        declaration::Alias::new(
+            "Keymap",
+            declaration::Type::table_with_indexer(
+                [
+                    declaration::Field::new("mode", declaration::Type::String.optional())
+                        .doc("Optional input mode for every entry. Nil or empty uses the default mode."),
+                    declaration::Field::new("path", declaration::Type::String.optional())
+                        .doc("Optional path filter for every entry, such as `editor/*`."),
+                    declaration::Field::new(
+                        "phase",
+                        declaration::Type::literals(["before_widget", "after_widget"]).optional(),
+                    )
+                    .doc("Key dispatch phase for every entry. The default is after_widget. Mouse entries accept only after_widget."),
+                    declaration::Field::new("tier", declaration::Type::literals(["global"]).optional())
+                        .doc("Use the global tier. A global keymap cannot name a mode."),
+                ],
+                declaration::TableIndexer::new(
+                    declaration::Type::Number,
+                    declaration::Type::named("KeymapEntry"),
+                ),
+            ),
+        )
+        .doc("Binding options in the named fields, and one KeymapEntry per array item."),
+    );
     builder.alias(declaration::Alias::new(
         "UnbindSelector",
         declaration::Type::table([
@@ -465,7 +534,20 @@ pub(super) fn register_owner_dependencies(
     builder: &mut module::Builder,
     specs: &[&'static CommandSpec],
 ) {
-    let mut registry = DeclRegistry::native_module(builder);
+    register_dependencies(DeclRegistry::native_module(builder), specs);
+}
+
+/// Reference the declaration dependencies of commands that another module
+/// declares.
+pub(super) fn register_extern_dependencies(
+    builder: &mut module::Builder,
+    specs: &[&'static CommandSpec],
+) {
+    register_dependencies(DeclRegistry::extern_module(builder), specs);
+}
+
+/// Walk the parameter and return types of commands into a registry.
+fn register_dependencies(mut registry: DeclRegistry<'_>, specs: &[&'static CommandSpec]) {
     for spec in specs {
         for param in spec
             .params

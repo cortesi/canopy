@@ -14,18 +14,20 @@ Canopy renders the file from the same native modules it installs on the script
 surface, in install order:
 
 1. The header comment in `crates/canopy/luau/preamble.d.luau`.
-2. The base `canopy` module, which declares `NodeId`, `Point`, `Size`, `Rect`,
-   `SemanticIdentity`, `NodeInfo`, `TreeNode`, `CommandTarget`,
-   `CommandTargetInfo`, `BindOptions`, `UnbindSelector`, `MouseSpec`,
-   `FixtureInfo`, `BindingInfo`, `CommandParamInfo`, `CommandInfo`, `ScreenCell`,
-   `RouteTraceEntry`, `AvailableBinding`, `BindingSnapshot`,
-   `ScriptAssertionInfo`, `ScriptJournalEntry`, `SemanticActionStatus`,
-   `WidgetSemantics`, `NodeSnapshot`, `FrameSnapshot`, the `canopy` global, and
-   `fixtures()`.
+2. The base `canopy` module, which declares `NodeId`, `CommandCall`, `Point`,
+   `Size`, `Rect`, `SemanticIdentity`, `NodeInfo`, `TreeNode`, `CommandTarget`,
+   `CommandTargetInfo`, `BindOptions`, `KeymapEntry`, `Keymap`,
+   `UnbindSelector`, `MouseSpec`, `FixtureInfo`, `BindingInfo`,
+   `CommandParamInfo`, `CommandInfo`, `ScreenCell`, `RouteTraceEntry`,
+   `AvailableBinding`, `BindingSnapshot`, `ScriptAssertionInfo`,
+   `ScriptJournalEntry`, `SemanticActionStatus`, `WidgetSemantics`,
+   `NodeSnapshot`, `FrameSnapshot`, the `canopy` global, and `fixtures()`.
 3. Each module registered through `Canopy::register_script_module`.
 4. One module per widget owner, carrying its command table and default-binding
    helper.
-5. Fixture comment lines.
+5. The `command` global, with one constructor per node command grouped by
+   owner. An owner named `command` fails API finalization.
+6. Fixture comment lines.
 
 The generated function signatures and the audited surface therefore cannot drift
 apart.
@@ -124,28 +126,67 @@ token is only an external data record and does not reconstruct that identity.
 
 ## Bindings
 
-Use `canopy.bind(key, options, callback)` for key bindings and
-`canopy.bind_mouse(mouse, options, callback)` for mouse bindings. The options
-table is required. Its `description` field must contain user-facing text. The
-optional `path` field limits a binding to matching route paths. The optional
-`mode` field puts a binding in a named mode. Set `tier = "global"` for a global
-binding; a global binding cannot also name a mode, and its path must be
-anchored at both ends.
+A binding action is a `CommandCall` or a function. The `command` table holds
+one constructor for each node command, grouped by owner. A constructor has the
+parameters of the owner function and returns a `CommandCall` that a binding
+runs later. `command.file_select.select_by(1)` builds the call;
+`file_select.select_by(1)` runs the command at once. A constructor checks its
+arguments, so a bad argument fails the binding call before it installs a
+binding. In a strict script the typechecker finds the same errors before the
+script runs. Keep functions for composed actions.
+
+Use `canopy.keymap` to write a keymap. The named fields of the table are the
+options shared by every entry: `mode`, `path`, `phase`, and `tier`. The array
+part holds the entries. An entry has `key` (one key spec or an array of key
+specs), `mouse` (one mouse spec or an array), a required `description`, and an
+`action`. An entry needs `key`, `mouse`, or both.
 
 ```luau
-canopy.bind_command("?", {
+local fs = command.file_select
+
+canopy.keymap {
+    mode = "preview",
+    { key = "j", description = "Scroll down", action = fs.pan_preview("Down") },
+    { key = { "k", "Up" }, mouse = "ScrollUp", description = "Scroll up", action = fs.pan_preview("Up") },
+    {
+        key = "esc",
+        description = "Leave the preview",
+        action = function()
+            canopy.set_mode("")
+        end,
+    },
+}
+```
+
+`canopy.keymap` validates every option and entry before it installs a binding.
+It rejects an unknown field in the table or an entry, an entry with neither
+`key` nor `mouse`, a spec that does not parse, an empty spec array, two entries
+that bind the same input, and a mouse entry under `phase = "before_widget"`. A
+keymap with an error installs nothing. Within a call the entries install in
+order, so a later entry wins a precedence tie. Every binding records the
+`canopy.keymap` call site as its source. The call returns the binding IDs in
+entry order, key bindings before mouse bindings within an entry.
+
+Use `canopy.bind(key, options, action)` and `canopy.bind_mouse(mouse, options,
+action)` for one binding. The options table is required. Its `description`
+field must contain user-facing text. The optional `path` field limits a binding
+to matching route paths. The optional `mode` field puts a binding in a named
+mode. Set `tier = "global"` for a global binding; a global binding cannot also
+name a mode, and its path must be anchored at both ends.
+
+```luau
+canopy.bind("?", {
     description = "Show key bindings",
     path = "/root/**/",
     tier = "global",
     phase = "before_widget",
-}, "root::toggle_help")
+}, command.root.toggle_help())
 ```
 
-Use `bind_command(key, options, id, ...)` for a single positional command
-action. Keep callbacks for composed actions. Native Rust uses generated typed
-`Widget::call_command(arguments...)` builders with `Canopy::bind_command`.
-`CommandCall::with_target` preserves exact, relative, or focus targeting when a
-Button, List, or native binding stores the action.
+Native Rust uses generated typed `Widget::call_command(arguments...)` builders
+with `Canopy::bind_command`. `CommandCall::with_target` preserves exact,
+relative, or focus targeting when a Button, List, or native binding stores the
+action.
 
 Set `phase = "before_widget"` to run before widget input, or `phase =
 "after_widget"` to run after the widget ignores input. Mouse bindings accept

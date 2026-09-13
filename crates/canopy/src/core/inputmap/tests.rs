@@ -477,7 +477,14 @@ fn omitted_phase_is_after_widget() -> Result<()> {
         ("", "/root/editor"),
     ] {
         map.clear_application();
-        bind(&mut map, BindingScope::Default, 'x', path, "Default phase", 1)?;
+        bind(
+            &mut map,
+            BindingScope::Default,
+            'x',
+            path,
+            "Default phase",
+            1,
+        )?;
         let resolved = map
             .resolve_match(&Path::from(route), InputSpec::Key('x'.into()))
             .unwrap();

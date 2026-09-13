@@ -320,6 +320,14 @@ impl CommandMeta {
         )
     }
 
+    /// Identifier for the generated argument check.
+    fn check_ident(&self) -> syn::Ident {
+        syn::Ident::new(
+            &format!("__canopy_cmd_check_{}", self.name),
+            proc_macro2::Span::call_site(),
+        )
+    }
+
     /// Identifier for the generated parameter spec constant.
     fn params_const_ident(&self) -> syn::Ident {
         syn::Ident::new(
@@ -449,6 +457,65 @@ impl CommandMeta {
         quote! { #(#cfg_attrs)* &Self::#spec_const_ident }
     }
 
+    /// Render the positional arity check shared by invoke and check.
+    fn arity_check_tokens(&self) -> proc_macro2::TokenStream {
+        let (min_required, max_allowed) = self.arity_bounds();
+        quote! {
+            let got = values.len();
+            let expected_min = #min_required;
+            let expected_max = #max_allowed;
+            if got < expected_min || got > expected_max {
+                let expected = if got < expected_min {
+                    expected_min
+                } else {
+                    expected_max
+                };
+                return Err(canopy::commands::CommandError::ArityMismatch {
+                    expected,
+                    got,
+                });
+            }
+        }
+    }
+
+    /// Render the generated argument check for this command.
+    ///
+    /// The check shares the arity bounds and parameter conversions of the
+    /// invoke shim, and it needs no target, context, or call.
+    fn check_tokens(&self) -> proc_macro2::TokenStream {
+        let check_ident = self.check_ident();
+        let names_const_ident = self.names_const_ident();
+        let positional_bindings = self.positional_bindings();
+        let named_bindings = self.named_bindings();
+        let arity_check = self.arity_check_tokens();
+
+        quote! {
+            #[allow(unused_variables)]
+            fn #check_ident(
+                args: &canopy::commands::CommandArgs,
+            ) -> ::std::result::Result<(), canopy::commands::CommandError>
+            where
+                Self: 'static,
+            {
+                match args {
+                    canopy::commands::CommandArgs::Positional(values) => {
+                        #arity_check
+                        #(#positional_bindings)*
+                        Ok(())
+                    }
+                    canopy::commands::CommandArgs::Named(values) => {
+                        let normalized = canopy::commands::normalize_named_args(
+                            values,
+                            Self::#names_const_ident,
+                        )?;
+                        #(#named_bindings)*
+                        Ok(())
+                    }
+                }
+            }
+        }
+    }
+
     /// Render the generated invoke function for this command.
     fn invoke_tokens(&self) -> proc_macro2::TokenStream {
         let invoke_ident = self.invoke_ident();
@@ -457,7 +524,7 @@ impl CommandMeta {
         let mutable_context_bindings = self.mutable_context_bindings();
         let positional_bindings = self.positional_bindings();
         let named_bindings = self.named_bindings();
-        let (min_required, max_allowed) = self.arity_bounds();
+        let arity_check = self.arity_check_tokens();
         let target_ident = syn::Ident::new("target", proc_macro2::Span::call_site());
         let method_ident = self.name_ident();
         let call_args = self.call_args();
@@ -483,20 +550,7 @@ impl CommandMeta {
                 #(#shared_bindings)*
                 match &inv.args {
                     canopy::commands::CommandArgs::Positional(values) => {
-                        let got = values.len();
-                        let expected_min = #min_required;
-                        let expected_max = #max_allowed;
-                        if got < expected_min || got > expected_max {
-                            let expected = if got < expected_min {
-                                expected_min
-                            } else {
-                                expected_max
-                            };
-                            return Err(canopy::commands::CommandError::ArityMismatch {
-                                expected,
-                                got,
-                            });
-                        }
+                        #arity_check
                         #(#positional_bindings)*
                         #(#mutable_context_bindings)*
                         #call_tokens
@@ -542,6 +596,7 @@ impl CommandMeta {
         let spec_const_ident = self.spec_const_ident();
         let params_const_ident = self.params_const_ident();
         let invoke_ident = self.invoke_ident();
+        let check_ident = self.check_ident();
         let id = self.command_id();
         let name = &self.name;
         let owner = &self.owner;
@@ -563,6 +618,7 @@ impl CommandMeta {
                 ret: #ret,
                 doc: #doc,
                 invoke: Self::#invoke_ident,
+                check: Self::#check_ident,
                 status: #status,
             };
         }
@@ -629,6 +685,7 @@ impl CommandMeta {
             self.names_const_tokens(),
             self.params_const_tokens(),
             self.invoke_tokens(),
+            self.check_tokens(),
             self.spec_const_tokens(),
             self.accessor_tokens(),
             self.call_builder_tokens(),

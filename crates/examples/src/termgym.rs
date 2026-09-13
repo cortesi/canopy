@@ -27,16 +27,36 @@ canopy.on_start(function()
     term_gym.focus_active_terminal()
 end)
 
-canopy.bind_command("F6", { phase = "before_widget", path = "term_gym/**/", description = "Toggle terminal list" }, "term_gym::toggle_terminal_focus")
-canopy.bind_command("n", { phase = "before_widget", path = "term_gym/**/list/**/", description = "New terminal" }, "term_gym::new_terminal_sidebar")
-canopy.bind_command("Down", { phase = "before_widget", path = "term_gym/**/list/**/", description = "Next terminal" }, "term_gym::next_terminal_sidebar")
-canopy.bind_command("j", { phase = "before_widget", path = "term_gym/**/list/**/", description = "Next terminal" }, "term_gym::next_terminal_sidebar")
-canopy.bind_command("Up", { phase = "before_widget", path = "term_gym/**/list/**/", description = "Previous terminal" }, "term_gym::prev_terminal_sidebar")
-canopy.bind_command("k", { phase = "before_widget", path = "term_gym/**/list/**/", description = "Previous terminal" }, "term_gym::prev_terminal_sidebar")
-canopy.bind_command("Enter", { phase = "before_widget", path = "term_gym/**/list/**/", description = "Focus active terminal" }, "term_gym::focus_active_terminal")
-canopy.bind_command("Right", { phase = "before_widget", path = "term_gym/**/list/**/", description = "Focus active terminal" }, "term_gym::focus_active_terminal")
-canopy.bind_command("Delete", { phase = "before_widget", path = "term_gym/**/list/**/", description = "Close terminal" }, "term_gym::delete_terminal")
-canopy.bind_command("d", { phase = "before_widget", path = "term_gym/**/list/**/", description = "Close terminal" }, "term_gym::delete_terminal")
+canopy.bind("F6", {
+    path = "term_gym/**/",
+    phase = "before_widget",
+    description = "Toggle terminal list",
+}, command.term_gym.toggle_terminal_focus())
+canopy.keymap {
+    path = "term_gym/**/list/**/",
+    phase = "before_widget",
+    { key = "n", description = "New terminal", action = command.term_gym.new_terminal_sidebar() },
+    {
+        key = { "Down", "j" },
+        description = "Next terminal",
+        action = command.term_gym.next_terminal_sidebar(),
+    },
+    {
+        key = { "Up", "k" },
+        description = "Previous terminal",
+        action = command.term_gym.prev_terminal_sidebar(),
+    },
+    {
+        key = { "Enter", "Right" },
+        description = "Focus active terminal",
+        action = command.term_gym.focus_active_terminal(),
+    },
+    {
+        key = { "Delete", "d" },
+        description = "Close terminal",
+        action = command.term_gym.delete_terminal(),
+    },
+}
 "#;
 
 /// List item widget for the terminal sidebar.

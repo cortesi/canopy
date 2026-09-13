@@ -1,6 +1,6 @@
 //! Guards and the bridge between a running script scope and the live `Canopy`.
 
-use std::{mem, result::Result as StdResult};
+use std::{fmt, mem, result::Result as StdResult};
 
 use ruau::vm::{
     HostType, HostTypeBuilder, MarshaledPair, RuntimeError, Scope, ScopedValue, ScriptErrorField,
@@ -175,6 +175,84 @@ pub(super) fn node_handle_type() -> HostType {
         .marshal(node_handle_marshal)
         .tostring(|node_id| commands::node_token(*node_id))
         .build()
+}
+
+/// Script-held command value: a command with checked arguments that a binding
+/// runs later.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct ScriptCommandCall(pub(super) commands::CommandAction);
+
+impl fmt::Display for ScriptCommandCall {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}(", self.0.invocation.id.0)?;
+        match &self.0.invocation.args {
+            commands::CommandArgs::Positional(values) => {
+                for (index, value) in values.iter().enumerate() {
+                    if index > 0 {
+                        formatter.write_str(", ")?;
+                    }
+                    formatter.write_str(&arg_value_text(value))?;
+                }
+            }
+            commands::CommandArgs::Named(fields) => {
+                formatter.write_str(&arg_value_text(&commands::ArgValue::Map(fields.clone())))?;
+            }
+        }
+        formatter.write_str(")")
+    }
+}
+
+/// Render one command argument as Luau-like source text.
+fn arg_value_text(value: &commands::ArgValue) -> String {
+    match value {
+        commands::ArgValue::Null => "nil".to_string(),
+        commands::ArgValue::Bool(value) => value.to_string(),
+        commands::ArgValue::Int(value) => value.to_string(),
+        commands::ArgValue::UInt(value) => value.to_string(),
+        commands::ArgValue::Float(value) => value.to_string(),
+        commands::ArgValue::String(value) => format!("{value:?}"),
+        commands::ArgValue::Node(node) => commands::node_token(*node),
+        commands::ArgValue::Array(values) => format!(
+            "{{ {} }}",
+            values
+                .iter()
+                .map(arg_value_text)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        commands::ArgValue::Map(fields) => format!(
+            "{{ {} }}",
+            fields
+                .iter()
+                .map(|(key, value)| format!("{key} = {}", arg_value_text(value)))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    }
+}
+
+/// Build the host userdata descriptor for `CommandCall` values.
+pub(super) fn command_call_type() -> HostType {
+    HostTypeBuilder::<ScriptCommandCall>::new("CommandCall")
+        .class(&commands::declaration::Class::new("CommandCall"))
+        .eq_by(|left, right| left == right)
+        .marshal(|call| ValueSnapshot::String(call.to_string().into_bytes()))
+        .tostring(ToString::to_string)
+        .build()
+}
+
+/// Convert a script value into a command call, or report the value's type.
+pub(super) fn command_call_from_value<'s>(
+    scope: &Scope<'s>,
+    value: &ScopedValue<'s>,
+) -> StdResult<Option<ScriptCommandCall>, RuntimeError> {
+    match value {
+        ScopedValue::Userdata(userdata) => match userdata.borrow::<ScriptCommandCall>(scope) {
+            Ok(call) => Ok(Some(call.clone())),
+            Err(_) => Ok(None),
+        },
+        _ => Ok(None),
+    }
 }
 
 /// Marshal a node handle to the external automation token record.
