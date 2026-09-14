@@ -26,6 +26,8 @@ pub struct BindingSnapshot {
     pub focus_path: Path,
     /// Active non-default modes in resolution order.
     pub active_modes: Vec<String>,
+    /// Newest active mode when it is transient.
+    pub transient_mode: Option<String>,
     /// Newest active exclusive binding group.
     pub exclusive_group: Option<FrameworkBindingGroup>,
     /// Effective key bindings, with one winner per normalized key.
@@ -146,6 +148,7 @@ impl Core {
                 .into_iter()
                 .map(str::to_string)
                 .collect(),
+            transient_mode: self.input_map.transient_mode().map(str::to_string),
             exclusive_group: self.input_map.active_exclusive_group(),
             bindings,
         })

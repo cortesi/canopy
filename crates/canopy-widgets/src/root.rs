@@ -9,9 +9,12 @@ use canopy::{
     layout::{Direction, Layout, Sizing},
 };
 
-use crate::help::{BindingList, Help};
 #[cfg(feature = "devtools")]
 use crate::inspector::Inspector;
+use crate::{
+    center::Center,
+    help::{BindingList, Help, ModeHelp},
+};
 
 /// Default root bindings exposed through `root.default_bindings()`.
 const DEFAULT_BINDINGS: &str = r#"
@@ -39,6 +42,9 @@ canopy::slot!(InspectorSlot: Inspector);
 
 // Typed key for the help slot
 canopy::slot!(HelpSlot: Help);
+
+// Typed key for the transient mode help slot
+canopy::slot!(ModeHelpSlot: Center);
 
 /// Key for the application subtree under root (widget type varies).
 const KEY_APP: &str = "AppSlot";
@@ -275,10 +281,14 @@ impl Root {
                 inspector
             };
 
-            // The help modal overlays the main pane.
+            // Mode help overlays the main pane, and the help modal overlays
+            // both.
+            let mode_help = ModeHelp::install(context)?;
             let help = Help::install(context)?;
             context.attach_slot(root_id, KEY_MAIN_PANE, main_pane)?;
+            context.attach_slot(root_id, ModeHelpSlot::KEY, mode_help)?;
             context.attach_slot(root_id, HelpSlot::KEY, help)?;
+            context.set_hidden_of(mode_help, true)?;
             context.set_hidden_of(help, true)?;
 
             #[cfg(feature = "devtools")]
@@ -337,8 +347,17 @@ impl Loader for Root {
         c.register_default_bindings("root", DEFAULT_BINDINGS)?;
         Help::load(c)?;
         register_help_bindings(c)?;
+        c.register_mode_hook("root.mode_help", sync_mode_help);
         Ok(())
     }
+}
+
+/// Show the keys of a transient mode while it waits, and hide them after.
+fn sync_mode_help(context: &mut dyn Context) -> Result<()> {
+    let Some(overlay) = context.get_slot::<ModeHelpSlot>()? else {
+        return Ok(());
+    };
+    ModeHelp::sync(context, overlay.into())
 }
 
 /// Register the Root-owned controls admitted by the help modal.
@@ -830,6 +849,49 @@ mod tests {
 
         assert_eq!(canopy.available_bindings(None)?.exclusive_group, None);
         Ok(())
+    }
+
+    #[test]
+    fn a_transient_mode_shows_its_keys_until_the_next_key() -> Result<()> {
+        let (mut canopy, _backend, _left, _right) = setup_root_tree()?;
+        install_help_trigger(&mut canopy)?;
+        run_script(
+            &mut canopy,
+            r#"
+            canopy.bind("a", { description = "Default key" }, function() end)
+            canopy.bind("p", { description = "Pane keys" }, function()
+                canopy.push_mode("panes", { transient = true })
+            end)
+            canopy.keymap({
+                mode = "panes",
+                { key = "e", description = "Equal widths", action = function() end },
+            })
+
+            canopy.send_key("p")
+            canopy.flush()
+            local screen = canopy.screen_text()
+            canopy.assert(screen:find("panes") ~= nil, "the panel should name the mode")
+            canopy.assert(screen:find("Equal widths") ~= nil, "the panel should list the mode keys")
+            canopy.assert(screen:find("Default key") == nil, "the panel should omit other keys")
+
+            canopy.send_key("x")
+            canopy.flush()
+            canopy.assert(canopy.input_mode() == "", "any key should end the mode")
+            canopy.assert(
+                canopy.screen_text():find("Equal widths") == nil,
+                "the panel should hide when the mode ends"
+            )
+
+            canopy.send_key("p")
+            canopy.send_key("?")
+            canopy.flush()
+            canopy.assert(
+                canopy.screen_text():find("Equal widths") == nil,
+                "contextual help should not show the panel"
+            )
+            canopy.send_key("?")
+            "#,
+        )
     }
 
     #[test]

@@ -98,22 +98,7 @@ impl BindingList {
             .snapshot
             .as_ref()
             .map_or(&[][..], |snapshot| snapshot.bindings.as_slice());
-        if bindings.is_empty() {
-            return vec![DisplayLine {
-                key: None,
-                text: "No key bindings in this context".to_string(),
-                style: "help/label",
-            }];
-        }
-
-        let mut bindings = bindings.iter().collect::<Vec<_>>();
-        bindings.sort_by_cached_key(|binding| binding_sort_key(binding));
-        let max_key_width = bindings
-            .iter()
-            .map(|binding| UnicodeWidthStr::width(binding.key.to_string().as_str()))
-            .max()
-            .unwrap_or(0);
-        binding_lines(&bindings, width, max_key_width)
+        display_lines(bindings, width)
     }
 
     /// Reserve a gutter when scrolling so the indicator never covers text.
@@ -195,18 +180,7 @@ impl Widget for BindingList {
             .take(viewport.h as usize)
         {
             let y = u32::try_from(index).unwrap_or(u32::MAX) - viewport.tl.y;
-            if let Some(key) = &line.key {
-                let key_width = UnicodeWidthStr::width(key.as_str()) as u32;
-                render.text("help/key", Line::new(0, y, key_width.min(width)), key)?;
-                let start = key_width.saturating_add(2).min(width);
-                render.text(
-                    line.style,
-                    Line::new(start, y, width.saturating_sub(start)),
-                    &line.text,
-                )?;
-            } else {
-                render.text(line.style, Line::new(0, y, width), &line.text)?;
-            }
+            render_line(render, line, 0, y, width)?;
         }
 
         if view.content.w > 0 && view.content.h > 0 && view.canvas.h > viewport.h {
@@ -228,6 +202,47 @@ impl Widget for BindingList {
     fn name(&self) -> NodeName {
         NodeName::convert("binding_list")
     }
+}
+
+/// Build the sorted display lines for `bindings` at `width`.
+pub(super) fn display_lines(bindings: &[AvailableBinding], width: u32) -> Vec<DisplayLine> {
+    if bindings.is_empty() {
+        return vec![DisplayLine {
+            key: None,
+            text: "No key bindings in this context".to_string(),
+            style: "help/label",
+        }];
+    }
+
+    let mut bindings = bindings.iter().collect::<Vec<_>>();
+    bindings.sort_by_cached_key(|binding| binding_sort_key(binding));
+    let max_key_width = bindings
+        .iter()
+        .map(|binding| UnicodeWidthStr::width(binding.key.to_string().as_str()))
+        .max()
+        .unwrap_or(0);
+    binding_lines(&bindings, width, max_key_width)
+}
+
+/// Render one display line from column `x` of row `y`, within `width` cells.
+pub(super) fn render_line(
+    render: &mut Render,
+    line: &DisplayLine,
+    x: u32,
+    y: u32,
+    width: u32,
+) -> Result<()> {
+    let Some(key) = &line.key else {
+        return render.text(line.style, Line::new(x, y, width), &line.text);
+    };
+    let key_width = UnicodeWidthStr::width(key.as_str()) as u32;
+    render.text("help/key", Line::new(x, y, key_width.min(width)), key)?;
+    let start = key_width.saturating_add(2).min(width);
+    render.text(
+        line.style,
+        Line::new(x + start, y, width.saturating_sub(start)),
+        &line.text,
+    )
 }
 
 /// Build aligned shortcut rows, stacking keys above actions on narrow screens.
@@ -287,7 +302,7 @@ fn binding_lines(
 
 /// Show the action and useful availability feedback, leaving diagnostics to
 /// inspection APIs.
-fn binding_description(binding: &AvailableBinding) -> String {
+pub(super) fn binding_description(binding: &AvailableBinding) -> String {
     let Some(command) = &binding.command else {
         return binding.description.clone();
     };

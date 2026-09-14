@@ -1289,6 +1289,8 @@ pub mod canopy {
             pub focus_path: crate::path::Path,
             /// Active non-default modes in resolution order.
             pub active_modes: Vec<String>,
+            /// Newest active mode when it is transient.
+            pub transient_mode: Option<String>,
             /// Newest active exclusive binding group.
             pub exclusive_group: Option<crate::core::inputmap::FrameworkBindingGroup>,
             /// Effective key bindings, with one winner per normalized key.
@@ -3885,12 +3887,30 @@ pub mod canopy {
         /// Push an input mode above the current mode.
         pub fn push_input_mode(&mut self, mode: &str) {}
 
+        /// Push an input mode that takes only the next key.
+        ///
+        /// The next key pops the mode. When the mode binds that key, the binding
+        /// runs after the pop and before any widget sees the key. Any other key
+        /// only pops the mode.
+        pub fn push_transient_input_mode(&mut self, mode: &str) {}
+
         /// Read the last publication without running widget hooks or refreshing
         /// state.
         pub fn snapshot(&self) -> Option<Arc<FrameSnapshot>> {}
 
         /// Register a Luau script as the default bindings for a widget namespace.
         pub fn register_default_bindings(&mut self, name: &str, script: &str) -> Result<()> {}
+
+        /// Register a hook that runs against the root context before the next
+        /// frame whenever the input mode stack has changed.
+        ///
+        /// Registering a name again replaces its hook. Hooks run in name order.
+        pub fn register_mode_hook(
+            &mut self,
+            name: &'static str,
+            hook: fn(_: &mut dyn crate::Context) -> crate::error::Result<()>,
+        ) {
+        }
 
         /// Register a named fixture available to headless and live automation.
         pub fn register_fixture(&mut self, fixture: Fixture) -> Result<()> {}

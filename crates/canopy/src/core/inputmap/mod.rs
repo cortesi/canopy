@@ -257,13 +257,22 @@ impl fmt::Display for InputSpec {
     }
 }
 
+/// One entry on the input mode stack.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ActiveMode {
+    /// Mode name.
+    name: String,
+    /// Whether the mode takes only the next key.
+    transient: bool,
+}
+
 /// Application-owned state restored after a failed startup script.
 #[derive(Clone, Debug)]
 pub struct ApplicationBindingSnapshot {
     /// Application records captured at the start of an attempt.
     records: Vec<BindingRecord>,
     /// Application mode stack captured at the start of an attempt.
-    mode_stack: Vec<String>,
+    mode_stack: Vec<ActiveMode>,
 }
 
 /// Registry for application bindings, framework controls, and active modes.
@@ -272,7 +281,9 @@ pub struct InputMap {
     /// Flat application and framework binding records.
     records: Vec<BindingRecord>,
     /// Active application modes in push order.
-    mode_stack: Vec<String>,
+    mode_stack: Vec<ActiveMode>,
+    /// Number of mode stack updates, so observers can tell when to resync.
+    mode_generation: u64,
     /// Admission imposed by the active modal.
     modal_bindings: Option<ModalBindings>,
     /// Next binding identifier.
@@ -293,6 +304,7 @@ impl InputMap {
         Self {
             records: Vec::new(),
             mode_stack: Vec::new(),
+            mode_generation: 0,
             modal_bindings: None,
             next_id: 1,
             next_insertion_id: 1,
@@ -426,6 +438,7 @@ impl InputMap {
     pub fn clear_application(&mut self) -> Vec<(BindingId, BindingTarget)> {
         let removed = self.remove_application_records(|_| true);
         self.mode_stack.clear();
+        self.touch_modes();
         removed
     }
 
@@ -463,12 +476,7 @@ impl InputMap {
             self.best_in_scope(path, input, &BindingScope::Exclusive(group), Some(group))
         } else {
             self.best_in_scope(path, input, &BindingScope::Global, None)
-                .or_else(|| {
-                    self.mode_stack.iter().rev().find_map(|mode| {
-                        self.best_in_scope(path, input, &BindingScope::Mode(mode.clone()), None)
-                    })
-                })
-                .or_else(|| self.best_in_scope(path, input, &BindingScope::Default, None))
+                .or_else(|| self.best_in_modes(path, input))
         }?;
         Some(ResolvedBinding {
             id: winner.0.id,
@@ -517,11 +525,14 @@ impl InputMap {
                     return format!("inactive exclusive group {group}");
                 }
                 BindingScope::Mode(mode)
-                    if !self.mode_stack.iter().any(|active| active == mode) =>
+                    if !self.mode_stack.iter().any(|active| active.name == *mode) =>
                 {
                     return format!("inactive mode {mode}");
                 }
                 BindingScope::Global | BindingScope::Mode(_) | BindingScope::Default => {}
+            }
+            if let Some(mode) = self.transient_blocker(&record.scope) {
+                return format!("blocked by transient mode {mode}");
             }
         }
 
@@ -582,32 +593,91 @@ impl InputMap {
     /// Set the active input mode.
     pub fn set_mode(&mut self, mode: &str) {
         self.mode_stack.clear();
-        if !mode.is_empty() {
-            self.mode_stack.push(mode.to_string());
-        }
+        self.push_active(mode, false);
     }
 
     /// Push a named input mode.
     pub fn push_mode(&mut self, mode: &str) {
+        self.push_active(mode, false);
+    }
+
+    /// Push a named input mode that takes only the next key.
+    ///
+    /// Keys the mode does not bind never fall through to older modes or the
+    /// default scope. Key routing pops the mode before it runs the binding.
+    pub fn push_transient_mode(&mut self, mode: &str) {
+        self.push_active(mode, true);
+    }
+
+    /// Push one mode stack entry. The empty default mode is never pushed.
+    fn push_active(&mut self, mode: &str, transient: bool) {
         if !mode.is_empty() {
-            self.mode_stack.push(mode.to_string());
+            self.mode_stack.push(ActiveMode {
+                name: mode.to_string(),
+                transient,
+            });
         }
+        self.touch_modes();
     }
 
     /// Pop the newest input mode and return the active mode.
     pub fn pop_mode(&mut self) -> &str {
         self.mode_stack.pop();
+        self.touch_modes();
         self.current_mode()
     }
 
     /// Return the newest active input mode.
     pub fn current_mode(&self) -> &str {
-        self.mode_stack.last().map_or(DEFAULT_MODE, String::as_str)
+        self.mode_stack
+            .last()
+            .map_or(DEFAULT_MODE, |mode| mode.name.as_str())
+    }
+
+    /// Return the newest active mode when it is transient.
+    pub fn transient_mode(&self) -> Option<&str> {
+        self.mode_stack
+            .last()
+            .filter(|mode| mode.transient)
+            .map(|mode| mode.name.as_str())
     }
 
     /// Return active non-default modes in resolution order.
     pub fn active_modes(&self) -> Vec<&str> {
-        self.mode_stack.iter().rev().map(String::as_str).collect()
+        self.mode_stack
+            .iter()
+            .rev()
+            .map(|mode| mode.name.as_str())
+            .collect()
+    }
+
+    /// Return the number of mode stack updates so far.
+    pub(crate) fn mode_generation(&self) -> u64 {
+        self.mode_generation
+    }
+
+    /// Record a mode stack update.
+    fn touch_modes(&mut self) {
+        self.mode_generation = self.mode_generation.wrapping_add(1);
+    }
+
+    /// Return the transient mode that keeps resolution from reaching `scope`.
+    fn transient_blocker(&self, scope: &BindingScope) -> Option<&str> {
+        let floor = match scope {
+            BindingScope::Default => 0,
+            BindingScope::Mode(mode) => {
+                self.mode_stack
+                    .iter()
+                    .rposition(|active| active.name == *mode)?
+                    + 1
+            }
+            BindingScope::Global | BindingScope::Exclusive(_) => return None,
+        };
+        self.mode_stack[floor..]
+            .iter()
+            .rev()
+            .find(|active| active.transient)
+            .map(|active| active.name.as_str())
     }
 
     /// Snapshot only application-owned registry state.
@@ -630,6 +700,7 @@ impl InputMap {
         self.records.extend(snapshot.records);
         self.records.sort_by_key(|record| record.insertion_id);
         self.mode_stack = snapshot.mode_stack;
+        self.touch_modes();
     }
 
     /// Return script targets added after an application snapshot was captured.
@@ -678,6 +749,24 @@ impl InputMap {
                     .map(|path_match| (record, path_match))
             })
             .max_by(|left, right| compare_candidates(*left, *right))
+    }
+
+    /// Select the best application record in the active modes, newest first,
+    /// and then in the default scope.
+    ///
+    /// A transient mode ends the search, so a key it does not bind resolves to
+    /// nothing.
+    fn best_in_modes(&self, path: &Path, input: InputSpec) -> Option<(&BindingRecord, PathMatch)> {
+        for mode in self.mode_stack.iter().rev() {
+            let scope = BindingScope::Mode(mode.name.clone());
+            if let Some(winner) = self.best_in_scope(path, input, &scope, None) {
+                return Some(winner);
+            }
+            if mode.transient {
+                return None;
+            }
+        }
+        self.best_in_scope(path, input, &BindingScope::Default, None)
     }
 
     /// Allocate one binding ID without mutating the registry on exhaustion.

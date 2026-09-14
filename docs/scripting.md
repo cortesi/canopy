@@ -183,6 +183,39 @@ canopy.bind("?", {
 }, command.root.toggle_help())
 ```
 
+`canopy.set_mode(mode)` replaces the active modes with one mode, and the empty
+string returns to the default mode. `canopy.push_mode(mode)` adds a mode above
+the active modes, and `canopy.pop_mode()` removes the newest one. A key that
+the newest mode does not bind falls through to the older modes and then to the
+default scope.
+
+Pass `{ transient = true }` to `canopy.push_mode` for a mode that takes only
+the next key:
+
+```luau
+canopy.keymap({
+    {
+        key = "p",
+        description = "Pane commands",
+        action = function()
+            canopy.push_mode("panes", { transient = true })
+        end,
+    },
+})
+
+canopy.keymap({
+    mode = "panes",
+    { key = "a", description = "Fit columns", action = command.file_select.autosize() },
+})
+```
+
+The next key pops a transient mode. When the mode binds that key, the binding
+runs after the pop, so it can enter another mode. It runs before the focused
+widget sees the key, whatever its phase. Any other key only pops the mode, and
+does not fall through to older modes or to the default scope. Global bindings
+still apply. `Root` lists the keys of a transient mode in a small panel until
+the mode ends.
+
 Native Rust uses generated typed `Widget::call_command(arguments...)` builders
 with `Canopy::bind_command`. `CommandCall::with_target` preserves exact,
 relative, or focus targeting when a Button, List, or native binding stores the
@@ -198,8 +231,8 @@ bindings. `canopy.bindings()` returns all records, including normalized input,
 owner, scope, path, description, source, and target kind.
 `canopy.available_bindings(node?)` returns an owned snapshot of the effective
 key bindings for the specified node or current focus. The snapshot contains the
-focus path, active modes, active exclusive framework group, and one winning
-record per key. Each winner includes its route path and whether it runs before
+focus path, active modes, the transient mode, active exclusive framework group,
+and one winning record per key. Each winner includes its route path and whether it runs before
 the widget or after the widget ignores the key. Contextual help and automation
 use this same resolver as input routing.
 

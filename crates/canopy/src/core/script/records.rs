@@ -665,6 +665,12 @@ pub(super) fn available_bindings_to_arg(
         ),
         ("bindings".to_string(), ArgValue::Array(bindings)),
         (
+            "transient_mode".to_string(),
+            snapshot
+                .transient_mode
+                .map_or(ArgValue::Null, ArgValue::String),
+        ),
+        (
             "exclusive_group".to_string(),
             snapshot.exclusive_group.map_or(ArgValue::Null, |group| {
                 ArgValue::String(group.as_str().to_string())

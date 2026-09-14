@@ -37,6 +37,7 @@ fn snapshot(focus: NodeId, bindings: Vec<AvailableBinding>) -> BindingSnapshot {
         focus,
         focus_path: Path::from("/root/editor"),
         active_modes: vec!["insert".to_string()],
+        transient_mode: None,
         exclusive_group: None,
         bindings,
     }

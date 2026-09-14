@@ -932,6 +932,9 @@ pub mod canopy_widgets {
 
         /// Construct a frame.
         pub fn new() -> Self {}
+
+        /// Replace the title.
+        pub fn set_title(&mut self, title: impl Into<String>) {}
     }
 
     impl Widget for Frame {

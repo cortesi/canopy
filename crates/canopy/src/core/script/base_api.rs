@@ -320,8 +320,14 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "push_mode",
-        docs: None,
-        signature: || FunctionSignature::new().param(("mode", Type::String)),
+        docs: Some(
+            "Push an input mode above the current mode. A transient mode takes only the next key.",
+        ),
+        signature: || {
+            FunctionSignature::new()
+                .param(("mode", Type::String))
+                .param(("options", Type::named("PushModeOptions").optional()))
+        },
         handler: Handler::Sync(host_push_mode),
     },
     BaseFunction {
@@ -670,6 +676,23 @@ fn parse_unbind_selector<'s>(
         mode: field("mode")?.filter(|mode| !mode.is_empty()),
         path: field("path")?.filter(|path| !path.is_empty()),
     })
+}
+
+/// Parse `PushModeOptions` and return whether the mode is transient.
+fn parse_push_mode_options<'s>(
+    scope: &Scope<'s>,
+    options: Option<Table<'s>>,
+) -> StdResult<bool, RuntimeError> {
+    let Some(options) = options else {
+        return Ok(false);
+    };
+    match options.get::<_, ScopedValue>(scope, "transient")? {
+        ScopedValue::Nil => Ok(false),
+        ScopedValue::Boolean(transient) => Ok(transient),
+        _ => Err(RuntimeError::runtime(
+            "push_mode option `transient` must be a boolean",
+        )),
+    }
 }
 
 /// Read a required node-id argument, validating the handle against the live
@@ -1530,8 +1553,13 @@ fn host_push_mode<'s>(
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
     let mut args = HostArgCursor::new(scope, args);
     let mode = args.required::<String>("mode")?;
+    let transient = parse_push_mode_options(scope, args.optional::<Table<'_>>("options")?)?;
     with_current_canopy(scope, |canopy, _| {
-        canopy.push_input_mode(&mode);
+        if transient {
+            canopy.push_transient_input_mode(&mode);
+        } else {
+            canopy.push_input_mode(&mode);
+        }
         Ok(())
     })?;
     Ok(ret_none())

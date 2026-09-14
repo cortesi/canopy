@@ -230,6 +230,50 @@ impl Canopy {
         Ok(false)
     }
 
+    /// Route one key taken by a transient mode.
+    ///
+    /// The mode pops before its binding runs, so the binding can enter another
+    /// mode. No widget sees the key, and a key the mode does not bind only
+    /// pops the mode.
+    fn route_transient_key(
+        &mut self,
+        start: NodeId,
+        mut path: Path,
+        key: key::Key,
+        scope: Option<&Scope<'_>>,
+    ) -> Result<bool> {
+        self.route_trace.clear();
+        let input = RoutedInput::Key(key);
+        self.trace_route(
+            RoutePhase::Target,
+            Some(start),
+            &path,
+            "key route selected for a transient mode",
+        );
+        let mut node = Some(start);
+        let mut winner = None;
+        while let Some(id) = node {
+            if let Some(binding) = self.core.input_map.resolve_match(&path, input.input_spec()) {
+                winner = Some((id, path.clone(), binding));
+                break;
+            }
+            node = self.core.nodes.get(id).and_then(|entry| entry.parent);
+            path.pop();
+        }
+        self.core.input_map.pop_mode();
+        let Some((id, path, binding)) = winner else {
+            self.trace_route(RoutePhase::Handled, None, &path, "transient mode ended");
+            return Ok(true);
+        };
+        self.trace_route(
+            RoutePhase::PreEventBinding,
+            Some(id),
+            &path,
+            "matched in a transient mode",
+        );
+        self.execute_routed_binding_with_scope(id, &path, input, binding, scope)
+    }
+
     /// Execute a binding after route resolution, preserving an active script
     /// scope.
     fn execute_routed_binding_with_scope(
@@ -298,7 +342,16 @@ impl Canopy {
     {
         let start = self.focus_or_root()?;
         let path = self.core.path_of(self.core.root, start);
-        let changed = self.route_input(Some(start), path, RoutedInput::Key(tk.into()), scope)?;
+        let key = tk.into();
+        let transient =
+            self.core.modal_region().is_none() && self.core.input_map.transient_mode().is_some();
+        let changed = if transient {
+            self.with_dispatch_boundary(|canopy| {
+                canopy.route_transient_key(start, path, key, scope)
+            })?
+        } else {
+            self.route_input(Some(start), path, RoutedInput::Key(key), scope)?
+        };
         if changed {
             self.render_pending = true;
         }

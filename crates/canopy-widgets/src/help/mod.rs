@@ -1,6 +1,7 @@
 //! Contextual key-binding help modal.
 
 mod binding_list;
+mod mode;
 mod panel;
 #[cfg(test)]
 mod tests;
@@ -13,6 +14,7 @@ use canopy::{
     event::Event,
     layout::{Align, Direction, Edges, Layout},
 };
+pub use mode::ModeHelp;
 use panel::{ControlFooter, HelpPanel};
 
 use crate::{center::Center, frame::Frame};

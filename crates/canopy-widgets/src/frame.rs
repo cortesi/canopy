@@ -85,6 +85,11 @@ impl Frame {
         self.title = Some(title.into());
         self
     }
+
+    /// Replace the title.
+    pub fn set_title(&mut self, title: impl Into<String>) {
+        self.title = Some(title.into());
+    }
 }
 
 impl Default for Frame {

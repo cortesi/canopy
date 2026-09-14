@@ -250,6 +250,14 @@ pub(super) fn register_framework_declarations(builder: &mut module::Builder) {
         ]),
     ));
     builder.alias(declaration::Alias::new(
+        "PushModeOptions",
+        declaration::Type::table([declaration::Field::new(
+            "transient",
+            declaration::Type::Boolean.optional(),
+        )
+        .doc("Take only the next key, then pop the mode.")]),
+    ));
+    builder.alias(declaration::Alias::new(
         "MouseSpec",
         declaration::Type::String,
     ));
@@ -433,6 +441,8 @@ fn register_observation_info(builder: &mut module::Builder) {
                 .doc("Path from root to focus."),
             declaration::Field::new("active_modes", declaration::Type::String.array())
                 .doc("Active modes in resolution order."),
+            declaration::Field::new("transient_mode", declaration::Type::String.optional())
+                .doc("Newest active mode when it is transient."),
             declaration::Field::new("exclusive_group", declaration::Type::String.optional())
                 .doc("Active exclusive framework group."),
             declaration::Field::new(

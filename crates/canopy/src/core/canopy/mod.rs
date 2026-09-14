@@ -4,7 +4,7 @@
 )]
 
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fmt, fs,
     path::{Path as FsPath, PathBuf},
     sync::{Arc, mpsc},
@@ -63,6 +63,9 @@ pub enum AdapterEvent {
     Wake,
 }
 
+/// Hook run against the root context after the input mode stack changes.
+type ModeHook = fn(&mut dyn crate::Context) -> Result<()>;
+
 /// Application runtime state and renderer coordination.
 pub struct Canopy {
     /// Core state.
@@ -107,6 +110,10 @@ pub struct Canopy {
     default_bindings: HashMap<String, DefaultBindingsScript>,
     /// Registered named fixtures keyed by fixture name.
     fixtures: HashMap<String, Fixture>,
+    /// Hooks run before a frame after the input mode stack changes.
+    mode_hooks: BTreeMap<&'static str, ModeHook>,
+    /// Mode stack generation the mode hooks last saw.
+    synced_mode_generation: u64,
     /// Trace for the most recent key or mouse routing pass.
     route_trace: Vec<RouteTraceEntry>,
 
@@ -422,6 +429,8 @@ impl Canopy {
             script_journal_limit: DEFAULT_SCRIPT_JOURNAL_LIMIT,
             default_bindings: HashMap::new(),
             fixtures: HashMap::new(),
+            mode_hooks: BTreeMap::new(),
+            synced_mode_generation: 0,
             style: solarized::solarized_dark(),
             root_size: None,
             render_limits: RenderLimits::default(),
@@ -1055,6 +1064,42 @@ impl Canopy {
     /// Push an input mode above the current mode.
     pub fn push_input_mode(&mut self, mode: &str) {
         self.core.input_map.push_mode(mode);
+    }
+
+    /// Push an input mode that takes only the next key.
+    ///
+    /// The next key pops the mode. When the mode binds that key, the binding
+    /// runs after the pop and before any widget sees the key. Any other key
+    /// only pops the mode.
+    pub fn push_transient_input_mode(&mut self, mode: &str) {
+        self.core.input_map.push_transient_mode(mode);
+    }
+
+    /// Register a hook that runs against the root context before the next
+    /// frame whenever the input mode stack has changed.
+    ///
+    /// Registering a name again replaces its hook. Hooks run in name order.
+    pub fn register_mode_hook(&mut self, name: &'static str, hook: ModeHook) {
+        self.mode_hooks.insert(name, hook);
+    }
+
+    /// Return whether the mode stack changed since the mode hooks last ran.
+    pub(super) fn mode_hooks_pending(&self) -> bool {
+        !self.mode_hooks.is_empty()
+            && self.synced_mode_generation != self.core.input_map.mode_generation()
+    }
+
+    /// Run the mode hooks once for the current mode stack.
+    pub(super) fn run_mode_hooks(&mut self) -> Result<()> {
+        if !self.mode_hooks_pending() {
+            return Ok(());
+        }
+        self.synced_mode_generation = self.core.input_map.mode_generation();
+        let hooks = self.mode_hooks.values().copied().collect::<Vec<_>>();
+        for hook in hooks {
+            self.with_root_context(hook)?;
+        }
+        Ok(())
     }
 
     /// Pop the top input mode and return the new active mode.

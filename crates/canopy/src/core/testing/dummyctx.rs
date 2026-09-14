@@ -181,6 +181,7 @@ impl Context for DummyContext {
             focus: self.root_id,
             focus_path: Path::empty(),
             active_modes: Vec::new(),
+            transient_mode: None,
             exclusive_group: None,
             bindings: Vec::new(),
         })

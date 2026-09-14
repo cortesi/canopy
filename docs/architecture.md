@@ -279,7 +279,8 @@ commands. Framework targets dispatch commands.
 
 The resolver checks the framework binding group admitted by the top modal scope
 first. Without one, it checks the global scope, active modes from newest to
-oldest, and then the default scope. Path specificity and insertion order select
+oldest, and then the default scope. A transient mode ends that search, so a key
+it does not bind resolves to nothing. Path specificity and insertion order select
 a winner within one scope. The binding phase chooses dispatch before widget
 input or after the widget ignores it. The default phase is `after_widget`, and
 the path filter has no effect on the phase. Mouse bindings run after ignored
@@ -303,6 +304,13 @@ controls until the modal closes. Root then calls `close_modal` with the returned
 `InteractionToken` and restores the original focus when that node remains live.
 Removing or replacing a subtree retires modal scopes whose owner or modal widget
 no longer belongs to the tree.
+
+Key routing gives a transient mode the next key before any widget sees it. It
+pops the mode, then runs the binding that the key resolved to, if there is one.
+`Canopy::register_mode_hook` registers a function that runs against the root
+context before a frame whenever the mode stack has changed. Root uses one to
+list the keys of a transient mode in a panel that overlays the main pane. The
+help modal covers that panel, and hides it while help is open.
 
 ## Focus and Mouse Capture
 

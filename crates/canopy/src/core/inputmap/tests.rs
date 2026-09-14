@@ -254,6 +254,63 @@ fn modal_bindings_block_all_application_tiers() -> Result<()> {
 }
 
 #[test]
+fn a_transient_mode_hides_older_modes_and_the_default_scope() -> Result<()> {
+    let mut map = InputMap::new();
+    let default = bind(&mut map, BindingScope::Default, 'a', "", "Default", 1)?;
+    bind(
+        &mut map,
+        BindingScope::Mode("normal".to_string()),
+        'b',
+        "",
+        "Normal",
+        2,
+    )?;
+    bind(
+        &mut map,
+        BindingScope::Mode("prefix".to_string()),
+        'c',
+        "",
+        "Prefix",
+        3,
+    )?;
+    bind(&mut map, BindingScope::Global, '?', "/root/**/", "Help", 4)?;
+
+    map.push_mode("normal");
+    let generation = map.mode_generation();
+    map.push_transient_mode("prefix");
+    assert_ne!(map.mode_generation(), generation);
+    assert_eq!(map.transient_mode(), Some("prefix"));
+    assert_eq!(map.current_mode(), "prefix");
+    assert_eq!(
+        target(&map, "/root/editor", 'c'),
+        Some(BindingTarget::Script(script(3)))
+    );
+    assert_eq!(
+        target(&map, "/root/editor", '?'),
+        Some(BindingTarget::Script(script(4))),
+        "global bindings still win"
+    );
+    assert_eq!(target(&map, "/root/editor", 'b'), None);
+    assert_eq!(target(&map, "/root/editor", 'a'), None);
+    assert_eq!(
+        map.diagnostic_state(default, &[Path::from("/root/editor")]),
+        "blocked by transient mode prefix"
+    );
+
+    map.pop_mode();
+    assert_eq!(map.transient_mode(), None);
+    assert_eq!(
+        target(&map, "/root/editor", 'b'),
+        Some(BindingTarget::Script(script(2)))
+    );
+    assert_eq!(
+        target(&map, "/root/editor", 'a'),
+        Some(BindingTarget::Script(script(1)))
+    );
+    Ok(())
+}
+
+#[test]
 fn application_mutation_cannot_remove_framework_records() -> Result<()> {
     let mut map = InputMap::new();
     let app = bind(&mut map, BindingScope::Default, 'a', "", "App", 1)?;

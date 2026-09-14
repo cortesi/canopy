@@ -274,6 +274,7 @@ impl Canopy {
             && !self.render_pending
             && !self.core.changes.is_pending()
             && !self.script_host.has_on_start_hooks()
+            && !self.mode_hooks_pending()
         {
             return Ok(false);
         }
@@ -283,6 +284,7 @@ impl Canopy {
         if let Some(new_style) = self.core.pending_style.take() {
             self.style = new_style;
         }
+        self.run_mode_hooks()?;
         self.pre_render()?;
         self.core.update_layout(root_size)?;
         if self.run_on_start_hooks()? {

@@ -618,6 +618,72 @@ fn input_mode_binding_target_switches_modes() -> Result<()> {
 }
 
 #[test]
+fn a_transient_mode_takes_the_next_key_before_widgets() -> Result<()> {
+    let mut canopy = Canopy::new();
+    canopy.eval_script(
+        r#"
+        canopy.bind("z", { description = "Default z" }, function() canopy.set_mode("default") end)
+        canopy.keymap({
+            mode = "prefix",
+            { key = "y", description = "Prefix y", action = function() canopy.push_mode("after") end },
+        })
+        canopy.push_mode("prefix", { transient = true })
+        local snapshot = canopy.available_bindings()
+        canopy.assert(snapshot.transient_mode == "prefix", "the snapshot names the transient mode")
+        "#,
+    )?;
+    let phases = |canopy: &Canopy| {
+        canopy
+            .route_trace()
+            .iter()
+            .map(|entry| entry.phase)
+            .collect::<Vec<_>>()
+    };
+
+    // The mode pops before its binding runs, so the binding can push a mode.
+    canopy.key(None, 'y')?;
+    assert_eq!(canopy.core.input_map.active_modes(), ["after"]);
+    assert!(phases(&canopy).contains(&RoutePhase::BindingExecution));
+    assert!(!phases(&canopy).contains(&RoutePhase::WidgetEvent));
+
+    // A key the mode does not bind only pops it.
+    canopy.set_input_mode("");
+    canopy.push_transient_input_mode("prefix");
+    canopy.key(None, 'z')?;
+    assert_eq!(canopy.input_mode(), "");
+    assert!(!phases(&canopy).contains(&RoutePhase::BindingExecution));
+    assert!(!phases(&canopy).contains(&RoutePhase::WidgetEvent));
+    Ok(())
+}
+
+#[test]
+fn mode_hooks_run_once_for_each_mode_change() -> Result<()> {
+    static RUNS: AtomicUsize = AtomicUsize::new(0);
+    fn count(_context: &mut dyn Context) -> Result<()> {
+        RUNS.fetch_add(1, Ordering::Relaxed);
+        Ok(())
+    }
+
+    let mut canopy = Canopy::new();
+    canopy.set_root_size(Size::new(10, 4))?;
+    let mut backend = NopBackend::new();
+    canopy.render(&mut backend)?;
+    canopy.register_mode_hook("test.count", count);
+    canopy.render(&mut backend)?;
+    assert_eq!(RUNS.load(Ordering::Relaxed), 0, "no mode change yet");
+
+    canopy.push_transient_input_mode("prefix");
+    canopy.render(&mut backend)?;
+    canopy.render(&mut backend)?;
+    assert_eq!(RUNS.load(Ordering::Relaxed), 1);
+
+    canopy.pop_input_mode();
+    canopy.render(&mut backend)?;
+    assert_eq!(RUNS.load(Ordering::Relaxed), 2);
+    Ok(())
+}
+
+#[test]
 fn route_trace_records_unhandled_key_pipeline() -> Result<()> {
     run_ttree(|c, _, tree| {
         c.core.set_focus(tree.a_a)?;
