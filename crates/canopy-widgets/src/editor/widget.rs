@@ -858,6 +858,74 @@ impl Editor {
         self.redo_edit();
         self.update_preferred_column();
     }
+
+    /// Search the text and highlight every match.
+    ///
+    /// The first match at or below the top of the view becomes current, and
+    /// the view scrolls to it. A query without uppercase letters ignores ASCII
+    /// case. An empty query clears the search.
+    /// @param query Text to find.
+    #[command]
+    pub fn search(&mut self, ctx: &mut dyn Context, query: String) {
+        if query.is_empty() {
+            self.search = SearchState::new();
+            return;
+        }
+        let view_rect = ctx.view().view_rect();
+        self.update_layout(view_rect, self.gutter_width());
+        let top = match self.layout.total_lines() {
+            0 => 0,
+            lines => self
+                .layout
+                .line_for_display((view_rect.tl.y as usize).min(lines - 1)),
+        };
+        self.search
+            .set_smart_query(&self.buffer, query, TextPosition::new(top, 0));
+        self.reveal_search_match(ctx);
+    }
+
+    /// Make another search match current and scroll to it.
+    /// @param delta Matches to move; negative values move backward.
+    #[command]
+    pub fn search_next(&mut self, ctx: &mut dyn Context, delta: i32) {
+        let count = self.search.match_count();
+        if count == 0 {
+            return;
+        }
+        for _ in 0..(delta.unsigned_abs() as usize % count) {
+            self.search.move_next(&self.buffer, delta < 0);
+        }
+        self.reveal_search_match(ctx);
+    }
+
+    /// Remove the search and its highlights.
+    #[command]
+    pub fn clear_search(&mut self, _ctx: &mut dyn Context) {
+        self.search = SearchState::new();
+    }
+
+    /// Return the number of search matches.
+    #[command]
+    pub fn search_matches(&self) -> usize {
+        self.search.match_count()
+    }
+
+    /// Return the one-based position of the current search match.
+    /// @return The position, or 0 when there is no current match.
+    #[command]
+    pub fn search_position(&self) -> usize {
+        self.search.current_index().map_or(0, |index| index + 1)
+    }
+
+    /// Put the cursor on the current search match and scroll it into view.
+    fn reveal_search_match(&mut self, ctx: &mut dyn Context) {
+        let Some(range) = self.search.current_match() else {
+            return;
+        };
+        self.buffer.set_cursor(range.start);
+        self.update_preferred_column();
+        self.ensure_cursor_visible(ctx);
+    }
 }
 
 impl Widget for Editor {

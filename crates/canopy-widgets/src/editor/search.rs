@@ -32,6 +32,8 @@ pub struct SearchState {
     current: Option<usize>,
     /// Buffer revision that matches were computed for.
     revision: u64,
+    /// Whether matching ignores ASCII case.
+    ignore_case: bool,
 }
 
 impl SearchState {
@@ -43,6 +45,7 @@ impl SearchState {
             matches: Vec::new(),
             current: None,
             revision: 0,
+            ignore_case: false,
         }
     }
 
@@ -55,6 +58,7 @@ impl SearchState {
     ) {
         self.query = query.into();
         self.direction = direction;
+        self.ignore_case = false;
         self.recompute(buffer);
         self.current = if self.matches.is_empty() {
             None
@@ -63,6 +67,41 @@ impl SearchState {
         } else {
             Some(self.matches.len().saturating_sub(1))
         };
+    }
+
+    /// Set a forward query with smart case, and make the first match at or
+    /// after `from` current.
+    ///
+    /// A query without uppercase letters ignores ASCII case. When no match
+    /// follows `from`, the search wraps to the first match.
+    pub fn set_smart_query(
+        &mut self,
+        buffer: &TextBuffer,
+        query: impl Into<String>,
+        from: TextPosition,
+    ) {
+        self.query = query.into();
+        self.direction = SearchDirection::Forward;
+        self.ignore_case = !self.query.chars().any(char::is_uppercase);
+        self.recompute(buffer);
+        self.current = (!self.matches.is_empty()).then(|| {
+            self.matches
+                .iter()
+                .position(|range| {
+                    (range.start.line, range.start.column) >= (from.line, from.column)
+                })
+                .unwrap_or(0)
+        });
+    }
+
+    /// Return the number of matches.
+    pub fn match_count(&self) -> usize {
+        self.matches.len()
+    }
+
+    /// Return the index of the current match.
+    pub fn current_index(&self) -> Option<usize> {
+        self.current
     }
 
     /// Update match cache if the buffer changed.
@@ -138,7 +177,12 @@ impl SearchState {
 
     /// Recompute match cache for the current query.
     fn recompute(&mut self, buffer: &TextBuffer) {
-        self.matches = find_matches(buffer, &self.query);
+        self.matches = find_matches_in(
+            buffer,
+            &self.query,
+            TextPosition::new(0, 0),
+            self.ignore_case,
+        );
         self.revision = buffer.revision();
     }
 }
@@ -150,13 +194,37 @@ pub fn find_matches(buffer: &TextBuffer, query: &str) -> Vec<TextRange> {
 
 /// Find matches entirely within the suffix beginning at a character position.
 fn find_matches_from(buffer: &TextBuffer, query: &str, start: TextPosition) -> Vec<TextRange> {
+    find_matches_in(buffer, query, start, false)
+}
+
+/// Find matches within the suffix beginning at a character position,
+/// optionally ignoring ASCII case.
+///
+/// ASCII case folding keeps every byte offset, so match columns index the
+/// original text.
+fn find_matches_in(
+    buffer: &TextBuffer,
+    query: &str,
+    start: TextPosition,
+    ignore_case: bool,
+) -> Vec<TextRange> {
     if query.is_empty() || query.contains('\n') {
         return Vec::new();
     }
+    let folded_query;
+    let query = if ignore_case {
+        folded_query = query.to_ascii_lowercase();
+        folded_query.as_str()
+    } else {
+        query
+    };
 
     let mut out = Vec::new();
     for line_idx in start.line..buffer.line_count() {
-        let line = buffer.line_text(line_idx);
+        let mut line = buffer.line_text(line_idx);
+        if ignore_case {
+            line.make_ascii_lowercase();
+        }
         let mut offset = if line_idx == start.line {
             line.char_indices()
                 .nth(start.column)

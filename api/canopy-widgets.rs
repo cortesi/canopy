@@ -180,12 +180,19 @@ pub mod canopy_widgets {
             /// state.
             pub fn set_highlighter(&mut self, highlighter: Option<Box<dyn Highlighter>>) {}
 
+            /// Make another search match current and scroll to it.
+            /// @param delta Matches to move; negative values move backward.
+            pub fn search_next(&mut self, ctx: &mut dyn Context, delta: i32) {}
+
             /// Move the cursor.
             /// @param dir The direction to move the cursor.
             pub fn move_cursor(&mut self, ctx: &mut dyn Context, dir: FocusDirection) {}
 
             /// Redo the last undone edit.
             pub fn redo(&mut self, _ctx: &mut dyn Context) {}
+
+            /// Remove the search and its highlights.
+            pub fn clear_search(&mut self, _ctx: &mut dyn Context) {}
 
             /// Replace the buffer contents.
             pub fn set_text(&mut self, text: impl Into<String>) {}
@@ -199,8 +206,26 @@ pub mod canopy_widgets {
             /// Return the current editor configuration.
             pub fn config(&self) -> &EditorConfig {}
 
+            /// Return the number of search matches.
+            pub fn search_matches(&self) -> usize {}
+
+            /// Return the one-based position of the current search match.
+            /// @return The position, or 0 when there is no current match.
+            pub fn search_position(&self) -> usize {}
+
+            /// Search the text and highlight every match.
+            ///
+            /// The first match at or below the top of the view becomes current, and
+            /// the view scrolls to it. A query without uppercase letters ignores ASCII
+            /// case. An empty query clears the search.
+            /// @param query Text to find.
+            pub fn search(&mut self, ctx: &mut dyn Context, query: String) {}
+
             /// Undo the last edit.
             pub fn undo(&mut self, _ctx: &mut dyn Context) {}
+
+            /// Build a positional call with typed user arguments.
+            pub fn call_clear_search() -> canopy::commands::CommandCall {}
 
             /// Build a positional call with typed user arguments.
             pub fn call_move_cursor(dir: FocusDirection) -> canopy::commands::CommandCall {}
@@ -209,13 +234,40 @@ pub mod canopy_widgets {
             pub fn call_redo() -> canopy::commands::CommandCall {}
 
             /// Build a positional call with typed user arguments.
+            pub fn call_search(query: String) -> canopy::commands::CommandCall {}
+
+            /// Build a positional call with typed user arguments.
+            pub fn call_search_matches() -> canopy::commands::CommandCall {}
+
+            /// Build a positional call with typed user arguments.
+            pub fn call_search_next(delta: i32) -> canopy::commands::CommandCall {}
+
+            /// Build a positional call with typed user arguments.
+            pub fn call_search_position() -> canopy::commands::CommandCall {}
+
+            /// Build a positional call with typed user arguments.
             pub fn call_undo() -> canopy::commands::CommandCall {}
+
+            /// Return a typed command reference for this command.
+            pub fn cmd_clear_search() -> &'static canopy::commands::CommandSpec {}
 
             /// Return a typed command reference for this command.
             pub fn cmd_move_cursor() -> &'static canopy::commands::CommandSpec {}
 
             /// Return a typed command reference for this command.
             pub fn cmd_redo() -> &'static canopy::commands::CommandSpec {}
+
+            /// Return a typed command reference for this command.
+            pub fn cmd_search() -> &'static canopy::commands::CommandSpec {}
+
+            /// Return a typed command reference for this command.
+            pub fn cmd_search_matches() -> &'static canopy::commands::CommandSpec {}
+
+            /// Return a typed command reference for this command.
+            pub fn cmd_search_next() -> &'static canopy::commands::CommandSpec {}
+
+            /// Return a typed command reference for this command.
+            pub fn cmd_search_position() -> &'static canopy::commands::CommandSpec {}
 
             /// Return a typed command reference for this command.
             pub fn cmd_undo() -> &'static canopy::commands::CommandSpec {}

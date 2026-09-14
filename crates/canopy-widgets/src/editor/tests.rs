@@ -917,6 +917,71 @@ fn highlight_spans_apply_styles() {
     assert!(harness.tbuf().contains_text_style("hi", &partial));
 }
 
+/// Run a search command on the harness editor and return its match count,
+/// current position, and top display row.
+fn run_search(
+    harness: &mut Harness,
+    operation: impl FnOnce(&mut Editor, &mut dyn Context),
+) -> (usize, usize, u32) {
+    harness
+        .with_root_context(|_root: &mut EditorHost, ctx| {
+            ctx.with_typed_slot::<EditorSlot, _>(|editor, ctx| {
+                operation(editor, ctx);
+                Ok((
+                    editor.search_matches(),
+                    editor.search_position(),
+                    ctx.view().view_rect().tl.y,
+                ))
+            })
+        })
+        .expect("editor missing")
+}
+
+#[test]
+fn search_command_uses_smart_case_and_scrolls_to_matches() {
+    let text = (1..=40)
+        .map(|n| match n {
+            25 => "target in lower case".to_string(),
+            n if n % 10 == 0 => format!("Target {n}"),
+            n => format!("line {n}"),
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let config = EditorConfig::new()
+        .with_read_only(true)
+        .with_focusable(false)
+        .with_wrap(WrapMode::None);
+    let mut harness = build_harness(&text, config, 24, 5);
+
+    let (matches, position, top) = run_search(&mut harness, |editor, ctx| {
+        editor.search(ctx, "target".into());
+    });
+    assert_eq!(matches, 5, "a lowercase query ignores case");
+    assert_eq!(position, 1);
+    assert!(
+        top > 0,
+        "the view scrolls to the first match, got row {top}"
+    );
+
+    let (_, position, _) = run_search(&mut harness, |editor, ctx| editor.search_next(ctx, 2));
+    assert_eq!(position, 3);
+    let (_, position, top) = run_search(&mut harness, |editor, ctx| editor.search_next(ctx, -3));
+    assert_eq!(position, 5, "moving back wraps to the last match");
+    assert!(top >= 35, "the view follows the match, got row {top}");
+
+    let (matches, position, _) = run_search(&mut harness, |editor, ctx| {
+        editor.search(ctx, "Target".into());
+    });
+    assert_eq!(matches, 4, "an uppercase letter makes the query match case");
+    assert_eq!(
+        position, 4,
+        "the first match on screen or below becomes current"
+    );
+
+    let (matches, position, _) = run_search(&mut harness, |editor, ctx| editor.clear_search(ctx));
+    assert_eq!((matches, position), (0, 0));
+}
+
 #[test]
 fn search_current_other_matches_and_syntax_keep_separate_styles() {
     let config = EditorConfig::new().with_wrap(WrapMode::None);
