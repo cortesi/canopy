@@ -25,7 +25,10 @@ canopy::slot!(pub(crate) PanelSlot: HelpPanel);
 canopy::slot!(pub(crate) BindingListSlot: BindingList);
 canopy::slot!(pub(crate) FooterSlot: ControlFooter);
 
-/// Opaque overlay that owns the help modal subtree.
+/// Transparent overlay that owns the help modal subtree.
+///
+/// The overlay draws nothing of its own, so the dimmed application stays
+/// visible around the help panel. It still consumes mouse input.
 pub struct Help;
 
 #[derive_commands]
@@ -96,9 +99,8 @@ impl Widget for Help {
         Layout::fill()
     }
 
-    fn render(&mut self, render: &mut Render, context: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, render: &mut Render, _context: &dyn ViewContext) -> Result<()> {
         render.push_layer("help");
-        render.fill("overlay", context.view().outer_rect_local(), ' ')?;
         Ok(())
     }
 

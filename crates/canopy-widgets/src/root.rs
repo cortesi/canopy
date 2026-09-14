@@ -401,11 +401,11 @@ mod tests {
     #[cfg(feature = "devtools")]
     use canopy::testing::harness::Harness;
     use canopy::{
-        BindingScope, Context, EventOutcome, NodeName, ViewContext, Widget,
+        BindingScope, Cell, Context, EventOutcome, NodeName, Render, ViewContext, Widget,
         commands::{CommandNode, CommandSpec},
         error::Result,
         event::Event,
-        geom::Size,
+        geom::{Line, Size},
         help::BindingSnapshot,
         layout::Layout,
         render::NopBackend,
@@ -848,6 +848,55 @@ mod tests {
         canopy.replace_root(App)?;
 
         assert_eq!(canopy.available_bindings(None)?.exclusive_group, None);
+        Ok(())
+    }
+
+    /// Application that draws one word in its top left corner.
+    struct Banner;
+
+    impl CommandNode for Banner {
+        fn commands() -> &'static [&'static CommandSpec] {
+            &[]
+        }
+    }
+
+    impl Widget for Banner {
+        fn render(&mut self, render: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+            render.text("text", Line::new(0, 0, 6), "BANNER")
+        }
+    }
+
+    #[test]
+    fn help_overlays_the_dimmed_application() -> Result<()> {
+        let mut canopy = Canopy::new();
+        Root::load(&mut canopy)?;
+        Root::new().install(&mut canopy, Banner)?;
+        canopy.finalize_api()?;
+        canopy.set_root_size(Size::new(60, 14))?;
+        let mut backend = NopBackend::new();
+        let mut corner = |canopy: &mut Canopy| -> Result<Cell> {
+            canopy.render(&mut backend)?;
+            Ok(canopy.snapshot().expect("published frame").cells[0].clone())
+        };
+        let before = corner(&mut canopy)?;
+        assert_eq!(before.ch, 'B');
+
+        canopy.eval_script("root.show_help()")?;
+        let during = corner(&mut canopy)?;
+        assert_eq!(during.ch, 'B', "help leaves the application visible");
+        assert_ne!(
+            (during.style.fg, during.style.bg),
+            (before.style.fg, before.style.bg),
+            "help dims the application"
+        );
+
+        canopy.eval_script("root.hide_help()")?;
+        let after = corner(&mut canopy)?;
+        assert_eq!(
+            (after.style.fg, after.style.bg),
+            (before.style.fg, before.style.bg),
+            "closing help restores the application"
+        );
         Ok(())
     }
 

@@ -107,7 +107,6 @@ pub fn theme(p: &Palette) -> StyleMap {
             "/editor/prompt",
             StyleBuilder::new().fg(p.fg).bg(p.panel_bg),
         )
-        .style("/help/overlay", StyleBuilder::new().fg(p.fg).bg(p.bg))
         .style("/help/panel", StyleBuilder::new().fg(p.fg).bg(p.panel_bg))
         .style_all(
             &[

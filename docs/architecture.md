@@ -299,8 +299,10 @@ Widget events bubble from target to root until a widget handles or consumes
 them. Command scopes expose the originating event and target.
 
 Root captures a help snapshot before it opens a modal with `ModalOptions` and
-`ModalBindings::Framework(HELP_BINDINGS)`. The scope admits only Root-owned help
-controls until the modal closes. Root then calls `close_modal` with the returned
+`ModalBindings::Framework(HELP_BINDINGS)`. The scope dims the main pane, and the
+help overlay draws only its panel, so the dimmed application stays visible
+around it. The scope admits only Root-owned help controls until the modal
+closes. Root then calls `close_modal` with the returned
 `InteractionToken` and restores the original focus when that node remains live.
 Removing or replacing a subtree retires modal scopes whose owner or modal widget
 no longer belongs to the tree.
