@@ -207,11 +207,40 @@ times in one pass.
 Canvas calculation is also infallible. It returns the scrollable content extent,
 which is at least the content size. Layout clamps scroll after every pass.
 
-`Context::scroll_into_view()` queues a content rectangle to reveal after canvas
-sizing, before views are published. This lets a widget expand and reveal a row
-in the same turn. The latest request wins and explicit scrolling cancels it.
-Requests survive hidden, detached, and zero-sized views, but widget replacement
-clears them. A successful nonempty layout consumes each request once.
+Scrolling and revealing are separate. `Context::scroll_to()`, `scroll_by()`,
+and `scroll_to_of()` move a view at once. `Context::reveal_area()`,
+`reveal_anchor()`, and `reveal_node()` queue requests that run after layout
+settles the geometry they show, so a widget can change content and reveal it in
+the same turn. `reveal_anchor()` asks `Widget::reveal_anchor()` for a rectangle
+using the final content size. The editor reveals its cursor this way.
+
+Each node holds one local request, an area or an anchor, and one request to
+reveal the node in its ancestor views. A later call replaces its slot. Every
+scroll and reveal takes an increasing call-order stamp, and each view records
+the stamp of the last scroll or reveal it accepted, including one that needed
+no movement. A focus change queues a nearest-edge reveal of the focused node.
+
+After measurement and canvas sizing, layout publishes views and runs focus
+recovery. It then applies the pending requests in call order. A local request
+moves its own view. A node request starts with the node's outer rectangle in its
+parent's canvas. At each view out to the active modal region or the root, it
+moves the view, clips the area to what the view now shows, and translates the
+result into the next canvas through the view's position and padding. A view
+with a newer stamp keeps its offset but still clips the area. Layout then
+publishes the moved views.
+
+`RevealAlign::Nearest` makes the smallest move and keeps a view that already
+lies inside a larger area. `RevealAlign::Center` centers each axis on which the
+area is shorter than the view. A request waits while its node is hidden,
+detached, zero-sized, or outside the active modal region. The stamps stop a
+returning request from overriding newer intent. Removal discards requests,
+replacement clears requests and stamps, and structural rollback restores them
+with the node.
+
+`Scroll` is a container whose canvas spans its children on the axes it
+scrolls. Those axes measure children without a bound, and the other axis stays
+bounded. Content that must grow uses measured or fixed sizing on a scrolling
+axis; flex children share only the space that remains.
 
 Hidden nodes and `Display::None` nodes do not participate in visible layout.
 Layout clears their subtree caches.

@@ -1,8 +1,8 @@
 use std::{collections::HashMap, time::Duration};
 
 use canopy::{
-    Context, EventOutcome, FocusDirection, NodeName, Render, ViewContext, Widget, cursor,
-    derive_commands,
+    Context, EventOutcome, FocusDirection, NodeName, Render, RevealAlign, ViewContext, Widget,
+    cursor, derive_commands,
     error::Result,
     event::{Event, key, mouse},
     geom::{Line, Point, Rect, Size},
@@ -14,7 +14,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use super::{
     EditMode, EditorConfig, LineNumbers, WrapMode, display_width,
     highlight::{HighlightSpan, Highlighter},
-    layout::{LayoutCache, WrapSegment, metrics},
+    layout::{LayoutCache, WrapSegment, metrics, point_for_position},
     search::{PromptState, SearchDirection, SearchState},
     vi::{ViMode, ViState},
 };
@@ -322,35 +322,39 @@ impl Editor {
         cursor_point
     }
 
-    /// Ensure the cursor is visible within the current scroll view.
+    /// Synchronize the wrap layout and reveal the cursor once layout settles.
+    ///
+    /// The reveal reads the cursor from [`Widget::reveal_anchor`] with the
+    /// final content width, so edits and resizes in the same turn count.
     pub(super) fn ensure_cursor_visible(&mut self, ctx: &mut dyn Context) {
-        let view = ctx.view();
-        let view_rect = view.view_rect();
-        let gutter_width = self.gutter_width();
-        let cursor = self.update_layout(view_rect, gutter_width);
-        let cursor_x = cursor.x;
-        let cursor_y = cursor.y;
+        let view_rect = ctx.view().view_rect();
+        self.update_layout(view_rect, self.gutter_width());
+        ctx.reveal_anchor(RevealAlign::Nearest);
+    }
 
-        let mut target_x = view_rect.tl.x;
-        let mut target_y = view_rect.tl.y;
-
-        if cursor_x < view_rect.tl.x {
-            target_x = cursor_x;
-        } else if cursor_x >= view_rect.tl.x.saturating_add(view_rect.w.saturating_sub(1)) {
-            target_x = cursor_x.saturating_sub(view_rect.w.saturating_sub(1));
+    /// Return the cursor cell in content coordinates for a content width.
+    ///
+    /// A current layout cache answers directly. Otherwise the position is
+    /// computed without changing the cache.
+    fn cursor_point(&self, width: u32) -> Point {
+        let gutter = self.gutter_width();
+        let wrap_width = width.saturating_sub(gutter).max(1) as usize;
+        let (wrap, tab_stop) = (self.config.wrap, self.config.tab_stop);
+        let cursor = self.buffer.cursor();
+        let point = if self
+            .layout
+            .metrics_for(&self.buffer, wrap_width, wrap, tab_stop)
+            .is_some()
+        {
+            self.layout
+                .point_for_position(&self.buffer, cursor, tab_stop)
+        } else {
+            point_for_position(&self.buffer, cursor, wrap, wrap_width, tab_stop)
+        };
+        Point {
+            x: point.x.saturating_add(gutter),
+            y: point.y,
         }
-
-        if cursor_y < view_rect.tl.y {
-            target_y = cursor_y;
-        } else if cursor_y >= view_rect.tl.y.saturating_add(view_rect.h.saturating_sub(1)) {
-            target_y = cursor_y.saturating_sub(view_rect.h.saturating_sub(1));
-        }
-
-        if self.config.wrap == WrapMode::Soft {
-            target_x = 0;
-        }
-
-        let _ = ctx.scroll_to(target_x, target_y);
     }
 
     /// Refresh the preferred display column from the cursor position.
@@ -1023,12 +1027,23 @@ impl Widget for Editor {
         c.clamp(Size::new(width, height))
     }
 
+    fn reveal_anchor(&self, view: Size) -> Option<Rect> {
+        let mut cursor = self.cursor_point(view.w);
+        // Soft-wrapped text never scrolls sideways.
+        if self.config.wrap == WrapMode::Soft {
+            cursor.x = 0;
+        }
+        Some(Rect::new(cursor.x, cursor.y, 1, 1))
+    }
+
     fn canvas(&self, view: Size, _ctx: &CanvasContext) -> Size {
         let gutter = self.gutter_width();
         let wrap_width = view.w.saturating_sub(gutter).max(1) as usize;
         let (line_count, max_line_width) = self.display_metrics(wrap_width);
         let width = match self.config.wrap {
+            // One more column holds the caret after the longest line.
             WrapMode::None => (max_line_width as u32)
+                .saturating_add(1)
                 .saturating_add(gutter)
                 .max(view.w.max(1)),
             WrapMode::Soft => view.w.max(1),

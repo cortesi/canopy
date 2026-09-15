@@ -7,18 +7,19 @@
 
 use canopy::{
     Canopy, CanopyBuilder, ChildSlot, Context, ContextExt, FocusDirection, Loader, NodeId,
-    NodeName, Render, TypedId, ViewContext, Widget, derive_commands,
+    NodeName, Render, TypedId, View, ViewContext, Widget, derive_commands,
     error::Result,
-    geom::{Line, Point, Size},
+    geom::{Line, Point, Rect, Size},
     layout::{CanvasContext, Direction, Edges, Layout},
     style::{
         AttrSet, Color, PartialStyle, ResolvedStyle, StyleMap, canopy as canopy_theme, dracula,
         effects::{self, Effect},
         gruvbox, solarized,
     },
+    text,
 };
 use canopy_widgets::{
-    Button, Center, Dropdown, Frame, Input, Label, Root, Selector, Tabs,
+    Button, Center, Dropdown, Frame, Input, Label, Root, Scroll, Selector, Tabs,
     editor::{Editor, EditorConfig, LineNumbers, WrapMode, highlight::SyntectHighlighter},
 };
 
@@ -55,13 +56,11 @@ canopy.keymap({
     path = "style_sheet",
     {
         key = { "j", "Down" },
-        mouse = "ScrollDown",
         description = "Scroll down",
         action = command.style_sheet.scroll("Down"),
     },
     {
         key = { "k", "Up" },
-        mouse = "ScrollUp",
         description = "Scroll up",
         action = command.style_sheet.scroll("Up"),
     },
@@ -452,32 +451,34 @@ impl StyleSheet {
     /// Paint one path row at canvas row `y`.
     fn paint_path(
         rndr: &mut Render,
+        place: Placement,
         muted: ResolvedStyle,
         y: u32,
         path: &str,
         sets: Components,
-        path_width: u32,
     ) -> Result<()> {
         let style = rndr.resolve_style(path);
         let solid = style.resolve_solid();
         if let Some(solid) = solid {
             for (x, color) in [(1, solid.fg), (4, solid.bg)] {
                 let swatch = ResolvedStyle::new(color, color, AttrSet::default());
-                put_text(rndr, swatch, x, y, "  ")?;
+                put_text(rndr, place, swatch, x, y, "  ")?;
             }
         }
-        rndr.text("", line(SWATCH_WIDTH, y, path_width), &format!("/{path}"))?;
+        put_styled(rndr, place, "", SWATCH_WIDTH, y, &format!("/{path}"))?;
 
+        let path_width = place.path_width;
         let [fg_x, bg_x, sample_x, attrs_x] = Self::value_columns(path_width);
         let (fg, bg) = solid.map_or_else(
             || ("gradient".to_string(), "gradient".to_string()),
             |solid| (hex(solid.fg), hex(solid.bg)),
         );
-        put_value(rndr, muted, fg_x, y, &fg, sets.fg)?;
-        put_value(rndr, muted, bg_x, y, &bg, sets.bg)?;
-        rndr.text(path, line(sample_x, y, SAMPLE.len() as u32), SAMPLE)?;
+        put_value(rndr, place, muted, fg_x, y, &fg, sets.fg)?;
+        put_value(rndr, place, muted, bg_x, y, &bg, sets.bg)?;
+        put_styled(rndr, place, path, sample_x, y, SAMPLE)?;
         put_value(
             rndr,
+            place,
             muted,
             attrs_x,
             y,
@@ -489,28 +490,36 @@ impl StyleSheet {
 
 impl Widget for StyleSheet {
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
-        let rect = ctx.view().view_rect_local();
-        rndr.fill("", rect, ' ')?;
+        let view = ctx.view();
+        rndr.fill("", view.view_rect_local(), ' ')?;
         let muted = muted_style(rndr);
-        let path_width = self.path_width();
-        let top = rect.tl.y as usize;
-        let bottom = top.saturating_add(rect.h as usize);
-        for (y, row) in self.rows.iter().enumerate().take(bottom).skip(top) {
+        let place = Placement::of(&view, self.path_width());
+        let visible = view.view_rect();
+        let rows = self
+            .rows
+            .iter()
+            .enumerate()
+            .skip(visible.tl.y as usize)
+            .take(visible.h as usize);
+        for (y, row) in rows {
             let y = y as u32;
             match row {
                 SheetRow::Blank => {}
                 SheetRow::Columns => {
-                    put_text(rndr, muted, SWATCH_WIDTH, y, "path")?;
+                    put_text(rndr, place, muted, SWATCH_WIDTH, y, "path")?;
                     let titles = ["fg", "bg", "sample", "attrs"];
-                    for (x, title) in Self::value_columns(path_width).into_iter().zip(titles) {
-                        put_text(rndr, muted, x, y, title)?;
+                    for (x, title) in Self::value_columns(place.path_width)
+                        .into_iter()
+                        .zip(titles)
+                    {
+                        put_text(rndr, place, muted, x, y, title)?;
                     }
                 }
                 SheetRow::Heading(title) => {
-                    rndr.text("frame/title", line(1, y, title.len() as u32), title)?;
+                    put_styled(rndr, place, "frame/title", 1, y, title)?;
                 }
                 SheetRow::Path { path, sets } => {
-                    Self::paint_path(rndr, muted, y, path, *sets, path_width)?;
+                    Self::paint_path(rndr, place, muted, y, path, *sets)?;
                 }
             }
         }
@@ -531,11 +540,41 @@ impl Widget for StyleSheet {
     }
 }
 
-/// Return a one-row line.
-fn line(x: u32, y: u32, w: u32) -> Line {
-    Line {
-        tl: Point { x, y },
-        w,
+/// Maps canvas cells of a scrolling page to the page's render coordinates.
+#[derive(Clone, Copy)]
+struct Placement {
+    /// Canvas rectangle the view shows.
+    visible: Rect,
+    /// Render position of the visible rectangle's top-left cell.
+    origin: Point,
+    /// Width of a style sheet's path column.
+    path_width: u32,
+}
+
+impl Placement {
+    /// Return the placement for a view.
+    fn of(view: &View, path_width: u32) -> Self {
+        Self {
+            visible: view.view_rect(),
+            origin: view.content_origin(),
+            path_width,
+        }
+    }
+
+    /// Return the render cell for a canvas cell, or `None` off screen.
+    fn cell(self, x: u32, y: u32) -> Option<Point> {
+        self.visible.contains_point(Point { x, y }).then(|| Point {
+            x: x - self.visible.tl.x + self.origin.x,
+            y: y - self.visible.tl.y + self.origin.y,
+        })
+    }
+
+    /// Return the render line for `width` canvas columns from (`x`, `y`) and
+    /// the leading columns the view hides.
+    fn line(self, x: u32, y: u32, width: u32) -> Option<(Line, usize)> {
+        let hidden = self.visible.tl.x.saturating_sub(x);
+        let start = self.cell(x.saturating_add(hidden), y)?;
+        (hidden < width).then(|| (Line::new(start.x, start.y, width - hidden), hidden as usize))
     }
 }
 
@@ -581,17 +620,44 @@ fn muted_style(rndr: &Render) -> ResolvedStyle {
     ResolvedStyle::new(fg, bg, AttrSet::default())
 }
 
-/// Paint ASCII `text` with an explicit style, starting at `x`.
-fn put_text(rndr: &mut Render, style: ResolvedStyle, x: u32, y: u32, text: &str) -> Result<()> {
+/// Paint ASCII `text` with an explicit style from canvas cell (`x`, `y`).
+fn put_text(
+    rndr: &mut Render,
+    place: Placement,
+    style: ResolvedStyle,
+    x: u32,
+    y: u32,
+    text: &str,
+) -> Result<()> {
     for (offset, ch) in (0u32..).zip(text.chars()) {
-        rndr.put_cell(style, Point { x: x + offset, y }, ch)?;
+        if let Some(cell) = place.cell(x.saturating_add(offset), y) {
+            rndr.put_cell(style, cell, ch)?;
+        }
     }
     Ok(())
+}
+
+/// Paint `content` with a style path from canvas cell (`x`, `y`).
+fn put_styled(
+    rndr: &mut Render,
+    place: Placement,
+    style: &str,
+    x: u32,
+    y: u32,
+    content: &str,
+) -> Result<()> {
+    let width = u32::try_from(text::display_width(content)).unwrap_or(u32::MAX);
+    let Some((line, hidden)) = place.line(x, y, width) else {
+        return Ok(());
+    };
+    let (shown, _) = text::slice_by_columns(content, hidden, line.w as usize);
+    rndr.text(style, line, shown)
 }
 
 /// Paint a value in the default style when its rule sets it, muted otherwise.
 fn put_value(
     rndr: &mut Render,
+    place: Placement,
     muted: ResolvedStyle,
     x: u32,
     y: u32,
@@ -599,11 +665,30 @@ fn put_value(
     set: bool,
 ) -> Result<()> {
     if set {
-        rndr.text("", line(x, y, value.len() as u32), value)
+        put_styled(rndr, place, "", x, y, value)
     } else {
-        put_text(rndr, muted, x, y, value)
+        put_text(rndr, place, muted, x, y, value)
     }
 }
+
+/// Rows of the text samples page: a style path and the text it paints.
+const TEXT_ROWS: &[(&str, &str)] = &[
+    ("frame/title", "Color Palette"),
+    ("red", "████ Red"),
+    ("orange", "████ Orange"),
+    ("yellow", "████ Yellow"),
+    ("green", "████ Green"),
+    ("cyan", "████ Cyan"),
+    ("blue", "████ Blue"),
+    ("violet", "████ Violet"),
+    ("magenta", "████ Magenta"),
+    ("", ""),
+    ("frame/title", "Text Styles"),
+    ("", "Normal text sample"),
+    ("text/bold", "Bold text sample"),
+    ("text/italic", "Italic text sample"),
+    ("text/underline", "Underlined text sample"),
+];
 
 /// The text samples page: named colors and text attributes.
 pub(crate) struct TextSamples;
@@ -611,43 +696,25 @@ pub(crate) struct TextSamples;
 impl Widget for TextSamples {
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
-        let rect = view.view_rect_local();
-
         // Fill background with root style so effects apply to empty space
-        rndr.fill("", rect, ' ')?;
-
-        let mut row = 0;
-
-        // Color palette section
-        rndr.text("frame/title", rect.line(row)?, "Color Palette")?;
-        row += 1;
-
-        if rect.h > row + 8 {
-            rndr.text("red", rect.line(row)?, "████ Red")?;
-            rndr.text("orange", rect.line(row + 1)?, "████ Orange")?;
-            rndr.text("yellow", rect.line(row + 2)?, "████ Yellow")?;
-            rndr.text("green", rect.line(row + 3)?, "████ Green")?;
-            rndr.text("cyan", rect.line(row + 4)?, "████ Cyan")?;
-            rndr.text("blue", rect.line(row + 5)?, "████ Blue")?;
-            rndr.text("violet", rect.line(row + 6)?, "████ Violet")?;
-            rndr.text("magenta", rect.line(row + 7)?, "████ Magenta")?;
-            row += 9;
+        rndr.fill("", view.view_rect_local(), ' ')?;
+        let place = Placement::of(&view, 0);
+        for (y, (style, content)) in (0u32..).zip(TEXT_ROWS) {
+            put_styled(rndr, place, style, 0, y, content)?;
         }
-
-        // Text styles section
-        if rect.h > row + 5 {
-            rndr.text("frame/title", rect.line(row)?, "Text Styles")?;
-            row += 1;
-            rndr.text("", rect.line(row)?, "Normal text sample")?;
-            row += 1;
-            rndr.text("text/bold", rect.line(row)?, "Bold text sample")?;
-            row += 1;
-            rndr.text("text/italic", rect.line(row)?, "Italic text sample")?;
-            row += 1;
-            rndr.text("text/underline", rect.line(row)?, "Underlined text sample")?;
-        }
-
         Ok(())
+    }
+
+    fn canvas(&self, view: Size, _ctx: &CanvasContext<'_>) -> Size {
+        let width = TEXT_ROWS
+            .iter()
+            .map(|(_, content)| text::display_width(content))
+            .max()
+            .unwrap_or(0);
+        Size::new(
+            u32::try_from(width).unwrap_or(u32::MAX).max(view.w),
+            (TEXT_ROWS.len() as u32).max(view.h),
+        )
     }
 
     fn layout(&self) -> Layout {
@@ -990,7 +1057,7 @@ impl Widget for Stylegym {
         let rules = c.with_widget_mut(tabs_id, |tabs: &mut Tabs, ctx| {
             tabs.add_tab(ctx, "Palette", StyleSheet::palette())?;
             let rules = tabs.add_tab(ctx, "Rules", StyleSheet::rules())?;
-            let widgets = tabs.add_tab(ctx, "Widgets", Stack(Direction::Column))?;
+            let widgets = tabs.add_tab(ctx, "Widgets", Scroll::vertical())?;
             add_widget_samples(ctx, widgets.into())?;
             let syntax = tabs.add_tab(ctx, "Syntax", Stack(Direction::Row))?;
             add_syntax_samples(ctx, syntax.into())?;

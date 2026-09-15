@@ -1,6 +1,6 @@
 use super::Core;
 use crate::{
-    ChangeOutcome, FocusDirection,
+    ChangeOutcome, FocusDirection, RevealAlign,
     core::{id::NodeId, widget_access},
     error::{Error, Result},
     geom::RectI32,
@@ -50,6 +50,9 @@ impl Core {
             Ok(ChangeOutcome::Unchanged)
         } else {
             self.focus = target;
+            if let Some(node) = target {
+                self.queue_node_reveal(node, RevealAlign::Nearest);
+            }
             self.invalidate(crate::Invalidation::Paint);
             Ok(ChangeOutcome::Changed)
         }

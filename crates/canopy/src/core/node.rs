@@ -1,7 +1,12 @@
 use std::{any::TypeId, cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
-    core::{id::NodeId, style::effects::Effect, view::View},
+    core::{
+        id::NodeId,
+        style::effects::Effect,
+        view::View,
+        world::scroll::{LocalReveal, NodeReveal},
+    },
     geom::{Point, Rect, Size},
     layout::{Layout, LayoutOverride},
     state::NodeName,
@@ -57,8 +62,12 @@ pub struct Node {
     pub(crate) canvas: Size,
     /// Scroll offset in content coordinates.
     pub(crate) scroll: Point,
-    /// Content rectangle to reveal after the next nonempty layout.
-    pub(crate) pending_reveal: Option<Rect>,
+    /// Reveal pending in this node's own viewport.
+    pub(crate) reveal: Option<LocalReveal>,
+    /// Reveal of this node pending in its ancestor viewports.
+    pub(crate) reveal_in_ancestors: Option<NodeReveal>,
+    /// Call-order stamp of the last scroll or reveal this viewport accepted.
+    pub(crate) scroll_order: u64,
     /// View information in screen coordinates.
     pub(crate) view: View,
 
@@ -104,7 +113,9 @@ impl Node {
             content_size: Size::default(),
             canvas: Size::default(),
             scroll: Point::ZERO,
-            pending_reveal: None,
+            reveal: None,
+            reveal_in_ancestors: None,
+            scroll_order: 0,
             view: View::default(),
             hidden: false,
             name,

@@ -43,6 +43,8 @@ mod pad;
 mod panes;
 /// Application root widget.
 mod root;
+/// Scrolling container.
+mod scroll;
 pub mod scrollbar;
 /// Selection widget.
 mod selector;
@@ -73,6 +75,7 @@ pub use list::{AutoKey, List, Selectable};
 pub use pad::Pad;
 pub use panes::Panes;
 pub use root::Root;
+pub use scroll::Scroll;
 pub use scrollbar::Scrollbar;
 pub use selector::Selector;
 pub use tabs::Tabs;

@@ -71,7 +71,8 @@ pub use canopy::{
 pub use change::{ChangeOutcome, ChangeSet, Invalidation};
 pub use children::{ChildBuilder, ChildConfig, KeyedChildren};
 pub use context::{
-    ChildSlot, Context, ContextExt, FocusDirection, FocusScope, ViewContext, ViewContextExt,
+    ChildSlot, Context, ContextExt, FocusDirection, FocusScope, RevealAlign, ViewContext,
+    ViewContextExt,
 };
 pub use fixture::{Fixture, FixtureInfo};
 pub use id::{NodeId, TypedId};

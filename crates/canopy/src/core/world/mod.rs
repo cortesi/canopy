@@ -81,6 +81,8 @@ pub struct Core {
     tree_edit: Option<TreeEditJournal>,
     /// Monotonic widget and attachment generation source, outside rollback.
     next_generation: u64,
+    /// Last call-order stamp given to a scroll or reveal, outside rollback.
+    scroll_stamp: u64,
     /// Widget slots currently extracted by mutation callbacks.
     pub(crate) callback_depth: usize,
     /// Completion-boundary removal queue and dispatch nesting.
@@ -217,6 +219,7 @@ impl Core {
             focus_hint: None,
             tree_edit: None,
             next_generation: 2,
+            scroll_stamp: 0,
             callback_depth: 0,
             completion: teardown::CompletionBatch::default(),
             wake_registry: WakeRegistry::default(),

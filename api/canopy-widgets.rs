@@ -167,6 +167,8 @@ pub mod canopy_widgets {
             fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {}
 
             fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
+
+            fn reveal_anchor(&self, view: Size) -> Option<Rect> {}
         }
 
         impl super::widget::Editor {
@@ -927,6 +929,20 @@ pub mod canopy_widgets {
     #[derive(Default)]
     pub struct Root {}
 
+    /// A container that lays its children out past its viewport and scrolls over
+    /// them.
+    ///
+    /// Children are ordinary nodes. On a scrolling axis they measure without a
+    /// bound, and the canvas spans their allocated rectangles. Content that must
+    /// grow along that axis uses measured or fixed sizing; flex children share
+    /// only the space that remains. The other axis stays bounded, even inside an
+    /// unbounded ancestor.
+    ///
+    /// `Scroll` accepts no focus and installs no keys. Wheel input scrolls it
+    /// through the runtime's default action, focus changes reveal the focused
+    /// node, and an enclosing frame draws its position.
+    pub struct Scroll {}
+
     /// A proportional scrollbar for one axis.
     ///
     /// The owner resolves its tracks before each render and event, and passes each
@@ -1587,6 +1603,25 @@ pub mod canopy_widgets {
         fn name(&self) -> NodeName {}
 
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {}
+    }
+
+    impl Scroll {
+        /// Place children in a row that scrolls horizontally.
+        pub fn horizontal() -> Self {}
+
+        /// Stack children in a column that scrolls on both axes.
+        pub fn both() -> Self {}
+
+        /// Stack children in a column that scrolls vertically.
+        pub fn vertical() -> Self {}
+    }
+
+    impl Widget for Scroll {
+        fn canvas(&self, view: Size, ctx: &CanvasContext<'_>) -> Size {}
+
+        fn layout(&self) -> Layout {}
+
+        fn name(&self) -> NodeName {}
     }
 
     impl Scrollbar {

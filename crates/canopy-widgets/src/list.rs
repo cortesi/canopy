@@ -8,7 +8,7 @@ use std::{collections::HashSet, hash::Hash};
 
 use canopy::{
     Context, ContextExt, EventOutcome, FocusDirection, KeyedChildren, NodeId, NodeName, Render,
-    TypedId, ViewContext, Widget, WidgetSemantics,
+    RevealAlign, TypedId, ViewContext, Widget, WidgetSemantics,
     commands::{
         ArgValue, CommandAction, CommandArgs, CommandCall, CommandInvocation, CommandScopeFrame,
         CommandStatus, CommandTarget, ListRowContext, ToArgValue,
@@ -418,7 +418,9 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
         }
         self.update_selection(c, Some(index.min(self.items.len() - 1)))?;
         self.focus_selected(c)?;
-        self.ensure_selected_visible(c);
+        if let Some(item) = self.selected_item() {
+            c.reveal_node(item.into(), RevealAlign::Nearest)?;
+        }
         Ok(())
     }
 
@@ -560,30 +562,6 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
             return Ok(());
         }
         self.page_shift(c, delta > 0)
-    }
-
-    /// Ensure the selected item is visible in the view.
-    fn ensure_selected_visible(&self, c: &mut dyn Context) {
-        let Some(selected_idx) = self.selected_index() else {
-            return;
-        };
-
-        let view = c.view();
-        let view_rect = view.view_rect();
-
-        // Compute item positions by measuring each child
-        let metrics = self.item_metrics(c);
-        let Some((start, height)) = metrics.get(selected_idx).copied() else {
-            return;
-        };
-
-        if start < view_rect.tl.y {
-            let delta = view_rect.tl.y - start;
-            let _ = c.scroll_by(0, -(delta as i32));
-        } else if start.saturating_add(height) > view_rect.tl.y.saturating_add(view_rect.h) {
-            let delta = start.saturating_add(height) - (view_rect.tl.y + view_rect.h);
-            let _ = c.scroll_by(0, delta as i32);
-        }
     }
 
     /// Move selection by one page and keep it visible.

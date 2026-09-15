@@ -203,7 +203,9 @@ impl Core {
             .get_mut(node_id)
             .ok_or(Error::NodeNotFound(node_id))?;
         node.incarnation = incarnation;
-        node.pending_reveal = None;
+        node.reveal = None;
+        node.reveal_in_ancestors = None;
+        node.scroll_order = 0;
         node.attachment_generation = None;
         node.poll_lifetime = poll_lifetime;
         node.widget = Rc::new(RefCell::new(Some(widget)));

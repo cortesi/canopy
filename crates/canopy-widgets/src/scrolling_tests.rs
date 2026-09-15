@@ -1,19 +1,24 @@
 //! Scroll target resolution and frame scrollbar tests.
 
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 
 use canopy::{
-    Context, ContextExt, EventOutcome, Loader, NodeId, NodeName, Widget,
+    Context, ContextExt, EventOutcome, Loader, NodeId, NodeName, ViewContext, Widget,
     error::Result,
     event::{Event, key, mouse},
     geom::{Point, PointI32, Rect, Size},
-    layout::{CanvasContext, Direction, Edges, Layout},
+    layout::{
+        CanvasContext, Direction, Edges, Layout, LayoutOverride, MeasureConstraints, Measurement,
+    },
     style::Color,
     testing::harness::Harness,
 };
 
 use crate::{
-    Frame, Tabs,
+    Frame, List, Scroll, Selectable, Tabs,
     scrollbar::{Axis, ScrollTarget, scroll_target},
 };
 
@@ -545,5 +550,96 @@ fn rendering_a_stale_drag_keeps_capture_until_the_next_event() -> Result<()> {
         Point::ZERO,
         "the event that ends a drag does not scroll"
     );
+    Ok(())
+}
+
+/// A focusable list row whose height the test shares and changes.
+struct Tall(Rc<Cell<u32>>);
+
+impl Selectable for Tall {
+    fn set_selected(&mut self, _selected: bool) {}
+}
+
+impl Widget for Tall {
+    fn measure(&self, c: MeasureConstraints) -> Measurement {
+        c.clamp(Size::new(1, self.0.get()))
+    }
+
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+        true
+    }
+}
+
+/// Add a list of `rows` rows under `parent`, each as tall as `height`.
+fn tall_list(
+    c: &mut dyn Context,
+    parent: NodeId,
+    rows: usize,
+    height: &Rc<Cell<u32>>,
+) -> Result<NodeId> {
+    let list = c.add_child_to(parent, List::<Tall>::new())?;
+    c.with_widget_mut(list, |list: &mut List<Tall>, c| {
+        for _ in 0..rows {
+            list.append(c, Tall(Rc::clone(height)))?;
+        }
+        Ok(())
+    })?;
+    Ok(list.into())
+}
+
+/// Select a list's last row.
+fn select_last(harness: &mut Harness, list: NodeId) -> Result<()> {
+    harness.canopy.with_root_context(|c| {
+        c.with_widget_mut(list, |list: &mut List<Tall>, c| list.select_last(c))
+    })
+}
+
+#[test]
+fn a_list_reveals_its_selection_with_row_heights_changed_in_the_same_turn() -> Result<()> {
+    let height = Rc::new(Cell::new(1));
+    let rows = Rc::clone(&height);
+    let (mut harness, nodes) = scene(10, 4, move |c| {
+        let root = c.node_id();
+        Ok(vec![tall_list(c, root, 5, &rows)?])
+    })?;
+    let list = nodes[0];
+
+    height.set(3);
+    select_last(&mut harness, list)?;
+    harness.render()?;
+    // Five rows of three cells end at row 15, and the view shows four rows.
+    assert_eq!(scroll(&harness, list), Point { x: 0, y: 11 });
+    Ok(())
+}
+
+#[test]
+fn a_list_inside_a_scroll_container_reveals_through_both_views() -> Result<()> {
+    let (mut harness, nodes) = scene(10, 6, |c| {
+        let root = c.node_id();
+        let container: NodeId = c.add_child_to(root, Scroll::vertical())?.into();
+        boxed(
+            c,
+            container,
+            Layout::column().flex_horizontal(1).fixed_height(10),
+        )?;
+        let list = tall_list(c, container, 10, &Rc::new(Cell::new(1)))?;
+        c.set_layout_override_of(list, LayoutOverride::new().fixed_height(4))?;
+        Ok(vec![container, list])
+    })?;
+    let (container, list) = (nodes[0], nodes[1]);
+    // Startup focus reveals the first row, so return both views to the top.
+    harness.canopy.with_root_context(|c| {
+        c.scroll_to_of(list, 0, 0)?;
+        c.scroll_to_of(container, 0, 0).map(|_| ())
+    })?;
+    harness.render()?;
+    assert_eq!(scroll(&harness, container), Point::ZERO);
+
+    select_last(&mut harness, list)?;
+    harness.render()?;
+    // The list shows rows 6 through 9. The container then shows the list's
+    // last visible row, which sits at row 13 of its canvas.
+    assert_eq!(scroll(&harness, list), Point { x: 0, y: 6 });
+    assert_eq!(scroll(&harness, container), Point { x: 0, y: 8 });
     Ok(())
 }

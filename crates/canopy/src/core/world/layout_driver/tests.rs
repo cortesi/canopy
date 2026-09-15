@@ -10,7 +10,6 @@ use rand::{RngExt, SeedableRng, rngs::StdRng};
 
 use super::{
     LayoutPass, align_offset, allocate_flex_shares, clamp_outer, clamp_scroll, constraint_for_axis,
-    reveal_offset,
 };
 use crate::{
     Context, NodeId,
@@ -696,7 +695,10 @@ fn reveal_uses_new_canvas_and_view_dimensions_once() -> Result<()> {
     core.update_layout(Size::new(5, 3))?;
     *canvas.lock().unwrap() = Size::new(100, 100);
     let mut ctx = CoreContext::new(&mut core, child);
-    assert!(ctx.scroll_into_view(Rect::new(10, 20, 2, 2)).changed());
+    assert!(
+        ctx.reveal_area(Rect::new(10, 20, 2, 2), crate::RevealAlign::Nearest)
+            .changed()
+    );
     core.update_layout(Size::new(7, 4))?;
     assert_eq!(core.nodes[child].view.scroll, Point { x: 5, y: 18 });
     // Once consumed, a request must not keep forcing its target into view.
@@ -721,20 +723,32 @@ fn reveal_obeys_request_and_explicit_scroll_order() -> Result<()> {
     let child = add_reveal_surface(&mut core)?;
     core.update_layout(Size::new(10, 4))?;
     let mut ctx = CoreContext::new(&mut core, child);
-    assert!(ctx.scroll_into_view(Rect::new(20, 20, 1, 1)).changed());
-    assert!(!ctx.scroll_into_view(Rect::new(20, 20, 1, 1)).changed());
-    assert!(ctx.scroll_into_view(Rect::new(40, 40, 1, 1)).changed());
-    assert!(!ctx.scroll_into_view(Rect::ZERO).changed());
+    assert!(
+        ctx.reveal_area(Rect::new(20, 20, 1, 1), crate::RevealAlign::Nearest)
+            .changed()
+    );
+    assert!(
+        !ctx.reveal_area(Rect::new(20, 20, 1, 1), crate::RevealAlign::Nearest)
+            .changed()
+    );
+    assert!(
+        ctx.reveal_area(Rect::new(40, 40, 1, 1), crate::RevealAlign::Nearest)
+            .changed()
+    );
+    assert!(
+        !ctx.reveal_area(Rect::ZERO, crate::RevealAlign::Nearest)
+            .changed()
+    );
     core.update_layout(Size::new(10, 4))?;
     assert_eq!(core.nodes[child].view.scroll, Point { x: 31, y: 37 });
 
     let mut ctx = CoreContext::new(&mut core, child);
-    ctx.scroll_into_view(Rect::new(80, 80, 1, 1));
+    ctx.reveal_area(Rect::new(80, 80, 1, 1), crate::RevealAlign::Nearest);
     ctx.scroll_to(2, 3);
     core.update_layout(Size::new(10, 4))?;
     assert_eq!(core.nodes[child].view.scroll, Point { x: 2, y: 3 });
     let mut ctx = CoreContext::new(&mut core, child);
-    ctx.scroll_into_view(Rect::new(80, 80, 1, 1));
+    ctx.reveal_area(Rect::new(80, 80, 1, 1), crate::RevealAlign::Nearest);
     assert!(
         ctx.scroll_by(0, 0).changed(),
         "cancelling a request changes state"
@@ -748,7 +762,8 @@ fn reveal_obeys_request_and_explicit_scroll_order() -> Result<()> {
 fn reveal_waits_for_visibility_and_does_not_reach_replacement_widgets() -> Result<()> {
     let mut core = Core::new();
     let child = add_reveal_surface(&mut core)?;
-    CoreContext::new(&mut core, child).scroll_into_view(Rect::new(40, 40, 1, 1));
+    CoreContext::new(&mut core, child)
+        .reveal_area(Rect::new(40, 40, 1, 1), crate::RevealAlign::Nearest);
     core.set_hidden(child, true)?;
     core.update_layout(Size::new(10, 4))?;
     core.set_hidden(child, false)?;
@@ -761,7 +776,7 @@ fn reveal_waits_for_visibility_and_does_not_reach_replacement_widgets() -> Resul
 
     let mut ctx = CoreContext::new(&mut core, child);
     ctx.scroll_to(0, 0);
-    ctx.scroll_into_view(Rect::new(80, 80, 1, 1));
+    ctx.reveal_area(Rect::new(80, 80, 1, 1), crate::RevealAlign::Nearest);
     let (replacement, _) =
         TestWidget::with_canvas(|_c| Measurement::Wrap, |_view, _ctx| Size::new(100, 100));
     core.replace_subtree(child, replacement)?;
@@ -769,24 +784,6 @@ fn reveal_waits_for_visibility_and_does_not_reach_replacement_widgets() -> Resul
     core.update_layout(Size::new(10, 4))?;
     assert_eq!(core.nodes[child].view.scroll, Point::ZERO);
     Ok(())
-}
-
-#[test]
-fn reveal_offsets_take_the_nearest_edge_without_oscillation() {
-    for (offset, view, start, length, expected) in [
-        (0, 5, 10, 2, 7),
-        (10, 5, 3, 2, 3),
-        (4, 5, 6, 2, 4),
-        (0, 5, 10, 20, 10),
-        (40, 5, 10, 20, 25),
-        (15, 5, 10, 20, 15),
-        (0, u32::MAX, 0, u32::MAX, 0),
-        (0, 10, u32::MAX - 1, 10, u32::MAX - 1),
-    ] {
-        let revealed = reveal_offset(offset, view, start, length);
-        assert_eq!(revealed, expected);
-        assert_eq!(reveal_offset(revealed, view, start, length), revealed);
-    }
 }
 
 #[test]

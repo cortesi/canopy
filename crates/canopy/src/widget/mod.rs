@@ -11,7 +11,7 @@ use crate::{
     cursor,
     error::Result,
     event::Event,
-    geom::Size,
+    geom::{Rect, Size},
     layout::{CanvasContext, Layout, MeasureConstraints, Measurement},
     render::Render,
     state::NodeName,
@@ -72,6 +72,17 @@ pub trait Widget: Any {
 
     /// Cursor specification for focused widgets.
     fn cursor(&self) -> Option<cursor::Cursor> {
+        None
+    }
+
+    /// Return the rectangle of this widget's canvas that
+    /// [`Context::reveal_anchor`] shows, given the final content size.
+    ///
+    /// Layout calls this after it settles geometry, so the anchor reflects
+    /// changes made earlier in the turn. The hook reads widget state and cannot
+    /// change layout. The default returns `None`, which consumes the request
+    /// without scrolling.
+    fn reveal_anchor(&self, _view: Size) -> Option<Rect> {
         None
     }
 

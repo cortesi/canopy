@@ -8,10 +8,11 @@ use std::{
 };
 
 use canopy::{
-    Canopy, Context, ContextExt, FocusScope, Loader, NodeName, Widget, buf, derive_commands,
+    Canopy, Context, ContextExt, FocusDirection, FocusScope, Loader, NodeName, Widget, buf,
+    derive_commands,
     error::Result,
     event::{key, mouse},
-    geom::{Point, PointI32},
+    geom::{Point, PointI32, Size},
     layout::{Edges, Layout},
     style::{AttrSet, Color, Paint, PartialStyle, Style, StyleManager},
     testing::harness::Harness,
@@ -924,18 +925,110 @@ fn run_search(
     harness: &mut Harness,
     operation: impl FnOnce(&mut Editor, &mut dyn Context),
 ) -> (usize, usize, u32) {
+    let (matches, position) = harness
+        .with_root_context(|_root: &mut EditorHost, ctx| {
+            ctx.with_typed_slot::<EditorSlot, _>(|editor, ctx| {
+                operation(editor, ctx);
+                Ok((editor.search_matches(), editor.search_position()))
+            })
+        })
+        .expect("editor missing");
+    // The reveal runs once layout settles.
+    harness.render().expect("Failed to render");
+    (matches, position, editor_view_scroll(harness).y)
+}
+
+/// Run an editor operation, then lay out and render the result.
+fn edit_in_one_turn(harness: &mut Harness, operation: impl FnOnce(&mut Editor, &mut dyn Context)) {
     harness
         .with_root_context(|_root: &mut EditorHost, ctx| {
             ctx.with_typed_slot::<EditorSlot, _>(|editor, ctx| {
                 operation(editor, ctx);
-                Ok((
-                    editor.search_matches(),
-                    editor.search_position(),
-                    ctx.view().view_rect().tl.y,
-                ))
+                Ok(())
             })
         })
-        .expect("editor missing")
+        .expect("editor missing");
+    harness.render().expect("Failed to render");
+}
+
+#[test]
+fn a_resize_in_the_same_turn_reveals_the_cursor_in_the_final_view() {
+    let text = (0..20)
+        .map(|idx| format!("line{idx}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let config = EditorConfig::new().with_wrap(WrapMode::None);
+    let mut harness = build_harness(&text, config, 10, 8);
+    harness
+        .canopy
+        .set_root_size(Size::new(10, 3))
+        .expect("resize");
+    edit_in_one_turn(&mut harness, |editor, ctx| {
+        for _ in 0..6 {
+            editor.move_cursor(ctx, FocusDirection::Down);
+        }
+    });
+    // Row 6 lies below the eight-row view the moves saw, and below the
+    // three-row view that layout settles.
+    assert_eq!(editor_view_scroll(&mut harness).y, 4);
+    assert_eq!(editor_cursor_location(&mut harness), Point { x: 0, y: 2 });
+}
+
+#[test]
+fn a_cursor_reveal_uses_the_final_soft_wrapping() {
+    let text = "a".repeat(35);
+    let config = EditorConfig::new().with_wrap(WrapMode::Soft);
+    let mut harness = build_harness(&text, config, 20, 2);
+    harness
+        .canopy
+        .set_root_size(Size::new(10, 2))
+        .expect("resize");
+    edit_in_one_turn(&mut harness, |editor, ctx| {
+        editor.buffer.set_cursor(TextPosition::new(0, 35));
+        editor.ensure_cursor_visible(ctx);
+    });
+    // At ten columns the line takes four rows, and the cursor ends the last.
+    assert_eq!(editor_view_scroll(&mut harness), Point { x: 0, y: 2 });
+    assert_eq!(editor_cursor_location(&mut harness), Point { x: 5, y: 1 });
+}
+
+#[test]
+fn a_cursor_reveal_counts_a_gutter_added_later_in_the_turn() {
+    let config = EditorConfig::new().with_wrap(WrapMode::None);
+    let mut harness = build_harness("one\n123456789\nthree", config.clone(), 10, 3);
+    edit_in_one_turn(&mut harness, |editor, ctx| {
+        editor.buffer.set_cursor(TextPosition::new(1, 9));
+        editor.ensure_cursor_visible(ctx);
+        editor.set_config(config.with_line_numbers(LineNumbers::Absolute));
+    });
+    // The two-column gutter pushes the caret to column 11.
+    assert_eq!(editor_view_scroll(&mut harness), Point { x: 2, y: 0 });
+    assert_eq!(editor_cursor_location(&mut harness), Point { x: 9, y: 1 });
+}
+
+#[test]
+fn the_unwrapped_canvas_holds_the_caret_after_the_longest_line() {
+    let config = EditorConfig::new().with_wrap(WrapMode::None);
+    let mut harness = build_harness("abcdefghijkl", config, 10, 1);
+    edit_in_one_turn(&mut harness, |editor, ctx| {
+        editor.buffer.set_cursor(TextPosition::new(0, 12));
+        editor.ensure_cursor_visible(ctx);
+    });
+    assert_eq!(editor_view_scroll(&mut harness), Point { x: 3, y: 0 });
+    assert_eq!(editor_cursor_location(&mut harness), Point { x: 9, y: 0 });
+}
+
+#[test]
+fn a_new_final_line_scrolls_into_view() {
+    let config = EditorConfig::new().with_wrap(WrapMode::None);
+    let mut harness = build_harness("one\ntwo\nthree", config, 10, 3);
+    with_editor(&mut harness, |editor| {
+        editor.buffer.set_cursor(TextPosition::new(2, 5));
+    });
+    harness.key(key::KeyCode::Enter).unwrap();
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(3, 0));
+    assert_eq!(editor_view_scroll(&mut harness), Point { x: 0, y: 1 });
+    assert_eq!(editor_cursor_location(&mut harness), Point { x: 0, y: 2 });
 }
 
 #[test]

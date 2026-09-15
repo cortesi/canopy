@@ -172,20 +172,11 @@ impl LayoutCache {
         tab_stop: usize,
     ) -> Point {
         let line = position.line.min(self.lines.len().saturating_sub(1));
-        let layout = self.lines.get(line);
-        if layout.is_none() {
+        let Some(layout) = self.lines.get(line) else {
             return Point { x: 0, y: 0 };
-        }
-        let layout = layout.expect("layout present");
+        };
         let display_col = buffer.column_for_position(position, tab_stop);
-        let seg_idx = layout.segment_for_column(display_col);
-        let seg = layout.segment(seg_idx).expect("segment present");
-        let x = display_col.saturating_sub(seg.start_col);
-        let y = self.line_offset(line).saturating_add(seg_idx);
-        Point {
-            x: x as u32,
-            y: y as u32,
-        }
+        segment_point(layout, display_col, self.line_offset(line))
     }
 
     /// Map display coordinates to the closest text position.
@@ -301,6 +292,38 @@ impl LayoutCache {
         }
         self.total_lines = total.max(1);
         self.max_line_width = max_width.max(1);
+    }
+}
+
+/// Map a text position to display coordinates by laying out the lines up to
+/// it, without a cache.
+pub fn point_for_position(
+    buffer: &TextBuffer,
+    position: TextPosition,
+    wrap_mode: WrapMode,
+    wrap_width: usize,
+    tab_stop: usize,
+) -> Point {
+    let line = position.line.min(buffer.line_count().max(1) - 1);
+    let layout_of = |index| layout_line(&buffer.line_text(index), wrap_mode, wrap_width, tab_stop);
+    let row = match wrap_mode {
+        WrapMode::None => line,
+        WrapMode::Soft => (0..line)
+            .map(|index| layout_of(index).display_lines())
+            .sum(),
+    };
+    let display_col = buffer.column_for_position(position, tab_stop);
+    segment_point(&layout_of(line), display_col, row)
+}
+
+/// Return the display point of a column in a line whose first segment starts
+/// at display row `row`.
+fn segment_point(layout: &LineLayout, display_col: usize, row: usize) -> Point {
+    let index = layout.segment_for_column(display_col);
+    let start = layout.segment(index).map_or(0, |segment| segment.start_col);
+    Point {
+        x: display_col.saturating_sub(start) as u32,
+        y: row.saturating_add(index) as u32,
     }
 }
 

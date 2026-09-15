@@ -1,8 +1,11 @@
 use canopy::{
     ContextExt, ViewContextExt,
     error::Result,
-    event::key::KeyCode,
-    geom::{Point, Size},
+    event::{
+        key::{self, KeyCode},
+        mouse,
+    },
+    geom::{Point, PointI32, Size},
     style::{Attr, AttrSet, PartialStyle, ResolvedStyle, canopy as canopy_theme},
     testing::harness::Harness,
 };
@@ -63,6 +66,29 @@ fn locate(harness: &Harness, text: &str) -> Point {
         }
     }
     panic!("{text:?} is not on screen:\n{}", screen(harness));
+}
+
+/// Send `steps` downward wheel steps at a screen location, then render.
+fn wheel_down(harness: &mut Harness, at: Point, steps: usize) -> Result<()> {
+    for _ in 0..steps {
+        harness.mouse(mouse::MouseEvent {
+            action: mouse::Action::ScrollDown,
+            button: mouse::Button::None,
+            modifiers: key::Empty,
+            location: PointI32::try_from(at)?,
+        })?;
+    }
+    harness.render()
+}
+
+/// Return how many rows show a thumb glyph in screen column `x`.
+fn thumb_rows(harness: &Harness, x: usize) -> usize {
+    harness
+        .tbuf()
+        .lines()
+        .iter()
+        .filter(|line| line.chars().nth(x) == Some('█'))
+        .count()
 }
 
 #[test]
@@ -238,5 +264,61 @@ fn modal_dimming_survives_effect_changes_without_accumulating() -> Result<()> {
     modal_first.with_root_context(|stylegym: &mut Stylegym, ctx| stylegym.hide_modal(ctx))?;
     modal_first.render()?;
     assert_eq!(sample_and_frame_style(&modal_first), undimmed_invert);
+    Ok(())
+}
+
+#[test]
+fn scrolled_pages_paint_the_rows_they_show() -> Result<()> {
+    let mut harness = setup_harness(Size::new(80, 12))?;
+    assert_on_screen(&harness, "Surfaces");
+    assert_off_screen(&harness, "/magenta");
+    let sheet = locate(&harness, "Surfaces");
+    wheel_down(&mut harness, sheet, 15)?;
+    assert_on_screen(&harness, "/magenta");
+    assert_off_screen(&harness, "Surfaces");
+
+    show_tab(&mut harness, TEXT)?;
+    assert_off_screen(&harness, "Underlined text sample");
+    let page = locate(&harness, "Color Palette");
+    wheel_down(&mut harness, page, 3)?;
+    assert_on_screen(&harness, "Underlined text sample");
+    assert_off_screen(&harness, "Color Palette");
+    Ok(())
+}
+
+#[test]
+fn the_main_frame_shows_the_position_of_the_active_page() -> Result<()> {
+    let mut harness = setup_harness(Size::new(80, 12))?;
+    assert!(
+        thumb_rows(&harness, 79) > 0,
+        "the palette page overflows:\n{}",
+        screen(&harness)
+    );
+    show_tab(&mut harness, SYNTAX)?;
+    assert_eq!(
+        thumb_rows(&harness, 79),
+        0,
+        "the syntax editors show their positions on their own frames:\n{}",
+        screen(&harness)
+    );
+    Ok(())
+}
+
+#[test]
+fn focusing_an_offscreen_control_scrolls_the_widgets_page() -> Result<()> {
+    let mut harness = setup_harness(Size::new(80, 12))?;
+    show_tab(&mut harness, WIDGETS)?;
+    assert_on_screen(&harness, "Pressed");
+    assert_off_screen(&harness, "Also checked");
+
+    harness.with_root_context(|_stylegym: &mut Stylegym, ctx| {
+        let selector = ctx
+            .unique_descendant::<Selector<String>>()?
+            .expect("the widgets page has a selector");
+        ctx.set_focus(selector.into()).map(|_| ())
+    })?;
+    harness.render()?;
+    assert_on_screen(&harness, "Also checked");
+    assert_off_screen(&harness, "Pressed");
     Ok(())
 }

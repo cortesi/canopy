@@ -1,7 +1,7 @@
 //! Selector widget for multi-value selection with checkbox-style items.
 
 use canopy::{
-    Context, EventOutcome, NodeName, Render, ViewContext, Widget, derive_commands,
+    Context, EventOutcome, NodeName, Render, RevealAlign, ViewContext, Widget, derive_commands,
     error::Result,
     event::{Event, mouse},
     geom::{Rect, Size},
@@ -117,7 +117,10 @@ where
 
     /// Reveal the focused row without changing horizontal scroll.
     fn reveal_focused(&self, c: &mut dyn Context) {
-        c.scroll_into_view(Rect::new(c.view().scroll.x, self.focused as u32, 1, 1));
+        c.reveal_area(
+            Rect::new(c.view().scroll.x, self.focused as u32, 1, 1),
+            RevealAlign::Nearest,
+        );
     }
 
     /// Focus and toggle the clicked row.

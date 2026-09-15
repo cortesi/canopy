@@ -1,7 +1,7 @@
 //! Dropdown widget for single-value selection with expand/collapse behavior.
 
 use canopy::{
-    Context, EventOutcome, NodeName, Render, ViewContext, Widget, derive_commands,
+    Context, EventOutcome, NodeName, Render, RevealAlign, ViewContext, Widget, derive_commands,
     error::{Error, Result},
     event::{Event, mouse},
     geom::{Rect, Size},
@@ -107,7 +107,10 @@ where
 
     /// Reveal the highlighted row after expansion or navigation is laid out.
     fn reveal_highlighted(&self, c: &mut dyn Context) {
-        c.scroll_into_view(Rect::new(c.view().scroll.x, self.highlighted as u32, 1, 1));
+        c.reveal_area(
+            Rect::new(c.view().scroll.x, self.highlighted as u32, 1, 1),
+            RevealAlign::Nearest,
+        );
     }
 
     /// Confirm the clicked row when expanded, or expand when collapsed.

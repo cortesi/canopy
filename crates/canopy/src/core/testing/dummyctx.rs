@@ -203,8 +203,16 @@ impl Context for DummyContext {
         Ok(ChangeOutcome::Unchanged)
     }
 
-    fn scroll_into_view(&mut self, _area: Rect) -> ChangeOutcome {
+    fn reveal_area(&mut self, _area: Rect, _align: crate::RevealAlign) -> ChangeOutcome {
         ChangeOutcome::Unchanged
+    }
+
+    fn reveal_anchor(&mut self, _align: crate::RevealAlign) -> ChangeOutcome {
+        ChangeOutcome::Unchanged
+    }
+
+    fn reveal_node(&mut self, _node: NodeId, _align: crate::RevealAlign) -> Result<ChangeOutcome> {
+        Ok(ChangeOutcome::Unchanged)
     }
 
     fn invalidate_layout(&mut self) {}

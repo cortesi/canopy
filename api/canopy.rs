@@ -2979,6 +2979,18 @@ pub mod canopy {
         pub max_cells: usize,
     }
 
+    /// How a reveal places a rectangle inside a viewport.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    pub enum RevealAlign {
+        #[default]
+        /// Make the smallest move that shows the rectangle. A viewport that
+        /// already lies inside a larger rectangle stays where it is.
+        Nearest,
+        /// Center each axis on which the rectangle is shorter than the viewport,
+        /// and use `Nearest` on the others.
+        Center,
+    }
+
     /// A phase in key or mouse event routing.
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub enum RoutePhase {
@@ -3322,24 +3334,37 @@ pub mod canopy {
         /// Request a diagnostic dump for a target node.
         fn request_diagnostic_dump(&mut self, target: NodeId);
 
+        /// Reveal this node's logical anchor once layout settles.
+        ///
+        /// Layout asks [`Widget::reveal_anchor`] for the anchor using the final
+        /// content size, so changes made in the same turn count. Otherwise this
+        /// behaves as [`Context::reveal_area`].
+        fn reveal_anchor(&mut self, align: RevealAlign) -> ChangeOutcome;
+
+        /// Reveal a rectangle of this node's canvas once layout settles.
+        ///
+        /// The request replaces this node's pending area or anchor request. It
+        /// waits while the node is hidden, detached, zero-sized, or outside the
+        /// active modal region, and a later scroll or reveal of this view
+        /// supersedes it. Empty areas do nothing. Returns whether the pending
+        /// request changed.
+        fn reveal_area(&mut self, area: Rect, align: RevealAlign) -> ChangeOutcome;
+
+        /// Reveal a node's outer rectangle in its ancestor views once layout
+        /// settles.
+        ///
+        /// Each view from the node's parent out to the active modal region or the
+        /// root shows what the view inside it left visible. A later scroll or
+        /// reveal of a shared view wins there without affecting other views. The
+        /// request waits while the node is hidden, detached, or outside the modal
+        /// region. Returns an error when the node does not exist.
+        fn reveal_node(&mut self, node: NodeId, align: RevealAlign) -> Result<ChangeOutcome>;
+
         /// Scroll the view by the given offsets.
         fn scroll_by(&mut self, x: i32, y: i32) -> ChangeOutcome;
 
         /// Scroll the view down by one line.
         fn scroll_down(&mut self) -> ChangeOutcome {}
-
-        /// Request the smallest scroll that reveals a content-coordinate rectangle.
-        ///
-        /// The request runs after the next nonempty layout, using the new canvas
-        /// and viewport sizes. A target larger than the viewport is revealed as far
-        /// as possible without moving a viewport already inside it.
-        ///
-        /// The latest request wins. Empty rectangles are ignored. Explicit
-        /// [`Context::scroll_to`] or [`Context::scroll_by`] calls cancel the
-        /// pending request. Hidden or detached widgets retain it until laid
-        /// out; replacing the widget discards it. Returns whether the pending
-        /// request changed.
-        fn scroll_into_view(&mut self, area: Rect) -> ChangeOutcome;
 
         /// Scroll the view left by one line.
         fn scroll_left(&mut self) -> ChangeOutcome {}
@@ -3348,6 +3373,9 @@ pub mod canopy {
         fn scroll_right(&mut self) -> ChangeOutcome {}
 
         /// Scroll the view to the specified position.
+        ///
+        /// Scrolling moves the view at once. It supersedes older reveal requests
+        /// for this view, even when the offset does not change.
         fn scroll_to(&mut self, x: u32, y: u32) -> ChangeOutcome;
 
         /// Scroll an attached node's view to the specified position.
@@ -3775,6 +3803,15 @@ pub mod canopy {
 
         /// Render this widget's own content. Does not render children.
         fn render(&mut self, _frame: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
+
+        /// Return the rectangle of this widget's canvas that
+        /// [`Context::reveal_anchor`] shows, given the final content size.
+        ///
+        /// Layout calls this after it settles geometry, so the anchor reflects
+        /// changes made earlier in the turn. The hook reads widget state and cannot
+        /// change layout. The default returns `None`, which consumes the request
+        /// without scrolling.
+        fn reveal_anchor(&self, _view: Size) -> Option<Rect> {}
 
         /// Describe application semantics for one publication through read-only
         /// access. Sensitive values must be omitted; this hook does not

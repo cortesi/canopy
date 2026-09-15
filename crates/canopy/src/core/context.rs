@@ -11,7 +11,7 @@ use super::{
     id::{NodeId, TypedId},
     style::effects::Effect,
     view::View,
-    world::{Core, WidgetOperation},
+    world::{Core, WidgetOperation, scroll::RevealTarget},
 };
 use crate::{
     ChangeOutcome, InteractionToken, ModalOptions, SemanticIdentity,
@@ -466,6 +466,18 @@ pub enum FocusDirection {
     Right,
 }
 
+/// How a reveal places a rectangle inside a viewport.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum RevealAlign {
+    /// Make the smallest move that shows the rectangle. A viewport that
+    /// already lies inside a larger rectangle stays where it is.
+    #[default]
+    Nearest,
+    /// Center each axis on which the rectangle is shorter than the viewport,
+    /// and use `Nearest` on the others.
+    Center,
+}
+
 impl FocusScope {
     /// Resolve this scope against a node-bound context.
     fn resolve(self, context: &dyn ViewContext) -> NodeId {
@@ -527,6 +539,9 @@ pub trait Context: ViewContext + sealed::Context {
     }
 
     /// Scroll the view to the specified position.
+    ///
+    /// Scrolling moves the view at once. It supersedes older reveal requests
+    /// for this view, even when the offset does not change.
     fn scroll_to(&mut self, x: u32, y: u32) -> ChangeOutcome;
 
     /// Scroll the view by the given offsets.
@@ -539,18 +554,31 @@ pub trait Context: ViewContext + sealed::Context {
     /// when the node is missing or detached.
     fn scroll_to_of(&mut self, node: NodeId, x: u32, y: u32) -> Result<ChangeOutcome>;
 
-    /// Request the smallest scroll that reveals a content-coordinate rectangle.
+    /// Reveal a rectangle of this node's canvas once layout settles.
     ///
-    /// The request runs after the next nonempty layout, using the new canvas
-    /// and viewport sizes. A target larger than the viewport is revealed as far
-    /// as possible without moving a viewport already inside it.
-    ///
-    /// The latest request wins. Empty rectangles are ignored. Explicit
-    /// [`Context::scroll_to`] or [`Context::scroll_by`] calls cancel the
-    /// pending request. Hidden or detached widgets retain it until laid
-    /// out; replacing the widget discards it. Returns whether the pending
+    /// The request replaces this node's pending area or anchor request. It
+    /// waits while the node is hidden, detached, zero-sized, or outside the
+    /// active modal region, and a later scroll or reveal of this view
+    /// supersedes it. Empty areas do nothing. Returns whether the pending
     /// request changed.
-    fn scroll_into_view(&mut self, area: Rect) -> ChangeOutcome;
+    fn reveal_area(&mut self, area: Rect, align: RevealAlign) -> ChangeOutcome;
+
+    /// Reveal this node's logical anchor once layout settles.
+    ///
+    /// Layout asks [`Widget::reveal_anchor`] for the anchor using the final
+    /// content size, so changes made in the same turn count. Otherwise this
+    /// behaves as [`Context::reveal_area`].
+    fn reveal_anchor(&mut self, align: RevealAlign) -> ChangeOutcome;
+
+    /// Reveal a node's outer rectangle in its ancestor views once layout
+    /// settles.
+    ///
+    /// Each view from the node's parent out to the active modal region or the
+    /// root shows what the view inside it left visible. A later scroll or
+    /// reveal of a shared view wins there without affecting other views. The
+    /// request waits while the node is hidden, detached, or outside the modal
+    /// region. Returns an error when the node does not exist.
+    fn reveal_node(&mut self, node: NodeId, align: RevealAlign) -> Result<ChangeOutcome>;
 
     /// Scroll the view up by one page.
     fn page_up(&mut self) -> ChangeOutcome {
@@ -1111,19 +1139,18 @@ impl Context for NodeCtx<&mut Core> {
         self.core.scroll_to_of(node, x, y)
     }
 
-    fn scroll_into_view(&mut self, area: Rect) -> ChangeOutcome {
-        if area.is_empty() {
-            return ChangeOutcome::Unchanged;
-        }
-        let Some(node) = self.core.nodes.get_mut(self.node_id) else {
-            return ChangeOutcome::Unchanged;
-        };
-        if node.pending_reveal == Some(area) {
-            return ChangeOutcome::Unchanged;
-        }
-        node.pending_reveal = Some(area);
-        self.core.invalidate(crate::Invalidation::Layout);
-        ChangeOutcome::Changed
+    fn reveal_area(&mut self, area: Rect, align: RevealAlign) -> ChangeOutcome {
+        self.core
+            .reveal_in(self.node_id, RevealTarget::Area(area), align)
+    }
+
+    fn reveal_anchor(&mut self, align: RevealAlign) -> ChangeOutcome {
+        self.core
+            .reveal_in(self.node_id, RevealTarget::Anchor, align)
+    }
+
+    fn reveal_node(&mut self, node: NodeId, align: RevealAlign) -> Result<ChangeOutcome> {
+        self.core.reveal_node(node, align)
     }
 
     fn invalidate_layout(&mut self) {

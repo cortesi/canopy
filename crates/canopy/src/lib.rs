@@ -37,9 +37,9 @@ pub use core::{
     ChildSlot, Context, ContextExt, EvalId, EvalOutcome, EvalRequest, EvalTicket, Fixture,
     FixtureInfo, FocusDirection, FocusScope, FrameId, FrameSnapshot, FrameworkBindingGroup,
     InputSpec, InteractionToken, Invalidation, KeyedChildren, Loader, ModalBindings, ModalOptions,
-    NodeId, NodeSnapshot, NodeWakeHandle, RoutePhase, RouteTraceEntry, ScriptJournalEntry,
-    ScriptOrigin, ScriptTrust, SemanticIdentity, TurnOutcome, TypedId, ViewContext, ViewContextExt,
-    WakeOutcome, WidgetSemantics, Work, WorkLifetime,
+    NodeId, NodeSnapshot, NodeWakeHandle, RevealAlign, RoutePhase, RouteTraceEntry,
+    ScriptJournalEntry, ScriptOrigin, ScriptTrust, SemanticIdentity, TurnOutcome, TypedId,
+    ViewContext, ViewContextExt, WakeOutcome, WidgetSemantics, Work, WorkLifetime,
 };
 // App-author modules used by widget implementations and derive output.
 pub use core::{commands, cursor, error, event, help, path, script, style, text};
