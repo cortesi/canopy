@@ -154,6 +154,8 @@ pub enum RoutePhase {
     WidgetEvent,
     /// A binding matched after the widget ignored the event.
     PostEventBinding,
+    /// The runtime applied the input's default action to a node.
+    DefaultAction,
     /// Routing moved from a node to its parent.
     Bubble,
     /// A resolved binding is being executed.
@@ -172,6 +174,7 @@ impl RoutePhase {
             Self::PreEventBinding => "pre-event-binding",
             Self::WidgetEvent => "widget-event",
             Self::PostEventBinding => "post-event-binding",
+            Self::DefaultAction => "default-action",
             Self::Bubble => "bubble",
             Self::BindingExecution => "binding-execution",
             Self::Handled => "handled",

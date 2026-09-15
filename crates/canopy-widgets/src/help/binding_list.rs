@@ -10,7 +10,6 @@ use canopy::{
     event::{
         Event,
         key::{Empty, Key, KeyCode},
-        mouse,
     },
     geom::{Line, Rect, Size},
     help::{AvailableBinding, BindingSnapshot},
@@ -148,29 +147,17 @@ impl Widget for BindingList {
         let Event::Mouse(mouse) = event else {
             return Ok(EventOutcome::Ignore);
         };
-        match mouse.action {
-            mouse::Action::ScrollUp => {
-                context.scroll_up();
-                Ok(EventOutcome::Handle)
-            }
-            mouse::Action::ScrollDown => {
-                context.scroll_down();
-                Ok(EventOutcome::Handle)
-            }
-            _ => {
-                let view = context.view();
-                self.scrollbar.handle_mouse(
-                    context,
-                    mouse,
-                    &view,
-                    scroll_track(&view),
-                    |context, x, y| {
-                        context.scroll_to(x, y);
-                        Ok(())
-                    },
-                )
-            }
-        }
+        let view = context.view();
+        self.scrollbar.handle_mouse(
+            context,
+            mouse,
+            &view,
+            scroll_track(&view),
+            |context, x, y| {
+                context.scroll_to(x, y);
+                Ok(())
+            },
+        )
     }
 
     fn render(&mut self, render: &mut Render, context: &dyn ViewContext) -> Result<()> {

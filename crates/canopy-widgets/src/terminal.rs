@@ -886,6 +886,64 @@ mod tests {
         (terminal, receiver)
     }
 
+    /// A viewport larger than the screen that holds one terminal.
+    struct TerminalHost(Option<Terminal>);
+
+    impl Widget for TerminalHost {
+        fn canvas(&self, _view: geom::Size, _ctx: &CanvasContext) -> geom::Size {
+            geom::Size::new(200, 200)
+        }
+
+        fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
+            let terminal = self.0.take().expect("terminal mounts once");
+            let terminal = ctx.add_child(terminal)?;
+            ctx.set_layout_of(terminal, Layout::fill())
+        }
+    }
+
+    impl canopy::Loader for TerminalHost {}
+
+    #[test]
+    fn terminal_wheel_input_never_scrolls_an_enclosing_viewport() -> Result<()> {
+        let (terminal, _receiver) = stream_terminal();
+        let mut harness = Harness::builder(TerminalHost(Some(terminal)))
+            .size(20, 6)
+            .build()?;
+        let host = harness.root;
+        let terminal = harness
+            .canopy
+            .with_root_view(|context| context.children_of(host)[0]);
+        let wheel = |harness: &mut Harness, action| {
+            harness.mouse(mouse::MouseEvent {
+                action,
+                button: mouse::Button::None,
+                modifiers: key::Empty,
+                location: geom::PointI32 { x: 2, y: 2 },
+            })
+        };
+        let host_scroll = |harness: &Harness| {
+            harness
+                .canopy
+                .with_root_view(|context| context.view_of(host).expect("host").scroll)
+        };
+
+        // Scrollback handles the wheel while the program does not report
+        // the mouse, and the program receives it once it does.
+        wheel(&mut harness, mouse::Action::ScrollDown)?;
+        wheel(&mut harness, mouse::Action::ScrollUp)?;
+        assert_eq!(host_scroll(&harness), geom::Point::ZERO);
+        harness.with_widget(terminal, |terminal: &mut Terminal| {
+            terminal
+                .session()
+                .expect("session")
+                .feed_stream_output(b"\x1b[?1000h")
+                .expect("enable mouse reports");
+        });
+        wheel(&mut harness, mouse::Action::ScrollDown)?;
+        assert_eq!(host_scroll(&harness), geom::Point::ZERO);
+        Ok(())
+    }
+
     #[test]
     fn renders_terminal_graphemes_with_their_cell_widths() {
         let base_style = ResolvedStyle::new(Color::White, Color::Black, AttrSet::default());

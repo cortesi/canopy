@@ -11,7 +11,7 @@ use super::{
     id::{NodeId, TypedId},
     style::effects::Effect,
     view::View,
-    world::{Core, WidgetOperation, layout_driver::clamp_scroll},
+    world::{Core, WidgetOperation},
 };
 use crate::{
     ChangeOutcome, InteractionToken, ModalOptions, SemanticIdentity,
@@ -272,32 +272,6 @@ fn matching_nodes<'a, C: ViewContext + ?Sized>(
         .filter(move |id| path_filter.check_match(&ctx.path_of(root, *id)).is_some())
 }
 
-/// Apply a scroll transform to a node, clamp it to the canvas, and report
-/// whether it moved.
-fn update_scroll(
-    core: &mut Core,
-    node_id: NodeId,
-    f: impl FnOnce(Point) -> Point,
-) -> ChangeOutcome {
-    let Some(node) = core.nodes.get_mut(node_id) else {
-        return ChangeOutcome::Unchanged;
-    };
-    let before = node.scroll;
-    let cancelled_reveal = node.pending_reveal.take().is_some();
-    node.scroll = f(before);
-    clamp_scroll(&mut node.scroll, node.content_size, node.canvas);
-    node.view.scroll = node.scroll;
-    let changed = before != node.scroll || cancelled_reveal;
-    if changed {
-        core.invalidate(crate::Invalidation::Layout);
-    }
-    if changed {
-        ChangeOutcome::Changed
-    } else {
-        ChangeOutcome::Unchanged
-    }
-}
-
 /// Validate one raw node ID against a requested widget type.
 fn checked_typed_id<W, C>(ctx: &C, node: NodeId) -> Result<TypedId<W>>
 where
@@ -554,6 +528,13 @@ pub trait Context: ViewContext + sealed::Context {
 
     /// Scroll the view by the given offsets.
     fn scroll_by(&mut self, x: i32, y: i32) -> ChangeOutcome;
+
+    /// Scroll an attached node's view to the specified position.
+    ///
+    /// Owners of scrollbars use this to move the node they display. The
+    /// offset is clamped as [`Context::scroll_to`] clamps it. Returns an error
+    /// when the node is missing or detached.
+    fn scroll_to_of(&mut self, node: NodeId, x: u32, y: u32) -> Result<ChangeOutcome>;
 
     /// Request the smallest scroll that reveals a content-coordinate rectangle.
     ///
@@ -1111,11 +1092,16 @@ impl Context for NodeCtx<&mut Core> {
     }
 
     fn scroll_to(&mut self, x: u32, y: u32) -> ChangeOutcome {
-        update_scroll(self.core, self.node_id, |_| Point { x, y })
+        self.core.update_scroll(self.node_id, |_| Point { x, y })
     }
 
     fn scroll_by(&mut self, x: i32, y: i32) -> ChangeOutcome {
-        update_scroll(self.core, self.node_id, |scroll| scroll.scroll(x, y))
+        self.core
+            .update_scroll(self.node_id, |scroll| scroll.scroll(x, y))
+    }
+
+    fn scroll_to_of(&mut self, node: NodeId, x: u32, y: u32) -> Result<ChangeOutcome> {
+        self.core.scroll_to_of(node, x, y)
     }
 
     fn scroll_into_view(&mut self, area: Rect) -> ChangeOutcome {

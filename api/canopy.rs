@@ -1197,6 +1197,14 @@ pub mod canopy {
                 pub location: crate::geom::PointI32,
             }
 
+            impl Action {
+                /// Return the scroll offset one wheel step requests, or `None` for
+                /// actions that do not scroll.
+                ///
+                /// Positive values move the view down or right.
+                pub fn scroll_delta(self) -> Option<PointI32> {}
+            }
+
             impl From<Mouse> for InputSpec {
                 fn from(mouse: Mouse) -> Self {}
             }
@@ -2982,6 +2990,8 @@ pub mod canopy {
         WidgetEvent,
         /// A binding matched after the widget ignored the event.
         PostEventBinding,
+        /// The runtime applied the input's default action to a node.
+        DefaultAction,
         /// Routing moved from a node to its parent.
         Bubble,
         /// A resolved binding is being executed.
@@ -3339,6 +3349,13 @@ pub mod canopy {
 
         /// Scroll the view to the specified position.
         fn scroll_to(&mut self, x: u32, y: u32) -> ChangeOutcome;
+
+        /// Scroll an attached node's view to the specified position.
+        ///
+        /// Owners of scrollbars use this to move the node they display. The
+        /// offset is clamped as [`Context::scroll_to`] clamps it. Returns an error
+        /// when the node is missing or detached.
+        fn scroll_to_of(&mut self, node: NodeId, x: u32, y: u32) -> Result<ChangeOutcome>;
 
         /// Scroll the view up by one line.
         fn scroll_up(&mut self) -> ChangeOutcome {}

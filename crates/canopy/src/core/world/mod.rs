@@ -41,6 +41,8 @@ mod focus;
 pub mod interaction;
 /// Layout traversal, measurement, and hit-testing.
 pub mod layout_driver;
+/// Viewport scroll mutation and default input actions.
+pub mod scroll;
 /// Scoped application identity and index invariants.
 mod semantic;
 /// Removal requests completed after callback restoration.

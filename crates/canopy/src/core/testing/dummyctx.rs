@@ -195,6 +195,10 @@ impl Context for DummyContext {
         ChangeOutcome::Unchanged
     }
 
+    fn scroll_to_of(&mut self, _node: NodeId, _x: u32, _y: u32) -> Result<ChangeOutcome> {
+        Ok(ChangeOutcome::Unchanged)
+    }
+
     fn scroll_into_view(&mut self, _area: Rect) -> ChangeOutcome {
         ChangeOutcome::Unchanged
     }

@@ -203,7 +203,7 @@ fn scrolled_and_resized_buffers_have_exact_rows() -> Result<()> {
     })?;
     harness
         .tbuf()
-        .assert_matches(buf!["  Alpha        █" "b              █" "  Beta"]);
+        .assert_matches(buf!["  Beta" "c              █" "  Gamma        █"]);
 
     harness.canopy.set_root_size(Size::new(16, 8))?;
     harness.render()?;
@@ -243,7 +243,7 @@ fn wheel_indicator_and_resize_keep_scroll_within_the_exact_canvas() -> Result<()
     let after_wheel = harness
         .canopy
         .with_root_view(|context| context.view_of(harness.root).expect("list view"));
-    assert_eq!(after_wheel.scroll.y, 1);
+    assert_eq!(after_wheel.scroll.y, 3);
 
     harness.mouse(mouse::MouseEvent {
         action: mouse::Action::Down,

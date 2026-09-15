@@ -309,8 +309,21 @@ shadowed, blocked by the top modal's framework group, or unmatched.
 Mouse events go to the capture node when capture is active; otherwise hit-
 testing chooses the target.
 
-Widget events bubble from target to root until a widget handles or consumes
-them. Command scopes expose the originating event and target.
+Routing visits each admitted node from the target toward the root. At each node
+the widget receives the event, then a matching binding runs, then the runtime
+applies the input's default action. The first of these that acts ends the
+route; otherwise the route continues to the parent. An ancestor binding runs
+only after every descendant declines. The route stops at the modal owner and
+never applies a default action outside the modal region.
+
+Wheel input is the only input with a default action. It scrolls the node by
+the step that `event::mouse::Action::scroll_delta()` returns. The runtime
+computes the clamped destination first. A step that cannot move declines, so
+the wheel reaches the nearest ancestor that can move, and the node's pending
+reveal survives. The route trace records each applied action as
+`RoutePhase::DefaultAction`. Widgets that give the wheel another meaning, such
+as a terminal that reports mouse input to its program, handle the event
+themselves. Command scopes expose the originating event and target.
 
 Root captures a help snapshot before it opens a modal with `ModalOptions` and
 `ModalBindings::Framework(HELP_BINDINGS)`. The scope dims the main pane, and the

@@ -47,7 +47,25 @@ pub enum Action {
     ScrollRight,
 }
 
+/// Cells one wheel step scrolls.
+const WHEEL_STEP: i32 = 3;
+
 impl Action {
+    /// Return the scroll offset one wheel step requests, or `None` for
+    /// actions that do not scroll.
+    ///
+    /// Positive values move the view down or right.
+    pub fn scroll_delta(self) -> Option<PointI32> {
+        let (x, y) = match self {
+            Self::ScrollUp => (0, -WHEEL_STEP),
+            Self::ScrollDown => (0, WHEEL_STEP),
+            Self::ScrollLeft => (-WHEEL_STEP, 0),
+            Self::ScrollRight => (WHEEL_STEP, 0),
+            Self::Down | Self::Up | Self::Drag | Self::Moved => return None,
+        };
+        Some(PointI32 { x, y })
+    }
+
     /// Is this a button-driven action?
     fn is_button(&self) -> bool {
         match self {

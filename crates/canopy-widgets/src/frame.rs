@@ -1,7 +1,7 @@
 use canopy::{
     Context, EventOutcome, NodeId, NodeName, Render, ViewContext, Widget, derive_commands,
     error::Result,
-    event::{Event, mouse},
+    event::Event,
     geom,
     layout::{Edges, Layout},
 };
@@ -14,9 +14,6 @@ use crate::Scrollbar;
 const SCROLL_VERTICAL: char = '█';
 /// Active horizontal scrollbar indicator.
 const SCROLL_HORIZONTAL: char = '▄';
-
-/// Lines to scroll per mouse wheel tick within a frame.
-const WHEEL_SCROLL_LINES: i32 = 3;
 
 /// A frame around an element with optional title and indicators.
 ///
@@ -123,32 +120,16 @@ impl Widget for Frame {
 
         let view_size = child_view.content_size();
         let canvas_size = child_view.canvas;
-        match m.action {
-            mouse::Action::ScrollUp
-                if scrollable(view_size.h, canvas_size.h)
-                    && scroll_child_by(ctx, child_id, 0, -WHEEL_SCROLL_LINES) =>
-            {
+        if let Some(delta) = m.action.scroll_delta() {
+            let scrollable = if delta.y == 0 {
+                scrollable(view_size.w, canvas_size.w)
+            } else {
+                scrollable(view_size.h, canvas_size.h)
+            };
+            if scrollable && scroll_child_by(ctx, child_id, delta.x, delta.y) {
                 return Ok(EventOutcome::Handle);
             }
-            mouse::Action::ScrollDown
-                if scrollable(view_size.h, canvas_size.h)
-                    && scroll_child_by(ctx, child_id, 0, WHEEL_SCROLL_LINES) =>
-            {
-                return Ok(EventOutcome::Handle);
-            }
-            mouse::Action::ScrollLeft
-                if scrollable(view_size.w, canvas_size.w)
-                    && scroll_child_by(ctx, child_id, -WHEEL_SCROLL_LINES, 0) =>
-            {
-                return Ok(EventOutcome::Handle);
-            }
-            mouse::Action::ScrollRight
-                if scrollable(view_size.w, canvas_size.w)
-                    && scroll_child_by(ctx, child_id, WHEEL_SCROLL_LINES, 0) =>
-            {
-                return Ok(EventOutcome::Handle);
-            }
-            _ => {}
+            return Ok(EventOutcome::Ignore);
         }
 
         let frame = geom::FrameRects::new(ctx.view().outer_rect_local(), 1);

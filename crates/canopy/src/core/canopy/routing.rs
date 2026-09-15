@@ -5,7 +5,7 @@ use ruau::vm::Scope;
 use super::{AUTOMATION_SERVICE_BUDGET, AdapterEvent, Canopy, RoutePhase, RouteTraceEntry};
 use crate::{
     NodeId, commands,
-    core::{Core, inputmap},
+    core::{Core, inputmap, world::scroll::DefaultAction},
     error::Result,
     event::{Event, key, mouse},
     geom::{Point, PointI32, Size},
@@ -37,6 +37,15 @@ impl RoutedInput {
         match self {
             Self::Key(key) => Event::Key(key),
             Self::Mouse(mouse) => Event::Mouse(Self::local_mouse(core, node_id, mouse)),
+        }
+    }
+
+    /// Return the action the runtime applies when a route node declines this
+    /// input.
+    fn default_action(self) -> Option<DefaultAction> {
+        match self {
+            Self::Key(_) => None,
+            Self::Mouse(mouse) => mouse.action.scroll_delta().map(DefaultAction::Scroll),
         }
     }
 
@@ -215,6 +224,26 @@ impl Canopy {
                         );
                         return self
                             .execute_routed_binding_with_scope(id, &path, input, binding, scope);
+                    }
+                    // The callback may have removed the node; a missing node
+                    // cannot move.
+                    if let Some(action) = input.default_action()
+                        && self.core.interaction_admits(id)
+                        && self.core.apply_default_action(id, action)
+                    {
+                        self.trace_route(
+                            RoutePhase::DefaultAction,
+                            Some(id),
+                            &path,
+                            format!("{action:?}"),
+                        );
+                        self.trace_route(
+                            RoutePhase::Handled,
+                            Some(id),
+                            &path,
+                            "default action applied",
+                        );
+                        return Ok(true);
                     }
                     self.trace_route(RoutePhase::Bubble, Some(id), &path, "ignored");
                     if modal_owner == Some(id) {
