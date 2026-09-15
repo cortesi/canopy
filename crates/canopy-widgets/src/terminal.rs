@@ -162,6 +162,13 @@ impl Terminal {
         }
     }
 
+    /// Return whether the terminal's process has exited.
+    ///
+    /// A terminal without a session, before it mounts, reports false.
+    pub fn exited(&self) -> bool {
+        self.session().is_some_and(|session| session.child_exited())
+    }
+
     /// Lazily create the backend session.
     fn mount_session(&mut self) -> Result<()> {
         if self.session.is_some() {
@@ -1230,6 +1237,23 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn exited_reports_the_end_of_the_process() -> Result<()> {
+        use std::{thread, time::Instant};
+
+        let mut terminal =
+            Terminal::new(TerminalConfig::new().with_command(["sh", "-c", "exit 0"]));
+        assert!(!terminal.exited(), "an unmounted terminal has no process");
+        terminal.mount_session()?;
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !terminal.exited() {
+            assert!(Instant::now() < deadline, "the process should exit");
+            thread::sleep(Duration::from_millis(20));
+        }
+        Ok(())
     }
 
     #[test]

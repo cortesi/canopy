@@ -595,6 +595,11 @@ pub mod canopy_widgets {
         impl Terminal {
             /// Construct a new terminal widget with the provided configuration.
             pub fn new(config: TerminalConfig) -> Self {}
+
+            /// Return whether the terminal's process has exited.
+            ///
+            /// A terminal without a session, before it mounts, reports false.
+            pub fn exited(&self) -> bool {}
         }
 
         impl Widget for Terminal {
