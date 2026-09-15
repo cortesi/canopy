@@ -200,11 +200,23 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
         docs: None,
         signature: || {
             FunctionSignature::new()
-                .param(("direction", Type::literals(["Up", "Down"])))
+                .param(("direction", Type::literals(["Up", "Down", "Left", "Right"])))
                 .param(("x", Type::Number))
                 .param(("y", Type::Number))
         },
         handler: Handler::Sync(host_send_scroll),
+    },
+    BaseFunction {
+        name: "send_drag",
+        docs: Some("Press the left button at one screen cell, drag to another, and release there."),
+        signature: || {
+            FunctionSignature::new()
+                .param(("x1", Type::Number))
+                .param(("y1", Type::Number))
+                .param(("x2", Type::Number))
+                .param(("y2", Type::Number))
+        },
+        handler: Handler::Sync(host_send_drag),
     },
     BaseFunction {
         name: "cmd",
@@ -1445,14 +1457,16 @@ fn host_send_scroll<'s>(
     let x = args.required::<u32>("x")?;
     let y = args.required::<u32>("y")?;
     with_current_canopy(scope, |canopy, _| {
-        let action = if dir.eq_ignore_ascii_case("up") {
-            mouse::Action::ScrollUp
-        } else if dir.eq_ignore_ascii_case("down") {
-            mouse::Action::ScrollDown
-        } else {
-            return Err(error::Error::script(format!(
-                "unknown scroll direction: {dir}"
-            )));
+        let action = match dir.to_ascii_lowercase().as_str() {
+            "up" => mouse::Action::ScrollUp,
+            "down" => mouse::Action::ScrollDown,
+            "left" => mouse::Action::ScrollLeft,
+            "right" => mouse::Action::ScrollRight,
+            _ => {
+                return Err(error::Error::script(format!(
+                    "unknown scroll direction: {dir}"
+                )));
+            }
         };
         let _reentrant = ReentrantCanopyGuard::push(canopy);
         canopy.mouse(
@@ -1467,6 +1481,42 @@ fn host_send_scroll<'s>(
     })?;
     Ok(ret_none())
 }
+/// `canopy.send_drag`: press at one screen cell, drag to another, and release.
+fn host_send_drag<'s>(
+    scope: &Scope<'s>,
+    args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    let mut args = HostArgCursor::new(scope, args);
+    let from = Point {
+        x: args.required::<u32>("x1")?,
+        y: args.required::<u32>("y1")?,
+    };
+    let to = Point {
+        x: args.required::<u32>("x2")?,
+        y: args.required::<u32>("y2")?,
+    };
+    with_current_canopy(scope, |canopy, _| {
+        let _reentrant = ReentrantCanopyGuard::push(canopy);
+        for (action, at) in [
+            (mouse::Action::Down, from),
+            (mouse::Action::Drag, to),
+            (mouse::Action::Up, to),
+        ] {
+            canopy.mouse(
+                Some(scope),
+                mouse::MouseEvent {
+                    action,
+                    button: mouse::Button::Left,
+                    modifiers: key::Empty,
+                    location: PointI32::try_from(at)?,
+                },
+            )?;
+        }
+        Ok(())
+    })?;
+    Ok(ret_none())
+}
+
 /// `canopy.bindings`: return the active binding table across all modes.
 fn host_bindings<'s>(
     scope: &Scope<'s>,

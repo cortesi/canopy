@@ -62,6 +62,20 @@ mod tests {
                     self.value = 22;
                     Ok(EventOutcome::Handle)
                 }
+                Event::Mouse(mouse::MouseEvent {
+                    action: mouse::Action::Drag,
+                    ..
+                }) => {
+                    self.value = 23;
+                    Ok(EventOutcome::Handle)
+                }
+                Event::Mouse(mouse::MouseEvent {
+                    action: mouse::Action::ScrollRight,
+                    ..
+                }) => {
+                    self.value = 24;
+                    Ok(EventOutcome::Handle)
+                }
                 _ => Ok(EventOutcome::Ignore),
             }
         }
@@ -191,10 +205,20 @@ mod tests {
                 canopy.cmd_on(first, "api_leaf::get") == 22,
                 "send_scroll should dispatch a scroll event to the target node"
             )
+            canopy.send_scroll("Right", 1, 1)
+            canopy.assert(
+                canopy.cmd_on(first, "api_leaf::get") == 24,
+                "send_scroll should dispatch horizontal wheel steps"
+            )
+            canopy.send_drag(1, 1, 2, 1)
+            canopy.assert(
+                canopy.cmd_on(first, "api_leaf::get") == 23,
+                "send_drag should press, drag, and release"
+            )
         "#,
         )?;
 
-        assert_eq!(leaf_values(&mut harness), vec![22, 9]);
+        assert_eq!(leaf_values(&mut harness), vec![23, 9]);
         Ok(())
     }
 

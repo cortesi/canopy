@@ -1386,6 +1386,10 @@ pub mod canopy {
             pub left: u32,
         }
 
+        /// A proportion of a parent's width, such as one third.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        pub struct Fraction {}
+
         /// Layout configuration for a node.
         #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
         pub struct Layout {
@@ -1401,6 +1405,12 @@ pub mod canopy {
             pub min_width: Option<u32>,
             /// Maximum outer width constraint (cells).
             pub max_width: Option<u32>,
+            /// Maximum outer width as a fraction of the parent's width budget.
+            ///
+            /// The budget is the parent's content width less the gaps between its
+            /// displayed children in a row, or the screen width at the root. The bound
+            /// joins `max_width` by taking the smaller, and `min_width` still wins.
+            pub max_width_fraction: Option<Fraction>,
             /// Minimum outer height constraint (cells).
             pub min_height: Option<u32>,
             /// Maximum outer height constraint (cells).
@@ -1442,6 +1452,8 @@ pub mod canopy {
             pub min_width: Option<Option<u32>>,
             /// Override for [`Layout::max_width`].
             pub max_width: Option<Option<u32>>,
+            /// Override for [`Layout::max_width_fraction`].
+            pub max_width_fraction: Option<Option<Fraction>>,
             /// Override for [`Layout::min_height`].
             pub min_height: Option<Option<u32>>,
             /// Override for [`Layout::max_height`].
@@ -1484,6 +1496,16 @@ pub mod canopy {
             PaddingOverflow {
                 /// Padding axis name.
                 axis: &'static str,
+            },
+            #[error("{axis} fraction {numerator}/{denominator} must lie in (0, 1]")]
+            /// A fraction bound lies outside `(0, 1]`.
+            InvalidFraction {
+                /// Layout axis name.
+                axis: &'static str,
+                /// Fraction numerator.
+                numerator: u32,
+                /// Fraction denominator.
+                denominator: u32,
             },
         }
 
@@ -1564,11 +1586,24 @@ pub mod canopy {
             pub fn vertical(&self) -> u32 {}
         }
 
+        impl Fraction {
+            /// Construct `numerator / denominator`.
+            ///
+            /// [`Layout::validate`] rejects a fraction outside `(0, 1]`.
+            pub const fn new(numerator: u32, denominator: u32) -> Self {}
+
+            /// Return this fraction of `whole`, rounded down.
+            pub fn of(self, whole: u32) -> u32 {}
+        }
+
         impl From<LayoutValidationError> for Error {
             fn from(source: LayoutValidationError) -> Self {}
         }
 
         impl Layout {
+            /// Bound the outer width by a fraction of the parent's width budget.
+            pub fn max_width_fraction(self, fraction: Fraction) -> Self {}
+
             /// Center children both horizontally and vertically.
             pub fn align_center(self) -> Self {}
 

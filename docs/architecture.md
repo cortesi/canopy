@@ -200,6 +200,16 @@ geometry does not panic.
 Fixed outer sizes use `fixed_width()` and `fixed_height()`, which encode fixed
 size as equal min and max constraints. There is no separate fixed-size enum.
 
+`Layout::max_width_fraction()` bounds an outer width by a `Fraction` of the
+parent's width budget: the parent's content width, less the gaps between its
+displayed children in a row. The root uses the screen width. The parent
+resolves the fraction once and applies the same bound when it measures the
+child and when it allocates the child's final width, so a child's reduced share
+never shrinks the bound again. The bound rounds down, joins `max_width` by
+taking the smaller, and yields to `min_width`. A measurement without a width
+bound reports the child's natural width, and the fraction applies once the
+parent has a finite allocation.
+
 Measurement is an infallible widget hook. A widget returns a fixed content size
 or asks layout to wrap visible children. Layout may measure a widget several
 times in one pass.

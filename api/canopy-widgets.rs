@@ -893,8 +893,8 @@ pub mod canopy_widgets {
     /// scrolls through wheel input without a track.
     ///
     /// `Columns` owns the scrollbars of its panes, so an enclosing frame draws none
-    /// for them. Dividers use `columns/divider`, thumbs `columns/thumb`, and a thumb
-    /// a drag holds `columns/thumb/active`.
+    /// for them. Dividers use `columns/divider`, thumbs `columns/thumb`, and a
+    /// thumb a drag holds `columns/thumb/active`.
     #[derive(Default)]
     pub struct Columns {}
 

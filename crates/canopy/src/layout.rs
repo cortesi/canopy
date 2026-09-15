@@ -96,6 +96,45 @@ pub enum LayoutValidationError {
         /// Padding axis name.
         axis: &'static str,
     },
+    /// A fraction bound lies outside `(0, 1]`.
+    #[error("{axis} fraction {numerator}/{denominator} must lie in (0, 1]")]
+    InvalidFraction {
+        /// Layout axis name.
+        axis: &'static str,
+        /// Fraction numerator.
+        numerator: u32,
+        /// Fraction denominator.
+        denominator: u32,
+    },
+}
+
+/// A proportion of a parent's width, such as one third.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Fraction {
+    /// Parts taken.
+    numerator: u32,
+    /// Parts in the whole.
+    denominator: u32,
+}
+
+impl Fraction {
+    /// Construct `numerator / denominator`.
+    ///
+    /// [`Layout::validate`] rejects a fraction outside `(0, 1]`.
+    pub const fn new(numerator: u32, denominator: u32) -> Self {
+        Self {
+            numerator,
+            denominator,
+        }
+    }
+
+    /// Return this fraction of `whole`, rounded down.
+    pub fn of(self, whole: u32) -> u32 {
+        let parts = u64::from(whole) * u64::from(self.numerator);
+        parts
+            .checked_div(u64::from(self.denominator))
+            .map_or(0, |part| u32::try_from(part).unwrap_or(u32::MAX))
+    }
 }
 
 /// Edge insets for padding.
@@ -197,6 +236,12 @@ pub struct Layout {
     pub min_width: Option<u32>,
     /// Maximum outer width constraint (cells).
     pub max_width: Option<u32>,
+    /// Maximum outer width as a fraction of the parent's width budget.
+    ///
+    /// The budget is the parent's content width less the gaps between its
+    /// displayed children in a row, or the screen width at the root. The bound
+    /// joins `max_width` by taking the smaller, and `min_width` still wins.
+    pub max_width_fraction: Option<Fraction>,
 
     /// Minimum outer height constraint (cells).
     pub min_height: Option<u32>,
@@ -244,6 +289,8 @@ pub struct LayoutOverride {
     pub min_width: Option<Option<u32>>,
     /// Override for [`Layout::max_width`].
     pub max_width: Option<Option<u32>>,
+    /// Override for [`Layout::max_width_fraction`].
+    pub max_width_fraction: Option<Option<Fraction>>,
     /// Override for [`Layout::min_height`].
     pub min_height: Option<Option<u32>>,
     /// Override for [`Layout::max_height`].
@@ -277,6 +324,7 @@ impl LayoutOverride {
             height: Some(layout.height),
             min_width: Some(layout.min_width),
             max_width: Some(layout.max_width),
+            max_width_fraction: Some(layout.max_width_fraction),
             min_height: Some(layout.min_height),
             max_height: Some(layout.max_height),
             overflow_x: Some(layout.overflow_x),
@@ -309,6 +357,9 @@ impl LayoutOverride {
         }
         if let Some(value) = self.max_width {
             layout.max_width = value;
+        }
+        if let Some(value) = self.max_width_fraction {
+            layout.max_width_fraction = value;
         }
         if let Some(value) = self.min_height {
             layout.min_height = value;
@@ -357,6 +408,9 @@ impl LayoutOverride {
         }
         if before.max_width != after.max_width {
             self.max_width = Some(after.max_width);
+        }
+        if before.max_width_fraction != after.max_width_fraction {
+            self.max_width_fraction = Some(after.max_width_fraction);
         }
         if before.min_height != after.min_height {
             self.min_height = Some(after.min_height);
@@ -427,6 +481,7 @@ impl Layout {
             height: Sizing::Measure,
             min_width: None,
             max_width: None,
+            max_width_fraction: None,
             min_height: None,
             max_height: None,
             overflow_x: MeasureOverflow::Inherit,
@@ -486,6 +541,12 @@ impl Layout {
     /// Set the maximum outer width.
     pub fn max_width(mut self, n: u32) -> Self {
         self.max_width = Some(n);
+        self
+    }
+
+    /// Bound the outer width by a fraction of the parent's width budget.
+    pub fn max_width_fraction(mut self, fraction: Fraction) -> Self {
+        self.max_width_fraction = Some(fraction);
         self
     }
 
@@ -591,7 +652,28 @@ impl Layout {
         validate_sizing("height", self.height)?;
         validate_padding("horizontal", self.padding.left, self.padding.right)?;
         validate_padding("vertical", self.padding.top, self.padding.bottom)?;
+        validate_fraction("width", self.max_width_fraction)?;
         Ok(())
+    }
+}
+
+/// Validate that a fraction bound lies in `(0, 1]`.
+fn validate_fraction(
+    axis: &'static str,
+    fraction: Option<Fraction>,
+) -> Result<(), LayoutValidationError> {
+    match fraction {
+        Some(Fraction {
+            numerator,
+            denominator,
+        }) if numerator == 0 || numerator > denominator => {
+            Err(LayoutValidationError::InvalidFraction {
+                axis,
+                numerator,
+                denominator,
+            })
+        }
+        _ => Ok(()),
     }
 }
 
@@ -841,6 +923,56 @@ mod tests {
             LayoutOverride::new().flex_vertical(0).apply(base),
             Err(LayoutValidationError::ZeroFlexWeight { axis: "height" })
         ));
+    }
+
+    #[test]
+    fn width_fractions_must_lie_in_the_unit_interval() {
+        for (numerator, denominator, valid) in [
+            (0, 3, false),
+            (4, 3, false),
+            (1, 0, false),
+            (3, 3, true),
+            (1, 3, true),
+        ] {
+            let layout = Layout::column().max_width_fraction(Fraction::new(numerator, denominator));
+            assert_eq!(
+                layout.validate().is_ok(),
+                valid,
+                "{numerator}/{denominator}"
+            );
+        }
+        assert_eq!(Fraction::new(1, 3).of(u32::MAX), u32::MAX / 3);
+        assert_eq!(Fraction::new(1, 3).of(2), 0);
+    }
+
+    #[test]
+    fn a_width_fraction_override_inherits_replaces_or_clears() {
+        let (third, half) = (Fraction::new(1, 3), Fraction::new(1, 2));
+        let base = Layout::column().max_width_fraction(third);
+        let apply = |overrides: LayoutOverride| {
+            overrides
+                .apply(base)
+                .expect("valid override")
+                .max_width_fraction
+        };
+        assert_eq!(apply(LayoutOverride::new()), Some(third));
+        assert_eq!(
+            apply(LayoutOverride {
+                max_width_fraction: Some(Some(half)),
+                ..LayoutOverride::new()
+            }),
+            Some(half)
+        );
+        assert_eq!(
+            apply(LayoutOverride {
+                max_width_fraction: Some(None),
+                ..LayoutOverride::new()
+            }),
+            None
+        );
+        let mut recorded = LayoutOverride::new();
+        recorded.record_changes(base, Layout::column());
+        assert_eq!(recorded.max_width_fraction, Some(None));
     }
 
     #[test]

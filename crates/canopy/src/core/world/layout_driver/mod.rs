@@ -16,7 +16,7 @@ impl Core {
         refresh_layouts(self)?;
         let root = self.root;
         let mut pass = LayoutPass::new(self);
-        pass.layout_node(root, screen_size, Overflow::none())?;
+        pass.layout_node(root, screen_size, Overflow::none(), Some(screen_size.w))?;
         let screen_view = View::new(
             RectI32::new(0, 0, screen_size.w, screen_size.h),
             RectI32::new(0, 0, screen_size.w, screen_size.h),
@@ -127,11 +127,15 @@ impl<'a> LayoutPass<'a> {
     }
 
     /// Lay out a node subtree and return its outer size.
+    ///
+    /// `width_budget` is the width the parent resolved width fractions
+    /// against, or `None` when no finite width exists.
     fn layout_node(
         &mut self,
         node_id: NodeId,
         available_outer: Size,
         parent_overflow: Overflow,
+        width_budget: Option<u32>,
     ) -> Result<Size> {
         let (layout, hidden) = self.node_layout_snapshot(node_id)?;
         if hidden || layout.display == Display::None {
@@ -139,7 +143,7 @@ impl<'a> LayoutPass<'a> {
             return Ok(Size::ZERO);
         }
 
-        let mut effective_layout = layout;
+        let mut effective_layout = bound_width(layout, width_budget);
         effective_layout.inherit_overflow(parent_overflow.x, parent_overflow.y);
 
         let outer =
@@ -352,13 +356,14 @@ impl<'a> LayoutPass<'a> {
             .direction
             .size_from_main_cross(avail_main, avail_cross);
 
+        let budget = measured_width_budget(layout, constraints, children.len());
         let mut fixed_main_total = 0u32;
         let mut flex_children: Vec<(usize, u32)> = Vec::new();
         let mut child_sizes = vec![Size::ZERO; children.len()];
 
         for (i, child) in children.iter().enumerate() {
             let child_layout = self.node_layout_snapshot(*child)?.0;
-            let mut effective = child_layout;
+            let mut effective = bound_width(child_layout, budget);
 
             let child_main = main_sizing(child_layout, layout.direction);
             if !main_fixed && matches!(child_main, Sizing::Flex(_)) {
@@ -393,7 +398,7 @@ impl<'a> LayoutPass<'a> {
             let shares = allocate_flex_shares(remaining, &weights);
             for (idx, (child_index, _)) in flex_children.iter().enumerate() {
                 let child_layout = self.node_layout_snapshot(children[*child_index])?.0;
-                let mut effective = child_layout;
+                let mut effective = bound_width(child_layout, budget);
                 let child_cross = cross_sizing(child_layout, layout.direction);
                 if !cross_fixed && matches!(child_cross, Sizing::Flex(_)) {
                     set_cross_sizing(&mut effective, layout.direction, Sizing::Measure);
@@ -432,13 +437,14 @@ impl<'a> LayoutPass<'a> {
         available: Size,
     ) -> Result<Size> {
         let avail = constraints.clamp_size(available);
+        let budget = measured_width_budget(layout, constraints, children.len());
 
         let mut max_w = 0u32;
         let mut max_h = 0u32;
 
         for child in children {
             let child_layout = self.node_layout_snapshot(*child)?.0;
-            let mut effective = child_layout;
+            let mut effective = bound_width(child_layout, budget);
 
             // Treat flex as measure when parent is not exact
             if !matches!(constraints.width, Constraint::Exact(_))
@@ -477,7 +483,8 @@ impl<'a> LayoutPass<'a> {
                 // according to alignment
                 for child in &children {
                     // First, layout the child to determine its size
-                    let child_size = self.layout_node(*child, content, parent_overflow)?;
+                    let child_size =
+                        self.layout_node(*child, content, parent_overflow, Some(content.w))?;
 
                     // Then apply alignment to position the child within content
                     // area
@@ -507,6 +514,9 @@ impl<'a> LayoutPass<'a> {
         children: &[NodeId],
         parent_overflow: Overflow,
     ) -> Result<()> {
+        // Every measurement and the final allocation share one width budget,
+        // so a child's reduced share never shrinks its fraction bound again.
+        let budget = Some(width_budget(layout, content.w, children.len()));
         let mut fixed_main_total = 0u32;
         let mut flex_weights: Vec<u32> = Vec::new();
         let mut pre_sizes = vec![Size::ZERO; children.len()];
@@ -519,7 +529,7 @@ impl<'a> LayoutPass<'a> {
                 continue;
             }
 
-            let mut effective = child_layout;
+            let mut effective = bound_width(child_layout, budget);
             effective.inherit_overflow(parent_overflow.x, parent_overflow.y);
 
             let child_available = content;
@@ -555,7 +565,7 @@ impl<'a> LayoutPass<'a> {
             let child_available = layout
                 .direction
                 .size_from_main_cross(main, layout.direction.cross_size(content));
-            let actual = self.layout_node(*child, child_available, parent_overflow)?;
+            let actual = self.layout_node(*child, child_available, parent_overflow, budget)?;
             actual_sizes.push(actual);
         }
 
@@ -717,6 +727,51 @@ impl<'a> LayoutPass<'a> {
         }
         Ok(())
     }
+}
+
+/// Return the width a parent offers width fractions: its content width less the
+/// gaps between displayed children in a row.
+fn width_budget(layout: Layout, content_width: u32, children: usize) -> u32 {
+    if layout.direction != LayoutDirection::Row {
+        return content_width;
+    }
+    let gaps = u32::try_from(children.saturating_sub(1)).unwrap_or(u32::MAX);
+    content_width.saturating_sub(layout.gap.saturating_mul(gaps))
+}
+
+/// Return the width budget for children measured under `constraints`, or
+/// `None` when the measurement has no width bound.
+fn measured_width_budget(
+    layout: Layout,
+    constraints: MeasureConstraints,
+    children: usize,
+) -> Option<u32> {
+    match constraints.width {
+        Constraint::Exact(width) | Constraint::AtMost(width) => {
+            Some(width_budget(layout, width, children))
+        }
+        Constraint::Unbounded => None,
+    }
+}
+
+/// Resolve a width fraction against a parent's width budget into `max_width`.
+///
+/// The bound rounds down, joins an absolute maximum by taking the smaller,
+/// and yields to a minimum. Without a budget the fraction waits for a parent
+/// with a finite allocation.
+fn bound_width(mut layout: Layout, budget: Option<u32>) -> Layout {
+    if let (Some(fraction), Some(budget)) = (layout.max_width_fraction, budget) {
+        let mut bound = fraction.of(budget);
+        if let Some(max) = layout.max_width {
+            bound = bound.min(max);
+        }
+        if let Some(min) = layout.min_width {
+            bound = bound.max(min);
+        }
+        layout.max_width = Some(bound);
+    }
+    layout.max_width_fraction = None;
+    layout
 }
 
 /// Clamp an outer size against min/max constraints.
@@ -921,6 +976,9 @@ fn locate_recursive(
     Ok(Some(node_id))
 }
 
+/// Width fraction layout tests.
+#[cfg(test)]
+mod fraction_tests;
 /// Tests for the layout driver.
 #[cfg(test)]
 mod tests;
