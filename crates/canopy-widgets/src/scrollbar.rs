@@ -77,6 +77,28 @@ pub fn scroll_target(
     })
 }
 
+/// Return the one node in `pane`, a child of `owner`, whose canvas overflows
+/// along `axis`.
+///
+/// Unlike [`scroll_target`], the pane itself can be the target.
+pub(crate) fn pane_target(
+    ctx: &dyn ViewContext,
+    owner: NodeId,
+    pane: NodeId,
+    axis: Axis,
+) -> Result<Option<ScrollTarget>> {
+    if !ctx.is_attached_of(owner) {
+        return Ok(None);
+    }
+    let Some(clip) = ancestor_clip(ctx, owner) else {
+        return Ok(None);
+    };
+    Ok(match resolve(ctx, pane, axis, clip)? {
+        Resolution::Unique(target) => Some(target),
+        Resolution::Absent | Resolution::Ambiguous => None,
+    })
+}
+
 /// Return the screen area visible through `node` and each of its ancestors.
 fn ancestor_clip(ctx: &dyn ViewContext, node: NodeId) -> Option<Rect> {
     let screen = ctx.view_of(ctx.root_id())?.outer;

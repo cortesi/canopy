@@ -383,6 +383,20 @@ impl LayoutOverride {
             self.align_vertical = Some(after.align_vertical);
         }
     }
+    /// Set width to flex with the provided weight.
+    ///
+    /// A zero weight is rejected when the override is applied.
+    pub fn flex_horizontal(mut self, weight: u32) -> Self {
+        self.width = Some(Sizing::Flex(weight));
+        self
+    }
+    /// Set height to flex with the provided weight.
+    ///
+    /// A zero weight is rejected when the override is applied.
+    pub fn flex_vertical(mut self, weight: u32) -> Self {
+        self.height = Some(Sizing::Flex(weight));
+        self
+    }
     /// Set both outer width bounds.
     pub fn fixed_width(mut self, value: u32) -> Self {
         self.min_width = Some(Some(value));
@@ -808,6 +822,25 @@ mod tests {
         let layout = Layout::fill().width(Sizing::Measure);
         assert_eq!(layout.width, Sizing::Measure);
         assert_eq!(layout.height, Sizing::Flex(1));
+    }
+
+    #[test]
+    fn override_helpers_set_only_their_fields_and_reject_zero_weights() {
+        let base = Layout::column().padding(Edges::all(1)).gap(2);
+        let layout = LayoutOverride::new()
+            .flex_horizontal(2)
+            .flex_vertical(3)
+            .fixed_height(4)
+            .apply(base)
+            .expect("valid override");
+        assert_eq!(layout.width, Sizing::Flex(2));
+        assert_eq!(layout.height, Sizing::Flex(3));
+        assert_eq!((layout.min_height, layout.max_height), (Some(4), Some(4)));
+        assert_eq!((layout.padding, layout.gap), (base.padding, base.gap));
+        assert!(matches!(
+            LayoutOverride::new().flex_vertical(0).apply(base),
+            Err(LayoutValidationError::ZeroFlexWeight { axis: "height" })
+        ));
     }
 
     #[test]

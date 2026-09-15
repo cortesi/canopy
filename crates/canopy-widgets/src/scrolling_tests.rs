@@ -18,7 +18,7 @@ use canopy::{
 };
 
 use crate::{
-    Frame, List, Scroll, Selectable, Tabs,
+    Columns, Frame, List, Scroll, Selectable, Tabs,
     scrollbar::{Axis, ScrollTarget, scroll_target},
 };
 
@@ -641,5 +641,157 @@ fn a_list_inside_a_scroll_container_reveals_through_both_views() -> Result<()> {
     // last visible row, which sits at row 13 of its canvas.
     assert_eq!(scroll(&harness, list), Point { x: 0, y: 6 });
     assert_eq!(scroll(&harness, container), Point { x: 0, y: 8 });
+    Ok(())
+}
+
+/// Add columns under the scene root.
+fn add_columns(c: &mut dyn Context) -> Result<NodeId> {
+    let root = c.node_id();
+    Ok(c.add_child_to(root, Columns::new())?.into())
+}
+
+/// Return the characters of screen column `x` over `height` rows.
+fn column_text(harness: &Harness, x: u32, height: u32) -> String {
+    (0..height)
+        .map(|y| {
+            harness
+                .buf()
+                .get(Point { x, y })
+                .map_or(' ', |cell| cell.ch)
+        })
+        .collect()
+}
+
+/// Return the characters of screen column `x`, with blank cells as spaces.
+fn trimmed_column_text(harness: &Harness, x: u32, height: u32) -> String {
+    column_text(harness, x, height).replace('\0', " ")
+}
+
+#[test]
+fn dividers_follow_each_pane_and_track_its_overflow() -> Result<()> {
+    // Twenty content columns less one gap leave panes of ten and nine.
+    let (harness, _) = scene(21, 6, |c| {
+        let columns = add_columns(c)?;
+        surface(c, columns, Size::new(1, 1))?;
+        surface(c, columns, Size::new(1, 60))?;
+        Ok(Vec::new())
+    })?;
+    assert_eq!(column_text(&harness, 10, 6), "││││││");
+    assert_eq!(column_text(&harness, 20, 6), "█│││││");
+
+    let (harness, _) = scene(21, 6, |c| {
+        let columns = add_columns(c)?;
+        surface(c, columns, Size::new(1, 60))?;
+        surface(c, columns, Size::new(1, 1))?;
+        Ok(Vec::new())
+    })?;
+    assert_eq!(column_text(&harness, 10, 6), "█│││││");
+    assert_eq!(
+        trimmed_column_text(&harness, 20, 6).trim(),
+        "",
+        "the trailing column stays blank while its pane fits"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_pane_header_keeps_a_plain_divider() -> Result<()> {
+    let (harness, _) = scene(21, 6, |c| {
+        let columns = add_columns(c)?;
+        let pane = boxed(c, columns, Layout::fill())?;
+        boxed(c, pane, Layout::column().flex_horizontal(1).fixed_height(1))?;
+        surface(c, pane, Size::new(1, 50))?;
+        surface(c, columns, Size::new(1, 1))?;
+        Ok(Vec::new())
+    })?;
+    assert_eq!(column_text(&harness, 10, 6), "│█││││");
+    Ok(())
+}
+
+#[test]
+fn wheel_input_and_drags_on_a_divider_scroll_the_pane_on_its_left() -> Result<()> {
+    let (mut harness, nodes) = scene(21, 6, |c| {
+        let columns = add_columns(c)?;
+        let left = surface(c, columns, Size::new(1, 60))?;
+        let right = surface(c, columns, Size::new(1, 60))?;
+        Ok(vec![columns, left, right])
+    })?;
+    let (columns, left, right) = (nodes[0], nodes[1], nodes[2]);
+
+    harness.mouse(pointer(mouse::Action::ScrollDown, 10, 3))?;
+    assert_eq!(scroll(&harness, left), Point { x: 0, y: 3 });
+    assert_eq!(scroll(&harness, right), Point::ZERO);
+
+    harness.mouse(pointer(mouse::Action::Down, 20, 5))?;
+    assert!(captured(&mut harness, columns)?);
+    assert_eq!(scroll(&harness, right), Point { x: 0, y: 54 });
+    harness.mouse(pointer(mouse::Action::Drag, 20, 0))?;
+    assert_eq!(scroll(&harness, right), Point::ZERO);
+    harness.mouse(pointer(mouse::Action::Up, 20, 0))?;
+    assert!(!captured(&mut harness, columns)?);
+    assert_eq!(scroll(&harness, left), Point { x: 0, y: 3 });
+    Ok(())
+}
+
+#[test]
+fn columns_keep_their_panes_from_an_enclosing_frame() -> Result<()> {
+    let (harness, _) = scene(22, 8, |c| {
+        let root = c.node_id();
+        let frame: NodeId = c.add_child_to(root, Frame::new())?.into();
+        let columns = c.add_child_to(frame, Columns::new())?;
+        surface(c, columns.into(), Size::new(1, 60))?;
+        Ok(Vec::new())
+    })?;
+    assert!(rows_with(&harness, 21, 8, '█').is_empty());
+    assert_eq!(rows_with(&harness, 20, 8, '█'), [1]);
+    Ok(())
+}
+
+#[test]
+fn focus_column_wraps_through_displayed_panes() -> Result<()> {
+    let (mut harness, nodes) = scene(30, 4, |c| {
+        let columns = add_columns(c)?;
+        let mut nodes = vec![columns];
+        for _ in 0..3 {
+            let pane = boxed(c, columns, Layout::fill())?;
+            let leaf = c.add_child_to(pane, Tall(Rc::new(Cell::new(1))))?;
+            nodes.extend([pane, leaf.into()]);
+        }
+        Ok(nodes)
+    })?;
+    let columns = nodes[0];
+    let (middle, leaves) = (nodes[3], [nodes[2], nodes[4], nodes[6]]);
+    let focus_column = |harness: &mut Harness, delta| -> Result<Option<NodeId>> {
+        harness.canopy.with_root_context(|c| {
+            c.with_widget_mut(columns, |columns: &mut Columns, c| {
+                columns.focus_column(c, delta)
+            })
+        })?;
+        harness.render()?;
+        Ok(harness.canopy.with_root_view(|ctx| ctx.focused_node()))
+    };
+
+    harness
+        .canopy
+        .with_root_context(|c| c.set_focus(leaves[0]).map(|_| ()))?;
+    assert_eq!(focus_column(&mut harness, 1)?, Some(leaves[1]));
+    assert_eq!(focus_column(&mut harness, -2)?, Some(leaves[2]));
+
+    harness
+        .canopy
+        .with_root_context(|c| c.set_hidden_of(middle, true).map(|_| ()))?;
+    harness.render()?;
+    assert_eq!(
+        focus_column(&mut harness, 1)?,
+        Some(leaves[0]),
+        "a hidden pane is skipped"
+    );
+
+    let (mut empty, nodes) = scene(10, 4, |c| Ok(vec![add_columns(c)?]))?;
+    empty.canopy.with_root_context(|c| {
+        c.with_widget_mut(nodes[0], |columns: &mut Columns, c| {
+            columns.focus_column(c, 1)
+        })
+    })?;
     Ok(())
 }

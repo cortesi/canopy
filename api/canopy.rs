@@ -1661,6 +1661,16 @@ pub mod canopy {
 
             /// Set both outer width bounds.
             pub fn fixed_width(self, value: u32) -> Self {}
+
+            /// Set height to flex with the provided weight.
+            ///
+            /// A zero weight is rejected when the override is applied.
+            pub fn flex_vertical(self, weight: u32) -> Self {}
+
+            /// Set width to flex with the provided weight.
+            ///
+            /// A zero weight is rejected when the override is applied.
+            pub fn flex_horizontal(self, weight: u32) -> Self {}
         }
 
         impl MeasureConstraints {

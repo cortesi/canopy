@@ -1,6 +1,9 @@
 # canopy_dark
 / fg=Some(Solid(Rgb { r: 238, g: 238, b: 238 })) bg=Some(Solid(Rgb { r: 10, g: 10, b: 10 })) attrs=Some(AttrSet { bold: false, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /blue fg=Some(Solid(Rgb { r: 92, g: 156, b: 245 })) bg=None attrs=None
+/columns/divider fg=Some(Solid(Rgb { r: 72, g: 72, b: 72 })) bg=None attrs=None
+/columns/thumb fg=Some(Solid(Rgb { r: 96, g: 96, b: 96 })) bg=None attrs=None
+/columns/thumb/active fg=Some(Solid(Rgb { r: 128, g: 128, b: 128 })) bg=None attrs=None
 /cyan fg=Some(Solid(Rgb { r: 86, g: 182, b: 194 })) bg=None attrs=None
 /dropdown fg=Some(Solid(Rgb { r: 238, g: 238, b: 238 })) bg=None attrs=None
 /dropdown/highlight fg=Some(Solid(Rgb { r: 10, g: 10, b: 10 })) bg=Some(Solid(Rgb { r: 138, g: 173, b: 244 })) attrs=None
@@ -50,6 +53,9 @@
 # solarized_dark
 / fg=Some(Solid(Rgb { r: 131, g: 148, b: 150 })) bg=Some(Solid(Rgb { r: 0, g: 43, b: 54 })) attrs=Some(AttrSet { bold: false, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /blue fg=Some(Solid(Rgb { r: 38, g: 139, b: 210 })) bg=None attrs=None
+/columns/divider fg=Some(Solid(Rgb { r: 88, g: 110, b: 117 })) bg=None attrs=None
+/columns/thumb fg=Some(Solid(Rgb { r: 147, g: 161, b: 161 })) bg=None attrs=None
+/columns/thumb/active fg=Some(Solid(Rgb { r: 38, g: 139, b: 210 })) bg=None attrs=None
 /cyan fg=Some(Solid(Rgb { r: 42, g: 161, b: 152 })) bg=None attrs=None
 /dropdown fg=Some(Solid(Rgb { r: 131, g: 148, b: 150 })) bg=None attrs=None
 /dropdown/highlight fg=Some(Solid(Rgb { r: 0, g: 43, b: 54 })) bg=Some(Solid(Rgb { r: 38, g: 139, b: 210 })) attrs=None
@@ -99,6 +105,9 @@
 # solarized_light
 / fg=Some(Solid(Rgb { r: 101, g: 123, b: 131 })) bg=Some(Solid(Rgb { r: 253, g: 246, b: 227 })) attrs=Some(AttrSet { bold: false, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /blue fg=Some(Solid(Rgb { r: 38, g: 139, b: 210 })) bg=None attrs=None
+/columns/divider fg=Some(Solid(Rgb { r: 147, g: 161, b: 161 })) bg=None attrs=None
+/columns/thumb fg=Some(Solid(Rgb { r: 88, g: 110, b: 117 })) bg=None attrs=None
+/columns/thumb/active fg=Some(Solid(Rgb { r: 38, g: 139, b: 210 })) bg=None attrs=None
 /cyan fg=Some(Solid(Rgb { r: 42, g: 161, b: 152 })) bg=None attrs=None
 /dropdown fg=Some(Solid(Rgb { r: 101, g: 123, b: 131 })) bg=None attrs=None
 /dropdown/highlight fg=Some(Solid(Rgb { r: 253, g: 246, b: 227 })) bg=Some(Solid(Rgb { r: 38, g: 139, b: 210 })) attrs=None
@@ -148,6 +157,9 @@
 # dracula
 / fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=Some(Solid(Rgb { r: 40, g: 42, b: 54 })) attrs=Some(AttrSet { bold: false, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /blue fg=Some(Solid(Rgb { r: 139, g: 233, b: 253 })) bg=None attrs=None
+/columns/divider fg=Some(Solid(Rgb { r: 98, g: 114, b: 164 })) bg=None attrs=None
+/columns/thumb fg=Some(Solid(Rgb { r: 139, g: 233, b: 253 })) bg=None attrs=None
+/columns/thumb/active fg=Some(Solid(Rgb { r: 189, g: 147, b: 249 })) bg=None attrs=None
 /cyan fg=Some(Solid(Rgb { r: 139, g: 233, b: 253 })) bg=None attrs=None
 /dropdown fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=None attrs=None
 /dropdown/highlight fg=Some(Solid(Rgb { r: 40, g: 42, b: 54 })) bg=Some(Solid(Rgb { r: 189, g: 147, b: 249 })) attrs=None
@@ -197,6 +209,9 @@
 # gruvbox_dark
 / fg=Some(Solid(Rgb { r: 235, g: 219, b: 178 })) bg=Some(Solid(Rgb { r: 40, g: 40, b: 40 })) attrs=Some(AttrSet { bold: false, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /blue fg=Some(Solid(Rgb { r: 131, g: 165, b: 152 })) bg=None attrs=None
+/columns/divider fg=Some(Solid(Rgb { r: 124, g: 111, b: 100 })) bg=None attrs=None
+/columns/thumb fg=Some(Solid(Rgb { r: 189, g: 174, b: 147 })) bg=None attrs=None
+/columns/thumb/active fg=Some(Solid(Rgb { r: 131, g: 165, b: 152 })) bg=None attrs=None
 /cyan fg=Some(Solid(Rgb { r: 142, g: 192, b: 124 })) bg=None attrs=None
 /dropdown fg=Some(Solid(Rgb { r: 235, g: 219, b: 178 })) bg=None attrs=None
 /dropdown/highlight fg=Some(Solid(Rgb { r: 40, g: 40, b: 40 })) bg=Some(Solid(Rgb { r: 131, g: 165, b: 152 })) attrs=None

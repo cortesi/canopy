@@ -2,7 +2,7 @@ use canopy::{
     Canopy, ChildSlot, Context, ContextExt, FocusDirection, FocusScope, FrameworkBindingGroup,
     InteractionToken, Loader, ModalBindings, ModalOptions, NodeId, NodeName, TypedId, ViewContext,
     Widget,
-    commands::{CommandCall, CommandNode, CommandSpec},
+    commands::CommandCall,
     derive_commands,
     error::{Error, Result},
     event::key::Key,
@@ -12,6 +12,7 @@ use canopy::{
 #[cfg(feature = "devtools")]
 use crate::inspector::Inspector;
 use crate::{
+    Container,
     center::Center,
     help::{BindingList, Help, ModeHelp},
 };
@@ -272,7 +273,9 @@ impl Root {
         let root_id: NodeId = canopy.replace_root(self)?.into();
         canopy.with_root_context(|context| {
             // Main pane holds the app beside the inspector.
-            let main_pane: NodeId = context.create_detached(MainPane)?.into();
+            let main_pane: NodeId = context
+                .create_detached(Container::row().with_name("main_pane"))?
+                .into();
             context.attach_slot(main_pane, KEY_APP, app_node)?;
             #[cfg(feature = "devtools")]
             let inspector: NodeId = {
@@ -299,25 +302,6 @@ impl Root {
             Ok(())
         })?;
         Ok(app_id)
-    }
-}
-
-/// Simple container widget for the main pane (app + inspector).
-struct MainPane;
-
-impl Widget for MainPane {
-    fn layout(&self) -> Layout {
-        Layout::fill().direction(Direction::Row)
-    }
-
-    fn name(&self) -> NodeName {
-        NodeName::convert("main_pane")
-    }
-}
-
-impl CommandNode for MainPane {
-    fn commands() -> &'static [&'static CommandSpec] {
-        &[]
     }
 }
 

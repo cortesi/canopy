@@ -272,6 +272,19 @@ only when the target reaches the border: every node from the target up to the
 frame's child ends at its parent's content edge on that side. A sidebar beside
 the target therefore removes the vertical track.
 
+`Columns` also owns scrollbars. It places panes in a row with a one-cell gap
+after each pane and one trailing column, and draws a divider in each of those
+cells. Each divider displays the vertical target in the pane on its left: the
+pane itself when it overflows, or the node that target resolution finds within
+the pane. The adjacency and projection rules above apply to the divider, so a
+pane's header and footer rows keep plain divider lines. `Columns` draws no
+horizontal tracks; horizontal overflow scrolls through wheel input.
+
+Layout-only grouping uses `Container`, which supplies a row, column, stack, or
+any other layout and has no other behavior. A parent sets each child's sizing
+through layout overrides such as `LayoutOverride::flex_vertical()` and
+`LayoutOverride::fixed_height()`.
+
 Painting and input resolve the same tracks. Wheel input on a track scrolls the
 target with `Context::scroll_to_of` only when the step can move. A press starts
 a drag that stores the target, the track, and the pointer's offset within the

@@ -19,7 +19,7 @@ use canopy::{
     text,
 };
 use canopy_widgets::{
-    Button, Center, Dropdown, Frame, Input, Label, Root, Scroll, Selector, Tabs,
+    Button, Center, Container, Dropdown, Frame, Input, Label, Root, Scroll, Selector, Tabs,
     editor::{Editor, EditorConfig, LineNumbers, WrapMode, highlight::SyntectHighlighter},
 };
 
@@ -315,7 +315,7 @@ canopy::slot!(ThemeFrameSlot: Frame);
 canopy::slot!(ThemeDropdownSlot: Dropdown<ThemeOption>);
 canopy::slot!(EffectsFrameSlot: Frame);
 canopy::slot!(EffectsSelectorSlot: Selector<EffectOption>);
-canopy::slot!(RightContainerSlot: Stack);
+canopy::slot!(RightContainerSlot: Container);
 canopy::slot!(MainFrameSlot: Frame);
 canopy::slot!(TabsSlot: Tabs);
 canopy::slot!(ModalSlot: Center);
@@ -748,15 +748,6 @@ impl Widget for ModalContent {
     }
 }
 
-/// A container that lays its children out along one direction.
-pub(crate) struct Stack(Direction);
-
-impl Widget for Stack {
-    fn layout(&self) -> Layout {
-        Layout::fill().direction(self.0)
-    }
-}
-
 /// Add stock widgets under `parent`, one titled frame each.
 fn add_widget_samples(c: &mut dyn Context, parent: NodeId) -> Result<()> {
     let buttons = c.add_child_to(parent, Frame::new().with_title("Buttons"))?;
@@ -767,7 +758,7 @@ fn add_widget_samples(c: &mut dyn Context, parent: NodeId) -> Result<()> {
             .flex_horizontal(1)
             .padding(Edges::all(1)),
     )?;
-    let row = c.add_child_to(buttons, Stack(Direction::Row))?;
+    let row = c.add_child_to(buttons, Container::row())?;
     for (label, active) in [("Normal", false), ("Pressed", true)] {
         let mut button = Button::new(label);
         button.set_active(active);
@@ -862,7 +853,7 @@ impl Stylegym {
     /// Execute a closure with the right container widget.
     fn with_right_container<F, R>(&self, c: &mut dyn Context, f: F) -> Result<R>
     where
-        F: FnOnce(&mut Stack, &mut dyn Context) -> Result<R>,
+        F: FnOnce(&mut Container, &mut dyn Context) -> Result<R>,
     {
         c.with_typed_slot::<RightContainerSlot, _>(f)
     }
@@ -1048,7 +1039,7 @@ impl Widget for Stylegym {
         c.set_layout_of(effects_frame_id, Layout::fill().padding(Edges::all(1)))?;
 
         // Create right container with Stack layout for modal overlay
-        let right_container_id = c.add_slot::<RightContainerSlot>(Stack(Direction::Stack))?;
+        let right_container_id = c.add_slot::<RightContainerSlot>(Container::stack())?;
 
         // Create the styles frame and its tabbed pages
         let styles_frame_id =
@@ -1059,7 +1050,7 @@ impl Widget for Stylegym {
             let rules = tabs.add_tab(ctx, "Rules", StyleSheet::rules())?;
             let widgets = tabs.add_tab(ctx, "Widgets", Scroll::vertical())?;
             add_widget_samples(ctx, widgets.into())?;
-            let syntax = tabs.add_tab(ctx, "Syntax", Stack(Direction::Row))?;
+            let syntax = tabs.add_tab(ctx, "Syntax", Container::row())?;
             add_syntax_samples(ctx, syntax.into())?;
             tabs.add_tab(ctx, "Text", TextSamples)?;
             Ok(rules)

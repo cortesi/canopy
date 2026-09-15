@@ -34,6 +34,14 @@ bottom borders use `frame/thumb`. While a drag holds a thumb, the thumb uses
 define every frame path. The help overlay pushes a `help` layer, so its frame
 also uses the `help/frame` paths.
 
+## Columns
+
+`Columns` draws the divider after each pane with `columns/divider`. Where a
+pane's scrolling node reaches the divider, the divider beside its visible rows
+is a track: the thumb uses `columns/thumb`, and `columns/thumb/active` while a
+drag holds it. The trailing column after the last pane shows only a track. The
+built-in themes define all three paths.
+
 ## States and fallback
 
 `canopy::style::WidgetState::layer()` maps states to ordinary layer strings:

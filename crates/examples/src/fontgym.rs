@@ -13,10 +13,12 @@ use canopy::{
     text,
 };
 use canopy_widgets::{
-    Frame, List, Pad, SINGLE_THICK, Selectable, Text, VStack,
+    Container, Frame, List, Pad, SINGLE_THICK, Selectable, Text,
     font::{Font, FontBanner, FontEffects, FontRenderer, LayoutOptions},
     wrap,
 };
+
+use crate::fixed_row;
 
 /// Initial text rendered by the banners.
 const DEFAULT_TEXT: &str = "Canopy";
@@ -194,12 +196,17 @@ impl Widget for FontGym {
         ctx.set_layout_of(input_id, Layout::fill())?;
 
         let input_frame = wrap(ctx, input_id, Frame::new().with_title("Text input"))?;
-        let stack = VStack::new()
-            .push_fixed(input_frame, INPUT_HEIGHT)
-            .push_fixed(status_row_id, STATUS_HEIGHT)
-            .push_flex(font_frame_id, 1);
-        let stack_id = ctx.add_child(stack)?;
-        ctx.set_layout_of(stack_id, Layout::fill())?;
+        let stack_id = ctx.add_child(Container::column())?;
+        ctx.set_children_of(
+            stack_id.into(),
+            vec![
+                input_frame.into(),
+                status_row_id.into(),
+                font_frame_id.into(),
+            ],
+        )?;
+        ctx.set_layout_override_of(input_frame.into(), fixed_row(INPUT_HEIGHT))?;
+        ctx.set_layout_override_of(status_row_id.into(), fixed_row(STATUS_HEIGHT))?;
         ctx.set_focus(input_id.into())?;
         Ok(())
     }

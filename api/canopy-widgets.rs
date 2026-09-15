@@ -881,6 +881,30 @@ pub mod canopy_widgets {
     #[derive(Default)]
     pub struct Center;
 
+    /// Panes side by side, each followed by a divider.
+    ///
+    /// Children are panes with normal child sizing. `Columns` places them in a
+    /// row, with a one-cell gap after each displayed pane and one trailing column.
+    /// That cell holds a divider across the pane's rows. When a node in a pane
+    /// overflows vertically and reaches the pane's right edge, the divider beside
+    /// the node's visible rows becomes a track that shows and controls its
+    /// position; headers and footers in the pane keep plain divider lines. The
+    /// trailing column stays blank while the last pane fits. Horizontal overflow
+    /// scrolls through wheel input without a track.
+    ///
+    /// `Columns` owns the scrollbars of its panes, so an enclosing frame draws none
+    /// for them. Dividers use `columns/divider`, thumbs `columns/thumb`, and a thumb
+    /// a drag holds `columns/thumb/active`.
+    #[derive(Default)]
+    pub struct Columns {}
+
+    /// A widget that lays out its children and has no other behavior.
+    ///
+    /// Parents adjust how each child sizes through layout overrides. Use
+    /// [`Container::with_name`] to keep a path segment that scripts or bindings
+    /// match.
+    pub struct Container {}
+
     /// A dropdown widget for single-value selection.
     ///
     /// When collapsed, displays the currently selected item with a dropdown
@@ -920,10 +944,6 @@ pub mod canopy_widgets {
 
     /// Container that adds padding around its child.
     pub struct Pad {}
-
-    /// Panes manages a set of child nodes arranged in a 2d grid.
-    #[derive(Default)]
-    pub struct Panes {}
 
     /// A Root widget that lives at the base of a Canopy app.
     #[derive(Default)]
@@ -975,10 +995,6 @@ pub mod canopy_widgets {
 
     /// Multiline text widget with wrapping and scrolling.
     pub struct Text {}
-
-    /// A vertical stack that arranges children with fixed or flex heights.
-    #[derive(Default)]
-    pub struct VStack {}
 
     /// Policy for publishing an input value in semantic snapshots.
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -1111,6 +1127,41 @@ pub mod canopy_widgets {
         fn layout(&self) -> Layout {}
 
         fn name(&self) -> NodeName {}
+    }
+
+    impl Columns {
+        /// Construct columns with no panes.
+        pub fn new() -> Self {}
+
+        /// Move focus to another displayed pane by a signed offset, wrapping
+        /// around.
+        ///
+        /// Focus moves to the pane's first focusable leaf, or to its first leaf
+        /// when none accepts focus. Columns without a displayed pane do nothing.
+        /// @param delta Panes to move; negative values move left.
+        pub fn focus_column(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_focus_column(delta: i32) -> canopy::commands::CommandCall {}
+
+        /// Return a typed command reference for this command.
+        pub fn cmd_focus_column() -> &'static canopy::commands::CommandSpec {}
+    }
+
+    impl CommandNode for Columns {
+        fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
+    }
+
+    impl Widget for Columns {
+        fn layout(&self) -> Layout {}
+
+        fn name(&self) -> NodeName {}
+
+        fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {}
+
+        fn owns_scrollbars(&self) -> bool {}
+
+        fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
     }
 
     impl CommandNode for Frame {
@@ -1306,36 +1357,6 @@ pub mod canopy_widgets {
         fn layout(&self) -> Layout {}
 
         fn name(&self) -> NodeName {}
-    }
-
-    impl CommandNode for Panes {
-        fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-    }
-
-    impl Panes {
-        /// Construct panes with no children.
-        pub fn new() -> Self {}
-
-        /// Delete the focus node. If a column ends up empty, it is removed.
-        pub fn delete_focus(&mut self, c: &mut dyn Context) -> Result<()> {}
-
-        /// Insert a node in a new column.
-        pub fn insert_col(&mut self, c: &mut dyn Context, n: impl Into<NodeId>) -> Result<()> {}
-
-        /// Move focus by a signed column offset (wraps around).
-        pub fn focus_column(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {}
-
-        /// Build a positional call with typed user arguments.
-        pub fn call_focus_column(delta: i32) -> canopy::commands::CommandCall {}
-
-        /// Return a typed command reference for this command.
-        pub fn cmd_focus_column() -> &'static canopy::commands::CommandSpec {}
-    }
-
-    impl Widget for Panes {
-        fn name(&self) -> NodeName {}
-
-        fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
     }
 
     impl CommandNode for Root {
@@ -1582,27 +1603,28 @@ pub mod canopy_widgets {
         fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
     }
 
-    impl CommandNode for VStack {
-        fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
+    impl Container {
+        #[must_use]
+        /// Name this node's path segment.
+        pub fn with_name(self, name: &str) -> Self {}
+
+        /// Construct a container with any layout.
+        pub fn new(layout: Layout) -> Self {}
+
+        /// Fill the available space and overlap children, the last on top.
+        pub fn stack() -> Self {}
+
+        /// Fill the available space and place children in a row.
+        pub fn row() -> Self {}
+
+        /// Fill the available space and stack children in a column.
+        pub fn column() -> Self {}
     }
 
-    impl VStack {
-        /// Add a fixed-height row.
-        pub fn push_fixed(self, node: impl Into<NodeId>, height: u32) -> Self {}
-
-        /// Add a flex row with a weight.
-        pub fn push_flex(self, node: impl Into<NodeId>, weight: u32) -> Self {}
-
-        /// Construct an empty vertical stack.
-        pub fn new() -> Self {}
-    }
-
-    impl Widget for VStack {
+    impl Widget for Container {
         fn layout(&self) -> Layout {}
 
         fn name(&self) -> NodeName {}
-
-        fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {}
     }
 
     impl Scroll {

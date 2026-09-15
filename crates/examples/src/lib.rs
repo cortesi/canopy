@@ -4,6 +4,7 @@
 use canopy::{
     CanopyBuilder, Context, FocusDirection, Loader, Widget,
     error::Result,
+    layout::{LayoutOverride, Sizing},
     style::{
         AttrSet, Color, GradientSpec, GradientStop, Paint, StyleBuilder, StyleRules,
         canopy as palette,
@@ -176,3 +177,25 @@ pub fn run_demo_with_options<T: Widget + 'static>(
 
 #[cfg(test)]
 mod tests;
+
+/// Override a column child to fill the width at a fixed outer height.
+pub(crate) fn fixed_row(height: u32) -> LayoutOverride {
+    LayoutOverride {
+        height: Some(Sizing::Measure),
+        ..LayoutOverride::new()
+            .flex_horizontal(1)
+            .fixed_height(height)
+    }
+}
+
+/// Override a column child to fill the width and share the remaining height by
+/// `weight`, without height bounds.
+pub(crate) fn flex_row(weight: u32) -> LayoutOverride {
+    LayoutOverride {
+        min_height: Some(None),
+        max_height: Some(None),
+        ..LayoutOverride::new()
+            .flex_horizontal(1)
+            .flex_vertical(weight)
+    }
+}

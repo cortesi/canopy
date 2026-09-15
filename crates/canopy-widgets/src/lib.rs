@@ -12,6 +12,10 @@ mod center;
 /// Multi-click tracker shared by editor and terminal.
 #[cfg(any(feature = "editor", feature = "terminal-widget"))]
 mod click;
+/// Panes side by side with scroll position dividers.
+mod columns;
+/// Layout-only container.
+mod container;
 /// Dropdown selection widget.
 mod dropdown;
 #[cfg(feature = "editor")]
@@ -39,8 +43,6 @@ mod label;
 mod list;
 /// Padding container widget.
 mod pad;
-/// 2D grid layout of panes.
-mod panes;
 /// Application root widget.
 mod root;
 /// Scrolling container.
@@ -57,14 +59,14 @@ pub mod terminal;
 mod text;
 /// Shared text editing machinery for Input and Editor.
 pub mod text_buffer;
-/// Vertical stack container.
-mod vstack;
 /// Wrapping an existing node in a container widget.
 mod wrap;
 
 pub use boxed::{Border, BoxGlyphs, DOUBLE, ROUND, SINGLE, SINGLE_THICK};
 pub use button::Button;
 pub use center::Center;
+pub use columns::Columns;
+pub use container::Container;
 pub use dropdown::Dropdown;
 pub use frame::Frame;
 #[cfg(feature = "graphics")]
@@ -73,14 +75,12 @@ pub use input::{Input, ValueExposure};
 pub use label::Label;
 pub use list::{AutoKey, List, Selectable};
 pub use pad::Pad;
-pub use panes::Panes;
 pub use root::Root;
 pub use scroll::Scroll;
 pub use scrollbar::Scrollbar;
 pub use selector::Selector;
 pub use tabs::Tabs;
 pub use text::{CanvasWidth, Text};
-pub use vstack::VStack;
 pub use wrap::wrap;
 
 #[cfg(test)]

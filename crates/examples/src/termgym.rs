@@ -9,12 +9,12 @@ use canopy::{
     style::{Attr, AttrSet, canopy as palette},
 };
 use canopy_widgets::{
-    Border, Button, Center, Frame, List, SINGLE, SINGLE_THICK, Selectable, Text, VStack,
+    Border, Button, Center, Container, Frame, List, SINGLE, SINGLE_THICK, Selectable, Text,
     terminal::{Terminal, TerminalConfig},
 };
 use unicode_width::UnicodeWidthStr;
 
-use crate::widget::TerminalStack;
+use crate::{fixed_row, flex_row, widget::TerminalStack};
 
 /// Height for each terminal entry row, including borders.
 const ENTRY_HEIGHT: u32 = 3;
@@ -389,11 +389,10 @@ impl Widget for TermGym {
         let button_id = c.create_detached(
             Button::new("+ New terminal").with_command(Self::cmd_new_terminal().call()),
         )?;
-        let sidebar_id = c.add_child(
-            VStack::new()
-                .push_fixed(button_id, ENTRY_HEIGHT)
-                .push_flex(list_id, 1),
-        )?;
+        let sidebar_id = c.add_child(Container::column())?;
+        c.set_children_of(sidebar_id.into(), vec![button_id.into(), list_id.into()])?;
+        c.set_layout_override_of(button_id.into(), fixed_row(ENTRY_HEIGHT))?;
+        c.set_layout_override_of(list_id.into(), flex_row(1))?;
 
         let term_frame_id = c.add_child(
             Frame::new()

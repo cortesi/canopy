@@ -8,8 +8,10 @@ use canopy::{
     layout::{Edges, Layout, MeasureConstraints, Measurement},
     style::canopy as palette,
 };
-use canopy_widgets::{Border, Center, Frame, List, SINGLE, Selectable, Text, VStack};
+use canopy_widgets::{Border, Center, Container, Frame, List, SINGLE, Selectable, Text};
 use unicode_width::UnicodeWidthStr;
+
+use crate::{fixed_row, flex_row};
 
 /// Padding inside each counter entry box.
 const ENTRY_PADDING: u32 = 2;
@@ -215,15 +217,13 @@ impl Widget for Intervals {
     }
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-        let frame_id = c.create_detached(Frame::new())?;
+        let root = c.node_id();
+        let column = c.add_child_to(root, Container::column())?;
+        let frame_id = c.add_child_to(column, Frame::new())?;
         c.add_child_to(frame_id, List::<CounterItem>::new())?;
-        let status_id = c.create_detached(StatusBar)?;
-        c.add_child(
-            VStack::new()
-                .push_flex(frame_id, 1)
-                .push_fixed(status_id, 1),
-        )?;
-        Ok(())
+        let status_id = c.add_child_to(column, StatusBar)?;
+        c.set_layout_override_of(frame_id.into(), flex_row(1))?;
+        c.set_layout_override_of(status_id.into(), fixed_row(1))
     }
 
     fn render(&mut self, r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {

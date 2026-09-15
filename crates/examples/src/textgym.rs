@@ -3,7 +3,7 @@ use canopy::{
     error::Result,
     layout::{Edges, Layout},
 };
-use canopy_widgets::{CanvasWidth, Frame, Pad, Selectable, Text, VStack, wrap};
+use canopy_widgets::{CanvasWidth, Container, Frame, Pad, Selectable, Text, wrap};
 
 /// Text sample using the default tab stop.
 const DEFAULT_TEXT: &str = concat!(
@@ -60,6 +60,7 @@ impl Widget for TextGym {
             "Default (tab stop 4)",
             Text::new(DEFAULT_TEXT).with_canvas_width(CanvasWidth::View),
             34,
+            6,
         )?;
 
         let wrap_id = section(
@@ -69,6 +70,7 @@ impl Widget for TextGym {
                 .with_wrap_width(24)
                 .with_style("text/italic"),
             34,
+            7,
         )?;
 
         let intrinsic_id = section(
@@ -79,40 +81,44 @@ impl Widget for TextGym {
                 .with_tab_stop(8)
                 .with_wrap_width(32),
             26,
+            6,
         )?;
 
         let mut fixed_text = Text::new(FIXED_TEXT)
             .with_canvas_width(CanvasWidth::Fixed(40))
             .with_selected_style("text/underline");
         fixed_text.set_selected(true);
-        let fixed_id = section(c, "Fixed canvas 40 + selected", fixed_text, 26)?;
+        let fixed_id = section(c, "Fixed canvas 40 + selected", fixed_text, 26, 6)?;
 
-        let stack = VStack::new()
-            .push_fixed(default_id, 6)
-            .push_fixed(wrap_id, 7)
-            .push_fixed(intrinsic_id, 6)
-            .push_fixed(fixed_id, 6);
-        let stack_id = c.add_child(stack)?;
-
+        let stack_id = c.add_child(Container::column())?;
+        c.set_children_of(
+            stack_id.into(),
+            vec![default_id, wrap_id, intrinsic_id, fixed_id],
+        )?;
         c.set_layout(Layout::fill())?;
-        c.set_layout_of(stack_id, Layout::fill())?;
         Ok(())
     }
 }
 
-/// Wrap a text widget in a titled frame.
-///
-/// `VStack::push_fixed` sets the row height, so `section` sets only the width
-/// it controls.
-fn section(c: &mut dyn Context, title: &str, text: Text, width: u32) -> Result<NodeId> {
+/// Wrap a text widget in a titled frame that fills a column row of `height`
+/// rows and `width` content columns.
+fn section(
+    c: &mut dyn Context,
+    title: &str,
+    text: Text,
+    width: u32,
+    height: u32,
+) -> Result<NodeId> {
     let text_id = c.create_detached(text)?;
     c.set_layout_of(text_id, Layout::fill())?;
     let frame_id = wrap(c, text_id, Frame::new().with_title(title))?;
     let pad_id = wrap(c, frame_id, Pad::uniform(OUTER_PADDING))?;
     c.set_layout_of(
         pad_id,
-        Layout::fill()
+        Layout::column()
+            .flex_horizontal(1)
             .fixed_width(width.saturating_add(2 * OUTER_PADDING))
+            .fixed_height(height)
             .padding(Edges::all(OUTER_PADDING)),
     )?;
     Ok(pad_id.into())
