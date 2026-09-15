@@ -37,6 +37,10 @@ impl Default for DummyContext {
 }
 
 impl ViewContext for DummyContext {
+    fn has_mouse_capture(&self) -> bool {
+        false
+    }
+
     fn find_identity(&self, _scope: NodeId, _key: &str) -> Result<Option<NodeId>> {
         Ok(None)
     }

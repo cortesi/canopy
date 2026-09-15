@@ -42,7 +42,7 @@ pub fn dracula() -> StyleMap {
         bg: BACKGROUND,
         frame: COMMENT,
         frame_focused: PURPLE,
-        frame_active: CYAN,
+        frame_thumb: CYAN,
         frame_title: FOREGROUND,
         accent: PURPLE,
         muted_fg: FOREGROUND,

@@ -1,14 +1,19 @@
+use std::mem;
+
 use canopy::{
-    BindingId, BindingOwner, BindingPhase, BindingScope, Loader, NodeId, buf,
+    BindingId, BindingOwner, BindingPhase, BindingScope, Context, ContextExt, Loader, NodeId,
+    ViewContext, Widget, buf,
     error::Result,
     event::{key, mouse},
     geom::{Point, PointI32, Size},
     help::{AvailableBinding, BindingSnapshot},
+    layout::Layout,
     path::Path,
     testing::harness::Harness,
 };
 
 use super::{binding_list::BindingList, panel::ControlFooter};
+use crate::Frame;
 
 impl Loader for ControlFooter {}
 
@@ -157,7 +162,7 @@ fn tiny_and_wide_key_buffers_do_not_overflow() -> Result<()> {
         1,
         vec![binding(1, 'a', "Alpha", BindingPhase::BeforeWidget)],
     )?;
-    tiny.tbuf().assert_matches(buf!["█"]);
+    tiny.tbuf().assert_matches(buf!["a"]);
 
     let wide = harness_with(
         12,
@@ -201,9 +206,7 @@ fn scrolled_and_resized_buffers_have_exact_rows() -> Result<()> {
         modifiers: key::Empty,
         location: PointI32 { x: 0, y: 0 },
     })?;
-    harness
-        .tbuf()
-        .assert_matches(buf!["  Beta" "c              █" "  Gamma        █"]);
+    harness.tbuf().assert_matches(buf!["  Beta" "c" "  Gamma"]);
 
     harness.canopy.set_root_size(Size::new(16, 8))?;
     harness.render()?;
@@ -221,7 +224,7 @@ fn scrolled_and_resized_buffers_have_exact_rows() -> Result<()> {
 }
 
 #[test]
-fn wheel_indicator_and_resize_keep_scroll_within_the_exact_canvas() -> Result<()> {
+fn wheel_and_resize_keep_scroll_within_the_exact_canvas() -> Result<()> {
     let bindings = (0..12)
         .map(|index| {
             binding(
@@ -245,18 +248,17 @@ fn wheel_indicator_and_resize_keep_scroll_within_the_exact_canvas() -> Result<()
         .with_root_view(|context| context.view_of(harness.root).expect("list view"));
     assert_eq!(after_wheel.scroll.y, 3);
 
-    harness.mouse(mouse::MouseEvent {
-        action: mouse::Action::Down,
-        button: mouse::Button::Left,
-        modifiers: key::Empty,
-        location: PointI32 { x: 9, y: 3 },
+    harness.with_root_context(|list: &mut BindingList, context| {
+        list.scroll_to_bottom(context);
+        Ok(())
     })?;
-    let after_click = harness
+    harness.render()?;
+    let at_bottom = harness
         .canopy
         .with_root_view(|context| context.view_of(harness.root).expect("list view"));
     assert_eq!(
-        after_click.scroll.y,
-        after_click.canvas.h.saturating_sub(after_click.content.h)
+        at_bottom.scroll.y,
+        at_bottom.canvas.h.saturating_sub(at_bottom.content.h)
     );
 
     harness.canopy.set_root_size(Size::new(10, 40))?;
@@ -272,7 +274,7 @@ fn wheel_indicator_and_resize_keep_scroll_within_the_exact_canvas() -> Result<()
 }
 
 #[test]
-fn scrolling_reserves_a_gutter_instead_of_overwriting_action_text() -> Result<()> {
+fn a_scrolling_list_wraps_actions_across_its_full_width() -> Result<()> {
     let harness = harness_with(
         32,
         2,
@@ -287,19 +289,9 @@ fn scrolling_reserves_a_gutter_instead_of_overwriting_action_text() -> Result<()
             binding(3, 'c', "Last action", BindingPhase::BeforeWidget),
         ],
     )?;
-    for y in 0..2 {
-        assert_eq!(
-            harness
-                .buf()
-                .get(Point { x: 30, y })
-                .unwrap()
-                .rendered_text(),
-            " "
-        );
-    }
     harness.tbuf().assert_matches(buf![
-        "a  123456789012345678901234567 █"
-        "   89"
+        "a  12345678901234567890123456789"
+        "b  Another action"
     ]);
     Ok(())
 }
@@ -472,20 +464,50 @@ fn scroll_thumb_spans_the_visible_fraction() -> Result<()> {
             )
         })
         .collect();
-    let mut harness = harness_with(40, 4, bindings)?;
+    // The frame leaves the list 40 columns and four rows.
+    let mut harness = Harness::builder(FramedList(bindings)).size(42, 6).build()?;
+    harness.render()?;
     let thumb_rows = |harness: &Harness| {
-        (0..4)
-            .filter(|&y| harness.buf().get(Point { x: 39, y }).unwrap().ch == '█')
+        (0..6)
+            .filter(|&y| harness.buf().get(Point { x: 41, y }).unwrap().ch == '█')
             .collect::<Vec<_>>()
     };
-    // Eight rows through a four-row view: the thumb covers half the track.
-    assert_eq!(thumb_rows(&harness), [0, 1]);
+    // Eight rows through a four-row view: the thumb covers half the track
+    // beside the list rows.
+    assert_eq!(thumb_rows(&harness), [1, 2]);
 
-    harness.with_root_context(|list: &mut BindingList, context| {
-        list.scroll_to_bottom(context);
-        Ok(())
+    harness.canopy.with_root_context(|context| {
+        let root = context.node_id();
+        let frame = ViewContext::children_of(context, root)[0];
+        let list = ViewContext::children_of(context, frame)[0];
+        context.with_widget_mut(list, |list: &mut BindingList, context| {
+            list.scroll_to_bottom(context);
+            Ok(())
+        })
     })?;
     harness.render()?;
-    assert_eq!(thumb_rows(&harness), [2, 3]);
+    assert_eq!(thumb_rows(&harness), [3, 4]);
     Ok(())
 }
+
+/// Root that frames a binding list, as the help overlay does.
+struct FramedList(Vec<AvailableBinding>);
+
+impl Widget for FramedList {
+    fn layout(&self) -> Layout {
+        Layout::fill()
+    }
+
+    fn on_mount(&mut self, context: &mut dyn Context) -> Result<()> {
+        let root = context.node_id();
+        let frame = context.add_child_to(root, Frame::new())?;
+        let list = context.add_child_to(frame, BindingList::new())?;
+        let bindings = mem::take(&mut self.0);
+        context.with_widget_mut(list, |list: &mut BindingList, _| {
+            drop(list.replace_snapshot(Some(snapshot(root, bindings))));
+            Ok(())
+        })
+    }
+}
+
+impl Loader for FramedList {}

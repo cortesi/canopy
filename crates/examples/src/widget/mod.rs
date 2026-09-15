@@ -96,7 +96,7 @@ impl Widget for DemoHost {
                 .rules()
                 .fg("frame", Paint::solid(Color::Blue))
                 .fg("frame/focused", Paint::solid(Color::Blue))
-                .fg("frame/active", Paint::solid(Color::Blue))
+                .fg("frame/thumb", Paint::solid(Color::Blue))
                 .apply();
             ctx.set_style(style);
         }

@@ -136,7 +136,8 @@ const PALETTE: &[(&str, &[&str])] = &[
         &[
             "frame",
             "frame/focused",
-            "frame/active",
+            "frame/thumb",
+            "frame/thumb/active",
             "frame/title",
             "tabs/bar",
             "tabs/tab",

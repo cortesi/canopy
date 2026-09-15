@@ -185,6 +185,9 @@ pub trait ViewContext: sealed::ViewContext {
     /// Return the currently focused node, including one not yet laid out.
     fn focused_node(&self) -> Option<NodeId>;
 
+    /// Does the current node hold mouse capture?
+    fn has_mouse_capture(&self) -> bool;
+
     /// Is the current node on the focus path?
     fn is_on_focus_path(&self) -> bool {
         self.is_on_focus_path_of(self.node_id())
@@ -988,6 +991,10 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
 
     fn focused_node(&self) -> Option<NodeId> {
         self.core.focus
+    }
+
+    fn has_mouse_capture(&self) -> bool {
+        self.core.mouse_capture == Some(self.node_id)
     }
 
     fn is_on_focus_path_of(&self, node: NodeId) -> bool {

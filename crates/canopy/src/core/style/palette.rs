@@ -19,8 +19,8 @@ pub struct Palette {
     pub frame: Color,
     /// Border of the frame that holds focus.
     pub frame_focused: Color,
-    /// Border of the frame that owns the active subtree.
-    pub frame_active: Color,
+    /// Scrollbar thumbs on frame borders.
+    pub frame_thumb: Color,
     /// Frame title text.
     pub frame_title: Color,
     /// Primary accent: focus and selection.
@@ -68,7 +68,8 @@ pub fn theme(p: &Palette) -> StyleMap {
         )
         .fg("/frame", p.frame)
         .fg("/frame/focused", p.frame_focused)
-        .fg("/frame/active", p.frame_active)
+        .fg("/frame/thumb", p.frame_thumb)
+        .fg("/frame/thumb/active", p.frame_focused)
         .fg("/frame/title", p.frame_title)
         .fg("/blue", p.blue)
         .fg("/red", p.red)
@@ -140,7 +141,8 @@ pub fn theme(p: &Palette) -> StyleMap {
             &[
                 "/help/frame",
                 "/help/frame/focused",
-                "/help/frame/active",
+                "/help/frame/thumb",
+                "/help/frame/thumb/active",
                 "/help/frame/title",
             ],
             StyleBuilder::new().bg(p.panel_bg),

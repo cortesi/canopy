@@ -43,8 +43,7 @@ mod pad;
 mod panes;
 /// Application root widget.
 mod root;
-/// Proportional scrollbars for scrolling views.
-mod scrollbar;
+pub mod scrollbar;
 /// Selection widget.
 mod selector;
 /// Tabbed pages beneath a tab bar.
@@ -83,3 +82,5 @@ pub use wrap::wrap;
 
 #[cfg(test)]
 mod render_tests;
+#[cfg(test)]
+mod scrolling_tests;

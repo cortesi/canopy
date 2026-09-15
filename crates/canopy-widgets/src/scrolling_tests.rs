@@ -1,0 +1,549 @@
+//! Scroll target resolution and frame scrollbar tests.
+
+use std::{cell::RefCell, rc::Rc};
+
+use canopy::{
+    Context, ContextExt, EventOutcome, Loader, NodeId, NodeName, Widget,
+    error::Result,
+    event::{Event, key, mouse},
+    geom::{Point, PointI32, Rect, Size},
+    layout::{CanvasContext, Direction, Edges, Layout},
+    style::Color,
+    testing::harness::Harness,
+};
+
+use crate::{
+    Frame, Tabs,
+    scrollbar::{Axis, ScrollTarget, scroll_target},
+};
+
+/// Builds a subtree under the scene root and returns the nodes a test uses.
+type Build = Box<dyn FnOnce(&mut dyn Context) -> Result<Vec<NodeId>>>;
+
+/// Root that builds a test subtree when mounted.
+struct Scene {
+    /// Subtree builder, consumed on mount.
+    build: Option<Build>,
+    /// Nodes the builder returned.
+    nodes: Rc<RefCell<Vec<NodeId>>>,
+}
+
+impl Widget for Scene {
+    fn layout(&self) -> Layout {
+        Layout::fill()
+    }
+
+    fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
+        if let Some(build) = self.build.take() {
+            *self.nodes.borrow_mut() = build(c)?;
+        }
+        Ok(())
+    }
+}
+
+impl Loader for Scene {}
+
+/// A leaf with a fixed canvas.
+struct Surface {
+    /// Canvas size in content cells.
+    canvas: Size,
+}
+
+impl Widget for Surface {
+    fn canvas(&self, _view: Size, _ctx: &CanvasContext) -> Size {
+        self.canvas
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("surface")
+    }
+}
+
+/// A container that supplies only a layout.
+struct Boxed(Layout);
+
+impl Widget for Boxed {
+    fn layout(&self) -> Layout {
+        self.0
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("boxed")
+    }
+}
+
+/// Render a scene of the given size and return the nodes its builder chose.
+fn scene(
+    width: u32,
+    height: u32,
+    build: impl FnOnce(&mut dyn Context) -> Result<Vec<NodeId>> + 'static,
+) -> Result<(Harness, Vec<NodeId>)> {
+    let nodes = Rc::new(RefCell::new(Vec::new()));
+    let root = Scene {
+        build: Some(Box::new(build)),
+        nodes: Rc::clone(&nodes),
+    };
+    let mut harness = Harness::builder(root).size(width, height).build()?;
+    harness
+        .canopy
+        .style_mut()
+        .rules()
+        .fg("frame/thumb", Color::Red)
+        .fg("frame/thumb/active", Color::Green)
+        .apply();
+    harness.render()?;
+    let nodes = nodes.borrow().clone();
+    Ok((harness, nodes))
+}
+
+/// Add a fill-sized surface with `canvas` under `parent`.
+fn surface(c: &mut dyn Context, parent: NodeId, canvas: Size) -> Result<NodeId> {
+    let node = c.add_child_to(parent, Surface { canvas })?;
+    c.set_layout_of(node, Layout::fill())?;
+    Ok(node.into())
+}
+
+/// Add a layout-only container under `parent`.
+fn boxed(c: &mut dyn Context, parent: NodeId, layout: Layout) -> Result<NodeId> {
+    Ok(c.add_child_to(parent, Boxed(layout))?.into())
+}
+
+/// Add a frame holding a fill-sized surface, returning both nodes.
+fn framed_surface(c: &mut dyn Context, canvas: Size) -> Result<Vec<NodeId>> {
+    let root = c.node_id();
+    let frame: NodeId = c.add_child_to(root, Frame::new())?.into();
+    let body = surface(c, frame, canvas)?;
+    Ok(vec![frame, body])
+}
+
+/// Resolve the target beneath `owner`.
+fn target(harness: &Harness, owner: NodeId, axis: Axis) -> Option<ScrollTarget> {
+    harness
+        .canopy
+        .with_root_view(|ctx| scroll_target(ctx, owner, axis))
+        .expect("targets resolve")
+}
+
+/// Return a node's scroll offset.
+fn scroll(harness: &Harness, node: NodeId) -> Point {
+    harness
+        .canopy
+        .with_root_view(|ctx| ctx.view_of(node).expect("live node").scroll)
+}
+
+/// Return whether `node` holds mouse capture.
+fn captured(harness: &mut Harness, node: NodeId) -> Result<bool> {
+    harness
+        .canopy
+        .with_context(node, |c| Ok(c.has_mouse_capture()))
+}
+
+/// Return the rows of column `x`, below `height`, that show `glyph`.
+fn rows_with(harness: &Harness, x: u32, height: u32, glyph: char) -> Vec<u32> {
+    (0..height)
+        .filter(|&y| {
+            harness
+                .buf()
+                .get(Point { x, y })
+                .is_some_and(|cell| cell.ch == glyph)
+        })
+        .collect()
+}
+
+/// Return the columns of row `y`, below `width`, that show `glyph`.
+fn columns_with(harness: &Harness, y: u32, width: u32, glyph: char) -> Vec<u32> {
+    (0..width)
+        .filter(|&x| {
+            harness
+                .buf()
+                .get(Point { x, y })
+                .is_some_and(|cell| cell.ch == glyph)
+        })
+        .collect()
+}
+
+/// Return the foreground color drawn at a cell.
+fn color_at(harness: &Harness, x: u32, y: u32) -> Option<Color> {
+    harness.buf().get(Point { x, y }).map(|cell| cell.style.fg)
+}
+
+/// Build a mouse event at a screen location.
+fn pointer(action: mouse::Action, x: i32, y: i32) -> mouse::MouseEvent {
+    let button = match action {
+        mouse::Action::Down | mouse::Action::Up | mouse::Action::Drag => mouse::Button::Left,
+        _ => mouse::Button::None,
+    };
+    mouse::MouseEvent {
+        action,
+        button,
+        modifiers: key::Empty,
+        location: PointI32 { x, y },
+    }
+}
+
+#[test]
+fn the_target_is_the_one_overflowing_node_beneath_wrappers() -> Result<()> {
+    let (harness, nodes) = scene(20, 10, |c| {
+        let root = c.node_id();
+        let owner = boxed(c, root, Layout::fill())?;
+        let wrapper = boxed(c, owner, Layout::fill())?;
+        let inner = surface(c, wrapper, Size::new(5, 50))?;
+        Ok(vec![owner, inner])
+    })?;
+    let (owner, inner) = (nodes[0], nodes[1]);
+    assert_eq!(
+        target(&harness, owner, Axis::Vertical),
+        Some(ScrollTarget {
+            node: inner,
+            viewport: Rect::new(0, 0, 20, 10),
+        })
+    );
+    assert_eq!(target(&harness, owner, Axis::Horizontal), None);
+    Ok(())
+}
+
+#[test]
+fn sibling_targets_are_ambiguous_at_every_enclosing_level() -> Result<()> {
+    let (mut harness, nodes) = scene(20, 10, |c| {
+        let root = c.node_id();
+        let owner = boxed(c, root, Layout::fill())?;
+        let pair = boxed(c, owner, Layout::fill())?;
+        let first = surface(c, pair, Size::new(1, 50))?;
+        let second = surface(c, pair, Size::new(1, 50))?;
+        surface(c, owner, Size::new(1, 1))?;
+        Ok(vec![owner, first, second])
+    })?;
+    let (owner, first, second) = (nodes[0], nodes[1], nodes[2]);
+    assert_eq!(target(&harness, owner, Axis::Vertical), None);
+
+    harness
+        .canopy
+        .with_root_context(|c| c.set_hidden_of(second, true).map(|_| ()))?;
+    harness.render()?;
+    assert_eq!(
+        target(&harness, owner, Axis::Vertical).map(|found| found.node),
+        Some(first)
+    );
+    Ok(())
+}
+
+#[test]
+fn only_the_visible_tab_page_is_a_target() -> Result<()> {
+    let (mut harness, nodes) = scene(20, 10, |c| {
+        let root = c.node_id();
+        let owner = boxed(c, root, Layout::fill())?;
+        let tabs = c.add_child_to(owner, Tabs::new())?;
+        let pages = c.with_widget_mut(tabs, |tabs: &mut Tabs, c| {
+            let canvas = Size::new(1, 50);
+            let first = tabs.add_tab(c, "One", Surface { canvas })?;
+            let second = tabs.add_tab(c, "Two", Surface { canvas })?;
+            Ok([NodeId::from(first), NodeId::from(second)])
+        })?;
+        Ok(vec![owner, tabs.into(), pages[0], pages[1]])
+    })?;
+    let (owner, tabs, first, second) = (nodes[0], nodes[1], nodes[2], nodes[3]);
+    let found = target(&harness, owner, Axis::Vertical).expect("the first page");
+    assert_eq!(found.node, first);
+    assert_eq!(
+        found.viewport.tl.y, 1,
+        "the tab bar is outside the viewport"
+    );
+
+    harness
+        .canopy
+        .with_root_context(|c| c.with_widget_mut(tabs, |tabs: &mut Tabs, c| tabs.select(c, 1)))?;
+    harness.render()?;
+    assert_eq!(
+        target(&harness, owner, Axis::Vertical).map(|found| found.node),
+        Some(second)
+    );
+    Ok(())
+}
+
+#[test]
+fn a_nested_owner_hides_its_subtree_from_enclosing_owners() -> Result<()> {
+    let (harness, nodes) = scene(20, 10, |c| {
+        let root = c.node_id();
+        let owner = boxed(c, root, Layout::fill())?;
+        let frame: NodeId = c.add_child_to(owner, Frame::new())?.into();
+        let inner = surface(c, frame, Size::new(1, 50))?;
+        let other = surface(c, owner, Size::new(1, 50))?;
+        Ok(vec![owner, frame, inner, other])
+    })?;
+    let (owner, frame, inner, other) = (nodes[0], nodes[1], nodes[2], nodes[3]);
+    assert_eq!(
+        target(&harness, owner, Axis::Vertical).map(|found| found.node),
+        Some(other)
+    );
+    assert_eq!(
+        target(&harness, frame, Axis::Vertical).map(|found| found.node),
+        Some(inner)
+    );
+    Ok(())
+}
+
+#[test]
+fn a_detached_owner_resolves_no_target_from_cached_views() -> Result<()> {
+    let (mut harness, nodes) = scene(20, 10, |c| {
+        let root = c.node_id();
+        let owner = boxed(c, root, Layout::fill())?;
+        surface(c, owner, Size::new(1, 50))?;
+        Ok(vec![owner])
+    })?;
+    let owner = nodes[0];
+    assert!(target(&harness, owner, Axis::Vertical).is_some());
+
+    harness.canopy.with_root_context(|c| c.detach(owner))?;
+    let cached = harness
+        .canopy
+        .with_root_view(|ctx| ctx.view_of(owner).expect("detached node"));
+    assert!(
+        !cached.is_empty(),
+        "the detached view keeps its last layout"
+    );
+    assert_eq!(target(&harness, owner, Axis::Vertical), None);
+    Ok(())
+}
+
+/// Add a 30 by 30 cell surface with a 60 by 60 cell canvas under `parent`.
+fn oversized_surface(c: &mut dyn Context, parent: NodeId) -> Result<NodeId> {
+    let node = c.add_child_to(
+        parent,
+        Surface {
+            canvas: Size::new(60, 60),
+        },
+    )?;
+    c.set_layout_of(node, Layout::column().fixed_width(30).fixed_height(30))?;
+    Ok(node.into())
+}
+
+#[test]
+fn viewports_are_clipped_by_every_ancestor_and_the_screen() -> Result<()> {
+    let (harness, nodes) = scene(20, 10, |c| {
+        let root = c.node_id();
+        let owner = boxed(c, root, Layout::fill())?;
+        let clip = boxed(
+            c,
+            owner,
+            Layout::column()
+                .fixed_width(12)
+                .fixed_height(5)
+                .padding(Edges::all(1)),
+        )?;
+        oversized_surface(c, clip)?;
+        Ok(vec![clip])
+    })?;
+    assert_eq!(
+        target(&harness, nodes[0], Axis::Vertical).map(|found| found.viewport),
+        Some(Rect::new(1, 1, 10, 3)),
+        "the clip box's content bounds its child"
+    );
+
+    let (harness, nodes) = scene(20, 10, |c| {
+        let root = c.node_id();
+        let owner = boxed(c, root, Layout::fill())?;
+        oversized_surface(c, owner)?;
+        Ok(vec![owner])
+    })?;
+    assert_eq!(
+        target(&harness, nodes[0], Axis::Horizontal).map(|found| found.viewport),
+        Some(Rect::new(0, 0, 20, 10)),
+        "the screen bounds a surface larger than itself"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_frame_track_covers_only_the_rows_beside_its_target() -> Result<()> {
+    let (mut harness, nodes) = scene(20, 10, |c| {
+        let root = c.node_id();
+        let frame: NodeId = c.add_child_to(root, Frame::new())?.into();
+        let column = boxed(c, frame, Layout::fill())?;
+        let bar = Layout::column().flex_horizontal(1).fixed_height(1);
+        boxed(c, column, bar)?;
+        let body = surface(c, column, Size::new(1, 100))?;
+        boxed(c, column, bar)?;
+        Ok(vec![body])
+    })?;
+    let body = nodes[0];
+    // The header takes row 1, the body rows 2 through 7, and the footer row 8.
+    assert_eq!(rows_with(&harness, 19, 10, '█'), [2]);
+
+    harness
+        .canopy
+        .with_root_context(|c| c.scroll_to_of(body, 0, u32::MAX).map(|_| ()))?;
+    harness.render()?;
+    assert_eq!(rows_with(&harness, 19, 10, '█'), [7]);
+    Ok(())
+}
+
+#[test]
+fn a_sidebar_beside_the_target_removes_only_the_vertical_track() -> Result<()> {
+    let (harness, _) = scene(20, 10, |c| {
+        let root = c.node_id();
+        let frame: NodeId = c.add_child_to(root, Frame::new())?.into();
+        let row = boxed(c, frame, Layout::fill().direction(Direction::Row))?;
+        surface(c, row, Size::new(100, 100))?;
+        boxed(c, row, Layout::column().fixed_width(3).flex_vertical(1))?;
+        Ok(Vec::new())
+    })?;
+    assert_eq!(rows_with(&harness, 19, 10, '█'), Vec::<u32>::new());
+    let thumb = columns_with(&harness, 9, 20, '▄');
+    assert!(
+        !thumb.is_empty(),
+        "the body still reaches the bottom border"
+    );
+    assert!(
+        thumb.iter().all(|x| (1..=15).contains(x)),
+        "the bottom track stays beside the body, got {thumb:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn wheel_input_scrolls_the_target_only_from_its_track() -> Result<()> {
+    let (mut harness, nodes) = scene(20, 10, |c| framed_surface(c, Size::new(1, 100)))?;
+    let body = nodes[1];
+
+    harness.mouse(pointer(mouse::Action::ScrollDown, 19, 4))?;
+    assert_eq!(scroll(&harness, body), Point { x: 0, y: 3 });
+    for (x, y) in [(10, 0), (19, 0), (19, 9)] {
+        harness.mouse(pointer(mouse::Action::ScrollDown, x, y))?;
+        assert_eq!(
+            scroll(&harness, body),
+            Point { x: 0, y: 3 },
+            "the title row and corners are not track cells: ({x}, {y})"
+        );
+    }
+    harness.mouse(pointer(mouse::Action::ScrollUp, 19, 4))?;
+    assert_eq!(scroll(&harness, body), Point::ZERO);
+    Ok(())
+}
+
+#[test]
+fn dragging_a_thumb_scrolls_its_target_and_releases_capture() -> Result<()> {
+    let (mut harness, nodes) = scene(20, 10, |c| framed_surface(c, Size::new(1, 64)))?;
+    let (frame, body) = (nodes[0], nodes[1]);
+    assert_eq!(color_at(&harness, 19, 1), Some(Color::Red));
+
+    // A press below the thumb moves the thumb under the pointer.
+    harness.mouse(pointer(mouse::Action::Down, 19, 8))?;
+    assert_eq!(scroll(&harness, body), Point { x: 0, y: 56 });
+    assert!(captured(&mut harness, frame)?);
+    assert_eq!(color_at(&harness, 19, 8), Some(Color::Green));
+
+    harness.mouse(pointer(mouse::Action::Drag, 19, 1))?;
+    assert_eq!(scroll(&harness, body), Point::ZERO);
+    harness.mouse(pointer(mouse::Action::Drag, 30, 50))?;
+    assert_eq!(scroll(&harness, body), Point { x: 0, y: 56 });
+
+    harness.mouse(pointer(mouse::Action::Up, 30, 50))?;
+    assert!(!captured(&mut harness, frame)?);
+    assert_eq!(color_at(&harness, 19, 8), Some(Color::Red));
+    Ok(())
+}
+
+#[test]
+fn a_thumb_without_travel_is_drawn_but_never_dragged() -> Result<()> {
+    // Two extra rows over a one-row track leave the thumb nowhere to go.
+    let (mut harness, nodes) = scene(20, 3, |c| framed_surface(c, Size::new(1, 3)))?;
+    let (frame, body) = (nodes[0], nodes[1]);
+    assert_eq!(rows_with(&harness, 19, 3, '█'), [1]);
+    harness.mouse(pointer(mouse::Action::Down, 19, 1))?;
+    assert!(!captured(&mut harness, frame)?);
+    assert_eq!(scroll(&harness, body), Point::ZERO);
+    harness.mouse(pointer(mouse::Action::ScrollDown, 19, 1))?;
+    assert_eq!(
+        scroll(&harness, body),
+        Point { x: 0, y: 2 },
+        "the wheel still reaches the end"
+    );
+    Ok(())
+}
+
+#[test]
+fn another_capture_owner_ends_a_drag_and_keeps_its_capture() -> Result<()> {
+    let (mut harness, nodes) = scene(20, 10, |c| framed_surface(c, Size::new(1, 64)))?;
+    let (frame, body) = (nodes[0], nodes[1]);
+    harness.mouse(pointer(mouse::Action::Down, 19, 8))?;
+    assert!(captured(&mut harness, frame)?);
+
+    harness
+        .canopy
+        .with_context(body, |c| c.capture_mouse().map(|_| ()))?;
+    let outcome = harness.canopy.with_context(frame, |c| {
+        c.with_widget_mut(frame, |frame: &mut Frame, c| {
+            frame.on_event(&Event::Mouse(pointer(mouse::Action::Drag, 19, 1)), c)
+        })
+    })?;
+    assert_eq!(outcome, EventOutcome::Ignore);
+    assert!(captured(&mut harness, body)?, "the new owner keeps capture");
+    assert_eq!(scroll(&harness, body), Point { x: 0, y: 56 });
+
+    harness.render()?;
+    assert_eq!(color_at(&harness, 19, 8), Some(Color::Red));
+    Ok(())
+}
+
+#[test]
+fn a_drag_follows_range_changes_and_ends_when_its_target_leaves() -> Result<()> {
+    let (mut harness, nodes) = scene(20, 10, |c| framed_surface(c, Size::new(1, 64)))?;
+    let (frame, body) = (nodes[0], nodes[1]);
+    harness.mouse(pointer(mouse::Action::Down, 19, 8))?;
+
+    harness.with_widget(body, |surface: &mut Surface| {
+        surface.canvas = Size::new(1, 128);
+    });
+    harness.canopy.with_context(body, |c| {
+        c.invalidate_layout();
+        Ok(())
+    })?;
+    harness.render()?;
+    harness.mouse(pointer(mouse::Action::Drag, 19, 8))?;
+    assert_eq!(scroll(&harness, body), Point { x: 0, y: 120 });
+    assert!(captured(&mut harness, frame)?);
+
+    harness
+        .canopy
+        .with_root_context(|c| c.remove_subtree(body))?;
+    harness.render()?;
+    harness.mouse(pointer(mouse::Action::Drag, 19, 4))?;
+    assert!(!captured(&mut harness, frame)?);
+    Ok(())
+}
+
+#[test]
+fn rendering_a_stale_drag_keeps_capture_until_the_next_event() -> Result<()> {
+    let (mut harness, nodes) = scene(20, 10, |c| framed_surface(c, Size::new(1, 64)))?;
+    let (frame, body) = (nodes[0], nodes[1]);
+    harness.mouse(pointer(mouse::Action::Down, 19, 8))?;
+
+    harness
+        .canopy
+        .with_root_context(|c| c.set_hidden_of(body, true).map(|_| ()))?;
+    harness.render()?;
+    assert!(rows_with(&harness, 19, 10, '█').is_empty());
+    assert!(
+        captured(&mut harness, frame)?,
+        "rendering cannot release capture"
+    );
+
+    // Hiding a node clears its scroll offset, so the thumb returns at the top.
+    harness
+        .canopy
+        .with_root_context(|c| c.set_hidden_of(body, false).map(|_| ()))?;
+    harness.render()?;
+    assert_eq!(
+        color_at(&harness, 19, 1),
+        Some(Color::Red),
+        "a cancelled drag never returns to its thumb"
+    );
+    harness.mouse(pointer(mouse::Action::Drag, 19, 5))?;
+    assert!(!captured(&mut harness, frame)?);
+    assert_eq!(
+        scroll(&harness, body),
+        Point::ZERO,
+        "the event that ends a drag does not scroll"
+    );
+    Ok(())
+}

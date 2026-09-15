@@ -50,7 +50,7 @@ pub fn gruvbox_dark() -> StyleMap {
         bg: DARK0,
         frame: DARK4,
         frame_focused: BLUE,
-        frame_active: LIGHT3,
+        frame_thumb: LIGHT3,
         frame_title: LIGHT0,
         accent: BLUE,
         muted_fg: LIGHT3,

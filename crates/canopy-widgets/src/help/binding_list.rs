@@ -3,21 +3,16 @@
 use std::mem;
 
 use canopy::{
-    Canopy, Context, EventOutcome, Loader, NodeName, Render, View, ViewContext, Widget,
+    Canopy, Context, Loader, NodeName, Render, ViewContext, Widget,
     commands::CommandStatus,
     derive_commands,
     error::Result,
-    event::{
-        Event,
-        key::{Empty, Key, KeyCode},
-    },
-    geom::{Line, Rect, Size},
+    event::key::{Empty, Key, KeyCode},
+    geom::{Line, Size},
     help::{AvailableBinding, BindingSnapshot},
     layout::{CanvasContext, Layout, MeasureOverflow},
 };
 use unicode_width::UnicodeWidthStr;
-
-use crate::Scrollbar;
 
 /// Widest row of keys for one action before further keys continue below.
 const KEY_ROW_WIDTH: usize = 20;
@@ -33,21 +28,18 @@ pub(super) struct DisplayLine {
 }
 
 /// Scrollable list of effective key bindings.
+///
+/// The list uses its full width. An enclosing frame draws its scroll position.
 pub struct BindingList {
     /// Captured application context, absent while help is closed.
     snapshot: Option<BindingSnapshot>,
-    /// Scrollbar drawn in the gutter the list keeps clear while it scrolls.
-    scrollbar: Scrollbar,
 }
 
 #[derive_commands]
 impl BindingList {
     /// Construct an empty list.
     pub(crate) const fn new() -> Self {
-        Self {
-            snapshot: None,
-            scrollbar: Scrollbar::vertical("help/indicator", '█'),
-        }
+        Self { snapshot: None }
     }
 
     /// Replace the captured snapshot and return the prior value.
@@ -109,18 +101,6 @@ impl BindingList {
             .map_or(&[][..], |snapshot| snapshot.bindings.as_slice());
         display_lines(bindings, width)
     }
-
-    /// Reserve a gutter when scrolling so the scrollbar never covers text.
-    ///
-    /// Returns the display lines and the text width used to build them.
-    fn viewport_lines(&self, view: Size) -> (Vec<DisplayLine>, u32) {
-        let lines = self.display_lines(view.w);
-        if lines.len() > view.h as usize && view.w > 2 {
-            (self.display_lines(view.w - 2), view.w - 2)
-        } else {
-            (lines, view.w)
-        }
-    }
 }
 
 impl Loader for BindingList {
@@ -139,32 +119,16 @@ impl Widget for BindingList {
     }
 
     fn canvas(&self, view: Size, _context: &CanvasContext) -> Size {
-        let (lines, _) = self.viewport_lines(view);
+        let lines = self.display_lines(view.w);
         Size::new(view.w, u32::try_from(lines.len()).unwrap_or(u32::MAX))
-    }
-
-    fn on_event(&mut self, event: &Event, context: &mut dyn Context) -> Result<EventOutcome> {
-        let Event::Mouse(mouse) = event else {
-            return Ok(EventOutcome::Ignore);
-        };
-        let view = context.view();
-        self.scrollbar.handle_mouse(
-            context,
-            mouse,
-            &view,
-            scroll_track(&view),
-            |context, x, y| {
-                context.scroll_to(x, y);
-                Ok(())
-            },
-        )
     }
 
     fn render(&mut self, render: &mut Render, context: &dyn ViewContext) -> Result<()> {
         let view = context.view();
         let rect = view.outer_rect_local();
         render.fill("help/panel", rect, ' ')?;
-        let (lines, width) = self.viewport_lines(view.content.size());
+        let width = view.content.w;
+        let lines = self.display_lines(width);
         let viewport = view.view_rect();
         for (index, line) in lines
             .iter()
@@ -175,22 +139,12 @@ impl Widget for BindingList {
             let y = u32::try_from(index).unwrap_or(u32::MAX) - viewport.tl.y;
             render_line(render, line, 0, y, width)?;
         }
-
-        if view.content.w > 0 && view.content.h > 0 {
-            self.scrollbar.render(render, &view, scroll_track(&view))?;
-        }
         Ok(())
     }
 
     fn name(&self) -> NodeName {
         NodeName::convert("binding_list")
     }
-}
-
-/// Return the scrollbar track: the last content column, which the list keeps
-/// clear while it scrolls.
-fn scroll_track(view: &View) -> Rect {
-    Rect::new(view.content.w.saturating_sub(1), 0, 1, view.content.h)
 }
 
 /// Bindings that share one action, shown together.

@@ -219,6 +219,40 @@ Layout clears their subtree caches.
 Layout errors must surface. Re-entrant widget access and missing nodes must not
 become zero measurements or fallback canvases.
 
+## Scrollbars
+
+Each node owns its canvas and scroll offset. Layout allocates the viewport, the
+canvas defines the scroll range, and the widgets around a node display and
+control that state. A node never draws its own scrollbar.
+
+A widget that returns true from `Widget::owns_scrollbars()` displays positions
+for its subtree. `Frame` is one. `scrollbar::scroll_target()` resolves the node
+an owner draws for one axis. It starts at the owner's children and visits the
+settled views. It skips nodes with no visible content, which include hidden and
+display-suppressed nodes. It stops at a nested owner, so no node has two owners
+on one axis, and it returns a node whose canvas exceeds its content on that
+axis without descending further. Siblings combine: one result is unique, more
+than one is ambiguous, and an ambiguous subtree makes every enclosing result
+ambiguous. An ambiguous or empty result draws nothing. The target's viewport is
+its content rectangle, clipped by every ancestor's content and by the screen.
+
+A frame draws the vertical target on its right border and the horizontal target
+on its bottom border. The track covers only the border cells beside the target's
+viewport, so corners, tab bars, headers, and footers stay plain. A track exists
+only when the target reaches the border: every node from the target up to the
+frame's child ends at its parent's content edge on that side. A sidebar beside
+the target therefore removes the vertical track.
+
+Painting and input resolve the same tracks. Wheel input on a track scrolls the
+target with `Context::scroll_to_of` only when the step can move. A press starts
+a drag that stores the target, the track, and the pointer's offset within the
+thumb. Each later event and render resolves the track again. A drag continues
+while the same target and track exist, against the target's current range. It
+ends when either changes. It also ends when another node takes mouse capture,
+without releasing that node's capture. Rendering cannot release capture, so a
+render that finds the drag invalid draws no active thumb, and the next event
+releases capture.
+
 ## Rendering
 
 Rendering consumes current layout and view state. Canopy renders visible nodes in

@@ -25,6 +25,15 @@ label uses `tabs/tab`, and the active label uses `tabs/tab/active`. While focus
 is within the tabs, the active label uses `tabs/tab/active/focused`, which falls
 back to `tabs/tab/active`. The built-in themes define all four paths.
 
+## Frames
+
+`Frame` draws its border with `frame`, or `frame/focused` while focus is within
+the frame, and its title with `frame/title`. Scroll thumbs on the right and
+bottom borders use `frame/thumb`. While a drag holds a thumb, the thumb uses
+`frame/thumb/active`, which falls back to `frame/thumb`. The built-in themes
+define every frame path. The help overlay pushes a `help` layer, so its frame
+also uses the `help/frame` paths.
+
 ## States and fallback
 
 `canopy::style::WidgetState::layer()` maps states to ordinary layer strings:

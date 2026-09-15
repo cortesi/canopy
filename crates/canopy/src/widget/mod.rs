@@ -75,6 +75,16 @@ pub trait Widget: Any {
         None
     }
 
+    /// Whether this widget displays scroll positions for the subtree beneath
+    /// it.
+    ///
+    /// Scrollbar owners, such as frames, search their subtree for the node
+    /// whose position they draw. The search stops at a widget that returns
+    /// true, so no node is drawn by two owners.
+    fn owns_scrollbars(&self) -> bool {
+        false
+    }
+
     /// Lifetime of scheduled polling. Hiding never stops polling.
     ///
     /// Node lifetime preserves background work while detached. Attachment

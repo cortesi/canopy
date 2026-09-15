@@ -479,6 +479,103 @@ pub mod canopy_widgets {
         }
     }
 
+    pub mod scrollbar {
+        //! Proportional scrollbars and the nodes they display.
+        //!
+        //! A scrollbar owner, such as [`crate::Frame`], draws the scroll position of a
+        //! node beneath it. [`scroll_target`] finds that node for one axis. A
+        //! [`Scrollbar`] draws the node's thumb into a track in the owner's outer
+        //! coordinates and turns pointer input on the track into scrolling. Wheel
+        //! input on a track scrolls the node. A press on the track centers the thumb on
+        //! the pointer, and a drag keeps the thumb under the pointer.
+
+        /// The axis a scrollbar measures.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub enum Axis {
+            /// Rows, with a track that runs top to bottom.
+            Vertical,
+            /// Columns, with a track that runs left to right.
+            Horizontal,
+        }
+
+        /// A node whose canvas overflows its content along one axis.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct ScrollTarget {
+            /// Node whose view scrolls.
+            pub node: canopy::NodeId,
+            /// The node's content viewport in screen coordinates, clipped by the
+            /// content of every ancestor and by the screen.
+            pub viewport: canopy::geom::Rect,
+        }
+
+        /// A proportional scrollbar for one axis.
+        ///
+        /// The owner resolves its tracks before each render and event, and passes each
+        /// track with the node it scrolls. A drag stays bound to the node and track it
+        /// started on. It ends when either changes, or when another node takes mouse
+        /// capture.
+        #[derive(Clone, Copy, Debug)]
+        pub struct Scrollbar {}
+
+        /// Return the one node beneath `owner` whose canvas overflows along `axis`.
+        ///
+        /// The search skips nodes with no visible content, which includes hidden
+        /// nodes. It does not descend into a node that overflows or into a widget that
+        /// owns scrollbars. It returns `None` when no node qualifies, when more than
+        /// one does, or when `owner` is detached. The owner's own widget is never
+        /// read, so an owner can call this while it renders or handles an event.
+        pub fn scroll_target(
+            ctx: &dyn ViewContext,
+            owner: canopy::NodeId,
+            axis: Axis,
+        ) -> canopy::error::Result<Option<ScrollTarget>> {
+        }
+
+        impl Scrollbar {
+            #[must_use]
+            /// Also draw the track around the thumb with `style` and `glyph`.
+            pub const fn with_track(self, style: &'static str, glyph: char) -> Self {}
+
+            #[must_use]
+            /// Draw the thumb with `style` while a drag holds it.
+            pub const fn with_active(self, style: &'static str) -> Self {}
+
+            /// Construct a horizontal scrollbar whose thumb uses `style` and `glyph`.
+            pub const fn horizontal(style: &'static str, glyph: char) -> Self {}
+
+            /// Construct a vertical scrollbar whose thumb uses `style` and `glyph`.
+            pub const fn vertical(style: &'static str, glyph: char) -> Self {}
+
+            /// Draw the thumb of each track's node.
+            ///
+            /// `tracks` pairs each node with its track, in the outer coordinates of
+            /// the context's node. A node that shows its whole canvas draws nothing.
+            /// Rendering cannot release mouse capture, so a drag whose node or track
+            /// has changed draws no active thumb and ends at the next event.
+            pub fn render(
+                &mut self,
+                render: &mut Render<'_>,
+                ctx: &dyn ViewContext,
+                tracks: &[(NodeId, Rect)],
+            ) -> Result<()> {
+            }
+
+            /// Handle a mouse event for the scrollbars drawn in `tracks`.
+            ///
+            /// `tracks` holds the tracks resolved for this event, as passed to
+            /// [`Scrollbar::render`]. A press on a track captures the mouse for the
+            /// context's node and the release frees it. Returns
+            /// [`EventOutcome::Handle`] for events the scrollbar uses.
+            pub fn handle_mouse(
+                &mut self,
+                ctx: &mut dyn Context,
+                event: &mouse::MouseEvent,
+                tracks: &[(NodeId, Rect)],
+            ) -> Result<EventOutcome> {
+            }
+        }
+    }
+
     pub mod terminal {
         //! Terminal emulation widget.
 
@@ -791,10 +888,15 @@ pub mod canopy_widgets {
     where
         T: Label, {}
 
-    /// A frame around an element with optional title and indicators.
+    /// A frame around an element with an optional title and scroll positions.
     ///
-    /// The frame draws scrollbars on its right and bottom edges for its first
-    /// child, and scrolls that child when the scrollbars are pressed or dragged.
+    /// A frame owns the scrollbars of its subtree. On each axis it finds the one
+    /// node beneath it whose canvas overflows, and draws that node's thumb on the
+    /// right or bottom border beside the node's visible rows or columns. The
+    /// border carries a track only where that node reaches it, so a sidebar,
+    /// header, or footer keeps a plain border. Wheel input, presses, and drags on
+    /// a track scroll the node. Thumbs use `frame/thumb`, and
+    /// `frame/thumb/active` while a drag holds them.
     #[derive(Default)]
     pub struct Frame {}
 
@@ -825,7 +927,12 @@ pub mod canopy_widgets {
     #[derive(Default)]
     pub struct Root {}
 
-    /// A proportional scrollbar for one axis of a view.
+    /// A proportional scrollbar for one axis.
+    ///
+    /// The owner resolves its tracks before each render and event, and passes each
+    /// track with the node it scrolls. A drag stays bound to the node and track it
+    /// started on. It ends when either changes, or when another node takes mouse
+    /// capture.
     #[derive(Clone, Copy, Debug)]
     pub struct Scrollbar {}
 
@@ -1014,6 +1121,8 @@ pub mod canopy_widgets {
         fn name(&self) -> NodeName {}
 
         fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {}
+
+        fn owns_scrollbars(&self) -> bool {}
 
         fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
     }
@@ -1485,29 +1594,41 @@ pub mod canopy_widgets {
         /// Also draw the track around the thumb with `style` and `glyph`.
         pub const fn with_track(self, style: &'static str, glyph: char) -> Self {}
 
+        #[must_use]
+        /// Draw the thumb with `style` while a drag holds it.
+        pub const fn with_active(self, style: &'static str) -> Self {}
+
         /// Construct a horizontal scrollbar whose thumb uses `style` and `glyph`.
         pub const fn horizontal(style: &'static str, glyph: char) -> Self {}
 
         /// Construct a vertical scrollbar whose thumb uses `style` and `glyph`.
         pub const fn vertical(style: &'static str, glyph: char) -> Self {}
 
-        /// Draw the scrollbar of `view` into `track`.
-        pub fn render(&self, render: &mut Render<'_>, view: &View, track: Rect) -> Result<()> {}
-
-        /// Handle a mouse event for the scrollbar of `view`, drawn in `track`.
+        /// Draw the thumb of each track's node.
         ///
-        /// `track` is in the outer coordinates of the widget that receives the
-        /// event. A press on the track captures the mouse for that widget and the
-        /// release frees it. `scroll_to` moves the node that owns `view` to an
-        /// `(x, y)` scroll offset. Returns [`EventOutcome::Handle`] for events the
-        /// scrollbar uses.
+        /// `tracks` pairs each node with its track, in the outer coordinates of
+        /// the context's node. A node that shows its whole canvas draws nothing.
+        /// Rendering cannot release mouse capture, so a drag whose node or track
+        /// has changed draws no active thumb and ends at the next event.
+        pub fn render(
+            &mut self,
+            render: &mut Render<'_>,
+            ctx: &dyn ViewContext,
+            tracks: &[(NodeId, Rect)],
+        ) -> Result<()> {
+        }
+
+        /// Handle a mouse event for the scrollbars drawn in `tracks`.
+        ///
+        /// `tracks` holds the tracks resolved for this event, as passed to
+        /// [`Scrollbar::render`]. A press on a track captures the mouse for the
+        /// context's node and the release frees it. Returns
+        /// [`EventOutcome::Handle`] for events the scrollbar uses.
         pub fn handle_mouse(
             &mut self,
-            context: &mut dyn Context,
+            ctx: &mut dyn Context,
             event: &mouse::MouseEvent,
-            view: &View,
-            track: Rect,
-            scroll_to: impl FnOnce(&mut dyn Context, u32, u32) -> Result<()>,
+            tracks: &[(NodeId, Rect)],
         ) -> Result<EventOutcome> {
         }
     }

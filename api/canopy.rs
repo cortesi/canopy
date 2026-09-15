@@ -3583,6 +3583,9 @@ pub mod canopy {
         /// Return the currently focused node, including one not yet laid out.
         fn focused_node(&self) -> Option<NodeId>;
 
+        /// Does the current node hold mouse capture?
+        fn has_mouse_capture(&self) -> bool;
+
         /// Return whether a node exists and is attached to the root tree.
         fn is_attached_of(&self, node: NodeId) -> bool;
 
@@ -3740,6 +3743,14 @@ pub mod canopy {
         /// context operations are rejected and external cleanup must be safe to
         /// repeat.
         fn on_unmount(&mut self, _ctx: &mut dyn Context) {}
+
+        /// Whether this widget displays scroll positions for the subtree beneath
+        /// it.
+        ///
+        /// Scrollbar owners, such as frames, search their subtree for the node
+        /// whose position they draw. The search stops at a widget that returns
+        /// true, so no node is drawn by two owners.
+        fn owns_scrollbars(&self) -> bool {}
 
         /// Scheduled poll endpoint.
         ///

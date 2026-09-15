@@ -56,7 +56,7 @@ pub fn canopy_dark() -> StyleMap {
         bg: BG,
         frame: BORDER,
         frame_focused: MUTED,
-        frame_active: BORDER_ACTIVE,
+        frame_thumb: BORDER_ACTIVE,
         frame_title: TEXT,
         accent: ACCENT,
         muted_fg: SUBTEXT,
