@@ -429,9 +429,14 @@ help modal covers that panel, and hides it while help is open.
 
 ## Focus and Mouse Capture
 
-Focus is `Option<NodeId>`. A valid focus node exists and is attached to the root.
-After removal, recovery prefers the next focusable node, then the previous node,
-then a focusable ancestor.
+Focus is `Option<NodeId>`. A valid focus node exists, is attached to the root,
+is not hidden, and accepts focus. After removal, recovery prefers the next
+focusable node, then the previous node, then a focusable ancestor.
+
+Structural changes check focus without views, because a node added or shown
+since the last layout has none. A widget can focus such a node, for example in
+`on_mount` or when it shows a page. Layout checks focus again after it publishes
+views, and moves focus off a node that received no area.
 
 Mouse capture is also `Option<NodeId>`. A valid capture node exists and is
 attached to the root. Detaching or removing it clears capture.

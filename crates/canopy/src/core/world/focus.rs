@@ -167,14 +167,28 @@ impl Core {
         }
     }
 
-    /// Ensure the focus invariant is satisfied.
+    /// Ensure focus rests on an attached, visible node that accepts focus and
+    /// has a view.
+    ///
+    /// Layout runs this once it publishes views, so focus leaves a node that
+    /// layout gave no area.
     pub fn ensure_focus_valid(&mut self, removed_root: Option<NodeId>) -> Result<ChangeOutcome> {
+        self.repair_focus(removed_root, true)
+    }
+
+    /// Move focus off a node that is detached, hidden, or refuses focus. With
+    /// `require_view`, also move it off a node without a view.
+    fn repair_focus(
+        &mut self,
+        removed_root: Option<NodeId>,
+        require_view: bool,
+    ) -> Result<ChangeOutcome> {
         let Some(focus) = self.focus else {
             self.focus_hint = None;
             return Ok(ChangeOutcome::Unchanged);
         };
 
-        if self.is_attached_to_root(focus) && is_focus_candidate(self, focus, true) {
+        if self.is_attached_to_root(focus) && is_focus_candidate(self, focus, require_view) {
             self.focus_hint = None;
             return Ok(ChangeOutcome::Unchanged);
         }
@@ -258,7 +272,10 @@ impl Core {
 
     /// Ensure focus and mouse capture invariants after structural changes.
     pub fn ensure_invariants(&mut self, removed_root: Option<NodeId>) -> Result<()> {
-        self.ensure_focus_valid(removed_root)?;
+        // Views are stale between layouts, and a node added or shown since the
+        // last layout has none, so a structural change does not judge focus by
+        // its view. The next layout does.
+        self.repair_focus(removed_root, false)?;
         self.ensure_mouse_capture_valid()?;
         self.debug_assert_tree_invariants();
         Ok(())

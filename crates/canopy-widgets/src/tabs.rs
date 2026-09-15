@@ -1,8 +1,8 @@
 //! Tabbed pages beneath a one-row tab bar.
 
 use canopy::{
-    Context, ContextExt, EventOutcome, NodeId, NodeName, Render, TypedId, ViewContext, Widget,
-    derive_commands,
+    Context, ContextExt, EventOutcome, FocusScope, NodeId, NodeName, Render, TypedId, ViewContext,
+    Widget, derive_commands,
     error::Result,
     event::{Event, mouse},
     geom::{Line, Point},
@@ -95,11 +95,10 @@ impl Tabs {
         for (index, (_, page)) in self.tabs.iter().enumerate() {
             c.set_hidden_of(*page, index != self.active)?;
         }
-        if focus_left
-            && let Some((_, page)) = self.tabs.get(self.active)
-            && let Some(target) = c.focusable_leaves(*page).first().copied()
-        {
-            c.set_focus(target)?;
+        // A page that was hidden has no view until the next layout, so the
+        // target must not depend on one.
+        if focus_left && let Some((_, page)) = self.tabs.get(self.active) {
+            c.focus_first(FocusScope::Node(*page))?;
         }
         Ok(())
     }
@@ -188,5 +187,80 @@ impl Widget for Tabs {
 
     fn name(&self) -> NodeName {
         NodeName::convert("tabs")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{cell::RefCell, rc::Rc};
+
+    use canopy::{Loader, testing::harness::Harness};
+
+    use super::*;
+
+    /// A page that accepts focus.
+    struct Page;
+
+    impl Widget for Page {
+        fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+            true
+        }
+    }
+
+    /// Root that mounts tabs over two focusable pages.
+    struct Scene {
+        /// The tabs node, then each page node.
+        nodes: Rc<RefCell<Vec<NodeId>>>,
+    }
+
+    impl Widget for Scene {
+        fn layout(&self) -> Layout {
+            Layout::fill()
+        }
+
+        fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
+            let tabs = c.add_child(Tabs::new())?;
+            c.set_layout_of(tabs, Layout::fill())?;
+            let pages = c.with_widget_mut(tabs, |tabs: &mut Tabs, c| {
+                let one = tabs.add_tab(c, "One", Page)?;
+                let two = tabs.add_tab(c, "Two", Page)?;
+                Ok([NodeId::from(one), NodeId::from(two)])
+            })?;
+            *self.nodes.borrow_mut() = vec![tabs.into(), pages[0], pages[1]];
+            Ok(())
+        }
+    }
+
+    impl Loader for Scene {}
+
+    #[test]
+    fn switching_away_from_the_focused_page_focuses_the_new_page() -> Result<()> {
+        let nodes = Rc::new(RefCell::new(Vec::new()));
+        let scene = Scene {
+            nodes: Rc::clone(&nodes),
+        };
+        let mut harness = Harness::builder(scene).size(20, 5).build()?;
+        harness.render()?;
+        let [tabs, one, two] = nodes.borrow().clone()[..] else {
+            panic!("the scene mounts tabs and two pages");
+        };
+        let focused = |harness: &Harness| harness.canopy.with_root_view(|c| c.focused_node());
+        assert_eq!(focused(&harness), Some(one));
+
+        // The second page has never been laid out, so it has no view yet.
+        let tabs = |index| {
+            move |c: &mut dyn Context| {
+                c.with_widget_mut(tabs, |tabs: &mut Tabs, c| tabs.select(c, index))
+            }
+        };
+        harness.canopy.with_root_context(tabs(1))?;
+        assert_eq!(focused(&harness), Some(two));
+        harness.render()?;
+        assert_eq!(focused(&harness), Some(two));
+
+        harness.canopy.with_root_context(tabs(0))?;
+        harness.render()?;
+        assert_eq!(focused(&harness), Some(one));
+        Ok(())
     }
 }

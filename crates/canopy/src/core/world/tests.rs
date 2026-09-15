@@ -1698,6 +1698,26 @@ fn focus_recovery_excludes_hidden_ancestor_subtrees() -> Result<()> {
 }
 
 #[test]
+fn focus_on_a_node_awaiting_layout_survives_structural_edits() -> Result<()> {
+    let mut core = Core::new();
+    let focused = core.create_detached(FocusableWidget)?;
+    core.attach(core.root, focused)?;
+    core.set_focus(focused)?;
+
+    // Neither node has a view until layout runs.
+    let other = core.create_detached(FocusableWidget)?;
+    core.attach(core.root, other)?;
+    assert_eq!(core.focus_id(), Some(focused));
+
+    for id in [core.root, focused, other] {
+        core.set_layout_of(id, Layout::fill())?;
+    }
+    core.update_layout(Size::new(10, 10))?;
+    assert_eq!(core.focus_id(), Some(focused));
+    Ok(())
+}
+
+#[test]
 fn keyed_reconcile_preserves_ids_when_reordered_and_rejects_duplicates_first() -> Result<()> {
     let mut core = Core::new();
     let parent = core.create_detached(simple_widget())?;

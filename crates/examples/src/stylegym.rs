@@ -54,28 +54,20 @@ canopy.keymap({
 
 canopy.keymap({
     path = "style_sheet",
-    {
-        key = { "j", "Down" },
-        description = "Scroll down",
-        action = command.style_sheet.scroll("Down"),
-    },
-    {
-        key = { "k", "Up" },
-        description = "Scroll up",
-        action = command.style_sheet.scroll("Up"),
-    },
-    {
-        key = { "H", "shift-Left" },
-        description = "Scroll left",
-        action = command.style_sheet.scroll("Left"),
-    },
-    {
-        key = { "L", "shift-Right" },
-        description = "Scroll right",
-        action = command.style_sheet.scroll("Right"),
-    },
+    { key = { "j", "Down" }, description = "Scroll down", action = command.style_sheet.scroll("Down") },
+    { key = { "k", "Up" }, description = "Scroll up", action = command.style_sheet.scroll("Up") },
+    { key = { "H", "shift-Left" }, description = "Scroll left", action = command.style_sheet.scroll("Left") },
+    { key = { "L", "shift-Right" }, description = "Scroll right", action = command.style_sheet.scroll("Right") },
     { key = { "PageDown", "Space" }, description = "Page down", action = command.style_sheet.page(1) },
     { key = "PageUp", description = "Page up", action = command.style_sheet.page(-1) },
+})
+
+canopy.keymap({
+    path = "text_samples",
+    { key = { "j", "Down" }, description = "Scroll down", action = command.text_samples.scroll("Down") },
+    { key = { "k", "Up" }, description = "Scroll up", action = command.text_samples.scroll("Up") },
+    { key = { "PageDown", "Space" }, description = "Page down", action = command.text_samples.page(1) },
+    { key = "PageUp", description = "Page up", action = command.text_samples.page(-1) },
 })
 
 canopy.keymap({
@@ -696,6 +688,21 @@ const TEXT_ROWS: &[(&str, &str)] = &[
 /// The text samples page: named colors and text attributes.
 pub(crate) struct TextSamples;
 
+#[derive_commands]
+impl TextSamples {
+    /// Scroll by one line or column.
+    #[command]
+    pub(crate) fn scroll(&self, c: &mut dyn Context, dir: FocusDirection) {
+        crate::scroll_in(c, dir);
+    }
+
+    /// Scroll by a page; negative moves up.
+    #[command]
+    pub(crate) fn page(&self, c: &mut dyn Context, delta: i32) {
+        crate::page_by(c, delta);
+    }
+}
+
 impl Widget for TextSamples {
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
@@ -722,6 +729,10 @@ impl Widget for TextSamples {
 
     fn layout(&self) -> Layout {
         Layout::fill()
+    }
+
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+        true
     }
 
     fn name(&self) -> NodeName {
@@ -1048,17 +1059,19 @@ impl Widget for Stylegym {
         let styles_frame_id =
             c.add_slot_to(right_container_id, MainFrameSlot::KEY, Frame::new())?;
         let tabs_id = c.add_slot_to(styles_frame_id, TabsSlot::KEY, Tabs::new())?;
-        let rules = c.with_widget_mut(tabs_id, |tabs: &mut Tabs, ctx| {
-            tabs.add_tab(ctx, "Palette", StyleSheet::palette())?;
+        let (palette, rules) = c.with_widget_mut(tabs_id, |tabs: &mut Tabs, ctx| {
+            let palette = tabs.add_tab(ctx, "Palette", StyleSheet::palette())?;
             let rules = tabs.add_tab(ctx, "Rules", StyleSheet::rules())?;
             let widgets = tabs.add_tab(ctx, "Widgets", Scroll::vertical())?;
             add_widget_samples(ctx, widgets.into())?;
             let syntax = tabs.add_tab(ctx, "Syntax", Container::row())?;
             add_syntax_samples(ctx, syntax.into())?;
             tabs.add_tab(ctx, "Text", TextSamples)?;
-            Ok(rules)
+            Ok((palette, rules))
         })?;
         self.rules = Some(rules);
+        // Start in the main pane so the scroll keys reach the palette.
+        c.set_focus(palette.into())?;
         self.install_theme(c, available_themes()[self.current_theme].builder)
     }
 }
@@ -1071,6 +1084,7 @@ impl Loader for Stylegym {
         c.add_commands::<Selector<EffectOption>>()?;
         c.add_commands::<Tabs>()?;
         c.add_commands::<StyleSheet>()?;
+        c.add_commands::<TextSamples>()?;
         c.add_commands::<Input>()?;
         c.add_commands::<Editor>()?;
         Ok(())

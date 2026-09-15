@@ -152,6 +152,44 @@ fn tab_keys_switch_the_visible_page() -> Result<()> {
     Ok(())
 }
 
+/// Press `key` `times` times, rendering after each press.
+fn press(harness: &mut Harness, key: char, times: usize) -> Result<()> {
+    for _ in 0..times {
+        harness.key(key)?;
+        harness.render()?;
+    }
+    Ok(())
+}
+
+#[test]
+fn scroll_keys_follow_the_active_page() -> Result<()> {
+    let mut harness = root_harness(
+        Stylegym::new(),
+        binding_setup,
+        Size::new(80, 12),
+        Mount::Wrap,
+    )?;
+    assert_on_screen(&harness, "Surfaces");
+    press(&mut harness, 'j', 4)?;
+    assert_off_screen(&harness, "Surfaces");
+
+    press(&mut harness, 'l', 1)?;
+    assert_on_screen(&harness, "Rules in the active theme");
+    press(&mut harness, 'j', 2)?;
+    assert_off_screen(&harness, "Rules in the active theme");
+
+    // Back through the palette and around to the text page, then forward.
+    press(&mut harness, 'h', 2)?;
+    assert_on_screen(&harness, "Color Palette");
+    press(&mut harness, 'j', 3)?;
+    assert_off_screen(&harness, "Color Palette");
+    press(&mut harness, 'l', 1)?;
+    assert_on_screen(&harness, "Surfaces");
+    press(&mut harness, 'j', 4)?;
+    assert_off_screen(&harness, "Surfaces");
+    Ok(())
+}
+
 #[test]
 fn palette_and_rules_follow_the_selected_theme() -> Result<()> {
     let mut harness = setup_harness(Size::new(120, 40))?;
