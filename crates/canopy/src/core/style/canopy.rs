@@ -11,7 +11,7 @@ use crate::rgb;
 /// Default background.
 pub const BG: Color = rgb!("#0a0a0a");
 /// Panel background: header and status bars, overlays.
-pub const PANEL: Color = rgb!("#141414");
+pub const PANEL: Color = rgb!("#1a1a1a");
 /// Element background: prompts, scrollbar tracks.
 pub const ELEMENT: Color = rgb!("#1e1e1e");
 /// Highlight background: raised elements and selections without focus.
