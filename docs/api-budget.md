@@ -41,6 +41,25 @@ Headroom is for a demonstrated capability rather than an alias. If a change
 crosses a threshold, record why consolidation would make the API less clear in
 the change that updates the captures.
 
+## Recorded growth
+
+The scrolling model added context methods to two surfaces that were already
+past their thresholds.
+
+`Context` and `ContextExt` grew from 67 to 70 methods against a threshold of
+60. Scrolling added `scroll_to_of`, `reveal_area`, `reveal_anchor`, and
+`reveal_node`, and removed `scroll_into_view`. Explicit scrolling moves a view
+at once, and a reveal waits for layout, so neither can express the other. A
+scrollbar owner scrolls a node other than itself, so `scroll_to_of` cannot fold
+into `scroll_to`. The three reveals take different targets: a rectangle of the
+node's canvas, an anchor the widget computes after layout, and a node in its
+ancestor views. One reveal method with an enum target would keep the anchor
+hook and the node lookup behind a single signature without removing either.
+
+`ViewContext` and `ViewContextExt` grew from 43 to 44 methods against a
+threshold of 34. `has_mouse_capture` lets a scrollbar owner confirm that it
+still holds its drag. No other query exposes mouse capture.
+
 ## Accepted dependency coupling
 
 `EvalTicket::completion` exposes `futures::channel::oneshot::Receiver` directly.

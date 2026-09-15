@@ -795,3 +795,42 @@ fn focus_column_wraps_through_displayed_panes() -> Result<()> {
     })?;
     Ok(())
 }
+
+#[test]
+fn a_resize_during_a_drag_ends_it_at_the_next_event() -> Result<()> {
+    let (mut harness, nodes) = scene(20, 10, |c| framed_surface(c, Size::new(1, 64)))?;
+    let (frame, body) = (nodes[0], nodes[1]);
+    harness.mouse(pointer(mouse::Action::Down, 19, 8))?;
+    assert!(captured(&mut harness, frame)?);
+
+    // A shorter window changes the track the drag started on.
+    harness.canopy.set_root_size(Size::new(20, 6))?;
+    harness.render()?;
+    assert!(
+        captured(&mut harness, frame)?,
+        "rendering cannot release capture"
+    );
+    let offset = scroll(&harness, body);
+    harness.mouse(pointer(mouse::Action::Drag, 19, 1))?;
+    assert!(!captured(&mut harness, frame)?);
+    assert_eq!(
+        scroll(&harness, body),
+        offset,
+        "the event that ends a drag does not scroll"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_sidebar_inside_a_pane_leaves_its_divider_plain() -> Result<()> {
+    let (harness, _) = scene(21, 6, |c| {
+        let columns = add_columns(c)?;
+        let pane = boxed(c, columns, Layout::fill().direction(Direction::Row))?;
+        surface(c, pane, Size::new(1, 60))?;
+        boxed(c, pane, Layout::column().fixed_width(2).flex_vertical(1))?;
+        surface(c, columns, Size::new(1, 1))?;
+        Ok(Vec::new())
+    })?;
+    assert_eq!(column_text(&harness, 10, 6), "││││││");
+    Ok(())
+}
