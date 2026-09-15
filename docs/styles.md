@@ -18,6 +18,13 @@ grapheme before the central cursor overlay; block cursors then exchange its
 foreground and background. Styling preserves combining characters and wide-cell
 continuations. An absent cursor rule falls back to the input text role.
 
+## Tabs
+
+`Tabs` paints a one-row bar above its pages. The bar fill uses `tabs/bar`, each
+label uses `tabs/tab`, and the active label uses `tabs/tab/active`. While focus
+is within the tabs, the active label uses `tabs/tab/active/focused`, which falls
+back to `tabs/tab/active`. The built-in themes define all four paths.
+
 ## States and fallback
 
 `canopy::style::WidgetState::layer()` maps states to ordinary layer strings:

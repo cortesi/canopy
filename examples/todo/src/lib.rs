@@ -12,7 +12,7 @@ use canopy::{
     error::{Error, Result},
     geom::{Rect, Size},
     layout::{Constraint, Direction, Layout, LayoutOverride, MeasureConstraints, Measurement},
-    style::solarized,
+    style::canopy as palette,
 };
 use canopy_widgets::{Center, Frame, Input, List, Root, Selectable, ValueExposure};
 
@@ -481,11 +481,9 @@ pub(crate) fn style(cnpy: &mut Canopy) {
         .rules()
         .style(
             "statusbar/text",
-            StyleBuilder::new()
-                .fg(solarized::BASE02)
-                .bg(solarized::BASE1),
+            StyleBuilder::new().fg(palette::SUBTEXT).bg(palette::PANEL),
         )
-        .fg("list/selected", solarized::BLUE)
+        .fg("list/selected", palette::ACCENT)
         .apply();
 }
 

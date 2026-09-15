@@ -1182,12 +1182,19 @@ pub mod canopy {
                 pub button: Button,
                 /// Keyboard modifiers.
                 pub modifiers: key::Mods,
-                /// Cursor location in screen coordinates for incoming events, and relative
-                /// to the node's content origin for events delivered to widgets.
-                /// Coordinates before the content origin saturate to zero, including
-                /// captured events and events in padding, so the conversion is not
-                /// always reversible.
-                pub location: crate::geom::Point,
+                /// Cursor location.
+                ///
+                /// Incoming events carry screen coordinates. Events delivered to a widget
+                /// are relative to its content origin, before scroll. The location is
+                /// signed: a point in padding above or left of the content is negative, and
+                /// a captured event may lie anywhere. Use [`View::outer_point`],
+                /// [`View::viewport_point`], or [`View::content_point`] to find the cell
+                /// under the pointer in the space the widget paints.
+                ///
+                /// [`View::outer_point`]: crate::View::outer_point
+                /// [`View::viewport_point`]: crate::View::viewport_point
+                /// [`View::content_point`]: crate::View::content_point
+                pub location: crate::geom::PointI32,
             }
 
             impl From<Mouse> for InputSpec {
@@ -1867,6 +1874,79 @@ pub mod canopy {
     pub mod style {
         //! Styling and color helpers.
 
+        pub mod canopy {
+            //! Canopy theme, the default.
+            //! Canopy theme - the default: a neutral near-black ground, grey chrome, and
+            //! a single accent.
+            //!
+            //! The grey ramp follows opencode's default theme, and the named
+            //! colours come from the One Dark and TokyoNight families that opencode and
+            //! Grok Build draw on.
+
+            /// Signature accent: focus and selection.
+            pub const ACCENT: super::Color = _;
+
+            /// Default background.
+            pub const BG: super::Color = _;
+
+            /// Blue.
+            pub const BLUE: super::Color = _;
+
+            /// Frame borders.
+            pub const BORDER: super::Color = _;
+
+            /// Borders of the active frame.
+            pub const BORDER_ACTIVE: super::Color = _;
+
+            /// Dividers, faint rules, and the selection background.
+            pub const BORDER_SUBTLE: super::Color = _;
+
+            /// Cyan.
+            pub const CYAN: super::Color = _;
+
+            /// Element background: prompts, scrollbar tracks.
+            pub const ELEMENT: super::Color = _;
+
+            /// Green.
+            pub const GREEN: super::Color = _;
+
+            /// Highlight background: raised elements and selections without focus.
+            pub const HIGHLIGHT: super::Color = _;
+
+            /// Magenta.
+            pub const MAGENTA: super::Color = _;
+
+            /// Muted text: comments, gutters, hints.
+            pub const MUTED: super::Color = _;
+
+            /// Orange.
+            pub const ORANGE: super::Color = _;
+
+            /// Panel background: header and status bars, overlays.
+            pub const PANEL: super::Color = _;
+
+            /// Peach.
+            pub const PEACH: super::Color = _;
+
+            /// Red.
+            pub const RED: super::Color = _;
+
+            /// Secondary text: labels and bars.
+            pub const SUBTEXT: super::Color = _;
+
+            /// Default text.
+            pub const TEXT: super::Color = _;
+
+            /// Violet.
+            pub const VIOLET: super::Color = _;
+
+            /// Yellow.
+            pub const YELLOW: super::Color = _;
+
+            /// Build the dark Canopy style map.
+            pub fn canopy_dark() -> super::StyleMap {}
+        }
+
         pub mod dracula {
             //! Dracula theme.
             //! Dracula theme - a dark theme with vibrant colors.
@@ -2396,6 +2476,12 @@ pub mod canopy {
 
             /// Construct a style map with defaults.
             pub fn new() -> Self {}
+
+            /// Iterate over every rule as its canonical path and partial style.
+            ///
+            /// Paths omit the leading `/`, so the root rule's path is empty. The order
+            /// is unspecified.
+            pub fn entries(&self) -> impl Iterator<Item = (&str, &PartialStyle)> {}
         }
 
         impl WidgetState {
@@ -3041,8 +3127,13 @@ pub mod canopy {
 
     /// One runtime input.
     pub enum Work {
-        /// Deliver an input event.
-        Input(crate::event::Event),
+        /// Deliver input events that arrived together, in order.
+        ///
+        /// The turn dispatches each event and prepares one frame for the batch, so
+        /// a burst of input costs one render. Layout settles before a mouse event
+        /// that follows another event, so hit testing sees the geometry the earlier
+        /// events left. Dispatch stops at the first error or exit request.
+        Input(Vec<crate::event::Event>),
         /// Service ready background work.
         Wake,
         /// Start a top-level evaluation.
@@ -4191,6 +4282,20 @@ pub mod canopy {
         /// Offset from the outer origin to the content origin, in local
         /// coordinates.
         pub fn content_origin(&self) -> Point {}
+
+        /// Return the canvas cell under a widget-local location, scroll included,
+        /// or `None` outside the visible content.
+        pub fn content_point(&self, location: PointI32) -> Option<Point> {}
+
+        /// Return the outer-local cell a widget-local location falls in, padding
+        /// included, or `None` outside the outer rect.
+        ///
+        /// This is the space `outer_rect_local()` paints in.
+        pub fn outer_point(&self, location: PointI32) -> Option<Point> {}
+
+        /// Return the visible content cell a widget-local location falls in,
+        /// before scroll, or `None` outside the content rect.
+        pub fn viewport_point(&self, location: PointI32) -> Option<Point> {}
 
         /// Size of the content rect.
         pub fn content_size(&self) -> Size {}

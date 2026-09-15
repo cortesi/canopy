@@ -17,7 +17,7 @@ use canopy::{
     derive_commands,
     error::Result,
     layout::Layout,
-    style::{StyleBuilder, solarized},
+    style::{StyleBuilder, canopy as palette},
 };
 use canopy_widgets::Root;
 
@@ -168,16 +168,14 @@ fn indent(source: &str, prefix: &str) -> String {
 
 /// Install the application palette and per-element styles.
 fn install_styles(canopy: &mut Canopy) {
-    *canopy.style_mut() = solarized::solarized_dark();
+    *canopy.style_mut() = palette::canopy_dark();
     canopy
         .style_mut()
         .rules()
-        .fg("hello/greeting", solarized::BLUE)
+        .fg("hello/greeting", palette::ACCENT)
         .style(
             "hello/status",
-            StyleBuilder::new()
-                .fg(solarized::BASE1)
-                .bg(solarized::BASE02),
+            StyleBuilder::new().fg(palette::SUBTEXT).bg(palette::PANEL),
         )
         .apply();
 }

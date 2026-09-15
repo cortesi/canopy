@@ -18,7 +18,7 @@ use crate::{
     derive_commands,
     error::{Error, NodeOperationKind, Result},
     event::{Event, key, mouse},
-    geom::{Point, RectI32},
+    geom::{PointI32, RectI32},
     layout::Layout,
     path::Path,
     render::{NopBackend, Render},
@@ -301,13 +301,7 @@ fn make_mouse_event(core: &Core, node_id: NodeId) -> mouse::MouseEvent {
     let loc = core
         .nodes
         .get(node_id)
-        .map(|n| {
-            let tl = n.view.outer.tl;
-            Point {
-                x: tl.x.max(0) as u32,
-                y: tl.y.max(0) as u32,
-            }
-        })
+        .map(|n| n.view.outer.tl)
         .unwrap_or_default();
     mouse::MouseEvent {
         action: mouse::Action::Down,
@@ -360,7 +354,7 @@ fn ignored_mouse_callback_conservatively_requests_render() -> Result<()> {
         action: mouse::Action::Moved,
         button: mouse::Button::None,
         modifiers: key::Empty,
-        location: Point { x: 1, y: 1 },
+        location: PointI32 { x: 1, y: 1 },
     };
     canopy.event(&Event::Mouse(event))?;
     assert!(canopy.render_if_pending(&mut render)?);
@@ -387,7 +381,7 @@ fn mouse_capture_routes_drag_outside() -> Result<()> {
         action: mouse::Action::Drag,
         button: mouse::Button::Left,
         modifiers: key::Empty,
-        location: Point { x: 50, y: 50 },
+        location: PointI32 { x: 50, y: 50 },
     };
     canopy.event(&Event::Mouse(drag))?;
 
@@ -397,7 +391,7 @@ fn mouse_capture_routes_drag_outside() -> Result<()> {
         action: mouse::Action::Up,
         button: mouse::Button::Left,
         modifiers: key::Empty,
-        location: Point { x: 50, y: 50 },
+        location: PointI32 { x: 50, y: 50 },
     };
     canopy.event(&Event::Mouse(up))?;
 
@@ -415,7 +409,7 @@ fn mouse_routing_clears_a_stale_internal_capture() -> Result<()> {
         action: mouse::Action::Moved,
         button: mouse::Button::None,
         modifiers: key::Empty,
-        location: Point::ZERO,
+        location: PointI32::default(),
     };
     canopy.event(&Event::Mouse(event))?;
     assert_eq!(canopy.core.mouse_capture, None);

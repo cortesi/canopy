@@ -7,7 +7,7 @@ mod tests {
         commands::{CommandNode, CommandSpec},
         error::Result,
         event::{key, mouse},
-        geom::Point,
+        geom::{Point, PointI32},
         layout::{Edges, Layout},
         testing::harness::Harness,
     };
@@ -19,7 +19,7 @@ mod tests {
             action: mouse::Action::Down,
             button: mouse::Button::Left,
             modifiers: key::Empty,
-            location,
+            location: PointI32::try_from(location).expect("test points fit"),
         }
     }
 
@@ -216,6 +216,117 @@ mod tests {
         fn load(_c: &mut Canopy) -> Result<()> {
             Ok(())
         }
+    }
+
+    fn mouse_at(action: mouse::Action, x: i32, y: i32) -> mouse::MouseEvent {
+        mouse::MouseEvent {
+            action,
+            button: mouse::Button::Left,
+            modifiers: key::Empty,
+            location: PointI32 { x, y },
+        }
+    }
+
+    #[test]
+    fn frame_scrollbar_keeps_the_thumb_under_the_pointer() -> Result<()> {
+        let text = (0..30)
+            .map(|n| format!("line {n}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let mut harness = Harness::builder(SnapshotRoot::new(Frame::new()))
+            .size(12, 8)
+            .build()?;
+        harness.with_root_context(|_root: &mut SnapshotRoot<Frame>, ctx| {
+            ctx.with_unique_descendant::<Frame, _>(|_, ctx| {
+                ctx.add_child(Text::new(text))?;
+                Ok(())
+            })
+        })?;
+        harness.render()?;
+        let scroll_y = |harness: &Harness| {
+            harness.canopy.with_root_view(|ctx| {
+                let text = ctx
+                    .unique_descendant::<Text>()
+                    .expect("text lookup")
+                    .expect("text node");
+                ctx.view_of(text.into()).expect("text view").scroll.y
+            })
+        };
+
+        // The right edge track spans rows 1 to 6. Thirty lines through a
+        // six-row view give a two-row thumb at the top.
+        assert_eq!(harness.buf().get(Point { x: 11, y: 1 }).unwrap().ch, '█');
+        assert_eq!(harness.buf().get(Point { x: 11, y: 3 }).unwrap().ch, '│');
+
+        // Dragging the thumb to the end of the track reaches the last line.
+        harness.mouse(mouse_at(mouse::Action::Down, 11, 1))?;
+        harness.mouse(mouse_at(mouse::Action::Drag, 11, 5))?;
+        assert_eq!(scroll_y(&harness), 24);
+        harness.mouse(mouse_at(mouse::Action::Up, 11, 5))?;
+
+        // A press on the track centers the thumb on the pointer: the thumb
+        // then covers rows 2 and 3.
+        harness.mouse(mouse_at(mouse::Action::Down, 11, 3))?;
+        harness.mouse(mouse_at(mouse::Action::Up, 11, 3))?;
+        harness.render()?;
+        assert_eq!(scroll_y(&harness), 5);
+        for y in [2, 3] {
+            assert_eq!(harness.buf().get(Point { x: 11, y }).unwrap().ch, '█');
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn an_input_measured_to_its_text_shows_all_of_it() -> Result<()> {
+        let mut harness = Harness::builder(SnapshotRoot::new(crate::Input::new("hello")))
+            .size(20, 3)
+            .build()?;
+        harness.with_root_context(|_root: &mut SnapshotRoot<crate::Input>, ctx| {
+            ctx.with_unique_descendant::<crate::Input, _>(|_, ctx| ctx.set_layout(Layout::column()))
+        })?;
+        harness.render()?;
+        assert!(
+            harness.tbuf().contains_text("hello"),
+            "{:?}",
+            harness.tbuf().lines()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn tabs_show_the_active_page_and_switch_on_click() -> Result<()> {
+        let mut harness = Harness::builder(SnapshotRoot::new(crate::Tabs::new()))
+            .size(30, 4)
+            .build()?;
+        harness.with_root_context(|_root: &mut SnapshotRoot<crate::Tabs>, ctx| {
+            ctx.with_unique_descendant::<crate::Tabs, _>(|tabs, ctx| {
+                tabs.add_tab(ctx, "One", Text::new("first page"))?;
+                tabs.add_tab(ctx, "Two", Text::new("second page"))?;
+                Ok(())
+            })
+        })?;
+        harness.render()?;
+        assert!(harness.tbuf().contains_text(" One "));
+        assert!(harness.tbuf().contains_text(" Two "));
+        assert!(harness.tbuf().contains_text("first page"));
+        assert!(!harness.tbuf().contains_text("second page"));
+
+        // " One " covers columns 0-4, a gap follows, and " Two " starts at 6.
+        harness.mouse(click_at(Point { x: 7, y: 0 }))?;
+        harness.render()?;
+        assert!(harness.tbuf().contains_text("second page"));
+        assert!(!harness.tbuf().contains_text("first page"));
+
+        harness.with_root_context(|_root: &mut SnapshotRoot<crate::Tabs>, ctx| {
+            ctx.with_unique_descendant::<crate::Tabs, _>(|tabs, ctx| {
+                tabs.select_by(ctx, 1)?;
+                assert_eq!(tabs.active(), 0, "moving past the last tab wraps");
+                tabs.select(ctx, 9)?;
+                assert_eq!(tabs.active(), 1, "an index past the end clamps");
+                Ok(())
+            })
+        })?;
+        Ok(())
     }
 
     #[test]

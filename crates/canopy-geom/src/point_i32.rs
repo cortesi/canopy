@@ -41,6 +41,14 @@ impl PointI32 {
             y: y.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32,
         }
     }
+
+    /// Return the nearest unsigned point, raising negative coordinates to zero.
+    pub fn clamped_point(self) -> Point {
+        Point {
+            x: u32::try_from(self.x).unwrap_or(0),
+            y: u32::try_from(self.y).unwrap_or(0),
+        }
+    }
 }
 
 impl TryFrom<PointI32> for Point {
@@ -100,6 +108,25 @@ mod tests {
             PointI32 {
                 x: i32::MIN,
                 y: i32::MAX
+            }
+        );
+    }
+
+    #[test]
+    fn clamped_points_raise_negative_coordinates_to_zero() {
+        assert_eq!(
+            PointI32 { x: -3, y: 7 }.clamped_point(),
+            Point { x: 0, y: 7 }
+        );
+        assert_eq!(
+            PointI32 {
+                x: i32::MAX,
+                y: i32::MIN
+            }
+            .clamped_point(),
+            Point {
+                x: i32::MAX as u32,
+                y: 0
             }
         );
     }

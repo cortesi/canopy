@@ -125,9 +125,10 @@ where
         if event.action != mouse::Action::Down || event.button != mouse::Button::Left {
             return Ok(());
         }
-        let clicked_row = event.location.y.saturating_add(c.view().scroll.y) as usize;
-        if clicked_row < self.items.len() {
-            self.focused = clicked_row;
+        if let Some(point) = c.view().content_point(event.location)
+            && (point.y as usize) < self.items.len()
+        {
+            self.focused = point.y as usize;
             self.toggle(c)?;
         }
         Ok(())

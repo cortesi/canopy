@@ -305,10 +305,12 @@ pub mod canopy_examples {
 
     pub mod stylegym {
         //! Stylegym example nodes.
-        //! Stylegym: A demonstration app for Canopy's styling features.
+        //! Stylegym: a viewer for Canopy themes and styles.
         //!
-        //! This example showcases themes, effects, and modal overlays in a two-pane
-        //! layout.
+        //! A sidebar titled Styles picks the theme and the effects. The untitled main
+        //! pane shows the theme through tabbed pages: resolved palette swatches, every
+        //! rule in the theme, stock widgets, syntax highlighting, and text samples. A
+        //! modal overlay shows how the pane dims.
 
         /// Root widget for the stylegym demo.
         #[derive(Default)]
@@ -340,7 +342,13 @@ pub mod canopy_examples {
             pub fn call_hide_modal() -> canopy::commands::CommandCall {}
 
             /// Build a positional call with typed user arguments.
+            pub fn call_next_tab(delta: i32) -> canopy::commands::CommandCall {}
+
+            /// Build a positional call with typed user arguments.
             pub fn call_show_modal() -> canopy::commands::CommandCall {}
+
+            /// Build a positional call with typed user arguments.
+            pub fn call_show_tab(index: usize) -> canopy::commands::CommandCall {}
 
             /// Return a typed command reference for this command.
             pub fn cmd_apply_effects() -> &'static canopy::commands::CommandSpec {}
@@ -352,7 +360,13 @@ pub mod canopy_examples {
             pub fn cmd_hide_modal() -> &'static canopy::commands::CommandSpec {}
 
             /// Return a typed command reference for this command.
+            pub fn cmd_next_tab() -> &'static canopy::commands::CommandSpec {}
+
+            /// Return a typed command reference for this command.
             pub fn cmd_show_modal() -> &'static canopy::commands::CommandSpec {}
+
+            /// Return a typed command reference for this command.
+            pub fn cmd_show_tab() -> &'static canopy::commands::CommandSpec {}
         }
 
         impl Widget for Stylegym {

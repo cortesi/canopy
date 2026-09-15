@@ -43,8 +43,12 @@ mod pad;
 mod panes;
 /// Application root widget.
 mod root;
+/// Proportional scrollbars for scrolling views.
+mod scrollbar;
 /// Selection widget.
 mod selector;
+/// Tabbed pages beneath a tab bar.
+mod tabs;
 /// Terminal emulation widget.
 #[cfg(feature = "terminal-widget")]
 pub mod terminal;
@@ -70,7 +74,9 @@ pub use list::{AutoKey, List, Selectable};
 pub use pad::Pad;
 pub use panes::Panes;
 pub use root::Root;
+pub use scrollbar::Scrollbar;
 pub use selector::Selector;
+pub use tabs::Tabs;
 pub use text::{CanvasWidth, Text};
 pub use vstack::VStack;
 pub use wrap::wrap;

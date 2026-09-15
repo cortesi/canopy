@@ -1,3 +1,50 @@
+# canopy_dark
+/ fg=Some(Solid(Rgb { r: 238, g: 238, b: 238 })) bg=Some(Solid(Rgb { r: 10, g: 10, b: 10 })) attrs=Some(AttrSet { bold: false, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/blue fg=Some(Solid(Rgb { r: 92, g: 156, b: 245 })) bg=None attrs=None
+/cyan fg=Some(Solid(Rgb { r: 86, g: 182, b: 194 })) bg=None attrs=None
+/dropdown fg=Some(Solid(Rgb { r: 238, g: 238, b: 238 })) bg=None attrs=None
+/dropdown/highlight fg=Some(Solid(Rgb { r: 10, g: 10, b: 10 })) bg=Some(Solid(Rgb { r: 138, g: 173, b: 244 })) attrs=None
+/dropdown/selected fg=Some(Solid(Rgb { r: 138, g: 173, b: 244 })) bg=None attrs=None
+/editor/line-number fg=Some(Solid(Rgb { r: 96, g: 96, b: 96 })) bg=None attrs=None
+/editor/line-number/current fg=Some(Solid(Rgb { r: 138, g: 173, b: 244 })) bg=None attrs=None
+/editor/prompt fg=Some(Solid(Rgb { r: 238, g: 238, b: 238 })) bg=Some(Solid(Rgb { r: 20, g: 20, b: 20 })) attrs=None
+/editor/search/current fg=Some(Solid(Rgb { r: 10, g: 10, b: 10 })) bg=Some(Solid(Rgb { r: 245, g: 167, b: 66 })) attrs=None
+/editor/search/match fg=Some(Solid(Rgb { r: 10, g: 10, b: 10 })) bg=Some(Solid(Rgb { r: 229, g: 192, b: 123 })) attrs=None
+/editor/selection fg=Some(Solid(Rgb { r: 238, g: 238, b: 238 })) bg=Some(Solid(Rgb { r: 60, g: 60, b: 60 })) attrs=None
+/editor/text fg=Some(Solid(Rgb { r: 238, g: 238, b: 238 })) bg=Some(Solid(Rgb { r: 10, g: 10, b: 10 })) attrs=None
+/frame fg=Some(Solid(Rgb { r: 72, g: 72, b: 72 })) bg=None attrs=None
+/frame/active fg=Some(Solid(Rgb { r: 96, g: 96, b: 96 })) bg=None attrs=None
+/frame/focused fg=Some(Solid(Rgb { r: 128, g: 128, b: 128 })) bg=None attrs=None
+/frame/title fg=Some(Solid(Rgb { r: 238, g: 238, b: 238 })) bg=None attrs=None
+/green fg=Some(Solid(Rgb { r: 127, g: 216, b: 143 })) bg=None attrs=None
+/help/fallback fg=Some(Solid(Rgb { r: 180, g: 180, b: 180 })) bg=Some(Solid(Rgb { r: 20, g: 20, b: 20 })) attrs=None
+/help/footer fg=Some(Solid(Rgb { r: 180, g: 180, b: 180 })) bg=Some(Solid(Rgb { r: 20, g: 20, b: 20 })) attrs=None
+/help/footer/key fg=Some(Solid(Rgb { r: 138, g: 173, b: 244 })) bg=Some(Solid(Rgb { r: 20, g: 20, b: 20 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/help/footer/label fg=Some(Solid(Rgb { r: 180, g: 180, b: 180 })) bg=Some(Solid(Rgb { r: 20, g: 20, b: 20 })) attrs=None
+/help/frame fg=None bg=Some(Solid(Rgb { r: 20, g: 20, b: 20 })) attrs=None
+/help/frame/active fg=None bg=Some(Solid(Rgb { r: 20, g: 20, b: 20 })) attrs=None
+/help/frame/focused fg=None bg=Some(Solid(Rgb { r: 20, g: 20, b: 20 })) attrs=None
+/help/frame/title fg=None bg=Some(Solid(Rgb { r: 20, g: 20, b: 20 })) attrs=None
+/help/indicator fg=Some(Solid(Rgb { r: 138, g: 173, b: 244 })) bg=Some(Solid(Rgb { r: 20, g: 20, b: 20 })) attrs=None
+/help/key fg=Some(Solid(Rgb { r: 138, g: 173, b: 244 })) bg=Some(Solid(Rgb { r: 20, g: 20, b: 20 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/help/label fg=Some(Solid(Rgb { r: 180, g: 180, b: 180 })) bg=Some(Solid(Rgb { r: 20, g: 20, b: 20 })) attrs=None
+/help/panel fg=Some(Solid(Rgb { r: 238, g: 238, b: 238 })) bg=Some(Solid(Rgb { r: 20, g: 20, b: 20 })) attrs=None
+/magenta fg=Some(Solid(Rgb { r: 229, g: 143, b: 214 })) bg=None attrs=None
+/orange fg=Some(Solid(Rgb { r: 245, g: 167, b: 66 })) bg=None attrs=None
+/red fg=Some(Solid(Rgb { r: 224, g: 108, b: 117 })) bg=None attrs=None
+/selector fg=Some(Solid(Rgb { r: 238, g: 238, b: 238 })) bg=None attrs=None
+/selector/focus fg=Some(Solid(Rgb { r: 10, g: 10, b: 10 })) bg=Some(Solid(Rgb { r: 138, g: 173, b: 244 })) attrs=None
+/selector/focus/selected fg=Some(Solid(Rgb { r: 10, g: 10, b: 10 })) bg=Some(Solid(Rgb { r: 86, g: 182, b: 194 })) attrs=None
+/selector/selected fg=Some(Solid(Rgb { r: 138, g: 173, b: 244 })) bg=None attrs=None
+/tabs/bar fg=Some(Solid(Rgb { r: 180, g: 180, b: 180 })) bg=Some(Solid(Rgb { r: 20, g: 20, b: 20 })) attrs=None
+/tabs/tab fg=Some(Solid(Rgb { r: 180, g: 180, b: 180 })) bg=Some(Solid(Rgb { r: 40, g: 40, b: 40 })) attrs=None
+/tabs/tab/active fg=Some(Solid(Rgb { r: 138, g: 173, b: 244 })) bg=Some(Solid(Rgb { r: 60, g: 60, b: 60 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/tabs/tab/active/focused fg=Some(Solid(Rgb { r: 10, g: 10, b: 10 })) bg=Some(Solid(Rgb { r: 138, g: 173, b: 244 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/text/bold fg=None bg=None attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/text/italic fg=None bg=None attrs=Some(AttrSet { bold: false, crossedout: false, dim: false, italic: true, overline: false, underline: false })
+/text/underline fg=None bg=None attrs=Some(AttrSet { bold: false, crossedout: false, dim: false, italic: false, overline: false, underline: true })
+/violet fg=Some(Solid(Rgb { r: 187, g: 154, b: 247 })) bg=None attrs=None
+/yellow fg=Some(Solid(Rgb { r: 229, g: 192, b: 123 })) bg=None attrs=None
 # solarized_dark
 / fg=Some(Solid(Rgb { r: 131, g: 148, b: 150 })) bg=Some(Solid(Rgb { r: 0, g: 43, b: 54 })) attrs=Some(AttrSet { bold: false, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /blue fg=Some(Solid(Rgb { r: 38, g: 139, b: 210 })) bg=None attrs=None
@@ -36,6 +83,10 @@
 /selector/focus fg=Some(Solid(Rgb { r: 0, g: 43, b: 54 })) bg=Some(Solid(Rgb { r: 38, g: 139, b: 210 })) attrs=None
 /selector/focus/selected fg=Some(Solid(Rgb { r: 0, g: 43, b: 54 })) bg=Some(Solid(Rgb { r: 42, g: 161, b: 152 })) attrs=None
 /selector/selected fg=Some(Solid(Rgb { r: 38, g: 139, b: 210 })) bg=None attrs=None
+/tabs/bar fg=Some(Solid(Rgb { r: 147, g: 161, b: 161 })) bg=Some(Solid(Rgb { r: 7, g: 54, b: 66 })) attrs=None
+/tabs/tab fg=Some(Solid(Rgb { r: 147, g: 161, b: 161 })) bg=Some(Solid(Rgb { r: 0, g: 43, b: 54 })) attrs=None
+/tabs/tab/active fg=Some(Solid(Rgb { r: 38, g: 139, b: 210 })) bg=Some(Solid(Rgb { r: 7, g: 54, b: 66 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/tabs/tab/active/focused fg=Some(Solid(Rgb { r: 0, g: 43, b: 54 })) bg=Some(Solid(Rgb { r: 38, g: 139, b: 210 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /text/bold fg=None bg=None attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /text/italic fg=None bg=None attrs=Some(AttrSet { bold: false, crossedout: false, dim: false, italic: true, overline: false, underline: false })
 /text/underline fg=None bg=None attrs=Some(AttrSet { bold: false, crossedout: false, dim: false, italic: false, overline: false, underline: true })
@@ -79,6 +130,10 @@
 /selector/focus fg=Some(Solid(Rgb { r: 253, g: 246, b: 227 })) bg=Some(Solid(Rgb { r: 38, g: 139, b: 210 })) attrs=None
 /selector/focus/selected fg=Some(Solid(Rgb { r: 253, g: 246, b: 227 })) bg=Some(Solid(Rgb { r: 42, g: 161, b: 152 })) attrs=None
 /selector/selected fg=Some(Solid(Rgb { r: 38, g: 139, b: 210 })) bg=None attrs=None
+/tabs/bar fg=Some(Solid(Rgb { r: 88, g: 110, b: 117 })) bg=Some(Solid(Rgb { r: 238, g: 232, b: 213 })) attrs=None
+/tabs/tab fg=Some(Solid(Rgb { r: 88, g: 110, b: 117 })) bg=Some(Solid(Rgb { r: 253, g: 246, b: 227 })) attrs=None
+/tabs/tab/active fg=Some(Solid(Rgb { r: 38, g: 139, b: 210 })) bg=Some(Solid(Rgb { r: 238, g: 232, b: 213 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/tabs/tab/active/focused fg=Some(Solid(Rgb { r: 253, g: 246, b: 227 })) bg=Some(Solid(Rgb { r: 38, g: 139, b: 210 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /text/bold fg=None bg=None attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /text/italic fg=None bg=None attrs=Some(AttrSet { bold: false, crossedout: false, dim: false, italic: true, overline: false, underline: false })
 /text/underline fg=None bg=None attrs=Some(AttrSet { bold: false, crossedout: false, dim: false, italic: false, overline: false, underline: true })
@@ -122,6 +177,10 @@
 /selector/focus fg=Some(Solid(Rgb { r: 40, g: 42, b: 54 })) bg=Some(Solid(Rgb { r: 189, g: 147, b: 249 })) attrs=None
 /selector/focus/selected fg=Some(Solid(Rgb { r: 40, g: 42, b: 54 })) bg=Some(Solid(Rgb { r: 139, g: 233, b: 253 })) attrs=None
 /selector/selected fg=Some(Solid(Rgb { r: 189, g: 147, b: 249 })) bg=None attrs=None
+/tabs/bar fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=Some(Solid(Rgb { r: 68, g: 71, b: 90 })) attrs=None
+/tabs/tab fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=Some(Solid(Rgb { r: 40, g: 42, b: 54 })) attrs=None
+/tabs/tab/active fg=Some(Solid(Rgb { r: 189, g: 147, b: 249 })) bg=Some(Solid(Rgb { r: 68, g: 71, b: 90 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/tabs/tab/active/focused fg=Some(Solid(Rgb { r: 40, g: 42, b: 54 })) bg=Some(Solid(Rgb { r: 189, g: 147, b: 249 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /text/bold fg=None bg=None attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /text/italic fg=None bg=None attrs=Some(AttrSet { bold: false, crossedout: false, dim: false, italic: true, overline: false, underline: false })
 /text/underline fg=None bg=None attrs=Some(AttrSet { bold: false, crossedout: false, dim: false, italic: false, overline: false, underline: true })
@@ -165,6 +224,10 @@
 /selector/focus fg=Some(Solid(Rgb { r: 40, g: 40, b: 40 })) bg=Some(Solid(Rgb { r: 131, g: 165, b: 152 })) attrs=None
 /selector/focus/selected fg=Some(Solid(Rgb { r: 40, g: 40, b: 40 })) bg=Some(Solid(Rgb { r: 142, g: 192, b: 124 })) attrs=None
 /selector/selected fg=Some(Solid(Rgb { r: 131, g: 165, b: 152 })) bg=None attrs=None
+/tabs/bar fg=Some(Solid(Rgb { r: 189, g: 174, b: 147 })) bg=Some(Solid(Rgb { r: 60, g: 56, b: 54 })) attrs=None
+/tabs/tab fg=Some(Solid(Rgb { r: 189, g: 174, b: 147 })) bg=Some(Solid(Rgb { r: 40, g: 40, b: 40 })) attrs=None
+/tabs/tab/active fg=Some(Solid(Rgb { r: 131, g: 165, b: 152 })) bg=Some(Solid(Rgb { r: 80, g: 73, b: 69 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
+/tabs/tab/active/focused fg=Some(Solid(Rgb { r: 40, g: 40, b: 40 })) bg=Some(Solid(Rgb { r: 131, g: 165, b: 152 })) attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /text/bold fg=None bg=None attrs=Some(AttrSet { bold: true, crossedout: false, dim: false, italic: false, overline: false, underline: false })
 /text/italic fg=None bg=None attrs=Some(AttrSet { bold: false, crossedout: false, dim: false, italic: true, overline: false, underline: false })
 /text/underline fg=None bg=None attrs=Some(AttrSet { bold: false, crossedout: false, dim: false, italic: false, overline: false, underline: true })

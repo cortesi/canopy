@@ -2,7 +2,7 @@ use canopy::{
     BindingId, BindingOwner, BindingPhase, BindingScope, Loader, NodeId, buf,
     error::Result,
     event::{key, mouse},
-    geom::{Point, Size},
+    geom::{Point, PointI32, Size},
     help::{AvailableBinding, BindingSnapshot},
     path::Path,
     testing::harness::Harness,
@@ -106,7 +106,7 @@ fn rows_sort_by_key_category_without_routing_details() {
         .iter()
         .filter_map(|line| line.key.as_deref().map(str::trim))
         .collect::<Vec<_>>();
-    assert_eq!(keys, ["a", "z", "B", "2", "Down", "Ctrl+a"]);
+    assert_eq!(keys, ["a", "z", "B", "2", "↓", "Ctrl+a"]);
     assert_eq!(lines.len(), 6);
 }
 
@@ -199,11 +199,11 @@ fn scrolled_and_resized_buffers_have_exact_rows() -> Result<()> {
         action: mouse::Action::ScrollDown,
         button: mouse::Button::None,
         modifiers: key::Empty,
-        location: Point { x: 0, y: 0 },
+        location: PointI32 { x: 0, y: 0 },
     })?;
     harness
         .tbuf()
-        .assert_matches(buf!["  Alpha        █" "b" "  Beta"]);
+        .assert_matches(buf!["  Alpha        █" "b              █" "  Beta"]);
 
     harness.canopy.set_root_size(Size::new(16, 8))?;
     harness.render()?;
@@ -238,7 +238,7 @@ fn wheel_indicator_and_resize_keep_scroll_within_the_exact_canvas() -> Result<()
         action: mouse::Action::ScrollDown,
         button: mouse::Button::None,
         modifiers: key::Empty,
-        location: Point { x: 0, y: 0 },
+        location: PointI32 { x: 0, y: 0 },
     })?;
     let after_wheel = harness
         .canopy
@@ -249,7 +249,7 @@ fn wheel_indicator_and_resize_keep_scroll_within_the_exact_canvas() -> Result<()
         action: mouse::Action::Down,
         button: mouse::Button::Left,
         modifiers: key::Empty,
-        location: Point { x: 9, y: 3 },
+        location: PointI32 { x: 9, y: 3 },
     })?;
     let after_click = harness
         .canopy
@@ -375,4 +375,117 @@ fn command_help_keeps_user_feedback_without_command_diagnostics() {
     binding.command.as_mut().unwrap().status = Some(CommandStatus::Enabled);
     let list = list_with(vec![binding]);
     assert_eq!(list.display_lines(100)[0].text, "Delete selection");
+}
+
+/// Return each display line as its trimmed key and its text.
+fn rows(list: &BindingList, width: u32) -> Vec<(Option<String>, String)> {
+    list.display_lines(width)
+        .into_iter()
+        .map(|line| (line.key.map(|key| key.trim().to_string()), line.text))
+        .collect()
+}
+
+#[test]
+fn bindings_with_one_action_share_a_row() {
+    let down = key::Key::parse_spec("Down").expect("valid key");
+    let list = list_with(vec![
+        binding(1, 'j', "Next entry", BindingPhase::BeforeWidget),
+        binding(2, down, "Next entry", BindingPhase::BeforeWidget),
+        binding(3, 'j', "Next entry", BindingPhase::AfterWidget),
+        binding(4, 'k', "Previous entry", BindingPhase::BeforeWidget),
+    ]);
+    assert_eq!(
+        rows(&list, 60),
+        [
+            (Some("j ↓".to_string()), "Next entry".to_string()),
+            (Some("k".to_string()), "Previous entry".to_string()),
+        ]
+    );
+}
+
+#[test]
+fn long_key_runs_continue_on_rows_below_the_action() {
+    let spec = |text: &str| key::Key::parse_spec(text).expect("valid key");
+    let list = list_with(vec![
+        binding(1, spec("PageDown"), "Page down", BindingPhase::BeforeWidget),
+        binding(2, ' ', "Page down", BindingPhase::BeforeWidget),
+        binding(
+            3,
+            spec("shift-PageDown"),
+            "Page down",
+            BindingPhase::BeforeWidget,
+        ),
+    ]);
+    assert_eq!(
+        rows(&list, 60),
+        [
+            (Some("PageDown Space".to_string()), "Page down".to_string()),
+            (Some("Shift+PageDown".to_string()), String::new()),
+        ]
+    );
+}
+
+#[test]
+fn arrow_keys_show_as_single_arrows() {
+    let list = list_with(vec![
+        binding(
+            1,
+            key::Key::parse_spec("Left").expect("valid key"),
+            "Back",
+            BindingPhase::BeforeWidget,
+        ),
+        binding(
+            2,
+            key::Ctrl + key::KeyCode::Right,
+            "Forward",
+            BindingPhase::BeforeWidget,
+        ),
+    ]);
+    let keys = rows(&list, 60)
+        .into_iter()
+        .filter_map(|(key, _)| key)
+        .collect::<Vec<_>>();
+    assert_eq!(keys, ["←", "Ctrl+→"]);
+}
+
+#[test]
+fn arrows_keep_a_blank_cell_for_glyphs_wider_than_one() {
+    let left = key::Key::parse_spec("Left").expect("valid key");
+    let list = list_with(vec![
+        binding(1, 'h', "Previous tab", BindingPhase::BeforeWidget),
+        binding(2, left, "Previous tab", BindingPhase::BeforeWidget),
+        binding(3, '[', "Previous tab", BindingPhase::BeforeWidget),
+    ]);
+    let lines = list.display_lines(60);
+    assert_eq!(lines[0].key.as_deref(), Some("h ←  ["));
+}
+
+#[test]
+fn scroll_thumb_spans_the_visible_fraction() -> Result<()> {
+    let bindings = (0..8)
+        .map(|index| {
+            binding(
+                index + 1,
+                char::from(b'a' + index as u8),
+                &format!("Action {index}"),
+                BindingPhase::BeforeWidget,
+            )
+        })
+        .collect();
+    let mut harness = harness_with(40, 4, bindings)?;
+    let thumb_rows = |harness: &Harness| {
+        (0..4)
+            .filter(|&y| harness.buf().get(Point { x: 39, y }).unwrap().ch == '█')
+            .collect::<Vec<_>>()
+    };
+    // Eight rows through a four-row view: the thumb covers half the track.
+    assert_eq!(thumb_rows(&harness), [0, 1]);
+
+    harness.with_root_context(|list: &mut BindingList, context| {
+        list.scroll_to_bottom(context);
+        Ok(())
+    })?;
+    harness.render()?;
+    assert_eq!(thumb_rows(&harness), [2, 3]);
+    Ok(())
 }

@@ -1,3 +1,5 @@
+/// Canopy theme, the default.
+pub mod canopy;
 /// Color helpers.
 mod color;
 /// Dracula theme.
@@ -527,6 +529,16 @@ impl StyleMap {
         }
     }
 
+    /// Iterate over every rule as its canonical path and partial style.
+    ///
+    /// Paths omit the leading `/`, so the root rule's path is empty. The order
+    /// is unspecified.
+    pub fn entries(&self) -> impl Iterator<Item = (&str, &PartialStyle)> {
+        self.styles
+            .iter()
+            .map(|(path, style)| (path.as_str(), style))
+    }
+
     /// Insert a partial style at a path.
     fn insert_style(&mut self, path: &str, style: PartialStyle) {
         self.styles
@@ -886,6 +898,7 @@ mod tests {
     /// Render every built-in theme in a stable order.
     fn dump_all_themes() -> String {
         [
+            ("canopy_dark", super::canopy::canopy_dark()),
             ("solarized_dark", solarized::solarized_dark()),
             ("solarized_light", solarized::solarized_light()),
             ("dracula", dracula::dracula()),

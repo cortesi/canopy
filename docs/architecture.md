@@ -232,6 +232,13 @@ already changed the terminal, making a repeated diff unsafe.
 Widgets draw through `Render` in local coordinates. The runtime clips to the view,
 translates to terminal coordinates, and applies style effects.
 
+Mouse events reach a widget relative to its content origin, before scroll. The
+location is signed: a point in padding above or left of the content is negative,
+and a captured drag can lie anywhere. `View::outer_point()`,
+`View::viewport_point()`, and `View::content_point()` return the cell under the
+pointer in each coordinate space, or nothing when the pointer is outside it. A
+widget hit-tests in the same space it paints.
+
 `TermBuf` owns grapheme writes. It stores a base cell plus continuation cells for
 wide graphemes, clips text by display columns, and clears stale continuation
 cells when narrower text overwrites wider text.
@@ -250,6 +257,13 @@ and explicit preparation. `TurnOutcome` reports the published `FrameId`, evaluat
 admission, unticketed completion, and exit status. Ticket-backed evaluations complete
 through their `EvalTicket`. Crossterm, headless evaluation, and the test harness use
 this driver.
+
+`Work::Input` carries the input events that arrived together. The turn dispatches
+them in order and prepares one frame, so a burst of input costs one render. Layout
+settles before each mouse event that follows another event, so hit testing sees
+current geometry. The terminal adapter drains waiting input into a bounded batch
+and collapses consecutive pointer moves, and drags with the same button, to the
+latest position.
 
 Dispatch completion restores widget slots and applies queued removals before layout.
 The driver services bounded native automation work, due polls, node wakes, and

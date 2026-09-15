@@ -55,8 +55,8 @@ pub mod canopy_widgets {
                 fn prepare(&self, text: &str) {}
             }
 
-            /// Theme used when the caller names none.
-            pub const DEFAULT_THEME: &str = "Solarized (dark)";
+            /// Theme used when the caller names none, matching the Canopy style theme.
+            pub const DEFAULT_THEME: &str = "Canopy (dark)";
 
             impl Highlighter for SyntectHighlighter {
                 fn highlight_line(&self, line: usize, text: &str) -> Vec<HighlightSpan> {}
@@ -792,6 +792,9 @@ pub mod canopy_widgets {
         T: Label, {}
 
     /// A frame around an element with optional title and indicators.
+    ///
+    /// The frame draws scrollbars on its right and bottom edges for its first
+    /// child, and scrolls that child when the scrollbars are pressed or dragged.
     #[derive(Default)]
     pub struct Frame {}
 
@@ -822,6 +825,10 @@ pub mod canopy_widgets {
     #[derive(Default)]
     pub struct Root {}
 
+    /// A proportional scrollbar for one axis of a view.
+    #[derive(Clone, Copy, Debug)]
+    pub struct Scrollbar {}
+
     /// A multi-select widget with checkbox-style items.
     ///
     /// Items can be toggled on/off independently. The selected indices are tracked
@@ -830,6 +837,18 @@ pub mod canopy_widgets {
     pub struct Selector<T>
     where
         T: Label, {}
+
+    /// A row of tabs over a set of pages, one page visible at a time.
+    ///
+    /// Each page is a child node. Tabs hides every page but the active one. When a
+    /// switch hides the page that held focus, focus moves to the first focusable
+    /// node of the new page.
+    ///
+    /// The bar occupies the top row of padding. It paints `tabs/bar`, each label
+    /// `tabs/tab`, and the active label `tabs/tab/active`, or
+    /// `tabs/tab/active/focused` while focus is within the tabs.
+    #[derive(Default)]
+    pub struct Tabs {}
 
     /// Multiline text widget with wrapping and scrolling.
     pub struct Text {}
@@ -1133,6 +1152,8 @@ pub mod canopy_widgets {
 
         fn cursor(&self) -> Option<cursor::Cursor> {}
 
+        fn layout(&self) -> Layout {}
+
         fn measure(&self, c: MeasureConstraints) -> Measurement {}
 
         fn name(&self) -> NodeName {}
@@ -1313,6 +1334,57 @@ pub mod canopy_widgets {
         fn name(&self) -> NodeName {}
     }
 
+    impl CommandNode for Tabs {
+        fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
+    }
+
+    impl Tabs {
+        /// Activate the tab at `index`, clamped to the last tab.
+        pub fn select(&mut self, c: &mut dyn Context, index: usize) -> Result<()> {}
+
+        /// Add `page` under a new tab at the end of the bar and return its node.
+        ///
+        /// The first page added is active. Later pages start hidden.
+        pub fn add_tab<W: 'static + Widget>(
+            &mut self,
+            c: &mut dyn Context,
+            label: impl Into<String>,
+            page: W,
+        ) -> Result<TypedId<W>> {
+        }
+
+        /// Construct tabs with no pages.
+        pub fn new() -> Self {}
+
+        /// Move the active tab by a signed offset, wrapping around.
+        pub fn select_by(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {}
+
+        /// Return the index of the active tab.
+        pub fn active(&self) -> usize {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_select(index: usize) -> canopy::commands::CommandCall {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_select_by(delta: i32) -> canopy::commands::CommandCall {}
+
+        /// Return a typed command reference for this command.
+        pub fn cmd_select() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return a typed command reference for this command.
+        pub fn cmd_select_by() -> &'static canopy::commands::CommandSpec {}
+    }
+
+    impl Widget for Tabs {
+        fn layout(&self) -> Layout {}
+
+        fn name(&self) -> NodeName {}
+
+        fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {}
+
+        fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
+    }
+
     impl CommandNode for Text {
         fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
     }
@@ -1406,6 +1478,38 @@ pub mod canopy_widgets {
         fn name(&self) -> NodeName {}
 
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {}
+    }
+
+    impl Scrollbar {
+        #[must_use]
+        /// Also draw the track around the thumb with `style` and `glyph`.
+        pub const fn with_track(self, style: &'static str, glyph: char) -> Self {}
+
+        /// Construct a horizontal scrollbar whose thumb uses `style` and `glyph`.
+        pub const fn horizontal(style: &'static str, glyph: char) -> Self {}
+
+        /// Construct a vertical scrollbar whose thumb uses `style` and `glyph`.
+        pub const fn vertical(style: &'static str, glyph: char) -> Self {}
+
+        /// Draw the scrollbar of `view` into `track`.
+        pub fn render(&self, render: &mut Render<'_>, view: &View, track: Rect) -> Result<()> {}
+
+        /// Handle a mouse event for the scrollbar of `view`, drawn in `track`.
+        ///
+        /// `track` is in the outer coordinates of the widget that receives the
+        /// event. A press on the track captures the mouse for that widget and the
+        /// release frees it. `scroll_to` moves the node that owns `view` to an
+        /// `(x, y)` scroll offset. Returns [`EventOutcome::Handle`] for events the
+        /// scrollbar uses.
+        pub fn handle_mouse(
+            &mut self,
+            context: &mut dyn Context,
+            event: &mouse::MouseEvent,
+            view: &View,
+            track: Rect,
+            scroll_to: impl FnOnce(&mut dyn Context, u32, u32) -> Result<()>,
+        ) -> Result<EventOutcome> {
+        }
     }
 
     impl ToArgValue for AutoKey {

@@ -16,7 +16,7 @@ use std::{
     sync::OnceLock,
 };
 
-use canopy::style::{Attr, AttrSet, Color, Paint, Style};
+use canopy::style::{Attr, AttrSet, Color, Paint, Style, canopy as palette};
 use syntect::{
     easy::HighlightLines,
     highlighting,
@@ -25,8 +25,8 @@ use syntect::{
 };
 use two_face::syntax::extra_newlines;
 
-/// Theme used when the caller names none.
-pub const DEFAULT_THEME: &str = "Solarized (dark)";
+/// Theme used when the caller names none, matching the Canopy style theme.
+pub const DEFAULT_THEME: &str = "Canopy (dark)";
 
 /// Extensions a bundled syntax covers under another name.
 ///
@@ -92,10 +92,133 @@ fn syntax_for_extension(extension: &str) -> Option<&'static SyntaxReference> {
     })
 }
 
-/// Return the themes shared by every highlighter.
+/// Return the themes shared by every highlighter: syntect's defaults and
+/// [`DEFAULT_THEME`].
 fn theme_set() -> &'static ThemeSet {
     static THEMES: OnceLock<ThemeSet> = OnceLock::new();
-    THEMES.get_or_init(ThemeSet::load_defaults)
+    THEMES.get_or_init(|| {
+        let mut themes = ThemeSet::load_defaults();
+        themes
+            .themes
+            .insert(DEFAULT_THEME.to_string(), canopy_theme());
+        themes
+    })
+}
+
+/// Build the syntax theme that matches the Canopy style theme.
+///
+/// Scopes follow opencode's syntax roles: keywords violet, functions peach,
+/// strings green, numbers and constants orange, types yellow.
+fn canopy_theme() -> Theme {
+    let rules: [(&str, Option<Color>, Option<FontStyle>); 22] = [
+        (
+            "comment, punctuation.definition.comment",
+            Some(palette::MUTED),
+            Some(FontStyle::ITALIC),
+        ),
+        (
+            "keyword, storage, keyword.operator.word",
+            Some(palette::VIOLET),
+            None,
+        ),
+        ("keyword.operator", Some(palette::CYAN), None),
+        (
+            "string, punctuation.definition.string",
+            Some(palette::GREEN),
+            None,
+        ),
+        (
+            "constant.character.escape, string.regexp",
+            Some(palette::CYAN),
+            None,
+        ),
+        ("constant, support.constant", Some(palette::ORANGE), None),
+        (
+            "entity.name.function, support.function, variable.function",
+            Some(palette::PEACH),
+            None,
+        ),
+        (
+            "entity.name.type, entity.name.class, entity.name.struct, entity.name.enum, \
+             entity.name.trait, entity.name.union, entity.other.inherited-class, \
+             support.type, support.class",
+            Some(palette::YELLOW),
+            None,
+        ),
+        (
+            "variable.language, variable.parameter",
+            Some(palette::RED),
+            None,
+        ),
+        (
+            "support.macro, entity.name.macro, meta.annotation, meta.attribute",
+            Some(palette::BLUE),
+            None,
+        ),
+        ("entity.name.tag", Some(palette::RED), None),
+        ("entity.other.attribute-name", Some(palette::YELLOW), None),
+        (
+            "markup.heading, entity.name.section",
+            Some(palette::VIOLET),
+            Some(FontStyle::BOLD),
+        ),
+        ("markup.bold", None, Some(FontStyle::BOLD)),
+        ("markup.italic", None, Some(FontStyle::ITALIC)),
+        (
+            "markup.underline.link, string.other.link",
+            Some(palette::PEACH),
+            None,
+        ),
+        ("markup.inserted", Some(palette::GREEN), None),
+        ("markup.deleted, invalid", Some(palette::RED), None),
+        ("markup.changed", Some(palette::YELLOW), None),
+        ("markup.raw", Some(palette::GREEN), None),
+        (
+            "markup.quote",
+            Some(palette::YELLOW),
+            Some(FontStyle::ITALIC),
+        ),
+        (
+            "meta.diff.header, meta.diff.range",
+            Some(palette::BLUE),
+            None,
+        ),
+    ];
+    let scopes = rules
+        .into_iter()
+        .map(|(scope, foreground, font_style)| highlighting::ThemeItem {
+            scope: scope.parse().expect("canopy theme scopes parse"),
+            style: highlighting::StyleModifier {
+                foreground: foreground.map(syntect_color),
+                background: None,
+                font_style,
+            },
+        })
+        .collect();
+    Theme {
+        name: Some(DEFAULT_THEME.to_string()),
+        settings: highlighting::ThemeSettings {
+            foreground: Some(syntect_color(palette::TEXT)),
+            background: Some(syntect_color(palette::BG)),
+            caret: Some(syntect_color(palette::ACCENT)),
+            selection: Some(syntect_color(palette::HIGHLIGHT)),
+            gutter_foreground: Some(syntect_color(palette::BORDER_ACTIVE)),
+            ..highlighting::ThemeSettings::default()
+        },
+        scopes,
+        ..Theme::default()
+    }
+}
+
+/// Convert a canopy color to an opaque syntect color.
+fn syntect_color(color: Color) -> highlighting::Color {
+    let (r, g, b) = color.rgb();
+    highlighting::Color {
+        r,
+        g,
+        b,
+        a: u8::MAX,
+    }
 }
 
 /// Return a theme by name, falling back to any available theme.

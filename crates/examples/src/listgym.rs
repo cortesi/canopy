@@ -4,7 +4,7 @@ use canopy::{
     error::{Error, Result},
     geom::Size,
     layout::{CanvasContext, MeasureConstraints, Measurement},
-    style::solarized,
+    style::canopy as palette,
 };
 use canopy_widgets::{CanvasWidth, Frame, List, Panes, Selectable, Text, VStack};
 use rand::RngExt;
@@ -296,10 +296,10 @@ impl Loader for ListGym {
 fn setup_style(cnpy: &mut Canopy) {
     cnpy.style_mut()
         .rules()
-        .fg("red/text", solarized::RED)
-        .fg("blue/text", solarized::BLUE)
-        .fg("statusbar/text", solarized::BLUE)
-        .fg("list/selected", solarized::BLUE)
+        .fg("red/text", palette::RED)
+        .fg("blue/text", palette::BLUE)
+        .fg("statusbar/text", palette::ACCENT)
+        .fg("list/selected", palette::ACCENT)
         .apply();
 }
 

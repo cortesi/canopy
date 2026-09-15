@@ -265,6 +265,19 @@ impl Canopy {
         Ok(())
     }
 
+    /// Bring geometry up to date without painting, so the input routed next
+    /// hit-tests the current tree.
+    pub(super) fn settle_layout(&mut self) -> Result<()> {
+        let Some(root_size) = self.root_size else {
+            return Ok(());
+        };
+        if !self.core.changes.layout {
+            return Ok(());
+        }
+        self.pre_render()?;
+        self.core.update_layout(root_size)
+    }
+
     /// Prepare and publish pending state without writing to a backend.
     pub(super) fn prepare_frame(&mut self, force: bool) -> Result<bool> {
         if !self.driver.startup_attempted {

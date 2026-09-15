@@ -55,37 +55,37 @@ impl RoutedInput {
     }
 
     /// Convert a screen-space mouse event to a node-local event.
+    ///
+    /// The location becomes relative to the node's content origin. It stays
+    /// signed, so padding above or left of the content, and captured events
+    /// beyond the node, keep their true offset.
     fn local_mouse(core: &Core, node_id: NodeId, mouse: mouse::MouseEvent) -> mouse::MouseEvent {
         let view = core
             .nodes
             .get(node_id)
             .map(|node| node.view)
             .unwrap_or_default();
-        let local = PointI32::try_from(mouse.location)
-            .ok()
-            .and_then(|screen| view.screen_to_viewport(screen).ok());
-        // Preserve the full unsigned range and the legacy top/left clamp.
-        let location = local.map_or_else(
-            || view.content.to_local_point(mouse.location),
-            |point| Point {
-                x: u32::try_from(point.x).unwrap_or(0),
-                y: u32::try_from(point.y).unwrap_or(0),
-            },
+        let location = PointI32::clamped_from_i64(
+            i64::from(mouse.location.x) - i64::from(view.content.tl.x),
+            i64::from(mouse.location.y) - i64::from(view.content.tl.y),
         );
-        mouse::MouseEvent {
-            action: mouse.action,
-            button: mouse.button,
-            modifiers: mouse.modifiers,
-            location,
-        }
+        mouse::MouseEvent { location, ..mouse }
     }
 }
 
 impl Canopy {
+    /// Return the node under a screen location, or none off screen.
+    fn node_at(&self, location: PointI32) -> Result<Option<NodeId>> {
+        match Point::try_from(location) {
+            Ok(screen) => self.core.locate_node(self.core.root, screen),
+            Err(_) => Ok(None),
+        }
+    }
+
     /// Return the starting target and binding path for a mouse event.
-    fn mouse_route_start(&mut self, location: Point) -> Result<(Option<NodeId>, Path)> {
+    fn mouse_route_start(&mut self, location: PointI32) -> Result<(Option<NodeId>, Path)> {
         if let Some(modal) = self.core.modal_region() {
-            let hit = self.core.locate_node(self.core.root, location)?;
+            let hit = self.node_at(location)?;
             if !hit.is_some_and(|node| self.core.is_ancestor_or_self(modal, node)) {
                 return Ok((None, Path::empty()));
             }
@@ -100,7 +100,7 @@ impl Canopy {
             }
         }
 
-        let target = self.core.locate_node(self.core.root, location)?;
+        let target = self.node_at(location)?;
         let path = target
             .map(|id| self.core.path_of(self.core.root, id))
             .unwrap_or_else(Path::empty);

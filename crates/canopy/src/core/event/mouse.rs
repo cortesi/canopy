@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::{error::ParseError, event::key, geom::Point};
+use crate::{error::ParseError, event::key, geom::PointI32};
 
 /// An abstract specification for a mouse action.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -138,12 +138,19 @@ pub struct MouseEvent {
     pub button: Button,
     /// Keyboard modifiers.
     pub modifiers: key::Mods,
-    /// Cursor location in screen coordinates for incoming events, and relative
-    /// to the node's content origin for events delivered to widgets.
-    /// Coordinates before the content origin saturate to zero, including
-    /// captured events and events in padding, so the conversion is not
-    /// always reversible.
-    pub location: Point,
+    /// Cursor location.
+    ///
+    /// Incoming events carry screen coordinates. Events delivered to a widget
+    /// are relative to its content origin, before scroll. The location is
+    /// signed: a point in padding above or left of the content is negative, and
+    /// a captured event may lie anywhere. Use [`View::outer_point`],
+    /// [`View::viewport_point`], or [`View::content_point`] to find the cell
+    /// under the pointer in the space the widget paints.
+    ///
+    /// [`View::outer_point`]: crate::View::outer_point
+    /// [`View::viewport_point`]: crate::View::viewport_point
+    /// [`View::content_point`]: crate::View::content_point
+    pub location: PointI32,
 }
 
 #[cfg(test)]
@@ -164,7 +171,7 @@ mod tests {
             action: Action::Drag,
             button: Button::Middle,
             modifiers: key::Shift,
-            location: Point { x: 3, y: 4 },
+            location: PointI32 { x: 3, y: 4 },
         };
         assert_eq!(
             Mouse::from(event),

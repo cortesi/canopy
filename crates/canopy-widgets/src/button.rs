@@ -184,7 +184,7 @@ impl Widget for Button {
 mod tests {
     use canopy::{
         Canopy, Loader, ViewContextExt, commands::CommandError, error::Error, event::key,
-        geom::Point, style::Color, testing::harness::Harness,
+        geom::PointI32, style::Color, testing::harness::Harness,
     };
 
     use super::*;
@@ -376,7 +376,7 @@ mod tests {
             action: mouse::Action::Down,
             button: mouse::Button::Left,
             modifiers: key::Empty,
-            location: Point { x: 0, y: 0 },
+            location: PointI32 { x: 0, y: 0 },
         }
     }
 

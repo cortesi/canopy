@@ -10,8 +10,8 @@ mod tests {
         ViewContextExt, Widget, Work,
         commands::ArgValue,
         error::{Error, Result, ScriptErrorKind},
-        event::Event,
-        geom::{Line, Size},
+        event::{Event, key, mouse},
+        geom::{Line, PointI32, Size},
         layout::Layout,
         testing::ManualClock,
     };
@@ -205,11 +205,115 @@ mod tests {
     #[test]
     fn failed_input_publishes_its_widget_mutation_in_the_same_turn() -> Result<()> {
         let (mut canopy, _widget, _clock) = eval_app()?;
-        let result = canopy.turn(Work::Input(Event::Key('f'.into())));
+        let result = canopy.turn(Work::Input(vec![Event::Key('f'.into())]));
         assert!(result.is_err());
         let text = canopy.buf().expect("published cells").screen_text();
         assert_eq!(text.lines().next().unwrap().trim_end(), "failed");
         assert!(canopy.turn(Work::Prepare)?.frame.is_none());
+        Ok(())
+    }
+
+    /// A pane that counts the presses it receives.
+    struct Clicks {
+        clicks: usize,
+    }
+
+    impl Widget for Clicks {
+        fn layout(&self) -> Layout {
+            Layout::fill()
+        }
+
+        fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {
+            if matches!(event, Event::Mouse(m) if m.action == mouse::Action::Down) {
+                self.clicks += 1;
+                return Ok(EventOutcome::Handle);
+            }
+            Ok(EventOutcome::Ignore)
+        }
+    }
+
+    /// Two stacked panes. `h` hides the top pane and `c` counts a key.
+    #[derive(Default)]
+    struct Split {
+        top: Option<TypedId<Clicks>>,
+        bottom: Option<TypedId<Clicks>>,
+        keys: usize,
+    }
+
+    impl Widget for Split {
+        fn layout(&self) -> Layout {
+            Layout::fill()
+        }
+
+        fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
+            self.top = Some(ctx.add_child(Clicks { clicks: 0 })?);
+            self.bottom = Some(ctx.add_child(Clicks { clicks: 0 })?);
+            Ok(())
+        }
+
+        fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
+            let Event::Key(pressed) = event else {
+                return Ok(EventOutcome::Ignore);
+            };
+            if *pressed == 'h' {
+                ctx.set_hidden_of(self.top.expect("mounted").into(), true)?;
+            } else if *pressed == 'c' {
+                self.keys += 1;
+            } else {
+                return Ok(EventOutcome::Ignore);
+            }
+            Ok(EventOutcome::Handle)
+        }
+    }
+
+    fn press_at(x: i32, y: i32) -> Event {
+        Event::Mouse(mouse::MouseEvent {
+            action: mouse::Action::Down,
+            button: mouse::Button::Left,
+            modifiers: key::Empty,
+            location: PointI32 { x, y },
+        })
+    }
+
+    #[test]
+    fn an_input_batch_dispatches_every_event_and_publishes_one_frame() -> Result<()> {
+        let mut canopy = Canopy::new();
+        let split = canopy.replace_root(Split::default())?;
+        canopy.set_root_size(Size::new(8, 4))?;
+        let prepared = canopy.turn(Work::Prepare)?.frame.expect("first frame");
+        let keys = vec![
+            Event::Key('c'.into()),
+            Event::Key('c'.into()),
+            Event::Key('c'.into()),
+        ];
+        let batch = canopy.turn(Work::Input(keys))?;
+        assert_eq!(batch.frame.map(|frame| frame.0), Some(prepared.0 + 1));
+        let counted = canopy.with_root_context(|ctx| {
+            ctx.with_widget_mut(split, |split: &mut Split, _| Ok(split.keys))
+        })?;
+        assert_eq!(counted, 3);
+        Ok(())
+    }
+
+    #[test]
+    fn an_input_batch_settles_layout_before_each_mouse_event() -> Result<()> {
+        let mut canopy = Canopy::new();
+        let split = canopy.replace_root(Split::default())?;
+        canopy.set_root_size(Size::new(8, 4))?;
+        canopy.turn(Work::Prepare)?;
+        // The top pane covers the first two rows until `h` hides it. The bottom
+        // pane then fills the root, so the press lands on it.
+        canopy.turn(Work::Input(vec![Event::Key('h'.into()), press_at(0, 0)]))?;
+        let clicks = canopy.with_root_context(|ctx| {
+            ctx.with_widget_mut(split, |split: &mut Split, ctx| {
+                let top = split.top.expect("mounted");
+                let bottom = split.bottom.expect("mounted");
+                let top = ctx.with_widget_mut(top, |pane: &mut Clicks, _| Ok(pane.clicks))?;
+                let bottom = ctx.with_widget_mut(bottom, |pane: &mut Clicks, _| Ok(pane.clicks))?;
+                Ok((top, bottom))
+            })
+        })?;
+        assert_eq!(clicks, (0, 1));
         Ok(())
     }
 }

@@ -11,7 +11,7 @@ use canopy::{
     Canopy, Context, ContextExt, FocusScope, Loader, NodeName, Widget, buf, derive_commands,
     error::Result,
     event::{key, mouse},
-    geom::Point,
+    geom::{Point, PointI32},
     layout::{Edges, Layout},
     style::{AttrSet, Color, Paint, PartialStyle, Style, StyleManager},
     testing::harness::Harness,
@@ -159,7 +159,7 @@ fn mouse_event(action: mouse::Action, x: u32, y: u32) -> mouse::MouseEvent {
         action,
         button: mouse::Button::Left,
         modifiers: key::Empty,
-        location: Point { x, y },
+        location: PointI32::try_from(Point { x, y }).expect("test points fit"),
     }
 }
 
@@ -674,11 +674,12 @@ fn nested_padding_scroll_and_captured_pointer_agree_on_wide_grapheme() {
         .mouse(mouse_event(mouse::Action::Drag, 4, 2))
         .unwrap();
     assert_eq!(editor_cursor(&mut harness), TextPosition::new(2, 2));
-    // Outside input clamps at the legacy unsigned viewport boundary.
+    // A captured drag two cells left of the content keeps its signed offset,
+    // so it reaches past the scrolled-out column to the start of the line.
     harness
         .mouse(mouse_event(mouse::Action::Drag, 0, 2))
         .unwrap();
-    assert_eq!(editor_cursor(&mut harness), TextPosition::new(2, 1));
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(2, 0));
     harness.mouse(mouse_event(mouse::Action::Up, 0, 2)).unwrap();
     harness
         .with_root_context(|_root: &mut EditorHost, ctx| {
@@ -793,7 +794,7 @@ fn mouse_wheel_scrolls_editor() {
             action: mouse::Action::ScrollDown,
             button: mouse::Button::None,
             modifiers: key::Empty,
-            location: Point { x: 1, y: 1 },
+            location: PointI32 { x: 1, y: 1 },
         })
         .unwrap();
     let after = editor_view_scroll(&mut harness);
@@ -804,7 +805,7 @@ fn mouse_wheel_scrolls_editor() {
             action: mouse::Action::ScrollUp,
             button: mouse::Button::None,
             modifiers: key::Empty,
-            location: Point { x: 1, y: 1 },
+            location: PointI32 { x: 1, y: 1 },
         })
         .unwrap();
     let end = editor_view_scroll(&mut harness);
@@ -1178,6 +1179,29 @@ canopy.bind("q", {
     harness.key('q').unwrap();
     assert_eq!(editor_text(&mut harness), "q");
     assert_eq!(host_binding_hits(&mut harness), 0);
+}
+
+#[test]
+fn read_only_editor_leaves_edit_keys_to_bindings() {
+    let config = EditorConfig::new()
+        .with_mode(EditMode::Text)
+        .with_read_only(true);
+    let mut harness = build_harness("text", config, 6, 1);
+    harness
+        .canopy
+        .eval_script(
+            r#"
+canopy.bind("q", {
+    path = "editor_host",
+    phase = "after_widget",
+    description = "Record binding",
+}, command.editor_host.record_binding())
+"#,
+        )
+        .unwrap();
+    harness.key('q').unwrap();
+    assert_eq!(editor_text(&mut harness), "text");
+    assert_eq!(host_binding_hits(&mut harness), 1);
 }
 
 #[derive(Clone)]

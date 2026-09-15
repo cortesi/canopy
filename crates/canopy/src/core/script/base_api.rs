@@ -1419,7 +1419,7 @@ fn host_send_click<'s>(
                 action: mouse::Action::Down,
                 button: mouse::Button::Left,
                 modifiers: key::Empty,
-                location: Point { x, y },
+                location: PointI32::try_from(Point { x, y })?,
             },
         )?;
         canopy.mouse(
@@ -1428,7 +1428,7 @@ fn host_send_click<'s>(
                 action: mouse::Action::Up,
                 button: mouse::Button::Left,
                 modifiers: key::Empty,
-                location: Point { x, y },
+                location: PointI32::try_from(Point { x, y })?,
             },
         )
     })?;
@@ -1461,7 +1461,7 @@ fn host_send_scroll<'s>(
                 action,
                 button: mouse::Button::None,
                 modifiers: key::Empty,
-                location: Point { x, y },
+                location: PointI32::try_from(Point { x, y })?,
             },
         )
     })?;

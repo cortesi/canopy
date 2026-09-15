@@ -6,7 +6,7 @@ use canopy::{
     error::{Error, Result},
     geom::Size,
     layout::{Constraint, Direction, Layout, MeasureConstraints, Measurement},
-    style::{Attr, AttrSet, solarized},
+    style::{Attr, AttrSet, canopy as palette},
 };
 use canopy_widgets::{
     Border, Button, Center, Frame, List, SINGLE, SINGLE_THICK, Selectable, Text, VStack,
@@ -434,12 +434,10 @@ fn setup_style(cnpy: &mut Canopy) {
         bold: true,
         ..AttrSet::default()
     };
-    let button_normal = StyleBuilder::new()
-        .fg(solarized::BASE3)
-        .bg(solarized::BASE02);
+    let button_normal = StyleBuilder::new().fg(palette::TEXT).bg(palette::ELEMENT);
     let button_selected = StyleBuilder::new()
-        .fg(solarized::BASE3)
-        .bg(solarized::BLUE)
+        .fg(palette::BG)
+        .bg(palette::ACCENT)
         .attrs(selected_attrs);
 
     let rules = crate::selectable_entry_styles(cnpy.style_mut().rules(), "termgym/entry");
@@ -451,15 +449,15 @@ fn setup_style(cnpy: &mut Canopy) {
             button_selected,
         )
         .prefix("termgym/frame")
-        .fg("", solarized::BASE01)
+        .fg("", palette::BORDER)
         .style(
             "focused",
-            StyleBuilder::new().fg(solarized::YELLOW).attr(Attr::Bold),
+            StyleBuilder::new().fg(palette::YELLOW).attr(Attr::Bold),
         )
-        .fg("active", solarized::ORANGE)
+        .fg("active", palette::ORANGE)
         .style(
             "title",
-            StyleBuilder::new().fg(solarized::BASE3).attr(Attr::Bold),
+            StyleBuilder::new().fg(palette::TEXT).attr(Attr::Bold),
         )
         .apply();
 }

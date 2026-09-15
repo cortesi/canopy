@@ -115,12 +115,13 @@ where
         if event.action != mouse::Action::Down || event.button != mouse::Button::Left {
             return Ok(());
         }
-        let clicked_row = event.location.y.saturating_add(c.view().scroll.y) as usize;
         if !self.expanded {
             return self.toggle(c);
         }
-        if clicked_row < self.items.len() {
-            self.highlighted = clicked_row;
+        if let Some(point) = c.view().content_point(event.location)
+            && (point.y as usize) < self.items.len()
+        {
+            self.highlighted = point.y as usize;
             self.confirm(c)?;
         }
         Ok(())

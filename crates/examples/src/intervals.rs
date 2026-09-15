@@ -6,7 +6,7 @@ use canopy::{
     error::Result,
     geom::Size,
     layout::{Edges, Layout, MeasureConstraints, Measurement},
-    style::solarized,
+    style::canopy as palette,
 };
 use canopy_widgets::{Border, Center, Frame, List, SINGLE, Selectable, Text, VStack};
 use unicode_width::UnicodeWidthStr;
@@ -269,9 +269,7 @@ fn setup_style(cnpy: &mut Canopy) {
         .no_prefix()
         .style(
             "statusbar/text",
-            StyleBuilder::new()
-                .fg(solarized::BASE02)
-                .bg(solarized::BASE1),
+            StyleBuilder::new().fg(palette::SUBTEXT).bg(palette::PANEL),
         )
         .apply();
 }

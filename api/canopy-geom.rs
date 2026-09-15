@@ -224,6 +224,9 @@ pub mod canopy_geom {
 
         /// Convert widened coordinates without losing out-of-range information.
         pub fn try_from_i64(x: i64, y: i64) -> Result<Self, Error> {}
+
+        /// Return the nearest unsigned point, raising negative coordinates to zero.
+        pub fn clamped_point(self) -> Point {}
     }
 
     impl TryFrom<Point> for PointI32 {

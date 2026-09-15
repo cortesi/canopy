@@ -4,7 +4,7 @@ use canopy::{
     error::Result,
     event::{Event, key},
     geom::{Line, Point, Size},
-    layout::{MeasureConstraints, Measurement},
+    layout::{Layout, MeasureConstraints, Measurement},
     style::{WidgetState, roles},
     text,
 };
@@ -285,9 +285,16 @@ impl Widget for Input {
         Ok(outcome)
     }
 
+    fn layout(&self) -> Layout {
+        // A text field keeps a stable width while its value changes, so it
+        // fills the width it is given. Its height is the one measured row.
+        Layout::column().flex_horizontal(1)
+    }
+
     fn measure(&self, c: MeasureConstraints) -> Measurement {
-        let text_len = self.buffer.display_width().max(1);
-        c.clamp(Size::new(text_len, 1))
+        // The cell after the text holds the caret at the end of the value.
+        let width = self.buffer.display_width().saturating_add(1);
+        c.clamp(Size::new(width, 1))
     }
 
     fn name(&self) -> NodeName {

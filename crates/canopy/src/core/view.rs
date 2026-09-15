@@ -45,6 +45,29 @@ impl View {
         )?)
     }
 
+    /// Return the outer-local cell a widget-local location falls in, padding
+    /// included, or `None` outside the outer rect.
+    ///
+    /// This is the space `outer_rect_local()` paints in.
+    pub fn outer_point(&self, location: PointI32) -> Option<Point> {
+        let point = Point::try_from(self.viewport_to_outer(location).ok()?).ok()?;
+        (point.x < self.outer.w && point.y < self.outer.h).then_some(point)
+    }
+
+    /// Return the visible content cell a widget-local location falls in,
+    /// before scroll, or `None` outside the content rect.
+    pub fn viewport_point(&self, location: PointI32) -> Option<Point> {
+        let point = Point::try_from(location).ok()?;
+        (point.x < self.content.w && point.y < self.content.h).then_some(point)
+    }
+
+    /// Return the canvas cell under a widget-local location, scroll included,
+    /// or `None` outside the visible content.
+    pub fn content_point(&self, location: PointI32) -> Option<Point> {
+        self.viewport_point(location)?;
+        Point::try_from(self.viewport_to_content(location).ok()?).ok()
+    }
+
     /// Size of the outer rect.
     pub fn outer_size(&self) -> Size {
         self.outer.size()
@@ -160,6 +183,32 @@ mod tests {
             view.screen_to_viewport(PointI32 { x: 9, y: 3 }).unwrap(),
             PointI32 { x: -2, y: -2 },
         );
+    }
+
+    #[test]
+    fn mouse_locations_resolve_in_each_coordinate_space() {
+        let view = View::new(
+            RectI32::new(10, 4, 12, 8),
+            RectI32::new(11, 5, 10, 6),
+            Point { x: 0, y: 3 },
+            Size::new(30, 20),
+        );
+        // The top-left padding cell lies one cell before the content origin.
+        let padding = PointI32 { x: -1, y: -1 };
+        assert_eq!(view.outer_point(padding), Some(Point { x: 0, y: 0 }));
+        assert_eq!(view.viewport_point(padding), None);
+        assert_eq!(view.content_point(padding), None);
+
+        let inside = PointI32 { x: 2, y: 1 };
+        assert_eq!(view.outer_point(inside), Some(Point { x: 3, y: 2 }));
+        assert_eq!(view.viewport_point(inside), Some(Point { x: 2, y: 1 }));
+        assert_eq!(view.content_point(inside), Some(Point { x: 2, y: 4 }));
+
+        let right_padding = PointI32 { x: 10, y: 0 };
+        assert_eq!(view.outer_point(right_padding), Some(Point { x: 11, y: 1 }));
+        assert_eq!(view.content_point(right_padding), None);
+
+        assert_eq!(view.outer_point(PointI32 { x: -5, y: 2 }), None);
     }
 
     #[test]

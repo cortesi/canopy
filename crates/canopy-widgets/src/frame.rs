@@ -1,5 +1,5 @@
 use canopy::{
-    Context, EventOutcome, NodeId, NodeName, Render, View, ViewContext, Widget, derive_commands,
+    Context, EventOutcome, NodeId, NodeName, Render, ViewContext, Widget, derive_commands,
     error::Result,
     event::{Event, mouse},
     geom,
@@ -8,6 +8,7 @@ use canopy::{
 use unicode_width::UnicodeWidthStr;
 
 use super::boxed::{BoxGlyphs, ROUND};
+use crate::Scrollbar;
 
 /// Active vertical scrollbar indicator.
 const SCROLL_VERTICAL: char = '█';
@@ -17,50 +18,19 @@ const SCROLL_HORIZONTAL: char = '▄';
 /// Lines to scroll per mouse wheel tick within a frame.
 const WHEEL_SCROLL_LINES: i32 = 3;
 
-/// Scrollbar axis used for drag tracking.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ScrollAxis {
-    /// Vertical scrollbar.
-    Vertical,
-    /// Horizontal scrollbar.
-    Horizontal,
-}
-
-/// Scrollbar drag tracking state.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct ScrollDrag {
-    /// Axis being dragged.
-    axis: ScrollAxis,
-    /// Pointer offset within the active indicator.
-    grab_offset: u32,
-}
-
-impl ScrollDrag {
-    /// Start a vertical scrollbar drag.
-    fn vertical(grab_offset: u32) -> Self {
-        Self {
-            axis: ScrollAxis::Vertical,
-            grab_offset,
-        }
-    }
-
-    /// Start a horizontal scrollbar drag.
-    fn horizontal(grab_offset: u32) -> Self {
-        Self {
-            axis: ScrollAxis::Horizontal,
-            grab_offset,
-        }
-    }
-}
-
 /// A frame around an element with optional title and indicators.
+///
+/// The frame draws scrollbars on its right and bottom edges for its first
+/// child, and scrolls that child when the scrollbars are pressed or dragged.
 pub struct Frame {
     /// Glyph set for rendering the box border.
     box_glyphs: BoxGlyphs,
     /// Optional title string.
     title: Option<String>,
-    /// Active scrollbar drag state.
-    scroll_drag: Option<ScrollDrag>,
+    /// Scrollbar on the right edge.
+    vertical: Scrollbar,
+    /// Scrollbar on the bottom edge.
+    horizontal: Scrollbar,
 }
 
 #[derive_commands]
@@ -70,7 +40,8 @@ impl Frame {
         Self {
             box_glyphs: ROUND,
             title: None,
-            scroll_drag: None,
+            vertical: Scrollbar::vertical("frame/active", SCROLL_VERTICAL),
+            horizontal: Scrollbar::horizontal("frame/active", SCROLL_HORIZONTAL),
         }
     }
 
@@ -131,13 +102,8 @@ impl Widget for Frame {
         if let Some(child_id) = child
             && let Some(child_view) = ctx.view_of(child_id)
         {
-            if let Some((_, active, _)) = child_view.vactive(f.right)? {
-                rndr.fill("frame/active", active, SCROLL_VERTICAL)?;
-            }
-
-            if let Some((_, active, _)) = child_view.hactive(f.bottom)? {
-                rndr.fill("frame/active", active, SCROLL_HORIZONTAL)?;
-            }
+            self.vertical.render(rndr, &child_view, f.right)?;
+            self.horizontal.render(rndr, &child_view, f.bottom)?;
         }
 
         Ok(())
@@ -157,34 +123,6 @@ impl Widget for Frame {
 
         let view_size = child_view.content_size();
         let canvas_size = child_view.canvas;
-        let outer = ctx.view().outer_rect_local();
-        let frame = geom::FrameRects::new(outer, 1);
-        let outer_location = geom::Point::try_from(
-            ctx.view()
-                .viewport_to_outer(geom::PointI32::try_from(m.location)?)?,
-        )?;
-
-        if let Some(drag) = self.scroll_drag {
-            match m.action {
-                mouse::Action::Drag => {
-                    if let Some(outcome) =
-                        handle_scroll_drag(ctx, child_id, &child_view, &frame, outer_location, drag)
-                    {
-                        return Ok(outcome);
-                    }
-                    self.scroll_drag = None;
-                    ctx.release_mouse()?;
-                    return Ok(EventOutcome::Handle);
-                }
-                mouse::Action::Up if m.button == mouse::Button::Left => {
-                    self.scroll_drag = None;
-                    ctx.release_mouse()?;
-                    return Ok(EventOutcome::Handle);
-                }
-                _ => {}
-            }
-        }
-
         match m.action {
             mouse::Action::ScrollUp
                 if scrollable(view_size.h, canvas_size.h)
@@ -210,61 +148,23 @@ impl Widget for Frame {
             {
                 return Ok(EventOutcome::Handle);
             }
-            mouse::Action::Down if m.button == mouse::Button::Left => {
-                let mut consumed = false;
-
-                if scrollable(view_size.h, canvas_size.h)
-                    && frame.right.contains_point(outer_location)
-                {
-                    if let Some(active) =
-                        scroll_active_rect(&child_view, frame.right, ScrollAxis::Vertical)
-                        && active.contains_point(outer_location)
-                    {
-                        let grab_offset = outer_location.y.saturating_sub(active.tl.y);
-                        self.scroll_drag = Some(ScrollDrag::vertical(grab_offset));
-                        ctx.capture_mouse()?;
-                        return Ok(EventOutcome::Handle);
-                    }
-
-                    let pos = outer_location.y.saturating_sub(frame.right.tl.y);
-                    let target_y =
-                        scroll_offset_for_click(pos, frame.right.h, canvas_size.h, view_size.h);
-                    if scroll_child_to(ctx, child_id, child_view.scroll.x, target_y) {
-                        return Ok(EventOutcome::Handle);
-                    }
-                    consumed = true;
-                }
-
-                if scrollable(view_size.w, canvas_size.w)
-                    && frame.bottom.contains_point(outer_location)
-                {
-                    if let Some(active) =
-                        scroll_active_rect(&child_view, frame.bottom, ScrollAxis::Horizontal)
-                        && active.contains_point(outer_location)
-                    {
-                        let grab_offset = outer_location.x.saturating_sub(active.tl.x);
-                        self.scroll_drag = Some(ScrollDrag::horizontal(grab_offset));
-                        ctx.capture_mouse()?;
-                        return Ok(EventOutcome::Handle);
-                    }
-
-                    let pos = outer_location.x.saturating_sub(frame.bottom.tl.x);
-                    let target_x =
-                        scroll_offset_for_click(pos, frame.bottom.w, canvas_size.w, view_size.w);
-                    if scroll_child_to(ctx, child_id, target_x, child_view.scroll.y) {
-                        return Ok(EventOutcome::Handle);
-                    }
-                    consumed = true;
-                }
-
-                if consumed {
-                    return Ok(EventOutcome::Handle);
-                }
-            }
             _ => {}
         }
 
-        Ok(EventOutcome::Ignore)
+        let frame = geom::FrameRects::new(ctx.view().outer_rect_local(), 1);
+        let scroll_child = |ctx: &mut dyn Context, x: u32, y: u32| {
+            scroll_child_to(ctx, child_id, x, y);
+            Ok(())
+        };
+        if self
+            .vertical
+            .handle_mouse(ctx, m, &child_view, frame.right, scroll_child)?
+            == EventOutcome::Handle
+        {
+            return Ok(EventOutcome::Handle);
+        }
+        self.horizontal
+            .handle_mouse(ctx, m, &child_view, frame.bottom, scroll_child)
     }
 
     fn layout(&self) -> Layout {
@@ -309,116 +209,4 @@ fn scroll_child_to(ctx: &mut dyn Context, child: NodeId, x: u32, y: u32) -> bool
         return false;
     }
     changed
-}
-
-/// Convert a scroll track click into a scroll offset.
-fn scroll_offset_for_click(pos: u32, track_len: u32, canvas_len: u32, view_len: u32) -> u32 {
-    if track_len == 0 || view_len == 0 || canvas_len <= view_len {
-        return 0;
-    }
-
-    let max_scroll = canvas_len - view_len;
-    let pos = pos.min(track_len.saturating_sub(1));
-    let scaled = (u64::from(pos) * u64::from(canvas_len)) / u64::from(track_len.max(1));
-    scaled.min(u64::from(max_scroll)) as u32
-}
-
-/// Return the active scrollbar indicator rect for the given track and axis.
-fn scroll_active_rect(view: &View, track: geom::Rect, axis: ScrollAxis) -> Option<geom::Rect> {
-    match axis {
-        ScrollAxis::Vertical => view
-            .vactive(track)
-            .ok()
-            .flatten()
-            .map(|(_, active, _)| active),
-        ScrollAxis::Horizontal => view
-            .hactive(track)
-            .ok()
-            .flatten()
-            .map(|(_, active, _)| active),
-    }
-}
-
-/// Convert a scrollbar drag position into a scroll offset.
-fn scroll_offset_for_drag(
-    pos: u32,
-    track_len: u32,
-    thumb_len: u32,
-    canvas_len: u32,
-    view_len: u32,
-) -> u32 {
-    if track_len == 0 || thumb_len == 0 || canvas_len <= view_len {
-        return 0;
-    }
-
-    let scroll_range = canvas_len - view_len;
-    let track_range = track_len.saturating_sub(thumb_len);
-    if track_range == 0 {
-        return 0;
-    }
-
-    let pos = pos.min(track_range);
-    let scaled = (u64::from(pos) * u64::from(scroll_range)) / u64::from(track_range);
-    scaled as u32
-}
-
-/// Handle an in-progress scrollbar drag.
-fn handle_scroll_drag(
-    ctx: &mut dyn Context,
-    child_id: NodeId,
-    child_view: &View,
-    frame: &geom::FrameRects,
-    outer_location: geom::Point,
-    drag: ScrollDrag,
-) -> Option<EventOutcome> {
-    let (track, pointer_pos, view_len, canvas_len) = match drag.axis {
-        ScrollAxis::Vertical => (
-            frame.right,
-            outer_location.y.saturating_sub(frame.right.tl.y),
-            child_view.content.h,
-            child_view.canvas.h,
-        ),
-        ScrollAxis::Horizontal => (
-            frame.bottom,
-            outer_location.x.saturating_sub(frame.bottom.tl.x),
-            child_view.content.w,
-            child_view.canvas.w,
-        ),
-    };
-
-    if !scrollable(view_len, canvas_len) {
-        return Some(EventOutcome::Handle);
-    }
-
-    let active = scroll_active_rect(child_view, track, drag.axis)?;
-    let thumb_len = match drag.axis {
-        ScrollAxis::Vertical => active.h,
-        ScrollAxis::Horizontal => active.w,
-    };
-    let pos = pointer_pos.saturating_sub(drag.grab_offset);
-    let target = scroll_offset_for_drag(
-        pos,
-        track_len(track, drag.axis),
-        thumb_len,
-        canvas_len,
-        view_len,
-    );
-    match drag.axis {
-        ScrollAxis::Vertical => {
-            scroll_child_to(ctx, child_id, child_view.scroll.x, target);
-        }
-        ScrollAxis::Horizontal => {
-            scroll_child_to(ctx, child_id, target, child_view.scroll.y);
-        }
-    }
-
-    Some(EventOutcome::Handle)
-}
-
-/// Return the length of a scrollbar track for the given axis.
-fn track_len(track: geom::Rect, axis: ScrollAxis) -> u32 {
-    match axis {
-        ScrollAxis::Vertical => track.h,
-        ScrollAxis::Horizontal => track.w,
-    }
 }

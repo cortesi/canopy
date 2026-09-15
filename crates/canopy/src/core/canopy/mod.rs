@@ -50,7 +50,7 @@ use crate::{
     event::Event,
     geom::Size,
     script,
-    style::{StyleMap, solarized},
+    style::{StyleMap, canopy::canopy_dark},
     widget::Widget,
 };
 
@@ -431,7 +431,7 @@ impl Canopy {
             fixtures: HashMap::new(),
             mode_hooks: BTreeMap::new(),
             synced_mode_generation: 0,
-            style: solarized::solarized_dark(),
+            style: canopy_dark(),
             root_size: None,
             render_limits: RenderLimits::default(),
             termbuf: None,

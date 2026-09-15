@@ -17,6 +17,8 @@ pub struct Palette {
     pub bg: Color,
     /// Inactive frame borders.
     pub frame: Color,
+    /// Border of the frame that holds focus.
+    pub frame_focused: Color,
     /// Border of the frame that owns the active subtree.
     pub frame_active: Color,
     /// Frame title text.
@@ -27,10 +29,14 @@ pub struct Palette {
     pub muted_fg: Color,
     /// Background of panels such as the help overlay and prompt.
     pub panel_bg: Color,
-    /// Editor selection background.
+    /// Background of raised elements set on a panel, such as inactive tabs.
+    pub element_bg: Color,
+    /// Selection background: editor selections and the active tab.
     pub selection_bg: Color,
     /// Editor line-number gutter.
     pub line_number: Color,
+    /// Key names in the help overlay.
+    pub key: Color,
     /// Named blue.
     pub blue: Color,
     /// Named red.
@@ -39,7 +45,7 @@ pub struct Palette {
     pub magenta: Color,
     /// Named violet.
     pub violet: Color,
-    /// Named cyan, also the help overlay's key colour.
+    /// Named cyan, also the focused selected selector background.
     pub cyan: Color,
     /// Named green.
     pub green: Color,
@@ -61,7 +67,7 @@ pub fn theme(p: &Palette) -> StyleMap {
                 .attrs(AttrSet::default()),
         )
         .fg("/frame", p.frame)
-        .fg("/frame/focused", p.accent)
+        .fg("/frame/focused", p.frame_focused)
         .fg("/frame/active", p.frame_active)
         .fg("/frame/title", p.frame_title)
         .fg("/blue", p.blue)
@@ -87,6 +93,28 @@ pub fn theme(p: &Palette) -> StyleMap {
         .style(
             "/dropdown/highlight",
             StyleBuilder::new().fg(p.bg).bg(p.accent),
+        )
+        .style(
+            "/tabs/bar",
+            StyleBuilder::new().fg(p.muted_fg).bg(p.panel_bg),
+        )
+        .style(
+            "/tabs/tab",
+            StyleBuilder::new().fg(p.muted_fg).bg(p.element_bg),
+        )
+        .style(
+            "/tabs/tab/active",
+            StyleBuilder::new()
+                .fg(p.accent)
+                .bg(p.selection_bg)
+                .attrs(AttrSet::new(Attr::Bold)),
+        )
+        .style(
+            "/tabs/tab/active/focused",
+            StyleBuilder::new()
+                .fg(p.bg)
+                .bg(p.accent)
+                .attrs(AttrSet::new(Attr::Bold)),
         )
         .style("/editor/text", StyleBuilder::new().fg(p.fg).bg(p.bg))
         .style(
@@ -120,7 +148,7 @@ pub fn theme(p: &Palette) -> StyleMap {
         .style_all(
             &["/help/key", "/help/footer/key"],
             StyleBuilder::new()
-                .fg(p.cyan)
+                .fg(p.key)
                 .bg(p.panel_bg)
                 .attrs(AttrSet::new(Attr::Bold)),
         )

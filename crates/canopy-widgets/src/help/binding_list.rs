@@ -3,13 +3,13 @@
 use std::mem;
 
 use canopy::{
-    Canopy, Context, EventOutcome, Loader, NodeName, Render, ViewContext, Widget,
+    Canopy, Context, EventOutcome, Loader, NodeName, Render, View, ViewContext, Widget,
     commands::CommandStatus,
     derive_commands,
     error::Result,
     event::{
         Event,
-        key::{Empty, KeyCode},
+        key::{Empty, Key, KeyCode},
         mouse,
     },
     geom::{Line, Rect, Size},
@@ -17,6 +17,11 @@ use canopy::{
     layout::{CanvasContext, Layout, MeasureOverflow},
 };
 use unicode_width::UnicodeWidthStr;
+
+use crate::Scrollbar;
+
+/// Widest row of keys for one action before further keys continue below.
+const KEY_ROW_WIDTH: usize = 20;
 
 /// One prepared display line.
 pub(super) struct DisplayLine {
@@ -32,13 +37,18 @@ pub(super) struct DisplayLine {
 pub struct BindingList {
     /// Captured application context, absent while help is closed.
     snapshot: Option<BindingSnapshot>,
+    /// Scrollbar drawn in the gutter the list keeps clear while it scrolls.
+    scrollbar: Scrollbar,
 }
 
 #[derive_commands]
 impl BindingList {
     /// Construct an empty list.
     pub(crate) const fn new() -> Self {
-        Self { snapshot: None }
+        Self {
+            snapshot: None,
+            scrollbar: Scrollbar::vertical("help/indicator", '█'),
+        }
     }
 
     /// Replace the captured snapshot and return the prior value.
@@ -101,7 +111,7 @@ impl BindingList {
         display_lines(bindings, width)
     }
 
-    /// Reserve a gutter when scrolling so the indicator never covers text.
+    /// Reserve a gutter when scrolling so the scrollbar never covers text.
     ///
     /// Returns the display lines and the text width used to build them.
     fn viewport_lines(&self, view: Size) -> (Vec<DisplayLine>, u32) {
@@ -147,23 +157,19 @@ impl Widget for BindingList {
                 context.scroll_down();
                 Ok(EventOutcome::Handle)
             }
-            mouse::Action::Down if mouse.button == mouse::Button::Left => {
+            _ => {
                 let view = context.view();
-                if view.canvas.h > view.view_rect().h
-                    && view.content.w > 0
-                    && mouse.location.x + 1 >= view.content.w
-                {
-                    let viewport = view.view_rect().h;
-                    let maximum = view.canvas.h.saturating_sub(viewport);
-                    let denominator = view.content.h.saturating_sub(1).max(1);
-                    let target =
-                        maximum.saturating_mul(mouse.location.y.min(denominator)) / denominator;
-                    context.scroll_to(0, target);
-                    return Ok(EventOutcome::Handle);
-                }
-                Ok(EventOutcome::Ignore)
+                self.scrollbar.handle_mouse(
+                    context,
+                    mouse,
+                    &view,
+                    scroll_track(&view),
+                    |context, x, y| {
+                        context.scroll_to(x, y);
+                        Ok(())
+                    },
+                )
             }
-            _ => Ok(EventOutcome::Ignore),
         }
     }
 
@@ -183,18 +189,8 @@ impl Widget for BindingList {
             render_line(render, line, 0, y, width)?;
         }
 
-        if view.content.w > 0 && view.content.h > 0 && view.canvas.h > viewport.h {
-            let maximum = view.canvas.h.saturating_sub(viewport.h).max(1);
-            let indicator_y = viewport
-                .tl
-                .y
-                .saturating_mul(view.content.h.saturating_sub(1))
-                / maximum;
-            render.fill(
-                "help/indicator",
-                Rect::new(view.content.w - 1, indicator_y, 1, 1),
-                '█',
-            )?;
+        if view.content.w > 0 && view.content.h > 0 {
+            self.scrollbar.render(render, &view, scroll_track(&view))?;
         }
         Ok(())
     }
@@ -202,6 +198,20 @@ impl Widget for BindingList {
     fn name(&self) -> NodeName {
         NodeName::convert("binding_list")
     }
+}
+
+/// Return the scrollbar track: the last content column, which the list keeps
+/// clear while it scrolls.
+fn scroll_track(view: &View) -> Rect {
+    Rect::new(view.content.w.saturating_sub(1), 0, 1, view.content.h)
+}
+
+/// Bindings that share one action, shown together.
+struct BindingGroup {
+    /// Distinct key labels, in display order.
+    keys: Vec<String>,
+    /// Action text shared by every key.
+    description: String,
 }
 
 /// Build the sorted display lines for `bindings` at `width`.
@@ -214,14 +224,34 @@ pub(super) fn display_lines(bindings: &[AvailableBinding], width: u32) -> Vec<Di
         }];
     }
 
-    let mut bindings = bindings.iter().collect::<Vec<_>>();
-    bindings.sort_by_cached_key(|binding| binding_sort_key(binding));
-    let max_key_width = bindings
+    let groups = binding_groups(bindings)
+        .into_iter()
+        .map(|group| (key_rows(&group.keys), group.description))
+        .collect::<Vec<_>>();
+    let max_key_width = groups
         .iter()
-        .map(|binding| UnicodeWidthStr::width(binding.key.to_string().as_str()))
+        .flat_map(|(rows, _)| rows)
+        .map(|row| text_width(row))
         .max()
         .unwrap_or(0);
-    binding_lines(&bindings, width, max_key_width)
+    binding_lines(&groups, width, max_key_width)
+}
+
+/// Return the width that shows every action on one row without wrapping.
+pub(super) fn natural_width(bindings: &[AvailableBinding]) -> usize {
+    let groups = binding_groups(bindings);
+    let keys = groups
+        .iter()
+        .flat_map(|group| key_rows(&group.keys))
+        .map(|row| text_width(&row))
+        .max()
+        .unwrap_or(0);
+    let description = groups
+        .iter()
+        .map(|group| text_width(&group.description))
+        .max()
+        .unwrap_or(0);
+    keys + 2 + description
 }
 
 /// Render one display line from column `x` of row `y`, within `width` cells.
@@ -235,7 +265,7 @@ pub(super) fn render_line(
     let Some(key) = &line.key else {
         return render.text(line.style, Line::new(x, y, width), &line.text);
     };
-    let key_width = UnicodeWidthStr::width(key.as_str()) as u32;
+    let key_width = text_width(key) as u32;
     render.text("help/key", Line::new(x, y, key_width.min(width)), key)?;
     let start = key_width.saturating_add(2).min(width);
     render.text(
@@ -245,30 +275,99 @@ pub(super) fn render_line(
     )
 }
 
+/// Merge bindings that show the same action into groups, ordered by their
+/// first key.
+fn binding_groups(bindings: &[AvailableBinding]) -> Vec<BindingGroup> {
+    let mut sorted = bindings.iter().collect::<Vec<_>>();
+    sorted.sort_by_cached_key(|binding| binding_sort_key(binding));
+    let mut groups: Vec<BindingGroup> = Vec::new();
+    for binding in sorted {
+        let key = key_label(binding.key);
+        let description = binding_description(binding);
+        match groups
+            .iter_mut()
+            .find(|group| group.description == description)
+        {
+            Some(group) if !group.keys.contains(&key) => group.keys.push(key),
+            Some(_) => {}
+            None => groups.push(BindingGroup {
+                keys: vec![key],
+                description,
+            }),
+        }
+    }
+    groups
+}
+
+/// Pack key labels into rows no wider than [`KEY_ROW_WIDTH`], with at least one
+/// label on each row.
+///
+/// A space separates keys. No key label contains one, so the split is never
+/// ambiguous.
+fn key_rows(keys: &[String]) -> Vec<String> {
+    let mut rows: Vec<String> = Vec::new();
+    for key in keys {
+        match rows.last_mut() {
+            Some(row) if text_width(row) + 1 + text_width(key) <= KEY_ROW_WIDTH => {
+                row.push(' ');
+                row.push_str(key);
+            }
+            _ => rows.push(key.clone()),
+        }
+    }
+    rows
+}
+
+/// Return the label help shows for `key`, with arrow keys drawn as arrows.
+///
+/// Arrows are ambiguous-width characters, and many terminal fonts draw them
+/// wider than their one cell. Each arrow keeps a blank cell after it for the
+/// glyph to spill into, so it never covers the next key.
+fn key_label(key: Key) -> String {
+    let code = match key.key {
+        KeyCode::Left => "← ".to_string(),
+        KeyCode::Right => "→ ".to_string(),
+        KeyCode::Up => "↑ ".to_string(),
+        KeyCode::Down => "↓ ".to_string(),
+        code => code.to_string(),
+    };
+    if key.mods == Empty {
+        code
+    } else {
+        format!("{}+{code}", key.mods)
+    }
+}
+
+/// Return the terminal-cell width of text.
+fn text_width(text: &str) -> usize {
+    UnicodeWidthStr::width(text)
+}
+
 /// Build aligned shortcut rows, stacking keys above actions on narrow screens.
+///
+/// A group's extra key rows pair with its wrapped action lines, so a long run
+/// of keys continues in the key column below its action.
 fn binding_lines(
-    bindings: &[&AvailableBinding],
+    groups: &[(Vec<String>, String)],
     width: u32,
     max_key_width: usize,
 ) -> Vec<DisplayLine> {
     let width = width as usize;
     let narrow = width < max_key_width.saturating_add(12) || width < 28;
     let mut lines = Vec::new();
-    for binding in bindings {
-        let key = binding.key.to_string();
-        let description = binding_description(binding);
+    for (keys, description) in groups {
         if narrow {
-            lines.extend(
-                textwrap::wrap(&key, width.max(1))
-                    .into_iter()
-                    .map(|text| DisplayLine {
+            for row in keys {
+                lines.extend(textwrap::wrap(row, width.max(1)).into_iter().map(|text| {
+                    DisplayLine {
                         key: None,
                         text: text.into_owned(),
                         style: "help/key",
-                    }),
-            );
+                    }
+                }));
+            }
             let wrap_width = width.saturating_sub(2).max(1);
-            for text in textwrap::wrap(&description, wrap_width) {
+            for text in textwrap::wrap(description, wrap_width) {
                 lines.push(DisplayLine {
                     key: None,
                     text: format!("  {text}"),
@@ -277,22 +376,25 @@ fn binding_lines(
             }
         } else {
             let wrap_width = width.saturating_sub(max_key_width + 2).max(1);
-            let mut wrapped = textwrap::wrap(&description, wrap_width).into_iter();
-            lines.push(DisplayLine {
-                key: Some(format!(
-                    "{}{key}",
-                    " ".repeat(max_key_width.saturating_sub(UnicodeWidthStr::width(key.as_str())))
-                )),
-                text: wrapped
-                    .next()
-                    .map_or_else(String::new, |text| text.to_string()),
-                style: "help/label",
-            });
-            for text in wrapped {
-                lines.push(DisplayLine {
-                    key: None,
-                    text: format!("{}  {text}", " ".repeat(max_key_width)),
-                    style: "help/label",
+            let wrapped = textwrap::wrap(description, wrap_width);
+            for index in 0..keys.len().max(wrapped.len()) {
+                let text = wrapped
+                    .get(index)
+                    .map_or_else(String::new, ToString::to_string);
+                lines.push(match keys.get(index) {
+                    Some(key) => DisplayLine {
+                        key: Some(format!(
+                            "{}{key}",
+                            " ".repeat(max_key_width.saturating_sub(text_width(key)))
+                        )),
+                        text,
+                        style: "help/label",
+                    },
+                    None => DisplayLine {
+                        key: None,
+                        text: format!("{}  {text}", " ".repeat(max_key_width)),
+                        style: "help/label",
+                    },
                 });
             }
         }

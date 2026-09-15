@@ -545,14 +545,14 @@ impl Widget for Terminal {
                         EventOutcome::Handle
                     }
                     mouse::Action::Down if mouse_event.button == mouse::Button::Left => {
-                        if self.handle_selection_start(mouse_event.location) {
+                        if self.handle_selection_start(mouse_event.location.clamped_point()) {
                             EventOutcome::Handle
                         } else {
                             EventOutcome::Ignore
                         }
                     }
                     mouse::Action::Drag if mouse_event.button == mouse::Button::Left => {
-                        if self.handle_selection_update(mouse_event.location) {
+                        if self.handle_selection_update(mouse_event.location.clamped_point()) {
                             EventOutcome::Handle
                         } else {
                             EventOutcome::Ignore
@@ -810,8 +810,9 @@ fn selection_contains(
 fn encode_mouse(event: &mouse::MouseEvent, state: &TerminalState) -> Option<Vec<u8>> {
     let cols = state.cols.max(1) as u32;
     let rows = state.lines.max(1) as u32;
-    let x = event.location.x.min(cols.saturating_sub(1)) + 1;
-    let y = event.location.y.min(rows.saturating_sub(1)) + 1;
+    let location = event.location.clamped_point();
+    let x = location.x.min(cols.saturating_sub(1)) + 1;
+    let y = location.y.min(rows.saturating_sub(1)) + 1;
 
     let mut cb = match event.action {
         mouse::Action::ScrollUp => 64,
@@ -1145,7 +1146,7 @@ mod tests {
                             action,
                             button,
                             modifiers,
-                            location: geom::Point { x: 4, y: 6 },
+                            location: geom::PointI32 { x: 4, y: 6 },
                         };
                         let code = if action == mouse::Action::Up && !sgr {
                             3
@@ -1232,7 +1233,7 @@ mod tests {
             action: mouse::Action::Down,
             button: mouse::Button::Left,
             modifiers: key::Empty,
-            location: geom::Point { x: 4, y: 6 },
+            location: geom::PointI32 { x: 4, y: 6 },
         };
 
         let encoded = encode_mouse(&event, &state).expect("mouse bytes");

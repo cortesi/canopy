@@ -5,7 +5,8 @@ use canopy::{
     CanopyBuilder, Context, FocusDirection, Loader, Widget,
     error::Result,
     style::{
-        AttrSet, Color, GradientSpec, GradientStop, Paint, StyleBuilder, StyleRules, solarized,
+        AttrSet, Color, GradientSpec, GradientStop, Paint, StyleBuilder, StyleRules,
+        canopy as palette,
     },
     terminal::{RunOptions, runloop_with_options},
 };
@@ -91,12 +92,10 @@ pub(crate) fn selectable_entry_styles<'a>(rules: StyleRules<'a>, prefix: &str) -
         bold: true,
         ..AttrSet::default()
     };
-    let normal = StyleBuilder::new()
-        .fg(solarized::BASE0)
-        .bg(solarized::BASE03);
+    let normal = StyleBuilder::new().fg(palette::TEXT).bg(palette::BG);
     let selected = StyleBuilder::new()
-        .fg(solarized::BASE3)
-        .bg(solarized::BLUE)
+        .fg(palette::BG)
+        .bg(palette::ACCENT)
         .attrs(selected_attrs);
     rules
         .prefix(prefix)

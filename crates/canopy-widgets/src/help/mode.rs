@@ -11,9 +11,8 @@ use canopy::{
     help::AvailableBinding,
     layout::{Align, Constraint, Direction, Edges, Layout, MeasureConstraints, Measurement},
 };
-use unicode_width::UnicodeWidthStr;
 
-use super::binding_list::{binding_description, display_lines, render_line};
+use super::binding_list::{display_lines, natural_width, render_line};
 use crate::{center::Center, frame::Frame};
 
 canopy::slot!(ModeFrameSlot: Frame);
@@ -39,18 +38,9 @@ impl ModeBindings {
         }
     }
 
-    /// Return the width that shows every binding on one row.
+    /// Return the width that shows every action on one row.
     fn preferred_width(&self) -> u32 {
-        let widest = |text: &dyn Fn(&AvailableBinding) -> String| {
-            self.bindings
-                .iter()
-                .map(|binding| UnicodeWidthStr::width(text(binding).as_str()))
-                .max()
-                .unwrap_or(0)
-        };
-        let key = widest(&|binding| binding.key.to_string());
-        let description = widest(&binding_description);
-        u32::try_from(key + 2 + description)
+        u32::try_from(natural_width(&self.bindings))
             .unwrap_or(u32::MAX)
             .saturating_add(2 * MARGIN)
             .min(MAX_WIDTH)

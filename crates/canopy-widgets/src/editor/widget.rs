@@ -5,7 +5,7 @@ use canopy::{
     derive_commands,
     error::Result,
     event::{Event, key, mouse},
-    geom::{Line, Point, PointI32, Rect, Size},
+    geom::{Line, Point, Rect, Size},
     layout::{CanvasContext, Constraint, MeasureConstraints, Measurement},
     style::Style,
 };
@@ -481,8 +481,28 @@ impl Editor {
         self.buffer.commit_transaction();
     }
 
+    /// Return whether `event` edits text in text-entry mode.
+    fn is_text_edit(event: &Event) -> bool {
+        matches!(
+            event,
+            Event::Paste(_)
+                | Event::Key(key::Key {
+                    key: key::KeyCode::Char(_)
+                        | key::KeyCode::Backspace
+                        | key::KeyCode::Delete
+                        | key::KeyCode::Enter,
+                    ..
+                })
+        )
+    }
+
     /// Handle events in text-entry mode.
+    ///
+    /// A read-only editor ignores edit input, so application bindings see it.
     fn handle_text_entry_event(&mut self, event: &Event, ctx: &mut dyn Context) -> EventOutcome {
+        if self.config.read_only && Self::is_text_edit(event) {
+            return EventOutcome::Ignore;
+        }
         match event {
             Event::Key(key::Key {
                 key: key::KeyCode::Char(c),
@@ -618,8 +638,8 @@ impl Editor {
         let view_rect = view.view_rect();
         let gutter_width = self.gutter_width();
         self.update_layout(view_rect, gutter_width);
-        let content_point =
-            Point::try_from(view.viewport_to_content(PointI32::try_from(event.location)?)?)?;
+        // A drag beyond the top or left edge selects toward the start.
+        let content_point = view.viewport_to_content(event.location)?.clamped_point();
         let mut text_point = content_point;
         text_point.x = text_point.x.saturating_sub(gutter_width);
         let pos = self
@@ -629,7 +649,7 @@ impl Editor {
         Ok(match event.action {
             mouse::Action::Down if event.button == mouse::Button::Left => {
                 ctx.set_focus(ctx.node_id())?;
-                match self.mouse.click_state.count(event.location) {
+                match self.mouse.click_state.count(content_point) {
                     2 => {
                         let range = word_range(&self.buffer, pos);
                         self.mouse.selecting = true;

@@ -7,7 +7,7 @@ use std::{
     time::Instant,
 };
 
-use futures::{FutureExt, channel::mpsc::UnboundedReceiver, pin_mut, stream::Stream};
+use futures::{channel::mpsc::UnboundedReceiver, pin_mut, stream::Stream};
 use tokio::{
     runtime::Builder,
     time::{Instant as TokioInstant, sleep_until},
@@ -20,7 +20,7 @@ use crate::{
     core::{Core, canopy::AdapterEvent, dump::dump, text},
     error::{self, Result},
     event::{Event, key, mouse},
-    geom::{Point, Size},
+    geom::{Point, PointI32, Size},
     render::RenderBackend,
     style::{Color, ResolvedStyle},
 };
@@ -45,15 +45,25 @@ pub struct RunOptions {
 }
 
 /// Decide host interruption without starting or mutating a terminal session.
+///
+/// An interrupt anywhere in a batch stops the host before the batch dispatches.
 fn interrupt_exit_code(work: &Work, options: RunOptions) -> Option<i32> {
-    let Work::Input(Event::Key(pressed)) = work else {
+    let Work::Input(events) = work else {
         return None;
     };
-    let emergency = options.emergency_exit == Some(*pressed);
-    let interrupt = options.interrupt_policy == InterruptPolicy::Exit130
-        && pressed.key == key::KeyCode::Char('c')
-        && pressed.mods.ctrl;
-    (emergency || interrupt).then_some(130)
+    events
+        .iter()
+        .any(|event| {
+            let Event::Key(pressed) = event else {
+                return false;
+            };
+            let emergency = options.emergency_exit == Some(*pressed);
+            let interrupt = options.interrupt_policy == InterruptPolicy::Exit130
+                && pressed.key == key::KeyCode::Char('c')
+                && pressed.mods.ctrl;
+            emergency || interrupt
+        })
+        .then_some(130)
 }
 
 /// Restore an intercepted terminal session before any widget sees the key.
@@ -68,17 +78,23 @@ fn intercept_interrupt(
     }
     Ok(code)
 }
+/// Most ready input events one turn takes before it renders.
+const INPUT_BATCH_LIMIT: usize = 256;
+
 /// Simple event source wrapper for receiving events.
 ///
-/// This coalesces consecutive mouse-move events so clicks are not delayed by
-/// move bursts.
+/// The run loop takes one event, then drains the input already waiting into
+/// the same batch, so a burst of input costs one render.
 struct EventSource<S> {
     /// Cancellable terminal event stream owned by the run loop.
     terminal: S,
     /// Framework event receiver channel.
     internal: UnboundedReceiver<AdapterEvent>,
-    /// Buffered non-move event encountered while coalescing.
+    /// Framework wake that ended the last batch, returned by the next call.
     pending: Option<AdapterEvent>,
+    /// Stream error met while draining, returned by the next call after its
+    /// batch.
+    deferred_error: Option<error::Error>,
     /// Alternate terminal and framework input when both remain ready.
     prefer_internal: bool,
 }
@@ -93,6 +109,7 @@ where
             terminal,
             internal,
             pending: None,
+            deferred_error: None,
             prefer_internal: false,
         }
     }
@@ -145,46 +162,87 @@ where
         poll_fn(|cx| self.poll_uncoalesced(cx)).await
     }
 
-    /// Take one event that is already available without waiting.
-    fn next_ready(&mut self) -> Result<Option<AdapterEvent>> {
-        self.next_uncoalesced().now_or_never().transpose()
-    }
-
-    /// Await the next event, coalescing consecutive ready mouse moves.
+    /// Await the next event, returning a held stream error or framework wake
+    /// first.
     async fn next(&mut self) -> Result<AdapterEvent> {
+        if let Some(error) = self.deferred_error.take() {
+            return Err(error);
+        }
         if let Some(event) = self.pending.take() {
             return Ok(event);
         }
+        self.next_uncoalesced().await
+    }
 
-        let mut event = self.next_uncoalesced().await?;
-        if matches!(
-            event,
-            AdapterEvent::Input(Event::Mouse(mouse::MouseEvent {
-                action: mouse::Action::Moved,
-                ..
-            }))
-        ) {
-            for _ in 0..64 {
-                let Some(next) = self.next_ready()? else {
-                    break;
-                };
-                if matches!(
-                    next,
-                    AdapterEvent::Input(Event::Mouse(mouse::MouseEvent {
-                        action: mouse::Action::Moved,
-                        ..
-                    }))
-                ) {
-                    event = next;
-                } else {
-                    self.pending = Some(next);
-                    break;
+    /// Await the next unit of work: a framework wake, or a batch of input.
+    ///
+    /// A batch starts with the next input event and takes the input already
+    /// waiting, at most [`INPUT_BATCH_LIMIT`] events, so a burst of input costs
+    /// one render. Consecutive pointer moves, and consecutive drags with the
+    /// same button and modifiers, collapse to the latest position.
+    ///
+    /// Draining polls with the caller's waker. A terminal stream such as
+    /// crossterm's keeps the waker from its first pending poll to report the
+    /// next event, so draining with a throwaway waker would leave the run
+    /// loop asleep.
+    async fn next_work(&mut self) -> Result<Work> {
+        let AdapterEvent::Input(first) = self.next().await? else {
+            return Ok(Work::Wake);
+        };
+        let mut batch = vec![first];
+        poll_fn(|cx| {
+            self.drain_ready(cx, &mut batch);
+            Poll::Ready(())
+        })
+        .await;
+        Ok(Work::Input(batch))
+    }
+
+    /// Move waiting input into `batch` until none is ready.
+    ///
+    /// A framework wake ends the batch and waits for the next call, and so does
+    /// a stream error, so the input read before it is still delivered.
+    fn drain_ready(&mut self, cx: &mut Context<'_>, batch: &mut Vec<Event>) {
+        for _ in 0..INPUT_BATCH_LIMIT {
+            let next = match self.poll_uncoalesced(cx) {
+                Poll::Ready(Ok(event)) => event,
+                Poll::Ready(Err(error)) => {
+                    self.deferred_error = Some(error);
+                    return;
+                }
+                Poll::Pending => return,
+            };
+            match next {
+                AdapterEvent::Input(event) => push_coalesced(batch, event),
+                AdapterEvent::Wake => {
+                    self.pending = Some(AdapterEvent::Wake);
+                    return;
                 }
             }
         }
-
-        Ok(event)
     }
+}
+
+/// Append `event` to `batch`, replacing the last event when both are the same
+/// pointer motion.
+fn push_coalesced(batch: &mut Vec<Event>, event: Event) {
+    if let (Some(Event::Mouse(last)), Event::Mouse(next)) = (batch.last_mut(), &event)
+        && same_motion(last, next)
+    {
+        *last = *next;
+        return;
+    }
+    batch.push(event);
+}
+
+/// Return whether `next` continues the motion of `last`: a move after a move,
+/// or a drag after a drag with the same button and modifiers.
+fn same_motion(last: &mouse::MouseEvent, next: &mouse::MouseEvent) -> bool {
+    matches!(
+        (last.action, next.action),
+        (mouse::Action::Moved, mouse::Action::Moved) | (mouse::Action::Drag, mouse::Action::Drag)
+    ) && last.button == next.button
+        && last.modifiers == next.modifiers
 }
 
 /// Select input, runtime notification, or a timer with rotating ready priority.
@@ -195,7 +253,7 @@ async fn select_work<E, W, D>(
     next_source: &mut usize,
 ) -> Result<Work>
 where
-    E: Future<Output = Result<AdapterEvent>>,
+    E: Future<Output = Result<Work>>,
     W: Future<Output = Result<()>>,
     D: Future<Output = ()>,
 {
@@ -204,12 +262,7 @@ where
         for offset in 0..3 {
             let source = (*next_source + offset) % 3;
             let ready = match source {
-                0 => event.as_mut().poll(cx).map(|event| {
-                    event.map(|event| match event {
-                        AdapterEvent::Input(event) => Work::Input(event),
-                        AdapterEvent::Wake => Work::Wake,
-                    })
-                }),
+                0 => event.as_mut().poll(cx),
                 1 => wake.as_mut().poll(cx).map(|wake| wake.map(|()| Work::Wake)),
                 _ => deadline.as_mut().poll(cx).map(|()| Ok(Work::Wake)),
             };
@@ -240,7 +293,7 @@ where
         }
     };
     select_work(
-        events.next(),
+        events.next_work(),
         poll_fn(|cx| canopy.poll_runtime_wake(cx)),
         timer,
         next_source,
@@ -802,7 +855,7 @@ fn translate_event(e: cevent::Event) -> Event {
             Event::Mouse(mouse::MouseEvent {
                 button,
                 action,
-                location: Point {
+                location: PointI32 {
                     x: m.column.into(),
                     y: m.row.into(),
                 },
@@ -906,13 +959,17 @@ pub fn runloop_with_options(mut cnpy: Canopy, options: RunOptions) -> Result<i32
 #[cfg(test)]
 mod tests {
     use std::{
+        collections::VecDeque,
         future::ready,
         pin::Pin,
         sync::{
-            Arc,
+            Arc, Mutex,
             atomic::{AtomicBool, AtomicUsize, Ordering},
+            mpsc,
         },
-        task::{Context, Poll},
+        task::{Context, Poll, Waker},
+        thread,
+        time::Duration,
     };
 
     use futures::{StreamExt, channel::mpsc::unbounded, executor::block_on, stream};
@@ -1027,7 +1084,9 @@ mod tests {
             None,
             &mut next_source,
         ))?;
-        assert!(matches!(work, Work::Input(Event::Key(_))));
+        assert!(
+            matches!(&work, Work::Input(events) if matches!(events.as_slice(), [Event::Key(_)]))
+        );
         let outcome = canopy.turn(work)?;
         assert!(outcome.frame.is_some());
         canopy.emit_frame(&mut backend)?;
@@ -1116,7 +1175,7 @@ mod tests {
             canopy.replace_root(PolicyTerminal(received.clone()))?;
             canopy.set_root_size(Size::new(8, 2))?;
             canopy.turn(Work::Prepare)?;
-            let work = Work::Input(Event::Key(pressed));
+            let work = Work::Input(vec![Event::Key(pressed)]);
             let result = intercept_interrupt(
                 &mut session,
                 &work,
@@ -1392,6 +1451,15 @@ mod tests {
         ))
     }
 
+    fn terminal_drag(column: u16) -> cevent::Event {
+        cevent::Event::Mouse(cevent::MouseEvent {
+            kind: cevent::MouseEventKind::Drag(cevent::MouseButton::Left),
+            column,
+            row: 0,
+            modifiers: cevent::KeyModifiers::empty(),
+        })
+    }
+
     fn terminal_move(column: u16) -> cevent::Event {
         cevent::Event::Mouse(cevent::MouseEvent {
             kind: cevent::MouseEventKind::Moved,
@@ -1428,55 +1496,168 @@ mod tests {
     }
 
     #[test]
-    fn event_source_releases_preserve_errors_in_both_ingestion_paths() {
-        for ready in [false, true] {
-            let (_tx, rx) = unbounded();
-            let terminal = stream::iter([
-                Ok(terminal_key(cevent::KeyEventKind::Release)),
-                Err(io::Error::other("after release")),
-            ]);
-            let mut events = EventSource::new(terminal, rx);
-            let result = if ready {
-                events.next_ready()
-            } else {
-                block_on(events.next()).map(Some)
-            };
-            assert!(
-                matches!(result, Err(error::Error::TerminalIo(error)) if error.to_string() == "after release")
-            );
-        }
-    }
-
-    #[test]
-    fn event_source_release_preserves_eof_in_ready_path() {
+    fn event_source_errors_surface_directly_and_after_a_batch() -> Result<()> {
+        // Awaiting the next event returns the error at once.
         let (_tx, rx) = unbounded();
-        let terminal = stream::iter([Ok(terminal_key(cevent::KeyEventKind::Release))]);
+        let terminal = stream::iter([
+            Ok(terminal_key(cevent::KeyEventKind::Release)),
+            Err(io::Error::other("after release")),
+        ]);
         let mut events = EventSource::new(terminal, rx);
-        assert!(matches!(events.next_ready(), Err(error::Error::RunLoop(_))));
+        assert!(
+            matches!(block_on(events.next()), Err(error::Error::TerminalIo(error)) if error.to_string() == "after release")
+        );
+
+        // An error met while draining keeps the batch and returns next.
+        let (_tx, rx) = unbounded();
+        let terminal = stream::iter([
+            Ok(terminal_key(cevent::KeyEventKind::Press)),
+            Ok(terminal_key(cevent::KeyEventKind::Release)),
+            Err(io::Error::other("after release")),
+        ]);
+        let mut events = EventSource::new(terminal, rx);
+        assert!(matches!(block_on(events.next_work())?, Work::Input(batch) if batch.len() == 1));
+        assert!(
+            matches!(block_on(events.next_work()), Err(error::Error::TerminalIo(error)) if error.to_string() == "after release")
+        );
+        Ok(())
     }
 
     #[test]
-    fn event_source_coalesces_moves_across_releases() -> Result<()> {
+    fn event_source_returns_eof_after_the_batch_before_it() -> Result<()> {
+        let (_tx, rx) = unbounded();
+        let terminal = stream::iter([
+            Ok(terminal_key(cevent::KeyEventKind::Press)),
+            Ok(terminal_key(cevent::KeyEventKind::Release)),
+        ]);
+        let mut events = EventSource::new(terminal, rx);
+        assert!(matches!(block_on(events.next_work())?, Work::Input(batch) if batch.len() == 1));
+        assert!(matches!(
+            block_on(events.next_work()),
+            Err(error::Error::RunLoop(_))
+        ));
+        Ok(())
+    }
+
+    /// Return each batched event as a short label.
+    fn batch_summary(batch: &[Event]) -> Vec<String> {
+        batch
+            .iter()
+            .map(|event| match event {
+                Event::Mouse(mouse) => format!("{:?}@{}", mouse.action, mouse.location.x),
+                Event::Key(_) => "key".to_string(),
+                other => format!("{other:?}"),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn ready_input_batches_and_coalesces_moves_and_drags() -> Result<()> {
         let (_tx, rx) = unbounded();
         let terminal = stream::iter([
             Ok(terminal_move(1)),
             Ok(terminal_key(cevent::KeyEventKind::Release)),
             Ok(terminal_move(2)),
+            Ok(terminal_drag(3)),
+            Ok(terminal_drag(4)),
             Ok(terminal_key(cevent::KeyEventKind::Press)),
-        ]);
+            Ok(terminal_drag(5)),
+        ])
+        .chain(stream::pending());
         let mut events = EventSource::new(terminal, rx);
-        assert!(matches!(
-            block_on(events.next())?,
-            AdapterEvent::Input(Event::Mouse(mouse::MouseEvent {
-                location: Point { x: 2, y: 0 },
-                ..
-            }))
-        ));
-        assert!(matches!(
-            block_on(events.next())?,
-            AdapterEvent::Input(Event::Key(_))
-        ));
+        let Work::Input(batch) = block_on(events.next_work())? else {
+            panic!("the terminal produced input");
+        };
+        assert_eq!(
+            batch_summary(&batch),
+            ["Moved@2", "Drag@4", "key", "Drag@5"]
+        );
         Ok(())
+    }
+
+    #[test]
+    fn a_ready_input_batch_takes_a_bounded_number_of_events() -> Result<()> {
+        let (_tx, rx) = unbounded();
+        let drags = (0..INPUT_BATCH_LIMIT as u16 + 10)
+            .map(|column| Ok(terminal_drag(column)))
+            .collect::<Vec<_>>();
+        let terminal = stream::iter(drags).chain(stream::pending());
+        let mut events = EventSource::new(terminal, rx);
+        let Work::Input(first) = block_on(events.next_work())? else {
+            panic!("the terminal produced input");
+        };
+        assert_eq!(
+            batch_summary(&first),
+            [format!("Drag@{INPUT_BATCH_LIMIT}")],
+            "the drags collapse to the last one taken"
+        );
+        let Work::Input(rest) = block_on(events.next_work())? else {
+            panic!("the terminal produced input");
+        };
+        assert_eq!(
+            batch_summary(&rest),
+            [format!("Drag@{}", INPUT_BATCH_LIMIT + 9)],
+            "input past the limit waits for the next batch"
+        );
+        Ok(())
+    }
+
+    /// A terminal stream that, like crossterm's, keeps only the waker from its
+    /// first pending poll until an event arrives.
+    struct OneWakerStream(Arc<Mutex<(VecDeque<cevent::Event>, Option<Waker>)>>);
+
+    impl Stream for OneWakerStream {
+        type Item = io::Result<cevent::Event>;
+
+        fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+            let mut state = self.0.lock().expect("stream state");
+            if let Some(event) = state.0.pop_front() {
+                return Poll::Ready(Some(Ok(event)));
+            }
+            if state.1.is_none() {
+                state.1 = Some(cx.waker().clone());
+            }
+            Poll::Pending
+        }
+    }
+
+    #[test]
+    fn input_after_a_drain_wakes_the_loop() {
+        let (done_tx, done_rx) = mpsc::channel();
+        let worker = thread::spawn(move || {
+            let state = Arc::new(Mutex::new((
+                VecDeque::from([terminal_key(cevent::KeyEventKind::Press)]),
+                None,
+            )));
+            let (_tx, rx) = unbounded();
+            let mut events = EventSource::new(OneWakerStream(state.clone()), rx);
+            // Draining after the first key finds nothing and leaves its waker
+            // with the stream, as crossterm does.
+            let first = block_on(events.next_work());
+            let pusher = thread::spawn(move || {
+                thread::sleep(Duration::from_millis(50));
+                let mut guard = state.lock().expect("stream state");
+                guard.0.push_back(terminal_key(cevent::KeyEventKind::Press));
+                if let Some(waker) = guard.1.take() {
+                    waker.wake();
+                }
+            });
+            let second = block_on(events.next_work());
+            pusher.join().expect("pusher thread");
+            let _sent = done_tx
+                .send(matches!(first, Ok(Work::Input(_))) && matches!(second, Ok(Work::Input(_))));
+        });
+        // A regression parks the worker forever, so wait with a timeout and
+        // join only a worker that finished.
+        let woke = done_rx.recv_timeout(Duration::from_secs(5));
+        if woke.is_ok() {
+            worker.join().expect("worker thread");
+        }
+        assert_eq!(
+            woke,
+            Ok(true),
+            "input that arrives after a drain must wake the loop"
+        );
     }
 
     #[test]
@@ -1495,14 +1676,16 @@ mod tests {
         let mut next_source = 0;
         for expected_source in 0..3 {
             let work = block_on(select_work(
-                ready(Ok(AdapterEvent::Input(Event::FocusGained))),
+                ready(Ok(Work::Input(vec![Event::FocusGained]))),
                 ready(Ok(())),
                 ready(()),
                 &mut next_source,
             ))?;
             assert_eq!(next_source, (expected_source + 1) % 3);
             if expected_source == 0 {
-                assert!(matches!(work, Work::Input(Event::FocusGained)));
+                assert!(
+                    matches!(&work, Work::Input(events) if matches!(events.as_slice(), [Event::FocusGained]))
+                );
             } else {
                 assert!(matches!(work, Work::Wake));
             }
@@ -1514,7 +1697,7 @@ mod tests {
     fn adapter_services_deadlines_without_terminal_input() -> Result<()> {
         let mut next_source = 0;
         let work = block_on(select_work(
-            pending::<Result<AdapterEvent>>(),
+            pending::<Result<Work>>(),
             pending::<Result<()>>(),
             ready(()),
             &mut next_source,

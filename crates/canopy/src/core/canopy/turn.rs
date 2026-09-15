@@ -74,8 +74,13 @@ pub struct EvalRequest {
 }
 /// One runtime input.
 pub enum Work {
-    /// Deliver an input event.
-    Input(Event),
+    /// Deliver input events that arrived together, in order.
+    ///
+    /// The turn dispatches each event and prepares one frame for the batch, so
+    /// a burst of input costs one render. Layout settles before a mouse event
+    /// that follows another event, so hit testing sees the geometry the earlier
+    /// events left. Dispatch stops at the first error or exit request.
+    Input(Vec<Event>),
     /// Service ready background work.
     Wake,
     /// Start a top-level evaluation.
@@ -364,6 +369,25 @@ impl Canopy {
         .flatten()
         .min()
     }
+    /// Dispatch a batch of input events in order.
+    ///
+    /// Layout settles before each mouse event that follows another event, so
+    /// hit testing sees current geometry. Dispatch stops after an exit request.
+    fn dispatch_batch(&mut self, events: &[Event]) -> Result<()> {
+        for (index, event) in events.iter().enumerate() {
+            if index > 0 {
+                if self.core.exit_requested.is_some() {
+                    break;
+                }
+                if matches!(event, Event::Mouse(_)) {
+                    self.settle_layout()?;
+                }
+            }
+            self.event(event)?;
+        }
+        Ok(())
+    }
+
     /// Advance one bounded runtime turn.
     pub fn turn(&mut self, work: Work) -> Result<TurnOutcome> {
         if self.driver.in_turn {
@@ -382,8 +406,8 @@ impl Canopy {
         let mut dispatch_error = None;
         self.driver.publication.advance(self.now());
         match work {
-            Work::Input(event) => {
-                dispatch_error = self.event(&event).err();
+            Work::Input(events) => {
+                dispatch_error = self.dispatch_batch(&events).err();
             }
             Work::StartEval(request) => {
                 let id = EvalId::next();
@@ -549,7 +573,7 @@ impl Canopy {
                         result = notified => { result?; Work::Wake },
                         () = timer => Work::Wake,
                         event = event => match event.ok_or_else(|| Error::RunLoop("headless event channel closed".into()))? {
-                            AdapterEvent::Input(event) => Work::Input(event),
+                            AdapterEvent::Input(event) => Work::Input(vec![event]),
                             AdapterEvent::Wake => Work::Wake,
                         },
                     }

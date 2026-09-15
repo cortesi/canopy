@@ -65,7 +65,7 @@ struct PendingActivate<K> {
     /// Stable key of the pressed row.
     key: K,
     /// Pointer origin when the press began.
-    origin: Point,
+    origin: PointI32,
     /// Whether the drag threshold was exceeded.
     dragged: bool,
 }
@@ -617,14 +617,10 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
     }
 
     /// Find the item index at a viewport-local location.
-    fn index_at_location(&self, c: &dyn Context, location: Point) -> Option<usize> {
-        let view = c.view();
-        let content = view
-            .viewport_to_content(PointI32::try_from(location).ok()?)
-            .ok()?;
-        let content_y = u32::try_from(content.y).ok()?;
+    fn index_at_location(&self, c: &dyn Context, location: PointI32) -> Option<usize> {
+        let content = c.view().content_point(location)?;
         let metrics = self.item_metrics(c);
-        Self::index_at_y(&metrics, content_y)
+        Self::index_at_y(&metrics, content.y)
     }
 
     /// Build (start_y, height) tuples for each item, one per keyed child.
@@ -835,7 +831,7 @@ fn indicator_width(text: &str) -> u32 {
 }
 
 /// Return true when drag distance exceeds the configured threshold.
-fn drag_exceeded(origin: Point, current: Point, threshold: u32) -> bool {
+fn drag_exceeded(origin: PointI32, current: PointI32, threshold: u32) -> bool {
     let dx = origin.x.abs_diff(current.x);
     let dy = origin.y.abs_diff(current.y);
     dx.max(dy) > threshold
@@ -844,7 +840,9 @@ fn drag_exceeded(origin: Point, current: Point, threshold: u32) -> bool {
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, Loader, NodeId, NodeName, ViewContext, derive_commands, event::key,
+        Canopy, Loader, NodeId, NodeName, ViewContext, derive_commands,
+        event::key,
+        layout::{Edges, Layout},
         testing::harness::Harness,
     };
 
@@ -901,7 +899,7 @@ mod tests {
                 action: mouse::Action::Down,
                 button: mouse::Button::Left,
                 modifiers: key::Empty,
-                location: Point { x: 0, y: 0 },
+                location: PointI32 { x: 0, y: 0 },
             };
             harness.mouse(event)?;
             if drag {
@@ -1145,7 +1143,7 @@ mod tests {
                 action: mouse::Action::Down,
                 button: mouse::Button::Left,
                 modifiers: key::Empty,
-                location: Point { x: 0, y: press_y },
+                location: PointI32 { x: 0, y: press_y },
             };
             harness.mouse(event)?;
             if press_y >= 2 {
@@ -1174,6 +1172,36 @@ mod tests {
                 })
             })?;
         }
+        Ok(())
+    }
+
+    #[test]
+    fn release_in_padding_above_rows_does_not_activate() -> Result<()> {
+        let mut harness = Harness::builder(KeyedActivationRoot::default())
+            .size(20, 5)
+            .build()?;
+        harness.with_root_context(|_: &mut KeyedActivationRoot, ctx| {
+            ctx.with_unique_descendant::<List<Text, i64>, _>(|_, ctx| {
+                ctx.set_layout(Layout::fill().padding(Edges::new(1, 0, 0, 0)))
+            })
+        })?;
+        harness.render()?;
+        let mut event = mouse::MouseEvent {
+            action: mouse::Action::Down,
+            button: mouse::Button::Left,
+            modifiers: key::Empty,
+            location: PointI32 { x: 0, y: 1 },
+        };
+        harness.mouse(event)?;
+        event.action = mouse::Action::Up;
+        event.location.y = 0;
+        harness.mouse(event)?;
+        harness.with_root_widget::<KeyedActivationRoot, _>(|root| {
+            assert_eq!(
+                root.activation, None,
+                "a release in the padding above the rows is outside every row"
+            );
+        });
         Ok(())
     }
 
@@ -1210,7 +1238,7 @@ mod tests {
             action: mouse::Action::Down,
             button: mouse::Button::Left,
             modifiers: key::Empty,
-            location: Point { x: 0, y: 0 },
+            location: PointI32 { x: 0, y: 0 },
         };
         harness.mouse(event)?;
         harness.with_root_context(|_: &mut KeyedActivationRoot, ctx| {
@@ -1244,7 +1272,7 @@ mod tests {
             action: mouse::Action::Down,
             button: mouse::Button::Left,
             modifiers: key::Empty,
-            location: Point { x: 0, y: 0 },
+            location: PointI32 { x: 0, y: 0 },
         })?;
         harness.with_root_context(|root: &mut KeyedActivationRoot, ctx| {
             ctx.with_unique_descendant::<List<Text, i64>, _>(|list, ctx| {

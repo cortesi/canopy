@@ -298,7 +298,6 @@ mod tests {
     use super::*;
     use crate::{
         event::{Event, key, mouse},
-        geom::Point,
         testing::ttree::{Bb, get_state, reset_state, run_ttree},
     };
 
@@ -326,7 +325,7 @@ mod tests {
                     .all(|event| !event.starts_with("r@"))
             );
             canopy.core.capture_mouse(tree.b_a)?;
-            let location = Point::try_from(canopy.core.nodes[tree.a_a].view.content.tl)?;
+            let location = canopy.core.nodes[tree.a_a].view.content.tl;
             reset_state();
             canopy.event(&Event::Mouse(mouse::MouseEvent {
                 action: mouse::Action::Down,

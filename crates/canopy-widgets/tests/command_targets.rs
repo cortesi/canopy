@@ -10,7 +10,7 @@ mod tests {
         derive_commands,
         error::Result,
         event::{key, mouse},
-        geom::{Point, Size},
+        geom::Size,
         layout::{Direction, Layout},
         testing::harness::Harness,
     };
@@ -172,10 +172,7 @@ mod tests {
             harness.render()?;
             let location = harness.canopy.with_root_view(|ctx| {
                 let view = ctx.view_of(row.into()).expect("row view");
-                Point {
-                    x: view.outer.tl.x.try_into().unwrap(),
-                    y: view.outer.tl.y.try_into().unwrap(),
-                }
+                view.outer.tl
             });
             for action in [mouse::Action::Down, mouse::Action::Up] {
                 harness.mouse(mouse::MouseEvent {

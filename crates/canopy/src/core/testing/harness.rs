@@ -103,14 +103,14 @@ impl Harness {
         T: Into<key::Key>,
     {
         self.canopy
-            .turn(crate::Work::Input(Event::Key(k.into())))
+            .turn(crate::Work::Input(vec![Event::Key(k.into())]))
             .map(|_| ())
     }
 
     /// Send a mouse event and render.
     pub fn mouse(&mut self, m: mouse::MouseEvent) -> Result<()> {
         self.canopy
-            .turn(crate::Work::Input(Event::Mouse(m)))
+            .turn(crate::Work::Input(vec![Event::Mouse(m)]))
             .map(|_| ())
     }
 
