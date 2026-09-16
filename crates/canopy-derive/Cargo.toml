@@ -9,15 +9,15 @@ proc-macro = true
 doctest = false
 
 [dependencies]
-syn = { version = "2.0.117", features = ["extra-traits", "full"] }
-quote = "1.0.45"
-proc-macro2 = "1.0.106"
+syn = { version = "3.0.6", features = ["extra-traits", "full"] }
+quote = "1.0.47"
+proc-macro2 = "1.0.107"
 convert_case.workspace = true
 
 [dev-dependencies]
 canopy = { path = "../canopy", features = ["testing"] }
 pretty_assertions = "1.4.1"
-trybuild = "1.0.120"
+trybuild = "1.0.121"
 serde.workspace = true
 
 [lints]

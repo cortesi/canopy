@@ -26,6 +26,22 @@ pub mod todo {
             /// Open or initialize a SQLite store.
             pub fn open(path: &str) -> Result<Self> {}
         }
+
+        impl<'r> AllNull<'r> for Todo
+        where
+            String: ::musq::decode::Decode<'r>,
+            i64: ::musq::decode::Decode<'r>,
+        {
+            fn all_null(prefix: &str, row: &'r ::musq::Row) -> ::musq::Result<bool> {}
+        }
+
+        impl<'r> FromRow<'r> for Todo
+        where
+            String: ::musq::decode::Decode<'r>,
+            i64: ::musq::decode::Decode<'r>,
+        {
+            fn from_row(prefix: &str, row: &'r ::musq::Row) -> ::musq::Result<Self> {}
+        }
     }
 
     /// Widget for a todo entry.

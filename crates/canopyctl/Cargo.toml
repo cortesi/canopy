@@ -14,7 +14,7 @@ serde.workspace = true
 serde_json.workspace = true
 tmcp.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "process", "net", "time", "sync"] }
-toml = "1.1.2"
+toml = "1.1.6"
 
 [lints]
 workspace = true

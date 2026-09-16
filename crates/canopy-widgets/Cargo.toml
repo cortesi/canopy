@@ -37,7 +37,7 @@ syntect = { version = "5.3.0", optional = true, default-features = false, featur
     "regex-onig",
 ] }
 tracing-subscriber = { workspace = true, optional = true }
-fontdue = { version = "0.9.3", optional = true }
+fontdue = { version = "0.9.4", optional = true }
 itty-core = { workspace = true, optional = true }
 two-face = { version = "0.5.2", default-features = false, features = ["syntect-onig"], optional = true }
 

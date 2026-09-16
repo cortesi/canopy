@@ -214,7 +214,7 @@ fn parse_command_macro_args(attrs: &[Attribute]) -> Result<Option<MacroArgs>> {
 
 /// Ensure a command receiver is borrowed.
 fn validate_receiver(receiver: &syn::Receiver) -> Result<()> {
-    if receiver.reference.is_some() {
+    if matches!(receiver.kind, syn::ReceiverKind::Reference(..)) {
         Ok(())
     } else {
         Err(syn::Error::new_spanned(

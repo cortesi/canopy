@@ -1,5 +1,5 @@
 use quote::quote;
-use syn::{FnArg, ImplItem, ItemImpl, ReturnType, Type};
+use syn::{FnArg, ImplItem, ItemImpl, ReceiverKind, ReturnType, Type};
 
 use crate::{
     model::{CommandMeta, ParamKind, ParamMeta, ReturnKind, ReturnMeta, UserBindingSource},
@@ -39,7 +39,7 @@ fn validate_enabled_hooks(input: &ItemImpl, commands: &[CommandMeta]) -> syn::Re
                 "enabled hook must take &self and &dyn ViewContext",
             ));
         };
-        if receiver.reference.is_none() || receiver.mutability.is_some() {
+        if !matches!(receiver.kind, ReceiverKind::Reference(_, _, None)) {
             return Err(syn::Error::new_spanned(
                 receiver,
                 "enabled hook receiver must be &self",

@@ -1,11 +1,31 @@
 //! SQLite storage for the todo example.
 
-use std::rc::Rc;
+use std::{future::Future, io, sync::LazyLock};
 
-use anyhow::Result;
-use rusqlite::Connection;
+use anyhow::{Result, anyhow};
+use musq::{FromRow, Musq, Pool, sql, sql_as};
+use tokio::runtime::{Builder, Runtime};
 
-#[derive(Debug, Clone)]
+/// Shared timer and task driver for Musq pools used by synchronous UI
+/// callbacks.
+static RUNTIME: LazyLock<io::Result<Runtime>> = LazyLock::new(|| {
+    Builder::new_multi_thread()
+        .worker_threads(1)
+        .enable_time()
+        .build()
+});
+
+/// Wait for storage work, including when Canopy already runs an async executor.
+fn block_on<T>(future: impl Future<Output = musq::Result<T>>) -> Result<T> {
+    let runtime = RUNTIME
+        .as_ref()
+        .map_err(|error| anyhow!("create todo storage runtime: {error}"))?;
+    let _guard = runtime.enter();
+    // Pollster permits nested calls; Tokio and futures executors do not.
+    Ok(pollster::block_on(future)?)
+}
+
+#[derive(Debug, Clone, FromRow)]
 /// A persisted todo record.
 pub struct Todo {
     /// Database identifier.
@@ -17,49 +37,43 @@ pub struct Todo {
 #[derive(Debug, Clone)]
 /// Cloneable handle to one todo database.
 pub struct Store {
-    /// Shared connection for cloned store handles on one thread.
-    conn: Rc<Connection>,
+    /// Shared pool with one connection for this application's database.
+    pool: Pool,
 }
 
 impl Store {
     /// Open or initialize a SQLite store.
     pub fn open(path: &str) -> Result<Self> {
-        let conn = Connection::open(path)?;
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS todo (
-                id INTEGER PRIMARY KEY,
-                item TEXT NOT NULL
-            );",
-            rusqlite::params![],
-        )?;
-        Ok(Self {
-            conn: Rc::new(conn),
+        block_on(async {
+            let options = Musq::new().max_connections(1).create_if_missing(true);
+            let pool = if path == ":memory:" {
+                options.open_in_memory().await?
+            } else {
+                options.open(path).await?
+            };
+            sql!(
+                "CREATE TABLE IF NOT EXISTS todo (
+                    id INTEGER PRIMARY KEY,
+                    item TEXT NOT NULL
+                );"
+            )?
+            .execute(&pool)
+            .await?;
+            Ok(Self { pool })
         })
     }
 
     /// Insert a todo and return its persisted record.
     pub(crate) fn add_todo(&self, item: &str) -> Result<Todo> {
-        self.conn.execute(
-            "INSERT INTO todo (item) VALUES (?1);",
-            rusqlite::params![item],
-        )?;
-        Ok(Todo {
-            id: self.conn.last_insert_rowid(),
-            item: item.to_string(),
-        })
+        block_on(
+            sql_as!("INSERT INTO todo (item) VALUES ({item}) RETURNING id, item;")?
+                .fetch_one(&self.pool),
+        )
     }
 
     /// Delete a todo by database identifier.
     pub(crate) fn delete_todo(&self, id: i64) -> Result<()> {
-        self.conn
-            .execute("DELETE FROM todo WHERE id=?1;", rusqlite::params![id])?;
-        Ok(())
-    }
-
-    /// Delete every todo in the store.
-    pub(crate) fn clear_todos(&self) -> Result<()> {
-        self.conn
-            .execute("DELETE FROM todo;", rusqlite::params![])?;
+        block_on(sql!("DELETE FROM todo WHERE id={id};")?.execute(&self.pool))?;
         Ok(())
     }
 
@@ -68,36 +82,31 @@ impl Store {
         &self,
         items: impl IntoIterator<Item = &'a str>,
     ) -> Result<Vec<Todo>> {
-        let transaction = self.conn.unchecked_transaction()?;
-        self.clear_todos()?;
-        let mut todos = Vec::new();
-        for item in items {
-            todos.push(self.add_todo(item)?);
-        }
-        transaction.commit()?;
-        Ok(todos)
+        block_on(async {
+            let transaction = self.pool.begin().await?;
+            sql!("DELETE FROM todo;")?.execute(&transaction).await?;
+            let mut todos = Vec::new();
+            for item in items {
+                todos.push(
+                    sql_as!("INSERT INTO todo (item) VALUES ({item}) RETURNING id, item;")?
+                        .fetch_one(&transaction)
+                        .await?,
+                );
+            }
+            transaction.commit().await?;
+            Ok(todos)
+        })
     }
 
     /// Load every persisted todo.
     pub fn todos(&self) -> Result<Vec<Todo>> {
-        let mut stmt = self.conn.prepare("SELECT id, item FROM todo ORDER BY id")?;
-        let todos = stmt
-            .query_map([], |row| {
-                Ok(Todo {
-                    id: row.get(0)?,
-                    item: row.get(1)?,
-                })
-            })?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
-        Ok(todos)
+        block_on(sql_as!("SELECT id, item FROM todo ORDER BY id")?.fetch_all(&self.pool))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::rc::Rc;
-
-    use rusqlite::Connection;
+    use futures::executor;
 
     use super::*;
 
@@ -105,9 +114,12 @@ mod tests {
     fn replace_todos_rolls_back_failed_insert() -> Result<()> {
         let store = Store::open(":memory:")?;
         let original = store.add_todo("original")?;
-        store.conn.execute_batch(
-            "CREATE TRIGGER reject_item BEFORE INSERT ON todo
+        block_on(
+            musq::query(
+                "CREATE TRIGGER reject_item BEFORE INSERT ON todo
             WHEN NEW.item = 'reject' BEGIN SELECT RAISE(ABORT, 'rejected'); END;",
+            )
+            .execute(&store.pool),
         )?;
         assert!(store.replace_todos(["first", "reject", "last"]).is_err());
         let rows = store.todos()?;
@@ -134,9 +146,7 @@ mod tests {
     fn todos_have_explicit_identifier_order() -> Result<()> {
         let store = Store::open(":memory:")?;
         store.replace_todos(["first", "second", "third"])?;
-        store
-            .conn
-            .execute_batch("PRAGMA reverse_unordered_selects = ON;")?;
+        block_on(musq::query("PRAGMA reverse_unordered_selects = ON;").execute(&store.pool))?;
         let rows = store.todos()?;
         assert_eq!(
             rows.iter().map(|row| row.item.as_str()).collect::<Vec<_>>(),
@@ -151,9 +161,12 @@ mod tests {
         let store = Store::open(":memory:")?;
         let mut canopy = crate::create_app(store.clone(), None)?;
         canopy.apply_fixture("with_items")?;
-        store.conn.execute_batch(
-            "CREATE TRIGGER reject_delete BEFORE DELETE ON todo
+        block_on(
+            musq::query(
+                "CREATE TRIGGER reject_delete BEFORE DELETE ON todo
             BEGIN SELECT RAISE(ABORT, 'cannot delete'); END;",
+            )
+            .execute(&store.pool),
         )?;
         let before = crate::with_todo(&mut canopy, |todo, ctx| {
             todo.with_list(ctx, |list, _| Ok((list.len(), list.selected_item())))
@@ -181,20 +194,61 @@ mod tests {
 
     #[test]
     fn todos_propagates_row_errors() -> Result<()> {
-        let conn = Connection::open_in_memory()?;
-        conn.execute(
-            "CREATE TABLE todo (
-                id INTEGER PRIMARY KEY,
-                item BLOB NOT NULL
-            );",
-            [],
+        let store = Store::open(":memory:")?;
+        block_on(
+            musq::query("INSERT INTO todo (id, item) VALUES (1, x'ff');").execute(&store.pool),
         )?;
-        conn.execute("INSERT INTO todo (id, item) VALUES (1, x'ff');", [])?;
-
-        let store = Store {
-            conn: Rc::new(conn),
-        };
         assert!(store.todos().is_err());
         Ok(())
+    }
+
+    #[test]
+    fn file_store_preserves_records_across_reopens() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("todo.db");
+        let path = path.to_str().unwrap();
+        let original = {
+            let store = Store::open(path)?;
+            store.add_todo("Don't lose 🦀 or 'quotes'")?
+        };
+        let store = Store::open(path)?;
+        let rows = store.todos()?;
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].id, original.id);
+        assert_eq!(rows[0].item, original.item);
+        store.delete_todo(original.id)?;
+        assert!(Store::open(path)?.todos()?.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn clones_share_rows_but_memory_stores_are_isolated() -> Result<()> {
+        let store = Store::open(":memory:")?;
+        let cloned = store.clone();
+        let row = store.add_todo("shared")?;
+        drop(store);
+        assert_eq!(cloned.todos()?[0].id, row.id);
+        assert!(Store::open(":memory:")?.todos()?.is_empty());
+        cloned.delete_todo(row.id)?;
+        assert!(cloned.todos()?.is_empty());
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn storage_runs_inside_a_tokio_runtime() -> Result<()> {
+        let store = Store::open(":memory:")?;
+        store.replace_todos(["nested"])?;
+        assert_eq!(store.todos()?[0].item, "nested");
+        Ok(())
+    }
+
+    #[test]
+    fn storage_runs_inside_a_futures_executor() -> Result<()> {
+        executor::block_on(async {
+            let store = Store::open(":memory:")?;
+            store.replace_todos(["nested"])?;
+            assert_eq!(store.todos()?[0].item, "nested");
+            Ok(())
+        })
     }
 }
