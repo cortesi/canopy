@@ -17,8 +17,10 @@ use canopy::{
 
 use crate::{Button, Container, boxed::ROUND, frame::Frame};
 
+/// Columns of blank between the body's text and each of its sides.
+const SIDE_PADDING: u32 = 1;
 /// Columns a row spends on its blank lead column and a trailing gutter.
-const ROW_PADDING: u32 = 2;
+const ROW_PADDING: u32 = SIDE_PADDING * 2;
 /// Rows and columns left around the frame, so the view shows through.
 const FRAME_MARGIN: u32 = 1;
 /// Columns between the buttons.
@@ -29,8 +31,6 @@ const BUTTON_PADDING: u32 = 4;
 const BUTTON_ROWS: u32 = 3;
 /// Rows the body keeps above the buttons: the message and a blank line.
 const MESSAGE_ROWS: u32 = 2;
-/// Rows the dialog draws.
-const DIALOG_ROWS: u32 = MESSAGE_ROWS + BUTTON_ROWS;
 
 /// Default answer bindings exposed through `confirm.default_bindings()`.
 ///
@@ -70,9 +70,30 @@ fn button_width(label: &str) -> u32 {
 
 /// Return the columns every button and the gap between them occupy.
 fn buttons_width() -> u32 {
-    button_width("Yes")
-        .saturating_add(button_width("No"))
+    button_width("yes")
+        .saturating_add(button_width("no"))
         .saturating_add(BUTTON_GAP)
+}
+
+/// Return whether `width` leaves the answers a column off centre.
+///
+/// The answers are centred as a group, so a remainder that will not halve
+/// evenly puts one more column on one side than on the other.
+fn off_centre(width: u32) -> bool {
+    width.saturating_sub(buttons_width()) % 2 == 1
+}
+
+/// Return `width` widened so the answers sit the same distance from each side.
+///
+/// Spending a column is better than taking one, because the width that holds
+/// the answers holds the message too, and narrowing the body to centre them
+/// would clip a message that fits.
+fn centred_width(width: u32) -> u32 {
+    if off_centre(width) {
+        width.saturating_add(1)
+    } else {
+        width
+    }
 }
 
 /// A centred modal asking a yes or no question.
@@ -295,7 +316,10 @@ impl Widget for Confirm {
             )
             .with_name("answers"),
         )?;
-        for (answer, label, key) in [(Answer::Yes, "Yes", 'y'), (Answer::No, "No", 'n')] {
+        // The labels are lower case, because each one spells the key that
+        // gives it and an upper-case letter would ask for a shift that the
+        // binding does not want.
+        for (answer, label, key) in [(Answer::Yes, "yes", 'y'), (Answer::No, "no", 'n')] {
             let button: NodeId = context
                 .add_child_to(
                     answers,
@@ -335,7 +359,7 @@ impl Widget for Confirm {
 struct ConfirmBody {
     /// What the question is about.
     message: String,
-    /// Width that shows the message and the answers unclipped.
+    /// Content width that shows the message and the answers unclipped.
     fitted_width: u32,
 }
 
@@ -351,9 +375,10 @@ impl ConfirmBody {
     /// Show `message` as the question.
     fn show(&mut self, context: &mut dyn Context, message: String) {
         let widest = u32::try_from(text::display_width(&message)).unwrap_or(u32::MAX);
-        self.fitted_width = widest
-            .saturating_add(ROW_PADDING)
-            .max(buttons_width().saturating_add(ROW_PADDING));
+        // This is the body's content box. The blank columns beside it are the
+        // body's own padding, which layout adds around whatever is measured
+        // here, so counting them again would spend them twice.
+        self.fitted_width = widest.max(buttons_width());
         self.message = message;
         context.invalidate_layout();
     }
@@ -365,11 +390,22 @@ impl Widget for ConfirmBody {
         // the padding keeps the answers below them.
         Layout::fill()
             .direction(Direction::Column)
-            .padding(Edges::new(MESSAGE_ROWS, 1, 0, 1))
+            .padding(Edges::new(MESSAGE_ROWS, SIDE_PADDING, 0, SIDE_PADDING))
     }
 
     fn measure(&self, c: MeasureConstraints) -> Measurement {
-        c.clamp(Size::new(self.fitted_width, DIALOG_ROWS))
+        // The message and the blank line under it are this body's top padding,
+        // which layout adds to what is measured here, so the content is the
+        // row of answers alone.
+        let content = c.clamp_size(Size::new(centred_width(self.fitted_width), BUTTON_ROWS));
+        // Widening keeps the message whole, but a view too narrow to grow into
+        // has the last word, so an odd remainder there gives a column up.
+        let width = if off_centre(content.w) {
+            content.w.saturating_sub(1)
+        } else {
+            content.w
+        };
+        Measurement::Fixed(Size::new(width, content.h))
     }
 
     fn canvas(&self, view: Size, _context: &CanvasContext) -> Size {
@@ -565,13 +601,63 @@ mod tests {
             "the dialog and both buttons are framed, got {screen}"
         );
         assert!(
-            screen.contains("\u{2502} Yes \u{2502}"),
+            screen.contains("\u{2502} yes \u{2502}"),
             "the affirmative button keeps both borders, got {screen}"
         );
         assert!(
-            screen.contains("\u{2502} No \u{2502}"),
+            screen.contains("\u{2502} no \u{2502}"),
             "the negative button keeps both borders, got {screen}"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn the_answers_are_centred_and_the_dialog_keeps_no_spare_rows() -> Result<()> {
+        for (message, width) in [
+            ("/tmp/alpha/notes.txt", 50),
+            // An odd remainder would otherwise sit the group off to one side.
+            ("/tmp/alpha/note.txt", 50),
+            ("/tmp/a", 40),
+            // A message wider than the view is clamped, and centres anyway.
+            ("/tmp/a-rather-long-path/that/keeps/going/notes.txt", 30),
+            ("/tmp/a-rather-long-path/that/keeps/going/notes.txt", 31),
+        ] {
+            let mut harness = dialog(message, width, 14)?;
+            let frame = harness
+                .find_nodes("**/confirm/**/frame")?
+                .first()
+                .copied()
+                .expect("the dialog is framed");
+            let yes = answer_node(&mut harness, Answer::Yes)?;
+            let no = answer_node(&mut harness, Answer::No)?;
+            let rect = |node| {
+                harness
+                    .canopy
+                    .with_root_view(|context| context.view_of(node).expect("live node").outer)
+            };
+            let bounds = |node| {
+                let outer = rect(node);
+                let w = i32::try_from(outer.w).unwrap_or(0);
+                let h = i32::try_from(outer.h).unwrap_or(0);
+                (outer.tl.x, outer.tl.x + w, outer.tl.y + h)
+            };
+            let (frame_left, frame_right, frame_bottom) = bounds(frame);
+            let (yes_left, _, yes_bottom) = bounds(yes);
+            let (_, no_right, _) = bounds(no);
+
+            // The border is one row, so answers that end where the frame's own
+            // bottom row starts leave nothing blank under them.
+            assert_eq!(
+                yes_bottom,
+                frame_bottom - 1,
+                "the answers reach the bottom border, asking {message:?} in {width}"
+            );
+            assert_eq!(
+                yes_left - frame_left - 1,
+                frame_right - 1 - no_right,
+                "the answers are centred, asking {message:?} in {width}"
+            );
+        }
         Ok(())
     }
 
@@ -597,12 +683,12 @@ mod tests {
                 .expect("the label renders")
         };
         assert_ne!(
-            style_of('Y'),
+            style_of('y'),
             style_of('e'),
             "the key stands out from its label"
         );
         assert_ne!(
-            style_of('N'),
+            style_of('n'),
             style_of('o'),
             "both keys stand out from their labels"
         );
@@ -633,7 +719,7 @@ mod tests {
             background('B'),
             "every frame edge shares it"
         );
-        assert_eq!(background('Y'), background('B'), "a button shares it too");
+        assert_eq!(background('y'), background('B'), "a button shares it too");
         Ok(())
     }
 
