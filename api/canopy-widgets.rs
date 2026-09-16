@@ -968,6 +968,36 @@ pub mod canopy_widgets {
     /// Container that adds padding around its child.
     pub struct Pad {}
 
+    /// A centred modal holding a filtered list of items.
+    ///
+    /// The widget draws nothing of its own. It centres its frame, pushes the style
+    /// layer its parts paint under, and swallows mouse input that lands on the
+    /// margin around the frame.
+    #[derive(Default)]
+    pub struct Picker<T>
+    where
+        T: Label, {}
+
+    /// The filter field under a picker's list.
+    ///
+    /// The field takes no focus and no keys of its own: the list owns the keyboard
+    /// while the modal is open and writes what it holds here. It is a sibling of
+    /// the list rather than a row of it, so it stays on screen however far the
+    /// list scrolls.
+    #[derive(Default)]
+    pub struct PickerFilter {}
+
+    /// A list of items, scrolled by its own view.
+    ///
+    /// The list shows the items its filter passes, one per row, trimmed to the
+    /// width it is given. It titles the frame around it with its label and the row
+    /// count, or with a pending delete, and writes the filter into the field below
+    /// it.
+    #[derive(Default)]
+    pub struct PickerList<T>
+    where
+        T: Label, {}
+
     /// A Root widget that lives at the base of a Canopy app.
     #[derive(Default)]
     pub struct Root {}
@@ -1018,6 +1048,16 @@ pub mod canopy_widgets {
 
     /// Multiline text widget with wrapping and scrolling.
     pub struct Text {}
+
+    /// Which end of a label a row drops when it does not fit.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    pub enum Truncate {
+        #[default]
+        /// Drop the tail, which is how ordinary text reads.
+        End,
+        /// Drop the head, which keeps the last components of a path visible.
+        Start,
+    }
 
     /// Policy for publishing an input value in semantic snapshots.
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -1772,6 +1812,28 @@ pub mod canopy_widgets {
         fn name(&self) -> NodeName {}
     }
 
+    impl PickerFilter {
+        #[must_use]
+        /// Build an empty field.
+        pub fn new() -> Self {}
+
+        #[must_use]
+        /// Return the text the field shows.
+        pub fn text(&self) -> &str {}
+    }
+
+    impl Widget for PickerFilter {
+        fn canvas(&self, view: Size, _context: &CanvasContext<'_>) -> Size {}
+
+        fn layout(&self) -> Layout {}
+
+        fn measure(&self, c: MeasureConstraints) -> Measurement {}
+
+        fn name(&self) -> NodeName {}
+
+        fn render(&mut self, render: &mut Render<'_>, context: &dyn ViewContext) -> Result<()> {}
+    }
+
     impl Scroll {
         /// Place children in a row that scrolls horizontally.
         pub fn horizontal() -> Self {}
@@ -1915,6 +1977,191 @@ pub mod canopy_widgets {
         fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
     }
 
+    impl<T> CommandNode for PickerList<T>
+    where
+        T: 'static + Label,
+    {
+        fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
+    }
+
+    impl<T> PickerList<T>
+    where
+        T: 'static + Label,
+    {
+        #[must_use]
+        /// Build an empty list.
+        pub fn new() -> Self {}
+
+        #[must_use]
+        /// Return the filter text, for automation.
+        /// @return The filter, or an empty string when every item shows.
+        pub fn filter(&self) -> String {}
+
+        #[must_use]
+        /// Return the number of items the filter passes, for automation.
+        pub fn shown_count(&self) -> usize {}
+
+        #[must_use]
+        /// Return the selected item's label, for automation.
+        /// @return The label, or an empty string when the list shows none.
+        pub fn selected_name(&self) -> String {}
+
+        #[must_use]
+        /// Return the selected item.
+        pub fn selected(&self) -> Option<&T> {}
+
+        #[must_use]
+        /// Return whether a delete waits for confirmation, for automation.
+        pub fn confirming(&self) -> bool {}
+
+        /// Ask for confirmation before deleting the selected item.
+        ///
+        /// An empty list has nothing to delete, so the request is ignored.
+        pub fn request_delete(&mut self, context: &mut dyn Context) -> Result<()> {}
+
+        /// Close the filter field and show every item again.
+        pub fn clear_filter(&mut self, context: &mut dyn Context) -> Result<()> {}
+
+        /// Drop a pending delete, leaving the item in the list.
+        pub fn cancel_delete(&mut self, context: &mut dyn Context) -> Result<()> {}
+
+        /// Drop the selected item from the list, and stop confirming.
+        ///
+        /// The host removes it from its own storage. The selection stays on the
+        /// row, which now holds the item below, so repeated deletes work without
+        /// moving the hand.
+        pub fn remove_selected(&mut self, context: &mut dyn Context) -> Result<()> {}
+
+        /// Move the selection by a signed row count.
+        /// @param delta Negative values move up; positive values move down.
+        pub fn select_by(&mut self, context: &mut dyn Context, delta: i32) -> Result<()> {}
+
+        /// Move the selection by whole pages.
+        /// @param delta Negative values move up; positive values move down.
+        pub fn page(&mut self, context: &mut dyn Context, delta: i32) -> Result<()> {}
+
+        /// Open the filter field. Typed text narrows the list to the items that
+        /// contain it.
+        pub fn start_filter(&mut self, context: &mut dyn Context) -> Result<()> {}
+
+        /// Select the first item.
+        pub fn select_first(&mut self, context: &mut dyn Context) -> Result<()> {}
+
+        /// Select the last item.
+        pub fn select_last(&mut self, context: &mut dyn Context) -> Result<()> {}
+
+        /// Show `items` under `label`, dropping any filter and confirmation.
+        pub fn show(
+            &mut self,
+            context: &mut dyn Context,
+            label: String,
+            placeholder: &'static str,
+            items: Vec<T>,
+        ) -> Result<()> {
+        }
+
+        /// Show only the items containing `text`, ignoring ASCII case.
+        /// @param text Text a label must contain. Empty text shows every item.
+        pub fn set_filter(&mut self, context: &mut dyn Context, text: String) -> Result<()> {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_cancel_delete() -> canopy::commands::CommandCall {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_clear_filter() -> canopy::commands::CommandCall {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_confirming() -> canopy::commands::CommandCall {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_filter() -> canopy::commands::CommandCall {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_page(delta: i32) -> canopy::commands::CommandCall {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_request_delete() -> canopy::commands::CommandCall {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_select_by(delta: i32) -> canopy::commands::CommandCall {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_select_first() -> canopy::commands::CommandCall {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_select_last() -> canopy::commands::CommandCall {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_selected_name() -> canopy::commands::CommandCall {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_set_filter(text: String) -> canopy::commands::CommandCall {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_shown_count() -> canopy::commands::CommandCall {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_start_filter() -> canopy::commands::CommandCall {}
+
+        /// Return a typed command reference for this command.
+        pub fn cmd_cancel_delete() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return a typed command reference for this command.
+        pub fn cmd_clear_filter() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return a typed command reference for this command.
+        pub fn cmd_confirming() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return a typed command reference for this command.
+        pub fn cmd_filter() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return a typed command reference for this command.
+        pub fn cmd_page() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return a typed command reference for this command.
+        pub fn cmd_request_delete() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return a typed command reference for this command.
+        pub fn cmd_select_by() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return a typed command reference for this command.
+        pub fn cmd_select_first() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return a typed command reference for this command.
+        pub fn cmd_select_last() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return a typed command reference for this command.
+        pub fn cmd_selected_name() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return a typed command reference for this command.
+        pub fn cmd_set_filter() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return a typed command reference for this command.
+        pub fn cmd_shown_count() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return a typed command reference for this command.
+        pub fn cmd_start_filter() -> &'static canopy::commands::CommandSpec {}
+    }
+
+    impl<T> Widget for PickerList<T>
+    where
+        T: 'static + Label,
+    {
+        fn accept_focus(&self, _context: &dyn ViewContext) -> bool {}
+
+        fn canvas(&self, view: Size, _context: &CanvasContext<'_>) -> Size {}
+
+        fn layout(&self) -> Layout {}
+
+        fn measure(&self, c: MeasureConstraints) -> Measurement {}
+
+        fn name(&self) -> NodeName {}
+
+        fn on_event(&mut self, event: &Event, context: &mut dyn Context) -> Result<EventOutcome> {}
+
+        fn render(&mut self, render: &mut Render<'_>, context: &dyn ViewContext) -> Result<()> {}
+    }
+
     impl<T> CommandNode for Selector<T>
     where
         T: 'static + Label,
@@ -2002,6 +2249,58 @@ pub mod canopy_widgets {
         fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {}
 
         fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
+    }
+
+    impl<T> Picker<T>
+    where
+        T: 'static + Label,
+    {
+        #[must_use]
+        /// Build a picker whose rows drop the given end when they do not fit.
+        ///
+        /// This is read when the list mounts, so set it before the picker is added
+        /// to the tree.
+        pub fn with_truncate(self, truncate: Truncate) -> Self {}
+
+        #[must_use]
+        /// Build an empty picker.
+        pub fn new() -> Self {}
+
+        /// Return the filter field, or an error before the picker mounts.
+        pub fn filter(&self) -> Result<NodeId> {}
+
+        /// Return the list, which takes the keyboard while the modal is open, or
+        /// an error before the picker mounts.
+        pub fn list(&self) -> Result<NodeId> {}
+
+        /// Show `items` under `title`, with `placeholder` in place of an empty
+        /// list.
+        ///
+        /// The filter and any pending confirmation are dropped, so a picker always
+        /// opens on the whole list.
+        pub fn show(
+            &mut self,
+            context: &mut dyn Context,
+            title: &str,
+            placeholder: &'static str,
+            items: Vec<T>,
+        ) -> Result<()> {
+        }
+    }
+
+    impl<T> Widget for Picker<T>
+    where
+        T: 'static + Label,
+    {
+        fn layout(&self) -> Layout {}
+
+        fn name(&self) -> NodeName {}
+
+        fn on_event(&mut self, event: &Event, _context: &mut dyn Context) -> Result<EventOutcome> {}
+
+        fn on_mount(&mut self, context: &mut dyn Context) -> Result<()> {}
+
+        fn render(&mut self, render: &mut Render<'_>, _context: &dyn ViewContext) -> Result<()> {}
     }
 
     impl<W: 'static + Selectable, K: 'static + Clone + Eq + Hash + ToArgValue> Widget for List<W, K> {

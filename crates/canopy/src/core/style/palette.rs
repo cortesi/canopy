@@ -182,6 +182,54 @@ pub fn theme(p: &Palette) -> StyleMap {
             StyleBuilder::new().fg(p.accent).bg(p.panel_bg),
         )
         .style_all(
+            &["/picker/background", "/picker/text"],
+            StyleBuilder::new().fg(p.fg).bg(p.panel_bg),
+        )
+        .style(
+            "/picker/selection",
+            StyleBuilder::new().fg(p.bg).bg(p.accent),
+        )
+        // While the filter takes keys the list is not what the keyboard drives,
+        // so its selection holds its place without claiming the eye.
+        .style(
+            "/picker/selection/dimmed",
+            StyleBuilder::new().fg(p.fg).bg(p.selection_bg),
+        )
+        .style(
+            "/picker/placeholder",
+            StyleBuilder::new().fg(p.muted_fg).bg(p.panel_bg),
+        )
+        // The filter is a field rather than a row of the list, so it takes the
+        // element ground to set it apart from the items above it. A filter that
+        // has been given stays legible without competing with the list that the
+        // keyboard has gone back to.
+        .style_all(
+            &["/picker/filter", "/picker/filter/text", "/picker/filter/prompt"],
+            StyleBuilder::new().fg(p.muted_fg).bg(p.element_bg),
+        )
+        // Taking keys lights the field up, because it is what typing reaches.
+        .style_all(
+            &["/picker/filter/active", "/picker/filter/active/text"],
+            StyleBuilder::new().fg(p.fg).bg(p.selection_bg),
+        )
+        .style(
+            "/picker/filter/active/prompt",
+            StyleBuilder::new()
+                .fg(p.key)
+                .bg(p.selection_bg)
+                .attrs(AttrSet::new(Attr::Bold)),
+        )
+        .style_all(
+            &[
+                "/picker/frame",
+                "/picker/frame/focused",
+                "/picker/frame/thumb",
+                "/picker/frame/thumb/active",
+                "/picker/frame/title",
+            ],
+            StyleBuilder::new().bg(p.panel_bg),
+        )
+        .style_all(
             &["/confirm/background", "/confirm/message"],
             StyleBuilder::new().fg(p.fg).bg(p.panel_bg),
         )

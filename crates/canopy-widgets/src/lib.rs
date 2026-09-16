@@ -45,6 +45,8 @@ mod label;
 mod list;
 /// Padding container widget.
 mod pad;
+/// Modal filtered list of items.
+mod picker;
 /// Application root widget.
 mod root;
 /// Scrolling container.
@@ -78,6 +80,7 @@ pub use input::{Input, ValueExposure};
 pub use label::Label;
 pub use list::{AutoKey, List, Selectable};
 pub use pad::Pad;
+pub use picker::{Picker, PickerFilter, PickerList, Truncate};
 pub use root::Root;
 pub use scroll::Scroll;
 pub use scrollbar::Scrollbar;
