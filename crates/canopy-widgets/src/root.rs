@@ -947,9 +947,9 @@ mod tests {
         send_key(&mut canopy, "?")?;
         let second = modal_snapshot(&mut canopy)?;
 
-        assert!(!first.bindings.iter().any(|binding| binding.key == 'z'));
+        assert!(!first.bindings.iter().any(|binding| binding.input == 'z'));
         assert!(second.bindings.iter().any(|binding| {
-            binding.key == 'z'
+            binding.input == 'z'
                 && binding.scope == BindingScope::Default
                 && binding.description == "Added later"
         }));

@@ -1260,13 +1260,16 @@ pub mod canopy {
         //! Help snapshot API.
         //! Contextual binding discovery.
 
-        /// One effective key binding in a contextual snapshot.
+        /// One effective binding in a contextual snapshot.
+        ///
+        /// `I` is the input kind: [`Key`] for a key binding and [`Mouse`] for a mouse
+        /// binding. Every other field means the same thing for both.
         #[derive(Clone, Debug)]
-        pub struct AvailableBinding {
+        pub struct AvailableBinding<I> {
             /// Stable binding identifier.
             pub id: crate::core::inputmap::BindingId,
-            /// Normalized key.
-            pub key: crate::event::key::Key,
+            /// Normalized input.
+            pub input: I,
             /// Required user-facing description.
             pub description: String,
             /// Binding owner.
@@ -1298,7 +1301,13 @@ pub mod canopy {
             pub missing_requirements: Vec<crate::commands::CommandRequirement>,
         }
 
-        /// Owned snapshot of the effective key bindings for one focus context.
+        /// Owned snapshot of the effective bindings for one focus context.
+        ///
+        /// The snapshot answers what one context would do with an input, not what the
+        /// next event will do. A route is only hypothetical here: hit testing and mouse
+        /// capture pick the real mouse target, and discovery cannot know whether a
+        /// widget's `on_event` will consume an input before an after-widget binding
+        /// sees it.
         #[derive(Clone, Debug)]
         pub struct BindingSnapshot {
             /// Node used as the discovery focus.
@@ -1312,7 +1321,12 @@ pub mod canopy {
             /// Newest active exclusive binding group.
             pub exclusive_group: Option<crate::core::inputmap::FrameworkBindingGroup>,
             /// Effective key bindings, with one winner per normalized key.
-            pub bindings: Vec<AvailableBinding>,
+            pub bindings: Vec<AvailableBinding<crate::event::key::Key>>,
+            /// Effective mouse bindings, with one winner per normalized mouse input.
+            ///
+            /// The route starts at the requested node, as a click on it would. The
+            /// pointer's own position plays no part.
+            pub mouse_bindings: Vec<AvailableBinding<crate::event::mouse::Mouse>>,
         }
     }
 

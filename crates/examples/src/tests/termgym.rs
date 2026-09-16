@@ -82,7 +82,7 @@ fn f6_toggles_terminal_focus_without_stealing_shell_shortcuts() -> Result<()> {
     let terminal_bindings = harness.canopy.available_bindings(None)?.bindings;
     let toggle = terminal_bindings
         .iter()
-        .find(|binding| binding.key == Key::parse_spec("F6").expect("valid key"))
+        .find(|binding| binding.input == Key::parse_spec("F6").expect("valid key"))
         .expect("terminal toggle binding");
     assert_eq!(toggle.description, "Toggle terminal list");
     assert_eq!(toggle.phase, BindingPhase::BeforeWidget);
@@ -102,7 +102,7 @@ fn f6_toggles_terminal_focus_without_stealing_shell_shortcuts() -> Result<()> {
         assert!(
             terminal_bindings
                 .iter()
-                .all(|binding| binding.key != removed),
+                .all(|binding| binding.input != removed),
             "{removed} must remain available to the terminal"
         );
     }
@@ -132,7 +132,9 @@ fn f6_toggles_terminal_focus_without_stealing_shell_shortcuts() -> Result<()> {
     ] {
         let expected = Key::parse_spec(expected).expect("valid list key");
         assert!(
-            list_bindings.iter().any(|binding| binding.key == expected),
+            list_bindings
+                .iter()
+                .any(|binding| binding.input == expected),
             "{expected} must be available in the terminal list"
         );
     }

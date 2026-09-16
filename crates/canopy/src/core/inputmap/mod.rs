@@ -1,6 +1,6 @@
 #[cfg(test)]
 use std::mem;
-use std::{cmp::Ordering, collections::HashSet, fmt};
+use std::{cmp::Ordering, collections::HashSet, fmt, hash::Hash};
 
 use crate::{
     ModalBindings,
@@ -488,8 +488,32 @@ impl InputMap {
     /// Return normalized key inputs that can participate in the current scope
     /// state.
     pub(crate) fn eligible_keys(&self) -> Vec<Key> {
+        self.eligible_inputs(|input| match input {
+            InputSpec::Key(key) => Some(key),
+            InputSpec::Mouse(_) => None,
+        })
+    }
+
+    /// Return normalized mouse inputs that can participate in the current scope
+    /// state.
+    pub(crate) fn eligible_mouse_inputs(&self) -> Vec<Mouse> {
+        self.eligible_inputs(|input| match input {
+            InputSpec::Mouse(mouse) => Some(mouse),
+            InputSpec::Key(_) => None,
+        })
+    }
+
+    /// Return the distinct inputs `select` keeps from the records the active
+    /// scope state admits.
+    ///
+    /// The order is by label alone, for stable presentation. Precedence between
+    /// records belongs to the resolver, which picks one winner per input.
+    fn eligible_inputs<I: Eq + Hash + ToString>(
+        &self,
+        select: impl Fn(InputSpec) -> Option<I>,
+    ) -> Vec<I> {
         let active_group = self.active_exclusive_group();
-        let mut keys = HashSet::new();
+        let mut inputs = HashSet::new();
         for record in &self.records {
             let eligible = match active_group {
                 Some(group) => {
@@ -498,13 +522,13 @@ impl InputMap {
                 }
                 None => matches!(record.owner, BindingOwner::Application),
             };
-            if eligible && let InputSpec::Key(key) = record.input {
-                keys.insert(key.normalize());
+            if eligible && let Some(input) = select(record.input.normalize()) {
+                inputs.insert(input);
             }
         }
-        let mut keys = keys.into_iter().collect::<Vec<_>>();
-        keys.sort_by_key(ToString::to_string);
-        keys
+        let mut inputs = inputs.into_iter().collect::<Vec<_>>();
+        inputs.sort_by_key(ToString::to_string);
+        inputs
     }
 
     /// Explain one record's state for a route from the target to the root.

@@ -955,6 +955,53 @@ fn declarative_script_binding_exposes_arguments_phase_and_route_target() -> Resu
 }
 
 #[test]
+fn availability_reports_key_and_mouse_bindings_in_separate_lists() -> Result<()> {
+    let (mut canopy, _, _) = script_call_probes()?;
+    canopy.eval_script(
+        r#"
+        canopy.bind("x", {description = "Set value"}, command.script_call_probe.set_value(7))
+        canopy.bind_mouse(
+            "ctrl-LeftDown",
+            {description = "Set value", phase = "before_widget"},
+            command.script_call_probe.set_value(7)
+        )
+        canopy.bind_mouse("ScrollUp", {description = "Scroll"}, function() end)
+
+        local available = canopy.available_bindings()
+        canopy.assert(#available.bindings == 1, "the key list stays key-only")
+        canopy.assert(available.bindings[1].input == "x", "the key reports its own spec")
+
+        local mice = available.mouse_bindings
+        canopy.assert(#mice == 2, "one winner per mouse input, got " .. #mice)
+        canopy.assert(mice[1].input == "Ctrl+LeftDown", "got " .. mice[1].input)
+        canopy.assert(mice[2].input == "ScrollUp", "the list orders by label")
+        canopy.assert(mice[1].phase == "before_widget", "a mouse record carries its phase")
+        canopy.assert(mice[1].command ~= nil, "a declarative record carries its command")
+        canopy.assert(mice[2].command == nil, "a script callback stays opaque")
+        canopy.assert(mice[1].route_path == available.focus_path, "the route is the focus route")
+        for _, record in canopy.bindings() do
+            if record.input == "Ctrl+LeftDown" then
+                canopy.assert(record.command == "script_call_probe::set_value")
+            end
+        end
+
+    "#,
+    )?;
+
+    // The label a record reports is the spec a binding is written in.
+    canopy.eval_script(
+        r#"
+        canopy.unbind_key("x", {})
+        for _, binding in canopy.available_bindings().mouse_bindings do
+            canopy.bind_mouse(binding.input, {description = "Rebound"}, function() end)
+        end
+        canopy.assert(#canopy.available_bindings().mouse_bindings == 2, "every label parsed back")
+    "#,
+    )?;
+    Ok(())
+}
+
+#[test]
 fn script_discovery_separates_disabled_state_and_missing_input() -> Result<()> {
     let (mut canopy, _, _) = script_call_probes()?;
     let ArgValue::Array(availability) = canopy.eval_script(

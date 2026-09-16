@@ -8,11 +8,10 @@ use canopy::{
     ChildSlot, Context, ContextExt, NodeId, NodeName, Render, ViewContext, Widget,
     error::{Error, Result},
     geom::Size,
-    help::AvailableBinding,
     layout::{Align, Constraint, Direction, Edges, Layout, MeasureConstraints, Measurement},
 };
 
-use super::binding_list::{display_lines, natural_width, render_line};
+use super::binding_list::{BindingRow, display_lines, key_rows_of, natural_width, render_line};
 use crate::{center::Center, frame::Frame};
 
 canopy::slot!(ModeFrameSlot: Frame);
@@ -25,9 +24,11 @@ const MAX_WIDTH: u32 = 64;
 const MARGIN: u32 = 1;
 
 /// Bindings of one transient mode, measured to fit them.
+///
+/// A transient mode takes the next key, so the panel lists keys alone.
 pub struct ModeBindings {
-    /// Bindings in the mode's own scope.
-    bindings: Vec<AvailableBinding>,
+    /// Rows for the keys in the mode's own scope.
+    bindings: Vec<BindingRow>,
 }
 
 impl ModeBindings {
@@ -119,6 +120,7 @@ impl ModeHelp {
             .into_iter()
             .filter(|binding| binding.scope.mode() == Some(mode.as_str()))
             .collect::<Vec<_>>();
+        let bindings = key_rows_of(&bindings);
 
         let frame = context
             .get_slot_of::<ModeFrameSlot>(overlay)?

@@ -115,7 +115,7 @@ fn help_and_diagnostics_use_canonical_binding_order() -> Result<()> {
             .expect("root binding snapshot")
             .bindings
             .iter()
-            .map(|binding| binding.key.to_string())
+            .map(|binding| binding.input.to_string())
             .collect::<Vec<_>>()
     };
     assert_eq!(help_inputs(&forward), ["a", "b"]);
@@ -568,7 +568,7 @@ fn explicit_binding_phases_override_the_same_selector_and_change_route_trace() -
             let binding = snapshot
                 .bindings
                 .iter()
-                .find(|binding| binding.key == 'h')
+                .find(|binding| binding.input == 'h')
                 .unwrap();
             assert_eq!(binding.phase, phase);
             assert_eq!(binding.path_filter, "/r/**/");

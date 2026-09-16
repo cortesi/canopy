@@ -387,11 +387,20 @@ the path filter has no effect on the phase. Key and mouse bindings take either
 phase. The phase belongs to the winner at one route node, so an early binding
 on an ancestor still runs after every descendant declines.
 
-Key routing and `available_bindings` call the same resolver at each node in the
+Routing and `available_bindings` call the same resolver at each node in the
 focus-to-root route. Availability returns an owned snapshot with one effective
-winner per normalized key. It does not include mouse bindings. Diagnostic
+winner per normalized key in `bindings`, and one per normalized mouse input in
+`mouse_bindings`. Both carry the same description, owner, scope, route, phase,
+command availability, and source. The mouse route starts at the requested node,
+as a click on it would; the pointer's position plays no part, and hit testing
+and capture still choose the real target. Discovery also cannot know whether a
+widget will consume an input before an after-widget binding sees it. Diagnostic
 binding output uses the same registry and reports why records are active,
 shadowed, blocked by the top modal's framework group, or unmatched.
+
+One label names an input everywhere. `Mouse` writes the spec `parse_spec`
+reads back, such as `Ctrl+LeftDown`, and it carries no space, so help can
+separate several inputs with one.
 
 Mouse events go to the capture node when capture is active; otherwise hit-
 testing chooses the target.

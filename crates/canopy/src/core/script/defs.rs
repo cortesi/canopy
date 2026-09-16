@@ -395,7 +395,8 @@ fn register_observation_info(builder: &mut module::Builder) {
         declaration::Type::table([
             declaration::Field::new("id", declaration::Type::Number)
                 .doc("Stable numeric binding identifier."),
-            declaration::Field::new("input", declaration::Type::String).doc("Normalized key spec."),
+            declaration::Field::new("input", declaration::Type::String)
+                .doc("Normalized key spec, or mouse spec in mouse_bindings."),
             declaration::Field::new(
                 "command",
                 declaration::Type::table({
@@ -450,6 +451,14 @@ fn register_observation_info(builder: &mut module::Builder) {
                 declaration::Type::named("AvailableBinding").array(),
             )
             .doc("Effective key bindings for the context."),
+            declaration::Field::new(
+                "mouse_bindings",
+                declaration::Type::named("AvailableBinding").array(),
+            )
+            .doc(
+                "Effective mouse bindings for the context, routed from the requested node \
+                 rather than from the pointer.",
+            ),
         ]),
     ));
     builder.alias(declaration::Alias::new(

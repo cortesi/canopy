@@ -188,6 +188,7 @@ impl Context for DummyContext {
             transient_mode: None,
             exclusive_group: None,
             bindings: Vec::new(),
+            mouse_bindings: Vec::new(),
         })
     }
 

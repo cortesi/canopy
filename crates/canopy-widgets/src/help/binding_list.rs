@@ -95,11 +95,8 @@ impl BindingList {
 
     /// Build the exact vertical canvas for one viewport width.
     pub(super) fn display_lines(&self, width: u32) -> Vec<DisplayLine> {
-        let bindings = self
-            .snapshot
-            .as_ref()
-            .map_or(&[][..], |snapshot| snapshot.bindings.as_slice());
-        display_lines(bindings, width)
+        let rows = self.snapshot.as_ref().map_or_else(Vec::new, snapshot_rows);
+        display_lines(&rows, width)
     }
 }
 
@@ -149,15 +146,57 @@ impl Widget for BindingList {
 
 /// Bindings that share one action, shown together.
 struct BindingGroup {
-    /// Distinct key labels, in display order.
+    /// Distinct input labels, in display order.
     keys: Vec<String>,
-    /// Action text shared by every key.
+    /// Action text shared by every input.
     description: String,
 }
 
-/// Build the sorted display lines for `bindings` at `width`.
-pub(super) fn display_lines(bindings: &[AvailableBinding], width: u32) -> Vec<DisplayLine> {
-    if bindings.is_empty() {
+/// One binding reduced to what the list shows and how it sorts.
+///
+/// Keys and mouse inputs differ only in their label and their sort position, so
+/// the rest of the list never needs to know which kind a row came from.
+pub(super) struct BindingRow {
+    /// Sort position: a category, then the label that breaks ties within it.
+    sort: (u8, String),
+    /// Label shown in the input column.
+    label: String,
+    /// Action text, including any reason it is unavailable.
+    description: String,
+}
+
+/// Return the rows for every effective binding in `snapshot`.
+///
+/// Mouse inputs sort after every key, so the familiar key list keeps its order
+/// and the pointer rows gather at the end. An input that shares an action with
+/// a key joins that action's row rather than repeating it.
+pub(super) fn snapshot_rows(snapshot: &BindingSnapshot) -> Vec<BindingRow> {
+    let mice = snapshot.mouse_bindings.iter().map(|binding| BindingRow {
+        sort: (MOUSE_SORT_GROUP, binding.input.to_string()),
+        label: binding.input.to_string(),
+        description: binding_description(binding),
+    });
+    key_rows_of(&snapshot.bindings)
+        .into_iter()
+        .chain(mice)
+        .collect()
+}
+
+/// Return the rows for key bindings alone.
+pub(super) fn key_rows_of(bindings: &[AvailableBinding<Key>]) -> Vec<BindingRow> {
+    bindings
+        .iter()
+        .map(|binding| BindingRow {
+            sort: key_sort_key(binding.input),
+            label: key_label(binding.input),
+            description: binding_description(binding),
+        })
+        .collect()
+}
+
+/// Build the sorted display lines for `rows` at `width`.
+pub(super) fn display_lines(rows: &[BindingRow], width: u32) -> Vec<DisplayLine> {
+    if rows.is_empty() {
         return vec![DisplayLine {
             key: None,
             text: "No key bindings in this context".to_string(),
@@ -165,7 +204,7 @@ pub(super) fn display_lines(bindings: &[AvailableBinding], width: u32) -> Vec<Di
         }];
     }
 
-    let groups = binding_groups(bindings)
+    let groups = binding_groups(rows)
         .into_iter()
         .map(|group| (key_rows(&group.keys), group.description))
         .collect::<Vec<_>>();
@@ -179,8 +218,8 @@ pub(super) fn display_lines(bindings: &[AvailableBinding], width: u32) -> Vec<Di
 }
 
 /// Return the width that shows every action on one row without wrapping.
-pub(super) fn natural_width(bindings: &[AvailableBinding]) -> usize {
-    let groups = binding_groups(bindings);
+pub(super) fn natural_width(rows: &[BindingRow]) -> usize {
+    let groups = binding_groups(rows);
     let keys = groups
         .iter()
         .flat_map(|group| key_rows(&group.keys))
@@ -217,23 +256,21 @@ pub(super) fn render_line(
 }
 
 /// Merge bindings that show the same action into groups, ordered by their
-/// first key.
-fn binding_groups(bindings: &[AvailableBinding]) -> Vec<BindingGroup> {
-    let mut sorted = bindings.iter().collect::<Vec<_>>();
-    sorted.sort_by_cached_key(|binding| binding_sort_key(binding));
+/// first input.
+fn binding_groups(rows: &[BindingRow]) -> Vec<BindingGroup> {
+    let mut sorted = rows.iter().collect::<Vec<_>>();
+    sorted.sort_by(|left, right| left.sort.cmp(&right.sort));
     let mut groups: Vec<BindingGroup> = Vec::new();
-    for binding in sorted {
-        let key = key_label(binding.key);
-        let description = binding_description(binding);
+    for row in sorted {
         match groups
             .iter_mut()
-            .find(|group| group.description == description)
+            .find(|group| group.description == row.description)
         {
-            Some(group) if !group.keys.contains(&key) => group.keys.push(key),
+            Some(group) if !group.keys.contains(&row.label) => group.keys.push(row.label.clone()),
             Some(_) => {}
             None => groups.push(BindingGroup {
-                keys: vec![key],
-                description,
+                keys: vec![row.label.clone()],
+                description: row.description.clone(),
             }),
         }
     }
@@ -345,7 +382,7 @@ fn binding_lines(
 
 /// Show the action and useful availability feedback, leaving diagnostics to
 /// inspection APIs.
-pub(super) fn binding_description(binding: &AvailableBinding) -> String {
+pub(super) fn binding_description<I>(binding: &AvailableBinding<I>) -> String {
     let Some(command) = &binding.command else {
         return binding.description.clone();
     };
@@ -360,9 +397,11 @@ pub(super) fn binding_description(binding: &AvailableBinding) -> String {
     description
 }
 
-/// Sort bindings by requested key category and display string.
-fn binding_sort_key(binding: &AvailableBinding) -> (u8, String) {
-    let key = binding.key;
+/// Sort category for every mouse input, after each key category.
+const MOUSE_SORT_GROUP: u8 = 6;
+
+/// Sort keys by requested category and display string.
+fn key_sort_key(key: Key) -> (u8, String) {
     let group = if key.mods != Empty {
         5
     } else {

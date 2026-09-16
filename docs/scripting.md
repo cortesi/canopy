@@ -221,19 +221,29 @@ relative, or focus targeting when a Button, List, or native binding stores the
 action.
 
 Set `phase = "before_widget"` to run before widget input, or `phase =
-"after_widget"` to run after the widget ignores input. Mouse bindings accept
-only `after_widget`. The default phase is `after_widget`. Explicit phases do
+"after_widget"` to run after the widget ignores input. Key and mouse bindings
+take either phase. The default phase is `after_widget`. Explicit phases do
 not change scope, specificity, or insertion ordering.
 
 The registry keeps one flat record format for application and framework
 bindings. `canopy.bindings()` returns all records, including normalized input,
 owner, scope, path, description, source, and target kind.
 `canopy.available_bindings(node?)` returns an owned snapshot of the effective
-key bindings for the specified node or current focus. The snapshot contains the
-focus path, active modes, the transient mode, active exclusive framework group,
-and one winning record per key. Each winner includes its route path and whether it runs before
-the widget or after the widget ignores the key. Contextual help and automation
-use this same resolver as input routing.
+bindings for the specified node or current focus. The snapshot contains the
+focus path, active modes, the transient mode, the active exclusive framework
+group, one winning record per key in `bindings`, and one winning record per
+mouse input in `mouse_bindings`. Each winner includes its route path and
+whether it runs before the widget or after the widget ignores the input.
+Contextual help and automation use this same resolver as input routing.
+
+A snapshot says what the named context would do with an input, not what the
+next event will do. The mouse route starts at the requested node, as a click on
+it would, and the pointer's own position plays no part: hit testing and mouse
+capture choose the real target. Discovery also cannot know whether a widget's
+own handler will consume an input before an `after_widget` binding sees it.
+
+An `input` field is the spec a binding is written in, such as `Ctrl+LeftDown`
+or `ScrollUp`, so a reported label parses back to the record it names.
 
 `canopy.unbind(id)` removes one binding. `canopy.unbind_key(key, options?)`
 removes matching application key bindings. Its optional selector has exact

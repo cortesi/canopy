@@ -3,10 +3,13 @@ use std::mem;
 use canopy::{
     BindingId, BindingOwner, BindingPhase, BindingScope, Context, ContextExt, Loader, NodeId,
     ViewContext, Widget, buf,
+    commands::{
+        CommandAction, CommandArgs, CommandId, CommandInvocation, CommandResolution, CommandStatus,
+    },
     error::Result,
     event::{key, mouse},
     geom::{Point, PointI32, Size},
-    help::{AvailableBinding, BindingSnapshot},
+    help::{AvailableBinding, BindingCommand, BindingSnapshot},
     layout::Layout,
     path::Path,
     testing::harness::Harness,
@@ -22,10 +25,10 @@ fn binding(
     key: impl Into<key::Key>,
     description: &str,
     phase: BindingPhase,
-) -> AvailableBinding {
+) -> AvailableBinding<key::Key> {
     AvailableBinding {
         id: BindingId::from_u64(id),
-        key: key.into(),
+        input: key.into(),
         description: description.to_string(),
         owner: BindingOwner::Application,
         scope: BindingScope::Default,
@@ -37,7 +40,7 @@ fn binding(
     }
 }
 
-fn snapshot(focus: NodeId, bindings: Vec<AvailableBinding>) -> BindingSnapshot {
+fn snapshot(focus: NodeId, bindings: Vec<AvailableBinding<key::Key>>) -> BindingSnapshot {
     BindingSnapshot {
         focus,
         focus_path: Path::from("/root/editor"),
@@ -45,17 +48,51 @@ fn snapshot(focus: NodeId, bindings: Vec<AvailableBinding>) -> BindingSnapshot {
         transient_mode: None,
         exclusive_group: None,
         bindings,
+        mouse_bindings: Vec::new(),
     }
 }
 
-fn list_with(bindings: Vec<AvailableBinding>) -> BindingList {
+/// Build one effective mouse binding record.
+fn mouse_binding(id: u64, spec: &str, description: &str) -> AvailableBinding<mouse::Mouse> {
+    AvailableBinding {
+        id: BindingId::from_u64(id),
+        input: mouse::Mouse::parse_spec(spec).expect("valid mouse spec"),
+        description: description.to_string(),
+        owner: BindingOwner::Application,
+        scope: BindingScope::Default,
+        path_filter: String::new(),
+        route_path: Path::from("/root/editor"),
+        phase: BindingPhase::AfterWidget,
+        command: None,
+        source: Some("test".to_string()),
+    }
+}
+
+/// Build a list holding both kinds of effective binding.
+fn list_with_mice(
+    bindings: Vec<AvailableBinding<key::Key>>,
+    mice: Vec<AvailableBinding<mouse::Mouse>>,
+) -> BindingList {
+    let mut list = BindingList::new();
+    let focus = canopy::Canopy::new().root_id();
+    let mut captured = snapshot(focus, bindings);
+    captured.mouse_bindings = mice;
+    drop(list.replace_snapshot(Some(captured)));
+    list
+}
+
+fn list_with(bindings: Vec<AvailableBinding<key::Key>>) -> BindingList {
     let mut list = BindingList::new();
     let focus = canopy::Canopy::new().root_id();
     drop(list.replace_snapshot(Some(snapshot(focus, bindings))));
     list
 }
 
-fn harness_with(width: u32, height: u32, bindings: Vec<AvailableBinding>) -> Result<Harness> {
+fn harness_with(
+    width: u32,
+    height: u32,
+    bindings: Vec<AvailableBinding<key::Key>>,
+) -> Result<Harness> {
     let mut harness = Harness::builder(BindingList::new())
         .size(width, height)
         .build()?;
@@ -81,6 +118,63 @@ fn wide_keys_align_descriptions_by_display_columns() {
         .map(unicode_width::UnicodeWidthStr::width)
         .collect::<Vec<_>>();
     assert_eq!(widths, [6, 6, 6]);
+}
+
+#[test]
+fn mouse_rows_follow_the_keys_and_share_an_action_with_them() {
+    let list = list_with_mice(
+        vec![
+            binding(1, 'a', "Activate", BindingPhase::AfterWidget),
+            binding(2, 'z', "Something else", BindingPhase::AfterWidget),
+        ],
+        vec![
+            mouse_binding(3, "ScrollUp", "Scroll up"),
+            mouse_binding(4, "LeftDown", "Activate"),
+        ],
+    );
+    let lines = list.display_lines(60);
+    let rows = lines
+        .iter()
+        .map(|line| {
+            (
+                line.key.as_deref().map(str::trim).unwrap_or_default(),
+                line.text.trim(),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        rows,
+        [
+            ("a LeftDown", "Activate"),
+            ("z", "Something else"),
+            ("ScrollUp", "Scroll up"),
+        ],
+        "a mouse input joins the action it shares with a key, and the rest \
+         follow every key"
+    );
+}
+
+#[test]
+fn a_disabled_mouse_binding_shows_its_reason() {
+    let mut click = mouse_binding(1, "LeftDown", "Activate");
+    click.command = Some(BindingCommand {
+        action: CommandAction {
+            invocation: CommandInvocation {
+                id: CommandId("button::press"),
+                args: CommandArgs::default(),
+            },
+            target: None,
+        },
+        resolution: Some(CommandResolution::Free),
+        status: Some(CommandStatus::Disabled("nothing selected".into())),
+        missing_requirements: Vec::new(),
+    });
+    let list = list_with_mice(Vec::new(), vec![click]);
+    let lines = list.display_lines(60);
+    assert_eq!(
+        lines[0].text.trim(),
+        "Activate — Unavailable: nothing selected"
+    );
 }
 
 #[test]
@@ -491,7 +585,7 @@ fn scroll_thumb_spans_the_visible_fraction() -> Result<()> {
 }
 
 /// Root that frames a binding list, as the help overlay does.
-struct FramedList(Vec<AvailableBinding>);
+struct FramedList(Vec<AvailableBinding<key::Key>>);
 
 impl Widget for FramedList {
     fn layout(&self) -> Layout {

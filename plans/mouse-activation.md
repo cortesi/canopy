@@ -242,11 +242,16 @@ button with no action is an enabled no-op.
 
 ### Stage 3: Expose mouse activation in discovery and help
 
-- [ ] Implement C4 across Rust snapshots, Luau records/declarations, and help.
-- [ ] Test context-specific mouse winners, modes and exclusive groups, disabled
+- [x] Implement C4 across Rust snapshots, Luau records/declarations, and help.
+- [x] Test context-specific mouse winners, modes and exclusive groups, disabled
   reasons, stable ordering, captured help context, and unchanged key fields.
-- [ ] Update binding and routing contracts in `docs/scripting.md` and
+- [x] Update binding and routing contracts in `docs/scripting.md` and
   `docs/architecture.md`; regenerate affected API and script artifacts.
+
+`AvailableBinding` took an input type parameter rather than gaining a twin, so
+one definition and one conversion serve both lists. Its `key` field is now
+`input`. Help sorts mouse rows after every key category and merges an input into
+the action it shares with a key, so activation reads as one row.
 
 ### Stage 4: Compose and validate confirmation dialogs
 

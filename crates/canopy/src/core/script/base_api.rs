@@ -419,7 +419,10 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "available_bindings",
-        docs: Some("Return effective key bindings for a node or the current focus."),
+        docs: Some(
+            "Return effective key and mouse bindings for a node or the current focus. \
+             The mouse route starts at that node, not at the pointer.",
+        ),
         signature: || {
             FunctionSignature::new()
                 .param(("id", Type::named("NodeId").optional()))
