@@ -859,9 +859,15 @@ pub mod canopy_widgets {
         pub vertical: char,
     }
 
-    /// Button widget that triggers a command when clicked.
+    /// Button widget that runs a command when it is activated.
     ///
-    /// Mouse clicks are consumed without dispatching when the command is disabled.
+    /// Activation is the `button::press` command, which a click, `Enter`, or
+    /// `Space` reaches through ordinary bindings. Install them with
+    /// [`Loader::load`] and `button.default_bindings()`, or bind `press` however an
+    /// application prefers. A modal that admits only its own framework group must
+    /// bind activation in that group.
+    ///
+    /// User activation of a disabled action is consumed without dispatching.
     /// Calling [`Button::press`] directly still reports command errors.
     pub struct Button {}
 
@@ -1117,12 +1123,20 @@ pub mod canopy_widgets {
         fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
     }
 
+    impl Loader for Button {
+        fn load(canopy: &mut Canopy) -> Result<()> {}
+    }
+
     impl Widget for Button {
+        /// Take focus only when there is something to activate.
+        ///
+        /// A decorative button stays out of keyboard traversal. One whose action is
+        /// disabled keeps focus, so its reason stays reachable.
+        fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
+
         fn layout(&self) -> Layout {}
 
         fn name(&self) -> NodeName {}
-
-        fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {}
 
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {}
 

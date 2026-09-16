@@ -28,6 +28,8 @@ pub struct HarnessBuilder<W> {
     root: W,
     /// View size for the harness.
     size: Size,
+    /// Named binding sources evaluated after the API is finalized.
+    bindings: Vec<(String, String)>,
 }
 
 impl<W: Widget + Loader + 'static> HarnessBuilder<W> {
@@ -36,12 +38,24 @@ impl<W: Widget + Loader + 'static> HarnessBuilder<W> {
         Self {
             root,
             size: Size::new(100, 100),
+            bindings: Vec::new(),
         }
     }
 
     /// Set the size of the harness view.
     pub fn size(mut self, width: u32, height: u32) -> Self {
         self.size = Size::new(width, height);
+        self
+    }
+
+    /// Evaluate named binding source after finalization, as an application
+    /// does.
+    ///
+    /// A widget's defaults reach a test this way, for instance
+    /// `button.default_bindings()`, which loading alone does not run.
+    #[must_use]
+    pub fn bindings(mut self, name: impl Into<String>, source: impl Into<String>) -> Self {
+        self.bindings.push((name.into(), source.into()));
         self
     }
 
@@ -52,6 +66,9 @@ impl<W: Widget + Loader + 'static> HarnessBuilder<W> {
 
         <W as Loader>::load(&mut canopy)?;
         canopy.finalize_api()?;
+        for (name, source) in &self.bindings {
+            canopy.evaluate_bindings(name, source)?;
+        }
         canopy.replace_root(self.root)?;
         canopy.core.with_layout_of(canopy.core.root, |layout| {
             *layout = layout.width(Sizing::Flex(1)).height(Sizing::Flex(1));

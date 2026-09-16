@@ -143,7 +143,7 @@ impl CanopyBuilder {
         for source in self.sources {
             match source {
                 SetupSource::Bindings { name, source } => {
-                    evaluate_bindings(&mut canopy, &name, &source)?
+                    canopy.evaluate_bindings(&name, &source)?
                 }
                 SetupSource::Config(path) => canopy.run_config_inner(&path)?,
             }
@@ -155,28 +155,29 @@ impl CanopyBuilder {
     }
 }
 
-/// Evaluate named setup source without entering a frame-preparation turn.
-fn evaluate_bindings(canopy: &mut Canopy, name: &str, text: &str) -> Result<()> {
-    if name.trim().is_empty() {
-        return Err(Error::Invalid(
-            "builder binding name cannot be empty".into(),
-        ));
+impl Canopy {
+    /// Evaluate named setup source without entering a frame-preparation turn.
+    pub(crate) fn evaluate_bindings(&mut self, name: &str, text: &str) -> Result<()> {
+        if name.trim().is_empty() {
+            return Err(Error::Invalid(
+                "builder binding name cannot be empty".into(),
+            ));
+        }
+        let baseline = self.begin_script_journal();
+        let source = Source::text(ModuleId::new(name.as_bytes().to_vec()), text);
+        let result = (|| {
+            let host = self.script_host.clone();
+            let script = host.compile_source(&source)?;
+            host.execute(self, self.root_id(), script, None).map(|_| ())
+        })();
+        self.record_script_journal(
+            ScriptOrigin::Bindings(name.to_owned()),
+            text,
+            baseline,
+            &result,
+        );
+        result
     }
-    let baseline = canopy.begin_script_journal();
-    let source = Source::text(ModuleId::new(name.as_bytes().to_vec()), text);
-    let result = (|| {
-        let host = canopy.script_host.clone();
-        let script = host.compile_source(&source)?;
-        host.execute(canopy, canopy.root_id(), script, None)
-            .map(|_| ())
-    })();
-    canopy.record_script_journal(
-        ScriptOrigin::Bindings(name.to_owned()),
-        text,
-        baseline,
-        &result,
-    );
-    result
 }
 
 #[cfg(test)]

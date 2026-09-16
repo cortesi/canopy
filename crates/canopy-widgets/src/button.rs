@@ -1,11 +1,10 @@
 //! Button widget.
 
 use canopy::{
-    Context, ContextExt, EventOutcome, NodeName, Render, ViewContext, Widget, WidgetSemantics,
+    Canopy, Context, ContextExt, Loader, NodeName, Render, ViewContext, Widget, WidgetSemantics,
     commands::{CommandAction, CommandCall, CommandStatus, CommandTarget},
     derive_commands,
     error::Result,
-    event::{Event, mouse},
     layout::Layout,
     style::{WidgetState, roles},
 };
@@ -20,9 +19,33 @@ canopy::slot!(LabelSlot: Text);
 canopy::slot!(BoxSlot: Border);
 canopy::slot!(CenterSlot: Center);
 
-/// Button widget that triggers a command when clicked.
+/// Default activation bindings exposed through `button.default_bindings()`.
 ///
-/// Mouse clicks are consumed without dispatching when the command is disabled.
+/// The path reaches a button wherever it is mounted, and matches the label and
+/// the border too, so a click anywhere on the button resolves to the button
+/// that contains it. The bindings are ordinary application records, so an
+/// application can rebind or unbind them like any other.
+const DEFAULT_BINDINGS: &str = r#"
+canopy.keymap({
+    path = "**/button/**/",
+    {
+        key = { "Enter", "Space" },
+        mouse = "LeftDown",
+        description = "Activate the button",
+        action = command.button.press(),
+    },
+})
+"#;
+
+/// Button widget that runs a command when it is activated.
+///
+/// Activation is the `button::press` command, which a click, `Enter`, or
+/// `Space` reaches through ordinary bindings. Install them with
+/// [`Loader::load`] and `button.default_bindings()`, or bind `press` however an
+/// application prefers. A modal that admits only its own framework group must
+/// bind activation in that group.
+///
+/// User activation of a disabled action is consumed without dispatching.
 /// Calling [`Button::press`] directly still reports command errors.
 pub struct Button {
     /// Button label.
@@ -65,26 +88,32 @@ impl Button {
     }
 
     /// Trigger the button action.
-    #[command]
+    #[command(enabled = "press_status")]
     pub fn press(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        if let Some(command) = self.command.as_ref() {
-            ctx.dispatch(
-                command.target.unwrap_or(CommandTarget::From(ctx.node_id())),
-                &command.invocation,
-            )?;
+        let Some(command) = self.command.as_ref() else {
+            return Ok(());
+        };
+        // A click puts focus on the button first. The action can close a modal,
+        // remove the button, or move focus itself, so focusing afterwards would
+        // undo what it did. A direct or keyboard call has no pointer to follow
+        // and leaves focus alone.
+        if ctx.current_mouse_event().is_some() {
+            ctx.set_focus(ctx.node_id())?;
         }
+        ctx.dispatch(
+            command.target.unwrap_or(CommandTarget::From(ctx.node_id())),
+            &command.invocation,
+        )?;
         Ok(())
     }
 
-    /// Handle a mouse click event.
-    fn handle_click(&mut self, ctx: &mut dyn Context, event: mouse::MouseEvent) -> Result<bool> {
-        if event.button == mouse::Button::Left && event.action == mouse::Action::Down {
-            if !matches!(self.command_status(ctx)?, Some(CommandStatus::Disabled(_))) {
-                self.press(ctx)?;
-            }
-            return Ok(true);
-        }
-        Ok(false)
+    /// Report the configured action's eligibility as this command's own.
+    ///
+    /// Discovery describes `press`, not the action behind it, so a disabled
+    /// action must disable the command that runs it. A button with no action
+    /// presses as a no-op and stays enabled.
+    fn press_status(&self, ctx: &dyn ViewContext) -> Result<CommandStatus> {
+        Ok(self.command_status(ctx)?.unwrap_or(CommandStatus::Enabled))
     }
 
     /// Compute the label width in terminal cells.
@@ -134,6 +163,13 @@ impl Button {
     }
 }
 
+impl Loader for Button {
+    fn load(canopy: &mut Canopy) -> Result<()> {
+        canopy.add_commands::<Self>()?;
+        canopy.register_default_bindings("button", DEFAULT_BINDINGS)
+    }
+}
+
 impl Widget for Button {
     fn semantics(&self, ctx: &dyn ViewContext) -> Result<WidgetSemantics> {
         Ok(WidgetSemantics {
@@ -146,6 +182,14 @@ impl Widget for Button {
 
     fn layout(&self) -> Layout {
         Layout::fill()
+    }
+
+    /// Take focus only when there is something to activate.
+    ///
+    /// A decorative button stays out of keyboard traversal. One whose action is
+    /// disabled keeps focus, so its reason stays reachable.
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+        self.command.is_some()
     }
 
     fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
@@ -166,15 +210,6 @@ impl Widget for Button {
         Ok(())
     }
 
-    fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
-        if let Event::Mouse(mouse_event) = event
-            && self.handle_click(ctx, *mouse_event)?
-        {
-            return Ok(EventOutcome::Handle);
-        }
-        Ok(EventOutcome::Ignore)
-    }
-
     fn name(&self) -> NodeName {
         NodeName::convert("button")
     }
@@ -183,16 +218,28 @@ impl Widget for Button {
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, Loader, ViewContextExt, commands::CommandError, error::Error, event::key,
-        geom::PointI32, style::Color, testing::harness::Harness,
+        Canopy, FocusDirection, FocusScope, FrameworkBindingGroup, InputSpec, Loader,
+        ModalBindings, ModalOptions, NodeId, ViewContextExt,
+        commands::CommandError,
+        error::Error,
+        event::{key, key::Key, mouse, mouse::Mouse},
+        geom::PointI32,
+        layout::Direction,
+        style::Color,
+        testing::harness::Harness,
     };
 
     use super::*;
+    use crate::Container;
 
+    /// Root that owns an action and shows it as a button.
     #[derive(Default)]
     struct ActionOwner {
+        /// Whether the action reports itself eligible.
         enabled: bool,
+        /// Whether the action fails once invoked.
         fail: bool,
+        /// Times the action ran, eligible or not.
         activations: usize,
     }
 
@@ -232,19 +279,59 @@ mod tests {
 
     impl Loader for ActionOwner {
         fn load(canopy: &mut Canopy) -> Result<()> {
+            Button::load(canopy)?;
             canopy.add_commands::<Self>()
         }
     }
 
+    /// Build a harness whose application installed the button defaults.
+    ///
+    /// Loading registers the script; an application runs it, and so does a
+    /// test, before any configuration that might replace a binding.
+    fn activating<W: Widget + Loader + 'static>(
+        root: W,
+        width: u32,
+        height: u32,
+    ) -> Result<Harness> {
+        let mut harness = Harness::builder(root)
+            .bindings("button-defaults", "button.default_bindings()")
+            .size(width, height)
+            .build()?;
+        harness.render()?;
+        Ok(harness)
+    }
+
+    /// Return the screen origin of `node`.
+    fn origin(harness: &Harness, node: NodeId) -> PointI32 {
+        harness
+            .canopy
+            .with_root_view(|ctx| ctx.view_of(node).expect("live node").outer.tl)
+    }
+
+    /// Build a left-button press at `location`.
+    fn press_at(location: PointI32) -> mouse::MouseEvent {
+        mouse::MouseEvent {
+            action: mouse::Action::Down,
+            button: mouse::Button::Left,
+            modifiers: key::Empty,
+            location,
+        }
+    }
+
+    /// Return the only button in the tree.
+    fn the_button(harness: &Harness) -> NodeId {
+        harness
+            .canopy
+            .with_root_view(|ctx| ctx.unique_descendant::<Button>())
+            .expect("button lookup")
+            .expect("button mounted")
+            .into()
+    }
+
     #[test]
     fn semantic_eligibility_is_independent_of_active_state() -> Result<()> {
-        let mut harness = Harness::builder(ActionOwner::default())
-            .size(20, 4)
-            .build()?;
-        let button = harness
-            .canopy
-            .with_root_view(|ctx| ctx.unique_descendant::<Button>())?
-            .expect("button mounted");
+        let mut harness = activating(ActionOwner::default(), 20, 4)?;
+        let button = the_button(&harness);
         harness.canopy.with_context(button, |ctx| {
             ctx.with_widget_mut(button, |button: &mut Button, ctx| {
                 let active = button.semantics(ctx)?;
@@ -281,7 +368,7 @@ mod tests {
 
     impl Loader for ActionScene {
         fn load(canopy: &mut Canopy) -> Result<()> {
-            canopy.add_commands::<ActionOwner>()
+            ActionOwner::load(canopy)
         }
     }
 
@@ -329,9 +416,7 @@ mod tests {
 
     #[test]
     fn button_label_role_survives_an_extra_center() -> Result<()> {
-        let mut harness = Harness::builder(ActionOwner::default())
-            .size(20, 4)
-            .build()?;
+        let mut harness = activating(ActionOwner::default(), 20, 4)?;
         harness
             .canopy
             .style_mut()
@@ -371,38 +456,153 @@ mod tests {
         Ok(())
     }
 
-    fn click() -> mouse::MouseEvent {
-        mouse::MouseEvent {
-            action: mouse::Action::Down,
-            button: mouse::Button::Left,
-            modifiers: key::Empty,
-            location: PointI32 { x: 0, y: 0 },
+    #[test]
+    fn a_click_anywhere_on_the_button_activates_it() -> Result<()> {
+        let mut harness = activating(
+            ActionOwner {
+                enabled: true,
+                ..ActionOwner::default()
+            },
+            20,
+            5,
+        )?;
+        let button = the_button(&harness);
+        let label = harness
+            .find_nodes("**/button/**/text")?
+            .first()
+            .copied()
+            .expect("button label");
+
+        // The border and the label are separate nodes, so a click on either
+        // must still reach the button that contains them.
+        assert_ne!(origin(&harness, button), origin(&harness, label));
+        harness.mouse(press_at(origin(&harness, button)))?;
+        harness.mouse(press_at(origin(&harness, label)))?;
+        harness.with_root_widget(|owner: &mut ActionOwner| assert_eq!(owner.activations, 2));
+        Ok(())
+    }
+
+    /// Two buttons that run the same action with different arguments.
+    #[derive(Default)]
+    struct Tally {
+        /// Tag of each button press, in order.
+        pressed: Vec<i64>,
+    }
+
+    #[derive_commands]
+    impl Tally {
+        /// Record one press.
+        /// @param tag Identifies the button that ran this command.
+        #[command]
+        fn note(&mut self, tag: i64) {
+            self.pressed.push(tag);
+        }
+    }
+
+    impl Widget for Tally {
+        fn layout(&self) -> Layout {
+            Layout::fill().direction(Direction::Column)
+        }
+
+        fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
+            let owner = ctx.node_id();
+            for tag in [1, 2] {
+                ctx.add_child(
+                    Button::new(format!("Button {tag}")).with_command(
+                        Self::call_note(tag).with_target(CommandTarget::Exact(owner)),
+                    ),
+                )?;
+            }
+            Ok(())
+        }
+
+        fn name(&self) -> NodeName {
+            NodeName::convert("tally")
+        }
+    }
+
+    impl Loader for Tally {
+        fn load(canopy: &mut Canopy) -> Result<()> {
+            Button::load(canopy)?;
+            canopy.add_commands::<Self>()
         }
     }
 
     #[test]
-    fn disabled_mouse_clicks_are_inert_and_recheck_eligibility() -> Result<()> {
-        let mut harness = Harness::builder(ActionOwner::default())
-            .size(20, 4)
-            .build()?;
-        harness.render()?;
-        harness.mouse(click())?;
+    fn a_click_activates_the_button_it_landed_on() -> Result<()> {
+        let mut harness = activating(Tally::default(), 20, 8)?;
+        let buttons = harness.find_nodes("**/button")?;
+        assert_eq!(buttons.len(), 2, "both buttons mounted");
+        for button in buttons.iter().rev() {
+            harness.mouse(press_at(origin(&harness, *button)))?;
+        }
+        harness.with_root_widget(|tally: &mut Tally| {
+            assert_eq!(tally.pressed, [2, 1], "each click ran its own button");
+        });
+        Ok(())
+    }
+
+    #[test]
+    fn only_an_unmodified_left_press_activates() -> Result<()> {
+        let mut harness = activating(
+            ActionOwner {
+                enabled: true,
+                ..ActionOwner::default()
+            },
+            20,
+            5,
+        )?;
+        let location = origin(&harness, the_button(&harness));
+        for event in [
+            mouse::MouseEvent {
+                modifiers: key::Ctrl,
+                ..press_at(location)
+            },
+            mouse::MouseEvent {
+                action: mouse::Action::Up,
+                ..press_at(location)
+            },
+            mouse::MouseEvent {
+                button: mouse::Button::Right,
+                ..press_at(location)
+            },
+            mouse::MouseEvent {
+                action: mouse::Action::Moved,
+                button: mouse::Button::None,
+                ..press_at(location)
+            },
+        ] {
+            harness.mouse(event)?;
+        }
+        harness.with_root_widget(|owner: &mut ActionOwner| {
+            assert_eq!(owner.activations, 0, "only a plain left press activates");
+        });
+        harness.mouse(press_at(location))?;
+        harness.with_root_widget(|owner: &mut ActionOwner| assert_eq!(owner.activations, 1));
+        Ok(())
+    }
+
+    #[test]
+    fn disabled_activation_is_inert_and_rechecked_each_time() -> Result<()> {
+        let mut harness = activating(ActionOwner::default(), 20, 5)?;
+        let location = origin(&harness, the_button(&harness));
+        harness.mouse(press_at(location))?;
         harness.with_root_widget(|owner: &mut ActionOwner| {
             assert_eq!(owner.activations, 0);
             owner.enabled = true;
         });
-        // Eligibility can change after the frame was rendered.
-        harness.mouse(click())?;
+        // Eligibility can change after the frame was rendered, so the click
+        // reads it again rather than trusting what was painted.
+        harness.mouse(press_at(location))?;
         harness.with_root_widget(|owner: &mut ActionOwner| {
             assert_eq!(owner.activations, 1);
             owner.enabled = false;
         });
-        harness.mouse(click())?;
+        harness.mouse(press_at(location))?;
         harness.with_root_widget(|owner: &mut ActionOwner| assert_eq!(owner.activations, 1));
-        let button = harness
-            .canopy
-            .with_root_view(|ctx| ctx.unique_descendant::<Button>())?
-            .expect("button mounted");
+
+        // A direct call still reports the reason rather than doing nothing.
+        let button = the_button(&harness);
         harness.canopy.with_context(button, |ctx| {
             ctx.with_widget_mut(button, |button: &mut Button, ctx| {
                 assert!(matches!(
@@ -416,16 +616,311 @@ mod tests {
     }
 
     #[test]
-    fn enabled_mouse_clicks_still_propagate_action_errors() -> Result<()> {
-        let mut harness = Harness::builder(ActionOwner {
-            enabled: true,
-            fail: true,
-            ..ActionOwner::default()
-        })
-        .size(20, 4)
-        .build()?;
-        assert!(harness.mouse(click()).is_err());
+    fn activation_propagates_action_errors() -> Result<()> {
+        let mut harness = activating(
+            ActionOwner {
+                enabled: true,
+                fail: true,
+                ..ActionOwner::default()
+            },
+            20,
+            5,
+        )?;
+        let location = origin(&harness, the_button(&harness));
+        assert!(harness.mouse(press_at(location)).is_err());
         harness.with_root_widget(|owner: &mut ActionOwner| assert_eq!(owner.activations, 1));
+        Ok(())
+    }
+
+    #[test]
+    fn a_click_focuses_the_button_and_the_keyboard_activates_it() -> Result<()> {
+        let mut harness = activating(
+            ActionOwner {
+                enabled: true,
+                ..ActionOwner::default()
+            },
+            20,
+            5,
+        )?;
+        let button = the_button(&harness);
+        harness.mouse(press_at(origin(&harness, button)))?;
+        assert_eq!(
+            harness.canopy.with_root_view(|ctx| ctx.focused_node()),
+            Some(button),
+            "a click leaves focus on the button it activated"
+        );
+        harness.key(key::KeyCode::Enter)?;
+        harness.key(' ')?;
+        harness.with_root_widget(|owner: &mut ActionOwner| {
+            assert_eq!(owner.activations, 3, "Enter and Space activate the focus");
+        });
+        Ok(())
+    }
+
+    /// Root holding one button with no action at all.
+    struct Decorative;
+
+    impl Widget for Decorative {
+        fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
+            ctx.add_child(Button::new("Label only"))?;
+            Ok(())
+        }
+    }
+
+    impl Loader for Decorative {
+        fn load(canopy: &mut Canopy) -> Result<()> {
+            Button::load(canopy)
+        }
+    }
+
+    #[test]
+    fn a_button_without_an_action_stays_out_of_traversal_and_presses_as_a_no_op() -> Result<()> {
+        let mut harness = activating(Decorative, 20, 5)?;
+        let button = the_button(&harness);
+        harness
+            .canopy
+            .with_root_context(|ctx| ctx.focus_move(FocusScope::Root, FocusDirection::Next))?;
+        assert_ne!(
+            harness.canopy.with_root_view(|ctx| ctx.focused_node()),
+            Some(button),
+            "a decorative button is not a focus stop"
+        );
+        // Pressing it anyway does nothing and reports nothing.
+        harness.mouse(press_at(origin(&harness, button)))?;
+        harness.canopy.with_context(button, |ctx| {
+            ctx.with_widget_mut(button, |button: &mut Button, ctx| button.press(ctx))
+        })
+    }
+
+    /// Root whose action removes the button that ran it.
+    #[derive(Default)]
+    struct SelfRemoving {
+        /// The button, once mounted.
+        button: Option<NodeId>,
+    }
+
+    #[derive_commands]
+    impl SelfRemoving {
+        /// Remove the button that ran this command.
+        #[command]
+        fn dismiss(&mut self, ctx: &mut dyn Context) -> Result<()> {
+            let Some(button) = self.button.take() else {
+                return Ok(());
+            };
+            // The button is borrowed while its own command runs, so removal
+            // waits for the dispatch that asked for it to return.
+            ctx.remove_after_dispatch(button)?;
+            Ok(())
+        }
+    }
+
+    impl Widget for SelfRemoving {
+        fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
+            let owner = ctx.node_id();
+            self.button = Some(
+                ctx.add_child(
+                    Button::new("Dismiss").with_command(
+                        Self::cmd_dismiss()
+                            .call()
+                            .with_target(CommandTarget::Exact(owner)),
+                    ),
+                )?
+                .into(),
+            );
+            Ok(())
+        }
+    }
+
+    impl Loader for SelfRemoving {
+        fn load(canopy: &mut Canopy) -> Result<()> {
+            Button::load(canopy)?;
+            canopy.add_commands::<Self>()
+        }
+    }
+
+    #[test]
+    fn an_action_may_remove_the_button_that_ran_it() -> Result<()> {
+        let mut harness = activating(SelfRemoving::default(), 20, 5)?;
+        let button = the_button(&harness);
+        harness.mouse(press_at(origin(&harness, button)))?;
+        harness.render()?;
+        assert!(
+            harness.find_nodes("**/button")?.is_empty(),
+            "the action removed its own button"
+        );
+        Ok(())
+    }
+
+    /// Framework group admitted while the guarded dialog is open.
+    const GUARDED: FrameworkBindingGroup = FrameworkBindingGroup::new("button.test_dialog");
+
+    /// Root with a dialog it opens as an exclusive modal.
+    #[derive(Default)]
+    struct Guarded {
+        /// Times the dialog's button ran its action.
+        activations: usize,
+        /// The dialog subtree, once mounted.
+        dialog: Option<NodeId>,
+        /// The dialog's button, once mounted.
+        button: Option<NodeId>,
+    }
+
+    #[derive_commands]
+    impl Guarded {
+        /// Accept the question the dialog asks.
+        #[command]
+        fn accept(&mut self) {
+            self.activations += 1;
+        }
+    }
+
+    impl Widget for Guarded {
+        fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
+            let owner = ctx.node_id();
+            let dialog = ctx.add_child(Container::column().with_name("dialog"))?;
+            let button = ctx.add_child_to(
+                dialog,
+                Button::new("Accept")
+                    .with_command(Self::call_accept().with_target(CommandTarget::Exact(owner))),
+            )?;
+            self.dialog = Some(dialog.into());
+            self.button = Some(button.into());
+            Ok(())
+        }
+    }
+
+    impl Loader for Guarded {
+        fn load(canopy: &mut Canopy) -> Result<()> {
+            Button::load(canopy)?;
+            canopy.add_commands::<Self>()?;
+            // The dialog owns activation inside its own group, because an
+            // exclusive scope admits nothing else. The records are the same
+            // three inputs, on a path of the dialog's own.
+            for (input, description) in [
+                (InputSpec::Key(Key::parse_spec("Enter")?), "Activate"),
+                (InputSpec::Key(Key::parse_spec("Space")?), "Activate"),
+                (InputSpec::Mouse(Mouse::parse_spec("LeftDown")?), "Activate"),
+            ] {
+                canopy.bind_framework(
+                    GUARDED,
+                    input,
+                    canopy::BindingOptions {
+                        path: Some("**/dialog/**/".parse()?),
+                        scope: canopy::BindingScope::Exclusive(GUARDED),
+                        description: description.to_string(),
+                        source: None,
+                        phase: canopy::BindingPhase::AfterWidget,
+                    },
+                    Button::call_press(),
+                )?;
+            }
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn an_exclusive_modal_admits_only_its_own_activation_bindings() -> Result<()> {
+        let mut harness = activating(Guarded::default(), 20, 6)?;
+        let (owner, dialog, button) = harness.with_root_context(|guarded: &mut Guarded, ctx| {
+            Ok((
+                ctx.node_id(),
+                guarded.dialog.expect("dialog mounted"),
+                guarded.button.expect("button mounted"),
+            ))
+        })?;
+
+        // Outside the modal the ordinary defaults carry the click.
+        harness.mouse(press_at(origin(&harness, button)))?;
+        harness.with_root_widget(|guarded: &mut Guarded| assert_eq!(guarded.activations, 1));
+
+        harness.canopy.with_root_context(|ctx| {
+            ctx.open_modal(ModalOptions {
+                owner,
+                modal: dialog,
+                initial_focus: button,
+                dim_target: None,
+                bindings: ModalBindings::Framework(GUARDED),
+            })?;
+            Ok(())
+        })?;
+        harness.render()?;
+
+        // The group admits its own records and nothing else, so the same three
+        // inputs still activate while unrelated defaults stay out.
+        harness.mouse(press_at(origin(&harness, button)))?;
+        harness.key(key::KeyCode::Enter)?;
+        harness.key(' ')?;
+        harness.with_root_widget(|guarded: &mut Guarded| {
+            assert_eq!(guarded.activations, 4, "the dialog's own bindings activate");
+        });
+        assert_eq!(
+            harness
+                .canopy
+                .available_bindings(None)?
+                .bindings
+                .iter()
+                .filter(|binding| binding.path_filter == "**/button/**/")
+                .count(),
+            0,
+            "the application defaults are not admitted through the modal"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn the_defaults_are_ordinary_records_an_application_can_replace() -> Result<()> {
+        let mut harness = activating(
+            ActionOwner {
+                enabled: true,
+                ..ActionOwner::default()
+            },
+            20,
+            5,
+        )?;
+        let location = origin(&harness, the_button(&harness));
+
+        // Loading again installs no second record and leaves one winner.
+        harness.script(
+            r#"
+            button.default_bindings()
+            local activation = 0
+            for _, binding in canopy.bindings() do
+                if binding.path == "**/button/**/" then
+                    activation += 1
+                end
+            end
+            canopy.assert(activation == 3, "one record per activation input, got " .. activation)
+            "#,
+        )?;
+
+        harness.script(r#"canopy.unbind_key("Enter", { path = "**/button/**/" })"#)?;
+        harness.key(key::KeyCode::Enter)?;
+        harness.with_root_widget(|owner: &mut ActionOwner| {
+            assert_eq!(owner.activations, 0, "an unbound key no longer activates");
+        });
+
+        // Rebinding the same selector replaces the default outright.
+        harness.script(
+            r#"canopy.bind_mouse("LeftDown", {
+                path = "**/button/**/",
+                description = "Ignore the click",
+            }, function() end)"#,
+        )?;
+        harness.mouse(press_at(location))?;
+        harness.with_root_widget(|owner: &mut ActionOwner| {
+            assert_eq!(owner.activations, 0, "the override took the click");
+        });
+
+        // Loading again is idempotent and installs nothing, so a replaced
+        // binding stays replaced.
+        Button::load(&mut harness.canopy).expect_err("loading after finalization is refused");
+        harness.mouse(press_at(location))?;
+        harness.with_root_widget(|owner: &mut ActionOwner| {
+            assert_eq!(
+                owner.activations, 0,
+                "loading does not reinstall the default"
+            );
+        });
         Ok(())
     }
 }

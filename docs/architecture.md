@@ -412,6 +412,22 @@ reveal survives. The route trace records each applied action as
 as a terminal that reports mouse input to its program, handle the event
 themselves. Command scopes expose the originating event and target.
 
+A declarative binding whose command is not available consumes its input without
+running it. The route stops there rather than offering the input to an ancestor,
+so a control the user saw as unavailable cannot be acted on in its place, and an
+ordinary click on it cannot end the run loop with an error. Availability is read
+inside the event scope at dispatch, not taken from the last rendered frame, and
+the route trace records the reason. An invoked command's own failure propagates
+unchanged, as does an opaque script callback's.
+
+Widget activation is a command like any other. `Button::press` runs the action a
+button was built with, and `button.default_bindings()` binds unmodified
+`LeftDown`, `Enter`, and `Space` to it under `**/button/**/`, so a click on the
+label or the border resolves to the button containing it. The records are
+ordinary application bindings that a configuration can replace or unbind.
+`root.default_bindings()` installs them. A modal that admits only a framework
+group must bind activation in that group itself.
+
 Root captures a help snapshot before it opens a modal with `ModalOptions` and
 `ModalBindings::Framework(HELP_BINDINGS)`. The scope dims the main pane, and the
 help overlay draws only its panel, so the dimmed application stays visible

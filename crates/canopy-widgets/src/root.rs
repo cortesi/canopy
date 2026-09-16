@@ -12,13 +12,19 @@ use canopy::{
 #[cfg(feature = "devtools")]
 use crate::inspector::Inspector;
 use crate::{
-    Container,
+    Button, Container,
     center::Center,
     help::{BindingList, Help, ModeHelp},
 };
 
 /// Default root bindings exposed through `root.default_bindings()`.
+///
+/// Button activation comes first, so an application that takes the root
+/// defaults can activate a button without knowing that buttons carry bindings,
+/// and can still rebind either afterwards.
 const DEFAULT_BINDINGS: &str = r#"
+button.default_bindings()
+
 canopy.bind("q", { path = "root", description = "Quit" }, command.root.quit())
 "#;
 
@@ -329,6 +335,7 @@ impl Loader for Root {
         }
         #[cfg(not(feature = "devtools"))]
         c.register_default_bindings("root", DEFAULT_BINDINGS)?;
+        Button::load(c)?;
         Help::load(c)?;
         register_help_bindings(c)?;
         c.register_mode_hook("root.mode_help", sync_mode_help);

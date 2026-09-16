@@ -13,7 +13,7 @@ use futures::{StreamExt, executor::block_on};
 use super::*;
 use crate::{
     Context, FocusDirection, ViewContext,
-    commands::{CommandNode, CommandSpec},
+    commands::{CommandNode, CommandSpec, CommandStatus},
     core::world::test_support::assert_error_context,
     derive_commands,
     error::{Error, NodeOperationKind, Result},
@@ -856,6 +856,169 @@ fn an_early_mouse_binding_respects_modal_admission_and_wheel_fallback() -> Resul
         c.core.input_map.set_modal_bindings(None);
         Ok(())
     })
+}
+
+/// Node whose command is eligible only while it says so.
+#[derive(Default)]
+struct Gated {
+    /// Whether the command reports itself eligible.
+    enabled: bool,
+    /// Whether the command fails once invoked.
+    fail: bool,
+    /// Times the command ran.
+    runs: usize,
+}
+
+#[derive_commands]
+impl Gated {
+    fn eligibility(&self, _ctx: &dyn ViewContext) -> Result<CommandStatus> {
+        Ok(if self.enabled {
+            CommandStatus::Enabled
+        } else {
+            CommandStatus::Disabled("not now".into())
+        })
+    }
+
+    #[command(enabled = "eligibility")]
+    fn act(&mut self, ctx: &dyn Context) -> Result<()> {
+        self.runs += 1;
+        assert!(
+            ctx.current_event().is_some(),
+            "a routed command runs inside the event scope"
+        );
+        if self.fail {
+            Err(Error::Invalid("action failed".into()))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl Widget for Gated {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+        true
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("gated")
+    }
+}
+
+/// Build a root and one child, both gated, with the child focused.
+fn gated_pair() -> Result<(Canopy, NodeId, NodeId)> {
+    let mut canopy = Canopy::new();
+    canopy.add_commands::<Gated>()?;
+    canopy.core.replace_subtree(
+        canopy.core.root,
+        Gated {
+            enabled: true,
+            ..Gated::default()
+        },
+    )?;
+    let root = canopy.core.root;
+    let child = canopy.core.create_detached(Gated::default())?;
+    canopy.core.set_children(root, vec![child])?;
+    canopy.core.set_focus(child)?;
+    Ok((canopy, root, child))
+}
+
+/// Return how many times each gated node ran its command.
+fn gated_runs(canopy: &mut Canopy, nodes: [NodeId; 2]) -> [usize; 2] {
+    nodes.map(|node| {
+        canopy
+            .core
+            .with_widget_dyn_mut(node, |widget, _| {
+                (widget as &mut dyn Any)
+                    .downcast_mut::<Gated>()
+                    .map_or(0, |gated| gated.runs)
+            })
+            .unwrap_or(0)
+    })
+}
+
+/// Options for one gated binding.
+fn gated_options(path: &str) -> Result<inputmap::BindingOptions> {
+    Ok(inputmap::BindingOptions {
+        path: Some(path.parse()?),
+        scope: inputmap::BindingScope::Default,
+        description: "Act".into(),
+        source: None,
+        phase: inputmap::BindingPhase::AfterWidget,
+    })
+}
+
+#[test]
+fn a_disabled_declarative_winner_is_consumed_without_running_or_bubbling() -> Result<()> {
+    let (mut canopy, root, child) = gated_pair()?;
+    canopy.bind_command(
+        'g',
+        gated_options("/gated/gated/")?,
+        Gated::call_act().with_target(commands::CommandTarget::Exact(child)),
+    )?;
+    canopy.bind_command(
+        'g',
+        gated_options("/gated/")?,
+        Gated::call_act().with_target(commands::CommandTarget::Exact(root)),
+    )?;
+
+    canopy.key(None, 'g')?;
+    assert_eq!(
+        gated_runs(&mut canopy, [root, child]),
+        [0, 0],
+        "a disabled winner neither runs nor lets an ancestor act in its place"
+    );
+    assert!(
+        canopy
+            .route_trace()
+            .iter()
+            .any(|entry| entry.detail == "binding disabled: not now"),
+        "the trace names the reason"
+    );
+    assert!(
+        canopy.core.current_command_scope().is_none(),
+        "the skipped binding restored the event scope"
+    );
+
+    // The check reads eligibility again rather than trusting the last frame.
+    canopy.core.with_widget_dyn_mut(child, |widget, _| {
+        if let Some(gated) = (widget as &mut dyn Any).downcast_mut::<Gated>() {
+            gated.enabled = true;
+        }
+    })?;
+    canopy.key(None, 'g')?;
+    assert_eq!(gated_runs(&mut canopy, [root, child]), [0, 1]);
+    assert!(canopy.core.current_command_scope().is_none());
+    Ok(())
+}
+
+#[test]
+fn binding_failures_propagate_and_still_restore_the_event_scope() -> Result<()> {
+    let (mut canopy, root, child) = gated_pair()?;
+    canopy.core.with_widget_dyn_mut(child, |widget, _| {
+        if let Some(gated) = (widget as &mut dyn Any).downcast_mut::<Gated>() {
+            gated.enabled = true;
+            gated.fail = true;
+        }
+    })?;
+    canopy.bind_command(
+        'g',
+        gated_options("/gated/gated/")?,
+        Gated::call_act().with_target(commands::CommandTarget::Exact(child)),
+    )?;
+    assert!(
+        canopy.key(None, 'g').is_err(),
+        "an executed command's failure is not swallowed"
+    );
+    assert_eq!(gated_runs(&mut canopy, [root, child]), [0, 1]);
+    assert!(canopy.core.current_command_scope().is_none());
+
+    // An opaque script callback reports its own failure the same way.
+    canopy.eval_script(
+        r#"canopy.bind("s", { description = "Fail" }, function() error("script failed") end)"#,
+    )?;
+    assert!(canopy.key(None, 's').is_err());
+    assert!(canopy.core.current_command_scope().is_none());
+    Ok(())
 }
 
 #[test]

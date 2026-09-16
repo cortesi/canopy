@@ -222,16 +222,23 @@ and `parse_spec` accepts `+` between modifiers as a key spec already does.
 
 ### Stage 2: Deliver button activation through bindings
 
-- [ ] Implement C1 and C2 together: eligibility, focus, disabled-input handling,
+- [x] Implement C1 and C2 together: eligibility, focus, disabled-input handling,
   loader/default setup, and removal of direct click handling.
-- [ ] Migrate stock consumers, examples, and harness loaders. Prove ordinary
+- [x] Migrate stock consumers, examples, and harness loaders. Prove ordinary
   defaults and exclusive modal activation, plus override/unbind behavior.
-- [ ] Retain real mouse-event tests through the runtime. Cover label and border
+- [x] Retain real mouse-event tests through the runtime. Cover label and border
   hits, sibling buttons, modifiers, non-activation events, disabled status
   changes, direct command errors, and actions that remove their own button.
-- [ ] Test disabled declarative bindings without fallback or execution. Prove
+- [x] Test disabled declarative bindings without fallback or execution. Prove
   action failures and opaque script errors still propagate and event scopes
   are restored after success, skipped activation, and failure.
+
+`Root::load` loads `Button` and `root.default_bindings()` runs
+`button.default_bindings()`, so every stock entry point that takes the root
+defaults activates buttons. `HarnessBuilder::bindings` gives a test the same
+step, since loading registers the script but does not run it. The decorative
+buttons in the terminal demo keep consuming their clicks, because `press` on a
+button with no action is an enabled no-op.
 
 ### Stage 3: Expose mouse activation in discovery and help
 

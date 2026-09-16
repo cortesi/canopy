@@ -316,28 +316,38 @@ impl Canopy {
         let frame = self.core.command_scope_for_event(&event);
         let depth = self.core.push_command_scope(frame);
         let result = match binding.target {
-            inputmap::BindingTarget::Script(binding) => {
-                self.execute_binding_with_scope(node_id, binding, scope)
-            }
-            inputmap::BindingTarget::Command(command) => commands::dispatch_target(
-                &mut self.core,
-                command
+            inputmap::BindingTarget::Script(binding) => self
+                .execute_binding_with_scope(node_id, binding, scope)
+                .map(|()| None),
+            inputmap::BindingTarget::Command(command) => {
+                let target = command
                     .target
-                    .unwrap_or(commands::CommandTarget::From(node_id)),
-                &command.invocation,
-            )
-            .map(|_| ())
-            .map_err(Into::into),
+                    .unwrap_or(commands::CommandTarget::From(node_id));
+                // Eligibility is read here, inside the event scope, rather than
+                // taken from the last frame, so a status hook sees the same
+                // injections the command would.
+                match commands::command_status(&self.core, target, &command.invocation) {
+                    Ok(commands::CommandStatus::Disabled(reason)) => Ok(Some(reason)),
+                    Ok(commands::CommandStatus::Enabled) => {
+                        commands::dispatch_target(&mut self.core, target, &command.invocation)
+                            .map(|_| None)
+                            .map_err(Into::into)
+                    }
+                    Err(error) => Err(error),
+                }
+            }
         };
         self.core.pop_command_scope(depth);
-        result?;
+        let skipped = result?;
 
-        self.trace_route(
-            RoutePhase::Handled,
-            Some(node_id),
-            path,
-            "binding completed",
+        // A disabled winner still consumes its input. Falling through would let
+        // an ancestor act on a control the user saw as unavailable, and
+        // reporting an error would end the run loop over an ordinary click.
+        let detail = skipped.map_or_else(
+            || "binding completed".to_string(),
+            |reason| format!("binding disabled: {reason}"),
         );
+        self.trace_route(RoutePhase::Handled, Some(node_id), path, detail);
         Ok(true)
     }
 
