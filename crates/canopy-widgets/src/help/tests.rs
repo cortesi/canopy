@@ -263,7 +263,9 @@ fn tiny_and_wide_key_buffers_do_not_overflow() -> Result<()> {
         3,
         vec![binding(1, '界', "Wide key", BindingPhase::BeforeWidget)],
     )?;
-    wide.tbuf().assert_matches(buf!["界X" "  Wide key" ""]);
+    // The key and its action fit the twelve columns exactly, so they share a
+    // row rather than stacking.
+    wide.tbuf().assert_matches(buf!["界X  Wide key" "" ""]);
     Ok(())
 }
 
@@ -300,19 +302,23 @@ fn scrolled_and_resized_buffers_have_exact_rows() -> Result<()> {
         modifiers: key::Empty,
         location: PointI32 { x: 0, y: 0 },
     })?;
-    harness.tbuf().assert_matches(buf!["  Beta" "c" "  Gamma"]);
+    // Each action fits beside its key, so the canvas is one row per binding
+    // and the wheel stops one row down rather than three.
+    harness
+        .tbuf()
+        .assert_matches(buf!["b  Beta" "c  Gamma" "d  Delta"]);
 
     harness.canopy.set_root_size(Size::new(16, 8))?;
     harness.render()?;
     harness.tbuf().assert_matches(buf![
-        "a"
-        "  Alpha"
-        "b"
-        "  Beta"
-        "c"
-        "  Gamma"
-        "d"
-        "  Delta"
+        "a  Alpha"
+        "b  Beta"
+        "c  Gamma"
+        "d  Delta"
+        ""
+        ""
+        ""
+        ""
     ]);
     Ok(())
 }

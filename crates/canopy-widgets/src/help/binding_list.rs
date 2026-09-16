@@ -331,7 +331,16 @@ fn binding_lines(
     max_key_width: usize,
 ) -> Vec<DisplayLine> {
     let width = width as usize;
-    let narrow = width < max_key_width.saturating_add(12) || width < 28;
+    // The width that shows every action beside its keys. A panel measured to
+    // its own content is given exactly this, so stacking at or above it would
+    // break rows that fit. The cramped-column rules only apply below it.
+    let natural = groups
+        .iter()
+        .map(|(_, description)| text_width(description))
+        .max()
+        .unwrap_or(0)
+        .saturating_add(max_key_width.saturating_add(2));
+    let narrow = width < natural && (width < max_key_width.saturating_add(12) || width < 28);
     let mut lines = Vec::new();
     for (keys, description) in groups {
         if narrow {
