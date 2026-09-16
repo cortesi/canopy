@@ -1869,10 +1869,10 @@ fn plan_keymap_entry<'s>(
     };
     let mut options = options.clone();
     options.description = description;
+    inputmap::validate_application_binding(&options)
+        .map_err(|err| entry_error(format!("is invalid: {err}")))?;
     let mut planned = Vec::new();
     let mut push = |input: inputmap::InputSpec| -> StdResult<(), RuntimeError> {
-        inputmap::validate_application_binding(input, &options)
-            .map_err(|err| entry_error(format!("is invalid: {err}")))?;
         planned.push(PlannedBinding {
             input: input.normalize(),
             options: options.clone(),

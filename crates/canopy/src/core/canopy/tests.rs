@@ -19,7 +19,7 @@ use crate::{
     error::{Error, NodeOperationKind, Result},
     event::{Event, key, mouse},
     geom::{PointI32, RectI32},
-    layout::Layout,
+    layout::{Edges, Layout},
     path::Path,
     render::{NopBackend, Render},
     state::NodeName,
@@ -590,6 +590,270 @@ fn explicit_binding_phases_override_the_same_selector_and_change_route_trace() -
                 assert!(!phases.contains(&RoutePhase::PreEventBinding));
             }
         }
+        Ok(())
+    })
+}
+
+/// Build a left-button press over `node`.
+fn click_on(core: &Core, node: NodeId) -> mouse::MouseEvent {
+    make_mouse_event(core, node)
+}
+
+/// Options for one mouse binding on the test tree.
+fn mouse_options(path: &str, phase: inputmap::BindingPhase) -> Result<inputmap::BindingOptions> {
+    Ok(inputmap::BindingOptions {
+        path: Some(path.parse()?),
+        scope: inputmap::BindingScope::Default,
+        description: "Click action".into(),
+        source: None,
+        phase,
+    })
+}
+
+#[test]
+fn a_mouse_binding_runs_in_the_phase_it_declares() -> Result<()> {
+    run_ttree(|c, mut tr, tree| {
+        c.render(&mut tr)?;
+        let click = inputmap::InputSpec::Mouse(click_on(&c.core, tree.a_a).into());
+        for phase in [
+            inputmap::BindingPhase::BeforeWidget,
+            inputmap::BindingPhase::AfterWidget,
+        ] {
+            c.bind_command(
+                click,
+                mouse_options("/r/ba/ba_la/", phase)?,
+                BaLa::call_c_leaf(),
+            )?;
+            reset_state();
+            c.mouse(None, click_on(&c.core, tree.a_a))?;
+            let phases = c
+                .route_trace()
+                .iter()
+                .map(|entry| entry.phase)
+                .collect::<Vec<_>>();
+            if phase == inputmap::BindingPhase::BeforeWidget {
+                // The early binding takes the click instead of the widget.
+                assert_eq!(get_state().path, ["ba_la.c_leaf()"]);
+                assert!(phases.contains(&RoutePhase::PreEventBinding));
+                assert!(!phases.contains(&RoutePhase::WidgetEvent));
+            } else {
+                assert_eq!(get_state().path, ["ba_la@mouse->ignore", "ba_la.c_leaf()"]);
+                assert!(phases.contains(&RoutePhase::PostEventBinding));
+                assert!(!phases.contains(&RoutePhase::PreEventBinding));
+            }
+        }
+        Ok(())
+    })
+}
+
+#[test]
+fn one_winner_decides_each_route_node_and_phases_stay_local() -> Result<()> {
+    run_ttree(|c, mut tr, tree| {
+        c.render(&mut tr)?;
+        let click = inputmap::InputSpec::Mouse(click_on(&c.core, tree.a_a).into());
+        // An ancestor's early binding is early only at the ancestor. The leaf's
+        // widget still sees the click first, because the route reaches the leaf
+        // before the ancestor exists as a route node at all.
+        c.bind_command(
+            click,
+            mouse_options("/r/", inputmap::BindingPhase::BeforeWidget)?,
+            R::call_c_root(),
+        )?;
+        reset_state();
+        c.mouse(None, click_on(&c.core, tree.a_a))?;
+        assert_eq!(
+            get_state().path,
+            ["ba_la@mouse->ignore", "ba@mouse->ignore", "r.c_root()"]
+        );
+
+        // A more specific path wins at the leaf, and its phase is the one the
+        // leaf uses. The ancestor binding never runs, because the route ends at
+        // the first node that acts.
+        c.bind_command(
+            click,
+            mouse_options("/r/**/ba_la/", inputmap::BindingPhase::BeforeWidget)?,
+            BaLa::call_c_leaf(),
+        )?;
+        reset_state();
+        c.mouse(None, click_on(&c.core, tree.a_a))?;
+        assert_eq!(get_state().path, ["ba_la.c_leaf()"]);
+
+        // A widget that handles the click ends the route before the winning
+        // late binding at that node, and no second binding is tried.
+        c.bind_command(
+            click,
+            mouse_options("/r/**/ba_la/", inputmap::BindingPhase::AfterWidget)?,
+            BaLa::call_c_leaf(),
+        )?;
+        set_outcome::<BaLa>(&mut c.core, tree.a_a, EventOutcome::Handle);
+        reset_state();
+        c.mouse(None, click_on(&c.core, tree.a_a))?;
+        assert_eq!(get_state().path, ["ba_la@mouse->handle"]);
+        Ok(())
+    })
+}
+
+/// Node that captures the mouse and records what an early binding saw.
+struct ClickProbe {
+    /// Node-local location of each click a binding ran for, and whether the
+    /// probe still held capture when it ran.
+    seen: Vec<(PointI32, bool)>,
+}
+
+#[derive_commands]
+impl ClickProbe {
+    /// Record the node-local location of the click that ran this command.
+    #[command]
+    fn note(&mut self, ctx: &dyn Context, event: mouse::MouseEvent) -> Result<()> {
+        self.seen.push((event.location, ctx.has_mouse_capture()));
+        Ok(())
+    }
+}
+
+impl Widget for ClickProbe {
+    fn layout(&self) -> Layout {
+        Layout::fill()
+    }
+
+    fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
+        if let Event::Mouse(m) = event
+            && m.action == mouse::Action::Down
+        {
+            ctx.capture_mouse()?;
+            return Ok(EventOutcome::Handle);
+        }
+        Ok(EventOutcome::Ignore)
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("click_probe")
+    }
+}
+
+#[test]
+fn early_mouse_bindings_keep_capture_and_node_local_coordinates() -> Result<()> {
+    let mut c = Canopy::new();
+    c.add_commands::<ClickProbe>()?;
+    let probe = c.core.create_detached(ClickProbe { seen: Vec::new() })?;
+    c.core.set_children(c.core.root, vec![probe])?;
+    c.core
+        .set_layout_of(c.core.root, Layout::fill().padding(Edges::all(4)))?;
+    c.set_root_size(Size::new(40, 20))?;
+    c.core.update_layout(Size::new(40, 20))?;
+
+    let drag = inputmap::InputSpec::Mouse(
+        mouse::MouseEvent {
+            action: mouse::Action::Drag,
+            button: mouse::Button::Left,
+            modifiers: key::Empty,
+            location: PointI32 { x: 0, y: 0 },
+        }
+        .into(),
+    );
+    c.bind_command(
+        drag,
+        mouse_options("/root/click_probe/", inputmap::BindingPhase::BeforeWidget)?,
+        ClickProbe::call_note(),
+    )?;
+
+    // The press captures the mouse, so the drag that follows routes to the
+    // probe even though it leaves the node.
+    c.mouse(
+        None,
+        mouse::MouseEvent {
+            action: mouse::Action::Down,
+            button: mouse::Button::Left,
+            modifiers: key::Empty,
+            location: PointI32 { x: 6, y: 6 },
+        },
+    )?;
+    assert_eq!(c.core.mouse_capture, Some(probe));
+    c.mouse(
+        None,
+        mouse::MouseEvent {
+            action: mouse::Action::Drag,
+            button: mouse::Button::Left,
+            modifiers: key::Empty,
+            location: PointI32 { x: 1, y: 9 },
+        },
+    )?;
+
+    let content = c.core.nodes[probe].view.content.tl;
+    let seen = c
+        .core
+        .with_widget_dyn_mut(probe, |widget, _| {
+            (widget as &mut dyn Any)
+                .downcast_mut::<ClickProbe>()
+                .map(|probe| probe.seen.clone())
+                .unwrap_or_default()
+        })
+        .unwrap_or_default();
+    assert_eq!(
+        seen,
+        [(
+            PointI32 {
+                x: 1 - content.x,
+                y: 9 - content.y,
+            },
+            true
+        )],
+        "an early binding sees the node-local location and the capture it ran under"
+    );
+    assert_eq!(
+        c.core.mouse_capture,
+        Some(probe),
+        "an early binding does not disturb capture"
+    );
+    Ok(())
+}
+
+#[test]
+fn an_early_mouse_binding_respects_modal_admission_and_wheel_fallback() -> Result<()> {
+    run_ttree(|c, mut tr, tree| {
+        c.render(&mut tr)?;
+        let wheel = inputmap::InputSpec::Mouse(
+            mouse::MouseEvent {
+                action: mouse::Action::ScrollDown,
+                button: mouse::Button::None,
+                modifiers: key::Empty,
+                location: PointI32 { x: 0, y: 0 },
+            }
+            .into(),
+        );
+        // An unbound wheel still reaches its default action rather than an
+        // early binding that does not match this route.
+        c.bind_command(
+            wheel,
+            mouse_options("/r/bb/**/", inputmap::BindingPhase::BeforeWidget)?,
+            R::call_c_root(),
+        )?;
+        let mut scroll = click_on(&c.core, tree.a_a);
+        scroll.action = mouse::Action::ScrollDown;
+        scroll.button = mouse::Button::None;
+        reset_state();
+        c.mouse(None, scroll)?;
+        assert!(
+            !get_state().path.contains(&"r.c_root()".to_string()),
+            "a binding outside the route never runs"
+        );
+
+        // An exclusive group blocks application bindings whatever their phase.
+        let group = inputmap::FrameworkBindingGroup::new("test.modal");
+        c.bind_command(
+            inputmap::InputSpec::Mouse(click_on(&c.core, tree.a_a).into()),
+            mouse_options("/r/**/", inputmap::BindingPhase::BeforeWidget)?,
+            R::call_c_root(),
+        )?;
+        c.core
+            .input_map
+            .set_modal_bindings(Some(crate::ModalBindings::Framework(group)));
+        reset_state();
+        c.mouse(None, click_on(&c.core, tree.a_a))?;
+        assert!(
+            !get_state().path.contains(&"r.c_root()".to_string()),
+            "an exclusive group blocks an early application binding"
+        );
+        c.core.input_map.set_modal_bindings(None);
         Ok(())
     })
 }

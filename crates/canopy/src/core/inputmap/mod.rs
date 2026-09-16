@@ -318,7 +318,7 @@ impl InputMap {
         options: BindingOptions,
         target: BindingTarget,
     ) -> Result<(BindingId, Vec<(BindingId, BindingTarget)>)> {
-        validate_application_binding(input, &options)?;
+        validate_application_binding(&options)?;
         let path_filter = options.path.as_ref().map_or("", PathFilter::as_str);
         let path_matcher = options.path.clone().unwrap_or(PathFilter::new("")?);
         let id = self.allocate_binding_id()?;
@@ -356,7 +356,6 @@ impl InputMap {
     ) -> Result<BindingId> {
         let input = input.into();
         validate_description(&options.description)?;
-        validate_phase(input, options.phase)?;
         let scope = BindingScope::Exclusive(group);
         if options.scope != scope {
             return Err(Error::InvalidOperation(
@@ -800,21 +799,10 @@ fn compare_candidates(
 }
 
 /// Validate the options of one application binding without installing it.
-pub fn validate_application_binding(input: InputSpec, options: &BindingOptions) -> Result<()> {
+pub fn validate_application_binding(options: &BindingOptions) -> Result<()> {
     let path_filter = options.path.as_ref().map_or("", PathFilter::as_str);
     validate_application_scope(&options.scope, path_filter)?;
-    validate_description(&options.description)?;
-    validate_phase(input, options.phase)
-}
-
-/// Reject pre-widget mouse bindings, which the mouse route cannot execute.
-fn validate_phase(input: InputSpec, phase: BindingPhase) -> Result<()> {
-    if matches!(input, InputSpec::Mouse(_)) && phase == BindingPhase::BeforeWidget {
-        return Err(Error::InvalidOperation(
-            "mouse bindings cannot use the before_widget phase".to_string(),
-        ));
-    }
-    Ok(())
+    validate_description(&options.description)
 }
 
 /// Validate an application binding scope.

@@ -93,8 +93,12 @@ impl From<MouseEvent> for Mouse {
 
 impl Mouse {
     /// Parse a mouse specification such as `ScrollUp` or `ctrl-LeftDown`.
+    ///
+    /// Modifiers separate with `-` or `+`, as they do for a key, so the label
+    /// [`Display`](fmt::Display) writes parses back to the same spec.
     pub fn parse_spec(spec: &str) -> Result<Self, ParseError> {
-        let (modifiers, body) = key::parse_spec_parts(spec, &['-']).map_err(ParseError::new)?;
+        let (modifiers, body) =
+            key::parse_spec_parts(spec, &['-', '+']).map_err(ParseError::new)?;
 
         let lower = body.to_ascii_lowercase();
         let action = [
@@ -134,15 +138,21 @@ impl Mouse {
 }
 
 impl fmt::Display for Mouse {
+    /// Write the spec that [`Mouse::parse_spec`] reads back, such as
+    /// `Ctrl+LeftDown`.
+    ///
+    /// One label serves bindings, help, and script output, so it holds to the
+    /// spelling a binding is written in. It carries no space, which lets help
+    /// separate several inputs with one.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.modifiers != key::Empty {
             write!(f, "{}+", self.modifiers)?;
         }
-        if matches!(self.button, Button::None) {
-            write!(f, "{:?}", self.action)
-        } else {
-            write!(f, "{:?} {:?}", self.button, self.action)
+        // A wheel or a move has no button, and naming `None` would not parse.
+        if !matches!(self.button, Button::None) {
+            write!(f, "{:?}", self.button)?;
         }
+        write!(f, "{:?}", self.action)
     }
 }
 
@@ -212,6 +222,33 @@ mod tests {
             Ok(spec(Action::Drag, Button::Middle, key::Shift))
         );
         assert!(Mouse::parse_spec("ctrl-nope").is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn the_label_parses_back_to_the_spec_it_names() -> Result<()> {
+        for mouse in [
+            spec(Action::ScrollUp, Button::None, key::Empty),
+            spec(Action::Moved, Button::None, key::Shift),
+            spec(Action::Down, Button::Left, key::Empty),
+            spec(Action::Drag, Button::Middle, key::Ctrl + key::Shift),
+            spec(Action::Up, Button::Right, key::Alt),
+        ] {
+            let label = mouse.to_string();
+            assert!(
+                !label.contains(' '),
+                "a label carries no space, got {label:?}"
+            );
+            assert_eq!(Mouse::parse_spec(&label), Ok(mouse), "round trip {label:?}");
+        }
+        assert_eq!(
+            spec(Action::Down, Button::Left, key::Ctrl).to_string(),
+            "Ctrl+LeftDown"
+        );
+        assert_eq!(
+            spec(Action::ScrollDown, Button::None, key::Empty).to_string(),
+            "ScrollDown"
+        );
         Ok(())
     }
 }

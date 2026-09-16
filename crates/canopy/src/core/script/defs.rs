@@ -176,7 +176,7 @@ pub(super) fn register_framework_declarations(builder: &mut module::Builder) {
                 "phase",
                 declaration::Type::literals(["before_widget", "after_widget"]).optional(),
             )
-            .doc("Key dispatch phase. The default is after_widget. Mouse bindings accept only after_widget."),
+            .doc("Dispatch phase relative to the widget. The default is after_widget."),
             declaration::Field::new("tier", declaration::Type::literals(["global"]).optional())
                 .doc("Use the global tier. A global binding cannot name a mode."),
         ]),
@@ -228,7 +228,7 @@ pub(super) fn register_framework_declarations(builder: &mut module::Builder) {
                         "phase",
                         declaration::Type::literals(["before_widget", "after_widget"]).optional(),
                     )
-                    .doc("Key dispatch phase for every entry. The default is after_widget. Mouse entries accept only after_widget."),
+                    .doc("Dispatch phase for every entry, relative to the widget. The default is after_widget."),
                     declaration::Field::new("tier", declaration::Type::literals(["global"]).optional())
                         .doc("Use the global tier. A global keymap cannot name a mode."),
                 ],

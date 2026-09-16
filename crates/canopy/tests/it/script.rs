@@ -430,6 +430,27 @@ mod tests {
         )?;
         harness.script(r#"canopy.send_key("a")"#)?;
         assert_eq!(leaf_values(&mut harness), vec![9, 0]);
+
+        // A keymap puts key and mouse entries in the same phase.
+        harness.canopy.eval_script(
+            r#"
+            canopy.keymap({
+                phase = "before_widget",
+                { key = "e", description = "Set three", action = command.api_leaf.set(3) },
+                { mouse = "ScrollDown", description = "Set four", action = command.api_leaf.set(4) },
+            })
+            for _, binding in canopy.bindings() do
+                if binding.input == "e" or binding.input == "ScrollDown" then
+                    canopy.assert(
+                        binding.phase == "before_widget",
+                        "every entry takes the keymap's phase"
+                    )
+                end
+            end
+            "#,
+        )?;
+        harness.script(r#"canopy.send_scroll("Down", 1, 1)"#)?;
+        assert_eq!(leaf_values(&mut harness), vec![4, 0]);
         Ok(())
     }
 
@@ -470,14 +491,6 @@ mod tests {
                     { key = "x", description = "B", action = command.api_leaf.set(2) },
                 })"#,
                 "keymap entry 2 binds `x` more than once",
-            ),
-            (
-                r#"canopy.keymap({
-                    phase = "before_widget",
-                    { key = "x", description = "Set", action = command.api_leaf.set(1) },
-                    { mouse = "ScrollUp", description = "Set", action = command.api_leaf.set(1) },
-                })"#,
-                "before_widget",
             ),
             (
                 r#"canopy.keymap({ { key = "x", action = command.api_leaf.set(1) } })"#,

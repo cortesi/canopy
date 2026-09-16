@@ -1215,6 +1215,9 @@ pub mod canopy {
 
             impl Mouse {
                 /// Parse a mouse specification such as `ScrollUp` or `ctrl-LeftDown`.
+                ///
+                /// Modifiers separate with `-` or `+`, as they do for a key, so the label
+                /// [`Display`](fmt::Display) writes parses back to the same spec.
                 pub fn parse_spec(spec: &str) -> Result<Self, ParseError> {}
             }
 

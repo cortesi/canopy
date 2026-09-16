@@ -49,12 +49,6 @@ impl RoutedInput {
         }
     }
 
-    /// Return true when a binding may run before widget event
-    /// dispatch.
-    fn allows_pre_event_binding(self) -> bool {
-        matches!(self, Self::Key(_))
-    }
-
     /// Return a short diagnostic label.
     fn label(self) -> &'static str {
         match self {
@@ -181,9 +175,7 @@ impl Canopy {
 
             let mut fallback_binding = None;
             if let Some(binding) = self.core.input_map.resolve_match(&path, input.input_spec()) {
-                if input.allows_pre_event_binding()
-                    && binding.phase == inputmap::BindingPhase::BeforeWidget
-                {
+                if binding.phase == inputmap::BindingPhase::BeforeWidget {
                     self.trace_route(
                         RoutePhase::PreEventBinding,
                         Some(id),

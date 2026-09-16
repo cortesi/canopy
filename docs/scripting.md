@@ -160,9 +160,8 @@ canopy.keymap({
 
 `canopy.keymap` validates every option and entry before it installs a binding.
 It rejects an unknown field in the table or an entry, an entry with neither
-`key` nor `mouse`, a spec that does not parse, an empty spec array, two entries
-that bind the same input, and a mouse entry under `phase = "before_widget"`. A
-keymap with an error installs nothing. Within a call the entries install in
+`key` nor `mouse`, a spec that does not parse, an empty spec array, and two
+entries that bind the same input. A keymap with an error installs nothing. Within a call the entries install in
 order, so a later entry wins a precedence tie. Every binding records the
 `canopy.keymap` call site as its source. The call returns the binding IDs in
 entry order, key bindings before mouse bindings within an entry.

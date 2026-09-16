@@ -940,7 +940,17 @@ fn declarative_script_binding_exposes_arguments_phase_and_route_target() -> Resu
         canopy.eval_script(r#"return canopy.call_focus("script_call_probe::identify")"#)?,
         ArgValue::Int(7)
     );
-    assert!(canopy.eval_script(r#"canopy.bind_mouse("LeftDown", {description = "Bad phase", phase = "before_widget"}, function() end)"#).is_err());
+    // A mouse binding declares its phase the same way a key does.
+    canopy.eval_script(
+        r#"
+        canopy.bind_mouse("LeftDown", {description = "Early click", phase = "before_widget"}, function() end)
+        for _, binding in canopy.bindings() do
+            if binding.input == "LeftDown" then
+                assert(binding.phase == "before_widget")
+            end
+        end
+    "#,
+    )?;
     Ok(())
 }
 

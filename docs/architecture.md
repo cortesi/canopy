@@ -383,8 +383,9 @@ oldest, and then the default scope. A transient mode ends that search, so a key
 it does not bind resolves to nothing. Path specificity and insertion order select
 a winner within one scope. The binding phase chooses dispatch before widget
 input or after the widget ignores it. The default phase is `after_widget`, and
-the path filter has no effect on the phase. Mouse bindings run after ignored
-widget input.
+the path filter has no effect on the phase. Key and mouse bindings take either
+phase. The phase belongs to the winner at one route node, so an early binding
+on an ancestor still runs after every descendant declines.
 
 Key routing and `available_bindings` call the same resolver at each node in the
 focus-to-root route. Availability returns an owned snapshot with one effective

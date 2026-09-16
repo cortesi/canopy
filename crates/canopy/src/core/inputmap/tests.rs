@@ -551,28 +551,39 @@ fn omitted_phase_is_after_widget() -> Result<()> {
 }
 
 #[test]
-fn rejected_mouse_phase_preserves_existing_binding() -> Result<()> {
+fn a_mouse_binding_takes_either_phase() -> Result<()> {
     let mut map = InputMap::new();
     let input = InputSpec::Mouse(Mouse::parse_spec("ScrollUp").unwrap());
-    let (id, _) = map.replace_application_action(
-        input,
-        options("editor/", BindingPhase::AfterWidget),
-        BindingTarget::Script(script(1)),
-    )?;
-    assert!(
+    for phase in [BindingPhase::BeforeWidget, BindingPhase::AfterWidget] {
+        map.clear_application();
         map.replace_application_action(
             input,
-            options("editor/", BindingPhase::BeforeWidget),
-            BindingTarget::Script(script(2)),
-        )
-        .is_err()
+            options("editor/", phase),
+            BindingTarget::Script(script(1)),
+        )?;
+        let resolved = map
+            .resolve_match(&Path::from("/root/editor"), input)
+            .unwrap();
+        assert_eq!(resolved.phase, phase);
+    }
+
+    // A framework group takes the early phase on the same terms.
+    let mut options = options("/root/dialog/**/", BindingPhase::BeforeWidget);
+    options.scope = BindingScope::Exclusive(HELP);
+    let id = map.bind_framework(
+        HELP,
+        Mouse::parse_spec("LeftDown").unwrap(),
+        options,
+        CommandAction {
+            invocation: command("button::press"),
+            target: None,
+        },
+    )?;
+    assert_eq!(
+        map.binding(id).unwrap().phase,
+        BindingPhase::BeforeWidget,
+        "a framework mouse binding keeps the phase it declared"
     );
-    assert_eq!(map.bindings().len(), 1);
-    let resolved = map
-        .resolve_match(&Path::from("/root/editor"), input)
-        .unwrap();
-    assert_eq!(resolved.id, id);
-    assert_eq!(resolved.target, BindingTarget::Script(script(1)));
     Ok(())
 }
 
