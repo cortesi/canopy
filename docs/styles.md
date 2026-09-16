@@ -34,6 +34,15 @@ bottom borders use `frame/thumb`. While a drag holds a thumb, the thumb uses
 define every frame path. The help overlay pushes a `help` layer, so its frame
 also uses the `help/frame` paths.
 
+## Confirm
+
+`Confirm` pushes a `confirm` layer, so the frame around it resolves the
+`confirm/frame` paths and shares the dialog's background rather than sitting on
+the view behind it. The question uses `confirm/message`, each button's border
+uses `confirm/button` and its label `confirm/button/label`, and the letter that
+answers the question uses `confirm/key`. The built-in themes define all of them,
+taking the panel background and the help overlay's key colour.
+
 ## Columns
 
 `Columns` draws the divider after each pane with `columns/divider`. Where a

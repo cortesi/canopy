@@ -903,6 +903,18 @@ pub mod canopy_widgets {
     #[derive(Default)]
     pub struct Columns {}
 
+    /// A centred modal asking a yes or no question.
+    ///
+    /// The dialog centres a titled frame over whatever it covers, states its
+    /// question, and offers it as two buttons. It decides nothing: it holds no
+    /// answer and runs no command, so a host keeps both the question and what
+    /// agreeing to it does, and binds the keys that answer it.
+    ///
+    /// Open it inside a modal scope, with [`Confirm::body`] as the initial focus,
+    /// and the scope dims what the dialog covers and gives it the keyboard.
+    #[derive(Default)]
+    pub struct Confirm {}
+
     /// A widget that lays out its children and has no other behavior.
     ///
     /// Parents adjust how each child sizes through layout overrides. Use
@@ -1167,6 +1179,35 @@ pub mod canopy_widgets {
         fn owns_scrollbars(&self) -> bool {}
 
         fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
+    }
+
+    impl CommandNode for Confirm {
+        fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
+    }
+
+    impl Confirm {
+        /// Ask `message` under `title`.
+        pub fn ask(&mut self, context: &mut dyn Context, title: &str, message: &str) -> Result<()> {
+        }
+
+        /// Build an empty dialog.
+        pub fn new() -> Self {}
+
+        /// Return the question, which takes the keyboard while the dialog is open,
+        /// or an error before it mounts.
+        pub fn body(&self) -> Result<NodeId> {}
+    }
+
+    impl Widget for Confirm {
+        fn layout(&self) -> Layout {}
+
+        fn name(&self) -> NodeName {}
+
+        fn on_event(&mut self, event: &Event, _context: &mut dyn Context) -> Result<EventOutcome> {}
+
+        fn on_mount(&mut self, context: &mut dyn Context) -> Result<()> {}
+
+        fn render(&mut self, render: &mut Render<'_>, _context: &dyn ViewContext) -> Result<()> {}
     }
 
     impl CommandNode for Frame {

@@ -2640,6 +2640,20 @@ pub mod canopy {
 
         /// Compute the width of the next tab from the provided column.
         pub fn tab_width(column: usize, tab_stop: usize) -> usize {}
+
+        /// Shorten `s` to `budget` display columns, marking a dropped tail.
+        ///
+        /// Text that already fits is returned as it is. This is the ordinary
+        /// direction, for text whose opening identifies it.
+        pub fn truncate_end(s: &str, budget: usize) -> std::borrow::Cow<'_, str> {}
+
+        /// Shorten `s` to `budget` display columns, marking a dropped head.
+        ///
+        /// Text that already fits is returned as it is, so a caller pays nothing for
+        /// the common case. The marker keeps the tail visible, which is what a long
+        /// filesystem path needs: its last components identify it, and its leading
+        /// ones repeat.
+        pub fn truncate_start(s: &str, budget: usize) -> std::borrow::Cow<'_, str> {}
     }
 
     #[macro_export]

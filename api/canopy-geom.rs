@@ -206,6 +206,17 @@ pub mod canopy_geom {
 
         /// Convert the line into a rectangle of height 1.
         pub fn rect(&self) -> Rect {}
+
+        /// Return this line indented from its start, giving up the columns it
+        /// skips.
+        ///
+        /// Moving a line's start without shrinking its width is the mistake this
+        /// exists to prevent. A line that keeps its width runs past the extent it
+        /// was cut from, and painting it writes over whatever lies beyond, such as
+        /// the border it was meant to sit inside. Indenting holds the far edge
+        /// still, and indenting past that edge leaves an empty line rather than
+        /// wrapping around.
+        pub fn indent(&self, columns: u32) -> Self {}
     }
 
     impl LineSegment {

@@ -14,6 +14,8 @@ mod center;
 mod click;
 /// Panes side by side with scroll position dividers.
 mod columns;
+/// Modal yes or no question.
+mod confirm;
 /// Layout-only container.
 mod container;
 /// Dropdown selection widget.
@@ -66,6 +68,7 @@ pub use boxed::{Border, BoxGlyphs, DOUBLE, ROUND, SINGLE, SINGLE_THICK};
 pub use button::Button;
 pub use center::Center;
 pub use columns::Columns;
+pub use confirm::Confirm;
 pub use container::Container;
 pub use dropdown::Dropdown;
 pub use frame::Frame;

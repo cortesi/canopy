@@ -170,6 +170,39 @@ pub fn theme(p: &Palette) -> StyleMap {
             "/help/indicator",
             StyleBuilder::new().fg(p.accent).bg(p.panel_bg),
         )
+        .style_all(
+            &["/confirm/background", "/confirm/message"],
+            StyleBuilder::new().fg(p.fg).bg(p.panel_bg),
+        )
+        // The frame takes the panel behind it, so the dialog reads as one
+        // surface rather than a border cut out of the view.
+        .style_all(
+            &[
+                "/confirm/frame",
+                "/confirm/frame/focused",
+                "/confirm/frame/thumb",
+                "/confirm/frame/thumb/active",
+                "/confirm/frame/title",
+            ],
+            StyleBuilder::new().bg(p.panel_bg),
+        )
+        .style(
+            "/confirm/button",
+            StyleBuilder::new().fg(p.frame).bg(p.panel_bg),
+        )
+        .style(
+            "/confirm/button/label",
+            StyleBuilder::new().fg(p.fg).bg(p.panel_bg),
+        )
+        // The key shares the help overlay's key colour, so one letter names the
+        // key without the label repeating it.
+        .style(
+            "/confirm/key",
+            StyleBuilder::new()
+                .fg(p.key)
+                .bg(p.panel_bg)
+                .attrs(AttrSet::new(Attr::Bold)),
+        )
         .apply();
     c
 }
