@@ -255,16 +255,24 @@ the action it shares with a key, so activation reads as one row.
 
 ### Stage 4: Compose and validate confirmation dialogs
 
-- [ ] Implement C5–C7: mnemonic rendering and bindings, answer composition,
+- [x] Implement C5–C7: mnemonic rendering and bindings, answer composition,
   configured actions/default focus, and scoped navigation.
-- [ ] Test both answers by mouse, Enter, Space, and accelerator; test Esc,
+- [x] Test both answers by mouse, Enter, Space, and accelerator; test Esc,
   disabled actions, focus restoration, repeated opens, and nested modals.
-- [ ] Preserve geometry/style tests for both borders, shared background, long
+- [x] Preserve geometry/style tests for both borders, shared background, long
   messages, Unicode labels, tiny views, and clicks outside answer bounds.
-- [ ] Migrate `../fh/crates/fh/src/commander.rs` and its bookmark tests. Verify
+- [x] Migrate `../fh/crates/fh/src/commander.rs` and its bookmark tests. Verify
   exactly one action per activation, correct stored path, cancellation, and
   retained modal isolation. Include this sibling consumer in acceptance.
-- [ ] Update durable style/API documentation and regenerate theme/API captures.
+- [x] Update durable style/API documentation and regenerate theme/API captures.
   Run focused checks for each change, then Canopy's `ncode test`, `ncode tidy`,
   `ncode api --check`, and `cargo xtask smoke`. Run fh's required checks and smoke
   suite from its own checkout, then `git diff --check` in both repositories.
+
+A private `ButtonLabel` replaced the button's `Text` child, because `Text`
+paints one style across a line and a mnemonic needs two. The theme capture
+gained a generator behind `UPDATE_GOLDEN`, since the plan forbids editing it by
+hand and none existed. `fh` needed more than the three activation records C2
+names: an exclusive group admits no application binding at all, so its group
+also carries the focus movement an ordinary application takes from
+`confirm.default_bindings()`.
