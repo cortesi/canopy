@@ -60,21 +60,26 @@ hook and the node lookup behind a single signature without removing either.
 threshold of 34. `has_mouse_capture` lets a scrollbar owner confirm that it
 still holds its drag. No other query exposes mouse capture.
 
-`canopy-widgets.rs` grew from 2,037 to 2,078 lines against a threshold of 2,050.
+`canopy-widgets.rs` grew from 2,037 to 2,177 lines against a threshold of 2,050.
 `Confirm` is a modal yes-or-no question: a centred titled frame stating a
-message, with the two answers drawn as framed buttons whose first letter is the
-key that gives that answer, highlighted rather than repeated beside the label.
-It adds one type and four methods. The widget decides nothing, so an application
-supplies the question, binds the keys, and keeps whatever agreeing to it does.
+message, with the two answers composed from real buttons whose first letter is
+the key that gives that answer, highlighted rather than repeated beside the
+label. The widget decides nothing, so an application supplies the question and
+the command each answer runs, and keeps whatever agreeing to it does.
 
-No existing widget absorbs it without becoming less clear. `Button` carries one
-label through a `Text` child and one command, so it can neither highlight the
-letter that names its key nor stand beside a second answer, and teaching it
-either would change every button that already exists. `Frame` and `Center`
+No existing widget absorbs it without becoming less clear. `Frame` and `Center`
 compose the dialog but neither states a question, so folding the question into
 them would give two layout widgets a purpose they do not have. `Help` is the
 only other modal, and it is a fixed panel of key bindings that `Root` owns,
 rather than something an application opens about a subject of its own.
+
+`Button` grew by `with_accelerator`, `set_command`, and `Loader`. The mnemonic
+belongs on the button because the button paints it, and the button alone knows
+which label character a key names. `set_command` exists because a composed
+dialog builds its buttons before its host says what each answer does.
+`Loader` registers the activation bindings that replaced the button's own click
+handler, so activation is discoverable and replaceable rather than hidden in an
+event handler.
 
 ## Accepted dependency coupling
 

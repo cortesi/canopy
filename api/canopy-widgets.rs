@@ -912,12 +912,12 @@ pub mod canopy_widgets {
     /// A centred modal asking a yes or no question.
     ///
     /// The dialog centres a titled frame over whatever it covers, states its
-    /// question, and offers it as two buttons. It decides nothing: it holds no
-    /// answer and runs no command, so a host keeps both the question and what
-    /// agreeing to it does, and binds the keys that answer it.
+    /// question, and offers it as two buttons. It holds no answer: a host supplies
+    /// the command each button runs, and keeps whatever agreeing to it does,
+    /// including closing the dialog.
     ///
-    /// Open it inside a modal scope, with [`Confirm::body`] as the initial focus,
-    /// and the scope dims what the dialog covers and gives it the keyboard.
+    /// Open it inside a modal scope with [`Confirm::initial_focus`] as the initial
+    /// focus, and the scope dims what the dialog covers and gives it the keyboard.
     #[derive(Default)]
     pub struct Confirm {}
 
@@ -1097,14 +1097,34 @@ pub mod canopy_widgets {
     }
 
     impl Button {
+        #[must_use]
         /// Build a button that dispatches a command when clicked.
         pub fn with_command(self, command: CommandCall) -> Self {}
+
+        #[must_use]
+        /// Mark the label character that a key reaches this button by.
+        ///
+        /// The first matching character takes the [`roles::BUTTON_KEY`] style, so
+        /// the label names its key without repeating it and keeps its spelling. An
+        /// ASCII letter matches without case; any other character must match
+        /// exactly. A label with no match is left alone.
+        ///
+        /// This declares what the button shows. Binding the key stays with whoever
+        /// owns the binding, so the mnemonic and its binding are written together
+        /// and a button cannot install a key of its own.
+        pub fn with_accelerator(self, accelerator: char) -> Self {}
 
         /// Build a button with a specified glyph set.
         pub fn with_glyphs(self, glyphs: BoxGlyphs) -> Self {}
 
         /// Construct a new button with a label.
         pub fn new(label: impl Into<String>) -> Self {}
+
+        /// Set the command this button runs, replacing any earlier one.
+        ///
+        /// A composed dialog builds its buttons before a host knows what each
+        /// answer does, so the action arrives after construction.
+        pub fn set_command(&mut self, command: CommandCall) {}
 
         /// Set whether the button is active.
         pub fn set_active(&mut self, active: bool) {}
@@ -1207,9 +1227,74 @@ pub mod canopy_widgets {
         /// Build an empty dialog.
         pub fn new() -> Self {}
 
-        /// Return the question, which takes the keyboard while the dialog is open,
-        /// or an error before it mounts.
+        /// Choose the answer that takes focus each time the dialog opens.
+        ///
+        /// Declining is the default, because a question worth asking is one whose
+        /// affirmative answer should not be reached by accident.
+        pub fn set_default_answer(&mut self, answer: Answer) {}
+
+        /// Give the affirmative answer, whichever answer holds focus.
+        pub fn yes(&mut self, context: &mut dyn Context) -> Result<()> {}
+
+        /// Give the negative answer, whichever answer holds focus.
+        pub fn no(&mut self, context: &mut dyn Context) -> Result<()> {}
+
+        /// Move focus between the answers.
+        ///
+        /// The scope is the dialog, so focus never leaves it for the application
+        /// the dialog covers.
+        /// @param direction Which way to move.
+        pub fn focus(
+            &mut self,
+            context: &mut dyn Context,
+            direction: FocusDirection,
+        ) -> Result<()> {
+        }
+
+        /// Return the answer that takes the keyboard when the dialog opens, or an
+        /// error before it mounts.
+        pub fn initial_focus(&self) -> Result<NodeId> {}
+
+        /// Return the question, or an error before it mounts.
+        ///
+        /// This is the dialog's body, not its initial focus. Use
+        /// [`Confirm::initial_focus`] when opening a modal scope.
         pub fn body(&self) -> Result<NodeId> {}
+
+        /// Set what each answer does, before the dialog opens.
+        ///
+        /// Each command is stored on its own button, so a click, a key, and an
+        /// accelerator all run the same one. The dialog decides nothing: closing it
+        /// is part of what a host's answer command does.
+        pub fn set_actions(
+            &mut self,
+            context: &mut dyn Context,
+            yes: CommandCall,
+            no: CommandCall,
+        ) -> Result<()> {
+        }
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_focus(direction: FocusDirection) -> canopy::commands::CommandCall {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_no() -> canopy::commands::CommandCall {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_yes() -> canopy::commands::CommandCall {}
+
+        /// Return a typed command reference for this command.
+        pub fn cmd_focus() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return a typed command reference for this command.
+        pub fn cmd_no() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return a typed command reference for this command.
+        pub fn cmd_yes() -> &'static canopy::commands::CommandSpec {}
+    }
+
+    impl Loader for Confirm {
+        fn load(canopy: &mut Canopy) -> Result<()> {}
     }
 
     impl Widget for Confirm {

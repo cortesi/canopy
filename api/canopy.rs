@@ -2084,6 +2084,9 @@ pub mod canopy {
             /// Button border paint path beneath its component and state layers.
             pub const BUTTON_BORDER: &str = "border";
 
+            /// Button accelerator cell path, for the one label character a key names.
+            pub const BUTTON_KEY: &str = "key";
+
             /// Button label paint path beneath its component and state layers.
             pub const BUTTON_LABEL: &str = "text";
 

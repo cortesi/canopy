@@ -28,6 +28,8 @@ pub mod roles {
     pub const BUTTON_LABEL: &str = "text";
     /// Button border paint path beneath its component and state layers.
     pub const BUTTON_BORDER: &str = "border";
+    /// Button accelerator cell path, for the one label character a key names.
+    pub const BUTTON_KEY: &str = "key";
     /// Input component layer.
     pub const INPUT: &str = "input";
     /// Input text paint path.
@@ -784,6 +786,8 @@ impl StyleManager {
 
 #[cfg(test)]
 mod tests {
+    use std::{env, fs};
+
     use super::*;
 
     #[test]
@@ -909,9 +913,18 @@ mod tests {
         .collect()
     }
 
+    /// Compare every built-in theme with its capture.
+    ///
+    /// Set `UPDATE_GOLDEN` to rewrite the capture from the themes instead of
+    /// editing it, so a palette change and its capture cannot disagree.
     #[test]
     fn built_in_themes_match_the_golden_rule_sets() {
-        assert_eq!(dump_all_themes(), include_str!("themes.golden"));
+        let dumped = dump_all_themes();
+        if env::var_os("UPDATE_GOLDEN").is_some() {
+            let path = concat!(env!("CARGO_MANIFEST_DIR"), "/src/core/style/themes.golden");
+            fs::write(path, &dumped).expect("theme capture is writable");
+        }
+        assert_eq!(dumped, include_str!("themes.golden"));
     }
 
     fn solid_style(fg: Color, bg: Color) -> Style {

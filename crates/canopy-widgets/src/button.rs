@@ -1,21 +1,26 @@
 //! Button widget.
 
+use std::{borrow::Cow, ops::Range};
+
 use canopy::{
     Canopy, Context, ContextExt, Loader, NodeName, Render, ViewContext, Widget, WidgetSemantics,
     commands::{CommandAction, CommandCall, CommandStatus, CommandTarget},
     derive_commands,
     error::Result,
-    layout::Layout,
+    geom::{Line, Size},
+    layout::{Layout, MeasureConstraints, Measurement},
     style::{WidgetState, roles},
+    text,
 };
+use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
-    Border, Center, Text,
+    Border, Center,
     boxed::{BoxGlyphs, SINGLE},
 };
 
-canopy::slot!(LabelSlot: Text);
+canopy::slot!(LabelSlot: ButtonLabel);
 canopy::slot!(BoxSlot: Border);
 canopy::slot!(CenterSlot: Center);
 
@@ -50,6 +55,8 @@ canopy.keymap({
 pub struct Button {
     /// Button label.
     label: String,
+    /// Label character a key is expected to reach this button by.
+    accelerator: Option<char>,
     /// Command invocation to dispatch on click.
     command: Option<CommandAction>,
     /// Glyph set for the button border.
@@ -64,10 +71,27 @@ impl Button {
     pub fn new(label: impl Into<String>) -> Self {
         Self {
             label: label.into(),
+            accelerator: None,
             command: None,
             glyphs: SINGLE,
             active: false,
         }
+    }
+
+    /// Mark the label character that a key reaches this button by.
+    ///
+    /// The first matching character takes the [`roles::BUTTON_KEY`] style, so
+    /// the label names its key without repeating it and keeps its spelling. An
+    /// ASCII letter matches without case; any other character must match
+    /// exactly. A label with no match is left alone.
+    ///
+    /// This declares what the button shows. Binding the key stays with whoever
+    /// owns the binding, so the mnemonic and its binding are written together
+    /// and a button cannot install a key of its own.
+    #[must_use]
+    pub fn with_accelerator(mut self, accelerator: char) -> Self {
+        self.accelerator = Some(accelerator);
+        self
     }
 
     /// Build a button with a specified glyph set.
@@ -77,9 +101,18 @@ impl Button {
     }
 
     /// Build a button that dispatches a command when clicked.
+    #[must_use]
     pub fn with_command(mut self, command: CommandCall) -> Self {
-        self.command = Some(command.action());
+        self.set_command(command);
         self
+    }
+
+    /// Set the command this button runs, replacing any earlier one.
+    ///
+    /// A composed dialog builds its buttons before a host knows what each
+    /// answer does, so the action arrives after construction.
+    pub fn set_command(&mut self, command: CommandCall) {
+        self.command = Some(command.action());
     }
 
     /// Set whether the button is active.
@@ -151,11 +184,11 @@ impl Button {
                 .with_fill()
         })?;
         let center_id = ctx.get_or_create_slot_of::<CenterSlot>(box_id, Center::new)?;
-        let label_id = ctx.get_or_create_slot_of::<LabelSlot>(center_id, || {
-            Text::new(self.label.clone()).with_style(roles::BUTTON_LABEL)
-        })?;
-        ctx.with_widget_mut(label_id, |text: &mut Text, _| {
-            text.set_text(self.label.clone());
+        let label_id = ctx.get_or_create_slot_of::<LabelSlot>(center_id, ButtonLabel::default)?;
+        let label = self.label.clone();
+        let accelerator = self.accelerator;
+        ctx.with_widget_mut(label_id, |text: &mut ButtonLabel, _| {
+            text.set_label(label, accelerator);
             Ok(())
         })?;
         ctx.set_layout_of(label_id, Layout::column().max_width(self.label_width()))?;
@@ -212,6 +245,108 @@ impl Widget for Button {
 
     fn name(&self) -> NodeName {
         NodeName::convert("button")
+    }
+}
+
+/// The label inside a button, with at most one highlighted character.
+///
+/// [`Text`](crate::Text) paints one style across a line, and a mnemonic needs
+/// two. This stays private, so the button keeps its border and centring
+/// composition and no other widget inherits a one-off renderer.
+#[derive(Default)]
+pub struct ButtonLabel {
+    /// Text on the button.
+    label: String,
+    /// Byte range of the highlighted grapheme, when the label has one.
+    accelerator: Option<Range<usize>>,
+}
+
+impl ButtonLabel {
+    /// Show `label`, highlighting the first character `accelerator` names.
+    fn set_label(&mut self, label: String, accelerator: Option<char>) {
+        self.accelerator = accelerator.and_then(|key| accelerator_range(&label, key));
+        self.label = label;
+    }
+}
+
+impl Widget for ButtonLabel {
+    fn layout(&self) -> Layout {
+        Layout::fill()
+    }
+
+    fn measure(&self, c: MeasureConstraints) -> Measurement {
+        // One row, as wide as the label. A narrower offer clips rather than
+        // wraps, because a button is a fixed shape around one line.
+        c.clamp(Size::new(
+            u32::try_from(text::display_width(&self.label)).unwrap_or(u32::MAX),
+            1,
+        ))
+    }
+
+    fn render(&mut self, render: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+        let area = ctx.view().view_rect_local();
+        if area.w == 0 || area.h == 0 {
+            return Ok(());
+        }
+        let budget = area.w as usize;
+        let shown = text::truncate_end(&self.label, budget);
+        let line = area.line(0)?;
+        render.text(roles::BUTTON_LABEL, line, &shown)?;
+
+        let Some(range) = self.accelerator.clone() else {
+            return Ok(());
+        };
+        // A clipped label spends its last column on the marker, so only the
+        // columns before it still spell the original characters.
+        let kept =
+            text::display_width(&shown).saturating_sub(usize::from(matches!(shown, Cow::Owned(_))));
+        let column = text::display_width(&self.label[..range.start]);
+        let width = text::display_width(&self.label[range.clone()]);
+        if column.saturating_add(width) > kept {
+            return Ok(());
+        }
+        render.text(
+            roles::BUTTON_KEY,
+            Line::new(
+                line.tl
+                    .x
+                    .saturating_add(u32::try_from(column).unwrap_or(u32::MAX)),
+                line.tl.y,
+                u32::try_from(width).unwrap_or(u32::MAX),
+            ),
+            &self.label[range],
+        )
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("button_label")
+    }
+}
+
+/// Return the byte range of the first grapheme in `label` that `accelerator`
+/// names.
+///
+/// The range is a whole grapheme cluster, so a highlighted letter keeps any
+/// mark that belongs to it rather than being split from it.
+fn accelerator_range(label: &str, accelerator: char) -> Option<Range<usize>> {
+    label.grapheme_indices(true).find_map(|(offset, grapheme)| {
+        names_grapheme(grapheme, accelerator).then(|| offset..offset + grapheme.len())
+    })
+}
+
+/// Return whether `accelerator` names `grapheme`.
+///
+/// An ASCII letter matches without case, because a mnemonic is written as one
+/// letter and the label keeps whichever case it is spelled in. Anything else
+/// matches exactly, so case folding never changes what a non-ASCII label means.
+fn names_grapheme(grapheme: &str, accelerator: char) -> bool {
+    let Some(first) = grapheme.chars().next() else {
+        return false;
+    };
+    if accelerator.is_ascii_alphabetic() {
+        first.eq_ignore_ascii_case(&accelerator)
+    } else {
+        grapheme.chars().eq([accelerator])
     }
 }
 
@@ -468,7 +603,7 @@ mod tests {
         )?;
         let button = the_button(&harness);
         let label = harness
-            .find_nodes("**/button/**/text")?
+            .find_nodes("**/button/**/button_label")?
             .first()
             .copied()
             .expect("button label");
@@ -747,6 +882,121 @@ mod tests {
         assert!(
             harness.find_nodes("**/button")?.is_empty(),
             "the action removed its own button"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn an_accelerator_names_the_first_matching_grapheme() {
+        // An ASCII letter matches without case and keeps the label's spelling.
+        assert_eq!(accelerator_range("Save", 's'), Some(0..1));
+        assert_eq!(accelerator_range("Save", 'S'), Some(0..1));
+        assert_eq!(accelerator_range("Save", 'v'), Some(2..3));
+        // The first match wins, so a repeated letter highlights once.
+        assert_eq!(accelerator_range("Rename", 'e'), Some(1..2));
+        // A missing match leaves the label alone.
+        assert_eq!(accelerator_range("Save", 'z'), None);
+        assert_eq!(accelerator_range("", 'a'), None);
+
+        // A non-ASCII character matches exactly, so case folding never changes
+        // what a label means.
+        assert_eq!(accelerator_range("Ärger", 'Ä'), Some(0..2));
+        assert_eq!(accelerator_range("Ärger", 'ä'), None);
+
+        // A highlighted letter keeps the mark that belongs to it, rather than
+        // being split from its cluster.
+        let combining = "cafe\u{0301}";
+        assert_eq!(accelerator_range(combining, 'e'), Some(3..6));
+    }
+
+    /// Root holding one button with an accelerator.
+    struct Mnemonic(&'static str, char);
+
+    impl Widget for Mnemonic {
+        fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
+            ctx.add_child(Button::new(self.0).with_accelerator(self.1))?;
+            Ok(())
+        }
+    }
+
+    impl Loader for Mnemonic {
+        fn load(canopy: &mut Canopy) -> Result<()> {
+            Button::load(canopy)
+        }
+    }
+
+    #[test]
+    fn the_accelerator_takes_its_own_style_without_changing_the_label() -> Result<()> {
+        for (label, key, shown, marked, plain) in [
+            ("Save", 's', "Save", 'S', 'a'),
+            // A wide grapheme before the key shifts it by two columns, not one.
+            // The buffer dump fills a wide cell's second column, so only the
+            // narrow tail is compared as text.
+            ("\u{754c}ave", 'v', "ave", 'v', 'a'),
+            ("Rename", 'e', "Rename", 'e', 'R'),
+        ] {
+            let harness = activating(Mnemonic(label, key), 20, 5)?;
+            let screen = harness.tbuf().lines().join("\n");
+            assert!(
+                screen.contains(shown),
+                "the label keeps its spelling, got {screen}"
+            );
+            let snapshot = harness.canopy.snapshot().expect("published button");
+            let style_of = |needle: char| {
+                snapshot
+                    .cells
+                    .iter()
+                    .find(|cell| cell.ch == needle)
+                    .map(|cell| (cell.style.fg, cell.style.attrs))
+                    .unwrap_or_else(|| panic!("{needle:?} renders in {label:?}"))
+            };
+            assert_ne!(
+                style_of(marked),
+                style_of(plain),
+                "the key stands out from the rest of {label:?}"
+            );
+        }
+
+        // A label with no match renders as one style throughout.
+        let harness = activating(Mnemonic("Save", 'z'), 20, 5)?;
+        let snapshot = harness.canopy.snapshot().expect("published button");
+        let styles = "Save"
+            .chars()
+            .map(|needle| {
+                snapshot
+                    .cells
+                    .iter()
+                    .find(|cell| cell.ch == needle)
+                    .map(|cell| (cell.style.fg, cell.style.attrs))
+                    .expect("the label renders")
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            styles.windows(2).all(|pair| pair[0] == pair[1]),
+            "an unmatched accelerator leaves the label alone"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_clipped_label_drops_an_accelerator_it_cannot_show() -> Result<()> {
+        // Six columns leave room for the border, one column of padding on each
+        // side, and two label columns, so the marker takes the second and the
+        // key at column three is gone.
+        let harness = activating(Mnemonic("Rename", 'm'), 6, 5)?;
+        let screen = harness.tbuf().lines().join("\n");
+        assert!(
+            screen.contains('\u{2026}'),
+            "the label is marked as clipped"
+        );
+        assert!(
+            !screen.contains("Rename"),
+            "the label does not overrun its button, got {screen}"
+        );
+        let snapshot = harness.canopy.snapshot().expect("published button");
+        assert!(
+            !snapshot.cells.iter().any(|cell| cell.ch == 'm'),
+            "a key clipped away is not painted somewhere else"
         );
         Ok(())
     }

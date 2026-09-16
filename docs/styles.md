@@ -9,8 +9,13 @@ Custom string layers remain supported.
 | --- | --- | --- | --- |
 | `button` | `roles::BUTTON_LABEL` | `text` | `button/active/text` |
 | `button` | `roles::BUTTON_BORDER` | `border` | `button/active/border` |
+| `button` | `roles::BUTTON_KEY` | `key` | `button/disabled/key` |
 | `input` | `roles::INPUT_TEXT` | `text` | `input/text` |
 | `input` | `roles::INPUT_CURSOR` | `text/cursor` | `input/focused/text/cursor` |
+
+The built-in themes are captured in `crates/canopy/src/core/style/themes.golden`.
+Set `UPDATE_GOLDEN` when running the style tests to rewrite that capture from
+the themes rather than editing it.
 
 The constants are available through `canopy::style::roles`. Button labels and
 borders retain their existing paths. Input cursor styling applies to the painted
@@ -34,14 +39,24 @@ bottom borders use `frame/thumb`. While a drag holds a thumb, the thumb uses
 define every frame path. The help overlay pushes a `help` layer, so its frame
 also uses the `help/frame` paths.
 
+## Buttons
+
+`Button` paints its border with `border`, its label with `text`, and the one
+label character an accelerator names with `key`, all beneath the `button` layer
+and its state layers. So `button/key` styles every accelerator, and
+`button/focused/border` the border of a focused button. The built-in themes
+give the accelerator the help overlay's key colour and leave the button on
+whatever ground it sits on.
+
 ## Confirm
 
 `Confirm` pushes a `confirm` layer, so the frame around it resolves the
 `confirm/frame` paths and shares the dialog's background rather than sitting on
-the view behind it. The question uses `confirm/message`, each button's border
-uses `confirm/button` and its label `confirm/button/label`, and the letter that
-answers the question uses `confirm/key`. The built-in themes define all of them,
-taking the panel background and the help overlay's key colour.
+the view behind it. The question uses `confirm/message`. Its answers are
+ordinary buttons, so they resolve `confirm/button/border`,
+`confirm/button/text`, and `confirm/button/key` before the plain `button` paths.
+The built-in themes define all of them, taking the panel background so the
+dialog reads as one surface.
 
 ## Columns
 
@@ -65,7 +80,7 @@ built-in themes define all three paths.
 Button pushes `button`, then `active` when active, then `focused` when focus is
 within the button, then `disabled` when its configured command is disabled.
 For example, `button/active/focused/disabled/text` targets a disabled active
-button label with focus. Active state does not imply command eligibility or
+button label with focus, and `button/disabled/key` a disabled accelerator. Active state does not imply command eligibility or
 selection. Input pushes `input`, then `focused` when it holds focus. Custom
 widgets can use `selected` independently of focus.
 

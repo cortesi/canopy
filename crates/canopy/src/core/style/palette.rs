@@ -85,6 +85,17 @@ pub fn theme(p: &Palette) -> StyleMap {
         .attr("/text/bold", Attr::Bold)
         .attr("/text/italic", Attr::Italic)
         .attr("/text/underline", Attr::Underline)
+        // A button's accelerator shares the help overlay's key colour, so one
+        // letter names the key without the label repeating it. The button keeps
+        // whatever ground it sits on.
+        .style(
+            "/button/key",
+            StyleBuilder::new().fg(p.key).attrs(AttrSet::new(Attr::Bold)),
+        )
+        .fg("/button/focused/border", p.frame_focused)
+        .fg("/button/disabled/border", p.muted_fg)
+        .fg("/button/disabled/text", p.muted_fg)
+        .fg("/button/disabled/key", p.muted_fg)
         .fg("/selector", p.fg)
         .fg("/selector/selected", p.accent)
         .style("/selector/focus", StyleBuilder::new().fg(p.bg).bg(p.accent))
@@ -186,18 +197,18 @@ pub fn theme(p: &Palette) -> StyleMap {
             ],
             StyleBuilder::new().bg(p.panel_bg),
         )
-        .style(
-            "/confirm/button",
-            StyleBuilder::new().fg(p.frame).bg(p.panel_bg),
-        )
-        .style(
-            "/confirm/button/label",
+        // The dialog's buttons take the panel behind them, so the row reads as
+        // part of the dialog rather than as controls laid on the view.
+        .style_all(
+            &["/confirm/button/border", "/confirm/button/text"],
             StyleBuilder::new().fg(p.fg).bg(p.panel_bg),
         )
-        // The key shares the help overlay's key colour, so one letter names the
-        // key without the label repeating it.
         .style(
-            "/confirm/key",
+            "/confirm/button/focused/border",
+            StyleBuilder::new().fg(p.frame_focused).bg(p.panel_bg),
+        )
+        .style(
+            "/confirm/button/key",
             StyleBuilder::new()
                 .fg(p.key)
                 .bg(p.panel_bg)
