@@ -7,7 +7,7 @@ mod tests {
         commands::{CommandNode, CommandSpec},
         error::Result,
         event::{key, mouse},
-        geom::{Point, PointI32},
+        geom::{Point, PointI32, Size},
         layout::{Edges, Layout},
         testing::harness::Harness,
     };
@@ -273,6 +273,70 @@ mod tests {
         for y in [2, 3] {
             assert_eq!(harness.buf().get(Point { x: 11, y }).unwrap().ch, '█');
         }
+        Ok(())
+    }
+
+    #[test]
+    fn inputs_show_focus_across_the_row_and_keep_the_prompt_out_of_the_value() -> Result<()> {
+        let mut harness = Harness::builder(SnapshotRoot::new(
+            crate::Input::new("hello").with_prompt(" 查: "),
+        ))
+        .size(20, 3)
+        .build()?;
+        let first = harness
+            .canopy
+            .with_root_view(|ctx| ctx.unique_descendant::<crate::Input>().unwrap().unwrap());
+        let second = harness.with_root_context(|_: &mut SnapshotRoot<crate::Input>, ctx| {
+            ctx.add_child(crate::Input::new(""))
+        })?;
+        harness.with_root_context(|_: &mut SnapshotRoot<crate::Input>, ctx| {
+            ctx.set_focus(first.into()).map(|_| ())
+        })?;
+        harness.render()?;
+        let point = |harness: &Harness, node, x| {
+            let origin = harness
+                .canopy
+                .with_root_view(|ctx| ctx.view_of(node).unwrap().outer.tl);
+            Point {
+                x: u32::try_from(origin.x).unwrap() + x,
+                y: u32::try_from(origin.y).unwrap(),
+            }
+        };
+        let prompt = point(&harness, first.into(), 1);
+        let tail = point(&harness, first.into(), 19);
+        let active = harness.buf().get(tail).unwrap().style;
+        assert!(harness.buf().get(prompt).unwrap().style.attrs.bold);
+        assert!(
+            harness.tbuf().contains_text("hello"),
+            "{:?}",
+            harness.tbuf().lines()
+        );
+        assert_eq!(harness.buf().get(prompt).unwrap().ch, '查');
+        harness.with_root_context(|_: &mut SnapshotRoot<crate::Input>, ctx| {
+            ctx.with_widget_mut(first, |input: &mut crate::Input, _| {
+                assert_eq!(input.value(), "hello");
+                assert_eq!(input.cursor().unwrap().location.x, 10);
+                Ok(())
+            })?;
+            ctx.set_focus(second.into()).map(|_| ())
+        })?;
+        harness.render()?;
+        assert_ne!(harness.buf().get(tail).unwrap().style.bg, active.bg);
+        assert!(!harness.buf().get(prompt).unwrap().style.attrs.bold);
+        assert_eq!(
+            harness
+                .buf()
+                .get(point(&harness, second.into(), 19))
+                .unwrap()
+                .style
+                .bg,
+            active.bg,
+            "an empty focused field paints the whole row too"
+        );
+        // A prompt can consume all available columns without breaking
+        // rendering.
+        harness.canopy.set_root_size(Size::new(2, 3))?;
+        harness.render()?;
         Ok(())
     }
 

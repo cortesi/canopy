@@ -11,6 +11,8 @@ Custom string layers remain supported.
 | `button` | `roles::BUTTON_BORDER` | `border` | `button/active/border` |
 | `button` | `roles::BUTTON_KEY` | `key` | `button/disabled/key` |
 | `input` | `roles::INPUT_TEXT` | `text` | `input/text` |
+| `input` | `roles::INPUT_BACKGROUND` | `background` | `input/focused/background` |
+| `input` | `roles::INPUT_PROMPT` | `prompt` | `input/focused/prompt` |
 | `input` | `roles::INPUT_CURSOR` | `text/cursor` | `input/focused/text/cursor` |
 
 The built-in themes are captured in `crates/canopy/src/core/style/themes.golden`.
@@ -22,6 +24,35 @@ borders retain their existing paths. Input cursor styling applies to the painted
 grapheme before the central cursor overlay; block cursors then exchange its
 foreground and background. Styling preserves combining characters and wide-cell
 continuations. An absent cursor rule falls back to the input text role.
+
+## Fields and results
+
+A text field beside a result list must show which part takes the keyboard.
+Retain the query and selected row when focus moves between them:
+
+- The active field paints its whole row, including empty space. Its prompt
+  uses the accent and bold text, and its caret marks where typing lands.
+- The inactive field keeps its text visible with subdued colors and no caret.
+- The active list gives its selected row the accent background. An inactive
+  list retains that row with a subdued background.
+
+`Input` applies the field treatment automatically from its actual focus. All
+built-in themes supply both states. Use `Input::new("").with_prompt(" Glob: ")`
+to add a visible, noneditable prompt. The prompt participates in measurement
+and cursor placement but does not change the value or semantic label.
+
+Custom lists can paint their selected row with `roles::selection(active)`.
+It returns `selection` or `selection/dimmed`, both supplied by the built-in
+themes. Usually `active` is `context.is_focused()`. A composite that routes
+keys through an owner must instead use that owner's actual active part. Being
+an ancestor of the focused field does not make the result list active.
+Unselected rows keep their normal item styles.
+
+`Picker` follows this pattern for its filter and list. Its list uses the
+shared selection role; its filter retains the `picker/filter/active` style
+paths. Hosts can override these paths and `input/focused/*` together for a
+consistent application palette. Use the standard roles instead of copying a
+second focus state into every row or resetting selection when focus moves.
 
 ## Tabs
 

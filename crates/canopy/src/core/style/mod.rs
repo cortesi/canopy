@@ -32,10 +32,25 @@ pub mod roles {
     pub const BUTTON_KEY: &str = "key";
     /// Input component layer.
     pub const INPUT: &str = "input";
+    /// Input row background, including the space after its value.
+    pub const INPUT_BACKGROUND: &str = "background";
+    /// Optional visible input prompt.
+    pub const INPUT_PROMPT: &str = "prompt";
     /// Input text paint path.
     pub const INPUT_TEXT: &str = "text";
     /// Input cursor cell path, falling back to the text role.
     pub const INPUT_CURSOR: &str = "text/cursor";
+
+    /// Paint a retained selection according to which control takes the keys.
+    /// Pass actual focus, or the composite widget's active part. Inactive
+    /// selections remain visible without claiming keyboard focus.
+    pub const fn selection(active: bool) -> &'static str {
+        if active {
+            "selection"
+        } else {
+            "selection/dimmed"
+        }
+    }
 }
 
 /// Independent widget states mapped onto the existing style layer stack.

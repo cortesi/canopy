@@ -25,6 +25,7 @@ use canopy::{
         CanvasContext, Direction, Edges, Layout, LayoutOverride, MeasureConstraints, Measurement,
         Sizing,
     },
+    style::roles,
     text,
 };
 
@@ -769,10 +770,10 @@ where
             };
             // A filter taking keys leaves the list holding its place rather
             // than driving it, so the selection dims until the keys come back.
-            let style = match (self.selected == Some(row), self.filtering) {
-                (true, true) => "selection/dimmed",
-                (true, false) => "selection",
-                (false, _) => "text",
+            let style = if self.selected == Some(row) {
+                roles::selection(context.is_focused() && !self.filtering)
+            } else {
+                "text"
             };
             let shown = self.truncate.apply(item.label(), budget);
             let line = Line::new(area.tl.x, area.tl.y.saturating_add(offset), area.w);

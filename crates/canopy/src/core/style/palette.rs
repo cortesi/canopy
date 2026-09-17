@@ -185,35 +185,42 @@ pub fn theme(p: &Palette) -> StyleMap {
             &["/picker/background", "/picker/text"],
             StyleBuilder::new().fg(p.fg).bg(p.panel_bg),
         )
-        .style(
-            "/picker/selection",
+        .style_all(
+            &["/selection", "/picker/selection"],
             StyleBuilder::new().fg(p.bg).bg(p.accent),
         )
         // While the filter takes keys the list is not what the keyboard drives,
         // so its selection holds its place without claiming the eye.
-        .style(
-            "/picker/selection/dimmed",
+        .style_all(
+            &["/selection/dimmed", "/picker/selection/dimmed"],
             StyleBuilder::new().fg(p.fg).bg(p.selection_bg),
         )
         .style(
             "/picker/placeholder",
             StyleBuilder::new().fg(p.muted_fg).bg(p.panel_bg),
         )
+        // Inputs and picker filters share the field-and-results focus pattern.
         // The filter is a field rather than a row of the list, so it takes the
         // element ground to set it apart from the items above it. A filter that
         // has been given stays legible without competing with the list that the
         // keyboard has gone back to.
         .style_all(
-            &["/picker/filter", "/picker/filter/text", "/picker/filter/prompt"],
+            &[
+                "/picker/filter", "/picker/filter/text", "/picker/filter/prompt",
+                "/input/background", "/input/text", "/input/prompt",
+            ],
             StyleBuilder::new().fg(p.muted_fg).bg(p.element_bg),
         )
         // Taking keys lights the field up, because it is what typing reaches.
         .style_all(
-            &["/picker/filter/active", "/picker/filter/active/text"],
+            &[
+                "/picker/filter/active", "/picker/filter/active/text",
+                "/input/focused/background", "/input/focused/text",
+            ],
             StyleBuilder::new().fg(p.fg).bg(p.selection_bg),
         )
-        .style(
-            "/picker/filter/active/prompt",
+        .style_all(
+            &["/picker/filter/active/prompt", "/input/focused/prompt"],
             StyleBuilder::new()
                 .fg(p.key)
                 .bg(p.selection_bg)

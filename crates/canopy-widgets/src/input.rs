@@ -150,9 +150,14 @@ impl InputBuffer {
 }
 
 /// Single-line text input widget.
+///
+/// The whole row changes style with keyboard focus, even when empty. A
+/// visible prompt can name the field independently of its editable value.
 pub struct Input {
     /// Text buffer for the input.
     buffer: InputBuffer,
+    /// Visible, noneditable prefix, separate from the value and semantic label.
+    prompt: String,
     /// Optional semantic label independent of the text value.
     label: Option<String>,
     /// Policy for exposing the value in semantic snapshots.
@@ -177,6 +182,7 @@ impl Input {
     pub fn new(txt: impl Into<String>) -> Self {
         Self {
             buffer: InputBuffer::new(txt),
+            prompt: String::new(),
             label: None,
             value_exposure: ValueExposure::Omit,
         }
@@ -186,6 +192,19 @@ impl Input {
     pub fn with_label(mut self, label: impl Into<String>) -> Self {
         self.label = Some(label.into());
         self
+    }
+
+    /// Add a visible prompt before the editable value, for example `" Glob: "`.
+    /// Its width participates in measurement, scrolling, and cursor placement.
+    /// The input automatically emphasizes the whole row while it holds focus.
+    pub fn with_prompt(mut self, prompt: impl Into<String>) -> Self {
+        self.prompt = single_line(&prompt.into());
+        self
+    }
+
+    /// Display columns reserved before the editable value.
+    fn prompt_width(&self) -> u32 {
+        u32::try_from(text::display_width(&self.prompt)).unwrap_or(u32::MAX)
     }
 
     /// Configure whether semantic snapshots expose this input's value.
@@ -240,7 +259,9 @@ impl Widget for Input {
     fn cursor(&self) -> Option<cursor::Cursor> {
         Some(cursor::Cursor {
             location: Point {
-                x: self.buffer.cursor_display(),
+                x: self
+                    .prompt_width()
+                    .saturating_add(self.buffer.cursor_display()),
                 y: 0,
             },
             shape: cursor::CursorShape::Block,
@@ -255,15 +276,32 @@ impl Widget for Input {
         let view = ctx.view();
         let view_rect = view.view_rect();
         let content_origin = view.content_origin();
-        self.buffer.set_display_width(view_rect.w as usize);
-        let line = Line::new(content_origin.x, content_origin.y, view_rect.w);
+        r.fill(roles::INPUT_BACKGROUND, view.view_rect_local(), ' ')?;
+        if view_rect.h == 0 {
+            return Ok(());
+        }
+        let prompt_width = self.prompt_width().min(view_rect.w);
+        if prompt_width > 0 {
+            r.text(
+                roles::INPUT_PROMPT,
+                Line::new(content_origin.x, content_origin.y, prompt_width),
+                &self.prompt,
+            )?;
+        }
+        let width = view_rect.w.saturating_sub(prompt_width);
+        self.buffer.set_display_width(width as usize);
+        if width == 0 {
+            return Ok(());
+        }
+        let text_x = content_origin.x.saturating_add(prompt_width);
+        let line = Line::new(text_x, content_origin.y, width);
         let content = self.buffer.render_text();
         r.text(roles::INPUT_TEXT, line, &content)?;
-        if ctx.is_focused() && self.buffer.cursor_display() < view_rect.w {
+        if ctx.is_focused() && self.buffer.cursor_display() < width {
             r.restyle(
                 roles::INPUT_CURSOR,
                 Point {
-                    x: content_origin.x + self.buffer.cursor_display(),
+                    x: text_x + self.buffer.cursor_display(),
                     y: content_origin.y,
                 },
             );
@@ -293,7 +331,10 @@ impl Widget for Input {
 
     fn measure(&self, c: MeasureConstraints) -> Measurement {
         // The cell after the text holds the caret at the end of the value.
-        let width = self.buffer.display_width().saturating_add(1);
+        let width = self
+            .prompt_width()
+            .saturating_add(self.buffer.display_width())
+            .saturating_add(1);
         c.clamp(Size::new(width, 1))
     }
 

@@ -1,7 +1,10 @@
 use std::{
     any::TypeId,
     panic::{AssertUnwindSafe, catch_unwind},
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use proptest::{prelude::*, test_runner::TestCaseResult};
@@ -31,6 +34,16 @@ struct FocusableWidget;
 impl Widget for FocusableWidget {
     fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
+    }
+}
+
+struct DynamicFocusWidget {
+    accepts: Arc<AtomicBool>,
+}
+
+impl Widget for DynamicFocusWidget {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+        self.accepts.load(Ordering::Relaxed)
     }
 }
 
@@ -1714,6 +1727,65 @@ fn focus_on_a_node_awaiting_layout_survives_structural_edits() -> Result<()> {
     }
     core.update_layout(Size::new(10, 10))?;
     assert_eq!(core.focus_id(), Some(focused));
+    Ok(())
+}
+
+#[test]
+fn focused_widget_survives_unrelated_visibility_change_during_its_callback() -> Result<()> {
+    let mut core = Core::new();
+    let focused = core.create_detached(FocusableWidget)?;
+    let sibling = core.create_detached(FocusableWidget)?;
+    core.set_children(core.root, vec![focused, sibling])?;
+    core.set_focus(focused)?;
+
+    core.with_widget_dyn_mut(focused, |_widget, core| core.set_hidden(sibling, true))??;
+
+    assert_eq!(core.focus_id(), Some(focused));
+    Ok(())
+}
+
+#[test]
+fn focused_child_survives_nested_parent_callback_visibility_change() -> Result<()> {
+    let mut core = Core::new();
+    let parent = core.create_detached(simple_widget())?;
+    let focused = core.create_detached(FocusableWidget)?;
+    let sibling = core.create_detached(FocusableWidget)?;
+    core.set_children(parent, vec![focused])?;
+    core.set_children(core.root, vec![parent, sibling])?;
+    core.set_focus(focused)?;
+
+    core.with_widget_dyn_mut(focused, |_widget, core| {
+        core.with_widget_dyn_mut(parent, |_widget, core| core.set_hidden(sibling, true))?
+    })??;
+
+    assert_eq!(core.focus_id(), Some(focused));
+    Ok(())
+}
+
+#[test]
+fn hidden_or_refusing_focused_widget_still_recovers_during_callbacks() -> Result<()> {
+    let mut core = Core::new();
+    let accepts = Arc::new(AtomicBool::new(true));
+    let focused = core.create_detached(DynamicFocusWidget {
+        accepts: Arc::clone(&accepts),
+    })?;
+    let sibling = core.create_detached(FocusableWidget)?;
+    core.set_children(core.root, vec![focused, sibling])?;
+    core.set_focus(focused)?;
+
+    core.with_widget_dyn_mut(focused, |_widget, core| core.set_hidden(focused, true))??;
+    assert_eq!(core.focus_id(), Some(sibling));
+
+    core.set_hidden(focused, false)?;
+    core.set_focus(focused)?;
+    core.with_widget_dyn_mut(focused, |_widget, core| {
+        accepts.store(false, Ordering::Relaxed);
+        core.set_hidden(sibling, true)
+    })??;
+    assert_eq!(core.focus_id(), Some(focused));
+
+    core.ensure_invariants(None)?;
+    assert_eq!(core.focus_id(), None);
     Ok(())
 }
 

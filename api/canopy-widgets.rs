@@ -953,6 +953,9 @@ pub mod canopy_widgets {
     pub struct ImageView {}
 
     /// Single-line text input widget.
+    ///
+    /// The whole row changes style with keyboard focus, even when empty. A
+    /// visible prompt can name the field independently of its editable value.
     pub struct Input {}
 
     /// A typed list container for widget items.
@@ -1465,6 +1468,11 @@ pub mod canopy_widgets {
     }
 
     impl Input {
+        /// Add a visible prompt before the editable value, for example `" Glob: "`.
+        /// Its width participates in measurement, scrolling, and cursor placement.
+        /// The input automatically emphasizes the whole row while it holds focus.
+        pub fn with_prompt(self, prompt: impl Into<String>) -> Self {}
+
         /// Configure whether semantic snapshots expose this input's value.
         pub fn with_value_exposure(self, exposure: ValueExposure) -> Self {}
 

@@ -188,7 +188,7 @@ impl Core {
             return Ok(ChangeOutcome::Unchanged);
         };
 
-        if self.is_attached_to_root(focus) && is_focus_candidate(self, focus, require_view) {
+        if self.is_attached_to_root(focus) && can_retain_focus(self, focus, require_view) {
             self.focus_hint = None;
             return Ok(ChangeOutcome::Unchanged);
         }
@@ -421,6 +421,22 @@ fn nearest_focusable_ancestor_with(
 /// Return whether the node is focusable, respecting hidden and view
 /// requirements.
 pub(super) fn is_focus_candidate(core: &Core, node_id: NodeId, require_view: bool) -> bool {
+    is_focus_position_valid(core, node_id, require_view)
+        && widget_access::accepts_focus(core, node_id)
+}
+
+/// Return whether the current focus can remain on this node.
+///
+/// A widget cannot answer `accept_focus` while its callback owns the slot. Its
+/// established focus remains valid until the callback returns and acceptance
+/// can be checked again. Structural and interaction constraints never defer.
+fn can_retain_focus(core: &Core, node_id: NodeId, require_view: bool) -> bool {
+    is_focus_position_valid(core, node_id, require_view)
+        && widget_access::focus_acceptance(core, node_id).unwrap_or(true)
+}
+
+/// Return whether focus may occupy this node apart from widget acceptance.
+fn is_focus_position_valid(core: &Core, node_id: NodeId, require_view: bool) -> bool {
     if !core.interaction_admits(node_id) {
         return false;
     }
@@ -440,7 +456,7 @@ pub(super) fn is_focus_candidate(core: &Core, node_id: NodeId, require_view: boo
     if require_view && node.view.is_empty() {
         return false;
     }
-    widget_access::accepts_focus(core, node_id)
+    true
 }
 
 /// Return the focus sort key for a candidate, or `None` if it is not in `dir`.
