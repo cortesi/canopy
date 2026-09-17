@@ -970,9 +970,10 @@ pub mod canopy_widgets {
 
     /// A centred modal holding a filtered list of items.
     ///
-    /// The widget draws nothing of its own. It centres its frame, pushes the style
-    /// layer its parts paint under, and swallows mouse input that lands on the
-    /// margin around the frame.
+    /// The widget draws nothing of its own. It centres its dialog and swallows
+    /// mouse input that lands on the margin around it. The root is a stack, so an
+    /// overlay a host adds with [`Picker::add_overlay`] draws over the dialog
+    /// within the same margin.
     #[derive(Default)]
     pub struct Picker<T>
     where
@@ -991,8 +992,7 @@ pub mod canopy_widgets {
     ///
     /// The list shows the items its filter passes, one per row, trimmed to the
     /// width it is given. It titles the frame around it with its label and the row
-    /// count, or with a pending delete, and writes the filter into the field below
-    /// it.
+    /// count, and writes the filter into the field below it.
     #[derive(Default)]
     pub struct PickerList<T>
     where
@@ -2010,29 +2010,21 @@ pub mod canopy_widgets {
         /// Return the selected item.
         pub fn selected(&self) -> Option<&T> {}
 
-        #[must_use]
-        /// Return whether a delete waits for confirmation, for automation.
-        pub fn confirming(&self) -> bool {}
-
-        /// Ask for confirmation before deleting the selected item.
-        ///
-        /// An empty list has nothing to delete, so the request is ignored.
-        pub fn request_delete(&mut self, context: &mut dyn Context) -> Result<()> {}
-
         /// Close the filter field and show every item again.
         pub fn clear_filter(&mut self, context: &mut dyn Context) -> Result<()> {}
 
-        /// Drop a pending delete, leaving the item in the list.
-        pub fn cancel_delete(&mut self, context: &mut dyn Context) -> Result<()> {}
-
-        /// Drop the selected item from the list, and stop confirming.
+        /// Drop the selected item from the list.
         ///
-        /// The host removes it from its own storage. The selection stays on the
-        /// row, which now holds the item below, so repeated deletes work without
-        /// moving the hand.
+        /// The host removes it from its own storage, and asks first if it wants
+        /// to. The selection stays on the row, which now holds the item below, so
+        /// repeated removals work without moving the hand.
         pub fn remove_selected(&mut self, context: &mut dyn Context) -> Result<()> {}
 
         /// Move the selection by a signed row count.
+        ///
+        /// The count saturates at both ends, so the smallest and largest values
+        /// select the first and the last item. There is no separate command for
+        /// either end, because it would carry no behaviour of its own.
         /// @param delta Negative values move up; positive values move down.
         pub fn select_by(&mut self, context: &mut dyn Context, delta: i32) -> Result<()> {}
 
@@ -2044,13 +2036,7 @@ pub mod canopy_widgets {
         /// contain it.
         pub fn start_filter(&mut self, context: &mut dyn Context) -> Result<()> {}
 
-        /// Select the first item.
-        pub fn select_first(&mut self, context: &mut dyn Context) -> Result<()> {}
-
-        /// Select the last item.
-        pub fn select_last(&mut self, context: &mut dyn Context) -> Result<()> {}
-
-        /// Show `items` under `label`, dropping any filter and confirmation.
+        /// Show `items` under `label`, dropping any filter.
         pub fn show(
             &mut self,
             context: &mut dyn Context,
@@ -2065,13 +2051,7 @@ pub mod canopy_widgets {
         pub fn set_filter(&mut self, context: &mut dyn Context, text: String) -> Result<()> {}
 
         /// Build a positional call with typed user arguments.
-        pub fn call_cancel_delete() -> canopy::commands::CommandCall {}
-
-        /// Build a positional call with typed user arguments.
         pub fn call_clear_filter() -> canopy::commands::CommandCall {}
-
-        /// Build a positional call with typed user arguments.
-        pub fn call_confirming() -> canopy::commands::CommandCall {}
 
         /// Build a positional call with typed user arguments.
         pub fn call_filter() -> canopy::commands::CommandCall {}
@@ -2080,16 +2060,7 @@ pub mod canopy_widgets {
         pub fn call_page(delta: i32) -> canopy::commands::CommandCall {}
 
         /// Build a positional call with typed user arguments.
-        pub fn call_request_delete() -> canopy::commands::CommandCall {}
-
-        /// Build a positional call with typed user arguments.
         pub fn call_select_by(delta: i32) -> canopy::commands::CommandCall {}
-
-        /// Build a positional call with typed user arguments.
-        pub fn call_select_first() -> canopy::commands::CommandCall {}
-
-        /// Build a positional call with typed user arguments.
-        pub fn call_select_last() -> canopy::commands::CommandCall {}
 
         /// Build a positional call with typed user arguments.
         pub fn call_selected_name() -> canopy::commands::CommandCall {}
@@ -2104,13 +2075,7 @@ pub mod canopy_widgets {
         pub fn call_start_filter() -> canopy::commands::CommandCall {}
 
         /// Return a typed command reference for this command.
-        pub fn cmd_cancel_delete() -> &'static canopy::commands::CommandSpec {}
-
-        /// Return a typed command reference for this command.
         pub fn cmd_clear_filter() -> &'static canopy::commands::CommandSpec {}
-
-        /// Return a typed command reference for this command.
-        pub fn cmd_confirming() -> &'static canopy::commands::CommandSpec {}
 
         /// Return a typed command reference for this command.
         pub fn cmd_filter() -> &'static canopy::commands::CommandSpec {}
@@ -2119,16 +2084,7 @@ pub mod canopy_widgets {
         pub fn cmd_page() -> &'static canopy::commands::CommandSpec {}
 
         /// Return a typed command reference for this command.
-        pub fn cmd_request_delete() -> &'static canopy::commands::CommandSpec {}
-
-        /// Return a typed command reference for this command.
         pub fn cmd_select_by() -> &'static canopy::commands::CommandSpec {}
-
-        /// Return a typed command reference for this command.
-        pub fn cmd_select_first() -> &'static canopy::commands::CommandSpec {}
-
-        /// Return a typed command reference for this command.
-        pub fn cmd_select_last() -> &'static canopy::commands::CommandSpec {}
 
         /// Return a typed command reference for this command.
         pub fn cmd_selected_name() -> &'static canopy::commands::CommandSpec {}
@@ -2266,6 +2222,36 @@ pub mod canopy_widgets {
         /// Build an empty picker.
         pub fn new() -> Self {}
 
+        /// Add `widget` over the dialog, hidden until [`Self::open_overlay`]
+        /// shows it.
+        ///
+        /// The overlay is a child of the picker, which is what lets a scope show
+        /// it while the picker's own scope is open: Canopy nests a scope only
+        /// inside the modal it covers. Add it after the picker has mounted.
+        pub fn add_overlay<W>(&self, context: &mut dyn Context, widget: W) -> Result<TypedId<W>>
+        where
+            W: 'static + Widget, {
+        }
+
+        /// Open `overlay` in a modal scope over the list.
+        ///
+        /// The scope is owned by the picker, so it nests inside the scope that
+        /// shows the picker. It shows the overlay, dims the dialog behind it,
+        /// gives `initial_focus` the keyboard, and admits `bindings`. The list
+        /// keeps its filter and selection, and takes the keyboard back when the
+        /// host closes the scope with the returned token.
+        /// @param overlay A node added with [`Self::add_overlay`].
+        /// @param initial_focus The node inside `overlay` that takes the keyboard.
+        /// @param bindings The bindings the scope admits.
+        pub fn open_overlay(
+            &self,
+            context: &mut dyn Context,
+            overlay: NodeId,
+            initial_focus: NodeId,
+            bindings: ModalBindings,
+        ) -> Result<InteractionToken> {
+        }
+
         /// Return the filter field, or an error before the picker mounts.
         pub fn filter(&self) -> Result<NodeId> {}
 
@@ -2276,8 +2262,7 @@ pub mod canopy_widgets {
         /// Show `items` under `title`, with `placeholder` in place of an empty
         /// list.
         ///
-        /// The filter and any pending confirmation are dropped, so a picker always
-        /// opens on the whole list.
+        /// The filter is dropped, so a picker always opens on the whole list.
         pub fn show(
             &mut self,
             context: &mut dyn Context,
@@ -2299,8 +2284,6 @@ pub mod canopy_widgets {
         fn on_event(&mut self, event: &Event, _context: &mut dyn Context) -> Result<EventOutcome> {}
 
         fn on_mount(&mut self, context: &mut dyn Context) -> Result<()> {}
-
-        fn render(&mut self, render: &mut Render<'_>, _context: &dyn ViewContext) -> Result<()> {}
     }
 
     impl<W: 'static + Selectable, K: 'static + Clone + Eq + Hash + ToArgValue> Widget for List<W, K> {

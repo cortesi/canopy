@@ -5,15 +5,19 @@
 //! The host opens it with Canopy's modal scope, which gives the list the
 //! keyboard and dims the application behind it.
 //!
-//! The widget owns the list, the filter, and the delete confirmation, and
-//! nothing else. It never reads or writes what it shows, so a host can back it
-//! with bookmarks, a history, or anything else that renders as one line.
+//! The widget owns the list and the filter, and nothing else. It never reads
+//! or writes what it shows, so a host can back it with bookmarks, a history, or
+//! anything else that renders as one line. A host that needs more than
+//! choosing, such as a question before a row is removed, adds its own modal
+//! over the dialog with [`Picker::add_overlay`] and opens it with
+//! [`Picker::open_overlay`]: the list keeps its filter and selection under it,
+//! and takes the keyboard back when the overlay closes.
 
 use std::borrow::Cow;
 
 use canopy::{
-    Context, ContextExt, EventOutcome, NodeId, NodeName, Render, RevealAlign, TypedId, ViewContext,
-    Widget, derive_commands,
+    Context, ContextExt, EventOutcome, InteractionToken, ModalBindings, ModalOptions, NodeId,
+    NodeName, Render, RevealAlign, TypedId, ViewContext, Widget, derive_commands,
     error::{Error, Result},
     event::{Event, key::KeyCode},
     geom::{Line, Rect, Size},
@@ -59,13 +63,16 @@ impl Truncate {
 
 /// A centred modal holding a filtered list of items.
 ///
-/// The widget draws nothing of its own. It centres its frame, pushes the style
-/// layer its parts paint under, and swallows mouse input that lands on the
-/// margin around the frame.
+/// The widget draws nothing of its own. It centres its dialog and swallows
+/// mouse input that lands on the margin around it. The root is a stack, so an
+/// overlay a host adds with [`Picker::add_overlay`] draws over the dialog
+/// within the same margin.
 pub struct Picker<T>
 where
     T: Label,
 {
+    /// The framed dialog, once mounted, which an overlay covers and dims.
+    dialog: Option<NodeId>,
     /// The list of items, once mounted. The list titles the frame itself, so
     /// the frame needs no second owner.
     list: Option<TypedId<PickerList<T>>>,
@@ -92,6 +99,7 @@ where
     #[must_use]
     pub fn new() -> Self {
         Self {
+            dialog: None,
             list: None,
             filter: None,
             truncate: Truncate::default(),
@@ -111,8 +119,7 @@ where
     /// Show `items` under `title`, with `placeholder` in place of an empty
     /// list.
     ///
-    /// The filter and any pending confirmation are dropped, so a picker always
-    /// opens on the whole list.
+    /// The filter is dropped, so a picker always opens on the whole list.
     pub fn show(
         &mut self,
         context: &mut dyn Context,
@@ -139,6 +146,50 @@ where
             .ok_or_else(|| Error::NotFound("picker filter".into()))
     }
 
+    /// Add `widget` over the dialog, hidden until [`Self::open_overlay`]
+    /// shows it.
+    ///
+    /// The overlay is a child of the picker, which is what lets a scope show
+    /// it while the picker's own scope is open: Canopy nests a scope only
+    /// inside the modal it covers. Add it after the picker has mounted.
+    pub fn add_overlay<W>(&self, context: &mut dyn Context, widget: W) -> Result<TypedId<W>>
+    where
+        W: Widget + 'static,
+    {
+        let overlay = context.add_child_to(context.node_id(), widget)?;
+        context.set_hidden_of(overlay.into(), true)?;
+        Ok(overlay)
+    }
+
+    /// Open `overlay` in a modal scope over the list.
+    ///
+    /// The scope is owned by the picker, so it nests inside the scope that
+    /// shows the picker. It shows the overlay, dims the dialog behind it,
+    /// gives `initial_focus` the keyboard, and admits `bindings`. The list
+    /// keeps its filter and selection, and takes the keyboard back when the
+    /// host closes the scope with the returned token.
+    /// @param overlay A node added with [`Self::add_overlay`].
+    /// @param initial_focus The node inside `overlay` that takes the keyboard.
+    /// @param bindings The bindings the scope admits.
+    pub fn open_overlay(
+        &self,
+        context: &mut dyn Context,
+        overlay: NodeId,
+        initial_focus: NodeId,
+        bindings: ModalBindings,
+    ) -> Result<InteractionToken> {
+        let dialog = self
+            .dialog
+            .ok_or_else(|| Error::NotFound("picker dialog".into()))?;
+        context.open_modal(ModalOptions {
+            owner: context.node_id(),
+            modal: overlay,
+            initial_focus,
+            dim_target: Some(dialog),
+            bindings,
+        })
+    }
+
     /// Return the typed list, or an error before the picker mounts.
     fn typed_list(&self) -> Result<TypedId<PickerList<T>>> {
         self.list
@@ -151,35 +202,32 @@ where
     T: Label + 'static,
 {
     fn layout(&self) -> Layout {
-        // A stack centres the frame over the dimmed application, and the
-        // margin keeps the view visible around it.
+        // A stack centres the dialog over the dimmed application, with any
+        // overlay over that, and the margin keeps the view visible around
+        // them.
         Layout::fill()
             .direction(Direction::Stack)
             .align_center()
             .padding(Edges::all(FRAME_MARGIN))
     }
 
-    fn render(&mut self, render: &mut Render, _context: &dyn ViewContext) -> Result<()> {
-        render.push_layer("picker");
-        Ok(())
-    }
-
     fn on_mount(&mut self, context: &mut dyn Context) -> Result<()> {
         let root = context.node_id();
-        let frame = context.add_child_to(root, Frame::new())?;
-        // The frame fits its contents rather than filling the view, so a short
-        // list is a small dialog. The margin above caps a long one, which then
-        // nearly fills the view. The width a narrow dialog holds comes from the
-        // list's own measurement, which the view bounds, rather than from a
-        // minimum here that a narrow terminal could not honour.
+        let dialog: NodeId = context.add_child_to(root, PickerDialog)?.into();
+        // The dialog fits its contents rather than filling the view, so a
+        // short list is a small dialog. The margin above caps a long one, which
+        // then nearly fills the view. The width a narrow dialog holds comes
+        // from the list's own measurement, which the view bounds, rather than
+        // from a minimum here that a narrow terminal could not honour.
         context.set_layout_override_of(
-            frame.into(),
+            dialog,
             LayoutOverride {
                 width: Some(Sizing::Measure),
                 height: Some(Sizing::Measure),
                 ..LayoutOverride::new()
             },
         )?;
+        let frame = context.add_child_to(dialog, Frame::new())?;
         // The list and the field are siblings in a column, so the field sits
         // outside whatever the list scrolls. However many items the list holds,
         // the field keeps its row at the bottom of the frame.
@@ -210,6 +258,7 @@ where
             list.truncate = truncate;
             Ok(())
         })?;
+        self.dialog = Some(dialog);
         self.list = Some(list);
         self.filter = Some(field);
         Ok(())
@@ -225,6 +274,28 @@ where
 
     fn name(&self) -> NodeName {
         NodeName::convert("picker")
+    }
+}
+
+/// The framed dialog inside a picker, which carries the picker's style layer.
+///
+/// The layer is pushed here rather than at the picker's root, so an overlay a
+/// host adds beside the dialog is styled as its own widget rather than as a
+/// part of the picker.
+struct PickerDialog;
+
+impl Widget for PickerDialog {
+    fn layout(&self) -> Layout {
+        Layout::fill()
+    }
+
+    fn render(&mut self, render: &mut Render, _context: &dyn ViewContext) -> Result<()> {
+        render.push_layer("picker");
+        Ok(())
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("picker_dialog")
     }
 }
 
@@ -343,8 +414,7 @@ impl Widget for PickerFilter {
 ///
 /// The list shows the items its filter passes, one per row, trimmed to the
 /// width it is given. It titles the frame around it with its label and the row
-/// count, or with a pending delete, and writes the filter into the field below
-/// it.
+/// count, and writes the filter into the field below it.
 pub struct PickerList<T>
 where
     T: Label,
@@ -359,8 +429,6 @@ where
     filter: String,
     /// Whether the field is taking filter text.
     filtering: bool,
-    /// Whether a delete of the selected item waits for confirmation.
-    confirming: bool,
     /// What the frame's title calls this list.
     label: String,
     /// Text shown in place of an empty list.
@@ -389,7 +457,6 @@ where
             selected: None,
             filter: String::new(),
             filtering: false,
-            confirming: false,
             label: String::new(),
             placeholder: "",
             frame: None,
@@ -400,11 +467,13 @@ where
     }
 
     /// Move the selection by a signed row count.
+    ///
+    /// The count saturates at both ends, so the smallest and largest values
+    /// select the first and the last item. There is no separate command for
+    /// either end, because it would carry no behaviour of its own.
     /// @param delta Negative values move up; positive values move down.
     #[command]
     pub fn select_by(&mut self, context: &mut dyn Context, delta: i32) -> Result<()> {
-        // Moving off the row abandons a delete that was waiting for an answer.
-        self.confirming = false;
         if self.shown.is_empty() {
             self.selected = None;
             return self.refresh(context);
@@ -424,24 +493,11 @@ where
         self.select_by(context, delta.saturating_mul(page))
     }
 
-    /// Select the first item.
-    #[command]
-    pub fn select_first(&mut self, context: &mut dyn Context) -> Result<()> {
-        self.select_by(context, i32::MIN)
-    }
-
-    /// Select the last item.
-    #[command]
-    pub fn select_last(&mut self, context: &mut dyn Context) -> Result<()> {
-        self.select_by(context, i32::MAX)
-    }
-
     /// Open the filter field. Typed text narrows the list to the items that
     /// contain it.
     #[command]
     pub fn start_filter(&mut self, context: &mut dyn Context) -> Result<()> {
         self.filtering = true;
-        self.confirming = false;
         self.republish(context)
     }
 
@@ -462,22 +518,6 @@ where
             return self.republish(context);
         }
         self.set_filter(context, String::new())
-    }
-
-    /// Ask for confirmation before deleting the selected item.
-    ///
-    /// An empty list has nothing to delete, so the request is ignored.
-    #[command]
-    pub fn request_delete(&mut self, context: &mut dyn Context) -> Result<()> {
-        self.confirming = self.selected.is_some();
-        self.republish(context)
-    }
-
-    /// Drop a pending delete, leaving the item in the list.
-    #[command]
-    pub fn cancel_delete(&mut self, context: &mut dyn Context) -> Result<()> {
-        self.confirming = false;
-        self.republish(context)
     }
 
     /// Return the selected item's label, for automation.
@@ -505,14 +545,7 @@ where
         self.filter.clone()
     }
 
-    /// Return whether a delete waits for confirmation, for automation.
-    #[command]
-    #[must_use]
-    pub fn confirming(&self) -> bool {
-        self.confirming
-    }
-
-    /// Show `items` under `label`, dropping any filter and confirmation.
+    /// Show `items` under `label`, dropping any filter.
     pub fn show(
         &mut self,
         context: &mut dyn Context,
@@ -525,7 +558,6 @@ where
         self.placeholder = placeholder;
         self.filter.clear();
         self.filtering = false;
-        self.confirming = false;
         self.apply_filter();
         // The list is new, so it opens at its first row rather than wherever
         // the last one was left.
@@ -542,13 +574,12 @@ where
             .and_then(|&item| self.items.get(item))
     }
 
-    /// Drop the selected item from the list, and stop confirming.
+    /// Drop the selected item from the list.
     ///
-    /// The host removes it from its own storage. The selection stays on the
-    /// row, which now holds the item below, so repeated deletes work without
-    /// moving the hand.
+    /// The host removes it from its own storage, and asks first if it wants
+    /// to. The selection stays on the row, which now holds the item below, so
+    /// repeated removals work without moving the hand.
     pub fn remove_selected(&mut self, context: &mut dyn Context) -> Result<()> {
-        self.confirming = false;
         let Some(&item) = self.selected.and_then(|row| self.shown.get(row)) else {
             return self.republish(context);
         };
@@ -627,21 +658,10 @@ where
         })
     }
 
-    /// Return the title the frame shows: a pending delete, or the label and
-    /// the row count.
+    /// Return the title the frame shows: the label and the row count.
     ///
     /// The filter is not named here, because the field below the list shows it.
     fn title(&self) -> String {
-        if self.confirming {
-            // The question names the item rather than repeating its whole
-            // label, so it stays short enough for the frame at any width. The
-            // highlighted row carries the label itself.
-            let name = self
-                .selected()
-                .map(|item| short_name(item.label()))
-                .unwrap_or_default();
-            return format!("delete {name}? y/n");
-        }
         if self.filter.is_empty() {
             return format!("{} · {}", self.label, self.items.len());
         }
@@ -693,15 +713,6 @@ where
     fn rows(&self) -> u32 {
         u32::try_from(self.shown.len().max(1)).unwrap_or(u32::MAX)
     }
-}
-
-/// Return the part of `label` that names one item, for a short question.
-fn short_name(label: &str) -> String {
-    label
-        .rsplit(['/', '\\'])
-        .find(|part| !part.is_empty())
-        .unwrap_or(label)
-        .to_string()
 }
 
 impl<T> Default for PickerList<T>
@@ -791,6 +802,7 @@ mod tests {
     use canopy::{Loader, geom::Size, testing::harness::Harness};
 
     use super::*;
+    use crate::Confirm;
 
     impl Loader for Picker<String> {}
 
@@ -901,7 +913,9 @@ mod tests {
             "/a",
             "moving up stops at the first row"
         );
-        on_list(&mut harness, |list, context| list.select_last(context))?;
+        on_list(&mut harness, |list, context| {
+            list.select_by(context, i32::MAX)
+        })?;
         assert_eq!(from_list(&mut harness, PickerList::selected_name), "/c");
         on_list(&mut harness, |list, context| list.select_by(context, 9))?;
         assert_eq!(
@@ -1094,9 +1108,11 @@ mod tests {
 
             for step in ["top", "bottom", "middle"] {
                 match step {
-                    "bottom" => on_list(&mut harness, PickerList::select_last)?,
+                    "bottom" => on_list(&mut harness, |list, context| {
+                        list.select_by(context, i32::MAX)
+                    })?,
                     "middle" => on_list(&mut harness, |list, context| {
-                        list.select_first(context)?;
+                        list.select_by(context, i32::MIN)?;
                         list.select_by(context, 2500)
                     })?,
                     _ => {}
@@ -1134,24 +1150,10 @@ mod tests {
     }
 
     #[test]
-    fn a_delete_waits_for_confirmation_and_keeps_the_row() -> Result<()> {
+    fn removing_the_selected_row_keeps_the_selection_in_place() -> Result<()> {
         let mut harness = picker(&["/a", "/b", "/c"], 40, 12)?;
         on_list(&mut harness, |list, context| list.select_by(context, 1))?;
-        on_list(&mut harness, PickerList::request_delete)?;
-        assert!(from_list(&mut harness, PickerList::confirming));
-        assert!(
-            harness.tbuf().contains_text("delete b?"),
-            "the title asks before deleting"
-        );
-
-        // Moving off the row abandons the question.
-        on_list(&mut harness, |list, context| list.select_by(context, 1))?;
-        assert!(!from_list(&mut harness, PickerList::confirming));
-
-        on_list(&mut harness, |list, context| list.select_by(context, -1))?;
-        on_list(&mut harness, PickerList::request_delete)?;
         on_list(&mut harness, PickerList::remove_selected)?;
-        assert!(!from_list(&mut harness, PickerList::confirming));
         assert_eq!(from_list(&mut harness, PickerList::shown_count), 2);
         assert_eq!(
             from_list(&mut harness, PickerList::selected_name),
@@ -1166,7 +1168,98 @@ mod tests {
         assert_eq!(
             from_list(&mut harness, PickerList::shown_count),
             0,
-            "deleting from an empty list does nothing"
+            "removing from an empty list does nothing"
+        );
+        Ok(())
+    }
+
+    /// Return the node holding the keyboard.
+    fn focused(harness: &Harness) -> Option<NodeId> {
+        harness
+            .canopy
+            .with_root_view(|context| context.focused_node())
+    }
+
+    #[test]
+    fn an_overlay_opens_over_the_list_and_gives_it_back_on_close() -> Result<()> {
+        // Enough rows that the dialog stands taller than the overlay, so its
+        // title shows above the question.
+        let items: Vec<String> = (0..8).map(|row| format!("/tmp/entry-{row}")).collect();
+        let borrowed: Vec<&str> = items.iter().map(String::as_str).collect();
+        let mut harness = picker(&borrowed, 40, 12)?;
+        let (overlay, focus) =
+            harness.with_root_context(|picker: &mut Picker<String>, context| {
+                let overlay = picker.add_overlay(context, Confirm::new())?;
+                let focus =
+                    context.with_widget_mut(overlay, |confirm: &mut Confirm, context| {
+                        confirm.ask(context, "Delete", "/tmp/entry-1")?;
+                        // An answer takes focus only once it has something to
+                        // run, as it would in a host.
+                        confirm.set_actions(
+                            context,
+                            PickerList::<String>::call_clear_filter(),
+                            PickerList::<String>::call_clear_filter(),
+                        )?;
+                        confirm.initial_focus()
+                    })?;
+                Ok((overlay, focus))
+            })?;
+        harness.render()?;
+        assert!(
+            !harness.tbuf().contains_text("Delete"),
+            "an overlay waits hidden"
+        );
+
+        on_list(&mut harness, |list, context| {
+            list.set_filter(context, "entry".into())?;
+            list.select_by(context, 1)
+        })?;
+        let list = harness.with_root_context(|picker: &mut Picker<String>, _| picker.list())?;
+        harness.canopy.with_root_context(|context| {
+            context.set_focus(list)?;
+            Ok(())
+        })?;
+
+        let token = harness.with_root_context(|picker: &mut Picker<String>, context| {
+            picker.open_overlay(context, overlay.into(), focus, ModalBindings::Application)
+        })?;
+        harness.render()?;
+        assert!(
+            harness.tbuf().contains_text("Delete"),
+            "the overlay shows over the list"
+        );
+        assert!(
+            harness.tbuf().contains_text("Bookmarks"),
+            "the dialog stays under the overlay"
+        );
+        assert_eq!(
+            focused(&harness),
+            Some(focus),
+            "the overlay takes the keyboard"
+        );
+
+        harness
+            .canopy
+            .with_root_context(|context| context.close_modal(token))?;
+        harness.render()?;
+        assert!(
+            !harness.tbuf().contains_text("Delete"),
+            "closing hides the overlay"
+        );
+        assert_eq!(
+            focused(&harness),
+            Some(list),
+            "the list takes the keyboard back"
+        );
+        assert_eq!(
+            from_list(&mut harness, PickerList::filter),
+            "entry",
+            "the filter survives the overlay"
+        );
+        assert_eq!(
+            from_list(&mut harness, PickerList::selected_name),
+            "/tmp/entry-1",
+            "the selection survives the overlay"
         );
         Ok(())
     }
@@ -1178,7 +1271,9 @@ mod tests {
         let mut harness = picker(&borrowed, 40, 12)?;
         assert!(harness.tbuf().contains_text("/tmp/entry-00"));
 
-        on_list(&mut harness, PickerList::select_last)?;
+        on_list(&mut harness, |list, context| {
+            list.select_by(context, i32::MAX)
+        })?;
         assert!(
             harness.tbuf().contains_text("/tmp/entry-39"),
             "the last row scrolls into view"
@@ -1188,7 +1283,9 @@ mod tests {
             "the first row scrolls away"
         );
 
-        on_list(&mut harness, PickerList::select_first)?;
+        on_list(&mut harness, |list, context| {
+            list.select_by(context, i32::MIN)
+        })?;
         assert!(
             harness.tbuf().contains_text("/tmp/entry-00"),
             "the list scrolls back"
