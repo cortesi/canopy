@@ -10,7 +10,7 @@ use canopy::{
     event::key::{Empty, Key, KeyCode},
     geom::{Line, Size},
     help::{AvailableBinding, BindingSnapshot},
-    layout::{CanvasContext, Layout, MeasureOverflow},
+    layout::{CanvasContext, Constraint, Layout, MeasureConstraints, MeasureOverflow, Measurement},
 };
 use unicode_width::UnicodeWidthStr;
 
@@ -113,6 +113,18 @@ impl Widget for BindingList {
 
     fn layout(&self) -> Layout {
         Layout::fill().overflow_y(MeasureOverflow::Unbounded)
+    }
+
+    fn measure(&self, constraints: MeasureConstraints) -> Measurement {
+        let rows = self.snapshot.as_ref().map_or_else(Vec::new, snapshot_rows);
+        let natural = u32::try_from(natural_width(&rows)).unwrap_or(u32::MAX);
+        let width = match constraints.width {
+            Constraint::Exact(width) => width,
+            Constraint::AtMost(width) => natural.min(width),
+            Constraint::Unbounded => natural,
+        };
+        let lines = display_lines(&rows, width).len();
+        constraints.clamp(Size::new(width, u32::try_from(lines).unwrap_or(u32::MAX)))
     }
 
     fn canvas(&self, view: Size, _context: &CanvasContext) -> Size {
@@ -234,6 +246,9 @@ pub(super) fn natural_width(rows: &[BindingRow]) -> usize {
     keys + 2 + description
 }
 
+/// Separator between keys that share one action.
+const KEY_SEPARATOR: &str = ", ";
+
 /// Render one display line from column `x` of row `y`, within `width` cells.
 pub(super) fn render_line(
     render: &mut Render,
@@ -245,14 +260,42 @@ pub(super) fn render_line(
     let Some(key) = &line.key else {
         return render.text(line.style, Line::new(x, y, width), &line.text);
     };
-    let key_width = text_width(key) as u32;
-    render.text("help/key", Line::new(x, y, key_width.min(width)), key)?;
+    let key_width = u32::try_from(text_width(key)).unwrap_or(u32::MAX);
+    render_keys(render, key, x, y, width)?;
     let start = key_width.saturating_add(2).min(width);
     render.text(
         line.style,
         Line::new(x + start, y, width.saturating_sub(start)),
         &line.text,
     )
+}
+
+/// Render a packed key row, drawing the separators apart from the keys.
+fn render_keys(render: &mut Render, key: &str, x: u32, y: u32, width: u32) -> Result<()> {
+    let limit = x.saturating_add(width);
+    let mut cursor = x;
+    for (index, piece) in key.split(KEY_SEPARATOR).enumerate() {
+        if index > 0 {
+            let separator = u32::try_from(text_width(KEY_SEPARATOR)).unwrap_or(u32::MAX);
+            render.text(
+                "help/key/separator",
+                Line::new(cursor, y, separator.min(limit.saturating_sub(cursor))),
+                KEY_SEPARATOR,
+            )?;
+            cursor = cursor.saturating_add(separator);
+        }
+        let piece_width = u32::try_from(text_width(piece)).unwrap_or(u32::MAX);
+        render.text(
+            "help/key",
+            Line::new(cursor, y, piece_width.min(limit.saturating_sub(cursor))),
+            piece,
+        )?;
+        cursor = cursor.saturating_add(piece_width);
+        if cursor >= limit {
+            break;
+        }
+    }
+    Ok(())
 }
 
 /// Merge bindings that show the same action into groups, ordered by their
@@ -280,14 +323,13 @@ fn binding_groups(rows: &[BindingRow]) -> Vec<BindingGroup> {
 /// Pack key labels into rows no wider than [`KEY_ROW_WIDTH`], with at least one
 /// label on each row.
 ///
-/// A space separates keys. No key label contains one, so the split is never
-/// ambiguous.
+/// A comma and a space separate keys, matching the help footer's guides.
 fn key_rows(keys: &[String]) -> Vec<String> {
     let mut rows: Vec<String> = Vec::new();
     for key in keys {
         match rows.last_mut() {
-            Some(row) if text_width(row) + 1 + text_width(key) <= KEY_ROW_WIDTH => {
-                row.push(' ');
+            Some(row) if text_width(row) + 2 + text_width(key) <= KEY_ROW_WIDTH => {
+                row.push_str(", ");
                 row.push_str(key);
             }
             _ => rows.push(key.clone()),
@@ -296,7 +338,8 @@ fn key_rows(keys: &[String]) -> Vec<String> {
     rows
 }
 
-/// Return the label help shows for `key`, with arrow keys drawn as arrows.
+/// Return the label help shows for `key`: named keys lowercased, arrows drawn
+/// as arrows, and the page keys shortened.
 ///
 /// Arrows are ambiguous-width characters, and many terminal fonts draw them
 /// wider than their one cell. Each arrow keeps a blank cell after it for the
@@ -307,12 +350,17 @@ fn key_label(key: Key) -> String {
         KeyCode::Right => "→ ".to_string(),
         KeyCode::Up => "↑ ".to_string(),
         KeyCode::Down => "↓ ".to_string(),
-        code => code.to_string(),
+        KeyCode::PageDown => "pgdown".to_string(),
+        KeyCode::PageUp => "pgup".to_string(),
+        KeyCode::Char(' ') => "space".to_string(),
+        // Literal keys keep their case, which distinguishes them.
+        KeyCode::Char(character) => character.to_string(),
+        code => code.to_string().to_ascii_lowercase(),
     };
     if key.mods == Empty {
         code
     } else {
-        format!("{}+{code}", key.mods)
+        format!("{}+{code}", key.mods.to_string().to_ascii_lowercase())
     }
 }
 

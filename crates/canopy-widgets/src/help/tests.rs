@@ -12,6 +12,7 @@ use canopy::{
     help::{AvailableBinding, BindingCommand, BindingSnapshot},
     layout::Layout,
     path::Path,
+    style::canopy::{HIGHLIGHT, TEXT},
     testing::harness::Harness,
 };
 
@@ -145,7 +146,7 @@ fn mouse_rows_follow_the_keys_and_share_an_action_with_them() {
     assert_eq!(
         rows,
         [
-            ("a LeftDown", "Activate"),
+            ("a, LeftDown", "Activate"),
             ("z", "Something else"),
             ("ScrollUp", "Scroll up"),
         ],
@@ -205,7 +206,7 @@ fn rows_sort_by_key_category_without_routing_details() {
         .iter()
         .filter_map(|line| line.key.as_deref().map(str::trim))
         .collect::<Vec<_>>();
-    assert_eq!(keys, ["a", "z", "B", "2", "↓", "Ctrl+a"]);
+    assert_eq!(keys, ["a", "z", "B", "2", "↓", "ctrl+a"]);
     assert_eq!(lines.len(), 6);
 }
 
@@ -218,7 +219,7 @@ fn narrow_and_long_rows_use_indented_wrapped_continuations() {
         BindingPhase::BeforeWidget,
     )]);
     let lines = list.display_lines(12);
-    assert_eq!(lines[0].text, "Ctrl+Shift+x");
+    assert_eq!(lines[0].text, "ctrl+shift+x");
     assert!(lines[1].text.starts_with("  "));
     assert!(lines.len() > 3);
     assert!(lines.iter().all(|line| line.key.is_none()));
@@ -283,7 +284,7 @@ fn narrow_long_buffer_wraps_to_exact_rows() -> Result<()> {
     )?;
     narrow
         .tbuf()
-        .assert_matches(buf!["Ctrl+Shift+x" "  Long text" "  wraps here" ""]);
+        .assert_matches(buf!["ctrl+shift+x" "  Long text" "  wraps here" ""]);
     Ok(())
 }
 
@@ -397,30 +398,29 @@ fn a_scrolling_list_wraps_actions_across_its_full_width() -> Result<()> {
 }
 
 #[test]
-fn footer_groups_navigation_and_keeps_close_guide_visible() -> Result<()> {
+fn the_footer_names_the_close_key() -> Result<()> {
     let mut wide = Harness::builder(ControlFooter::new()).size(70, 1).build()?;
     wide.render()?;
-    assert!(wide.tbuf().contains_text("↑/↓ Scroll"));
-    assert!(wide.tbuf().contains_text("PgUp/PgDn Page"));
-    assert!(wide.tbuf().contains_text("Home/End First/last"));
-    assert!(wide.tbuf().contains_text("Esc Close"));
+    let line = wide.tbuf().lines()[0].clone();
+    assert!(
+        line.ends_with("esc: close"),
+        "the close guide keeps the right edge, got {line:?}"
+    );
     let key_style = wide
         .buf()
-        .get(Point { x: 0, y: 0 })
-        .expect("first footer key")
+        .get(Point { x: 60, y: 0 })
+        .expect("the close key")
         .style;
     let label_style = wide
         .buf()
-        .get(Point { x: 5, y: 0 })
-        .expect("first footer label")
+        .get(Point { x: 63, y: 0 })
+        .expect("the close label")
         .style;
     assert!(key_style.attrs.bold);
     assert!(!label_style.attrs.bold);
     assert_ne!(key_style.fg, label_style.fg);
-
-    let mut narrow = Harness::builder(ControlFooter::new()).size(20, 1).build()?;
-    narrow.render()?;
-    narrow.tbuf().assert_matches(buf!["           Esc Close"]);
+    // The guide bar takes the element ground, apart from the panel behind it.
+    assert_eq!(key_style.bg, HIGHLIGHT);
     for x in 0..70 {
         assert_eq!(
             wide.buf().get(Point { x, y: 0 }).unwrap().style.bg,
@@ -428,6 +428,36 @@ fn footer_groups_navigation_and_keeps_close_guide_visible() -> Result<()> {
             "footer background must cover gaps at column {x}"
         );
     }
+
+    let mut narrow = Harness::builder(ControlFooter::new()).size(20, 1).build()?;
+    narrow.render()?;
+    narrow.tbuf().assert_matches(buf!["          esc: close"]);
+    Ok(())
+}
+
+#[test]
+fn separators_read_apart_from_the_keys() -> Result<()> {
+    let harness = harness_with(
+        30,
+        3,
+        vec![
+            binding(1, 'a', "Action", BindingPhase::BeforeWidget),
+            binding(2, 'b', "Action", BindingPhase::BeforeWidget),
+        ],
+    )?;
+    let cell = |x: u32| {
+        harness
+            .buf()
+            .get(Point { x, y: 0 })
+            .expect("the key row")
+            .style
+    };
+    let key = cell(0);
+    let separator = cell(1);
+    assert!(key.attrs.bold);
+    assert!(!separator.attrs.bold);
+    assert_eq!(separator.fg, TEXT);
+    assert_ne!(key.fg, separator.fg, "the comma is not a key");
     Ok(())
 }
 
@@ -489,7 +519,7 @@ fn bindings_with_one_action_share_a_row() {
     assert_eq!(
         rows(&list, 60),
         [
-            (Some("j ↓".to_string()), "Next entry".to_string()),
+            (Some("j, ↓".to_string()), "Next entry".to_string()),
             (Some("k".to_string()), "Previous entry".to_string()),
         ]
     );
@@ -511,8 +541,8 @@ fn long_key_runs_continue_on_rows_below_the_action() {
     assert_eq!(
         rows(&list, 60),
         [
-            (Some("PageDown Space".to_string()), "Page down".to_string()),
-            (Some("Shift+PageDown".to_string()), String::new()),
+            (Some("pgdown, space".to_string()), "Page down".to_string()),
+            (Some("shift+pgdown".to_string()), String::new()),
         ]
     );
 }
@@ -537,7 +567,7 @@ fn arrow_keys_show_as_single_arrows() {
         .into_iter()
         .filter_map(|(key, _)| key)
         .collect::<Vec<_>>();
-    assert_eq!(keys, ["←", "Ctrl+→"]);
+    assert_eq!(keys, ["←", "ctrl+→"]);
 }
 
 #[test]
@@ -549,7 +579,7 @@ fn arrows_keep_a_blank_cell_for_glyphs_wider_than_one() {
         binding(3, '[', "Previous tab", BindingPhase::BeforeWidget),
     ]);
     let lines = list.display_lines(60);
-    assert_eq!(lines[0].key.as_deref(), Some("h ←  ["));
+    assert_eq!(lines[0].key.as_deref(), Some("h, ← , ["));
 }
 
 #[test]

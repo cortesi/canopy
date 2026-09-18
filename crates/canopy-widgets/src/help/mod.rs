@@ -12,7 +12,7 @@ use canopy::{
     TypedId, ViewContext, Widget, derive_commands,
     error::{Error, Result},
     event::Event,
-    layout::{Align, Direction, Edges, Layout},
+    layout::{Align, Direction, Edges, Layout, Sizing},
 };
 pub use mode::ModeHelp;
 use panel::{ControlFooter, HelpPanel};
@@ -45,20 +45,24 @@ impl Help {
         let frame = context.create_detached(Frame::new().with_title("Keyboard shortcuts"))?;
         context.attach_slot(frame.into(), PanelSlot::KEY, panel.into())?;
         context.with_layout_of(frame.into(), &mut |layout| {
+            // The frame hugs its rows, so the list scrolls only once the
+            // content outgrows the room the overlay leaves.
             *layout = Layout::fill()
+                .height(Sizing::Measure)
                 .max_width(72)
-                .max_height(28)
                 .padding(Edges::all(1));
         })?;
 
         let modal = context.create_detached(Center::new())?;
         context.attach_slot(modal.into(), FrameSlot::KEY, frame.into())?;
         context.with_layout_of(modal.into(), &mut |layout| {
+            // Two rows above and below keep the frame clear of the screen
+            // edges, so a tall modal never fills the window.
             *layout = Layout::fill()
                 .direction(Direction::Stack)
                 .align_horizontal(Align::Center)
                 .align_vertical(Align::Center)
-                .padding(Edges::all(1));
+                .padding(Edges::symmetric(2, 1));
         })?;
 
         let help = context.create_detached(Self)?;

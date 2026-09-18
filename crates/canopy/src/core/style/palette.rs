@@ -166,21 +166,38 @@ pub fn theme(p: &Palette) -> StyleMap {
             ],
             StyleBuilder::new().bg(p.panel_bg),
         )
-        .style_all(
-            &["/help/key", "/help/footer/key"],
+        .style(
+            "/help/key",
             StyleBuilder::new()
                 .fg(p.key)
                 .bg(p.panel_bg)
                 .attrs(AttrSet::new(Attr::Bold)),
         )
+        // The comma between keys reads as punctuation, not as part of a key.
+        // The empty attribute set stops it inheriting the key's bold.
+        .style(
+            "/help/key/separator",
+            StyleBuilder::new()
+                .fg(p.fg)
+                .bg(p.panel_bg)
+                .attrs(AttrSet::default()),
+        )
         .style_all(
-            &[
-                "/help/label",
-                "/help/fallback",
-                "/help/footer",
-                "/help/footer/label",
-            ],
+            &["/help/label", "/help/fallback"],
             StyleBuilder::new().fg(p.muted_fg).bg(p.panel_bg),
+        )
+        // The guide bar is a raised element on the panel, so it takes the
+        // element ground and reads as its own row.
+        .style_all(
+            &["/help/footer", "/help/footer/label"],
+            StyleBuilder::new().fg(p.muted_fg).bg(p.element_bg),
+        )
+        .style(
+            "/help/footer/key",
+            StyleBuilder::new()
+                .fg(p.key)
+                .bg(p.element_bg)
+                .attrs(AttrSet::new(Attr::Bold)),
         )
         .style(
             "/help/indicator",

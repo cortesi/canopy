@@ -19,9 +19,11 @@ impl HelpPanel {
 
 impl Widget for HelpPanel {
     fn layout(&self) -> Layout {
+        // The list starts at the frame's top edge and the footer ends at its
+        // bottom edge, so only the sides keep a margin.
         Layout::fill()
             .direction(Direction::Column)
-            .padding(Edges::all(1))
+            .padding(Edges::symmetric(0, 1))
     }
 
     fn render(&mut self, render: &mut Render, context: &dyn ViewContext) -> Result<()> {
@@ -37,16 +39,9 @@ impl Widget for HelpPanel {
 pub struct ControlFooter;
 
 impl ControlFooter {
-    /// Navigation key groups shown from left to right when space permits.
-    const NAVIGATION: [(&'static str, &'static str); 3] = [
-        ("↑/↓", " Scroll"),
-        ("PgUp/PgDn", " Page"),
-        ("Home/End", " First/last"),
-    ];
-    /// Close key, kept visible when navigation groups do not fit.
-    const CLOSE: (&'static str, &'static str) = ("Esc", " Close");
-    /// Space between adjacent guide groups.
-    const GAP: &'static str = "  ";
+    /// Close key and what it does. Every other guide only repeats a control
+    /// the list above already names, so the bar carries this one alone.
+    const CLOSE: (&'static str, &'static str) = ("esc", ": close");
 
     /// Construct the control footer.
     pub(crate) const fn new() -> Self {
@@ -63,17 +58,6 @@ impl ControlFooter {
         Self::text_width(group.0) + Self::text_width(group.1)
     }
 
-    /// Return the width required to show every guide group.
-    fn preferred_width() -> u32 {
-        Self::NAVIGATION
-            .iter()
-            .copied()
-            .map(Self::group_width)
-            .sum::<u32>()
-            + Self::text_width(Self::GAP) * Self::NAVIGATION.len() as u32
-            + Self::group_width(Self::CLOSE)
-    }
-
     /// Render one styled text fragment and advance the cursor.
     fn render_text(
         render: &mut Render,
@@ -87,12 +71,6 @@ impl ControlFooter {
         *x += width;
         Ok(())
     }
-
-    /// Render one key and action group with their respective styles.
-    fn render_group(render: &mut Render, group: (&str, &str), x: &mut u32, y: u32) -> Result<()> {
-        Self::render_text(render, "help/footer/key", group.0, x, y)?;
-        Self::render_text(render, "help/footer/label", group.1, x, y)
-    }
 }
 
 impl Widget for ControlFooter {
@@ -103,9 +81,9 @@ impl Widget for ControlFooter {
     fn measure(&self, constraints: MeasureConstraints) -> Measurement {
         let width = match constraints.width {
             Constraint::Exact(width) | Constraint::AtMost(width) => width,
-            Constraint::Unbounded => Self::preferred_width(),
+            Constraint::Unbounded => Self::group_width(Self::CLOSE),
         };
-        constraints.clamp(Size::new(width, 2))
+        constraints.clamp(Size::new(width, 1))
     }
 
     fn render(&mut self, render: &mut Render, context: &dyn ViewContext) -> Result<()> {
@@ -116,24 +94,10 @@ impl Widget for ControlFooter {
 
         render.fill("help/footer", rect, ' ')?;
         let y = rect.h - 1;
-
-        let close_width = Self::group_width(Self::CLOSE);
-        let close_x = rect.w.saturating_sub(close_width);
-        let navigation_limit = close_x.saturating_sub(Self::text_width(Self::GAP));
-        let mut x = 0;
-        for (index, group) in Self::NAVIGATION.iter().copied().enumerate() {
-            let gap_width = u32::from(index > 0) * Self::text_width(Self::GAP);
-            if x + gap_width + Self::group_width(group) > navigation_limit {
-                break;
-            }
-            if index > 0 {
-                Self::render_text(render, "help/footer", Self::GAP, &mut x, y)?;
-            }
-            Self::render_group(render, group, &mut x, y)?;
-        }
-
-        let mut close_x = close_x;
-        Self::render_group(render, Self::CLOSE, &mut close_x, y)?;
+        let (key, label) = Self::CLOSE;
+        let mut x = rect.w.saturating_sub(Self::group_width(Self::CLOSE));
+        Self::render_text(render, "help/footer/key", key, &mut x, y)?;
+        Self::render_text(render, "help/footer/label", label, &mut x, y)?;
         Ok(())
     }
 

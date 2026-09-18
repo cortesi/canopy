@@ -353,7 +353,7 @@ fn sync_mode_help(context: &mut dyn Context) -> Result<()> {
 
 /// Register the Root-owned controls admitted by the help modal.
 fn register_help_bindings(canopy: &mut Canopy) -> Result<()> {
-    let bindings: [(&str, &str, CommandCall); 13] = [
+    let bindings: [(&str, &str, CommandCall); 14] = [
         ("Up", "Scroll up", BindingList::call_scroll_up()),
         ("k", "Scroll up", BindingList::call_scroll_up()),
         ("Down", "Scroll down", BindingList::call_scroll_down()),
@@ -367,6 +367,7 @@ fn register_help_bindings(canopy: &mut Canopy) -> Result<()> {
         ("G", "Last binding", BindingList::call_scroll_to_bottom()),
         ("Esc", "Close help", Root::call_hide_help()),
         ("?", "Close help", Root::call_toggle_help()),
+        ("Ctrl+g", "Close help", Root::call_toggle_help()),
     ];
     for (key, description, command) in bindings {
         canopy.bind_framework(
@@ -932,6 +933,20 @@ mod tests {
             canopy.send_key("?")
             "#,
         )
+    }
+
+    #[test]
+    fn ctrl_g_closes_help() -> Result<()> {
+        let (mut canopy, _backend, _left, _right) = setup_root_tree()?;
+        install_help_trigger(&mut canopy)?;
+        send_key(&mut canopy, "?")?;
+        assert_eq!(
+            canopy.available_bindings(None)?.exclusive_group,
+            Some(HELP_BINDINGS)
+        );
+        send_key(&mut canopy, "ctrl-g")?;
+        assert_eq!(canopy.available_bindings(None)?.exclusive_group, None);
+        Ok(())
     }
 
     #[test]
