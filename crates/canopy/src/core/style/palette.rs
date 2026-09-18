@@ -140,6 +140,11 @@ pub fn theme(p: &Palette) -> StyleMap {
             "/editor/search/match",
             StyleBuilder::new().fg(p.bg).bg(p.yellow),
         )
+        // Scrollbar marks reuse the match color as a foreground: a mark
+        // under the thumb keeps its style but takes the thumb glyph, and a
+        // block thumb glyph hides the background, so the text style's dark
+        // foreground would turn the mark dark just when it slides under.
+        .fg("/editor/search/mark", p.yellow)
         .style(
             "/editor/search/current",
             StyleBuilder::new().fg(p.bg).bg(p.orange),

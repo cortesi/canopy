@@ -3170,6 +3170,43 @@ pub mod canopy {
         TrustedLocal,
     }
 
+    /// The axis a scrollbar measures.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum ScrollAxis {
+        /// Rows, with a track that runs top to bottom.
+        Vertical,
+        /// Columns, with a track that runs left to right.
+        Horizontal,
+    }
+
+    /// A position indicator drawn on a scrollbar track.
+    ///
+    /// `start` and `end` bound a half-open region of canvas cells, counted from
+    /// the start of the target's canvas along the scrollbar's axis, so a mark
+    /// can cover one row or a whole multi-line match. The scrollbar maps the
+    /// region onto its track the same proportional way it places the thumb, so
+    /// a mark sits beside the content it annotates; every nonempty region owns
+    /// at least one track cell, and an empty region draws nothing. Each covered
+    /// cell outside the thumb draws with `style` and `glyph`; each cell under
+    /// the thumb keeps the thumb's glyph and the mark's style, so the position
+    /// reads through in the mark's color.
+    ///
+    /// The mark color must read from the style's foreground. Block thumb glyphs
+    /// hide the background, so a text-highlight style with a dark foreground
+    /// turns the mark dark just when the thumb slides over it; give marks a
+    /// style whose foreground is the mark color instead.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct ScrollMark {
+        /// First canvas cell of the marked region.
+        pub start: u32,
+        /// One past the last canvas cell of the marked region.
+        pub end: u32,
+        /// Style path of the mark.
+        pub style: &'static str,
+        /// Glyph of the mark where it sits outside the thumb.
+        pub glyph: char,
+    }
+
     /// Application identity unique within an explicit arena subtree.
     #[derive(Clone, Debug, Eq, PartialEq)]
     pub struct SemanticIdentity {
@@ -3906,6 +3943,16 @@ pub mod canopy {
         /// change layout. The default returns `None`, which consumes the request
         /// without scrolling.
         fn reveal_anchor(&self, _view: Size) -> Option<Rect> {}
+
+        /// Position indicators for a scrollbar on `axis`.
+        ///
+        /// A scrollbar owner draws the returned marks on its track beside this
+        /// widget's canvas, so any scrolling widget can annotate positions such
+        /// as search matches without owning a scrollbar itself. `content` is
+        /// this node's content size, for widgets whose canvas offsets depend on
+        /// the view width, such as soft-wrapped text. The default reports no
+        /// marks.
+        fn scroll_marks(&self, _axis: ScrollAxis, _content: Size) -> Vec<ScrollMark> {}
 
         /// Describe application semantics for one publication through read-only
         /// access. Sensitive values must be omitted; this hook does not

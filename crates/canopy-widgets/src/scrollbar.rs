@@ -8,10 +8,10 @@
 //! the pointer, and a drag keeps the thumb under the pointer.
 
 use canopy::{
-    Context, EventOutcome, NodeId, Render, View, ViewContext,
+    Context, EventOutcome, NodeId, Render, ScrollAxis, View, ViewContext,
     error::Result,
     event::mouse,
-    geom::{Point, PointI32, Rect, RectI32},
+    geom::{Point, PointI32, Rect, RectI32, Size},
 };
 
 /// The axis a scrollbar measures.
@@ -22,6 +22,32 @@ pub enum Axis {
     /// Columns, with a track that runs left to right.
     Horizontal,
 }
+
+/// The glyphs drawn on scrollbar tracks, following the
+/// [`BoxGlyphs`](crate::BoxGlyphs) pattern.
+///
+/// Owners draw thumbs with the `thumb_*` glyphs and track backgrounds with
+/// the `track_*` glyphs. Marks that blend into the track reuse the track
+/// glyph of their axis and read through color alone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ScrollbarGlyphs {
+    /// Thumb on a vertical track.
+    pub thumb_vertical: char,
+    /// Thumb on a horizontal track.
+    pub thumb_horizontal: char,
+    /// Background line of a vertical track around the thumb.
+    pub track_vertical: char,
+    /// Background line of a horizontal track around the thumb.
+    pub track_horizontal: char,
+}
+
+/// Thin-line scrollbar glyphs over thin-line chrome.
+pub const THIN: ScrollbarGlyphs = ScrollbarGlyphs {
+    thumb_vertical: '█',
+    thumb_horizontal: '▄',
+    track_vertical: '│',
+    track_horizontal: '─',
+};
 
 /// A node whose canvas overflows its content along one axis.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -309,7 +335,10 @@ impl Scrollbar {
     /// `tracks` pairs each node with its track, in the outer coordinates of
     /// the context's node. A node that shows its whole canvas draws nothing.
     /// Rendering cannot release mouse capture, so a drag whose node or track
-    /// has changed draws no active thumb and ends at the next event.
+    /// has changed draws no active thumb and ends at the next event. After
+    /// the thumb, each target's [`ScrollMark`](canopy::ScrollMark)s draw over
+    /// the track, so scrolling the thumb across a mark keeps the mark's
+    /// color under the thumb's glyph.
     pub fn render(
         &mut self,
         render: &mut Render,
@@ -343,8 +372,85 @@ impl Scrollbar {
                 _ => self.thumb.0,
             };
             render.fill(style, thumb, self.thumb.1)?;
+            self.render_marks(render, ctx, target, &view, track, thumb)?;
         }
         Ok(())
+    }
+
+    /// Draw the scroll marks a target reports onto its track.
+    ///
+    /// A marked region covers every track cell from its first to its last
+    /// mapped cell. A covered cell outside the thumb draws with the mark's
+    /// style and glyph; a covered cell under the thumb draws with the mark's
+    /// style and the thumb's glyph, so the thumb reads solid while the
+    /// mark's color shows through.
+    fn render_marks(
+        &self,
+        render: &mut Render,
+        ctx: &dyn ViewContext,
+        target: NodeId,
+        view: &View,
+        track: Rect,
+        thumb: Rect,
+    ) -> Result<()> {
+        let mut marks = Vec::new();
+        ctx.with_widget_dyn(target, &mut |widget| {
+            marks =
+                widget.scroll_marks(self.core_axis(), Size::new(view.content.w, view.content.h));
+            Ok(())
+        })?;
+        if marks.is_empty() {
+            return Ok(());
+        }
+        let canvas_len = match self.axis {
+            Axis::Vertical => view.canvas.h,
+            Axis::Horizontal => view.canvas.w,
+        };
+        let track_len = self.length(track);
+        for mark in marks {
+            if mark.end <= mark.start {
+                continue;
+            }
+            let (Some(first), Some(last)) = (
+                Self::mark_cell(mark.start, canvas_len, track_len),
+                Self::mark_cell(mark.end.saturating_sub(1), canvas_len, track_len),
+            ) else {
+                continue;
+            };
+            for pos in first..=last {
+                let cell = match self.axis {
+                    Axis::Vertical => Rect::new(track.tl.x, track.tl.y + pos, track.w, 1),
+                    Axis::Horizontal => Rect::new(track.tl.x + pos, track.tl.y, 1, track.h),
+                };
+                if thumb.contains_point(cell.tl) {
+                    render.fill(mark.style, cell, self.thumb.1)?;
+                } else {
+                    render.fill(mark.style, cell, mark.glyph)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Return the track-cell index for a canvas offset.
+    ///
+    /// The offset maps proportionally, the way [`View::vactive`] places the
+    /// thumb, and clamps to the last cell, so the final canvas row owns the
+    /// end of the track.
+    fn mark_cell(offset: u32, canvas_len: u32, track_len: u32) -> Option<u32> {
+        if track_len == 0 || canvas_len == 0 {
+            return None;
+        }
+        let cell = u64::from(offset) * u64::from(track_len) / u64::from(canvas_len);
+        u32::try_from(cell.min(u64::from(track_len) - 1)).ok()
+    }
+
+    /// Convert this scrollbar's axis to the core axis marks are reported on.
+    fn core_axis(&self) -> ScrollAxis {
+        match self.axis {
+            Axis::Vertical => ScrollAxis::Vertical,
+            Axis::Horizontal => ScrollAxis::Horizontal,
+        }
     }
 
     /// Handle a mouse event for the scrollbars drawn in `tracks`.
@@ -642,6 +748,17 @@ mod tests {
                 prop_assert_eq!(offset, canvas_len - view_len);
             }
         }
+    }
+
+    #[test]
+    fn marks_map_proportionally_and_clamp_to_the_track() {
+        assert_eq!(Scrollbar::mark_cell(0, 100, 10), Some(0));
+        assert_eq!(Scrollbar::mark_cell(50, 100, 10), Some(5));
+        assert_eq!(Scrollbar::mark_cell(99, 100, 10), Some(9));
+        // An offset past the canvas still lands on the last cell.
+        assert_eq!(Scrollbar::mark_cell(1_000, 100, 10), Some(9));
+        assert_eq!(Scrollbar::mark_cell(0, 0, 10), None);
+        assert_eq!(Scrollbar::mark_cell(0, 100, 0), None);
     }
 
     #[test]

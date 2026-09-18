@@ -9,12 +9,7 @@ use canopy::{
     layout::{Direction, Edges, Layout},
 };
 
-use crate::scrollbar::{Axis, Scrollbar, edge_track, pane_target};
-
-/// Divider glyph.
-const DIVIDER: char = '│';
-/// Thumb glyph.
-const THUMB: char = '█';
+use crate::scrollbar::{Axis, Scrollbar, ScrollbarGlyphs, THIN, edge_track, pane_target};
 
 /// Panes side by side, each followed by a divider.
 ///
@@ -31,6 +26,8 @@ const THUMB: char = '█';
 /// for them. Dividers use `columns/divider`, thumbs `columns/thumb`, and a
 /// thumb a drag holds `columns/thumb/active`.
 pub struct Columns {
+    /// Glyph set the divider and thumb below draw with.
+    glyphs: ScrollbarGlyphs,
     /// Thumbs drawn in the dividers.
     scrollbar: Scrollbar,
 }
@@ -40,10 +37,31 @@ impl Columns {
     /// Construct columns with no panes.
     pub fn new() -> Self {
         Self {
-            scrollbar: Scrollbar::vertical("columns/thumb", THUMB)
-                .with_active("columns/thumb/active")
-                .with_track("columns/divider", DIVIDER),
+            glyphs: THIN,
+            scrollbar: Self::scrollbar(THIN),
         }
+    }
+
+    /// Build columns with replaced scrollbar glyphs.
+    ///
+    /// Rebuilding the thumbs drops a drag in progress, so configure glyphs
+    /// before mounting.
+    pub fn with_scrollbar_glyphs(mut self, glyphs: ScrollbarGlyphs) -> Self {
+        self.glyphs = glyphs;
+        self.scrollbar = Self::scrollbar(glyphs);
+        self
+    }
+
+    /// Build the divider thumb for a glyph set.
+    fn scrollbar(glyphs: ScrollbarGlyphs) -> Scrollbar {
+        Scrollbar::vertical("columns/thumb", glyphs.thumb_vertical)
+            .with_active("columns/thumb/active")
+            .with_track("columns/divider", glyphs.track_vertical)
+    }
+
+    /// Return the scrollbar glyphs these columns draw with.
+    pub fn scrollbar_glyphs(&self) -> ScrollbarGlyphs {
+        self.glyphs
     }
 
     /// Move focus to another displayed pane by a signed offset, wrapping
@@ -133,7 +151,7 @@ impl Widget for Columns {
         // track.
         for pane in panes.iter().take(panes.len().saturating_sub(1)) {
             if let Some(divider) = Self::divider(ctx, *pane) {
-                rndr.fill("columns/divider", divider, DIVIDER)?;
+                rndr.fill("columns/divider", divider, self.glyphs.track_vertical)?;
             }
         }
         let tracks = Self::tracks(ctx)?;

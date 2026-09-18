@@ -65,4 +65,4 @@ pub mod terminal {
 // Re-export derive macros
 pub use canopy_derive::{CommandArg, CommandEnum, command, derive_commands};
 // Re-export widget trait and event outcome
-pub use widget::{EventOutcome, Widget};
+pub use widget::{EventOutcome, ScrollAxis, ScrollMark, Widget};

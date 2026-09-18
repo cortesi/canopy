@@ -6,7 +6,8 @@ use std::{
 };
 
 use canopy::{
-    Context, ContextExt, EventOutcome, Loader, NodeId, NodeName, ViewContext, Widget,
+    Context, ContextExt, EventOutcome, Loader, NodeId, NodeName, ScrollAxis, ScrollMark,
+    ViewContext, Widget,
     error::Result,
     event::{Event, key, mouse},
     geom::{Point, PointI32, Rect, Size},
@@ -18,7 +19,7 @@ use canopy::{
 };
 
 use crate::{
-    Columns, Frame, List, Scroll, Selectable, Tabs,
+    Columns, Frame, List, Scroll, ScrollbarGlyphs, Selectable, THIN, Tabs,
     scrollbar::{Axis, ScrollTarget, scroll_target},
 };
 
@@ -61,6 +62,32 @@ impl Widget for Surface {
 
     fn name(&self) -> NodeName {
         NodeName::convert("surface")
+    }
+}
+
+/// A leaf with a fixed canvas and fixed scrollbar marks.
+struct MarkedSurface {
+    /// Canvas size in content cells.
+    canvas: Size,
+    /// Marks reported on the vertical axis.
+    marks: Vec<ScrollMark>,
+}
+
+impl Widget for MarkedSurface {
+    fn canvas(&self, _view: Size, _ctx: &CanvasContext) -> Size {
+        self.canvas
+    }
+
+    fn scroll_marks(&self, axis: ScrollAxis, _content: Size) -> Vec<ScrollMark> {
+        if axis == ScrollAxis::Vertical {
+            self.marks.clone()
+        } else {
+            Default::default()
+        }
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("marked_surface")
     }
 }
 
@@ -383,6 +410,67 @@ fn a_frame_track_covers_only_the_rows_beside_its_target() -> Result<()> {
 }
 
 #[test]
+fn marks_keep_their_color_as_the_thumb_slides_over_them() -> Result<()> {
+    let marks = vec![
+        ScrollMark {
+            start: 0,
+            end: 1,
+            style: "test/mark",
+            glyph: '─',
+        },
+        ScrollMark {
+            start: 50,
+            end: 52,
+            style: "test/mark",
+            glyph: '─',
+        },
+    ];
+    let (mut harness, nodes) = scene(20, 10, |c| {
+        let root = c.node_id();
+        let frame: NodeId = c.add_child_to(root, Frame::new())?.into();
+        let body = c.add_child_to(
+            frame,
+            MarkedSurface {
+                canvas: Size::new(1, 100),
+                marks,
+            },
+        )?;
+        c.set_layout_of(body, Layout::fill())?;
+        Ok(vec![frame, body.into()])
+    })?;
+    harness
+        .canopy
+        .style_mut()
+        .rules()
+        .fg("test/mark", Color::Blue)
+        .apply();
+    harness.render()?;
+    let body = nodes[1];
+    // A hundred canvas rows on an eight-row track: offset 0 sits on row 1
+    // under the thumb, and offsets 50-51 share row 5 in the open track.
+    assert_eq!(
+        harness.buf().get(Point { x: 19, y: 1 }).unwrap().ch,
+        '█',
+        "the thumb keeps its glyph over a mark"
+    );
+    assert_eq!(color_at(&harness, 19, 1), Some(Color::Blue));
+    assert_eq!(harness.buf().get(Point { x: 19, y: 5 }).unwrap().ch, '─');
+    assert_eq!(color_at(&harness, 19, 5), Some(Color::Blue));
+
+    // Scroll the thumb onto the second mark: its cell keeps the mark color
+    // and takes the thumb glyph, while the first mark shows its own glyph.
+    harness
+        .canopy
+        .with_root_context(|c| c.scroll_to_of(body, 0, 50).map(|_| ()))?;
+    harness.render()?;
+    assert_eq!(harness.buf().get(Point { x: 19, y: 5 }).unwrap().ch, '█');
+    assert_eq!(color_at(&harness, 19, 5), Some(Color::Blue));
+    assert_eq!(harness.buf().get(Point { x: 19, y: 1 }).unwrap().ch, '─');
+    assert_eq!(color_at(&harness, 19, 1), Some(Color::Blue));
+    Ok(())
+}
+
+#[test]
 fn a_sidebar_beside_the_target_removes_only_the_vertical_track() -> Result<()> {
     let (harness, _) = scene(20, 10, |c| {
         let root = c.node_id();
@@ -665,6 +753,62 @@ fn column_text(harness: &Harness, x: u32, height: u32) -> String {
 /// Return the characters of screen column `x`, with blank cells as spaces.
 fn trimmed_column_text(harness: &Harness, x: u32, height: u32) -> String {
     column_text(harness, x, height).replace('\0', " ")
+}
+
+#[test]
+fn owners_draw_and_expose_their_configured_scrollbar_glyphs() -> Result<()> {
+    assert_eq!(Frame::new().scrollbar_glyphs(), THIN);
+    assert_eq!(Columns::new().scrollbar_glyphs(), THIN);
+    let custom = ScrollbarGlyphs {
+        thumb_vertical: 'T',
+        thumb_horizontal: 't',
+        track_vertical: '|',
+        track_horizontal: '-',
+    };
+    assert_eq!(
+        Frame::new()
+            .with_scrollbar_glyphs(custom)
+            .scrollbar_glyphs(),
+        custom
+    );
+    assert_eq!(
+        Columns::new()
+            .with_scrollbar_glyphs(custom)
+            .scrollbar_glyphs(),
+        custom
+    );
+    // Twenty content columns less one gap leave panes of ten and nine.
+    let (harness, _) = scene(21, 6, move |c| {
+        let root = c.node_id();
+        let columns: NodeId = c
+            .add_child_to(root, Columns::new().with_scrollbar_glyphs(custom))?
+            .into();
+        surface(c, columns, Size::new(1, 1))?;
+        surface(c, columns, Size::new(1, 60))?;
+        Ok(Vec::new())
+    })?;
+    assert_eq!(column_text(&harness, 10, 6), "||||||");
+    assert_eq!(column_text(&harness, 20, 6), "T|||||");
+
+    let (harness, _) = scene(20, 10, move |c| {
+        let root = c.node_id();
+        let frame: NodeId = c
+            .add_child_to(root, Frame::new().with_scrollbar_glyphs(custom))?
+            .into();
+        surface(c, frame, Size::new(100, 100))?;
+        Ok(Vec::new())
+    })?;
+    assert_eq!(
+        column_text(&harness, 19, 10).chars().nth(1),
+        Some('T'),
+        "the custom vertical thumb draws on the right border"
+    );
+    assert_eq!(
+        &columns_with(&harness, 9, 20, 't')[..4],
+        &[1, 2, 3, 4],
+        "the custom horizontal thumb draws on the bottom border"
+    );
+    Ok(())
 }
 
 #[test]

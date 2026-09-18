@@ -83,7 +83,7 @@ pub use pad::Pad;
 pub use picker::{Picker, PickerFilter, PickerList, Truncate};
 pub use root::Root;
 pub use scroll::Scroll;
-pub use scrollbar::Scrollbar;
+pub use scrollbar::{Scrollbar, ScrollbarGlyphs, THIN};
 pub use selector::Selector;
 pub use tabs::Tabs;
 pub use text::{CanvasWidth, Text};

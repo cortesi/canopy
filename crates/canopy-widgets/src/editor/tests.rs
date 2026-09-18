@@ -8,8 +8,8 @@ use std::{
 };
 
 use canopy::{
-    Canopy, Context, ContextExt, FocusDirection, FocusScope, Loader, NodeName, Widget, buf,
-    derive_commands,
+    Canopy, Context, ContextExt, FocusDirection, FocusScope, Loader, NodeName, ScrollAxis,
+    ScrollMark, Widget, buf, derive_commands,
     error::Result,
     event::{key, mouse},
     geom::{Point, PointI32, Size},
@@ -23,6 +23,7 @@ use super::{
     vi::ViMode,
 };
 use crate::{
+    THIN,
     editor::{
         EditMode, Editor, EditorConfig, LineNumbers, WrapMode,
         highlight::{HighlightSpan, Highlighter},
@@ -1178,6 +1179,84 @@ fn search_current_other_matches_and_syntax_keep_separate_styles() {
         assert_eq!(style.fg, selected.fg.solid_color().unwrap());
         assert_eq!(style.bg, selected.bg.solid_color().unwrap());
     }
+}
+
+#[test]
+fn scroll_marks_report_one_row_per_match_line() {
+    let config = EditorConfig::new().with_wrap(WrapMode::None);
+    let mut editor = Editor::with_config("aa aa\nbb", config);
+    editor
+        .search
+        .set_query(&editor.buffer, "aa", SearchDirection::Forward);
+    let content = Size::new(80, 24);
+    // Both matches share line zero, so they collapse into one mark.
+    assert_eq!(
+        editor.scroll_marks(ScrollAxis::Vertical, content),
+        [ScrollMark {
+            start: 0,
+            end: 1,
+            style: "editor/search/mark",
+            glyph: THIN.track_vertical,
+        }]
+    );
+    assert!(
+        editor
+            .scroll_marks(ScrollAxis::Horizontal, content)
+            .is_empty()
+    );
+}
+
+#[test]
+fn scroll_marks_follow_soft_wrapped_rows_on_both_layout_paths() {
+    let config = EditorConfig::new().with_wrap(WrapMode::Soft);
+    // At width ten the 25-character first line wraps across rows 0-2, and
+    // the second line sits on row 3.
+    let mut editor = Editor::with_config("aaaaaaaaaaaaaaaaaaaaaaaaa\nbb", config);
+    editor
+        .search
+        .set_query(&editor.buffer, "a", SearchDirection::Forward);
+    let content = Size::new(10, 24);
+    let fallback = editor.scroll_marks(ScrollAxis::Vertical, content);
+    assert_eq!(
+        fallback
+            .iter()
+            .map(|mark| (mark.start, mark.end))
+            .collect::<Vec<_>>(),
+        [(0, 1), (1, 2), (2, 3)]
+    );
+    // Syncing the cache the way a render would must not move the marks.
+    editor
+        .layout
+        .sync(&mut editor.buffer, 10, WrapMode::Soft, 4);
+    assert_eq!(editor.scroll_marks(ScrollAxis::Vertical, content), fallback);
+    editor
+        .search
+        .set_query(&editor.buffer, "b", SearchDirection::Forward);
+    assert_eq!(
+        editor
+            .scroll_marks(ScrollAxis::Vertical, content)
+            .iter()
+            .map(|mark| (mark.start, mark.end))
+            .collect::<Vec<_>>(),
+        [(3, 4)]
+    );
+}
+
+#[test]
+fn scroll_marks_skip_matches_past_the_buffer() {
+    let config = EditorConfig::new().with_wrap(WrapMode::None);
+    let mut editor = Editor::with_config("aa", config);
+    editor.search.set_matches(
+        &editor.buffer,
+        vec![
+            TextRange::new(TextPosition::new(0, 0), TextPosition::new(0, 2)),
+            TextRange::new(TextPosition::new(9, 0), TextPosition::new(9, 2)),
+        ],
+        TextPosition::new(0, 0),
+    );
+    let marks = editor.scroll_marks(ScrollAxis::Vertical, Size::new(80, 24));
+    assert_eq!(marks.len(), 1);
+    assert_eq!((marks[0].start, marks[0].end), (0, 1));
 }
 
 #[test]

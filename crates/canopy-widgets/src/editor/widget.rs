@@ -1,8 +1,8 @@
 use std::{collections::HashMap, time::Duration};
 
 use canopy::{
-    Context, EventOutcome, FocusDirection, NodeName, Render, RevealAlign, ViewContext, Widget,
-    cursor, derive_commands,
+    Context, EventOutcome, FocusDirection, NodeName, Render, RevealAlign, ScrollAxis, ScrollMark,
+    ViewContext, Widget, cursor, derive_commands,
     error::Result,
     event::{Event, key, mouse},
     geom::{Line, Point, Rect, Size},
@@ -14,12 +14,13 @@ use unicode_segmentation::UnicodeSegmentation;
 use super::{
     EditMode, EditorConfig, LineNumbers, WrapMode, display_width,
     highlight::{HighlightSpan, Highlighter},
-    layout::{LayoutCache, WrapSegment, metrics, point_for_position},
+    layout::{LayoutCache, LineLayout, WrapSegment, layout_line, metrics, point_for_position},
     search::{PromptState, SearchDirection, SearchState},
     vi::{ViMode, ViState},
 };
 use crate::{
     click::ClickTracker,
+    scrollbar::THIN,
     text_buffer::{Selection, TextBuffer, TextPosition, TextRange, single_line},
 };
 
@@ -28,6 +29,12 @@ const DOUBLE_CLICK_MS: u64 = 500;
 
 /// Rows of context kept above a revealed search match, when space allows.
 const SEARCH_MATCH_TOP_CONTEXT: u32 = 3;
+
+/// Glyph of a search-match mark on a scrollbar track.
+///
+/// This is the shared thin track vertical, so a mark blends into the
+/// surrounding divider or border and only its color stands out.
+const SEARCH_MARK: char = THIN.track_vertical;
 
 /// Editor widget implementation.
 pub struct Editor {
@@ -967,6 +974,76 @@ impl Editor {
         self.search.current_index().map_or(0, |index| index + 1)
     }
 
+    /// Return one display row per match for the scrollbar track.
+    ///
+    /// Matches arrive in ascending order without spanning lines, so one
+    /// forward pass maps them all: lines are visited monotonically, and each
+    /// lays out at most twice, once while advancing and once for its own
+    /// matches. The layout cache answers when it is current for `content`;
+    /// otherwise lines lay out directly, which still costs a single scan no
+    /// matter how many matches share a line. Same-row matches collapse into
+    /// one mark, so marks never outnumber the rows they sit on. A match past
+    /// the end of the buffer belongs to a changed buffer and is skipped.
+    fn match_rows(&self, content: Size) -> Vec<u32> {
+        if self.config.wrap == WrapMode::None {
+            let mut rows = Vec::new();
+            for range in self.search.matches() {
+                if range.start.line >= self.buffer.line_count() {
+                    continue;
+                }
+                let row = u32::try_from(range.start.line).unwrap_or(u32::MAX);
+                if rows.last() != Some(&row) {
+                    rows.push(row);
+                }
+            }
+            return rows;
+        }
+        let gutter = self.gutter_width();
+        let wrap_width = content.w.saturating_sub(gutter).max(1) as usize;
+        let (wrap, tab_stop) = (self.config.wrap, self.config.tab_stop);
+        let layout = &self.layout;
+        let buffer = &self.buffer;
+        let cached = layout
+            .metrics_for(buffer, wrap_width, wrap, tab_stop)
+            .is_some();
+        let mut memo: Option<(usize, LineLayout)> = None;
+        let mut layout_of = |index: usize| -> LineLayout {
+            if let Some((line, laid_out)) = &memo
+                && *line == index
+            {
+                return laid_out.clone();
+            }
+            let laid_out = if cached {
+                layout.line(index).cloned()
+            } else {
+                None
+            }
+            .unwrap_or_else(|| layout_line(&buffer.line_text(index), wrap, wrap_width, tab_stop));
+            memo = Some((index, laid_out.clone()));
+            laid_out
+        };
+        let mut rows = Vec::new();
+        let mut line_idx = 0usize;
+        let mut row = 0u32;
+        for range in self.search.matches() {
+            let line = range.start.line;
+            if line >= buffer.line_count() {
+                continue;
+            }
+            while line_idx < line {
+                row = row.saturating_add(layout_of(line_idx).display_lines() as u32);
+                line_idx += 1;
+            }
+            let column = buffer.column_for_position(range.start, tab_stop);
+            let segment = layout_of(line).segment_for_column(column) as u32;
+            let mark = row.saturating_add(segment);
+            if rows.last() != Some(&mark) {
+                rows.push(mark);
+            }
+        }
+        rows
+    }
+
     /// Put the cursor on the current search match and scroll it into view.
     ///
     /// The match lands [`SEARCH_MATCH_TOP_CONTEXT`] rows below the top of the
@@ -1067,6 +1144,25 @@ impl Widget for Editor {
             cursor.x = 0;
         }
         Some(Rect::new(cursor.x, cursor.y, 1, 1))
+    }
+
+    fn scroll_marks(&self, axis: ScrollAxis, content: Size) -> Vec<ScrollMark> {
+        if axis != ScrollAxis::Vertical {
+            return Vec::new();
+        }
+        // Matches never span lines, so each one marks a single display row.
+        // The mark style carries the match color as a foreground: text
+        // match styles put it in the background, which a block thumb glyph
+        // would hide on scroll-over.
+        self.match_rows(content)
+            .into_iter()
+            .map(|row| ScrollMark {
+                start: row,
+                end: row.saturating_add(1),
+                style: "editor/search/mark",
+                glyph: SEARCH_MARK,
+            })
+            .collect()
     }
 
     fn canvas(&self, view: Size, _ctx: &CanvasContext) -> Size {

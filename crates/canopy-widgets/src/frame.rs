@@ -8,12 +8,7 @@ use canopy::{
 use unicode_width::UnicodeWidthStr;
 
 use super::boxed::{BoxGlyphs, ROUND};
-use crate::scrollbar::{Axis, Scrollbar, edge_track, scroll_target};
-
-/// Vertical scrollbar thumb glyph.
-const SCROLL_VERTICAL: char = '█';
-/// Horizontal scrollbar thumb glyph.
-const SCROLL_HORIZONTAL: char = '▄';
+use crate::scrollbar::{Axis, Scrollbar, ScrollbarGlyphs, THIN, edge_track, scroll_target};
 
 /// A frame around an element with an optional title and scroll positions.
 ///
@@ -29,6 +24,8 @@ pub struct Frame {
     box_glyphs: BoxGlyphs,
     /// Optional title string.
     title: Option<String>,
+    /// Glyph set the scrollbars below draw with.
+    scrollbar_glyphs: ScrollbarGlyphs,
     /// Scrollbar on the right border.
     vertical: Scrollbar,
     /// Scrollbar on the bottom border.
@@ -39,14 +36,39 @@ pub struct Frame {
 impl Frame {
     /// Construct a frame.
     pub fn new() -> Self {
+        let (vertical, horizontal) = Self::scrollbars(THIN);
         Self {
             box_glyphs: ROUND,
             title: None,
-            vertical: Scrollbar::vertical("frame/thumb", SCROLL_VERTICAL)
-                .with_active("frame/thumb/active"),
-            horizontal: Scrollbar::horizontal("frame/thumb", SCROLL_HORIZONTAL)
-                .with_active("frame/thumb/active"),
+            scrollbar_glyphs: THIN,
+            vertical,
+            horizontal,
         }
+    }
+
+    /// Build a frame with replaced scrollbar glyphs.
+    ///
+    /// Rebuilding the thumbs drops a drag in progress, so configure glyphs
+    /// before mounting.
+    pub fn with_scrollbar_glyphs(mut self, glyphs: ScrollbarGlyphs) -> Self {
+        self.scrollbar_glyphs = glyphs;
+        (self.vertical, self.horizontal) = Self::scrollbars(glyphs);
+        self
+    }
+
+    /// Build the vertical and horizontal thumbs for a glyph set.
+    fn scrollbars(glyphs: ScrollbarGlyphs) -> (Scrollbar, Scrollbar) {
+        (
+            Scrollbar::vertical("frame/thumb", glyphs.thumb_vertical)
+                .with_active("frame/thumb/active"),
+            Scrollbar::horizontal("frame/thumb", glyphs.thumb_horizontal)
+                .with_active("frame/thumb/active"),
+        )
+    }
+
+    /// Return the scrollbar glyphs this frame draws with.
+    pub fn scrollbar_glyphs(&self) -> ScrollbarGlyphs {
+        self.scrollbar_glyphs
     }
 
     /// Build a frame with a specified glyph set.

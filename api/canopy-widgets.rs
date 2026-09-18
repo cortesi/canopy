@@ -169,6 +169,8 @@ pub mod canopy_widgets {
             fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
 
             fn reveal_anchor(&self, view: Size) -> Option<Rect> {}
+
+            fn scroll_marks(&self, axis: ScrollAxis, content: Size) -> Vec<ScrollMark> {}
         }
 
         impl super::widget::Editor {
@@ -528,6 +530,27 @@ pub mod canopy_widgets {
         #[derive(Clone, Copy, Debug)]
         pub struct Scrollbar {}
 
+        /// The glyphs drawn on scrollbar tracks, following the
+        /// [`BoxGlyphs`](crate::BoxGlyphs) pattern.
+        ///
+        /// Owners draw thumbs with the `thumb_*` glyphs and track backgrounds with
+        /// the `track_*` glyphs. Marks that blend into the track reuse the track
+        /// glyph of their axis and read through color alone.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct ScrollbarGlyphs {
+            /// Thumb on a vertical track.
+            pub thumb_vertical: char,
+            /// Thumb on a horizontal track.
+            pub thumb_horizontal: char,
+            /// Background line of a vertical track around the thumb.
+            pub track_vertical: char,
+            /// Background line of a horizontal track around the thumb.
+            pub track_horizontal: char,
+        }
+
+        /// Thin-line scrollbar glyphs over thin-line chrome.
+        pub const THIN: ScrollbarGlyphs = _;
+
         /// Return the one node beneath `owner` whose canvas overflows along `axis`.
         ///
         /// The search skips nodes with no visible content, which includes hidden
@@ -562,7 +585,10 @@ pub mod canopy_widgets {
             /// `tracks` pairs each node with its track, in the outer coordinates of
             /// the context's node. A node that shows its whole canvas draws nothing.
             /// Rendering cannot release mouse capture, so a drag whose node or track
-            /// has changed draws no active thumb and ends at the next event.
+            /// has changed draws no active thumb and ends at the next event. After
+            /// the thumb, each target's [`ScrollMark`](canopy::ScrollMark)s draw over
+            /// the track, so scrolling the thumb across a mark keeps the mark's
+            /// color under the thumb's glyph.
             pub fn render(
                 &mut self,
                 render: &mut Render<'_>,
@@ -1037,6 +1063,24 @@ pub mod canopy_widgets {
     #[derive(Clone, Copy, Debug)]
     pub struct Scrollbar {}
 
+    /// The glyphs drawn on scrollbar tracks, following the
+    /// [`BoxGlyphs`](crate::BoxGlyphs) pattern.
+    ///
+    /// Owners draw thumbs with the `thumb_*` glyphs and track backgrounds with
+    /// the `track_*` glyphs. Marks that blend into the track reuse the track
+    /// glyph of their axis and read through color alone.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct ScrollbarGlyphs {
+        /// Thumb on a vertical track.
+        pub thumb_vertical: char,
+        /// Thumb on a horizontal track.
+        pub thumb_horizontal: char,
+        /// Background line of a vertical track around the thumb.
+        pub track_vertical: char,
+        /// Background line of a horizontal track around the thumb.
+        pub track_horizontal: char,
+    }
+
     /// A multi-select widget with checkbox-style items.
     ///
     /// Items can be toggled on/off independently. The selected indices are tracked
@@ -1110,6 +1154,9 @@ pub mod canopy_widgets {
 
     /// Single line thick Unicode box drawing set.
     pub const SINGLE_THICK: BoxGlyphs = _;
+
+    /// Thin-line scrollbar glyphs over thin-line chrome.
+    pub const THIN: ScrollbarGlyphs = _;
 
     /// Wrap `child` in a new `widget` node and return the wrapper's typed id.
     ///
@@ -1233,6 +1280,12 @@ pub mod canopy_widgets {
     }
 
     impl Columns {
+        /// Build columns with replaced scrollbar glyphs.
+        ///
+        /// Rebuilding the thumbs drops a drag in progress, so configure glyphs
+        /// before mounting.
+        pub fn with_scrollbar_glyphs(self, glyphs: ScrollbarGlyphs) -> Self {}
+
         /// Construct columns with no panes.
         pub fn new() -> Self {}
 
@@ -1243,6 +1296,9 @@ pub mod canopy_widgets {
         /// when none accepts focus. Columns without a displayed pane do nothing.
         /// @param delta Panes to move; negative values move left.
         pub fn focus_column(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {}
+
+        /// Return the scrollbar glyphs these columns draw with.
+        pub fn scrollbar_glyphs(&self) -> ScrollbarGlyphs {}
 
         /// Build a positional call with typed user arguments.
         pub fn call_focus_column(delta: i32) -> canopy::commands::CommandCall {}
@@ -1372,11 +1428,20 @@ pub mod canopy_widgets {
         /// Build a frame with a specified title.
         pub fn with_title(self, title: impl Into<String>) -> Self {}
 
+        /// Build a frame with replaced scrollbar glyphs.
+        ///
+        /// Rebuilding the thumbs drops a drag in progress, so configure glyphs
+        /// before mounting.
+        pub fn with_scrollbar_glyphs(self, glyphs: ScrollbarGlyphs) -> Self {}
+
         /// Construct a frame.
         pub fn new() -> Self {}
 
         /// Replace the title.
         pub fn set_title(&mut self, title: impl Into<String>) {}
+
+        /// Return the scrollbar glyphs this frame draws with.
+        pub fn scrollbar_glyphs(&self) -> ScrollbarGlyphs {}
     }
 
     impl Widget for Frame {
@@ -1890,7 +1955,10 @@ pub mod canopy_widgets {
         /// `tracks` pairs each node with its track, in the outer coordinates of
         /// the context's node. A node that shows its whole canvas draws nothing.
         /// Rendering cannot release mouse capture, so a drag whose node or track
-        /// has changed draws no active thumb and ends at the next event.
+        /// has changed draws no active thumb and ends at the next event. After
+        /// the thumb, each target's [`ScrollMark`](canopy::ScrollMark)s draw over
+        /// the track, so scrolling the thumb across a mark keeps the mark's
+        /// color under the thumb's glyph.
         pub fn render(
             &mut self,
             render: &mut Render<'_>,

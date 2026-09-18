@@ -136,6 +136,11 @@ impl SearchState {
         self.matches.len()
     }
 
+    /// Return all match ranges in ascending order.
+    pub fn matches(&self) -> &[TextRange] {
+        &self.matches
+    }
+
     /// Return the index of the current match.
     pub fn current_index(&self) -> Option<usize> {
         self.current
