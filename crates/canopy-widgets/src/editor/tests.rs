@@ -1077,6 +1077,55 @@ fn search_command_uses_smart_case_and_scrolls_to_matches() {
 }
 
 #[test]
+fn revealed_search_match_sits_three_rows_below_the_top() {
+    let text = (1..=40)
+        .map(|n| {
+            if n == 25 {
+                "target here".to_string()
+            } else {
+                format!("line {n}")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let config = EditorConfig::new()
+        .with_read_only(true)
+        .with_focusable(false)
+        .with_wrap(WrapMode::None);
+    let mut harness = build_harness(&text, config, 24, 8);
+
+    let (matches, position, top) = run_search(&mut harness, |editor, ctx| {
+        editor.search(ctx, "target".into());
+    });
+    assert_eq!((matches, position), (1, 1));
+    assert_eq!(top, 21, "row 24 sits three below the top");
+
+    let (matches, position, top) = run_search(&mut harness, |editor, ctx| {
+        editor.highlight_matches(
+            ctx,
+            vec![TextRange::new(
+                TextPosition::new(1, 0),
+                TextPosition::new(1, 6),
+            )],
+        );
+    });
+    assert_eq!((matches, position), (1, 1));
+    assert_eq!(top, 0, "matches near the start clamp to the top");
+
+    let (matches, position, top) = run_search(&mut harness, |editor, ctx| {
+        editor.highlight_matches(
+            ctx,
+            vec![TextRange::new(
+                TextPosition::new(39, 0),
+                TextPosition::new(39, 6),
+            )],
+        );
+    });
+    assert_eq!((matches, position), (1, 1));
+    assert_eq!(top, 32, "matches near the end clamp to the edge");
+}
+
+#[test]
 fn search_current_other_matches_and_syntax_keep_separate_styles() {
     let config = EditorConfig::new().with_wrap(WrapMode::None);
     let mut harness = build_harness("hi a a", config, 10, 1);

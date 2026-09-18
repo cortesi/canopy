@@ -315,9 +315,15 @@ fn align_viewport(viewport: &mut Node, area: Rect, align: RevealAlign, order: u6
     }
     viewport.scroll_order = order;
     let size = viewport.content_size;
+    // `Top` offsets only the vertical axis; horizontally it keeps the
+    // smallest move.
+    let (x_align, y_align) = match align {
+        RevealAlign::Top(_) => (RevealAlign::Nearest, align),
+        align => (align, align),
+    };
     viewport.scroll = Point {
-        x: reveal_offset(viewport.scroll.x, size.w, area.tl.x, area.w, align),
-        y: reveal_offset(viewport.scroll.y, size.h, area.tl.y, area.h, align),
+        x: reveal_offset(viewport.scroll.x, size.w, area.tl.x, area.w, x_align),
+        y: reveal_offset(viewport.scroll.y, size.h, area.tl.y, area.h, y_align),
     };
     clamp_scroll(&mut viewport.scroll, size, viewport.canvas);
 }
@@ -327,14 +333,17 @@ fn align_viewport(viewport: &mut Node, area: Rect, align: RevealAlign, order: u6
 ///
 /// `Nearest` makes the smallest move, and keeps a viewport that already lies
 /// inside an oversized area. `Center` centers an area shorter than the
-/// viewport. Wide arithmetic keeps end coordinates intact.
+/// viewport. `Top` puts the start `context` cells past the viewport origin.
+/// Wide arithmetic keeps end coordinates intact.
 fn reveal_offset(offset: u32, view: u32, start: u32, length: u32, align: RevealAlign) -> u32 {
     let (start, length, view) = (u64::from(start), u64::from(length), u64::from(view));
-    let offset = if align == RevealAlign::Center && length < view {
-        (2 * start + length).saturating_sub(view) / 2
-    } else {
-        let end_aligned = (start + length).saturating_sub(view);
-        u64::from(offset).clamp(start.min(end_aligned), start.max(end_aligned))
+    let offset = match align {
+        RevealAlign::Center if length < view => (2 * start + length).saturating_sub(view) / 2,
+        RevealAlign::Top(context) => start.saturating_sub(u64::from(context)),
+        _ => {
+            let end_aligned = (start + length).saturating_sub(view);
+            u64::from(offset).clamp(start.min(end_aligned), start.max(end_aligned))
+        }
     };
     u32::try_from(offset).unwrap_or(u32::MAX)
 }

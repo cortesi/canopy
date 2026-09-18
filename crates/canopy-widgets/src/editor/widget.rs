@@ -26,6 +26,9 @@ use crate::{
 /// Maximum delay between clicks to count as multi-click selection.
 const DOUBLE_CLICK_MS: u64 = 500;
 
+/// Rows of context kept above a revealed search match, when space allows.
+const SEARCH_MATCH_TOP_CONTEXT: u32 = 3;
+
 /// Editor widget implementation.
 pub struct Editor {
     /// Editor configuration.
@@ -906,6 +909,31 @@ impl Editor {
         self.reveal_search_match(ctx);
     }
 
+    /// Highlight precomputed match ranges.
+    ///
+    /// The first match at or below the top of the view becomes current, and
+    /// the view scrolls to it. Ranges must arrive in ascending order without
+    /// spanning lines; see [`SearchState::set_matches`]. An empty set clears
+    /// the search. Unlike [`Self::search`], the ranges need not come from a
+    /// literal query, so callers can highlight regular-expression matches.
+    pub fn highlight_matches(&mut self, ctx: &mut dyn Context, matches: Vec<TextRange>) {
+        if matches.is_empty() {
+            self.search = SearchState::new();
+            return;
+        }
+        let view_rect = ctx.view().view_rect();
+        self.update_layout(view_rect, self.gutter_width());
+        let top = match self.layout.total_lines() {
+            0 => 0,
+            lines => self
+                .layout
+                .line_for_display((view_rect.tl.y as usize).min(lines - 1)),
+        };
+        self.search
+            .set_matches(&self.buffer, matches, TextPosition::new(top, 0));
+        self.reveal_search_match(ctx);
+    }
+
     /// Make another search match current and scroll to it.
     /// @param delta Matches to move; negative values move backward.
     #[command]
@@ -940,13 +968,18 @@ impl Editor {
     }
 
     /// Put the cursor on the current search match and scroll it into view.
+    ///
+    /// The match lands [`SEARCH_MATCH_TOP_CONTEXT`] rows below the top of the
+    /// view when space allows, so its surroundings read above it; near the
+    /// start or end of the text the view clamps to its edge instead. The
+    /// reveal queues behind layout, so it resolves against settled geometry.
     fn reveal_search_match(&mut self, ctx: &mut dyn Context) {
         let Some(range) = self.search.current_match() else {
             return;
         };
         self.buffer.set_cursor(range.start);
         self.update_preferred_column();
-        self.ensure_cursor_visible(ctx);
+        ctx.reveal_anchor(RevealAlign::Top(SEARCH_MATCH_TOP_CONTEXT));
     }
 }
 

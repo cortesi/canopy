@@ -202,6 +202,25 @@ fn reveal_offsets_take_the_nearest_edge_or_center_without_oscillation() {
 }
 
 #[test]
+fn top_offsets_place_the_start_past_the_viewport_origin() {
+    use RevealAlign::Top;
+    // (offset, view, start, length, context, expected)
+    for (offset, view, start, length, context, expected) in [
+        (0, 8, 24, 1, 3, 21),
+        (50, 8, 24, 1, 3, 21),
+        (0, 8, 1, 1, 3, 0),
+        (0, 8, 2, 1, 3, 0),
+        (0, u32::MAX, u32::MAX - 1, 1, 3, u32::MAX - 4),
+    ] {
+        assert_eq!(
+            reveal_offset(offset, view, start, length, Top(context)),
+            expected,
+            "{offset} {view} {start} {length} Top({context})"
+        );
+    }
+}
+
+#[test]
 fn area_anchor_and_node_requests_apply_in_call_order() -> Result<()> {
     let mut core = Core::new();
     let viewport = root_viewport(&mut core, Some(Rect::new(0, 30, 1, 1)))?;

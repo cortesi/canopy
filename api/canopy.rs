@@ -3079,6 +3079,10 @@ pub mod canopy {
         /// Center each axis on which the rectangle is shorter than the viewport,
         /// and use `Nearest` on the others.
         Center,
+        /// Place the rectangle's start `context` cells past the viewport origin,
+        /// clamping to the scrollable range. Text reads top to bottom, so only
+        /// the vertical axis offsets; the horizontal axis uses `Nearest`.
+        Top(u32),
     }
 
     /// A phase in key or mouse event routing.

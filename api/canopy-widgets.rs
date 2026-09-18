@@ -175,6 +175,15 @@ pub mod canopy_widgets {
             /// Construct an editor with a configuration.
             pub fn with_config(text: impl Into<String>, config: EditorConfig) -> Self {}
 
+            /// Highlight precomputed match ranges.
+            ///
+            /// The first match at or below the top of the view becomes current, and
+            /// the view scrolls to it. Ranges must arrive in ascending order without
+            /// spanning lines; see [`SearchState::set_matches`]. An empty set clears
+            /// the search. Unlike [`Self::search`], the ranges need not come from a
+            /// literal query, so callers can highlight regular-expression matches.
+            pub fn highlight_matches(&mut self, ctx: &mut dyn Context, matches: Vec<TextRange>) {}
+
             /// Install a syntax highlighter.
             ///
             /// Preparation is deferred until the next render, using the latest buffer

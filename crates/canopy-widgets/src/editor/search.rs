@@ -94,6 +94,43 @@ impl SearchState {
         });
     }
 
+    /// Install precomputed match ranges, making the first match at or after
+    /// `from` current.
+    ///
+    /// The ranges must arrive in ascending order without spanning lines, the
+    /// way [`find_matches`] produces them, because the per-line renderer
+    /// locates one line's slice by partition points. The query stays empty:
+    /// the buffer is read-only under an installed set, and a new buffer
+    /// replaces the search state outright, so no recompute can clobber these
+    /// ranges. When no match follows `from`, the search wraps to the first.
+    pub fn set_matches(
+        &mut self,
+        buffer: &TextBuffer,
+        matches: Vec<TextRange>,
+        from: TextPosition,
+    ) {
+        debug_assert!(
+            matches.windows(2).all(|pair| {
+                (pair[0].start.line, pair[0].start.column)
+                    <= (pair[1].start.line, pair[1].start.column)
+            }),
+            "installed matches must arrive in ascending order"
+        );
+        self.query.clear();
+        self.direction = SearchDirection::Forward;
+        self.ignore_case = false;
+        self.matches = matches;
+        self.revision = buffer.revision();
+        self.current = (!self.matches.is_empty()).then(|| {
+            self.matches
+                .iter()
+                .position(|range| {
+                    (range.start.line, range.start.column) >= (from.line, from.column)
+                })
+                .unwrap_or(0)
+        });
+    }
+
     /// Return the number of matches.
     pub fn match_count(&self) -> usize {
         self.matches.len()
@@ -107,8 +144,14 @@ impl SearchState {
     /// Update match cache if the buffer changed.
     pub fn update(&mut self, buffer: &TextBuffer) {
         if self.query.is_empty() {
-            self.matches.clear();
-            self.current = None;
+            // Without a query there is nothing to recompute. An installed
+            // match set pins its revision, so a matching revision keeps it;
+            // only a changed buffer drops it. Clearing an already empty set
+            // is a no-op either way, so no existing flow changes behavior.
+            if self.revision != buffer.revision() {
+                self.matches.clear();
+                self.current = None;
+            }
             return;
         }
         if self.revision != buffer.revision() {
@@ -270,6 +313,33 @@ mod tests {
         assert_ne!(first, second);
         let back = state.move_next(&buffer, true).unwrap();
         assert_eq!(back, first);
+    }
+
+    #[test]
+    fn installed_matches_make_the_first_match_at_or_after_from_current() {
+        let buffer = TextBuffer::new("one two one");
+        let ranges = find_matches(&buffer, "one");
+        assert_eq!(ranges.len(), 2);
+        let mut state = SearchState::new();
+        state.set_matches(&buffer, ranges.clone(), TextPosition::new(0, 4));
+        assert_eq!(state.match_count(), 2);
+        assert_eq!(state.current_index(), Some(1));
+        assert_eq!(state.current_match(), Some(ranges[1]));
+    }
+
+    #[test]
+    fn installed_matches_wrap_and_survive_navigation() {
+        let buffer = TextBuffer::new("one two one");
+        let ranges = find_matches(&buffer, "one");
+        let mut state = SearchState::new();
+        state.set_matches(&buffer, ranges.clone(), TextPosition::new(0, 99));
+        assert_eq!(state.current_match(), Some(ranges[0]));
+        // The buffer did not change, so navigation keeps the installed set
+        // instead of recomputing a literal query.
+        state.move_next(&buffer, false);
+        assert_eq!(state.current_match(), Some(ranges[1]));
+        state.move_next(&buffer, false);
+        assert_eq!(state.current_match(), Some(ranges[0]));
     }
 
     #[test]
