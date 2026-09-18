@@ -7,7 +7,7 @@ use std::{
     cell::{RefCell, RefMut},
     collections::{BTreeSet, HashMap, HashSet},
     fmt,
-    future::poll_fn,
+    future::{Future, poll_fn},
     mem,
     pin::Pin,
     ptr::NonNull,
@@ -18,10 +18,11 @@ use std::{
     time::{Duration, Instant},
 };
 
-use futures::executor;
 use ruau::{
     bytecode::{BytecodeChunk, CompileOptions},
-    session::{FunctionHandle, LifecycleError, RootHandle, Runtime},
+    session::{
+        BlockingRuntime, BlockingRuntimeError, FunctionHandle, LifecycleError, RootHandle, Runtime,
+    },
     source::{ModuleId, Source, SourceProvider},
     surface::{CheckOptions, PrepareOptions, PreparedGraph, Surface, VmConfig},
     typecheck::{DiagnosticRecord, ModuleDiagnosticRecord, Severity},
@@ -32,10 +33,6 @@ use ruau::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use tokio::{
-    runtime::{Builder as RuntimeBuilder, Handle},
-    task::coop::unconstrained,
-};
 
 use crate::{
     Canopy, ChangeOutcome, FixtureInfo, NodeId,
@@ -82,6 +79,19 @@ pub(crate) use invocation::{SCRIPT_GAS_LIMIT, ScriptInvocation};
 pub(crate) use modules::{ScriptModuleRoots, ScriptModuleSource};
 use records::*;
 use value::*;
+
+/// One runtime bridge for synchronous script and headless driver entry points.
+static BLOCKING_RUNTIME: BlockingRuntime = BlockingRuntime::new("canopy-script");
+
+/// Drive a borrowed future only where blocking is supported by the caller.
+pub(crate) fn block_on<T>(future: impl Future<Output = Result<T>>) -> Result<T> {
+    BLOCKING_RUNTIME.block_on(future).map_err(|error| match error {
+        BlockingRuntimeError::AsyncContext => error::Error::InvalidOperation(
+            "synchronous script execution cannot block this Tokio context; construct and run the application on a blocking worker".into(),
+        ),
+        BlockingRuntimeError::Build(message) => error::Error::RunLoop(message),
+    })?
+}
 
 /// Script identifier.
 pub(crate) type ScriptId = u64;
@@ -1042,20 +1052,7 @@ impl LuauHost {
             gas = gas.saturating_sub(step.gas_spent);
             step.poll
         });
-        let outcome = if Handle::try_current().is_ok() {
-            // This foreign executor cannot replenish Tokio's cooperative
-            // budget. Disable it while polling; script gas and timeout
-            // limits remain enforced above.
-            executor::block_on(unconstrained(future))
-        } else {
-            let runtime = RuntimeBuilder::new_current_thread()
-                .enable_time()
-                .build()
-                .map_err(|error| {
-                    error::Error::script(format!("script async runtime failed: {error}"))
-                })?;
-            runtime.block_on(future)
-        };
+        let outcome = block_on(future);
         let (logs, assertions) = invocation.take_diagnostics();
         self.set_diagnostics(logs, assertions);
         outcome

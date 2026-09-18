@@ -7,6 +7,7 @@ use proptest::{
     test_runner::{TestCaseError, TestCaseResult},
 };
 use ruau::vm::{HostArgCursor, MarshaledPair, MultiValue, OwnedValue, ScopedValue, ValueSnapshot};
+use tokio::runtime::Builder;
 
 use super::{base_api::read_node_id, bridge::REENTRANT_CANOPY, *};
 use crate::{
@@ -415,7 +416,8 @@ fn tcompile_error_reports_details() {
 
 #[test]
 fn execute_with_many_waits_survives_tokio_coop_budget() -> Result<()> {
-    RuntimeBuilder::new_current_thread()
+    Builder::new_multi_thread()
+        .worker_threads(1)
         .enable_time()
         .build()
         .expect("test runtime")

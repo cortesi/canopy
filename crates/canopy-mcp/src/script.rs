@@ -19,7 +19,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use tmcp::{TOOL_ERROR_INTERNAL, schema::CallToolResult, tool_params};
-use tokio::task::spawn_blocking;
+use tokio::{sync::oneshot, task::spawn_blocking};
 
 #[cfg(test)]
 use crate::metadata::test_app_factory as app_factory;
@@ -306,6 +306,32 @@ impl AppFactory {
 
     /// Evaluate a Luau script against a fresh headless app.
     pub fn evaluate(&self, request: &ScriptEvalRequest) -> ScriptEvalOutcome {
+        self.evaluate_with(request, eval_script)
+    }
+
+    /// Evaluate on a Tokio blocking worker, cancelling when its caller leaves.
+    pub(crate) fn evaluate_cancellable(
+        &self,
+        request: &ScriptEvalRequest,
+        cancelled: oneshot::Receiver<()>,
+    ) -> ScriptEvalOutcome {
+        self.evaluate_with(request, |canopy, script, timeout_ms| {
+            let request = eval_request(canopy, script, timeout_ms);
+            canopy
+                .eval_with_cancellation(request, async {
+                    let _closed = cancelled.await;
+                })?
+                .into_result()
+                .map_err(Into::into)
+        })
+    }
+
+    /// Share setup, typechecking, diagnostics, and rendering across drivers.
+    fn evaluate_with(
+        &self,
+        request: &ScriptEvalRequest,
+        eval: impl FnOnce(&mut Canopy, &str, Option<u64>) -> Result<ArgValue>,
+    ) -> ScriptEvalOutcome {
         let viewport = request.viewport.unwrap_or_default();
         let mut metadata = ExecutionMetadata::fresh(self.metadata(), viewport);
         let outcome = (|| {
@@ -331,7 +357,7 @@ impl AppFactory {
                     }
                 };
             let build_ms = elapsed_ms(total_start);
-            evaluate_in(&mut canopy, request, build_ms, total_start, true)
+            evaluate_in(&mut canopy, request, build_ms, total_start, true, eval)
         })();
         outcome.with_metadata(metadata)
     }
@@ -495,7 +521,7 @@ pub fn evaluate_live(
         }
     };
     let outcome = match validate_live_request(request, &metadata) {
-        Ok(()) => evaluate_in(canopy, request, 0, Instant::now(), false),
+        Ok(()) => evaluate_in(canopy, request, 0, Instant::now(), false, eval_script),
         Err(error) => ScriptEvalOutcome::error_only(
             ScriptErrorType::Invalid,
             error.to_string(),
@@ -706,6 +732,7 @@ fn evaluate_in(
     build_ms: u64,
     total_start: Instant,
     render: bool,
+    eval: impl FnOnce(&mut Canopy, &str, Option<u64>) -> Result<ArgValue>,
 ) -> ScriptEvalOutcome {
     let diagnostics = match typecheck_for_eval(
         canopy,
@@ -721,7 +748,7 @@ fn evaluate_in(
     };
 
     let exec_start = Instant::now();
-    let eval_result = eval_script(canopy, &request.script, request.timeout_ms).and_then(|value| {
+    let eval_result = eval(canopy, &request.script, request.timeout_ms).and_then(|value| {
         if render {
             canopy.render(&mut NopBackend::new())?;
         }
@@ -774,14 +801,19 @@ fn build_headless(
 
 /// Evaluate a script with an optional cooperative timeout.
 fn eval_script(canopy: &mut Canopy, script: &str, timeout_ms: Option<u64>) -> Result<ArgValue> {
-    let outcome = canopy.eval(EvalRequest {
+    let request = eval_request(canopy, script, timeout_ms);
+    canopy.eval(request)?.into_result().map_err(Into::into)
+}
+
+/// Resolve the root and shared timeout policy before borrowing the driver.
+fn eval_request(canopy: &Canopy, script: &str, timeout_ms: Option<u64>) -> EvalRequest {
+    EvalRequest {
         source: script.to_string(),
         timeout: timeout_ms
             .filter(|timeout| *timeout > 0)
             .map(Duration::from_millis),
         anchor: canopy.root_id(),
-    })?;
-    outcome.into_result().map_err(Into::into)
+    }
 }
 
 /// Result of the shared typecheck gate used by headless and live evaluation.

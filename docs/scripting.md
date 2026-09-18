@@ -63,6 +63,21 @@ reload fails with structured `ScriptBusy`. Live callers submit an `EvalRequest`
 through `AutomationHandle::submit_eval` and await the returned `EvalTicket` outside
 the UI thread. Its completion contains the value or error, logs, and assertions.
 Completion arrives through the original ticket after runtime preparation.
+Dropping its completion receiver cancels queued or active work. Active work wakes
+the UI driver and records cancellation on the next turn.
+
+Synchronous script entry points use Ruau's cached blocking runtime. This includes
+`Canopy::eval`, `eval_script`, builder binding/config scripts, and startup hooks.
+Current-thread Tokio tasks and `LocalSet` callers must construct, use, and drop
+the entire application on a blocking worker. An entered runtime outside a running
+task, as used by the terminal adapter, is supported. `eval_with_cancellation`
+accepts a cancellation future and leaves the application reusable after cancellation.
+
+The headless MCP server runs factory operations on at most four blocking workers.
+Each worker owns its application from construction through destruction. Cancellation
+and connection-input closure stop queued work or signal a running evaluation.
+Workers retain their capacity permits until native work returns. Live MCP uses
+the same transport signals to drop evaluation tickets on the UI driver.
 
 Script-created node IDs, binding IDs, and function handles are runtime
 capabilities. They are valid only while the app, node, script host, and
@@ -406,11 +421,16 @@ visible through `canopy.bindings()`.
 The driver includes parked time in each evaluation deadline. VM limits also check
 running Luau at safepoints. Expiration surfaces as a structured `ScriptTimeout`
 error. Explicit cancellation produces `ScriptCancelled` and MCP state `cancelled`.
+MCP clients that cancel a request do not receive a late response for that request.
 
 Timeouts do not kill a thread or process. Rust callbacks must return to Luau
 before the cancellation can be observed. A long native callback can therefore
 run past the requested timeout. Infinite Luau loops time out with `state =
 "timed_out"` and `error.type = "timeout"`.
+Construction, typechecking, startup, and rendering remain synchronous. Transport
+cancellation cannot interrupt these phases. VM instruction quanta and a scheduler
+yield between headless turns let cancellation interrupt busy Luau evaluation
+without disabling Tokio's cooperative budget.
 
 ## Testing
 

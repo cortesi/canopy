@@ -4,15 +4,22 @@ use std::{
     os::unix::fs::FileTypeExt,
     path::{Path, PathBuf},
     result,
-    sync::mpsc,
+    sync::{Arc, mpsc},
     thread,
 };
 
 use canopy::AutomationHandle;
 use ruau_script_api::{ScriptApiError, ScriptApiQuery, ScriptApiResponse};
 use serde::{Deserialize, Serialize};
-use tmcp::{Server, ToolError, ToolResult, mcp_server, schema::CallToolResult, tool_params};
-use tokio::{net::UnixListener, runtime::Builder, sync::oneshot, task::block_in_place};
+use tmcp::{
+    Server, ServerCtx, ToolError, ToolResult, mcp_server, schema::CallToolResult, tool_params,
+};
+use tokio::{
+    net::UnixListener,
+    runtime::Builder,
+    sync::{Semaphore, oneshot},
+    task::{block_in_place, spawn_blocking},
+};
 
 use crate::{
     AppFactory, AppMetadata, BootstrapRequest, Error, Result,
@@ -23,9 +30,20 @@ use crate::{
     },
 };
 
+#[cfg(test)]
+mod headless_tests;
+
 /// Convert an arbitrary error into a tmcp tool error.
 fn tool_error(error: impl Display) -> ToolError {
     ToolError::internal(error.to_string())
+}
+
+/// Stop work when its request is cancelled or the client ends the connection.
+async fn request_cancelled(context: &ServerCtx) {
+    tokio::select! {
+        () = context.cancelled() => {},
+        () = context.connection_closed() => {},
+    }
 }
 
 /// Encode a typed payload as an MCP structured result.
@@ -38,6 +56,55 @@ fn to_tool_result(value: impl Serialize) -> ToolResult<CallToolResult> {
 struct CanopyMcpServer {
     /// Headless evaluator shared by all tool calls.
     evaluator: AppFactory,
+    /// Bound app construction and execution across concurrent requests.
+    workers: Arc<Semaphore>,
+}
+
+impl CanopyMcpServer {
+    /// Share a small blocking-work budget between all connection clones.
+    fn new(evaluator: AppFactory) -> Self {
+        Self {
+            evaluator,
+            workers: Arc::new(Semaphore::new(4)),
+        }
+    }
+
+    /// Keep the non-Send application on a blocking worker for its full
+    /// lifetime.
+    async fn run_headless<T: Send + 'static>(
+        &self,
+        context: &ServerCtx,
+        work: impl FnOnce(AppFactory, oneshot::Receiver<()>) -> ToolResult<T> + Send + 'static,
+    ) -> ToolResult<T> {
+        let permit = tokio::select! {
+            biased;
+            () = request_cancelled(context) => return Err(tool_error("request cancelled")),
+            permit = Arc::clone(&self.workers).acquire_owned() => permit.map_err(tool_error)?,
+        };
+        let evaluator = self.evaluator.clone();
+        let (cancel, mut cancelled) = oneshot::channel();
+        let worker = spawn_blocking(move || {
+            // The worker retains its permit even if the async caller leaves.
+            let _permit = permit;
+            if !matches!(
+                cancelled.try_recv(),
+                Err(oneshot::error::TryRecvError::Empty)
+            ) {
+                return Err(tool_error("request cancelled"));
+            }
+            work(evaluator, cancelled)
+        });
+        tokio::select! {
+            biased;
+            () = request_cancelled(context) => {
+                drop(cancel);
+                Err(tool_error("request cancelled"))
+            }
+            result = worker => result.map_err(tool_error)?,
+        }
+        // Dropping the sender also cancels a worker when this future is
+        // dropped.
+    }
 }
 
 /// Request payload for applying a named fixture to a live app.
@@ -69,29 +136,53 @@ impl CanopyMcpServer {
     #[tool]
     /// Return the operating guide, generated API, fixtures, availability, and
     /// journal summary.
-    async fn bootstrap(&self, params: BootstrapRequest) -> ToolResult<CallToolResult> {
-        let bootstrap = self.evaluator.bootstrap(&params).map_err(tool_error)?;
-        to_tool_result(bootstrap)
+    async fn bootstrap(
+        &self,
+        context: &ServerCtx,
+        params: BootstrapRequest,
+    ) -> ToolResult<CallToolResult> {
+        self.run_headless(context, move |evaluator, _cancelled| {
+            to_tool_result(evaluator.bootstrap(&params).map_err(tool_error)?)
+        })
+        .await
     }
 
     #[tool]
     /// Evaluate a Luau script against a fresh headless canopy app instance.
-    async fn script_eval(&self, params: ScriptEvalRequest) -> ToolResult<CallToolResult> {
-        Ok(self.evaluator.evaluate(&params).to_tool_result())
+    async fn script_eval(
+        &self,
+        context: &ServerCtx,
+        params: ScriptEvalRequest,
+    ) -> ToolResult<CallToolResult> {
+        self.run_headless(context, move |evaluator, cancelled| {
+            Ok(evaluator
+                .evaluate_cancellable(&params, cancelled)
+                .to_tool_result())
+        })
+        .await
     }
 
     #[tool(read_only, output_schema = ScriptApiResponse)]
     /// Return shared discovery for the generated app API.
-    async fn script_api(&self, params: ScriptApiQuery) -> ToolResult<CallToolResult> {
-        let api = self.evaluator.script_api().map_err(tool_error)?;
-        script_api_tool_result(query_script_api(api, &params))
+    async fn script_api(
+        &self,
+        context: &ServerCtx,
+        params: ScriptApiQuery,
+    ) -> ToolResult<CallToolResult> {
+        self.run_headless(context, move |evaluator, _cancelled| {
+            let api = evaluator.script_api().map_err(tool_error)?;
+            script_api_tool_result(query_script_api(api, &params))
+        })
+        .await
     }
 
     #[tool]
     /// List the application's registered fixtures.
-    async fn fixtures(&self) -> ToolResult<CallToolResult> {
-        let fixtures = self.evaluator.fixtures().map_err(tool_error)?;
-        to_tool_result(fixtures)
+    async fn fixtures(&self, context: &ServerCtx) -> ToolResult<CallToolResult> {
+        self.run_headless(context, move |evaluator, _cancelled| {
+            to_tool_result(evaluator.fixtures().map_err(tool_error)?)
+        })
+        .await
     }
 }
 
@@ -116,10 +207,16 @@ impl LiveCanopyMcpServer {
 
     #[tool]
     /// Evaluate a Luau script against the currently running canopy app.
-    async fn script_eval(&self, params: ScriptEvalRequest) -> ToolResult<CallToolResult> {
-        let outcome =
-            evaluate_live_request(self.automation.clone(), params, self.context.clone()).await;
-        Ok(outcome.to_tool_result())
+    async fn script_eval(
+        &self,
+        context: &ServerCtx,
+        params: ScriptEvalRequest,
+    ) -> ToolResult<CallToolResult> {
+        tokio::select! {
+            biased;
+            () = request_cancelled(context) => Err(tool_error("request cancelled")),
+            outcome = evaluate_live_request(self.automation.clone(), params, self.context.clone()) => Ok(outcome.to_tool_result()),
+        }
     }
 
     #[tool(read_only, output_schema = ScriptApiResponse)]
@@ -190,11 +287,10 @@ fn script_api_tool_result(
 /// This low-level entry point grants trusted-local access to all exposed native
 /// actions. Calling this function is the application's automation opt-in.
 pub fn serve_stdio(factory: AppFactory) -> Result<()> {
-    Server::new(move || CanopyMcpServer {
-        evaluator: factory.clone(),
-    })
-    .serve_stdio_blocking()
-    .map_err(Error::from)
+    let server = CanopyMcpServer::new(factory);
+    Server::new(move || server.clone())
+        .serve_stdio_blocking()
+        .map_err(Error::from)
 }
 
 /// Handle for a running live UDS MCP listener.
@@ -326,7 +422,7 @@ mod tests {
         Canopy, CanopyBuilder, ContextExt, Fixture, Loader, NodeName, Widget, derive_commands,
         error::Result as CanopyResult, geom::Size, testing::contracts,
     };
-    use tokio::net::UnixStream;
+    use tokio::{net::UnixStream, sync::mpsc as async_mpsc};
 
     use super::*;
     use crate::metadata::test_app_factory as app_factory;
@@ -426,59 +522,70 @@ mod tests {
     }
 
     fn server() -> CanopyMcpServer {
-        CanopyMcpServer {
-            evaluator: app_factory(|| {
-                CanopyBuilder::new()
-                    .configure(|canopy| {
-                        EchoNode::load(canopy)?;
-                        canopy.register_fixture(Fixture::new(
-                            "seeded",
-                            "Set echo_node to a known value",
-                            |canopy| canopy.eval_script("echo_node.set(41)").map(|_| ()),
-                        ))
-                    })
-                    .assemble(|canopy| {
-                        canopy.replace_root(EchoNode::new())?;
-                        Ok(())
-                    })
-                    .build()
-                    .map_err(Into::into)
-            }),
-        }
+        CanopyMcpServer::new(app_factory(|| {
+            CanopyBuilder::new()
+                .configure(|canopy| {
+                    EchoNode::load(canopy)?;
+                    canopy.register_fixture(Fixture::new(
+                        "seeded",
+                        "Set echo_node to a known value",
+                        |canopy| canopy.eval_script("echo_node.set(41)").map(|_| ()),
+                    ))
+                })
+                .assemble(|canopy| {
+                    canopy.replace_root(EchoNode::new())?;
+                    Ok(())
+                })
+                .build()
+                .map_err(Into::into)
+        }))
+    }
+
+    fn context() -> ServerCtx {
+        ServerCtx::notification_only(async_mpsc::channel(1).0)
     }
 
     #[tokio::test]
     async fn script_api_returns_shared_dynamic_discovery() {
         let server = server();
         let overview = server
-            .script_api(ScriptApiQuery::default())
+            .script_api(&context(), ScriptApiQuery::default())
             .await
             .expect("overview");
         assert_eq!(overview.structured_content.unwrap()["mode"], "overview");
 
         let listed = server
-            .script_api(ScriptApiQuery {
-                list: true,
-                filter: None,
-            })
+            .script_api(
+                &context(),
+                ScriptApiQuery {
+                    list: true,
+                    filter: None,
+                },
+            )
             .await
             .expect("list");
         assert!(listed.text().unwrap().contains("echo_node.ping"));
 
         let detail = server
-            .script_api(ScriptApiQuery {
-                list: false,
-                filter: Some("echo_node.ping".to_owned()),
-            })
+            .script_api(
+                &context(),
+                ScriptApiQuery {
+                    list: false,
+                    filter: Some("echo_node.ping".to_owned()),
+                },
+            )
             .await
             .expect("detail");
         assert_eq!(detail.structured_content.unwrap()["mode"], "detail");
 
         let missing = server
-            .script_api(ScriptApiQuery {
-                list: false,
-                filter: Some("missing-path".to_owned()),
-            })
+            .script_api(
+                &context(),
+                ScriptApiQuery {
+                    list: false,
+                    filter: Some("missing-path".to_owned()),
+                },
+            )
             .await
             .expect("missing result");
         assert!(missing.is_error());
@@ -488,7 +595,7 @@ mod tests {
     #[tokio::test]
     async fn bootstrap_returns_digest_inventory_and_availability() {
         let result = server()
-            .bootstrap(BootstrapRequest::default())
+            .bootstrap(&context(), BootstrapRequest::default())
             .await
             .expect("bootstrap");
         let payload = result.structured_content.expect("structured content");
@@ -512,23 +619,24 @@ mod tests {
 
     #[tokio::test]
     async fn shared_trace_through_direct_mcp_handler() -> crate::Result<()> {
-        let server = CanopyMcpServer {
-            evaluator: AppFactory::new(
-                AppMetadata {
-                    app: "contract".into(),
-                    reset: crate::ResetPolicy::Isolated,
-                },
-                || Ok(contracts::app()?),
-            ),
-        };
+        let server = CanopyMcpServer::new(AppFactory::new(
+            AppMetadata {
+                app: "contract".into(),
+                reset: crate::ResetPolicy::Isolated,
+            },
+            || Ok(contracts::app()?),
+        ));
         let response = server
-            .script_eval(ScriptEvalRequest {
-                viewport: Some(crate::Viewport {
-                    width: 12,
-                    height: 3,
-                }),
-                ..ScriptEvalRequest::new(contracts::SCRIPT)
-            })
+            .script_eval(
+                &context(),
+                ScriptEvalRequest {
+                    viewport: Some(crate::Viewport {
+                        width: 12,
+                        height: 3,
+                    }),
+                    ..ScriptEvalRequest::new(contracts::SCRIPT)
+                },
+            )
             .await
             .expect("direct MCP evaluation");
         let outcome: crate::ScriptEvalOutcome =
@@ -690,9 +798,10 @@ mod tests {
     #[tokio::test]
     async fn script_eval_returns_json_payload() {
         let result = server()
-            .script_eval(ScriptEvalRequest::new(
-                "return echo_node.ping()".to_string(),
-            ))
+            .script_eval(
+                &context(),
+                ScriptEvalRequest::new("return echo_node.ping()".to_string()),
+            )
             .await
             .expect("script_eval");
         let payload = result.structured_content.expect("structured content");
@@ -706,10 +815,13 @@ mod tests {
     #[tokio::test]
     async fn script_eval_applies_headless_fixture() {
         let result = server()
-            .script_eval(ScriptEvalRequest {
-                fixture: Some("seeded".to_string()),
-                ..ScriptEvalRequest::new("return echo_node.get()")
-            })
+            .script_eval(
+                &context(),
+                ScriptEvalRequest {
+                    fixture: Some("seeded".to_string()),
+                    ..ScriptEvalRequest::new("return echo_node.get()")
+                },
+            )
             .await
             .expect("script_eval");
         let payload = result.structured_content.expect("structured content");
@@ -725,10 +837,13 @@ mod tests {
             "for _ = 1, 300 do canopy.wait_for(function() return true end, 50) end return echo_node.ping()"
                 .to_string();
         let result = server()
-            .script_eval(ScriptEvalRequest {
-                timeout_ms: Some(20_000),
-                ..ScriptEvalRequest::new(script)
-            })
+            .script_eval(
+                &context(),
+                ScriptEvalRequest {
+                    timeout_ms: Some(20_000),
+                    ..ScriptEvalRequest::new(script)
+                },
+            )
             .await
             .expect("script_eval");
         let payload = result.structured_content.expect("structured content");
@@ -748,10 +863,13 @@ mod tests {
             "while true do end",
         ] {
             let result = server()
-                .script_eval(ScriptEvalRequest {
-                    timeout_ms: Some(50),
-                    ..ScriptEvalRequest::new(script)
-                })
+                .script_eval(
+                    &context(),
+                    ScriptEvalRequest {
+                        timeout_ms: Some(50),
+                        ..ScriptEvalRequest::new(script)
+                    },
+                )
                 .await
                 .expect("script_eval");
             let payload = result.structured_content.expect("structured content");
@@ -763,7 +881,7 @@ mod tests {
 
     #[tokio::test]
     async fn fixtures_returns_registered_fixture_metadata() {
-        let result = server().fixtures().await.expect("fixtures");
+        let result = server().fixtures(&context()).await.expect("fixtures");
         let payload = result.structured_content.expect("structured content");
         assert_eq!(
             payload[0]["name"],
@@ -778,7 +896,10 @@ mod tests {
     #[tokio::test]
     async fn script_eval_reports_typecheck_errors() {
         let result = server()
-            .script_eval(ScriptEvalRequest::new("echo_node.ping(1)".to_string()))
+            .script_eval(
+                &context(),
+                ScriptEvalRequest::new("echo_node.ping(1)".to_string()),
+            )
             .await
             .expect("script_eval");
         let payload = result.structured_content.expect("structured content");
@@ -826,7 +947,7 @@ mod tests {
         };
         let worker = thread::spawn(move || {
             let runtime = Builder::new_current_thread().enable_all().build().unwrap();
-            runtime.block_on(server.script_eval(ScriptEvalRequest::new("echo_node.signal_started(); canopy.wait_for(function() return echo_node.get() == 7 end); return echo_node.get()".to_string()))).expect("live eval transport")
+            runtime.block_on(server.script_eval(&context(), ScriptEvalRequest::new("echo_node.signal_started(); canopy.wait_for(function() return echo_node.get() == 7 end); return echo_node.get()".to_string()))).expect("live eval transport")
         });
         while started_rx.try_recv().is_err() {
             executor::block_on(events.next()).expect("queued work wakes the UI");

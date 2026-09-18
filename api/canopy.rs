@@ -2787,6 +2787,11 @@ pub mod canopy {
     /// A failed build returns no application. Native or database effects performed
     /// by callbacks are not rolled back. Retrying requires a fresh builder and
     /// application resources suitable for retry.
+    ///
+    /// Script setup is synchronous. From a current-thread Tokio task or `LocalSet`,
+    /// construct and run the entire application on a blocking worker. Synchronous
+    /// script execution rejects those task contexts instead of blocking their
+    /// scheduler.
     #[derive(Default)]
     pub struct CanopyBuilder {}
 
@@ -2867,7 +2872,8 @@ pub mod canopy {
     ///
     /// The public receiver is intentionally the futures oneshot type: evaluation
     /// completion is a single-consumer event, and wrapping it would duplicate the
-    /// same polling and cancellation contract.
+    /// same polling and cancellation contract. Dropping the completion receiver
+    /// cancels queued or active evaluation work on its next driver turn.
     pub struct EvalTicket {
         /// Accepted queue identity, including failed admission results.
         pub id: EvalId,
@@ -4120,8 +4126,27 @@ pub mod canopy {
         /// Advance one bounded runtime turn.
         pub fn turn(&mut self, work: Work) -> Result<TurnOutcome> {}
 
+        /// Drive a synchronous headless evaluation until completion or
+        /// cancellation.
+        ///
+        /// When `cancelled` resolves, abort the evaluation and return
+        /// [`Error::ScriptCancelled`]. The application remains reusable. Native
+        /// callbacks must return before cancellation can take effect. The future
+        /// is polled on the application's owning thread in a time-enabled Tokio
+        /// runtime. The same caller restrictions as [`Self::eval`] apply.
+        pub fn eval_with_cancellation(
+            &mut self,
+            request: EvalRequest,
+            cancelled: impl Future<Output = ()>,
+        ) -> Result<EvalOutcome> {
+        }
+
         /// Drive the shared runtime until one synchronous headless evaluation
         /// completes.
+        ///
+        /// Current-thread Tokio tasks and `LocalSet` callers must move the
+        /// complete operation, including application construction, to a blocking
+        /// worker. The application stays on its owning thread.
         pub fn eval(&mut self, request: EvalRequest) -> Result<EvalOutcome> {}
 
         /// Set the size on the root node.
@@ -4145,6 +4170,8 @@ pub mod canopy {
         pub fn take_script_logs(&mut self) -> Vec<String> {}
 
         /// Evaluate a Luau source string at the root and return its value.
+        ///
+        /// The synchronous caller restrictions of [`Self::eval`] apply.
         pub fn eval_script(&mut self, source: &str) -> Result<commands::ArgValue> {}
 
         /// Get a reference to the current render buffer, if any.

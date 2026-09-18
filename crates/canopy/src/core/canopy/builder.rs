@@ -47,6 +47,11 @@ enum SetupSource {
 /// A failed build returns no application. Native or database effects performed
 /// by callbacks are not rolled back. Retrying requires a fresh builder and
 /// application resources suitable for retry.
+///
+/// Script setup is synchronous. From a current-thread Tokio task or `LocalSet`,
+/// construct and run the entire application on a blocking worker. Synchronous
+/// script execution rejects those task contexts instead of blocking their
+/// scheduler.
 #[derive(Default)]
 pub struct CanopyBuilder {
     /// Registration callbacks in configuration-phase order.

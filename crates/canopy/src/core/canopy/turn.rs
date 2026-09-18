@@ -2,6 +2,7 @@
 
 use std::{
     collections::HashMap,
+    future::Future,
     mem,
     sync::{
         Arc, Mutex,
@@ -12,15 +13,14 @@ use std::{
 };
 
 use futures::{
-    channel::{mpsc::UnboundedSender, oneshot},
-    executor,
+    FutureExt, StreamExt,
+    channel::{
+        mpsc::{UnboundedReceiver, UnboundedSender},
+        oneshot,
+    },
     future::{pending, poll_fn},
 };
-use tokio::{
-    runtime::{Builder as RuntimeBuilder, Handle},
-    task::coop::unconstrained,
-    time::sleep,
-};
+use tokio::{task::yield_now, time::sleep};
 
 use super::{AdapterEvent, Canopy};
 use crate::{
@@ -48,7 +48,8 @@ impl EvalId {
 ///
 /// The public receiver is intentionally the futures oneshot type: evaluation
 /// completion is a single-consumer event, and wrapping it would duplicate the
-/// same polling and cancellation contract.
+/// same polling and cancellation contract. Dropping the completion receiver
+/// cancels queued or active evaluation work on its next driver turn.
 pub struct EvalTicket {
     /// Accepted queue identity, including failed admission results.
     pub id: EvalId,
@@ -329,6 +330,7 @@ impl Canopy {
     pub(super) fn service_message(&mut self, message: AutomationMessage) {
         match message {
             AutomationMessage::Callback(callback) => callback(self),
+            AutomationMessage::Eval(_, _, sender) if sender.is_canceled() => {}
             AutomationMessage::Eval(id, request, sender) => match self.start_eval(id, request) {
                 Ok(()) => {
                     self.driver.tickets.insert(id, sender);
@@ -438,16 +440,27 @@ impl Canopy {
         }
         if let Some(mut active) = self.driver.active.take() {
             let now = self.now();
-            if active.deadline.is_some_and(|d| now >= d) {
+            // Clear before registering cancellation: a concurrent receiver
+            // drop must leave a fresh wake for the next turn.
+            let vm_ready = self.driver.wake.ready.swap(false, Ordering::AcqRel);
+            let waker = Waker::from(Arc::clone(&self.driver.wake));
+            let mut cx = Context::from_waker(&waker);
+            let cancelled = self
+                .driver
+                .tickets
+                .get_mut(&active.id)
+                .is_some_and(|sender| sender.poll_canceled(&mut cx).is_ready());
+            if cancelled {
+                self.script_host.abort_invocation(&mut active.invocation)?;
+                completed = Some((active, Err(Error::ScriptCancelled)));
+            } else if active.deadline.is_some_and(|d| now >= d) {
                 self.script_host.abort_invocation(&mut active.invocation)?;
                 let timeout_ms = active
                     .request
                     .timeout
                     .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX));
                 completed = Some((active, Err(Error::ScriptTimeout { timeout_ms })));
-            } else if self.driver.wake.ready.swap(false, Ordering::AcqRel) {
-                let waker = Waker::from(Arc::clone(&self.driver.wake));
-                let mut cx = Context::from_waker(&waker);
+            } else if vm_ready {
                 let host = self.script_host.clone();
                 let step = host.poll_invocation(
                     self,
@@ -532,69 +545,56 @@ impl super::AutomationHandle {
 impl Canopy {
     /// Drive the shared runtime until one synchronous headless evaluation
     /// completes.
+    ///
+    /// Current-thread Tokio tasks and `LocalSet` callers must move the
+    /// complete operation, including application construction, to a blocking
+    /// worker. The application stays on its owning thread.
     pub fn eval(&mut self, request: EvalRequest) -> Result<EvalOutcome> {
+        script::block_on(self.eval_async(request))
+    }
+
+    /// Drive a synchronous headless evaluation until completion or
+    /// cancellation.
+    ///
+    /// When `cancelled` resolves, abort the evaluation and return
+    /// [`Error::ScriptCancelled`]. The application remains reusable. Native
+    /// callbacks must return before cancellation can take effect. The future
+    /// is polled on the application's owning thread in a time-enabled Tokio
+    /// runtime. The same caller restrictions as [`Self::eval`] apply.
+    pub fn eval_with_cancellation(
+        &mut self,
+        request: EvalRequest,
+        cancelled: impl Future<Output = ()>,
+    ) -> Result<EvalOutcome> {
+        script::block_on(async {
+            tokio::select! {
+                biased;
+                () = cancelled => Err(Error::ScriptCancelled),
+                result = self.eval_async(request) => result,
+            }
+        })
+    }
+
+    /// Drive bounded turns inside the owned blocking runtime.
+    async fn eval_async(&mut self, request: EvalRequest) -> Result<EvalOutcome> {
         if self.driver.in_turn || self.driver.active.is_some() || script::in_live_scope(self) {
             return Err(busy());
         }
-        let runtime = if Handle::try_current().is_ok() {
-            None
-        } else {
-            Some(
-                RuntimeBuilder::new_current_thread()
-                    .enable_time()
-                    .build()
-                    .map_err(|error| Error::RunLoop(format!("headless runtime: {error}")))?,
-            )
+        let events = self.event_rx.take().ok_or_else(busy)?;
+        let mut guard = HeadlessEval {
+            canopy: self,
+            events: Some(events),
         };
-        let mut events = self.event_rx.take().ok_or_else(busy)?;
-        let future = async {
-            use futures::{FutureExt, StreamExt};
-            let mut outcome = self.turn(Work::StartEval(request))?;
-            let id = outcome.started.expect("start turn accepts evaluation");
-            loop {
-                if let Some(index) = outcome.completed.iter().position(|done| done.id == id) {
-                    let completion = outcome.completed.swap_remove(index);
-                    return Ok(completion);
-                }
-                let work = {
-                    let deadline = self.next_deadline();
-                    let timer = async {
-                        match deadline {
-                            Some(deadline) => {
-                                sleep(deadline.saturating_duration_since(self.now())).await
-                            }
-                            None => pending().await,
-                        }
-                    }
-                    .fuse();
-                    let notified = poll_fn(|cx| self.poll_runtime_wake(cx)).fuse();
-                    let event = events.next().fuse();
-                    futures::pin_mut!(timer, notified, event);
-                    futures::select! {
-                        result = notified => { result?; Work::Wake },
-                        () = timer => Work::Wake,
-                        event = event => match event.ok_or_else(|| Error::RunLoop("headless event channel closed".into()))? {
-                            AdapterEvent::Input(event) => Work::Input(vec![event]),
-                            AdapterEvent::Wake => Work::Wake,
-                        },
-                    }
-                };
-                // All waiting futures release application references before
-                // dispatch.
-                outcome = self.turn(work)?;
-            }
-        };
-        let result = match runtime {
-            Some(runtime) => runtime.block_on(future),
-            // This foreign executor cannot replenish Tokio's cooperative
-            // budget. Disable it while polling; turn_inner still enforces
-            // the evaluation's gas and deadline limits.
-            None => executor::block_on(unconstrained(future)),
-        };
-        self.event_rx = Some(events);
-        if result.is_err()
-            && let Some(mut active) = self.driver.active.take()
-        {
+        let result = guard.run(request).await;
+        if result.is_err() {
+            guard.canopy.abort_headless_eval(&result);
+        }
+        result
+    }
+
+    /// Release pending work and preserve its diagnostics on driver failure.
+    fn abort_headless_eval<T>(&mut self, result: &Result<T>) {
+        if let Some(mut active) = self.driver.active.take() {
             if let Err(error) = self.script_host.abort_invocation(&mut active.invocation) {
                 tracing::error!(%error, "aborting failed headless evaluation");
             }
@@ -610,10 +610,70 @@ impl Canopy {
                     logs: 0,
                     assertions: 0,
                 },
-                &result,
+                result,
             );
         }
-        result
+    }
+}
+
+/// Restore driver resources even when an async caller drops its evaluation.
+struct HeadlessEval<'a> {
+    /// Application borrowed for the complete headless operation.
+    canopy: &'a mut Canopy,
+    /// Event receiver restored to the application on every exit path.
+    events: Option<UnboundedReceiver<AdapterEvent>>,
+}
+
+impl HeadlessEval<'_> {
+    /// Poll bounded turns, returning control to Tokio between ready turns.
+    async fn run(&mut self, request: EvalRequest) -> Result<EvalOutcome> {
+        let canopy = &mut *self.canopy;
+        let events = self.events.as_mut().expect("headless driver owns events");
+        let mut outcome = canopy.turn(Work::StartEval(request))?;
+        let id = outcome.started.expect("start turn accepts evaluation");
+        loop {
+            if let Some(index) = outcome.completed.iter().position(|done| done.id == id) {
+                let completion = outcome.completed.swap_remove(index);
+                return Ok(completion);
+            }
+            // VM and adapter wakes can stay ready indefinitely. Yield
+            // explicitly so Tokio replenishes its cooperative budget.
+            yield_now().await;
+            let work = {
+                let deadline = canopy.next_deadline();
+                let timer = async {
+                    match deadline {
+                        Some(deadline) => {
+                            sleep(deadline.saturating_duration_since(canopy.now())).await
+                        }
+                        None => pending().await,
+                    }
+                }
+                .fuse();
+                let notified = poll_fn(|cx| canopy.poll_runtime_wake(cx)).fuse();
+                let event = events.next().fuse();
+                futures::pin_mut!(timer, notified, event);
+                futures::select! {
+                    result = notified => { result?; Work::Wake },
+                    () = timer => Work::Wake,
+                    event = event => match event.ok_or_else(|| Error::RunLoop("headless event channel closed".into()))? {
+                        AdapterEvent::Input(event) => Work::Input(vec![event]),
+                        AdapterEvent::Wake => Work::Wake,
+                    },
+                }
+            };
+            // All waiting futures release application references before
+            // dispatch.
+            outcome = canopy.turn(work)?;
+        }
+    }
+}
+
+impl Drop for HeadlessEval<'_> {
+    fn drop(&mut self) {
+        self.canopy
+            .abort_headless_eval(&Err::<(), _>(Error::ScriptCancelled));
+        self.canopy.event_rx = self.events.take();
     }
 }
 

@@ -533,6 +533,8 @@ impl Canopy {
     }
 
     /// Evaluate a Luau source string at the root and return its value.
+    ///
+    /// The synchronous caller restrictions of [`Self::eval`] apply.
     pub fn eval_script(&mut self, source: &str) -> Result<commands::ArgValue> {
         let outcome = self.eval(EvalRequest {
             source: source.to_owned(),

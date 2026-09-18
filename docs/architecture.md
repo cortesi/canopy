@@ -357,6 +357,14 @@ ready VM segments. It then prepares layout, paints, and publishes changed state.
 Evaluation tickets complete after preparation. Publication wakes parked predicates
 for a later turn.
 
+Headless evaluation drives these turns on Ruau's cached blocking runtime and
+yields between ready turns. Each VM poll has an instruction quantum, independent
+of the total gas and timeout limits. Synchronous script callbacks also use this
+runtime bridge. No foreign executor or unconstrained Tokio scope drives scripts.
+The MCP transport owns only factory handles and results; bounded blocking workers
+own headless applications. Live evaluation stays on the UI thread, and dropping
+a ticket wakes that driver to cancel its work.
+
 `ChangeSet` tracks layout, paint, cursor, and observation invalidation. Mutable
 widget access and accepted runtime mutations record the required work. Failed
 mutations retain invalidation for state they changed. Read-only automation does

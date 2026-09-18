@@ -8,6 +8,10 @@ pub mod canopy_mcp {
     //! MCP and smoke-test helpers for canopy applications.
 
     /// Shared application constructor with an explicit domain-state declaration.
+    ///
+    /// Factory operations are synchronous and may execute application scripts.
+    /// Async callers should construct, use, and drop each application on one
+    /// blocking worker. The headless MCP server supplies bounded workers itself.
     #[derive(Clone)]
     pub struct AppFactory {}
 

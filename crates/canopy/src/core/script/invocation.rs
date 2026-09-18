@@ -21,6 +21,9 @@ use super::{
 /// Total gas available to one top-level evaluation across all VM segments.
 pub const SCRIPT_GAS_LIMIT: u64 = 500_000_000;
 
+/// Maximum VM work before the adapter can service cancellation and other input.
+const SCRIPT_QUANTUM: u64 = 10_000;
+
 /// A pending evaluation with no borrowed runtime, widget, or application state.
 pub struct ScriptInvocation {
     /// Host responsible for releasing a pending invocation on drop.
@@ -265,6 +268,7 @@ impl LuauHost {
         let mut runtime = self.runtime_mut("script VM re-entered without a live scope")?;
         invocation.options = mem::take(&mut invocation.options).limits(Limits {
             gas: Some(remaining_gas),
+            quantum: Some(SCRIPT_QUANTUM),
             ..invocation_limits(remaining_timeout)
         });
         let diagnostics =
