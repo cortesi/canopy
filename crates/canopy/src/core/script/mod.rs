@@ -32,7 +32,10 @@ use ruau::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use tokio::runtime::{Builder as RuntimeBuilder, Handle};
+use tokio::{
+    runtime::{Builder as RuntimeBuilder, Handle},
+    task::coop::unconstrained,
+};
 
 use crate::{
     Canopy, ChangeOutcome, FixtureInfo, NodeId,
@@ -1040,7 +1043,10 @@ impl LuauHost {
             step.poll
         });
         let outcome = if Handle::try_current().is_ok() {
-            executor::block_on(future)
+            // This foreign executor cannot replenish Tokio's cooperative
+            // budget. Disable it while polling; script gas and timeout
+            // limits remain enforced above.
+            executor::block_on(unconstrained(future))
         } else {
             let runtime = RuntimeBuilder::new_current_thread()
                 .enable_time()

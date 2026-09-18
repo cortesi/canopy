@@ -18,6 +18,7 @@ use futures::{
 };
 use tokio::{
     runtime::{Builder as RuntimeBuilder, Handle},
+    task::coop::unconstrained,
     time::sleep,
 };
 
@@ -585,7 +586,10 @@ impl Canopy {
         };
         let result = match runtime {
             Some(runtime) => runtime.block_on(future),
-            None => executor::block_on(future),
+            // This foreign executor cannot replenish Tokio's cooperative
+            // budget. Disable it while polling; turn_inner still enforces
+            // the evaluation's gas and deadline limits.
+            None => executor::block_on(unconstrained(future)),
         };
         self.event_rx = Some(events);
         if result.is_err()

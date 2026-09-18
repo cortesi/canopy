@@ -414,6 +414,28 @@ fn tcompile_error_reports_details() {
 }
 
 #[test]
+fn execute_with_many_waits_survives_tokio_coop_budget() -> Result<()> {
+    RuntimeBuilder::new_current_thread()
+        .enable_time()
+        .build()
+        .expect("test runtime")
+        .block_on(async {
+            run_ttree(|c, _, _| {
+                c.finalize_api()?;
+                let host = c.script_host.clone();
+                let script = host.compile(
+                    "for _ = 1, 300 do canopy.wait_for(function() return true end, 50) end return 42",
+                )?;
+                assert_eq!(
+                    host.execute(c, c.core.root_id(), script, Some(Duration::from_secs(2)))?,
+                    ArgValue::Int(42)
+                );
+                Ok(())
+            })
+        })
+}
+
+#[test]
 fn tprint_output_lands_in_script_logs() -> Result<()> {
     run_ttree(|c, _, _| {
         c.finalize_api()?;

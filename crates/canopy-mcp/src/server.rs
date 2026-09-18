@@ -718,6 +718,50 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn script_eval_with_many_waits_survives_tokio_coop_budget() {
+        // Cross Tokio's cooperative budget with ready host roundtrips while
+        // the synchronous evaluator is nested inside a Tokio task.
+        let script =
+            "for _ = 1, 300 do canopy.wait_for(function() return true end, 50) end return echo_node.ping()"
+                .to_string();
+        let result = server()
+            .script_eval(ScriptEvalRequest {
+                timeout_ms: Some(20_000),
+                ..ScriptEvalRequest::new(script)
+            })
+            .await
+            .expect("script_eval");
+        let payload = result.structured_content.expect("structured content");
+        assert_eq!(payload["success"], serde_json::Value::Bool(true));
+        assert_eq!(
+            payload["value"],
+            serde_json::Value::String("pong".to_string())
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn script_eval_under_tokio_preserves_execution_timeouts() {
+        // Exercise both a parked publication waiter and a busy VM. Neither
+        // execution limit may depend on Tokio's cooperative budget.
+        for script in [
+            "canopy.wait_for(function() return false end, 10000)",
+            "while true do end",
+        ] {
+            let result = server()
+                .script_eval(ScriptEvalRequest {
+                    timeout_ms: Some(50),
+                    ..ScriptEvalRequest::new(script)
+                })
+                .await
+                .expect("script_eval");
+            let payload = result.structured_content.expect("structured content");
+            assert_eq!(payload["success"], serde_json::Value::Bool(false));
+            assert_eq!(payload["state"], "timed_out");
+            assert_eq!(payload["error"]["type"], "timeout");
+        }
+    }
+
+    #[tokio::test]
     async fn fixtures_returns_registered_fixture_metadata() {
         let result = server().fixtures().await.expect("fixtures");
         let payload = result.structured_content.expect("structured content");
