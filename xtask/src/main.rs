@@ -1,6 +1,8 @@
 #![deny(unsafe_code)]
 //! Developer workflow tasks for the canopy workspace.
 
+mod cargo_env;
+
 use std::{
     fs, io,
     path::{Path, PathBuf},
@@ -219,7 +221,7 @@ fn collect_smoke_suites(dir: &Path, suites: &mut Vec<PathBuf>) -> io::Result<()>
 
 /// Run a cargo command from the workspace root.
 fn run_cargo_command(workspace_root: &Path, args: &[&str]) -> bool {
-    match Command::new("cargo")
+    match cargo_env::command("cargo")
         .args(args)
         .current_dir(workspace_root)
         .stdout(Stdio::inherit())

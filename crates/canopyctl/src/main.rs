@@ -1,6 +1,8 @@
 #![deny(unsafe_code)]
 //! Command-line tooling for running and automating canopy apps.
 
+mod cargo_env;
+
 /// CLI configuration and `.canopyctl.toml` resolution.
 mod config;
 /// Replay journal types and their file IO.

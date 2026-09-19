@@ -11,6 +11,8 @@ use anyhow::{Context, Result, anyhow, bail};
 use serde::Deserialize;
 use tokio::process::Command;
 
+use crate::cargo_env;
+
 /// Parsed `.canopyctl.toml` contents.
 #[derive(Debug, Default, Clone, Deserialize)]
 struct FileConfig {
@@ -227,7 +229,16 @@ impl ResolvedCommand {
 
     /// Convert the resolved command into a `tokio::process::Command`.
     pub fn to_command(&self) -> Command {
-        let mut command = Command::new(&self.argv[0]);
+        let mut command = if Path::new(&self.argv[0]).file_stem().is_some_and(|name| {
+            matches!(
+                name.to_str(),
+                Some("cargo" | "ncode" | "edev" | "canopyctl")
+            )
+        }) {
+            Command::from(cargo_env::command(&self.argv[0]))
+        } else {
+            Command::new(&self.argv[0])
+        };
         command.args(&self.argv[1..]);
         command.current_dir(&self.cwd);
         command.envs(&self.env);
