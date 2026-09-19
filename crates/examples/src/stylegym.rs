@@ -6,9 +6,10 @@
 //! modal overlay shows how the pane dims.
 
 use canopy::{
-    Canopy, CanopyBuilder, ChildSlot, Context, ContextExt, FocusDirection, Loader, NodeId,
-    NodeName, Render, TypedId, View, ViewContext, Widget, derive_commands,
+    Canopy, CanopyBuilder, ChildSlot, Context, ContextExt, EventOutcome, FocusDirection, Loader,
+    NodeId, NodeName, Render, TypedId, View, ViewContext, Widget, derive_commands,
     error::Result,
+    event::key,
     geom::{Line, Point, Rect, Size},
     layout::{CanvasContext, Direction, Edges, Layout},
     style::{
@@ -484,6 +485,10 @@ impl StyleSheet {
 }
 
 impl Widget for StyleSheet {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
         rndr.fill("", view.view_rect_local(), ' ')?;
@@ -704,6 +709,10 @@ impl TextSamples {
 }
 
 impl Widget for TextSamples {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
         // Fill background with root style so effects apply to empty space
@@ -744,6 +753,10 @@ impl Widget for TextSamples {
 struct ModalContent;
 
 impl Widget for ModalContent {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
         let rect = view.view_rect_local();
@@ -1007,6 +1020,10 @@ impl Stylegym {
 }
 
 impl Widget for Stylegym {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn layout(&self) -> Layout {
         Layout::fill().direction(Direction::Row)
     }

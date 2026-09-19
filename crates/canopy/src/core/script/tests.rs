@@ -1026,6 +1026,37 @@ fn availability_reports_key_and_mouse_bindings_in_separate_lists() -> Result<()>
 }
 
 #[test]
+fn script_explains_routes_and_rejects_partial_checked_dispatch() -> Result<()> {
+    let (mut canopy, _, _) = script_call_probes()?;
+    canopy.eval_script(
+        r#"
+        canopy.bind("x", {description = "Set value"}, command.script_call_probe.set_value(7))
+
+        local explanation = canopy.explain_key("x")
+        canopy.assert(explanation.certainty == "partial", "an unknown widget leaves the route partial")
+        canopy.assert(explanation.outcome.kind == "after_widget", "the binding would run")
+        canopy.assert(#explanation.steps >= 1, "the walk records steps")
+        canopy.assert(explanation.steps[#explanation.steps].widget == nil, "the step is unknown")
+
+        local active = canopy.available_bindings()
+        local id = active.bindings[1].id
+        canopy.assert(explanation.outcome.binding == id, "the outcome names the binding")
+        canopy.assert(#active.key_prediction_gaps == 1, "the unknown widget creates one gap")
+        local gap = active.key_prediction_gaps[1]
+        canopy.assert(gap.input == "x", "the gap names the canonical key")
+        canopy.assert(gap.binding == id, "the gap names the provisional binding")
+        canopy.assert(gap.path == explanation.steps[#explanation.steps].path, "the gap names the route path")
+
+        local ok = pcall(function()
+            canopy.send_key_checked("x", {kind = "binding", binding = id})
+        end)
+        canopy.assert(not ok, "a partial route cannot be checked")
+        "#,
+    )?;
+    Ok(())
+}
+
+#[test]
 fn script_discovery_separates_disabled_state_and_missing_input() -> Result<()> {
     let (mut canopy, _, _) = script_call_probes()?;
     let ArgValue::Array(availability) = canopy.eval_script(

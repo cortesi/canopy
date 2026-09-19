@@ -240,6 +240,14 @@ impl Input {
     pub fn backspace(&mut self, _c: &mut dyn Context) {
         self.buffer.backspace();
     }
+
+    /// Classify one key without running its effect.
+    ///
+    /// Only plain text is inserted; every chord stays available to bindings,
+    /// and the field's owner handles editing keys.
+    fn classify_key(key: key::Key) -> Option<char> {
+        key.text_char()
+    }
 }
 
 impl Widget for Input {
@@ -311,16 +319,24 @@ impl Widget for Input {
 
     fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {
         let outcome = match event {
-            Event::Key(key::Key {
-                key: key::KeyCode::Char(c),
-                mods,
-            }) if !mods.ctrl && !mods.alt => {
-                self.buffer.insert(*c);
-                EventOutcome::Handle
-            }
+            Event::Key(key) => match Self::classify_key(*key) {
+                Some(character) => {
+                    self.buffer.insert(character);
+                    EventOutcome::Handle
+                }
+                None => EventOutcome::Ignore,
+            },
             _ => EventOutcome::Ignore,
         };
         Ok(outcome)
+    }
+
+    fn key_outcome(&self, key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(if Self::classify_key(key).is_some() {
+            EventOutcome::Handle
+        } else {
+            EventOutcome::Ignore
+        })
     }
 
     fn layout(&self) -> Layout {
@@ -428,6 +444,42 @@ mod tests {
         assert_eq!(buf.cursor_display(), UnicodeWidthStr::width("a") as u32);
         buf.backspace();
         assert_eq!(buf.value(), accent.to_string());
+    }
+
+    #[test]
+    fn key_outcome_matches_event_handling_for_every_spec() {
+        let specs = [
+            "a",
+            "Z",
+            "2",
+            "space",
+            "ctrl-a",
+            "alt-x",
+            "ctrl-alt-z",
+            "enter",
+            "backspace",
+            "left",
+            "f1",
+            "esc",
+            "tab",
+            "shift-a",
+        ];
+        for spec in specs {
+            let mut input = Input::new("");
+            let mut ctx = DummyContext::default();
+            let key = key::Key::parse_spec(spec).expect("valid key spec");
+            let predicted = input.key_outcome(key, &ctx);
+            let actual = input.on_event(&Event::Key(key), &mut ctx).expect("event");
+            let expected = Some(if actual == EventOutcome::Handle {
+                EventOutcome::Handle
+            } else {
+                EventOutcome::Ignore
+            });
+            assert_eq!(
+                predicted, expected,
+                "prediction must match handling for {spec}"
+            );
+        }
     }
 
     #[test]

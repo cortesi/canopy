@@ -435,6 +435,19 @@ fn register_observation_info(builder: &mut module::Builder) {
         ]),
     ));
     builder.alias(declaration::Alias::new(
+        "KeyPredictionGap",
+        declaration::Type::table([
+            declaration::Field::new("input", declaration::Type::String)
+                .doc("Canonical binding key that stays provisional."),
+            declaration::Field::new("binding", declaration::Type::Number)
+                .doc("Included binding that an unknown widget can hide."),
+            declaration::Field::new("node", declaration::Type::named("NodeId"))
+                .doc("Unknown widget that precedes the binding."),
+            declaration::Field::new("path", declaration::Type::String)
+                .doc("Route path of the unknown widget."),
+        ]),
+    ));
+    builder.alias(declaration::Alias::new(
         "BindingSnapshot",
         declaration::Type::table([
             declaration::Field::new("focus", declaration::Type::named("NodeId")),
@@ -452,6 +465,14 @@ fn register_observation_info(builder: &mut module::Builder) {
             )
             .doc("Effective key bindings for the context."),
             declaration::Field::new(
+                "key_prediction_gaps",
+                declaration::Type::named("KeyPredictionGap").array(),
+            )
+            .doc(
+                "Included key bindings whose reachability depends on a widget that offers no \
+                 prediction. An empty list means the key-binding set is exact.",
+            ),
+            declaration::Field::new(
                 "mouse_bindings",
                 declaration::Type::named("AvailableBinding").array(),
             )
@@ -459,6 +480,77 @@ fn register_observation_info(builder: &mut module::Builder) {
                 "Effective mouse bindings for the context, routed from the requested node \
                  rather than from the pointer.",
             ),
+        ]),
+    ));
+    builder.alias(declaration::Alias::new(
+        "KeyExpectation",
+        declaration::Type::table([
+            declaration::Field::new(
+                "kind",
+                declaration::Type::literals([
+                    "widget",
+                    "binding",
+                    "transient",
+                    "transient_dismiss",
+                    "unhandled",
+                ]),
+            ),
+            declaration::Field::new("node", declaration::Type::named("NodeId").optional())
+                .doc("Required when kind is widget."),
+            declaration::Field::new("binding", declaration::Type::Number.optional())
+                .doc("Required when kind is binding or transient."),
+        ]),
+    ));
+    builder.alias(declaration::Alias::new(
+        "KeyRouteStep",
+        declaration::Type::table([
+            declaration::Field::new("node", declaration::Type::named("NodeId")),
+            declaration::Field::new("path", declaration::Type::String),
+            declaration::Field::new("binding", declaration::Type::Number.optional())
+                .doc("Resolved binding at this node, when one exists."),
+            declaration::Field::new(
+                "phase",
+                declaration::Type::literals(["before_widget", "after_widget"]).optional(),
+            ),
+            declaration::Field::new(
+                "widget",
+                declaration::Type::literals(["handle", "ignore"]).optional(),
+            )
+            .doc("Widget prediction; absent when the widget offers none."),
+        ]),
+    ));
+    builder.alias(declaration::Alias::new(
+        "KeyRouteOutcome",
+        declaration::Type::table([
+            declaration::Field::new(
+                "kind",
+                declaration::Type::literals([
+                    "transient",
+                    "transient_dismiss",
+                    "before_widget",
+                    "widget",
+                    "after_widget",
+                    "unhandled",
+                ]),
+            ),
+            declaration::Field::new("binding", declaration::Type::Number.optional()),
+            declaration::Field::new("node", declaration::Type::named("NodeId").optional()),
+            declaration::Field::new("path", declaration::Type::String.optional()),
+        ]),
+    ));
+    builder.alias(declaration::Alias::new(
+        "KeyRouteExplanation",
+        declaration::Type::table([
+            declaration::Field::new("key", declaration::Type::String),
+            declaration::Field::new("focus", declaration::Type::named("NodeId")),
+            declaration::Field::new("focus_path", declaration::Type::String),
+            declaration::Field::new("steps", declaration::Type::named("KeyRouteStep").array()),
+            declaration::Field::new(
+                "certainty",
+                declaration::Type::literals(["exact", "partial"]),
+            )
+            .doc("Partial marks the outcome as provisional."),
+            declaration::Field::new("outcome", declaration::Type::named("KeyRouteOutcome")),
         ]),
     ));
     builder.alias(declaration::Alias::new(

@@ -1,8 +1,9 @@
 use std::path::Path;
 
 use canopy::{
-    Canopy, CanopyBuilder, Context, ContextExt, Loader, Widget,
+    Canopy, CanopyBuilder, Context, ContextExt, EventOutcome, Loader, ViewContext, Widget,
     error::Result,
+    event::key,
     layout::{Edges, Layout},
 };
 use canopy_widgets::{
@@ -47,6 +48,10 @@ impl WidgetEditor {
 }
 
 impl Widget for WidgetEditor {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         let config = EditorConfig::new()
             .with_mode(EditMode::Vi)

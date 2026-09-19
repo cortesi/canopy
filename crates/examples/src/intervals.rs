@@ -1,9 +1,10 @@
 use std::time::Duration;
 
 use canopy::{
-    Canopy, CanopyBuilder, Context, ContextExt, Loader, NodeName, Render, ViewContext,
-    ViewContextExt, Widget, derive_commands,
+    Canopy, CanopyBuilder, Context, ContextExt, EventOutcome, Loader, NodeName, Render,
+    ViewContext, ViewContextExt, Widget, derive_commands,
     error::Result,
+    event::key,
     geom::Size,
     layout::{Edges, Layout, MeasureConstraints, Measurement},
     style::canopy as palette,
@@ -128,6 +129,10 @@ impl CounterItem {
 }
 
 impl Widget for CounterItem {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn layout(&self) -> Layout {
         Layout::fill().fixed_height(ENTRY_HEIGHT)
     }
@@ -166,6 +171,10 @@ impl Widget for CounterItem {
 pub(crate) struct StatusBar;
 
 impl Widget for StatusBar {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         r.push_layer("statusbar");
         r.text(
@@ -212,6 +221,10 @@ impl Intervals {
 }
 
 impl Widget for Intervals {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }

@@ -401,10 +401,30 @@ winner per normalized key in `bindings`, and one per normalized mouse input in
 `mouse_bindings`. Both carry the same description, owner, scope, route, phase,
 command availability, and source. The mouse route starts at the requested node,
 as a click on it would; the pointer's position plays no part, and hit testing
-and capture still choose the real target. Discovery also cannot know whether a
-widget will consume an input before an after-widget binding sees it. Diagnostic
-binding output uses the same registry and reports why records are active,
-shadowed, blocked by the top modal's framework group, or unmatched.
+and capture still choose the real target. Key discovery asks each widget's
+`key_outcome` along the route: `Handle` hides the after-widget bindings at that
+node and above, `Ignore` continues, and a widget that offers no prediction is
+unknown. An included binding behind an unknown widget stays in the snapshot but
+is marked in `key_prediction_gaps` with the key, the provisional binding, and
+the unknown node and path, so an empty gap list means the key set is exact.
+First-party widgets predict every key they see. Diagnostic binding output uses
+the same registry and reports why records are active, shadowed, blocked by the
+top modal's framework group, or unmatched.
+
+`Canopy::explain_key` walks the same route without acting and returns an owned
+explanation: each examined node's path, resolved binding, phase, and widget
+prediction, plus an exact or partial certainty and the decisive outcome. The
+explanation is advisory. Routing still resolves and dispatches one node at a
+time, because an ignored widget can change the tree, focus, or bindings before
+the route reaches an ancestor, and `Canopy::route_trace` remains the record of
+what actually happened. `available_bindings` projects its key results from the
+same analysis, so discovery and explanation cannot disagree.
+
+`Canopy::send_key_checked` analyzes the route, rejects a partial or mismatched
+expectation before delivery, then guards each normal route step and stops before
+an unexpected consumer acts. It never selects a target from the stored
+analysis, and it is not a transaction: earlier widgets may already have observed
+the key.
 
 One label names an input everywhere. `Mouse` writes the spec `parse_spec`
 reads back, such as `Ctrl+LeftDown`, and it carries no space, so help can

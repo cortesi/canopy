@@ -5,8 +5,15 @@ use ruau::vm::Scope;
 use super::{AUTOMATION_SERVICE_BUDGET, AdapterEvent, Canopy, RoutePhase, RouteTraceEntry};
 use crate::{
     NodeId, commands,
-    core::{Core, inputmap, world::scroll::DefaultAction},
-    error::Result,
+    core::{
+        Core, inputmap,
+        keyroute::{
+            KeyDispatchDivergence, KeyExpectation, KeyRouteExplanation, KeyRouteStep,
+            RouteCertainty, RouteOutcome,
+        },
+        world::scroll::DefaultAction,
+    },
+    error::{Error, Result},
     event::{Event, key, mouse},
     geom::{Point, PointI32, Size},
     path::Path,
@@ -135,8 +142,11 @@ impl Canopy {
         path: Path,
         input: RoutedInput,
         scope: Option<&Scope<'_>>,
+        guard: Option<&mut KeyRouteGuard>,
     ) -> Result<bool> {
-        self.with_dispatch_boundary(|canopy| canopy.route_input_inner(start, path, input, scope))
+        self.with_dispatch_boundary(|canopy| {
+            canopy.route_input_inner(start, path, input, scope, guard)
+        })
     }
 
     /// Route one synchronous input inside a shared completion boundary.
@@ -146,6 +156,7 @@ impl Canopy {
         mut path: Path,
         input: RoutedInput,
         scope: Option<&Scope<'_>>,
+        mut guard: Option<&mut KeyRouteGuard>,
     ) -> Result<bool> {
         self.route_trace.clear();
         if self.core.modal_region().is_some()
@@ -172,6 +183,12 @@ impl Canopy {
                 );
                 return Ok(false);
             }
+            if let Some(guard) = guard.as_deref_mut() {
+                guard.observe_node(id);
+                if guard.tripped() {
+                    return Ok(true);
+                }
+            }
 
             let mut fallback_binding = None;
             if let Some(binding) = self.core.input_map.resolve_match(&path, input.input_spec()) {
@@ -182,6 +199,12 @@ impl Canopy {
                         &path,
                         "matched before widget event",
                     );
+                    if let Some(guard) = guard.as_deref_mut() {
+                        guard.observe_binding(binding.id, binding.phase);
+                        if guard.tripped() {
+                            return Ok(true);
+                        }
+                    }
                     return self
                         .execute_routed_binding_with_scope(id, &path, input, binding, scope);
                 }
@@ -196,10 +219,30 @@ impl Canopy {
                 format!("{event:?}"),
             );
             let outcome = if self.core.interaction_admits(id) {
-                self.core.dispatch_event_on_node(id, &event)?
+                #[cfg(debug_assertions)]
+                let predicted = match input {
+                    RoutedInput::Key(key) => self.predict_key_outcome(id, key, start),
+                    RoutedInput::Mouse(_) => None,
+                };
+                let outcome = self.core.dispatch_event_on_node(id, &event)?;
+                #[cfg(debug_assertions)]
+                if let Some(predicted) = predicted {
+                    debug_assert!(
+                        predicted == outcome,
+                        "key prediction mismatch at node {id:?} path {path}: \
+                         predicted {predicted:?}, actual {outcome:?} for {event:?}"
+                    );
+                }
+                outcome
             } else {
                 EventOutcome::Ignore
             };
+            if let Some(guard) = guard.as_deref_mut() {
+                guard.observe_widget(&outcome);
+                if guard.tripped() {
+                    return Ok(true);
+                }
+            }
 
             match outcome {
                 EventOutcome::Handle => {
@@ -214,6 +257,12 @@ impl Canopy {
                             &path,
                             "matched after widget ignored event",
                         );
+                        if let Some(guard) = guard.as_deref_mut() {
+                            guard.observe_binding(binding.id, binding.phase);
+                            if guard.tripped() {
+                                return Ok(true);
+                            }
+                        }
                         return self
                             .execute_routed_binding_with_scope(id, &path, input, binding, scope);
                     }
@@ -239,6 +288,12 @@ impl Canopy {
                     }
                     self.trace_route(RoutePhase::Bubble, Some(id), &path, "ignored");
                     if modal_owner == Some(id) {
+                        if let Some(guard) = guard.as_deref_mut() {
+                            guard.observe_end();
+                            if guard.tripped() {
+                                return Ok(true);
+                            }
+                        }
                         return Ok(true);
                     }
                     target = self.core.nodes.get(id).and_then(|node| node.parent);
@@ -247,8 +302,96 @@ impl Canopy {
             }
         }
 
+        if let Some(guard) = guard {
+            guard.observe_end();
+            if guard.tripped() {
+                return Ok(true);
+            }
+        }
         self.trace_route(RoutePhase::Unhandled, None, &path, "no handler");
         Ok(false)
+    }
+
+    /// Send `key` only when its prospective route matches `expectation`.
+    ///
+    /// The analysis runs inside the same dispatch boundary as the route, and a
+    /// guard compares each actual step before it acts. An unexpected widget
+    /// stops the route with a structured divergence; earlier steps may already
+    /// have observed the key.
+    pub fn send_key_checked<T>(&mut self, key: T, expectation: KeyExpectation) -> Result<()>
+    where
+        T: Into<key::Key>,
+    {
+        self.key_checked(None, key, expectation)
+    }
+
+    /// Send a checked key inside an active script scope.
+    ///
+    /// Script-originated dispatch carries the live scope so bindings the route
+    /// executes can re-enter the VM.
+    pub(crate) fn key_checked<T>(
+        &mut self,
+        scope: Option<&Scope<'_>>,
+        key: T,
+        expectation: KeyExpectation,
+    ) -> Result<()>
+    where
+        T: Into<key::Key>,
+    {
+        let key = key.into();
+        self.with_dispatch_boundary(|canopy| canopy.key_checked_inner(scope, key, expectation))
+    }
+
+    /// Run one checked key route inside its completion boundary.
+    fn key_checked_inner(
+        &mut self,
+        scope: Option<&Scope<'_>>,
+        key: key::Key,
+        expectation: KeyExpectation,
+    ) -> Result<()> {
+        let start = self.focus_or_root()?;
+        let path = self.core.path_of(self.core.root, start);
+        let explanation = self.core.explain_key(Some(start), key)?;
+        if explanation.certainty != RouteCertainty::Exact
+            || !expectation.matches(&explanation.outcome)
+        {
+            return Err(Error::KeyDispatchDivergence(Box::new(
+                KeyDispatchDivergence {
+                    expected: expectation,
+                    analysis_step: explanation.steps.last().cloned(),
+                    actual_widget: None,
+                    actual_binding: None,
+                },
+            )));
+        }
+        let mut guard = KeyRouteGuard::new(&explanation, expectation);
+        let changed = self.route_key(start, path, scope, key, Some(&mut guard))?;
+        guard.finish();
+        if let Some(divergence) = guard.divergence {
+            return Err(Error::KeyDispatchDivergence(Box::new(divergence)));
+        }
+        if changed {
+            self.render_pending = true;
+        }
+        Ok(())
+    }
+
+    /// Route one key through the transient shortcut or the normal guarded walk.
+    fn route_key(
+        &mut self,
+        start: NodeId,
+        path: Path,
+        scope: Option<&Scope<'_>>,
+        key: key::Key,
+        guard: Option<&mut KeyRouteGuard>,
+    ) -> Result<bool> {
+        if self.core.modal_region().is_none() && self.core.input_map.transient_mode().is_some() {
+            self.with_dispatch_boundary(|canopy| {
+                canopy.route_transient_key(start, path, key, scope)
+            })
+        } else {
+            self.route_input(Some(start), path, RoutedInput::Key(key), scope, guard)
+        }
     }
 
     /// Route one key taken by a transient mode.
@@ -357,7 +500,7 @@ impl Canopy {
     /// `scope` carries an active script scope for a script-originated event.
     pub(crate) fn mouse(&mut self, scope: Option<&Scope<'_>>, m: mouse::MouseEvent) -> Result<()> {
         let (target, path) = self.mouse_route_start(m.location)?;
-        let changed = self.route_input(target, path, RoutedInput::Mouse(m), scope)?;
+        let changed = self.route_input(target, path, RoutedInput::Mouse(m), scope, None)?;
         if changed {
             self.render_pending = true;
         }
@@ -373,20 +516,10 @@ impl Canopy {
     {
         let start = self.focus_or_root()?;
         let path = self.core.path_of(self.core.root, start);
-        let key = tk.into();
-        let transient =
-            self.core.modal_region().is_none() && self.core.input_map.transient_mode().is_some();
-        let changed = if transient {
-            self.with_dispatch_boundary(|canopy| {
-                canopy.route_transient_key(start, path, key, scope)
-            })?
-        } else {
-            self.route_input(Some(start), path, RoutedInput::Key(key), scope)?
-        };
+        let changed = self.route_key(start, path, scope, tk.into(), None)?;
         if changed {
             self.render_pending = true;
         }
-
         Ok(())
     }
 
@@ -397,6 +530,20 @@ impl Canopy {
             self.core.focus_first(self.core.root)?;
         }
         Ok(self.core.focus.unwrap_or(self.core.root))
+    }
+
+    /// Return a node's key prediction for the route that starts at `focus`.
+    ///
+    /// A prediction failure, such as an unavailable widget slot, reports no
+    /// prediction so the consistency check skips the node.
+    #[cfg(debug_assertions)]
+    fn predict_key_outcome(
+        &self,
+        node: NodeId,
+        key: key::Key,
+        focus: Option<NodeId>,
+    ) -> Option<EventOutcome> {
+        self.core.node_key_outcome(node, key, focus.unwrap_or(node))
     }
 
     /// Dispatch a focus-related event to the focused node, bubbling as needed.
@@ -492,5 +639,226 @@ impl Canopy {
         } else {
             self.script_host.release_function(binding);
         }
+    }
+}
+
+/// One expected event on a checked route.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum GuardEvent {
+    /// Route reached a node.
+    Node(NodeId),
+    /// Route resolved and executed a binding.
+    Binding(inputmap::BindingId, inputmap::BindingPhase),
+    /// Widget returned an outcome.
+    Widget(EventOutcome),
+    /// Route ended without a handler.
+    End,
+}
+
+/// Compare a checked route with its prospective analysis step by step.
+struct KeyRouteGuard {
+    /// Expected events with the analysis step each belongs to.
+    events: Vec<(GuardEvent, Option<usize>)>,
+    /// Analysis steps, for divergence detail.
+    steps: Vec<KeyRouteStep>,
+    /// Expectation the caller supplied.
+    expected: KeyExpectation,
+    /// Index of the next expected event.
+    index: usize,
+    /// First divergence observed, if any.
+    divergence: Option<KeyDispatchDivergence>,
+}
+
+impl KeyRouteGuard {
+    /// Build the expected event stream for one exact analysis.
+    fn new(explanation: &KeyRouteExplanation, expected: KeyExpectation) -> Self {
+        use inputmap::BindingPhase;
+        let mut events: Vec<(GuardEvent, Option<usize>)> = Vec::new();
+        for (step_index, step) in explanation.steps.iter().enumerate() {
+            let mut push = |event| events.push((event, Some(step_index)));
+            push(GuardEvent::Node(step.node));
+            match (step.binding, step.phase) {
+                (Some(binding), Some(BindingPhase::BeforeWidget)) => {
+                    push(GuardEvent::Binding(binding, BindingPhase::BeforeWidget));
+                }
+                (Some(binding), Some(BindingPhase::AfterWidget)) => {
+                    if let Some(widget) = step.widget.clone() {
+                        push(GuardEvent::Widget(widget));
+                    }
+                    if matches!(
+                        explanation.outcome,
+                        RouteOutcome::AfterWidget {
+                            binding: winner,
+                            ..
+                        } if winner == binding
+                    ) {
+                        push(GuardEvent::Binding(binding, BindingPhase::AfterWidget));
+                    }
+                }
+                (None, None) => {
+                    if let Some(widget) = step.widget.clone() {
+                        push(GuardEvent::Widget(widget));
+                    }
+                }
+                (Some(_), None) | (None, Some(_)) => {
+                    debug_assert!(false, "an analysis step pairs a binding with its phase");
+                }
+            }
+        }
+        if matches!(explanation.outcome, RouteOutcome::Unhandled) {
+            events.push((GuardEvent::End, None));
+        }
+        Self {
+            events,
+            steps: explanation.steps.clone(),
+            expected,
+            index: 0,
+            divergence: None,
+        }
+    }
+
+    /// Return whether a divergence has been observed.
+    fn tripped(&self) -> bool {
+        self.divergence.is_some()
+    }
+
+    /// Observe one visited node.
+    fn observe_node(&mut self, node: NodeId) {
+        self.expect(&GuardEvent::Node(node), None, None);
+    }
+
+    /// Observe one executed binding.
+    fn observe_binding(&mut self, binding: inputmap::BindingId, phase: inputmap::BindingPhase) {
+        self.expect(&GuardEvent::Binding(binding, phase), None, Some(binding));
+    }
+
+    /// Observe one widget outcome before the route acts on it.
+    fn observe_widget(&mut self, outcome: &EventOutcome) {
+        self.expect(
+            &GuardEvent::Widget(outcome.clone()),
+            Some(outcome.clone()),
+            None,
+        );
+    }
+
+    /// Observe the route ending without a handler.
+    fn observe_end(&mut self) {
+        self.expect(&GuardEvent::End, None, None);
+    }
+
+    /// Reject a route that returned before consuming its expected events.
+    fn finish(&mut self) {
+        if !self.tripped() && self.index != self.events.len() {
+            self.record_divergence(None, None);
+        }
+    }
+
+    /// Compare one actual event with the next expected event.
+    fn expect(
+        &mut self,
+        actual: &GuardEvent,
+        actual_widget: Option<EventOutcome>,
+        actual_binding: Option<inputmap::BindingId>,
+    ) {
+        if self.tripped() {
+            return;
+        }
+        let matched = self
+            .events
+            .get(self.index)
+            .is_some_and(|(expected, _)| expected == actual);
+        if matched {
+            self.index += 1;
+            return;
+        }
+        self.record_divergence(actual_widget, actual_binding);
+    }
+
+    /// Record the first divergence at the next expected analysis step.
+    fn record_divergence(
+        &mut self,
+        actual_widget: Option<EventOutcome>,
+        actual_binding: Option<inputmap::BindingId>,
+    ) {
+        let step = self
+            .events
+            .get(self.index)
+            .and_then(|(_, step)| *step)
+            .and_then(|index| self.steps.get(index).cloned());
+        self.divergence = Some(KeyDispatchDivergence {
+            expected: self.expected,
+            analysis_step: step,
+            actual_widget,
+            actual_binding,
+        });
+    }
+}
+
+#[cfg(test)]
+mod guard_tests {
+    use super::*;
+
+    #[test]
+    fn an_incomplete_checked_route_diverges() -> Result<()> {
+        let canopy = Canopy::new();
+        let explanation = canopy.core.explain_key(None, 'x'.into())?;
+        let mut guard = KeyRouteGuard::new(&explanation, KeyExpectation::Unhandled);
+
+        guard.finish();
+
+        assert!(guard.tripped());
+        assert_eq!(
+            guard
+                .divergence
+                .as_ref()
+                .and_then(|divergence| divergence.analysis_step.as_ref())
+                .map(|step| step.node),
+            explanation.steps.first().map(|step| step.node)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_widget_divergence_records_the_actual_outcome() -> Result<()> {
+        let canopy = Canopy::new();
+        let explanation = canopy.core.explain_key(None, 'x'.into())?;
+        let mut guard = KeyRouteGuard::new(&explanation, KeyExpectation::Unhandled);
+        let step = explanation.steps.first().expect("root step");
+
+        guard.observe_node(step.node);
+        guard.observe_widget(&EventOutcome::Handle);
+
+        let divergence = guard.divergence.expect("widget divergence");
+        assert_eq!(divergence.analysis_step, Some(step.clone()));
+        assert_eq!(divergence.actual_widget, Some(EventOutcome::Handle));
+        assert_eq!(divergence.actual_binding, None);
+        Ok(())
+    }
+
+    #[test]
+    fn a_binding_divergence_records_the_actual_binding() -> Result<()> {
+        let mut canopy = Canopy::new();
+        canopy.eval_script(r#"canopy.bind("x", { description = "Expected" }, function() end)"#)?;
+        let explanation = canopy.core.explain_key(None, 'x'.into())?;
+        let RouteOutcome::AfterWidget {
+            binding: expected, ..
+        } = &explanation.outcome
+        else {
+            panic!("expected an after-widget binding");
+        };
+        let expected = *expected;
+        let actual = inputmap::BindingId::from_u64(expected.as_u64() + 1);
+        let mut guard = KeyRouteGuard::new(&explanation, KeyExpectation::Binding(expected));
+        let step = explanation.steps.first().expect("root step");
+
+        guard.observe_node(step.node);
+        guard.observe_widget(&EventOutcome::Ignore);
+        guard.observe_binding(actual, inputmap::BindingPhase::AfterWidget);
+
+        let divergence = guard.divergence.expect("binding divergence");
+        assert_eq!(divergence.analysis_step, Some(step.clone()));
+        assert_eq!(divergence.actual_widget, None);
+        assert_eq!(divergence.actual_binding, Some(actual));
+        Ok(())
     }
 }

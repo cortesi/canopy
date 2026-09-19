@@ -49,6 +49,7 @@ pub mod help;
 pub mod id;
 /// Input mapping.
 pub mod inputmap;
+pub mod keyroute;
 /// Polling utilities.
 pub mod poll;
 /// Terminal buffer types.

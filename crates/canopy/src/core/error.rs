@@ -4,7 +4,12 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{commands::CommandError, core::id::NodeId, geom, layout::LayoutValidationError};
+use crate::{
+    commands::CommandError,
+    core::{id::NodeId, keyroute::KeyDispatchDivergence},
+    geom,
+    layout::LayoutValidationError,
+};
 
 /// Result type for canopy operations.
 pub type Result<T> = StdResult<T, Error>;
@@ -305,6 +310,9 @@ pub enum Error {
     /// Command dispatch failure.
     #[error(transparent)]
     Command(#[from] CommandError),
+    /// A checked key dispatch diverged from its prospective analysis.
+    #[error("checked key dispatch diverged from the analyzed route")]
+    KeyDispatchDivergence(Box<KeyDispatchDivergence>),
 
     #[error("parse error: {0}")]
     /// Parsing failure.

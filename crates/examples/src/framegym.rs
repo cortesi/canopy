@@ -1,7 +1,8 @@
 use canopy::{
-    Canopy, CanopyBuilder, ChildSlot, Context, ContextExt, FocusDirection, Loader, Render,
-    ViewContext, Widget, derive_commands,
+    Canopy, CanopyBuilder, ChildSlot, Context, ContextExt, EventOutcome, FocusDirection, Loader,
+    Render, ViewContext, Widget, derive_commands,
     error::Result,
+    event::key,
     geom::{Line, Size},
     layout::{CanvasContext, Layout, MeasureConstraints, Measurement},
 };
@@ -70,6 +71,10 @@ impl TestPattern {
 }
 
 impl Widget for TestPattern {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }
@@ -141,6 +146,10 @@ impl FrameGym {
 }
 
 impl Widget for FrameGym {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         let frame_id = c.add_slot::<FrameSlot>(Frame::new().with_title("Frame Gym"))?;
         let pattern_id = c.add_slot_to(frame_id, PatternSlot::KEY, TestPattern::new())?;

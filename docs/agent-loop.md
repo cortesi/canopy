@@ -117,7 +117,15 @@ Observation helpers are script-visible:
 - `canopy.bindings()` for the complete application and framework binding
   registry.
 - `canopy.available_bindings(node?)` for effective keys, active modes, and
-  exclusive state.
+  exclusive state. `key_prediction_gaps` marks included bindings an unknown
+  widget can hide; an empty list means the key set is exact.
+- `canopy.explain_key(key, node?)` to inspect the prospective route for one
+  key before sending it: the examined steps, an exact or partial certainty,
+  and the decisive outcome. It is advisory; `canopy.route_trace()` reports what
+  actually happened.
+- `canopy.send_key_checked(key, expectation)` to send a key only when the
+  analyzed route matches a widget, binding, transient, or unhandled
+  expectation. A mismatch or partial analysis is rejected without delivery.
 - `canopy.diagnostic_dump(node?)` for tree, focus, binding, and route context.
 - `canopy.script_journal()` for recent eval records.
 

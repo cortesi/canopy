@@ -38,7 +38,7 @@ fn add_scroll_rows(canopy: &mut canopy::Canopy) -> Result<()> {
     canopy.eval_script(&source).map(|_| ())
 }
 
-fn prove_help_flow(mut harness: Harness) -> Result<()> {
+fn prove_help_flow(mut harness: Harness, hidden: &[&str], shown: &[&str]) -> Result<()> {
     harness.canopy.eval_script(
         r#"
         local count = 0
@@ -79,10 +79,29 @@ fn prove_help_flow(mut harness: Harness) -> Result<()> {
             .map(|group| group.as_str()),
         Some("root.help")
     );
+    assert!(
+        harness
+            .canopy
+            .available_bindings(None)?
+            .key_prediction_gaps
+            .is_empty(),
+        "first-party widgets must predict every key on the route"
+    );
     assert!(harness.tbuf().contains_text("Keyboard shortcuts"));
     assert!(!harness.tbuf().contains_text("Context:"));
-    assert!(harness.tbuf().contains_text("↑/↓ Scroll"));
-    assert!(harness.tbuf().contains_text("Esc Close"));
+    assert!(harness.tbuf().contains_text("esc: close"));
+    for text in hidden {
+        assert!(
+            !harness.tbuf().contains_text(text),
+            "{text} should be hidden by the focused widget"
+        );
+    }
+    for text in shown {
+        assert!(
+            harness.tbuf().contains_text(text),
+            "{text} should stay reachable"
+        );
+    }
     let frame = harness.canopy.snapshot().expect("published help");
     let panel = frame
         .nodes
@@ -92,8 +111,10 @@ fn prove_help_flow(mut harness: Harness) -> Result<()> {
         .map(|view| view.outer)
         .expect("visible help panel");
     let cell = |x, y| &frame.cells[(y * frame.viewport.w + x) as usize];
-    let background = cell(panel.tl.x as u32, panel.tl.y as u32).style.bg;
-    for y in panel.tl.y as u32..panel.tl.y as u32 + panel.h {
+    // Binding rows are one panel band each. The footer below them is a raised
+    // bar inset by the panel's side padding, so it is checked separately.
+    for y in panel.tl.y as u32..panel.tl.y as u32 + panel.h.saturating_sub(1) {
+        let background = cell(panel.tl.x as u32, y).style.bg;
         for x in panel.tl.x as u32..panel.tl.x as u32 + panel.w {
             assert_eq!(
                 cell(x, y).style.bg,
@@ -143,7 +164,11 @@ fn termgym_help_opens_over_a_consuming_terminal_and_restores_input() -> Result<(
         Size::new(80, 24),
         Mount::Wrap,
     )?;
-    prove_help_flow(harness)
+    prove_help_flow(
+        harness,
+        &["Quit", "Extra help row a"],
+        &["Show key bindings"],
+    )
 }
 
 #[test]
@@ -154,5 +179,9 @@ fn widget_editor_help_opens_over_a_consuming_editor_and_restores_input() -> Resu
         Size::new(80, 24),
         Mount::Wrap,
     )?;
-    prove_help_flow(harness)
+    prove_help_flow(
+        harness,
+        &[],
+        &["Quit", "Show key bindings", "Extra help row a"],
+    )
 }

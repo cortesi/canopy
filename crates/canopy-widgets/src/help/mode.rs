@@ -5,8 +5,9 @@
 //! focus and no keys, so the mode still receives the next key.
 
 use canopy::{
-    ChildSlot, Context, ContextExt, NodeId, NodeName, Render, ViewContext, Widget,
+    ChildSlot, Context, ContextExt, EventOutcome, NodeId, NodeName, Render, ViewContext, Widget,
     error::{Error, Result},
+    event::key,
     geom::Size,
     layout::{Align, Constraint, Direction, Edges, Layout, MeasureConstraints, Measurement},
 };
@@ -49,6 +50,10 @@ impl ModeBindings {
 }
 
 impl Widget for ModeBindings {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn measure(&self, constraints: MeasureConstraints) -> Measurement {
         let preferred = self.preferred_width();
         let width = match constraints.width {

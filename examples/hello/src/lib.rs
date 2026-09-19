@@ -13,9 +13,10 @@ use std::{
 };
 
 use canopy::{
-    Canopy, CanopyBuilder, Context, Loader, NodeName, Render, ScriptTrust, ViewContext, Widget,
-    derive_commands,
+    Canopy, CanopyBuilder, Context, EventOutcome, Loader, NodeName, Render, ScriptTrust,
+    ViewContext, Widget, derive_commands,
     error::Result,
+    event::key::Key,
     layout::Layout,
     style::{StyleBuilder, canopy as palette},
 };
@@ -54,6 +55,10 @@ impl Hello {
 }
 
 impl Widget for Hello {
+    fn key_outcome(&self, _key: Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn layout(&self) -> Layout {
         Layout::fill()
     }

@@ -64,6 +64,10 @@ impl ViewContext for DummyContext {
         None
     }
 
+    fn scroll_outcome_of(&self, _node: NodeId, _x: i32, _y: i32) -> Option<ChangeOutcome> {
+        None
+    }
+
     fn with_widget_dyn(
         &self,
         node: NodeId,
@@ -188,6 +192,7 @@ impl Context for DummyContext {
             transient_mode: None,
             exclusive_group: None,
             bindings: Vec::new(),
+            key_prediction_gaps: Vec::new(),
             mouse_bindings: Vec::new(),
         })
     }

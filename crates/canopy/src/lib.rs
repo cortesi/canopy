@@ -42,7 +42,7 @@ pub use core::{
     ViewContext, ViewContextExt, WakeOutcome, WidgetSemantics, Work, WorkLifetime,
 };
 // App-author modules used by widget implementations and derive output.
-pub use core::{commands, cursor, error, event, help, path, script, style, text};
+pub use core::{commands, cursor, error, event, help, keyroute, path, script, style, text};
 // App-facing handle types re-exported from private core modules.
 pub use core::{render::Render, state::NodeName, view::View};
 

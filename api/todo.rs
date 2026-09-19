@@ -65,6 +65,8 @@ pub mod todo {
     impl Widget for TodoEntry {
         fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
+        fn key_outcome(&self, _key: Key, _context: &dyn ViewContext) -> Option<EventOutcome> {}
+
         fn layout(&self) -> Layout {}
 
         fn measure(&self, c: MeasureConstraints) -> Measurement {}

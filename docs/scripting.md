@@ -254,8 +254,29 @@ Contextual help and automation use this same resolver as input routing.
 A snapshot says what the named context would do with an input, not what the
 next event will do. The mouse route starts at the requested node, as a click on
 it would, and the pointer's own position plays no part: hit testing and mouse
-capture choose the real target. Discovery also cannot know whether a widget's
-own handler will consume an input before an `after_widget` binding sees it.
+capture choose the real target. Key discovery asks each widget's `key_outcome`
+along the route: a `Handle` prediction hides the `after_widget` bindings it
+would shadow, and `Ignore` lets the route continue. A widget with no prediction
+is unknown, so an included binding behind it stays in `bindings` and is listed
+in `key_prediction_gaps` with the canonical key, the provisional binding, and
+the unknown node and path. An empty gap list means the key set is exact.
+
+`canopy.explain_key(key, node?)` analyzes one key without sending it. The record
+names the focus and path, one step per examined node with its resolved binding,
+phase, and widget prediction, an `exact` or `partial` certainty, and the
+decisive outcome: a transient, before-widget, or after-widget binding, a widget
+that consumes the key, or an unhandled route. The explanation is advisory;
+routing still acts one node at a time, and `canopy.route_trace()` reports what
+actually happened.
+
+`canopy.send_key_checked(key, expectation)` sends a key only when its analyzed
+route matches. An expectation is `{ kind = "widget", node = ... }`,
+`{ kind = "binding", binding = ... }`,
+`{ kind = "transient", binding = ... }`, `{ kind = "transient_dismiss" }`, or
+`{ kind = "unhandled" }`. A partial analysis, a detached node, or a mismatched
+outcome is rejected before delivery. During delivery a guard compares each step
+and stops before an unexpected consumer acts, without rolling back earlier
+steps.
 
 An `input` field is the spec a binding is written in, such as `Ctrl+LeftDown`
 or `ScrollUp`, so a reported label parses back to the record it names.

@@ -473,3 +473,38 @@ fn layout_time_focus_recovery_reveals_in_the_same_frame() -> Result<()> {
     assert_eq!(core.nodes[last].view.content.tl.y, 3);
     Ok(())
 }
+
+#[test]
+fn readonly_scroll_outcome_matches_the_mutating_scroll() -> Result<()> {
+    let mut core = Core::new();
+    let viewport = root_viewport(&mut core, None)?;
+    spacer(&mut core, viewport, 40)?;
+    core.update_layout(SCREEN)?;
+
+    assert_eq!(
+        core.scroll_outcome_of(viewport, 0, 1),
+        Some(ChangeOutcome::Changed)
+    );
+    let expected = core.update_scroll(viewport, |scroll| scroll.scroll(0, 1));
+    assert_eq!(expected, ChangeOutcome::Changed);
+    assert_eq!(
+        core.scroll_outcome_of(viewport, 0, 0),
+        Some(ChangeOutcome::Unchanged),
+        "a probe that moves nothing reports no change"
+    );
+
+    core.scroll_to_of(viewport, 0, u32::MAX)?;
+    assert_eq!(
+        core.scroll_outcome_of(viewport, 0, 1),
+        Some(ChangeOutcome::Unchanged),
+        "a clamped scroll at the boundary changes nothing"
+    );
+    assert_eq!(
+        core.scroll_outcome_of(viewport, 0, -1),
+        Some(ChangeOutcome::Changed)
+    );
+    let missing = core.create_detached(Leaf(Size::new(1, 1)))?;
+    core.remove_subtree(missing)?;
+    assert_eq!(core.scroll_outcome_of(missing, 0, 1), None);
+    Ok(())
+}

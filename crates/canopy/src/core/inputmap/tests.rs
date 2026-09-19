@@ -293,7 +293,8 @@ fn a_transient_mode_hides_older_modes_and_the_default_scope() -> Result<()> {
     assert_eq!(target(&map, "/root/editor", 'b'), None);
     assert_eq!(target(&map, "/root/editor", 'a'), None);
     assert_eq!(
-        map.diagnostic_state(default, &[Path::from("/root/editor")]),
+        map.registry_status(default, &[Path::from("/root/editor")])
+            .label(),
         "blocked by transient mode prefix"
     );
 
@@ -446,28 +447,37 @@ fn diagnostics_distinguish_scope_path_insertion_route_and_exclusive_causes() -> 
     let unmatched = bind(&mut map, BindingScope::Default, 'e', "other/", "Other", 9)?;
     let route = [Path::from("/root/editor"), Path::from("/root")];
 
-    assert_eq!(map.diagnostic_state(earlier_route, &route), "effective");
     assert_eq!(
-        map.diagnostic_state(later_route, &route),
+        map.registry_status(earlier_route, &route).label(),
+        "effective"
+    );
+    assert_eq!(
+        map.registry_status(later_route, &route).label(),
         "shadowed at an earlier route node"
     );
     assert_eq!(
-        map.diagnostic_state(insertion_loser, &route),
+        map.registry_status(insertion_loser, &route).label(),
         "shadowed by later insertion"
     );
-    assert_eq!(map.diagnostic_state(insertion_winner, &route), "effective");
     assert_eq!(
-        map.diagnostic_state(path_loser, &route),
+        map.registry_status(insertion_winner, &route).label(),
+        "effective"
+    );
+    assert_eq!(
+        map.registry_status(path_loser, &route).label(),
         "shadowed by a more specific path"
     );
-    assert_eq!(map.diagnostic_state(path_winner, &route), "effective");
     assert_eq!(
-        map.diagnostic_state(default, &route),
+        map.registry_status(path_winner, &route).label(),
+        "effective"
+    );
+    assert_eq!(
+        map.registry_status(default, &route).label(),
         "shadowed by a higher-priority scope"
     );
-    assert_eq!(map.diagnostic_state(global, &route), "effective");
+    assert_eq!(map.registry_status(global, &route).label(), "effective");
     assert_eq!(
-        map.diagnostic_state(unmatched, &route),
+        map.registry_status(unmatched, &route).label(),
         "path does not match route"
     );
 
@@ -481,7 +491,7 @@ fn diagnostics_distinguish_scope_path_insertion_route_and_exclusive_causes() -> 
     )?;
     map.set_modal_bindings(Some(ModalBindings::Framework(HELP)));
     assert_eq!(
-        map.diagnostic_state(global, &route),
+        map.registry_status(global, &route).label(),
         "blocked by exclusive group root.help"
     );
     map.set_modal_bindings(None);

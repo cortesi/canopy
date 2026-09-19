@@ -47,7 +47,7 @@ use crate::{
         fixture::{Fixture, FixtureInfo},
     },
     error::{self, Result},
-    event::Event,
+    event::{Event, key::Key},
     geom::Size,
     script,
     style::{StyleMap, canopy::canopy_dark},
@@ -1459,6 +1459,19 @@ impl Canopy {
         self.core.available_bindings(focus)
     }
 
+    /// Explain where `key` would go for a node or the current focus.
+    ///
+    /// The result is advisory: it predicts the route from the same resolver
+    /// and widget predictions as dispatch, but routing still acts one node at
+    /// a time. Use [`Canopy::route_trace`] for what actually happened.
+    pub fn explain_key(
+        &self,
+        focus: Option<NodeId>,
+        key: Key,
+    ) -> Result<super::keyroute::KeyRouteExplanation> {
+        self.core.explain_key(focus, key)
+    }
+
     /// Build a diagnostic dump with tree, focus, and binding details.
     pub(crate) fn diagnostic_dump(&self, target: NodeId) -> String {
         let mut out = String::new();
@@ -1484,14 +1497,6 @@ impl Canopy {
             .map_or("(none)", inputmap::FrameworkBindingGroup::as_str);
         out.push_str(&format!("exclusive group: {exclusive}\n"));
 
-        let mut route = Vec::new();
-        let mut route_path = target_path;
-        let mut route_node = Some(target);
-        while let Some(node) = route_node {
-            route.push(route_path.clone());
-            route_node = self.core.nodes.get(node).and_then(|entry| entry.parent);
-            route_path.pop();
-        }
         let mut bindings = self.core.input_map.bindings().iter().collect::<Vec<_>>();
         bindings.sort_by(|left, right| {
             left.input
@@ -1504,15 +1509,16 @@ impl Canopy {
         } else {
             out.push_str("bindings:\n");
             for binding in bindings {
-                let state = self.core.input_map.diagnostic_state(binding.id, &route);
+                let verdict = self.core.binding_verdict(binding.id, target);
                 out.push_str(&format!(
-                    "  [{:?}] owner={:?} scope={:?} {} {} -> {} ({state})\n",
+                    "  [{:?}] owner={:?} scope={:?} {} {} -> {} ({})\n",
                     binding.id,
                     binding.owner,
                     binding.scope,
                     binding.input,
                     binding.path_filter(),
                     binding.description,
+                    verdict.label(),
                 ));
             }
         }

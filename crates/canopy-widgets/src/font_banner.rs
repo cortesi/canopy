@@ -1,6 +1,7 @@
 use canopy::{
-    Render, ViewContext, Widget,
+    EventOutcome, Render, ViewContext, Widget,
     error::Result,
+    event::key,
     geom::{Point, Rect, Size},
     layout::Layout,
     style::ResolvedStyle,
@@ -113,6 +114,10 @@ impl FontBanner {
 }
 
 impl Widget for FontBanner {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn layout(&self) -> Layout {
         Layout::fill()
     }

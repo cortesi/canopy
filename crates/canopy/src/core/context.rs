@@ -141,6 +141,15 @@ pub trait ViewContext: sealed::ViewContext {
     /// Layout configuration for a specific node.
     fn layout_of(&self, node: NodeId) -> Option<Layout>;
 
+    /// Return what scrolling `node` by `(x, y)` would change, without
+    /// mutating the tree.
+    ///
+    /// This mirrors [`Context::scroll_by`], including the change a cancelled
+    /// pending reveal produces. It returns `None` when the node is missing.
+    /// Contextual key prediction uses this to answer for a scrollable target
+    /// without running widget effects.
+    fn scroll_outcome_of(&self, node: NodeId, x: i32, y: i32) -> Option<ChangeOutcome>;
+
     /// Read a widget without extracting its slot or marking it changed.
     fn with_widget_dyn(
         &self,
@@ -941,6 +950,11 @@ pub struct NodeCtx<C> {
     core: C,
     /// Node bound to this context.
     node_id: NodeId,
+    /// Focus this context reports instead of the live focus.
+    ///
+    /// Prediction uses this so a hypothetical route focus answers focus
+    /// queries as if that node held the keyboard.
+    focus_override: Option<NodeId>,
 }
 
 /// Mutating context bound to a specific node.
@@ -952,7 +966,23 @@ pub type CoreViewContext<'a> = NodeCtx<&'a Core>;
 impl<C> NodeCtx<C> {
     /// Create a new context for a node.
     pub fn new(core: C, node_id: NodeId) -> Self {
-        Self { core, node_id }
+        Self {
+            core,
+            node_id,
+            focus_override: None,
+        }
+    }
+
+    /// Create a read-only context that reports `focus` as the focused node.
+    ///
+    /// Contextual key prediction uses this so focus-dependent widgets answer
+    /// for the route focus rather than the live focus.
+    pub(crate) fn with_focus(core: C, node_id: NodeId, focus: NodeId) -> Self {
+        Self {
+            core,
+            node_id,
+            focus_override: Some(focus),
+        }
     }
 }
 
@@ -973,6 +1003,10 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
 
     fn layout_of(&self, node: NodeId) -> Option<Layout> {
         self.core.nodes.get(node).map(|n| n.layout)
+    }
+
+    fn scroll_outcome_of(&self, node: NodeId, x: i32, y: i32) -> Option<ChangeOutcome> {
+        self.core.scroll_outcome_of(node, x, y)
     }
 
     fn with_widget_dyn(
@@ -1018,11 +1052,14 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
     }
 
     fn is_focused_of(&self, node: NodeId) -> bool {
-        self.core.is_focused(node)
+        match self.focus_override {
+            Some(focus) => focus == node,
+            None => self.core.is_focused(node),
+        }
     }
 
     fn focused_node(&self) -> Option<NodeId> {
-        self.core.focus
+        self.focus_override.or(self.core.focus)
     }
 
     fn has_mouse_capture(&self) -> bool {
@@ -1030,11 +1067,17 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
     }
 
     fn is_on_focus_path_of(&self, node: NodeId) -> bool {
-        self.core.is_on_focus_path(node)
+        match self.focus_override {
+            Some(focus) => self.core.is_ancestor_or_self(node, focus),
+            None => self.core.is_on_focus_path(node),
+        }
     }
 
     fn focused_leaf(&self, root: NodeId) -> Option<NodeId> {
-        self.core.focused_leaf(root)
+        match self.focus_override {
+            Some(focus) => self.core.is_ancestor_or_self(root, focus).then_some(focus),
+            None => self.core.focused_leaf(root),
+        }
     }
 
     fn focusable_leaves(&self, root: NodeId) -> Vec<NodeId> {

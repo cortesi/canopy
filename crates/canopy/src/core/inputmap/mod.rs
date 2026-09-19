@@ -202,6 +202,69 @@ pub struct ResolvedBinding {
     pub description: String,
 }
 
+/// Why the registry admits, blocks, or shadows one record.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RegistryStatus {
+    /// The record is the effective winner.
+    Effective,
+    /// No record has this identifier.
+    Missing,
+    /// The active exclusive group does not admit this record.
+    BlockedByExclusive(FrameworkBindingGroup),
+    /// The record's exclusive group is not active.
+    InactiveExclusive(FrameworkBindingGroup),
+    /// The record's named mode is not active.
+    InactiveMode(String),
+    /// A transient mode ends resolution before this record.
+    BlockedByTransient(String),
+    /// The record's path never matches the route.
+    PathMismatch,
+    /// No route path admits the record in the active scope.
+    NotEligible,
+    /// An earlier route node shadows the record.
+    ShadowedAtEarlierRoute {
+        /// Binding that wins earlier on the route.
+        winner: BindingId,
+    },
+    /// A higher-priority scope shadows the record.
+    ShadowedByScope {
+        /// Binding that wins in the higher scope.
+        winner: BindingId,
+    },
+    /// A more specific path shadows the record.
+    ShadowedByMoreSpecificPath {
+        /// Binding that wins through path specificity.
+        winner: BindingId,
+    },
+    /// A later insertion shadows the record.
+    ShadowedByInsertion {
+        /// Binding that wins through insertion order.
+        winner: BindingId,
+    },
+}
+
+impl RegistryStatus {
+    /// Return the stable human diagnostic label.
+    pub(crate) fn label(&self) -> String {
+        match self {
+            Self::Effective => "effective".to_string(),
+            Self::Missing => "missing".to_string(),
+            Self::BlockedByExclusive(group) => format!("blocked by exclusive group {group}"),
+            Self::InactiveExclusive(group) => format!("inactive exclusive group {group}"),
+            Self::InactiveMode(mode) => format!("inactive mode {mode}"),
+            Self::BlockedByTransient(mode) => format!("blocked by transient mode {mode}"),
+            Self::PathMismatch => "path does not match route".to_string(),
+            Self::NotEligible => "not eligible in the active scope".to_string(),
+            Self::ShadowedAtEarlierRoute { .. } => "shadowed at an earlier route node".to_string(),
+            Self::ShadowedByScope { .. } => "shadowed by a higher-priority scope".to_string(),
+            Self::ShadowedByMoreSpecificPath { .. } => {
+                "shadowed by a more specific path".to_string()
+            }
+            Self::ShadowedByInsertion { .. } => "shadowed by later insertion".to_string(),
+        }
+    }
+}
+
 /// Binding selector used by application mutation APIs.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct BindingSelector<'a> {
@@ -531,31 +594,31 @@ impl InputMap {
         inputs
     }
 
-    /// Explain one record's state for a route from the target to the root.
-    pub(crate) fn diagnostic_state(&self, id: BindingId, route: &[Path]) -> String {
+    /// Return why the registry admits, blocks, or shadows one record.
+    pub(crate) fn registry_status(&self, id: BindingId, route: &[Path]) -> RegistryStatus {
         let Some(record) = self.binding(id) else {
-            return "missing".to_string();
+            return RegistryStatus::Missing;
         };
         if let Some(group) = self.active_exclusive_group() {
             if record.owner != BindingOwner::Framework(group)
                 || record.scope != BindingScope::Exclusive(group)
             {
-                return format!("blocked by exclusive group {group}");
+                return RegistryStatus::BlockedByExclusive(group);
             }
         } else {
             match &record.scope {
                 BindingScope::Exclusive(group) => {
-                    return format!("inactive exclusive group {group}");
+                    return RegistryStatus::InactiveExclusive(*group);
                 }
                 BindingScope::Mode(mode)
                     if !self.mode_stack.iter().any(|active| active.name == *mode) =>
                 {
-                    return format!("inactive mode {mode}");
+                    return RegistryStatus::InactiveMode(mode.clone());
                 }
                 BindingScope::Global | BindingScope::Mode(_) | BindingScope::Default => {}
             }
             if let Some(mode) = self.transient_blocker(&record.scope) {
-                return format!("blocked by transient mode {mode}");
+                return RegistryStatus::BlockedByTransient(mode.to_string());
             }
         }
 
@@ -563,26 +626,26 @@ impl InputMap {
             .iter()
             .position(|path| record.path_matcher.check_match(path).is_some());
         let Some(record_route) = record_route else {
-            return "path does not match route".to_string();
+            return RegistryStatus::PathMismatch;
         };
         let winner = route.iter().enumerate().find_map(|(index, path)| {
             self.resolve_match(path, record.input)
                 .map(|winner| (index, winner))
         });
         let Some((winner_route, winner)) = winner else {
-            return "not eligible in the active scope".to_string();
+            return RegistryStatus::NotEligible;
         };
         if winner.id == id {
-            return "effective".to_string();
+            return RegistryStatus::Effective;
         }
         if winner_route < record_route {
-            return "shadowed at an earlier route node".to_string();
+            return RegistryStatus::ShadowedAtEarlierRoute { winner: winner.id };
         }
         let winning_record = self
             .binding(winner.id)
             .expect("resolved binding record must remain registered");
         if winning_record.scope != record.scope {
-            return "shadowed by a higher-priority scope".to_string();
+            return RegistryStatus::ShadowedByScope { winner: winner.id };
         }
         let path = &route[winner_route];
         let record_match = record
@@ -594,9 +657,9 @@ impl InputMap {
             .check_match(path)
             .expect("winner must match its route node");
         if winner_match.score() > record_match.score() {
-            "shadowed by a more specific path".to_string()
+            RegistryStatus::ShadowedByMoreSpecificPath { winner: winner.id }
         } else {
-            "shadowed by later insertion".to_string()
+            RegistryStatus::ShadowedByInsertion { winner: winner.id }
         }
     }
 

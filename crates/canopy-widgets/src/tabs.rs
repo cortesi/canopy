@@ -4,7 +4,7 @@ use canopy::{
     Context, ContextExt, EventOutcome, FocusScope, NodeId, NodeName, Render, TypedId, ViewContext,
     Widget, derive_commands,
     error::Result,
-    event::{Event, mouse},
+    event::{Event, key, mouse},
     geom::{Line, Point},
     layout::{Edges, Layout, Sizing},
 };
@@ -126,6 +126,10 @@ impl Default for Tabs {
 }
 
 impl Widget for Tabs {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn layout(&self) -> Layout {
         Layout::fill().padding(Edges::new(1, 0, 0, 0))
     }

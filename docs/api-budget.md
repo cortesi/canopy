@@ -81,6 +81,21 @@ dialog builds its buttons before its host says what each answer does.
 handler, so activation is discoverable and replaceable rather than hidden in an
 event handler.
 
+`ViewContext` and `ViewContextExt` grew from 44 to 45 methods against a
+threshold of 34. `scroll_outcome_of` reports what scrolling one node would
+change without mutating it. Contextual key prediction needs it because
+`Context::scroll_by` reports a change when it cancels a pending reveal, which a
+`view_of` snapshot cannot see; a widget whose outcome depends on a scroll
+boundary cannot otherwise predict exactly. The same probe is the read-only basis
+for future wheel-default analysis.
+
+`Canopy` grew by `explain_key` and `send_key_checked` against a threshold of 56.
+`explain_key` returns the prospective key route that `available_bindings`
+already projects, so automation can inspect one key without sending it.
+`send_key_checked` is the guarded delivery that uses that analysis. Both are
+application lifecycle operations that cannot live on a context because they
+start from the live focus and participate in dispatch boundaries.
+
 ## Accepted dependency coupling
 
 `EvalTicket::completion` exposes `futures::channel::oneshot::Receiver` directly.

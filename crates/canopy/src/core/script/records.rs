@@ -9,7 +9,14 @@ use super::{
     ViewContext, commands, error, inputmap, node_list_to_arg, point_to_arg, rect_to_arg,
     size_to_arg, widget_access,
 };
-use crate::{FrameSnapshot, NodeSnapshot, core::termbuf::TermBuf, help};
+use crate::{
+    FrameSnapshot, NodeSnapshot,
+    core::termbuf::TermBuf,
+    event::key::Key,
+    help,
+    keyroute::{KeyRouteExplanation, KeyRouteStep, RouteCertainty, RouteOutcome},
+    widget::EventOutcome,
+};
 
 /// Convert a publication without consulting live widget or node state.
 pub(super) fn snapshot_to_arg(frame: &FrameSnapshot) -> ArgValue {
@@ -675,6 +682,23 @@ pub(super) fn available_bindings_to_arg(
             ),
         ),
         (
+            "key_prediction_gaps".to_string(),
+            ArgValue::Array(
+                snapshot
+                    .key_prediction_gaps
+                    .into_iter()
+                    .map(|gap| {
+                        ArgValue::Map(BTreeMap::from([
+                            ("input".to_string(), ArgValue::String(gap.input.to_string())),
+                            ("binding".to_string(), ArgValue::UInt(gap.binding.as_u64())),
+                            ("node".to_string(), ArgValue::Node(gap.node)),
+                            ("path".to_string(), ArgValue::String(gap.path.to_string())),
+                        ]))
+                    })
+                    .collect(),
+            ),
+        ),
+        (
             "mouse_bindings".to_string(),
             ArgValue::Array(
                 snapshot
@@ -749,4 +773,116 @@ pub(super) fn script_journal_to_arg(canopy: &Canopy) -> ArgValue {
             })
             .collect(),
     )
+}
+
+/// Convert one prospective key-route explanation to a scripting record.
+pub(super) fn key_explanation_to_arg(
+    canopy: &Canopy,
+    requested: Option<NodeId>,
+    key: Key,
+) -> Result<ArgValue> {
+    let explanation = canopy.explain_key(requested, key)?;
+    Ok(key_route_explanation_to_arg(explanation))
+}
+
+/// Convert an owned explanation into its stable scripting shape.
+fn key_route_explanation_to_arg(explanation: KeyRouteExplanation) -> ArgValue {
+    ArgValue::Map(BTreeMap::from([
+        (
+            "key".to_string(),
+            ArgValue::String(explanation.key.to_string()),
+        ),
+        ("focus".to_string(), ArgValue::Node(explanation.focus)),
+        (
+            "focus_path".to_string(),
+            ArgValue::String(explanation.focus_path.to_string()),
+        ),
+        (
+            "steps".to_string(),
+            ArgValue::Array(
+                explanation
+                    .steps
+                    .into_iter()
+                    .map(key_route_step_to_arg)
+                    .collect(),
+            ),
+        ),
+        (
+            "certainty".to_string(),
+            ArgValue::String(
+                match explanation.certainty {
+                    RouteCertainty::Exact => "exact",
+                    RouteCertainty::Partial => "partial",
+                }
+                .to_string(),
+            ),
+        ),
+        (
+            "outcome".to_string(),
+            key_route_outcome_to_arg(explanation.outcome),
+        ),
+    ]))
+}
+
+/// Convert one examined route step.
+fn key_route_step_to_arg(step: KeyRouteStep) -> ArgValue {
+    let mut record = BTreeMap::from([
+        ("node".to_string(), ArgValue::Node(step.node)),
+        ("path".to_string(), ArgValue::String(step.path.to_string())),
+    ]);
+    if let (Some(binding), Some(phase)) = (step.binding, step.phase) {
+        record.insert("binding".to_string(), ArgValue::UInt(binding.as_u64()));
+        record.insert(
+            "phase".to_string(),
+            ArgValue::String(phase.label().to_string()),
+        );
+    }
+    if let Some(widget) = step.widget {
+        record.insert(
+            "widget".to_string(),
+            ArgValue::String(
+                match widget {
+                    EventOutcome::Handle => "handle",
+                    EventOutcome::Ignore => "ignore",
+                }
+                .to_string(),
+            ),
+        );
+    }
+    ArgValue::Map(record)
+}
+
+/// Convert the decisive route outcome.
+fn key_route_outcome_to_arg(outcome: RouteOutcome) -> ArgValue {
+    let (kind, binding, node, path) = match outcome {
+        RouteOutcome::Transient {
+            binding,
+            node,
+            path,
+        } => ("transient", Some(binding), Some(node), Some(path)),
+        RouteOutcome::TransientDismiss => ("transient_dismiss", None, None, None),
+        RouteOutcome::BeforeWidget {
+            binding,
+            node,
+            path,
+        } => ("before_widget", Some(binding), Some(node), Some(path)),
+        RouteOutcome::Widget { node, path } => ("widget", None, Some(node), Some(path)),
+        RouteOutcome::AfterWidget {
+            binding,
+            node,
+            path,
+        } => ("after_widget", Some(binding), Some(node), Some(path)),
+        RouteOutcome::Unhandled => ("unhandled", None, None, None),
+    };
+    let mut record = BTreeMap::from([("kind".to_string(), ArgValue::String(kind.to_string()))]);
+    if let Some(binding) = binding {
+        record.insert("binding".to_string(), ArgValue::UInt(binding.as_u64()));
+    }
+    if let Some(node) = node {
+        record.insert("node".to_string(), ArgValue::Node(node));
+    }
+    if let Some(path) = path {
+        record.insert("path".to_string(), ArgValue::String(path.to_string()));
+    }
+    ArgValue::Map(record)
 }

@@ -1,11 +1,11 @@
 use canopy::{
-    Canopy, ChildSlot, Context, ContextExt, FocusDirection, FocusScope, FrameworkBindingGroup,
-    InteractionToken, Loader, ModalBindings, ModalOptions, NodeId, NodeName, TypedId, ViewContext,
-    Widget,
+    Canopy, ChildSlot, Context, ContextExt, EventOutcome, FocusDirection, FocusScope,
+    FrameworkBindingGroup, InteractionToken, Loader, ModalBindings, ModalOptions, NodeId, NodeName,
+    TypedId, ViewContext, Widget,
     commands::CommandCall,
     derive_commands,
     error::{Error, Result},
-    event::key::Key,
+    event::{key, key::Key},
     layout::{Direction, Layout, Sizing},
 };
 
@@ -312,6 +312,10 @@ impl Root {
 }
 
 impl Widget for Root {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn layout(&self) -> Layout {
         // Stack layout so the help modal overlays the main pane.
         Layout::fill().direction(Direction::Stack)
@@ -388,7 +392,7 @@ fn register_help_bindings(canopy: &mut Canopy) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::cell::Cell as LocalCell;
 
     #[cfg(feature = "devtools")]
     use canopy::testing::harness::Harness;
@@ -404,7 +408,10 @@ mod tests {
     };
 
     use super::*;
-    static APP_EVENTS: AtomicUsize = AtomicUsize::new(0);
+    thread_local! {
+        /// Key and mouse events seen by `FocusLeaf` on this test's thread.
+        static APP_EVENTS: LocalCell<usize> = const { LocalCell::new(0) };
+    }
 
     struct App;
 
@@ -457,7 +464,7 @@ mod tests {
 
         fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {
             if matches!(event, Event::Key(_) | Event::Mouse(_)) {
-                APP_EVENTS.fetch_add(1, Ordering::Relaxed);
+                APP_EVENTS.with(|count| count.set(count.get() + 1));
             }
             Ok(EventOutcome::Ignore)
         }
@@ -713,7 +720,7 @@ mod tests {
 
     #[test]
     fn help_isolates_application_bindings_widgets_and_mouse_capture() -> Result<()> {
-        APP_EVENTS.store(0, Ordering::Relaxed);
+        APP_EVENTS.with(|count| count.set(0));
         let (mut canopy, mut backend, left, _right) = setup_root_tree()?;
         install_help_trigger(&mut canopy)?;
         canopy.eval_script(
@@ -749,12 +756,12 @@ mod tests {
         canopy.eval_script("canopy.send_click(1, 1)")?;
         canopy.render(&mut backend)?;
         assert_eq!(canopy.input_mode(), "");
-        assert_eq!(APP_EVENTS.load(Ordering::Relaxed), 0);
+        assert_eq!(APP_EVENTS.with(LocalCell::get), 0);
 
         send_key(&mut canopy, "?")?;
         send_key(&mut canopy, "x")?;
         assert_eq!(canopy.input_mode(), "leaked");
-        assert_eq!(APP_EVENTS.load(Ordering::Relaxed), 1);
+        assert_eq!(APP_EVENTS.with(LocalCell::get), 1);
         Ok(())
     }
 

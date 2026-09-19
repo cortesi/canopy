@@ -1,6 +1,7 @@
 use canopy::{
-    NodeName, Render, ViewContext, Widget, derive_commands,
+    EventOutcome, NodeName, Render, ViewContext, Widget, derive_commands,
     error::Result,
+    event::key,
     geom,
     layout::{Edges, Layout},
 };
@@ -129,6 +130,10 @@ impl Default for Border {
 }
 
 impl Widget for Border {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let outer = ctx.view().outer_rect_local();
         let frame = geom::FrameRects::new(outer, 1);

@@ -8,14 +8,14 @@ use std::{
 };
 
 use canopy::{
-    Canopy, Context, ContextExt, FocusDirection, FocusScope, Loader, NodeName, ScrollAxis,
-    ScrollMark, Widget, buf, derive_commands,
+    Canopy, Context, ContextExt, EventOutcome, FocusDirection, FocusScope, Loader, NodeName,
+    ScrollAxis, ScrollMark, Widget, buf, derive_commands,
     error::Result,
-    event::{key, mouse},
+    event::{Event, key, mouse},
     geom::{Point, PointI32, Size},
     layout::{Edges, Layout},
     style::{AttrSet, Color, Paint, PartialStyle, Style, StyleManager},
-    testing::harness::Harness,
+    testing::{dummyctx::DummyContext, harness::Harness},
 };
 
 use super::{
@@ -163,6 +163,89 @@ fn mouse_event(action: mouse::Action, x: u32, y: u32) -> mouse::MouseEvent {
         modifiers: key::Empty,
         location: PointI32::try_from(Point { x, y }).expect("test points fit"),
     }
+}
+
+/// Key specs that exercise the editor's handling across its modes.
+const CAPTURE_KEYS: &[&str] = &[
+    "a",
+    "q",
+    "z",
+    "i",
+    "d",
+    "h",
+    "G",
+    "x",
+    "y",
+    "p",
+    "P",
+    "$",
+    "?",
+    "2",
+    "esc",
+    "enter",
+    "backspace",
+    "delete",
+    "left",
+    "right",
+    "up",
+    "down",
+    "home",
+    "end",
+    "pageup",
+    "pagedown",
+    "tab",
+    "f1",
+    "ctrl-r",
+    "ctrl-a",
+    "ctrl-g",
+    "alt-x",
+];
+
+/// Assert that `key_outcome` agrees with `on_event` after `setup` keys run.
+fn assert_capture_matches(mode: EditMode, read_only: bool, setup: &[&str]) {
+    for spec in CAPTURE_KEYS {
+        let config = EditorConfig::new()
+            .with_mode(mode)
+            .with_read_only(read_only);
+        let mut editor = Editor::with_config("alpha\nbeta", config);
+        let mut ctx = DummyContext::default();
+        for prefix in setup {
+            let prefix = key::Key::parse_spec(prefix).expect("valid key spec");
+            editor
+                .on_event(&Event::Key(prefix), &mut ctx)
+                .expect("setup event");
+        }
+        let probe = key::Key::parse_spec(spec).expect("valid key spec");
+        let predicted = editor.key_outcome(probe, &ctx);
+        let handled = editor
+            .on_event(&Event::Key(probe), &mut ctx)
+            .expect("probe event")
+            == EventOutcome::Handle;
+        assert_eq!(
+            predicted,
+            Some(if handled {
+                EventOutcome::Handle
+            } else {
+                EventOutcome::Ignore
+            }),
+            "{mode:?} mode, read_only {read_only}, after {setup:?}, key {spec}"
+        );
+    }
+}
+
+#[test]
+fn key_capture_matches_event_handling_in_every_mode() {
+    assert_capture_matches(EditMode::Text, false, &[]);
+    assert_capture_matches(EditMode::Text, true, &[]);
+    assert_capture_matches(EditMode::Vi, false, &[]);
+    assert_capture_matches(EditMode::Vi, false, &["i"]);
+    assert_capture_matches(EditMode::Vi, false, &["v"]);
+    assert_capture_matches(EditMode::Vi, false, &["/"]);
+    assert_capture_matches(EditMode::Vi, false, &["g"]);
+    assert_capture_matches(EditMode::Vi, false, &["d"]);
+    assert_capture_matches(EditMode::Vi, false, &["c"]);
+    assert_capture_matches(EditMode::Vi, false, &["y"]);
+    assert_capture_matches(EditMode::Vi, true, &["i"]);
 }
 
 #[test]

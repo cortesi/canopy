@@ -160,6 +160,13 @@ pub mod canopy_widgets {
 
             fn cursor(&self) -> Option<cursor::Cursor> {}
 
+            fn key_outcome(
+                &self,
+                key: key::Key,
+                _context: &dyn ViewContext,
+            ) -> Option<EventOutcome> {
+            }
+
             fn measure(&self, c: MeasureConstraints) -> Measurement {}
 
             fn name(&self) -> NodeName {}
@@ -447,6 +454,13 @@ pub mod canopy_widgets {
             fn render(&mut self, render: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
 
             fn canvas(&self, view: Size, _ctx: &CanvasContext<'_>) -> Size {}
+
+            fn key_outcome(
+                &self,
+                _key: key::Key,
+                _context: &dyn ViewContext,
+            ) -> Option<EventOutcome> {
+            }
         }
 
         impl Font {
@@ -481,6 +495,13 @@ pub mod canopy_widgets {
         }
 
         impl Widget for FontBanner {
+            fn key_outcome(
+                &self,
+                _key: key::Key,
+                _context: &dyn ViewContext,
+            ) -> Option<EventOutcome> {
+            }
+
             fn layout(&self) -> Layout {}
 
             fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
@@ -643,6 +664,13 @@ pub mod canopy_widgets {
             fn canvas(&self, view: Size, _ctx: &CanvasContext<'_>) -> Size {}
 
             fn cursor(&self) -> Option<cursor::Cursor> {}
+
+            fn key_outcome(
+                &self,
+                key: key::Key,
+                _context: &dyn ViewContext,
+            ) -> Option<EventOutcome> {
+            }
 
             fn measure(&self, c: MeasureConstraints) -> Measurement {}
 
@@ -1188,6 +1216,8 @@ pub mod canopy_widgets {
     }
 
     impl Widget for Border {
+        fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {}
+
         fn layout(&self) -> Layout {}
 
         fn name(&self) -> NodeName {}
@@ -1253,6 +1283,8 @@ pub mod canopy_widgets {
         /// disabled keeps focus, so its reason stays reachable.
         fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
+        fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {}
+
         fn layout(&self) -> Layout {}
 
         fn name(&self) -> NodeName {}
@@ -1274,6 +1306,8 @@ pub mod canopy_widgets {
     }
 
     impl Widget for Center {
+        fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {}
+
         fn layout(&self) -> Layout {}
 
         fn name(&self) -> NodeName {}
@@ -1312,6 +1346,8 @@ pub mod canopy_widgets {
     }
 
     impl Widget for Columns {
+        fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {}
+
         fn layout(&self) -> Layout {}
 
         fn name(&self) -> NodeName {}
@@ -1406,6 +1442,8 @@ pub mod canopy_widgets {
     }
 
     impl Widget for Confirm {
+        fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {}
+
         fn layout(&self) -> Layout {}
 
         fn name(&self) -> NodeName {}
@@ -1445,6 +1483,8 @@ pub mod canopy_widgets {
     }
 
     impl Widget for Frame {
+        fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {}
+
         fn layout(&self) -> Layout {}
 
         fn name(&self) -> NodeName {}
@@ -1535,6 +1575,8 @@ pub mod canopy_widgets {
         fn render(&mut self, render: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
 
         fn canvas(&self, view: Size, _ctx: &CanvasContext<'_>) -> Size {}
+
+        fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {}
     }
 
     impl CommandNode for Input {
@@ -1595,6 +1637,8 @@ pub mod canopy_widgets {
 
         fn cursor(&self) -> Option<cursor::Cursor> {}
 
+        fn key_outcome(&self, key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {}
+
         fn layout(&self) -> Layout {}
 
         fn measure(&self, c: MeasureConstraints) -> Measurement {}
@@ -1621,6 +1665,8 @@ pub mod canopy_widgets {
     }
 
     impl Widget for Pad {
+        fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {}
+
         fn layout(&self) -> Layout {}
 
         fn name(&self) -> NodeName {}
@@ -1742,6 +1788,8 @@ pub mod canopy_widgets {
     }
 
     impl Widget for Root {
+        fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {}
+
         fn layout(&self) -> Layout {}
 
         fn name(&self) -> NodeName {}
@@ -1789,6 +1837,8 @@ pub mod canopy_widgets {
     }
 
     impl Widget for Tabs {
+        fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {}
+
         fn layout(&self) -> Layout {}
 
         fn name(&self) -> NodeName {}
@@ -1863,6 +1913,8 @@ pub mod canopy_widgets {
     impl Widget for Text {
         fn canvas(&self, view: Size, _ctx: &canopy::layout::CanvasContext<'_>) -> Size {}
 
+        fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {}
+
         fn measure(&self, c: MeasureConstraints) -> Measurement {}
 
         fn name(&self) -> NodeName {}
@@ -1889,6 +1941,8 @@ pub mod canopy_widgets {
     }
 
     impl Widget for Container {
+        fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {}
+
         fn layout(&self) -> Layout {}
 
         fn name(&self) -> NodeName {}
@@ -1906,6 +1960,8 @@ pub mod canopy_widgets {
 
     impl Widget for PickerFilter {
         fn canvas(&self, view: Size, _context: &CanvasContext<'_>) -> Size {}
+
+        fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {}
 
         fn layout(&self) -> Layout {}
 
@@ -1929,6 +1985,8 @@ pub mod canopy_widgets {
 
     impl Widget for Scroll {
         fn canvas(&self, view: Size, ctx: &CanvasContext<'_>) -> Size {}
+
+        fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {}
 
         fn layout(&self) -> Layout {}
 
@@ -2052,6 +2110,8 @@ pub mod canopy_widgets {
         fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
         fn canvas(&self, _view: Size, _ctx: &canopy::layout::CanvasContext<'_>) -> Size {}
+
+        fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {}
 
         fn measure(&self, c: MeasureConstraints) -> Measurement {}
 
@@ -2192,6 +2252,8 @@ pub mod canopy_widgets {
 
         fn canvas(&self, view: Size, _context: &CanvasContext<'_>) -> Size {}
 
+        fn key_outcome(&self, key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {}
+
         fn layout(&self) -> Layout {}
 
         fn measure(&self, c: MeasureConstraints) -> Measurement {}
@@ -2283,6 +2345,8 @@ pub mod canopy_widgets {
 
         fn canvas(&self, _view: Size, _ctx: &canopy::layout::CanvasContext<'_>) -> Size {}
 
+        fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {}
+
         fn measure(&self, c: MeasureConstraints) -> Measurement {}
 
         fn name(&self) -> NodeName {}
@@ -2362,6 +2426,8 @@ pub mod canopy_widgets {
     where
         T: 'static + Label,
     {
+        fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {}
+
         fn layout(&self) -> Layout {}
 
         fn name(&self) -> NodeName {}
@@ -2375,6 +2441,8 @@ pub mod canopy_widgets {
         fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
         fn canvas(&self, view: Size, ctx: &CanvasContext<'_>) -> Size {}
+
+        fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {}
 
         fn layout(&self) -> Layout {}
 

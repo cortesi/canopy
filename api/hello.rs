@@ -61,6 +61,8 @@ end
     impl Widget for Hello {
         fn accept_focus(&self, _context: &dyn ViewContext) -> bool {}
 
+        fn key_outcome(&self, _key: Key, _context: &dyn ViewContext) -> Option<EventOutcome> {}
+
         fn layout(&self) -> Layout {}
 
         fn name(&self) -> NodeName {}

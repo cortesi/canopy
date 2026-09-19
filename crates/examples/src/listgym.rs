@@ -1,7 +1,8 @@
 use canopy::{
-    Canopy, CanopyBuilder, Context, ContextExt, Loader, NodeId, NodeName, Render, ViewContext,
-    ViewContextExt, Widget, derive_commands,
+    Canopy, CanopyBuilder, Context, ContextExt, EventOutcome, Loader, NodeId, NodeName, Render,
+    ViewContext, ViewContextExt, Widget, derive_commands,
     error::{Error, Result},
+    event::key,
     geom::Size,
     layout::{CanvasContext, MeasureConstraints, Measurement},
     style::canopy as palette,
@@ -76,6 +77,10 @@ impl Selectable for ListEntry {
 }
 
 impl Widget for ListEntry {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         self.text.render(r, ctx)
     }
@@ -149,6 +154,10 @@ impl StatusBar {
 }
 
 impl Widget for StatusBar {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         r.push_layer("statusbar");
         let label = self.label(ctx);
@@ -267,6 +276,10 @@ impl ListGym {
 }
 
 impl Widget for ListGym {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }

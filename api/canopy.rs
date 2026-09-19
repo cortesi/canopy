@@ -736,6 +736,9 @@ pub mod canopy {
             #[error(transparent)]
             /// Command dispatch failure.
             Command(crate::commands::CommandError),
+            #[error("checked key dispatch diverged from the analyzed route")]
+            /// A checked key dispatch diverged from its prospective analysis.
+            KeyDispatchDivergence(Box<crate::core::keyroute::KeyDispatchDivergence>),
             #[error("parse error: {0}")]
             /// Parsing failure.
             Parse(ParseError),
@@ -1121,6 +1124,13 @@ pub mod canopy {
 
                 /// Parse a key specification such as `ctrl-s`, `PageDown`, or `A`.
                 pub fn parse_spec(spec: &str) -> Result<Self, ParseError> {}
+
+                /// Return the character this key produces as plain text, if any.
+                ///
+                /// A `Char` produces text unless Ctrl or Alt turns it into a command.
+                /// Shift does not disqualify a character, because a terminal can report
+                /// the produced character and the Shift modifier together.
+                pub fn text_char(&self) -> Option<char> {}
             }
         }
 
@@ -1305,9 +1315,9 @@ pub mod canopy {
         ///
         /// The snapshot answers what one context would do with an input, not what the
         /// next event will do. A route is only hypothetical here: hit testing and mouse
-        /// capture pick the real mouse target, and discovery cannot know whether a
-        /// widget's `on_event` will consume an input before an after-widget binding
-        /// sees it.
+        /// capture pick the real mouse target. Key discovery asks each widget along the
+        /// route through [`crate::Widget::key_outcome`], so a key a widget consumes
+        /// hides the after-widget bindings it would shadow.
         #[derive(Clone, Debug)]
         pub struct BindingSnapshot {
             /// Node used as the discovery focus.
@@ -1322,11 +1332,156 @@ pub mod canopy {
             pub exclusive_group: Option<crate::core::inputmap::FrameworkBindingGroup>,
             /// Effective key bindings, with one winner per normalized key.
             pub bindings: Vec<AvailableBinding<crate::event::key::Key>>,
+            /// Included key bindings whose reachability depends on an unknown widget.
+            ///
+            /// A widget that returns no prediction (`None`) can consume a key before a
+            /// binding that discovery still includes. Each gap names the canonical
+            /// key, the provisional binding, and the unknown widget that precedes it.
+            /// An empty list means the returned key-binding set is exact.
+            pub key_prediction_gaps: Vec<KeyPredictionGap>,
             /// Effective mouse bindings, with one winner per normalized mouse input.
             ///
             /// The route starts at the requested node, as a click on it would. The
             /// pointer's own position plays no part.
             pub mouse_bindings: Vec<AvailableBinding<crate::event::mouse::Mouse>>,
+        }
+
+        /// One included binding made provisional by an unknown widget.
+        ///
+        /// `node` and `path` identify the widget that returned no prediction, and
+        /// `binding` is the included binding it can hide.
+        #[derive(Clone, Debug, Eq, PartialEq)]
+        pub struct KeyPredictionGap {
+            /// Canonical binding key that stays provisional.
+            pub input: crate::event::key::Key,
+            /// Included binding that an unknown widget can hide.
+            pub binding: crate::core::inputmap::BindingId,
+            /// Unknown widget that precedes the binding.
+            pub node: crate::core::NodeId,
+            /// Route path of the unknown widget.
+            pub path: crate::path::Path,
+        }
+    }
+
+    pub mod keyroute {
+        //! Prospective key-route analysis.
+        //!
+        //! The analyzer walks the same route as key dispatch without running widget
+        //! effects, so a caller can explain where one key would go. The result is
+        //! advisory: normal routing still resolves and dispatches one node at a time,
+        //! because an ignored widget can change the tree, focus, or bindings before
+        //! the route reaches an ancestor.
+
+        /// A checked key dispatch diverged from its prospective analysis.
+        #[derive(Clone, Debug, Eq, PartialEq)]
+        pub struct KeyDispatchDivergence {
+            /// Expectation the caller supplied.
+            pub expected: KeyExpectation,
+            /// Analysis step that was due, absent when the route ran past the analysis.
+            pub analysis_step: Option<KeyRouteStep>,
+            /// Widget outcome the route actually produced, when one was observed.
+            pub actual_widget: Option<crate::widget::EventOutcome>,
+            /// Binding the route actually resolved, when one was observed.
+            pub actual_binding: Option<crate::core::inputmap::BindingId>,
+        }
+
+        /// What a checked key dispatch expects to happen.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub enum KeyExpectation {
+            /// A specific widget consumes the key.
+            Widget(crate::core::NodeId),
+            /// A specific binding runs.
+            Binding(crate::core::inputmap::BindingId),
+            /// A specific transient-mode binding runs.
+            Transient(crate::core::inputmap::BindingId),
+            /// A transient mode ends without running a binding.
+            TransientDismiss,
+            /// No binding or widget handles the key.
+            Unhandled,
+        }
+
+        /// One prospective key-route analysis.
+        #[derive(Clone, Debug, Eq, PartialEq)]
+        pub struct KeyRouteExplanation {
+            /// Raw key being analyzed.
+            pub key: crate::event::key::Key,
+            /// Node the route starts from.
+            pub focus: crate::core::NodeId,
+            /// Path from the root to the focus.
+            pub focus_path: crate::path::Path,
+            /// Nodes examined in focus-to-root order, stopping at the outcome.
+            pub steps: Vec<KeyRouteStep>,
+            /// Whether every step that affects the outcome is predicted.
+            pub certainty: RouteCertainty,
+            /// What would act first.
+            pub outcome: RouteOutcome,
+        }
+
+        /// One examined node on a prospective key route.
+        #[derive(Clone, Debug, Eq, PartialEq)]
+        pub struct KeyRouteStep {
+            /// Examined node.
+            pub node: crate::core::NodeId,
+            /// Route path at which the node was examined.
+            pub path: crate::path::Path,
+            /// Resolved binding at this node, when one exists.
+            pub binding: Option<crate::core::inputmap::BindingId>,
+            /// Phase of the resolved binding; present exactly when `binding` is.
+            pub phase: Option<crate::core::inputmap::BindingPhase>,
+            /// Widget prediction, absent when the widget offers none.
+            pub widget: Option<crate::widget::EventOutcome>,
+        }
+
+        /// How exact a prospective key route is.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub enum RouteCertainty {
+            /// Every step that affects the outcome is predicted.
+            Exact,
+            /// An unknown widget precedes the outcome, so the outcome is provisional.
+            Partial,
+        }
+
+        /// What would act first on a key.
+        #[derive(Clone, Debug, Eq, PartialEq)]
+        pub enum RouteOutcome {
+            /// A transient mode's own binding runs.
+            Transient {
+                /// Winning binding.
+                binding: crate::core::inputmap::BindingId,
+                /// Node the binding resolved at.
+                node: crate::core::NodeId,
+                /// Route path of the winning binding.
+                path: crate::path::Path,
+            },
+            /// A transient mode ends with no binding; the key is still consumed.
+            TransientDismiss,
+            /// A `before_widget` binding runs.
+            BeforeWidget {
+                /// Winning binding.
+                binding: crate::core::inputmap::BindingId,
+                /// Node the binding resolved at.
+                node: crate::core::NodeId,
+                /// Route path of the winning binding.
+                path: crate::path::Path,
+            },
+            /// A widget consumes the key.
+            Widget {
+                /// Consuming node.
+                node: crate::core::NodeId,
+                /// Route path of the consuming node.
+                path: crate::path::Path,
+            },
+            /// An `after_widget` binding runs.
+            AfterWidget {
+                /// Winning binding.
+                binding: crate::core::inputmap::BindingId,
+                /// Node the binding resolved at.
+                node: crate::core::NodeId,
+                /// Route path of the winning binding.
+                path: crate::path::Path,
+            },
+            /// No binding or widget handles the key.
+            Unhandled,
         }
     }
 
@@ -3790,6 +3945,15 @@ pub mod canopy {
         /// The root node of the tree.
         fn root_id(&self) -> NodeId;
 
+        /// Return what scrolling `node` by `(x, y)` would change, without
+        /// mutating the tree.
+        ///
+        /// This mirrors [`Context::scroll_by`], including the change a cancelled
+        /// pending reveal produces. It returns `None` when the node is missing.
+        /// Contextual key prediction uses this to answer for a scrollable target
+        /// without running widget effects.
+        fn scroll_outcome_of(&self, node: NodeId, x: i32, y: i32) -> Option<ChangeOutcome>;
+
         /// Return a node's independently assigned semantic identity.
         fn semantic_identity(&self, node: NodeId) -> Option<SemanticIdentity>;
 
@@ -3881,6 +4045,26 @@ pub mod canopy {
 
         /// Cursor specification for focused widgets.
         fn cursor(&self) -> Option<cursor::Cursor> {}
+
+        /// Predict this widget's result for `key` without changing any state.
+        ///
+        /// `context` is a read-only view bound to this widget's node. Its focus
+        /// answers follow the route focus the caller is asking about, which can
+        /// differ from the live focus.
+        ///
+        /// The result has three meanings: `Some(EventOutcome::Handle)` predicts
+        /// that [`Widget::on_event`] consumes the key, `Some(EventOutcome::Ignore)`
+        /// predicts that it does not, and `None` says that this widget offers no
+        /// prediction. The default is `None`, so third-party widgets keep the
+        /// pre-existing discovery behavior.
+        ///
+        /// When this returns `Some`, the prediction must equal the next routed
+        /// `on_event(Event::Key(key), ...)` result for the same pre-event state.
+        /// Dispatch passes the raw event key. Discovery probes the canonical
+        /// binding key instead, so a `Some` prediction is exact for the raw key
+        /// and best-effort for a canonical probe. First-party widgets return
+        /// `Some(EventOutcome::Ignore)` for keys they do not handle.
+        fn key_outcome(&self, _key: Key, _context: &dyn ViewContext) -> Option<EventOutcome> {}
 
         /// Layout configuration for this widget.
         fn layout(&self) -> Layout {}
@@ -4149,6 +4333,17 @@ pub mod canopy {
         /// worker. The application stays on its owning thread.
         pub fn eval(&mut self, request: EvalRequest) -> Result<EvalOutcome> {}
 
+        /// Send `key` only when its prospective route matches `expectation`.
+        ///
+        /// The analysis runs inside the same dispatch boundary as the route, and a
+        /// guard compares each actual step before it acts. An unexpected widget
+        /// stops the route with a structured divergence; earlier steps may already
+        /// have observed the key.
+        pub fn send_key_checked<T>(&mut self, key: T, expectation: KeyExpectation) -> Result<()>
+        where
+            T: Into<key::Key>, {
+        }
+
         /// Set the size on the root node.
         pub fn set_root_size(&mut self, size: Size) -> Result<()> {}
 
@@ -4173,6 +4368,18 @@ pub mod canopy {
         ///
         /// The synchronous caller restrictions of [`Self::eval`] apply.
         pub fn eval_script(&mut self, source: &str) -> Result<commands::ArgValue> {}
+
+        /// Explain where `key` would go for a node or the current focus.
+        ///
+        /// The result is advisory: it predicts the route from the same resolver
+        /// and widget predictions as dispatch, but routing still acts one node at
+        /// a time. Use [`Canopy::route_trace`] for what actually happened.
+        pub fn explain_key(
+            &self,
+            focus: Option<NodeId>,
+            key: Key,
+        ) -> Result<super::keyroute::KeyRouteExplanation> {
+        }
 
         /// Get a reference to the current render buffer, if any.
         pub fn buf(&self) -> Option<&TermBuf> {}

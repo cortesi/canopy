@@ -10,7 +10,7 @@ use crate::{
     core::context::ViewContext,
     cursor,
     error::Result,
-    event::Event,
+    event::{Event, key::Key},
     geom::{Rect, Size},
     layout::{CanvasContext, Layout, MeasureConstraints, Measurement},
     render::Render,
@@ -97,6 +97,28 @@ pub trait Widget: Any {
     /// Handle events.
     fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {
         Ok(EventOutcome::Ignore)
+    }
+
+    /// Predict this widget's result for `key` without changing any state.
+    ///
+    /// `context` is a read-only view bound to this widget's node. Its focus
+    /// answers follow the route focus the caller is asking about, which can
+    /// differ from the live focus.
+    ///
+    /// The result has three meanings: `Some(EventOutcome::Handle)` predicts
+    /// that [`Widget::on_event`] consumes the key, `Some(EventOutcome::Ignore)`
+    /// predicts that it does not, and `None` says that this widget offers no
+    /// prediction. The default is `None`, so third-party widgets keep the
+    /// pre-existing discovery behavior.
+    ///
+    /// When this returns `Some`, the prediction must equal the next routed
+    /// `on_event(Event::Key(key), ...)` result for the same pre-event state.
+    /// Dispatch passes the raw event key. Discovery probes the canonical
+    /// binding key instead, so a `Some` prediction is exact for the raw key
+    /// and best-effort for a canonical probe. First-party widgets return
+    /// `Some(EventOutcome::Ignore)` for keys they do not handle.
+    fn key_outcome(&self, _key: Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        None
     }
 
     /// Attempt to focus this widget.

@@ -3,10 +3,12 @@
 use std::{borrow::Cow, ops::Range};
 
 use canopy::{
-    Canopy, Context, ContextExt, Loader, NodeName, Render, ViewContext, Widget, WidgetSemantics,
+    Canopy, Context, ContextExt, EventOutcome, Loader, NodeName, Render, ViewContext, Widget,
+    WidgetSemantics,
     commands::{CommandAction, CommandCall, CommandStatus, CommandTarget},
     derive_commands,
     error::Result,
+    event::key,
     geom::{Line, Size},
     layout::{Layout, MeasureConstraints, Measurement},
     style::{WidgetState, roles},
@@ -204,6 +206,10 @@ impl Loader for Button {
 }
 
 impl Widget for Button {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn semantics(&self, ctx: &dyn ViewContext) -> Result<WidgetSemantics> {
         Ok(WidgetSemantics {
             role: Some("button".into()),
@@ -270,6 +276,10 @@ impl ButtonLabel {
 }
 
 impl Widget for ButtonLabel {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn layout(&self) -> Layout {
         Layout::fill()
     }

@@ -71,6 +71,29 @@ impl Core {
         Ok(self.update_scroll(node, |_| Point { x, y }))
     }
 
+    /// Return what scrolling `node_id` by `(x, y)` would change, without
+    /// mutating the tree.
+    ///
+    /// This mirrors [`Core::update_scroll`] for the same start state,
+    /// including the change a cancelled pending reveal produces. It returns
+    /// `None` when the node is missing.
+    pub(crate) fn scroll_outcome_of(
+        &self,
+        node_id: NodeId,
+        x: i32,
+        y: i32,
+    ) -> Option<ChangeOutcome> {
+        let node = self.nodes.get(node_id)?;
+        let before = node.scroll;
+        let mut target = before.scroll(x, y);
+        clamp_scroll(&mut target, node.content_size, node.canvas);
+        Some(if target != before || node.reveal.is_some() {
+            ChangeOutcome::Changed
+        } else {
+            ChangeOutcome::Unchanged
+        })
+    }
+
     /// Move a viewport by an explicit scroll, clamped to its canvas.
     ///
     /// The scroll supersedes older reveals of this viewport, even when the

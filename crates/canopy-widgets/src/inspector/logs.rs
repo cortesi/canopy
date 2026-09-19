@@ -11,9 +11,10 @@ use std::{
 };
 
 use canopy::{
-    Canopy, Context, ContextExt, FocusDirection, Loader, NodeName, Render, ViewContext, Widget,
-    derive_commands,
+    Canopy, Context, ContextExt, EventOutcome, FocusDirection, Loader, NodeName, Render,
+    ViewContext, Widget, derive_commands,
     error::{Error, Result},
+    event::key,
     geom::Size,
     layout::{CanvasContext, Constraint, Layout, MeasureConstraints, Measurement},
 };
@@ -104,6 +105,10 @@ pub struct Logs {
 }
 
 impl Widget for Logs {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn layout(&self) -> Layout {
         Layout::fill()
     }
@@ -404,7 +409,12 @@ mod tests {
 
     #[test]
     fn failed_log_updates_keep_pending_entries_for_retry() -> Result<()> {
-        let mut harness = Harness::builder(Logs::new()).size(80, 4).build()?;
+        let mut harness = Harness::builder(Logs {
+            install: InstallState::Active,
+            ..Logs::new()
+        })
+        .size(80, 4)
+        .build()?;
         harness.with_root_context(|logs: &mut Logs, ctx| {
             let list = ctx.get_slot::<ListSlot>()?.expect("list mounted");
             ctx.remove_subtree(list.into())?;
@@ -445,7 +455,12 @@ mod tests {
 
     #[test]
     fn a_long_log_line_wraps_to_the_wrap_width() -> Result<()> {
-        let mut harness = Harness::builder(Logs::new()).size(80, 4).build()?;
+        let mut harness = Harness::builder(Logs {
+            install: InstallState::Active,
+            ..Logs::new()
+        })
+        .size(80, 4)
+        .build()?;
         harness.with_root_context(|logs: &mut Logs, ctx| {
             logs.buf.lock().unwrap().push_back("a".repeat(80));
             logs.flush_buffer(ctx)

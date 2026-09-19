@@ -1,9 +1,10 @@
 use std::env;
 
 use canopy::{
-    Canopy, CanopyBuilder, Context, ContextExt, FocusScope, Loader, NodeId, NodeName, Render,
-    ViewContext, ViewContextExt, Widget, derive_commands,
+    Canopy, CanopyBuilder, Context, ContextExt, EventOutcome, FocusScope, Loader, NodeId, NodeName,
+    Render, ViewContext, ViewContextExt, Widget, derive_commands,
     error::{Error, Result},
+    event::key,
     geom::Size,
     layout::{Constraint, Direction, Layout, MeasureConstraints, Measurement},
     style::{Attr, AttrSet, canopy as palette},
@@ -89,6 +90,10 @@ impl Selectable for TermEntry {
 }
 
 impl Widget for TermEntry {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn layout(&self) -> Layout {
         Layout::column()
             .flex_horizontal(1)
@@ -374,6 +379,10 @@ impl TermGym {
 }
 
 impl Widget for TermGym {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }

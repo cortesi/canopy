@@ -19,7 +19,7 @@ use canopy::{
     Context, ContextExt, EventOutcome, InteractionToken, ModalBindings, ModalOptions, NodeId,
     NodeName, Render, RevealAlign, TypedId, ViewContext, Widget, derive_commands,
     error::{Error, Result},
-    event::{Event, key::KeyCode},
+    event::{Event, key, key::KeyCode},
     geom::{Line, Rect, Size},
     layout::{
         CanvasContext, Direction, Edges, Layout, LayoutOverride, MeasureConstraints, Measurement,
@@ -202,6 +202,10 @@ impl<T> Widget for Picker<T>
 where
     T: Label + 'static,
 {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn layout(&self) -> Layout {
         // A stack centres the dialog over the dimmed application, with any
         // overlay over that, and the margin keeps the view visible around
@@ -286,6 +290,10 @@ where
 struct PickerDialog;
 
 impl Widget for PickerDialog {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn layout(&self) -> Layout {
         Layout::fill()
     }
@@ -343,6 +351,10 @@ impl PickerFilter {
 }
 
 impl Widget for PickerFilter {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn layout(&self) -> Layout {
         Layout::fill()
             .height(Sizing::Measure)
@@ -681,25 +693,21 @@ where
     fn filter_event(&mut self, event: &Event, context: &mut dyn Context) -> Result<EventOutcome> {
         let mut text = self.filter.clone();
         match event {
-            Event::Key(key) => match key.key {
-                KeyCode::Enter => {
+            Event::Key(key) => match self.filter_command(*key) {
+                Some(FilterCommand::Accept) => {
                     self.filtering = false;
                     self.republish(context)?;
                     return Ok(EventOutcome::Handle);
                 }
-                KeyCode::Esc => {
+                Some(FilterCommand::Clear) => {
                     self.clear_filter(context)?;
                     return Ok(EventOutcome::Handle);
                 }
-                KeyCode::Backspace if text.pop().is_none() => {
-                    self.clear_filter(context)?;
-                    return Ok(EventOutcome::Handle);
+                Some(FilterCommand::Backspace) => {
+                    let _ = text.pop();
                 }
-                KeyCode::Backspace => {}
-                KeyCode::Char(character) if !key.mods.ctrl && !key.mods.alt => {
-                    text.push(character);
-                }
-                _ => return Ok(EventOutcome::Ignore),
+                Some(FilterCommand::Push(character)) => text.push(character),
+                None => return Ok(EventOutcome::Ignore),
             },
             Event::Paste(pasted) => {
                 text.extend(pasted.chars().filter(|character| !character.is_control()));
@@ -710,10 +718,38 @@ where
         Ok(EventOutcome::Handle)
     }
 
+    /// Classify one key while the filter is open.
+    ///
+    /// `None` means the key passes on to bindings, matching
+    /// [`PickerList::filter_event`].
+    fn filter_command(&self, key: key::Key) -> Option<FilterCommand> {
+        match key.key {
+            KeyCode::Enter => Some(FilterCommand::Accept),
+            KeyCode::Esc => Some(FilterCommand::Clear),
+            KeyCode::Backspace if self.filter.is_empty() => Some(FilterCommand::Clear),
+            KeyCode::Backspace => Some(FilterCommand::Backspace),
+            KeyCode::Char(_) => key.text_char().map(FilterCommand::Push),
+            _ => None,
+        }
+    }
+
     /// Return the row count, which is one per item or one placeholder row.
     fn rows(&self) -> u32 {
         u32::try_from(self.shown.len().max(1)).unwrap_or(u32::MAX)
     }
+}
+
+/// One open-filter action.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FilterCommand {
+    /// Keep the filter and close the field.
+    Accept,
+    /// Drop the filter and close the field.
+    Clear,
+    /// Delete one character from the filter.
+    Backspace,
+    /// Append one character to the filter.
+    Push(char),
 }
 
 impl<T> Default for PickerList<T>
@@ -791,6 +827,14 @@ where
             return self.filter_event(event, context);
         }
         Ok(EventOutcome::Ignore)
+    }
+
+    fn key_outcome(&self, key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(if self.filtering && self.filter_command(key).is_some() {
+            EventOutcome::Handle
+        } else {
+            EventOutcome::Ignore
+        })
     }
 
     fn name(&self) -> NodeName {
@@ -953,6 +997,47 @@ mod tests {
 
         on_list(&mut harness, PickerList::clear_filter)?;
         assert_eq!(from_list(&mut harness, PickerList::shown_count), 3);
+        Ok(())
+    }
+
+    #[test]
+    fn filter_keys_predict_their_handling() -> Result<()> {
+        let keys = [
+            "a",
+            "enter",
+            "esc",
+            "backspace",
+            "up",
+            "f1",
+            "ctrl-a",
+            "alt-x",
+        ];
+        for filtering in [false, true] {
+            for spec in keys {
+                let mut harness = picker(&["alpha", "beta"], 40, 12)?;
+                if filtering {
+                    on_list(&mut harness, PickerList::start_filter)?;
+                    on_list(&mut harness, |list, context| {
+                        list.set_filter(context, "al".into())
+                    })?;
+                }
+                harness.with_root_context(|picker: &mut Picker<String>, context| {
+                    let list = picker.list()?;
+                    context.with_widget_mut(list, |list: &mut PickerList<String>, context| {
+                        let key = key::Key::parse_spec(spec).expect("valid key spec");
+                        let predicted = list.key_outcome(key, context);
+                        let actual = list.on_event(&Event::Key(key), context)?;
+                        let expected = Some(if actual == EventOutcome::Handle {
+                            EventOutcome::Handle
+                        } else {
+                            EventOutcome::Ignore
+                        });
+                        assert_eq!(predicted, expected, "filtering {filtering}: {spec}");
+                        Ok(())
+                    })
+                })?;
+            }
+        }
         Ok(())
     }
 

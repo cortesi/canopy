@@ -5,11 +5,12 @@ use std::{collections::HashMap, fmt::Display, path::Path};
 
 use anyhow::Result as AnyResult;
 use canopy::{
-    Canopy, CanopyBuilder, Context, ContextExt, InteractionToken, Loader, ModalBindings,
-    ModalOptions, NodeId, NodeName, Render, ViewContext, ViewContextExt, Widget,
+    Canopy, CanopyBuilder, Context, ContextExt, EventOutcome, InteractionToken, Loader,
+    ModalBindings, ModalOptions, NodeId, NodeName, Render, ViewContext, ViewContextExt, Widget,
     commands::CommandStatus,
     derive_commands,
     error::{Error, Result},
+    event::key::Key,
     geom::{Rect, Size},
     layout::{Constraint, Direction, Layout, LayoutOverride, MeasureConstraints, Measurement},
     style::canopy as palette,
@@ -57,6 +58,10 @@ impl TodoEntry {
 }
 
 impl Widget for TodoEntry {
+    fn key_outcome(&self, _key: Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn layout(&self) -> Layout {
         // Flex horizontally but use Measure for height so scrolling works
         Layout::column().flex_horizontal(1)
@@ -128,6 +133,10 @@ impl Widget for TodoEntry {
 pub(crate) struct StatusBar;
 
 impl Widget for StatusBar {
+    fn key_outcome(&self, _key: Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn render(&mut self, r: &mut Render, ctx: &dyn canopy::ViewContext) -> Result<()> {
         r.push_layer("statusbar");
         r.text(
@@ -142,7 +151,11 @@ impl Widget for StatusBar {
 /// Container for main content (list frame + status bar).
 struct MainContent;
 
-impl Widget for MainContent {}
+impl Widget for MainContent {
+    fn key_outcome(&self, _key: Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+}
 
 /// Root node for the todo demo.
 pub(crate) struct Todo {
@@ -407,6 +420,10 @@ impl Todo {
 }
 
 impl Widget for Todo {
+    fn key_outcome(&self, _key: Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn layout(&self) -> Layout {
         Layout::fill().direction(Direction::Stack)
     }

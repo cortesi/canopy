@@ -203,6 +203,10 @@ pub fn theme(p: &Palette) -> StyleMap {
             "/help/indicator",
             StyleBuilder::new().fg(p.accent).bg(p.panel_bg),
         )
+        .style(
+            "/help/warning",
+            StyleBuilder::new().fg(p.orange).bg(p.panel_bg),
+        )
         .style_all(
             &["/picker/background", "/picker/text"],
             StyleBuilder::new().fg(p.fg).bg(p.panel_bg),

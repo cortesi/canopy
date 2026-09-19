@@ -14,7 +14,11 @@ use super::*;
 use crate::{
     Context, FocusDirection, ViewContext,
     commands::{CommandNode, CommandSpec, CommandStatus},
-    core::world::test_support::assert_error_context,
+    core::{
+        inputmap::InputSpec,
+        keyroute::{KeyExpectation, RouteCertainty, RouteOutcome},
+        world::test_support::assert_error_context,
+    },
     derive_commands,
     error::{Error, NodeOperationKind, Result},
     event::{Event, key, mouse},
@@ -22,6 +26,7 @@ use crate::{
     layout::{Edges, Layout},
     path::Path,
     render::{NopBackend, Render},
+    script::LuauFunctionId,
     state::NodeName,
     testing::{
         backend::TestRender,
@@ -1595,5 +1600,393 @@ fn visible_render_limits_reject_sizes_before_publication() -> Result<()> {
         Err(Error::RenderWidthLimit { .. })
     ));
     assert_eq!(canopy.render_limits, accepted);
+    Ok(())
+}
+
+/// Handles and predicts `Handle` for `x`, and ignores every other key.
+struct PredictingLeaf;
+
+impl Widget for PredictingLeaf {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+        true
+    }
+
+    fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {
+        Ok(match event {
+            Event::Key(key) if *key == 'x' => EventOutcome::Handle,
+            _ => EventOutcome::Ignore,
+        })
+    }
+
+    fn key_outcome(&self, key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(if key == 'x' {
+            EventOutcome::Handle
+        } else {
+            EventOutcome::Ignore
+        })
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("predicting_leaf")
+    }
+}
+
+/// Offers no key prediction.
+struct UnknownLeaf;
+
+impl Widget for UnknownLeaf {
+    fn name(&self) -> NodeName {
+        NodeName::convert("unknown_leaf")
+    }
+}
+
+/// Predicts `Ignore` for every key but handles them anyway.
+struct OverclaimingLeaf;
+
+impl Widget for OverclaimingLeaf {
+    fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {
+        Ok(if matches!(event, Event::Key(_)) {
+            EventOutcome::Handle
+        } else {
+            EventOutcome::Ignore
+        })
+    }
+
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("overclaiming_leaf")
+    }
+}
+
+/// Predicts `Handle` for every key but ignores them.
+struct UnderclaimingLeaf;
+
+impl Widget for UnderclaimingLeaf {
+    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {
+        Ok(EventOutcome::Ignore)
+    }
+
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Handle)
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("underclaiming_leaf")
+    }
+}
+
+/// Attach a leaf and focus it.
+fn focused_leaf<W: Widget + 'static>(canopy: &mut Canopy, widget: W) -> Result<NodeId> {
+    let leaf = canopy.core.create_detached(widget)?;
+    canopy.core.attach(canopy.root_id(), leaf)?;
+    canopy.core.set_focus(leaf)?;
+    Ok(leaf)
+}
+
+/// Bind an opaque script callback to one character.
+fn bind_key(canopy: &mut Canopy, key: char) -> Result<crate::BindingId> {
+    bind_key_phase(canopy, key, crate::BindingPhase::AfterWidget)
+}
+
+/// Bind an opaque script callback with an explicit phase.
+fn bind_key_phase(
+    canopy: &mut Canopy,
+    key: char,
+    phase: crate::BindingPhase,
+) -> Result<crate::BindingId> {
+    use crate::core::inputmap::{BindingOptions, BindingTarget};
+    let (id, _) = canopy.core.input_map.replace_application_action(
+        InputSpec::Key(key.into()),
+        BindingOptions {
+            path: None,
+            scope: crate::BindingScope::Default,
+            description: "Test binding".to_string(),
+            source: None,
+            phase,
+        },
+        BindingTarget::Script(LuauFunctionId::for_test(1)),
+    )?;
+    Ok(id)
+}
+
+#[cfg(debug_assertions)]
+#[test]
+#[should_panic(expected = "key prediction mismatch")]
+fn an_ignored_prediction_that_handles_panics_in_debug() {
+    let mut canopy = Canopy::new();
+    focused_leaf(&mut canopy, OverclaimingLeaf).expect("leaf mounted");
+    canopy.key(None, 'x').expect("route dispatched");
+}
+
+#[cfg(debug_assertions)]
+#[test]
+#[should_panic(expected = "key prediction mismatch")]
+fn a_handled_prediction_that_ignores_panics_in_debug() {
+    let mut canopy = Canopy::new();
+    focused_leaf(&mut canopy, UnderclaimingLeaf).expect("leaf mounted");
+    canopy.key(None, 'x').expect("route dispatched");
+}
+
+#[test]
+fn explain_key_reports_a_widget_outcome_for_the_focus() -> Result<()> {
+    let mut canopy = Canopy::new();
+    let leaf = focused_leaf(&mut canopy, PredictingLeaf)?;
+    let explanation = canopy.explain_key(Some(leaf), 'x'.into())?;
+    assert_eq!(explanation.focus, leaf);
+    assert_eq!(
+        explanation.outcome,
+        RouteOutcome::Widget {
+            node: leaf,
+            path: Path::from("/root/predicting_leaf")
+        }
+    );
+    assert_eq!(explanation.certainty, RouteCertainty::Exact);
+    assert_eq!(explanation.steps.len(), 1);
+    assert_eq!(explanation.steps[0].widget, Some(EventOutcome::Handle));
+    Ok(())
+}
+
+#[test]
+fn explain_key_is_partial_behind_an_unknown_widget() -> Result<()> {
+    let mut canopy = Canopy::new();
+    let leaf = focused_leaf(&mut canopy, UnknownLeaf)?;
+    bind_key(&mut canopy, 'q')?;
+    let explanation = canopy.explain_key(Some(leaf), 'q'.into())?;
+    assert_eq!(explanation.certainty, RouteCertainty::Partial);
+    assert!(matches!(
+        explanation.outcome,
+        RouteOutcome::AfterWidget { .. }
+    ));
+    assert_eq!(explanation.steps[0].node, leaf);
+    assert!(explanation.steps[0].widget.is_none());
+    Ok(())
+}
+
+#[test]
+fn send_key_checked_delivers_a_matching_binding_from_a_script() -> Result<()> {
+    let mut canopy = Canopy::new();
+    // The check runs from evaluated source, so a replay that records the
+    // source repeats it.
+    canopy.eval_script(
+        r#"
+        canopy.bind("x", { description = "Switch" }, function() canopy.set_mode("ran") end)
+        local active = canopy.available_bindings()
+        canopy.send_key_checked("x", { kind = "binding", binding = active.bindings[1].id })
+        "#,
+    )?;
+    assert_eq!(canopy.input_mode(), "ran");
+    Ok(())
+}
+
+#[test]
+fn send_key_checked_allows_a_widget_to_suppress_an_after_widget_binding() -> Result<()> {
+    let mut canopy = Canopy::new();
+    let leaf = focused_leaf(&mut canopy, PredictingLeaf)?;
+    bind_key(&mut canopy, 'x')?;
+
+    canopy.send_key_checked('x', KeyExpectation::Widget(leaf))?;
+
+    assert!(
+        !canopy
+            .route_trace()
+            .iter()
+            .any(|entry| entry.phase == RoutePhase::BindingExecution)
+    );
+    Ok(())
+}
+
+#[test]
+fn send_key_checked_accepts_an_unhandled_route_at_a_modal_boundary() -> Result<()> {
+    let mut canopy = Canopy::new();
+    let modal = focused_leaf(&mut canopy, PredictingLeaf)?;
+    canopy.core.open_modal(crate::ModalOptions {
+        owner: canopy.root_id(),
+        modal,
+        initial_focus: modal,
+        dim_target: None,
+        bindings: crate::ModalBindings::Application,
+    })?;
+
+    canopy.send_key_checked('u', KeyExpectation::Unhandled)?;
+
+    assert!(
+        !canopy
+            .route_trace()
+            .iter()
+            .any(|entry| entry.phase == RoutePhase::BindingExecution)
+    );
+    Ok(())
+}
+
+#[test]
+fn explain_key_reports_before_widget_and_unhandled_outcomes() -> Result<()> {
+    let mut canopy = Canopy::new();
+    let leaf = focused_leaf(&mut canopy, PredictingLeaf)?;
+    let id = bind_key_phase(&mut canopy, 'b', crate::BindingPhase::BeforeWidget)?;
+
+    let before = canopy.explain_key(Some(leaf), 'b'.into())?;
+    assert_eq!(
+        before.outcome,
+        RouteOutcome::BeforeWidget {
+            binding: id,
+            node: leaf,
+            path: Path::from("/root/predicting_leaf"),
+        }
+    );
+    assert_eq!(before.certainty, RouteCertainty::Exact);
+
+    let unhandled = canopy.explain_key(Some(leaf), 'u'.into())?;
+    assert_eq!(unhandled.outcome, RouteOutcome::Unhandled);
+    assert_eq!(unhandled.certainty, RouteCertainty::Exact);
+    Ok(())
+}
+
+#[test]
+fn explain_key_matches_the_actual_route() -> Result<()> {
+    let mut canopy = Canopy::new();
+    canopy.eval_script(
+        r#"canopy.bind("q", { description = "Switch" }, function() canopy.set_mode("ran") end)"#,
+    )?;
+    let id = canopy
+        .core
+        .input_map
+        .bindings()
+        .iter()
+        .find(|record| record.input == InputSpec::Key('q'.into()))
+        .expect("binding")
+        .id;
+
+    let explanation = canopy.explain_key(None, 'q'.into())?;
+    assert_eq!(
+        explanation.outcome,
+        RouteOutcome::AfterWidget {
+            binding: id,
+            node: canopy.root_id(),
+            path: Path::from("/root"),
+        }
+    );
+
+    canopy.key(None, 'q')?;
+    assert_eq!(canopy.input_mode(), "ran");
+    assert!(
+        canopy.route_trace().iter().any(|entry| {
+            entry.phase == RoutePhase::BindingExecution && entry.detail == "Switch"
+        })
+    );
+    Ok(())
+}
+
+#[test]
+fn explain_key_reports_transient_binding_and_dismissal() -> Result<()> {
+    let mut canopy = Canopy::new();
+    canopy.eval_script(
+        r#"
+        canopy.keymap({
+            mode = "prefix",
+            { key = "y", description = "Prefix y", action = function() canopy.set_mode("after") end },
+        })
+        canopy.push_mode("prefix", { transient = true })
+        "#,
+    )?;
+    let id = canopy
+        .core
+        .input_map
+        .bindings()
+        .iter()
+        .find(|record| record.scope == crate::BindingScope::Mode("prefix".to_string()))
+        .expect("mode binding")
+        .id;
+
+    let bound = canopy.explain_key(None, 'y'.into())?;
+    assert_eq!(
+        bound.outcome,
+        RouteOutcome::Transient {
+            binding: id,
+            node: canopy.root_id(),
+            path: Path::from("/root"),
+        }
+    );
+    assert_eq!(bound.certainty, RouteCertainty::Exact);
+    assert!(bound.steps.is_empty());
+    assert!(KeyExpectation::Transient(id).matches(&bound.outcome));
+    assert!(!KeyExpectation::TransientDismiss.matches(&bound.outcome));
+
+    let dismissed = canopy.explain_key(None, 'z'.into())?;
+    assert_eq!(dismissed.outcome, RouteOutcome::TransientDismiss);
+    assert!(KeyExpectation::TransientDismiss.matches(&dismissed.outcome));
+    assert!(!KeyExpectation::Transient(id).matches(&dismissed.outcome));
+    Ok(())
+}
+
+#[test]
+fn send_key_checked_rechecks_between_calls() -> Result<()> {
+    let mut canopy = Canopy::new();
+    canopy.eval_script(
+        r#"canopy.bind("x", { description = "Switch" }, function() canopy.set_mode("ran") end)"#,
+    )?;
+    let id = canopy
+        .core
+        .input_map
+        .bindings()
+        .iter()
+        .find(|record| record.input == InputSpec::Key('x'.into()))
+        .expect("binding")
+        .id;
+    canopy.send_key_checked('x', KeyExpectation::Binding(id))?;
+    assert_eq!(canopy.input_mode(), "ran");
+
+    // A later evaluation that removes the winner makes the next check fail.
+    canopy.eval_script(&format!("canopy.unbind({})", id.as_u64()))?;
+    let error = canopy
+        .send_key_checked('x', KeyExpectation::Binding(id))
+        .expect_err("a stale expectation must be rejected");
+    assert!(matches!(error, Error::KeyDispatchDivergence(_)));
+    Ok(())
+}
+
+#[test]
+fn send_key_checked_rechecks_focus_and_tree_changes() -> Result<()> {
+    let mut canopy = Canopy::new();
+    let first = focused_leaf(&mut canopy, PredictingLeaf)?;
+    let second = canopy.core.create_detached(PredictingLeaf)?;
+    canopy.core.attach(canopy.root_id(), second)?;
+
+    // Focus moving to another consumer invalidates the first expectation.
+    canopy.core.set_focus(second)?;
+    let error = canopy
+        .send_key_checked('x', KeyExpectation::Widget(first))
+        .expect_err("stale focus must be rejected");
+    assert!(matches!(error, Error::KeyDispatchDivergence(_)));
+
+    // A removed node can no longer be the expected consumer.
+    canopy.core.set_focus(first)?;
+    canopy.core.remove_subtree(second)?;
+    let error = canopy
+        .send_key_checked('x', KeyExpectation::Widget(second))
+        .expect_err("a removed node must be rejected");
+    assert!(matches!(error, Error::KeyDispatchDivergence(_)));
+    Ok(())
+}
+
+#[test]
+fn send_key_checked_rejects_a_mismatched_expectation_without_delivery() -> Result<()> {
+    let mut canopy = Canopy::new();
+    canopy.eval_script(
+        r#"canopy.bind("x", { description = "Switch" }, function() canopy.set_mode("ran") end)"#,
+    )?;
+    let error = canopy
+        .send_key_checked('x', KeyExpectation::Unhandled)
+        .expect_err("expectation must be rejected");
+    assert!(matches!(error, Error::KeyDispatchDivergence(_)));
+    assert_eq!(canopy.input_mode(), "");
+    assert!(
+        !canopy
+            .route_trace()
+            .iter()
+            .any(|entry| entry.phase == RoutePhase::BindingExecution)
+    );
     Ok(())
 }

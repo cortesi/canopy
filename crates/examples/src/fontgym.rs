@@ -134,6 +134,10 @@ impl FontGym {
 }
 
 impl Widget for FontGym {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn layout(&self) -> Layout {
         Layout::fill()
     }
@@ -245,6 +249,41 @@ impl FocusFrame {
             Ok(action(list_ctx).changed())
         })
     }
+
+    /// Classify one key after the same normalization the handler applies.
+    fn classify_key(key: key::Key) -> Option<FocusScroll> {
+        match key.normalize().key {
+            key::KeyCode::Up => Some(FocusScroll::Up),
+            key::KeyCode::Down => Some(FocusScroll::Down),
+            key::KeyCode::PageUp => Some(FocusScroll::PageUp),
+            key::KeyCode::PageDown => Some(FocusScroll::PageDown),
+            _ => None,
+        }
+    }
+
+    /// Return the vertical scroll delta `command` requests.
+    fn scroll_delta(view: canopy::View, command: FocusScroll) -> i32 {
+        let page = i32::try_from(view.content.h).unwrap_or(i32::MAX);
+        match command {
+            FocusScroll::Up => -1,
+            FocusScroll::Down => 1,
+            FocusScroll::PageUp => -page,
+            FocusScroll::PageDown => page,
+        }
+    }
+}
+
+/// One focus-frame scroll action.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FocusScroll {
+    /// Scroll up one line.
+    Up,
+    /// Scroll down one line.
+    Down,
+    /// Scroll up one page.
+    PageUp,
+    /// Scroll down one page.
+    PageDown,
 }
 
 impl Widget for FocusFrame {
@@ -261,22 +300,37 @@ impl Widget for FocusFrame {
     }
 
     fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
-        if let Event::Key(raw) = event {
-            let normalized = raw.normalize();
-            let handled = match normalized.key {
-                key::KeyCode::Up => self.scroll_list(ctx, |ctx| ctx.scroll_up())?,
-                key::KeyCode::Down => self.scroll_list(ctx, |ctx| ctx.scroll_down())?,
-                key::KeyCode::PageUp => self.scroll_list(ctx, |ctx| ctx.page_up())?,
-                key::KeyCode::PageDown => self.scroll_list(ctx, |ctx| ctx.page_down())?,
-                _ => false,
+        if let Event::Key(raw) = event
+            && let Some(command) = Self::classify_key(*raw)
+        {
+            let changed = match command {
+                FocusScroll::Up => self.scroll_list(ctx, |ctx| ctx.scroll_up())?,
+                FocusScroll::Down => self.scroll_list(ctx, |ctx| ctx.scroll_down())?,
+                FocusScroll::PageUp => self.scroll_list(ctx, |ctx| ctx.page_up())?,
+                FocusScroll::PageDown => self.scroll_list(ctx, |ctx| ctx.page_down())?,
             };
-
-            if handled {
+            if changed {
                 return Ok(EventOutcome::Handle);
             }
         }
 
         self.frame.on_event(event, ctx)
+    }
+
+    fn key_outcome(&self, key: key::Key, context: &dyn ViewContext) -> Option<EventOutcome> {
+        let Some(command) = Self::classify_key(key) else {
+            return Some(EventOutcome::Ignore);
+        };
+        let node = NodeId::from(self.list_id);
+        let view = context.view_of(node)?;
+        let delta = Self::scroll_delta(view, command);
+        Some(
+            if context.scroll_outcome_of(node, 0, delta) == Some(ChangeOutcome::Changed) {
+                EventOutcome::Handle
+            } else {
+                EventOutcome::Ignore
+            },
+        )
     }
 
     fn name(&self) -> NodeName {
@@ -350,6 +404,10 @@ impl Selectable for FontBlock {
 }
 
 impl Widget for FontBlock {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn layout(&self) -> Layout {
         Layout::column().gap(LABEL_GAP)
     }
@@ -391,6 +449,10 @@ impl FontLabel {
 }
 
 impl Widget for FontLabel {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn layout(&self) -> Layout {
         Layout::fill()
     }
@@ -576,6 +638,66 @@ impl FontGymInput {
         })?;
         Ok(())
     }
+
+    /// Classify one key without running its effect.
+    ///
+    /// The control branch reads the normalized key, and the editing branch
+    /// reads the raw key, exactly as [`FontGymInput::on_event`] does.
+    fn classify_key(key: key::Key) -> Option<FontInputCommand> {
+        let normalized = key.normalize();
+        if normalized.mods.ctrl {
+            return match normalized.key {
+                key::KeyCode::Up => Some(FontInputCommand::Height(1)),
+                key::KeyCode::Down => Some(FontInputCommand::Height(-1)),
+                key::KeyCode::Char(character) if is_style_key(character) => {
+                    Some(FontInputCommand::ToggleStyle(character))
+                }
+                _ => None,
+            };
+        }
+        Some(match key.key {
+            key::KeyCode::Char(character) => FontInputCommand::Insert(character),
+            key::KeyCode::Backspace => FontInputCommand::Backspace,
+            key::KeyCode::Left => FontInputCommand::Move(FontInputMove::Left),
+            key::KeyCode::Right => FontInputCommand::Move(FontInputMove::Right),
+            key::KeyCode::Home => FontInputCommand::Move(FontInputMove::Home),
+            key::KeyCode::End => FontInputCommand::Move(FontInputMove::End),
+            _ => return None,
+        })
+    }
+}
+
+/// One fontgym input action.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FontInputCommand {
+    /// Adjust the banner height.
+    Height(i32),
+    /// Toggle a style attribute.
+    ToggleStyle(char),
+    /// Insert one character.
+    Insert(char),
+    /// Delete backward.
+    Backspace,
+    /// Move the caret.
+    Move(FontInputMove),
+}
+
+/// A fontgym input caret movement.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FontInputMove {
+    /// Move left.
+    Left,
+    /// Move right.
+    Right,
+    /// Move to the start.
+    Home,
+    /// Move to the end.
+    End,
+}
+
+/// Return whether `key` names a style toggle.
+fn is_style_key(key: char) -> bool {
+    matches!(key.to_ascii_lowercase(), 'b' | 'i' | 'u' | 'd' | 'o' | 'x')
 }
 
 impl Widget for FontGymInput {
@@ -612,81 +734,43 @@ impl Widget for FontGymInput {
     }
 
     fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
-        if let Event::Key(raw) = event {
-            let normalized = raw.normalize();
-            if normalized.mods.ctrl {
-                match normalized.key {
-                    key::KeyCode::Up => {
-                        self.adjust_height(ctx, 1)?;
-                        return Ok(EventOutcome::Handle);
-                    }
-                    key::KeyCode::Down => {
-                        self.adjust_height(ctx, -1)?;
-                        return Ok(EventOutcome::Handle);
-                    }
-                    key::KeyCode::Char(ch) if self.toggle_style(ctx, ch)? => {
-                        return Ok(EventOutcome::Handle);
-                    }
-                    _ => {}
-                }
-                return Ok(EventOutcome::Ignore);
-            }
-        }
-
+        let Event::Key(key) = event else {
+            return Ok(EventOutcome::Ignore);
+        };
+        let Some(command) = Self::classify_key(*key) else {
+            return Ok(EventOutcome::Ignore);
+        };
         let mut changed = false;
-        let outcome = match event {
-            Event::Key(key::Key {
-                key: key::KeyCode::Char(c),
-                ..
-            }) => {
-                self.insert_char(*c);
-                changed = true;
-                EventOutcome::Handle
+        match command {
+            FontInputCommand::Height(delta) => self.adjust_height(ctx, delta)?,
+            FontInputCommand::ToggleStyle(character) => {
+                let _ = self.toggle_style(ctx, character)?;
             }
-            Event::Key(key::Key {
-                key: key::KeyCode::Backspace,
-                ..
-            }) => {
+            FontInputCommand::Insert(character) => {
+                self.insert_char(character);
+                changed = true;
+            }
+            FontInputCommand::Backspace => {
                 self.backspace();
                 changed = true;
-                EventOutcome::Handle
             }
-            Event::Key(key::Key {
-                key: key::KeyCode::Left,
-                ..
-            }) => {
-                self.move_left();
-                EventOutcome::Handle
-            }
-            Event::Key(key::Key {
-                key: key::KeyCode::Right,
-                ..
-            }) => {
-                self.move_right();
-                EventOutcome::Handle
-            }
-            Event::Key(key::Key {
-                key: key::KeyCode::Home,
-                ..
-            }) => {
-                self.move_home();
-                EventOutcome::Handle
-            }
-            Event::Key(key::Key {
-                key: key::KeyCode::End,
-                ..
-            }) => {
-                self.move_end();
-                EventOutcome::Handle
-            }
-            _ => EventOutcome::Ignore,
-        };
-
+            FontInputCommand::Move(FontInputMove::Left) => self.move_left(),
+            FontInputCommand::Move(FontInputMove::Right) => self.move_right(),
+            FontInputCommand::Move(FontInputMove::Home) => self.move_home(),
+            FontInputCommand::Move(FontInputMove::End) => self.move_end(),
+        }
         if changed {
             self.sync_targets(ctx)?;
         }
+        Ok(EventOutcome::Handle)
+    }
 
-        Ok(outcome)
+    fn key_outcome(&self, key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(if Self::classify_key(key).is_some() {
+            EventOutcome::Handle
+        } else {
+            EventOutcome::Ignore
+        })
     }
 
     fn measure(&self, c: MeasureConstraints) -> Measurement {
@@ -703,6 +787,10 @@ impl Widget for FontGymInput {
 struct StatusRow;
 
 impl Widget for StatusRow {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn layout(&self) -> Layout {
         Layout::row()
             .fixed_height(STATUS_HEIGHT)
@@ -805,6 +893,10 @@ impl LegendSegment {
 struct ControlsLegend;
 
 impl Widget for ControlsLegend {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn layout(&self) -> Layout {
         Layout::fill()
     }
@@ -977,7 +1069,9 @@ pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
 
 #[cfg(test)]
 mod tests {
-    use canopy::{ViewContextExt, layout::Constraint, testing::harness::Harness};
+    use canopy::{
+        RevealAlign, ViewContextExt, geom::Rect, layout::Constraint, testing::harness::Harness,
+    };
 
     use super::*;
     use crate::tests::{Mount, root_harness};
@@ -1016,6 +1110,75 @@ mod tests {
 
         let after = font_list_scroll(&harness);
         assert!(after.y > before.y, "PageDown must scroll the font list");
+        Ok(())
+    }
+
+    #[test]
+    fn focus_frame_predicts_scroll_boundaries_and_pending_reveals() -> Result<()> {
+        let mut harness = root_harness(
+            FontGym::new(),
+            binding_setup,
+            Size::new(80, 24),
+            Mount::Wrap,
+        )?;
+        let (frame, list) = harness.canopy.with_root_view(|ctx| {
+            (
+                ctx.unique_descendant::<FocusFrame>()
+                    .expect("frame lookup")
+                    .expect("focus frame"),
+                ctx.unique_descendant::<List<FontBlock>>()
+                    .expect("list lookup")
+                    .expect("font list"),
+            )
+        });
+        harness.canopy.with_root_context(|ctx| {
+            ctx.set_focus(frame.into())?;
+            Ok(())
+        })?;
+
+        let check = |harness: &mut Harness, spec: &str| -> Result<()> {
+            harness.canopy.with_root_context(|ctx| {
+                ctx.with_widget_mut(frame, |frame: &mut FocusFrame, ctx| {
+                    let key = key::Key::parse_spec(spec)?;
+                    let predicted = frame.key_outcome(key, ctx);
+                    let actual = frame.on_event(&Event::Key(key), ctx)?;
+                    let expected = Some(if actual == EventOutcome::Handle {
+                        EventOutcome::Handle
+                    } else {
+                        EventOutcome::Ignore
+                    });
+                    assert_eq!(
+                        predicted, expected,
+                        "prediction must match handling for {spec}"
+                    );
+                    Ok(())
+                })
+            })
+        };
+
+        for offset in [3, 0, u32::MAX] {
+            harness
+                .canopy
+                .with_root_context(|ctx| ctx.scroll_to_of(list.into(), 0, offset))?;
+            check(&mut harness, "up")?;
+            harness
+                .canopy
+                .with_root_context(|ctx| ctx.scroll_to_of(list.into(), 0, offset))?;
+            check(&mut harness, "down")?;
+        }
+
+        // A pending reveal changes a scroll that the clamped offset alone
+        // would report as no movement.
+        harness
+            .canopy
+            .with_root_context(|ctx| ctx.scroll_to_of(list.into(), 0, 0))?;
+        harness.canopy.with_root_context(|ctx| {
+            ctx.with_widget_mut(list, |_: &mut List<FontBlock>, list_ctx| {
+                list_ctx.reveal_area(Rect::new(0, 0, 1, 1), RevealAlign::Nearest);
+                Ok(())
+            })
+        })?;
+        check(&mut harness, "up")?;
         Ok(())
     }
 

@@ -3,7 +3,7 @@
 use canopy::{
     Context, EventOutcome, NodeName, Render, RevealAlign, ViewContext, Widget, derive_commands,
     error::{Error, Result},
-    event::{Event, mouse},
+    event::{Event, key, mouse},
     geom::{Rect, Size},
     layout::{MeasureConstraints, Measurement},
     text,
@@ -173,6 +173,10 @@ impl<T> Widget for Dropdown<T>
 where
     T: Label + 'static,
 {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
         if let Event::Mouse(mouse_event) = event {
             self.handle_click(ctx, *mouse_event)?;

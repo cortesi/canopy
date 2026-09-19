@@ -393,39 +393,53 @@ impl Terminal {
 
     /// Encode and send a keyboard event to the backend session.
     fn handle_key(&mut self, key: key::Key) -> bool {
+        match self.classify_key(key) {
+            Some(TerminalKey::ScrollPageUp) => {
+                if let Some(session) = self.session_mut() {
+                    session.scroll_page_up();
+                }
+                true
+            }
+            Some(TerminalKey::ScrollPageDown) => {
+                if let Some(session) = self.session_mut() {
+                    session.scroll_page_down();
+                }
+                true
+            }
+            Some(TerminalKey::CopySelection) => {
+                self.copy_selection();
+                true
+            }
+            Some(TerminalKey::Forward(mapped)) => {
+                self.clear_selection();
+                if let Some(session) = self.session() {
+                    drop(session.send_key(mapped));
+                    true
+                } else {
+                    false
+                }
+            }
+            None => false,
+        }
+    }
+
+    /// Classify one key without running its effect.
+    ///
+    /// This is the only place the terminal decides which keys it consumes, so
+    /// prediction and dispatch cannot drift.
+    fn classify_key(&self, key: key::Key) -> Option<TerminalKey> {
+        self.session.as_ref()?;
         if key.mods.shift {
             match key.key {
-                key::KeyCode::PageUp => {
-                    if let Some(session) = self.session_mut() {
-                        session.scroll_page_up();
-                    }
-                    return true;
-                }
-                key::KeyCode::PageDown => {
-                    if let Some(session) = self.session_mut() {
-                        session.scroll_page_down();
-                    }
-                    return true;
-                }
+                key::KeyCode::PageUp => return Some(TerminalKey::ScrollPageUp),
+                key::KeyCode::PageDown => return Some(TerminalKey::ScrollPageDown),
                 _ => {}
             }
         }
-
         if key.mods.ctrl && key.mods.shift && matches!(key.key, key::KeyCode::Char('c' | 'C')) {
-            self.copy_selection();
-            return true;
+            return Some(TerminalKey::CopySelection);
         }
-
-        let Some(mapped) = map_key(key) else {
-            return false;
-        };
-
-        self.clear_selection();
-        if let Some(session) = self.session() {
-            drop(session.send_key(mapped));
-            return true;
-        }
-        false
+        map_key(key).map(TerminalKey::Forward)
     }
 
     /// Return the focus report the terminal expects, if it enabled focus
@@ -588,6 +602,14 @@ impl Widget for Terminal {
         }
     }
 
+    fn key_outcome(&self, key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(if self.classify_key(key).is_some() {
+            EventOutcome::Handle
+        } else {
+            EventOutcome::Ignore
+        })
+    }
+
     fn measure(&self, c: MeasureConstraints) -> Measurement {
         c.wrap()
     }
@@ -642,6 +664,19 @@ fn terminal_config(config: &TerminalConfig, size: TerminalSize) -> EguiTTYConfig
         builder = builder.pty_working_dir(cwd.display().to_string());
     }
     builder.build()
+}
+
+/// One key action the terminal can take.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TerminalKey {
+    /// Scroll the scrollback up one page.
+    ScrollPageUp,
+    /// Scroll the scrollback down one page.
+    ScrollPageDown,
+    /// Copy the current selection to the system clipboard.
+    CopySelection,
+    /// Forward an encoded key to the process.
+    Forward(IttyKey),
 }
 
 /// Convert a Canopy key into an `itty` key.
@@ -878,11 +913,57 @@ mod tests {
             GradientSpec, GradientStop, Paint, StyleManager, StyleMap,
             effects::{self, Effect, StyleEffect},
         },
-        testing::harness::Harness,
+        testing::{dummyctx::DummyContext, harness::Harness},
     };
     use itty_core::{colors::Rgba8, palette::builtin};
 
     use super::*;
+
+    #[test]
+    fn key_capture_matches_event_handling() {
+        let (mut terminal, _receiver) = stream_terminal();
+        let mut ctx = DummyContext::default();
+        for spec in [
+            "a",
+            "Z",
+            "2",
+            "ctrl-a",
+            "alt-x",
+            "ctrl-shift-c",
+            "shift-pageup",
+            "pagedown",
+            "up",
+            "f1",
+            "esc",
+            "enter",
+            "backspace",
+            "tab",
+            "insert",
+            "delete",
+            "home",
+            "end",
+            "capslock",
+            "printscreen",
+            "null",
+            "keypadbegin",
+        ] {
+            let key = key::Key::parse_spec(spec).expect("valid key spec");
+            let predicted = terminal.key_outcome(key, &ctx);
+            let handled = terminal
+                .on_event(&event::Event::Key(key), &mut ctx)
+                .expect("event")
+                == EventOutcome::Handle;
+            assert_eq!(
+                predicted,
+                Some(if handled {
+                    EventOutcome::Handle
+                } else {
+                    EventOutcome::Ignore
+                }),
+                "prediction must match handling for {spec}"
+            );
+        }
+    }
 
     fn stream_terminal() -> (Terminal, itty_core::StreamInputReceiver) {
         let (session, receiver) =

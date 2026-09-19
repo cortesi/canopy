@@ -6,7 +6,7 @@ use canopy::{
     commands::{CommandCall, CommandStatus, CommandTarget},
     derive_commands,
     error::{Error, Result},
-    event::Event,
+    event::{Event, key},
     geom::Size,
     layout::{
         Align, CanvasContext, Direction, Edges, Layout, LayoutOverride, MeasureConstraints,
@@ -274,6 +274,10 @@ impl Loader for Confirm {
 }
 
 impl Widget for Confirm {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn layout(&self) -> Layout {
         // A stack centres the frame over what the dialog covers, and the margin
         // keeps that visible around it.
@@ -385,6 +389,10 @@ impl ConfirmBody {
 }
 
 impl Widget for ConfirmBody {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn layout(&self) -> Layout {
         // The message and the blank line under it are the body's own paint, so
         // the padding keeps the answers below them.

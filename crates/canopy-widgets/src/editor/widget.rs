@@ -36,6 +36,38 @@ const SEARCH_MATCH_TOP_CONTEXT: u32 = 3;
 /// surrounding divider or border and only its color stands out.
 const SEARCH_MARK: char = THIN.track_vertical;
 
+/// One text-entry action.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TextCommand {
+    /// Insert one character.
+    Insert(char),
+    /// Delete backward.
+    Backspace,
+    /// Delete forward.
+    Delete,
+    /// Move the caret.
+    Move(TextMove),
+    /// Insert a newline.
+    Newline,
+}
+
+/// A text-entry caret movement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TextMove {
+    /// Move left.
+    Left,
+    /// Move right.
+    Right,
+    /// Move up.
+    Up,
+    /// Move down.
+    Down,
+    /// Move to the line start.
+    Home,
+    /// Move to the line end.
+    End,
+}
+
 /// Editor widget implementation.
 pub struct Editor {
     /// Editor configuration.
@@ -493,140 +525,126 @@ impl Editor {
         self.buffer.commit_transaction();
     }
 
-    /// Return whether `event` edits text in text-entry mode.
-    fn is_text_edit(event: &Event) -> bool {
+    /// Return whether `key` edits text in text-entry mode.
+    fn is_text_edit_key(key: key::Key) -> bool {
         matches!(
-            event,
-            Event::Paste(_)
-                | Event::Key(key::Key {
-                    key: key::KeyCode::Char(_)
-                        | key::KeyCode::Backspace
-                        | key::KeyCode::Delete
-                        | key::KeyCode::Enter,
-                    ..
-                })
+            key.key,
+            key::KeyCode::Char(_)
+                | key::KeyCode::Backspace
+                | key::KeyCode::Delete
+                | key::KeyCode::Enter
         )
+    }
+
+    /// Classify one text-entry key without running its edit.
+    fn text_command(&self, key: key::Key) -> Option<TextCommand> {
+        if self.config.read_only && Self::is_text_edit_key(key) {
+            return None;
+        }
+        Some(match key.key {
+            key::KeyCode::Char(character) if !key.mods.ctrl && !key.mods.alt => {
+                TextCommand::Insert(character)
+            }
+            key::KeyCode::Backspace => TextCommand::Backspace,
+            key::KeyCode::Delete => TextCommand::Delete,
+            key::KeyCode::Left => TextCommand::Move(TextMove::Left),
+            key::KeyCode::Right => TextCommand::Move(TextMove::Right),
+            key::KeyCode::Up => TextCommand::Move(TextMove::Up),
+            key::KeyCode::Down => TextCommand::Move(TextMove::Down),
+            key::KeyCode::Home => TextCommand::Move(TextMove::Home),
+            key::KeyCode::End => TextCommand::Move(TextMove::End),
+            key::KeyCode::Enter if self.config.multiline => TextCommand::Newline,
+            _ => return None,
+        })
     }
 
     /// Handle events in text-entry mode.
     ///
     /// A read-only editor ignores edit input, so application bindings see it.
     fn handle_text_entry_event(&mut self, event: &Event, ctx: &mut dyn Context) -> EventOutcome {
-        if self.config.read_only && Self::is_text_edit(event) {
-            return EventOutcome::Ignore;
-        }
         match event {
-            Event::Key(key::Key {
-                key: key::KeyCode::Char(c),
-                mods,
-            }) if !mods.ctrl && !mods.alt => {
-                self.begin_text_entry_transaction();
-                self.handle_insert_text(c.encode_utf8(&mut [0; 4]));
-                self.ensure_cursor_visible(ctx);
-                EventOutcome::Handle
-            }
-            Event::Key(key::Key {
-                key: key::KeyCode::Backspace,
-                ..
-            }) => {
-                self.commit_text_entry_transaction();
-                if self.handle_delete_backward() {
+            Event::Key(key) => match self.text_command(*key) {
+                Some(TextCommand::Insert(character)) => {
+                    self.begin_text_entry_transaction();
+                    self.handle_insert_text(character.encode_utf8(&mut [0; 4]));
                     self.ensure_cursor_visible(ctx);
+                    EventOutcome::Handle
                 }
-                EventOutcome::Handle
-            }
-            Event::Key(key::Key {
-                key: key::KeyCode::Delete,
-                ..
-            }) => {
-                self.commit_text_entry_transaction();
-                if self.handle_delete_forward() {
+                Some(TextCommand::Backspace) => {
+                    self.commit_text_entry_transaction();
+                    if self.handle_delete_backward() {
+                        self.ensure_cursor_visible(ctx);
+                    }
+                    EventOutcome::Handle
+                }
+                Some(TextCommand::Delete) => {
+                    self.commit_text_entry_transaction();
+                    if self.handle_delete_forward() {
+                        self.ensure_cursor_visible(ctx);
+                    }
+                    EventOutcome::Handle
+                }
+                Some(TextCommand::Move(TextMove::Left)) => {
+                    self.commit_text_entry_transaction();
+                    let moved = self.buffer.move_left(self.config.multiline);
+                    if moved {
+                        self.update_preferred_column();
+                        self.ensure_cursor_visible(ctx);
+                    }
+                    EventOutcome::Handle
+                }
+                Some(TextCommand::Move(TextMove::Right)) => {
+                    self.commit_text_entry_transaction();
+                    let moved = self.buffer.move_right(self.config.multiline);
+                    if moved {
+                        self.update_preferred_column();
+                        self.ensure_cursor_visible(ctx);
+                    }
+                    EventOutcome::Handle
+                }
+                Some(TextCommand::Move(TextMove::Up)) => {
+                    self.commit_text_entry_transaction();
+                    self.move_vertical(-1);
                     self.ensure_cursor_visible(ctx);
+                    EventOutcome::Handle
                 }
-                EventOutcome::Handle
-            }
-            Event::Key(key::Key {
-                key: key::KeyCode::Left,
-                ..
-            }) => {
-                self.commit_text_entry_transaction();
-                let moved = self.buffer.move_left(self.config.multiline);
-                if moved {
+                Some(TextCommand::Move(TextMove::Down)) => {
+                    self.commit_text_entry_transaction();
+                    self.move_vertical(1);
+                    self.ensure_cursor_visible(ctx);
+                    EventOutcome::Handle
+                }
+                Some(TextCommand::Move(TextMove::Home)) => {
+                    self.commit_text_entry_transaction();
+                    self.buffer.move_line_start();
                     self.update_preferred_column();
                     self.ensure_cursor_visible(ctx);
+                    EventOutcome::Handle
                 }
-                EventOutcome::Handle
-            }
-            Event::Key(key::Key {
-                key: key::KeyCode::Right,
-                ..
-            }) => {
-                self.commit_text_entry_transaction();
-                let moved = self.buffer.move_right(self.config.multiline);
-                if moved {
+                Some(TextCommand::Move(TextMove::End)) => {
+                    self.commit_text_entry_transaction();
+                    self.buffer.move_line_end();
                     self.update_preferred_column();
                     self.ensure_cursor_visible(ctx);
+                    EventOutcome::Handle
                 }
-                EventOutcome::Handle
-            }
-            Event::Key(key::Key {
-                key: key::KeyCode::Up,
-                ..
-            }) => {
-                self.commit_text_entry_transaction();
-                self.move_vertical(-1);
-                self.ensure_cursor_visible(ctx);
-                EventOutcome::Handle
-            }
-            Event::Key(key::Key {
-                key: key::KeyCode::Down,
-                ..
-            }) => {
-                self.commit_text_entry_transaction();
-                self.move_vertical(1);
-                self.ensure_cursor_visible(ctx);
-                EventOutcome::Handle
-            }
-            Event::Key(key::Key {
-                key: key::KeyCode::Home,
-                ..
-            }) => {
-                self.commit_text_entry_transaction();
-                self.buffer.move_line_start();
-                self.update_preferred_column();
-                self.ensure_cursor_visible(ctx);
-                EventOutcome::Handle
-            }
-            Event::Key(key::Key {
-                key: key::KeyCode::End,
-                ..
-            }) => {
-                self.commit_text_entry_transaction();
-                self.buffer.move_line_end();
-                self.update_preferred_column();
-                self.ensure_cursor_visible(ctx);
-                EventOutcome::Handle
-            }
-            Event::Key(key::Key {
-                key: key::KeyCode::Enter,
-                ..
-            }) => {
-                self.commit_text_entry_transaction();
-                if self.config.multiline {
+                Some(TextCommand::Newline) => {
+                    self.commit_text_entry_transaction();
                     self.handle_insert_text("\n");
                     self.ensure_cursor_visible(ctx);
                     EventOutcome::Handle
-                } else {
+                }
+                None => {
+                    // Every other key commits the active transaction before it
+                    // bubbles, including Esc. A read-only edit key returns
+                    // before the commit.
+                    if !(self.config.read_only && Self::is_text_edit_key(*key)) {
+                        self.commit_text_entry_transaction();
+                    }
                     EventOutcome::Ignore
                 }
-            }
-            Event::Key(key::Key {
-                key: key::KeyCode::Esc,
-                ..
-            }) => {
-                self.commit_text_entry_transaction();
-                EventOutcome::Ignore
-            }
+            },
+            Event::Paste(_) if self.config.read_only => EventOutcome::Ignore,
             Event::Paste(content) => {
                 self.begin_text_entry_transaction();
                 self.handle_insert_text(content);
@@ -1192,6 +1210,18 @@ impl Widget for Editor {
         Ok(match self.config.mode {
             EditMode::Text => self.handle_text_entry_event(event, ctx),
             EditMode::Vi => self.handle_vi_event(event, ctx),
+        })
+    }
+
+    fn key_outcome(&self, key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        let handled = match self.config.mode {
+            EditMode::Text => self.text_command(key).is_some(),
+            EditMode::Vi => self.vi_command(key).is_some(),
+        };
+        Some(if handled {
+            EventOutcome::Handle
+        } else {
+            EventOutcome::Ignore
         })
     }
 

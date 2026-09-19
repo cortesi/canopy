@@ -1,7 +1,7 @@
 //! Base `canopy` scripting API declarations and native registration.
 
 use std::{
-    collections::{BTreeSet, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     future::poll_fn,
     iter,
     result::Result as StdResult,
@@ -25,13 +25,13 @@ use super::{
     ViewContext, available_bindings_to_arg, base_api, binding_info_to_arg, command_call_from_value,
     command_call_type, command_info_to_arg, commands, defs, dispatch_command,
     dispatch_command_by_name, dispatch_explicit, error, fixtures_to_arg, host_return, host_value,
-    inputmap, key, luau_global_owner_name, mouse, node_handle_type, node_id_from_value,
-    node_info_to_arg, node_list_to_arg, owned_truthy, ret_arg, ret_none, ret_one,
-    route_trace_to_arg, screen_cells_to_arg, screen_text, screen_text_for_rect, screen_to_arg,
-    script_callback_label, script_journal_to_arg, snapshot_to_arg, tree_node_to_arg,
+    inputmap, key, key_explanation_to_arg, luau_global_owner_name, mouse, node_handle_type,
+    node_id_from_value, node_info_to_arg, node_list_to_arg, owned_truthy, ret_arg, ret_none,
+    ret_one, route_trace_to_arg, screen_cells_to_arg, screen_text, screen_text_for_rect,
+    screen_to_arg, script_callback_label, script_journal_to_arg, snapshot_to_arg, tree_node_to_arg,
     validate_node_handle, values_to_args, with_current_canopy,
 };
-use crate::{FocusDirection, geom::PointI32};
+use crate::{FocusDirection, geom::PointI32, keyroute::KeyExpectation};
 
 /// The native implementation behind one base API function.
 enum Handler {
@@ -184,6 +184,20 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
         ),
         signature: || FunctionSignature::new().param(("key", Type::String)),
         handler: Handler::Sync(host_send_key),
+    },
+    BaseFunction {
+        name: "send_key_checked",
+        docs: Some(
+            "Send a key only when its analyzed route matches `expectation`. \
+             Native routing still acts one step at a time; an unexpected \
+             widget or binding stops the route with a divergence error.",
+        ),
+        signature: || {
+            FunctionSignature::new()
+                .param(("key", Type::String))
+                .param(("expectation", Type::named("KeyExpectation")))
+        },
+        handler: Handler::Sync(host_send_key_checked),
     },
     BaseFunction {
         name: "send_click",
@@ -429,6 +443,20 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
                 .ret(Type::named("BindingSnapshot"))
         },
         handler: Handler::Sync(host_available_bindings),
+    },
+    BaseFunction {
+        name: "explain_key",
+        docs: Some(
+            "Explain where a key would go for a node or the current focus, without \
+             sending it. The result is advisory; route_trace reports what happened.",
+        ),
+        signature: || {
+            FunctionSignature::new()
+                .param(("key", Type::String))
+                .param(("id", Type::named("NodeId").optional()))
+                .ret(Type::named("KeyRouteExplanation"))
+        },
+        handler: Handler::Sync(host_explain_key),
     },
     BaseFunction {
         name: "script_journal",
@@ -1418,6 +1446,70 @@ fn host_send_key<'s>(
     Ok(ret_none())
 }
 
+/// `canopy.send_key_checked`: inject a key only when its route is expected.
+fn host_send_key_checked<'s>(
+    scope: &Scope<'s>,
+    args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    let mut args = HostArgCursor::new(scope, args);
+    let key_spec = args.required::<String>("key")?;
+    let expectation = args.required::<Table<'_>>("expectation")?;
+    let expectation = parse_key_expectation(scope, ScopedValue::Table(expectation))?;
+    with_current_canopy(scope, |canopy, _| {
+        let key = key::Key::parse_spec(&key_spec)?;
+        let _reentrant = ReentrantCanopyGuard::push(canopy);
+        canopy.key_checked(Some(scope), key, expectation)
+    })?;
+    Ok(ret_none())
+}
+
+/// Parse one `KeyExpectation` table.
+fn parse_key_expectation<'s>(
+    scope: &Scope<'s>,
+    value: ScopedValue<'s>,
+) -> StdResult<KeyExpectation, RuntimeError> {
+    let ArgValue::Map(mut fields) =
+        super::scoped_to_arg_value(scope, value).map_err(RuntimeError::runtime)?
+    else {
+        return Err(RuntimeError::runtime("expectation must be a table"));
+    };
+    let kind = match fields.remove("kind") {
+        Some(ArgValue::String(kind)) => kind,
+        _ => return Err(RuntimeError::runtime("expectation kind is required")),
+    };
+    let expectation = match kind.as_str() {
+        "widget" => match fields.remove("node") {
+            Some(ArgValue::Node(node)) => KeyExpectation::Widget(node),
+            _ => return Err(RuntimeError::runtime("widget expectation requires a node")),
+        },
+        "binding" => KeyExpectation::Binding(expectation_binding(&mut fields)?),
+        "transient" => KeyExpectation::Transient(expectation_binding(&mut fields)?),
+        "transient_dismiss" => KeyExpectation::TransientDismiss,
+        "unhandled" => KeyExpectation::Unhandled,
+        _ => return Err(RuntimeError::runtime("unknown expectation kind")),
+    };
+    if !fields.is_empty() {
+        return Err(RuntimeError::runtime("unknown expectation field"));
+    }
+    if let KeyExpectation::Widget(node) = expectation {
+        with_current_canopy(scope, |canopy, _| validate_node_handle(&canopy.core, node))?;
+    }
+    Ok(expectation)
+}
+
+/// Read the required binding identifier of one expectation.
+fn expectation_binding(
+    fields: &mut BTreeMap<String, ArgValue>,
+) -> StdResult<crate::BindingId, RuntimeError> {
+    match fields.remove("binding") {
+        Some(ArgValue::UInt(id)) => Ok(crate::BindingId::from_u64(id)),
+        Some(ArgValue::Int(id)) if id >= 0 => Ok(crate::BindingId::from_u64(id as u64)),
+        _ => Err(RuntimeError::runtime(
+            "expectation binding must be a binding number",
+        )),
+    }
+}
+
 /// `canopy.send_click`: inject a left click at screen coordinates.
 fn host_send_click<'s>(
     scope: &Scope<'s>,
@@ -2120,6 +2212,20 @@ fn host_available_bindings<'s>(
     let requested = read_opt_node_id(scope, &mut args)?;
     host_value(scope, |canopy, _| {
         available_bindings_to_arg(canopy, requested)
+    })
+}
+
+/// `canopy.explain_key`: explain one prospective key route.
+fn host_explain_key<'s>(
+    scope: &Scope<'s>,
+    args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    let mut args = HostArgCursor::new(scope, args);
+    let key_spec = args.required::<String>("key")?;
+    let requested = read_opt_node_id(scope, &mut args)?;
+    host_value(scope, |canopy, _| {
+        let key = key::Key::parse_spec(&key_spec)?;
+        key_explanation_to_arg(canopy, requested, key)
     })
 }
 

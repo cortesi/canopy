@@ -9,14 +9,17 @@ use canopy::{
     error::Result,
     event::{key, mouse},
     geom::{Point, PointI32, Size},
-    help::{AvailableBinding, BindingCommand, BindingSnapshot},
+    help::{AvailableBinding, BindingCommand, BindingSnapshot, KeyPredictionGap},
     layout::Layout,
     path::Path,
     style::canopy::{HIGHLIGHT, TEXT},
     testing::harness::Harness,
 };
 
-use super::{binding_list::BindingList, panel::ControlFooter};
+use super::{
+    binding_list::{BindingList, PARTIAL_WARNING},
+    panel::ControlFooter,
+};
 use crate::Frame;
 
 impl Loader for ControlFooter {}
@@ -49,6 +52,7 @@ fn snapshot(focus: NodeId, bindings: Vec<AvailableBinding<key::Key>>) -> Binding
         transient_mode: None,
         exclusive_group: None,
         bindings,
+        key_prediction_gaps: Vec::new(),
         mouse_bindings: Vec::new(),
     }
 }
@@ -184,6 +188,46 @@ fn empty_list_has_one_explicit_row() {
     let lines = list.display_lines(40);
     assert_eq!(lines.len(), 1);
     assert_eq!(lines[0].text, "No key bindings in this context");
+}
+
+#[test]
+fn partial_snapshots_end_with_one_warning_row() {
+    let mut list = BindingList::new();
+    let focus = canopy::Canopy::new().root_id();
+    let mut captured = snapshot(
+        focus,
+        vec![binding(1, 'a', "Action", BindingPhase::AfterWidget)],
+    );
+    captured.key_prediction_gaps.push(KeyPredictionGap {
+        input: key::Key::from('a'),
+        binding: BindingId::from_u64(1),
+        node: focus,
+        path: Path::from("/root"),
+    });
+    drop(list.replace_snapshot(Some(captured)));
+
+    let lines = list.display_lines(60);
+    assert_eq!(
+        lines
+            .iter()
+            .filter(|line| line.text == PARTIAL_WARNING)
+            .count(),
+        1,
+        "one warning covers the whole snapshot"
+    );
+    let warning = lines.last().expect("warning row");
+    assert_eq!(warning.text, PARTIAL_WARNING);
+    assert_eq!(warning.style, "help/warning");
+}
+
+#[test]
+fn exact_snapshots_have_no_warning_row() {
+    let list = list_with(vec![binding(1, 'a', "Action", BindingPhase::AfterWidget)]);
+    let lines = list.display_lines(60);
+    assert!(
+        lines.iter().all(|line| line.text != PARTIAL_WARNING),
+        "an exact snapshot needs no warning"
+    );
 }
 
 #[test]

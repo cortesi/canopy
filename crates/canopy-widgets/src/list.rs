@@ -15,7 +15,7 @@ use canopy::{
     },
     derive_commands,
     error::{Error, Result},
-    event::{Event, mouse},
+    event::{Event, key, mouse},
     geom::{Line, Point, PointI32, Size},
     layout::{
         CanvasContext, Constraint, Edges, Layout, MeasureConstraints, MeasureOverflow, Measurement,
@@ -681,6 +681,10 @@ impl<W: Selectable> List<W, AutoKey> {
 }
 
 impl<W: Selectable + 'static, K: Eq + Hash + Clone + ToArgValue + 'static> Widget for List<W, K> {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn semantics(&self, ctx: &dyn ViewContext) -> Result<WidgetSemantics> {
         Ok(WidgetSemantics {
             role: Some("list".into()),

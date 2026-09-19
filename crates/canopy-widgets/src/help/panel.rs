@@ -1,8 +1,9 @@
 //! List container and control footer for contextual help.
 
 use canopy::{
-    NodeName, Render, ViewContext, Widget,
+    EventOutcome, NodeName, Render, ViewContext, Widget,
     error::Result,
+    event::key,
     geom::{Line, Size},
     layout::{Constraint, Direction, Edges, Layout, MeasureConstraints, Measurement, Sizing},
 };
@@ -18,6 +19,10 @@ impl HelpPanel {
 }
 
 impl Widget for HelpPanel {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn layout(&self) -> Layout {
         // The list starts at the frame's top edge and the footer ends at its
         // bottom edge, so only the sides keep a margin.
@@ -74,6 +79,10 @@ impl ControlFooter {
 }
 
 impl Widget for ControlFooter {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn layout(&self) -> Layout {
         Layout::row().height(Sizing::Measure)
     }
