@@ -61,6 +61,17 @@ label uses `tabs/tab`, and the active label uses `tabs/tab/active`. While focus
 is within the tabs, the active label uses `tabs/tab/active/focused`, which falls
 back to `tabs/tab/active`. The built-in themes define all four paths.
 
+## Status bars
+
+`StatusBar` is a container for one row. It paints the `status_bar` role as its
+ground, keeps the widgets added with `StatusBar::with_left` at the start, and
+pins the widgets added with `with_right` to the end. A widget that paints a
+`status_bar` path takes the bar's ground, because a component an inner rule
+leaves unset falls back to the outer one: `status_bar/text` inherits the
+`status_bar` background, and `KeyHint` paints `status_bar/key` and
+`status_bar/text` for its two parts. The built-in themes give the bar the panel
+ground, its text a quiet label, and hint keys the accent.
+
 ## Frames
 
 `Frame` draws its border with `frame`, or `frame/focused` while focus is within

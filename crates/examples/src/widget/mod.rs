@@ -137,7 +137,12 @@ impl Widget for DemoHost {
     }
 
     fn name(&self) -> NodeName {
-        NodeName::convert("widget-demo-host")
+        // The host owns no subject of its own, so it takes the name of the
+        // demo it shows. That name reaches the launcher footer before mount.
+        self.child.as_ref().map_or_else(
+            || NodeName::convert("widget-demo-host"),
+            |child| child.name(),
+        )
     }
 }
 

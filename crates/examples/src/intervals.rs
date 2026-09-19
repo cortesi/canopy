@@ -7,12 +7,11 @@ use canopy::{
     event::key,
     geom::Size,
     layout::{Edges, Layout, MeasureConstraints, Measurement},
-    style::canopy as palette,
 };
 use canopy_widgets::{Border, Center, Container, Frame, List, SINGLE, Selectable, Text};
 use unicode_width::UnicodeWidthStr;
 
-use crate::{fixed_row, flex_row};
+use crate::flex_row;
 
 /// Padding inside each counter entry box.
 const ENTRY_PADDING: u32 = 2;
@@ -167,25 +166,6 @@ impl Widget for CounterItem {
     }
 }
 
-/// Status bar widget for the intervals demo.
-pub(crate) struct StatusBar;
-
-impl Widget for StatusBar {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
-    fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
-        r.push_layer("statusbar");
-        r.text(
-            "statusbar/text",
-            ctx.view().outer_rect_local().line(0)?,
-            "intervals",
-        )?;
-        Ok(())
-    }
-}
-
 /// Root node for the intervals demo.
 pub struct Intervals;
 
@@ -234,9 +214,7 @@ impl Widget for Intervals {
         let column = c.add_child_to(root, Container::column())?;
         let frame_id = c.add_child_to(column, Frame::new())?;
         c.add_child_to(frame_id, List::<CounterItem>::new())?;
-        let status_id = c.add_child_to(column, StatusBar)?;
-        c.set_layout_override_of(frame_id.into(), flex_row(1))?;
-        c.set_layout_override_of(status_id.into(), fixed_row(1))
+        c.set_layout_override_of(frame_id.into(), flex_row(1))
     }
 
     fn render(&mut self, r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
@@ -276,14 +254,8 @@ impl Loader for Intervals {
 
 /// Install native styles during the configuration phase.
 fn setup_style(cnpy: &mut Canopy) {
-    use canopy::style::StyleBuilder;
-
     crate::selectable_entry_styles(cnpy.style_mut().rules(), "intervals/entry")
         .no_prefix()
-        .style(
-            "statusbar/text",
-            StyleBuilder::new().fg(palette::SUBTEXT).bg(palette::PANEL),
-        )
         .apply();
 }
 

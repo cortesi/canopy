@@ -10,7 +10,7 @@ use canopy::{
 use canopy_widgets::{CanvasWidth, Columns, Container, List, Selectable, Text};
 use rand::RngExt;
 
-use crate::{fixed_row, flex_row};
+use crate::flex_row;
 
 /// Sample text content for list items.
 const TEXT: &str = "What a struggle must have gone on during long centuries between the several kinds of trees, each annually scattering its seeds by the thousand; what war between insect and insect — between insects, snails, and other animals with birds and beasts of prey — all striving to increase, all feeding on each other, or on the trees, their seeds and seedlings, or on the other plants which first clothed the ground and thus checked the growth of the trees.";
@@ -131,47 +131,6 @@ fn focused_column(ctx: &dyn ViewContext, columns: NodeId) -> Option<(usize, Node
         .find(|(_, pane)| ctx.is_on_focus_path_of(*pane))
 }
 
-/// Status bar widget for the list gym demo.
-pub(crate) struct StatusBar;
-
-impl StatusBar {
-    /// Construct a status bar.
-    pub fn new() -> Self {
-        Self
-    }
-
-    /// Build the status text based on the focused column.
-    fn label(&self, ctx: &dyn ViewContext) -> String {
-        let Ok(columns) = columns_id(ctx) else {
-            return "listgym".to_string();
-        };
-        let total = ctx.children_of(columns).len();
-        match focused_column(ctx, columns) {
-            Some((index, _)) => format!("listgym  col {}/{}", index + 1, total),
-            None => "listgym".to_string(),
-        }
-    }
-}
-
-impl Widget for StatusBar {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
-    fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
-        r.push_layer("statusbar");
-        let label = self.label(ctx);
-        r.text("text", ctx.view().outer_rect_local().line(0)?, &label)?;
-        Ok(())
-    }
-}
-
-impl Default for StatusBar {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 /// Root node for the list gym demo.
 pub struct ListGym;
 
@@ -288,9 +247,7 @@ impl Widget for ListGym {
         let root = c.node_id();
         let layout = c.add_child_to(root, Container::column())?;
         let columns: NodeId = c.add_child_to(layout, Columns::new())?.into();
-        let status: NodeId = c.add_child_to(layout, StatusBar::new())?.into();
         c.set_layout_override_of(columns, flex_row(1))?;
-        c.set_layout_override_of(status, fixed_row(1))?;
         let list = Self::create_column(c)?;
         c.set_children_of(columns, vec![list])
     }
@@ -311,7 +268,6 @@ fn setup_style(cnpy: &mut Canopy) {
         .rules()
         .fg("red/text", palette::RED)
         .fg("blue/text", palette::BLUE)
-        .fg("statusbar/text", palette::ACCENT)
         .fg("list/selected", palette::ACCENT)
         .apply();
 }

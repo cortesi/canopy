@@ -2,21 +2,25 @@
 //! Example widgets used by canopy demos.
 
 use canopy::{
-    CanopyBuilder, Context, FocusDirection, Loader, Widget,
-    error::Result,
-    layout::{LayoutOverride, Sizing},
+    CanopyBuilder, Context, ContextExt, EventOutcome, FocusDirection, Loader, ViewContext, Widget,
+    error::{Error, Result},
+    event::key,
+    layout::{Direction, Layout, LayoutOverride, Sizing},
     style::{
         AttrSet, Color, GradientSpec, GradientStop, Paint, StyleBuilder, StyleRules,
         canopy as palette,
     },
     terminal::{RunOptions, runloop_with_options},
 };
-use canopy_widgets::Root;
+use canopy_widgets::{KeyHint, Root, StatusBar, Text};
 
 /// Shared global contextual-help trigger for Root-based demos.
+///
+/// `Ctrl+g` is the standard Canopy help key. A control chord reaches the
+/// binding even while a field has focus, where `?` is a character to insert.
 const HELP_BINDING: &str = r#"
 function setup()
-    canopy.bind("?", {
+    canopy.bind("Ctrl+g", {
         path = "/root/**/",
         phase = "before_widget",
         tier = "global",
@@ -24,6 +28,11 @@ function setup()
     }, command.root.toggle_help())
 end
 "#;
+
+/// Key every demo footer hints at.
+pub(crate) const HELP_KEY: &str = "ctrl-g";
+/// Label every demo footer gives that key.
+pub(crate) const HELP_LABEL: &str = "help";
 
 /// Char gym example nodes.
 pub mod chargym;
@@ -168,11 +177,69 @@ pub fn run_demo_with_options<T: Widget + 'static>(
 ) -> Result<i32> {
     let canopy = builder
         .assemble(move |cnpy| {
-            Root::new().with_inspector(inspector).install(cnpy, app)?;
+            Root::new()
+                .with_inspector(inspector)
+                .install(cnpy, DemoShell::new(app))?;
             Ok(())
         })
         .build()?;
     runloop_with_options(canopy, options)
+}
+
+/// Wrap a demo app in the shared footer bar every launcher demo carries.
+///
+/// The footer names the app and pins the standard help hint to the right edge.
+/// The app keeps the rest of the shell and its own layout; the shell only adds
+/// the row beneath it.
+struct DemoShell<T> {
+    /// The demo application, mounted on first mount.
+    app: Option<T>,
+    /// Status text shown on the left of the footer.
+    status: String,
+}
+
+impl<T: Widget + 'static> DemoShell<T> {
+    /// Construct a shell around one demo app.
+    fn new(app: T) -> Self {
+        Self {
+            status: app.name().to_string(),
+            app: Some(app),
+        }
+    }
+}
+
+impl<T: Widget + 'static> Widget for DemoShell<T> {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
+    fn layout(&self) -> Layout {
+        Layout::fill().direction(Direction::Column)
+    }
+
+    fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
+        let app = self
+            .app
+            .take()
+            .ok_or_else(|| Error::Internal("demo app missing".into()))?;
+        let app_node = c.add_child(app)?;
+        c.set_layout_override_of(
+            app_node.into(),
+            LayoutOverride {
+                min_width: Some(None),
+                max_width: Some(None),
+                min_height: Some(None),
+                max_height: Some(None),
+                ..LayoutOverride::new().flex_horizontal(1).flex_vertical(1)
+            },
+        )?;
+        c.add_child(
+            StatusBar::new()
+                .with_left(Text::new(self.status.clone()).with_style("status_bar/text"))
+                .with_right(KeyHint::new(HELP_KEY, HELP_LABEL)),
+        )?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]

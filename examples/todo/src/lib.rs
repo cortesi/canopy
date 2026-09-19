@@ -15,7 +15,9 @@ use canopy::{
     layout::{Constraint, Direction, Layout, LayoutOverride, MeasureConstraints, Measurement},
     style::canopy as palette,
 };
-use canopy_widgets::{Center, Frame, Input, List, Root, Selectable, ValueExposure};
+use canopy_widgets::{
+    Center, Frame, Input, KeyHint, List, Root, Selectable, StatusBar, Text, ValueExposure,
+};
 
 // Typed keys for keyed children
 canopy::slot!(MainSlot: MainContent);
@@ -129,25 +131,6 @@ impl Widget for TodoEntry {
     }
 }
 
-/// Status bar widget for the todo demo.
-pub(crate) struct StatusBar;
-
-impl Widget for StatusBar {
-    fn key_outcome(&self, _key: Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
-    fn render(&mut self, r: &mut Render, ctx: &dyn canopy::ViewContext) -> Result<()> {
-        r.push_layer("statusbar");
-        r.text(
-            "statusbar/text",
-            ctx.view().outer_rect_local().line(0)?,
-            "todo",
-        )?;
-        Ok(())
-    }
-}
-
 /// Container for main content (list frame + status bar).
 struct MainContent;
 
@@ -188,11 +171,12 @@ impl Todo {
                     })?;
                     Ok(())
                 })?;
-                main.child(StatusBar, |status| {
-                    status.layout_override(LayoutOverride::full(
-                        Layout::row().flex_horizontal(1).fixed_height(1),
-                    ))
-                })?;
+                main.child(
+                    StatusBar::new()
+                        .with_left(Text::new("todo").with_style("status_bar/text"))
+                        .with_right(KeyHint::new("ctrl-g", "help")),
+                    |_| Ok(()),
+                )?;
                 Ok(())
             })?;
             Ok(())
@@ -448,7 +432,7 @@ impl Loader for Todo {
 
 /// Default Luau bindings for the todo app.
 pub(crate) const DEFAULT_BINDINGS: &str = r#"
-canopy.bind("?", {
+canopy.bind("ctrl-g", {
     path = "/root/**/",
     phase = "before_widget",
     tier = "global",
@@ -492,14 +476,8 @@ canopy.keymap({
 
 /// Install the todo application's style rules.
 pub(crate) fn style(cnpy: &mut Canopy) {
-    use canopy::style::StyleBuilder;
-
     cnpy.style_mut()
         .rules()
-        .style(
-            "statusbar/text",
-            StyleBuilder::new().fg(palette::SUBTEXT).bg(palette::PANEL),
-        )
         .fg("list/selected", palette::ACCENT)
         .apply();
 }
@@ -694,6 +672,16 @@ mod tests {
             assert_eq!(ctx.focused_node(), Some(input));
             todo.close_adder(ctx)
         })?;
+        Ok(())
+    }
+
+    #[test]
+    fn the_footer_names_the_app_and_the_help_key() -> AnyResult<()> {
+        let store = store::Store::open(":memory:")?;
+        let mut harness = Harness::from_canopy(create_app(store, None)?, Size::new(80, 24))?;
+        harness.render()?;
+        assert!(harness.tbuf().contains_text("todo"));
+        assert!(harness.tbuf().contains_text("ctrl-g: help"));
         Ok(())
     }
 

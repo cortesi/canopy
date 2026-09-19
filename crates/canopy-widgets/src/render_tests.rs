@@ -12,7 +12,7 @@ mod tests {
         testing::harness::Harness,
     };
 
-    use crate::{BoxGlyphs, Button, Dropdown, Frame, List, Selector, Text};
+    use crate::{BoxGlyphs, Button, Dropdown, Frame, KeyHint, List, Selector, StatusBar, Text};
 
     fn click_at(location: Point) -> mouse::MouseEvent {
         mouse::MouseEvent {
@@ -413,6 +413,32 @@ mod tests {
         let mut harness = Harness::builder(root).size(10, 3).build()?;
         harness.render()?;
         harness.tbuf().assert_matches(buf!["Hello" "" ""]);
+        Ok(())
+    }
+
+    #[test]
+    fn status_bar_pins_its_status_left_and_its_hint_right() -> Result<()> {
+        let bar = StatusBar::new()
+            .with_left(Text::new("demo").with_style("status_bar/text"))
+            .with_right(KeyHint::new("ctrl-g", "help"));
+        let root = SnapshotRoot::new(bar);
+        let mut harness = Harness::builder(root).size(20, 2).build()?;
+        harness.render()?;
+        harness
+            .tbuf()
+            .assert_matches(buf!["demo    ctrl-g: help" ""]);
+        Ok(())
+    }
+
+    #[test]
+    fn a_narrow_status_bar_keeps_the_hint_at_the_left_edge() -> Result<()> {
+        let bar = StatusBar::new()
+            .with_left(Text::new("demo").with_style("status_bar/text"))
+            .with_right(KeyHint::new("ctrl-g", "help"));
+        let root = SnapshotRoot::new(bar);
+        let mut harness = Harness::builder(root).size(10, 1).build()?;
+        harness.render()?;
+        harness.tbuf().assert_matches(buf!["ctrl-g: he"]);
         Ok(())
     }
 

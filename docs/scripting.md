@@ -189,13 +189,16 @@ mode. Set `tier = "global"` for a global binding; a global binding cannot also
 name a mode, and its path must be anchored at both ends.
 
 ```luau
-canopy.bind("?", {
+canopy.bind("Ctrl+g", {
     description = "Show key bindings",
     path = "/root/**/",
     tier = "global",
     phase = "before_widget",
 }, command.root.toggle_help())
 ```
+
+`Ctrl+g` is Canopy's standard help key. A control chord reaches its binding
+even while a text field has focus, where `?` is a character to insert.
 
 `canopy.set_mode(mode)` replaces the active modes with one mode, and the empty
 string returns to the default mode. `canopy.push_mode(mode)` adds a mode above

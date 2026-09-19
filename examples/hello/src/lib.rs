@@ -13,14 +13,14 @@ use std::{
 };
 
 use canopy::{
-    Canopy, CanopyBuilder, Context, EventOutcome, Loader, NodeName, Render, ScriptTrust,
-    ViewContext, Widget, derive_commands,
+    Canopy, CanopyBuilder, Context, ContextExt, EventOutcome, Loader, NodeName, Render,
+    ScriptTrust, ViewContext, Widget, derive_commands,
     error::Result,
     event::key::Key,
-    layout::Layout,
-    style::{StyleBuilder, canopy as palette},
+    layout::{Align, Direction, Layout},
+    style::canopy as palette,
 };
-use canopy_widgets::Root;
+use canopy_widgets::{KeyHint, Root, StatusBar, Text};
 
 /// Default keymap copied to a user's configuration directory on first use.
 pub const DEFAULT_BINDINGS: &str = include_str!("default_bindings.luau");
@@ -60,7 +60,10 @@ impl Widget for Hello {
     }
 
     fn layout(&self) -> Layout {
+        // The footer bar keeps the last row, so align the greeting above it.
         Layout::fill()
+            .direction(Direction::Column)
+            .align_vertical(Align::End)
     }
 
     fn render(&mut self, render: &mut Render, context: &dyn ViewContext) -> Result<()> {
@@ -75,17 +78,15 @@ impl Widget for Hello {
         if area.h > 1 {
             render.text("count", area.line(1)?, &format!("count: {}", self.count))?;
         }
-        if area.h > 2 {
-            render.text(
-                "status",
-                area.line(area.h - 1)?,
-                " +/- count  ? help  q quit ",
-            )?;
-        }
         Ok(())
     }
 
     fn on_mount(&mut self, context: &mut dyn Context) -> Result<()> {
+        context.add_child(
+            StatusBar::new()
+                .with_left(Text::new("hello").with_style("status_bar/text"))
+                .with_right(KeyHint::new("ctrl-g", "help")),
+        )?;
         context.set_focus(context.node_id()).map(|_| ())
     }
 
@@ -178,10 +179,6 @@ fn install_styles(canopy: &mut Canopy) {
         .style_mut()
         .rules()
         .fg("hello/greeting", palette::ACCENT)
-        .style(
-            "hello/status",
-            StyleBuilder::new().fg(palette::SUBTEXT).bg(palette::PANEL),
-        )
         .apply();
 }
 
@@ -201,6 +198,7 @@ mod tests {
         harness.render()?;
         assert!(harness.tbuf().contains_text("Hello, Canopy!"));
         assert!(harness.tbuf().contains_text("count: 0"));
+        assert!(harness.tbuf().contains_text("ctrl-g: help"));
         assert!(
             harness
                 .canopy

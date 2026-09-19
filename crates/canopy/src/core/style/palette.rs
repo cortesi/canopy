@@ -155,7 +155,22 @@ pub fn theme(p: &Palette) -> StyleMap {
             "/editor/prompt",
             StyleBuilder::new().fg(p.fg).bg(p.panel_bg),
         )
-        .style("/help/panel", StyleBuilder::new().fg(p.fg).bg(p.panel_bg))
+        .style(
+            "/help/panel",
+            StyleBuilder::new().fg(p.fg).bg(p.panel_bg),
+        )
+        // The status bar is chrome on the panel ground: a quiet label and an
+        // accented key that names what the bar can do.
+        .style(
+            "/status_bar",
+            StyleBuilder::new().fg(p.muted_fg).bg(p.panel_bg),
+        )
+        .style(
+            "/status_bar/key",
+            StyleBuilder::new()
+                .fg(p.key)
+                .attrs(AttrSet::new(Attr::Bold)),
+        )
         .style_all(
             &[
                 "/help/frame",

@@ -21,11 +21,20 @@ use crate::{
 ///
 /// Button activation comes first, so an application that takes the root
 /// defaults can activate a button without knowing that buttons carry bindings,
-/// and can still rebind either afterwards.
+/// and can still rebind either afterwards. Control chords carry the standard
+/// bindings that typed text must not swallow: `Ctrl+g` opens help even while a
+/// field has focus, where `?` is a character to insert.
 const DEFAULT_BINDINGS: &str = r#"
 button.default_bindings()
 
 canopy.bind("q", { path = "root", description = "Quit" }, command.root.quit())
+
+canopy.bind("Ctrl+g", {
+    path = "/root/**/",
+    phase = "before_widget",
+    tier = "global",
+    description = "Show key bindings",
+}, command.root.toggle_help())
 "#;
 
 /// Additional root bindings installed with developer tools.
@@ -357,7 +366,7 @@ fn sync_mode_help(context: &mut dyn Context) -> Result<()> {
 
 /// Register the Root-owned controls admitted by the help modal.
 fn register_help_bindings(canopy: &mut Canopy) -> Result<()> {
-    let bindings: [(&str, &str, CommandCall); 14] = [
+    let bindings: [(&str, &str, CommandCall); 13] = [
         ("Up", "Scroll up", BindingList::call_scroll_up()),
         ("k", "Scroll up", BindingList::call_scroll_up()),
         ("Down", "Scroll down", BindingList::call_scroll_down()),
@@ -370,7 +379,6 @@ fn register_help_bindings(canopy: &mut Canopy) -> Result<()> {
         ("End", "Last binding", BindingList::call_scroll_to_bottom()),
         ("G", "Last binding", BindingList::call_scroll_to_bottom()),
         ("Esc", "Close help", Root::call_hide_help()),
-        ("?", "Close help", Root::call_toggle_help()),
         ("Ctrl+g", "Close help", Root::call_toggle_help()),
     ];
     for (key, description, command) in bindings {
@@ -500,7 +508,7 @@ mod tests {
         canopy
             .eval_script(
                 r#"
-            canopy.bind("?", {
+            canopy.bind("Ctrl+g", {
                 path = "/root/**/",
                 phase = "before_widget",
                 tier = "global",
@@ -661,7 +669,7 @@ mod tests {
                 .collect::<Vec<_>>()
         );
 
-        send_key(&mut canopy, "?")?;
+        send_key(&mut canopy, "ctrl-g")?;
         canopy.render(&mut backend)?;
         assert_eq!(
             canopy.with_root_view(|context| context.focused_leaf(context.root_id())),
@@ -684,7 +692,7 @@ mod tests {
             end
             "#,
         )?;
-        send_key(&mut canopy, "?")?;
+        send_key(&mut canopy, "ctrl-g")?;
         canopy.render(&mut backend)?;
         let list = binding_list_id(&canopy);
         let before = modal_snapshot(&mut canopy)?;
@@ -714,7 +722,7 @@ mod tests {
             }),
             scroll
         );
-        send_key(&mut canopy, "?")?;
+        send_key(&mut canopy, "ctrl-g")?;
         Ok(())
     }
 
@@ -740,7 +748,7 @@ mod tests {
             Ok(())
         })?;
 
-        send_key(&mut canopy, "?")?;
+        send_key(&mut canopy, "ctrl-g")?;
         canopy.render(&mut backend)?;
         let capture = canopy.with_root_context(|context| context.take_mouse_capture())?;
         assert_eq!(capture, None);
@@ -758,7 +766,7 @@ mod tests {
         assert_eq!(canopy.input_mode(), "");
         assert_eq!(APP_EVENTS.with(LocalCell::get), 0);
 
-        send_key(&mut canopy, "?")?;
+        send_key(&mut canopy, "ctrl-g")?;
         send_key(&mut canopy, "x")?;
         assert_eq!(canopy.input_mode(), "leaked");
         assert_eq!(APP_EVENTS.with(LocalCell::get), 1);
@@ -796,10 +804,10 @@ mod tests {
     fn stale_origin_falls_back_inside_the_saved_pane() -> Result<()> {
         let (mut canopy, _backend, left, right) = setup_root_tree()?;
         install_help_trigger(&mut canopy)?;
-        send_key(&mut canopy, "?")?;
+        send_key(&mut canopy, "ctrl-g")?;
         canopy.with_root_context(|context| context.remove_subtree(left))?;
 
-        send_key(&mut canopy, "?")?;
+        send_key(&mut canopy, "ctrl-g")?;
 
         assert_eq!(
             canopy.with_root_view(|context| context.focused_leaf(context.root_id())),
@@ -838,7 +846,7 @@ mod tests {
     fn replacing_an_open_root_retires_its_modal_bindings() -> Result<()> {
         let (mut canopy, _backend, _left, _right) = setup_root_tree()?;
         install_help_trigger(&mut canopy)?;
-        send_key(&mut canopy, "?")?;
+        send_key(&mut canopy, "ctrl-g")?;
         assert_eq!(
             canopy.available_bindings(None)?.exclusive_group,
             Some(HELP_BINDINGS)
@@ -931,13 +939,13 @@ mod tests {
             )
 
             canopy.send_key("p")
-            canopy.send_key("?")
+            canopy.send_key("ctrl-g")
             canopy.flush()
             canopy.assert(
                 canopy.screen_text():find("Equal widths") == nil,
                 "contextual help should not show the panel"
             )
-            canopy.send_key("?")
+            canopy.send_key("ctrl-g")
             "#,
         )
     }
@@ -946,7 +954,7 @@ mod tests {
     fn ctrl_g_closes_help() -> Result<()> {
         let (mut canopy, _backend, _left, _right) = setup_root_tree()?;
         install_help_trigger(&mut canopy)?;
-        send_key(&mut canopy, "?")?;
+        send_key(&mut canopy, "ctrl-g")?;
         assert_eq!(
             canopy.available_bindings(None)?.exclusive_group,
             Some(HELP_BINDINGS)
@@ -960,13 +968,13 @@ mod tests {
     fn reopening_captures_new_application_bindings() -> Result<()> {
         let (mut canopy, _backend, _left, _right) = setup_root_tree()?;
         install_help_trigger(&mut canopy)?;
-        send_key(&mut canopy, "?")?;
+        send_key(&mut canopy, "ctrl-g")?;
         let first = modal_snapshot(&mut canopy)?;
-        send_key(&mut canopy, "?")?;
+        send_key(&mut canopy, "ctrl-g")?;
         canopy
             .eval_script(r#"canopy.bind("z", { description = "Added later" }, function() end)"#)?;
 
-        send_key(&mut canopy, "?")?;
+        send_key(&mut canopy, "ctrl-g")?;
         let second = modal_snapshot(&mut canopy)?;
 
         assert!(!first.bindings.iter().any(|binding| binding.input == 'z'));
@@ -975,7 +983,7 @@ mod tests {
                 && binding.scope == BindingScope::Default
                 && binding.description == "Added later"
         }));
-        send_key(&mut canopy, "?")?;
+        send_key(&mut canopy, "ctrl-g")?;
         Ok(())
     }
 }

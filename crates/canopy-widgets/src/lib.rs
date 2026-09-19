@@ -54,6 +54,8 @@ mod scroll;
 pub mod scrollbar;
 /// Selection widget.
 mod selector;
+/// Single-line status bar.
+mod status_bar;
 /// Tabbed pages beneath a tab bar.
 mod tabs;
 /// Terminal emulation widget.
@@ -85,6 +87,7 @@ pub use root::Root;
 pub use scroll::Scroll;
 pub use scrollbar::{Scrollbar, ScrollbarGlyphs, THIN};
 pub use selector::Selector;
+pub use status_bar::{KeyHint, StatusBar};
 pub use tabs::Tabs;
 pub use text::{CanvasWidth, Text};
 pub use wrap::wrap;

@@ -8,13 +8,13 @@ local before = canopy.available_bindings(origin)
 canopy.assert(before.exclusive_group == nil, "application context must not be isolated")
 local found_help = false
 for _, binding in before.bindings do
-    if binding.input == "?" and binding.scope == "global" then
+    if binding.input == "Ctrl+g" and binding.scope == "global" then
         found_help = true
     end
 end
 canopy.assert(found_help, "the application snapshot must include global help")
 
-canopy.send_key("?")
+canopy.send_key("ctrl-g")
 local live = canopy.available_bindings()
 canopy.assert(live.exclusive_group == "root.help", "help must activate its exclusive group")
 local help_focus = canopy.focused()
@@ -39,7 +39,7 @@ canopy.assert(
     "the help paging binding must handle its key"
 )
 
-canopy.send_key("?")
+canopy.send_key("ctrl-g")
 canopy.assert(canopy.focused() == origin, "closing help must restore exact focus")
 
 canopy.send_key("a")

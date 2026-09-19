@@ -2,6 +2,7 @@ mod focusgym;
 mod framegym;
 mod help;
 mod listgym;
+mod shell;
 mod stylegym;
 mod termgym;
 

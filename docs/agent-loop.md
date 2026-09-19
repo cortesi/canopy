@@ -144,11 +144,11 @@ end
 local before = canopy.available_bindings(origin)
 canopy.assert(before.exclusive_group == nil, "the app must not be isolated")
 
-canopy.send_key("?")
+canopy.send_key("ctrl-g")
 local modal = canopy.available_bindings()
 canopy.assert(modal.exclusive_group == "root.help", "help must isolate its bindings")
 
-canopy.send_key("?")
+canopy.send_key("ctrl-g")
 canopy.assert(canopy.focused() == origin, "help must restore exact focus")
 ```
 

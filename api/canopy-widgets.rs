@@ -1021,6 +1021,13 @@ pub mod canopy_widgets {
     /// visible prompt can name the field independently of its editable value.
     pub struct Input {}
 
+    /// A key and what it does, drawn for a status bar.
+    ///
+    /// The key paints `status_bar/key` and its label paints `status_bar/text`, so
+    /// the hint takes the bar's ground from the `status_bar` rule. An empty key
+    /// measures nothing and draws nothing.
+    pub struct KeyHint {}
+
     /// A typed list container for widget items.
     ///
     /// List items are actual widgets in the tree, enabling composition and focus
@@ -1117,6 +1124,23 @@ pub mod canopy_widgets {
     pub struct Selector<T>
     where
         T: Label, {}
+
+    /// A single-line status bar for the top or bottom edge of an application.
+    ///
+    /// The bar is a container. It fills its row with `status_bar`, keeps the
+    /// widgets added with [`StatusBar::with_left`] at the start, and pins the
+    /// widgets added with [`StatusBar::with_right`] to the end. The left zone
+    /// takes the columns that remain; the right zone measures its widgets, so it
+    /// keeps its natural width and squeezes the left zone first.
+    ///
+    /// A widget that paints a `status_bar` style path takes the bar's ground: a
+    /// role that names no paint falls back to the `status_bar` rule, so
+    /// `status_bar/text` and `status_bar/key` inherit the panel background.
+    ///
+    /// The bar holds no focus and takes no input. A host gives it one row, usually
+    /// as a column's last or first child.
+    #[derive(Default)]
+    pub struct StatusBar {}
 
     /// A row of tabs over a set of pages, one page visible at a time.
     ///
@@ -1948,6 +1972,32 @@ pub mod canopy_widgets {
         fn name(&self) -> NodeName {}
     }
 
+    impl KeyHint {
+        /// Construct a hint for one key.
+        pub fn new(key: impl Into<String>, label: impl Into<String>) -> Self {}
+
+        /// Replace the key and its label.
+        pub fn set(&mut self, key: impl Into<String>, label: impl Into<String>) {}
+
+        /// Return the action name.
+        pub fn label(&self) -> &str {}
+
+        /// Return the key name.
+        pub fn key(&self) -> &str {}
+    }
+
+    impl Widget for KeyHint {
+        fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {}
+
+        fn layout(&self) -> Layout {}
+
+        fn measure(&self, c: MeasureConstraints) -> Measurement {}
+
+        fn name(&self) -> NodeName {}
+
+        fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
+    }
+
     impl PickerFilter {
         #[must_use]
         /// Build an empty field.
@@ -2038,6 +2088,31 @@ pub mod canopy_widgets {
             tracks: &[(NodeId, Rect)],
         ) -> Result<EventOutcome> {
         }
+    }
+
+    impl StatusBar {
+        #[must_use]
+        /// Add a widget at the left edge, after the widgets already added.
+        pub fn with_left(self, widget: impl Into<Box<dyn Widget>>) -> Self {}
+
+        #[must_use]
+        /// Add a widget at the right edge, after the widgets already added.
+        pub fn with_right(self, widget: impl Into<Box<dyn Widget>>) -> Self {}
+
+        /// Construct an empty status bar.
+        pub fn new() -> Self {}
+    }
+
+    impl Widget for StatusBar {
+        fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {}
+
+        fn layout(&self) -> Layout {}
+
+        fn name(&self) -> NodeName {}
+
+        fn on_mount(&mut self, context: &mut dyn Context) -> Result<()> {}
+
+        fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
     }
 
     impl ToArgValue for AutoKey {

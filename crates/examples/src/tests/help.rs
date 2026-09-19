@@ -43,7 +43,7 @@ fn prove_help_flow(mut harness: Harness, hidden: &[&str], shown: &[&str]) -> Res
         r#"
         local count = 0
         for _, binding in canopy.bindings() do
-            if binding.input == "?" and binding.scope == "global"
+            if binding.input == "Ctrl+g" and binding.scope == "global"
                 and binding.owner == "application" then
                 count += 1
             end
@@ -57,7 +57,7 @@ fn prove_help_flow(mut harness: Harness, hidden: &[&str], shown: &[&str]) -> Res
         .with_root_view(|context| context.focused_node())
         .expect("demo should focus its consuming widget");
 
-    harness.key('?')?;
+    harness.key(Key::parse_spec("ctrl-g").expect("valid key"))?;
     harness.render()?;
 
     let list = harness
@@ -128,7 +128,7 @@ fn prove_help_flow(mut harness: Harness, hidden: &[&str], shown: &[&str]) -> Res
     assert!(harness.canopy.route_trace().iter().any(|entry| {
         entry.phase == RoutePhase::BindingExecution && entry.detail == "Scroll down"
     }));
-    harness.key('?')?;
+    harness.key(Key::parse_spec("ctrl-g").expect("valid key"))?;
 
     assert_eq!(
         harness
@@ -176,7 +176,7 @@ fn widget_editor_help_opens_over_a_consuming_editor_and_restores_input() -> Resu
     let harness = root_harness(
         widget_editor::WidgetEditor::new("fn main() {}\n", "rs", "test.rs"),
         widget_editor::binding_setup,
-        Size::new(80, 24),
+        Size::new(80, 40),
         Mount::Wrap,
     )?;
     prove_help_flow(

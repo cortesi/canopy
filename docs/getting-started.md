@@ -425,19 +425,12 @@ builder = builder.user_script_root(root, ScriptTrust::TrustedLocal);
 [Scripting](./scripting.md) for the mount, trust, and module resolution rules.
 
 `src/default_bindings.luau` is the shipped keymap. `root.default_bindings()`
-installs the framework defaults. `canopy.keymap` binds each entry's keys to an
-action, and `command.hello.bump(1)` is a typed command value with its
-arguments:
+installs the framework defaults, including `Ctrl+g` for contextual help.
+`canopy.keymap` binds each entry's keys to an action, and
+`command.hello.bump(1)` is a typed command value with its arguments:
 
 ```luau
 root.default_bindings()
-
-canopy.bind("?", {
-    path = "/root/**/",
-    phase = "before_widget",
-    tier = "global",
-    description = "Show key bindings",
-}, command.root.toggle_help())
 
 canopy.keymap({
     { key = "+", description = "Count up", action = command.hello.bump(1) },
