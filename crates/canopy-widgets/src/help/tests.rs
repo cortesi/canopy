@@ -1,8 +1,8 @@
 use std::mem;
 
 use canopy::{
-    BindingId, BindingOwner, BindingPhase, BindingScope, Context, ContextExt, Loader, NodeId,
-    ViewContext, Widget, buf,
+    BindingId, BindingOwner, BindingPhase, BindingScope, BindingTargetKind, Context, ContextExt,
+    Loader, NodeId, ViewContext, Widget, buf,
     commands::{
         CommandAction, CommandArgs, CommandId, CommandInvocation, CommandResolution, CommandStatus,
     },
@@ -38,7 +38,9 @@ fn binding(
         scope: BindingScope::Default,
         path_filter: String::new(),
         route_path: Path::from("/root/editor"),
-        phase,
+        target: BindingTargetKind::Script,
+        action: None,
+        phase: Some(phase),
         command: None,
         source: Some("test".to_string()),
     }
@@ -52,6 +54,7 @@ fn snapshot(focus: NodeId, bindings: Vec<AvailableBinding<key::Key>>) -> Binding
         transient_mode: None,
         exclusive_group: None,
         bindings,
+        provisional_bindings: Vec::new(),
         key_prediction_gaps: Vec::new(),
         mouse_bindings: Vec::new(),
     }
@@ -67,7 +70,9 @@ fn mouse_binding(id: u64, spec: &str, description: &str) -> AvailableBinding<mou
         scope: BindingScope::Default,
         path_filter: String::new(),
         route_path: Path::from("/root/editor"),
-        phase: BindingPhase::AfterWidget,
+        target: BindingTargetKind::Script,
+        action: None,
+        phase: Some(BindingPhase::AfterWidget),
         command: None,
         source: Some("test".to_string()),
     }

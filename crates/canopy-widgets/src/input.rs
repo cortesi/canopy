@@ -149,10 +149,18 @@ impl InputBuffer {
     }
 }
 
+/// Action name that clears a single-line input.
+///
+/// An application registers this name and binds a key to it. The route offers
+/// the action to an accepting widget, which clears its own text in response.
+pub const TEXT_CLEAR_ACTION: &str = "canopy.text.clear";
+
 /// Single-line text input widget.
 ///
 /// The whole row changes style with keyboard focus, even when empty. A
 /// visible prompt can name the field independently of its editable value.
+/// The field consumes [`TEXT_CLEAR_ACTION`] and the field's owner handles the
+/// other editing keys.
 pub struct Input {
     /// Text buffer for the input.
     buffer: InputBuffer,
@@ -339,6 +347,18 @@ impl Widget for Input {
         })
     }
 
+    fn accepts_action(&self, action: &str, _context: &dyn ViewContext) -> bool {
+        action == TEXT_CLEAR_ACTION
+    }
+
+    fn on_action(&mut self, action: &str, _context: &mut dyn Context) -> Result<EventOutcome> {
+        if action != TEXT_CLEAR_ACTION {
+            return Ok(EventOutcome::Ignore);
+        }
+        self.set_value("");
+        Ok(EventOutcome::Handle)
+    }
+
     fn layout(&self) -> Layout {
         // A text field keeps a stable width while its value changes, so it
         // fills the width it is given. Its height is the one measured row.
@@ -368,7 +388,7 @@ mod tests {
     };
     use unicode_width::UnicodeWidthStr;
 
-    use super::{Input, InputBuffer, ValueExposure};
+    use super::{Input, InputBuffer, TEXT_CLEAR_ACTION, ValueExposure};
 
     #[test]
     fn semantic_values_require_explicit_public_exposure() {
@@ -454,6 +474,8 @@ mod tests {
             "2",
             "space",
             "ctrl-a",
+            "ctrl-x",
+            "ctrl-alt-x",
             "alt-x",
             "ctrl-alt-z",
             "enter",
@@ -480,6 +502,31 @@ mod tests {
                 "prediction must match handling for {spec}"
             );
         }
+    }
+
+    #[test]
+    fn the_clear_action_resets_the_value() {
+        let mut input = Input::new("typed text");
+        let mut ctx = DummyContext::default();
+        assert!(input.accepts_action(TEXT_CLEAR_ACTION, &ctx));
+        assert!(!input.accepts_action("canopy.text.other", &ctx));
+        assert_eq!(
+            input
+                .on_action(TEXT_CLEAR_ACTION, &mut ctx)
+                .expect("action"),
+            EventOutcome::Handle
+        );
+        assert_eq!(input.value(), "");
+
+        // An unknown action is ignored and changes nothing.
+        input.set_value("kept");
+        assert_eq!(
+            input
+                .on_action("canopy.text.other", &mut ctx)
+                .expect("action"),
+            EventOutcome::Ignore
+        );
+        assert_eq!(input.value(), "kept");
     }
 
     #[test]

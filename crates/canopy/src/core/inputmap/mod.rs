@@ -11,6 +11,9 @@ use crate::{
     script::LuauFunctionId,
 };
 
+mod action;
+pub use action::{WidgetActionCatalog, WidgetActionName, WidgetActionSpec};
+
 /// Default input mode name.
 const DEFAULT_MODE: &str = "";
 
@@ -106,7 +109,11 @@ pub struct BindingOptions {
     /// Optional diagnostic source.
     pub source: Option<String>,
     /// Phase that sets when the binding runs relative to the widget.
-    pub phase: BindingPhase,
+    ///
+    /// `None` means the phase was omitted at registration. Commands and
+    /// callbacks then default to `after_widget`. Widget actions carry no
+    /// phase, and an explicit phase on one is an error.
+    pub phase: Option<BindingPhase>,
 }
 
 /// Action executed by a binding.
@@ -116,14 +123,55 @@ pub enum BindingTarget {
     Script(LuauFunctionId),
     /// Rust command invocation.
     Command(CommandAction),
+    /// Named operation the route offers to widgets on the way up.
+    WidgetAction(WidgetActionName),
+}
+
+/// Class of target a binding record owns.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BindingTargetKind {
+    /// Stored Luau callback.
+    Script,
+    /// Rust command invocation.
+    Command,
+    /// Named operation offered to widgets on the route.
+    WidgetAction,
+}
+
+impl BindingTargetKind {
+    /// Return the kind of one binding target.
+    #[must_use]
+    pub fn of(target: &BindingTarget) -> Self {
+        match target {
+            BindingTarget::Script(_) => Self::Script,
+            BindingTarget::Command(_) => Self::Command,
+            BindingTarget::WidgetAction(_) => Self::WidgetAction,
+        }
+    }
+
+    /// Return a stable target-kind label.
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Script => "script",
+            Self::Command => "command",
+            Self::WidgetAction => "widget_action",
+        }
+    }
 }
 
 impl BindingTarget {
     /// Return a stable target-kind label.
     pub fn label(&self) -> &'static str {
+        BindingTargetKind::of(self).label()
+    }
+
+    /// Return the widget action name, when this is an action target.
+    #[must_use]
+    pub fn widget_action(&self) -> Option<&WidgetActionName> {
         match self {
-            Self::Script(_) => "script",
-            Self::Command(_) => "command",
+            Self::WidgetAction(name) => Some(name),
+            Self::Script(_) | Self::Command(_) => None,
         }
     }
 }
@@ -144,7 +192,10 @@ pub struct BindingRecord {
     /// Optional diagnostic source.
     pub source: Option<String>,
     /// Phase that sets when the binding runs relative to the widget.
-    pub phase: BindingPhase,
+    ///
+    /// `None` marks a widget action, which runs before the node's raw key
+    /// handler and carries no phase choice.
+    pub phase: Option<BindingPhase>,
     /// Binding target.
     pub target: BindingTarget,
     /// Monotonic insertion order.
@@ -157,6 +208,11 @@ impl BindingRecord {
     /// Return the original path filter.
     pub fn path_filter(&self) -> &str {
         self.path_matcher.as_str()
+    }
+
+    /// Return the path match for one route path.
+    pub(crate) fn path_match(&self, path: &Path) -> Option<PathMatch> {
+        self.path_matcher.check_match(path)
     }
 }
 
@@ -196,8 +252,8 @@ pub struct ResolvedBinding {
     pub id: BindingId,
     /// Target to execute.
     pub target: BindingTarget,
-    /// Routing phase.
-    pub phase: BindingPhase,
+    /// Routing phase, absent for a widget action.
+    pub phase: Option<BindingPhase>,
     /// User-facing description.
     pub description: String,
 }
@@ -343,6 +399,8 @@ pub struct ApplicationBindingSnapshot {
 pub struct InputMap {
     /// Flat application and framework binding records.
     records: Vec<BindingRecord>,
+    /// Bindable widget actions the application registered.
+    actions: WidgetActionCatalog,
     /// Active application modes in push order.
     mode_stack: Vec<ActiveMode>,
     /// Number of mode stack updates, so observers can tell when to resync.
@@ -366,6 +424,7 @@ impl InputMap {
     pub fn new() -> Self {
         Self {
             records: Vec::new(),
+            actions: WidgetActionCatalog::default(),
             mode_stack: Vec::new(),
             mode_generation: 0,
             modal_bindings: None,
@@ -374,14 +433,48 @@ impl InputMap {
         }
     }
 
-    /// Store or replace an application action.
-    pub fn replace_application_action(
+    /// Register one bindable widget action for this application.
+    pub(crate) fn register_widget_action(&mut self, spec: WidgetActionSpec) -> Result<()> {
+        self.actions.register(spec)
+    }
+
+    /// Freeze the widget action catalog when the script API finalizes.
+    pub(crate) fn freeze_widget_actions(&mut self) {
+        self.actions.freeze();
+    }
+
+    /// Return the registered widget actions in name order.
+    #[must_use]
+    pub(crate) fn widget_actions(&self) -> &WidgetActionCatalog {
+        &self.actions
+    }
+
+    /// Store or replace an application binding.
+    pub fn replace_application_binding(
         &mut self,
         input: InputSpec,
         options: BindingOptions,
         target: BindingTarget,
     ) -> Result<(BindingId, Vec<(BindingId, BindingTarget)>)> {
-        validate_application_binding(&options)?;
+        validate_application_binding(&options, target.widget_action())?;
+        if let BindingTarget::WidgetAction(name) = &target {
+            if matches!(input, InputSpec::Mouse(_)) {
+                return Err(Error::InvalidOperation(
+                    "widget action bindings accept keys only".to_string(),
+                ));
+            }
+            if !self.actions.contains_name(name.as_str()) {
+                return Err(Error::InvalidOperation(format!(
+                    "widget action {name} is not registered in this application"
+                )));
+            }
+        }
+        let phase = match target {
+            BindingTarget::WidgetAction(_) => None,
+            BindingTarget::Script(_) | BindingTarget::Command(_) => {
+                Some(options.phase.unwrap_or_default())
+            }
+        };
         let path_filter = options.path.as_ref().map_or("", PathFilter::as_str);
         let path_matcher = options.path.clone().unwrap_or(PathFilter::new("")?);
         let id = self.allocate_binding_id()?;
@@ -401,7 +494,7 @@ impl InputMap {
             scope: options.scope,
             description: options.description,
             source: options.source,
-            phase: options.phase,
+            phase,
             target,
             insertion_id,
             path_matcher,
@@ -428,6 +521,7 @@ impl InputMap {
         let path_filter = options.path.as_ref().map_or("", PathFilter::as_str);
         let path_matcher = options.path.clone().unwrap_or(PathFilter::new("")?);
         let input = input.normalize();
+        let phase = Some(options.phase.unwrap_or_default());
         if let Some(existing) = self.records.iter().find(|record| {
             record.owner == BindingOwner::Framework(group)
                 && record.input == input
@@ -435,7 +529,7 @@ impl InputMap {
         }) {
             if existing.scope == scope
                 && existing.description == options.description
-                && existing.phase == options.phase
+                && existing.phase == phase
                 && existing.source == options.source
                 && existing.target == BindingTarget::Command(command)
             {
@@ -454,7 +548,7 @@ impl InputMap {
             scope,
             description: options.description,
             source: options.source,
-            phase: options.phase,
+            phase,
             target: BindingTarget::Command(command),
             insertion_id,
             path_matcher,
@@ -532,35 +626,152 @@ impl InputMap {
     }
 
     /// Resolve one input at one route node.
+    ///
+    /// This is the structural winner. It ignores widget acceptance, so an
+    /// action candidate that no widget consumes still resolves here. Route
+    /// selection uses [`Core::select_key_binding`] instead.
     pub fn resolve_match(&self, path: &Path, input: InputSpec) -> Option<ResolvedBinding> {
-        let input = input.normalize();
-        let winner = if let Some(group) = self.active_exclusive_group() {
-            self.best_in_scope(path, input, &BindingScope::Exclusive(group), Some(group))
-        } else {
-            self.best_in_scope(path, input, &BindingScope::Global, None)
-                .or_else(|| self.best_in_modes(path, input))
-        }?;
+        let candidate = self.candidates(path, input).into_iter().next()?;
         Some(ResolvedBinding {
-            id: winner.0.id,
-            target: winner.0.target.clone(),
-            phase: winner.0.phase,
-            description: winner.0.description.clone(),
+            id: candidate.record.id,
+            target: candidate.record.target.clone(),
+            phase: candidate.record.phase,
+            description: candidate.record.description.clone(),
         })
     }
 
-    /// Return normalized key inputs that can participate in the current scope
-    /// state.
-    pub(crate) fn eligible_keys(&self) -> Vec<Key> {
-        self.eligible_inputs(|input| match input {
+    /// Return ranked binding candidates at one route node, best first.
+    ///
+    /// The order is modal admission, then the global tier, the newest active
+    /// modes, and the default tier. Within a tier, path specificity and
+    /// insertion order rank the candidates. A transient mode ends the walk,
+    /// so nothing older follows it.
+    pub(crate) fn candidates(&self, path: &Path, input: InputSpec) -> Vec<BindingCandidate<'_>> {
+        let input = input.normalize();
+        let mut out = Vec::new();
+        match &self.modal_bindings {
+            Some(ModalBindings::Framework(group)) => {
+                let group = *group;
+                self.extend_scope(
+                    &mut out,
+                    path,
+                    input,
+                    &BindingScope::Exclusive(group),
+                    Some(group),
+                );
+            }
+            Some(ModalBindings::FrameworkWithActions { group, .. }) => {
+                let group = *group;
+                self.extend_scope(
+                    &mut out,
+                    path,
+                    input,
+                    &BindingScope::Exclusive(group),
+                    Some(group),
+                );
+                self.extend_application_tiers(&mut out, path, input);
+            }
+            Some(ModalBindings::Application) | None => {
+                self.extend_application_tiers(&mut out, path, input);
+            }
+        }
+        out
+    }
+
+    /// Append the application tiers in resolution order.
+    fn extend_application_tiers<'a>(
+        &'a self,
+        out: &mut Vec<BindingCandidate<'a>>,
+        path: &Path,
+        input: InputSpec,
+    ) {
+        self.extend_scope(out, path, input, &BindingScope::Global, None);
+        for mode in self.mode_stack.iter().rev() {
+            let scope = BindingScope::Mode(mode.name.clone());
+            self.extend_scope(out, path, input, &scope, None);
+            if mode.transient {
+                // A transient mode ends the walk, so older modes and the
+                // default tier stay out of reach.
+                return;
+            }
+        }
+        self.extend_scope(out, path, input, &BindingScope::Default, None);
+    }
+
+    /// Append the candidates of one exact scope, best first.
+    fn extend_scope<'a>(
+        &'a self,
+        out: &mut Vec<BindingCandidate<'a>>,
+        path: &Path,
+        input: InputSpec,
+        scope: &BindingScope,
+        framework_group: Option<FrameworkBindingGroup>,
+    ) {
+        let mut found = self
+            .records
+            .iter()
+            .filter(|record| record.input == input && record.scope == *scope)
+            .filter(|record| match framework_group {
+                Some(group) => record.owner == BindingOwner::Framework(group),
+                None => matches!(record.owner, BindingOwner::Application),
+            })
+            .filter(|record| self.admits_record(record))
+            .filter_map(|record| {
+                record
+                    .path_matcher
+                    .check_match(path)
+                    .map(|path_match| BindingCandidate { record, path_match })
+            })
+            .collect::<Vec<_>>();
+        found.sort_by(|left, right| compare_candidates(*left, *right).reverse());
+        out.extend(found);
+    }
+
+    /// Return whether the active scope state admits one record.
+    ///
+    /// Admission ignores route position and widget state. Route selection and
+    /// `candidate_keys` share this predicate.
+    pub(crate) fn admits_record(&self, record: &BindingRecord) -> bool {
+        match &self.modal_bindings {
+            Some(ModalBindings::Framework(group)) => {
+                record.owner == BindingOwner::Framework(*group)
+                    && record.scope == BindingScope::Exclusive(*group)
+            }
+            Some(ModalBindings::FrameworkWithActions { group, actions }) => {
+                if record.owner == BindingOwner::Framework(*group)
+                    && record.scope == BindingScope::Exclusive(*group)
+                {
+                    return true;
+                }
+                matches!(record.owner, BindingOwner::Application)
+                    && record.phase.is_none()
+                    && record
+                        .target
+                        .widget_action()
+                        .is_some_and(|name| actions.contains(&name.as_str()))
+            }
+            Some(ModalBindings::Application) | None => {
+                matches!(record.owner, BindingOwner::Application)
+                    && !matches!(record.scope, BindingScope::Exclusive(_))
+            }
+        }
+    }
+
+    /// Return normalized key inputs the active scope state admits.
+    ///
+    /// The result is a safe superset for discovery. It includes dormant action
+    /// keys and does not decide which binding wins.
+    pub(crate) fn candidate_keys(&self) -> Vec<Key> {
+        self.candidate_inputs(|input| match input {
             InputSpec::Key(key) => Some(key),
             InputSpec::Mouse(_) => None,
         })
     }
 
-    /// Return normalized mouse inputs that can participate in the current scope
-    /// state.
+    /// Return normalized mouse inputs that can participate in the current
+    /// scope state.
     pub(crate) fn eligible_mouse_inputs(&self) -> Vec<Mouse> {
-        self.eligible_inputs(|input| match input {
+        self.candidate_inputs(|input| match input {
             InputSpec::Mouse(mouse) => Some(mouse),
             InputSpec::Key(_) => None,
         })
@@ -570,22 +781,16 @@ impl InputMap {
     /// scope state admits.
     ///
     /// The order is by label alone, for stable presentation. Precedence between
-    /// records belongs to the resolver, which picks one winner per input.
-    fn eligible_inputs<I: Eq + Hash + ToString>(
+    /// records belongs to the resolver, which ranks one winner per input.
+    fn candidate_inputs<I: Eq + Hash + ToString>(
         &self,
         select: impl Fn(InputSpec) -> Option<I>,
     ) -> Vec<I> {
-        let active_group = self.active_exclusive_group();
         let mut inputs = HashSet::new();
         for record in &self.records {
-            let eligible = match active_group {
-                Some(group) => {
-                    record.owner == BindingOwner::Framework(group)
-                        && record.scope == BindingScope::Exclusive(group)
-                }
-                None => matches!(record.owner, BindingOwner::Application),
-            };
-            if eligible && let Some(input) = select(record.input.normalize()) {
+            if self.admits_record(record)
+                && let Some(input) = select(record.input.normalize())
+            {
                 inputs.insert(input);
             }
         }
@@ -600,9 +805,7 @@ impl InputMap {
             return RegistryStatus::Missing;
         };
         if let Some(group) = self.active_exclusive_group() {
-            if record.owner != BindingOwner::Framework(group)
-                || record.scope != BindingScope::Exclusive(group)
-            {
+            if !self.admits_record(record) {
                 return RegistryStatus::BlockedByExclusive(group);
             }
         } else {
@@ -671,7 +874,8 @@ impl InputMap {
     /// Return the active exclusive group admitted by the top modal scope.
     pub fn active_exclusive_group(&self) -> Option<FrameworkBindingGroup> {
         match self.modal_bindings {
-            Some(ModalBindings::Framework(group)) => Some(group),
+            Some(ModalBindings::Framework(group))
+            | Some(ModalBindings::FrameworkWithActions { group, .. }) => Some(group),
             Some(ModalBindings::Application) | None => None,
         }
     }
@@ -802,7 +1006,7 @@ impl InputMap {
             .filter(|record| !baseline.contains(&record.id))
             .filter_map(|record| match record.target {
                 BindingTarget::Script(target) => Some(target),
-                BindingTarget::Command(_) => None,
+                BindingTarget::Command(_) | BindingTarget::WidgetAction(_) => None,
             })
             .collect()
     }
@@ -811,48 +1015,6 @@ impl InputMap {
     #[cfg(test)]
     pub(crate) fn replace_next_id(&mut self, next_id: u64) -> u64 {
         mem::replace(&mut self.next_id, next_id)
-    }
-
-    /// Select the best matching record in one exact scope.
-    fn best_in_scope(
-        &self,
-        path: &Path,
-        input: InputSpec,
-        scope: &BindingScope,
-        framework_group: Option<FrameworkBindingGroup>,
-    ) -> Option<(&BindingRecord, PathMatch)> {
-        self.records
-            .iter()
-            .filter(|record| record.input == input && record.scope == *scope)
-            .filter(|record| match framework_group {
-                Some(group) => record.owner == BindingOwner::Framework(group),
-                None => matches!(record.owner, BindingOwner::Application),
-            })
-            .filter_map(|record| {
-                record
-                    .path_matcher
-                    .check_match(path)
-                    .map(|path_match| (record, path_match))
-            })
-            .max_by(|left, right| compare_candidates(*left, *right))
-    }
-
-    /// Select the best application record in the active modes, newest first,
-    /// and then in the default scope.
-    ///
-    /// A transient mode ends the search, so a key it does not bind resolves to
-    /// nothing.
-    fn best_in_modes(&self, path: &Path, input: InputSpec) -> Option<(&BindingRecord, PathMatch)> {
-        for mode in self.mode_stack.iter().rev() {
-            let scope = BindingScope::Mode(mode.name.clone());
-            if let Some(winner) = self.best_in_scope(path, input, &scope, None) {
-                return Some(winner);
-            }
-            if mode.transient {
-                return None;
-            }
-        }
-        self.best_in_scope(path, input, &BindingScope::Default, None)
     }
 
     /// Allocate one binding ID without mutating the registry on exhaustion.
@@ -874,22 +1036,41 @@ impl InputMap {
     }
 }
 
-/// Compare two candidates by path specificity and insertion order.
-fn compare_candidates(
-    left: (&BindingRecord, PathMatch),
-    right: (&BindingRecord, PathMatch),
-) -> Ordering {
-    left.1
-        .score()
-        .cmp(&right.1.score())
-        .then_with(|| left.0.insertion_id.cmp(&right.0.insertion_id))
+/// One ranked binding candidate at one route node.
+#[derive(Clone, Copy, Debug)]
+pub struct BindingCandidate<'a> {
+    /// Candidate record.
+    pub(crate) record: &'a BindingRecord,
+    /// Path-match score against the route path.
+    pub(crate) path_match: PathMatch,
 }
 
-/// Validate the options of one application binding without installing it.
-pub fn validate_application_binding(options: &BindingOptions) -> Result<()> {
+/// Compare two candidates by path specificity and insertion order.
+fn compare_candidates(left: BindingCandidate<'_>, right: BindingCandidate<'_>) -> Ordering {
+    left.path_match
+        .score()
+        .cmp(&right.path_match.score())
+        .then_with(|| left.record.insertion_id.cmp(&right.record.insertion_id))
+}
+
+/// Validate the options and target of one application binding without
+/// installing it.
+///
+/// `action` is the widget action name for an action target, and `None` for a
+/// command or callback target.
+pub fn validate_application_binding(
+    options: &BindingOptions,
+    action: Option<&WidgetActionName>,
+) -> Result<()> {
     let path_filter = options.path.as_ref().map_or("", PathFilter::as_str);
     validate_application_scope(&options.scope, path_filter)?;
-    validate_description(&options.description)
+    validate_description(&options.description)?;
+    if action.is_some() && options.phase.is_some() {
+        return Err(Error::InvalidOperation(
+            "widget action bindings do not take a phase".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 /// Validate an application binding scope.

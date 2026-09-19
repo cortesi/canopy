@@ -31,7 +31,9 @@ use super::{
     screen_to_arg, script_callback_label, script_journal_to_arg, snapshot_to_arg, tree_node_to_arg,
     validate_node_handle, values_to_args, with_current_canopy,
 };
-use crate::{FocusDirection, geom::PointI32, keyroute::KeyExpectation};
+use crate::{
+    FocusDirection, core::inputmap::WidgetActionCatalog, geom::PointI32, keyroute::KeyExpectation,
+};
 
 /// The native implementation behind one base API function.
 enum Handler {
@@ -471,26 +473,6 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
         handler: Handler::Sync(host_api),
     },
     BaseFunction {
-        name: "bind",
-        docs: Some(
-            "Bind a key spec to a CommandCall or a function, with required discovery metadata.",
-        ),
-        signature: || {
-            FunctionSignature::new()
-                .param(("key", Type::String))
-                .param(("options", Type::named("BindOptions")))
-                .param((
-                    "action",
-                    Type::union([
-                        Type::named("CommandCall"),
-                        Type::func(FunctionSignature::new()),
-                    ]),
-                ))
-                .ret(Type::Number)
-        },
-        handler: Handler::Sync(host_bind),
-    },
-    BaseFunction {
         name: "keymap",
         docs: Some(
             "Install a keymap: shared options in the named fields, and entries in the array part. \
@@ -612,7 +594,7 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
 ];
 
 /// Register the base `canopy` table and global helpers.
-pub(super) fn register(builder: &mut module::Builder) {
+pub(super) fn register(builder: &mut module::Builder, action_type: &Type) {
     for function in CANOPY_FUNCTIONS {
         let mut binding = Binding::library("canopy", Type::func((function.signature)()));
         if let Some(docs) = function.docs {
@@ -627,6 +609,16 @@ pub(super) fn register(builder: &mut module::Builder) {
             }
         }
     }
+    // `bind` takes the catalog-aware action type, so it registers here rather
+    // than in the fixed table.
+    builder.borrowed_function(
+        "bind",
+        Binding::library("canopy", Type::func(bind_signature(action_type))).doc(
+            "Bind a key spec to a CommandCall, a function, or a registered widget action name, \
+             with required discovery metadata.",
+        ),
+        host_bind,
+    );
     builder.borrowed_function(
         "fixtures",
         Binding::global(Type::func(
@@ -666,8 +658,8 @@ fn parse_bind_options<'s>(
         return Err(RuntimeError::runtime("binding options table is required"));
     };
     let field = |name: &str| optional_string_field(scope, &options, name);
-    // `InputMap::replace_application_action` rejects a blank description on the
-    // next step.
+    // `InputMap::replace_application_binding` rejects a blank description on
+    // the next step.
     let description = field("description")?
         .ok_or_else(|| RuntimeError::runtime("binding description is required"))?;
     let mode = field("mode")?.filter(|mode| !mode.is_empty());
@@ -690,9 +682,11 @@ fn parse_bind_options<'s>(
         }
     };
     let phase = match field("phase")?.as_deref() {
-        None => inputmap::BindingPhase::default(),
-        Some(label) => inputmap::BindingPhase::parse(label)
-            .ok_or_else(|| RuntimeError::runtime(format!("unknown binding phase: {label}")))?,
+        None => None,
+        Some(label) => Some(
+            inputmap::BindingPhase::parse(label)
+                .ok_or_else(|| RuntimeError::runtime(format!("unknown binding phase: {label}")))?,
+        ),
     };
     Ok(inputmap::BindingOptions {
         scope: binding_scope,
@@ -1007,7 +1001,7 @@ fn install_function_binding<'s>(
     let stashed = scope.stash_function(function)?;
     with_current_canopy(scope, |canopy, _| {
         let function_id = canopy.script_host.store_function(stashed)?;
-        let result = canopy.core.input_map.replace_application_action(
+        let result = canopy.core.input_map.replace_application_binding(
             input,
             options.clone(),
             inputmap::BindingTarget::Script(function_id),
@@ -1034,10 +1028,29 @@ fn install_command_binding(
     options: &inputmap::BindingOptions,
 ) -> StdResult<i64, RuntimeError> {
     with_current_canopy(scope, |canopy, _| {
-        let (binding_id, removed) = canopy.core.input_map.replace_application_action(
+        let (binding_id, removed) = canopy.core.input_map.replace_application_binding(
             input,
             options.clone(),
             inputmap::BindingTarget::Command(action),
+        )?;
+        canopy.release_removed_bindings(removed);
+        Ok(binding_id.as_u64() as i64)
+    })
+    .map_err(RuntimeError::from)
+}
+
+/// Install a named widget action binding.
+fn install_widget_action_binding(
+    scope: &Scope<'_>,
+    action: inputmap::WidgetActionName,
+    input: inputmap::InputSpec,
+    options: &inputmap::BindingOptions,
+) -> StdResult<i64, RuntimeError> {
+    with_current_canopy(scope, |canopy, _| {
+        let (binding_id, removed) = canopy.core.input_map.replace_application_binding(
+            input,
+            options.clone(),
+            inputmap::BindingTarget::WidgetAction(action),
         )?;
         canopy.release_removed_bindings(removed);
         Ok(binding_id.as_u64() as i64)
@@ -1719,15 +1732,38 @@ fn host_pop_mode<'s>(
     Ok(ret_one(ScopedValue::String(scope.create_string(&mode)?)))
 }
 
-/// A binding action read from a script: a command value or a callback.
+/// A binding action read from a script: a command value, a callback, or the
+/// name of a registered widget action.
 enum ScriptAction<'s> {
     /// A `CommandCall` built by a `command` constructor.
     Command(ScriptCommandCall),
     /// A Luau function.
     Function(Function<'s>),
+    /// A registered widget action name.
+    WidgetAction(inputmap::WidgetActionName),
 }
 
-/// Read a binding action argument, which is a `CommandCall` or a function.
+impl ScriptAction<'_> {
+    /// Return the widget action name, when this action names one.
+    fn widget_action(&self) -> Option<&inputmap::WidgetActionName> {
+        match self {
+            Self::WidgetAction(name) => Some(name),
+            Self::Command(_) | Self::Function(_) => None,
+        }
+    }
+}
+
+/// Read a widget action name from one script value.
+fn read_widget_action_name<'s>(
+    scope: &Scope<'s>,
+    value: ScopedValue<'s>,
+) -> StdResult<inputmap::WidgetActionName, RuntimeError> {
+    let name = String::from_lua(value, scope)?;
+    inputmap::WidgetActionName::new(name).map_err(|error| RuntimeError::runtime(error.to_string()))
+}
+
+/// Read a binding action argument: a `CommandCall`, a function, or a widget
+/// action name.
 fn read_action<'s>(
     scope: &Scope<'s>,
     args: &mut HostArgCursor<'_, 's>,
@@ -1740,8 +1776,11 @@ fn read_action<'s>(
     }
     match value {
         ScopedValue::Function(function) => Ok(ScriptAction::Function(function)),
+        ScopedValue::String(_) => Ok(ScriptAction::WidgetAction(read_widget_action_name(
+            scope, value,
+        )?)),
         other => Err(RuntimeError::runtime(format!(
-            "argument `action` must be a CommandCall or a function, got {}",
+            "argument `action` must be a CommandCall, a function, or a widget action name, got {}",
             other.type_name()
         ))),
     }
@@ -1758,6 +1797,9 @@ fn install_action_binding<'s>(
         ScriptAction::Command(call) => install_command_binding(scope, call.0, input, options),
         ScriptAction::Function(function) => {
             install_function_binding(scope, function, input, options)
+        }
+        ScriptAction::WidgetAction(name) => {
+            install_widget_action_binding(scope, name, input, options)
         }
     }
 }
@@ -1812,6 +1854,7 @@ impl Clone for ScriptAction<'_> {
         match self {
             Self::Command(call) => Self::Command(call.clone()),
             Self::Function(function) => Self::Function(*function),
+            Self::WidgetAction(name) => Self::WidgetAction(name.clone()),
         }
     }
 }
@@ -1953,18 +1996,36 @@ fn plan_keymap_entry<'s>(
             Some(call) => ScriptAction::Command(call),
             None => match value {
                 ScopedValue::Function(function) => ScriptAction::Function(function),
+                ScopedValue::String(_) => {
+                    ScriptAction::WidgetAction(read_widget_action_name(scope, value)?)
+                }
                 other => {
                     return Err(entry_error(format!(
-                        "`action` must be a CommandCall or a function, got {}",
+                        "`action` must be a CommandCall, a function, or a widget action name, got {}",
                         other.type_name()
                     )));
                 }
             },
         },
     };
+    if let Some(name) = action.widget_action() {
+        let registered = with_current_canopy(scope, |canopy, _| {
+            Ok(canopy
+                .core
+                .input_map
+                .widget_actions()
+                .contains_name(name.as_str()))
+        })
+        .map_err(RuntimeError::from)?;
+        if !registered {
+            return Err(entry_error(format!(
+                "uses unregistered widget action `{name}`"
+            )));
+        }
+    }
     let mut options = options.clone();
     options.description = description;
-    inputmap::validate_application_binding(&options)
+    inputmap::validate_application_binding(&options, action.widget_action())
         .map_err(|err| entry_error(format!("is invalid: {err}")))?;
     let mut planned = Vec::new();
     let mut push = |input: inputmap::InputSpec| -> StdResult<(), RuntimeError> {
@@ -2276,9 +2337,9 @@ fn host_fixtures<'s>(
 }
 
 /// Build the declaration-coupled base Canopy module.
-pub(super) fn build_base_module() -> Result<Arc<dyn NativeModule>> {
+pub(super) fn build_base_module(actions: &WidgetActionCatalog) -> Result<Arc<dyn NativeModule>> {
     let mut builder = module::Builder::new("canopy");
-    defs::register_framework_declarations(&mut builder);
+    let action_type = defs::register_framework_declarations(&mut builder, actions);
     builder.host_type(
         commands::declaration::Class::new("NodeId"),
         Arc::new(node_handle_type()),
@@ -2287,10 +2348,19 @@ pub(super) fn build_base_module() -> Result<Arc<dyn NativeModule>> {
         commands::declaration::Class::new("CommandCall"),
         Arc::new(command_call_type()),
     );
-    base_api::register(&mut builder);
+    base_api::register(&mut builder, &action_type);
     builder.build().map_err(|error| {
         error::Error::script(format!("building base script module failed: {error}"))
     })
+}
+
+/// Signature for `canopy.bind`, with the catalog-aware action type.
+fn bind_signature(action_type: &Type) -> FunctionSignature {
+    FunctionSignature::new()
+        .param(("key", Type::String))
+        .param(("options", Type::named("BindOptions")))
+        .param(("action", action_type.clone()))
+        .ret(Type::Number)
 }
 
 /// Luau global that holds the command constructors.

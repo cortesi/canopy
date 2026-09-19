@@ -96,6 +96,19 @@ already projects, so automation can inspect one key without sending it.
 application lifecycle operations that cannot live on a context because they
 start from the live focus and participate in dispatch boundaries.
 
+Widget actions added `Widget::accepts_action` and `Widget::on_action`, and the
+`Canopy` lifecycle operations `register_widget_action` and
+`bind_widget_action`. The two widget hooks are the object-safe minimum for a
+consumer decision that routing, route analysis, and help must share: one pure
+prediction and one effect. `ViewContext` and `Event` gained nothing, so widgets
+stay registry-agnostic. The catalog lives on `Canopy` because names must exist
+before script finalization, and the same list validates bindings and renders
+the application's Luau API. `BindingTargetKind`, the action name and spec types,
+the fields on `BindingSnapshot`, `AvailableBinding`, and `KeyRouteStep`, and
+`ModalBindings::FrameworkWithActions` report that model to scripts, help, and
+diagnostics. An action record carries no phase, so `BindingOptions.phase` and
+the matching record fields became optional.
+
 ## Accepted dependency coupling
 
 `EvalTicket::completion` exposes `futures::channel::oneshot::Receiver` directly.

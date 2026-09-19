@@ -1069,7 +1069,7 @@ mod tests {
                         scope: canopy::BindingScope::Exclusive(GUARDED),
                         description: description.to_string(),
                         source: None,
-                        phase: canopy::BindingPhase::AfterWidget,
+                        phase: Some(canopy::BindingPhase::AfterWidget),
                     },
                     Button::call_press(),
                 )?;

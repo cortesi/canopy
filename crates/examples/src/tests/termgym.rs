@@ -85,7 +85,7 @@ fn f6_toggles_terminal_focus_without_stealing_shell_shortcuts() -> Result<()> {
         .find(|binding| binding.input == Key::parse_spec("F6").expect("valid key"))
         .expect("terminal toggle binding");
     assert_eq!(toggle.description, "Toggle terminal list");
-    assert_eq!(toggle.phase, BindingPhase::BeforeWidget);
+    assert_eq!(toggle.phase, Some(BindingPhase::BeforeWidget));
     assert_eq!(
         toggle
             .command

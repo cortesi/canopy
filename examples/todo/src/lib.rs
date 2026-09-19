@@ -7,6 +7,7 @@ use anyhow::Result as AnyResult;
 use canopy::{
     Canopy, CanopyBuilder, Context, ContextExt, EventOutcome, InteractionToken, Loader,
     ModalBindings, ModalOptions, NodeId, NodeName, Render, ViewContext, ViewContextExt, Widget,
+    WidgetActionSpec,
     commands::CommandStatus,
     derive_commands,
     error::{Error, Result},
@@ -16,7 +17,8 @@ use canopy::{
     style::canopy as palette,
 };
 use canopy_widgets::{
-    Center, Frame, Input, KeyHint, List, Root, Selectable, StatusBar, Text, ValueExposure,
+    Center, Frame, Input, KeyHint, List, Root, Selectable, StatusBar, TEXT_CLEAR_ACTION, Text,
+    ValueExposure,
 };
 
 // Typed keys for keyed children
@@ -440,6 +442,7 @@ canopy.bind("ctrl-g", {
 }, command.root.toggle_help())
 canopy.keymap({
     { key = "q", description = "Quit", action = command.root.quit() },
+    { key = "ctrl-x", description = "Clear text", action = "canopy.text.clear" },
     { key = "d", description = "Delete item", action = command.todo.delete_item() },
     { key = "a", description = "Add item", action = command.todo.enter_item() },
     { key = "g", description = "First item", action = command.todo.select_first() },
@@ -548,6 +551,10 @@ fn app_builder(config: Option<&Path>) -> CanopyBuilder {
             Root::load(cnpy)?;
             <Todo as Loader>::load(cnpy)?;
             style(cnpy);
+            cnpy.register_widget_action(WidgetActionSpec::new(
+                TEXT_CLEAR_ACTION,
+                "Clear the focused input",
+            )?)?;
             register_fixtures(cnpy)
         })
         .bindings("todo-defaults", DEFAULT_BINDINGS);

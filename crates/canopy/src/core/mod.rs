@@ -52,6 +52,8 @@ pub mod inputmap;
 pub mod keyroute;
 /// Polling utilities.
 pub mod poll;
+/// Consumer-aware binding selection.
+mod select;
 /// Terminal buffer types.
 pub mod termbuf;
 /// Text utilities.
@@ -78,8 +80,8 @@ pub use context::{
 pub use fixture::{Fixture, FixtureInfo};
 pub use id::{NodeId, TypedId};
 pub use inputmap::{
-    BindingId, BindingOptions, BindingOwner, BindingPhase, BindingScope, FrameworkBindingGroup,
-    InputSpec,
+    BindingId, BindingOptions, BindingOwner, BindingPhase, BindingScope, BindingTargetKind,
+    FrameworkBindingGroup, InputSpec, WidgetActionName, WidgetActionSpec,
 };
 pub use node::SemanticIdentity;
 pub use snapshot::{FrameSnapshot, NodeSnapshot, WidgetSemantics};

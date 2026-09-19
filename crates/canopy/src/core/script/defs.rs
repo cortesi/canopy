@@ -11,6 +11,7 @@ use crate::{
         CommandDispatchKind, CommandParamKind, CommandReturnSpec, CommandSet, CommandSpec,
         DeclRegistry,
     },
+    core::inputmap::WidgetActionCatalog,
 };
 
 /// Header comment shared by every rendered canopy API surface.
@@ -92,7 +93,13 @@ fn command_params_sig(spec: &CommandSpec) -> declaration::FunctionSignature {
 }
 
 /// Register framework-owned record and alias declarations.
-pub(super) fn register_framework_declarations(builder: &mut module::Builder) {
+///
+/// Returns the binding action union, which narrows to `WidgetActionName`
+/// whenever the application registered at least one widget action.
+pub(super) fn register_framework_declarations(
+    builder: &mut module::Builder,
+    actions: &WidgetActionCatalog,
+) -> declaration::Type {
     builder.alias(declaration::Alias::new(
         "Point",
         declaration::Type::table([
@@ -176,15 +183,15 @@ pub(super) fn register_framework_declarations(builder: &mut module::Builder) {
                 "phase",
                 declaration::Type::literals(["before_widget", "after_widget"]).optional(),
             )
-            .doc("Dispatch phase relative to the widget. The default is after_widget."),
+            .doc(
+                "Dispatch phase relative to the widget. The default is after_widget. A widget \
+                 action carries no phase.",
+            ),
             declaration::Field::new("tier", declaration::Type::literals(["global"]).optional())
                 .doc("Use the global tier. A global binding cannot name a mode."),
         ]),
     ));
-    let action_type = declaration::Type::union([
-        declaration::Type::named("CommandCall"),
-        declaration::Type::func(declaration::FunctionSignature::new()),
-    ]);
+    let action_type = register_action_type(builder, actions);
     builder.alias(
         declaration::Alias::new(
             "KeymapEntry",
@@ -209,8 +216,10 @@ pub(super) fn register_framework_declarations(builder: &mut module::Builder) {
                 .doc("One mouse spec, or an array of mouse specs. Each spec makes one binding."),
                 declaration::Field::new("description", declaration::Type::String)
                     .doc("User-facing description of every binding the entry makes."),
-                declaration::Field::new("action", action_type)
-                    .doc("A CommandCall from the `command` table, or a function."),
+                declaration::Field::new("action", action_type.clone()).doc(
+                    "A CommandCall, a function, or a registered widget action name. An \
+                         action entry takes keys only and no phase.",
+                ),
             ]),
         )
         .doc("One keymap entry. An entry needs `key`, `mouse`, or both."),
@@ -273,6 +282,41 @@ pub(super) fn register_framework_declarations(builder: &mut module::Builder) {
     register_binding_info(builder);
     register_command_info(builder);
     register_observation_info(builder);
+    action_type
+}
+
+/// Register `WidgetActionName` when the catalog holds actions, and return the
+/// binding action union.
+///
+/// An empty catalog leaves the union at commands and callbacks, because no
+/// string action can be registered in that application.
+fn register_action_type(
+    builder: &mut module::Builder,
+    actions: &WidgetActionCatalog,
+) -> declaration::Type {
+    let mut union = vec![
+        declaration::Type::named("CommandCall"),
+        declaration::Type::func(declaration::FunctionSignature::new()),
+    ];
+    if actions.is_empty() {
+        return declaration::Type::union(union);
+    }
+    let mut doc = String::from(
+        "Registered widget action name. The route offers the action to the focused \
+         widget; a widget that accepts it consumes the key.",
+    );
+    for (name, description) in actions.iter() {
+        doc.push_str(&format!("\n`{name}`: {description}"));
+    }
+    let literals = actions
+        .iter()
+        .map(|(name, _)| name.as_str().to_string())
+        .collect::<Vec<_>>();
+    builder.alias(
+        declaration::Alias::new("WidgetActionName", declaration::Type::literals(literals)).doc(doc),
+    );
+    union.push(declaration::Type::named("WidgetActionName"));
+    declaration::Type::union(union)
 }
 
 /// Register the active-binding discovery record.
@@ -297,9 +341,9 @@ fn register_binding_info(builder: &mut module::Builder) {
                 .doc("Path filter string used when matching the focused path."),
             declaration::Field::new(
                 "phase",
-                declaration::Type::literals(["before_widget", "after_widget"]),
+                declaration::Type::literals(["before_widget", "after_widget"]).optional(),
             )
-            .doc("Phase relative to widget input handling."),
+            .doc("Phase relative to widget input handling; absent for a widget action."),
             declaration::Field::new("command", declaration::Type::String.optional()),
             declaration::Field::new("arguments", declaration::Type::Any.optional()),
             declaration::Field::new(
@@ -310,7 +354,12 @@ fn register_binding_info(builder: &mut module::Builder) {
                 .doc("Required user-facing description."),
             declaration::Field::new("source", declaration::Type::String.optional())
                 .doc("Diagnostic source for application bindings."),
-            declaration::Field::new("target", declaration::Type::literals(["script", "command"])),
+            declaration::Field::new(
+                "target",
+                declaration::Type::literals(["script", "command", "widget_action"]),
+            ),
+            declaration::Field::new("action", declaration::Type::String.optional())
+                .doc("Widget action name, present for a widget action target."),
         ]),
     ));
 }
@@ -426,10 +475,17 @@ fn register_observation_info(builder: &mut module::Builder) {
             declaration::Field::new("route_path", declaration::Type::String)
                 .doc("Route path at which this binding wins."),
             declaration::Field::new(
-                "phase",
-                declaration::Type::literals(["before_widget", "after_widget"]),
+                "target",
+                declaration::Type::literals(["script", "command", "widget_action"]),
             )
-            .doc("Phase relative to widget input handling."),
+            .doc("Kind of target this binding owns."),
+            declaration::Field::new("action", declaration::Type::String.optional())
+                .doc("Widget action name, present for a widget action target."),
+            declaration::Field::new(
+                "phase",
+                declaration::Type::literals(["before_widget", "after_widget"]).optional(),
+            )
+            .doc("Phase relative to widget input handling; absent for a widget action."),
             declaration::Field::new("source", declaration::Type::String.optional())
                 .doc("Diagnostic source when available."),
         ]),
@@ -463,7 +519,15 @@ fn register_observation_info(builder: &mut module::Builder) {
                 "bindings",
                 declaration::Type::named("AvailableBinding").array(),
             )
-            .doc("Effective key bindings for the context."),
+            .doc("Effective key bindings with an exact route to a consumer."),
+            declaration::Field::new(
+                "provisional_bindings",
+                declaration::Type::named("AvailableBinding").array(),
+            )
+            .doc(
+                "Key bindings behind an unknown widget prediction. Diagnostic only; not \
+                 executable help.",
+            ),
             declaration::Field::new(
                 "key_prediction_gaps",
                 declaration::Type::named("KeyPredictionGap").array(),
@@ -509,9 +573,15 @@ fn register_observation_info(builder: &mut module::Builder) {
             declaration::Field::new("binding", declaration::Type::Number.optional())
                 .doc("Resolved binding at this node, when one exists."),
             declaration::Field::new(
+                "target",
+                declaration::Type::literals(["script", "command", "widget_action"]).optional(),
+            )
+            .doc("Kind of target the resolved binding owns."),
+            declaration::Field::new(
                 "phase",
                 declaration::Type::literals(["before_widget", "after_widget"]).optional(),
-            ),
+            )
+            .doc("Phase of an ordinary binding; absent for a widget action."),
             declaration::Field::new(
                 "widget",
                 declaration::Type::literals(["handle", "ignore"]).optional(),
@@ -526,7 +596,9 @@ fn register_observation_info(builder: &mut module::Builder) {
                 "kind",
                 declaration::Type::literals([
                     "transient",
+                    "transient_widget_action",
                     "transient_dismiss",
+                    "widget_action",
                     "before_widget",
                     "widget",
                     "after_widget",

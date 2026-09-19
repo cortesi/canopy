@@ -173,6 +173,7 @@ impl Canopy {
         );
 
         let mut target = start;
+        let mut excluded: Vec<inputmap::BindingId> = Vec::new();
         while let Some(id) = target {
             if !self.core.nodes.contains_key(id) {
                 self.trace_route(
@@ -190,28 +191,76 @@ impl Canopy {
                 }
             }
 
+            let event = input.event_for_node(&self.core, id);
+            let route_focus = start.unwrap_or(id);
             let mut fallback_binding = None;
-            if let Some(binding) = self.core.input_map.resolve_match(&path, input.input_spec()) {
-                if binding.phase == inputmap::BindingPhase::BeforeWidget {
-                    self.trace_route(
-                        RoutePhase::PreEventBinding,
-                        Some(id),
-                        &path,
-                        "matched before widget event",
-                    );
-                    if let Some(guard) = guard.as_deref_mut() {
-                        guard.observe_binding(binding.id, binding.phase);
-                        if guard.tripped() {
+            let mut selected = self.select_at(input, id, &path, route_focus, &excluded);
+            while let Some(binding) = selected {
+                match binding.phase {
+                    None => {
+                        let Some(action) = binding.target.widget_action().cloned() else {
+                            break;
+                        };
+                        self.trace_route(
+                            RoutePhase::PreEventBinding,
+                            Some(id),
+                            &path,
+                            format!("offered widget action {action}"),
+                        );
+                        let Some(outcome) =
+                            self.offer_widget_action(&binding, id, input, &mut guard)?
+                        else {
+                            return Ok(true);
+                        };
+                        if outcome == EventOutcome::Handle {
+                            self.trace_route(
+                                RoutePhase::Handled,
+                                Some(id),
+                                &path,
+                                format!("widget action {action} handled"),
+                            );
                             return Ok(true);
                         }
+                        self.trace_route(
+                            RoutePhase::PreEventBinding,
+                            Some(id),
+                            &path,
+                            format!("widget action {action} declined after acceptance"),
+                        );
+                        excluded.push(binding.id);
+                        if !self.core.nodes.contains_key(id) {
+                            self.trace_route(
+                                RoutePhase::Unhandled,
+                                Some(id),
+                                &path,
+                                "node removed while running a widget action",
+                            );
+                            return Ok(true);
+                        }
+                        selected = self.select_at(input, id, &path, route_focus, &excluded);
                     }
-                    return self
-                        .execute_routed_binding_with_scope(id, &path, input, binding, scope);
+                    Some(inputmap::BindingPhase::BeforeWidget) => {
+                        self.trace_route(
+                            RoutePhase::PreEventBinding,
+                            Some(id),
+                            &path,
+                            "matched before widget event",
+                        );
+                        if let Some(guard) = guard.as_deref_mut() {
+                            guard.observe_binding(binding.id, inputmap::BindingPhase::BeforeWidget);
+                            if guard.tripped() {
+                                return Ok(true);
+                            }
+                        }
+                        return self
+                            .execute_routed_binding_with_scope(id, &path, input, binding, scope);
+                    }
+                    Some(inputmap::BindingPhase::AfterWidget) => {
+                        fallback_binding = Some(binding);
+                        break;
+                    }
                 }
-                fallback_binding = Some(binding);
             }
-
-            let event = input.event_for_node(&self.core, id);
             self.trace_route(
                 RoutePhase::WidgetEvent,
                 Some(id),
@@ -258,7 +307,7 @@ impl Canopy {
                             "matched after widget ignored event",
                         );
                         if let Some(guard) = guard.as_deref_mut() {
-                            guard.observe_binding(binding.id, binding.phase);
+                            guard.observe_binding(binding.id, inputmap::BindingPhase::AfterWidget);
                             if guard.tripped() {
                                 return Ok(true);
                             }
@@ -387,7 +436,7 @@ impl Canopy {
     ) -> Result<bool> {
         if self.core.modal_region().is_none() && self.core.input_map.transient_mode().is_some() {
             self.with_dispatch_boundary(|canopy| {
-                canopy.route_transient_key(start, path, key, scope)
+                canopy.route_transient_key(start, path, key, scope, guard)
             })
         } else {
             self.route_input(Some(start), path, RoutedInput::Key(key), scope, guard)
@@ -405,6 +454,7 @@ impl Canopy {
         mut path: Path,
         key: key::Key,
         scope: Option<&Scope<'_>>,
+        mut guard: Option<&mut KeyRouteGuard>,
     ) -> Result<bool> {
         self.route_trace.clear();
         let input = RoutedInput::Key(key);
@@ -417,7 +467,7 @@ impl Canopy {
         let mut node = Some(start);
         let mut winner = None;
         while let Some(id) = node {
-            if let Some(binding) = self.core.input_map.resolve_match(&path, input.input_spec()) {
+            if let Some(binding) = self.core.select_key_binding(id, &path, key, start, &[]) {
                 winner = Some((id, path.clone(), binding));
                 break;
             }
@@ -427,14 +477,59 @@ impl Canopy {
         self.core.input_map.pop_mode();
         let Some((id, path, binding)) = winner else {
             self.trace_route(RoutePhase::Handled, None, &path, "transient mode ended");
+            if let Some(guard) = guard.as_deref_mut() {
+                guard.observe_end();
+            }
             return Ok(true);
         };
+        if let Some(guard) = guard.as_deref_mut() {
+            guard.observe_node(id);
+            if guard.tripped() {
+                return Ok(true);
+            }
+        }
+        if let Some(action) = binding.target.widget_action().cloned() {
+            self.trace_route(
+                RoutePhase::PreEventBinding,
+                Some(id),
+                &path,
+                format!("offered widget action {action} in a transient mode"),
+            );
+            let Some(outcome) = self.offer_widget_action(&binding, id, input, &mut guard)? else {
+                return Ok(true);
+            };
+            if outcome == EventOutcome::Handle {
+                self.trace_route(
+                    RoutePhase::Handled,
+                    Some(id),
+                    &path,
+                    format!("widget action {action} handled"),
+                );
+            } else {
+                // A transient decision is spent once the mode pops, so a
+                // declined action ends the key as a transient dismissal. It
+                // does not reselect into the default scope or run raw.
+                self.trace_route(
+                    RoutePhase::Handled,
+                    Some(id),
+                    &path,
+                    format!("widget action {action} declined after acceptance"),
+                );
+            }
+            return Ok(true);
+        }
         self.trace_route(
             RoutePhase::PreEventBinding,
             Some(id),
             &path,
             "matched in a transient mode",
         );
+        if let Some(guard) = guard {
+            guard.observe_binding(binding.id, inputmap::BindingPhase::BeforeWidget);
+            if guard.tripped() {
+                return Ok(true);
+            }
+        }
         self.execute_routed_binding_with_scope(id, &path, input, binding, scope)
     }
 
@@ -459,6 +554,10 @@ impl Canopy {
         let frame = self.core.command_scope_for_event(&event);
         let depth = self.core.push_command_scope(frame);
         let result = match binding.target {
+            inputmap::BindingTarget::WidgetAction(_) => {
+                debug_assert!(false, "widget actions dispatch through on_action");
+                Ok(None)
+            }
             inputmap::BindingTarget::Script(binding) => self
                 .execute_binding_with_scope(node_id, binding, scope)
                 .map(|()| None),
@@ -530,6 +629,59 @@ impl Canopy {
             self.core.focus_first(self.core.root)?;
         }
         Ok(self.core.focus.unwrap_or(self.core.root))
+    }
+
+    /// Offer one selected widget action to its consumer.
+    ///
+    /// Returns the consumer's outcome, or `None` when a checked-route guard
+    /// tripped; the caller then ends the route without acting further.
+    fn offer_widget_action(
+        &mut self,
+        binding: &inputmap::ResolvedBinding,
+        node: NodeId,
+        input: RoutedInput,
+        guard: &mut Option<&mut KeyRouteGuard>,
+    ) -> Result<Option<EventOutcome>> {
+        let action = binding
+            .target
+            .widget_action()
+            .cloned()
+            .expect("an action candidate carries an action name");
+        let event = input.event_for_node(&self.core, node);
+        let outcome = self
+            .core
+            .dispatch_action_on_node(node, action.as_str(), &event)?;
+        debug_assert_eq!(
+            outcome,
+            EventOutcome::Handle,
+            "accepts_action promised Handle for {action} at {node:?}"
+        );
+        if let Some(guard) = guard.as_deref_mut() {
+            guard.observe_action(binding.id, node);
+            if guard.tripped() {
+                return Ok(None);
+            }
+        }
+        Ok(Some(outcome))
+    }
+
+    /// Select the first eligible binding at one route node.
+    ///
+    /// Mouse routing has no widget actions, so it keeps the plain resolver.
+    fn select_at(
+        &self,
+        input: RoutedInput,
+        node: NodeId,
+        path: &Path,
+        focus: NodeId,
+        excluded: &[inputmap::BindingId],
+    ) -> Option<inputmap::ResolvedBinding> {
+        match input {
+            RoutedInput::Key(key) => self
+                .core
+                .select_key_binding(node, path, key, focus, excluded),
+            RoutedInput::Mouse(_) => self.core.input_map.resolve_match(path, input.input_spec()),
+        }
     }
 
     /// Return a node's key prediction for the route that starts at `focus`.
@@ -649,6 +801,8 @@ enum GuardEvent {
     Node(NodeId),
     /// Route resolved and executed a binding.
     Binding(inputmap::BindingId, inputmap::BindingPhase),
+    /// Route offered an action to a consumer node.
+    Action(inputmap::BindingId, NodeId),
     /// Widget returned an outcome.
     Widget(EventOutcome),
     /// Route ended without a handler.
@@ -677,11 +831,14 @@ impl KeyRouteGuard {
         for (step_index, step) in explanation.steps.iter().enumerate() {
             let mut push = |event| events.push((event, Some(step_index)));
             push(GuardEvent::Node(step.node));
-            match (step.binding, step.phase) {
-                (Some(binding), Some(BindingPhase::BeforeWidget)) => {
+            match (step.binding, step.phase, step.target) {
+                (Some(binding), None, Some(inputmap::BindingTargetKind::WidgetAction)) => {
+                    push(GuardEvent::Action(binding, step.node));
+                }
+                (Some(binding), Some(BindingPhase::BeforeWidget), _) => {
                     push(GuardEvent::Binding(binding, BindingPhase::BeforeWidget));
                 }
-                (Some(binding), Some(BindingPhase::AfterWidget)) => {
+                (Some(binding), Some(BindingPhase::AfterWidget), _) => {
                     if let Some(widget) = step.widget.clone() {
                         push(GuardEvent::Widget(widget));
                     }
@@ -695,18 +852,37 @@ impl KeyRouteGuard {
                         push(GuardEvent::Binding(binding, BindingPhase::AfterWidget));
                     }
                 }
-                (None, None) => {
+                (None, None, _) => {
                     if let Some(widget) = step.widget.clone() {
                         push(GuardEvent::Widget(widget));
                     }
                 }
-                (Some(_), None) | (None, Some(_)) => {
+                _ => {
                     debug_assert!(false, "an analysis step pairs a binding with its phase");
                 }
             }
         }
-        if matches!(explanation.outcome, RouteOutcome::Unhandled) {
-            events.push((GuardEvent::End, None));
+        // A transient explanation carries no route steps, so its outcome
+        // supplies the expected stream.
+        match &explanation.outcome {
+            RouteOutcome::Transient { binding, node, .. } => {
+                events.push((GuardEvent::Node(*node), None));
+                events.push((
+                    GuardEvent::Binding(*binding, BindingPhase::BeforeWidget),
+                    None,
+                ));
+            }
+            RouteOutcome::TransientWidgetAction { binding, node, .. } => {
+                events.push((GuardEvent::Node(*node), None));
+                events.push((GuardEvent::Action(*binding, *node), None));
+            }
+            RouteOutcome::TransientDismiss | RouteOutcome::Unhandled => {
+                events.push((GuardEvent::End, None));
+            }
+            RouteOutcome::WidgetAction { .. }
+            | RouteOutcome::BeforeWidget { .. }
+            | RouteOutcome::Widget { .. }
+            | RouteOutcome::AfterWidget { .. } => {}
         }
         Self {
             events,
@@ -730,6 +906,11 @@ impl KeyRouteGuard {
     /// Observe one executed binding.
     fn observe_binding(&mut self, binding: inputmap::BindingId, phase: inputmap::BindingPhase) {
         self.expect(&GuardEvent::Binding(binding, phase), None, Some(binding));
+    }
+
+    /// Observe one action offered to a consumer node.
+    fn observe_action(&mut self, binding: inputmap::BindingId, node: NodeId) {
+        self.expect(&GuardEvent::Action(binding, node), None, Some(binding));
     }
 
     /// Observe one widget outcome before the route acts on it.

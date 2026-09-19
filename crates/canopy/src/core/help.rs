@@ -9,8 +9,8 @@ use crate::{
         Core, NodeId,
         context::CoreViewContext,
         inputmap::{
-            BindingId, BindingOwner, BindingPhase, BindingScope, BindingTarget,
-            FrameworkBindingGroup, InputSpec,
+            BindingId, BindingOwner, BindingPhase, BindingScope, BindingTarget, BindingTargetKind,
+            FrameworkBindingGroup, InputSpec, WidgetActionName,
         },
         world::WidgetOperation,
     },
@@ -39,14 +39,23 @@ pub struct BindingSnapshot {
     pub transient_mode: Option<String>,
     /// Newest active exclusive binding group.
     pub exclusive_group: Option<FrameworkBindingGroup>,
-    /// Effective key bindings, with one winner per normalized key.
+    /// Effective key bindings with an exact route to a consumer.
+    ///
+    /// An action binding appears only when a widget on the route accepts it.
+    /// An action without a consumer appears in neither this list nor
+    /// `provisional_bindings`.
     pub bindings: Vec<AvailableBinding<Key>>,
-    /// Included key bindings whose reachability depends on an unknown widget.
+    /// Key bindings whose reachability depends on an unknown widget.
     ///
     /// A widget that returns no prediction (`None`) can consume a key before a
-    /// binding that discovery still includes. Each gap names the canonical
-    /// key, the provisional binding, and the unknown widget that precedes it.
-    /// An empty list means the returned key-binding set is exact.
+    /// binding that discovery otherwise includes. These rows are diagnostic
+    /// and do not belong in executable help.
+    pub provisional_bindings: Vec<AvailableBinding<Key>>,
+    /// Included key bindings whose reachability depends on an unknown widget.
+    ///
+    /// Each gap names the canonical key, the provisional binding, and the
+    /// unknown widget that precedes it. An empty list means the returned
+    /// key-binding set is exact.
     pub key_prediction_gaps: Vec<KeyPredictionGap>,
     /// Effective mouse bindings, with one winner per normalized mouse input.
     ///
@@ -91,9 +100,14 @@ pub struct AvailableBinding<I> {
     pub path_filter: String,
     /// Route path at which this binding wins.
     pub route_path: Path,
-    /// Phase relative to widget input handling.
-    pub phase: BindingPhase,
-    /// Declarative command details, absent for opaque script callbacks.
+    /// Kind of target this binding owns.
+    pub target: BindingTargetKind,
+    /// Widget action name, present for an action target.
+    pub action: Option<WidgetActionName>,
+    /// Phase relative to widget input handling, absent for a widget action.
+    pub phase: Option<BindingPhase>,
+    /// Declarative command details, absent for opaque script callbacks and
+    /// widget actions.
     pub command: Option<BindingCommand>,
     /// Optional diagnostic source.
     pub source: Option<String>,
@@ -120,11 +134,13 @@ impl Core {
         let focus_path = self.path_of(self.root, focus);
 
         let mut bindings = Vec::new();
+        let mut provisional_bindings = Vec::new();
         let mut key_prediction_gaps = Vec::new();
-        for key in self.input_map.eligible_keys() {
+        for key in self.input_map.candidate_keys() {
             let explanation = self.explain_key(Some(focus), key)?;
             let projection = self.key_projection(&explanation)?;
-            bindings.extend(projection.binding);
+            bindings.extend(projection.exact);
+            provisional_bindings.extend(projection.provisional);
             key_prediction_gaps.extend(projection.gaps);
         }
         let mut mouse_bindings = Vec::new();
@@ -149,6 +165,7 @@ impl Core {
             transient_mode: self.input_map.transient_mode().map(str::to_string),
             exclusive_group: self.input_map.active_exclusive_group(),
             bindings,
+            provisional_bindings,
             key_prediction_gaps,
             mouse_bindings,
         })
@@ -200,7 +217,7 @@ impl Core {
             .binding(id)
             .expect("resolved binding record must remain registered");
         let command = match &record.target {
-            BindingTarget::Script(_) => None,
+            BindingTarget::Script(_) | BindingTarget::WidgetAction(_) => None,
             BindingTarget::Command(action) => {
                 let availability = self
                     .commands
@@ -230,6 +247,8 @@ impl Core {
             scope: record.scope.clone(),
             path_filter: record.path_filter().to_string(),
             route_path,
+            target: BindingTargetKind::of(&record.target),
+            action: record.target.widget_action().cloned(),
             phase: record.phase,
             command,
             source: record.source.clone(),
@@ -335,14 +354,14 @@ mod tests {
         target: u64,
         phase: BindingPhase,
     ) -> Result<()> {
-        core.input_map.replace_application_action(
+        core.input_map.replace_application_binding(
             InputSpec::Key(key.into()),
             crate::BindingOptions {
                 scope,
                 path: Some(path.parse()?),
                 description: description.into(),
                 source: Some("test".to_string()),
-                phase,
+                phase: Some(phase),
             },
             BindingTarget::Script(LuauFunctionId::for_test(target)),
         )?;
@@ -359,14 +378,14 @@ mod tests {
         target: u64,
     ) -> Result<Mouse> {
         let mouse = Mouse::parse_spec(spec)?;
-        core.input_map.replace_application_action(
+        core.input_map.replace_application_binding(
             InputSpec::Mouse(mouse),
             crate::BindingOptions {
                 scope,
                 path: Some(path.parse()?),
                 description: description.into(),
                 source: Some("test".to_string()),
-                phase: BindingPhase::AfterWidget,
+                phase: Some(BindingPhase::AfterWidget),
             },
             BindingTarget::Script(LuauFunctionId::for_test(target)),
         )?;
@@ -428,21 +447,25 @@ mod tests {
             ],
             "the more specific path wins, and an inactive mode contributes nothing"
         );
+        assert!(
+            snapshot.bindings.is_empty(),
+            "an unknown leaf leaves no exact key row"
+        );
         assert_eq!(
             snapshot
-                .bindings
+                .provisional_bindings
                 .iter()
                 .map(|binding| binding.input.to_string())
                 .collect::<Vec<_>>(),
             ["a"],
-            "the key list stays key-only"
+            "the provisional list stays key-only"
         );
 
         // Every other field means the same as it does for a key.
         let winner = &snapshot.mouse_bindings[0];
         assert_eq!(winner.path_filter, "leaf/");
         assert_eq!(winner.route_path, Path::from("/root/leaf"));
-        assert_eq!(winner.phase, BindingPhase::AfterWidget);
+        assert_eq!(winner.phase, Some(BindingPhase::AfterWidget));
         assert_eq!(winner.owner, BindingOwner::Application);
         assert_eq!(winner.source.as_deref(), Some("test"));
         assert!(winner.command.is_none(), "a script callback stays opaque");
@@ -484,7 +507,7 @@ mod tests {
                 scope: BindingScope::Exclusive(group),
                 description: "Dialog click".to_string(),
                 source: None,
-                phase: BindingPhase::AfterWidget,
+                phase: Some(BindingPhase::AfterWidget),
             },
             CommandAction {
                 invocation: CommandInvocation {
@@ -515,14 +538,14 @@ mod tests {
         let action = EligibleLeaf::call_update(7)
             .with_target(CommandTarget::Exact(leaf))
             .action();
-        core.input_map.replace_application_action(
+        core.input_map.replace_application_binding(
             InputSpec::Mouse(Mouse::parse_spec("LeftDown")?),
             BindingOptions {
                 path: Some("eligible_leaf/".parse()?),
                 scope: BindingScope::Default,
                 description: "Update selection".into(),
                 source: None,
-                phase: BindingPhase::AfterWidget,
+                phase: Some(BindingPhase::AfterWidget),
             },
             BindingTarget::Command(action),
         )?;
@@ -572,15 +595,16 @@ mod tests {
         assert_eq!(snapshot.focus, leaf);
         assert_eq!(snapshot.focus_path, Path::from("/root/leaf"));
         assert_eq!(snapshot.active_modes, ["insert"]);
-        assert_eq!(snapshot.bindings.len(), 2);
+        assert_eq!(snapshot.bindings.len(), 0);
+        assert_eq!(snapshot.provisional_bindings.len(), 2);
         let fallback = snapshot
-            .bindings
+            .provisional_bindings
             .iter()
             .find(|binding| binding.input == 'a')
             .expect("fallback binding");
-        assert_eq!(fallback.phase, BindingPhase::AfterWidget);
+        assert_eq!(fallback.phase, Some(BindingPhase::AfterWidget));
         let global = snapshot
-            .bindings
+            .provisional_bindings
             .iter()
             .find(|binding| binding.input == 'b')
             .expect("global binding");
@@ -629,20 +653,21 @@ mod tests {
         let action = EligibleLeaf::call_update(7)
             .with_target(CommandTarget::Exact(leaf))
             .action();
-        core.input_map.replace_application_action(
+        core.input_map.replace_application_binding(
             InputSpec::Key('u'.into()),
             BindingOptions {
                 path: Some("eligible_leaf/".parse()?),
                 scope: BindingScope::Default,
                 description: "Update selection".into(),
                 source: None,
-                phase: BindingPhase::AfterWidget,
+                phase: Some(BindingPhase::AfterWidget),
             },
             BindingTarget::Command(action.clone()),
         )?;
         let snapshot = core.available_bindings(Some(leaf))?;
-        let binding = &snapshot.bindings[0];
-        assert_eq!(binding.phase, BindingPhase::AfterWidget);
+        assert!(snapshot.bindings.is_empty());
+        let binding = &snapshot.provisional_bindings[0];
+        assert_eq!(binding.phase, Some(BindingPhase::AfterWidget));
         let command = binding.command.as_ref().expect("command details");
         assert_eq!(command.action, action);
         assert_eq!(
@@ -655,7 +680,7 @@ mod tests {
         );
         enabled.set(true);
         assert_eq!(
-            core.available_bindings(Some(leaf))?.bindings[0]
+            core.available_bindings(Some(leaf))?.provisional_bindings[0]
                 .command
                 .as_ref()
                 .unwrap()
@@ -764,8 +789,12 @@ mod tests {
         )?;
 
         let snapshot = core.available_bindings(None)?;
-        assert_eq!(snapshot.bindings.len(), 1);
-        let binding = &snapshot.bindings[0];
+        assert!(
+            snapshot.bindings.is_empty(),
+            "an unknown widget keeps the row out of executable help"
+        );
+        assert_eq!(snapshot.provisional_bindings.len(), 1);
+        let binding = &snapshot.provisional_bindings[0];
         assert_eq!(binding.description, "Provisional");
         assert_eq!(snapshot.key_prediction_gaps.len(), 1);
         let gap = &snapshot.key_prediction_gaps[0];
@@ -818,7 +847,8 @@ mod tests {
         )?;
 
         let snapshot = core.available_bindings(None)?;
-        assert_eq!(snapshot.bindings.len(), 1);
+        assert!(snapshot.bindings.is_empty());
+        assert_eq!(snapshot.provisional_bindings.len(), 1);
         assert_eq!(snapshot.key_prediction_gaps.len(), 1);
         assert_eq!(snapshot.key_prediction_gaps[0].node, leaf);
         Ok(())
@@ -896,14 +926,14 @@ mod tests {
         let leaf = core.create_detached(ControlCodeLeaf)?;
         core.attach(core.root, leaf)?;
         core.set_focus(leaf)?;
-        core.input_map.replace_application_action(
+        core.input_map.replace_application_binding(
             InputSpec::Key(Key::parse_spec("ctrl-a")?),
             BindingOptions {
                 path: Some("control_code_leaf/".parse()?),
                 scope: BindingScope::Default,
                 description: "Canonical binding".to_string(),
                 source: None,
-                phase: BindingPhase::AfterWidget,
+                phase: Some(BindingPhase::AfterWidget),
             },
             BindingTarget::Script(LuauFunctionId::for_test(1)),
         )?;
@@ -941,7 +971,7 @@ mod tests {
                 scope: BindingScope::Exclusive(group),
                 description: "Scroll down".to_string(),
                 source: None,
-                phase: BindingPhase::AfterWidget,
+                phase: Some(BindingPhase::AfterWidget),
             },
             CommandAction {
                 invocation: CommandInvocation {

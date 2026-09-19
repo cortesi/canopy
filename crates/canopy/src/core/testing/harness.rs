@@ -28,9 +28,14 @@ pub struct HarnessBuilder<W> {
     root: W,
     /// View size for the harness.
     size: Size,
+    /// Configuration hooks run before the API finalizes.
+    configure: Vec<ConfigureHook>,
     /// Named binding sources evaluated after the API is finalized.
     bindings: Vec<(String, String)>,
 }
+
+/// One harness configuration hook.
+type ConfigureHook = Box<dyn FnOnce(&mut Canopy) -> Result<()>>;
 
 impl<W: Widget + Loader + 'static> HarnessBuilder<W> {
     /// Create a new harness builder with the given root widget.
@@ -38,6 +43,7 @@ impl<W: Widget + Loader + 'static> HarnessBuilder<W> {
         Self {
             root,
             size: Size::new(100, 100),
+            configure: Vec::new(),
             bindings: Vec::new(),
         }
     }
@@ -45,6 +51,16 @@ impl<W: Widget + Loader + 'static> HarnessBuilder<W> {
     /// Set the size of the harness view.
     pub fn size(mut self, width: u32, height: u32) -> Self {
         self.size = Size::new(width, height);
+        self
+    }
+
+    /// Run one configuration hook before the API finalizes.
+    ///
+    /// Native registration that must precede script finalization, such as a
+    /// widget action catalog entry, belongs here.
+    #[must_use]
+    pub fn configure(mut self, hook: impl FnOnce(&mut Canopy) -> Result<()> + 'static) -> Self {
+        self.configure.push(Box::new(hook));
         self
     }
 
@@ -65,6 +81,9 @@ impl<W: Widget + Loader + 'static> HarnessBuilder<W> {
         let mut canopy = Canopy::new();
 
         <W as Loader>::load(&mut canopy)?;
+        for hook in self.configure {
+            hook(&mut canopy)?;
+        }
         canopy.finalize_api()?;
         for (name, source) in &self.bindings {
             canopy.evaluate_bindings(name, source)?;

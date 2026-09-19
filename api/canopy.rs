@@ -1290,9 +1290,14 @@ pub mod canopy {
             pub path_filter: String,
             /// Route path at which this binding wins.
             pub route_path: crate::path::Path,
-            /// Phase relative to widget input handling.
-            pub phase: crate::core::inputmap::BindingPhase,
-            /// Declarative command details, absent for opaque script callbacks.
+            /// Kind of target this binding owns.
+            pub target: crate::core::inputmap::BindingTargetKind,
+            /// Widget action name, present for an action target.
+            pub action: Option<crate::core::inputmap::WidgetActionName>,
+            /// Phase relative to widget input handling, absent for a widget action.
+            pub phase: Option<crate::core::inputmap::BindingPhase>,
+            /// Declarative command details, absent for opaque script callbacks and
+            /// widget actions.
             pub command: Option<BindingCommand>,
             /// Optional diagnostic source.
             pub source: Option<String>,
@@ -1330,14 +1335,23 @@ pub mod canopy {
             pub transient_mode: Option<String>,
             /// Newest active exclusive binding group.
             pub exclusive_group: Option<crate::core::inputmap::FrameworkBindingGroup>,
-            /// Effective key bindings, with one winner per normalized key.
+            /// Effective key bindings with an exact route to a consumer.
+            ///
+            /// An action binding appears only when a widget on the route accepts it.
+            /// An action without a consumer appears in neither this list nor
+            /// `provisional_bindings`.
             pub bindings: Vec<AvailableBinding<crate::event::key::Key>>,
-            /// Included key bindings whose reachability depends on an unknown widget.
+            /// Key bindings whose reachability depends on an unknown widget.
             ///
             /// A widget that returns no prediction (`None`) can consume a key before a
-            /// binding that discovery still includes. Each gap names the canonical
-            /// key, the provisional binding, and the unknown widget that precedes it.
-            /// An empty list means the returned key-binding set is exact.
+            /// binding that discovery otherwise includes. These rows are diagnostic
+            /// and do not belong in executable help.
+            pub provisional_bindings: Vec<AvailableBinding<crate::event::key::Key>>,
+            /// Included key bindings whose reachability depends on an unknown widget.
+            ///
+            /// Each gap names the canonical key, the provisional binding, and the
+            /// unknown widget that precedes it. An empty list means the returned
+            /// key-binding set is exact.
             pub key_prediction_gaps: Vec<KeyPredictionGap>,
             /// Effective mouse bindings, with one winner per normalized mouse input.
             ///
@@ -1426,8 +1440,11 @@ pub mod canopy {
             pub path: crate::path::Path,
             /// Resolved binding at this node, when one exists.
             pub binding: Option<crate::core::inputmap::BindingId>,
-            /// Phase of the resolved binding; present exactly when `binding` is.
+            /// Phase of an ordinary binding. Absent for a widget action, which has no
+            /// phase, and for a node with no binding.
             pub phase: Option<crate::core::inputmap::BindingPhase>,
+            /// Kind of the resolved target, present exactly when `binding` is.
+            pub target: Option<crate::core::inputmap::BindingTargetKind>,
             /// Widget prediction, absent when the widget offers none.
             pub widget: Option<crate::widget::EventOutcome>,
         }
@@ -1453,8 +1470,26 @@ pub mod canopy {
                 /// Route path of the winning binding.
                 path: crate::path::Path,
             },
+            /// A transient mode's widget action runs, with the consumer known.
+            TransientWidgetAction {
+                /// Winning binding.
+                binding: crate::core::inputmap::BindingId,
+                /// Node the action resolved at.
+                node: crate::core::NodeId,
+                /// Route path of the winning binding.
+                path: crate::path::Path,
+            },
             /// A transient mode ends with no binding; the key is still consumed.
             TransientDismiss,
+            /// A widget action runs before the node's raw key handler.
+            WidgetAction {
+                /// Winning binding.
+                binding: crate::core::inputmap::BindingId,
+                /// Accepting node.
+                node: crate::core::NodeId,
+                /// Route path of the winning binding.
+                path: crate::path::Path,
+            },
             /// A `before_widget` binding runs.
             BeforeWidget {
                 /// Winning binding.
@@ -2893,7 +2928,11 @@ pub mod canopy {
         /// Optional diagnostic source.
         pub source: Option<String>,
         /// Phase that sets when the binding runs relative to the widget.
-        pub phase: BindingPhase,
+        ///
+        /// `None` means the phase was omitted at registration. Commands and
+        /// callbacks then default to `after_widget`. Widget actions carry no
+        /// phase, and an explicit phase on one is an error.
+        pub phase: Option<BindingPhase>,
     }
 
     /// Owner of one binding record.
@@ -2926,6 +2965,17 @@ pub mod canopy {
         Default,
         /// Framework-only exclusive group.
         Exclusive(FrameworkBindingGroup),
+    }
+
+    /// Class of target a binding record owns.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum BindingTargetKind {
+        /// Stored Luau callback.
+        Script,
+        /// Rust command invocation.
+        Command,
+        /// Named operation offered to widgets on the route.
+        WidgetAction,
     }
 
     /// Application runtime state and renderer coordination.
@@ -3153,6 +3203,14 @@ pub mod canopy {
     pub enum ModalBindings {
         /// Admit only this framework binding group.
         Framework(crate::FrameworkBindingGroup),
+        /// Admit this framework group first, then named application widget
+        /// actions from the allowlist, on the bounded modal route.
+        FrameworkWithActions {
+            /// Framework group that owns the modal.
+            group: crate::FrameworkBindingGroup,
+            /// Exact application action names the modal admits.
+            actions: &'static [&'static str],
+        },
         /// Admit ordinary application bindings on the bounded modal route.
         Application,
     }
@@ -3421,6 +3479,17 @@ pub mod canopy {
         /// The owning widget, attachment, or application no longer exists.
         Expired,
     }
+
+    /// Validated name of a bindable widget action.
+    ///
+    /// A name is nonempty and dotted, such as `canopy.text.clear`. The dotted
+    /// form names the namespace that owns the behavior.
+    #[derive(Clone, Debug, Display, Eq, Hash, Ord, PartialEq, PartialOrd)]
+    pub struct WidgetActionName(_);
+
+    /// One widget action an application registers as bindable.
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    pub struct WidgetActionSpec {}
 
     /// Optional application observations, without arbitrary widget serialization.
     #[derive(Clone, Debug, Default, PartialEq)]
@@ -4038,6 +4107,17 @@ pub mod canopy {
         /// whether they have children) when deciding whether to accept focus.
         fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
+        /// Return whether this widget consumes `action` in its current state.
+        ///
+        /// This is a pure promise. When it returns true, the next routed
+        /// [`Widget::on_action`] call for the same action and state must return
+        /// [`EventOutcome::Handle`]. The default says the widget consumes no
+        /// action, so action bindings stay dormant on its route.
+        ///
+        /// `context` is a read-only view bound to this widget's node. Its focus
+        /// answers follow the route focus the caller is asking about.
+        fn accepts_action(&self, _action: &str, _view: &dyn ViewContext) -> bool {}
+
         /// Canvas size in content coordinates (for scrolling).
         ///
         /// `view` is this node's content size (outer minus padding).
@@ -4074,6 +4154,14 @@ pub mod canopy {
 
         /// Name used for commands and paths.
         fn name(&self) -> NodeName {}
+
+        /// Perform one named action the route offered to this widget.
+        ///
+        /// Routing calls this only after [`Widget::accepts_action`] returned true
+        /// for the same action and state. A widget that does not know the action
+        /// returns [`EventOutcome::Ignore`].
+        fn on_action(&mut self, _action: &str, _context: &mut dyn Context) -> Result<EventOutcome> {
+        }
 
         /// Handle events.
         fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {}
@@ -4172,6 +4260,16 @@ pub mod canopy {
 
         /// Return the named mode, if this is a mode scope.
         pub fn mode(&self) -> Option<&str> {}
+    }
+
+    impl BindingTargetKind {
+        #[must_use]
+        /// Return a stable target-kind label.
+        pub fn label(self) -> &'static str {}
+
+        #[must_use]
+        /// Return the kind of one binding target.
+        pub fn of(target: &BindingTarget) -> Self {}
     }
 
     impl CanopyBuilder {
@@ -4405,6 +4503,18 @@ pub mod canopy {
         ) -> Result<inputmap::BindingId> {
         }
 
+        /// Install or replace an application widget action binding.
+        ///
+        /// The action name must already be registered in this application's
+        /// catalog.
+        pub fn bind_widget_action(
+            &mut self,
+            input: impl Into<inputmap::InputSpec>,
+            options: inputmap::BindingOptions,
+            action: inputmap::WidgetActionName,
+        ) -> Result<inputmap::BindingId> {
+        }
+
         /// Load the commands from a command node using the default node name.
         /// Returns an error if any command id is already registered.
         pub fn add_commands<T: commands::CommandNode>(&mut self) -> Result<()> {}
@@ -4448,6 +4558,13 @@ pub mod canopy {
 
         /// Register an app-level startup script.
         pub fn register_startup_script(&mut self, name: &str, source: &str) -> Result<()> {}
+
+        /// Register one bindable widget action for this application.
+        ///
+        /// Registration is native-only and must happen before `finalize_api`.
+        /// The catalog carries names and descriptions; widgets decide whether
+        /// they consume an action.
+        pub fn register_widget_action(&mut self, spec: inputmap::WidgetActionSpec) -> Result<()> {}
 
         /// Replace the root widget while preserving its stable node ID.
         pub fn replace_root<W>(&mut self, widget: W) -> Result<TypedId<W>>
@@ -4751,6 +4868,20 @@ pub mod canopy {
 
         /// Visible view rectangle in local outer coordinates.
         pub fn view_rect_local(&self) -> Rect {}
+    }
+
+    impl WidgetActionName {
+        #[must_use]
+        /// Return the action name.
+        pub fn as_str(&self) -> &str {}
+
+        /// Validate `name` and return it.
+        pub fn new(name: impl Into<String>) -> Result<Self> {}
+    }
+
+    impl WidgetActionSpec {
+        /// Build a spec from a name and a description.
+        pub fn new(name: impl Into<String>, description: impl Into<String>) -> Result<Self> {}
     }
 
     impl super::AutomationHandle {

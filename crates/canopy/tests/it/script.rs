@@ -503,7 +503,7 @@ mod tests {
             (
                 r#"local bad: any = "api_leaf::set"
                    canopy.keymap({ { key = "x", description = "Set", action = bad } })"#,
-                "must be a CommandCall or a function",
+                "must be dotted",
             ),
             (
                 r#"local bad: any = "oops"
@@ -562,7 +562,7 @@ mod tests {
                 scope: BindingScope::Exclusive(group),
                 description: "Framework action".to_string(),
                 source: None,
-                phase: BindingPhase::AfterWidget,
+                phase: Some(BindingPhase::AfterWidget),
             },
             ApiLeaf::call_get(),
         )?;

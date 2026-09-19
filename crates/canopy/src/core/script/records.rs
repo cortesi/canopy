@@ -291,10 +291,15 @@ pub(super) fn binding_info_to_arg(binding: &inputmap::BindingRecord) -> ArgValue
             ArgValue::String(binding.target.label().to_string()),
         ),
     ]);
-    record.insert(
-        "phase".to_string(),
-        ArgValue::String(binding.phase.label().to_string()),
-    );
+    if let Some(phase) = binding.phase {
+        record.insert(
+            "phase".to_string(),
+            ArgValue::String(phase.label().to_string()),
+        );
+    }
+    if let Some(action) = binding.target.widget_action() {
+        record.insert("action".to_string(), ArgValue::String(action.to_string()));
+    }
     if let inputmap::BindingTarget::Command(action) = &binding.target {
         insert_command_action(&mut record, action);
     }
@@ -622,10 +627,19 @@ fn available_binding_to_arg<I: ToString>(binding: help::AvailableBinding<I>) -> 
             ArgValue::String(binding.route_path.to_string()),
         ),
         (
-            "phase".to_string(),
-            ArgValue::String(binding.phase.label().to_string()),
+            "target".to_string(),
+            ArgValue::String(binding.target.label().to_string()),
         ),
     ]);
+    if let Some(action) = binding.action {
+        record.insert("action".to_string(), ArgValue::String(action.to_string()));
+    }
+    if let Some(phase) = binding.phase {
+        record.insert(
+            "phase".to_string(),
+            ArgValue::String(phase.label().to_string()),
+        );
+    }
     if let Some(command) = binding.command {
         let mut detail = BTreeMap::new();
         insert_command_action(&mut detail, &command.action);
@@ -676,6 +690,16 @@ pub(super) fn available_bindings_to_arg(
             ArgValue::Array(
                 snapshot
                     .bindings
+                    .into_iter()
+                    .map(available_binding_to_arg)
+                    .collect(),
+            ),
+        ),
+        (
+            "provisional_bindings".to_string(),
+            ArgValue::Array(
+                snapshot
+                    .provisional_bindings
                     .into_iter()
                     .map(available_binding_to_arg)
                     .collect(),
@@ -830,8 +854,16 @@ fn key_route_step_to_arg(step: KeyRouteStep) -> ArgValue {
         ("node".to_string(), ArgValue::Node(step.node)),
         ("path".to_string(), ArgValue::String(step.path.to_string())),
     ]);
-    if let (Some(binding), Some(phase)) = (step.binding, step.phase) {
+    if let Some(binding) = step.binding {
         record.insert("binding".to_string(), ArgValue::UInt(binding.as_u64()));
+    }
+    if let Some(target) = step.target {
+        record.insert(
+            "target".to_string(),
+            ArgValue::String(target.label().to_string()),
+        );
+    }
+    if let Some(phase) = step.phase {
         record.insert(
             "phase".to_string(),
             ArgValue::String(phase.label().to_string()),
@@ -860,7 +892,22 @@ fn key_route_outcome_to_arg(outcome: RouteOutcome) -> ArgValue {
             node,
             path,
         } => ("transient", Some(binding), Some(node), Some(path)),
+        RouteOutcome::TransientWidgetAction {
+            binding,
+            node,
+            path,
+        } => (
+            "transient_widget_action",
+            Some(binding),
+            Some(node),
+            Some(path),
+        ),
         RouteOutcome::TransientDismiss => ("transient_dismiss", None, None, None),
+        RouteOutcome::WidgetAction {
+            binding,
+            node,
+            path,
+        } => ("widget_action", Some(binding), Some(node), Some(path)),
         RouteOutcome::BeforeWidget {
             binding,
             node,

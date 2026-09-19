@@ -141,14 +141,30 @@ token is only an external data record and does not reconstruct that identity.
 
 ## Bindings
 
-A binding action is a `CommandCall` or a function. The `command` table holds
-one constructor for each node command, grouped by owner. A constructor has the
-parameters of the owner function and returns a `CommandCall` that a binding
-runs later. `command.file_select.select_by(1)` builds the call;
+A binding action is a `CommandCall`, a function, or the string name of a
+registered widget action. The `command` table holds one constructor for each
+node command, grouped by owner. A constructor has the parameters of the owner
+function and returns a `CommandCall` that a binding runs later.
+`command.file_select.select_by(1)` builds the call;
 `file_select.select_by(1)` runs the command at once. A constructor checks its
 arguments, so a bad argument fails the binding call before it installs a
 binding. In a strict script the typechecker finds the same errors before the
 script runs. Keep functions for composed actions.
+
+An application registers a widget action in native configuration before the
+script API finalizes. A string action names one of those registered actions:
+
+```luau
+canopy.keymap({
+    { key = "ctrl-x", description = "Clear text", action = "canopy.text.clear" },
+})
+```
+
+A widget action takes keys only and carries no phase. The route offers it to
+the widget at each route node; a widget that accepts it consumes the key, and a
+dormant action lets the route fall through to the next binding. An
+unregistered name fails at binding registration. Registered names appear in the
+rendered `canopy.api()` and in `canopy.bindings()` output.
 
 Use `canopy.keymap` to write a keymap. The named fields of the table are the
 options shared by every entry: `mode`, `path`, `phase`, and `tier`. The array

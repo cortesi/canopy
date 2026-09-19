@@ -1019,6 +1019,8 @@ pub mod canopy_widgets {
     ///
     /// The whole row changes style with keyboard focus, even when empty. A
     /// visible prompt can name the field independently of its editable value.
+    /// The field consumes [`TEXT_CLEAR_ACTION`] and the field's owner handles the
+    /// other editing keys.
     pub struct Input {}
 
     /// A key and what it does, drawn for a status bar.
@@ -1206,6 +1208,12 @@ pub mod canopy_widgets {
 
     /// Single line thick Unicode box drawing set.
     pub const SINGLE_THICK: BoxGlyphs = _;
+
+    /// Action name that clears a single-line input.
+    ///
+    /// An application registers this name and binds a key to it. The route offers
+    /// the action to an accepting widget, which clears its own text in response.
+    pub const TEXT_CLEAR_ACTION: &str = "canopy.text.clear";
 
     /// Thin-line scrollbar glyphs over thin-line chrome.
     pub const THIN: ScrollbarGlyphs = _;
@@ -1659,6 +1667,8 @@ pub mod canopy_widgets {
     impl Widget for Input {
         fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
+        fn accepts_action(&self, action: &str, _context: &dyn ViewContext) -> bool {}
+
         fn cursor(&self) -> Option<cursor::Cursor> {}
 
         fn key_outcome(&self, key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {}
@@ -1668,6 +1678,8 @@ pub mod canopy_widgets {
         fn measure(&self, c: MeasureConstraints) -> Measurement {}
 
         fn name(&self) -> NodeName {}
+
+        fn on_action(&mut self, action: &str, _context: &mut dyn Context) -> Result<EventOutcome> {}
 
         fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {}
 
@@ -2325,6 +2337,8 @@ pub mod canopy_widgets {
     {
         fn accept_focus(&self, _context: &dyn ViewContext) -> bool {}
 
+        fn accepts_action(&self, action: &str, _context: &dyn ViewContext) -> bool {}
+
         fn canvas(&self, view: Size, _context: &CanvasContext<'_>) -> Size {}
 
         fn key_outcome(&self, key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {}
@@ -2334,6 +2348,8 @@ pub mod canopy_widgets {
         fn measure(&self, c: MeasureConstraints) -> Measurement {}
 
         fn name(&self) -> NodeName {}
+
+        fn on_action(&mut self, action: &str, context: &mut dyn Context) -> Result<EventOutcome> {}
 
         fn on_event(&mut self, event: &Event, context: &mut dyn Context) -> Result<EventOutcome> {}
 

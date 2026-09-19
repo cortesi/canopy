@@ -16,7 +16,7 @@ use crate::{
     commands::{CommandNode, CommandSpec, CommandStatus},
     core::{
         inputmap::InputSpec,
-        keyroute::{KeyExpectation, RouteCertainty, RouteOutcome},
+        keyroute::{BindingVerdict, KeyExpectation, RouteCertainty, RouteOutcome},
         world::test_support::assert_error_context,
     },
     derive_commands,
@@ -524,7 +524,7 @@ fn framework_command_bindings_share_route_resolution_and_command_scope() -> Resu
                 scope: inputmap::BindingScope::Exclusive(group),
                 description: "Framework root command".to_string(),
                 source: None,
-                phase: inputmap::BindingPhase::BeforeWidget,
+                phase: Some(inputmap::BindingPhase::BeforeWidget),
             },
             R::call_c_root(),
         )?;
@@ -565,7 +565,7 @@ fn explicit_binding_phases_override_the_same_selector_and_change_route_trace() -
                     scope: inputmap::BindingScope::Default,
                     description: "Root action".into(),
                     source: None,
-                    phase,
+                    phase: Some(phase),
                 },
                 R::call_c_root(),
             )?;
@@ -573,9 +573,10 @@ fn explicit_binding_phases_override_the_same_selector_and_change_route_trace() -
             let binding = snapshot
                 .bindings
                 .iter()
+                .chain(snapshot.provisional_bindings.iter())
                 .find(|binding| binding.input == 'h')
                 .unwrap();
-            assert_eq!(binding.phase, phase);
+            assert_eq!(binding.phase, Some(phase));
             assert_eq!(binding.path_filter, "/r/**/");
             reset_state();
             c.key(None, 'h')?;
@@ -611,7 +612,7 @@ fn mouse_options(path: &str, phase: inputmap::BindingPhase) -> Result<inputmap::
         scope: inputmap::BindingScope::Default,
         description: "Click action".into(),
         source: None,
-        phase,
+        phase: Some(phase),
     })
 }
 
@@ -948,7 +949,7 @@ fn gated_options(path: &str) -> Result<inputmap::BindingOptions> {
         scope: inputmap::BindingScope::Default,
         description: "Act".into(),
         source: None,
-        phase: inputmap::BindingPhase::AfterWidget,
+        phase: Some(inputmap::BindingPhase::AfterWidget),
     })
 }
 
@@ -1698,14 +1699,14 @@ fn bind_key_phase(
     phase: crate::BindingPhase,
 ) -> Result<crate::BindingId> {
     use crate::core::inputmap::{BindingOptions, BindingTarget};
-    let (id, _) = canopy.core.input_map.replace_application_action(
+    let (id, _) = canopy.core.input_map.replace_application_binding(
         InputSpec::Key(key.into()),
         BindingOptions {
             path: None,
             scope: crate::BindingScope::Default,
             description: "Test binding".to_string(),
             source: None,
-            phase,
+            phase: Some(phase),
         },
         BindingTarget::Script(LuauFunctionId::for_test(1)),
     )?;
@@ -1989,4 +1990,606 @@ fn send_key_checked_rejects_a_mismatched_expectation_without_delivery() -> Resul
             .any(|entry| entry.phase == RoutePhase::BindingExecution)
     );
     Ok(())
+}
+
+/// A leaf that accepts one widget action and records what it receives.
+struct ActionLeaf {
+    /// Action name this leaf implements.
+    action: &'static str,
+    /// Whether the pure prediction accepts the action.
+    accepted: bool,
+    /// Whether `on_action` honors an accepted action.
+    honest: bool,
+    /// Number of completed action calls.
+    calls: Arc<AtomicUsize>,
+    /// Number of raw key events the leaf observed.
+    raw: Arc<AtomicUsize>,
+}
+
+impl Widget for ActionLeaf {
+    fn accept_focus(&self, _context: &dyn ViewContext) -> bool {
+        true
+    }
+
+    fn on_event(&mut self, event: &Event, _context: &mut dyn Context) -> Result<EventOutcome> {
+        if matches!(event, Event::Key(_)) {
+            self.raw.fetch_add(1, Ordering::Relaxed);
+        }
+        Ok(EventOutcome::Ignore)
+    }
+
+    fn accepts_action(&self, action: &str, _context: &dyn ViewContext) -> bool {
+        self.accepted && action == self.action
+    }
+
+    fn on_action(&mut self, action: &str, _context: &mut dyn Context) -> Result<EventOutcome> {
+        if !self.accepted || !self.honest || action != self.action {
+            return Ok(EventOutcome::Ignore);
+        }
+        self.calls.fetch_add(1, Ordering::Relaxed);
+        Ok(EventOutcome::Handle)
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("action_leaf")
+    }
+}
+
+/// Mount one action leaf and give it the keyboard.
+fn mount_action_leaf(canopy: &mut Canopy, leaf: ActionLeaf) -> Result<NodeId> {
+    let node = canopy.core.create_detached(leaf)?;
+    canopy.core.attach(canopy.core.root, node)?;
+    canopy.core.set_focus(node)?;
+    Ok(node)
+}
+
+#[test]
+fn the_rendered_api_narrows_the_action_arm_to_registered_names() -> Result<()> {
+    let mut empty = Canopy::new();
+    empty.finalize_api()?;
+    assert!(
+        !empty.script_api()?.contains("WidgetActionName"),
+        "an empty catalog leaves the action arm at commands and callbacks"
+    );
+
+    let mut canopy = Canopy::new();
+    canopy.register_widget_action(inputmap::WidgetActionSpec::new(
+        "test.clear",
+        "Clear the test leaf",
+    )?)?;
+    canopy.finalize_api()?;
+    let api = canopy.script_api()?;
+    assert!(
+        api.contains("export type WidgetActionName = \"test.clear\""),
+        "the union holds every registered name: {api}"
+    );
+    assert!(
+        api.contains("`test.clear`: Clear the test leaf"),
+        "the union documents each action: {api}"
+    );
+    let unknown = canopy.check_script(
+        "unknown-action",
+        "--!strict\ncanopy.bind(\"x\", {description = \"x\"}, \"test.other\")",
+    )?;
+    assert!(
+        unknown.has_errors(),
+        "an unregistered action name fails the typechecker: {unknown:?}"
+    );
+    let known = canopy.check_script(
+        "known-action",
+        "--!strict\ncanopy.bind(\"x\", {description = \"x\"}, \"test.clear\")",
+    )?;
+    assert!(
+        !known.has_errors(),
+        "a registered action name typechecks: {known:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_widget_action_dispatches_to_its_accepting_consumer() -> Result<()> {
+    let mut canopy = Canopy::new();
+    canopy.register_widget_action(inputmap::WidgetActionSpec::new("test.clear", "Clear")?)?;
+    let calls = Arc::new(AtomicUsize::new(0));
+    let leaf = mount_action_leaf(
+        &mut canopy,
+        ActionLeaf {
+            action: "test.clear",
+            accepted: true,
+            honest: true,
+            calls: Arc::clone(&calls),
+            raw: Arc::new(AtomicUsize::new(0)),
+        },
+    )?;
+    canopy.eval_script(r#"canopy.bind("ctrl-x", {description = "Clear"}, "test.clear")"#)?;
+    let key = key::Key::parse_spec("ctrl-x")?;
+    canopy.key(None, key)?;
+    assert_eq!(calls.load(Ordering::Relaxed), 1, "the consumer runs once");
+
+    let explanation = canopy.core.explain_key(Some(leaf), key)?;
+    assert!(
+        matches!(explanation.outcome, RouteOutcome::WidgetAction { .. }),
+        "the analysis names the action, got {:?}",
+        explanation.outcome
+    );
+    let snapshot = canopy.available_bindings(Some(leaf))?;
+    assert!(
+        snapshot.bindings.iter().any(|binding| {
+            binding.description == "Clear"
+                && binding.target == inputmap::BindingTargetKind::WidgetAction
+                && binding
+                    .action
+                    .as_ref()
+                    .is_some_and(|name| name.as_str() == "test.clear")
+        }),
+        "help shows the exact action row"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_dormant_action_does_not_shadow_the_next_candidate() -> Result<()> {
+    let mut canopy = Canopy::new();
+    canopy.register_widget_action(inputmap::WidgetActionSpec::new("test.clear", "Clear")?)?;
+    let raw = Arc::new(AtomicUsize::new(0));
+    let leaf = mount_action_leaf(
+        &mut canopy,
+        ActionLeaf {
+            action: "test.clear",
+            accepted: false,
+            honest: true,
+            calls: Arc::new(AtomicUsize::new(0)),
+            raw: Arc::clone(&raw),
+        },
+    )?;
+    canopy.eval_script(
+        r#"
+        canopy.bind("ctrl-x", {description = "Clear", path = "action_leaf/"}, "test.clear")
+        canopy.bind("ctrl-x", {description = "Fallback"}, function()
+            canopy.set_mode("fallback")
+        end)
+        "#,
+    )?;
+    let key = key::Key::parse_spec("ctrl-x")?;
+    canopy.key(None, key)?;
+    assert_eq!(canopy.input_mode(), "fallback", "the fallback runs");
+    assert_eq!(
+        raw.load(Ordering::Relaxed),
+        1,
+        "the raw key reaches the widget first"
+    );
+    let explanation = canopy.core.explain_key(Some(leaf), key)?;
+    assert!(matches!(
+        explanation.outcome,
+        RouteOutcome::AfterWidget { .. }
+    ));
+    Ok(())
+}
+
+#[test]
+fn a_dormant_global_action_falls_through_to_the_default_scope() -> Result<()> {
+    let mut canopy = Canopy::new();
+    canopy.register_widget_action(inputmap::WidgetActionSpec::new("test.clear", "Clear")?)?;
+    mount_action_leaf(
+        &mut canopy,
+        ActionLeaf {
+            action: "test.clear",
+            accepted: false,
+            honest: true,
+            calls: Arc::new(AtomicUsize::new(0)),
+            raw: Arc::new(AtomicUsize::new(0)),
+        },
+    )?;
+    canopy.eval_script(
+        r#"
+        canopy.bind("ctrl-x", {
+            description = "Global clear",
+            tier = "global",
+            path = "/root/**/",
+        }, "test.clear")
+        canopy.bind("ctrl-x", {description = "Default fallback"}, function()
+            canopy.set_mode("default_won")
+        end)
+        "#,
+    )?;
+    canopy.key(None, key::Key::parse_spec("ctrl-x")?)?;
+    assert_eq!(
+        canopy.input_mode(),
+        "default_won",
+        "the dormant global action gives way to the default scope"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_transient_mode_offers_its_action_before_the_raw_key() -> Result<()> {
+    let mut canopy = Canopy::new();
+    canopy.register_widget_action(inputmap::WidgetActionSpec::new("test.clear", "Clear")?)?;
+    let calls = Arc::new(AtomicUsize::new(0));
+    let raw = Arc::new(AtomicUsize::new(0));
+    mount_action_leaf(
+        &mut canopy,
+        ActionLeaf {
+            action: "test.clear",
+            accepted: true,
+            honest: true,
+            calls: Arc::clone(&calls),
+            raw: Arc::clone(&raw),
+        },
+    )?;
+    canopy.eval_script(
+        r#"
+        canopy.keymap({
+            mode = "prefix",
+            { key = "ctrl-x", description = "Clear", action = "test.clear" },
+        })
+        canopy.push_mode("prefix", {transient = true})
+        "#,
+    )?;
+    let key = key::Key::parse_spec("ctrl-x")?;
+    let explanation = canopy.core.explain_key(None, key)?;
+    assert!(
+        matches!(
+            explanation.outcome,
+            RouteOutcome::TransientWidgetAction { .. }
+        ),
+        "the transient analysis names the action, got {:?}",
+        explanation.outcome
+    );
+    canopy.key(None, key)?;
+    assert_eq!(calls.load(Ordering::Relaxed), 1);
+    assert_eq!(raw.load(Ordering::Relaxed), 0, "no raw key is delivered");
+    assert_eq!(canopy.input_mode(), "", "the transient mode pops");
+    Ok(())
+}
+
+#[test]
+fn a_transient_mode_dismisses_a_dormant_action() -> Result<()> {
+    let mut canopy = Canopy::new();
+    canopy.register_widget_action(inputmap::WidgetActionSpec::new("test.clear", "Clear")?)?;
+    let raw = Arc::new(AtomicUsize::new(0));
+    mount_action_leaf(
+        &mut canopy,
+        ActionLeaf {
+            action: "test.clear",
+            accepted: false,
+            honest: true,
+            calls: Arc::new(AtomicUsize::new(0)),
+            raw: Arc::clone(&raw),
+        },
+    )?;
+    canopy.eval_script(
+        r#"
+        canopy.keymap({
+            mode = "prefix",
+            { key = "ctrl-x", description = "Clear", action = "test.clear" },
+        })
+        canopy.bind("ctrl-x", {description = "Default"}, function()
+            canopy.set_mode("default_won")
+        end)
+        canopy.push_mode("prefix", {transient = true})
+        "#,
+    )?;
+    canopy.key(None, key::Key::parse_spec("ctrl-x")?)?;
+    assert_eq!(canopy.input_mode(), "", "the transient mode dismisses");
+    assert_eq!(
+        raw.load(Ordering::Relaxed),
+        0,
+        "the raw key is not delivered"
+    );
+    Ok(())
+}
+
+#[test]
+fn only_the_first_accepting_consumer_runs() -> Result<()> {
+    let mut canopy = Canopy::new();
+    canopy.register_widget_action(inputmap::WidgetActionSpec::new("test.clear", "Clear")?)?;
+    let leaf_calls = Arc::new(AtomicUsize::new(0));
+    let parent_calls = Arc::new(AtomicUsize::new(0));
+    let parent = canopy.core.create_detached(ActionLeaf {
+        action: "test.clear",
+        accepted: true,
+        honest: true,
+        calls: Arc::clone(&parent_calls),
+        raw: Arc::new(AtomicUsize::new(0)),
+    })?;
+    canopy.core.attach(canopy.core.root, parent)?;
+    let leaf = canopy.core.create_detached(ActionLeaf {
+        action: "test.clear",
+        accepted: true,
+        honest: true,
+        calls: Arc::clone(&leaf_calls),
+        raw: Arc::new(AtomicUsize::new(0)),
+    })?;
+    canopy.core.attach(parent, leaf)?;
+    canopy.core.set_focus(leaf)?;
+    canopy.eval_script(r#"canopy.bind("ctrl-x", {description = "Clear"}, "test.clear")"#)?;
+    canopy.key(None, key::Key::parse_spec("ctrl-x")?)?;
+    assert_eq!(leaf_calls.load(Ordering::Relaxed), 1, "the child runs");
+    assert_eq!(
+        parent_calls.load(Ordering::Relaxed),
+        0,
+        "the ancestor does not"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_declining_child_leaves_an_action_to_its_accepting_ancestor() -> Result<()> {
+    let mut canopy = Canopy::new();
+    canopy.register_widget_action(inputmap::WidgetActionSpec::new("test.clear", "Clear")?)?;
+    let parent_calls = Arc::new(AtomicUsize::new(0));
+    let parent = canopy.core.create_detached(ActionLeaf {
+        action: "test.clear",
+        accepted: true,
+        honest: true,
+        calls: Arc::clone(&parent_calls),
+        raw: Arc::new(AtomicUsize::new(0)),
+    })?;
+    canopy.core.attach(canopy.core.root, parent)?;
+    let leaf = canopy.core.create_detached(ActionLeaf {
+        action: "test.clear",
+        accepted: false,
+        honest: true,
+        calls: Arc::new(AtomicUsize::new(0)),
+        raw: Arc::new(AtomicUsize::new(0)),
+    })?;
+    canopy.core.attach(parent, leaf)?;
+    canopy.core.set_focus(leaf)?;
+    let key = key::Key::parse_spec("ctrl-x")?;
+    let id = canopy.bind_widget_action(
+        key,
+        default_options(None, "Clear", None)?,
+        inputmap::WidgetActionName::new("test.clear")?,
+    )?;
+    canopy.key(None, key)?;
+    assert_eq!(
+        parent_calls.load(Ordering::Relaxed),
+        1,
+        "the ancestor consumes the action the child declined"
+    );
+    assert_ne!(
+        canopy.core.binding_verdict(id, leaf),
+        BindingVerdict::NoConsumer,
+        "the diagnostic follows the same route as dispatch"
+    );
+    Ok(())
+}
+
+/// A leaf with one command that is always disabled.
+struct DisabledLeaf;
+
+#[derive_commands]
+impl DisabledLeaf {
+    fn ready(&self, _ctx: &dyn ViewContext) -> Result<CommandStatus> {
+        Ok(CommandStatus::Disabled("not ready".into()))
+    }
+
+    #[command(enabled = "ready")]
+    fn fire(&self) {}
+}
+
+impl Widget for DisabledLeaf {
+    fn accept_focus(&self, _context: &dyn ViewContext) -> bool {
+        true
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("disabled_leaf")
+    }
+}
+
+/// Build binding options for an action or command in the default scope.
+fn default_options(
+    path: Option<&str>,
+    description: &str,
+    phase: Option<inputmap::BindingPhase>,
+) -> Result<inputmap::BindingOptions> {
+    Ok(inputmap::BindingOptions {
+        path: path.map(str::parse).transpose()?,
+        scope: inputmap::BindingScope::Default,
+        description: description.to_string(),
+        source: None,
+        phase,
+    })
+}
+
+#[test]
+fn a_disabled_command_claims_the_key_after_a_dormant_action() -> Result<()> {
+    let mut canopy = Canopy::new();
+    canopy.register_widget_action(inputmap::WidgetActionSpec::new("test.clear", "Clear")?)?;
+    canopy.core.commands.add(DisabledLeaf::commands())?;
+    let calls = Arc::new(AtomicUsize::new(0));
+    mount_action_leaf(
+        &mut canopy,
+        ActionLeaf {
+            action: "test.clear",
+            accepted: false,
+            honest: true,
+            calls: Arc::clone(&calls),
+            raw: Arc::new(AtomicUsize::new(0)),
+        },
+    )?;
+    let key = key::Key::parse_spec("ctrl-x")?;
+    canopy.bind_widget_action(
+        key,
+        default_options(Some("action_leaf/"), "Dormant clear", None)?,
+        inputmap::WidgetActionName::new("test.clear")?,
+    )?;
+    canopy.bind_command(
+        key,
+        default_options(
+            None,
+            "Disabled fire",
+            Some(inputmap::BindingPhase::AfterWidget),
+        )?,
+        DisabledLeaf::call_fire(),
+    )?;
+    canopy.key(None, key)?;
+    assert!(
+        canopy
+            .route_trace()
+            .iter()
+            .any(|entry| entry.detail.contains("binding disabled")),
+        "the dormant action gives way to the disabled command: {:?}",
+        canopy.route_trace()
+    );
+    assert_eq!(
+        calls.load(Ordering::Relaxed),
+        0,
+        "the dormant action never runs"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_disabled_command_claims_the_key_before_an_accepting_action() -> Result<()> {
+    let mut canopy = Canopy::new();
+    canopy.register_widget_action(inputmap::WidgetActionSpec::new("test.clear", "Clear")?)?;
+    canopy.core.commands.add(DisabledLeaf::commands())?;
+    let calls = Arc::new(AtomicUsize::new(0));
+    mount_action_leaf(
+        &mut canopy,
+        ActionLeaf {
+            action: "test.clear",
+            accepted: true,
+            honest: true,
+            calls: Arc::clone(&calls),
+            raw: Arc::new(AtomicUsize::new(0)),
+        },
+    )?;
+    let key = key::Key::parse_spec("ctrl-x")?;
+    canopy.bind_command(
+        key,
+        default_options(
+            Some("action_leaf/"),
+            "Disabled fire",
+            Some(inputmap::BindingPhase::AfterWidget),
+        )?,
+        DisabledLeaf::call_fire(),
+    )?;
+    canopy.bind_widget_action(
+        key,
+        default_options(None, "Clear", None)?,
+        inputmap::WidgetActionName::new("test.clear")?,
+    )?;
+    canopy.key(None, key)?;
+    assert_eq!(
+        calls.load(Ordering::Relaxed),
+        0,
+        "the higher-ranked disabled command hides the action"
+    );
+    assert!(
+        canopy
+            .route_trace()
+            .iter()
+            .any(|entry| entry.detail.contains("binding disabled")),
+        "the disabled command claims the key"
+    );
+    Ok(())
+}
+
+#[test]
+fn an_unreadable_widget_declines_an_action() -> Result<()> {
+    let mut canopy = Canopy::new();
+    canopy.register_widget_action(inputmap::WidgetActionSpec::new("test.clear", "Clear")?)?;
+    let calls = Arc::new(AtomicUsize::new(0));
+    let leaf = mount_action_leaf(
+        &mut canopy,
+        ActionLeaf {
+            action: "test.clear",
+            accepted: true,
+            honest: true,
+            calls: Arc::clone(&calls),
+            raw: Arc::new(AtomicUsize::new(0)),
+        },
+    )?;
+    let key = key::Key::parse_spec("ctrl-x")?;
+    canopy.bind_widget_action(
+        key,
+        default_options(None, "Clear", None)?,
+        inputmap::WidgetActionName::new("test.clear")?,
+    )?;
+    let path = canopy.core.path_of(canopy.core.root, leaf);
+    canopy
+        .core
+        .with_widget_dyn_mut(leaf, |_, core| -> Result<()> {
+            assert!(
+                core.select_key_binding(leaf, &path, key, leaf, &[])
+                    .is_none(),
+                "a borrowed widget declines the action"
+            );
+            let explanation = core.explain_key(Some(leaf), key)?;
+            assert!(
+                matches!(explanation.outcome, RouteOutcome::Unhandled),
+                "an unreadable consumer is not a provisional action consumer, got {:?}",
+                explanation.outcome
+            );
+            Ok(())
+        })??;
+    canopy.key(None, key)?;
+    assert_eq!(calls.load(Ordering::Relaxed), 1, "the action works again");
+    Ok(())
+}
+
+#[test]
+fn checked_dispatch_accepts_an_action_expectation() -> Result<()> {
+    let mut canopy = Canopy::new();
+    canopy.register_widget_action(inputmap::WidgetActionSpec::new("test.clear", "Clear")?)?;
+    let calls = Arc::new(AtomicUsize::new(0));
+    mount_action_leaf(
+        &mut canopy,
+        ActionLeaf {
+            action: "test.clear",
+            accepted: true,
+            honest: true,
+            calls: Arc::clone(&calls),
+            raw: Arc::new(AtomicUsize::new(0)),
+        },
+    )?;
+    let key = key::Key::parse_spec("ctrl-x")?;
+    let id = canopy.bind_widget_action(
+        key,
+        default_options(None, "Clear", None)?,
+        inputmap::WidgetActionName::new("test.clear")?,
+    )?;
+    canopy.send_key_checked(key, KeyExpectation::Binding(id))?;
+    assert_eq!(calls.load(Ordering::Relaxed), 1);
+
+    let error = canopy
+        .send_key_checked(key, KeyExpectation::Unhandled)
+        .expect_err("a mismatched expectation is rejected");
+    assert!(matches!(error, Error::KeyDispatchDivergence(_)));
+    assert_eq!(
+        calls.load(Ordering::Relaxed),
+        1,
+        "a rejected expectation delivers nothing"
+    );
+    Ok(())
+}
+
+#[cfg(debug_assertions)]
+#[test]
+#[should_panic(expected = "accepts_action promised Handle")]
+fn an_inconsistent_action_consumer_trips_the_debug_assert() {
+    let mut canopy = Canopy::new();
+    canopy
+        .register_widget_action(inputmap::WidgetActionSpec::new("test.clear", "Clear").unwrap())
+        .unwrap();
+    let calls = Arc::new(AtomicUsize::new(0));
+    mount_action_leaf(
+        &mut canopy,
+        ActionLeaf {
+            action: "test.clear",
+            accepted: true,
+            honest: false,
+            calls: Arc::clone(&calls),
+            raw: Arc::new(AtomicUsize::new(0)),
+        },
+    )
+    .unwrap();
+    canopy
+        .eval_script(r#"canopy.bind("ctrl-x", {description = "Clear"}, "test.clear")"#)
+        .unwrap();
+    drop(canopy.key(None, key::Key::parse_spec("ctrl-x").unwrap()));
 }

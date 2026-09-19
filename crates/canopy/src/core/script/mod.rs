@@ -760,13 +760,14 @@ impl LuauHost {
         extra_modules: &[Arc<dyn NativeModule>],
         module_source: Option<Arc<dyn SourceProvider>>,
         fixtures: &[FixtureInfo],
+        actions: &inputmap::WidgetActionCatalog,
     ) -> Result<String> {
         if self.is_finalized() || self.state.borrow().surface.is_some() {
             return Err(error::Error::InvalidOperation(
                 "Luau API finalization is already active or complete".into(),
             ));
         }
-        let mut modules = vec![build_base_module()?];
+        let mut modules = vec![build_base_module(actions)?];
         modules.extend(extra_modules.iter().map(Arc::clone));
         modules.extend(build_owner_modules(commands, default_binding_owners)?);
         modules.push(build_command_module(commands)?);

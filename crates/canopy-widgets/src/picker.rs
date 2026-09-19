@@ -688,8 +688,8 @@ where
 
     /// Edit the open filter with one event.
     ///
-    /// Enter keeps the filter and closes the field, and escape drops it. Other
-    /// keys pass on, so the paging keys still reach their bindings.
+    /// Enter keeps the filter and closes the field, and escape drops it.
+    /// Other keys pass on, so the paging keys still reach their bindings.
     fn filter_event(&mut self, event: &Event, context: &mut dyn Context) -> Result<EventOutcome> {
         let mut text = self.filter.clone();
         match event {
@@ -835,6 +835,19 @@ where
         } else {
             EventOutcome::Ignore
         })
+    }
+
+    fn accepts_action(&self, action: &str, _context: &dyn ViewContext) -> bool {
+        self.filtering && action == crate::TEXT_CLEAR_ACTION
+    }
+
+    fn on_action(&mut self, action: &str, context: &mut dyn Context) -> Result<EventOutcome> {
+        if !self.filtering || action != crate::TEXT_CLEAR_ACTION {
+            return Ok(EventOutcome::Ignore);
+        }
+        // The filter stays open, so the next key narrows the list again.
+        self.set_filter(context, String::new())?;
+        Ok(EventOutcome::Handle)
     }
 
     fn name(&self) -> NodeName {
@@ -1001,6 +1014,41 @@ mod tests {
     }
 
     #[test]
+    fn the_clear_action_empties_the_filter_and_keeps_its_field() -> Result<()> {
+        let mut harness = picker(&["alpha", "beta"], 40, 12)?;
+        on_list(&mut harness, PickerList::start_filter)?;
+        on_list(&mut harness, |list, context| {
+            list.set_filter(context, "al".into())
+        })?;
+        assert_eq!(from_list(&mut harness, PickerList::shown_count), 1);
+
+        harness.with_root_context(|picker: &mut Picker<String>, context| {
+            let list = picker.list()?;
+            context.with_widget_mut(list, |list: &mut PickerList<String>, context| {
+                assert!(
+                    list.accepts_action(crate::TEXT_CLEAR_ACTION, context),
+                    "the open filter consumes the clear action"
+                );
+                assert_eq!(
+                    list.on_action(crate::TEXT_CLEAR_ACTION, context)?,
+                    EventOutcome::Handle
+                );
+                Ok(())
+            })
+        })?;
+        harness.render()?;
+        assert_eq!(from_list(&mut harness, PickerList::filter), "");
+        assert_eq!(from_list(&mut harness, PickerList::shown_count), 2);
+
+        // The field stays open, so the next key filters again.
+        harness.key('b')?;
+        harness.render()?;
+        assert_eq!(from_list(&mut harness, PickerList::filter), "b");
+        assert_eq!(from_list(&mut harness, PickerList::shown_count), 1);
+        Ok(())
+    }
+
+    #[test]
     fn filter_keys_predict_their_handling() -> Result<()> {
         let keys = [
             "a",
@@ -1010,6 +1058,7 @@ mod tests {
             "up",
             "f1",
             "ctrl-a",
+            "ctrl-x",
             "alt-x",
         ];
         for filtering in [false, true] {

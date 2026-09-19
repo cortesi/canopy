@@ -3,7 +3,7 @@ use crate::{
     commands::{CommandArgs, CommandId, CommandInvocation, CommandTarget},
     core::id::testing_node_id,
     error::Result,
-    event::key,
+    event::{key, mouse::Mouse},
 };
 
 const HELP: FrameworkBindingGroup = FrameworkBindingGroup::new("root.help");
@@ -36,7 +36,7 @@ fn bind_framework(
             scope: BindingScope::Exclusive(group),
             description: description.to_string(),
             source: None,
-            phase: BindingPhase::AfterWidget,
+            phase: Some(BindingPhase::AfterWidget),
         },
         CommandAction {
             invocation: command,
@@ -53,7 +53,7 @@ fn bind(
     description: &str,
     target: u64,
 ) -> Result<BindingId> {
-    map.replace_application_action(
+    map.replace_application_binding(
         InputSpec::Key(key.into()),
         BindingOptions {
             scope,
@@ -64,7 +64,7 @@ fn bind(
             },
             description: description.to_string(),
             source: Some("test:1".to_string()),
-            phase: BindingPhase::AfterWidget,
+            phase: Some(BindingPhase::AfterWidget),
         },
         BindingTarget::Script(script(target)),
     )
@@ -508,7 +508,7 @@ fn options(path: &str, phase: BindingPhase) -> BindingOptions {
         scope: BindingScope::Default,
         description: "Test action".to_string(),
         source: None,
-        phase,
+        phase: Some(phase),
     }
 }
 
@@ -519,16 +519,16 @@ fn explicit_phase_is_independent_of_selector() -> Result<()> {
     for path in ["editor", "editor/"] {
         for phase in [BindingPhase::BeforeWidget, BindingPhase::AfterWidget] {
             map.clear_application();
-            let (id, _) = map.replace_application_action(
+            let (id, _) = map.replace_application_binding(
                 input,
                 options(path, phase),
                 BindingTarget::Script(script(1)),
             )?;
-            assert_eq!(map.binding(id).unwrap().phase, phase);
+            assert_eq!(map.binding(id).unwrap().phase, Some(phase));
             let resolved = map
                 .resolve_match(&Path::from("/root/editor"), input)
                 .unwrap();
-            assert_eq!(resolved.phase, phase);
+            assert_eq!(resolved.phase, Some(phase));
         }
     }
     Ok(())
@@ -555,7 +555,7 @@ fn omitted_phase_is_after_widget() -> Result<()> {
         let resolved = map
             .resolve_match(&Path::from(route), InputSpec::Key('x'.into()))
             .unwrap();
-        assert_eq!(resolved.phase, BindingPhase::AfterWidget);
+        assert_eq!(resolved.phase, Some(BindingPhase::AfterWidget));
     }
     Ok(())
 }
@@ -566,7 +566,7 @@ fn a_mouse_binding_takes_either_phase() -> Result<()> {
     let input = InputSpec::Mouse(Mouse::parse_spec("ScrollUp").unwrap());
     for phase in [BindingPhase::BeforeWidget, BindingPhase::AfterWidget] {
         map.clear_application();
-        map.replace_application_action(
+        map.replace_application_binding(
             input,
             options("editor/", phase),
             BindingTarget::Script(script(1)),
@@ -574,7 +574,7 @@ fn a_mouse_binding_takes_either_phase() -> Result<()> {
         let resolved = map
             .resolve_match(&Path::from("/root/editor"), input)
             .unwrap();
-        assert_eq!(resolved.phase, phase);
+        assert_eq!(resolved.phase, Some(phase));
     }
 
     // A framework group takes the early phase on the same terms.
@@ -591,7 +591,7 @@ fn a_mouse_binding_takes_either_phase() -> Result<()> {
     )?;
     assert_eq!(
         map.binding(id).unwrap().phase,
-        BindingPhase::BeforeWidget,
+        Some(BindingPhase::BeforeWidget),
         "a framework mouse binding keeps the phase it declared"
     );
     Ok(())
@@ -605,7 +605,7 @@ fn application_command_targets_replace_and_remove_like_callbacks() -> Result<()>
         invocation: command("editor::undo"),
         target: Some(CommandTarget::Focus),
     });
-    let (command_id, removed) = map.replace_application_action(
+    let (command_id, removed) = map.replace_application_binding(
         InputSpec::Key('x'.into()),
         options("", BindingPhase::AfterWidget),
         action.clone(),
@@ -615,12 +615,12 @@ fn application_command_targets_replace_and_remove_like_callbacks() -> Result<()>
     assert_eq!(map.unbind(command_id)?, Some(action.clone()));
     assert_eq!(map.unbind(command_id)?, None);
 
-    let (command_id, _) = map.replace_application_action(
+    let (command_id, _) = map.replace_application_binding(
         InputSpec::Key('x'.into()),
         options("", BindingPhase::AfterWidget),
         action.clone(),
     )?;
-    let (_, removed) = map.replace_application_action(
+    let (_, removed) = map.replace_application_binding(
         InputSpec::Key('x'.into()),
         options("", BindingPhase::AfterWidget),
         BindingTarget::Script(script(2)),
@@ -636,7 +636,7 @@ fn application_snapshot_and_clear_include_commands() -> Result<()> {
         invocation: command("editor::undo"),
         target: Some(CommandTarget::Exact(testing_node_id())),
     });
-    let (command_id, _) = map.replace_application_action(
+    let (command_id, _) = map.replace_application_binding(
         InputSpec::Key('x'.into()),
         options("", BindingPhase::BeforeWidget),
         action.clone(),
@@ -658,7 +658,7 @@ fn application_snapshot_and_clear_include_commands() -> Result<()> {
     assert_eq!(target(&map, "/root", 'x'), Some(action));
     assert_eq!(
         map.binding(command_id).unwrap().phase,
-        BindingPhase::BeforeWidget
+        Some(BindingPhase::BeforeWidget)
     );
     Ok(())
 }
@@ -682,10 +682,161 @@ fn framework_binding_options_preserve_explicit_phase() -> Result<()> {
     let resolved = map
         .resolve_match(&Path::from("/root/help/list"), input)
         .unwrap();
-    assert_eq!(resolved.phase, BindingPhase::AfterWidget);
+    assert_eq!(resolved.phase, Some(BindingPhase::AfterWidget));
     assert_eq!(resolved.target, BindingTarget::Command(action.clone()));
-    options.phase = BindingPhase::BeforeWidget;
+    options.phase = Some(BindingPhase::BeforeWidget);
     assert!(map.bind_framework(HELP, input, options, action).is_err());
-    assert_eq!(map.binding(id).unwrap().phase, BindingPhase::AfterWidget);
+    assert_eq!(
+        map.binding(id).unwrap().phase,
+        Some(BindingPhase::AfterWidget)
+    );
+    Ok(())
+}
+
+fn register_action(map: &mut InputMap, name: &str) -> Result<()> {
+    map.register_widget_action(WidgetActionSpec::new(name, "Test action")?)
+}
+
+fn bind_action(
+    map: &mut InputMap,
+    scope: BindingScope,
+    key: impl Into<Key>,
+    path: &str,
+    name: &str,
+    description: &str,
+) -> Result<BindingId> {
+    map.replace_application_binding(
+        InputSpec::Key(key.into()),
+        BindingOptions {
+            scope,
+            path: if path.is_empty() {
+                None
+            } else {
+                Some(path.parse()?)
+            },
+            description: description.to_string(),
+            source: None,
+            phase: None,
+        },
+        BindingTarget::WidgetAction(WidgetActionName::new(name)?),
+    )
+    .map(|(id, _)| id)
+}
+
+#[test]
+fn widget_actions_validate_names_phases_and_inputs() -> Result<()> {
+    let mut map = InputMap::new();
+    register_action(&mut map, "test.clear")?;
+    register_action(&mut map, "test.clear")?;
+    assert!(
+        map.register_widget_action(WidgetActionSpec::new("test.clear", "Other")?)
+            .is_err(),
+        "a conflicting description is rejected"
+    );
+    assert!(
+        WidgetActionName::new("clear").is_err(),
+        "a name must be dotted"
+    );
+    assert!(WidgetActionName::new("").is_err(), "a name cannot be empty");
+    assert!(
+        WidgetActionName::new("a..b").is_err(),
+        "name segments cannot be empty"
+    );
+
+    let options = BindingOptions {
+        scope: BindingScope::Default,
+        path: None,
+        description: "Clear".to_string(),
+        source: None,
+        phase: None,
+    };
+    assert!(
+        map.replace_application_binding(
+            InputSpec::Key('x'.into()),
+            options.clone(),
+            BindingTarget::WidgetAction(WidgetActionName::new("test.other")?),
+        )
+        .is_err(),
+        "an unregistered action name is rejected"
+    );
+    let mut phased = options.clone();
+    phased.phase = Some(BindingPhase::BeforeWidget);
+    assert!(
+        map.replace_application_binding(
+            InputSpec::Key('x'.into()),
+            phased,
+            BindingTarget::WidgetAction(WidgetActionName::new("test.clear")?),
+        )
+        .is_err(),
+        "an action takes no phase"
+    );
+    assert!(
+        map.replace_application_binding(
+            InputSpec::Mouse(Mouse::parse_spec("LeftDown")?),
+            options,
+            BindingTarget::WidgetAction(WidgetActionName::new("test.clear")?),
+        )
+        .is_err(),
+        "an action accepts keys only"
+    );
+    map.freeze_widget_actions();
+    assert!(
+        register_action(&mut map, "test.later").is_err(),
+        "a frozen catalog rejects registration"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_framework_action_modal_admits_only_allowlisted_actions() -> Result<()> {
+    let mut map = InputMap::new();
+    register_action(&mut map, "test.clear")?;
+    register_action(&mut map, "test.other")?;
+    bind_action(
+        &mut map,
+        BindingScope::Default,
+        'x',
+        "",
+        "test.clear",
+        "Allowed",
+    )?;
+    bind_action(
+        &mut map,
+        BindingScope::Default,
+        'y',
+        "",
+        "test.other",
+        "Other",
+    )?;
+    bind(&mut map, BindingScope::Default, 'z', "", "Callback", 1)?;
+    map.set_modal_bindings(Some(ModalBindings::FrameworkWithActions {
+        group: HELP,
+        actions: &["test.clear"],
+    }));
+    let path = Path::from("/root/help/list");
+    let allowed = map.resolve_match(&path, InputSpec::Key('x'.into()));
+    assert_eq!(
+        allowed.map(|resolved| resolved.description),
+        Some("Allowed".to_string())
+    );
+    assert!(
+        map.resolve_match(&path, InputSpec::Key('y'.into()))
+            .is_none(),
+        "an action outside the allowlist is not admitted"
+    );
+    assert!(
+        map.resolve_match(&path, InputSpec::Key('z'.into()))
+            .is_none(),
+        "an application callback is not admitted"
+    );
+    assert!(map.candidate_keys().contains(&Key::from('x')));
+
+    map.set_modal_bindings(Some(ModalBindings::Framework(HELP)));
+    assert!(
+        map.resolve_match(&path, InputSpec::Key('x'.into()))
+            .is_none(),
+        "a framework-only modal excludes application actions"
+    );
+    assert!(!map.candidate_keys().contains(&Key::from('x')));
     Ok(())
 }

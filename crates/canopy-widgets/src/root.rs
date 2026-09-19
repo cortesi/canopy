@@ -390,7 +390,7 @@ fn register_help_bindings(canopy: &mut Canopy) -> Result<()> {
                 scope: canopy::BindingScope::Exclusive(HELP_BINDINGS),
                 description: description.to_string(),
                 source: None,
-                phase: canopy::BindingPhase::BeforeWidget,
+                phase: Some(canopy::BindingPhase::BeforeWidget),
             },
             command,
         )?;
@@ -977,12 +977,19 @@ mod tests {
         send_key(&mut canopy, "ctrl-g")?;
         let second = modal_snapshot(&mut canopy)?;
 
-        assert!(!first.bindings.iter().any(|binding| binding.input == 'z'));
-        assert!(second.bindings.iter().any(|binding| {
-            binding.input == 'z'
-                && binding.scope == BindingScope::Default
-                && binding.description == "Added later"
-        }));
+        let rows = |snapshot: &BindingSnapshot| {
+            snapshot
+                .bindings
+                .iter()
+                .chain(snapshot.provisional_bindings.iter())
+                .any(|binding| {
+                    binding.input == 'z'
+                        && binding.scope == BindingScope::Default
+                        && binding.description == "Added later"
+                })
+        };
+        assert!(!rows(&first));
+        assert!(rows(&second));
         send_key(&mut canopy, "ctrl-g")?;
         Ok(())
     }

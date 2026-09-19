@@ -1008,13 +1008,42 @@ impl Canopy {
         options: inputmap::BindingOptions,
         command: commands::CommandCall,
     ) -> Result<inputmap::BindingId> {
-        let (id, removed) = self.core.input_map.replace_application_action(
+        let (id, removed) = self.core.input_map.replace_application_binding(
             input.into(),
             options,
             inputmap::BindingTarget::Command(command.action()),
         )?;
         self.release_removed_bindings(removed);
         Ok(id)
+    }
+
+    /// Install or replace an application widget action binding.
+    ///
+    /// The action name must already be registered in this application's
+    /// catalog.
+    pub fn bind_widget_action(
+        &mut self,
+        input: impl Into<inputmap::InputSpec>,
+        options: inputmap::BindingOptions,
+        action: inputmap::WidgetActionName,
+    ) -> Result<inputmap::BindingId> {
+        let (id, removed) = self.core.input_map.replace_application_binding(
+            input.into(),
+            options,
+            inputmap::BindingTarget::WidgetAction(action),
+        )?;
+        self.release_removed_bindings(removed);
+        Ok(id)
+    }
+
+    /// Register one bindable widget action for this application.
+    ///
+    /// Registration is native-only and must happen before `finalize_api`.
+    /// The catalog carries names and descriptions; widgets decide whether
+    /// they consume an action.
+    pub fn register_widget_action(&mut self, spec: inputmap::WidgetActionSpec) -> Result<()> {
+        self.ensure_api_unfinalized("widget action registration")?;
+        self.core.input_map.register_widget_action(spec)
     }
 
     /// Remove an application binding by ID.
@@ -1155,6 +1184,7 @@ impl Canopy {
             &self.script_native_modules,
             surface_source,
             &self.fixture_infos(),
+            self.core.input_map.widget_actions(),
         )?;
         let prepared = (|| {
             self.validate_script_module_declarations(module_source.as_ref())?;
@@ -1180,6 +1210,7 @@ impl Canopy {
         }
         self.script_module_source = module_source;
         self.script_api_text = Some(definitions);
+        self.core.input_map.freeze_widget_actions();
         Ok(())
     }
 

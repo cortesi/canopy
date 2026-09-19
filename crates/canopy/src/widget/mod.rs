@@ -121,6 +121,28 @@ pub trait Widget: Any {
         None
     }
 
+    /// Return whether this widget consumes `action` in its current state.
+    ///
+    /// This is a pure promise. When it returns true, the next routed
+    /// [`Widget::on_action`] call for the same action and state must return
+    /// [`EventOutcome::Handle`]. The default says the widget consumes no
+    /// action, so action bindings stay dormant on its route.
+    ///
+    /// `context` is a read-only view bound to this widget's node. Its focus
+    /// answers follow the route focus the caller is asking about.
+    fn accepts_action(&self, _action: &str, _view: &dyn ViewContext) -> bool {
+        false
+    }
+
+    /// Perform one named action the route offered to this widget.
+    ///
+    /// Routing calls this only after [`Widget::accepts_action`] returned true
+    /// for the same action and state. A widget that does not know the action
+    /// returns [`EventOutcome::Ignore`].
+    fn on_action(&mut self, _action: &str, _context: &mut dyn Context) -> Result<EventOutcome> {
+        Ok(EventOutcome::Ignore)
+    }
+
     /// Attempt to focus this widget.
     ///
     /// Widgets can use the provided context to query their tree state (e.g.,

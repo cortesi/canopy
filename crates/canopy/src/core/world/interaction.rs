@@ -18,6 +18,14 @@ pub struct InteractionToken(u64);
 pub enum ModalBindings {
     /// Admit only this framework binding group.
     Framework(FrameworkBindingGroup),
+    /// Admit this framework group first, then named application widget
+    /// actions from the allowlist, on the bounded modal route.
+    FrameworkWithActions {
+        /// Framework group that owns the modal.
+        group: FrameworkBindingGroup,
+        /// Exact application action names the modal admits.
+        actions: &'static [&'static str],
+    },
     /// Admit ordinary application bindings on the bounded modal route.
     Application,
 }

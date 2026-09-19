@@ -12,7 +12,7 @@ use tokio::runtime::Builder;
 use super::{base_api::read_node_id, bridge::REENTRANT_CANOPY, *};
 use crate::{
     Widget,
-    core::{id::testing_node_id, testing::model::trace_result},
+    core::{id::testing_node_id, inputmap::WidgetActionCatalog, testing::model::trace_result},
     derive_commands,
     error::Result,
     state::NodeName,
@@ -339,7 +339,7 @@ fn marshaled_table_policy_uses_shared_layouts_and_paths() {
 #[test]
 fn live_and_marshaled_value_policy_agree_without_erasing_node_identity() {
     let surface = Surface::builder()
-        .module(build_base_module().expect("base module builds"))
+        .module(build_base_module(&WidgetActionCatalog::default()).expect("base module builds"))
         .build()
         .expect("surface builds");
     let mut vm = surface
@@ -992,8 +992,9 @@ fn availability_reports_key_and_mouse_bindings_in_separate_lists() -> Result<()>
         canopy.bind_mouse("ScrollUp", {description = "Scroll"}, function() end)
 
         local available = canopy.available_bindings()
-        canopy.assert(#available.bindings == 1, "the key list stays key-only")
-        canopy.assert(available.bindings[1].input == "x", "the key reports its own spec")
+        canopy.assert(#available.bindings == 0, "an unknown widget leaves no exact key row")
+        canopy.assert(#available.provisional_bindings == 1, "the provisional list holds the key")
+        canopy.assert(available.provisional_bindings[1].input == "x", "the key reports its own spec")
 
         local mice = available.mouse_bindings
         canopy.assert(#mice == 2, "one winner per mouse input, got " .. #mice)
@@ -1039,7 +1040,7 @@ fn script_explains_routes_and_rejects_partial_checked_dispatch() -> Result<()> {
         canopy.assert(explanation.steps[#explanation.steps].widget == nil, "the step is unknown")
 
         local active = canopy.available_bindings()
-        local id = active.bindings[1].id
+        local id = active.provisional_bindings[1].id
         canopy.assert(explanation.outcome.binding == id, "the outcome names the binding")
         canopy.assert(#active.key_prediction_gaps == 1, "the unknown widget creates one gap")
         local gap = active.key_prediction_gaps[1]

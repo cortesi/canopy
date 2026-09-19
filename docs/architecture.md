@@ -395,21 +395,42 @@ the path filter has no effect on the phase. Key and mouse bindings take either
 phase. The phase belongs to the winner at one route node, so an early binding
 on an ancestor still runs after every descendant declines.
 
-Routing and `available_bindings` call the same resolver at each node in the
+An application can also bind a key to a named widget action instead of a
+command or callback. The application registers each action name in its catalog
+before the script API finalizes. The catalog validates binding names and
+renders the application's Luau API; a name promises a bindable operation, not a
+consumer in every state. At each node the resolver ranks candidates, and an
+action candidate is eligible only when that node's widget accepts the action in
+its current state. A dormant action falls through to the next candidate at the
+same node, so it never shadows a usable binding. An eligible action runs before
+the node's raw key handler and carries no phase. A release mismatch from a
+widget that breaks its acceptance promise is treated as a decline, recorded in
+the route trace, and never aborts the application. In a transient mode the
+mode pops before its action runs, and an action without a consumer dismisses
+the mode the way an unbound key does. A framework modal can admit named
+application actions with `ModalBindings::FrameworkWithActions`, which admits
+only the listed action names after its framework group and only while a widget
+inside the modal accepts them.
+
+Routing and `available_bindings` call the same selection at each node in the
 focus-to-root route. Availability returns an owned snapshot with one effective
 winner per normalized key in `bindings`, and one per normalized mouse input in
-`mouse_bindings`. Both carry the same description, owner, scope, route, phase,
-command availability, and source. The mouse route starts at the requested node,
-as a click on it would; the pointer's position plays no part, and hit testing
-and capture still choose the real target. Key discovery asks each widget's
-`key_outcome` along the route: `Handle` hides the after-widget bindings at that
-node and above, `Ignore` continues, and a widget that offers no prediction is
-unknown. An included binding behind an unknown widget stays in the snapshot but
-is marked in `key_prediction_gaps` with the key, the provisional binding, and
-the unknown node and path, so an empty gap list means the key set is exact.
-First-party widgets predict every key they see. Diagnostic binding output uses
-the same registry and reports why records are active, shadowed, blocked by the
-top modal's framework group, or unmatched.
+`mouse_bindings`. `bindings` holds only rows with an exact route to a consumer:
+an action needs an accepting widget, while an ordinary target claims the key
+when the route reaches it. Every row carries the same description, owner,
+scope, route, target kind, phase, command availability, and source. The mouse
+route starts at the requested node, as a click on it would; the pointer's
+position plays no part, and hit testing and capture still choose the real
+target. Key discovery asks each widget's `key_outcome` along the route:
+`Handle` hides the after-widget bindings at that node and above, `Ignore`
+continues, and a widget that offers no prediction is unknown. A binding behind
+an unknown widget moves to `provisional_bindings` and is marked in
+`key_prediction_gaps` with the key, the provisional binding, and the unknown
+node and path. An empty gap list means the key set is exact. An action without
+an accepting consumer is neither exact nor provisional and appears in neither
+list. First-party widgets predict every key they see. Diagnostic binding output
+uses the same registry and reports why records are active, dormant, shadowed,
+blocked by the top modal's framework group, or unmatched.
 
 `Canopy::explain_key` walks the same route without acting and returns an owned
 explanation: each examined node's path, resolved binding, phase, and widget
