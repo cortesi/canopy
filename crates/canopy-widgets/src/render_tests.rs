@@ -254,25 +254,24 @@ mod tests {
         };
 
         // The right edge track spans rows 1 to 6. Thirty lines through a
-        // six-row view give a two-row thumb at the top.
+        // six-row view give a one-row thumb at the top.
         assert_eq!(harness.buf().get(Point { x: 11, y: 1 }).unwrap().ch, '█');
         assert_eq!(harness.buf().get(Point { x: 11, y: 3 }).unwrap().ch, '│');
 
         // Dragging the thumb to the end of the track reaches the last line.
         harness.mouse(mouse_at(mouse::Action::Down, 11, 1))?;
-        harness.mouse(mouse_at(mouse::Action::Drag, 11, 5))?;
+        harness.mouse(mouse_at(mouse::Action::Drag, 11, 6))?;
         assert_eq!(scroll_y(&harness), 24);
-        harness.mouse(mouse_at(mouse::Action::Up, 11, 5))?;
+        harness.mouse(mouse_at(mouse::Action::Up, 11, 6))?;
 
-        // A press on the track centers the thumb on the pointer: the thumb
-        // then covers rows 2 and 3.
+        // A press on the track centers the one-row thumb on the pointer: the
+        // thumb then covers row 3.
         harness.mouse(mouse_at(mouse::Action::Down, 11, 3))?;
         harness.mouse(mouse_at(mouse::Action::Up, 11, 3))?;
         harness.render()?;
-        assert_eq!(scroll_y(&harness), 5);
-        for y in [2, 3] {
-            assert_eq!(harness.buf().get(Point { x: 11, y }).unwrap().ch, '█');
-        }
+        assert_eq!(scroll_y(&harness), 8);
+        assert_eq!(harness.buf().get(Point { x: 11, y: 3 }).unwrap().ch, '█');
+        assert_eq!(harness.buf().get(Point { x: 11, y: 2 }).unwrap().ch, '│');
         Ok(())
     }
 

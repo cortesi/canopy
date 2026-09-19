@@ -226,6 +226,13 @@ pub mod canopy_geom {
         /// Split this extent into (pre, active, post) extents, based on the
         /// position of a window within a view. The main use for this function is
         /// computation of the active indicator size and position in a scrollbar.
+        ///
+        /// Both ends of the active extent round to the nearest cell, so its
+        /// position is never more than half a cell from the true proportion and
+        /// the thumb moves near the midpoint of a cell instead of sticking at its
+        /// start. The active extent keeps at least one cell, so a thumb stays
+        /// visible and grabbable in a long document, and a track is never
+        /// overrun.
         pub fn split_active(&self, window: Self, view: Self) -> Result<(Self, Self, Self)> {}
     }
 

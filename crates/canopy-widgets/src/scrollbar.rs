@@ -685,8 +685,10 @@ fn clamp_offset(view: &View, offset: Point) -> Point {
 /// track.
 ///
 /// This inverts the thumb placement of [`View::vactive`], so a dragged thumb
-/// stays under the pointer. A thumb at the end of the track reaches the last
-/// offset, which the rounded-up thumb length could otherwise leave out.
+/// stays under the pointer. The thumb rounds to the nearest cell, so the
+/// inverse finds the first offset whose rounded start reaches `thumb_start`.
+/// A thumb at the end of the track reaches the last offset, which the rounded
+/// thumb length could otherwise leave out.
 fn offset_for_thumb_start(
     thumb_start: u32,
     track_len: u32,
@@ -701,7 +703,11 @@ fn offset_for_thumb_start(
     if thumb_start >= track_len.saturating_sub(thumb_len) {
         return max_offset;
     }
-    let offset = (u64::from(thumb_start) * u64::from(canvas_len)).div_ceil(u64::from(track_len));
+    // Solve round(track * offset / canvas) >= thumb_start for the smallest
+    // offset, with the rounding of [`View::vactive`].
+    let shifted = thumb_start.saturating_mul(2).saturating_sub(1);
+    let numerator = u64::from(shifted) * u64::from(canvas_len);
+    let offset = numerator.div_ceil(2 * u64::from(track_len));
     u32::try_from(offset).unwrap_or(u32::MAX).min(max_offset)
 }
 

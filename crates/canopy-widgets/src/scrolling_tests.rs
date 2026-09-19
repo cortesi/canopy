@@ -804,8 +804,8 @@ fn owners_draw_and_expose_their_configured_scrollbar_glyphs() -> Result<()> {
         "the custom vertical thumb draws on the right border"
     );
     assert_eq!(
-        &columns_with(&harness, 9, 20, 't')[..4],
-        &[1, 2, 3, 4],
+        &columns_with(&harness, 9, 20, 't')[..3],
+        &[1, 2, 3],
         "the custom horizontal thumb draws on the bottom border"
     );
     Ok(())

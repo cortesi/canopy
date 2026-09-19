@@ -47,6 +47,13 @@ impl LineSegment {
     /// Split this extent into (pre, active, post) extents, based on the
     /// position of a window within a view. The main use for this function is
     /// computation of the active indicator size and position in a scrollbar.
+    ///
+    /// Both ends of the active extent round to the nearest cell, so its
+    /// position is never more than half a cell from the true proportion and
+    /// the thumb moves near the midpoint of a cell instead of sticking at its
+    /// start. The active extent keeps at least one cell, so a thumb stays
+    /// visible and grabbable in a long document, and a track is never
+    /// overrun.
     pub fn split_active(&self, window: Self, view: Self) -> Result<(Self, Self, Self)> {
         if window.len == 0 {
             Err(Error::ZeroLengthWindow)
@@ -56,9 +63,10 @@ impl LineSegment {
             let track_len = u64::from(self.len);
             let view_len = u64::from(view.len);
             let leading = u64::from(window.off - view.off);
-            let pre = track_len * leading / view_len;
-            let active_numerator = track_len * u64::from(window.len);
-            let active = active_numerator.div_ceil(view_len).min(track_len - pre);
+            let active = nearest(track_len * u64::from(window.len), view_len)
+                .max(1)
+                .min(track_len);
+            let pre = nearest(track_len * leading, view_len).min(track_len - active);
             let post = track_len - pre - active;
             let pre = u32::try_from(pre).unwrap_or(u32::MAX);
             let active = u32::try_from(active).unwrap_or(u32::MAX);
@@ -82,6 +90,13 @@ impl LineSegment {
             ))
         }
     }
+}
+
+/// Round `numerator / denominator` to the nearest integer, halves up.
+fn nearest(numerator: u64, denominator: u64) -> u64 {
+    let quotient = numerator / denominator;
+    let remainder = numerator % denominator;
+    quotient + u64::from(remainder * 2 >= denominator)
 }
 
 #[cfg(test)]
