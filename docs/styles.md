@@ -78,8 +78,10 @@ ground, its text a quiet label, and hint keys the accent.
 the frame, and its title with `frame/title`. Scroll thumbs on the right and
 bottom borders use `frame/thumb`. While a drag holds a thumb, the thumb uses
 `frame/thumb/active`, which falls back to `frame/thumb`. The built-in themes
-define every frame path. The help overlay pushes a `help` layer, so its frame
-also uses the `help/frame` paths.
+tint the thumb from the theme's base toward its accent, and give a held thumb
+the full accent, so the position carries a hint of colour without competing
+with selection. The built-in themes define every frame path. The help overlay
+pushes a `help` layer, so its frame also uses the `help/frame` paths.
 
 ## Buttons
 
@@ -105,8 +107,9 @@ dialog reads as one surface.
 `Columns` draws the divider after each pane with `columns/divider`. Where a
 pane's scrolling node reaches the divider, the divider beside its visible rows
 is a track: the thumb uses `columns/thumb`, and `columns/thumb/active` while a
-drag holds it. The trailing column after the last pane shows only a track. The
-built-in themes define all three paths.
+drag holds it. Thumbs follow the same tint-toward-accent rule as frame thumbs.
+The trailing column after the last pane shows only a track. The built-in themes
+define all three paths.
 
 ## States and fallback
 

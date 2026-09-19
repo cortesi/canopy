@@ -5,6 +5,9 @@
 
 use super::{Attr, AttrSet, Color, StyleBuilder, StyleMap};
 
+/// How far a scrollbar thumb leans from the theme's base toward the accent.
+const THUMB_ACCENT: f32 = 0.4;
+
 /// The role colours a theme assigns.
 ///
 /// Each field names the role a colour plays, not the colour itself, so the same
@@ -19,7 +22,7 @@ pub struct Palette {
     pub frame: Color,
     /// Border of the frame that holds focus.
     pub frame_focused: Color,
-    /// Scrollbar thumbs on frame borders.
+    /// Base colour of scrollbar thumbs, tinted toward the accent.
     pub frame_thumb: Color,
     /// Frame title text.
     pub frame_title: Color,
@@ -58,6 +61,10 @@ pub struct Palette {
 /// Build the shared rule set for one palette.
 pub fn theme(p: &Palette) -> StyleMap {
     let mut c = StyleMap::new();
+    // The thumb is chrome, but the position is worth seeing, so it leans
+    // toward the accent without becoming a highlight. A drag holds the full
+    // accent, which reads as the thumb waking up.
+    let thumb = p.frame_thumb.blend(p.accent, THUMB_ACCENT);
     c.rules()
         .style(
             "/",
@@ -68,12 +75,12 @@ pub fn theme(p: &Palette) -> StyleMap {
         )
         .fg("/frame", p.frame)
         .fg("/frame/focused", p.frame_focused)
-        .fg("/frame/thumb", p.frame_thumb)
-        .fg("/frame/thumb/active", p.frame_focused)
+        .fg("/frame/thumb", thumb)
+        .fg("/frame/thumb/active", p.accent)
         .fg("/frame/title", p.frame_title)
         .fg("/columns/divider", p.frame)
-        .fg("/columns/thumb", p.frame_thumb)
-        .fg("/columns/thumb/active", p.frame_focused)
+        .fg("/columns/thumb", thumb)
+        .fg("/columns/thumb/active", p.accent)
         .fg("/blue", p.blue)
         .fg("/red", p.red)
         .fg("/magenta", p.magenta)
