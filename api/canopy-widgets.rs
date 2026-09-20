@@ -1195,6 +1195,12 @@ pub mod canopy_widgets {
     /// their selection state. Selection is independent of focus - an item
     /// remains selected even when the list loses focus.
     pub trait Selectable: Widget {
+        /// Set the checked state of this item.
+        ///
+        /// Only a list with checks enabled calls this. A row that never shows a
+        /// check keeps the default no-op.
+        fn set_checked(&mut self, _checked: bool) {}
+
         /// Set the selection state of this item.
         fn set_selected(&mut self, selected: bool);
     }
@@ -2579,6 +2585,30 @@ pub mod canopy_widgets {
     }
 
     impl<W: Selectable, K: 'static + Clone + Eq + Hash + ToArgValue> List<W, K> {
+        #[must_use]
+        /// Enable multi-select checks.
+        ///
+        /// Checked keys are independent of the selected row. The row widget
+        /// learns its state through [`Selectable::set_checked`] when the list
+        /// reconciles it or its check changes.
+        pub fn with_checks(self) -> Self {}
+
+        #[must_use]
+        /// Return the checked keys in display order.
+        pub fn checked_keys(&self) -> Vec<&K> {}
+
+        #[must_use]
+        /// Return the number of checked keys.
+        pub fn checked_len(&self) -> usize {}
+
+        #[must_use]
+        /// Return whether `key` is checked.
+        pub fn is_checked(&self, key: &K) -> bool {}
+
+        #[must_use]
+        /// Return whether this list tracks checks.
+        pub fn checks_enabled(&self) -> bool {}
+
         /// Borrow the stable keys in display order.
         pub fn keys(&self) -> &[K] {}
 
@@ -2593,6 +2623,15 @@ pub mod canopy_widgets {
             text: impl Into<String>,
             repeat: bool,
         ) -> Self {
+        }
+
+        /// Check every row.
+        pub fn check_all(&mut self, ctx: &mut dyn Context) -> Result<()> {}
+
+        /// Check or uncheck `key`, updating its row widget.
+        ///
+        /// A list without checks ignores the call.
+        pub fn set_checked(&mut self, ctx: &mut dyn Context, key: &K, checked: bool) -> Result<()> {
         }
 
         /// Clear all items from the list.
@@ -2670,8 +2709,22 @@ pub mod canopy_widgets {
         /// Set the semantic label of the collection.
         pub fn with_label(self, label: impl Into<String>) -> Self {}
 
+        /// Toggle the checked state of the selected row.
+        ///
+        /// Returns the new state, or false when the list has no selection.
+        pub fn toggle(&mut self, ctx: &mut dyn Context) -> Result<bool> {}
+
+        /// Uncheck every row.
+        pub fn clear_checks(&mut self, ctx: &mut dyn Context) -> Result<()> {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_check_all() -> canopy::commands::CommandCall {}
+
         /// Build a positional call with typed user arguments.
         pub fn call_clear() -> canopy::commands::CommandCall {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_clear_checks() -> canopy::commands::CommandCall {}
 
         /// Build a positional call with typed user arguments.
         pub fn call_delete_selected() -> canopy::commands::CommandCall {}
@@ -2691,8 +2744,17 @@ pub mod canopy_widgets {
         /// Build a positional call with typed user arguments.
         pub fn call_select_last() -> canopy::commands::CommandCall {}
 
+        /// Build a positional call with typed user arguments.
+        pub fn call_toggle() -> canopy::commands::CommandCall {}
+
+        /// Return a typed command reference for this command.
+        pub fn cmd_check_all() -> &'static canopy::commands::CommandSpec {}
+
         /// Return a typed command reference for this command.
         pub fn cmd_clear() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return a typed command reference for this command.
+        pub fn cmd_clear_checks() -> &'static canopy::commands::CommandSpec {}
 
         /// Return a typed command reference for this command.
         pub fn cmd_delete_selected() -> &'static canopy::commands::CommandSpec {}
@@ -2711,6 +2773,9 @@ pub mod canopy_widgets {
 
         /// Return a typed command reference for this command.
         pub fn cmd_select_last() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return a typed command reference for this command.
+        pub fn cmd_toggle() -> &'static canopy::commands::CommandSpec {}
     }
 
     impl<W: Selectable> List<W, AutoKey> {

@@ -88,6 +88,12 @@ impl ToArgValue for AutoKey {
 pub trait Selectable: Widget {
     /// Set the selection state of this item.
     fn set_selected(&mut self, selected: bool);
+
+    /// Set the checked state of this item.
+    ///
+    /// Only a list with checks enabled calls this. A row that never shows a
+    /// check keeps the default no-op.
+    fn set_checked(&mut self, _checked: bool) {}
 }
 
 /// A typed list container for widget items.
@@ -104,6 +110,8 @@ pub struct List<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static = Aut
     next_key: u64,
     /// Stable key of the selected item.
     selected: Option<K>,
+    /// Checked item keys, absent until checks are enabled.
+    checks: Option<HashSet<K>>,
     /// Optional list-level selection indicator.
     selection_indicator: Option<SelectionIndicator>,
     /// Optional activation command configuration.
@@ -128,6 +136,7 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
             items: KeyedChildren::new(),
             next_key: 0,
             selected: None,
+            checks: None,
             selection_indicator: None,
             on_activate: None,
             pending_activate: None,
@@ -139,6 +148,76 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
     pub fn with_label(mut self, label: impl Into<String>) -> Self {
         self.label = Some(label.into());
         self
+    }
+
+    /// Enable multi-select checks.
+    ///
+    /// Checked keys are independent of the selected row. The row widget
+    /// learns its state through [`Selectable::set_checked`] when the list
+    /// reconciles it or its check changes.
+    #[must_use]
+    pub fn with_checks(mut self) -> Self {
+        self.checks = Some(HashSet::new());
+        self
+    }
+
+    /// Return whether this list tracks checks.
+    #[must_use]
+    pub fn checks_enabled(&self) -> bool {
+        self.checks.is_some()
+    }
+
+    /// Return whether `key` is checked.
+    #[must_use]
+    pub fn is_checked(&self, key: &K) -> bool {
+        self.checks
+            .as_ref()
+            .is_some_and(|checks| checks.contains(key))
+    }
+
+    /// Return the checked keys in display order.
+    #[must_use]
+    pub fn checked_keys(&self) -> Vec<&K> {
+        let Some(checks) = self.checks.as_ref() else {
+            return Vec::new();
+        };
+        self.items
+            .keys()
+            .iter()
+            .filter(|key| checks.contains(*key))
+            .collect()
+    }
+
+    /// Return the number of checked keys.
+    #[must_use]
+    pub fn checked_len(&self) -> usize {
+        self.checks.as_ref().map_or(0, HashSet::len)
+    }
+
+    /// Check or uncheck `key`, updating its row widget.
+    ///
+    /// A list without checks ignores the call.
+    pub fn set_checked(&mut self, ctx: &mut dyn Context, key: &K, checked: bool) -> Result<()> {
+        let Some(id) = self.items.id_for(key) else {
+            return Err(Error::Invalid("list check key is absent".into()));
+        };
+        let Some(checks) = self.checks.as_mut() else {
+            return Ok(());
+        };
+        let changed = if checked {
+            checks.insert(key.clone())
+        } else {
+            checks.remove(key)
+        };
+        if !changed {
+            return Ok(());
+        }
+        ctx.with_widget_mut(id, |widget: &mut W, _| {
+            widget.set_checked(checked);
+            Ok(())
+        })?;
+        debug_assert!(self.checks_invariant_holds());
+        Ok(())
     }
 
     /// Inspect the selected row's configured activation command.
@@ -268,14 +347,25 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
         let selection_changed = selected != self.selected;
         let had_focus = ctx.is_on_focus_path_of(ctx.node_id());
         let previous_focus = ctx.focused_node();
+        let checks = self.checks.as_ref();
+        let desired_checks = checks.map(|_| desired.iter().cloned().collect::<HashSet<K>>());
         let ordered = self.items.reconcile(ctx, desired, create, |key, id, ctx| {
             update(key, id, ctx)?;
             ctx.with_widget_mut(id, |widget: &mut W, _| {
                 widget.set_selected(selected.as_ref() == Some(key));
+                if let Some(checks) = checks {
+                    widget.set_checked(checks.contains(key));
+                }
                 Ok(())
             })
         })?;
         self.selected = selected;
+        if let Some(checks) = self.checks.as_mut()
+            && let Some(desired) = &desired_checks
+        {
+            checks.retain(|key| desired.contains(key));
+            debug_assert!(self.checks_invariant_holds());
+        }
         if self
             .pending_activate
             .as_ref()
@@ -335,6 +425,56 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
             Some(sel) => self.remove(ctx, sel),
             None => Ok(false),
         }
+    }
+
+    /// Toggle the checked state of the selected row.
+    ///
+    /// Returns the new state, or false when the list has no selection.
+    #[command(ignore_result)]
+    pub fn toggle(&mut self, ctx: &mut dyn Context) -> Result<bool> {
+        if self.checks.is_none() {
+            return Ok(false);
+        }
+        let Some(key) = self.selected.clone() else {
+            return Ok(false);
+        };
+        let checked = !self.is_checked(&key);
+        self.set_checked(ctx, &key, checked)?;
+        Ok(checked)
+    }
+
+    /// Check every row.
+    #[command]
+    pub fn check_all(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        if self.checks.is_none() {
+            return Ok(());
+        }
+        self.checks = Some(self.items.keys().iter().cloned().collect());
+        let ids = self.items.iter_ids().collect::<Vec<_>>();
+        for id in ids {
+            ctx.with_widget_mut(id, |widget: &mut W, _| {
+                widget.set_checked(true);
+                Ok(())
+            })?;
+        }
+        Ok(())
+    }
+
+    /// Uncheck every row.
+    #[command]
+    pub fn clear_checks(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        if self.checks.is_none() {
+            return Ok(());
+        }
+        self.checks = Some(HashSet::new());
+        let ids = self.items.iter_ids().collect::<Vec<_>>();
+        for id in ids {
+            ctx.with_widget_mut(id, |widget: &mut W, _| {
+                widget.set_checked(false);
+                Ok(())
+            })?;
+        }
+        Ok(())
     }
 
     /// Select an item at the given index.
@@ -407,6 +547,13 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
         self.selected
             .as_ref()
             .is_none_or(|key| self.items.id_for(key).is_some())
+    }
+
+    /// Return whether every checked key points at a live list item.
+    fn checks_invariant_holds(&self) -> bool {
+        self.checks
+            .as_ref()
+            .is_none_or(|checks| checks.iter().all(|key| self.items.id_for(key).is_some()))
     }
 
     /// Select an item by index, focus it, and scroll it into view.
@@ -686,15 +833,24 @@ impl<W: Selectable + 'static, K: Eq + Hash + Clone + ToArgValue + 'static> Widge
     }
 
     fn semantics(&self, ctx: &dyn ViewContext) -> Result<WidgetSemantics> {
-        Ok(WidgetSemantics {
-            role: Some("list".into()),
-            label: self.label.clone(),
-            selected_keys: self
-                .selected
+        // A checked list reports its checks as the collection's selection.
+        let selected_keys = if self.checks.is_some() {
+            self.checked_keys()
+                .into_iter()
+                .cloned()
+                .map(ToArgValue::to_arg_value)
+                .collect()
+        } else {
+            self.selected
                 .iter()
                 .cloned()
                 .map(ToArgValue::to_arg_value)
-                .collect(),
+                .collect()
+        };
+        Ok(WidgetSemantics {
+            role: Some("list".into()),
+            label: self.label.clone(),
+            selected_keys,
             action_status: self.command_status(ctx)?,
             ..WidgetSemantics::default()
         })
@@ -904,18 +1060,26 @@ mod tests {
 
     struct Row {
         selected: bool,
+        checked: bool,
     }
 
     #[derive_commands]
     impl Row {
         fn new() -> Self {
-            Self { selected: false }
+            Self {
+                selected: false,
+                checked: false,
+            }
         }
     }
 
     impl Selectable for Row {
         fn set_selected(&mut self, selected: bool) {
             self.selected = selected;
+        }
+
+        fn set_checked(&mut self, checked: bool) {
+            self.checked = checked;
         }
     }
 
@@ -986,6 +1150,112 @@ mod tests {
         assert_eq!(focused_row(&harness), Some(selected.into()));
         assert!(harness.with_widget(selected, |row: &mut Row| row.selected));
         Ok(())
+    }
+
+    #[test]
+    fn checks_toggle_the_selected_row_and_update_widgets() -> Result<()> {
+        let mut harness = Harness::builder(List::<Row, i64>::new().with_checks())
+            .size(20, 10)
+            .build()?;
+        let (toggled, other) = harness.with_root_context(|list: &mut List<Row, i64>, ctx| {
+            reconcile_rows(list, ctx, &[10, 20, 30])?;
+            let toggled = list.item_for_key(&20).expect("toggled row");
+            let other = list.item_for_key(&10).expect("other row");
+            list.select_key(ctx, &20)?;
+            assert!(list.checks_enabled());
+            assert!(list.checked_keys().is_empty());
+            assert!(list.toggle(ctx)?, "toggle returns the new state");
+            assert!(list.is_checked(&20));
+            assert_eq!(list.checked_len(), 1);
+            assert_eq!(list.checked_keys(), vec![&20]);
+            assert_eq!(
+                list.semantics(ctx)?.selected_keys,
+                vec![20_i64.to_arg_value()],
+                "semantics report the checks"
+            );
+            assert!(!list.toggle(ctx)?, "a second toggle clears it");
+            assert!(!list.is_checked(&20));
+            assert!(list.toggle(ctx)?);
+            Ok((toggled, other))
+        })?;
+        assert!(
+            harness.with_widget(toggled, |row: &mut Row| row.checked),
+            "the checked row learns its state"
+        );
+        assert!(
+            !harness.with_widget(other, |row: &mut Row| row.checked),
+            "other rows stay unchecked"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn check_all_and_clear_update_every_row() -> Result<()> {
+        let mut harness = Harness::builder(List::<Row, i64>::new().with_checks())
+            .size(20, 10)
+            .build()?;
+        let ids = harness.with_root_context(|list: &mut List<Row, i64>, ctx| {
+            reconcile_rows(list, ctx, &[10, 20])?;
+            list.check_all(ctx)?;
+            assert_eq!(list.checked_keys(), vec![&10, &20]);
+            Ok((0..list.len())
+                .map(|index| list.item(index).expect("row"))
+                .collect::<Vec<_>>())
+        })?;
+        for id in &ids {
+            assert!(harness.with_widget(*id, |row: &mut Row| row.checked));
+        }
+        harness.with_root_context(|list: &mut List<Row, i64>, ctx| list.clear_checks(ctx))?;
+        for id in &ids {
+            assert!(!harness.with_widget(*id, |row: &mut Row| row.checked));
+        }
+        assert!(harness.with_root_widget(|list: &mut List<Row, i64>| list.checked_len()) == 0);
+        Ok(())
+    }
+
+    #[test]
+    fn checks_follow_reconcile_and_validate_keys() -> Result<()> {
+        let mut harness = Harness::builder(List::<Row, i64>::new().with_checks())
+            .size(20, 10)
+            .build()?;
+        harness.with_root_context(|list: &mut List<Row, i64>, ctx| {
+            reconcile_rows(list, ctx, &[10, 20, 30])?;
+            assert!(list.set_checked(ctx, &99, true).is_err());
+            list.set_checked(ctx, &20, true)?;
+            list.set_checked(ctx, &20, true)?;
+            assert_eq!(list.checked_len(), 1, "setting twice is idempotent");
+            reconcile_rows(list, ctx, &[30, 10])?;
+            assert!(
+                list.checked_keys().is_empty(),
+                "a removed row drops its check"
+            );
+            list.select_key(ctx, &30)?;
+            list.toggle(ctx)?;
+            reconcile_rows(list, ctx, &[10, 30])?;
+            assert_eq!(
+                list.checked_keys(),
+                vec![&30],
+                "a surviving row keeps its check"
+            );
+            assert!(list.checks_invariant_holds());
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn a_plain_list_has_no_checks() -> Result<()> {
+        let mut harness = Harness::builder(List::<Row, i64>::new())
+            .size(20, 10)
+            .build()?;
+        harness.with_root_context(|list: &mut List<Row, i64>, ctx| {
+            reconcile_rows(list, ctx, &[10])?;
+            assert!(!list.checks_enabled());
+            assert!(!list.toggle(ctx)?, "toggle is inert without checks");
+            assert!(list.checked_keys().is_empty());
+            list.set_checked(ctx, &10, true)?;
+            assert!(!list.is_checked(&10));
+            Ok(())
+        })
     }
 
     #[test]

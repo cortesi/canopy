@@ -116,6 +116,14 @@ read the focused row to map a toggle back to its data, and give the markers a
 theme; these are the minimum for a dialog that applies each tick live. The
 `show` name matches the list-style reinstatement used elsewhere.
 
+`List` gained opt-in multi-select checks: `with_checks`, `checked_keys`,
+`checked_len`, `is_checked`, `checks_enabled`, `set_checked`, and the
+`toggle`/`check_all`/`clear_checks` commands, plus a defaulted
+`Selectable::set_checked`. A checklist needs a second selection axis beside the
+focused row, and the defaulted row hook keeps every existing `Selectable`
+implementation valid. Checks are off unless a list opts in, so single-select
+users see no behavior change.
+
 ## Accepted dependency coupling
 
 `EvalTicket::completion` exposes `futures::channel::oneshot::Receiver` directly.
