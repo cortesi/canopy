@@ -1122,7 +1122,9 @@ pub mod canopy_widgets {
     ///
     /// Items can be toggled on/off independently. The selected indices are tracked
     /// in the order they were selected, allowing for ordered selection if needed.
-    /// Navigation scrolls the focused row into view after layout.
+    /// Navigation scrolls the focused row into view after layout. A host that
+    /// changes its item set calls [`Selector::show`], which reinstalls both the
+    /// items and the check state.
     pub struct Selector<T>
     where
         T: Label, {}
@@ -2367,6 +2369,22 @@ pub mod canopy_widgets {
     where
         T: 'static + Label,
     {
+        #[must_use]
+        /// Replace the checkbox glyphs, unchecked first.
+        pub fn with_glyphs(self, unchecked: &'static str, checked: &'static str) -> Self {}
+
+        #[must_use]
+        /// Return the checked indices, in selection order.
+        pub fn checked_indices(&self) -> &[usize] {}
+
+        #[must_use]
+        /// Return the focused item index.
+        pub fn focused_index(&self) -> usize {}
+
+        #[must_use]
+        /// Set the semantic label.
+        pub fn with_label(self, label: impl Into<String>) -> Self {}
+
         /// Clear all selections.
         pub fn clear(&mut self, _c: &mut dyn Context) -> Result<()> {}
 
@@ -2384,6 +2402,12 @@ pub mod canopy_widgets {
 
         /// Move focus to the last item.
         pub fn select_last(&mut self, c: &mut dyn Context) -> Result<()> {}
+
+        /// Replace the items and the checked indices, in place.
+        ///
+        /// Indices outside the new items are dropped. Focus returns to the first
+        /// item, matching a fresh list.
+        pub fn show(&mut self, items: Vec<T>, checked: &[usize]) {}
 
         /// Select all items.
         pub fn select_all(&mut self, _c: &mut dyn Context) -> Result<()> {}
@@ -2445,6 +2469,8 @@ pub mod canopy_widgets {
         fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {}
 
         fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
+
+        fn semantics(&self, _ctx: &dyn ViewContext) -> Result<WidgetSemantics> {}
     }
 
     impl<T> Picker<T>

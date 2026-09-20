@@ -109,6 +109,13 @@ the fields on `BindingSnapshot`, `AvailableBinding`, and `KeyRouteStep`, and
 diagnostics. An action record carries no phase, so `BindingOptions.phase` and
 the matching record fields became optional.
 
+`Selector` gained `show`, `focused_index`, `checked_indices`, `with_label`, and
+`with_glyphs`, plus a semantics value that lists its checked labels. A
+checklist host must reinstall its items and checks when its own state changes,
+read the focused row to map a toggle back to its data, and give the markers a
+theme; these are the minimum for a dialog that applies each tick live. The
+`show` name matches the list-style reinstatement used elsewhere.
+
 ## Accepted dependency coupling
 
 `EvalTicket::completion` exposes `futures::channel::oneshot::Receiver` directly.

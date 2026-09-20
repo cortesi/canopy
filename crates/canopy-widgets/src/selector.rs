@@ -1,7 +1,8 @@
 //! Selector widget for multi-value selection with checkbox-style items.
 
 use canopy::{
-    Context, EventOutcome, NodeName, Render, RevealAlign, ViewContext, Widget, derive_commands,
+    Context, EventOutcome, NodeName, Render, RevealAlign, ViewContext, Widget, WidgetSemantics,
+    derive_commands,
     error::Result,
     event::{Event, key, mouse},
     geom::{Rect, Size},
@@ -12,11 +13,16 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::label::Label;
 
+/// The glyphs a selector draws before an unchecked and checked item.
+const CHECK_GLYPHS: (&str, &str) = ("[ ] ", "[x] ");
+
 /// A multi-select widget with checkbox-style items.
 ///
 /// Items can be toggled on/off independently. The selected indices are tracked
 /// in the order they were selected, allowing for ordered selection if needed.
-/// Navigation scrolls the focused row into view after layout.
+/// Navigation scrolls the focused row into view after layout. A host that
+/// changes its item set calls [`Selector::show`], which reinstalls both the
+/// items and the check state.
 pub struct Selector<T>
 where
     T: Label,
@@ -27,6 +33,10 @@ where
     focused: usize,
     /// Selected indices, in selection order.
     selected: Vec<usize>,
+    /// Optional semantic label.
+    label: Option<String>,
+    /// Glyphs drawn before an unchecked and checked item.
+    glyphs: (&'static str, &'static str),
 }
 
 #[derive_commands]
@@ -40,7 +50,51 @@ where
             items,
             focused: 0,
             selected: Vec::new(),
+            label: None,
+            glyphs: CHECK_GLYPHS,
         }
+    }
+
+    /// Set the semantic label.
+    #[must_use]
+    pub fn with_label(mut self, label: impl Into<String>) -> Self {
+        self.label = Some(label.into());
+        self
+    }
+
+    /// Replace the checkbox glyphs, unchecked first.
+    #[must_use]
+    pub fn with_glyphs(mut self, unchecked: &'static str, checked: &'static str) -> Self {
+        self.glyphs = (unchecked, checked);
+        self
+    }
+
+    /// Replace the items and the checked indices, in place.
+    ///
+    /// Indices outside the new items are dropped. Focus returns to the first
+    /// item, matching a fresh list.
+    pub fn show(&mut self, items: Vec<T>, checked: &[usize]) {
+        self.items = items;
+        self.focused = 0;
+        self.selected.clear();
+        for index in checked {
+            if *index < self.items.len() && !self.selected.contains(index) {
+                self.selected.push(*index);
+            }
+        }
+        debug_assert!(self.selection_invariant_holds());
+    }
+
+    /// Return the focused item index.
+    #[must_use]
+    pub fn focused_index(&self) -> usize {
+        self.focused
+    }
+
+    /// Return the checked indices, in selection order.
+    #[must_use]
+    pub fn checked_indices(&self) -> &[usize] {
+        &self.selected
     }
 
     /// Get references to the selected items in selection order.
@@ -188,6 +242,22 @@ where
         Ok(EventOutcome::Ignore)
     }
 
+    fn semantics(&self, _ctx: &dyn ViewContext) -> Result<WidgetSemantics> {
+        let checked = self
+            .selected
+            .iter()
+            .filter_map(|index| self.items.get(*index))
+            .map(Label::label)
+            .collect::<Vec<_>>()
+            .join(", ");
+        Ok(WidgetSemantics {
+            role: Some("selector".into()),
+            label: self.label.clone(),
+            value: (!checked.is_empty()).then_some(checked),
+            ..WidgetSemantics::default()
+        })
+    }
+
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
         let rect = view.view_rect_local();
@@ -206,7 +276,11 @@ where
             let is_item_focused = idx == self.focused;
 
             // Checkbox prefix
-            let prefix = if is_selected { "[x] " } else { "[ ] " };
+            let prefix = if is_selected {
+                self.glyphs.1
+            } else {
+                self.glyphs.0
+            };
             let display = format!("{}{}", prefix, label);
             let (display, _) =
                 text::slice_by_columns(&display, view.scroll.x as usize, rect.w as usize);
@@ -326,6 +400,36 @@ mod tests {
         assert_eq!(selector.focused, 0);
         assert!(selector.selected.is_empty());
         assert!(selector.selection_invariant_holds());
+        Ok(())
+    }
+
+    #[test]
+    fn show_replaces_items_and_checks_in_order() {
+        let mut selector = Selector::new(vec!["a".to_string(), "b".to_string()]);
+        selector.show(
+            vec!["x".to_string(), "y".to_string(), "z".to_string()],
+            &[2, 0, 9, 2],
+        );
+        assert_eq!(selector.focused_index(), 0);
+        assert_eq!(
+            selector.checked_indices(),
+            &[2, 0],
+            "out-of-range and repeated indices drop"
+        );
+        assert!(selector.selection_invariant_holds());
+    }
+
+    #[test]
+    fn glyphs_and_semantics_report_the_checks() -> Result<()> {
+        let mut selector = Selector::new(vec!["Size".to_string(), "Modified".to_string()])
+            .with_label("Columns")
+            .with_glyphs("· ", "✓ ");
+        assert_eq!(selector.glyphs, ("· ", "✓ "));
+        selector.selected.push(1);
+        let semantics = selector.semantics(&DummyContext::default())?;
+        assert_eq!(semantics.role.as_deref(), Some("selector"));
+        assert_eq!(semantics.label.as_deref(), Some("Columns"));
+        assert_eq!(semantics.value.as_deref(), Some("Modified"));
         Ok(())
     }
 
