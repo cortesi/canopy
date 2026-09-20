@@ -740,7 +740,10 @@ impl Editor {
                 self.buffer.cursor().line,
                 ctx.gutter_width,
             );
-            let style = if line_idx == self.buffer.cursor().line {
+            // The cursor marks the line the user would edit. An editor that
+            // declines focus is a display with no cursor to place, so its
+            // gutter marks no current line.
+            let style = if self.config.focusable && line_idx == self.buffer.cursor().line {
                 "editor/line-number/current"
             } else {
                 "editor/line-number"

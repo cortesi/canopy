@@ -256,6 +256,35 @@ fn render_with_line_numbers() {
     harness.tbuf().assert_matches(buf!["1 hi  " "2 ok  "]);
 }
 
+#[test]
+fn a_display_only_editor_marks_no_current_line_number() {
+    let styles = StyleManager::default();
+    for focusable in [true, false] {
+        let config = EditorConfig::new()
+            .with_line_numbers(LineNumbers::Absolute)
+            .with_focusable(focusable);
+        let mut harness = build_harness("hi\nok", config, 6, 2);
+        harness.render().unwrap();
+        let plain = styles
+            .get(harness.canopy.style(), "editor/line-number")
+            .fg
+            .solid_color()
+            .expect("the gutter color is solid");
+        let current = styles
+            .get(harness.canopy.style(), "editor/line-number/current")
+            .fg
+            .solid_color()
+            .expect("the current gutter color is solid");
+        assert_ne!(plain, current, "the two gutter styles differ");
+        let first = harness.buf().get(Point { x: 0, y: 0 }).unwrap().style.fg;
+        let expected = if focusable { current } else { plain };
+        assert_eq!(
+            first, expected,
+            "the first line number carries the current accent only when focusable={focusable}"
+        );
+    }
+}
+
 /// Text that every read-only check must leave untouched.
 const READ_ONLY_TEXT: &str = "alpha\nbeta\ngamma";
 
