@@ -16,7 +16,7 @@ use std::{
     sync::OnceLock,
 };
 
-use canopy::style::{Attr, AttrSet, Color, Paint, Style, canopy as palette};
+use canopy::style::{Attr, AttrSet, Color, Paint, Style, default as palette};
 use syntect::{
     easy::HighlightLines,
     highlighting,

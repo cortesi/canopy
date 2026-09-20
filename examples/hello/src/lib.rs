@@ -18,7 +18,7 @@ use canopy::{
     error::Result,
     event::key::Key,
     layout::{Align, Direction, Layout},
-    style::canopy as palette,
+    style::default as palette,
 };
 use canopy_widgets::{KeyHint, Root, StatusBar, Text};
 
@@ -174,7 +174,7 @@ fn indent(source: &str, prefix: &str) -> String {
 
 /// Install the application palette and per-element styles.
 fn install_styles(canopy: &mut Canopy) {
-    *canopy.style_mut() = palette::canopy_dark();
+    *canopy.style_mut() = palette::default_dark();
     canopy
         .style_mut()
         .rules()

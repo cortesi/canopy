@@ -1,7 +1,7 @@
-/// Canopy theme, the default.
-pub mod canopy;
 /// Color helpers.
 mod color;
+/// Default theme.
+pub mod default;
 /// Dracula theme.
 pub mod dracula;
 /// Style effects system.
@@ -917,7 +917,7 @@ mod tests {
     /// Render every built-in theme in a stable order.
     fn dump_all_themes() -> String {
         [
-            ("canopy_dark", super::canopy::canopy_dark()),
+            ("default_dark", super::default::default_dark()),
             ("solarized_dark", solarized::solarized_dark()),
             ("solarized_light", solarized::solarized_light()),
             ("dracula", dracula::dracula()),

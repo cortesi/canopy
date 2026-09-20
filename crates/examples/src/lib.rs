@@ -8,7 +8,7 @@ use canopy::{
     layout::{Direction, Layout, LayoutOverride, Sizing},
     style::{
         AttrSet, Color, GradientSpec, GradientStop, Paint, StyleBuilder, StyleRules,
-        canopy as palette,
+        default as palette,
     },
     terminal::{RunOptions, runloop_with_options},
 };

@@ -12,7 +12,7 @@ use canopy::{
     help::{AvailableBinding, BindingCommand, BindingSnapshot, KeyPredictionGap},
     layout::Layout,
     path::Path,
-    style::canopy::{HIGHLIGHT, TEXT},
+    style::default::{HIGHLIGHT, TEXT},
     testing::harness::Harness,
 };
 

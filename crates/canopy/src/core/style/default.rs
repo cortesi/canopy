@@ -1,4 +1,4 @@
-//! Canopy theme - the default: a neutral near-black ground, grey chrome, and
+//! Default theme: a neutral near-black ground, grey chrome, and
 //! a single accent.
 //!
 //! The grey ramp follows opencode's default theme, and the named
@@ -49,8 +49,8 @@ pub const ORANGE: Color = rgb!("#f5a742");
 /// Red.
 pub const RED: Color = rgb!("#e06c75");
 
-/// Build the dark Canopy style map.
-pub fn canopy_dark() -> StyleMap {
+/// Build the dark default style map.
+pub fn default_dark() -> StyleMap {
     theme(&Palette {
         fg: TEXT,
         bg: BG,

@@ -5,7 +5,7 @@ use canopy::{
     event::key,
     geom::Size,
     layout::{CanvasContext, MeasureConstraints, Measurement},
-    style::canopy as palette,
+    style::default as palette,
 };
 use canopy_widgets::{CanvasWidth, Columns, Container, List, Selectable, Text};
 use rand::RngExt;

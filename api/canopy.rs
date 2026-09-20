@@ -2134,9 +2134,9 @@ pub mod canopy {
     pub mod style {
         //! Styling and color helpers.
 
-        pub mod canopy {
-            //! Canopy theme, the default.
-            //! Canopy theme - the default: a neutral near-black ground, grey chrome, and
+        pub mod default {
+            //! Default theme.
+            //! Default theme: a neutral near-black ground, grey chrome, and
             //! a single accent.
             //!
             //! The grey ramp follows opencode's default theme, and the named
@@ -2203,8 +2203,8 @@ pub mod canopy {
             /// Yellow.
             pub const YELLOW: super::Color = _;
 
-            /// Build the dark Canopy style map.
-            pub fn canopy_dark() -> super::StyleMap {}
+            /// Build the dark default style map.
+            pub fn default_dark() -> super::StyleMap {}
         }
 
         pub mod dracula {

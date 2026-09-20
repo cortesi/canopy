@@ -7,7 +7,7 @@ use canopy::{
     event::key,
     geom::Size,
     layout::{Constraint, Direction, Layout, MeasureConstraints, Measurement},
-    style::{Attr, AttrSet, canopy as palette},
+    style::{Attr, AttrSet, default as palette},
 };
 use canopy_widgets::{
     Border, Button, Center, Container, Frame, List, SINGLE, SINGLE_THICK, Selectable, Text,

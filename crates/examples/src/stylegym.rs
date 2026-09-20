@@ -13,7 +13,7 @@ use canopy::{
     geom::{Line, Point, Rect, Size},
     layout::{CanvasContext, Direction, Edges, Layout},
     style::{
-        AttrSet, Color, PartialStyle, ResolvedStyle, StyleMap, canopy as canopy_theme, dracula,
+        AttrSet, Color, PartialStyle, ResolvedStyle, StyleMap, default as default_theme, dracula,
         effects::{self, Effect},
         gruvbox, solarized,
     },
@@ -249,8 +249,8 @@ impl Label for EffectOption {
 fn available_themes() -> Vec<ThemeOption> {
     vec![
         ThemeOption {
-            name: "Canopy Dark",
-            builder: canopy_theme::canopy_dark,
+            name: "Default Dark",
+            builder: default_theme::default_dark,
         },
         ThemeOption {
             name: "Solarized Dark",

@@ -14,7 +14,7 @@ use canopy::{
     event::key::Key,
     geom::{Rect, Size},
     layout::{Constraint, Direction, Layout, LayoutOverride, MeasureConstraints, Measurement},
-    style::canopy as palette,
+    style::default as palette,
 };
 use canopy_widgets::{
     Center, Frame, Input, KeyHint, List, Root, Selectable, StatusBar, TEXT_CLEAR_ACTION, Text,
