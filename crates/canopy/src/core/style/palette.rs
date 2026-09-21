@@ -208,19 +208,6 @@ pub fn theme(p: &Palette) -> StyleMap {
             &["/help/label", "/help/fallback"],
             StyleBuilder::new().fg(p.muted_fg).bg(p.panel_bg),
         )
-        // The guide bar is a raised element on the panel, so it takes the
-        // element ground and reads as its own row.
-        .style_all(
-            &["/help/footer", "/help/footer/label"],
-            StyleBuilder::new().fg(p.muted_fg).bg(p.element_bg),
-        )
-        .style(
-            "/help/footer/key",
-            StyleBuilder::new()
-                .fg(p.key)
-                .bg(p.element_bg)
-                .attrs(AttrSet::new(Attr::Bold)),
-        )
         .style(
             "/help/indicator",
             StyleBuilder::new().fg(p.accent).bg(p.panel_bg),

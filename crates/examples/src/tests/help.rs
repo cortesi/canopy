@@ -89,7 +89,6 @@ fn prove_help_flow(mut harness: Harness, hidden: &[&str], shown: &[&str]) -> Res
     );
     assert!(harness.tbuf().contains_text("Keyboard shortcuts"));
     assert!(!harness.tbuf().contains_text("Context:"));
-    assert!(harness.tbuf().contains_text("esc: close"));
     for text in hidden {
         assert!(
             !harness.tbuf().contains_text(text),

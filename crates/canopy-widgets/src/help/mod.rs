@@ -15,7 +15,7 @@ use canopy::{
     layout::{Align, Direction, Edges, Layout, Sizing},
 };
 pub use mode::ModeHelp;
-use panel::{ControlFooter, HelpPanel};
+use panel::HelpPanel;
 
 use crate::{center::Center, frame::Frame};
 
@@ -23,7 +23,6 @@ canopy::slot!(pub(crate) ModalSlot: Center);
 canopy::slot!(pub(crate) FrameSlot: Frame);
 canopy::slot!(pub(crate) PanelSlot: HelpPanel);
 canopy::slot!(pub(crate) BindingListSlot: BindingList);
-canopy::slot!(pub(crate) FooterSlot: ControlFooter);
 
 /// Transparent overlay that owns the help modal subtree.
 ///
@@ -36,11 +35,9 @@ impl Help {
     /// Build the complete help subtree and return its root.
     pub(crate) fn install(context: &mut dyn Context) -> Result<NodeId> {
         let bindings = context.create_detached(BindingList::new())?;
-        let footer = context.create_detached(ControlFooter::new())?;
 
         let panel = context.create_detached(HelpPanel::new())?;
         context.attach_slot(panel.into(), BindingListSlot::KEY, bindings.into())?;
-        context.attach_slot(panel.into(), FooterSlot::KEY, footer.into())?;
 
         let frame = context.create_detached(Frame::new().with_title("Keyboard shortcuts"))?;
         context.attach_slot(frame.into(), PanelSlot::KEY, panel.into())?;

@@ -12,17 +12,12 @@ use canopy::{
     help::{AvailableBinding, BindingCommand, BindingSnapshot, KeyPredictionGap},
     layout::Layout,
     path::Path,
-    style::default::{HIGHLIGHT, TEXT},
+    style::default::TEXT,
     testing::harness::Harness,
 };
 
-use super::{
-    binding_list::{BindingList, PARTIAL_WARNING},
-    panel::ControlFooter,
-};
+use super::binding_list::{BindingList, PARTIAL_WARNING};
 use crate::Frame;
-
-impl Loader for ControlFooter {}
 
 fn binding(
     id: u64,
@@ -443,44 +438,6 @@ fn a_scrolling_list_wraps_actions_across_its_full_width() -> Result<()> {
         "a  12345678901234567890123456789"
         "b  Another action"
     ]);
-    Ok(())
-}
-
-#[test]
-fn the_footer_names_the_close_key() -> Result<()> {
-    let mut wide = Harness::builder(ControlFooter::new()).size(70, 1).build()?;
-    wide.render()?;
-    let line = wide.tbuf().lines()[0].clone();
-    assert!(
-        line.ends_with("esc: close"),
-        "the close guide keeps the right edge, got {line:?}"
-    );
-    let key_style = wide
-        .buf()
-        .get(Point { x: 60, y: 0 })
-        .expect("the close key")
-        .style;
-    let label_style = wide
-        .buf()
-        .get(Point { x: 63, y: 0 })
-        .expect("the close label")
-        .style;
-    assert!(key_style.attrs.bold);
-    assert!(!label_style.attrs.bold);
-    assert_ne!(key_style.fg, label_style.fg);
-    // The guide bar takes the element ground, apart from the panel behind it.
-    assert_eq!(key_style.bg, HIGHLIGHT);
-    for x in 0..70 {
-        assert_eq!(
-            wide.buf().get(Point { x, y: 0 }).unwrap().style.bg,
-            key_style.bg,
-            "footer background must cover gaps at column {x}"
-        );
-    }
-
-    let mut narrow = Harness::builder(ControlFooter::new()).size(20, 1).build()?;
-    narrow.render()?;
-    narrow.tbuf().assert_matches(buf!["          esc: close"]);
     Ok(())
 }
 
