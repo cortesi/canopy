@@ -991,6 +991,52 @@ pub mod canopy_widgets {
     /// match.
     pub struct Container {}
 
+    /// A line diff of two full texts.
+    pub struct Diff {}
+
+    /// One row of a diff.
+    ///
+    /// Rows are ordered the way a unified diff reads: removed lines precede added
+    /// lines inside a change, and a side-by-side renderer pairs consecutive
+    /// removed and added runs at render time.
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    pub enum DiffRow {
+        /// A line both versions hold at the same place.
+        Unchanged {
+            /// Zero-based line in the old version.
+            old: usize,
+            /// Zero-based line in the new version.
+            new: usize,
+        },
+        /// A line only the old version holds.
+        Removed {
+            /// Zero-based line in the old version.
+            old: usize,
+        },
+        /// A line only the new version holds.
+        Added {
+            /// Zero-based line in the new version.
+            new: usize,
+        },
+        /// A run of unchanged lines the context scope hides.
+        Gap {
+            /// Hidden old lines.
+            old: std::ops::Range<usize>,
+            /// Hidden new lines.
+            new: std::ops::Range<usize>,
+        },
+        /// The heading that opens one change block in context scope.
+        Header {
+            /// Old lines the block shows, changes and context together.
+            old: std::ops::Range<usize>,
+            /// New lines the block shows, changes and context together.
+            new: std::ops::Range<usize>,
+        },
+    }
+
+    /// A line diff with a display strategy, a scope, and optional highlighting.
+    pub struct DiffView {}
+
     /// A dropdown widget for single-value selection.
     ///
     /// When collapsed, displays the currently selected item with a dropdown
@@ -1073,9 +1119,24 @@ pub mod canopy_widgets {
     where
         T: Label, {}
 
+    /// The expensive parts of a diff view, ready to adopt without recomputation.
+    ///
+    /// A host that computes diffs off the UI thread builds one of these there and
+    /// hands it to [`DiffView::from_prepared`], so the UI thread only moves data.
+    pub struct PreparedDiff {}
+
     /// A Root widget that lives at the base of a Canopy app.
     #[derive(Default)]
     pub struct Root {}
+
+    /// How much unchanged text the rows show.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum Scope {
+        /// Every line of both versions.
+        WholeFile,
+        /// Changes with this many unchanged lines around them.
+        Context(usize),
+    }
 
     /// A container that lays its children out past its viewport and scrolls over
     /// them.
@@ -1145,6 +1206,15 @@ pub mod canopy_widgets {
     /// as a column's last or first child.
     #[derive(Default)]
     pub struct StatusBar {}
+
+    /// How a diff view arranges the two versions.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum Strategy {
+        /// One column: removed lines above added lines.
+        Unified,
+        /// Two columns: the old version left, the new version right.
+        SideBySide,
+    }
 
     /// A row of tabs over a set of pages, one page visible at a time.
     ///
@@ -1493,6 +1563,104 @@ pub mod canopy_widgets {
         fn on_mount(&mut self, context: &mut dyn Context) -> Result<()> {}
 
         fn render(&mut self, render: &mut Render<'_>, _context: &dyn ViewContext) -> Result<()> {}
+    }
+
+    impl CommandNode for DiffView {
+        fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
+    }
+
+    impl DiffView {
+        #[must_use]
+        /// Adopt a diff whose expensive parts are already computed.
+        ///
+        /// The view starts in unified layout; use [`Self::with_strategy`] to
+        /// change that. Highlighters are installed afterwards, as for
+        /// [`Self::new`].
+        pub fn from_prepared(prepared: PreparedDiff) -> Self {}
+
+        #[must_use]
+        /// Install a highlighter for the new side.
+        pub fn with_new_highlighter(self, highlighter: Box<dyn Highlighter>) -> Self {}
+
+        #[must_use]
+        /// Install a highlighter for the old side.
+        pub fn with_old_highlighter(self, highlighter: Box<dyn Highlighter>) -> Self {}
+
+        #[must_use]
+        /// Return the diff being shown.
+        pub fn diff(&self) -> &Diff {}
+
+        #[must_use]
+        /// Return the display scope.
+        pub fn scope(&self) -> Scope {}
+
+        #[must_use]
+        /// Return the display strategy.
+        pub fn strategy(&self) -> Strategy {}
+
+        #[must_use]
+        /// Return the rows for the current scope.
+        pub fn rows(&self) -> &[DiffRow] {}
+
+        #[must_use]
+        /// Set the amount of unchanged text the rows show.
+        pub fn with_scope(self, scope: Scope) -> Self {}
+
+        #[must_use]
+        /// Set the display strategy.
+        pub fn with_strategy(self, strategy: Strategy) -> Self {}
+
+        #[must_use]
+        /// Set the tab stop width in columns.
+        pub fn with_tab_stop(self, tab_stop: usize) -> Self {}
+
+        /// Construct a view of `old` and `new` in unified, whole-file layout.
+        pub fn new(old: impl Into<String>, new: impl Into<String>) -> Self {}
+
+        /// Page through the diff.
+        /// @param delta Signed page delta. Positive moves down and negative moves
+        /// up.
+        pub fn page(&mut self, c: &mut dyn Context, delta: i32) {}
+
+        /// Replace the diff, discarding highlight state.
+        pub fn set_diff(&mut self, diff: Diff) {}
+
+        /// Replace the view with an already computed diff.
+        pub fn set_prepared(&mut self, prepared: PreparedDiff) {}
+
+        /// Scroll by one line or column in the specified direction.
+        /// @param dir The direction to scroll.
+        pub fn scroll(&mut self, c: &mut dyn Context, dir: FocusDirection) {}
+
+        /// Set the display scope and rebuild the rows.
+        pub fn set_scope(&mut self, scope: Scope) {}
+
+        /// Set the display strategy.
+        pub fn set_strategy(&mut self, strategy: Strategy) {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_page(delta: i32) -> canopy::commands::CommandCall {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_scroll(dir: FocusDirection) -> canopy::commands::CommandCall {}
+
+        /// Return a typed command reference for this command.
+        pub fn cmd_page() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return a typed command reference for this command.
+        pub fn cmd_scroll() -> &'static canopy::commands::CommandSpec {}
+    }
+
+    impl Widget for DiffView {
+        fn canvas(&self, view: Size, _ctx: &CanvasContext<'_>) -> Size {}
+
+        fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {}
+
+        fn measure(&self, c: MeasureConstraints) -> Measurement {}
+
+        fn name(&self) -> NodeName {}
+
+        fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
     }
 
     impl CommandNode for Frame {
@@ -1992,6 +2160,59 @@ pub mod canopy_widgets {
         fn name(&self) -> NodeName {}
     }
 
+    impl Diff {
+        #[must_use]
+        /// Compute the line diff of `old` and `new`.
+        ///
+        /// The caller bounds the texts; a 1 MiB side is the intended ceiling for
+        /// interactive use. An empty side or two equal texts skip the diff
+        /// algorithm, which makes a whole-file creation or deletion immediate.
+        pub fn new(old: impl Into<String>, new: impl Into<String>) -> Self {}
+
+        #[must_use]
+        /// Return one new line without its terminator.
+        pub fn new_line(&self, line: usize) -> &str {}
+
+        #[must_use]
+        /// Return one old line without its terminator.
+        pub fn old_line(&self, line: usize) -> &str {}
+
+        #[must_use]
+        /// Return the display rows for `scope`.
+        ///
+        /// Each call rebuilds the sequence; a view caches the result until its
+        /// scope or texts change.
+        pub fn rows(&self, scope: Scope) -> Vec<DiffRow> {}
+
+        #[must_use]
+        /// Return the new version text.
+        pub fn new_text(&self) -> &str {}
+
+        #[must_use]
+        /// Return the number of lines in the new version.
+        pub fn new_len(&self) -> usize {}
+
+        #[must_use]
+        /// Return the number of lines in the old version.
+        pub fn old_len(&self) -> usize {}
+
+        #[must_use]
+        /// Return the number of lines the new version adds.
+        pub fn insertions(&self) -> usize {}
+
+        #[must_use]
+        /// Return the number of lines the old version holds and the new does not.
+        pub fn deletions(&self) -> usize {}
+
+        #[must_use]
+        /// Return the old version text.
+        pub fn old_text(&self) -> &str {}
+
+        #[must_use]
+        /// Return whether the versions differ.
+        pub fn changed(&self) -> bool {}
+    }
+
     impl KeyHint {
         /// Construct a hint for one key.
         pub fn new(key: impl Into<String>, label: impl Into<String>) -> Self {}
@@ -2040,6 +2261,19 @@ pub mod canopy_widgets {
         fn name(&self) -> NodeName {}
 
         fn render(&mut self, render: &mut Render<'_>, context: &dyn ViewContext) -> Result<()> {}
+    }
+
+    impl PreparedDiff {
+        #[must_use]
+        /// Compute every part of a view for `diff` at `scope` and `tab_stop`.
+        ///
+        /// Side-by-side pairing is deferred until a view needs it, because a
+        /// unified view never does.
+        pub fn new(diff: Diff, scope: Scope, tab_stop: usize) -> Self {}
+
+        #[must_use]
+        /// Return the line diff.
+        pub fn diff(&self) -> &Diff {}
     }
 
     impl Scroll {

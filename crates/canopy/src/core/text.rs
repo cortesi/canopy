@@ -95,7 +95,15 @@ pub fn tab_width(column: usize, tab_stop: usize) -> usize {
 }
 
 /// Return the display width of a string in terminal cells.
+///
+/// Printable ASCII is one column per byte, and the check for it costs a byte
+/// scan, so the common case avoids grapheme segmentation.
 pub fn display_width(s: &str) -> usize {
+    if s.bytes()
+        .all(|byte| byte.is_ascii_graphic() || byte == b' ')
+    {
+        return s.len();
+    }
     s.graphemes(true).map(grapheme_width).sum()
 }
 
@@ -144,6 +152,14 @@ pub fn truncate_end(s: &str, budget: usize) -> Cow<'_, str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn display_width_matches_the_slow_path() {
+        for text in ["", "plain ascii", "a界b", "A👩‍💻B", "café", "line\r"] {
+            let slow: usize = text.graphemes(true).map(grapheme_width).sum();
+            assert_eq!(display_width(text), slow, "{text:?}");
+        }
+    }
 
     #[test]
     fn slice_by_columns_handles_wide_chars() {

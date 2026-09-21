@@ -12,7 +12,10 @@ mod tests {
         testing::harness::Harness,
     };
 
-    use crate::{BoxGlyphs, Button, Dropdown, Frame, KeyHint, List, Selector, StatusBar, Text};
+    use crate::{
+        BoxGlyphs, Button, DiffView, Dropdown, Frame, KeyHint, List, Scope, Selector, StatusBar,
+        Strategy, Text,
+    };
 
     fn click_at(location: Point) -> mouse::MouseEvent {
         mouse::MouseEvent {
@@ -487,6 +490,124 @@ mod tests {
         harness
             .tbuf()
             .assert_matches(buf![">One" " Two" " Three" ""]);
+        Ok(())
+    }
+
+    #[test]
+    fn diff_view_renders_unified_whole_file_rows() -> Result<()> {
+        let view = DiffView::new("one\ntwo\nthree\n", "one\nchanged\nthree\n");
+        let root = SnapshotRoot::new(view);
+        let mut harness = Harness::builder(root).size(20, 4).build()?;
+        harness.render()?;
+        harness
+            .tbuf()
+            .assert_matches(buf![" 1 one" "-2 two" "+2 changed" " 3 three"]);
+        Ok(())
+    }
+
+    #[test]
+    fn diff_view_renders_context_blocks_with_gaps() -> Result<()> {
+        let lines: Vec<String> = (0..20).map(|line| format!("line {line}\n")).collect();
+        let old = lines.concat();
+        let mut changed = lines;
+        changed[10] = "changed\n".to_string();
+        let view = DiffView::new(old, changed.concat()).with_scope(Scope::Context(1));
+        let root = SnapshotRoot::new(view);
+        let mut harness = Harness::builder(root).size(25, 7).build()?;
+        harness.render()?;
+        harness.tbuf().assert_matches(buf![
+            "…"
+            "    @@ -10,3 +10,3 @@"
+            " 10 line 9"
+            "-11 line 10"
+            "+11 changed"
+            " 12 line 11"
+            "…"
+        ]);
+        Ok(())
+    }
+
+    #[test]
+    fn diff_view_pairs_sides_in_side_by_side_layout() -> Result<()> {
+        let view = DiffView::new("one\ntwo\nthree\n", "one\nchanged\nthree\n")
+            .with_strategy(Strategy::SideBySide);
+        let root = SnapshotRoot::new(view);
+        let mut harness = Harness::builder(root).size(24, 4).build()?;
+        harness.render()?;
+        harness.tbuf().assert_matches(buf![
+            " 1 one     │ 1 one"
+            "-2 two     │+2 changed"
+            " 3 three   │ 3 three"
+            ""
+        ]);
+        Ok(())
+    }
+
+    #[test]
+    fn diff_view_scrolls_long_lines_horizontally() -> Result<()> {
+        let view = DiffView::new("abcdefghij\n", "abcdefghij\n");
+        let root = SnapshotRoot::new(view);
+        let mut harness = Harness::builder(root).size(8, 1).build()?;
+        harness.render()?;
+        harness.tbuf().assert_matches(buf![" 1 abcde"]);
+        harness.with_root_context(|_root: &mut SnapshotRoot<DiffView>, ctx| {
+            ctx.with_unique_descendant::<DiffView, _>(|_, ctx| {
+                assert!(ctx.scroll_to(5, 0).changed());
+                Ok(())
+            })
+        })?;
+        harness.render()?;
+        harness.tbuf().assert_matches(buf![" 1 fghij"]);
+        Ok(())
+    }
+
+    #[cfg(feature = "editor")]
+    #[test]
+    fn diff_view_prepares_one_highlighter_per_side() -> Result<()> {
+        use std::{cell::Cell, rc::Rc};
+
+        use crate::editor::highlight::{HighlightSpan, Highlighter};
+
+        struct Counting {
+            prepared: Rc<Cell<usize>>,
+            lines: Rc<Cell<usize>>,
+        }
+
+        impl Highlighter for Counting {
+            fn prepare(&self, _text: &str) {
+                self.prepared.set(self.prepared.get() + 1);
+            }
+
+            fn highlight_line(&self, _line: usize, _text: &str) -> Vec<HighlightSpan> {
+                self.lines.set(self.lines.get() + 1);
+                Vec::new()
+            }
+        }
+
+        let old_prepared = Rc::new(Cell::new(0));
+        let new_prepared = Rc::new(Cell::new(0));
+        let old_lines = Rc::new(Cell::new(0));
+        let new_lines = Rc::new(Cell::new(0));
+        let view = DiffView::new("one\ntwo\n", "one\nthree\n")
+            .with_old_highlighter(Box::new(Counting {
+                prepared: Rc::clone(&old_prepared),
+                lines: Rc::clone(&old_lines),
+            }))
+            .with_new_highlighter(Box::new(Counting {
+                prepared: Rc::clone(&new_prepared),
+                lines: Rc::clone(&new_lines),
+            }));
+        let root = SnapshotRoot::new(view);
+        let mut harness = Harness::builder(root).size(20, 3).build()?;
+        harness.render()?;
+        assert_eq!(old_prepared.get(), 1, "the old source prepares once");
+        assert_eq!(new_prepared.get(), 1, "the new source prepares once");
+        assert!(old_lines.get() > 0, "the old side highlights its lines");
+        assert!(new_lines.get() > 0, "the new side highlights its lines");
+
+        harness.render()?;
+        assert_eq!(old_prepared.get(), 1, "a second frame reuses the source");
+        assert_eq!(new_prepared.get(), 1, "a second frame reuses the source");
         Ok(())
     }
 }

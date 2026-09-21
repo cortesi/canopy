@@ -2847,6 +2847,9 @@ pub mod canopy {
         //! Text utilities.
 
         /// Return the display width of a string in terminal cells.
+        ///
+        /// Printable ASCII is one column per byte, and the check for it costs a byte
+        /// scan, so the common case avoids grapheme segmentation.
         pub fn display_width(s: &str) -> usize {}
 
         /// Expand tabs into spaces using the configured tab stop.
