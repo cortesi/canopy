@@ -432,6 +432,14 @@ impl DiffView {
 
     /// Draw one code line, scrolled horizontally and clipped to `width`.
     #[expect(clippy::too_many_arguments, reason = "one render step")]
+    #[cfg_attr(
+        not(feature = "editor"),
+        expect(
+            unused_variables,
+            unused_mut,
+            reason = "only syntax highlighting reads the side, line, and span offsets"
+        )
+    )]
     fn draw_code(
         &self,
         rndr: &mut Render,

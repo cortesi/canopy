@@ -9,7 +9,6 @@ use canopy::{
     layout::{MeasureConstraints, Measurement},
     text,
 };
-use unicode_width::UnicodeWidthStr;
 
 use crate::label::Label;
 
@@ -200,15 +199,21 @@ where
     }
 
     /// Return the unclamped size required to render all selector items.
+    ///
+    /// Every row reserves the wider checkbox glyph, so checking an item never
+    /// changes the width.
     fn content_size(&self) -> Size {
+        let glyph_width =
+            text::display_width(self.glyphs.0).max(text::display_width(self.glyphs.1));
         let max_label_width = self
             .items
             .iter()
-            .map(|item| UnicodeWidthStr::width(item.label()))
+            .map(|item| text::display_width(item.label()))
             .max()
-            .unwrap_or(0) as u32;
-
-        Size::new(max_label_width + 4, self.items.len() as u32)
+            .unwrap_or(0);
+        let width = u32::try_from(glyph_width.saturating_add(max_label_width)).unwrap_or(u32::MAX);
+        let height = u32::try_from(self.items.len()).unwrap_or(u32::MAX);
+        Size::new(width, height)
     }
 
     /// Return whether focus and selection indices point at current items.
@@ -401,6 +406,29 @@ mod tests {
         assert!(selector.selected.is_empty());
         assert!(selector.selection_invariant_holds());
         Ok(())
+    }
+
+    #[test]
+    fn content_width_measures_the_check_glyphs() {
+        let items = || vec!["ab".to_string(), "abcd".to_string()];
+        assert_eq!(Selector::new(items()).content_size(), Size::new(8, 2));
+        assert_eq!(
+            Selector::new(items()).with_glyphs("", "✓ ").content_size(),
+            Size::new(6, 2),
+            "the wider glyph sets the width"
+        );
+        assert_eq!(
+            Selector::new(items())
+                .with_glyphs("【 】", "【x】")
+                .content_size(),
+            Size::new(9, 2),
+            "wide glyphs count their display columns"
+        );
+        assert_eq!(
+            Selector::new(vec!["日本".to_string()]).content_size(),
+            Size::new(8, 1),
+            "labels count display columns"
+        );
     }
 
     #[test]

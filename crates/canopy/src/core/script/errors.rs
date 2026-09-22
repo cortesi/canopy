@@ -75,110 +75,50 @@ struct CanopyErrorPayload {
 
 impl From<&error::Error> for CanopyErrorPayload {
     fn from(err: &error::Error) -> Self {
+        if let error::Error::Command(err) = err {
+            return Self::from(err);
+        }
+        let payload = Self::new(err.script_kind(), err.to_string());
         match err {
-            error::Error::Command(err) => Self::from(err),
-            error::Error::ScriptTimeout { timeout_ms } => {
-                Self::new(error::ScriptErrorKind::Timeout, err.to_string())
-                    .with_timeout_ms(*timeout_ms)
-            }
-            error::Error::NodeNotFound(node) => {
-                Self::new(error::ScriptErrorKind::NodeNotFound, err.to_string())
-                    .with_owner(format!("{node:?}"))
-            }
-            error::Error::NodeDetached(node) => {
-                Self::new(error::ScriptErrorKind::NodeDetached, err.to_string())
-                    .with_owner(format!("{node:?}"))
-            }
-            error::Error::NodeTypeMismatch { .. } => {
-                Self::new(error::ScriptErrorKind::TypeMismatch, err.to_string())
-            }
-            error::Error::NotFound(_) => {
-                Self::new(error::ScriptErrorKind::NotFound, err.to_string())
-            }
-            error::Error::Invalid(_) | error::Error::InvalidOperation(_) => {
-                Self::new(error::ScriptErrorKind::Invalid, err.to_string())
-            }
-            error::Error::InvalidPhase { .. } => {
-                Self::new(error::ScriptErrorKind::InvalidPhase, err.to_string())
+            error::Error::ScriptTimeout { timeout_ms } => payload.with_timeout_ms(*timeout_ms),
+            error::Error::NodeNotFound(node) | error::Error::NodeDetached(node) => {
+                payload.with_owner(format!("{node:?}"))
             }
             error::Error::ScriptStructured {
-                kind,
                 command,
                 owner,
                 message,
+                ..
             } => Self {
-                kind: *kind,
-                timeout_ms: None,
                 command: command.clone(),
                 owner: owner.clone(),
                 message: message.clone(),
+                ..payload
             },
-            _ => Self::new(error::ScriptErrorKind::Canopy, err.to_string()),
+            _ => payload,
         }
     }
 }
 
 impl From<&commands::CommandError> for CanopyErrorPayload {
     fn from(err: &commands::CommandError) -> Self {
+        let payload = Self::new(err.script_kind(), err.to_string());
         match err {
-            commands::CommandError::UnknownCommand { id } => {
-                Self::new(error::ScriptErrorKind::UnknownCommand, err.to_string())
-                    .with_command(id.clone())
-            }
-            commands::CommandError::ConflictingCommand { id } => {
-                Self::new(error::ScriptErrorKind::ConflictingCommand, err.to_string())
-                    .with_command(id.clone())
-            }
-            commands::CommandError::InvalidCommand { id, .. } => {
-                Self::new(error::ScriptErrorKind::InvalidCommand, err.to_string())
-                    .with_command(id.clone())
-            }
+            commands::CommandError::UnknownCommand { id }
+            | commands::CommandError::ConflictingCommand { id }
+            | commands::CommandError::InvalidCommand { id, .. }
+            | commands::CommandError::Disabled { id, .. } => payload.with_command(id.clone()),
             commands::CommandError::NoTarget { id, owner } => {
-                Self::new(error::ScriptErrorKind::NoTarget, err.to_string())
-                    .with_command(id.clone())
-                    .with_owner(owner.clone())
+                payload.with_command(id.clone()).with_owner(owner.clone())
             }
             commands::CommandError::WrongOwner { id, expected, .. } => {
-                let mut payload = Self::new(error::ScriptErrorKind::WrongOwner, err.to_string())
-                    .with_command(id.clone());
-                if let Some(owner) = expected {
-                    payload = payload.with_owner(owner.clone());
+                let payload = payload.with_command(id.clone());
+                match expected {
+                    Some(owner) => payload.with_owner(owner.clone()),
+                    None => payload,
                 }
-                payload
             }
-            commands::CommandError::Disabled { id, .. } => {
-                Self::new(error::ScriptErrorKind::DisabledCommand, err.to_string())
-                    .with_command(id.clone())
-            }
-            commands::CommandError::InvalidNode { .. } => {
-                Self::new(error::ScriptErrorKind::InvalidNode, err.to_string())
-            }
-            commands::CommandError::ArityMismatch { .. } => {
-                Self::new(error::ScriptErrorKind::ArityMismatch, err.to_string())
-            }
-            commands::CommandError::MissingNamedArg { .. } => Self::new(
-                error::ScriptErrorKind::MissingNamedArgument,
-                err.to_string(),
-            ),
-            commands::CommandError::UnknownNamedArg { .. } => Self::new(
-                error::ScriptErrorKind::UnknownNamedArgument,
-                err.to_string(),
-            ),
-            commands::CommandError::TypeMismatch { .. } => {
-                Self::new(error::ScriptErrorKind::TypeMismatch, err.to_string())
-            }
-            commands::CommandError::MissingInjected { .. } => {
-                Self::new(error::ScriptErrorKind::MissingInjected, err.to_string())
-            }
-            commands::CommandError::Conversion { .. } => {
-                Self::new(error::ScriptErrorKind::Conversion, err.to_string())
-            }
-            commands::CommandError::TargetTypeMismatch => {
-                Self::new(error::ScriptErrorKind::TargetTypeMismatch, err.to_string())
-            }
-            commands::CommandError::Exec(_) => {
-                Self::new(error::ScriptErrorKind::CommandExecution, err.to_string())
-            }
+            _ => payload,
         }
     }
 }
@@ -333,4 +273,58 @@ fn timeout_error(kind: RuntimeErrorKind, timeout: Option<Duration>) -> Option<er
         RuntimeErrorKind::Cancelled | RuntimeErrorKind::Deadline
     )
     .then(|| script_timeout(timeout))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        commands::CommandError,
+        core::{error::NodeOperationKind, id::testing_node_id},
+    };
+
+    #[test]
+    fn every_error_reaches_luau_with_its_script_kind() {
+        let node = testing_node_id();
+        let cases = [
+            (error::Error::ScriptCancelled, "script_cancelled"),
+            (error::Error::ScriptBusy("busy".into()), "script_busy"),
+            (error::Error::ScriptTimeout { timeout_ms: 5 }, "timeout"),
+            (error::Error::NodeDetached(node), "node_detached"),
+            (
+                error::Error::NodeOperation {
+                    kind: NodeOperationKind::Access,
+                    operation: "test",
+                    node,
+                    path: "/root".into(),
+                    source: Box::new(error::Error::NodeNotFound(node)),
+                },
+                "node_not_found",
+            ),
+            (
+                error::Error::Command(CommandError::UnknownCommand { id: "x::y".into() }),
+                "unknown_command",
+            ),
+            (error::Error::Internal("oops".into()), "canopy_error"),
+        ];
+        for (err, label) in cases {
+            let payload = CanopyErrorPayload::from(&err);
+            assert_eq!(payload.kind, err.script_kind(), "{err}");
+            assert_eq!(payload.kind.as_str(), label, "{err}");
+        }
+    }
+
+    #[test]
+    fn payloads_keep_command_and_owner_context() {
+        let node = testing_node_id();
+        let detached = CanopyErrorPayload::from(&error::Error::NodeDetached(node));
+        assert_eq!(detached.owner, Some(format!("{node:?}")));
+        let missing = CanopyErrorPayload::from(&error::Error::Command(CommandError::NoTarget {
+            id: "list::select".into(),
+            owner: "list".into(),
+        }));
+        assert_eq!(missing.kind, error::ScriptErrorKind::NoTarget);
+        assert_eq!(missing.command.as_deref(), Some("list::select"));
+        assert_eq!(missing.owner.as_deref(), Some("list"));
+    }
 }

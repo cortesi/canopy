@@ -527,7 +527,9 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "clear_bindings",
-        docs: Some("Remove every binding from every mode."),
+        docs: Some(
+            "Remove every application binding and clear the mode stack. Framework bindings stay.",
+        ),
         signature: FunctionSignature::new,
         handler: Handler::Sync(host_clear_bindings),
     },
@@ -2137,7 +2139,8 @@ fn host_unbind_key<'s>(
     Ok(ret_none())
 }
 
-/// `canopy.clear_bindings`: remove every binding from every mode.
+/// `canopy.clear_bindings`: remove every application binding and clear the
+/// mode stack.
 fn host_clear_bindings<'s>(
     scope: &Scope<'s>,
     _args: MultiValue<'s>,

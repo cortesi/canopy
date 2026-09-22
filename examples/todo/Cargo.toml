@@ -1,17 +1,19 @@
 [package]
 name = "todo"
 version = "0.1.0"
+authors.workspace = true
 edition.workspace = true
 license.workspace = true
+publish = false
 
 [lib]
 doctest = false
 
 [dependencies]
 anyhow.workspace = true
-canopy = { path = "../../crates/canopy" }
-canopy-mcp = { version = "0.1.0", path = "../../crates/canopy-mcp" }
-canopy-widgets = { path = "../../crates/canopy-widgets", default-features = false }
+canopy.workspace = true
+canopy-mcp.workspace = true
+canopy-widgets.workspace = true
 clap.workspace = true
 musq = { path = "../../../musq/crates/musq", default-features = false }
 pollster = "1.0.1"
@@ -19,7 +21,7 @@ textwrap.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "time"] }
 
 [dev-dependencies]
-canopy = { path = "../../crates/canopy", features = ["testing"] }
+canopy = { workspace = true, features = ["testing"] }
 futures.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["macros"] }

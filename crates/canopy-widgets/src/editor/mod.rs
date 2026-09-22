@@ -3,6 +3,10 @@
     reason = "Editor methods are split by rendering, vi, and prompt concerns."
 )]
 //! Editor widget and supporting types.
+//!
+//! Editing policy, such as vi modes, search, and selection behavior, belongs on
+//! the editor. Buffer mechanics, such as positions, ranges, and edits, belong
+//! on the shared text buffer.
 
 pub mod highlight;
 /// Layout and wrapping cache.

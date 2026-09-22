@@ -905,38 +905,31 @@ fn script_error_info(error: &crate::Error) -> ScriptErrorInfo {
 
 /// Preserve structured fields from shared driver errors without cloning the
 /// error.
+///
+/// The kind comes from [`CanopyError::script_kind`], the mapping Luau error
+/// payloads use, so a script and its report agree on the category.
 fn canopy_error_info(error: &CanopyError) -> ScriptErrorInfo {
-    if let CanopyError::ScriptStructured {
-        kind,
-        command,
-        owner,
-        message,
-    } = error
-    {
-        return ScriptErrorInfo {
-            error_type: if *kind == ScriptErrorKind::Timeout {
-                ScriptErrorType::Timeout
-            } else {
-                ScriptErrorType::Runtime
-            },
-            kind: Some(*kind),
-            command: command.clone(),
-            owner: owner.clone(),
-            message: message.clone(),
-        };
-    }
-    let error_type = match error {
-        CanopyError::ScriptTimeout { .. } => ScriptErrorType::Timeout,
-        CanopyError::ScriptCancelled => ScriptErrorType::Cancelled,
+    let kind = error.script_kind();
+    let error_type = match kind {
+        ScriptErrorKind::Timeout => ScriptErrorType::Timeout,
+        ScriptErrorKind::ScriptCancelled => ScriptErrorType::Cancelled,
         _ => ScriptErrorType::Runtime,
+    };
+    let (command, owner, message) = match error {
+        CanopyError::ScriptStructured {
+            command,
+            owner,
+            message,
+            ..
+        } => (command.clone(), owner.clone(), message.clone()),
+        _ => (None, None, error.to_string()),
     };
     ScriptErrorInfo {
         error_type,
-        kind: matches!(error, CanopyError::ScriptCancelled)
-            .then_some(ScriptErrorKind::ScriptCancelled),
-        command: None,
-        owner: None,
-        message: error.to_string(),
+        kind: Some(kind),
+        command,
+        owner,
+        message,
     }
 }
 
@@ -1430,5 +1423,42 @@ declare command: {
             outcome.error.as_ref().unwrap().kind,
             Some(ScriptErrorKind::ScriptCancelled)
         );
+    }
+
+    #[test]
+    fn reports_classify_errors_by_their_script_kind() {
+        let cases = [
+            (
+                CanopyError::ScriptBusy("busy".into()),
+                ScriptErrorType::Runtime,
+                ScriptErrorKind::ScriptBusy,
+            ),
+            (
+                CanopyError::ScriptTimeout { timeout_ms: 5 },
+                ScriptErrorType::Timeout,
+                ScriptErrorKind::Timeout,
+            ),
+            (
+                CanopyError::ScriptStructured {
+                    kind: ScriptErrorKind::ScriptCancelled,
+                    command: None,
+                    owner: None,
+                    message: "eval failed: cancelled".into(),
+                },
+                ScriptErrorType::Cancelled,
+                ScriptErrorKind::ScriptCancelled,
+            ),
+            (
+                CanopyError::NotFound("widget".into()),
+                ScriptErrorType::Runtime,
+                ScriptErrorKind::NotFound,
+            ),
+        ];
+        for (error, error_type, kind) in cases {
+            let info = canopy_error_info(&error);
+            assert_eq!(info.error_type, error_type, "{error}");
+            assert_eq!(info.kind, Some(kind), "{error}");
+            assert_eq!(info.kind, Some(error.script_kind()), "{error}");
+        }
     }
 }

@@ -162,9 +162,8 @@ impl LuauHost {
     /// Check admission before compilation, reload, or diagnostics mutation.
     pub(crate) fn ensure_eval_idle(&self) -> Result<()> {
         if self.is_eval_active() {
-            return Err(error::Error::script_structured(
-                error::ScriptErrorKind::ScriptBusy,
-                "a script evaluation is already active",
+            return Err(error::Error::ScriptBusy(
+                "a script evaluation is already active".into(),
             ));
         }
         Ok(())
@@ -255,11 +254,7 @@ impl LuauHost {
             .with_owner(format!("{anchor:?}")));
         }
         if !canopy.core.is_attached_to_root(anchor) {
-            return Err(error::Error::script_structured(
-                error::ScriptErrorKind::NodeDetached,
-                "script anchor is detached",
-            )
-            .with_owner(format!("{anchor:?}")));
+            return Err(error::Error::NodeDetached(anchor));
         }
         invocation.anchor_incarnation = Some(entry.incarnation);
         let handle = invocation.handle.ok_or_else(|| {
@@ -459,31 +454,19 @@ mod tests {
             assert_eq!(invocation.logs, vec!["root output"]);
             assert!(matches!(
                 host.compile("return 1"),
-                Err(error::Error::ScriptStructured {
-                    kind: error::ScriptErrorKind::ScriptBusy,
-                    ..
-                })
+                Err(error::Error::ScriptBusy(_))
             ));
             assert!(matches!(
                 host.compile_startup_named("invalid Luau", "busy_startup"),
-                Err(error::Error::ScriptStructured {
-                    kind: error::ScriptErrorKind::ScriptBusy,
-                    ..
-                })
+                Err(error::Error::ScriptBusy(_))
             ));
             assert!(matches!(
                 canopy.invalidate_script_modules(None),
-                Err(error::Error::ScriptStructured {
-                    kind: error::ScriptErrorKind::ScriptBusy,
-                    ..
-                })
+                Err(error::Error::ScriptBusy(_))
             ));
             assert!(matches!(
                 host.start_invocation(tree.root, script),
-                Err(error::Error::ScriptStructured {
-                    kind: error::ScriptErrorKind::ScriptBusy,
-                    ..
-                })
+                Err(error::Error::ScriptBusy(_))
             ));
             assert_eq!(host.logs(), vec!["ambient output", "binding output"]);
             assert!(host.state.borrow().closures.functions.contains_key(&target));

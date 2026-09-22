@@ -6,6 +6,7 @@ use super::{Core, focus::is_focus_candidate};
 use crate::{
     FrameworkBindingGroup, Invalidation, NodeId,
     error::{Error, Result},
+    path::Path,
     style::effects::{self, Effect},
 };
 
@@ -43,6 +44,36 @@ pub struct ModalOptions {
     pub dim_target: Option<NodeId>,
     /// Binding ownership admitted by this scope.
     pub bindings: ModalBindings,
+}
+
+/// The input route from a start node toward the root.
+///
+/// Built by [`Core::route`].
+pub struct Route<'a> {
+    /// Tree the route walks.
+    core: &'a Core,
+    /// Next node to yield, if the route continues.
+    next: Option<NodeId>,
+    /// Path from the root to `next`.
+    path: Path,
+    /// Modal owner that ends the route, if a modal is open.
+    owner: Option<NodeId>,
+}
+
+impl Iterator for Route<'_> {
+    type Item = (NodeId, Path);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let node = self.next?;
+        let path = self.path.clone();
+        self.next = if self.owner == Some(node) {
+            None
+        } else {
+            self.core.nodes.get(node).and_then(|entry| entry.parent)
+        };
+        self.path.pop();
+        Some((node, path))
+    }
 }
 
 /// Node identity that cannot silently refer to a replacement widget.
@@ -125,6 +156,32 @@ impl Core {
     pub(crate) fn interaction_admits(&self, node: NodeId) -> bool {
         self.modal_region()
             .is_none_or(|modal| self.is_ancestor_or_self(modal, node))
+    }
+
+    /// Return the transient mode that takes the next key.
+    ///
+    /// A framework-group modal suspends transient modes, so none is in effect
+    /// while one is open. An application modal leaves the mode in effect.
+    pub(crate) fn effective_transient_mode(&self) -> Option<&str> {
+        if self.input_map.active_exclusive_group().is_some() {
+            return None;
+        }
+        self.input_map.transient_mode()
+    }
+
+    /// Walk the input route from `start` toward the root.
+    ///
+    /// Each step yields a node and its path from the root. The walk ends after
+    /// the modal owner, and it is empty when the modal does not admit `start`.
+    /// Routing, analysis, and discovery share this walk, so they agree about
+    /// which nodes a route reaches.
+    pub(crate) fn route(&self, start: NodeId) -> Route<'_> {
+        Route {
+            core: self,
+            next: self.interaction_admits(start).then_some(start),
+            path: self.path_of(self.root, start),
+            owner: self.modal_owner(),
+        }
     }
 
     /// Return effects owned by scopes without altering widget-owned effects.

@@ -920,11 +920,7 @@ mod tests {
     }
     #[test]
     fn live_pending_eval_allows_native_progress_and_reports_busy() -> crate::Result<()> {
-        use canopy::{
-            EvalRequest, Work,
-            error::{Error as CanopyError, ScriptErrorKind},
-            geom::Size,
-        };
+        use canopy::{EvalRequest, Work, error::Error as CanopyError, geom::Size};
         use futures::{StreamExt, executor};
 
         let mut canopy = Canopy::new();
@@ -982,10 +978,7 @@ mod tests {
         let busy_result = executor::block_on(busy.completion).expect("busy request completed");
         assert!(matches!(
             busy_result.result.as_ref(),
-            Err(CanopyError::ScriptStructured {
-                kind: ScriptErrorKind::ScriptBusy,
-                ..
-            })
+            Err(CanopyError::ScriptBusy(_))
         ));
         while !worker.is_finished() {
             canopy.turn(Work::Wake)?;

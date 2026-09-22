@@ -840,3 +840,41 @@ fn a_framework_action_modal_admits_only_allowlisted_actions() -> Result<()> {
     assert!(!map.candidate_keys().contains(&Key::from('x')));
     Ok(())
 }
+
+#[test]
+fn a_framework_modal_suspends_the_transient_cutoff() -> Result<()> {
+    let mut map = InputMap::new();
+    register_action(&mut map, "test.clear")?;
+    let allowed = bind_action(
+        &mut map,
+        BindingScope::Default,
+        'x',
+        "",
+        "test.clear",
+        "Allowed",
+    )?;
+    map.push_transient_mode("prefix");
+    map.set_modal_bindings(Some(ModalBindings::FrameworkWithActions {
+        group: HELP,
+        actions: &["test.clear"],
+    }));
+    let route = [Path::from("/root/help/list")];
+    assert_eq!(
+        map.resolve_match(&route[0], InputSpec::Key('x'.into()))
+            .map(|resolved| resolved.id),
+        Some(allowed),
+        "a suspended transient mode leaves the default tier reachable"
+    );
+    assert_eq!(
+        map.registry_status(allowed, &route),
+        RegistryStatus::Effective
+    );
+
+    map.set_modal_bindings(None);
+    assert!(
+        map.resolve_match(&route[0], InputSpec::Key('x'.into()))
+            .is_none(),
+        "without the modal, the transient mode cuts off the default tier"
+    );
+    Ok(())
+}

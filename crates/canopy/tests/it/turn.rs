@@ -9,7 +9,7 @@ mod tests {
         Canopy, Context, ContextExt, EvalRequest, EventOutcome, Render, TypedId, ViewContext,
         ViewContextExt, Widget, Work,
         commands::ArgValue,
-        error::{Error, Result, ScriptErrorKind},
+        error::{Error, Result},
         event::{Event, key, mouse},
         geom::{Line, PointI32, Size},
         layout::Layout,
@@ -145,19 +145,10 @@ mod tests {
             timeout: None,
             anchor: canopy.root_id(),
         }));
-        assert!(matches!(
-            second,
-            Err(Error::ScriptStructured {
-                kind: ScriptErrorKind::ScriptBusy,
-                ..
-            })
-        ));
+        assert!(matches!(second, Err(Error::ScriptBusy(_))));
         assert!(matches!(
             canopy.invalidate_script_modules(None),
-            Err(Error::ScriptStructured {
-                kind: ScriptErrorKind::ScriptBusy,
-                ..
-            })
+            Err(Error::ScriptBusy(_))
         ));
         let cancelled = canopy.turn(Work::CancelEval(id))?;
         assert_eq!(cancelled.completed.len(), 1);

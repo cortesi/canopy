@@ -7,27 +7,23 @@ that Rust code uses.
 
 ## Generated API
 
-`Canopy::finalize_api()` seals the command surface and renders the app's
-`.d.luau` definition text. `Canopy::script_api()` returns that text.
+`CanopyBuilder::build()` finalizes the script API. Finalization seals the
+command surface and renders the app's `.d.luau` definition text.
+`Canopy::script_api()` returns that text, and Luau `canopy.api()` returns the
+same text to scripts.
 
 Canopy renders the file from the same native modules it installs on the script
 surface, in install order:
 
 1. The header comment in `crates/canopy/luau/preamble.d.luau`.
-2. The base `canopy` module, which declares `NodeId`, `CommandCall`, `Point`,
-   `Size`, `Rect`, `SemanticIdentity`, `NodeInfo`, `TreeNode`, `CommandTarget`,
-   `CommandTargetInfo`, `BindOptions`, `KeymapEntry`, `Keymap`,
-   `UnbindSelector`, `MouseSpec`, `FixtureInfo`, `BindingInfo`,
-   `CommandParamInfo`, `CommandInfo`, `ScreenCell`, `RouteTraceEntry`,
-   `AvailableBinding`, `BindingSnapshot`, `ScriptAssertionInfo`,
-   `ScriptJournalEntry`, `SemanticActionStatus`, `WidgetSemantics`,
-   `NodeSnapshot`, `FrameSnapshot`, the `canopy` global, and `fixtures()`.
-3. Each module registered through `Canopy::register_script_module`.
-4. One module per widget owner, carrying its command table and default-binding
+2. The base `canopy` module, with its record types, the `canopy` global, and
+   `fixtures()`. Read the current type list from `canopy.api()` or
+   `canopyctl api`.
+3. One module per widget owner, carrying its command table and default-binding
    helper.
-5. The `command` global, with one constructor per node command grouped by
+4. The `command` global, with one constructor per node command grouped by
    owner. An owner named `command` fails API finalization.
-6. Fixture comment lines.
+5. Fixture comment lines.
 
 The generated function signatures and the audited surface therefore cannot drift
 apart.
@@ -59,7 +55,7 @@ automation can progress while an evaluation waits. Resumed segments retain their
 original script anchor. Focus-targeted calls resolve current focus when invoked.
 
 Only one top-level evaluation may run at a time. Another evaluation or module
-reload fails with structured `ScriptBusy`. Live callers submit an `EvalRequest`
+reload fails with `ScriptBusy`. Live callers submit an `EvalRequest`
 through `AutomationHandle::submit_eval` and await the returned `EvalTicket` outside
 the UI thread. Its completion contains the value or error, logs, and assertions.
 Completion arrives through the original ticket after runtime preparation.
@@ -276,9 +272,9 @@ it would, and the pointer's own position plays no part: hit testing and mouse
 capture choose the real target. Key discovery asks each widget's `key_outcome`
 along the route: a `Handle` prediction hides the `after_widget` bindings it
 would shadow, and `Ignore` lets the route continue. A widget with no prediction
-is unknown, so an included binding behind it stays in `bindings` and is listed
-in `key_prediction_gaps` with the canonical key, the provisional binding, and
-the unknown node and path. An empty gap list means the key set is exact.
+is unknown. An included binding behind it moves to `provisional_bindings`, and
+`key_prediction_gaps` lists it with the canonical key, the provisional binding,
+and the unknown node and path. An empty gap list means the key set is exact.
 
 `canopy.explain_key(key, node?)` analyzes one key without sending it. The record
 names the focus and path, one step per examined node with its resolved binding,
@@ -303,7 +299,8 @@ or `ScrollUp`, so a reported label parses back to the record it names.
 `canopy.unbind(id)` removes one binding. `canopy.unbind_key(key, options?)`
 removes matching application key bindings. Its optional selector has exact
 `mode` and `path` filters. `canopy.clear_bindings()` removes every application
-binding. Scripts cannot remove or replace framework-owned bindings.
+binding and clears the mode stack. Scripts cannot remove or replace
+framework-owned bindings.
 
 Registered widget default bindings appear as `owner.default_bindings()` in the
 generated API. Calling that helper installs the Rust-registered default binding
@@ -320,7 +317,7 @@ back; retry with a fresh builder and suitable application resources.
 
 Build does not prepare a frame or run startup. The first runtime preparation
 runs startup, calculates geometry, then invokes `on_start` before publication.
-The low-level `Canopy` setup APIs remain available.
+`CanopyBuilder` is the only way to construct an application.
 
 Builder user and project script roots default to disabled. Register each root
 with `user_script_root(path, ScriptTrust::TrustedLocal)` or
@@ -344,13 +341,6 @@ Rooted config and startup files keep one source identity through typechecking,
 compilation, loading, diagnostics, and tracebacks. `init.luau` maps to its
 mount root (`@user` or `@project`), matching directory-module resolution.
 
-`Canopy::invalidate_script_modules` refreshes one named root or every root.
-Invalidation also removes application key and mouse bindings and pending
-startup hooks because their retained function handles belong to the previous
-source epoch. Framework-owned bindings remain installed. The next script load
-prepares dependencies again, and re-running the startup scripts reinstalls the
-application bindings.
-
 ## Startup Scripts
 
 Startup scripts run once, after the app finalizes its script API. The layer
@@ -366,8 +356,7 @@ end
 
 Canopy typechecks startup roots against an obligated surface before execution.
 Missing or mismatched obligations fail startup with a diagnostic naming the
-global and required type. App code may add more obligations with
-`Canopy::require_startup_global(name, type_text)` before `finalize_api()`.
+global and required type.
 
 Keep top level startup code to imports, locals, and pure construction. Put side
 effects such as bindings, mode setup, and command calls inside `setup()`.
@@ -429,7 +418,7 @@ Ruau associates them with a named source. Error diagnostics fail MCP evaluation
 before execution. MCP evaluation reports `ScriptCheckDiagnostic` unchanged, so
 the `source` field travels with each diagnostic in the `diagnostics` array.
 
-After `finalize_api()`, every compile typechecks the source against the
+After API finalization, every compile typechecks the source against the
 finalized surface in every build. Error diagnostics fail compilation with a
 parse error. Scripts compiled before finalization are only syntax-checked.
 

@@ -1822,6 +1822,126 @@ fn send_key_checked_accepts_an_unhandled_route_at_a_modal_boundary() -> Result<(
     Ok(())
 }
 
+/// Open a modal over a focused leaf and return the leaf.
+fn modal_leaf(canopy: &mut Canopy, bindings: crate::ModalBindings) -> Result<NodeId> {
+    let modal = focused_leaf(canopy, PredictingLeaf)?;
+    canopy.core.open_modal(crate::ModalOptions {
+        owner: canopy.root_id(),
+        modal,
+        initial_focus: modal,
+        dim_target: None,
+        bindings,
+    })?;
+    Ok(modal)
+}
+
+/// Bind a default-tier `z` and a `prefix` mode `y`, each pushing a mode.
+fn bind_prefix_mode(canopy: &mut Canopy) -> Result<()> {
+    canopy.eval_script(
+        r#"
+        canopy.bind("z", { description = "Default z" }, function() canopy.push_mode("default_ran") end)
+        canopy.keymap({
+            mode = "prefix",
+            { key = "y", description = "Prefix y", action = function() canopy.push_mode("after") end },
+        })
+        "#,
+    )?;
+    Ok(())
+}
+
+#[test]
+fn a_transient_mode_under_an_application_modal_takes_the_next_key() -> Result<()> {
+    let mut canopy = Canopy::new();
+    modal_leaf(&mut canopy, crate::ModalBindings::Application)?;
+    bind_prefix_mode(&mut canopy)?;
+
+    // Discovery, analysis, and routing agree that the mode takes the key.
+    canopy.push_transient_input_mode("prefix");
+    let snapshot = canopy.available_bindings(None)?;
+    assert_eq!(snapshot.transient_mode.as_deref(), Some("prefix"));
+    assert_eq!(
+        snapshot
+            .bindings
+            .iter()
+            .map(|binding| binding.description.as_str())
+            .collect::<Vec<_>>(),
+        ["Prefix y"]
+    );
+    assert!(matches!(
+        canopy.explain_key(None, 'y'.into())?.outcome,
+        RouteOutcome::Transient { .. }
+    ));
+    canopy.key(None, 'y')?;
+    assert_eq!(
+        canopy.core.input_map.active_modes(),
+        ["after"],
+        "the mode pops before its binding runs"
+    );
+
+    // A key the mode does not bind pops it without reaching the default tier.
+    canopy.set_input_mode("");
+    canopy.push_transient_input_mode("prefix");
+    assert_eq!(
+        canopy.explain_key(None, 'z'.into())?.outcome,
+        RouteOutcome::TransientDismiss
+    );
+    canopy.key(None, 'z')?;
+    assert!(canopy.core.input_map.active_modes().is_empty());
+
+    // Once the mode has popped, the default tier is reachable again.
+    assert!(matches!(
+        canopy.explain_key(None, 'z'.into())?.outcome,
+        RouteOutcome::AfterWidget { .. }
+    ));
+    canopy.key(None, 'z')?;
+    assert_eq!(canopy.core.input_map.active_modes(), ["default_ran"]);
+    Ok(())
+}
+
+#[test]
+fn a_checked_transient_key_under_an_application_modal_matches_its_analysis() -> Result<()> {
+    let mut canopy = Canopy::new();
+    modal_leaf(&mut canopy, crate::ModalBindings::Application)?;
+    bind_prefix_mode(&mut canopy)?;
+    canopy.push_transient_input_mode("prefix");
+    let RouteOutcome::Transient { binding, .. } = canopy.explain_key(None, 'y'.into())?.outcome
+    else {
+        panic!("expected a transient binding");
+    };
+
+    canopy.send_key_checked('y', KeyExpectation::Transient(binding))?;
+    assert_eq!(canopy.core.input_map.active_modes(), ["after"]);
+
+    canopy.push_transient_input_mode("prefix");
+    canopy.send_key_checked('q', KeyExpectation::TransientDismiss)?;
+    assert_eq!(canopy.core.input_map.active_modes(), ["after"]);
+    Ok(())
+}
+
+#[test]
+fn a_framework_modal_suspends_a_transient_mode() -> Result<()> {
+    let mut canopy = Canopy::new();
+    let group = inputmap::FrameworkBindingGroup::new("test.modal");
+    modal_leaf(&mut canopy, crate::ModalBindings::Framework(group))?;
+    bind_prefix_mode(&mut canopy)?;
+    canopy.push_transient_input_mode("prefix");
+
+    let snapshot = canopy.available_bindings(None)?;
+    assert_eq!(snapshot.transient_mode, None);
+    assert!(snapshot.bindings.is_empty());
+    assert_eq!(
+        canopy.explain_key(None, 'y'.into())?.outcome,
+        RouteOutcome::Unhandled
+    );
+    canopy.key(None, 'y')?;
+    assert_eq!(
+        canopy.core.input_map.active_modes(),
+        ["prefix"],
+        "a suspended mode neither runs nor pops"
+    );
+    Ok(())
+}
+
 #[test]
 fn explain_key_reports_before_widget_and_unhandled_outcomes() -> Result<()> {
     let mut canopy = Canopy::new();

@@ -68,7 +68,7 @@ fixture.
 ## Guardrails
 
 `cargo xtask smoke` discovers every `.canopyctl.toml` file and runs its configured
-smoke suite. The Todo suite is currently the only checked-in suite. New examples
+smoke suite. The Todo and Hello examples each check in a suite. New examples
 should add a `.canopyctl.toml`, at least one root smoke script, and fixture-specific
 scripts for every non-trivial state they register.
 

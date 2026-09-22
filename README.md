@@ -59,3 +59,15 @@ All interface operations are defined cleanly as traversals of this node tree.
 - [Scripting](./docs/scripting.md)
 - [Agent loop](./docs/agent-loop.md)
 - [Fixtures](./docs/fixtures.md)
+- [Stock widget styles](./docs/styles.md)
+
+
+# Demos
+
+The gyms exercise each widget family. Run one by name:
+
+```sh
+cargo run -p canopy-examples --example demo -- stylegym
+```
+
+Run `cargo run -p canopy-examples --example demo -- --help` to list them.

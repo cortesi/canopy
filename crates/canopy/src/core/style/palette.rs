@@ -81,6 +81,15 @@ pub fn theme(p: &Palette) -> StyleMap {
         .fg("/columns/divider", p.frame)
         .fg("/columns/thumb", thumb)
         .fg("/columns/thumb/active", p.accent)
+        // A diff reads changed rows by their colour, and its chrome stays
+        // quiet: gaps, the empty half of a one-sided change, and the divider.
+        .fg("/diff/context", p.fg)
+        .fg("/diff/added", p.green)
+        .fg("/diff/removed", p.red)
+        .fg("/diff/header", p.accent)
+        .fg("/diff/gap", p.muted_fg)
+        .fg("/diff/missing", p.muted_fg)
+        .fg("/diff/separator", p.frame)
         .fg("/blue", p.blue)
         .fg("/red", p.red)
         .fg("/magenta", p.magenta)

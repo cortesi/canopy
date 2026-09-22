@@ -1,6 +1,7 @@
 [package]
 name = "canopy-derive"
 version = "0.1.0"
+authors.workspace = true
 edition.workspace = true
 license.workspace = true
 
@@ -15,7 +16,7 @@ proc-macro2 = "1.0.107"
 convert_case.workspace = true
 
 [dev-dependencies]
-canopy = { path = "../canopy", features = ["testing"] }
+canopy = { workspace = true, features = ["testing"] }
 pretty_assertions = "1.4.1"
 trybuild = "1.0.121"
 serde.workspace = true

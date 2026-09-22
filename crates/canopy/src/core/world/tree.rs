@@ -838,16 +838,12 @@ impl Core {
         Ok(())
     }
 
-    /// Retain only keyed mappings that still point to direct children.
-    fn retain_child_keys(&mut self, parent: NodeId) {
-        let Some(node) = self.nodes.get_mut(parent) else {
-            return;
-        };
-        let keep: HashSet<NodeId> = node.children.iter().copied().collect();
-        node.child_keys.retain(|_, id| keep.contains(id));
-    }
-
     /// Replace the children list for a parent in the arena tree.
+    ///
+    /// The list reorders the current children and may add new ones, including
+    /// nodes taken from another parent. It must keep every current child: a
+    /// caller that wants a child out detaches or removes it first, so no
+    /// child is left detached in the arena by omission.
     pub fn set_children(&mut self, parent: impl Into<NodeId>, children: Vec<NodeId>) -> Result<()> {
         let parent = parent.into();
         self.with_tree_edit("set children", move |core| {
@@ -869,6 +865,15 @@ impl Core {
                     child: *child,
                 });
             }
+        }
+        if let Some(omitted) = self.nodes[parent]
+            .children
+            .iter()
+            .find(|child| !seen.contains(*child))
+        {
+            return Err(Error::InvalidOperation(format!(
+                "set children omits child {omitted:?} of {parent:?}; detach or remove it first"
+            )));
         }
 
         for child in &children {
@@ -910,13 +915,6 @@ impl Core {
             }
         }
 
-        let old_children = self.nodes[parent].children.clone();
-        for child in old_children {
-            if let Some(node) = self.nodes.get_mut(child) {
-                node.parent = None;
-            }
-        }
-
         for child in &children {
             if let Some(node) = self.nodes.get_mut(*child) {
                 node.parent = Some(parent);
@@ -924,7 +922,6 @@ impl Core {
         }
 
         self.nodes[parent].children = children;
-        self.retain_child_keys(parent);
 
         let new_children = self.nodes[parent].children.clone();
         self.refresh_attachment_generations();

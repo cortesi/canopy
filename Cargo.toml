@@ -1,5 +1,5 @@
 [workspace]
-resolver = "2"
+resolver = "3"
 members = ["crates/*", "examples/*", "xtask"]
 
 [workspace.metadata.nanocode]
@@ -19,10 +19,19 @@ debug = "line-tables-only"
 debug = false
 
 [workspace.package]
+authors = ["Aldo Cortesi <aldo@corte.si>"]
 edition = "2024"
 license = "MIT"
 
 [workspace.dependencies]
+# Internal crates.
+canopy = { path = "crates/canopy" }
+canopy-derive = { path = "crates/canopy-derive" }
+canopy-geom = { path = "crates/canopy-geom" }
+canopy-mcp = { path = "crates/canopy-mcp" }
+canopy-widgets = { path = "crates/canopy-widgets", default-features = false }
+
+# External crates.
 anyhow = "1.0.104"
 clap = { version = "4.6.7", features = ["derive"] }
 convert_case = "0.12.0"

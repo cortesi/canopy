@@ -141,7 +141,7 @@ pub enum BindingTargetKind {
 impl BindingTargetKind {
     /// Return the kind of one binding target.
     #[must_use]
-    pub fn of(target: &BindingTarget) -> Self {
+    pub(crate) fn of(target: &BindingTarget) -> Self {
         match target {
             BindingTarget::Script(_) => Self::Script,
             BindingTarget::Command(_) => Self::Command,
@@ -645,7 +645,7 @@ impl InputMap {
     /// The order is modal admission, then the global tier, the newest active
     /// modes, and the default tier. Within a tier, path specificity and
     /// insertion order rank the candidates. A transient mode ends the walk,
-    /// so nothing older follows it.
+    /// so nothing older follows it, unless a framework group suspends it.
     pub(crate) fn candidates(&self, path: &Path, input: InputSpec) -> Vec<BindingCandidate<'_>> {
         let input = input.normalize();
         let mut out = Vec::new();
@@ -669,27 +669,31 @@ impl InputMap {
                     &BindingScope::Exclusive(group),
                     Some(group),
                 );
-                self.extend_application_tiers(&mut out, path, input);
+                self.extend_application_tiers(&mut out, path, input, false);
             }
             Some(ModalBindings::Application) | None => {
-                self.extend_application_tiers(&mut out, path, input);
+                self.extend_application_tiers(&mut out, path, input, true);
             }
         }
         out
     }
 
     /// Append the application tiers in resolution order.
+    ///
+    /// `transient_ends` is false while a framework group suspends transient
+    /// modes, so a waiting mode does not cut off the tiers below it.
     fn extend_application_tiers<'a>(
         &'a self,
         out: &mut Vec<BindingCandidate<'a>>,
         path: &Path,
         input: InputSpec,
+        transient_ends: bool,
     ) {
         self.extend_scope(out, path, input, &BindingScope::Global, None);
         for mode in self.mode_stack.iter().rev() {
             let scope = BindingScope::Mode(mode.name.clone());
             self.extend_scope(out, path, input, &scope, None);
-            if mode.transient {
+            if transient_ends && mode.transient {
                 // A transient mode ends the walk, so older modes and the
                 // default tier stay out of reach.
                 return;

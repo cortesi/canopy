@@ -587,9 +587,8 @@ impl Canopy {
     #[cfg(any(test, feature = "testing"))]
     pub fn invalidate_script_modules(&mut self, root: Option<&str>) -> Result<Option<u64>> {
         if self.script_host.is_eval_active() {
-            return Err(error::Error::script_structured(
-                error::ScriptErrorKind::ScriptBusy,
-                "cannot reload modules while evaluation is active",
+            return Err(error::Error::ScriptBusy(
+                "cannot reload modules while evaluation is active".into(),
             ));
         }
         let Some(source) = self.script_module_source.as_ref() else {
@@ -1069,7 +1068,9 @@ impl Canopy {
         self.release_removed_bindings(removed)
     }
 
-    /// Remove all bindings from all modes.
+    /// Remove every application binding and clear the mode stack.
+    ///
+    /// Framework bindings stay registered. Returns the count removed.
     pub(crate) fn clear_bindings(&mut self) -> usize {
         let removed = self.core.input_map.clear_application();
         self.release_removed_bindings(removed)

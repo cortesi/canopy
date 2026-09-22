@@ -597,6 +597,9 @@ pub mod canopy {
             #[error("script evaluation cancelled")]
             /// Evaluation explicitly cancelled by its caller.
             ScriptCancelled,
+            #[error("script busy: {0}")]
+            /// Another runtime turn or top-level script evaluation is active.
+            ScriptBusy(String),
             #[error("render target width {requested} exceeds limit {limit}")]
             /// A render target exceeds its configured width limit.
             RenderWidthLimit {
@@ -873,6 +876,14 @@ pub mod canopy {
         /// Convert a canopy error into a structured Ruau runtime error.
         impl From<Error> for ruau::vm::RuntimeError {
             fn from(error: error::Error) -> Self {}
+        }
+
+        impl Error {
+            /// Return the stable script-visible category of this error.
+            ///
+            /// Luau error payloads and automation reports both classify through this
+            /// one mapping.
+            pub fn script_kind(&self) -> ScriptErrorKind {}
         }
 
         impl From<&Error> for CanopyErrorPayload {
@@ -1331,7 +1342,10 @@ pub mod canopy {
             pub focus_path: crate::path::Path,
             /// Active non-default modes in resolution order.
             pub active_modes: Vec<String>,
-            /// Newest active mode when it is transient.
+            /// Transient mode that takes the next key.
+            ///
+            /// This is the newest active mode when it is transient. It is absent
+            /// while a framework-group modal suspends transient modes.
             pub transient_mode: Option<String>,
             /// Newest active exclusive binding group.
             pub exclusive_group: Option<crate::core::inputmap::FrameworkBindingGroup>,
@@ -3753,9 +3767,15 @@ pub mod canopy {
         fn scroll_up(&mut self) -> ChangeOutcome {}
 
         /// Replace the children list for the current node.
+        ///
+        /// The list must keep every current child, as for
+        /// [`Context::set_children_of`].
         fn set_children(&mut self, children: Vec<NodeId>) -> Result<()> {}
 
         /// Replace the children list for a specific parent node.
+        ///
+        /// The list reorders the current children and may add new ones. Omitting
+        /// a current child is an error: detach or remove it first.
         fn set_children_of(&mut self, parent: NodeId, children: Vec<NodeId>) -> Result<()>;
 
         /// Focus an attached node.
@@ -4269,10 +4289,6 @@ pub mod canopy {
         #[must_use]
         /// Return a stable target-kind label.
         pub fn label(self) -> &'static str {}
-
-        #[must_use]
-        /// Return the kind of one binding target.
-        pub fn of(target: &BindingTarget) -> Self {}
     }
 
     impl CanopyBuilder {

@@ -1,20 +1,22 @@
 [package]
 name = "canopy-examples"
 version = "0.1.0"
+authors.workspace = true
 edition.workspace = true
 license.workspace = true
+publish = false
 
 [lib]
 doctest = false
 
 [dependencies]
-canopy = { path = "../canopy" }
-canopy-widgets = { path = "../canopy-widgets" }
+canopy.workspace = true
+canopy-widgets = { workspace = true, default-features = true }
 rand.workspace = true
 unicode-width.workspace = true
 
 [dev-dependencies]
-canopy = { path = "../canopy", features = ["testing"] }
+canopy = { workspace = true, features = ["testing"] }
 clap.workspace = true
 
 [lints]

@@ -16,9 +16,11 @@ facade traits and their handle types: `Canopy`, `Widget`, `Context`,
 `ViewContext`, `Render`, `NodeName`, `View`, the capability context traits,
 typed node IDs, and the command macros. Value libraries live in their modules:
 `canopy::geom`, `canopy::layout`, `canopy::style`, `canopy::event`,
-`canopy::path`, `canopy::script`, `canopy::error`, `canopy::help`,
-`canopy::cursor`, `canopy::text`, and `canopy::render` (backend interfaces).
-Each item has one canonical location, and there is no prelude.
+`canopy::path`, `canopy::commands`, `canopy::script`, `canopy::error`,
+`canopy::help`, `canopy::keyroute`, `canopy::cursor`, `canopy::text`,
+`canopy::render` (backend interfaces), and `canopy::terminal` (the Crossterm
+run loop). The `testing` feature adds `canopy::testing`. Each item has one
+canonical location, and there is no prelude.
 
 `Canopy` owns `Core` and the style map. Its fields are private. Apps install root
 widgets with helpers such as `Root::install`, mutate styles through
@@ -32,6 +34,16 @@ expose only what the stable surface above needs.
 Path-oriented APIs use `Path`, `PathFilter`, and `NodeName`. Literal path
 components must be valid node names. Raw script path strings are validated at the
 Luau boundary before matching.
+
+Two rules keep the surface small. `Canopy` holds only operations that cannot
+live on a context. A new context query or mutation replaces or generalizes an
+existing one. The generated captures in `api/` record the surface, and every
+public API change is reviewed as a diff of those captures.
+
+`EvalTicket::completion` exposes `futures::channel::oneshot::Receiver`
+directly. Evaluation completion is a single-consumer event with that receiver's
+polling and cancellation semantics, so a wrapper would add surface without
+changing the contract.
 
 ## Widget capabilities
 
@@ -224,6 +236,12 @@ settles the geometry they show, so a widget can change content and reveal it in
 the same turn. `reveal_anchor()` asks `Widget::reveal_anchor()` for a rectangle
 using the final content size. The editor reveals its cursor this way.
 
+Neither operation can express the other: a scroll moves now, and a reveal waits
+for layout. A scrollbar owner scrolls a node other than itself, so
+`scroll_to_of()` takes a node. The three reveals take different targets: a
+rectangle of the node's canvas, an anchor the widget computes after layout, and
+a node in its ancestor views.
+
 Each node holds one local request, an area or an anchor, and one request to
 reveal the node in its ancestor views. A later call replaces its slot. Every
 scroll and reveal takes an increasing call-order stamp, and each view records
@@ -281,6 +299,10 @@ viewport, so corners, tab bars, headers, and footers stay plain. A track exists
 only when the target reaches the border: every node from the target up to the
 frame's child ends at its parent's content edge on that side. A sidebar beside
 the target therefore removes the vertical track.
+
+A thumb covers whole cells. Both of its ends round to the nearest cell, and a
+thumb is at least one cell long. A drag inverts the same rounding, so the thumb
+stays under the pointer and its last position reaches the final offset.
 
 `Columns` also owns scrollbars. It places panes in a row with a one-cell gap
 after each pane and one trailing column, and draws a divider in each of those
@@ -368,13 +390,14 @@ a ticket wakes that driver to cancel its work.
 `ChangeSet` tracks layout, paint, cursor, and observation invalidation. Mutable
 widget access and accepted runtime mutations record the required work. Failed
 mutations retain invalidation for state they changed. Read-only automation does
-not request a redraw. `Canopy::render` remains an explicit preparation and emission
-path for isolated rendering tests. `Canopy::flush` prepares pending changes for
-native callers that need snapshots or geometry before the next turn.
+not request a redraw. `Canopy::render` prepares a frame and emits it to a
+given backend; headless MCP evaluation and rendering tests use it. Scripts
+prepare pending changes with `canopy.flush()` when they need snapshots or
+geometry before the next turn.
 
 Poll deadlines belong to the driver. There is no eager scheduler thread per
-application. Adapters wait on terminal input, runtime notifications, and
-`Canopy::next_deadline()` with fair ready-source selection. Tests can install
+application. Adapters wait on terminal input, runtime notifications, and the
+next poll deadline with fair ready-source selection. Tests can install
 `testing::ManualClock` before initialization, advance it, then deliver `Work::Wake`.
 
 ## Event Routing

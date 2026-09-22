@@ -95,17 +95,23 @@ applied.
 
 Prefer one eval per scenario step: check availability, call commands, and
 assert the result in the same Luau program. Use typed command calls and runtime
-observation before coordinate input.
+observation before coordinate input. This example runs after the `with_items`
+fixture:
 
 ```luau
 local todo_node = canopy.resolve("todo")
 canopy.assert(todo_node ~= nil, "todo widget should be mounted")
+canopy.assert(
+    canopy.screen_text():find("Buy milk") ~= nil,
+    "fixture should render the first item"
+)
 
 todo.select_first()
 todo.delete_item()
+canopy.flush()
 
 local text = canopy.screen_text()
-canopy.assert(text:find("Write agent loop docs") == nil, "deleted item should disappear")
+canopy.assert(text:find("Buy milk") == nil, "deleted item should disappear")
 ```
 
 Observation helpers are script-visible:

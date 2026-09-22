@@ -1,6 +1,7 @@
 [package]
 name = "canopy-mcp"
 version = "0.1.0"
+authors.workspace = true
 edition.workspace = true
 license.workspace = true
 
@@ -8,7 +9,7 @@ license.workspace = true
 doctest = false
 
 [dependencies]
-canopy = { version = "0.0.1", path = "../canopy" }
+canopy.workspace = true
 ruau-script-api = { workspace = true, features = ["schema"] }
 schemars.workspace = true
 serde.workspace = true
@@ -21,6 +22,6 @@ tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "syn
 workspace = true
 
 [dev-dependencies]
-canopy = { path = "../canopy", features = ["testing"] }
+canopy = { workspace = true, features = ["testing"] }
 futures.workspace = true
 tempfile.workspace = true

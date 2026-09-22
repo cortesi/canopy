@@ -76,7 +76,7 @@ pub use boxed::{Border, BoxGlyphs, DOUBLE, ROUND, SINGLE, SINGLE_THICK};
 pub use button::Button;
 pub use center::Center;
 pub use columns::Columns;
-pub use confirm::Confirm;
+pub use confirm::{Answer, Confirm};
 pub use container::Container;
 pub use diff::{Diff, DiffRow, Scope};
 pub use diff_view::{DiffView, PreparedDiff, Strategy};

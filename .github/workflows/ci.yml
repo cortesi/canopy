@@ -1,5 +1,5 @@
 # Blocker: this workflow cannot pass on a hosted runner yet. The workspace
-# depends on the sibling path crates ruau, tmcp, itty-core, and itty-script,
+# depends on the sibling path crates ruau, tmcp, itty-core, and musq,
 # which are not published and are not part of this repository.
 # The job stays red until those crates are published, vendored, or checked out
 # beside the workspace here. Do not replace it with a passing no-op.
@@ -41,7 +41,7 @@ jobs:
         run: >-
           cargo +nightly fmt
           -p canopy -p canopy-derive -p canopy-geom -p canopy-mcp
-          -p canopy-widgets -p canopyctl -p canopy-examples -p todo -p xtask
+          -p canopy-widgets -p canopyctl -p canopy-examples -p hello -p todo -p xtask
           -- --check --config-path rustfmt.toml
 
       - name: Check lints

@@ -140,15 +140,12 @@ impl Core {
         let focus = requested.or(self.focus).unwrap_or(self.root);
         self.validate_attached_node(focus)?;
         let focus_path = self.path_of(self.root, focus);
-        let transient = self.input_map.transient_mode().is_some() && self.modal_region().is_none();
-        if transient {
+        if self.effective_transient_mode().is_some() {
             return Ok(self.explain_transient_key(focus, focus_path, key));
         }
-        let mut route_node = self.interaction_admits(focus).then_some(focus);
-        let mut route_path = focus_path.clone();
         let mut steps = Vec::new();
         let mut unknown = false;
-        while let Some(node) = route_node {
+        for (node, route_path) in self.route(focus) {
             let prior_unknown = unknown;
             let prediction = self.node_key_outcome(node, key, focus);
             let selected = self.select_key_binding(node, &route_path, key, focus, &[]);
@@ -177,12 +174,6 @@ impl Core {
                     ));
                 }
                 unknown = prior_unknown || prediction.is_none();
-                route_node = if self.modal_owner() == Some(node) {
-                    None
-                } else {
-                    self.nodes.get(node).and_then(|entry| entry.parent)
-                };
-                route_path.pop();
                 continue;
             };
             let outcome = match (&selected.target, selected.phase) {
@@ -252,41 +243,22 @@ impl Core {
         focus_path: Path,
         key: Key,
     ) -> KeyRouteExplanation {
-        let mut route_node = self.interaction_admits(focus).then_some(focus);
-        let mut route_path = focus_path.clone();
-        while let Some(node) = route_node {
-            if let Some(selected) = self.select_key_binding(node, &route_path, key, focus, &[]) {
-                let outcome = match selected.target {
-                    BindingTarget::WidgetAction(_) => RouteOutcome::TransientWidgetAction {
-                        binding: selected.id,
-                        node,
-                        path: route_path,
-                    },
-                    BindingTarget::Script(_) | BindingTarget::Command(_) => {
-                        RouteOutcome::Transient {
-                            binding: selected.id,
-                            node,
-                            path: route_path,
-                        }
-                    }
-                };
-                return explanation(key, focus, focus_path, Vec::new(), false, outcome);
-            }
-            route_node = if self.modal_owner() == Some(node) {
-                None
-            } else {
-                self.nodes.get(node).and_then(|entry| entry.parent)
-            };
-            route_path.pop();
-        }
-        explanation(
-            key,
-            focus,
-            focus_path,
-            Vec::new(),
-            false,
-            RouteOutcome::TransientDismiss,
-        )
+        let outcome = match self.transient_winner(focus, key) {
+            Some((node, path, selected)) => match selected.target {
+                BindingTarget::WidgetAction(_) => RouteOutcome::TransientWidgetAction {
+                    binding: selected.id,
+                    node,
+                    path,
+                },
+                BindingTarget::Script(_) | BindingTarget::Command(_) => RouteOutcome::Transient {
+                    binding: selected.id,
+                    node,
+                    path,
+                },
+            },
+            None => RouteOutcome::TransientDismiss,
+        };
+        explanation(key, focus, focus_path, Vec::new(), false, outcome)
     }
 
     /// Project the included binding and gaps for one explained key.
@@ -432,19 +404,10 @@ impl Core {
         if let Some(action) = record.target.widget_action() {
             // The route offers the action at every node whose path it matches
             // on the way up, so any accepting node keeps it reachable.
-            let mut node = Some(target);
-            let mut path = self.path_of(self.root, target);
-            let mut consumer = false;
-            while let Some(current) = node {
-                if record.path_match(&path).is_some()
-                    && self.node_accepts_action(current, action.as_str(), target)
-                {
-                    consumer = true;
-                    break;
-                }
-                node = self.nodes.get(current).and_then(|entry| entry.parent);
-                path.pop();
-            }
+            let consumer = self.route(target).any(|(node, path)| {
+                record.path_match(&path).is_some()
+                    && self.node_accepts_action(node, action.as_str(), target)
+            });
             if !consumer {
                 return BindingVerdict::NoConsumer;
             }
@@ -470,17 +433,9 @@ impl Core {
         }
     }
 
-    /// Return the diagnostic target-to-root route.
+    /// Return the route paths from `target`, as dispatch would walk them.
     fn diagnostic_route(&self, target: NodeId) -> Vec<Path> {
-        let mut route = Vec::new();
-        let mut route_path = self.path_of(self.root, target);
-        let mut route_node = Some(target);
-        while let Some(node) = route_node {
-            route.push(route_path.clone());
-            route_node = self.nodes.get(node).and_then(|entry| entry.parent);
-            route_path.pop();
-        }
-        route
+        self.route(target).map(|(_, path)| path).collect()
     }
 }
 

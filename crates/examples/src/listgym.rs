@@ -1,6 +1,6 @@
 use canopy::{
-    Canopy, CanopyBuilder, Context, ContextExt, EventOutcome, Loader, NodeId, NodeName, Render,
-    ViewContext, ViewContextExt, Widget, derive_commands,
+    Canopy, CanopyBuilder, Context, ContextExt, EventOutcome, FocusScope, Loader, NodeId, NodeName,
+    Render, ViewContext, ViewContextExt, Widget, derive_commands,
     error::{Error, Result},
     event::key,
     geom::Size,
@@ -212,14 +212,7 @@ impl ListGym {
         let index = focused_column(c, columns).map_or(panes.len(), |(index, _)| index + 1);
         panes.insert(index, list);
         c.set_children_of(columns, panes)?;
-        let target = c
-            .focusable_leaves(list)
-            .first()
-            .copied()
-            .or_else(|| c.first_leaf(list));
-        if let Some(target) = target {
-            c.set_focus(target)?;
-        }
+        c.focus_first(FocusScope::Node(list))?;
         Ok(())
     }
 

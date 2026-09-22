@@ -113,10 +113,7 @@ impl ModeHelp {
     /// Contextual help replaces the panel while it is open.
     pub(crate) fn sync(context: &mut dyn Context, overlay: NodeId) -> Result<()> {
         let snapshot = context.available_bindings(context.focused_node())?;
-        let mode = snapshot
-            .transient_mode
-            .filter(|_| snapshot.exclusive_group.is_none());
-        let Some(mode) = mode else {
+        let Some(mode) = snapshot.transient_mode else {
             context.set_hidden_of(overlay, true)?;
             return Ok(());
         };

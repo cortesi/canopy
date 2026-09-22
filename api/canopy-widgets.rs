@@ -12,6 +12,10 @@ pub mod canopy_widgets {
     )]
     pub mod editor {
         //! Editor widget and supporting types.
+        //!
+        //! Editing policy, such as vi modes, search, and selection behavior, belongs on
+        //! the editor. Buffer mechanics, such as positions, ranges, and edits, belong
+        //! on the shared text buffer.
 
         pub mod highlight {
             //! Syntax highlighting helpers.
@@ -897,6 +901,16 @@ pub mod canopy_widgets {
         }
     }
 
+    /// One of the two answers a question takes.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    pub enum Answer {
+        /// Agree to the question.
+        Yes,
+        #[default]
+        /// Decline it, which is where a dialog opens unless a host says otherwise.
+        No,
+    }
+
     /// Monotonic key for list items.
     #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
     pub struct AutoKey(_);
@@ -1436,8 +1450,9 @@ pub mod canopy_widgets {
         /// Move focus to another displayed pane by a signed offset, wrapping
         /// around.
         ///
-        /// Focus moves to the pane's first focusable leaf, or to its first leaf
-        /// when none accepts focus. Columns without a displayed pane do nothing.
+        /// Focus moves to the first node in the pane that accepts focus. A pane
+        /// with none leaves focus where it is, and columns without a displayed
+        /// pane do nothing.
         /// @param delta Panes to move; negative values move left.
         pub fn focus_column(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {}
 

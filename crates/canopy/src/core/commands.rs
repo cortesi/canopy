@@ -17,7 +17,7 @@ use crate::{
         context::{CoreContext, CoreViewContext},
         world::WidgetOperation,
     },
-    error::Result as CoreResult,
+    error::{Result as CoreResult, ScriptErrorKind},
     event::{Event, mouse::MouseEvent},
 };
 
@@ -1309,6 +1309,27 @@ pub enum CommandError {
 }
 
 impl CommandError {
+    /// Return the stable script-visible category of this failure.
+    pub(crate) fn script_kind(&self) -> ScriptErrorKind {
+        match self {
+            Self::UnknownCommand { .. } => ScriptErrorKind::UnknownCommand,
+            Self::ConflictingCommand { .. } => ScriptErrorKind::ConflictingCommand,
+            Self::InvalidCommand { .. } => ScriptErrorKind::InvalidCommand,
+            Self::NoTarget { .. } => ScriptErrorKind::NoTarget,
+            Self::InvalidNode { .. } => ScriptErrorKind::InvalidNode,
+            Self::WrongOwner { .. } => ScriptErrorKind::WrongOwner,
+            Self::Disabled { .. } => ScriptErrorKind::DisabledCommand,
+            Self::ArityMismatch { .. } => ScriptErrorKind::ArityMismatch,
+            Self::MissingNamedArg { .. } => ScriptErrorKind::MissingNamedArgument,
+            Self::UnknownNamedArg { .. } => ScriptErrorKind::UnknownNamedArgument,
+            Self::TypeMismatch { .. } => ScriptErrorKind::TypeMismatch,
+            Self::MissingInjected { .. } => ScriptErrorKind::MissingInjected,
+            Self::Conversion { .. } => ScriptErrorKind::Conversion,
+            Self::TargetTypeMismatch => ScriptErrorKind::TargetTypeMismatch,
+            Self::Exec(_) => ScriptErrorKind::CommandExecution,
+        }
+    }
+
     /// Preserve a command implementation's concrete error as the execution
     /// source.
     #[doc(hidden)]

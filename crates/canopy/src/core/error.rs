@@ -171,6 +171,9 @@ pub enum Error {
     /// Evaluation explicitly cancelled by its caller.
     #[error("script evaluation cancelled")]
     ScriptCancelled,
+    /// Another runtime turn or top-level script evaluation is active.
+    #[error("script busy: {0}")]
+    ScriptBusy(String),
     /// A render target exceeds its configured width limit.
     #[error("render target width {requested} exceeds limit {limit}")]
     RenderWidthLimit {
@@ -347,6 +350,48 @@ pub enum Error {
 }
 
 impl Error {
+    /// Return the stable script-visible category of this error.
+    ///
+    /// Luau error payloads and automation reports both classify through this
+    /// one mapping.
+    pub fn script_kind(&self) -> ScriptErrorKind {
+        match self {
+            Self::ScriptCancelled => ScriptErrorKind::ScriptCancelled,
+            Self::ScriptBusy(_) => ScriptErrorKind::ScriptBusy,
+            Self::ScriptTimeout { .. } => ScriptErrorKind::Timeout,
+            Self::ScriptStructured { kind, .. } => *kind,
+            Self::Command(error) => error.script_kind(),
+            Self::NodeOperation { source, .. } => source.script_kind(),
+            Self::NodeNotFound(_) => ScriptErrorKind::NodeNotFound,
+            Self::NodeDetached(_) => ScriptErrorKind::NodeDetached,
+            Self::NodeTypeMismatch { .. } => ScriptErrorKind::TypeMismatch,
+            Self::NotFound(_) => ScriptErrorKind::NotFound,
+            Self::Invalid(_) | Self::InvalidOperation(_) => ScriptErrorKind::Invalid,
+            Self::InvalidPhase { .. } => ScriptErrorKind::InvalidPhase,
+            Self::RenderWidthLimit { .. }
+            | Self::RenderHeightLimit { .. }
+            | Self::RenderCellCountOverflow { .. }
+            | Self::RenderCellLimit { .. }
+            | Self::RenderAllocation { .. }
+            | Self::InvalidCellCharacter { .. }
+            | Self::Geometry(_)
+            | Self::InvalidLayout(_)
+            | Self::TerminalIo(_)
+            | Self::RunLoop(_)
+            | Self::Internal(_)
+            | Self::Invariant(_)
+            | Self::ReentrantWidgetBorrow(_)
+            | Self::MultipleMatches
+            | Self::DuplicateChildKey(_)
+            | Self::DuplicateChild { .. }
+            | Self::AlreadyAttached(_)
+            | Self::WouldCreateCycle { .. }
+            | Self::TreeEditDuringRollback { .. }
+            | Self::KeyDispatchDivergence(_)
+            | Self::Parse(_) => ScriptErrorKind::Canopy,
+        }
+    }
+
     /// Construct a structured script failure.
     pub(crate) fn script_structured(kind: ScriptErrorKind, message: impl Into<String>) -> Self {
         Self::ScriptStructured {

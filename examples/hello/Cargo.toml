@@ -1,8 +1,10 @@
 [package]
 name = "hello"
 version = "0.1.0"
+authors.workspace = true
 edition.workspace = true
 license.workspace = true
+publish = false
 description = "Minimal Canopy application used as the external-application reference"
 
 [lib]
@@ -10,13 +12,13 @@ doctest = false
 
 [dependencies]
 anyhow.workspace = true
-canopy = { path = "../../crates/canopy" }
-canopy-mcp = { version = "0.1.0", path = "../../crates/canopy-mcp" }
-canopy-widgets = { path = "../../crates/canopy-widgets", default-features = false }
+canopy.workspace = true
+canopy-mcp.workspace = true
+canopy-widgets.workspace = true
 clap.workspace = true
 
 [dev-dependencies]
-canopy = { path = "../../crates/canopy", features = ["testing"] }
+canopy = { workspace = true, features = ["testing"] }
 tempfile.workspace = true
 
 [lints]

@@ -730,11 +730,17 @@ pub trait Context: ViewContext + sealed::Context {
     fn wake_handle(&self, lifetime: crate::WorkLifetime) -> Result<crate::NodeWakeHandle>;
 
     /// Replace the children list for the current node.
+    ///
+    /// The list must keep every current child, as for
+    /// [`Context::set_children_of`].
     fn set_children(&mut self, children: Vec<NodeId>) -> Result<()> {
         self.set_children_of(self.node_id(), children)
     }
 
     /// Replace the children list for a specific parent node.
+    ///
+    /// The list reorders the current children and may add new ones. Omitting
+    /// a current child is an error: detach or remove it first.
     fn set_children_of(&mut self, parent: NodeId, children: Vec<NodeId>) -> Result<()>;
 
     /// Set the current node's visibility.

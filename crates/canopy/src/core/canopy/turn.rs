@@ -26,7 +26,7 @@ use super::{AdapterEvent, Canopy};
 use crate::{
     NodeId,
     commands::ArgValue,
-    error::{Error, Result, ScriptErrorKind},
+    error::{Error, Result},
     event::Event,
     script,
 };
@@ -526,10 +526,7 @@ impl Canopy {
 }
 /// Structured admission error shared by driver entry points.
 fn busy() -> Error {
-    Error::script_structured(
-        ScriptErrorKind::ScriptBusy,
-        "another runtime turn or evaluation is active",
-    )
+    Error::ScriptBusy("another runtime turn or evaluation is active".into())
 }
 
 impl super::AutomationHandle {

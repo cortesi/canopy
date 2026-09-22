@@ -53,6 +53,22 @@ impl Core {
         None
     }
 
+    /// Select the binding a transient mode runs for `key` on `start`'s route.
+    ///
+    /// The winner is the first node on the modal-bounded route with an
+    /// eligible binding. Routing and analysis both use this, so a transient
+    /// key dispatches where its explanation says it will.
+    pub(crate) fn transient_winner(
+        &self,
+        start: NodeId,
+        key: Key,
+    ) -> Option<(NodeId, Path, ResolvedBinding)> {
+        self.route(start).find_map(|(node, path)| {
+            self.select_key_binding(node, &path, key, start, &[])
+                .map(|binding| (node, path, binding))
+        })
+    }
+
     /// Return whether the widget at `node` accepts `action` on `focus`'s
     /// route.
     ///

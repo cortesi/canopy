@@ -35,7 +35,10 @@ pub struct BindingSnapshot {
     pub focus_path: Path,
     /// Active non-default modes in resolution order.
     pub active_modes: Vec<String>,
-    /// Newest active mode when it is transient.
+    /// Transient mode that takes the next key.
+    ///
+    /// This is the newest active mode when it is transient. It is absent
+    /// while a framework-group modal suspends transient modes.
     pub transient_mode: Option<String>,
     /// Newest active exclusive binding group.
     pub exclusive_group: Option<FrameworkBindingGroup>,
@@ -147,7 +150,6 @@ impl Core {
         for mouse in self.input_map.eligible_mouse_inputs() {
             mouse_bindings.extend(self.winner_along_route(
                 focus,
-                &focus_path,
                 mouse,
                 InputSpec::Mouse(mouse),
             )?);
@@ -162,7 +164,7 @@ impl Core {
                 .into_iter()
                 .map(str::to_string)
                 .collect(),
-            transient_mode: self.input_map.transient_mode().map(str::to_string),
+            transient_mode: self.effective_transient_mode().map(str::to_string),
             exclusive_group: self.input_map.active_exclusive_group(),
             bindings,
             provisional_bindings,
@@ -178,30 +180,17 @@ impl Core {
     fn winner_along_route<I>(
         &self,
         focus: NodeId,
-        focus_path: &Path,
         input: I,
         spec: InputSpec,
     ) -> Result<Option<AvailableBinding<I>>> {
-        let mut route_node = self.interaction_admits(focus).then_some(focus);
-        let mut route_path = focus_path.clone();
-        while let Some(node) = route_node {
-            let Some(resolved) = self.input_map.resolve_match(&route_path, spec) else {
-                route_node = if self.modal_owner() == Some(node) {
-                    None
-                } else {
-                    self.nodes.get(node).and_then(|entry| entry.parent)
-                };
-                route_path.pop();
-                continue;
-            };
-            return Ok(Some(self.available_binding(
-                node,
-                input,
-                route_path,
-                resolved.id,
-            )?));
-        }
-        Ok(None)
+        let winner = self.route(focus).find_map(|(node, path)| {
+            self.input_map
+                .resolve_match(&path, spec)
+                .map(|resolved| (node, path, resolved.id))
+        });
+        winner
+            .map(|(node, path, id)| self.available_binding(node, input, path, id))
+            .transpose()
     }
 
     /// Build one effective binding record from a resolved winner.

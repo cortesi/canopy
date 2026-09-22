@@ -1,7 +1,7 @@
 //! Panes side by side, with dividers that show their scroll positions.
 
 use canopy::{
-    Context, EventOutcome, NodeId, NodeName, Render, ViewContext, ViewContextExt, Widget,
+    Context, EventOutcome, FocusScope, NodeId, NodeName, Render, ViewContext, Widget,
     derive_commands,
     error::Result,
     event::{Event, key},
@@ -67,8 +67,9 @@ impl Columns {
     /// Move focus to another displayed pane by a signed offset, wrapping
     /// around.
     ///
-    /// Focus moves to the pane's first focusable leaf, or to its first leaf
-    /// when none accepts focus. Columns without a displayed pane do nothing.
+    /// Focus moves to the first node in the pane that accepts focus. A pane
+    /// with none leaves focus where it is, and columns without a displayed
+    /// pane do nothing.
     /// @param delta Panes to move; negative values move left.
     #[command]
     pub fn focus_column(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {
@@ -83,14 +84,7 @@ impl Columns {
         let count = i64::try_from(panes.len()).unwrap_or(i64::MAX);
         let next = (i64::try_from(current).unwrap_or(0) + i64::from(delta)).rem_euclid(count);
         let pane = panes[usize::try_from(next).unwrap_or(0)];
-        let target = c
-            .focusable_leaves(pane)
-            .first()
-            .copied()
-            .or_else(|| c.first_leaf(pane));
-        if let Some(target) = target {
-            c.set_focus(target)?;
-        }
+        c.focus_first(FocusScope::Node(pane))?;
         Ok(())
     }
 

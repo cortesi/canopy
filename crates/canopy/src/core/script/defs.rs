@@ -512,7 +512,7 @@ fn register_observation_info(builder: &mut module::Builder) {
             declaration::Field::new("active_modes", declaration::Type::String.array())
                 .doc("Active modes in resolution order."),
             declaration::Field::new("transient_mode", declaration::Type::String.optional())
-                .doc("Newest active mode when it is transient."),
+                .doc("Transient mode that takes the next key, absent while a framework modal suspends it."),
             declaration::Field::new("exclusive_group", declaration::Type::String.optional())
                 .doc("Active exclusive framework group."),
             declaration::Field::new(

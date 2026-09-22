@@ -941,6 +941,41 @@ fn focus_column_wraps_through_displayed_panes() -> Result<()> {
 }
 
 #[test]
+fn focus_column_skips_a_pane_that_refuses_focus() -> Result<()> {
+    let (mut harness, nodes) = scene(30, 4, |c| {
+        let columns = add_columns(c)?;
+        let focusable = boxed(c, columns, Layout::fill())?;
+        let leaf = c.add_child_to(focusable, Tall(Rc::new(Cell::new(1))))?;
+        let refusing = boxed(c, columns, Layout::fill())?;
+        let inert = boxed(c, refusing, Layout::fill())?;
+        Ok(vec![columns, leaf.into(), inert])
+    })?;
+    let (columns, leaf, inert) = (nodes[0], nodes[1], nodes[2]);
+    harness
+        .canopy
+        .with_root_context(|c| c.set_focus(leaf).map(|_| ()))?;
+
+    // Read focus before the next layout, which would repair a bad target.
+    let focus = harness.canopy.with_root_context(|c| {
+        c.with_widget_mut(columns, |columns: &mut Columns, c| {
+            columns.focus_column(c, 1)
+        })?;
+        Ok(c.focused_node())
+    })?;
+    assert_ne!(
+        focus,
+        Some(inert),
+        "a leaf that refuses focus never takes it"
+    );
+    assert_eq!(
+        focus,
+        Some(leaf),
+        "a pane with nothing to focus leaves focus"
+    );
+    Ok(())
+}
+
+#[test]
 fn a_resize_during_a_drag_ends_it_at_the_next_event() -> Result<()> {
     let (mut harness, nodes) = scene(20, 10, |c| framed_surface(c, Size::new(1, 64)))?;
     let (frame, body) = (nodes[0], nodes[1]);

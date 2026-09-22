@@ -1,7 +1,7 @@
 [package]
 name = "canopy-widgets"
-authors = ["Aldo Cortesi <aldo@corte.si>"]
 version = "0.0.1"
+authors.workspace = true
 edition.workspace = true
 license.workspace = true
 
@@ -16,7 +16,7 @@ graphics = ["dep:image", "dep:fontdue"]
 devtools = ["dep:tracing-subscriber"]
 
 [dependencies]
-canopy = { path = "../canopy" }
+canopy.workspace = true
 
 # Widget-specific dependencies
 textwrap.workspace = true
@@ -43,7 +43,7 @@ itty-core = { workspace = true, optional = true }
 two-face = { version = "0.5.2", default-features = false, features = ["syntect-onig"], optional = true }
 
 [dev-dependencies]
-canopy = { path = "../canopy", features = ["testing"] }
+canopy = { workspace = true, features = ["testing"] }
 criterion.workspace = true
 proptest.workspace = true
 tempfile.workspace = true

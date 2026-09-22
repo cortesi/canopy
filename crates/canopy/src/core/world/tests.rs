@@ -1083,6 +1083,34 @@ fn set_children_detaches_from_previous_parent() -> Result<()> {
 }
 
 #[test]
+fn set_children_rejects_omitted_children() -> Result<()> {
+    let mut core = Core::new();
+    let parent = wrap_node(&mut core)?;
+    let first = wrap_node(&mut core)?;
+    let second = wrap_node(&mut core)?;
+    core.set_children(parent, vec![first, second])?;
+
+    let err = core
+        .set_children(parent, vec![second])
+        .expect_err("an omitted child is rejected");
+    assert!(matches!(err, Error::InvalidOperation(_)));
+    assert_eq!(core.nodes[parent].children, vec![first, second]);
+    assert_eq!(core.nodes[first].parent, Some(parent));
+
+    // Reordering and adding keep every current child.
+    let third = wrap_node(&mut core)?;
+    core.set_children(parent, vec![second, third, first])?;
+    assert_eq!(core.nodes[parent].children, vec![second, third, first]);
+
+    // An explicit detach takes a child out.
+    core.detach(first)?;
+    core.set_children(parent, vec![third, second])?;
+    assert_eq!(core.nodes[parent].children, vec![third, second]);
+    assert_eq!(core.nodes[first].parent, None);
+    core.validate_invariants()
+}
+
+#[test]
 fn set_children_rejects_cycles() -> Result<()> {
     let mut core = Core::new();
     let parent = wrap_node(&mut core)?;

@@ -345,6 +345,9 @@ impl Canopy {
                         }
                         return Ok(true);
                     }
+                    // Handlers can change the tree, so the parent is read
+                    // only now. This is the walk `Core::route` takes, with
+                    // the same modal bounds, read live.
                     target = self.core.nodes.get(id).and_then(|node| node.parent);
                     path.pop();
                 }
@@ -434,9 +437,9 @@ impl Canopy {
         key: key::Key,
         guard: Option<&mut KeyRouteGuard>,
     ) -> Result<bool> {
-        if self.core.modal_region().is_none() && self.core.input_map.transient_mode().is_some() {
+        if self.core.effective_transient_mode().is_some() {
             self.with_dispatch_boundary(|canopy| {
-                canopy.route_transient_key(start, path, key, scope, guard)
+                canopy.route_transient_key(start, &path, key, scope, guard)
             })
         } else {
             self.route_input(Some(start), path, RoutedInput::Key(key), scope, guard)
@@ -447,11 +450,12 @@ impl Canopy {
     ///
     /// The mode pops before its binding runs, so the binding can enter another
     /// mode. No widget sees the key, and a key the mode does not bind only
-    /// pops the mode.
+    /// pops the mode. The winner is searched on the modal-bounded route, as
+    /// key analysis does.
     fn route_transient_key(
         &mut self,
         start: NodeId,
-        mut path: Path,
+        path: &Path,
         key: key::Key,
         scope: Option<&Scope<'_>>,
         mut guard: Option<&mut KeyRouteGuard>,
@@ -461,22 +465,13 @@ impl Canopy {
         self.trace_route(
             RoutePhase::Target,
             Some(start),
-            &path,
+            path,
             "key route selected for a transient mode",
         );
-        let mut node = Some(start);
-        let mut winner = None;
-        while let Some(id) = node {
-            if let Some(binding) = self.core.select_key_binding(id, &path, key, start, &[]) {
-                winner = Some((id, path.clone(), binding));
-                break;
-            }
-            node = self.core.nodes.get(id).and_then(|entry| entry.parent);
-            path.pop();
-        }
+        let winner = self.core.transient_winner(start, key);
         self.core.input_map.pop_mode();
         let Some((id, path, binding)) = winner else {
-            self.trace_route(RoutePhase::Handled, None, &path, "transient mode ended");
+            self.trace_route(RoutePhase::Handled, None, path, "transient mode ended");
             if let Some(guard) = guard.as_deref_mut() {
                 guard.observe_end();
             }

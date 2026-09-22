@@ -51,7 +51,7 @@ the versions off:
 anyhow = "1.0"
 canopy = { path = "../../../canopy/crates/canopy" }
 canopy-mcp = { path = "../../../canopy/crates/canopy-mcp" }
-canopy-widgets = { path = "../../../canopy/crates/canopy-widgets" }
+canopy-widgets = { path = "../../../canopy/crates/canopy-widgets", default-features = false }
 clap = { version = "4.5", features = ["derive"] }
 
 [dev-dependencies]
@@ -97,12 +97,21 @@ impl Hello {
 The doc comment becomes the generated Luau documentation, and each `@param`
 line documents one argument.
 
-The `Widget` impl draws the widget and joins the focus chain:
+The `Widget` impl draws the widget, adds a status bar, and joins the focus
+chain. `key_outcome` predicts that the widget ignores every key, so help and
+automation can report exactly which binding a key reaches:
 
 ```rust
 impl Widget for Hello {
+    fn key_outcome(&self, _key: Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
     fn layout(&self) -> Layout {
+        // The footer bar keeps the last row, so align the greeting above it.
         Layout::fill()
+            .direction(Direction::Column)
+            .align_vertical(Align::End)
     }
 
     fn render(&mut self, render: &mut Render, context: &dyn ViewContext) -> Result<()> {
@@ -117,17 +126,15 @@ impl Widget for Hello {
         if area.h > 1 {
             render.text("count", area.line(1)?, &format!("count: {}", self.count))?;
         }
-        if area.h > 2 {
-            render.text(
-                "status",
-                area.line(area.h - 1)?,
-                " +/- count  ? help  q quit ",
-            )?;
-        }
         Ok(())
     }
 
     fn on_mount(&mut self, context: &mut dyn Context) -> Result<()> {
+        context.add_child(
+            StatusBar::new()
+                .with_left(Text::new("hello").with_style("status_bar/text"))
+                .with_right(KeyHint::new("ctrl-g", "help")),
+        )?;
         context.set_focus(context.node_id()).map(|_| ())
     }
 
