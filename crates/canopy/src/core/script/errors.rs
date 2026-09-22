@@ -111,13 +111,9 @@ impl From<&commands::CommandError> for CanopyErrorPayload {
             commands::CommandError::NoTarget { id, owner } => {
                 payload.with_command(id.clone()).with_owner(owner.clone())
             }
-            commands::CommandError::WrongOwner { id, expected, .. } => {
-                let payload = payload.with_command(id.clone());
-                match expected {
-                    Some(owner) => payload.with_owner(owner.clone()),
-                    None => payload,
-                }
-            }
+            commands::CommandError::WrongOwner { id, expected, .. } => payload
+                .with_command(id.clone())
+                .with_owner(expected.clone()),
             _ => payload,
         }
     }

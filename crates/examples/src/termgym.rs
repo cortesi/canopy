@@ -396,7 +396,7 @@ impl Widget for TermGym {
             List::<TermEntry>::new().with_on_activate(Self::cmd_activate_terminal().call()),
         )?;
         let button_id = c.create_detached(
-            Button::new("+ New terminal").with_command(Self::cmd_new_terminal().call()),
+            Button::new("+ New terminal").with_command(Self::call_new_terminal()),
         )?;
         let sidebar_id = c.add_child(Container::column())?;
         c.set_children_of(sidebar_id.into(), vec![button_id.into(), list_id.into()])?;

@@ -88,8 +88,8 @@ restores its own checkpoint, even when the enclosing edit handles the error.
 
 The checkpoint captures every arena node, including detached nodes. It restores
 node metadata, topology, child keys, layout and view caches, and lifecycle flags.
-It also restores root, focus, mouse capture, focus recovery hints, exit requests,
-and pending style changes.
+It also restores root, focus, mouse capture, deferred focus repairs, exit
+requests, and pending style changes.
 Layout metadata includes the widget base layout and persistent override.
 
 The checkpoint shares widget slots with the live arena. Widget-owned mutations
@@ -118,7 +118,8 @@ not repeat completed mount hooks. Layout caches refresh when the subtree returns
 
 Runtime-managed work declares `WorkLifetime::Node` or `WorkLifetime::Attachment`.
 Node lifetime ends on widget replacement or removal. Attachment lifetime also ends
-on detach. Reattachment starts a new attachment generation. Hiding ends neither
+on detach. Reattachment starts a new attachment generation. An edit updates the
+generations of the subtree it moves and no others. Hiding ends neither
 lifetime. `Widget::poll_lifetime()` defaults to node lifetime, preserving detached
 terminal polling. Attachment polling initializes again after reattachment.
 
@@ -146,8 +147,8 @@ layout pass ends with it, so any tree mutation that reaches layout is checked.
 `Core` is crate-private, so only canopy's own tests call it directly.
 
 It checks the root, widget slots, reciprocal links, duplicate children, cycles,
-keys, focus, mouse capture, lifecycle flags, layout caches, computed view caches,
-and the semantic-key index.
+keys, focus, mouse capture, lifecycle flags, attachment generations, layout
+caches, computed view caches, and the semantic-key index.
 
 It does not run layout. Run layout before using screen coordinates.
 
@@ -168,6 +169,11 @@ passes `&mut Core` to the callback. Event, mount, unmount, poll, command, and
 test helper callbacks use this mode. Nested access to the same widget fails
 instead of aliasing the widget.
 
+`ViewContextExt::with_widget` is the typed read path. It borrows in place and
+does not invalidate. `ContextExt::with_widget_mut` takes the widget cell for a
+mutation callback and invalidates layout. Both check the node's widget type at
+runtime and fail with `NodeTypeMismatch` for another type.
+
 All widget access failures include the operation, node ID, node path, and source
 error. Slot take and restore are safe code through `WidgetSlotGuard`. The only
 `unsafe` in the runtime is the reentrant script bridge.
@@ -183,9 +189,17 @@ replacing the current node fails. Removing or replacing an ancestor that contain
 the current node also fails. Canopy checks this before running lifecycle hooks,
 so a rejected edit does not partially run `pre_remove` or `on_unmount`.
 
-Removing or replacing siblings is allowed. Removing the focused node recovers
-focus immediately. Removing the mouse-capture node clears capture immediately.
-Removed `NodeId`s become invalid immediately.
+Removing or replacing siblings is allowed. Removing the mouse-capture node
+clears capture immediately. Removed `NodeId`s become invalid immediately.
+
+Focus repair after an edit inside a callback waits until the outermost callback
+returns every widget cell. A widget whose cell a callback holds cannot answer
+`accept_focus`, so an immediate repair would skip it, and often that widget is
+the one that should take focus back. When the edit takes the focused node out of
+the tree, focus clears at once and the edit records its recovery candidates.
+Once the cells return, recovery picks among them, unless the callback focused
+another node in the meantime. Focus that stays in the tree on a node that can
+no longer hold it moves only when the cells return.
 
 Use `Context::remove_after_dispatch(node)` when an active callback must remove
 itself or an ancestor. The bounded FIFO records widget incarnations and drains
@@ -495,7 +509,9 @@ the widget receives the event, then a matching binding runs, then the runtime
 applies the input's default action. The first of these that acts ends the
 route; otherwise the route continues to the parent. An ancestor binding runs
 only after every descendant declines. The route stops at the modal owner and
-never applies a default action outside the modal region.
+never applies a default action outside the modal region. Paste and focus-change
+events take the same route from the focus to the modal owner, offered to
+widgets only.
 
 Wheel input is the only input with a default action. It scrolls the node by
 the step that `event::mouse::Action::scroll_delta()` returns. The runtime
@@ -541,8 +557,10 @@ help modal covers that panel, and hides it while help is open.
 ## Focus and Mouse Capture
 
 Focus is `Option<NodeId>`. A valid focus node exists, is attached to the root,
-is not hidden, and accepts focus. After removal, recovery prefers the next
-focusable node, then the previous node, then a focusable ancestor.
+is not hidden, and accepts focus. Removal, replacement, and detachment record
+the same recovery candidates when they take the focused node out of the tree.
+Recovery prefers the next focusable node after the subtree, then the previous
+node, then a focusable ancestor, then the first focusable node.
 
 Structural changes check focus without views, because a node added or shown
 since the last layout has none. A widget can focus such a node, for example in

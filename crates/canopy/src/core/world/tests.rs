@@ -61,7 +61,7 @@ struct StructuralSnapshot {
     nodes: Vec<NodeSnapshot>,
     focus: Option<NodeId>,
     mouse_capture: Option<NodeId>,
-    focus_hint: Option<(Option<NodeId>, Option<NodeId>, Option<NodeId>)>,
+    deferred_focus_repair: Option<DeferredFocusRepair>,
     exit_requested: Option<i32>,
     pending_style: bool,
     commands: Vec<&'static str>,
@@ -103,9 +103,6 @@ impl StructuralSnapshot {
                 }
             })
             .collect();
-        let focus_hint = core
-            .focus_hint
-            .map(|hint| (hint.next, hint.prev, hint.ancestor));
         let mut commands: Vec<_> = core.commands.iter().map(|(id, _)| id).collect();
         commands.sort_unstable();
         Self {
@@ -113,7 +110,7 @@ impl StructuralSnapshot {
             nodes,
             focus: core.focus,
             mouse_capture: core.mouse_capture,
-            focus_hint,
+            deferred_focus_repair: core.deferred_focus_repair,
             exit_requested: core.exit_requested,
             pending_style: core.pending_style.is_some(),
             commands,
@@ -715,7 +712,7 @@ fn focus_path_queries_tolerate_a_stale_internal_id() -> Result<()> {
     core.focus = Some(child);
     assert!(!core.is_on_focus_path(core.root));
     assert_eq!(core.focus_path(core.root), Path::empty());
-    core.ensure_focus_valid(None)?;
+    core.ensure_focus_valid()?;
     assert_eq!(core.focus_id(), None);
     Ok(())
 }
@@ -1716,7 +1713,7 @@ fn focus_recovery_excludes_hidden_ancestor_subtrees() -> Result<()> {
             core.set_focus(child)?;
             if display_none {
                 core.set_layout_of(parent, Layout::fill().hidden())?;
-                core.ensure_focus_valid(None)?;
+                core.ensure_focus_valid()?;
             } else {
                 core.set_hidden(parent, true)?;
             }
@@ -1787,6 +1784,124 @@ fn focused_child_survives_nested_parent_callback_visibility_change() -> Result<(
     Ok(())
 }
 
+/// Build a focusable parent whose focused, focusable child sits under the
+/// root beside nothing else that takes focus.
+fn focused_child_of_focusable_parent() -> Result<(Core, NodeId, NodeId)> {
+    let mut core = Core::new();
+    let parent = core.create_detached(FocusableWidget)?;
+    let child = core.create_detached(FocusableWidget)?;
+    core.set_children(parent, vec![child])?;
+    core.set_children(core.root, vec![parent])?;
+    core.set_focus(child)?;
+    Ok((core, parent, child))
+}
+
+#[test]
+fn edits_inside_a_callback_recover_focus_to_the_callback_widget() -> Result<()> {
+    for remove in [false, true] {
+        let (mut core, parent, child) = focused_child_of_focusable_parent()?;
+
+        // The parent's callback holds its cell, so a repair during the call
+        // could not consider the parent. Focus clears, and the repair waits.
+        core.with_widget_dyn_mut(parent, |_widget, core| {
+            if remove {
+                core.remove_subtree(child)?;
+            } else {
+                core.detach(child)?;
+            }
+            assert_eq!(core.focus_id(), None);
+            core.debug_assert_tree_invariants();
+            Ok::<_, Error>(())
+        })??;
+
+        assert_eq!(core.focus_id(), Some(parent));
+        core.validate_invariants()?;
+    }
+    Ok(())
+}
+
+#[test]
+fn hiding_focus_inside_a_callback_repairs_once_the_cell_returns() -> Result<()> {
+    let (mut core, parent, child) = focused_child_of_focusable_parent()?;
+
+    core.with_widget_dyn_mut(parent, |_widget, core| {
+        core.with_widget_dyn_mut(child, |_widget, core| core.set_hidden(child, true))??;
+        // The outer callback still holds the parent's cell.
+        assert_eq!(core.focus_id(), Some(child));
+        Ok::<_, Error>(())
+    })??;
+
+    assert_eq!(core.focus_id(), Some(parent));
+    Ok(())
+}
+
+#[test]
+fn focus_set_inside_a_callback_overrides_the_deferred_repair() -> Result<()> {
+    let (mut core, parent, child) = focused_child_of_focusable_parent()?;
+    let other = core.create_detached(FocusableWidget)?;
+    core.attach(core.root, other)?;
+
+    core.with_widget_dyn_mut(parent, |_widget, core| {
+        core.detach(child)?;
+        core.set_focus(other).map(drop)
+    })??;
+
+    assert_eq!(core.focus_id(), Some(other));
+    Ok(())
+}
+
+#[test]
+fn detach_recovers_focus_like_removal() -> Result<()> {
+    for remove in [false, true] {
+        let mut core = Core::new();
+        let nodes = (0..3)
+            .map(|_| core.create_detached(FocusableWidget))
+            .collect::<Result<Vec<_>>>()?;
+        core.set_children(core.root, nodes.clone())?;
+        core.set_focus(nodes[1])?;
+
+        // Both edits prefer the next candidate after the subtree, not the
+        // first focusable node in the tree.
+        if remove {
+            core.remove_subtree(nodes[1])?;
+        } else {
+            core.detach(nodes[1])?;
+        }
+        assert_eq!(core.focus_id(), Some(nodes[2]));
+
+        core.set_focus(nodes[2])?;
+        if remove {
+            core.remove_subtree(nodes[2])?;
+        } else {
+            core.detach(nodes[2])?;
+        }
+        assert_eq!(core.focus_id(), Some(nodes[0]));
+    }
+    Ok(())
+}
+
+#[test]
+fn attachment_refresh_changes_only_the_moved_subtree() -> Result<()> {
+    let mut core = Core::new();
+    let stay = core.create_detached(simple_widget())?;
+    let moved = core.create_detached(simple_widget())?;
+    let moved_child = core.create_detached(simple_widget())?;
+    core.attach(moved, moved_child)?;
+    core.attach(core.root, stay)?;
+    let stay_generation = core.nodes[stay].attachment_generation;
+    assert!(stay_generation.is_some());
+    assert_eq!(core.nodes[moved_child].attachment_generation, None);
+
+    core.attach(core.root, moved)?;
+    assert!(core.nodes[moved].attachment_generation.is_some());
+    assert!(core.nodes[moved_child].attachment_generation.is_some());
+    core.detach(moved)?;
+    assert_eq!(core.nodes[moved].attachment_generation, None);
+    assert_eq!(core.nodes[moved_child].attachment_generation, None);
+    assert_eq!(core.nodes[stay].attachment_generation, stay_generation);
+    core.validate_invariants()
+}
+
 #[test]
 fn hidden_or_refusing_focused_widget_still_recovers_during_callbacks() -> Result<()> {
     let mut core = Core::new();
@@ -1809,7 +1924,7 @@ fn hidden_or_refusing_focused_widget_still_recovers_during_callbacks() -> Result
     })??;
     assert_eq!(core.focus_id(), Some(focused));
 
-    core.ensure_invariants(None)?;
+    core.repair_focus_and_capture(None)?;
     assert_eq!(core.focus_id(), None);
     Ok(())
 }

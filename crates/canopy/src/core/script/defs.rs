@@ -7,10 +7,7 @@ use ruau::{declaration, module, vm::NativeModule};
 
 use crate::{
     FixtureInfo,
-    commands::{
-        CommandDispatchKind, CommandParamKind, CommandReturnSpec, CommandSet, CommandSpec,
-        DeclRegistry,
-    },
+    commands::{CommandParamKind, CommandReturnSpec, CommandSet, CommandSpec, DeclRegistry},
     core::inputmap::WidgetActionCatalog,
 };
 
@@ -51,10 +48,7 @@ pub(super) fn owner_command_specs(
 ) -> BTreeMap<String, Vec<&'static CommandSpec>> {
     let mut owners: BTreeMap<String, Vec<&'static CommandSpec>> = BTreeMap::new();
     for (_, spec) in commands.iter() {
-        let CommandDispatchKind::Node { owner } = spec.dispatch else {
-            continue;
-        };
-        owners.entry(owner.to_string()).or_default().push(spec);
+        owners.entry(spec.owner.to_string()).or_default().push(spec);
     }
     for owner in default_binding_owners {
         owners.entry(owner.clone()).or_default();
@@ -390,8 +384,7 @@ fn register_command_info(builder: &mut module::Builder) {
     let mut fields = vec![
         declaration::Field::new("name", declaration::Type::String)
             .doc("Command name relative to its owner table."),
-        declaration::Field::new("owner", declaration::Type::String)
-            .doc("Widget owner name, or the empty string for free commands."),
+        declaration::Field::new("owner", declaration::Type::String).doc("Widget owner name."),
         declaration::Field::new("doc", declaration::Type::String.optional()),
         declaration::Field::new(
             "params",

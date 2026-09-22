@@ -3,7 +3,7 @@ use std::{
     rc::Rc,
 };
 
-use super::{context::CoreViewContext, id::NodeId, node::Node, world::Core};
+use super::{id::NodeId, node::Node, world::Core};
 use crate::{
     error::{Error, Result},
     widget::Widget,
@@ -141,22 +141,4 @@ pub fn validate_slot(node_id: NodeId, node: &Node, policy: WidgetSlotPolicy) -> 
     Err(Error::Invariant(format!(
         "node {node_id:?} has an empty widget slot"
     )))
-}
-
-/// Query focus acceptance when the widget slot is available.
-///
-/// A callback temporarily extracts its widget from the node. Callers that are
-/// validating the current focus can defer an acceptance decision in that
-/// state, while candidate discovery must continue to reject it.
-pub fn focus_acceptance(core: &Core, node_id: NodeId) -> Option<bool> {
-    let node = core.nodes.get(node_id)?;
-    let widget = WidgetReadGuard::borrow(node_id, node).ok()?;
-    let ctx = CoreViewContext::new(core, node_id);
-    Some(widget.widget().accept_focus(&ctx))
-}
-
-/// Return whether a widget accepts focus, treating unavailable slots as not
-/// focusable.
-pub fn accepts_focus(core: &Core, node_id: NodeId) -> bool {
-    focus_acceptance(core, node_id).unwrap_or(false)
 }

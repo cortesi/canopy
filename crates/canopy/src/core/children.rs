@@ -6,6 +6,7 @@ use std::{
     hash::Hash,
 };
 
+use super::context::OneShot;
 use crate::{
     Context, ContextExt, NodeId, TypedId, Widget,
     error::{Error, Result},
@@ -148,79 +149,70 @@ where
                 (!seen.contains(key)).then(|| key.clone())
             })
             .collect();
-        let mut planned_map = Some(planned_map);
-        let mut candidates = Some(candidates);
-        let mut outcome = None;
-
+        let mut once = OneShot::new((planned_map, candidates));
         ctx.edit_structure(&mut |ctx| {
-            let mut working_map = planned_map
-                .take()
-                .ok_or_else(|| Error::Internal("reconcile map consumed".into()))?;
-            for (key, widget) in candidates
-                .take()
-                .ok_or_else(|| Error::Internal("reconcile candidates consumed".into()))?
-            {
-                let typed_id = ctx.create_detached(widget)?;
-                working_map.insert(key, typed_id);
-            }
-
-            let mut ordered = Vec::with_capacity(desired.len());
-            for key in &desired {
-                let typed_id = working_map
-                    .get(key)
-                    .copied()
-                    .ok_or_else(|| Error::Internal("reconcile candidate missing".into()))?;
-                let node_id = NodeId::from(typed_id);
-                if ctx.type_id_of(node_id) != Some(expected_type) {
-                    return Err(Error::Invalid(
-                        "keyed child became stale during update".into(),
-                    ));
+            once.call(|(mut working_map, candidates)| {
+                for (key, widget) in candidates {
+                    let typed_id = ctx.create_detached(widget)?;
+                    working_map.insert(key, typed_id);
                 }
-                update(key, typed_id, ctx)?;
-                ordered.push(typed_id);
-            }
 
-            for key in &removed {
-                let Some(typed_id) = working_map.get(key).copied() else {
-                    continue;
-                };
-                let node_id = NodeId::from(typed_id);
-                if ctx.type_id_of(node_id).is_none() {
+                let mut ordered = Vec::with_capacity(desired.len());
+                for key in &desired {
+                    let typed_id = working_map
+                        .get(key)
+                        .copied()
+                        .ok_or_else(|| Error::Internal("reconcile candidate missing".into()))?;
+                    let node_id = NodeId::from(typed_id);
+                    if ctx.type_id_of(node_id) != Some(expected_type) {
+                        return Err(Error::Invalid(
+                            "keyed child became stale during update".into(),
+                        ));
+                    }
+                    update(key, typed_id, ctx)?;
+                    ordered.push(typed_id);
+                }
+
+                for key in &removed {
+                    let Some(typed_id) = working_map.get(key).copied() else {
+                        continue;
+                    };
+                    let node_id = NodeId::from(typed_id);
+                    if ctx.type_id_of(node_id).is_none() {
+                        working_map.remove(key);
+                        continue;
+                    }
+                    ctx.remove_subtree(node_id)?;
                     working_map.remove(key);
-                    continue;
                 }
-                ctx.remove_subtree(node_id)?;
-                working_map.remove(key);
-            }
 
-            for typed_id in &ordered {
-                let node_id = NodeId::from(*typed_id);
-                if ctx.type_id_of(node_id) != Some(expected_type) {
+                for typed_id in &ordered {
+                    let node_id = NodeId::from(*typed_id);
+                    if ctx.type_id_of(node_id) != Some(expected_type) {
+                        return Err(Error::Invalid(
+                            "keyed child became stale before commit".into(),
+                        ));
+                    }
+                }
+
+                let managed: HashSet<NodeId> =
+                    working_map.values().map(|id| NodeId::from(*id)).collect();
+                if ctx
+                    .children_of(parent)
+                    .iter()
+                    .any(|node| !managed.contains(node))
+                {
                     return Err(Error::Invalid(
-                        "keyed child became stale before commit".into(),
+                        "keyed collection update inserted unmanaged children".into(),
                     ));
                 }
-            }
-
-            let managed: HashSet<NodeId> =
-                working_map.values().map(|id| NodeId::from(*id)).collect();
-            if ctx
-                .children_of(parent)
-                .iter()
-                .any(|node| !managed.contains(node))
-            {
-                return Err(Error::Invalid(
-                    "keyed collection update inserted unmanaged children".into(),
-                ));
-            }
-            let ordered_nodes = ordered.iter().map(|id| NodeId::from(*id)).collect();
-            ctx.set_children_of(parent, ordered_nodes)?;
-            outcome = Some((working_map, ordered));
-            Ok(())
+                let ordered_nodes = ordered.iter().map(|id| NodeId::from(*id)).collect();
+                ctx.set_children_of(parent, ordered_nodes)?;
+                Ok((working_map, ordered))
+            })
         })?;
 
-        let (map, ordered) =
-            outcome.ok_or_else(|| Error::Internal("reconcile outcome missing".into()))?;
+        let (map, ordered) = once.finish()?;
         self.map = map;
         self.order = desired;
         Ok(ordered)
@@ -357,30 +349,26 @@ pub(super) fn compose<R>(
     if context.type_id_of(parent).is_none() {
         return Err(Error::NodeNotFound(parent));
     }
-    let mut build = Some(build);
-    let mut result = None;
+    let mut once = OneShot::new(build);
     context.edit_structure(&mut |ctx| {
-        let mut builder = ChildBuilder {
-            ctx,
-            parent,
-            roots: Vec::new(),
-            semantic_keys: Vec::new(),
-        };
-        let output = build
-            .take()
-            .ok_or_else(|| Error::Internal("composition already consumed".into()))?(
-            &mut builder
-        )?;
-        super::context::sealed::Context::attach_composed(
-            builder.ctx,
-            parent,
-            &builder.roots,
-            &builder.semantic_keys,
-        )?;
-        result = Some(output);
-        Ok(())
+        once.call(|build| {
+            let mut builder = ChildBuilder {
+                ctx,
+                parent,
+                roots: Vec::new(),
+                semantic_keys: Vec::new(),
+            };
+            let output = build(&mut builder)?;
+            super::context::sealed::Context::attach_composed(
+                builder.ctx,
+                parent,
+                &builder.roots,
+                &builder.semantic_keys,
+            )?;
+            Ok(output)
+        })
     })?;
-    result.ok_or_else(|| Error::Internal("composition result missing".into()))
+    once.finish()
 }
 #[cfg(test)]
 mod tests {

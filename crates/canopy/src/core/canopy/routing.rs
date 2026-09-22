@@ -321,9 +321,12 @@ impl Canopy {
                 format!("{event:?}"),
             );
             let outcome = if self.core.interaction_admits(id) {
+                // A prediction failure, such as an unavailable widget slot,
+                // reports no prediction, so the consistency check skips the
+                // node.
                 #[cfg(debug_assertions)]
                 let predicted = match input {
-                    RoutedInput::Key(key) => self.predict_key_outcome(id, key, start),
+                    RoutedInput::Key(key) => self.core.node_key_outcome(id, key, route_focus),
                     RoutedInput::Mouse(_) => None,
                 };
                 let outcome = self.core.dispatch_event_on_node(id, &event)?;
@@ -398,10 +401,10 @@ impl Canopy {
                         }
                         return Ok(true);
                     }
-                    // Handlers can change the tree, so the parent is read
-                    // only now. This is the walk `Core::route` takes, with
-                    // the same modal bounds, read live.
-                    target = self.core.nodes.get(id).and_then(|node| node.parent);
+                    // Handlers can change the tree, so the next node is read
+                    // only now. The modal owner ended the walk above, so this
+                    // is the step `Core::route` takes.
+                    target = self.core.route_step(id);
                     path.pop();
                 }
             }
@@ -521,7 +524,10 @@ impl Canopy {
             path,
             "key route selected for a transient mode",
         );
-        let winner = self.core.transient_winner(start, key);
+        let winner = self
+            .core
+            .transient_winner(start, key)
+            .map(|(id, path, record)| (id, path, record.resolved()));
         self.core.input_map.pop_mode();
         let Some((id, path, binding)) = winner else {
             self.trace_route(RoutePhase::Handled, None, path, "transient mode ended");
@@ -713,7 +719,8 @@ impl Canopy {
         Ok(Some(outcome))
     }
 
-    /// Select the first eligible binding at one route node.
+    /// Select the first eligible binding at one route node, and copy it to
+    /// run.
     ///
     /// Mouse routing has no widget actions, so it keeps the plain resolver.
     fn select_at(
@@ -730,20 +737,7 @@ impl Canopy {
                 .select_key_binding(node, path, key, focus, excluded),
             RoutedInput::Mouse(_) => self.core.input_map.resolve_match(path, input.input_spec()),
         }
-    }
-
-    /// Return a node's key prediction for the route that starts at `focus`.
-    ///
-    /// A prediction failure, such as an unavailable widget slot, reports no
-    /// prediction so the consistency check skips the node.
-    #[cfg(debug_assertions)]
-    fn predict_key_outcome(
-        &self,
-        node: NodeId,
-        key: key::Key,
-        focus: Option<NodeId>,
-    ) -> Option<EventOutcome> {
-        self.core.node_key_outcome(node, key, focus.unwrap_or(node))
+        .map(inputmap::BindingRecord::resolved)
     }
 
     /// Dispatch a focus-related event to the focused node, bubbling as needed.

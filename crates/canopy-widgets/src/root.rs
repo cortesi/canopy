@@ -742,8 +742,7 @@ mod tests {
 
         send_key(&mut canopy, "ctrl-g")?;
         canopy.render(&mut backend)?;
-        let capture = canopy.with_root_context(|context| context.take_mouse_capture())?;
-        assert_eq!(capture, None);
+        assert!(!canopy.with_context(left, |context| Ok(context.has_mouse_capture()))?);
         send_key(&mut canopy, "x")?;
         let list = binding_list_id(&canopy);
         let view =
@@ -829,8 +828,7 @@ mod tests {
             Some(left)
         );
         assert_eq!(canopy.available_bindings(None)?.exclusive_group, None);
-        let capture = canopy.with_root_context(|context| context.take_mouse_capture())?;
-        assert_eq!(capture, Some(left));
+        assert!(canopy.with_context(left, |context| Ok(context.has_mouse_capture()))?);
         Ok(())
     }
 

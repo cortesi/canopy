@@ -281,6 +281,45 @@ fn matching_nodes<'a, C: ViewContext + ?Sized>(
         .filter(move |id| path_filter.check_match(&ctx.path_of(root, *id)).is_some())
 }
 
+/// A one-shot closure passed through an API that takes `&mut dyn FnMut`.
+///
+/// Object-safe context methods take `&mut dyn FnMut` callbacks, while typed
+/// helpers accept `FnOnce` closures and return values. The `FnMut` shim runs
+/// the closure through [`OneShot::call`] and stores its output. Calling the
+/// shim twice, or never, is an internal error.
+pub(super) struct OneShot<F, R> {
+    /// Closure to run, until it runs.
+    f: Option<F>,
+    /// Output of the closure, once it ran.
+    output: Option<R>,
+}
+
+impl<F, R> OneShot<F, R> {
+    /// Hold a closure until the shim calls it.
+    pub(super) fn new(f: F) -> Self {
+        Self {
+            f: Some(f),
+            output: None,
+        }
+    }
+
+    /// Run the closure through `run` and store its output.
+    pub(super) fn call(&mut self, run: impl FnOnce(F) -> Result<R>) -> Result<()> {
+        let f = self
+            .f
+            .take()
+            .ok_or_else(|| Error::Internal("one-shot callback called twice".into()))?;
+        self.output = Some(run(f)?);
+        Ok(())
+    }
+
+    /// Return the stored output.
+    pub(super) fn finish(self) -> Result<R> {
+        self.output
+            .ok_or_else(|| Error::Internal("one-shot callback never called".into()))
+    }
+}
+
 /// Validate one raw node ID against a requested widget type.
 fn checked_typed_id<W, C>(ctx: &C, node: NodeId) -> Result<TypedId<W>>
 where
@@ -289,36 +328,42 @@ where
 {
     let actual = ctx.type_id_of(node).ok_or(Error::NodeNotFound(node))?;
     if actual != TypeId::of::<W>() {
-        return Err(Error::NodeTypeMismatch {
-            node,
-            expected: type_name::<W>(),
-        });
+        return Err(type_mismatch::<W>(node));
     }
     Ok(TypedId::new(node))
 }
 
+/// Report a widget of another type as a type mismatch.
+fn type_mismatch<W: Widget + 'static>(node: NodeId) -> Error {
+    Error::NodeTypeMismatch {
+        node,
+        expected: type_name::<W>(),
+    }
+}
+
 /// Typed helpers shared by read-only and mutable contexts.
 pub trait ViewContextExt: ViewContext {
-    /// Read a typed widget while preserving immutable access and borrow errors.
+    /// Read a runtime-checked widget node.
+    ///
+    /// This is the read path: it borrows the widget in place and does not
+    /// invalidate layout or paint. Use [`ContextExt::with_widget_mut`] to
+    /// change a widget. A node of another widget type fails with
+    /// [`Error::NodeTypeMismatch`].
     fn with_widget<W: Widget + 'static, R>(
         &self,
-        node: TypedId<W>,
-        callback: impl FnOnce(&W) -> Result<R>,
+        node: impl Into<NodeId>,
+        f: impl FnOnce(&W) -> Result<R>,
     ) -> Result<R> {
-        let mut callback = Some(callback);
-        let mut result = None;
-        self.with_widget_dyn(node.into(), &mut |widget| {
-            let any = widget as &dyn Any;
-            let widget = any
+        let node = node.into();
+        checked_typed_id::<W, _>(self, node)?;
+        let mut once = OneShot::new(f);
+        self.with_widget_dyn(node, &mut |widget| {
+            let widget = (widget as &dyn Any)
                 .downcast_ref::<W>()
-                .ok_or_else(|| Error::Internal("widget type mismatch".into()))?;
-            let callback = callback
-                .take()
-                .ok_or_else(|| Error::Internal("widget callback repeated".into()))?;
-            result = Some(callback(widget)?);
-            Ok(())
+                .ok_or_else(|| type_mismatch::<W>(node))?;
+            once.call(|f| f(widget))
         })?;
-        result.ok_or_else(|| Error::Internal("widget callback omitted".into()))
+        once.finish()
     }
 
     /// Validate an untyped node ID and return its typed form.
@@ -525,9 +570,6 @@ pub trait Context: ViewContext + sealed::Context {
 
     /// Release mouse capture if held by the current node.
     fn release_mouse(&mut self) -> Result<ChangeOutcome>;
-
-    /// Clear and return the current mouse-capture target.
-    fn take_mouse_capture(&mut self) -> Result<Option<NodeId>>;
 
     /// Return effective key bindings for a node or the current focus.
     fn available_bindings(&self, node: Option<NodeId>) -> Result<BindingSnapshot>;
@@ -785,6 +827,11 @@ pub trait ContextExt: Context + ViewContextExt {
     }
 
     /// Execute a closure with mutable access to a runtime-checked widget node.
+    ///
+    /// The call invalidates layout, because the closure may change what the
+    /// widget measures or draws. Use [`ViewContextExt::with_widget`] to read
+    /// a widget. A node of another widget type fails with
+    /// [`Error::NodeTypeMismatch`].
     fn with_widget_mut<W, R>(
         &mut self,
         node: impl Into<NodeId>,
@@ -795,20 +842,14 @@ pub trait ContextExt: Context + ViewContextExt {
     {
         let node = node.into();
         checked_typed_id::<W, _>(&*self, node)?;
-        let mut output = None;
-        let mut f = Some(f);
+        let mut once = OneShot::new(f);
         self.with_widget_dyn_mut(node, &mut |widget, ctx| {
-            let any = widget as &mut dyn Any;
-            let widget = any
+            let widget = (widget as &mut dyn Any)
                 .downcast_mut::<W>()
-                .ok_or_else(|| Error::Internal("widget type mismatch".into()))?;
-            let f = f
-                .take()
-                .ok_or_else(|| Error::Internal("missing widget closure".into()))?;
-            output = Some(f(widget, ctx)?);
-            Ok(())
+                .ok_or_else(|| type_mismatch::<W>(node))?;
+            once.call(|f| f(widget, ctx))
         })?;
-        output.ok_or_else(|| Error::Internal("missing widget result".into()))
+        once.finish()
     }
 
     /// Create a widget node detached from the tree.
@@ -1147,10 +1188,6 @@ impl Context for NodeCtx<&mut Core> {
         self.core.release_mouse(self.node_id)
     }
 
-    fn take_mouse_capture(&mut self) -> Result<Option<NodeId>> {
-        self.core.take_mouse_capture()
-    }
-
     fn available_bindings(&self, node: Option<NodeId>) -> Result<BindingSnapshot> {
         self.core.available_bindings(node)
     }
@@ -1160,7 +1197,7 @@ impl Context for NodeCtx<&mut Core> {
     }
 
     fn close_modal(&mut self, token: InteractionToken) -> Result<()> {
-        self.core.close_modal(token)
+        self.core.close_modal_after_dispatch(token)
     }
 
     fn scroll_to(&mut self, x: u32, y: u32) -> ChangeOutcome {

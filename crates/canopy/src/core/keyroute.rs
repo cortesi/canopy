@@ -152,11 +152,9 @@ impl Core {
             steps.push(KeyRouteStep {
                 node,
                 path: route_path.clone(),
-                binding: selected.as_ref().map(|selected| selected.id),
-                phase: selected.as_ref().and_then(|selected| selected.phase),
-                target: selected
-                    .as_ref()
-                    .map(|selected| BindingTargetKind::of(&selected.target)),
+                binding: selected.map(|selected| selected.id),
+                phase: selected.and_then(|selected| selected.phase),
+                target: selected.map(|selected| BindingTargetKind::of(&selected.target)),
                 widget: prediction.clone(),
             });
             let Some(selected) = selected else {

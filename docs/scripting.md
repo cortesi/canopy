@@ -106,8 +106,8 @@ Target tables accept `{ kind = "exact", node = id }`,
 `{ kind = "from", node = id }`, or `{ kind = "focus" }`. Omission uses the
 current script anchor.
 `canopy.commands(target?)` uses the same target policies. Exact dispatch
-rejects stale nodes, wrong owners, and free commands. It never searches for a
-replacement target.
+rejects stale nodes and wrong owners. It never searches for a replacement
+target.
 
 Legacy `owner.command(...)`, `canopy.cmd(id, ...)`, and `canopy.cmd_on(node,
 id, ...)` retain their decoding rules. A single table is interpreted as named

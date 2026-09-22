@@ -68,7 +68,7 @@ pub trait Widget: Any {
     /// Describe application semantics for one publication through read-only
     /// access. Sensitive values must be omitted; this hook does not
     /// serialize widget state.
-    fn semantics(&self, _view: &dyn ViewContext) -> Result<WidgetSemantics> {
+    fn semantics(&self, _ctx: &dyn ViewContext) -> Result<WidgetSemantics> {
         Ok(WidgetSemantics::default())
     }
 
@@ -84,9 +84,9 @@ pub trait Widget: Any {
 
     /// Canvas size in content coordinates (for scrolling).
     ///
-    /// `view` is this node's content size (outer minus padding).
-    fn canvas(&self, view: Size, _ctx: &CanvasContext) -> Size {
-        view
+    /// `content` is this node's content size (outer minus padding).
+    fn canvas(&self, content: Size, _ctx: &CanvasContext) -> Size {
+        content
     }
 
     /// Render this widget's own content. Does not render children.
@@ -101,7 +101,7 @@ pub trait Widget: Any {
 
     /// Predict this widget's result for `key` without changing any state.
     ///
-    /// `context` is a read-only view bound to this widget's node. Its focus
+    /// `ctx` is a read-only view bound to this widget's node. Its focus
     /// answers follow the route focus the caller is asking about, which can
     /// differ from the live focus.
     ///
@@ -117,7 +117,7 @@ pub trait Widget: Any {
     /// binding key instead, so a `Some` prediction is exact for the raw key
     /// and best-effort for a canonical probe. First-party widgets return
     /// `Some(EventOutcome::Ignore)` for keys they do not handle.
-    fn key_outcome(&self, _key: Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+    fn key_outcome(&self, _key: Key, _ctx: &dyn ViewContext) -> Option<EventOutcome> {
         None
     }
 
@@ -128,9 +128,9 @@ pub trait Widget: Any {
     /// [`EventOutcome::Handle`]. The default says the widget consumes no
     /// action, so action bindings stay dormant on its route.
     ///
-    /// `context` is a read-only view bound to this widget's node. Its focus
+    /// `ctx` is a read-only view bound to this widget's node. Its focus
     /// answers follow the route focus the caller is asking about.
-    fn accepts_action(&self, _action: &str, _view: &dyn ViewContext) -> bool {
+    fn accepts_action(&self, _action: &str, _ctx: &dyn ViewContext) -> bool {
         false
     }
 
@@ -139,7 +139,7 @@ pub trait Widget: Any {
     /// Routing calls this only after [`Widget::accepts_action`] returned true
     /// for the same action and state. A widget that does not know the action
     /// returns [`EventOutcome::Ignore`].
-    fn on_action(&mut self, _action: &str, _context: &mut dyn Context) -> Result<EventOutcome> {
+    fn on_action(&mut self, _action: &str, _ctx: &mut dyn Context) -> Result<EventOutcome> {
         Ok(EventOutcome::Ignore)
     }
 
@@ -157,13 +157,13 @@ pub trait Widget: Any {
     }
 
     /// Return the rectangle of this widget's canvas that
-    /// [`Context::reveal_anchor`] shows, given the final content size.
+    /// [`Context::reveal_anchor`] shows, given the final `content` size.
     ///
     /// Layout calls this after it settles geometry, so the anchor reflects
     /// changes made earlier in the turn. The hook reads widget state and cannot
     /// change layout. The default returns `None`, which consumes the request
     /// without scrolling.
-    fn reveal_anchor(&self, _view: Size) -> Option<Rect> {
+    fn reveal_anchor(&self, _content: Size) -> Option<Rect> {
         None
     }
 

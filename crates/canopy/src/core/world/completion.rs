@@ -1,4 +1,4 @@
-//! Completion-boundary removal requests.
+//! Dispatch boundaries, deferred removals and modal closes, and wake handles.
 
 use std::collections::VecDeque;
 
@@ -9,9 +9,9 @@ use crate::{
     error::{Error, Result},
 };
 
-/// Maximum retained removals across one outer dispatch and its nested
-/// callbacks.
-const MAX_REMOVAL_REQUESTS: usize = 1024;
+/// Maximum retained completion requests across one outer dispatch and its
+/// nested callbacks.
+const MAX_COMPLETION_REQUESTS: usize = 1024;
 
 /// One queued removal tied to the widget that received the request.
 pub(super) struct RemovalRequest {
@@ -29,7 +29,17 @@ pub(super) enum CompletionRequest {
     CloseModal(InteractionToken),
 }
 
-/// Pending teardown and dispatch nesting state.
+impl CompletionRequest {
+    /// Name the deferred work for diagnostics.
+    fn label(&self) -> &'static str {
+        match self {
+            Self::Remove(_) => "removal",
+            Self::CloseModal(_) => "modal close",
+        }
+    }
+}
+
+/// Pending completion requests and dispatch nesting state.
 #[derive(Default)]
 pub(super) struct CompletionBatch {
     /// FIFO requests from active dispatches.
@@ -85,6 +95,7 @@ impl Core {
             .ok_or(Error::NodeDetached(node))?;
         self.wake_registry.handle(stamp)
     }
+
     /// Start a dispatch boundary and return its queue checkpoint.
     pub(crate) fn begin_dispatch(&mut self) -> usize {
         self.completion.depth += 1;
@@ -103,92 +114,80 @@ impl Core {
             .checked_sub(1)
             .expect("dispatch completion requires an active boundary");
         if success && self.completion.depth == 0 && self.callback_depth == 0 {
-            self.drain_removals()?;
+            self.drain_completion()?;
         }
         Ok(())
     }
 
     /// Queue removal of this widget incarnation after callbacks return.
+    ///
+    /// A node that no longer exists needs no removal.
     pub(crate) fn remove_after_dispatch(&mut self, node: NodeId) -> Result<()> {
-        if self.completion.draining || self.rolling_back_tree_edit {
-            return Err(Error::Invalid(
-                "cannot queue removal during lifecycle cleanup".into(),
-            ));
-        }
         let Some(entry) = self.nodes.get(node) else {
             return Ok(());
         };
-        self.enqueue_completion(
-            CompletionRequest::Remove(RemovalRequest {
-                node,
-                incarnation: entry.incarnation,
-            }),
-            "removal",
-            format!("dispatch removal batch exceeds {MAX_REMOVAL_REQUESTS} requests"),
-        )
+        self.enqueue_completion(CompletionRequest::Remove(RemovalRequest {
+            node,
+            incarnation: entry.incarnation,
+        }))
     }
 
-    /// Defer modal closure with the same failure checkpoint as node removal.
+    /// Close a modal scope and its nested scopes after callbacks return, with
+    /// the same failure checkpoint as node removal.
     pub(crate) fn close_modal_after_dispatch(&mut self, token: InteractionToken) -> Result<()> {
-        self.enqueue_completion(
-            CompletionRequest::CloseModal(token),
-            "modal close",
-            "dispatch completion batch is full".into(),
-        )
+        self.enqueue_completion(CompletionRequest::CloseModal(token))
     }
 
-    /// Admit a completion request unless lifecycle cleanup forbids new work,
-    /// then drain the outer boundary when no dispatch remains open.
-    fn enqueue_completion(
-        &mut self,
-        request: CompletionRequest,
-        what: &str,
-        full: String,
-    ) -> Result<()> {
+    /// Admit a completion request unless lifecycle cleanup forbids new work or
+    /// the batch is full, then drain the outer boundary when no dispatch
+    /// remains open.
+    fn enqueue_completion(&mut self, request: CompletionRequest) -> Result<()> {
         if self.completion.draining || self.rolling_back_tree_edit {
             return Err(Error::Invalid(format!(
-                "cannot queue {what} during lifecycle cleanup"
+                "cannot queue {} during lifecycle cleanup",
+                request.label()
             )));
         }
-        if self.completion.requests.len() >= MAX_REMOVAL_REQUESTS {
-            return Err(Error::InvalidOperation(full));
+        if self.completion.requests.len() >= MAX_COMPLETION_REQUESTS {
+            return Err(Error::InvalidOperation(format!(
+                "dispatch completion batch exceeds {MAX_COMPLETION_REQUESTS} requests"
+            )));
         }
         self.completion.requests.push_back(request);
         if self.completion.depth == 0 && self.callback_depth == 0 {
-            self.drain_removals()?;
+            self.drain_completion()?;
         }
         Ok(())
     }
 
     /// Apply the current FIFO batch, stopping and discarding the tail on
     /// failure.
-    fn drain_removals(&mut self) -> Result<()> {
+    fn drain_completion(&mut self) -> Result<()> {
         if self.completion.draining {
             return Ok(());
         }
         self.completion.draining = true;
-        let result = self.drain_removals_inner();
+        let result = self.drain_completion_inner();
         self.completion.requests.clear();
         self.completion.draining = false;
         result
     }
 
-    /// Remove only nodes whose widget incarnation still matches the request.
-    fn drain_removals_inner(&mut self) -> Result<()> {
+    /// Apply requests in FIFO order. A removal applies only while the node's
+    /// widget incarnation still matches the request.
+    fn drain_completion_inner(&mut self) -> Result<()> {
         while let Some(request) = self.completion.requests.pop_front() {
-            let request = match request {
-                CompletionRequest::CloseModal(token) => {
-                    self.close_modal_now(token)?;
-                    continue;
+            match request {
+                CompletionRequest::CloseModal(token) => self.close_modal_now(token)?,
+                CompletionRequest::Remove(request) => {
+                    if self
+                        .nodes
+                        .get(request.node)
+                        .is_some_and(|node| node.incarnation == request.incarnation)
+                    {
+                        self.remove_subtree(request.node)?;
+                    }
                 }
-                CompletionRequest::Remove(request) => request,
-            };
-            if self
-                .nodes
-                .get(request.node)
-                .is_some_and(|node| node.incarnation == request.incarnation)
-            {
-                self.remove_subtree(request.node)?;
             }
         }
         Ok(())
@@ -221,14 +220,14 @@ mod tests {
         let target = core.create_detached(Leaf { veto: false })?;
         let checkpoint = core.begin_dispatch();
         let result = core.with_widget_ctx(trigger, |_widget, ctx| {
-            for _ in 0..=MAX_REMOVAL_REQUESTS {
+            for _ in 0..=MAX_COMPLETION_REQUESTS {
                 ctx.remove_after_dispatch(target)?;
             }
             Ok::<_, Error>(())
         })?;
         assert!(matches!(&result, Err(Error::InvalidOperation(message))
-            if message == "dispatch removal batch exceeds 1024 requests"));
-        assert_eq!(core.completion.requests.len(), MAX_REMOVAL_REQUESTS);
+            if message == "dispatch completion batch exceeds 1024 requests"));
+        assert_eq!(core.completion.requests.len(), MAX_COMPLETION_REQUESTS);
         assert!(core.nodes.contains_key(trigger));
         assert!(core.nodes.contains_key(target));
         core.finish_dispatch(checkpoint, result.is_ok())?;

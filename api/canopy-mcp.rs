@@ -45,7 +45,7 @@ pub mod canopy_mcp {
     pub struct BootstrapCommand {
         /// Command name relative to its owner.
         pub name: String,
-        /// Widget owner name, or empty for free commands.
+        /// Widget owner name.
         pub owner: String,
         /// Whether the command currently resolves.
         pub available: bool,

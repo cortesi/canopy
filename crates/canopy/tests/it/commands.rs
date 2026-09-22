@@ -7,8 +7,8 @@ mod tests {
     use canopy::{
         Canopy, CommandArg, CommandEnum, Context, ContextExt, ViewContext, Widget,
         commands::{
-            ArgValue, CommandArgs, CommandDispatchKind, CommandError, CommandInvocation,
-            CommandResolution, CommandStatus, CommandTarget, FromArgValue, SerdeArg, ToArgValue,
+            ArgValue, CommandArgs, CommandError, CommandInvocation, CommandResolution,
+            CommandStatus, CommandTarget, FromArgValue, SerdeArg, ToArgValue,
         },
         derive_commands,
         error::{Error, Result},
@@ -126,10 +126,7 @@ mod tests {
                 Ok(context.dispatch(CommandTarget::From(context.node_id()), &inv))
             })?
             .unwrap_err();
-        let owner_name = match TestLeaf::cmd_c_leaf().dispatch {
-            CommandDispatchKind::Node { owner } => owner,
-            CommandDispatchKind::Free => "free",
-        };
+        let owner_name = TestLeaf::cmd_c_leaf().owner;
 
         assert!(matches!(
             err,
@@ -282,7 +279,7 @@ mod tests {
         let mut tester = Tester::new();
         let inv = Tester::cmd_set_scroll().call_with(()).invocation();
         let err = with_ctx(|ctx| {
-            (Tester::cmd_set_scroll().invoke)(Some(&mut tester as &mut dyn Any), ctx, &inv)
+            (Tester::cmd_set_scroll().invoke)(&mut tester as &mut dyn Any, ctx, &inv)
         })
         .unwrap_err();
 
@@ -303,7 +300,7 @@ mod tests {
             args: CommandArgs::Positional(vec![ArgValue::String("bad".to_string())]),
         };
         let err = with_ctx(|ctx| {
-            (Tester::cmd_set_scroll().invoke)(Some(&mut tester as &mut dyn Any), ctx, &inv)
+            (Tester::cmd_set_scroll().invoke)(&mut tester as &mut dyn Any, ctx, &inv)
         })
         .unwrap_err();
 
@@ -324,7 +321,7 @@ mod tests {
             args: CommandArgs::Named(map),
         };
         let err = with_ctx(|ctx| {
-            (Tester::cmd_set_scroll().invoke)(Some(&mut tester as &mut dyn Any), ctx, &inv)
+            (Tester::cmd_set_scroll().invoke)(&mut tester as &mut dyn Any, ctx, &inv)
         })
         .unwrap_err();
 
@@ -344,7 +341,7 @@ mod tests {
             args: CommandArgs::Named(map),
         };
         let out = with_ctx(|ctx| {
-            (Tester::cmd_set_scroll().invoke)(Some(&mut tester as &mut dyn Any), ctx, &inv)
+            (Tester::cmd_set_scroll().invoke)(&mut tester as &mut dyn Any, ctx, &inv)
         })
         .unwrap();
 
@@ -357,7 +354,7 @@ mod tests {
         let mut tester = Tester::new();
         let inv = Tester::cmd_needs_event().call_with(()).invocation();
         let err = with_ctx(|ctx| {
-            (Tester::cmd_needs_event().invoke)(Some(&mut tester as &mut dyn Any), ctx, &inv)
+            (Tester::cmd_needs_event().invoke)(&mut tester as &mut dyn Any, ctx, &inv)
         })
         .unwrap_err();
 
@@ -423,7 +420,7 @@ mod tests {
                 .find(|entry| entry.spec.id == invocation.id)
                 .unwrap();
             assert_eq!(
-                command.resolution.and_then(CommandResolution::target),
+                command.resolution.map(CommandResolution::target),
                 Some(expected.into())
             );
             assert_eq!(command.status, Some(CommandStatus::Enabled));

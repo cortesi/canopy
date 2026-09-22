@@ -259,9 +259,7 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "call_exact",
-        docs: Some(
-            "Call only the supplied node with positional arguments. Free commands are rejected.",
-        ),
+        docs: Some("Call only the supplied node with positional arguments."),
         signature: || {
             FunctionSignature::new()
                 .param(("node", Type::named("NodeId")))
@@ -933,11 +931,11 @@ async fn wait_for_node(
                 let canopy = scope
                     .context_mut::<Canopy>()
                     .ok_or_else(|| RuntimeError::runtime("no active canopy context"))?;
-                let registered = canopy.core.commands.iter().any(|(_, spec)| {
-                    matches!(spec.dispatch,
-                        commands::CommandDispatchKind::Node { owner: entry_owner }
-                            if entry_owner == owner)
-                });
+                let registered = canopy
+                    .core
+                    .commands
+                    .iter()
+                    .any(|(_, spec)| spec.owner == owner);
                 let start = canopy.core.focus.unwrap_or(canopy.core.root);
                 Ok(registered
                     && commands::CommandResolver::for_target(
@@ -1660,7 +1658,7 @@ fn host_commands<'s>(
         let mut availability = canopy.command_availability(target)?;
         availability.sort_by_key(|item| item.spec.id.0);
         Ok(ArgValue::Array(
-            availability.into_iter().map(command_info_to_arg).collect(),
+            availability.iter().map(command_info_to_arg).collect(),
         ))
     })
 }
@@ -1679,7 +1677,7 @@ fn host_resolve<'s>(
         );
         Ok(resolver
             .resolve_owner(&owner)
-            .and_then(commands::CommandResolution::target)
+            .map(commands::CommandResolution::target)
             .map_or(ArgValue::Null, ArgValue::Node))
     })
 }
@@ -2013,11 +2011,7 @@ fn plan_keymap_entry<'s>(
     };
     if let Some(name) = action.widget_action() {
         let registered = with_current_canopy(scope, |canopy, _| {
-            Ok(canopy
-                .core
-                .input_map
-                .widget_actions()
-                .contains_name(name.as_str()))
+            Ok(canopy.core.input_map.widget_actions().contains(name))
         })
         .map_err(RuntimeError::from)?;
         if !registered {

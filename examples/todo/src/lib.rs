@@ -344,7 +344,7 @@ impl Todo {
         let Ok(list) = self.list_id(ctx) else {
             return Ok(CommandStatus::Disabled("No item selected".into()));
         };
-        ctx.with_widget(ctx.typed_id::<List<TodoEntry, i64>>(list)?, |list| {
+        ctx.with_widget(list, |list: &List<TodoEntry, i64>| {
             Ok(if list.selected_item().is_some() {
                 CommandStatus::Enabled
             } else {

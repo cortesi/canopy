@@ -1051,7 +1051,9 @@ mod tests {
             assert_eq!(result.is_err(), fail && !drag);
             harness.with_root_context(|root: &mut ActivationRoot, ctx| {
                 assert_eq!(root.activations, usize::from(!drag));
-                assert_eq!(ctx.take_mouse_capture()?, None);
+                assert!(!ctx.with_unique_descendant::<List<Text>, _>(|_, ctx| {
+                    Ok(ctx.has_mouse_capture())
+                })?);
                 Ok(())
             })?;
         }
@@ -1400,12 +1402,10 @@ mod tests {
             harness.mouse(event)?;
             if press_y >= 2 {
                 harness.with_root_context(|_: &mut KeyedActivationRoot, ctx| {
-                    assert_eq!(
-                        ctx.take_mouse_capture()?,
-                        None,
-                        "blank space cannot capture"
-                    );
-                    Ok(())
+                    ctx.with_unique_descendant::<List<Text, i64>, _>(|_, ctx| {
+                        assert!(!ctx.has_mouse_capture(), "blank space cannot capture");
+                        Ok(())
+                    })
                 })?;
             }
             event.action = mouse::Action::Up;
@@ -1416,8 +1416,8 @@ mod tests {
                     root.activation, None,
                     "release outside a row cannot activate"
                 );
-                assert_eq!(ctx.take_mouse_capture()?, None);
-                ctx.with_unique_descendant::<List<Text, i64>, _>(|list, _| {
+                ctx.with_unique_descendant::<List<Text, i64>, _>(|list, ctx| {
+                    assert!(!ctx.has_mouse_capture());
                     let expected = if press_y == 1 { 20 } else { 10 };
                     assert_eq!(list.selected_key(), Some(&expected));
                     Ok(())
@@ -1535,7 +1535,7 @@ mod tests {
                     |_, _, _| Ok(()),
                 )?;
                 assert!(list.pending_activate.is_none());
-                assert_eq!(ctx.take_mouse_capture()?, None);
+                assert!(!ctx.has_mouse_capture());
                 Ok(())
             })?;
             assert_eq!(root.activation, None);

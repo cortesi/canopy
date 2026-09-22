@@ -492,7 +492,7 @@ impl Canopy {
     pub fn command_availability(
         &self,
         target: commands::CommandTarget,
-    ) -> Result<Vec<commands::CommandAvailability<'_>>> {
+    ) -> Result<Vec<commands::CommandAvailability>> {
         commands::CommandResolver::for_target(&self.core, target).availability()
     }
 

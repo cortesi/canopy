@@ -1,22 +1,39 @@
 use super::Core;
 use crate::{
     ChangeOutcome, FocusDirection, RevealAlign,
-    core::{id::NodeId, widget_access},
+    core::{context::CoreViewContext, id::NodeId, widget_access::WidgetReadGuard},
     error::{Error, Result},
     geom::RectI32,
     layout::Display,
     path::Path,
 };
 
-#[derive(Clone, Copy)]
-/// Preferred focus recovery candidates around a removed subtree.
-pub struct FocusRecoveryHint {
-    /// Next focusable node after the removed subtree.
-    pub next: Option<NodeId>,
-    /// Previous focusable node before the removed subtree.
-    pub prev: Option<NodeId>,
-    /// Focusable ancestor of the removed subtree.
-    pub ancestor: Option<NodeId>,
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Focus recovery candidates around a subtree that an edit takes out of the
+/// tree while it holds focus.
+pub(super) struct FocusRecoveryHint {
+    /// Next focusable node after the subtree.
+    next: Option<NodeId>,
+    /// Previous focusable node before the subtree.
+    prev: Option<NodeId>,
+    /// Focusable ancestor of the subtree.
+    ancestor: Option<NodeId>,
+}
+
+/// A focus repair that waits until mutable callbacks return their widget
+/// cells.
+///
+/// A callback holds its widget's cell, and a widget without its cell cannot
+/// answer `accept_focus`. A repair inside a callback would skip that widget, so
+/// an edit made inside a callback records the repair instead. The repair runs
+/// once every cell has returned.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum DeferredFocusRepair {
+    /// Focus stays on an attached node that may no longer hold it.
+    Check,
+    /// An edit took the focused node out of the tree, and focus was cleared.
+    /// The hint, when the edit recorded one, names the recovery candidates.
+    Recover(Option<FocusRecoveryHint>),
 }
 
 impl Core {
@@ -67,6 +84,13 @@ impl Core {
             return Err(Error::NodeDetached(node));
         }
         Ok(())
+    }
+
+    /// Return whether a node's widget accepts focus.
+    ///
+    /// A widget whose cell a callback holds cannot answer, and does not.
+    pub(crate) fn accepts_focus(&self, node: NodeId) -> bool {
+        focus_acceptance(self, node).unwrap_or(false)
     }
 
     /// Return the focus path for the subtree under `root`.
@@ -172,44 +196,142 @@ impl Core {
     ///
     /// Layout runs this once it publishes views, so focus leaves a node that
     /// layout gave no area.
-    pub fn ensure_focus_valid(&mut self, removed_root: Option<NodeId>) -> Result<ChangeOutcome> {
-        self.repair_focus(removed_root, true)
+    pub fn ensure_focus_valid(&mut self) -> Result<ChangeOutcome> {
+        self.repair_focus(None, true)
     }
 
     /// Move focus off a node that is detached, hidden, or refuses focus. With
     /// `require_view`, also move it off a node without a view.
+    ///
+    /// `lost` carries the recovery candidates when an edit took the focused
+    /// node out of the tree.
     fn repair_focus(
         &mut self,
-        removed_root: Option<NodeId>,
+        lost: Option<FocusRecoveryHint>,
         require_view: bool,
     ) -> Result<ChangeOutcome> {
         let Some(focus) = self.focus else {
-            self.focus_hint = None;
             return Ok(ChangeOutcome::Unchanged);
         };
-
-        if self.is_attached_to_root(focus) && can_retain_focus(self, focus, require_view) {
-            self.focus_hint = None;
+        let retain = Candidates {
+            require_view,
+            admit_taken: true,
+        };
+        if retain.admits(self, focus) {
             return Ok(ChangeOutcome::Unchanged);
         }
-
-        let hint = self.focus_hint.take();
-        let candidate = if let Some(removed_root) = removed_root {
-            if let Some(hint) = hint {
-                [hint.next, hint.prev, hint.ancestor]
-                    .into_iter()
-                    .flatten()
-                    .find(|candidate| is_focus_candidate(self, *candidate, true))
-            } else {
-                self.next_focusable_after_subtree(removed_root)
-                    .or_else(|| self.prev_focusable_before_subtree(removed_root))
-                    .or_else(|| self.nearest_focusable_ancestor(removed_root))
-            }
-        } else {
-            find_next_focus(self, self.root, focus, false)
-                .or_else(|| first_focusable(self, self.root))
+        let candidate = match lost {
+            Some(hint) => self.recovery_candidate(Some(hint), require_view),
+            None => find_next_focus(self, self.root, focus, false)
+                .or_else(|| first_focusable(self, self.root)),
         };
         self.transition_focus(candidate)
+    }
+
+    /// Choose where focus goes after it left the tree: the first hint
+    /// candidate that can hold focus now, else the first focusable node.
+    fn recovery_candidate(
+        &self,
+        hint: Option<FocusRecoveryHint>,
+        require_view: bool,
+    ) -> Option<NodeId> {
+        let accept = Candidates {
+            require_view,
+            admit_taken: false,
+        };
+        hint.into_iter()
+            .flat_map(|hint| [hint.next, hint.prev, hint.ancestor])
+            .flatten()
+            .find(|node| accept.admits(self, *node))
+            .or_else(|| first_focusable(self, self.root))
+    }
+
+    /// Repair focus and mouse capture after a structural change.
+    ///
+    /// `lost` carries the recovery candidates when the change took the focused
+    /// node out of the tree; [`Core::focus_loss`] records them. Inside a
+    /// mutable callback the focus repair waits until every widget cell
+    /// returns, as [`DeferredFocusRepair`] describes. Mouse capture involves no
+    /// widget, so its repair never waits.
+    pub(super) fn repair_focus_and_capture(
+        &mut self,
+        lost: Option<FocusRecoveryHint>,
+    ) -> Result<()> {
+        // Views are stale between layouts, and a node added or shown since the
+        // last layout has none, so a structural change does not judge focus by
+        // its view. The next layout does.
+        if self.callback_depth == 0 {
+            self.repair_focus(lost, false)?;
+        } else {
+            self.defer_focus_repair(lost)?;
+        }
+        self.ensure_mouse_capture_valid()?;
+        self.debug_assert_tree_invariants();
+        Ok(())
+    }
+
+    /// Record a focus repair until mutable callbacks return their widget
+    /// cells.
+    ///
+    /// Focus that left the tree clears now, so it never names a node outside
+    /// the tree. Focus on a node still in the tree stays until the repair
+    /// runs.
+    fn defer_focus_repair(&mut self, lost: Option<FocusRecoveryHint>) -> Result<()> {
+        let Some(focus) = self.focus else {
+            return Ok(());
+        };
+        if self.is_attached_to_root(focus) {
+            let retain = Candidates {
+                require_view: false,
+                admit_taken: true,
+            };
+            if !retain.admits(self, focus) {
+                self.deferred_focus_repair = Some(DeferredFocusRepair::Check);
+            }
+            return Ok(());
+        }
+        self.deferred_focus_repair = Some(DeferredFocusRepair::Recover(lost));
+        self.transition_focus(None)?;
+        Ok(())
+    }
+
+    /// Run the deferred focus repair, if any, once every widget cell has
+    /// returned.
+    ///
+    /// A callback that set focus after its edit keeps that focus, subject to
+    /// the usual check.
+    pub(super) fn run_deferred_focus_repair(&mut self) -> Result<()> {
+        match self.deferred_focus_repair.take() {
+            None => Ok(()),
+            Some(DeferredFocusRepair::Recover(hint)) if self.focus.is_none() => {
+                let candidate = self.recovery_candidate(hint, false);
+                self.transition_focus(candidate).map(drop)
+            }
+            Some(_) => self.repair_focus(None, false).map(drop),
+        }
+    }
+
+    /// Record recovery candidates when an edit is about to take the subtree
+    /// at `root` out of the tree, if the subtree holds focus.
+    ///
+    /// Removal, replacement, and detachment all record this hint. The
+    /// candidates count a widget whose cell a callback holds as focusable,
+    /// since it cannot answer until its cell returns; recovery checks each
+    /// candidate again.
+    pub(super) fn focus_loss(&self, root: NodeId) -> Option<FocusRecoveryHint> {
+        let focus = self.focus?;
+        if !self.is_ancestor_or_self(root, focus) {
+            return None;
+        }
+        Some(FocusRecoveryHint {
+            next: prefer_view(true, |accept| {
+                find_next_with(self, self.root, root, true, accept)
+            }),
+            prev: prefer_view(true, |accept| {
+                find_prev_with(self, self.root, Some(root), accept)
+            }),
+            ancestor: prefer_view(true, |accept| nearest_ancestor_with(self, root, accept)),
+        })
     }
 
     /// Capture mouse events for an attached node.
@@ -230,13 +352,6 @@ impl Core {
     /// Clear mouse capture without a requester.
     pub fn clear_mouse_capture(&mut self) -> Result<ChangeOutcome> {
         self.transition_mouse_capture(None)
-    }
-
-    /// Clear and return the current mouse-capture target.
-    pub fn take_mouse_capture(&mut self) -> Result<Option<NodeId>> {
-        let capture = self.mouse_capture;
-        self.transition_mouse_capture(None)?;
-        Ok(capture)
     }
 
     /// Apply one validated mouse-capture transition.
@@ -269,67 +384,55 @@ impl Core {
             Ok(ChangeOutcome::Unchanged)
         }
     }
+}
 
-    /// Ensure focus and mouse capture invariants after structural changes.
-    pub fn ensure_invariants(&mut self, removed_root: Option<NodeId>) -> Result<()> {
-        // Views are stale between layouts, and a node added or shown since the
-        // last layout has none, so a structural change does not judge focus by
-        // its view. The next layout does.
-        self.repair_focus(removed_root, false)?;
-        self.ensure_mouse_capture_valid()?;
-        self.debug_assert_tree_invariants();
-        Ok(())
-    }
+/// Which nodes a focus search accepts.
+#[derive(Clone, Copy)]
+struct Candidates {
+    /// Require a laid-out view.
+    require_view: bool,
+    /// Count a widget whose cell a callback holds as accepting focus.
+    ///
+    /// Such a widget cannot answer `accept_focus` until the callback returns.
+    /// Established focus stays on it, and recovery hints may name it, because
+    /// both are checked again once the cell returns. Candidate discovery
+    /// otherwise rejects it. Structural and interaction constraints never
+    /// wait.
+    admit_taken: bool,
+}
 
-    /// Precompute focus recovery candidates for a removed subtree.
-    pub fn focus_recovery_hint(&self, removed_root: NodeId) -> FocusRecoveryHint {
-        FocusRecoveryHint {
-            next: self.next_focusable_after_subtree(removed_root),
-            prev: self.prev_focusable_before_subtree(removed_root),
-            ancestor: self.nearest_focusable_ancestor(removed_root),
-        }
-    }
-
-    /// Return the next focusable node after the subtree rooted at
-    /// `removed_root`.
-    pub fn next_focusable_after_subtree(&self, removed_root: NodeId) -> Option<NodeId> {
-        if !self.is_attached_to_root(removed_root) {
-            return None;
-        }
-        find_next_focus(self, self.root, removed_root, true)
-    }
-
-    /// Return the previous focusable node before the subtree rooted at
-    /// `removed_root`.
-    pub fn prev_focusable_before_subtree(&self, removed_root: NodeId) -> Option<NodeId> {
-        if !self.is_attached_to_root(removed_root) {
-            return None;
-        }
-        find_prev_focus(self, self.root, removed_root)
-    }
-
-    /// Return the nearest focusable ancestor of `start`.
-    pub fn nearest_focusable_ancestor(&self, start: NodeId) -> Option<NodeId> {
-        nearest_focusable_ancestor_with(self, start, true)
-            .or_else(|| nearest_focusable_ancestor_with(self, start, false))
+impl Candidates {
+    /// Return whether `node` qualifies.
+    fn admits(self, core: &Core, node: NodeId) -> bool {
+        is_focus_position_valid(core, node, self.require_view)
+            && focus_acceptance(core, node).unwrap_or(self.admit_taken)
     }
 }
 
-// Private helper functions
+/// Run a focus search that prefers nodes with a view, then accepts any.
+fn prefer_view(admit_taken: bool, search: impl Fn(Candidates) -> Option<NodeId>) -> Option<NodeId> {
+    search(Candidates {
+        require_view: true,
+        admit_taken,
+    })
+    .or_else(|| {
+        search(Candidates {
+            require_view: false,
+            admit_taken,
+        })
+    })
+}
 
 /// Return the first focusable node under `root`, preferring nodes with views.
 fn first_focusable(core: &Core, root: NodeId) -> Option<NodeId> {
-    first_focusable_with(core, root, true).or_else(|| first_focusable_with(core, root, false))
+    prefer_view(false, |accept| {
+        core.subtree_pre_order(root)
+            .into_iter()
+            .find(|id| accept.admits(core, *id))
+    })
 }
 
-/// Return the first focusable node under `root` with view requirement control.
-fn first_focusable_with(core: &Core, root: NodeId, require_view: bool) -> Option<NodeId> {
-    core.subtree_pre_order(root)
-        .into_iter()
-        .find(|id| is_focus_candidate(core, *id, require_view))
-}
-
-/// Find next focusable node after `target`.
+/// Find the next focusable node after `target`, preferring nodes with views.
 /// If `skip_subtree` is true, traversal skips `target`'s children.
 fn find_next_focus(
     core: &Core,
@@ -337,17 +440,18 @@ fn find_next_focus(
     target: NodeId,
     skip_subtree: bool,
 ) -> Option<NodeId> {
-    find_next_focus_with(core, root, target, skip_subtree, true)
-        .or_else(|| find_next_focus_with(core, root, target, skip_subtree, false))
+    prefer_view(false, |accept| {
+        find_next_with(core, root, target, skip_subtree, accept)
+    })
 }
 
-/// Find the next focusable node with optional view requirement.
-fn find_next_focus_with(
+/// Find the next node after `target` in pre-order that `accept` admits.
+fn find_next_with(
     core: &Core,
     root: NodeId,
     target: NodeId,
     skip_subtree: bool,
-    require_view: bool,
+    accept: Candidates,
 ) -> Option<NodeId> {
     let mut past_target = false;
     for id in core.subtree_pre_order(root) {
@@ -361,56 +465,51 @@ fn find_next_focus_with(
         if skip_subtree && core.is_ancestor_or_self(target, id) {
             continue;
         }
-        if is_focus_candidate(core, id, require_view) {
+        if accept.admits(core, id) {
             return Some(id);
         }
     }
     None
 }
 
-/// Find the last focusable node before `target` in pre-order.
+/// Find the last focusable node before `target` in pre-order, preferring
+/// nodes with views.
 fn find_prev_focus(core: &Core, root: NodeId, target: NodeId) -> Option<NodeId> {
-    find_prev_focus_with(core, root, Some(target), true)
-        .or_else(|| find_prev_focus_with(core, root, Some(target), false))
+    prefer_view(false, |accept| {
+        find_prev_with(core, root, Some(target), accept)
+    })
 }
 
 /// Find the last focusable node under `root`, preferring nodes with views.
 fn find_last_focusable(core: &Core, root: NodeId) -> Option<NodeId> {
-    find_prev_focus_with(core, root, None, true)
-        .or_else(|| find_prev_focus_with(core, root, None, false))
+    prefer_view(false, |accept| find_prev_with(core, root, None, accept))
 }
 
-/// Find the previous focusable node with optional view requirement.
-fn find_prev_focus_with(
+/// Find the last node that `accept` admits before `target` in pre-order, or
+/// under `root` when `target` is `None`.
+fn find_prev_with(
     core: &Core,
     root: NodeId,
     target: Option<NodeId>,
-    require_view: bool,
+    accept: Candidates,
 ) -> Option<NodeId> {
     let mut prev = None;
     for id in core.subtree_pre_order(root) {
-        if let Some(t) = target
-            && id == t
-        {
+        if target == Some(id) {
             break;
         }
-        if is_focus_candidate(core, id, require_view) {
+        if accept.admits(core, id) {
             prev = Some(id);
         }
     }
     prev
 }
 
-/// Return the nearest focusable ancestor of `start` with optional view
-/// requirement.
-fn nearest_focusable_ancestor_with(
-    core: &Core,
-    start: NodeId,
-    require_view: bool,
-) -> Option<NodeId> {
+/// Return the nearest ancestor of `start` that `accept` admits.
+fn nearest_ancestor_with(core: &Core, start: NodeId, accept: Candidates) -> Option<NodeId> {
     let mut current = core.nodes.get(start).and_then(|node| node.parent);
     while let Some(id) = current {
-        if is_focus_candidate(core, id, require_view) {
+        if accept.admits(core, id) {
             return Some(id);
         }
         current = core.nodes.get(id).and_then(|node| node.parent);
@@ -418,24 +517,27 @@ fn nearest_focusable_ancestor_with(
     None
 }
 
-/// Return whether the node is focusable, respecting hidden and view
-/// requirements.
+/// Return whether the node can take focus, respecting hidden and view
+/// requirements. A widget whose cell a callback holds cannot.
 pub(super) fn is_focus_candidate(core: &Core, node_id: NodeId, require_view: bool) -> bool {
-    is_focus_position_valid(core, node_id, require_view)
-        && widget_access::accepts_focus(core, node_id)
+    Candidates {
+        require_view,
+        admit_taken: false,
+    }
+    .admits(core, node_id)
 }
 
-/// Return whether the current focus can remain on this node.
-///
-/// A widget cannot answer `accept_focus` while its callback owns the slot. Its
-/// established focus remains valid until the callback returns and acceptance
-/// can be checked again. Structural and interaction constraints never defer.
-fn can_retain_focus(core: &Core, node_id: NodeId, require_view: bool) -> bool {
-    is_focus_position_valid(core, node_id, require_view)
-        && widget_access::focus_acceptance(core, node_id).unwrap_or(true)
+/// Ask a widget whether it accepts focus, or return `None` while a callback
+/// holds its cell.
+fn focus_acceptance(core: &Core, node_id: NodeId) -> Option<bool> {
+    let node = core.nodes.get(node_id)?;
+    let widget = WidgetReadGuard::borrow(node_id, node).ok()?;
+    let ctx = CoreViewContext::new(core, node_id);
+    Some(widget.widget().accept_focus(&ctx))
 }
 
-/// Return whether focus may occupy this node apart from widget acceptance.
+/// Return whether focus may occupy this node apart from widget acceptance: it
+/// is attached, admitted by the active modal, and not hidden.
 fn is_focus_position_valid(core: &Core, node_id: NodeId, require_view: bool) -> bool {
     if !core.interaction_admits(node_id) {
         return false;
@@ -443,20 +545,22 @@ fn is_focus_position_valid(core: &Core, node_id: NodeId, require_view: bool) -> 
     let Some(node) = core.nodes.get(node_id) else {
         return false;
     };
-    let mut current = Some(node_id);
-    while let Some(id) = current {
-        let Some(ancestor) = core.nodes.get(id) else {
-            return false;
-        };
-        if ancestor.hidden || ancestor.layout.display == Display::None {
-            return false;
-        }
-        current = ancestor.parent;
-    }
     if require_view && node.view.is_empty() {
         return false;
     }
-    true
+    let mut current = node_id;
+    loop {
+        let Some(entry) = core.nodes.get(current) else {
+            return false;
+        };
+        if entry.hidden || entry.layout.display == Display::None {
+            return false;
+        }
+        match entry.parent {
+            Some(parent) => current = parent,
+            None => return current == core.root,
+        }
+    }
 }
 
 /// Return the focus sort key for a candidate, or `None` if it is not in `dir`.

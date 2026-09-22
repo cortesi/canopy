@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashSet, rc::Rc};
 
-use super::*;
+use super::{focus::FocusRecoveryHint, *};
 use crate::{
     core::{
         context::CoreContext,
@@ -30,7 +30,7 @@ impl TreeStateSnapshot {
             exit_requested: core.exit_requested,
             pending_style: core.pending_style.clone(),
             mouse_capture: core.mouse_capture,
-            focus_hint: core.focus_hint,
+            deferred_focus_repair: core.deferred_focus_repair,
         }
     }
 
@@ -46,7 +46,7 @@ impl TreeStateSnapshot {
         core.exit_requested = self.exit_requested;
         core.pending_style = self.pending_style;
         core.mouse_capture = self.mouse_capture;
-        core.focus_hint = self.focus_hint;
+        core.deferred_focus_repair = self.deferred_focus_repair;
     }
 }
 
@@ -78,23 +78,23 @@ impl Core {
         generation
     }
 
-    /// Update provisional attachment identities after topology changes.
-    fn refresh_attachment_generations(&mut self) {
-        let nodes: Vec<_> = self.nodes.keys().collect();
-        for id in nodes {
-            let attached = self.is_attached_to_root(id);
-            let generation = self.nodes[id].attachment_generation;
-            if attached && generation.is_none() {
-                let generation = self.next_generation();
-                self.nodes[id].attachment_generation = Some(generation);
-                if self.nodes[id].poll_lifetime == crate::WorkLifetime::Attachment {
-                    self.nodes[id].initialized = false;
-                }
-            } else if !attached && generation.is_some() {
-                self.nodes[id].attachment_generation = None;
-                if self.nodes[id].poll_lifetime == crate::WorkLifetime::Attachment {
-                    self.nodes[id].initialized = false;
-                }
+    /// Update provisional attachment identities in the subtree at `root`
+    /// after it moved.
+    ///
+    /// Every node in a subtree shares its root's attachment, so an edit
+    /// refreshes only the subtree it moved. A node that joins the tree gets a
+    /// new generation, and one that leaves loses its generation.
+    fn refresh_attachment_generations(&mut self, root: NodeId) {
+        let attached = self.is_attached_to_root(root);
+        for id in self.subtree_pre_order(root) {
+            if self.nodes[id].attachment_generation.is_some() == attached {
+                continue;
+            }
+            let generation = attached.then(|| self.next_generation());
+            let node = &mut self.nodes[id];
+            node.attachment_generation = generation;
+            if node.poll_lifetime == crate::WorkLifetime::Attachment {
+                node.initialized = false;
             }
         }
     }
@@ -175,30 +175,10 @@ impl Core {
         let widget_type = widget.as_ref().type_id();
         let poll_lifetime = widget.poll_lifetime();
 
-        let plan = self.plan_subtree_removal(node_id, "replace subtree")?;
-        let removed_focus_root = self.removed_focus_root(&plan);
-        let focus_hint = removed_focus_root.map(|root| self.focus_recovery_hint(root));
-        self.run_removal_hooks(&plan)?;
-
-        for removed_node in plan.post_order.iter().copied() {
-            if removed_node != plan.root {
-                self.clear_semantic_key(removed_node)?;
-                self.nodes.remove(removed_node);
-            }
-        }
-        let node = self
-            .nodes
-            .get_mut(node_id)
-            .ok_or(Error::NodeNotFound(node_id))?;
-        node.children.clear();
-        node.child_keys.clear();
-
+        let lost = self.delete_subtree(node_id, "replace subtree", true)?;
         self.clear_semantic_key(node_id)?;
         let incarnation = self.next_generation();
-        let node = self
-            .nodes
-            .get_mut(node_id)
-            .ok_or(Error::NodeNotFound(node_id))?;
+        let node = &mut self.nodes[node_id];
         node.incarnation = incarnation;
         node.reveal = None;
         node.reveal_in_ancestors = None;
@@ -214,13 +194,11 @@ impl Core {
         node.mounted = false;
         node.initialized = false;
 
-        self.refresh_attachment_generations();
+        self.refresh_attachment_generations(node_id);
         if self.is_attached_to_root(node_id) {
             self.mount_node(node_id)?;
         }
-        self.focus_hint = focus_hint;
-        self.ensure_invariants(removed_focus_root)?;
-        Ok(())
+        self.repair_focus_and_capture(lost)
     }
 
     /// Run the mount hook for a node if it has not been mounted yet.
@@ -295,7 +273,6 @@ impl Core {
         match result {
             Ok(value) => {
                 self.prune_semantic_keys();
-                self.refresh_attachment_generations();
                 self.sync_work_stamps()?;
                 self.retire_invalid_interactions()?;
                 Ok(value)
@@ -522,11 +499,18 @@ impl Core {
         Ok(())
     }
 
-    /// Validate lifecycle flags that are independent of widget behavior.
+    /// Validate lifecycle flags and attachment generations, which are
+    /// independent of widget behavior.
     fn validate_lifecycle_state(&self, node_id: NodeId, node: &Node) -> Result<()> {
-        if node.initialized && !node.mounted && self.is_attached_to_root(node_id) {
+        let attached = self.is_attached_to_root(node_id);
+        if node.initialized && !node.mounted && attached {
             return Err(invariant_violation(format!(
                 "attached node {node_id:?} is initialized before it is mounted"
+            )));
+        }
+        if node.attachment_generation.is_some() != attached {
+            return Err(invariant_violation(format!(
+                "node {node_id:?} attachment generation disagrees with its attachment"
             )));
         }
         Ok(())
@@ -694,8 +678,7 @@ impl Core {
         if self.is_attached_to_root(parent) {
             self.mount_subtree_pre_order(child)?;
         }
-        self.ensure_invariants(None)?;
-        Ok(())
+        self.repair_focus_and_capture(None)
     }
 
     /// Attach all configured topology and identities before invoking mount
@@ -718,7 +701,7 @@ impl Core {
                     core.mount_subtree_pre_order(*node)?;
                 }
             }
-            core.ensure_invariants(None)
+            core.repair_focus_and_capture(None)
         })
     }
 
@@ -727,12 +710,41 @@ impl Core {
         if !self.nodes.contains_key(parent) {
             return Err(Error::NodeNotFound(parent));
         }
+        if self
+            .nodes
+            .get(child)
+            .is_some_and(|node| node.parent.is_some())
+        {
+            return Err(Error::AlreadyAttached(child));
+        }
+        if let Some(key) = key
+            && self.nodes[parent].child_keys.contains_key(key)
+        {
+            return Err(Error::DuplicateChildKey(key.to_string()));
+        }
+        self.validate_attach(parent, child, "attach")?;
+
+        let node = &mut self.nodes[parent];
+        if let Some(key) = key {
+            node.child_keys.insert(key.to_string(), child);
+        }
+        node.children.push(child);
+        self.nodes[child].parent = Some(parent);
+        self.refresh_attachment_generations(child);
+        Ok(())
+    }
+
+    /// Check that `child` can move under `parent`: it exists, it is not the
+    /// root, and the move makes no cycle. Under an attached parent, the
+    /// child's unmounted widgets must be available to mount.
+    fn validate_attach(
+        &self,
+        parent: NodeId,
+        child: NodeId,
+        operation: &'static str,
+    ) -> Result<()> {
         if !self.nodes.contains_key(child) {
             return Err(Error::NodeNotFound(child));
-        }
-        let child_parent = self.nodes.get(child).and_then(|node| node.parent);
-        if child_parent.is_some() {
-            return Err(Error::AlreadyAttached(child));
         }
         if child == self.root {
             return Err(Error::InvalidOperation(
@@ -742,62 +754,40 @@ impl Core {
         if self.is_ancestor_or_self(child, parent) {
             return Err(Error::WouldCreateCycle { parent, child });
         }
-        if let Some(key) = key
-            && self
-                .nodes
-                .get(parent)
-                .is_some_and(|node| node.child_keys.contains_key(key))
-        {
-            return Err(Error::DuplicateChildKey(key.to_string()));
+        if self.is_attached_to_root(parent) {
+            self.ensure_unmounted_widget_slots_available(child, operation)?;
         }
-
-        let parent_attached = self.is_attached_to_root(parent);
-        if parent_attached {
-            self.ensure_unmounted_widget_slots_available(child, "attach")?;
-        }
-
-        if let Some(key) = key
-            && let Some(node) = self.nodes.get_mut(parent)
-        {
-            node.child_keys.insert(key.to_string(), child);
-        }
-
-        if let Some(node) = self.nodes.get_mut(child) {
-            node.parent = Some(parent);
-        }
-        if let Some(node) = self.nodes.get_mut(parent) {
-            node.children.push(child);
-        }
-
-        self.refresh_attachment_generations();
         Ok(())
+    }
+
+    /// Take `child` out of its parent's children and slots, and clear its
+    /// parent link.
+    fn unlink(&mut self, child: NodeId) {
+        let Some(parent) = self
+            .nodes
+            .get_mut(child)
+            .and_then(|node| node.parent.take())
+        else {
+            return;
+        };
+        if let Some(node) = self.nodes.get_mut(parent) {
+            node.children.retain(|id| *id != child);
+            node.child_keys.retain(|_, id| *id != child);
+        }
     }
 
     /// Detach a child from its parent if attached.
     pub fn detach(&mut self, child: impl Into<NodeId>) -> Result<()> {
         let child = child.into();
         self.with_tree_edit("detach", |core| {
-            if !core.nodes.contains_key(child) {
-                return Err(Error::NodeNotFound(child));
-            }
-            let parent = core.nodes.get(child).and_then(|node| node.parent);
-            let hint = parent
-                .filter(|_| core.is_attached_to_root(child))
-                .map(|_| core.focus_recovery_hint(child));
-            let Some(parent) = parent else {
+            let node = core.nodes.get(child).ok_or(Error::NodeNotFound(child))?;
+            if node.parent.is_none() {
                 return Ok(());
-            };
-            if let Some(node) = core.nodes.get_mut(parent) {
-                node.children.retain(|id| *id != child);
-                node.child_keys.retain(|_, id| *id != child);
             }
-            if let Some(node) = core.nodes.get_mut(child) {
-                node.parent = None;
-            }
-            core.refresh_attachment_generations();
-            core.focus_hint = hint;
-            core.ensure_invariants(Some(child))?;
-            Ok(())
+            let lost = core.focus_loss(child);
+            core.unlink(child);
+            core.refresh_attachment_generations(child);
+            core.repair_focus_and_capture(lost)
         })
     }
 
@@ -861,62 +851,35 @@ impl Core {
         }
 
         for child in &children {
-            if self.is_ancestor_or_self(*child, parent) {
-                return Err(Error::WouldCreateCycle {
-                    parent,
-                    child: *child,
-                });
-            }
-            if !self.nodes.contains_key(*child) {
-                return Err(Error::NodeNotFound(*child));
-            }
-            if *child == self.root {
-                return Err(Error::InvalidOperation(
-                    "cannot attach root as a child".into(),
-                ));
-            }
+            self.validate_attach(parent, *child, "set children")?;
         }
 
         let parent_attached = self.is_attached_to_root(parent);
+        let moved: Vec<NodeId> = children
+            .iter()
+            .copied()
+            .filter(|child| self.nodes[*child].parent != Some(parent))
+            .collect();
+        // A focused child that moves under a detached parent leaves the tree.
+        let lost = if parent_attached {
+            None
+        } else {
+            moved.iter().find_map(|child| self.focus_loss(*child))
+        };
+        for child in &moved {
+            self.unlink(*child);
+            self.nodes[*child].parent = Some(parent);
+        }
+        self.nodes[parent].children = children.clone();
+        for child in &moved {
+            self.refresh_attachment_generations(*child);
+        }
         if parent_attached {
-            for child in &children {
-                self.ensure_unmounted_widget_slots_available(*child, "set children")?;
-            }
-        }
-
-        for child in &children {
-            let old_parent = self.nodes.get(*child).and_then(|n| n.parent);
-            if let Some(old_parent) = old_parent
-                && old_parent != parent
-            {
-                if let Some(node) = self.nodes.get_mut(old_parent) {
-                    node.children.retain(|id| *id != *child);
-                    node.child_keys.retain(|_, id| *id != *child);
-                }
-                if let Some(node) = self.nodes.get_mut(*child) {
-                    node.parent = None;
-                }
-            }
-        }
-
-        for child in &children {
-            if let Some(node) = self.nodes.get_mut(*child) {
-                node.parent = Some(parent);
-            }
-        }
-
-        self.nodes[parent].children = children;
-
-        let new_children = self.nodes[parent].children.clone();
-        self.refresh_attachment_generations();
-        if parent_attached {
-            for child in new_children {
+            for child in children {
                 self.mount_subtree_pre_order(child)?;
             }
         }
-
-        self.ensure_invariants(None)?;
-        Ok(())
+        self.repair_focus_and_capture(lost)
     }
 
     /// Remove a node and all descendants from the arena.
@@ -933,30 +896,53 @@ impl Core {
         if !self.nodes.contains_key(root_id) {
             return Err(Error::NodeNotFound(root_id));
         }
-        let hint = if self.is_attached_to_root(root_id) {
-            Some(self.focus_recovery_hint(root_id))
+        let lost = self.delete_subtree(root_id, "remove subtree", false)?;
+        self.repair_focus_and_capture(lost)
+    }
+
+    /// Run removal hooks for the subtree at `root`, then delete its nodes.
+    ///
+    /// Removal and replacement share this. With `keep_root`, the root node
+    /// stays in place without children, ready for a replacement widget.
+    /// Returns the focus recovery candidates when the deleted nodes held
+    /// focus.
+    fn delete_subtree(
+        &mut self,
+        root: NodeId,
+        operation: &'static str,
+        keep_root: bool,
+    ) -> Result<Option<FocusRecoveryHint>> {
+        let plan = self.plan_subtree_removal(root, operation)?;
+        // Focus is lost from the topmost deleted node on its path. A replaced
+        // root survives, so that is its child on the path.
+        let lost_root = if keep_root {
+            self.focus.and_then(|focus| {
+                self.nodes[root]
+                    .children
+                    .iter()
+                    .copied()
+                    .find(|child| self.is_ancestor_or_self(*child, focus))
+            })
         } else {
-            None
+            Some(root)
         };
-        let plan = self.plan_subtree_removal(root_id, "remove subtree")?;
+        let lost = lost_root.and_then(|node| self.focus_loss(node));
         self.run_removal_hooks(&plan)?;
 
-        let parent = self.nodes.get(root_id).and_then(|node| node.parent);
-        if let Some(parent) = parent
-            && let Some(node) = self.nodes.get_mut(parent)
-        {
-            node.children.retain(|id| *id != root_id);
-            node.child_keys.retain(|_, id| *id != root_id);
+        if keep_root {
+            let node = &mut self.nodes[root];
+            node.children.clear();
+            node.child_keys.clear();
+        } else {
+            self.unlink(root);
         }
-
-        for node_id in &plan.post_order {
-            self.clear_semantic_key(*node_id)?;
-            self.nodes.remove(*node_id);
+        for node_id in plan.post_order {
+            if !keep_root || node_id != root {
+                self.clear_semantic_key(node_id)?;
+                self.nodes.remove(node_id);
+            }
         }
-
-        self.focus_hint = hint;
-        self.ensure_invariants(Some(root_id))?;
-        Ok(())
+        Ok(lost)
     }
 
     /// Build a stable plan for removing a complete subtree.
@@ -1034,16 +1020,6 @@ impl Core {
         Ok(())
     }
 
-    /// Find the direct child whose removal invalidates focus, if any.
-    fn removed_focus_root(&self, plan: &RemovalPlan) -> Option<NodeId> {
-        let focus = self.focus?;
-        self.nodes[plan.root]
-            .children
-            .iter()
-            .copied()
-            .find(|child| self.is_ancestor_or_self(*child, focus))
-    }
-
     /// Collect a subtree in pre-order, including the root.
     pub(crate) fn subtree_pre_order(&self, root: NodeId) -> Vec<NodeId> {
         let mut out = Vec::new();
@@ -1119,7 +1095,7 @@ impl Core {
         node.hidden = hidden;
         if changed {
             self.invalidate(crate::Invalidation::Layout);
-            self.ensure_invariants(None)?;
+            self.repair_focus_and_capture(None)?;
             Ok(ChangeOutcome::Changed)
         } else {
             Ok(ChangeOutcome::Unchanged)

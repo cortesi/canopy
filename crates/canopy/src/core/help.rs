@@ -1,10 +1,7 @@
 //! Contextual binding discovery.
 
 use crate::{
-    commands::{
-        CommandAction, CommandRequirement, CommandResolution, CommandResolver, CommandStatus,
-        CommandTarget,
-    },
+    commands::{CommandAction, CommandAvailability, CommandResolver, CommandTarget},
     core::{
         Core, NodeId,
         context::CoreViewContext,
@@ -121,12 +118,9 @@ pub struct AvailableBinding<I> {
 pub struct BindingCommand {
     /// Stored invocation, arguments, and target policy.
     pub action: CommandAction,
-    /// Resolved owner at capture time, absent for an unavailable command.
-    pub resolution: Option<CommandResolution>,
-    /// Eligibility at capture time, separate from target resolution.
-    pub status: Option<CommandStatus>,
-    /// Required context absent at capture time.
-    pub missing_requirements: Vec<CommandRequirement>,
+    /// Availability at capture time, absent when the command is not
+    /// registered.
+    pub availability: Option<CommandAvailability>,
 }
 
 impl Core {
@@ -186,7 +180,7 @@ impl Core {
         let winner = self.route(focus).find_map(|(node, path)| {
             self.input_map
                 .resolve_match(&path, spec)
-                .map(|resolved| (node, path, resolved.id))
+                .map(|record| (node, path, record.id))
         });
         winner
             .map(|(node, path, id)| self.available_binding(node, input, path, id))
@@ -221,10 +215,7 @@ impl Core {
                     .transpose()?;
                 Some(BindingCommand {
                     action: action.clone(),
-                    resolution: availability.as_ref().and_then(|item| item.resolution),
-                    status: availability.as_ref().and_then(|item| item.status.clone()),
-                    missing_requirements: availability
-                        .map_or_else(Vec::new, |item| item.missing_requirements),
+                    availability,
                 })
             }
         };
@@ -270,7 +261,10 @@ mod tests {
     use super::*;
     use crate::{
         ViewContext,
-        commands::{CommandAction, CommandArgs, CommandId, CommandInvocation, CommandNode},
+        commands::{
+            CommandAction, CommandArgs, CommandId, CommandInvocation, CommandNode,
+            CommandResolution, CommandStatus,
+        },
         core::inputmap::{BindingOptions, BindingTarget, InputSpec},
         error::Error,
         event::key::KeyCode,
@@ -543,7 +537,15 @@ mod tests {
                 .expect("snapshot")
                 .mouse_bindings
                 .first()
-                .and_then(|binding| binding.command.as_ref()?.status.clone())
+                .and_then(|binding| {
+                    binding
+                        .command
+                        .as_ref()?
+                        .availability
+                        .as_ref()?
+                        .status
+                        .clone()
+                })
         };
         assert_eq!(
             status(&core),
@@ -659,25 +661,25 @@ mod tests {
         assert_eq!(binding.phase, Some(BindingPhase::AfterWidget));
         let command = binding.command.as_ref().expect("command details");
         assert_eq!(command.action, action);
+        let availability = command.availability.as_ref().expect("registered command");
         assert_eq!(
-            command.resolution,
+            availability.resolution,
             Some(CommandResolution::Exact { target: leaf })
         );
         assert_eq!(
-            command.status,
+            availability.status,
             Some(CommandStatus::Disabled("no selection".into()))
         );
         enabled.set(true);
+        let refreshed = core.available_bindings(Some(leaf))?;
+        let refreshed = refreshed.provisional_bindings[0]
+            .command
+            .as_ref()
+            .and_then(|command| command.availability.as_ref())
+            .expect("registered command");
+        assert_eq!(refreshed.status, Some(CommandStatus::Enabled));
         assert_eq!(
-            core.available_bindings(Some(leaf))?.provisional_bindings[0]
-                .command
-                .as_ref()
-                .unwrap()
-                .status,
-            Some(CommandStatus::Enabled)
-        );
-        assert_eq!(
-            command.status,
+            availability.status,
             Some(CommandStatus::Disabled("no selection".into()))
         );
         Ok(())

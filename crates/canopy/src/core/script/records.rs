@@ -7,7 +7,7 @@ use ruau::vm::Scope;
 use super::{
     ArgValue, AttrSet, Canopy, Cell, Color, CoreViewContext, NodeId, Point, RectI32, Result,
     ViewContext, commands, error, inputmap, node_list_to_arg, point_to_arg, rect_to_arg,
-    size_to_arg, widget_access,
+    size_to_arg,
 };
 use crate::{
     FrameSnapshot, NodeSnapshot,
@@ -173,7 +173,7 @@ pub(super) fn node_info_to_arg(
     } else {
         rect_to_arg(node.view.content)
     };
-    let accept_focus = widget_access::accepts_focus(&canopy.core, node_id);
+    let accept_focus = canopy.core.accepts_focus(node_id);
     Ok(BTreeMap::from([
         ("id".to_string(), ArgValue::Node(node_id)),
         ("name".to_string(), ArgValue::String(node.name.to_string())),
@@ -343,15 +343,22 @@ fn insert_command_action(
 
 /// Add availability and eligibility without conflating them with target
 /// resolution or missing context.
+///
+/// An unregistered command has no availability, and reports itself as
+/// unavailable.
 fn insert_command_availability(
     record: &mut BTreeMap<String, ArgValue>,
-    status: Option<&commands::CommandStatus>,
-    missing: &[commands::CommandRequirement],
-    available: bool,
-    target: Option<NodeId>,
+    availability: Option<&commands::CommandAvailability>,
 ) {
-    record.insert("available".to_string(), ArgValue::Bool(available));
-    if let Some(status) = status {
+    let resolution = availability.and_then(|availability| availability.resolution);
+    let missing = availability.map_or(&[][..], |availability| {
+        availability.missing_requirements.as_slice()
+    });
+    record.insert(
+        "available".to_string(),
+        ArgValue::Bool(resolution.is_some()),
+    );
+    if let Some(status) = availability.and_then(|availability| availability.status.as_ref()) {
         record.insert(
             "status".to_string(),
             ArgValue::String(status.label().to_string()),
@@ -372,8 +379,8 @@ fn insert_command_availability(
                 .collect(),
         ),
     );
-    if let Some(target) = target {
-        record.insert("target".to_string(), ArgValue::Node(target));
+    if let Some(resolution) = resolution {
+        record.insert("target".to_string(), ArgValue::Node(resolution.target()));
     }
 }
 
@@ -414,17 +421,14 @@ fn command_param_to_arg(param: &commands::CommandParamSpec) -> ArgValue {
 }
 
 /// Convert a command specification into its scripting record.
-pub(super) fn command_info_to_arg(availability: commands::CommandAvailability<'_>) -> ArgValue {
-    let commands::CommandAvailability {
-        spec,
-        resolution,
-        status,
-        missing_requirements,
-    } = availability;
-    let owner = spec.dispatch.owner().unwrap_or("");
+pub(super) fn command_info_to_arg(availability: &commands::CommandAvailability) -> ArgValue {
+    let spec = availability.spec;
     let mut record = BTreeMap::from([
         ("name".to_string(), ArgValue::String(spec.name.to_string())),
-        ("owner".to_string(), ArgValue::String(owner.to_string())),
+        (
+            "owner".to_string(),
+            ArgValue::String(spec.owner.to_string()),
+        ),
         (
             "params".to_string(),
             ArgValue::Array(spec.params.iter().map(command_param_to_arg).collect()),
@@ -437,13 +441,7 @@ pub(super) fn command_info_to_arg(availability: commands::CommandAvailability<'_
             }),
         ),
     ]);
-    insert_command_availability(
-        &mut record,
-        status.as_ref(),
-        &missing_requirements,
-        resolution.is_some(),
-        resolution.and_then(commands::CommandResolution::target),
-    );
+    insert_command_availability(&mut record, Some(availability));
     if let Some(doc) = spec.doc {
         record.insert("doc".to_string(), ArgValue::String(doc.to_string()));
     }
@@ -643,15 +641,7 @@ fn available_binding_to_arg<I: ToString>(binding: help::AvailableBinding<I>) -> 
     if let Some(command) = binding.command {
         let mut detail = BTreeMap::new();
         insert_command_action(&mut detail, &command.action);
-        insert_command_availability(
-            &mut detail,
-            command.status.as_ref(),
-            &command.missing_requirements,
-            command.resolution.is_some(),
-            command
-                .resolution
-                .and_then(commands::CommandResolution::target),
-        );
+        insert_command_availability(&mut detail, command.availability.as_ref());
         record.insert("command".to_string(), ArgValue::Map(detail));
     }
     if let Some(mode) = binding.scope.mode() {

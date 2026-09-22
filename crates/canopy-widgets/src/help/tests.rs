@@ -4,7 +4,8 @@ use canopy::{
     BindingId, BindingOwner, BindingPhase, BindingScope, BindingTargetKind, Context, ContextExt,
     Loader, NodeId, ViewContext, Widget, buf,
     commands::{
-        CommandAction, CommandArgs, CommandId, CommandInvocation, CommandResolution, CommandStatus,
+        CommandAction, CommandArgs, CommandAvailability, CommandId, CommandInvocation,
+        CommandStatus,
     },
     error::Result,
     event::{key, mouse},
@@ -170,9 +171,12 @@ fn a_disabled_mouse_binding_shows_its_reason() {
             },
             target: None,
         },
-        resolution: Some(CommandResolution::Free),
-        status: Some(CommandStatus::Disabled("nothing selected".into())),
-        missing_requirements: Vec::new(),
+        availability: Some(CommandAvailability {
+            spec: crate::Button::cmd_press(),
+            resolution: None,
+            status: Some(CommandStatus::Disabled("nothing selected".into())),
+            missing_requirements: Vec::new(),
+        }),
     });
     let list = list_with_mice(Vec::new(), vec![click]);
     let lines = list.display_lines(60);
@@ -471,8 +475,8 @@ fn separators_read_apart_from_the_keys() -> Result<()> {
 fn command_help_keeps_user_feedback_without_command_diagnostics() {
     use canopy::{
         commands::{
-            ArgValue, CommandAction, CommandArgs, CommandId, CommandInvocation, CommandRequirement,
-            CommandStatus, CommandTarget,
+            ArgValue, CommandAction, CommandArgs, CommandAvailability, CommandId,
+            CommandInvocation, CommandRequirement, CommandStatus, CommandTarget,
         },
         help::BindingCommand,
     };
@@ -486,9 +490,12 @@ fn command_help_keeps_user_feedback_without_command_diagnostics() {
             },
             target: Some(CommandTarget::Focus),
         },
-        resolution: None,
-        status: Some(CommandStatus::Disabled("no selection".into())),
-        missing_requirements: vec![CommandRequirement::ListRow],
+        availability: Some(CommandAvailability {
+            spec: crate::Button::cmd_press(),
+            resolution: None,
+            status: Some(CommandStatus::Disabled("no selection".into())),
+            missing_requirements: vec![CommandRequirement::ListRow],
+        }),
     });
     let list = list_with(vec![binding.clone()]);
     let text = list
@@ -500,7 +507,12 @@ fn command_help_keeps_user_feedback_without_command_diagnostics() {
     let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
     assert_eq!(text, "Delete selection — Unavailable: no selection");
     // Input dispatch supplies event/row context that passive discovery lacks.
-    binding.command.as_mut().unwrap().status = Some(CommandStatus::Enabled);
+    binding
+        .command
+        .as_mut()
+        .and_then(|command| command.availability.as_mut())
+        .unwrap()
+        .status = Some(CommandStatus::Enabled);
     let list = list_with(vec![binding]);
     assert_eq!(list.display_lines(100)[0].text, "Delete selection");
 }

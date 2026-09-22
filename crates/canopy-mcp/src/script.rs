@@ -177,7 +177,7 @@ pub struct ScriptEvalOutcome {
 pub struct BootstrapCommand {
     /// Command name relative to its owner.
     pub name: String,
-    /// Widget owner name, or empty for free commands.
+    /// Widget owner name.
     pub owner: String,
     /// Whether the command currently resolves.
     pub available: bool,
@@ -445,7 +445,6 @@ fn bootstrap_commands(
         .command_availability(target)?
         .into_iter()
         .map(|availability| {
-            let owner = availability.spec.dispatch.owner().unwrap_or("");
             let (status, disabled_reason) = match &availability.status {
                 Some(status) => {
                     let reason = match status {
@@ -458,7 +457,7 @@ fn bootstrap_commands(
             };
             BootstrapCommand {
                 name: availability.spec.name.to_string(),
-                owner: owner.to_string(),
+                owner: availability.spec.owner.to_string(),
                 available: availability.resolution.is_some(),
                 status,
                 disabled_reason,

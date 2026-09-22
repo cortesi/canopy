@@ -713,17 +713,17 @@ fn tcompile_rejects_type_errors_when_finalized() -> Result<()> {
     })
 }
 
-/// Mounted owner used to distinguish free commands from node dispatch.
-struct WaitFreeOwner;
+/// Mounted node whose name no registered command owns.
+struct WaitUnownedNode;
 
-impl crate::Widget for WaitFreeOwner {
+impl crate::Widget for WaitUnownedNode {
     fn name(&self) -> NodeName {
-        NodeName::convert("wait_free")
+        NodeName::convert("wait_unowned")
     }
 }
 
 fn wait_command_invoke(
-    _target: Option<&mut dyn Any>,
+    _target: &mut dyn Any,
     _ctx: &mut dyn crate::Context,
     _invocation: &commands::CommandInvocation,
 ) -> StdResult<ArgValue, commands::CommandError> {
@@ -737,19 +737,7 @@ fn wait_command_check(_args: &CommandArgs) -> StdResult<(), commands::CommandErr
 static WAIT_EXTRA_NODE: CommandSpec = CommandSpec {
     id: commands::CommandId("ba_la::wait_extra"),
     name: "wait_extra",
-    dispatch: commands::CommandDispatchKind::Node { owner: "ba_la" },
-    params: &[],
-    ret: commands::CommandReturnSpec::Unit,
-    doc: None,
-    invoke: wait_command_invoke,
-    check: wait_command_check,
-    status: None,
-};
-
-static WAIT_FREE: CommandSpec = CommandSpec {
-    id: commands::CommandId("wait_free::run"),
-    name: "run",
-    dispatch: commands::CommandDispatchKind::Free,
+    owner: "ba_la",
     params: &[],
     ret: commands::CommandReturnSpec::Unit,
     doc: None,
@@ -761,17 +749,17 @@ static WAIT_FREE: CommandSpec = CommandSpec {
 #[test]
 fn wait_for_node_preserves_registration_and_focus_resolution() -> Result<()> {
     run_ttree(|canopy, _, tree| {
-        static WAIT_COMMANDS: &[&CommandSpec] = &[&WAIT_EXTRA_NODE, &WAIT_FREE];
+        static WAIT_COMMANDS: &[&CommandSpec] = &[&WAIT_EXTRA_NODE];
         canopy.core.commands.add(WAIT_COMMANDS)?;
         canopy
             .core
-            .add_child_to_boxed(tree.root, Box::new(WaitFreeOwner))?;
+            .add_child_to_boxed(tree.root, Box::new(WaitUnownedNode))?;
         canopy.core.set_focus(tree.root)?;
         assert_eq!(
             canopy.eval_script(r#"return canopy.wait_for_node("ba_la", 10)"#)?,
             ArgValue::Bool(true)
         );
-        for owner in ["ba", "wait_free", "missing"] {
+        for owner in ["ba", "wait_unowned", "missing"] {
             let error = canopy
                 .eval_script(&format!("return canopy.wait_for_node({owner:?}, 1)"))
                 .expect_err("unregistered or absent node owner must time out");

@@ -82,24 +82,6 @@ impl WidgetActionSpec {
             description,
         })
     }
-
-    /// Return the action name.
-    #[must_use]
-    pub(crate) fn name(&self) -> &WidgetActionName {
-        &self.name
-    }
-
-    /// Return the action description.
-    #[must_use]
-    pub(crate) fn description(&self) -> &str {
-        &self.description
-    }
-
-    /// Split the spec into its name and description.
-    #[must_use]
-    pub(crate) fn into_parts(self) -> (WidgetActionName, String) {
-        (self.name, self.description)
-    }
 }
 
 /// Bindable widget actions for one application, with their descriptions.
@@ -122,15 +104,14 @@ impl WidgetActionCatalog {
                 "widget action registration is sealed after finalize_api()".to_string(),
             ));
         }
-        match self.actions.get(spec.name()) {
-            Some(existing) if existing == spec.description() => Ok(()),
+        match self.actions.get(&spec.name) {
+            Some(existing) if *existing == spec.description => Ok(()),
             Some(_) => Err(Error::InvalidOperation(format!(
                 "conflicting widget action already registered for {}",
-                spec.name()
+                spec.name
             ))),
             None => {
-                let (name, description) = spec.into_parts();
-                self.actions.insert(name, description);
+                self.actions.insert(spec.name, spec.description);
                 Ok(())
             }
         }
@@ -149,8 +130,8 @@ impl WidgetActionCatalog {
 
     /// Return whether `name` is registered.
     #[must_use]
-    pub(crate) fn contains_name(&self, name: &str) -> bool {
-        WidgetActionName::new(name).is_ok_and(|name| self.actions.contains_key(&name))
+    pub(crate) fn contains(&self, name: &WidgetActionName) -> bool {
+        self.actions.contains_key(name)
     }
 
     /// Return every registered action in name order.

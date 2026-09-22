@@ -42,7 +42,6 @@ use crate::{
         context::{Context, CoreContext, CoreViewContext, FocusScope, ViewContext},
         inputmap,
         termbuf::Cell,
-        widget_access,
     },
     error::{self, Result},
     event::{key, mouse},

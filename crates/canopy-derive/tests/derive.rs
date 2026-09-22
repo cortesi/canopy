@@ -7,8 +7,8 @@ mod tests {
     use canopy::{
         self, Canopy, Context, ViewContext, Widget,
         commands::{
-            ArgValue, CommandArgs, CommandDispatchKind, CommandError, CommandNode,
-            CommandParamKind, CommandRequirement, CommandReturnSpec, CommandStatus, ListRowContext,
+            ArgValue, CommandArgs, CommandError, CommandNode, CommandParamKind, CommandRequirement,
+            CommandReturnSpec, CommandStatus, ListRowContext,
         },
         error::{Error, Result},
         event::{Event, mouse::MouseEvent},
@@ -202,7 +202,7 @@ mod tests {
         ] {
             inv.args = args;
             assert_eq!(
-                with_ctx(|ctx| (spec.invoke)(Some(&mut target), ctx, &inv)).unwrap(),
+                with_ctx(|ctx| (spec.invoke)(&mut target, ctx, &inv)).unwrap(),
                 ArgValue::String("a/b/c/d".into()),
             );
         }
@@ -219,7 +219,7 @@ mod tests {
         for fail in [false, true] {
             let mut inv = spec.call_with(()).invocation();
             inv.args = CommandArgs::Positional(vec![ArgValue::Bool(fail)]);
-            let result = with_ctx(|ctx| (spec.invoke)(Some(&mut target), ctx, &inv));
+            let result = with_ctx(|ctx| (spec.invoke)(&mut target, ctx, &inv));
             if fail {
                 assert!(matches!(result, Err(CommandError::Exec(_))));
             } else {
@@ -229,7 +229,7 @@ mod tests {
         let spec = Collision::cmd_explicit();
         let inv = spec.call_with(()).invocation();
         assert_eq!(
-            with_ctx(|ctx| (spec.invoke)(Some(&mut target), ctx, &inv)).unwrap(),
+            with_ctx(|ctx| (spec.invoke)(&mut target, ctx, &inv)).unwrap(),
             ArgValue::String("value".into())
         );
     }
@@ -279,8 +279,7 @@ mod tests {
             Collision::call_bindings("a".into(), "b".into(), "c".into(), "d".into()).invocation();
         let mut target = Collision;
         assert_eq!(
-            with_ctx(|ctx| (Collision::cmd_bindings().invoke)(Some(&mut target), ctx, &call))
-                .unwrap(),
+            with_ctx(|ctx| (Collision::cmd_bindings().invoke)(&mut target, ctx, &call)).unwrap(),
             ArgValue::String("a/b/c/d".into())
         );
     }
@@ -348,10 +347,7 @@ mod tests {
         let cmd_a = Foo::cmd_a();
         assert_eq!(cmd_a.id.0, "foo::a");
         assert_eq!(cmd_a.name, "a");
-        assert!(matches!(
-            cmd_a.dispatch,
-            CommandDispatchKind::Node { owner } if owner == "foo"
-        ));
+        assert_eq!(cmd_a.owner, "foo");
         assert!(cmd_a.params.is_empty());
         assert!(matches!(cmd_a.ret, CommandReturnSpec::Unit));
     }
@@ -448,8 +444,7 @@ mod tests {
     fn invoke_dispatches() {
         let mut f = Foo::default();
         let inv = Foo::cmd_a().call_with(()).invocation();
-        let out =
-            with_ctx(|ctx| (Foo::cmd_a().invoke)(Some(&mut f as &mut dyn Any), ctx, &inv)).unwrap();
+        let out = with_ctx(|ctx| (Foo::cmd_a().invoke)(&mut f as &mut dyn Any, ctx, &inv)).unwrap();
 
         assert_eq!(out, ArgValue::Null);
         assert!(f.a_triggered);
@@ -459,10 +454,9 @@ mod tests {
     fn missing_args_error() {
         let mut f = Foo::default();
         let inv = Foo::cmd_naked_isize().call_with(()).invocation();
-        let err = with_ctx(|ctx| {
-            (Foo::cmd_naked_isize().invoke)(Some(&mut f as &mut dyn Any), ctx, &inv)
-        })
-        .unwrap_err();
+        let err =
+            with_ctx(|ctx| (Foo::cmd_naked_isize().invoke)(&mut f as &mut dyn Any, ctx, &inv))
+                .unwrap_err();
 
         assert!(matches!(err, CommandError::ArityMismatch { .. }));
         assert!(f.naked_isize.is_none());
@@ -493,10 +487,9 @@ mod tests {
     fn ignored_result_wraps_errors() {
         let mut f = Foo::default();
         let inv = Foo::cmd_ignored_result().call_with(()).invocation();
-        let err = with_ctx(|ctx| {
-            (Foo::cmd_ignored_result().invoke)(Some(&mut f as &mut dyn Any), ctx, &inv)
-        })
-        .unwrap_err();
+        let err =
+            with_ctx(|ctx| (Foo::cmd_ignored_result().invoke)(&mut f as &mut dyn Any, ctx, &inv))
+                .unwrap_err();
 
         assert!(matches!(err, CommandError::Exec(_)));
         assert!(f.ignored_result_triggered);

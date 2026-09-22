@@ -466,7 +466,11 @@ pub(super) fn binding_description<I>(binding: &AvailableBinding<I>) -> String {
         return binding.description.clone();
     };
     let mut description = binding.description.clone();
-    match &command.status {
+    match command
+        .availability
+        .as_ref()
+        .and_then(|availability| availability.status.as_ref())
+    {
         Some(CommandStatus::Disabled(reason)) => {
             description.push_str(&format!(" — Unavailable: {reason}"));
         }

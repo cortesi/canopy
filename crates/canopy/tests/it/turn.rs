@@ -78,7 +78,7 @@ mod tests {
         assert!(canopy.turn(Work::Prepare)?.frame.is_some());
         canopy.with_root_view(|ctx| {
             assert!(ctx.view_of(widget.into()).is_some());
-            ctx.with_widget(widget, |widget| {
+            ctx.with_widget(widget, |widget: &TextWidget| {
                 assert_eq!(widget.text, "visible");
                 Ok(())
             })

@@ -131,12 +131,12 @@ mod tests {
         })?;
         canopy.with_root_view(|ctx| {
             for id in [first, extra] {
-                ctx.with_widget(id, |counter| {
+                ctx.with_widget(id, |counter: &Counter| {
                     assert_eq!(counter.presses, 0);
                     Ok(())
                 })?;
             }
-            ctx.with_widget(second, |counter| {
+            ctx.with_widget(second, |counter: &Counter| {
                 assert_eq!(counter.presses, 3);
                 Ok(())
             })

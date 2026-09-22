@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{Canopy, EvalRequest};
 use crate::{
-    commands::{self, CommandDispatchKind},
+    commands,
     core::{
         NodeId,
         fixture::{Fixture, FixtureInfo},
@@ -753,10 +753,10 @@ impl Canopy {
     /// Return true if the named owner already exports a `default_bindings`
     /// command.
     fn owner_has_default_bindings_command(&self, owner: &str) -> bool {
-        self.core.commands.iter().any(|(_, spec)| {
-            matches!(spec.dispatch, CommandDispatchKind::Node { owner: spec_owner } if spec_owner == owner)
-                && spec.name == "default_bindings"
-        })
+        self.core
+            .commands
+            .iter()
+            .any(|(_, spec)| spec.owner == owner && spec.name == "default_bindings")
     }
 
     /// Ensure the script surface can still be extended.

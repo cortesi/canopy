@@ -56,8 +56,6 @@ pub struct Route<'a> {
     next: Option<NodeId>,
     /// Path from the root to `next`.
     path: Path,
-    /// Modal owner that ends the route, if a modal is open.
-    owner: Option<NodeId>,
 }
 
 impl Iterator for Route<'_> {
@@ -66,11 +64,7 @@ impl Iterator for Route<'_> {
     fn next(&mut self) -> Option<Self::Item> {
         let node = self.next?;
         let path = self.path.clone();
-        self.next = if self.owner == Some(node) {
-            None
-        } else {
-            self.core.nodes.get(node).and_then(|entry| entry.parent)
-        };
+        self.next = self.core.route_step(node);
         self.path.pop();
         Some((node, path))
     }
@@ -180,8 +174,19 @@ impl Core {
             core: self,
             next: self.interaction_admits(start).then_some(start),
             path: self.path_of(self.root, start),
-            owner: self.modal_owner(),
         }
+    }
+
+    /// Return the node the input route visits after `node`: its parent, or
+    /// none at the modal owner.
+    ///
+    /// [`Core::route`] steps with this. A dispatch walk whose handlers can
+    /// change the tree takes each step live, after the handler returns.
+    pub(crate) fn route_step(&self, node: NodeId) -> Option<NodeId> {
+        if self.modal_owner() == Some(node) {
+            return None;
+        }
+        self.nodes.get(node).and_then(|entry| entry.parent)
     }
 
     /// Return effects owned by scopes without altering widget-owned effects.
@@ -277,11 +282,6 @@ impl Core {
         Ok(token)
     }
 
-    /// Close at the shared callback completion boundary.
-    pub(crate) fn close_modal(&mut self, token: InteractionToken) -> Result<()> {
-        self.close_modal_after_dispatch(token)
-    }
-
     /// Close the requested scope and all younger scopes after callbacks return.
     pub(crate) fn close_modal_now(&mut self, token: InteractionToken) -> Result<()> {
         let Some(index) = self
@@ -358,12 +358,14 @@ impl Core {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::{cell::RefCell, rc::Rc, sync::Arc};
 
     use super::*;
     use crate::{
+        Context, ViewContext, Widget,
         event::{Event, key, mouse},
         testing::ttree::{Bb, get_state, reset_state, run_ttree},
+        widget::EventOutcome,
     };
 
     #[test]
@@ -456,7 +458,7 @@ mod tests {
                 dim_target: Some(tree.b_a),
                 bindings: ModalBindings::Application,
             })?;
-            core.close_modal(inner)?;
+            core.close_modal_after_dispatch(inner)?;
             assert_eq!(core.modal_region(), Some(tree.b));
             assert_eq!(core.focus, Some(tree.b_a));
             let _inner = core.open_modal(ModalOptions {
@@ -466,7 +468,7 @@ mod tests {
                 dim_target: Some(tree.b_a),
                 bindings: ModalBindings::Application,
             })?;
-            core.close_modal(outer)?;
+            core.close_modal_after_dispatch(outer)?;
             assert_eq!(core.modal_region(), None);
             assert_eq!(core.focus, Some(tree.a_a));
             assert_eq!(core.mouse_capture, None);
@@ -475,7 +477,7 @@ mod tests {
             assert!(core.modal_effects_for(tree.a).is_empty());
             assert_eq!(core.nodes[tree.a].effects.len(), 1);
             assert!(Arc::ptr_eq(&ordinary, &core.nodes[tree.a].effects[0]));
-            core.close_modal(outer)?;
+            core.close_modal_after_dispatch(outer)?;
             Ok(())
         })
     }
@@ -493,12 +495,12 @@ mod tests {
                 bindings: ModalBindings::Application,
             })?;
             let checkpoint = core.begin_dispatch();
-            core.close_modal(token)?;
+            core.close_modal_after_dispatch(token)?;
             assert_eq!(core.modal_region(), Some(tree.b));
             core.finish_dispatch(checkpoint, false)?;
             assert_eq!(core.modal_region(), Some(tree.b));
             let checkpoint = core.begin_dispatch();
-            core.close_modal(token)?;
+            core.close_modal_after_dispatch(token)?;
             assert!(!core.nodes[tree.b].hidden);
             core.finish_dispatch(checkpoint, true)?;
             assert!(core.nodes[tree.b].hidden);
@@ -533,9 +535,55 @@ mod tests {
                 bindings: ModalBindings::Application,
             })?;
             core.remove_subtree(tree.a_a)?;
-            core.close_modal(token)?;
+            core.close_modal_after_dispatch(token)?;
             assert_eq!(core.focus, Some(tree.a));
             Ok(())
         })
+    }
+
+    /// Records the paste events it declines.
+    struct PasteLog {
+        name: &'static str,
+        log: Rc<RefCell<Vec<&'static str>>>,
+    }
+
+    impl Widget for PasteLog {
+        fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+            true
+        }
+
+        fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {
+            if matches!(event, Event::Paste(_)) {
+                self.log.borrow_mut().push(self.name);
+            }
+            Ok(EventOutcome::Ignore)
+        }
+    }
+
+    #[test]
+    fn focus_events_stop_at_the_modal_owner() -> Result<()> {
+        let log = Rc::new(RefCell::new(Vec::new()));
+        let mut core = Core::new();
+        let mut parent = core.root;
+        let mut nodes = Vec::new();
+        for name in ["outside", "owner", "modal", "leaf"] {
+            let node = core.create_detached(PasteLog {
+                name,
+                log: Rc::clone(&log),
+            })?;
+            core.attach(parent, node)?;
+            nodes.push(node);
+            parent = node;
+        }
+        core.open_modal(ModalOptions {
+            owner: nodes[1],
+            modal: nodes[2],
+            initial_focus: nodes[3],
+            dim_target: None,
+            bindings: ModalBindings::Application,
+        })?;
+        core.dispatch_event(nodes[3], &Event::Paste("text".into()))?;
+        assert_eq!(*log.borrow(), ["leaf", "modal", "owner"]);
+        Ok(())
     }
 }

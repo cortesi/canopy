@@ -28,7 +28,7 @@ impl Core {
         // Focus recovery reads the published views. Reveals then run against
         // the settled geometry, including the reveal of a recovered focus, and
         // the views they move are published again.
-        self.ensure_focus_valid(None)?;
+        self.ensure_focus_valid()?;
         if self.apply_reveals()? {
             LayoutPass::new(self).update_views(root, screen_view)?;
         }

@@ -62,11 +62,6 @@ impl<T> NodeArena<T> {
         self.0.len()
     }
 
-    /// Iterate over opaque identifiers.
-    pub fn keys(&self) -> impl Iterator<Item = NodeId> + '_ {
-        self.0.keys().map(NodeId)
-    }
-
     /// Iterate over identifiers and borrowed values.
     pub fn iter(&self) -> impl Iterator<Item = (NodeId, &T)> + '_ {
         self.0.iter().map(|(id, value)| (NodeId(id), value))

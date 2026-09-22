@@ -70,9 +70,9 @@ pub mod canopy {
 
         /// Command availability from a given focus context.
         #[derive(Clone, Debug)]
-        pub struct CommandAvailability<'a> {
+        pub struct CommandAvailability {
             /// Command specification.
-            pub spec: &'a CommandSpec,
+            pub spec: &'static CommandSpec,
             /// Resolution if the command has a target, or `None` if no target exists.
             pub resolution: Option<CommandResolution>,
             /// Eligibility for a resolved command.
@@ -84,18 +84,6 @@ pub mod canopy {
         /// Builder for a command invocation.
         #[derive(Clone, Debug)]
         pub struct CommandCall {}
-
-        /// Command dispatch routing.
-        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-        pub enum CommandDispatchKind {
-            /// Invoke with `target = None`.
-            Free,
-            /// Route to a node by owner name.
-            Node {
-                /// Owner node name.
-                owner: &'static str,
-            },
-        }
 
         /// Error type for command dispatch and conversion.
         #[derive(Debug, Display, Error)]
@@ -134,15 +122,15 @@ pub mod canopy {
                 /// Stale node id.
                 id: crate::core::NodeId,
             },
-            #[error("node {node:?} does not own command {id} (expected {expected:?})")]
+            #[error("node {node:?} does not own command {id} (expected owner {expected})")]
             /// An exact target does not own the requested node command.
             WrongOwner {
                 /// Requested command identifier.
                 id: String,
                 /// Requested exact node.
                 node: crate::core::NodeId,
-                /// Required owner, absent for a free command.
-                expected: Option<String>,
+                /// Required owner name.
+                expected: String,
             },
             #[error("command {id} is disabled: {reason}")]
             /// Eligibility changed or the action was already disabled.
@@ -259,8 +247,6 @@ pub mod canopy {
         /// Resolution of a command dispatch target.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub enum CommandResolution {
-            /// Command is free (no target).
-            Free,
             /// Command targets the specified owner without searching.
             Exact {
                 /// Target node ID.
@@ -305,8 +291,9 @@ pub mod canopy {
             pub id: CommandId,
             /// Command name.
             pub name: &'static str,
-            /// Dispatch routing.
-            pub dispatch: CommandDispatchKind,
+            /// Name of the node type that owns the command. Dispatch routes the
+            /// command to a node with this name.
+            pub owner: &'static str,
             /// Parameter specs.
             pub params: &'static [CommandParamSpec],
             /// Return spec.
@@ -364,7 +351,7 @@ pub mod canopy {
 
         /// Erased invoke function signature.
         pub type InvokeFn = fn(
-            target: Option<&mut dyn Any>,
+            target: &mut dyn Any,
             ctx: &mut dyn Context,
             inv: &CommandInvocation,
         ) -> Result<ArgValue, CommandError>;
@@ -470,11 +457,6 @@ pub mod canopy {
             pub fn action(self) -> CommandAction {}
         }
 
-        impl CommandDispatchKind {
-            /// Return the owner name for node-routed commands.
-            pub fn owner(&self) -> Option<&'static str> {}
-        }
-
         impl CommandError {
             #[doc(hidden)]
             /// Preserve a command implementation's concrete error as the execution
@@ -505,8 +487,8 @@ pub mod canopy {
         }
 
         impl CommandResolution {
-            /// Return the resolved node target, if this command dispatches to a node.
-            pub fn target(self) -> Option<NodeId> {}
+            /// Return the resolved node target.
+            pub fn target(self) -> NodeId {}
         }
 
         impl CommandSpec {
@@ -1319,12 +1301,9 @@ pub mod canopy {
         pub struct BindingCommand {
             /// Stored invocation, arguments, and target policy.
             pub action: crate::commands::CommandAction,
-            /// Resolved owner at capture time, absent for an unavailable command.
-            pub resolution: Option<crate::commands::CommandResolution>,
-            /// Eligibility at capture time, separate from target resolution.
-            pub status: Option<crate::commands::CommandStatus>,
-            /// Required context absent at capture time.
-            pub missing_requirements: Vec<crate::commands::CommandRequirement>,
+            /// Availability at capture time, absent when the command is not
+            /// registered.
+            pub availability: Option<crate::commands::CommandAvailability>,
         }
 
         /// Owned snapshot of the effective bindings for one focus context.
@@ -3767,9 +3746,6 @@ pub mod canopy {
         /// The style change will be applied before the next render.
         fn set_style(&mut self, style: StyleMap);
 
-        /// Clear and return the current mouse-capture target.
-        fn take_mouse_capture(&mut self) -> Result<Option<NodeId>>;
-
         /// Capture a thread-safe wake handle for this widget's work lifetime.
         /// Attachment handles require this node to be attached when acquired.
         fn wake_handle(&self, lifetime: crate::WorkLifetime) -> Result<crate::NodeWakeHandle>;
@@ -3894,6 +3870,11 @@ pub mod canopy {
         }
 
         /// Execute a closure with mutable access to a runtime-checked widget node.
+        ///
+        /// The call invalidates layout, because the closure may change what the
+        /// widget measures or draws. Use [`ViewContextExt::with_widget`] to read
+        /// a widget. A node of another widget type fails with
+        /// [`Error::NodeTypeMismatch`].
         fn with_widget_mut<W, R>(
             &mut self,
             node: impl Into<NodeId>,
@@ -4081,11 +4062,16 @@ pub mod canopy {
         /// exists.
         fn unique_descendant<W: 'static + Widget>(&self) -> Result<Option<TypedId<W>>> {}
 
-        /// Read a typed widget while preserving immutable access and borrow errors.
+        /// Read a runtime-checked widget node.
+        ///
+        /// This is the read path: it borrows the widget in place and does not
+        /// invalidate layout or paint. Use [`ContextExt::with_widget_mut`] to
+        /// change a widget. A node of another widget type fails with
+        /// [`Error::NodeTypeMismatch`].
         fn with_widget<W: 'static + Widget, R>(
             &self,
-            node: TypedId<W>,
-            callback: impl FnOnce(&W) -> Result<R>,
+            node: impl Into<NodeId>,
+            f: impl FnOnce(&W) -> Result<R>,
         ) -> Result<R> {
         }
     }
@@ -4105,21 +4091,21 @@ pub mod canopy {
         /// [`EventOutcome::Handle`]. The default says the widget consumes no
         /// action, so action bindings stay dormant on its route.
         ///
-        /// `context` is a read-only view bound to this widget's node. Its focus
+        /// `ctx` is a read-only view bound to this widget's node. Its focus
         /// answers follow the route focus the caller is asking about.
-        fn accepts_action(&self, _action: &str, _view: &dyn ViewContext) -> bool {}
+        fn accepts_action(&self, _action: &str, _ctx: &dyn ViewContext) -> bool {}
 
         /// Canvas size in content coordinates (for scrolling).
         ///
-        /// `view` is this node's content size (outer minus padding).
-        fn canvas(&self, view: Size, _ctx: &CanvasContext<'_>) -> Size {}
+        /// `content` is this node's content size (outer minus padding).
+        fn canvas(&self, content: Size, _ctx: &CanvasContext<'_>) -> Size {}
 
         /// Cursor specification for focused widgets.
         fn cursor(&self) -> Option<cursor::Cursor> {}
 
         /// Predict this widget's result for `key` without changing any state.
         ///
-        /// `context` is a read-only view bound to this widget's node. Its focus
+        /// `ctx` is a read-only view bound to this widget's node. Its focus
         /// answers follow the route focus the caller is asking about, which can
         /// differ from the live focus.
         ///
@@ -4135,7 +4121,7 @@ pub mod canopy {
         /// binding key instead, so a `Some` prediction is exact for the raw key
         /// and best-effort for a canonical probe. First-party widgets return
         /// `Some(EventOutcome::Ignore)` for keys they do not handle.
-        fn key_outcome(&self, _key: Key, _context: &dyn ViewContext) -> Option<EventOutcome> {}
+        fn key_outcome(&self, _key: Key, _ctx: &dyn ViewContext) -> Option<EventOutcome> {}
 
         /// Layout configuration for this widget.
         fn layout(&self) -> Layout {}
@@ -4151,8 +4137,7 @@ pub mod canopy {
         /// Routing calls this only after [`Widget::accepts_action`] returned true
         /// for the same action and state. A widget that does not know the action
         /// returns [`EventOutcome::Ignore`].
-        fn on_action(&mut self, _action: &str, _context: &mut dyn Context) -> Result<EventOutcome> {
-        }
+        fn on_action(&mut self, _action: &str, _ctx: &mut dyn Context) -> Result<EventOutcome> {}
 
         /// Handle events.
         fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {}
@@ -4205,13 +4190,13 @@ pub mod canopy {
         fn render(&mut self, _frame: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
 
         /// Return the rectangle of this widget's canvas that
-        /// [`Context::reveal_anchor`] shows, given the final content size.
+        /// [`Context::reveal_anchor`] shows, given the final `content` size.
         ///
         /// Layout calls this after it settles geometry, so the anchor reflects
         /// changes made earlier in the turn. The hook reads widget state and cannot
         /// change layout. The default returns `None`, which consumes the request
         /// without scrolling.
-        fn reveal_anchor(&self, _view: Size) -> Option<Rect> {}
+        fn reveal_anchor(&self, _content: Size) -> Option<Rect> {}
 
         /// Position indicators for a scrollbar on `axis`.
         ///
@@ -4226,7 +4211,7 @@ pub mod canopy {
         /// Describe application semantics for one publication through read-only
         /// access. Sensitive values must be omitted; this hook does not
         /// serialize widget state.
-        fn semantics(&self, _view: &dyn ViewContext) -> Result<WidgetSemantics> {}
+        fn semantics(&self, _ctx: &dyn ViewContext) -> Result<WidgetSemantics> {}
     }
 
     impl BindingId {
@@ -4582,7 +4567,7 @@ pub mod canopy {
         pub fn command_availability(
             &self,
             target: commands::CommandTarget,
-        ) -> Result<Vec<commands::CommandAvailability<'_>>> {
+        ) -> Result<Vec<commands::CommandAvailability>> {
         }
 
         /// Return the active input mode.

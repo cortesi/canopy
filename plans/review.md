@@ -2153,11 +2153,11 @@ Each stage also updates the docs it touches.
   - Fix `bench_layout`.
   - Tidy the testing module.
   - Delete `request_diagnostic_dump`.
-- [ ] C23:
+- [x] C23:
   - Tree internals, including the subtree-only attachment refresh.
   - The symmetric `with_widget` and `with_widget_mut`.
   - Deferred focus repair inside callbacks, and a recovery hint on `detach`.
-- [ ] C24: one route walk, borrowed candidates, `CommandAvailability` without
+- [x] C24: one route walk, borrowed candidates, `CommandAvailability` without
   a lifetime, and no free commands.
 - [ ] C29: consolidate `base_api.rs` and `value.rs`, move the `bridge.rs`
   helpers, narrow visibility, and delete the native-module and startup-global

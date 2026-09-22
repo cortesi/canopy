@@ -9,7 +9,7 @@ use std::{
     rc::Rc,
 };
 
-use self::focus::FocusRecoveryHint;
+use self::focus::DeferredFocusRepair;
 use super::{
     inputmap::InputMap,
     wake::WakeRegistry,
@@ -34,6 +34,8 @@ use crate::{
 
 #[cfg(test)]
 mod change_tests;
+/// Dispatch boundaries, deferred removals and modal closes, and wake handles.
+mod completion;
 /// Event dispatch and bubbling helpers.
 mod dispatch;
 /// Focus and mouse-capture management.
@@ -46,8 +48,6 @@ pub mod layout_driver;
 pub mod scroll;
 /// Scoped application identity and index invariants.
 mod semantic;
-/// Removal requests completed after callback restoration.
-mod teardown;
 /// Widgets and node builders shared by the world test modules.
 #[cfg(test)]
 pub mod test_support;
@@ -76,8 +76,9 @@ pub struct Core {
     pub(crate) pending_style: Option<StyleMap>,
     /// Node that captures mouse events regardless of cursor position.
     pub(crate) mouse_capture: Option<NodeId>,
-    /// Focus recovery hint for the most recent structural removal.
-    pub(crate) focus_hint: Option<FocusRecoveryHint>,
+    /// Focus repair waiting for mutable callbacks to return their widget
+    /// cells.
+    deferred_focus_repair: Option<DeferredFocusRepair>,
     /// Active tree edit and its rollback state.
     tree_edit: Option<TreeEditJournal>,
     /// Monotonic widget and attachment generation source, outside rollback.
@@ -87,7 +88,7 @@ pub struct Core {
     /// Widget slots currently extracted by mutation callbacks.
     pub(crate) callback_depth: usize,
     /// Completion-boundary removal queue and dispatch nesting.
-    completion: teardown::CompletionBatch,
+    completion: completion::CompletionBatch,
     /// Cross-thread work handles synchronized with committed structural state.
     pub(crate) wake_registry: WakeRegistry,
     /// Whether lifecycle cleanup is unwinding a failed tree edit.
@@ -156,8 +157,8 @@ struct TreeStateSnapshot {
     pending_style: Option<StyleMap>,
     /// Mouse capture target.
     mouse_capture: Option<NodeId>,
-    /// Focus recovery candidates.
-    focus_hint: Option<FocusRecoveryHint>,
+    /// Deferred focus repair.
+    deferred_focus_repair: Option<DeferredFocusRepair>,
 }
 
 /// Widget operation whose failures should carry node context.
@@ -213,12 +214,12 @@ impl Core {
             exit_requested: None,
             pending_style: None,
             mouse_capture: None,
-            focus_hint: None,
+            deferred_focus_repair: None,
             tree_edit: None,
             next_generation: 2,
             scroll_stamp: 0,
             callback_depth: 0,
-            completion: teardown::CompletionBatch::default(),
+            completion: completion::CompletionBatch::default(),
             wake_registry: WakeRegistry::default(),
             rolling_back_tree_edit: false,
             commands: CommandSet::default(),
@@ -262,6 +263,10 @@ impl Core {
     }
 
     /// Take a mutable reference to a widget for a single call.
+    ///
+    /// The widget's cell is empty during the call. Once the outermost call
+    /// returns every cell, a focus repair that edits inside the calls deferred
+    /// runs.
     pub(crate) fn with_widget_dyn_mut<R>(
         &mut self,
         node_id: NodeId,
@@ -282,6 +287,9 @@ impl Core {
         let result = f(guard.widget_mut(), self);
         drop(guard);
         self.callback_depth -= 1;
+        if self.callback_depth == 0 {
+            self.run_deferred_focus_repair()?;
+        }
         Ok(result)
     }
 

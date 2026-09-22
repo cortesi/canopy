@@ -9,7 +9,7 @@ use crate::{
     core::{
         Core, NodeId,
         context::CoreViewContext,
-        inputmap::{BindingId, InputSpec, ResolvedBinding},
+        inputmap::{BindingId, BindingRecord, InputSpec},
         world::WidgetOperation,
     },
     error::Result,
@@ -32,25 +32,18 @@ impl Core {
         key: Key,
         focus: NodeId,
         excluded: &[BindingId],
-    ) -> Option<ResolvedBinding> {
-        for candidate in self.input_map.candidates(path, InputSpec::Key(key)) {
-            let record = candidate.record;
-            if excluded.contains(&record.id) {
-                continue;
-            }
-            if let Some(action) = record.target.widget_action()
-                && !self.node_accepts_action(node, action.as_str(), focus)
-            {
-                continue;
-            }
-            return Some(ResolvedBinding {
-                id: record.id,
-                target: record.target.clone(),
-                phase: record.phase,
-                description: record.description.clone(),
-            });
-        }
-        None
+    ) -> Option<&BindingRecord> {
+        self.input_map
+            .candidates(path, InputSpec::Key(key))
+            .into_iter()
+            .map(|candidate| candidate.record)
+            .find(|record| {
+                !excluded.contains(&record.id)
+                    && record
+                        .target
+                        .widget_action()
+                        .is_none_or(|action| self.node_accepts_action(node, action.as_str(), focus))
+            })
     }
 
     /// Select the binding a transient mode runs for `key` on `start`'s route.
@@ -62,7 +55,7 @@ impl Core {
         &self,
         start: NodeId,
         key: Key,
-    ) -> Option<(NodeId, Path, ResolvedBinding)> {
+    ) -> Option<(NodeId, Path, &BindingRecord)> {
         self.route(start).find_map(|(node, path)| {
             self.select_key_binding(node, &path, key, start, &[])
                 .map(|binding| (node, path, binding))

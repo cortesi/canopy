@@ -534,7 +534,7 @@ impl CommandMeta {
 
         quote! {
             fn #invoke_ident(
-                target: Option<&mut dyn ::std::any::Any>,
+                target: &mut dyn ::std::any::Any,
                 ctx: &mut dyn canopy::Context,
                 inv: &canopy::commands::CommandInvocation,
             ) -> ::std::result::Result<
@@ -545,7 +545,7 @@ impl CommandMeta {
                 Self: 'static,
             {
                 let #target_ident = target
-                    .and_then(|target| target.downcast_mut::<Self>())
+                    .downcast_mut::<Self>()
                     .ok_or(canopy::commands::CommandError::TargetTypeMismatch)?;
                 #(#shared_bindings)*
                 match &inv.args {
@@ -613,7 +613,7 @@ impl CommandMeta {
             const #spec_const_ident: canopy::commands::CommandSpec = canopy::commands::CommandSpec {
                 id: canopy::commands::CommandId(#id),
                 name: #name,
-                dispatch: canopy::commands::CommandDispatchKind::Node { owner: #owner },
+                owner: #owner,
                 params: Self::#params_const_ident,
                 ret: #ret,
                 doc: #doc,

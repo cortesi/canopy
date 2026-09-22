@@ -12,11 +12,7 @@ use serde_json::{Map as JsonMap, Number as JsonNumber, Value as JsonValue};
 
 use crate::{
     Context, ViewContext,
-    core::{
-        Core, NodeId,
-        context::{CoreContext, CoreViewContext},
-        world::WidgetOperation,
-    },
+    core::{Core, NodeId, context::CoreViewContext, world::WidgetOperation},
     error::{Result as CoreResult, ScriptErrorKind},
     event::{Event, mouse::MouseEvent},
 };
@@ -832,7 +828,7 @@ pub enum CommandReturnSpec {
 
 /// Erased invoke function signature.
 pub type InvokeFn = fn(
-    target: Option<&mut dyn Any>,
+    target: &mut dyn Any,
     ctx: &mut dyn Context,
     inv: &CommandInvocation,
 ) -> Result<ArgValue, CommandError>;
@@ -843,28 +839,6 @@ pub type InvokeFn = fn(
 /// command's invoke function. It needs no target, context, or call.
 pub type CheckFn = fn(args: &CommandArgs) -> Result<(), CommandError>;
 
-/// Command dispatch routing.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CommandDispatchKind {
-    /// Invoke with `target = None`.
-    Free,
-    /// Route to a node by owner name.
-    Node {
-        /// Owner node name.
-        owner: &'static str,
-    },
-}
-
-impl CommandDispatchKind {
-    /// Return the owner name for node-routed commands.
-    pub fn owner(&self) -> Option<&'static str> {
-        match self {
-            Self::Node { owner } => Some(owner),
-            Self::Free => None,
-        }
-    }
-}
-
 /// Static metadata for a command.
 #[derive(Clone, Copy, Debug)]
 pub struct CommandSpec {
@@ -872,8 +846,9 @@ pub struct CommandSpec {
     pub id: CommandId,
     /// Command name.
     pub name: &'static str,
-    /// Dispatch routing.
-    pub dispatch: CommandDispatchKind,
+    /// Name of the node type that owns the command. Dispatch routes the
+    /// command to a node with this name.
+    pub owner: &'static str,
     /// Parameter specs.
     pub params: &'static [CommandParamSpec],
     /// Return spec.
@@ -891,8 +866,6 @@ pub struct CommandSpec {
 /// Resolution of a command dispatch target.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CommandResolution {
-    /// Command is free (no target).
-    Free,
     /// Command targets the specified owner without searching.
     Exact {
         /// Target node ID.
@@ -912,9 +885,9 @@ pub enum CommandResolution {
 
 /// Command availability from a given focus context.
 #[derive(Clone, Debug)]
-pub struct CommandAvailability<'a> {
+pub struct CommandAvailability {
     /// Command specification.
-    pub spec: &'a CommandSpec,
+    pub spec: &'static CommandSpec,
     /// Resolution if the command has a target, or `None` if no target exists.
     pub resolution: Option<CommandResolution>,
     /// Eligibility for a resolved command.
@@ -924,13 +897,10 @@ pub struct CommandAvailability<'a> {
 }
 
 impl CommandResolution {
-    /// Return the resolved node target, if this command dispatches to a node.
-    pub fn target(self) -> Option<NodeId> {
+    /// Return the resolved node target.
+    pub fn target(self) -> NodeId {
         match self {
-            Self::Free => None,
-            Self::Exact { target } | Self::Subtree { target } | Self::Ancestor { target } => {
-                Some(target)
-            }
+            Self::Exact { target } | Self::Subtree { target } | Self::Ancestor { target } => target,
         }
     }
 }
@@ -962,26 +932,14 @@ impl<'a> CommandResolver<'a> {
     /// Resolve a command specification to the target dispatch would use.
     pub(crate) fn resolve(&self, spec: &CommandSpec) -> Option<CommandResolution> {
         if let CommandTarget::Exact(node) = self.target {
-            return match spec.dispatch {
-                CommandDispatchKind::Node { owner }
-                    if self
-                        .core
-                        .nodes
-                        .get(node)
-                        .is_some_and(|node| node.name == owner) =>
-                {
-                    Some(CommandResolution::Exact { target: node })
-                }
-                _ => None,
-            };
+            return self
+                .core
+                .nodes
+                .get(node)
+                .is_some_and(|node| node.name == spec.owner)
+                .then_some(CommandResolution::Exact { target: node });
         }
-        if !self.core.nodes.contains_key(self.start) {
-            return None;
-        }
-        match spec.dispatch {
-            CommandDispatchKind::Free => Some(CommandResolution::Free),
-            CommandDispatchKind::Node { owner } => self.resolve_owner(owner),
-        }
+        self.resolve_owner(spec.owner)
     }
 
     /// Resolve a node-owner name with subtree targets preferred over ancestors.
@@ -1014,7 +972,7 @@ impl<'a> CommandResolver<'a> {
     }
 
     /// Return availability for every registered command.
-    pub(crate) fn availability(&self) -> CoreResult<Vec<CommandAvailability<'a>>> {
+    pub(crate) fn availability(&self) -> CoreResult<Vec<CommandAvailability>> {
         self.core
             .commands
             .iter()
@@ -1025,8 +983,8 @@ impl<'a> CommandResolver<'a> {
     /// Inspect one command using the same resolution and eligibility rules.
     pub(crate) fn availability_for(
         &self,
-        spec: &'a CommandSpec,
-    ) -> CoreResult<CommandAvailability<'a>> {
+        spec: &'static CommandSpec,
+    ) -> CoreResult<CommandAvailability> {
         let resolution = self.resolve(spec);
         let status = match resolution {
             Some(resolution) => Some(status_at(self.core, spec, resolution)?),
@@ -1054,7 +1012,7 @@ impl CommandSpec {
     fn equivalent(&self, other: &Self) -> bool {
         self.id == other.id
             && self.name == other.name
-            && self.dispatch == other.dispatch
+            && self.owner == other.owner
             && self.params == other.params
             && self.ret == other.ret
             && self.doc == other.doc
@@ -1228,14 +1186,14 @@ pub enum CommandError {
     },
 
     /// An exact target does not own the requested node command.
-    #[error("node {node:?} does not own command {id} (expected {expected:?})")]
+    #[error("node {node:?} does not own command {id} (expected owner {expected})")]
     WrongOwner {
         /// Requested command identifier.
         id: String,
         /// Requested exact node.
         node: NodeId,
-        /// Required owner, absent for a free command.
-        expected: Option<String>,
+        /// Required owner name.
+        expected: String,
     },
     /// Eligibility changed or the action was already disabled.
     #[error("command {id} is disabled: {reason}")]
@@ -1520,16 +1478,8 @@ fn dispatch_target_inner(
             id: inv.id.0.to_string(),
         })?;
     validate_node_args(core, &inv.args)?;
-    let resolver = CommandResolver::for_target(core, target);
-    let start = resolver.start;
-    let resolution = checked_resolution(&resolver, spec)?;
-    match resolution {
-        CommandResolution::Free => {
-            let mut ctx = CoreContext::new(core, start);
-            (spec.invoke)(None, &mut ctx, inv)
-        }
-        resolved => dispatch_on_node(core, resolved.target().expect("node resolution"), spec, inv),
-    }
+    let resolution = checked_resolution(&CommandResolver::for_target(core, target), spec)?;
+    dispatch_on_node(core, resolution.target(), spec, inv)
 }
 
 /// Reject stale and wrong exact owners before invocation or inspection.
@@ -1544,11 +1494,11 @@ fn checked_resolution(
         CommandTarget::Exact(node) => CommandError::WrongOwner {
             id: spec.id.0.to_string(),
             node,
-            expected: spec.dispatch.owner().map(str::to_string),
+            expected: spec.owner.to_string(),
         },
         _ => CommandError::NoTarget {
             id: spec.id.0.to_string(),
-            owner: spec.dispatch.owner().unwrap_or_default().to_string(),
+            owner: spec.owner.to_string(),
         },
     })
 }
@@ -1580,9 +1530,10 @@ fn status_at(
     spec: &CommandSpec,
     resolution: CommandResolution,
 ) -> CoreResult<CommandStatus> {
-    let (Some(status), Some(node)) = (spec.status, resolution.target()) else {
+    let Some(status) = spec.status else {
         return Ok(CommandStatus::Enabled);
     };
+    let node = resolution.target();
     core.with_widget(
         node,
         WidgetOperation::access("command status"),
@@ -1629,7 +1580,7 @@ fn dispatch_on_node(
                 reason,
             });
         }
-        (spec.invoke)(Some(widget as &mut dyn Any), ctx, inv)
+        (spec.invoke)(widget as &mut dyn Any, ctx, inv)
     })
     .map_err(CommandError::execution)?
 }
@@ -1697,9 +1648,7 @@ mod tests {
     static FAILING_STATUS: CommandSpec = CommandSpec {
         id: CommandId("status_owner.action"),
         name: "action",
-        dispatch: CommandDispatchKind::Node {
-            owner: "status_owner",
-        },
+        owner: "status_owner",
         params: &[],
         ret: CommandReturnSpec::Unit,
         doc: None,
@@ -1745,7 +1694,7 @@ mod tests {
     }
 
     fn registry_invoke(
-        _target: Option<&mut dyn Any>,
+        _target: &mut dyn Any,
         _ctx: &mut dyn Context,
         _invocation: &CommandInvocation,
     ) -> Result<ArgValue, CommandError> {
@@ -1759,7 +1708,7 @@ mod tests {
     static REGISTRY_A: CommandSpec = CommandSpec {
         id: CommandId("registry.a"),
         name: "a",
-        dispatch: CommandDispatchKind::Free,
+        owner: "registry",
         params: &[],
         ret: CommandReturnSpec::Unit,
         doc: Some("a"),
@@ -1770,7 +1719,7 @@ mod tests {
     static REGISTRY_A_CONFLICT: CommandSpec = CommandSpec {
         id: CommandId("registry.a"),
         name: "a",
-        dispatch: CommandDispatchKind::Free,
+        owner: "registry",
         params: &[],
         ret: CommandReturnSpec::Unit,
         doc: Some("conflict"),
@@ -1781,7 +1730,7 @@ mod tests {
     static REGISTRY_B: CommandSpec = CommandSpec {
         id: CommandId("registry.b"),
         name: "b",
-        dispatch: CommandDispatchKind::Free,
+        owner: "registry",
         params: &[],
         ret: CommandReturnSpec::Unit,
         doc: None,

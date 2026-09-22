@@ -73,7 +73,7 @@ fn bind(
 
 fn target(map: &InputMap, path: &str, key: impl Into<Key>) -> Option<BindingTarget> {
     map.resolve_match(&Path::from(path), InputSpec::Key(key.into()))
-        .map(|binding| binding.target)
+        .map(|binding| binding.target.clone())
 }
 
 #[test]
@@ -816,8 +816,8 @@ fn a_framework_action_modal_admits_only_allowlisted_actions() -> Result<()> {
     let path = Path::from("/root/help/list");
     let allowed = map.resolve_match(&path, InputSpec::Key('x'.into()));
     assert_eq!(
-        allowed.map(|resolved| resolved.description),
-        Some("Allowed".to_string())
+        allowed.map(|resolved| resolved.description.as_str()),
+        Some("Allowed")
     );
     assert!(
         map.resolve_match(&path, InputSpec::Key('y'.into()))

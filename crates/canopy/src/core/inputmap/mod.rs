@@ -205,6 +205,16 @@ pub struct BindingRecord {
 }
 
 impl BindingRecord {
+    /// Copy the parts of this record that routing needs to run it.
+    pub(crate) fn resolved(&self) -> ResolvedBinding {
+        ResolvedBinding {
+            id: self.id,
+            target: self.target.clone(),
+            phase: self.phase,
+            description: self.description.clone(),
+        }
+    }
+
     /// Return the original path filter.
     pub fn path_filter(&self) -> &str {
         self.path_matcher.as_str()
@@ -245,7 +255,10 @@ impl BindingPhase {
     }
 }
 
-/// Winner returned by the shared resolver.
+/// Owned copy of a winning binding, kept while its target runs.
+///
+/// Resolution borrows records. Routing copies the winner here, because
+/// running the target can change the registry.
 #[derive(Clone, Debug)]
 pub struct ResolvedBinding {
     /// Binding identifier.
@@ -463,7 +476,7 @@ impl InputMap {
                     "widget action bindings accept keys only".to_string(),
                 ));
             }
-            if !self.actions.contains_name(name.as_str()) {
+            if !self.actions.contains(name) {
                 return Err(Error::InvalidOperation(format!(
                     "widget action {name} is not registered in this application"
                 )));
@@ -630,14 +643,11 @@ impl InputMap {
     /// This is the structural winner. It ignores widget acceptance, so an
     /// action candidate that no widget consumes still resolves here. Route
     /// selection uses [`Core::select_key_binding`] instead.
-    pub fn resolve_match(&self, path: &Path, input: InputSpec) -> Option<ResolvedBinding> {
-        let candidate = self.candidates(path, input).into_iter().next()?;
-        Some(ResolvedBinding {
-            id: candidate.record.id,
-            target: candidate.record.target.clone(),
-            phase: candidate.record.phase,
-            description: candidate.record.description.clone(),
-        })
+    pub fn resolve_match(&self, path: &Path, input: InputSpec) -> Option<&BindingRecord> {
+        self.candidates(path, input)
+            .into_iter()
+            .next()
+            .map(|candidate| candidate.record)
     }
 
     /// Return ranked binding candidates at one route node, best first.
@@ -651,24 +661,10 @@ impl InputMap {
         let mut out = Vec::new();
         match &self.modal_bindings {
             Some(ModalBindings::Framework(group)) => {
-                let group = *group;
-                self.extend_scope(
-                    &mut out,
-                    path,
-                    input,
-                    &BindingScope::Exclusive(group),
-                    Some(group),
-                );
+                self.extend_framework_group(&mut out, path, input, *group);
             }
             Some(ModalBindings::FrameworkWithActions { group, .. }) => {
-                let group = *group;
-                self.extend_scope(
-                    &mut out,
-                    path,
-                    input,
-                    &BindingScope::Exclusive(group),
-                    Some(group),
-                );
+                self.extend_framework_group(&mut out, path, input, *group);
                 self.extend_application_tiers(&mut out, path, input, false);
             }
             Some(ModalBindings::Application) | None => {
@@ -689,36 +685,52 @@ impl InputMap {
         input: InputSpec,
         transient_ends: bool,
     ) {
-        self.extend_scope(out, path, input, &BindingScope::Global, None);
+        let application = |record: &BindingRecord| record.owner == BindingOwner::Application;
+        self.extend_scope(out, path, input, |record| {
+            application(record) && record.scope == BindingScope::Global
+        });
         for mode in self.mode_stack.iter().rev() {
-            let scope = BindingScope::Mode(mode.name.clone());
-            self.extend_scope(out, path, input, &scope, None);
+            self.extend_scope(out, path, input, |record| {
+                application(record) && record.scope.mode() == Some(mode.name.as_str())
+            });
             if transient_ends && mode.transient {
                 // A transient mode ends the walk, so older modes and the
                 // default tier stay out of reach.
                 return;
             }
         }
-        self.extend_scope(out, path, input, &BindingScope::Default, None);
+        self.extend_scope(out, path, input, |record| {
+            application(record) && record.scope == BindingScope::Default
+        });
     }
 
-    /// Append the candidates of one exact scope, best first.
+    /// Append the candidates of one framework group, best first.
+    fn extend_framework_group<'a>(
+        &'a self,
+        out: &mut Vec<BindingCandidate<'a>>,
+        path: &Path,
+        input: InputSpec,
+        group: FrameworkBindingGroup,
+    ) {
+        self.extend_scope(out, path, input, |record| {
+            record.owner == BindingOwner::Framework(group)
+                && record.scope == BindingScope::Exclusive(group)
+        });
+    }
+
+    /// Append the candidates of one tier, best first. `in_tier` selects the
+    /// tier's records by owner and scope.
     fn extend_scope<'a>(
         &'a self,
         out: &mut Vec<BindingCandidate<'a>>,
         path: &Path,
         input: InputSpec,
-        scope: &BindingScope,
-        framework_group: Option<FrameworkBindingGroup>,
+        in_tier: impl Fn(&BindingRecord) -> bool,
     ) {
         let mut found = self
             .records
             .iter()
-            .filter(|record| record.input == input && record.scope == *scope)
-            .filter(|record| match framework_group {
-                Some(group) => record.owner == BindingOwner::Framework(group),
-                None => matches!(record.owner, BindingOwner::Application),
-            })
+            .filter(|record| record.input == input && in_tier(record))
             .filter(|record| self.admits_record(record))
             .filter_map(|record| {
                 record
@@ -848,10 +860,7 @@ impl InputMap {
         if winner_route < record_route {
             return RegistryStatus::ShadowedAtEarlierRoute { winner: winner.id };
         }
-        let winning_record = self
-            .binding(winner.id)
-            .expect("resolved binding record must remain registered");
-        if winning_record.scope != record.scope {
+        if winner.scope != record.scope {
             return RegistryStatus::ShadowedByScope { winner: winner.id };
         }
         let path = &route[winner_route];
@@ -859,7 +868,7 @@ impl InputMap {
             .path_matcher
             .check_match(path)
             .expect("record must match its first route node");
-        let winner_match = winning_record
+        let winner_match = winner
             .path_matcher
             .check_match(path)
             .expect("winner must match its route node");
