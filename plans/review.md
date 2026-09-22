@@ -2142,11 +2142,11 @@ Each stage also updates the docs it touches.
 
 ### Stage 2: Internal simplification, with no public API change
 
-- [ ] C18 internals:
+- [x] C18 internals:
   - Collapse `ChangeSet` to one level and replace `render_pending`.
   - Document the whole-frame repaint invariant.
   - Measure per-turn layout cost on fh's tree.
-- [ ] C22:
+- [x] C22:
   - Split `backend/crossterm.rs` and `canopy/mod.rs`.
   - Share one work selector with `HeadlessEval`.
   - Remove the duplicates.
@@ -2214,8 +2214,8 @@ Each stage also updates the docs it touches.
 - [ ] C17: `ScrollOp` with counted lines and pages and a one-line page overlap.
   Replace the five direction matches, and delete fileselect's
   `with_preview_view`.
-- [ ] C18 public part: make `ChangeSet` and `Invalidation` `pub(crate)`.
-  Delete `invalidate_layout` and its 16 calls, including fileselect's
+- [ ] C18 public part: `ChangeSet` and `Invalidation` are already crate-private
+  (done in Stage 2). Delete `invalidate_layout` and its 16 calls, including fileselect's
   `lib.rs:1772-1775` block.
 - [ ] C21: merge the error variants, and rename `RunLoop` to `Driver`.
 

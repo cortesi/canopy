@@ -2843,18 +2843,13 @@ pub mod canopy {
             pub emergency_exit: Option<key::Key>,
         }
 
-        /// Run the main render/event loop using the crossterm backend.
+        /// Run the terminal adapter until the application requests an exit.
         ///
-        /// Ctrl+C dumps the node tree and stops the loop with status 130. Keyboard
-        /// enhancement flags are enabled so escape codes are unambiguous.
-        pub fn runloop(cnpy: crate::Canopy) -> crate::error::Result<i32> {}
-
-        /// Run the terminal adapter with explicit interrupt and emergency-key policies.
-        pub fn runloop_with_options(
-            cnpy: crate::Canopy,
-            options: RunOptions,
-        ) -> crate::error::Result<i32> {
-        }
+        /// `options` decides how Ctrl+C and the emergency exit key stop the loop. With
+        /// the default options, Ctrl+C restores the terminal, dumps the node tree, and
+        /// returns status 130. Keyboard enhancement flags are enabled so escape codes
+        /// are unambiguous.
+        pub fn runloop(cnpy: crate::Canopy, options: RunOptions) -> crate::error::Result<i32> {}
     }
 
     pub mod text {
@@ -3039,19 +3034,6 @@ pub mod canopy {
         Changed,
     }
 
-    /// Pending work accumulated independently of adapter scheduling.
-    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-    pub struct ChangeSet {
-        /// Geometry must be recomputed.
-        pub layout: bool,
-        /// Visible cells must be rebuilt.
-        pub paint: bool,
-        /// Cursor state must be refreshed.
-        pub cursor: bool,
-        /// Observations must be published.
-        pub observation: bool,
-    }
-
     /// Restricted builder for new children of one existing parent.
     ///
     /// Configuration completes while nodes are detached. The enclosing structural
@@ -3193,17 +3175,6 @@ pub mod canopy {
     /// Opaque identity of one modal scope, unique across applications.
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub struct InteractionToken(_);
-
-    /// Work invalidated by a mutation.
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-    pub enum Invalidation {
-        /// Recompute layout, paint, cursor and observations.
-        Layout,
-        /// Repaint and publish the visible state.
-        Paint,
-        /// Republish semantic observations.
-        Semantics,
-    }
 
     /// Ordered keyed child collection helper.
     ///
@@ -3350,7 +3321,7 @@ pub mod canopy {
         /// Routing phase.
         pub phase: RoutePhase,
         /// Node associated with this route step.
-        pub node: Option<crate::core::NodeId>,
+        pub node: Option<crate::NodeId>,
         /// Path visible to binding resolution at this route step.
         pub path: String,
         /// Human-readable route detail.
@@ -3618,7 +3589,7 @@ pub mod canopy {
         fn clear_semantic_key(&mut self, node: NodeId) -> Result<()>;
 
         /// Close this scope and its nested scopes after active callbacks return.
-        fn close_modal(&mut self, token: InteractionToken) -> Result<()> {}
+        fn close_modal(&mut self, token: InteractionToken) -> Result<()>;
 
         /// Create a new widget node detached from the tree.
         fn create_detached_boxed(&mut self, widget: Box<dyn Widget>) -> Result<NodeId>;
@@ -3683,7 +3654,7 @@ pub mod canopy {
         fn invalidate_layout(&mut self);
 
         /// Open a modal scope that owns focus, input admission, and visual effects.
-        fn open_modal(&mut self, options: ModalOptions) -> Result<InteractionToken> {}
+        fn open_modal(&mut self, options: ModalOptions) -> Result<InteractionToken>;
 
         /// Scroll the view down by one page.
         fn page_down(&mut self) -> ChangeOutcome {}
@@ -3708,9 +3679,6 @@ pub mod canopy {
 
         /// Remove a node and all descendants from the arena.
         fn remove_subtree(&mut self, node: NodeId) -> Result<()>;
-
-        /// Request a diagnostic dump for a target node.
-        fn request_diagnostic_dump(&mut self, target: NodeId);
 
         /// Reveal this node's logical anchor once layout settles.
         ///
@@ -4023,7 +3991,7 @@ pub mod canopy {
         fn locate(&self, root: NodeId, point: Point) -> Result<Option<NodeId>>;
 
         /// Whether a modal scope remains open, including pending deferred closes.
-        fn modal_is_open(&self, token: InteractionToken) -> bool {}
+        fn modal_is_open(&self, token: InteractionToken) -> bool;
 
         /// The node currently being rendered.
         fn node_id(&self) -> NodeId;
@@ -4345,14 +4313,6 @@ pub mod canopy {
         pub fn changed(self) -> bool {}
     }
 
-    impl ChangeSet {
-        /// Record work, including the dependencies of the requested invalidation.
-        pub fn invalidate(&mut self, invalidation: Invalidation) {}
-
-        /// Whether any work remains to be published.
-        pub fn is_pending(self) -> bool {}
-    }
-
     impl ChildBuilder<'_> {
         /// Configure a child occupying a typed structural slot.
         pub fn keyed<K: crate::ChildSlot>(
@@ -4424,6 +4384,66 @@ pub mod canopy {
         /// Prepare and render the widget tree explicitly.
         pub fn render<R: RenderBackend>(&mut self, be: &mut R) -> Result<()> {}
 
+        /// Send `key` only when its prospective route matches `expectation`.
+        ///
+        /// The analysis runs inside the same dispatch boundary as the route, and a
+        /// guard compares each actual step before it acts. An unexpected widget
+        /// stops the route with a structured divergence; earlier steps may already
+        /// have observed the key.
+        pub fn send_key_checked<T>(&mut self, key: T, expectation: KeyExpectation) -> Result<()>
+        where
+            T: Into<key::Key>, {
+        }
+
+        /// Set the size on the root node.
+        pub fn set_root_size(&mut self, size: Size) -> Result<()> {}
+
+        /// Apply a named fixture to the current app instance.
+        pub fn apply_fixture(&mut self, name: &str) -> Result<()> {}
+
+        /// Drain and return assertion outcomes from the most recent script
+        /// evaluation.
+        pub fn take_script_assertions(&mut self) -> Vec<script::ScriptAssertion> {}
+
+        /// Drain and return log lines recorded by the most recent script
+        /// evaluation.
+        pub fn take_script_logs(&mut self) -> Vec<String> {}
+
+        /// Evaluate a Luau source string at the root and return its value.
+        ///
+        /// The synchronous caller restrictions of [`Self::eval`] apply.
+        pub fn eval_script(&mut self, source: &str) -> Result<commands::ArgValue> {}
+
+        /// Register a Luau script as the default bindings for a widget namespace.
+        pub fn register_default_bindings(&mut self, name: &str, script: &str) -> Result<()> {}
+
+        /// Register a named fixture available to headless and live automation.
+        pub fn register_fixture(&mut self, fixture: Fixture) -> Result<()> {}
+
+        /// Register an app-level startup script.
+        pub fn register_startup_script(&mut self, name: &str, source: &str) -> Result<()> {}
+
+        /// Return registered fixture metadata in stable name order.
+        pub fn fixture_infos(&self) -> Vec<FixtureInfo> {}
+
+        /// Return the in-memory script evaluation journal.
+        ///
+        /// The journal retains the most recent entries up to the configured limit.
+        /// Entry ids are monotonic and never reused, so a first id greater than
+        /// one indicates that older entries were evicted or cleared.
+        pub fn script_journal(&self) -> &[ScriptJournalEntry] {}
+
+        /// Return the rendered Luau definition file for a ready app.
+        pub fn script_api(&self) -> Result<&str> {}
+
+        /// Type-check a named Luau source against the finalized app API.
+        pub fn check_script(
+            &mut self,
+            source_name: &str,
+            source: &str,
+        ) -> Result<script::ScriptCheckResult> {
+        }
+
         /// Advance one bounded runtime turn.
         pub fn turn(&mut self, work: Work) -> Result<TurnOutcome> {}
 
@@ -4450,41 +4470,11 @@ pub mod canopy {
         /// worker. The application stays on its owning thread.
         pub fn eval(&mut self, request: EvalRequest) -> Result<EvalOutcome> {}
 
-        /// Send `key` only when its prospective route matches `expectation`.
-        ///
-        /// The analysis runs inside the same dispatch boundary as the route, and a
-        /// guard compares each actual step before it acts. An unexpected widget
-        /// stops the route with a structured divergence; earlier steps may already
-        /// have observed the key.
-        pub fn send_key_checked<T>(&mut self, key: T, expectation: KeyExpectation) -> Result<()>
-        where
-            T: Into<key::Key>, {
-        }
-
-        /// Set the size on the root node.
-        pub fn set_root_size(&mut self, size: Size) -> Result<()> {}
-
-        /// Apply a named fixture to the current app instance.
-        pub fn apply_fixture(&mut self, name: &str) -> Result<()> {}
-
         /// Create a detached widget node.
         pub fn create_detached<W>(&mut self, widget: W) -> Result<TypedId<W>>
         where
             W: 'static + Widget, {
         }
-
-        /// Drain and return assertion outcomes from the most recent script
-        /// evaluation.
-        pub fn take_script_assertions(&mut self) -> Vec<script::ScriptAssertion> {}
-
-        /// Drain and return log lines recorded by the most recent script
-        /// evaluation.
-        pub fn take_script_logs(&mut self) -> Vec<String> {}
-
-        /// Evaluate a Luau source string at the root and return its value.
-        ///
-        /// The synchronous caller restrictions of [`Self::eval`] apply.
-        pub fn eval_script(&mut self, source: &str) -> Result<commands::ArgValue> {}
 
         /// Explain where `key` would go for a node or the current focus.
         ///
@@ -4558,9 +4548,6 @@ pub mod canopy {
         /// state.
         pub fn snapshot(&self) -> Option<Arc<FrameSnapshot>> {}
 
-        /// Register a Luau script as the default bindings for a widget namespace.
-        pub fn register_default_bindings(&mut self, name: &str, script: &str) -> Result<()> {}
-
         /// Register a hook that runs against the root context before the next
         /// frame whenever the input mode stack has changed.
         ///
@@ -4571,12 +4558,6 @@ pub mod canopy {
             hook: fn(_: &mut dyn crate::Context) -> crate::error::Result<()>,
         ) {
         }
-
-        /// Register a named fixture available to headless and live automation.
-        pub fn register_fixture(&mut self, fixture: Fixture) -> Result<()> {}
-
-        /// Register an app-level startup script.
-        pub fn register_startup_script(&mut self, name: &str, source: &str) -> Result<()> {}
 
         /// Register one bindable widget action for this application.
         ///
@@ -4604,9 +4585,6 @@ pub mod canopy {
         ) -> Result<Vec<commands::CommandAvailability<'_>>> {
         }
 
-        /// Return registered fixture metadata in stable name order.
-        pub fn fixture_infos(&self) -> Vec<FixtureInfo> {}
-
         /// Return the active input mode.
         pub fn input_mode(&self) -> &str {}
 
@@ -4620,18 +4598,8 @@ pub mod canopy {
         ) -> Result<super::help::BindingSnapshot> {
         }
 
-        /// Return the in-memory script evaluation journal.
-        ///
-        /// The journal retains the most recent entries up to the configured limit.
-        /// Entry ids are monotonic and never reused, so a first id greater than
-        /// one indicates that older entries were evicted or cleared.
-        pub fn script_journal(&self) -> &[ScriptJournalEntry] {}
-
         /// Return the most recent key or mouse route trace.
         pub fn route_trace(&self) -> &[RouteTraceEntry] {}
-
-        /// Return the rendered Luau definition file for a ready app.
-        pub fn script_api(&self) -> Result<&str> {}
 
         /// Return the root node ID.
         pub fn root_id(&self) -> NodeId {}
@@ -4659,14 +4627,6 @@ pub mod canopy {
 
         /// Set the active input mode.
         pub fn set_input_mode(&mut self, mode: &str) {}
-
-        /// Type-check a named Luau source against the finalized app API.
-        pub fn check_script(
-            &mut self,
-            source_name: &str,
-            source: &str,
-        ) -> Result<script::ScriptCheckResult> {
-        }
     }
 
     impl EvalOutcome {
@@ -4773,7 +4733,7 @@ pub mod canopy {
         }
 
         /// Diff this terminal buffer against a previous state, emitting changes
-        /// to the provided render backend.
+        /// to the provided render backend. The caller flushes the backend.
         pub fn diff<R: RenderBackend>(&self, prev: &Self, backend: &mut R) -> Result<()> {}
 
         /// Draw text clipped to the given line.
@@ -4798,7 +4758,8 @@ pub mod canopy {
         pub fn overlay_cursor(&mut self, location: Point, shape: cursor::CursorShape) {}
 
         /// Render this terminal buffer in full using the provided backend,
-        /// batching runs of text with the same style.
+        /// batching runs of text with the same style. The caller flushes the
+        /// backend.
         pub fn render<R: RenderBackend>(&self, backend: &mut R) -> Result<()> {}
 
         /// Return the buffer bounds as a rectangle.

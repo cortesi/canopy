@@ -130,7 +130,7 @@ fn with_canopy<R>(scope: &Scope<'_>, f: impl FnOnce(&mut Canopy) -> Result<R>) -
 /// Push the active script anchor.
 fn push_script_anchor(scope: &Scope<'_>, node_id: NodeId) -> StdResult<(), RuntimeError> {
     Ok(with_canopy(scope, |canopy| {
-        canopy.script_context_stack.push(node_id);
+        canopy.script.context_stack.push(node_id);
         Ok(())
     })?)
 }
@@ -138,7 +138,7 @@ fn push_script_anchor(scope: &Scope<'_>, node_id: NodeId) -> StdResult<(), Runti
 /// Pop the active script anchor.
 fn pop_script_anchor(scope: &Scope<'_>) {
     with_canopy(scope, |canopy| {
-        canopy.script_context_stack.pop();
+        canopy.script.context_stack.pop();
         Ok(())
     })
     .ok();
@@ -149,7 +149,7 @@ fn pop_script_anchor(scope: &Scope<'_>) {
 /// True means the current Rust code was reached from inside a running script,
 /// so any script execution started now is nested within that evaluation.
 pub fn in_live_scope(canopy: &Canopy) -> bool {
-    !canopy.script_context_stack.is_empty()
+    !canopy.script.context_stack.is_empty()
 }
 
 /// Execute a closure with mutable access to the active canopy instance.
@@ -159,7 +159,8 @@ pub(super) fn with_current_canopy<R>(
 ) -> Result<R> {
     with_canopy(scope, |canopy| {
         let node_id = canopy
-            .script_context_stack
+            .script
+            .context_stack
             .last()
             .copied()
             .ok_or_else(|| error::Error::script("no active script context"))?;

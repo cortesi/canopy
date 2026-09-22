@@ -9,10 +9,6 @@ pub mod backend;
 pub mod buf;
 /// Shared native and adapter publication contract fixture.
 pub mod contracts;
-/// Event notifications for stepping adapter integration tests.
-pub mod driver;
-/// Dummy context for tests.
-pub mod dummyctx;
 /// Grid test helpers.
 pub mod grid;
 /// Harness for node testing.

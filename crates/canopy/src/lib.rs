@@ -33,14 +33,14 @@ pub use core::testing;
 // Stable app-author surface.
 pub use core::{
     AutomationCallback, AutomationHandle, BindingId, BindingOptions, BindingOwner, BindingPhase,
-    BindingScope, BindingTargetKind, Canopy, CanopyBuilder, ChangeOutcome, ChangeSet, ChildBuilder,
+    BindingScope, BindingTargetKind, Canopy, CanopyBuilder, ChangeOutcome, ChildBuilder,
     ChildConfig, ChildSlot, Context, ContextExt, EvalId, EvalOutcome, EvalRequest, EvalTicket,
     Fixture, FixtureInfo, FocusDirection, FocusScope, FrameId, FrameSnapshot,
-    FrameworkBindingGroup, InputSpec, InteractionToken, Invalidation, KeyedChildren, Loader,
-    ModalBindings, ModalOptions, NodeId, NodeSnapshot, NodeWakeHandle, RevealAlign, RoutePhase,
-    RouteTraceEntry, ScriptJournalEntry, ScriptOrigin, ScriptTrust, SemanticIdentity, TurnOutcome,
-    TypedId, ViewContext, ViewContextExt, WakeOutcome, WidgetActionName, WidgetActionSpec,
-    WidgetSemantics, Work, WorkLifetime,
+    FrameworkBindingGroup, InputSpec, InteractionToken, KeyedChildren, Loader, ModalBindings,
+    ModalOptions, NodeId, NodeSnapshot, NodeWakeHandle, RevealAlign, RoutePhase, RouteTraceEntry,
+    ScriptJournalEntry, ScriptOrigin, ScriptTrust, SemanticIdentity, TurnOutcome, TypedId,
+    ViewContext, ViewContextExt, WakeOutcome, WidgetActionName, WidgetActionSpec, WidgetSemantics,
+    Work, WorkLifetime,
 };
 // App-author modules used by widget implementations and derive output.
 pub use core::{commands, cursor, error, event, help, keyroute, path, script, style, text};
@@ -48,6 +48,7 @@ pub use core::{commands, cursor, error, event, help, keyroute, path, script, sty
 pub use core::{render::Render, state::NodeName, view::View};
 
 // Internal module paths used across the crate.
+pub(crate) use crate::core::change::{ChangeSet, Invalidation};
 use crate::core::state;
 
 /// Rendering backend interfaces.
@@ -58,9 +59,7 @@ pub mod render {
 
 /// Crossterm terminal run-loop integration.
 pub mod terminal {
-    pub use crate::core::backend::crossterm::{
-        InterruptPolicy, RunOptions, runloop, runloop_with_options,
-    };
+    pub use crate::core::backend::crossterm::{InterruptPolicy, RunOptions, runloop};
 }
 
 // Re-export derive macros

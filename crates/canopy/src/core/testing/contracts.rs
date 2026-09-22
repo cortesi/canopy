@@ -1,4 +1,5 @@
-//! A small shared R27 trace for native, terminal, MCP, proxy, and replay tests.
+//! A small shared script trace that native, terminal, MCP, proxy, and replay
+//! tests all run, so every driver is held to the same observable result.
 
 use std::collections::BTreeMap;
 
@@ -14,9 +15,12 @@ use crate::{
     state::NodeName,
 };
 
-/// R06/R07 argument shapes and exact targeting, R18 waits, and R19
-/// observations. The result omits opaque node tokens and absolute frame
-/// generations.
+/// The shared trace script.
+///
+/// It calls a command with positional arguments on an exact target and with
+/// named arguments, checks that a snapshot stays unchanged until the next
+/// prepare, waits for a published value, and reads semantic observations. The
+/// result omits opaque node tokens and absolute frame generations.
 pub const SCRIPT: &str = r#"
 local old = canopy.snapshot()
 if old == nil then error("initial publication missing") end

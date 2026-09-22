@@ -89,7 +89,7 @@ restores its own checkpoint, even when the enclosing edit handles the error.
 The checkpoint captures every arena node, including detached nodes. It restores
 node metadata, topology, child keys, layout and view caches, and lifecycle flags.
 It also restores root, focus, mouse capture, focus recovery hints, exit requests,
-pending style changes, and pending diagnostic requests.
+and pending style changes.
 Layout metadata includes the widget base layout and persistent override.
 
 The checkpoint shares widget slots with the live arena. Widget-owned mutations
@@ -147,7 +147,7 @@ layout pass ends with it, so any tree mutation that reaches layout is checked.
 
 It checks the root, widget slots, reciprocal links, duplicate children, cycles,
 keys, focus, mouse capture, lifecycle flags, layout caches, computed view caches,
-the semantic-key index, and pending diagnostic targets.
+and the semantic-key index.
 
 It does not run layout. Run layout before using screen coordinates.
 
@@ -333,7 +333,8 @@ Rendering consumes current layout and view state. Canopy renders visible nodes i
 tree order into an offscreen buffer and applies the cursor overlay. Published
 snapshots and backend output use separate buffers. Observation can refresh the
 published snapshot without changing the backend diff baseline. The baseline
-advances only after output and backend flush succeed. Any backend failure
+advances only after output and backend flush succeed. Each emitted frame flushes
+the backend once. Any backend failure
 invalidates it, so the next attempt repaints in full. A failed write may have
 already changed the terminal, making a repeated diff unsafe.
 
@@ -387,18 +388,30 @@ The MCP transport owns only factory handles and results; bounded blocking worker
 own headless applications. Live evaluation stays on the UI thread, and dropping
 a ticket wakes that driver to cancel its work.
 
-`ChangeSet` tracks layout, paint, cursor, and observation invalidation. Mutable
-widget access and accepted runtime mutations record the required work. Failed
-mutations retain invalidation for state they changed. Read-only automation does
-not request a redraw. `Canopy::render` prepares a frame and emits it to a
-given backend; headless MCP evaluation and rendering tests use it. Scripts
-prepare pending changes with `canopy.flush()` when they need snapshots or
-geometry before the next turn.
+The runtime records pending frame work as one invalidation level. The levels are
+ordered: layout includes paint, paint includes the snapshot, and semantics
+republishes the snapshot only. A mutation raises the level to what it needs and
+never lowers it. Settling layout between batched events runs only when layout is
+pending. Frame preparation runs when any level is pending, and it lays out and
+paints the whole tree. Failed mutations retain invalidation for state they
+changed. Read-only automation does not request a redraw. `Canopy::render`
+prepares a frame and emits it to a given backend; headless MCP evaluation and
+rendering tests use it. Scripts prepare pending changes with `canopy.flush()`
+when they need snapshots or geometry before the next turn.
+
+Every mutable widget callback invalidates layout before it runs, so any
+mutable callback repaints the whole frame. There is no per-node damage
+tracking. Widgets can therefore read other nodes while they render, and still
+repaint when a callback changes what they read. canopy-fileselect relies on
+this: its footer reads the file selector during render, and its listings read
+another node's focus. Any narrower invalidation must keep this guarantee.
 
 Poll deadlines belong to the driver. There is no eager scheduler thread per
-application. Adapters wait on terminal input, runtime notifications, and the
-next poll deadline with fair ready-source selection. Tests can install
-`testing::ManualClock` before initialization, advance it, then deliver `Work::Wake`.
+application. The terminal adapter and headless evaluation share one work
+selector. It waits on adapter input, runtime notifications, and the next driver
+deadline, and it takes ready sources in rotating order, so a source that stays
+ready cannot starve the others. Tests can install `testing::ManualClock` before
+initialization, advance it, then deliver `Work::Wake`.
 
 ## Event Routing
 

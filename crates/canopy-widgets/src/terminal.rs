@@ -906,23 +906,23 @@ mod tests {
     use std::sync::Arc;
 
     use canopy::{
-        ContextExt, TermBuf,
+        Canopy, ContextExt, TermBuf,
         event::{key, mouse},
         layout::Layout,
         style::{
             GradientSpec, GradientStop, Paint, StyleManager, StyleMap,
             effects::{self, Effect, StyleEffect},
         },
-        testing::{dummyctx::DummyContext, harness::Harness},
+        testing::harness::Harness,
     };
     use itty_core::{colors::Rgba8, palette::builtin};
 
     use super::*;
 
     #[test]
-    fn key_capture_matches_event_handling() {
+    fn key_capture_matches_event_handling() -> Result<()> {
         let (mut terminal, _receiver) = stream_terminal();
-        let mut ctx = DummyContext::default();
+        let mut app = Canopy::new();
         for spec in [
             "a",
             "Z",
@@ -948,11 +948,11 @@ mod tests {
             "keypadbegin",
         ] {
             let key = key::Key::parse_spec(spec).expect("valid key spec");
-            let predicted = terminal.key_outcome(key, &ctx);
-            let handled = terminal
-                .on_event(&event::Event::Key(key), &mut ctx)
-                .expect("event")
-                == EventOutcome::Handle;
+            let (predicted, outcome) = app.with_root_context(|ctx| {
+                let predicted = terminal.key_outcome(key, ctx);
+                Ok((predicted, terminal.on_event(&event::Event::Key(key), ctx)?))
+            })?;
+            let handled = outcome == EventOutcome::Handle;
             assert_eq!(
                 predicted,
                 Some(if handled {
@@ -963,6 +963,7 @@ mod tests {
                 "prediction must match handling for {spec}"
             );
         }
+        Ok(())
     }
 
     fn stream_terminal() -> (Terminal, itty_core::StreamInputReceiver) {

@@ -328,7 +328,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use canopy::testing::dummyctx::DummyContext;
+    use canopy::Canopy;
 
     use super::*;
 
@@ -387,25 +387,25 @@ mod tests {
             "Option 3".to_string(),
         ];
         let mut selector = Selector::new(items);
-        let mut ctx = DummyContext::default();
+        assert!(selector.selection_invariant_holds());
+        Canopy::new().with_root_context(|ctx| {
+            selector.toggle(ctx)?;
+            selector.select_by(ctx, 2)?;
+            selector.toggle(ctx)?;
+            selector.select_by(ctx, 99)?;
+            selector.toggle(ctx)?;
+            selector.select_all(ctx)?;
+            assert_eq!(selector.focused, 2);
+            assert_eq!(selector.selected.as_slice(), &[0, 1, 2]);
+            assert!(selector.selection_invariant_holds());
 
-        assert!(selector.selection_invariant_holds());
-        selector.toggle(&mut ctx)?;
-        selector.select_by(&mut ctx, 2)?;
-        selector.toggle(&mut ctx)?;
-        selector.select_by(&mut ctx, 99)?;
-        selector.toggle(&mut ctx)?;
-        selector.select_all(&mut ctx)?;
-        assert_eq!(selector.focused, 2);
-        assert_eq!(selector.selected.as_slice(), &[0, 1, 2]);
-        assert!(selector.selection_invariant_holds());
-
-        selector.clear(&mut ctx)?;
-        selector.select_by(&mut ctx, -99)?;
-        assert_eq!(selector.focused, 0);
-        assert!(selector.selected.is_empty());
-        assert!(selector.selection_invariant_holds());
-        Ok(())
+            selector.clear(ctx)?;
+            selector.select_by(ctx, -99)?;
+            assert_eq!(selector.focused, 0);
+            assert!(selector.selected.is_empty());
+            assert!(selector.selection_invariant_holds());
+            Ok(())
+        })
     }
 
     #[test]
@@ -454,7 +454,7 @@ mod tests {
             .with_glyphs("· ", "✓ ");
         assert_eq!(selector.glyphs, ("· ", "✓ "));
         selector.selected.push(1);
-        let semantics = selector.semantics(&DummyContext::default())?;
+        let semantics = Canopy::new().with_root_view(|ctx| selector.semantics(ctx))?;
         assert_eq!(semantics.role.as_deref(), Some("selector"));
         assert_eq!(semantics.label.as_deref(), Some("Columns"));
         assert_eq!(semantics.value.as_deref(), Some("Modified"));
@@ -464,14 +464,14 @@ mod tests {
     #[test]
     fn empty_selector_invariants_hold_after_commands() -> Result<()> {
         let mut selector = Selector::<String>::new(Vec::new());
-        let mut ctx = DummyContext::default();
-
-        selector.toggle(&mut ctx)?;
-        selector.select_by(&mut ctx, 1)?;
-        selector.select_first(&mut ctx)?;
-        selector.select_last(&mut ctx)?;
-        selector.select_all(&mut ctx)?;
-        selector.clear(&mut ctx)?;
+        Canopy::new().with_root_context(|ctx| {
+            selector.toggle(ctx)?;
+            selector.select_by(ctx, 1)?;
+            selector.select_first(ctx)?;
+            selector.select_last(ctx)?;
+            selector.select_all(ctx)?;
+            selector.clear(ctx)
+        })?;
 
         assert!(selector.selection_invariant_holds());
         assert_eq!(selector.focused, 0);

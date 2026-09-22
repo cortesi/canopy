@@ -13,12 +13,13 @@ use std::{
 };
 
 use futures::{
-    FutureExt, StreamExt,
+    StreamExt,
     channel::{
         mpsc::{UnboundedReceiver, UnboundedSender},
         oneshot,
     },
     future::{pending, poll_fn},
+    pin_mut,
 };
 use tokio::{task::yield_now, time::sleep};
 
@@ -279,11 +280,11 @@ impl Driver {
 impl Canopy {
     /// Admit an evaluation before changing retained runtime state.
     fn start_eval(&mut self, id: EvalId, request: EvalRequest) -> Result<()> {
-        if self.driver.active.is_some() || self.script_host.is_eval_active() {
+        if self.driver.active.is_some() || self.script.host.is_eval_active() {
             return Err(busy());
         }
         let baseline = self.begin_script_journal();
-        self.script_host.set_diagnostics(Vec::new(), Vec::new());
+        self.script.host.set_diagnostics(Vec::new(), Vec::new());
         let prepared = (|| {
             self.ensure_finalized()?;
             self.prepare_frame(false)?;
@@ -296,8 +297,8 @@ impl Canopy {
                     })
                 })
                 .transpose()?;
-            let script = self.script_host.compile(&request.source)?;
-            let mut invocation = self.script_host.start_invocation(request.anchor, script)?;
+            let script = self.script.host.compile(&request.source)?;
+            let mut invocation = self.script.host.start_invocation(request.anchor, script)?;
             invocation.set_reporting_timeout(request.timeout);
             invocation.set_anchor_incarnation(self.core.nodes[request.anchor].incarnation);
             Ok((deadline, invocation))
@@ -420,7 +421,7 @@ impl Canopy {
             Work::CancelEval(id) => {
                 if self.driver.active.as_ref().is_some_and(|a| a.id == id) {
                     let mut active = self.driver.active.take().expect("active evaluation exists");
-                    self.script_host.abort_invocation(&mut active.invocation)?;
+                    self.script.host.abort_invocation(&mut active.invocation)?;
                     completed = Some((active, Err(Error::ScriptCancelled)));
                 }
             }
@@ -451,17 +452,17 @@ impl Canopy {
                 .get_mut(&active.id)
                 .is_some_and(|sender| sender.poll_canceled(&mut cx).is_ready());
             if cancelled {
-                self.script_host.abort_invocation(&mut active.invocation)?;
+                self.script.host.abort_invocation(&mut active.invocation)?;
                 completed = Some((active, Err(Error::ScriptCancelled)));
             } else if active.deadline.is_some_and(|d| now >= d) {
-                self.script_host.abort_invocation(&mut active.invocation)?;
+                self.script.host.abort_invocation(&mut active.invocation)?;
                 let timeout_ms = active
                     .request
                     .timeout
                     .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX));
                 completed = Some((active, Err(Error::ScriptTimeout { timeout_ms })));
             } else if vm_ready {
-                let host = self.script_host.clone();
+                let host = self.script.host.clone();
                 let step = host.poll_invocation(
                     self,
                     &mut active.invocation,
@@ -479,27 +480,9 @@ impl Canopy {
             }
         }
         let prepared = self.prepare_frame(false);
-        let published = prepared.as_ref().is_ok_and(|p| *p);
         if let Some((mut active, result)) = completed {
-            let result = match prepared {
-                Ok(_) => result,
-                Err(error) => Err(error),
-            };
-            self.driver.publication.clear_waiters();
-            self.driver.wake.ready.store(false, Ordering::Release);
-            let (logs, assertions) = active.invocation.take_diagnostics();
-            self.script_host
-                .set_diagnostics(logs.clone(), assertions.clone());
-            self.record_script_journal(
-                super::ScriptOrigin::Eval,
-                &active.request.source,
-                super::ScriptJournalBaseline {
-                    started: active.started,
-                    logs: 0,
-                    assertions: 0,
-                },
-                &result,
-            );
+            let result = prepared.and(result);
+            let (logs, assertions) = self.finish_eval(&mut active, &result);
             let completion = EvalOutcome {
                 id: active.id,
                 result,
@@ -514,7 +497,7 @@ impl Canopy {
         } else {
             prepared?;
         }
-        if published || self.driver.publication.generation() != before {
+        if self.driver.publication.generation() != before {
             outcome.frame = Some(FrameId(self.driver.publication.generation()));
         }
         if let Some(error) = dispatch_error {
@@ -592,24 +575,36 @@ impl Canopy {
     /// Release pending work and preserve its diagnostics on driver failure.
     fn abort_headless_eval<T>(&mut self, result: &Result<T>) {
         if let Some(mut active) = self.driver.active.take() {
-            if let Err(error) = self.script_host.abort_invocation(&mut active.invocation) {
+            if let Err(error) = self.script.host.abort_invocation(&mut active.invocation) {
                 tracing::error!(%error, "aborting failed headless evaluation");
             }
-            let (logs, assertions) = active.invocation.take_diagnostics();
-            self.script_host.set_diagnostics(logs, assertions);
-            self.driver.publication.clear_waiters();
-            self.driver.wake.ready.store(false, Ordering::Release);
-            self.record_script_journal(
-                super::ScriptOrigin::Eval,
-                &active.request.source,
-                super::ScriptJournalBaseline {
-                    started: active.started,
-                    logs: 0,
-                    assertions: 0,
-                },
-                result,
-            );
+            self.finish_eval(&mut active, result);
         }
+    }
+
+    /// Close an evaluation that has left the driver.
+    ///
+    /// Release its publication subscriptions and VM wake, make its logs and
+    /// assertions the host's most recent diagnostics, and journal it. Return
+    /// the logs and assertions for its outcome.
+    fn finish_eval<T>(
+        &mut self,
+        active: &mut ActiveEval,
+        result: &Result<T>,
+    ) -> (Vec<String>, Vec<script::ScriptAssertion>) {
+        self.driver.publication.clear_waiters();
+        self.driver.wake.ready.store(false, Ordering::Release);
+        let (logs, assertions) = active.invocation.take_diagnostics();
+        self.script
+            .host
+            .set_diagnostics(logs.clone(), assertions.clone());
+        self.record_script_journal(
+            super::ScriptOrigin::Eval,
+            &active.request.source,
+            super::ScriptJournalBaseline::top_level(active.started),
+            result,
+        );
+        (logs, assertions)
     }
 }
 
@@ -628,6 +623,7 @@ impl HeadlessEval<'_> {
         let events = self.events.as_mut().expect("headless driver owns events");
         let mut outcome = canopy.turn(Work::StartEval(request))?;
         let id = outcome.started.expect("start turn accepts evaluation");
+        let mut selector = WorkSelector::default();
         loop {
             if let Some(index) = outcome.completed.iter().position(|done| done.id == id) {
                 let completion = outcome.completed.swap_remove(index);
@@ -636,33 +632,76 @@ impl HeadlessEval<'_> {
             // VM and adapter wakes can stay ready indefinitely. Yield
             // explicitly so Tokio replenishes its cooperative budget.
             yield_now().await;
-            let work = {
-                let deadline = canopy.next_deadline();
-                let timer = async {
-                    match deadline {
-                        Some(deadline) => {
-                            sleep(deadline.saturating_duration_since(canopy.now())).await
-                        }
-                        None => pending().await,
-                    }
-                }
-                .fuse();
-                let notified = poll_fn(|cx| canopy.poll_runtime_wake(cx)).fuse();
-                let event = events.next().fuse();
-                futures::pin_mut!(timer, notified, event);
-                futures::select! {
-                    result = notified => { result?; Work::Wake },
-                    () = timer => Work::Wake,
-                    event = event => match event.ok_or_else(|| Error::RunLoop("headless event channel closed".into()))? {
-                        AdapterEvent::Input(event) => Work::Input(vec![event]),
-                        AdapterEvent::Wake => Work::Wake,
-                    },
+            let event = async {
+                match events.next().await {
+                    Some(AdapterEvent::Input(event)) => Ok(Work::Input(vec![event])),
+                    Some(AdapterEvent::Wake) => Ok(Work::Wake),
+                    None => Err(Error::RunLoop("headless event channel closed".into())),
                 }
             };
-            // All waiting futures release application references before
-            // dispatch.
+            let work = selector.next(canopy, event).await?;
             outcome = canopy.turn(work)?;
         }
+    }
+}
+
+/// Chooses the next turn input from adapter input, a runtime notification,
+/// or the next driver deadline.
+///
+/// Sources that are ready together are taken in rotating order, so a source
+/// that stays ready cannot starve the others. The terminal adapter and headless
+/// evaluation share this selector.
+#[derive(Default)]
+pub struct WorkSelector {
+    /// Source polled first on the next wait.
+    next_source: usize,
+}
+
+impl WorkSelector {
+    /// Wait for the next turn input.
+    ///
+    /// The wait holds only a shared application borrow, which ends before the
+    /// caller runs the turn, so no widget or VM borrow crosses suspension.
+    pub async fn next<E>(&mut self, canopy: &mut Canopy, event: E) -> Result<Work>
+    where
+        E: Future<Output = Result<Work>>,
+    {
+        let deadline = canopy.next_deadline();
+        let canopy = &*canopy;
+        let timer = async move {
+            match deadline {
+                Some(deadline) => sleep(deadline.saturating_duration_since(canopy.now())).await,
+                None => pending::<()>().await,
+            }
+        };
+        self.select(event, poll_fn(|cx| canopy.poll_runtime_wake(cx)), timer)
+            .await
+    }
+
+    /// Return the first ready source, starting from the rotating priority.
+    async fn select<E, W, D>(&mut self, event: E, wake: W, deadline: D) -> Result<Work>
+    where
+        E: Future<Output = Result<Work>>,
+        W: Future<Output = Result<()>>,
+        D: Future<Output = ()>,
+    {
+        pin_mut!(event, wake, deadline);
+        poll_fn(|cx| {
+            for offset in 0..3 {
+                let source = (self.next_source + offset) % 3;
+                let ready = match source {
+                    0 => event.as_mut().poll(cx),
+                    1 => wake.as_mut().poll(cx).map(|wake| wake.map(|()| Work::Wake)),
+                    _ => deadline.as_mut().poll(cx).map(|()| Ok(Work::Wake)),
+                };
+                if ready.is_ready() {
+                    self.next_source = (source + 1) % 3;
+                    return ready;
+                }
+            }
+            Poll::Pending
+        })
+        .await
     }
 }
 
@@ -691,5 +730,46 @@ impl Drop for Canopy {
                 assertions: Vec::new(),
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::future::ready;
+
+    use futures::executor::block_on;
+
+    use super::*;
+
+    #[test]
+    fn selector_rotates_between_ready_input_wake_and_deadline() -> Result<()> {
+        let mut selector = WorkSelector::default();
+        for expected_source in 0..3 {
+            let work = block_on(selector.select(
+                ready(Ok(Work::Input(vec![Event::FocusGained]))),
+                ready(Ok(())),
+                ready(()),
+            ))?;
+            assert_eq!(selector.next_source, (expected_source + 1) % 3);
+            if expected_source == 0 {
+                assert!(
+                    matches!(&work, Work::Input(events) if matches!(events.as_slice(), [Event::FocusGained]))
+                );
+            } else {
+                assert!(matches!(work, Work::Wake));
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn selector_services_deadlines_without_input() -> Result<()> {
+        let work = block_on(WorkSelector::default().select(
+            pending::<Result<Work>>(),
+            pending::<Result<()>>(),
+            ready(()),
+        ))?;
+        assert!(matches!(work, Work::Wake));
+        Ok(())
     }
 }

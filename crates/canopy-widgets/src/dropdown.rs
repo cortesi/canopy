@@ -248,10 +248,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use canopy::{
-        Canopy, Loader,
-        testing::{dummyctx::DummyContext, harness::Harness},
-    };
+    use canopy::{Canopy, Loader, testing::harness::Harness};
 
     use super::*;
 
@@ -315,25 +312,27 @@ mod tests {
             "Option 2".to_string(),
             "Option 3".to_string(),
         ];
-        let mut dropdown = Dropdown::new(items)?;
-        let mut ctx = DummyContext::default();
+        let mut harness = Harness::builder(Dropdown::new(items)?)
+            .size(20, 6)
+            .build()?;
+        harness.with_root_context(|dropdown: &mut Dropdown<String>, ctx| {
+            assert!(dropdown.selection_invariant_holds());
+            dropdown.selected = 1;
+            dropdown.highlighted = 1;
+            dropdown.toggle(ctx)?;
+            dropdown.select_by(ctx, 99)?;
+            dropdown.confirm(ctx)?;
+            assert_eq!(dropdown.selected_index(), 2);
+            assert!(!dropdown.expanded);
+            assert!(dropdown.selection_invariant_holds());
 
-        assert!(dropdown.selection_invariant_holds());
-        dropdown.selected = 1;
-        dropdown.highlighted = 1;
-        dropdown.toggle(&mut ctx)?;
-        dropdown.select_by(&mut ctx, 99)?;
-        dropdown.confirm(&mut ctx)?;
-        assert_eq!(dropdown.selected_index(), 2);
-        assert!(!dropdown.expanded);
-        assert!(dropdown.selection_invariant_holds());
-
-        dropdown.toggle(&mut ctx)?;
-        dropdown.select_by(&mut ctx, -99)?;
-        dropdown.cancel(&mut ctx)?;
-        assert_eq!(dropdown.selected_index(), 2);
-        assert!(!dropdown.expanded);
-        assert!(dropdown.selection_invariant_holds());
-        Ok(())
+            dropdown.toggle(ctx)?;
+            dropdown.select_by(ctx, -99)?;
+            dropdown.cancel(ctx)?;
+            assert_eq!(dropdown.selected_index(), 2);
+            assert!(!dropdown.expanded);
+            assert!(dropdown.selection_invariant_holds());
+            Ok(())
+        })
     }
 }

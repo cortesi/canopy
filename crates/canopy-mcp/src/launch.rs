@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use canopy::terminal::{RunOptions, runloop_with_options};
+use canopy::terminal::{RunOptions, runloop};
 
 use crate::{
     AppFactory, Result,
@@ -53,7 +53,7 @@ fn run_interactive(
         .map(|socket_path| serve_uds(socket_path, automation, factory.metadata().clone()))
         .transpose()?;
 
-    let run_result = runloop_with_options(canopy, options);
+    let run_result = runloop(canopy, options);
     if let Some(server) = live_server {
         server.stop()?;
     }

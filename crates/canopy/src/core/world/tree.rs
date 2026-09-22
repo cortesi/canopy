@@ -31,7 +31,6 @@ impl TreeStateSnapshot {
             pending_style: core.pending_style.clone(),
             mouse_capture: core.mouse_capture,
             focus_hint: core.focus_hint,
-            pending_diagnostic_dump: core.pending_diagnostic_dump,
         }
     }
 
@@ -48,7 +47,6 @@ impl TreeStateSnapshot {
         core.pending_style = self.pending_style;
         core.mouse_capture = self.mouse_capture;
         core.focus_hint = self.focus_hint;
-        core.pending_diagnostic_dump = self.pending_diagnostic_dump;
     }
 }
 
@@ -194,7 +192,6 @@ impl Core {
             .ok_or(Error::NodeNotFound(node_id))?;
         node.children.clear();
         node.child_keys.clear();
-        self.clear_removed_targets(&plan.pre_order[1..]);
 
         self.clear_semantic_key(node_id)?;
         let incarnation = self.next_generation();
@@ -394,7 +391,6 @@ impl Core {
             self.validate_cached_state(node_id, node)?;
         }
         self.validate_focus_and_capture()?;
-        self.validate_pending_targets()?;
         self.validate_semantic_keys()?;
         Ok(())
     }
@@ -521,18 +517,6 @@ impl Core {
         if !self.is_attached_to_root(node_id) {
             return Err(invariant_violation(format!(
                 "{label} points at detached node {node_id:?}"
-            )));
-        }
-        Ok(())
-    }
-
-    /// Validate pending target references stored by auxiliary runtime features.
-    fn validate_pending_targets(&self) -> Result<()> {
-        if let Some(target) = self.pending_diagnostic_dump
-            && !self.nodes.contains_key(target)
-        {
-            return Err(invariant_violation(format!(
-                "pending diagnostic dump points at missing node {target:?}"
             )));
         }
         Ok(())
@@ -970,7 +954,6 @@ impl Core {
             self.nodes.remove(*node_id);
         }
 
-        self.clear_removed_targets(&plan.pre_order);
         self.focus_hint = hint;
         self.ensure_invariants(Some(root_id))?;
         Ok(())
@@ -1059,16 +1042,6 @@ impl Core {
             .iter()
             .copied()
             .find(|child| self.is_ancestor_or_self(*child, focus))
-    }
-
-    /// Clear auxiliary targets that point into a removed set.
-    fn clear_removed_targets(&mut self, removed: &[RemovalEntry]) {
-        if self
-            .pending_diagnostic_dump
-            .is_some_and(|target| removed.iter().any(|entry| entry.node_id == target))
-        {
-            self.pending_diagnostic_dump = None;
-        }
     }
 
     /// Collect a subtree in pre-order, including the root.

@@ -1,4 +1,5 @@
-//! R27 shared trace through native driver turns, plus R16 app isolation.
+//! The shared script trace through native driver turns, and isolation between
+//! two applications in one process.
 
 #[cfg(test)]
 mod tests {

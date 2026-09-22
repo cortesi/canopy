@@ -13,9 +13,15 @@ mod tests {
         derive_commands,
         error::{Error, Result},
         event::Event,
-        testing::dummyctx::DummyContext,
     };
     use serde::{Deserialize, Serialize};
+
+    /// Run `f` against the root context of an empty application.
+    fn with_ctx<R>(f: impl FnOnce(&mut dyn Context) -> R) -> R {
+        Canopy::new()
+            .with_root_context(|ctx| Ok(f(ctx)))
+            .expect("root context is available")
+    }
 
     // Test helper to record command calls
     thread_local! {
@@ -274,11 +280,11 @@ mod tests {
     #[test]
     fn positional_arity_mismatch() {
         let mut tester = Tester::new();
-        let mut ctx = DummyContext::default();
         let inv = Tester::cmd_set_scroll().call_with(()).invocation();
-        let err =
-            (Tester::cmd_set_scroll().invoke)(Some(&mut tester as &mut dyn Any), &mut ctx, &inv)
-                .unwrap_err();
+        let err = with_ctx(|ctx| {
+            (Tester::cmd_set_scroll().invoke)(Some(&mut tester as &mut dyn Any), ctx, &inv)
+        })
+        .unwrap_err();
 
         assert!(matches!(
             err,
@@ -292,14 +298,14 @@ mod tests {
     #[test]
     fn type_mismatch_reports_param() {
         let mut tester = Tester::new();
-        let mut ctx = DummyContext::default();
         let inv = CommandInvocation {
             id: Tester::cmd_set_scroll().id,
             args: CommandArgs::Positional(vec![ArgValue::String("bad".to_string())]),
         };
-        let err =
-            (Tester::cmd_set_scroll().invoke)(Some(&mut tester as &mut dyn Any), &mut ctx, &inv)
-                .unwrap_err();
+        let err = with_ctx(|ctx| {
+            (Tester::cmd_set_scroll().invoke)(Some(&mut tester as &mut dyn Any), ctx, &inv)
+        })
+        .unwrap_err();
 
         assert!(matches!(
             err,
@@ -311,16 +317,16 @@ mod tests {
     #[test]
     fn unknown_named_args_error() {
         let mut tester = Tester::new();
-        let mut ctx = DummyContext::default();
         let mut map = BTreeMap::new();
         map.insert("unknown".to_string(), ArgValue::Int(1));
         let inv = CommandInvocation {
             id: Tester::cmd_set_scroll().id,
             args: CommandArgs::Named(map),
         };
-        let err =
-            (Tester::cmd_set_scroll().invoke)(Some(&mut tester as &mut dyn Any), &mut ctx, &inv)
-                .unwrap_err();
+        let err = with_ctx(|ctx| {
+            (Tester::cmd_set_scroll().invoke)(Some(&mut tester as &mut dyn Any), ctx, &inv)
+        })
+        .unwrap_err();
 
         assert!(matches!(
             err,
@@ -331,16 +337,16 @@ mod tests {
     #[test]
     fn normalized_named_args_bind() {
         let mut tester = Tester::new();
-        let mut ctx = DummyContext::default();
         let mut map = BTreeMap::new();
         map.insert("Scroll-Count".to_string(), ArgValue::Int(3));
         let inv = CommandInvocation {
             id: Tester::cmd_set_scroll().id,
             args: CommandArgs::Named(map),
         };
-        let out =
-            (Tester::cmd_set_scroll().invoke)(Some(&mut tester as &mut dyn Any), &mut ctx, &inv)
-                .unwrap();
+        let out = with_ctx(|ctx| {
+            (Tester::cmd_set_scroll().invoke)(Some(&mut tester as &mut dyn Any), ctx, &inv)
+        })
+        .unwrap();
 
         assert_eq!(out, ArgValue::Null);
         assert_eq!(tester.scroll, 3);
@@ -349,11 +355,11 @@ mod tests {
     #[test]
     fn missing_injected_value_errors() {
         let mut tester = Tester::new();
-        let mut ctx = DummyContext::default();
         let inv = Tester::cmd_needs_event().call_with(()).invocation();
-        let err =
-            (Tester::cmd_needs_event().invoke)(Some(&mut tester as &mut dyn Any), &mut ctx, &inv)
-                .unwrap_err();
+        let err = with_ctx(|ctx| {
+            (Tester::cmd_needs_event().invoke)(Some(&mut tester as &mut dyn Any), ctx, &inv)
+        })
+        .unwrap_err();
 
         assert!(matches!(
             err,

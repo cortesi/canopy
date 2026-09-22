@@ -55,7 +55,10 @@ fn script_snapshot_refresh_preserves_backend_diff_baseline() -> Result<()> {
         ArgValue::String("b".into())
     );
     assert_eq!(canopy.buf().unwrap().screen_text(), "b");
-    assert_eq!(canopy.emitted_buf.as_ref().unwrap().screen_text(), "a");
+    assert_eq!(
+        canopy.frame.emitted_buf.as_ref().unwrap().screen_text(),
+        "a"
+    );
 
     canopy.emit_frame(&mut backend)?;
     assert_eq!(backend.text, ["b"]);
@@ -78,6 +81,7 @@ struct FailingBackend {
     capture: TestRender,
     fail_at: Option<Failure>,
     shifts: usize,
+    flushes: usize,
 }
 
 impl FailingBackend {
@@ -117,6 +121,7 @@ impl RenderBackend for FailingBackend {
     }
 
     fn flush(&mut self) -> Result<()> {
+        self.flushes += 1;
         self.check_failure(Failure::Flush)
     }
 }
@@ -148,7 +153,10 @@ fn failed_output_repaints_even_when_the_next_frame_reverts() -> Result<()> {
         canopy.flush()?;
         canopy.emit_frame(&mut backend)?;
         assert_eq!(backend.capture.text, ["a"], "failed at {operation:?}");
-        assert_eq!(canopy.emitted_buf.as_ref().unwrap().screen_text(), "a");
+        assert_eq!(
+            canopy.frame.emitted_buf.as_ref().unwrap().screen_text(),
+            "a"
+        );
         canopy.emit_frame(&mut backend)?;
         assert!(backend.capture.text.is_empty());
     }
@@ -167,9 +175,9 @@ fn frame(text: &str) -> Result<TermBuf> {
 fn failed_shift_is_not_repeated_on_retry() -> Result<()> {
     let mut canopy = Canopy::new();
     let mut backend = FailingBackend::default();
-    canopy.termbuf = Some(frame("abcdef")?);
+    canopy.frame.termbuf = Some(frame("abcdef")?);
     canopy.emit_frame(&mut backend)?;
-    canopy.termbuf = Some(frame("Zabcde")?);
+    canopy.frame.termbuf = Some(frame("Zabcde")?);
 
     // A backend can apply a shift before reporting a write failure. Repeating
     // that relative operation would shift the existing content twice.
@@ -181,5 +189,19 @@ fn failed_shift_is_not_repeated_on_retry() -> Result<()> {
     assert_eq!(backend.capture.text, ["Zabcde"]);
     canopy.emit_frame(&mut backend)?;
     assert!(backend.capture.text.is_empty());
+    Ok(())
+}
+
+#[test]
+fn each_emitted_frame_flushes_once() -> Result<()> {
+    let mut canopy = Canopy::new();
+    let mut backend = FailingBackend::default();
+    // A full paint, a shifted diff, and an unchanged diff.
+    for (count, text) in ["abcdef", "Zabcde", "Zabcde"].into_iter().enumerate() {
+        canopy.frame.termbuf = Some(frame(text)?);
+        canopy.emit_frame(&mut backend)?;
+        assert_eq!(backend.flushes, count + 1, "frame {text}");
+    }
+    assert_eq!(backend.shifts, 1);
     Ok(())
 }

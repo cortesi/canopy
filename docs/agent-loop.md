@@ -29,10 +29,10 @@ permission profile.
 
 ## Terminal interrupts
 
-`canopy::terminal::runloop` retains the default Ctrl+C behavior: restore the
-terminal, dump the node tree, and return status 130. `runloop_with_options`
-accepts `RunOptions` with `InterruptPolicy::RouteToApplication` to deliver Ctrl+C
-through normal input routing, including to embedded terminal widgets.
+`canopy::terminal::runloop(canopy, options)` runs the terminal adapter. With
+`RunOptions::default()`, Ctrl+C restores the terminal, dumps the node tree, and
+returns status 130. `InterruptPolicy::RouteToApplication` delivers Ctrl+C
+through normal input routing instead, including to embedded terminal widgets.
 
 `RunOptions::emergency_exit` optionally specifies a separate exact `Key` match.
 It exits with status 130 before widget dispatch and restores the terminal once.

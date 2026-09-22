@@ -1002,7 +1002,7 @@ fn install_function_binding<'s>(
 ) -> StdResult<i64, RuntimeError> {
     let stashed = scope.stash_function(function)?;
     with_current_canopy(scope, |canopy, _| {
-        let function_id = canopy.script_host.store_function(stashed)?;
+        let function_id = canopy.script.host.store_function(stashed)?;
         let result = canopy.core.input_map.replace_application_binding(
             input,
             options.clone(),
@@ -1014,7 +1014,7 @@ fn install_function_binding<'s>(
                 Ok(binding_id.as_u64() as i64)
             }
             Err(err) => {
-                canopy.script_host.release_function(function_id);
+                canopy.script.host.release_function(function_id);
                 Err(err)
             }
         }
@@ -1217,7 +1217,7 @@ fn host_log<'s>(
     let message = args.raw().unwrap_or(ScopedValue::Nil).display(scope);
     tracing::info!("{message}");
     with_current_canopy(scope, |canopy, _| {
-        canopy.script_host.push_log(message);
+        canopy.script.host.push_log(message);
         Ok(())
     })?;
     Ok(ret_none())
@@ -1239,7 +1239,8 @@ fn host_assert<'s>(
     };
     with_current_canopy(scope, |canopy, _| {
         canopy
-            .script_host
+            .script
+            .host
             .push_assertion(condition, message.clone());
         Ok(())
     })?;
@@ -2319,9 +2320,10 @@ fn host_on_start<'s>(
     let function = args.required::<Function<'_>>("handler")?;
     let stashed = scope.stash_function(function)?;
     with_current_canopy(scope, |canopy, _| {
-        let function_id = canopy.script_host.store_function(stashed)?;
+        let function_id = canopy.script.host.store_function(stashed)?;
         canopy
-            .script_host
+            .script
+            .host
             .state
             .borrow_mut()
             .on_start_hooks

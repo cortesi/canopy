@@ -218,10 +218,7 @@ pub trait ViewContext: sealed::ViewContext {
     fn is_attached_of(&self, node: NodeId) -> bool;
 
     /// Whether a modal scope remains open, including pending deferred closes.
-    fn modal_is_open(&self, token: InteractionToken) -> bool {
-        let _ = token;
-        false
-    }
+    fn modal_is_open(&self, token: InteractionToken) -> bool;
 
     /// Return the path for a node relative to a root.
     fn path_of(&self, root: NodeId, node: NodeId) -> Path;
@@ -536,20 +533,10 @@ pub trait Context: ViewContext + sealed::Context {
     fn available_bindings(&self, node: Option<NodeId>) -> Result<BindingSnapshot>;
 
     /// Open a modal scope that owns focus, input admission, and visual effects.
-    fn open_modal(&mut self, options: ModalOptions) -> Result<InteractionToken> {
-        let _ = options;
-        Err(Error::InvalidOperation(
-            "modal interaction is unavailable".into(),
-        ))
-    }
+    fn open_modal(&mut self, options: ModalOptions) -> Result<InteractionToken>;
 
     /// Close this scope and its nested scopes after active callbacks return.
-    fn close_modal(&mut self, token: InteractionToken) -> Result<()> {
-        let _ = token;
-        Err(Error::InvalidOperation(
-            "modal interaction is unavailable".into(),
-        ))
-    }
+    fn close_modal(&mut self, token: InteractionToken) -> Result<()>;
 
     /// Scroll the view to the specified position.
     ///
@@ -764,9 +751,6 @@ pub trait Context: ViewContext + sealed::Context {
     /// Set the style map to be used for rendering.
     /// The style change will be applied before the next render.
     fn set_style(&mut self, style: StyleMap);
-
-    /// Request a diagnostic dump for a target node.
-    fn request_diagnostic_dump(&mut self, target: NodeId);
 }
 
 /// Typed mutation and composition helpers for contexts.
@@ -1359,10 +1343,6 @@ impl Context for NodeCtx<&mut Core> {
     fn set_style(&mut self, style: StyleMap) {
         self.core.pending_style = Some(style);
         self.core.invalidate(crate::Invalidation::Paint);
-    }
-
-    fn request_diagnostic_dump(&mut self, target: NodeId) {
-        self.core.pending_diagnostic_dump = Some(target);
     }
 }
 

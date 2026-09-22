@@ -26,7 +26,7 @@ use crate::{
     layout::{Edges, Layout},
     path::Path,
     render::{NopBackend, Render},
-    script::LuauFunctionId,
+    script::{self, LuauFunctionId},
     state::NodeName,
     testing::{
         backend::TestRender,
@@ -59,11 +59,9 @@ fn read_only_automation_service_is_bounded_without_redraw() -> Result<()> {
         }))?;
     }
 
-    canopy.render_pending = false;
     canopy.core.changes = crate::ChangeSet::default();
     assert_eq!(canopy.service_automation(), AUTOMATION_SERVICE_BUDGET);
     assert_eq!(count.load(Ordering::Relaxed), AUTOMATION_SERVICE_BUDGET);
-    assert!(!canopy.render_pending);
     assert!(!canopy.core.changes.is_pending());
     assert_eq!(canopy.service_automation(), 1);
     assert_eq!(count.load(Ordering::Relaxed), AUTOMATION_SERVICE_BUDGET + 1);
@@ -139,7 +137,7 @@ fn help_and_diagnostics_use_canonical_binding_order() -> Result<()> {
 fn pending_script_finalization_failure_is_atomic_and_retryable() -> Result<()> {
     let mut canopy = Canopy::new();
     assert!(canopy.script_api().is_err());
-    let host = canopy.script_host.clone();
+    let host = canopy.script.host.clone();
     let first = host.compile("return 1")?;
     let second = host.compile("return 2")?;
     host.inject_finalize_failure(script::FinalizeStep::PendingScript(1));
@@ -179,7 +177,7 @@ fn every_finalization_checkpoint_is_atomic_and_retryable() -> Result<()> {
         let mut canopy = Canopy::new();
         canopy.register_default_bindings("fault_owner", "canopy.log('default')")?;
         canopy.register_startup_script("fault_startup", "function setup() end")?;
-        let host = canopy.script_host.clone();
+        let host = canopy.script.host.clone();
         let first = host.compile("return 1")?;
         let second = host.compile("return 2")?;
         host.inject_finalize_failure(step);
@@ -1521,12 +1519,12 @@ fn tkey_no_render() -> Result<()> {
     canopy.core.set_focus(canopy.core.root)?;
     canopy.render(&mut tr)?;
     assert!(!tr.buf_empty());
-    let prev_buf = canopy.termbuf.clone().expect("missing termbuf");
+    let prev_buf = canopy.frame.termbuf.clone().expect("missing termbuf");
     tr.text.clear();
 
     canopy.key(None, 'a')?;
     canopy.render(&mut tr)?;
-    let next_buf = canopy.termbuf.clone().expect("missing termbuf");
+    let next_buf = canopy.frame.termbuf.clone().expect("missing termbuf");
     assert_eq!(prev_buf.cells, next_buf.cells);
     Ok(())
 }
@@ -1584,14 +1582,14 @@ fn visible_render_limits_reject_sizes_before_publication() -> Result<()> {
         canopy.set_root_size(Size::new(2049, 1)),
         Err(Error::RenderWidthLimit { .. })
     ));
-    assert_eq!(canopy.root_size, None);
+    assert_eq!(canopy.frame.root_size, None);
 
     canopy.set_render_limits(RenderLimits::new(4, 4, 15))?;
     assert!(matches!(
         canopy.set_root_size(Size::new(4, 4)),
         Err(Error::RenderCellLimit { .. })
     ));
-    assert_eq!(canopy.root_size, None);
+    assert_eq!(canopy.frame.root_size, None);
 
     let accepted = RenderLimits::new(4, 4, 16);
     canopy.set_render_limits(accepted)?;
@@ -1600,7 +1598,7 @@ fn visible_render_limits_reject_sizes_before_publication() -> Result<()> {
         canopy.set_render_limits(RenderLimits::new(3, 4, 16)),
         Err(Error::RenderWidthLimit { .. })
     ));
-    assert_eq!(canopy.render_limits, accepted);
+    assert_eq!(canopy.frame.render_limits, accepted);
     Ok(())
 }
 

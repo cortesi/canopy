@@ -1911,9 +1911,6 @@ pub mod canopy_widgets {
         /// Construct a root widget wrapping the application and inspector nodes.
         pub fn new() -> Self {}
 
-        /// Dump diagnostic information about the tree, focus, and bindings.
-        pub fn dump_diagnostics(&mut self, c: &mut dyn Context) -> Result<()> {}
-
         /// Exit from the program, restoring terminal state. If help or inspector is
         /// open, close them first.
         pub fn quit(&mut self, c: &mut dyn Context) -> Result<()> {}
@@ -1954,9 +1951,6 @@ pub mod canopy_widgets {
         pub fn toggle_inspector(&mut self, c: &mut dyn Context) -> Result<()> {}
 
         /// Build a positional call with typed user arguments.
-        pub fn call_dump_diagnostics() -> canopy::commands::CommandCall {}
-
-        /// Build a positional call with typed user arguments.
         pub fn call_focus(direction: FocusDirection) -> canopy::commands::CommandCall {}
 
         /// Build a positional call with typed user arguments.
@@ -1982,9 +1976,6 @@ pub mod canopy_widgets {
 
         /// Build a positional call with typed user arguments.
         pub fn call_toggle_inspector() -> canopy::commands::CommandCall {}
-
-        /// Return a typed command reference for this command.
-        pub fn cmd_dump_diagnostics() -> &'static canopy::commands::CommandSpec {}
 
         /// Return a typed command reference for this command.
         pub fn cmd_focus() -> &'static canopy::commands::CommandSpec {}

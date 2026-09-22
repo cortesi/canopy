@@ -93,7 +93,7 @@ impl<T> IndexMut<NodeId> for NodeArena<T> {
     }
 }
 
-#[cfg(any(test, feature = "testing"))]
+#[cfg(test)]
 /// Construct an opaque identifier for tests that do not own a live core.
 pub fn testing_node_id() -> NodeId {
     let mut arena = NodeArena::new();

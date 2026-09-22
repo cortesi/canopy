@@ -14,50 +14,42 @@ impl ChangeOutcome {
     }
 }
 
-/// Work invalidated by a mutation.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Frame work invalidated by a mutation.
+///
+/// Levels are ordered: each level includes the work of every level below it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Invalidation {
-    /// Recompute layout, paint, cursor and observations.
-    Layout,
-    /// Repaint and publish the visible state.
-    Paint,
-    /// Republish semantic observations.
+    /// Republish the frame snapshot.
     Semantics,
+    /// Repaint the frame, then republish the snapshot.
+    Paint,
+    /// Recompute layout, then repaint and republish the snapshot.
+    Layout,
 }
 
-/// Pending work accumulated independently of adapter scheduling.
+/// The highest invalidation level recorded since the last frame.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct ChangeSet {
-    /// Geometry must be recomputed.
-    pub layout: bool,
-    /// Visible cells must be rebuilt.
-    pub paint: bool,
-    /// Cursor state must be refreshed.
-    pub cursor: bool,
-    /// Observations must be published.
-    pub observation: bool,
-}
+pub struct ChangeSet(Option<Invalidation>);
 
 impl ChangeSet {
-    /// Record work, including the dependencies of the requested invalidation.
+    /// Record work; a lower level never replaces a higher one.
     pub fn invalidate(&mut self, invalidation: Invalidation) {
-        match invalidation {
-            Invalidation::Layout => {
-                self.layout = true;
-                self.paint = true;
-                self.cursor = true;
-            }
-            Invalidation::Paint => {
-                self.paint = true;
-                self.cursor = true;
-            }
-            Invalidation::Semantics => {}
-        }
-        self.observation = true;
+        self.0 = self.0.max(Some(invalidation));
     }
 
-    /// Whether any work remains to be published.
+    /// Whether geometry must be recomputed before the next hit test or frame.
+    pub fn layout_pending(self) -> bool {
+        self.0 == Some(Invalidation::Layout)
+    }
+
+    /// Whether any frame work remains to be published.
     pub fn is_pending(self) -> bool {
-        self.layout || self.paint || self.cursor || self.observation
+        self.0.is_some()
+    }
+
+    /// Return the recorded level.
+    #[cfg(test)]
+    pub fn level(self) -> Option<Invalidation> {
+        self.0
     }
 }

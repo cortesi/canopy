@@ -1,23 +1,109 @@
-//! Testing-only clock injection for the shared runtime driver.
+//! Testing-only `Canopy` construction, script control, and driver access.
 
-use std::sync::Arc;
+use std::{
+    path::{Path as FsPath, PathBuf},
+    sync::Arc,
+};
+
+use futures::{Stream, StreamExt};
 
 use super::Canopy;
+#[cfg(test)]
+use crate::render::RenderBackend;
 use crate::{
     error::{Error, Result},
     testing::ManualClock,
 };
 
 impl Canopy {
+    /// Construct an unbuilt Canopy instance for low-level tests.
+    pub fn new() -> Self {
+        Self::empty()
+    }
+
+    /// Configure the `@user` persistent script root in a low-level test.
+    pub fn set_user_script_root(&mut self, root: impl Into<PathBuf>) -> Result<()> {
+        self.set_user_script_root_inner(root)
+    }
+
+    /// Configure the `@project` persistent script root in a low-level test.
+    pub fn set_project_script_root(&mut self, root: impl Into<PathBuf>) -> Result<()> {
+        self.set_project_script_root_inner(root)
+    }
+
+    /// Invalidate cached exports from persistent script modules.
+    ///
+    /// Pass a root such as `@user` or `@project` to invalidate one root, or
+    /// `None` to invalidate every root. Returns the new source epoch, or
+    /// `None` when no module source is configured or the named root is
+    /// unknown.
+    pub fn invalidate_script_modules(&mut self, root: Option<&str>) -> Result<Option<u64>> {
+        if self.script.host.is_eval_active() {
+            return Err(Error::ScriptBusy(
+                "cannot reload modules while evaluation is active".into(),
+            ));
+        }
+        let Some(source) = self.script.module_source.as_ref() else {
+            return Ok(None);
+        };
+        let epoch = match root {
+            Some(root) => match source.invalidate(root) {
+                Ok(epoch) => epoch,
+                Err(_) => return Ok(None),
+            },
+            None => source.invalidate_all(),
+        };
+        self.clear_script_callbacks();
+        Ok(Some(epoch))
+    }
+
+    /// Require every startup script root to define a typed global.
+    pub fn require_startup_global(&mut self, name: &str, type_text: &str) -> Result<()> {
+        self.ensure_api_unfinalized("startup global requirement")?;
+        self.script.host.require_startup_global(name, type_text)
+    }
+
+    /// Run startup scripts directly in a low-level test.
+    pub fn run_startup_scripts(&mut self) -> Result<usize> {
+        self.run_startup_scripts_inner()
+    }
+
+    /// Set the maximum number of retained script journal entries.
+    ///
+    /// When the journal exceeds the limit the oldest entries are evicted. A
+    /// limit of zero disables retention entirely.
+    pub fn set_script_journal_limit(&mut self, limit: usize) {
+        self.journal.set_limit(limit);
+    }
+
+    /// Evaluate a Luau config file directly in a low-level test.
+    pub fn run_config(&mut self, path: &FsPath) -> Result<()> {
+        self.run_config_inner(path)
+    }
+
+    /// Remove application bindings and callbacks from the current source epoch.
+    fn clear_script_callbacks(&mut self) {
+        let removed = self.core.input_map.clear_application();
+        self.release_removed_bindings(removed);
+        for hook in self.script.host.drain_on_start_hooks() {
+            self.script.host.release_function(hook);
+        }
+    }
+
+    /// Finalize the script API surface for a low-level test application.
+    pub fn finalize_api(&mut self) -> Result<()> {
+        self.finalize_api_inner()
+    }
+
     /// Install an explicit test clock before the application starts polling.
     ///
     /// Replacing the clock after initialization, publication, or evaluation
     /// begins returns an error, so existing deadlines retain their original
     /// time base.
     pub fn set_clock_for_testing(&mut self, clock: Arc<ManualClock>) -> Result<()> {
-        if self.termbuf.is_some()
+        if self.frame.termbuf.is_some()
             || self.core.nodes.values().any(|node| node.initialized)
-            || self.script_host.is_eval_active()
+            || self.script.host.is_eval_active()
             || self.next_deadline().is_some()
         {
             return Err(Error::InvalidOperation(
@@ -25,6 +111,34 @@ impl Canopy {
             ));
         }
         self.poller.set_clock(clock)
+    }
+
+    /// Render the tree only if a render is pending.
+    #[cfg(test)]
+    pub(crate) fn render_if_pending<R: RenderBackend>(&mut self, be: &mut R) -> Result<bool> {
+        if !self.core.changes.is_pending() {
+            return Ok(false);
+        }
+        self.render(be)?;
+        Ok(true)
+    }
+
+    /// Bring layout up to date without painting, as frame preparation does
+    /// before it paints. Benchmarks use this to time layout alone.
+    pub fn layout_for_testing(&mut self) -> Result<()> {
+        self.core.invalidate(crate::Invalidation::Layout);
+        self.settle_layout()
+    }
+
+    /// Take the driver's event notifications so a test can step only when work
+    /// wakes it.
+    ///
+    /// The test owns subsequent event delivery. Synchronous evaluation is
+    /// unavailable while this receiver is outside the app.
+    pub fn take_event_receiver(&mut self) -> Option<impl Stream<Item = ()> + use<>> {
+        self.event_rx
+            .take()
+            .map(|events| events.map(|_notification| ()))
     }
 }
 

@@ -10,7 +10,7 @@ use canopy::{
         AttrSet, Color, GradientSpec, GradientStop, Paint, StyleBuilder, StyleRules,
         default as palette,
     },
-    terminal::{RunOptions, runloop_with_options},
+    terminal::{RunOptions, runloop},
 };
 use canopy_widgets::{KeyHint, Root, StatusBar, Text};
 
@@ -183,7 +183,7 @@ pub fn run_demo_with_options<T: Widget + 'static>(
             Ok(())
         })
         .build()?;
-    runloop_with_options(canopy, options)
+    runloop(canopy, options)
 }
 
 /// Wrap a demo app in the shared footer bar every launcher demo carries.

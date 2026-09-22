@@ -286,8 +286,6 @@ end)
 
 #[cfg(test)]
 mod tests {
-    use canopy::testing::dummyctx::DummyContext;
-
     use super::*;
 
     #[test]
@@ -315,7 +313,9 @@ mod tests {
                     false,
                     FontEffects::default(),
                 );
-                let error = demo.on_mount(&mut DummyContext::default()).unwrap_err();
+                let error = canopy::Canopy::new()
+                    .with_root_context(|ctx| demo.on_mount(ctx))
+                    .unwrap_err();
                 assert!(
                     error
                         .to_string()

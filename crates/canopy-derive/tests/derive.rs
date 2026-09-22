@@ -5,18 +5,29 @@ mod tests {
     use std::{any::Any, marker::PhantomData, result};
 
     use canopy::{
-        self, Widget,
+        self, Canopy, Context, ViewContext, Widget,
         commands::{
             ArgValue, CommandArgs, CommandDispatchKind, CommandError, CommandNode,
             CommandParamKind, CommandRequirement, CommandReturnSpec, CommandStatus, ListRowContext,
         },
         error::{Error, Result},
         event::{Event, mouse::MouseEvent},
-        testing::dummyctx::DummyContext,
     };
     use canopy_derive::derive_commands;
     use pretty_assertions::assert_eq;
     use serde::de::DeserializeOwned;
+
+    /// Run `f` against the root context of an empty application.
+    fn with_ctx<R>(f: impl FnOnce(&mut dyn Context) -> R) -> R {
+        Canopy::new()
+            .with_root_context(|ctx| Ok(f(ctx)))
+            .expect("root context is available")
+    }
+
+    /// Run `f` against the root view of an empty application.
+    fn with_view<R>(f: impl FnOnce(&dyn ViewContext) -> R) -> R {
+        Canopy::new().with_root_view(f)
+    }
 
     #[derive(serde::Serialize, serde::Deserialize, canopy_derive::CommandArg)]
     struct TreeArgument {
@@ -181,7 +192,6 @@ mod tests {
     #[test]
     fn generated_bindings_preserve_parameter_names_and_order() {
         let mut target = Collision;
-        let mut ctx = DummyContext::default();
         let spec = Collision::cmd_bindings();
         let names = ["target", "values", "normalized", "__canopy_param_0"];
         let values = ["a", "b", "c", "d"].map(|s| ArgValue::String(s.into()));
@@ -192,7 +202,7 @@ mod tests {
         ] {
             inv.args = args;
             assert_eq!(
-                (spec.invoke)(Some(&mut target), &mut ctx, &inv).unwrap(),
+                with_ctx(|ctx| (spec.invoke)(Some(&mut target), ctx, &inv)).unwrap(),
                 ArgValue::String("a/b/c/d".into()),
             );
         }
@@ -205,12 +215,11 @@ mod tests {
     #[test]
     fn explicit_result_dispatch_preserves_errors_and_values() {
         let mut target = Collision;
-        let mut ctx = DummyContext::default();
         let spec = Collision::cmd_opaque();
         for fail in [false, true] {
             let mut inv = spec.call_with(()).invocation();
             inv.args = CommandArgs::Positional(vec![ArgValue::Bool(fail)]);
-            let result = (spec.invoke)(Some(&mut target), &mut ctx, &inv);
+            let result = with_ctx(|ctx| (spec.invoke)(Some(&mut target), ctx, &inv));
             if fail {
                 assert!(matches!(result, Err(CommandError::Exec(_))));
             } else {
@@ -220,7 +229,7 @@ mod tests {
         let spec = Collision::cmd_explicit();
         let inv = spec.call_with(()).invocation();
         assert_eq!(
-            (spec.invoke)(Some(&mut target), &mut ctx, &inv).unwrap(),
+            with_ctx(|ctx| (spec.invoke)(Some(&mut target), ctx, &inv)).unwrap(),
             ArgValue::String("value".into())
         );
     }
@@ -270,12 +279,8 @@ mod tests {
             Collision::call_bindings("a".into(), "b".into(), "c".into(), "d".into()).invocation();
         let mut target = Collision;
         assert_eq!(
-            (Collision::cmd_bindings().invoke)(
-                Some(&mut target),
-                &mut DummyContext::default(),
-                &call,
-            )
-            .unwrap(),
+            with_ctx(|ctx| (Collision::cmd_bindings().invoke)(Some(&mut target), ctx, &call))
+                .unwrap(),
             ArgValue::String("a/b/c/d".into())
         );
     }
@@ -283,15 +288,17 @@ mod tests {
     #[test]
     fn status_shim_checks_target_and_reads_current_eligibility() -> Result<()> {
         let status = Eligible::cmd_update().status.expect("eligibility hook");
-        let ctx = DummyContext::default();
         let mut target = Eligible { enabled: false };
         assert_eq!(
-            status(&target, &ctx)?,
+            with_view(|ctx| status(&target, ctx))?,
             CommandStatus::Disabled("no selection".into())
         );
         target.enabled = true;
-        assert_eq!(status(&target, &ctx)?, CommandStatus::Enabled);
-        assert!(status(&Collision, &ctx).is_err());
+        assert_eq!(
+            with_view(|ctx| status(&target, ctx))?,
+            CommandStatus::Enabled
+        );
+        assert!(with_view(|ctx| status(&Collision, ctx)).is_err());
         assert!(Foo::cmd_a().status.is_none());
         Ok(())
     }
@@ -440,9 +447,9 @@ mod tests {
     #[test]
     fn invoke_dispatches() {
         let mut f = Foo::default();
-        let mut ctx = DummyContext::default();
         let inv = Foo::cmd_a().call_with(()).invocation();
-        let out = (Foo::cmd_a().invoke)(Some(&mut f as &mut dyn Any), &mut ctx, &inv).unwrap();
+        let out =
+            with_ctx(|ctx| (Foo::cmd_a().invoke)(Some(&mut f as &mut dyn Any), ctx, &inv)).unwrap();
 
         assert_eq!(out, ArgValue::Null);
         assert!(f.a_triggered);
@@ -451,10 +458,11 @@ mod tests {
     #[test]
     fn missing_args_error() {
         let mut f = Foo::default();
-        let mut ctx = DummyContext::default();
         let inv = Foo::cmd_naked_isize().call_with(()).invocation();
-        let err = (Foo::cmd_naked_isize().invoke)(Some(&mut f as &mut dyn Any), &mut ctx, &inv)
-            .unwrap_err();
+        let err = with_ctx(|ctx| {
+            (Foo::cmd_naked_isize().invoke)(Some(&mut f as &mut dyn Any), ctx, &inv)
+        })
+        .unwrap_err();
 
         assert!(matches!(err, CommandError::ArityMismatch { .. }));
         assert!(f.naked_isize.is_none());
@@ -484,10 +492,11 @@ mod tests {
     #[test]
     fn ignored_result_wraps_errors() {
         let mut f = Foo::default();
-        let mut ctx = DummyContext::default();
         let inv = Foo::cmd_ignored_result().call_with(()).invocation();
-        let err = (Foo::cmd_ignored_result().invoke)(Some(&mut f as &mut dyn Any), &mut ctx, &inv)
-            .unwrap_err();
+        let err = with_ctx(|ctx| {
+            (Foo::cmd_ignored_result().invoke)(Some(&mut f as &mut dyn Any), ctx, &inv)
+        })
+        .unwrap_err();
 
         assert!(matches!(err, CommandError::Exec(_)));
         assert!(f.ignored_result_triggered);

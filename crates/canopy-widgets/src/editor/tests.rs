@@ -15,7 +15,7 @@ use canopy::{
     geom::{Point, PointI32, Size},
     layout::{Edges, Layout},
     style::{AttrSet, Color, Paint, PartialStyle, Style, StyleManager},
-    testing::{dummyctx::DummyContext, harness::Harness},
+    testing::harness::Harness,
 };
 
 use super::{
@@ -203,24 +203,24 @@ const CAPTURE_KEYS: &[&str] = &[
 
 /// Assert that `key_outcome` agrees with `on_event` after `setup` keys run.
 fn assert_capture_matches(mode: EditMode, read_only: bool, setup: &[&str]) {
+    let mut app = Canopy::new();
     for spec in CAPTURE_KEYS {
         let config = EditorConfig::new()
             .with_mode(mode)
             .with_read_only(read_only);
         let mut editor = Editor::with_config("alpha\nbeta", config);
-        let mut ctx = DummyContext::default();
-        for prefix in setup {
-            let prefix = key::Key::parse_spec(prefix).expect("valid key spec");
-            editor
-                .on_event(&Event::Key(prefix), &mut ctx)
-                .expect("setup event");
-        }
         let probe = key::Key::parse_spec(spec).expect("valid key spec");
-        let predicted = editor.key_outcome(probe, &ctx);
-        let handled = editor
-            .on_event(&Event::Key(probe), &mut ctx)
-            .expect("probe event")
-            == EventOutcome::Handle;
+        let (predicted, outcome) = app
+            .with_root_context(|ctx| {
+                for prefix in setup {
+                    let prefix = key::Key::parse_spec(prefix).expect("valid key spec");
+                    editor.on_event(&Event::Key(prefix), ctx)?;
+                }
+                let predicted = editor.key_outcome(probe, ctx);
+                Ok((predicted, editor.on_event(&Event::Key(probe), ctx)?))
+            })
+            .expect("editor events");
+        let handled = outcome == EventOutcome::Handle;
         assert_eq!(
             predicted,
             Some(if handled {

@@ -168,7 +168,7 @@ proptest! {
         canopy
             .finalize_api()
             .map_err(|error| TestCaseError::fail(error.to_string()))?;
-        let host = canopy.script_host.clone();
+        let host = canopy.script.host.clone();
         let mut model = ClosureModel::new();
         for (index, operation) in operations.iter().enumerate() {
             trace_result(
@@ -189,7 +189,7 @@ fn reentrant_canopy_guard_restores_nested_stack() -> Result<()> {
     {
         let _outer_guard = ReentrantCanopyGuard::push(&mut outer);
         with_reentrant_canopy(|canopy| {
-            canopy.script_context_stack.push(canopy.root_id());
+            canopy.script.context_stack.push(canopy.root_id());
             Ok(())
         })
         .expect("outer guard installed")?;
@@ -197,21 +197,21 @@ fn reentrant_canopy_guard_restores_nested_stack() -> Result<()> {
         {
             let _inner_guard = ReentrantCanopyGuard::push(&mut inner);
             with_reentrant_canopy(|canopy| {
-                canopy.script_context_stack.push(canopy.root_id());
+                canopy.script.context_stack.push(canopy.root_id());
                 Ok(())
             })
             .expect("inner guard installed")?;
         }
 
         with_reentrant_canopy(|canopy| {
-            canopy.script_context_stack.push(canopy.root_id());
+            canopy.script.context_stack.push(canopy.root_id());
             Ok(())
         })
         .expect("outer guard restored")?;
     }
 
-    assert_eq!(outer.script_context_stack.len(), 2);
-    assert_eq!(inner.script_context_stack.len(), 1);
+    assert_eq!(outer.script.context_stack.len(), 2);
+    assert_eq!(inner.script.context_stack.len(), 1);
     assert!(with_reentrant_canopy(|_| Ok(())).is_none());
     Ok(())
 }
@@ -424,7 +424,7 @@ fn execute_with_many_waits_survives_tokio_coop_budget() -> Result<()> {
         .block_on(async {
             run_ttree(|c, _, _| {
                 c.finalize_api()?;
-                let host = c.script_host.clone();
+                let host = c.script.host.clone();
                 let script = host.compile(
                     "for _ = 1, 300 do canopy.wait_for(function() return true end, 50) end return 42",
                 )?;
@@ -441,8 +441,8 @@ fn execute_with_many_waits_survives_tokio_coop_budget() -> Result<()> {
 fn tprint_output_lands_in_script_logs() -> Result<()> {
     run_ttree(|c, _, _| {
         c.finalize_api()?;
-        let scr = c.script_host.compile(r#"print("plain print", 42)"#)?;
-        let host = c.script_host.clone();
+        let scr = c.script.host.compile(r#"print("plain print", 42)"#)?;
+        let host = c.script.host.clone();
         host.execute(c, c.core.root_id(), scr, None)?;
         let logs = host.take_logs();
         assert!(
@@ -457,7 +457,7 @@ fn tprint_output_lands_in_script_logs() -> Result<()> {
 fn print_quota_and_sequential_diagnostics_are_per_invocation() -> Result<()> {
     run_ttree(|c, _, _| {
         c.finalize_api()?;
-        let host = c.script_host.clone();
+        let host = c.script.host.clone();
         let noisy = host.compile("for i = 1, 5000 do print(i) end")?;
         host.execute(c, c.core.root_id(), noisy, None)?;
         let logs = host.take_logs();
@@ -478,7 +478,7 @@ fn print_quota_and_sequential_diagnostics_are_per_invocation() -> Result<()> {
 fn node_handle_marshal_hook_returns_external_token_record() -> Result<()> {
     run_ttree(|c, _, tree| {
         c.finalize_api()?;
-        let host = c.script_host.clone();
+        let host = c.script.host.clone();
         let mut runtime_cell = host.runtime.borrow_mut();
         let runtime = runtime_cell.as_mut().expect("finalized runtime");
         let mut marshaled = None;
@@ -502,10 +502,10 @@ fn node_handle_marshal_hook_returns_external_token_record() -> Result<()> {
 fn retained_node_handle_is_rejected_after_removal() -> Result<()> {
     run_ttree(|c, _, tree| {
         c.finalize_api()?;
-        let host = c.script_host.clone();
+        let host = c.script.host.clone();
         c.core.remove_subtree(tree.a)?;
         let anchor = c.core.root_id();
-        c.script_context_stack.push(anchor);
+        c.script.context_stack.push(anchor);
         let mut runtime_cell = host.runtime.borrow_mut();
         let runtime = runtime_cell.as_mut().expect("finalized runtime");
         runtime
@@ -522,7 +522,7 @@ fn retained_node_handle_is_rejected_after_removal() -> Result<()> {
                 Ok(())
             })
             .map_err(|error| error::Error::script(error.to_string()))?;
-        assert_eq!(c.script_context_stack.pop(), Some(anchor));
+        assert_eq!(c.script.context_stack.pop(), Some(anchor));
         Ok(())
     })
 }
@@ -531,7 +531,7 @@ fn retained_node_handle_is_rejected_after_removal() -> Result<()> {
 fn binding_replacement_releases_old_and_failed_callbacks() -> Result<()> {
     run_ttree(|c, _, _| {
         c.finalize_api()?;
-        let host = c.script_host.clone();
+        let host = c.script.host.clone();
         let install = host.compile(
             r#"canopy.bind("a", { path = "", description = "First binding" }, function() local value = true end)"#,
         )?;
@@ -562,9 +562,10 @@ fn binding_replacement_releases_old_and_failed_callbacks() -> Result<()> {
 #[test]
 fn script_identifier_exhaustion_is_reported() -> Result<()> {
     run_ttree(|c, _, _| {
-        c.script_host.state.borrow_mut().scripts.next_script_id = u64::MAX;
+        c.script.host.state.borrow_mut().scripts.next_script_id = u64::MAX;
         let error = c
-            .script_host
+            .script
+            .host
             .compile("return true")
             .expect_err("script identifier exhaustion should fail");
         assert!(matches!(error, error::Error::InvalidOperation(_)));
@@ -600,11 +601,12 @@ fn tscript_bindings_carry_declaration_sites() -> Result<()> {
     run_ttree(|c, _, _| {
         c.finalize_api()?;
         let scr = c
-            .script_host
+            .script
+            .host
             .compile("canopy.bind(\"z\", { description = \"Test binding\" }, function() end)")?;
-        let host = c.script_host.clone();
+        let host = c.script.host.clone();
         host.execute(c, c.core.root_id(), scr, None)?;
-        let check = c.script_host.compile(
+        let check = c.script.host.compile(
             r#"
             for _, binding in canopy.bindings() do
                 if binding.input == "z" then
@@ -629,8 +631,8 @@ fn tscript_bindings_carry_declaration_sites() -> Result<()> {
 fn texecute() -> Result<()> {
     run_ttree(|c, _, tree| {
         c.finalize_api()?;
-        let scr = c.script_host.compile(r#"bb_la.c_leaf()"#)?;
-        let host = c.script_host.clone();
+        let scr = c.script.host.compile(r#"bb_la.c_leaf()"#)?;
+        let host = c.script.host.clone();
         host.execute(c, tree.b_a, scr, None)?;
         assert_eq!(get_state().path, ["bb_la.c_leaf()"]);
         Ok(())
@@ -642,8 +644,8 @@ fn texecute() -> Result<()> {
 fn truntime_error_returns_script_error() -> Result<()> {
     run_ttree(|c, _, tree| {
         c.finalize_api()?;
-        let scr = c.script_host.compile(r#"canopy.assert(false, "boom")"#)?;
-        let host = c.script_host.clone();
+        let scr = c.script.host.compile(r#"canopy.assert(false, "boom")"#)?;
+        let host = c.script.host.clone();
         let err = host.execute(c, tree.b_a, scr, None);
         assert!(matches!(
             err,
@@ -660,8 +662,8 @@ fn truntime_error_returns_script_error() -> Result<()> {
 fn script_context_stack_pops_after_runtime_error() -> Result<()> {
     run_ttree(|c, _, tree| {
         c.finalize_api()?;
-        let scr = c.script_host.compile(r#"error("boom")"#)?;
-        let host = c.script_host.clone();
+        let scr = c.script.host.compile(r#"error("boom")"#)?;
+        let host = c.script.host.clone();
         let err = host.execute(c, tree.a, scr, None);
         assert!(matches!(
             err,
@@ -670,7 +672,7 @@ fn script_context_stack_pops_after_runtime_error() -> Result<()> {
                 ..
             })
         ));
-        assert!(c.script_context_stack.is_empty());
+        assert!(c.script.context_stack.is_empty());
         Ok(())
     })
 }
@@ -680,7 +682,8 @@ fn tcheck_script_reports_type_errors() -> Result<()> {
     run_ttree(|c, _, _| {
         c.finalize_api()?;
         let result = c
-            .script_host
+            .script
+            .host
             .check_script("tests/type-error.luau", "local value: string = 1")?;
         assert!(!result.is_ok());
         assert!(result.has_errors());
@@ -704,7 +707,7 @@ fn tcheck_script_reports_type_errors() -> Result<()> {
 fn tcompile_rejects_type_errors_when_finalized() -> Result<()> {
     run_ttree(|c, _, _| {
         c.finalize_api()?;
-        let err = c.script_host.compile("local value: string = 1");
+        let err = c.script.host.compile("local value: string = 1");
         assert!(matches!(err, Err(error::Error::Parse(_))));
         Ok(())
     })

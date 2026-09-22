@@ -110,7 +110,7 @@ fn headless_input_failure_releases_parked_eval_and_preserves_mutation() -> Resul
         .expect_err("queued input fails while evaluation waits");
     assert!(error.to_string().contains("input failed after mutation"));
     assert_eq!(mutations.load(Ordering::Relaxed), 1);
-    assert!(!canopy.script_host.is_eval_active());
+    assert!(!canopy.script.host.is_eval_active());
     let entries: Vec<_> = canopy
         .script_journal()
         .iter()
@@ -166,7 +166,7 @@ fn cancellable_headless_waits_and_reuse_work_in_supported_contexts() -> Result<(
                 }),
                 Err(Error::ScriptCancelled)
             ));
-            assert!(!canopy.script_host.is_eval_active());
+            assert!(!canopy.script.host.is_eval_active());
             assert!(canopy.event_rx.is_some());
             assert!(
                 canopy
@@ -228,7 +228,7 @@ fn synchronous_headless_rejects_current_thread_tasks_without_consuming_driver() 
             Ok::<_, Error>(())
         })?;
     assert_eq!(canopy.eval_script("return 7")?, ArgValue::Int(7));
-    assert!(canopy.startup_scripts[0].ran);
+    assert!(canopy.script.startup_scripts[0].ran);
     Ok(())
 }
 
@@ -244,7 +244,7 @@ fn dropping_live_ticket_cancels_before_admission_and_while_parked() -> Result<()
         })?;
         if admitted {
             canopy.turn(Work::Wake)?;
-            assert!(canopy.script_host.is_eval_active());
+            assert!(canopy.script.host.is_eval_active());
             // Drain the initial VM notification so the dropped ticket must
             // supply its own wake.
             for _ in 0..10 {
@@ -267,7 +267,7 @@ fn dropping_live_ticket_cancels_before_admission_and_while_parked() -> Result<()
             );
         }
         canopy.turn(Work::Wake)?;
-        assert!(!canopy.script_host.is_eval_active());
+        assert!(!canopy.script.host.is_eval_active());
         assert_eq!(
             canopy
                 .script_journal()

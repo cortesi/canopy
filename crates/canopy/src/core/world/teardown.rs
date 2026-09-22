@@ -52,26 +52,38 @@ impl Core {
         })
     }
 
+    /// Return the owner of a live node's work for the requested lifetime.
+    ///
+    /// Attachment-bound work on a detached node has no owner and returns
+    /// `None`.
+    pub(crate) fn work_stamp(
+        &self,
+        node: NodeId,
+        lifetime: crate::WorkLifetime,
+    ) -> Result<Option<WorkStamp>> {
+        let entry = self.nodes.get(node).ok_or(Error::NodeNotFound(node))?;
+        let attachment = match (lifetime, entry.attachment_generation) {
+            (crate::WorkLifetime::Node, _) => None,
+            (crate::WorkLifetime::Attachment, Some(generation)) => Some(generation),
+            (crate::WorkLifetime::Attachment, None) => return Ok(None),
+        };
+        Ok(Some(WorkStamp {
+            node,
+            incarnation: entry.incarnation,
+            attachment,
+        }))
+    }
+
     /// Capture a wake handle for the requested lifetime of a live node.
     pub(crate) fn wake_handle(
         &self,
         node: NodeId,
         lifetime: crate::WorkLifetime,
     ) -> Result<crate::NodeWakeHandle> {
-        let entry = self.nodes.get(node).ok_or(Error::NodeNotFound(node))?;
-        let attachment = match lifetime {
-            crate::WorkLifetime::Node => None,
-            crate::WorkLifetime::Attachment => Some(
-                entry
-                    .attachment_generation
-                    .ok_or(Error::NodeDetached(node))?,
-            ),
-        };
-        self.wake_registry.handle(WorkStamp {
-            node,
-            incarnation: entry.incarnation,
-            attachment,
-        })
+        let stamp = self
+            .work_stamp(node, lifetime)?
+            .ok_or(Error::NodeDetached(node))?;
+        self.wake_registry.handle(stamp)
     }
     /// Start a dispatch boundary and return its queue checkpoint.
     pub(crate) fn begin_dispatch(&mut self) -> usize {

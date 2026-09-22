@@ -137,7 +137,7 @@ impl CanopyBuilder {
         canopy.ensure_api_unfinalized("builder registration phase")?;
         // Builder root declarations are authoritative, including disabled
         // defaults.
-        canopy.script_module_roots = ScriptModuleRoots::default();
+        canopy.script.module_roots = ScriptModuleRoots::default();
         if let Some((path, ScriptTrust::TrustedLocal)) = self.user_root {
             canopy.set_user_script_root_inner(path)?;
         }
@@ -171,7 +171,7 @@ impl Canopy {
         let baseline = self.begin_script_journal();
         let source = Source::text(ModuleId::new(name.as_bytes().to_vec()), text);
         let result = (|| {
-            let host = self.script_host.clone();
+            let host = self.script.host.clone();
             let script = host.compile_source(&source)?;
             host.execute(self, self.root_id(), script, None).map(|_| ())
         })();
@@ -206,14 +206,14 @@ mod tests {
         let assemble_second = Rc::clone(&phases);
         let mut canopy = CanopyBuilder::new()
             .assemble(move |canopy| {
-                assert!(canopy.script_host.is_finalized());
+                assert!(canopy.script.host.is_finalized());
                 assert_eq!(canopy.input_mode(), "last");
                 assert!(canopy.snapshot().is_none());
                 assemble_first.borrow_mut().push("assemble first");
                 Ok(())
             })
             .configure(move |canopy| {
-                assert!(!canopy.script_host.is_finalized());
+                assert!(!canopy.script.host.is_finalized());
                 configure_first.borrow_mut().push("configure first");
                 canopy.register_startup_script(
                     "deferred",
@@ -223,7 +223,7 @@ mod tests {
             .bindings("first", "canopy.set_mode(\"first\")")
             .config(config)
             .configure(move |canopy| {
-                assert!(!canopy.script_host.is_finalized());
+                assert!(!canopy.script.host.is_finalized());
                 configure_second.borrow_mut().push("configure second");
                 Ok(())
             })
@@ -335,7 +335,7 @@ mod tests {
                     builder.project_script_root(directory.path().to_owned(), ScriptTrust::Disabled);
             }
             let mut canopy = builder.build()?;
-            assert!(canopy.script_module_source.is_none());
+            assert!(canopy.script.module_source.is_none());
             canopy.set_root_size(Size::new(10, 3))?;
             canopy.turn(Work::Prepare)?;
             assert!(

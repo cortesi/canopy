@@ -146,15 +146,15 @@ struct SegmentAnchor<'a> {
 impl<'a> SegmentAnchor<'a> {
     /// Push the admitted task origin until this segment releases its borrow.
     fn enter(canopy: &'a mut Canopy, anchor: NodeId) -> Self {
-        let depth = canopy.script_context_stack.len();
-        canopy.script_context_stack.push(anchor);
+        let depth = canopy.script.context_stack.len();
+        canopy.script.context_stack.push(anchor);
         Self { canopy, depth }
     }
 }
 
 impl Drop for SegmentAnchor<'_> {
     fn drop(&mut self) {
-        self.canopy.script_context_stack.truncate(self.depth);
+        self.canopy.script.context_stack.truncate(self.depth);
     }
 }
 
@@ -407,7 +407,7 @@ mod tests {
     fn parked_script_releases_borrows_and_isolates_callback_diagnostics() -> Result<()> {
         run_ttree(|canopy, _, tree| {
             canopy.finalize_api()?;
-            let host = canopy.script_host.clone();
+            let host = canopy.script.host.clone();
             let script = host.compile(r#"
                 canopy.bind("x", {description = "Independent callback", phase = "before_widget"}, function()
                     canopy.log("binding output")
@@ -421,7 +421,7 @@ mod tests {
             let mut gas = SCRIPT_GAS_LIMIT;
             assert!(drive_ready(&host, canopy, &mut invocation, &mut gas).is_pending());
             assert!(gas < SCRIPT_GAS_LIMIT);
-            assert!(canopy.script_context_stack.is_empty());
+            assert!(canopy.script.context_stack.is_empty());
             assert!(host.runtime.try_borrow_mut().is_ok());
             assert_eq!(host.logs(), vec!["ambient output"]);
             assert_eq!(invocation.logs, vec!["root output"]);
@@ -484,7 +484,7 @@ mod tests {
     fn detached_print_quota_and_result_survive_multiple_segments() -> Result<()> {
         run_ttree(|canopy, _, tree| {
             canopy.finalize_api()?;
-            let host = canopy.script_host.clone();
+            let host = canopy.script.host.clone();
             let script = host.compile(
                 r#"
                 for i = 1, 4100 do print("before") end
@@ -518,7 +518,7 @@ mod tests {
     fn resumed_script_rejects_replaced_anchor_before_returning() -> Result<()> {
         run_ttree(|canopy, _, tree| {
             canopy.finalize_api()?;
-            let host = canopy.script_host.clone();
+            let host = canopy.script.host.clone();
             let script = host.compile("canopy.wait_for(function() return false end); return 42")?;
             let mut invocation = host.start_invocation(tree.root, script)?;
             let waker = Waker::from(Arc::new(TestWake(AtomicBool::new(true))));
@@ -548,7 +548,7 @@ mod tests {
             ));
             assert!(invocation.handle.is_none());
             assert!(!host.is_eval_active());
-            assert!(canopy.script_context_stack.is_empty());
+            assert!(canopy.script.context_stack.is_empty());
             Ok(())
         })
     }
@@ -557,7 +557,7 @@ mod tests {
     fn detached_vm_timeout_reports_the_original_budget() -> Result<()> {
         run_ttree(|canopy, _, tree| {
             canopy.finalize_api()?;
-            let host = canopy.script_host.clone();
+            let host = canopy.script.host.clone();
             let script = host.compile("while true do end")?;
             let mut invocation = host.start_invocation(tree.root, script)?;
             invocation.set_reporting_timeout(Some(Duration::from_millis(125)));
@@ -583,7 +583,7 @@ mod tests {
     fn detached_segments_share_a_total_gas_budget() -> Result<()> {
         run_ttree(|canopy, _, tree| {
             canopy.finalize_api()?;
-            let host = canopy.script_host.clone();
+            let host = canopy.script.host.clone();
             let script = host.compile(
                 r#"
                 for i = 1, 10000 do
@@ -602,7 +602,7 @@ mod tests {
                 "{error}"
             );
             assert!(invocation.handle.is_none());
-            assert!(canopy.script_context_stack.is_empty());
+            assert!(canopy.script.context_stack.is_empty());
             Ok(())
         })
     }

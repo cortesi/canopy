@@ -98,8 +98,6 @@ pub struct Core {
     pub(crate) input_map: InputMap,
     /// Command scope stack for injection.
     command_scope: Vec<CommandScopeFrame>,
-    /// Pending diagnostic dump request.
-    pub(crate) pending_diagnostic_dump: Option<NodeId>,
 }
 
 /// Journal for one outermost tree edit and all nested edits it performs.
@@ -160,8 +158,6 @@ struct TreeStateSnapshot {
     mouse_capture: Option<NodeId>,
     /// Focus recovery candidates.
     focus_hint: Option<FocusRecoveryHint>,
-    /// Pending diagnostic target.
-    pending_diagnostic_dump: Option<NodeId>,
 }
 
 /// Widget operation whose failures should carry node context.
@@ -228,7 +224,6 @@ impl Core {
             commands: CommandSet::default(),
             input_map: InputMap::new(),
             command_scope: Vec::new(),
-            pending_diagnostic_dump: None,
         }
     }
 

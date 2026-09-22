@@ -71,7 +71,7 @@ pub use canopy::{
     EvalTicket, FrameId, Loader, RoutePhase, RouteTraceEntry, ScriptJournalEntry, ScriptOrigin,
     ScriptTrust, TurnOutcome, Work,
 };
-pub use change::{ChangeOutcome, ChangeSet, Invalidation};
+pub use change::ChangeOutcome;
 pub use children::{ChildBuilder, ChildConfig, KeyedChildren};
 pub use context::{
     ChildSlot, Context, ContextExt, FocusDirection, FocusScope, RevealAlign, ViewContext,

@@ -515,11 +515,10 @@ impl TermBuf {
     }
 
     /// Diff this terminal buffer against a previous state, emitting changes
-    /// to the provided render backend.
+    /// to the provided render backend. The caller flushes the backend.
     pub fn diff<R: RenderBackend>(&self, prev: &Self, backend: &mut R) -> Result<()> {
         self.validate_canonical()?;
         prev.validate_canonical()?;
-        let mut wrote = false;
         if self.size != prev.size {
             return self.render(backend);
         }
@@ -560,7 +559,6 @@ impl TermBuf {
                     let start = width.saturating_sub(gap);
                     render_line_range(backend, current_row, y, start, gap, &mut text)?;
                 }
-                wrote = true;
                 continue;
             }
 
@@ -589,21 +587,17 @@ impl TermBuf {
                 }
 
                 render_line_range(backend, current_row, y, start_x, end_x - start_x, &mut text)?;
-                wrote = true;
                 x = end_x;
             }
-        }
-        if wrote {
-            backend.flush()?;
         }
         Ok(())
     }
 
     /// Render this terminal buffer in full using the provided backend,
-    /// batching runs of text with the same style.
+    /// batching runs of text with the same style. The caller flushes the
+    /// backend.
     pub fn render<R: RenderBackend>(&self, backend: &mut R) -> Result<()> {
         self.validate_canonical()?;
-        let mut wrote = false;
         let width = self.size.w as usize;
         let mut text = String::new();
         for y in 0..self.size.h {
@@ -611,10 +605,6 @@ impl TermBuf {
             let row_end = row_start + width;
             let row = &self.cells[row_start..row_end];
             render_line_range(backend, row, y, 0, width, &mut text)?;
-            wrote = true;
-        }
-        if wrote {
-            backend.flush()?;
         }
         Ok(())
     }
@@ -803,7 +793,7 @@ fn render_shifted_rect<R: RenderBackend>(
         let row = &buf.cells[row_start..row_start + width];
         render_line_range(backend, row, y, 0, width, &mut text)?;
     }
-    backend.flush()
+    Ok(())
 }
 
 /// Determine whether two buffers match for a given vertical shift within a

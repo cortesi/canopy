@@ -2,7 +2,7 @@
 
 use ruau::vm::Scope;
 
-use super::{AUTOMATION_SERVICE_BUDGET, AdapterEvent, Canopy, RoutePhase, RouteTraceEntry};
+use super::{AUTOMATION_SERVICE_BUDGET, AdapterEvent, Canopy};
 use crate::{
     NodeId, commands,
     core::{
@@ -20,6 +20,59 @@ use crate::{
     script::LuauFunctionId,
     widget::EventOutcome,
 };
+
+/// A phase in key or mouse event routing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RoutePhase {
+    /// The initial routing target was selected.
+    Target,
+    /// A binding matched before the widget received the event.
+    PreEventBinding,
+    /// The event was offered to a widget.
+    WidgetEvent,
+    /// A binding matched after the widget ignored the event.
+    PostEventBinding,
+    /// The runtime applied the input's default action to a node.
+    DefaultAction,
+    /// Routing moved from a node to its parent.
+    Bubble,
+    /// A resolved binding is being executed.
+    BindingExecution,
+    /// A widget or binding handled the event.
+    Handled,
+    /// Routing ended without a handler.
+    Unhandled,
+}
+
+impl RoutePhase {
+    /// Return a stable diagnostic label for this phase.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Target => "target",
+            Self::PreEventBinding => "pre-event-binding",
+            Self::WidgetEvent => "widget-event",
+            Self::PostEventBinding => "post-event-binding",
+            Self::DefaultAction => "default-action",
+            Self::Bubble => "bubble",
+            Self::BindingExecution => "binding-execution",
+            Self::Handled => "handled",
+            Self::Unhandled => "unhandled",
+        }
+    }
+}
+
+/// One entry in the most recent input route trace.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RouteTraceEntry {
+    /// Routing phase.
+    pub phase: RoutePhase,
+    /// Node associated with this route step.
+    pub node: Option<NodeId>,
+    /// Path visible to binding resolution at this route step.
+    pub path: String,
+    /// Human-readable route detail.
+    pub detail: String,
+}
 
 /// Input routed through the shared bubbling pipeline.
 #[derive(Clone, Copy)]
@@ -423,7 +476,7 @@ impl Canopy {
             return Err(Error::KeyDispatchDivergence(Box::new(divergence)));
         }
         if changed {
-            self.render_pending = true;
+            self.core.invalidate(crate::Invalidation::Paint);
         }
         Ok(())
     }
@@ -596,7 +649,7 @@ impl Canopy {
         let (target, path) = self.mouse_route_start(m.location)?;
         let changed = self.route_input(target, path, RoutedInput::Mouse(m), scope, None)?;
         if changed {
-            self.render_pending = true;
+            self.core.invalidate(crate::Invalidation::Paint);
         }
         Ok(())
     }
@@ -612,7 +665,7 @@ impl Canopy {
         let path = self.core.path_of(self.core.root, start);
         let changed = self.route_key(start, path, scope, tk.into(), None)?;
         if changed {
-            self.render_pending = true;
+            self.core.invalidate(crate::Invalidation::Paint);
         }
         Ok(())
     }
@@ -730,11 +783,11 @@ impl Canopy {
             Event::Key(k) => self.key(None, *k),
             Event::Mouse(m) => self.mouse(None, *m),
             Event::Resize(s) => {
-                self.render_pending = true;
+                self.core.invalidate(crate::Invalidation::Paint);
                 self.set_root_size(*s)
             }
             Event::Paste(_) | Event::FocusGained | Event::FocusLost => {
-                self.render_pending = true;
+                self.core.invalidate(crate::Invalidation::Paint);
                 self.dispatch_focus_event(e)
             }
         }
@@ -742,9 +795,8 @@ impl Canopy {
 
     /// Set the size on the root node.
     pub fn set_root_size(&mut self, size: Size) -> Result<()> {
-        self.render_limits.cell_count(size)?;
-        self.root_size = Some(size);
-        self.render_pending = true;
+        self.frame.render_limits.cell_count(size)?;
+        self.frame.root_size = Some(size);
         self.core.invalidate(crate::Invalidation::Layout);
         Ok(())
     }
@@ -757,7 +809,7 @@ impl Canopy {
         binding: LuauFunctionId,
         scope: Option<&Scope<'_>>,
     ) -> Result<()> {
-        let host = self.script_host.clone();
+        let host = self.script.host.clone();
         match scope {
             Some(scope) => host.call_function_in_scope(scope, node_id, binding),
             None => host.call_function(self, node_id, binding),
@@ -781,10 +833,10 @@ impl Canopy {
 
     /// Release the script host's reference to a bound closure.
     pub(crate) fn release_binding_target(&mut self, binding: LuauFunctionId) {
-        if let Some(releases) = &mut self.deferred_binding_releases {
+        if let Some(releases) = &mut self.script.deferred_binding_releases {
             releases.push(binding);
         } else {
-            self.script_host.release_function(binding);
+            self.script.host.release_function(binding);
         }
     }
 }

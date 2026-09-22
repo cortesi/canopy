@@ -65,7 +65,6 @@ struct StructuralSnapshot {
     exit_requested: Option<i32>,
     pending_style: bool,
     commands: Vec<&'static str>,
-    pending_diagnostic_dump: Option<NodeId>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -118,7 +117,6 @@ impl StructuralSnapshot {
             exit_requested: core.exit_requested,
             pending_style: core.pending_style.is_some(),
             commands,
-            pending_diagnostic_dump: core.pending_diagnostic_dump,
         }
     }
 }
@@ -211,7 +209,7 @@ impl Widget for FaultWidget {
             MountAction::FailAfterCoreMutations => {
                 ctx.set_hidden(true)?;
                 ctx.exit(73);
-                ctx.request_diagnostic_dump(ctx.node_id());
+                ctx.set_style(StyleMap::default());
                 Err(Error::Invalid("fault-injected mount failure".into()))
             }
             MountAction::FailFromNestedEdit => {
@@ -1294,7 +1292,6 @@ fn set_children_fault_restores_core_state_and_unwinds_completed_mounts() -> Resu
     let mut core = Core::new();
     core.set_focus(core.root)?;
     core.capture_mouse(core.root)?;
-    core.pending_diagnostic_dump = Some(core.root);
     let log = Arc::new(Mutex::new(Vec::new()));
     let mounted = core.create_detached(
         FaultWidget::new("mounted", Arc::clone(&log))

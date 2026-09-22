@@ -382,9 +382,9 @@ impl Widget for Input {
 #[cfg(test)]
 mod tests {
     use canopy::{
-        EventOutcome, Widget,
+        Canopy, EventOutcome, Widget,
+        error::Result,
         event::{Event, key},
-        testing::dummyctx::DummyContext,
     };
     use unicode_width::UnicodeWidthStr;
 
@@ -401,8 +401,8 @@ mod tests {
                 .with_label("Account")
                 .with_value_exposure(exposure);
             input.set_value("updated");
-            let semantics = input
-                .semantics(&DummyContext::default())
+            let semantics = Canopy::new()
+                .with_root_view(|ctx| input.semantics(ctx))
                 .expect("input semantics");
             assert_eq!(semantics.role.as_deref(), Some("input"));
             assert_eq!(semantics.label.as_deref(), Some("Account"));
@@ -412,8 +412,8 @@ mod tests {
             );
         }
         assert_eq!(
-            Input::new("private")
-                .semantics(&DummyContext::default())
+            Canopy::new()
+                .with_root_view(|ctx| Input::new("private").semantics(ctx))
                 .expect("default semantics")
                 .value,
             None
@@ -467,7 +467,7 @@ mod tests {
     }
 
     #[test]
-    fn key_outcome_matches_event_handling_for_every_spec() {
+    fn key_outcome_matches_event_handling_for_every_spec() -> Result<()> {
         let specs = [
             "a",
             "Z",
@@ -486,12 +486,14 @@ mod tests {
             "tab",
             "shift-a",
         ];
+        let mut app = Canopy::new();
         for spec in specs {
             let mut input = Input::new("");
-            let mut ctx = DummyContext::default();
             let key = key::Key::parse_spec(spec).expect("valid key spec");
-            let predicted = input.key_outcome(key, &ctx);
-            let actual = input.on_event(&Event::Key(key), &mut ctx).expect("event");
+            let (predicted, actual) = app.with_root_context(|ctx| {
+                let predicted = input.key_outcome(key, ctx);
+                Ok((predicted, input.on_event(&Event::Key(key), ctx)?))
+            })?;
             let expected = Some(if actual == EventOutcome::Handle {
                 EventOutcome::Handle
             } else {
@@ -502,58 +504,53 @@ mod tests {
                 "prediction must match handling for {spec}"
             );
         }
+        Ok(())
     }
 
     #[test]
-    fn the_clear_action_resets_the_value() {
+    fn the_clear_action_resets_the_value() -> Result<()> {
         let mut input = Input::new("typed text");
-        let mut ctx = DummyContext::default();
-        assert!(input.accepts_action(TEXT_CLEAR_ACTION, &ctx));
-        assert!(!input.accepts_action("canopy.text.other", &ctx));
-        assert_eq!(
-            input
-                .on_action(TEXT_CLEAR_ACTION, &mut ctx)
-                .expect("action"),
-            EventOutcome::Handle
-        );
-        assert_eq!(input.value(), "");
-
-        // An unknown action is ignored and changes nothing.
-        input.set_value("kept");
-        assert_eq!(
-            input
-                .on_action("canopy.text.other", &mut ctx)
-                .expect("action"),
-            EventOutcome::Ignore
-        );
-        assert_eq!(input.value(), "kept");
-    }
-
-    #[test]
-    fn input_ignores_ctrl_and_alt_chords() {
-        let mut input = Input::new("");
-        let mut ctx = DummyContext::default();
-        for mods in [key::Ctrl, key::Alt] {
-            let event = Event::Key(key::Key {
-                key: key::KeyCode::Char('a'),
-                mods,
-            });
+        Canopy::new().with_root_context(|ctx| {
+            assert!(input.accepts_action(TEXT_CLEAR_ACTION, ctx));
+            assert!(!input.accepts_action("canopy.text.other", ctx));
             assert_eq!(
-                input.on_event(&event, &mut ctx).unwrap(),
-                EventOutcome::Ignore
+                input.on_action(TEXT_CLEAR_ACTION, ctx)?,
+                EventOutcome::Handle
             );
             assert_eq!(input.value(), "");
-        }
 
-        let event = Event::Key(key::Key {
-            key: key::KeyCode::Char('a'),
-            mods: key::Empty,
-        });
-        assert_eq!(
-            input.on_event(&event, &mut ctx).unwrap(),
-            EventOutcome::Handle
-        );
-        assert_eq!(input.value(), "a");
+            // An unknown action is ignored and changes nothing.
+            input.set_value("kept");
+            assert_eq!(
+                input.on_action("canopy.text.other", ctx)?,
+                EventOutcome::Ignore
+            );
+            assert_eq!(input.value(), "kept");
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn input_ignores_ctrl_and_alt_chords() -> Result<()> {
+        let mut input = Input::new("");
+        Canopy::new().with_root_context(|ctx| {
+            for mods in [key::Ctrl, key::Alt] {
+                let event = Event::Key(key::Key {
+                    key: key::KeyCode::Char('a'),
+                    mods,
+                });
+                assert_eq!(input.on_event(&event, ctx)?, EventOutcome::Ignore);
+                assert_eq!(input.value(), "");
+            }
+
+            let event = Event::Key(key::Key {
+                key: key::KeyCode::Char('a'),
+                mods: key::Empty,
+            });
+            assert_eq!(input.on_event(&event, ctx)?, EventOutcome::Handle);
+            assert_eq!(input.value(), "a");
+            Ok(())
+        })
     }
 
     #[test]

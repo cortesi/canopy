@@ -6,8 +6,7 @@ use super::{Canopy, FrameId};
 use crate::{
     NodeId,
     core::{
-        context::CoreViewContext, snapshot, termbuf::TermBuf, view::View, wake::WorkStamp,
-        world::WidgetOperation,
+        context::CoreViewContext, snapshot, termbuf::TermBuf, view::View, world::WidgetOperation,
     },
     cursor,
     error::{Error, Result},
@@ -28,36 +27,16 @@ struct RenderTraversal<'a> {
 }
 
 impl Canopy {
-    /// Render the tree only if a render is pending.
-    #[cfg(test)]
-    pub(crate) fn render_if_pending<R: RenderBackend>(&mut self, be: &mut R) -> Result<bool> {
-        if !self.render_pending && !self.core.changes.is_pending() {
-            return Ok(false);
-        }
-        self.render(be)?;
-        Ok(true)
-    }
-
     /// Poll one node and schedule its next callback.
     pub(crate) fn poll_node(&mut self, node_id: NodeId) -> Result<()> {
-        let entry = self
+        let lifetime = self
             .core
             .nodes
             .get(node_id)
-            .ok_or(Error::NodeNotFound(node_id))?;
-        let attachment = match entry.poll_lifetime {
-            crate::WorkLifetime::Node => None,
-            crate::WorkLifetime::Attachment => {
-                let Some(generation) = entry.attachment_generation else {
-                    return Ok(());
-                };
-                Some(generation)
-            }
-        };
-        let stamp = WorkStamp {
-            node: node_id,
-            incarnation: entry.incarnation,
-            attachment,
+            .ok_or(Error::NodeNotFound(node_id))?
+            .poll_lifetime;
+        let Some(stamp) = self.core.work_stamp(node_id, lifetime)? else {
+            return Ok(());
         };
         // An explicit wake can arrive before the existing timer. Consume that
         // timer too, so the callback's return value decides all future polling.
@@ -218,7 +197,8 @@ impl Canopy {
             .get(&self.style, "")
             .resolve_solid()
             .expect("default style resolves to solid colors");
-        let mut next = TermBuf::new_with_limits(root_size, ' ', def_style, self.render_limits)?;
+        let mut next =
+            TermBuf::new_with_limits(root_size, ' ', def_style, self.frame.render_limits)?;
 
         let screen_clip = Rect::new(0, 0, root_size.w, root_size.h);
         let mut effect_stack: Vec<Effect> = Vec::new();
@@ -268,10 +248,10 @@ impl Canopy {
     /// Bring geometry up to date without painting, so the input routed next
     /// hit-tests the current tree.
     pub(super) fn settle_layout(&mut self) -> Result<()> {
-        let Some(root_size) = self.root_size else {
+        let Some(root_size) = self.frame.root_size else {
             return Ok(());
         };
-        if !self.core.changes.layout {
+        if !self.core.changes.layout_pending() {
             return Ok(());
         }
         self.pre_render()?;
@@ -284,14 +264,13 @@ impl Canopy {
             self.run_startup_scripts_inner()?;
         }
         if !force
-            && !self.render_pending
             && !self.core.changes.is_pending()
-            && !self.script_host.has_on_start_hooks()
+            && !self.script.host.has_on_start_hooks()
             && !self.mode_hooks_pending()
         {
             return Ok(false);
         }
-        let Some(root_size) = self.root_size else {
+        let Some(root_size) = self.frame.root_size else {
             return Ok(false);
         };
         if let Some(new_style) = self.core.pending_style.take() {
@@ -306,25 +285,21 @@ impl Canopy {
         }
         let next = self.render_pass(root_size)?;
         let frame_id = FrameId(self.driver.publication.generation() + 1);
-        let observation = snapshot::capture(&self.core, frame_id, &next)?;
-        self.termbuf = Some(next);
-        self.snapshot = Some(Arc::new(observation));
-        self.render_pending = false;
+        let snapshot = snapshot::capture(&self.core, frame_id, &next)?;
+        self.frame.termbuf = Some(next);
+        self.frame.snapshot = Some(Arc::new(snapshot));
         self.core.changes = crate::ChangeSet::default();
         self.driver.publication.publish();
-        if let Some(target) = self.core.pending_diagnostic_dump.take() {
-            eprintln!("{}", self.diagnostic_dump(target));
-        }
         Ok(true)
     }
 
     /// Emit published cells. After a backend failure, repaint the next frame
     /// in full because some output may already have reached the terminal.
     pub(crate) fn emit_frame<R: RenderBackend>(&mut self, be: &mut R) -> Result<()> {
-        let Some(next) = &self.termbuf else {
+        let Some(next) = &self.frame.termbuf else {
             return Ok(());
         };
-        let previous = self.emitted_buf.take();
+        let previous = self.frame.emitted_buf.take();
         be.reset()?;
         if let Some(previous) = previous {
             next.diff(&previous, be)?;
@@ -332,7 +307,7 @@ impl Canopy {
             next.render(be)?;
         }
         be.flush()?;
-        self.emitted_buf = Some(next.clone());
+        self.frame.emitted_buf = Some(next.clone());
         Ok(())
     }
 
