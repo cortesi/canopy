@@ -25,6 +25,8 @@
 /diff_view/context fg=Some(Solid(Rgb { r: 238, g: 238, b: 238 })) bg=None attrs=None
 /diff_view/gap fg=Some(Solid(Rgb { r: 180, g: 180, b: 180 })) bg=None attrs=None
 /diff_view/header fg=Some(Solid(Rgb { r: 138, g: 173, b: 244 })) bg=None attrs=None
+/diff_view/loading fg=Some(Solid(Rgb { r: 128, g: 128, b: 128 })) bg=None attrs=None
+/diff_view/message fg=Some(Solid(Rgb { r: 128, g: 128, b: 128 })) bg=None attrs=None
 /diff_view/missing fg=Some(Solid(Rgb { r: 180, g: 180, b: 180 })) bg=None attrs=None
 /diff_view/removed fg=Some(Solid(Rgb { r: 224, g: 108, b: 117 })) bg=None attrs=None
 /diff_view/separator fg=Some(Solid(Rgb { r: 72, g: 72, b: 72 })) bg=None attrs=None
@@ -105,6 +107,8 @@
 /diff_view/context fg=Some(Solid(Rgb { r: 131, g: 148, b: 150 })) bg=None attrs=None
 /diff_view/gap fg=Some(Solid(Rgb { r: 147, g: 161, b: 161 })) bg=None attrs=None
 /diff_view/header fg=Some(Solid(Rgb { r: 38, g: 139, b: 210 })) bg=None attrs=None
+/diff_view/loading fg=Some(Solid(Rgb { r: 88, g: 110, b: 117 })) bg=None attrs=None
+/diff_view/message fg=Some(Solid(Rgb { r: 88, g: 110, b: 117 })) bg=None attrs=None
 /diff_view/missing fg=Some(Solid(Rgb { r: 147, g: 161, b: 161 })) bg=None attrs=None
 /diff_view/removed fg=Some(Solid(Rgb { r: 220, g: 50, b: 47 })) bg=None attrs=None
 /diff_view/separator fg=Some(Solid(Rgb { r: 88, g: 110, b: 117 })) bg=None attrs=None
@@ -185,6 +189,8 @@
 /diff_view/context fg=Some(Solid(Rgb { r: 101, g: 123, b: 131 })) bg=None attrs=None
 /diff_view/gap fg=Some(Solid(Rgb { r: 88, g: 110, b: 117 })) bg=None attrs=None
 /diff_view/header fg=Some(Solid(Rgb { r: 38, g: 139, b: 210 })) bg=None attrs=None
+/diff_view/loading fg=Some(Solid(Rgb { r: 147, g: 161, b: 161 })) bg=None attrs=None
+/diff_view/message fg=Some(Solid(Rgb { r: 147, g: 161, b: 161 })) bg=None attrs=None
 /diff_view/missing fg=Some(Solid(Rgb { r: 88, g: 110, b: 117 })) bg=None attrs=None
 /diff_view/removed fg=Some(Solid(Rgb { r: 220, g: 50, b: 47 })) bg=None attrs=None
 /diff_view/separator fg=Some(Solid(Rgb { r: 147, g: 161, b: 161 })) bg=None attrs=None
@@ -265,6 +271,8 @@
 /diff_view/context fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=None attrs=None
 /diff_view/gap fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=None attrs=None
 /diff_view/header fg=Some(Solid(Rgb { r: 189, g: 147, b: 249 })) bg=None attrs=None
+/diff_view/loading fg=Some(Solid(Rgb { r: 98, g: 114, b: 164 })) bg=None attrs=None
+/diff_view/message fg=Some(Solid(Rgb { r: 98, g: 114, b: 164 })) bg=None attrs=None
 /diff_view/missing fg=Some(Solid(Rgb { r: 248, g: 248, b: 242 })) bg=None attrs=None
 /diff_view/removed fg=Some(Solid(Rgb { r: 255, g: 85, b: 85 })) bg=None attrs=None
 /diff_view/separator fg=Some(Solid(Rgb { r: 98, g: 114, b: 164 })) bg=None attrs=None
@@ -345,6 +353,8 @@
 /diff_view/context fg=Some(Solid(Rgb { r: 235, g: 219, b: 178 })) bg=None attrs=None
 /diff_view/gap fg=Some(Solid(Rgb { r: 189, g: 174, b: 147 })) bg=None attrs=None
 /diff_view/header fg=Some(Solid(Rgb { r: 131, g: 165, b: 152 })) bg=None attrs=None
+/diff_view/loading fg=Some(Solid(Rgb { r: 146, g: 131, b: 116 })) bg=None attrs=None
+/diff_view/message fg=Some(Solid(Rgb { r: 146, g: 131, b: 116 })) bg=None attrs=None
 /diff_view/missing fg=Some(Solid(Rgb { r: 189, g: 174, b: 147 })) bg=None attrs=None
 /diff_view/removed fg=Some(Solid(Rgb { r: 251, g: 73, b: 52 })) bg=None attrs=None
 /diff_view/separator fg=Some(Solid(Rgb { r: 124, g: 111, b: 100 })) bg=None attrs=None

@@ -98,6 +98,8 @@ impl Palette {
             .fg("/diff_view/gap", p.muted_fg)
             .fg("/diff_view/missing", p.muted_fg)
             .fg("/diff_view/separator", p.frame)
+            .fg("/diff_view/message", p.faint_fg)
+            .fg("/diff_view/loading", p.faint_fg)
             .fg("/blue", p.blue)
             .fg("/red", p.red)
             .fg("/magenta", p.magenta)

@@ -15,7 +15,7 @@ mod tests {
     use crate::{
         BoxGlyphs, Button, Dialog, DiffView, Dropdown, Frame, KeyHint, List, Root, Selector,
         StatusBar, Text,
-        diff::{Mode, Scope},
+        diff::{DiffModel, Mode, Scope},
     };
 
     fn click_at(location: Point) -> mouse::MouseEvent {
@@ -483,6 +483,56 @@ mod tests {
     }
 
     #[test]
+    fn a_diff_view_moves_between_changes_and_shows_a_message() -> Result<()> {
+        let old = (0..20).map(|n| format!("line {n}\n")).collect::<String>();
+        let new = old
+            .replace("line 2\n", "two\n")
+            .replace("line 15\n", "fifteen\n");
+        let view = DiffView::new(DiffModel::from_texts(old, new));
+        let mut harness = Harness::builder(SnapshotRoot::new(view))
+            .register::<DiffView>()
+            .size(30, 5)
+            .build()?;
+        harness.render()?;
+        let scroll_y = |harness: &Harness| {
+            let node = harness.find_nodes("**/diff_view").unwrap()[0];
+            harness
+                .canopy
+                .with_root_view(|ctx| ctx.view_of(node).expect("diff view").scroll.y)
+        };
+        let step = |harness: &mut Harness, next: bool| -> Result<()> {
+            harness.with_root_widget_context(|_: &mut SnapshotRoot<DiffView>, ctx| {
+                ctx.with_unique_descendant::<DiffView, _>(|view, ctx| {
+                    if next {
+                        view.next_change(ctx);
+                    } else {
+                        view.prev_change(ctx);
+                    }
+                    Ok(())
+                })
+            })?;
+            harness.render()
+        };
+        step(&mut harness, true)?;
+        let second = scroll_y(&harness);
+        assert!(
+            second > 2,
+            "the second change is further down, got {second}"
+        );
+        step(&mut harness, false)?;
+        assert_eq!(scroll_y(&harness), 2, "the first change is its removed row");
+        harness.with_root_widget_context(|_: &mut SnapshotRoot<DiffView>, ctx| {
+            ctx.with_unique_descendant::<DiffView, _>(|view, _| {
+                view.set_message("Binary file");
+                Ok(())
+            })
+        })?;
+        harness.render()?;
+        assert!(harness.tbuf().contains_text("Binary file"));
+        Ok(())
+    }
+
+    #[test]
     fn text_renders_its_content() -> Result<()> {
         let root = SnapshotRoot::new(Text::new("Hello"));
         let mut harness = Harness::builder(root).size(10, 3).build()?;
@@ -588,7 +638,10 @@ mod tests {
 
     #[test]
     fn diff_view_renders_unified_whole_file_rows() -> Result<()> {
-        let view = DiffView::new("one\ntwo\nthree\n", "one\nchanged\nthree\n");
+        let view = DiffView::new(DiffModel::from_texts(
+            "one\ntwo\nthree\n",
+            "one\nchanged\nthree\n",
+        ));
         let root = SnapshotRoot::new(view);
         let mut harness = Harness::builder(root).size(20, 4).build()?;
         harness.render()?;
@@ -604,7 +657,8 @@ mod tests {
         let old = lines.concat();
         let mut changed = lines;
         changed[10] = "changed\n".to_string();
-        let view = DiffView::new(old, changed.concat()).with_scope(Scope::Context(1));
+        let view = DiffView::new(DiffModel::from_texts(old, changed.concat()))
+            .with_scope(Scope::Context(1));
         let root = SnapshotRoot::new(view);
         let mut harness = Harness::builder(root).size(25, 7).build()?;
         harness.render()?;
@@ -622,8 +676,11 @@ mod tests {
 
     #[test]
     fn diff_view_pairs_sides_in_side_by_side_layout() -> Result<()> {
-        let view = DiffView::new("one\ntwo\nthree\n", "one\nchanged\nthree\n")
-            .with_strategy(Mode::SideBySide);
+        let view = DiffView::new(DiffModel::from_texts(
+            "one\ntwo\nthree\n",
+            "one\nchanged\nthree\n",
+        ))
+        .with_strategy(Mode::SideBySide);
         let root = SnapshotRoot::new(view);
         let mut harness = Harness::builder(root).size(24, 4).build()?;
         harness.render()?;
@@ -638,7 +695,7 @@ mod tests {
 
     #[test]
     fn diff_view_scrolls_long_lines_horizontally() -> Result<()> {
-        let view = DiffView::new("abcdefghij\n", "abcdefghij\n");
+        let view = DiffView::new(DiffModel::from_texts("abcdefghij\n", "abcdefghij\n"));
         let root = SnapshotRoot::new(view);
         let mut harness = Harness::builder(root).size(8, 1).build()?;
         harness.render()?;
@@ -680,7 +737,7 @@ mod tests {
         let new_prepared = Rc::new(Cell::new(0));
         let old_lines = Rc::new(Cell::new(0));
         let new_lines = Rc::new(Cell::new(0));
-        let view = DiffView::new("one\ntwo\n", "one\nthree\n")
+        let view = DiffView::new(DiffModel::from_texts("one\ntwo\n", "one\nthree\n"))
             .with_old_highlighter(Box::new(Counting {
                 prepared: Rc::clone(&old_prepared),
                 lines: Rc::clone(&old_lines),
@@ -728,7 +785,7 @@ mod tests {
             bg: Paint::solid(Color::Red),
             attrs: AttrSet::default(),
         };
-        let view = DiffView::new("hi\n", "hi\n")
+        let view = DiffView::new(DiffModel::from_texts("hi\n", "hi\n"))
             .with_old_highlighter(Box::new(FirstChar(highlight_style)));
         let root = SnapshotRoot::new(view);
         let mut harness = Harness::builder(root).size(20, 1).build()?;

@@ -16,23 +16,33 @@
 //! - `diff/missing`: the empty half of a one-sided change.
 //! - `diff/separator`: the side-by-side divider.
 
-use std::ops::Range;
+use std::{
+    ops::Range,
+    time::{Duration, Instant},
+};
 
 use canopy::{
-    NodeName, ViewContext, Widget, derive_commands,
+    Context, NodeName, Register, Setup, ViewContext, Widget, derive_commands,
     error::Result,
     geom::{Line, Point, Rect, Size},
-    layout::{CanvasContext, Constraint, MeasureConstraints, Measurement},
+    layout::{CanvasContext, Constraint, MeasureConstraints, Measurement, ScrollOp},
     render::Render,
     style::Style,
     text,
 };
 
 use crate::{
+    Spinner,
     diff::{Diff, DiffRow, Scope},
     highlight::{HighlightSpan, Highlighter},
     run_paint,
 };
+
+/// Tab stop a model built from texts assumes.
+const DEFAULT_TAB_STOP: usize = 4;
+
+/// How long a model may compute before the spinner shows.
+const LOADING_DELAY: Duration = Duration::from_millis(150);
 
 /// How a diff view arranges the two versions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -90,8 +100,9 @@ struct Geometry {
 /// The expensive parts of a diff view, ready to adopt without recomputation.
 ///
 /// A host that computes diffs off the UI thread builds one of these there and
-/// hands it to [`DiffView::from_prepared`], so the UI thread only moves data.
-pub struct PreparedDiff {
+/// hands it to [`DiffView::new`] or [`DiffView::set_model`], so the UI thread
+/// only moves data.
+pub struct DiffModel {
     /// The line diff.
     diff: Diff,
     /// Rows for `scope`, in unified order.
@@ -106,7 +117,7 @@ pub struct PreparedDiff {
     tab_stop: usize,
 }
 
-impl PreparedDiff {
+impl DiffModel {
     /// Compute every part of a view for `diff` at `scope` and `tab_stop`.
     ///
     /// Side-by-side pairing is deferred until a view needs it, because a
@@ -125,6 +136,12 @@ impl PreparedDiff {
             scope,
             tab_stop,
         }
+    }
+
+    /// Compute a whole-file model of `old` and `new` at the default tab stop.
+    #[must_use]
+    pub fn from_texts(old: impl Into<String>, new: impl Into<String>) -> Self {
+        Self::new(Diff::new(old, new), Scope::WholeFile, DEFAULT_TAB_STOP)
     }
 
     /// Return the line diff.
@@ -158,48 +175,123 @@ pub struct DiffView {
     new_highlighter: Option<Box<dyn Highlighter>>,
     /// Whether both highlighters hold the current texts.
     prepared: bool,
+    /// Text shown in place of the diff, if any.
+    message: Option<String>,
+    /// When the view started waiting for a model, while it waits.
+    loading: Option<Instant>,
+    /// Index into the change heads that the last change move reached.
+    change: usize,
 }
 
 #[derive_commands]
 impl DiffView {
-    /// Construct a view of `old` and `new` in unified, whole-file layout.
-    pub fn new(old: impl Into<String>, new: impl Into<String>) -> Self {
-        Self::from_prepared(PreparedDiff::new(Diff::new(old, new), Scope::WholeFile, 4))
-    }
-
-    /// Adopt a diff whose expensive parts are already computed.
+    /// Show `model` in unified layout.
     ///
-    /// The view starts in unified layout; use [`Self::with_strategy`] to
-    /// change that. Highlighters are installed afterwards, as for
-    /// [`Self::new`].
+    /// Use [`Self::with_strategy`] to change the layout, and install
+    /// highlighters afterwards.
     #[must_use]
-    pub fn from_prepared(prepared: PreparedDiff) -> Self {
+    pub fn new(model: DiffModel) -> Self {
         Self {
-            diff: prepared.diff,
+            diff: model.diff,
             strategy: Mode::Unified,
-            scope: prepared.scope,
-            rows: prepared.rows,
+            scope: model.scope,
+            rows: model.rows,
             side_rows: Vec::new(),
-            old_width: prepared.old_width,
-            new_width: prepared.new_width,
-            tab_stop: prepared.tab_stop,
+            old_width: model.old_width,
+            new_width: model.new_width,
+            tab_stop: model.tab_stop,
             old_highlighter: None,
             new_highlighter: None,
             prepared: false,
+            message: None,
+            loading: None,
+            change: 0,
         }
     }
 
-    /// Replace the view with an already computed diff.
-    pub fn set_prepared(&mut self, prepared: PreparedDiff) {
-        self.diff = prepared.diff;
-        self.scope = prepared.scope;
-        self.rows = prepared.rows;
+    /// Show a message in place of any diff, such as before one is chosen.
+    #[must_use]
+    pub fn with_message(mut self, message: impl Into<String>) -> Self {
+        self.message = Some(message.into());
+        self
+    }
+
+    /// Replace the diff with an already computed model, keeping the layout.
+    ///
+    /// This clears any message and loading state, drops the highlighters,
+    /// and returns change movement to the first change.
+    pub fn set_model(&mut self, model: DiffModel) {
+        self.diff = model.diff;
+        self.scope = model.scope;
+        self.rows = model.rows;
         self.side_rows = Vec::new();
-        self.old_width = prepared.old_width;
-        self.new_width = prepared.new_width;
-        self.tab_stop = prepared.tab_stop;
+        self.old_width = model.old_width;
+        self.new_width = model.new_width;
+        self.tab_stop = model.tab_stop;
+        self.old_highlighter = None;
+        self.new_highlighter = None;
         self.ensure_side_rows();
         self.prepared = false;
+        self.message = None;
+        self.loading = None;
+        self.change = 0;
+    }
+
+    /// Replace the highlighters for the old and new sides.
+    pub fn set_highlighters(
+        &mut self,
+        old: Option<Box<dyn Highlighter>>,
+        new: Option<Box<dyn Highlighter>>,
+    ) {
+        self.old_highlighter = old;
+        self.new_highlighter = new;
+        self.prepared = false;
+    }
+
+    /// Show `message` in place of the diff, such as for a binary file.
+    pub fn set_message(&mut self, message: impl Into<String>) {
+        self.set_model(DiffModel::from_texts("", ""));
+        self.message = Some(message.into());
+    }
+
+    /// Note that a model is computing. After a short delay the view shows a
+    /// spinner until [`Self::set_model`] or [`Self::set_message`] arrives.
+    pub fn set_loading(&mut self) {
+        self.loading = Some(Instant::now());
+    }
+
+    /// Return whether the view shows a message rather than a diff.
+    #[must_use]
+    pub fn message(&self) -> Option<&str> {
+        self.message.as_deref()
+    }
+
+    /// Scroll to the next change.
+    #[command]
+    pub fn next_change(&mut self, c: &mut dyn Context) {
+        let heads = change_heads(&self.rows, self.scope);
+        if heads.is_empty() {
+            return;
+        }
+        self.change = (self.change + 1).min(heads.len() - 1);
+        c.scroll(ScrollOp::To(Point {
+            x: 0,
+            y: column(heads[self.change]),
+        }));
+    }
+
+    /// Scroll to the previous change.
+    #[command]
+    pub fn prev_change(&mut self, c: &mut dyn Context) {
+        let heads = change_heads(&self.rows, self.scope);
+        if heads.is_empty() {
+            return;
+        }
+        self.change = self.change.saturating_sub(1).min(heads.len() - 1);
+        c.scroll(ScrollOp::To(Point {
+            x: 0,
+            y: column(heads[self.change]),
+        }));
     }
 
     /// Set the display strategy.
@@ -648,14 +740,43 @@ impl DiffView {
     }
 }
 
+impl Register for DiffView {
+    fn register(setup: &mut Setup) -> Result<()> {
+        setup.add_commands::<Self>()
+    }
+}
+
 impl Widget for DiffView {
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         rndr.push_layer("diff_view");
-        self.prepare_highlighters();
-        match self.strategy {
-            Mode::Unified => self.draw_unified(rndr, ctx),
-            Mode::SideBySide => self.draw_side_by_side(rndr, ctx),
+        let view = ctx.view();
+        let origin = view.content_origin();
+        let width = view.view_rect().w;
+        if let Some(message) = &self.message {
+            rndr.text("message", Line::new(origin.x, origin.y, width), message)?;
+        } else {
+            self.prepare_highlighters();
+            match self.strategy {
+                Mode::Unified => self.draw_unified(rndr, ctx)?,
+                Mode::SideBySide => self.draw_side_by_side(rndr, ctx)?,
+            }
         }
+        // A model that takes a while to compute shows a spinner in the top
+        // right corner, over whatever the view showed before.
+        if let Some(started) = self.loading
+            && started.elapsed() >= LOADING_DELAY
+        {
+            let label = format!("{} diffing", Spinner::LINE.frame(started.elapsed()));
+            let label_width = text::width(&label).min(width);
+            let x = origin.x + width.saturating_sub(label_width);
+            rndr.text("loading", Line::new(x, origin.y, label_width), &label)?;
+        }
+        Ok(())
+    }
+
+    fn poll(&mut self, _ctx: &mut dyn Context) -> Result<Option<Duration>> {
+        // A waiting view repaints to turn its spinner.
+        Ok(self.loading.map(|_| Spinner::LINE.period()))
     }
 
     fn measure(&self, c: MeasureConstraints) -> Measurement {
@@ -687,6 +808,31 @@ impl Widget for DiffView {
 /// Convert a `usize` cell count to the coordinate type.
 fn column(value: usize) -> u32 {
     u32::try_from(value).unwrap_or(u32::MAX)
+}
+
+/// Return the row index of every change head in `rows`.
+///
+/// Context scope opens each block with a header. Whole-file scope has no
+/// headers, so the head of a change is its first removed or added row.
+fn change_heads(rows: &[DiffRow], scope: Scope) -> Vec<usize> {
+    let mut heads = Vec::new();
+    let mut in_change = false;
+    for (index, row) in rows.iter().enumerate() {
+        match (scope, row) {
+            (_, DiffRow::Header { .. }) => {
+                heads.push(index);
+                in_change = true;
+            }
+            (Scope::WholeFile, DiffRow::Removed { .. } | DiffRow::Added { .. }) => {
+                if !in_change {
+                    heads.push(index);
+                }
+                in_change = true;
+            }
+            _ => in_change = false,
+        }
+    }
+    heads
 }
 
 /// Return the number of decimal digits in `value`, at least one.

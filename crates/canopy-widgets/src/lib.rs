@@ -63,6 +63,8 @@ mod scroll;
 pub mod scrollbar;
 /// Selection widget.
 mod selector;
+/// Frames for a busy indicator.
+mod spinner;
 /// Single-line status bar.
 mod status_bar;
 /// Tabbed pages beneath a tab bar.
@@ -96,6 +98,7 @@ pub use picker::{Picker, PickerList};
 pub use root::Root;
 pub use scroll::Scroll;
 pub use selector::Selector;
+pub use spinner::Spinner;
 pub use status_bar::{KeyHint, StatusBar};
 pub use tabs::Tabs;
 pub use text::{CanvasWidth, Text};

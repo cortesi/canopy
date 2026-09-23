@@ -20,6 +20,13 @@ pub mod canopy_widgets {
         /// A line diff of two full texts.
         pub struct Diff {}
 
+        /// The expensive parts of a diff view, ready to adopt without recomputation.
+        ///
+        /// A host that computes diffs off the UI thread builds one of these there and
+        /// hands it to [`DiffView::new`] or [`DiffView::set_model`], so the UI thread
+        /// only moves data.
+        pub struct DiffModel {}
+
         /// One row of a diff.
         ///
         /// Rows are ordered the way a unified diff reads: removed lines precede added
@@ -68,12 +75,6 @@ pub mod canopy_widgets {
             /// Two columns: the old version left, the new version right.
             SideBySide,
         }
-
-        /// The expensive parts of a diff view, ready to adopt without recomputation.
-        ///
-        /// A host that computes diffs off the UI thread builds one of these there and
-        /// hands it to [`DiffView::from_prepared`], so the UI thread only moves data.
-        pub struct PreparedDiff {}
 
         /// How much unchanged text the rows show.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -137,7 +138,11 @@ pub mod canopy_widgets {
             pub fn changed(&self) -> bool {}
         }
 
-        impl PreparedDiff {
+        impl DiffModel {
+            #[must_use]
+            /// Compute a whole-file model of `old` and `new` at the default tab stop.
+            pub fn from_texts(old: impl Into<String>, new: impl Into<String>) -> Self {}
+
             #[must_use]
             /// Compute every part of a view for `diff` at `scope` and `tab_stop`.
             ///
@@ -1030,6 +1035,14 @@ pub mod canopy_widgets {
     where
         T: ItemLabel, {}
 
+    /// A sequence of glyphs that turns while work runs.
+    ///
+    /// A spinner holds no state: a widget that is busy picks the frame for how
+    /// long it has waited, or for a step it counts itself, and repaints on its
+    /// own schedule.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct Spinner {}
+
     /// A single-line status bar for the top or bottom edge of an application.
     ///
     /// The bar is a container. It fills its row with `status_bar`, keeps the
@@ -1369,14 +1382,6 @@ pub mod canopy_widgets {
 
     impl DiffView {
         #[must_use]
-        /// Adopt a diff whose expensive parts are already computed.
-        ///
-        /// The view starts in unified layout; use [`Self::with_strategy`] to
-        /// change that. Highlighters are installed afterwards, as for
-        /// [`Self::new`].
-        pub fn from_prepared(prepared: PreparedDiff) -> Self {}
-
-        #[must_use]
         /// Install a highlighter for the new side.
         pub fn with_new_highlighter(self, highlighter: Box<dyn Highlighter>) -> Self {}
 
@@ -1397,6 +1402,10 @@ pub mod canopy_widgets {
         pub fn rows(&self) -> &[DiffRow] {}
 
         #[must_use]
+        /// Return whether the view shows a message rather than a diff.
+        pub fn message(&self) -> Option<&str> {}
+
+        #[must_use]
         /// Set the amount of unchanged text the rows show.
         pub fn with_scope(self, scope: Scope) -> Self {}
 
@@ -1408,11 +1417,59 @@ pub mod canopy_widgets {
         /// Set the tab stop width in columns.
         pub fn with_tab_stop(self, tab_stop: usize) -> Self {}
 
-        /// Construct a view of `old` and `new` in unified, whole-file layout.
-        pub fn new(old: impl Into<String>, new: impl Into<String>) -> Self {}
+        #[must_use]
+        /// Show `model` in unified layout.
+        ///
+        /// Use [`Self::with_strategy`] to change the layout, and install
+        /// highlighters afterwards.
+        pub fn new(model: DiffModel) -> Self {}
 
-        /// Replace the view with an already computed diff.
-        pub fn set_prepared(&mut self, prepared: PreparedDiff) {}
+        #[must_use]
+        /// Show a message in place of any diff, such as before one is chosen.
+        pub fn with_message(self, message: impl Into<String>) -> Self {}
+
+        /// Note that a model is computing. After a short delay the view shows a
+        /// spinner until [`Self::set_model`] or [`Self::set_message`] arrives.
+        pub fn set_loading(&mut self) {}
+
+        /// Replace the diff with an already computed model, keeping the layout.
+        ///
+        /// This clears any message and loading state, drops the highlighters,
+        /// and returns change movement to the first change.
+        pub fn set_model(&mut self, model: DiffModel) {}
+
+        /// Replace the highlighters for the old and new sides.
+        pub fn set_highlighters(
+            &mut self,
+            old: Option<Box<dyn Highlighter>>,
+            new: Option<Box<dyn Highlighter>>,
+        ) {
+        }
+
+        /// Scroll to the next change.
+        pub fn next_change(&mut self, c: &mut dyn Context) {}
+
+        /// Scroll to the previous change.
+        pub fn prev_change(&mut self, c: &mut dyn Context) {}
+
+        /// Show `message` in place of the diff, such as for a binary file.
+        pub fn set_message(&mut self, message: impl Into<String>) {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_next_change() -> canopy::commands::CommandCall {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_prev_change() -> canopy::commands::CommandCall {}
+
+        /// Return the command spec for this command.
+        pub fn spec_next_change() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return the command spec for this command.
+        pub fn spec_prev_change() -> &'static canopy::commands::CommandSpec {}
+    }
+
+    impl Register for DiffView {
+        fn register(setup: &mut Setup) -> Result<()> {}
     }
 
     impl Widget for DiffView {
@@ -1421,6 +1478,8 @@ pub mod canopy_widgets {
         fn measure(&self, c: MeasureConstraints) -> Measurement {}
 
         fn name(&self) -> NodeName {}
+
+        fn poll(&mut self, _ctx: &mut dyn Context) -> Result<Option<Duration>> {}
 
         fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
     }
@@ -2070,6 +2129,30 @@ pub mod canopy_widgets {
         fn layout(&self) -> Layout {}
 
         fn name(&self) -> NodeName {}
+    }
+
+    impl Spinner {
+        #[must_use]
+        /// Return how long each frame shows, which is how often a busy widget
+        /// repaints.
+        pub fn period(&self) -> Duration {}
+
+        #[must_use]
+        /// Return the frame for `step`, counting from zero.
+        pub fn step(&self, step: usize) -> char {}
+
+        #[must_use]
+        /// Return the frame to show after `elapsed`.
+        pub fn frame(&self, elapsed: Duration) -> char {}
+
+        #[must_use]
+        /// Return whether `glyph` is one of this spinner's frames.
+        pub fn contains(&self, glyph: char) -> bool {}
+
+        /// An ASCII line, for any terminal font.
+        pub const LINE: Self = _;
+        /// Braille dots, for a spinner inline with text.
+        pub const DOTS: Self = _;
     }
 
     impl StatusBar {

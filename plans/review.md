@@ -2350,7 +2350,10 @@ Each stage also updates the docs it touches.
 - [x] C43 widget part: `TerminalConfig::with_on_exit`.
   - The call gets the terminal's node appended; fh's `terminal_exited`
     command reaps that one terminal, and the 250 ms reaping poll is gone.
-- [ ] C46: complete DiffView, add `Spinner`, and rename `DiffModel`.
+- [x] C46: complete DiffView, add `Spinner`, and rename `DiffModel`.
+  - `Spinner` is a stateless frame set (`DOTS`, `LINE`) that a busy widget
+    samples, not a widget. DiffView gains `Register`, `set_highlighters`, and
+    `with_message`; fh's worker payload becomes `DiffContent`.
 - [ ] C48: run the nested-modal spike. Adopt the overlay layer only if its
   invariants hold.
 - [ ] C51: fh adopts C31 to C48 and deletes its workaround code.
