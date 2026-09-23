@@ -698,7 +698,7 @@ mod tests {
         let (mut canopy, mut backend, left, _right) = setup_root_tree()?;
 
         assert_eq!(
-            canopy.with_root_view(|context| context.focused_leaf(context.root_id())),
+            canopy.with_root_view(|context| context.focused_within(context.root_id())),
             Some(left)
         );
 
@@ -707,14 +707,14 @@ mod tests {
             include_str!("../tests/luau/root_focus_dir.luau"),
         )?;
         assert_eq!(
-            canopy.with_root_view(|context| context.focused_leaf(context.root_id())),
+            canopy.with_root_view(|context| context.focused_within(context.root_id())),
             Some(left)
         );
 
         canopy.render(&mut backend)?;
         assert!(
             canopy
-                .with_root_view(|context| context.focused_leaf(context.root_id()))
+                .with_root_view(|context| context.focused_within(context.root_id()))
                 .is_some()
         );
 
@@ -726,7 +726,7 @@ mod tests {
         let (mut canopy, mut backend, left, _right) = setup_root_tree()?;
 
         assert_eq!(
-            canopy.with_root_view(|context| context.focused_leaf(context.root_id())),
+            canopy.with_root_view(|context| context.focused_within(context.root_id())),
             Some(left)
         );
 
@@ -735,14 +735,14 @@ mod tests {
             include_str!("../tests/luau/root_focus_order.luau"),
         )?;
         assert_eq!(
-            canopy.with_root_view(|context| context.focused_leaf(context.root_id())),
+            canopy.with_root_view(|context| context.focused_within(context.root_id())),
             Some(left)
         );
 
         canopy.render(&mut backend)?;
         assert!(
             canopy
-                .with_root_view(|context| context.focused_leaf(context.root_id()))
+                .with_root_view(|context| context.focused_within(context.root_id()))
                 .is_some()
         );
 
@@ -782,7 +782,7 @@ mod tests {
         send_key(&mut canopy, "ctrl-g")?;
         canopy.render(&mut backend)?;
         assert_eq!(
-            canopy.with_root_view(|context| context.focused_leaf(context.root_id())),
+            canopy.with_root_view(|context| context.focused_within(context.root_id())),
             Some(left)
         );
         assert_eq!(canopy.available_bindings(None)?.framework_group, None);
@@ -919,7 +919,7 @@ mod tests {
         send_key(&mut canopy, "ctrl-g")?;
 
         assert_eq!(
-            canopy.with_root_view(|context| context.focused_leaf(context.root_id())),
+            canopy.with_root_view(|context| context.focused_within(context.root_id())),
             Some(right)
         );
         Ok(())
@@ -942,7 +942,7 @@ mod tests {
         assert!(canopy.eval_script("root.show_help()").is_err());
 
         assert_eq!(
-            canopy.with_root_view(|context| context.focused_leaf(context.root_id())),
+            canopy.with_root_view(|context| context.focused_within(context.root_id())),
             Some(left)
         );
         assert_eq!(canopy.available_bindings(None)?.framework_group, None);

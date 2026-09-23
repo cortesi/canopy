@@ -113,7 +113,8 @@ fn list_item(index: usize) -> ListEntry {
 
 /// Return the columns node, once mounted.
 fn columns_id(ctx: &dyn ViewContext) -> Result<NodeId> {
-    ctx.first_in_tree::<Columns>()
+    ctx.descendants::<Columns>(ctx.root_id())
+        .next()
         .map(Into::into)
         .ok_or_else(|| Error::Invalid("columns not initialized".into()))
 }
@@ -163,8 +164,12 @@ impl ListGym {
     where
         F: FnMut(&mut List<ListEntry>, &mut dyn Context) -> Result<R>,
     {
-        let list_id = (c as &dyn ViewContext)
-            .focused_or_first_descendant::<List<ListEntry>>()
+        let lists: Vec<_> = c.descendants::<List<ListEntry>>(c.node_id()).collect();
+        let list_id = lists
+            .iter()
+            .copied()
+            .find(|id| c.is_on_focus_path((*id).into()))
+            .or_else(|| lists.first().copied())
             .ok_or_else(|| Error::Invalid("list not initialized".into()))?;
         c.with_widget_mut(list_id, |list: &mut List<ListEntry>, ctx| f(list, ctx))
     }

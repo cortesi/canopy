@@ -104,8 +104,8 @@ impl Core {
             .collect()
     }
 
-    /// Return the focused node when it is a focusable leaf under `root`.
-    pub fn focused_leaf(&self, root: NodeId) -> Option<NodeId> {
+    /// Return the focused node when it is a focus candidate under `root`.
+    pub fn focused_within(&self, root: NodeId) -> Option<NodeId> {
         let focused = self.focus?;
         (is_focus_candidate(self, focused, true) && self.is_ancestor_or_self(root, focused))
             .then_some(focused)

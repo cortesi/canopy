@@ -1067,7 +1067,7 @@ mod tests {
     fn font_list_scroll(harness: &Harness) -> Point {
         harness.canopy.with_root_view(|ctx| {
             let list = ctx
-                .unique_descendant::<List<FontBlock>>()
+                .unique_descendant::<List<FontBlock>>(ctx.root_id())
                 .expect("list lookup")
                 .expect("font list");
             ctx.view_of(list.into()).expect("font list view").scroll
@@ -1086,7 +1086,7 @@ mod tests {
 
         let frame = harness
             .canopy
-            .with_root_view(|ctx| ctx.unique_descendant::<FocusFrame>())
+            .with_root_view(|ctx| ctx.unique_descendant::<FocusFrame>(ctx.root_id()))
             .expect("frame lookup")
             .expect("focus frame");
         harness.canopy.with_root_context(|ctx| {
@@ -1111,10 +1111,10 @@ mod tests {
         )?;
         let (frame, list) = harness.canopy.with_root_view(|ctx| {
             (
-                ctx.unique_descendant::<FocusFrame>()
+                ctx.unique_descendant::<FocusFrame>(ctx.root_id())
                     .expect("frame lookup")
                     .expect("focus frame"),
-                ctx.unique_descendant::<List<FontBlock>>()
+                ctx.unique_descendant::<List<FontBlock>>(ctx.root_id())
                     .expect("list lookup")
                     .expect("font list"),
             )

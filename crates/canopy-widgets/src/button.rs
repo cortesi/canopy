@@ -453,7 +453,7 @@ mod tests {
     fn the_button(harness: &Harness) -> NodeId {
         harness
             .canopy
-            .with_root_view(|ctx| ctx.unique_descendant::<Button>())
+            .with_root_view(|ctx| ctx.unique_descendant::<Button>(ctx.node_id()))
             .expect("button lookup")
             .expect("button mounted")
             .into()

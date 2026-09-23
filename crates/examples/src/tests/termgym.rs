@@ -21,16 +21,18 @@ fn termgym_harness() -> Result<(Harness, NodeId)> {
 
 /// Return true when a terminal emulator owns focus.
 fn terminal_has_focus(harness: &Harness) -> bool {
-    harness
-        .canopy
-        .with_root_view(|context| context.focused_descendant::<Terminal>().is_some())
+    harness.canopy.with_root_view(|context| {
+        context
+            .descendants::<Terminal>(context.root_id())
+            .any(|id| context.is_on_focus_path(id.into()))
+    })
 }
 
 /// Return the number of terminal emulators in the stack.
 fn terminal_count(harness: &Harness) -> usize {
     harness
         .canopy
-        .with_root_view(|context| context.descendants_of_type::<Terminal>().len())
+        .with_root_view(|context| context.descendants::<Terminal>(context.root_id()).count())
 }
 
 /// Return the current root-relative focus path.

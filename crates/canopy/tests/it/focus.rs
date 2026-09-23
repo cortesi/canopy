@@ -11,7 +11,7 @@ mod tests {
     fn focused_cell(canopy: &Canopy) -> Option<String> {
         canopy.with_root_view(|context| {
             let root = context.root_id();
-            let focused = context.focused_leaf(root)?;
+            let focused = context.focused_within(root)?;
             let mut path = context.path_of(root, focused);
             path.pop().filter(|name| name.starts_with("cell_"))
         })
@@ -209,7 +209,7 @@ mod tests {
         canopy.turn(canopy::Work::Prepare)?;
 
         assert_eq!(
-            canopy.with_root_view(|context| context.focused_leaf(context.root_id())),
+            canopy.with_root_view(|context| context.focused_within(context.root_id())),
             Some(second.into())
         );
         Ok(())

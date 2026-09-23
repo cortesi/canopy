@@ -107,7 +107,7 @@ fn installed_stylegym_keeps_controls_beside_styles() -> Result<()> {
     )?;
     let app = harness
         .canopy
-        .with_root_view(|context| context.unique_descendant::<Stylegym>())?
+        .with_root_view(|context| context.unique_descendant::<Stylegym>(context.root_id()))?
         .expect("stylegym node");
 
     harness.canopy.with_root_view(|context| {
@@ -360,7 +360,7 @@ fn focusing_an_offscreen_control_scrolls_the_widgets_page() -> Result<()> {
 
     harness.with_root_widget_context(|_stylegym: &mut Stylegym, ctx| {
         let selector = ctx
-            .unique_descendant::<Selector<String>>()?
+            .unique_descendant::<Selector<String>>(ctx.node_id())?
             .expect("the widgets page has a selector");
         ctx.set_focus(selector.into()).map(|_| ())
     })?;

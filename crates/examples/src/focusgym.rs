@@ -1,6 +1,6 @@
 use canopy::{
-    CanopyBuilder, Context, ContextExt, FocusDirection, FocusScope, NodeId, Register, Render,
-    Setup, ViewContext, ViewContextExt, Widget, derive_commands,
+    CanopyBuilder, Context, ContextExt, FocusDirection, FocusScope, Register, Render, Setup,
+    ViewContext, ViewContextExt, Widget, derive_commands,
     error::Result,
     geom::Size,
     layout::{Direction, Layout, Sizing},
@@ -230,11 +230,14 @@ impl FocusGym {
     #[command]
     /// Delete the currently focused block.
     fn delete_focused(&self, c: &mut dyn Context) -> Result<()> {
-        let Some(root_block) = (c as &dyn ViewContext).unique_child::<Block>()? else {
+        let Some(root_block) = c
+            .children_of(c.node_id())
+            .into_iter()
+            .find(|node| c.typed_id::<Block>(*node).is_ok())
+        else {
             return Ok(());
         };
-        let root_block = NodeId::from(root_block);
-        let Some(focused) = c.focused_leaf(root_block) else {
+        let Some(focused) = c.focused_within(root_block) else {
             return Ok(());
         };
         if focused == root_block {

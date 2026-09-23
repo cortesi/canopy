@@ -23,10 +23,12 @@ fn with_root_block<R>(
     f: impl FnOnce(&mut dyn Context, NodeId) -> Result<R>,
 ) -> Result<R> {
     harness.with_root_widget_context(|_root: &mut FocusGym, ctx| {
-        let root_block = (ctx as &dyn ViewContext)
-            .unique_child::<Block>()?
+        let root_block = ctx
+            .children_of(ctx.node_id())
+            .into_iter()
+            .find(|node| ctx.typed_id::<Block>(*node).is_ok())
             .ok_or_else(|| Error::NotFound("root block".into()))?;
-        f(ctx, NodeId::from(root_block))
+        f(ctx, root_block)
     })
 }
 

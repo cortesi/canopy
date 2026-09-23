@@ -11,7 +11,8 @@ use tokio::time::sleep_until;
 
 use super::buf::BufTest;
 use crate::{
-    Canopy, CanopyBuilder, Context, ContextExt, NodeId, Register, Setup, ViewContextExt, Work,
+    Canopy, CanopyBuilder, Context, ContextExt, NodeId, Register, Setup, TypedId, ViewContextExt,
+    Work,
     core::{canopy::WorkSelector, termbuf::TermBuf},
     error::{Error, Result},
     event::{Event, key, mouse},
@@ -237,7 +238,14 @@ impl Harness {
         W: Widget + 'static,
     {
         self.canopy.with_root_context(|ctx| {
-            let node = match ctx.all_in_tree::<W>().as_slice() {
+            let root = ctx.root_id();
+            let found: Vec<TypedId<W>> = ctx
+                .typed_id::<W>(root)
+                .ok()
+                .into_iter()
+                .chain(ctx.descendants::<W>(root))
+                .collect();
+            let node = match found.as_slice() {
                 [node] => *node,
                 [] => return Err(Error::NotFound(type_name::<W>().to_string())),
                 _ => return Err(Error::MultipleMatches),

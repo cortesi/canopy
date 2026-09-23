@@ -7,7 +7,7 @@
 
 use canopy::{
     CanopyBuilder, ChildSlot, Context, ContextExt, FocusDirection, NodeId, NodeName, Register,
-    Render, Setup, TypedId, View, ViewContext, Widget, derive_commands,
+    Render, Setup, TypedId, View, ViewContext, ViewContextExt, Widget, derive_commands,
     error::Result,
     geom::{Line, Point, Rect, Size},
     layout::{CanvasContext, Direction, Edges, Layout},
@@ -974,13 +974,12 @@ impl Stylegym {
     /// Apply the selected theme from the dropdown.
     #[command]
     pub(crate) fn apply_theme(&mut self, c: &mut dyn Context) -> Result<()> {
-        let Some((index, builder)) =
-            c.try_with_unique_descendant::<Dropdown<ThemeOption>, _>(|dropdown, _ctx| {
-                Ok((dropdown.selected_index(), dropdown.selected().builder))
-            })?
-        else {
+        let Some(dropdown) = c.unique_descendant::<Dropdown<ThemeOption>>(c.node_id())? else {
             return Ok(());
         };
+        let (index, builder) = c.with_widget(dropdown, |dropdown: &Dropdown<ThemeOption>| {
+            Ok((dropdown.selected_index(), dropdown.selected().builder))
+        })?;
 
         if index != self.current_theme {
             self.current_theme = index;
@@ -992,15 +991,16 @@ impl Stylegym {
     /// Apply the selected effects from the selector to the style pages.
     #[command]
     pub(crate) fn apply_effects(&self, c: &mut dyn Context) -> Result<()> {
-        let selected = c
-            .try_with_unique_descendant::<Selector<EffectOption>, _>(|selector, _ctx| {
+        let selected = match c.unique_descendant::<Selector<EffectOption>>(c.node_id())? {
+            Some(selector) => c.with_widget(selector, |selector: &Selector<EffectOption>| {
                 Ok(selector
                     .selected_items()
                     .into_iter()
                     .map(|option| option.effect.clone())
                     .collect::<Vec<_>>())
-            })?
-            .unwrap_or_default();
+            })?,
+            None => Vec::new(),
+        };
 
         self.with_tabs(c, |_tabs, ctx| {
             ctx.clear_effects(ctx.node_id())?;

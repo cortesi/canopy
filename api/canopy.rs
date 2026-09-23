@@ -3727,13 +3727,6 @@ pub mod canopy {
         /// [`Error::NotFound`] that names `K::KEY`.
         fn get_slot<K: ChildSlot>(&self, parent: impl Into<NodeId>) -> Result<TypedId<K::Widget>> {}
 
-        /// Execute a closure with the unique descendant of type `W` if it exists.
-        fn try_with_unique_descendant<W: 'static + Widget, R>(
-            &mut self,
-            f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
-        ) -> Result<Option<R>> {
-        }
-
         /// Execute a closure with the typed keyed child `K` of `parent`.
         fn with_slot<K: ChildSlot, R>(
             &mut self,
@@ -3796,9 +3789,6 @@ pub mod canopy {
         /// Resolve a semantic key in an explicit live subtree scope.
         fn find_identity(&self, scope: NodeId, key: &str) -> Result<Option<NodeId>>;
 
-        /// Find the first node whose path matches the validated filter.
-        fn find_node_matching(&self, path_filter: &PathFilter) -> Option<NodeId> {}
-
         /// Find all nodes whose paths match the filter, relative to the current
         /// node.
         ///
@@ -3806,17 +3796,12 @@ pub mod canopy {
         /// the parse error.
         fn find_nodes(&self, path_filter: &str) -> Result<Vec<NodeId>> {}
 
-        /// Find all nodes whose paths match the validated filter.
-        fn find_nodes_matching(&self, path_filter: &PathFilter) -> Vec<NodeId> {}
-
-        /// Return focusable leaves in pre-order under the subtree rooted at `root`.
-        fn focusable_leaves(&self, root: NodeId) -> Vec<NodeId>;
-
-        /// Return the focused leaf under the subtree rooted at `root`.
-        fn focused_leaf(&self, root: NodeId) -> Option<NodeId>;
-
         /// Return the currently focused node, including one not yet laid out.
         fn focused_node(&self) -> Option<NodeId>;
+
+        /// Return the focused node when it lies in the subtree rooted at `root`,
+        /// `root` included.
+        fn focused_within(&self, root: NodeId) -> Option<NodeId>;
 
         /// Does the current node hold mouse capture?
         fn has_mouse_capture(&self) -> bool;
@@ -3832,9 +3817,6 @@ pub mod canopy {
 
         /// Layout configuration for a specific node.
         fn layout_of(&self, node: NodeId) -> Option<Layout>;
-
-        /// Locate the deepest visible node at a point within a subtree.
-        fn locate(&self, root: NodeId, point: Point) -> Result<Option<NodeId>>;
 
         /// Whether a modal scope remains open, including pending deferred closes.
         fn modal_is_open(&self, token: InteractionToken) -> bool;
@@ -3886,50 +3868,24 @@ pub mod canopy {
 
     /// Typed helpers shared by read-only and mutable contexts.
     pub trait ViewContextExt: ViewContext {
-        /// Return all widgets of type `W` anywhere in the tree, including the root.
-        fn all_in_tree<W: 'static + Widget>(&self) -> Vec<TypedId<W>> {}
-
-        /// Return all direct children of type `W`.
-        fn children_of_type<W: 'static + Widget>(&self) -> Vec<TypedId<W>> {}
-
-        /// Return all descendants of type `W` (excluding self).
-        fn descendants_of_type<W: 'static + Widget>(&self) -> Vec<TypedId<W>> {}
-
-        /// Find exactly one node matching a path filter.
-        fn find_one(&self, path: &str) -> Result<NodeId> {}
-
-        /// Return the first widget of type `W` anywhere in the tree, including the
-        /// root.
-        fn first_in_tree<W: 'static + Widget>(&self) -> Option<TypedId<W>> {}
-
-        /// Return the first leaf node under `root` using pre-order traversal.
-        ///
-        /// A leaf is a node with no children.
-        fn first_leaf(&self, root: impl Into<NodeId>) -> Option<NodeId> {}
-
-        /// Return the descendant of type `W` that is on the focus path, if any.
-        fn focused_descendant<W: 'static + Widget>(&self) -> Option<TypedId<W>> {}
-
-        /// Return the descendant of type `W` on the focus path, or the first if
-        /// none focused.
-        ///
-        /// This searches only within the current node's subtree. Use the tree-wide
-        /// helpers on `ViewContext` if you need to search from an arbitrary
-        /// root.
-        fn focused_or_first_descendant<W: 'static + Widget>(&self) -> Option<TypedId<W>> {}
-
-        /// Pre-order traversal of the subtree rooted at `root`.
-        fn preorder(&self, root: impl Into<NodeId>) -> impl '_ + Iterator<Item = NodeId> {}
+        /// Iterate the widgets of type `W` below `root` in pre-order. `root`
+        /// itself is not included.
+        fn descendants<W: 'static + Widget>(
+            &self,
+            root: impl Into<NodeId>,
+        ) -> impl '_ + Iterator<Item = TypedId<W>> {
+        }
 
         /// Validate an untyped node ID and return its typed form.
         fn typed_id<W: 'static + Widget>(&self, node: impl Into<NodeId>) -> Result<TypedId<W>> {}
 
-        /// Return the unique child of type `W`, or error if more than one exists.
-        fn unique_child<W: 'static + Widget>(&self) -> Result<Option<TypedId<W>>> {}
-
-        /// Return the unique descendant of type `W`, or error if more than one
-        /// exists.
-        fn unique_descendant<W: 'static + Widget>(&self) -> Result<Option<TypedId<W>>> {}
+        /// Return the unique widget of type `W` below `root`. More than one match
+        /// is an error.
+        fn unique_descendant<W: 'static + Widget>(
+            &self,
+            root: impl Into<NodeId>,
+        ) -> Result<Option<TypedId<W>>> {
+        }
 
         /// Read a runtime-checked widget node.
         ///

@@ -97,7 +97,7 @@ impl CounterItem {
 
     /// Update the box layout based on the current label width.
     fn update_box_layout(&self, ctx: &mut dyn Context) -> Result<()> {
-        let Some(box_id) = (ctx as &dyn ViewContext).unique_descendant::<Border>()? else {
+        let Some(box_id) = ctx.unique_descendant::<Border>(ctx.node_id())? else {
             return Ok(());
         };
 
@@ -119,10 +119,12 @@ impl CounterItem {
     /// Sync the text label to the current value.
     fn sync_label(&self, ctx: &mut dyn Context) -> Result<()> {
         let label = self.label();
-        let _ = ctx.try_with_unique_descendant::<Text, _>(|text, _ctx| {
-            text.set_text(label.clone());
-            Ok(())
-        })?;
+        if let Some(text) = ctx.unique_descendant::<Text>(ctx.node_id())? {
+            ctx.with_widget_mut(text, |text: &mut Text, _ctx| {
+                text.set_text(label);
+                Ok(())
+            })?;
+        }
         self.update_box_layout(ctx)?;
         Ok(())
     }

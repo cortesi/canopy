@@ -168,10 +168,10 @@ impl TermGym {
     /// Return terminal stack children in order.
     fn terminal_ids(&self, c: &mut dyn Context) -> Result<Vec<NodeId>> {
         self.with_stack(c, |_stack, ctx| {
-            Ok((ctx as &dyn ViewContext)
-                .children_of_type::<Terminal>()
+            Ok(ctx
+                .children_of(ctx.node_id())
                 .into_iter()
-                .map(NodeId::from)
+                .filter(|node| ctx.typed_id::<Terminal>(*node).is_ok())
                 .collect())
         })
     }

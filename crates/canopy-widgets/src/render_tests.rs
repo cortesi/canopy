@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Context, ContextExt, NodeName, ViewContext, ViewContextExt, Widget, buf,
+        Context, ContextExt, NodeName, ViewContextExt, Widget, buf,
         commands::{CommandNode, CommandSpec},
         error::Result,
         event::{key, mouse},
@@ -243,7 +243,7 @@ mod tests {
         let scroll_y = |harness: &Harness| {
             harness.canopy.with_root_view(|ctx| {
                 let text = ctx
-                    .unique_descendant::<Text>()
+                    .unique_descendant::<Text>(ctx.node_id())
                     .expect("text lookup")
                     .expect("text node");
                 ctx.view_of(text.into()).expect("text view").scroll.y
@@ -279,9 +279,11 @@ mod tests {
         ))
         .size(20, 3)
         .build()?;
-        let first = harness
-            .canopy
-            .with_root_view(|ctx| ctx.unique_descendant::<crate::Input>().unwrap().unwrap());
+        let first = harness.canopy.with_root_view(|ctx| {
+            ctx.unique_descendant::<crate::Input>(ctx.node_id())
+                .unwrap()
+                .unwrap()
+        });
         let second =
             harness.with_root_widget_context(|_: &mut SnapshotRoot<crate::Input>, ctx| {
                 ctx.add_child(ctx.node_id(), crate::Input::new(""))
@@ -472,8 +474,9 @@ mod tests {
 
         harness.render()?;
         harness.with_root_widget_context(|_root: &mut SnapshotRoot<List<Text>>, ctx| {
-            let view = ctx as &dyn ViewContext;
-            let list_id = view.typed_id::<List<Text>>(view.find_one("**/list")?)?;
+            let list_id = ctx
+                .unique_descendant::<List<Text>>(ctx.node_id())?
+                .expect("snapshot root holds a list");
             ctx.with_widget_mut::<List<Text>, _>(list_id, |list, ctx| {
                 list.append(ctx, Text::new("One"))?;
                 list.append(ctx, Text::new("Two"))?;

@@ -32,7 +32,10 @@ use super::{
     validate_node_handle, values_to_args, with_current_canopy,
 };
 use crate::{
-    FocusDirection, core::inputmap::WidgetActionCatalog, geom::PointI32, keyroute::KeyExpectation,
+    FocusDirection,
+    core::{context::matching_nodes, inputmap::WidgetActionCatalog},
+    geom::PointI32,
+    keyroute::KeyExpectation,
 };
 
 /// The native implementation behind one base API function.
@@ -1264,8 +1267,8 @@ fn host_find_node<'s>(
     host_value(scope, |canopy, _| {
         let filter = PathFilter::normalized(&pattern)?;
         let root_ctx = CoreViewContext::new(&canopy.core, canopy.core.root_id());
-        Ok(root_ctx
-            .find_node_matching(&filter)
+        Ok(matching_nodes(&root_ctx, &filter)
+            .next()
             .map(ArgValue::Node)
             .unwrap_or(ArgValue::Null))
     })
@@ -1281,7 +1284,9 @@ fn host_find_nodes<'s>(
     host_value(scope, |canopy, _| {
         let filter = PathFilter::normalized(&pattern)?;
         let root_ctx = CoreViewContext::new(&canopy.core, canopy.core.root_id());
-        Ok(node_list_to_arg(root_ctx.find_nodes_matching(&filter)))
+        Ok(node_list_to_arg(
+            matching_nodes(&root_ctx, &filter).collect::<Vec<_>>(),
+        ))
     })
 }
 

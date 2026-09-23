@@ -1,5 +1,7 @@
 use canopy::{
-    ContextExt, NodeId, ViewContext, ViewContextExt, error::Result, testing::harness::Harness,
+    ContextExt, FocusScope, NodeId, ViewContextExt,
+    error::{Error, Result},
+    testing::harness::Harness,
 };
 use canopy_widgets::{Columns, List};
 
@@ -34,28 +36,26 @@ fn column_count(harness: &mut Harness) -> Result<usize> {
 
 fn list_count(harness: &mut Harness) -> Result<usize> {
     harness.with_root_widget_context(|_root: &mut ListGym, ctx| {
-        let view = ctx as &dyn ViewContext;
-        Ok(view.all_in_tree::<List<ListEntry>>().len())
+        Ok(ctx.descendants::<List<ListEntry>>(ctx.root_id()).count())
     })
 }
 
 fn focused_list_index(harness: &mut Harness) -> Result<Option<usize>> {
     harness.with_root_widget_context(|_root: &mut ListGym, ctx| {
-        let focused = (ctx as &dyn ViewContext).focused_descendant::<List<ListEntry>>();
-        let lists = (ctx as &dyn ViewContext).descendants_of_type::<List<ListEntry>>();
-        Ok(focused.and_then(|focused_id| {
-            let focused_id = NodeId::from(focused_id);
-            lists.iter().position(|id| NodeId::from(*id) == focused_id)
-        }))
+        Ok(ctx
+            .descendants::<List<ListEntry>>(ctx.node_id())
+            .position(|id| ctx.is_on_focus_path(id.into())))
     })
 }
 
 /// Focus the first entry of the list at `index`.
 fn focus_list(harness: &mut Harness, index: usize) -> Result<()> {
     harness.with_root_widget_context(|_root: &mut ListGym, ctx| {
-        let lists = (ctx as &dyn ViewContext).descendants_of_type::<List<ListEntry>>();
-        let entry = ctx.focusable_leaves(lists[index].into())[0];
-        ctx.set_focus(entry).map(|_| ())
+        let list = ctx
+            .descendants::<List<ListEntry>>(ctx.node_id())
+            .nth(index)
+            .ok_or_else(|| Error::NotFound(format!("list {index}")))?;
+        ctx.focus_first(FocusScope::Node(list.into())).map(|_| ())
     })
 }
 
@@ -149,7 +149,9 @@ fn a_new_column_follows_the_focused_one_and_takes_focus() -> Result<()> {
     focus_list(&mut harness, 0)?;
     let first = harness.with_root_widget_context(|_root: &mut ListGym, ctx| {
         Ok(NodeId::from(
-            (ctx as &dyn ViewContext).descendants_of_type::<List<ListEntry>>()[1],
+            ctx.descendants::<List<ListEntry>>(ctx.node_id())
+                .nth(1)
+                .expect("second list"),
         ))
     })?;
 
@@ -159,7 +161,9 @@ fn a_new_column_follows_the_focused_one_and_takes_focus() -> Result<()> {
     assert_eq!(focused_list_index(&mut harness)?, Some(1));
     let moved = harness.with_root_widget_context(|_root: &mut ListGym, ctx| {
         Ok(NodeId::from(
-            (ctx as &dyn ViewContext).descendants_of_type::<List<ListEntry>>()[2],
+            ctx.descendants::<List<ListEntry>>(ctx.node_id())
+                .nth(2)
+                .expect("third list"),
         ))
     })?;
     assert_eq!(moved, first, "the old second column moves right");

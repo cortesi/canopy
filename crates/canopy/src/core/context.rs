@@ -165,11 +165,9 @@ pub trait ViewContext: sealed::ViewContext {
     /// Is the specified node on the focus path?
     fn is_on_focus_path(&self, node: NodeId) -> bool;
 
-    /// Return the focused leaf under the subtree rooted at `root`.
-    fn focused_leaf(&self, root: NodeId) -> Option<NodeId>;
-
-    /// Return focusable leaves in pre-order under the subtree rooted at `root`.
-    fn focusable_leaves(&self, root: NodeId) -> Vec<NodeId>;
+    /// Return the focused node when it lies in the subtree rooted at `root`,
+    /// `root` included.
+    fn focused_within(&self, root: NodeId) -> Option<NodeId>;
 
     /// Return the parent of a node, or `None` if it is the root or not found.
     fn parent_of(&self, node: NodeId) -> Option<NodeId>;
@@ -187,16 +185,8 @@ pub trait ViewContext: sealed::ViewContext {
     /// Return the path for a node relative to a root.
     fn path_of(&self, root: NodeId, node: NodeId) -> Path;
 
-    /// Locate the deepest visible node at a point within a subtree.
-    fn locate(&self, root: NodeId, point: Point) -> Result<Option<NodeId>>;
-
     /// Return a keyed child relative to a specific parent node.
     fn child_slot_of(&self, parent: NodeId, key: &str) -> Option<NodeId>;
-
-    /// Find the first node whose path matches the validated filter.
-    fn find_node_matching(&self, path_filter: &PathFilter) -> Option<NodeId> {
-        matching_nodes(self, path_filter).next()
-    }
 
     /// Find all nodes whose paths match the filter, relative to the current
     /// node.
@@ -205,12 +195,7 @@ pub trait ViewContext: sealed::ViewContext {
     /// the parse error.
     fn find_nodes(&self, path_filter: &str) -> Result<Vec<NodeId>> {
         let filter = PathFilter::normalized(path_filter)?;
-        Ok(self.find_nodes_matching(&filter))
-    }
-
-    /// Find all nodes whose paths match the validated filter.
-    fn find_nodes_matching(&self, path_filter: &PathFilter) -> Vec<NodeId> {
-        matching_nodes(self, path_filter).collect()
+        Ok(matching_nodes(self, &filter).collect())
     }
 }
 
@@ -231,7 +216,7 @@ fn preorder_from<C: ViewContext + ?Sized>(
 
 /// Walk the current node's subtree, yielding nodes whose path matches the
 /// filter.
-fn matching_nodes<'a, C: ViewContext + ?Sized>(
+pub fn matching_nodes<'a, C: ViewContext + ?Sized>(
     ctx: &'a C,
     path_filter: &'a PathFilter,
 ) -> impl Iterator<Item = NodeId> + 'a {
@@ -330,96 +315,30 @@ pub trait ViewContextExt: ViewContext {
         checked_typed_id(self, node.into())
     }
 
-    /// Pre-order traversal of the subtree rooted at `root`.
-    fn preorder(&self, root: impl Into<NodeId>) -> impl Iterator<Item = NodeId> + '_ {
+    /// Iterate the widgets of type `W` below `root` in pre-order. `root`
+    /// itself is not included.
+    fn descendants<W: Widget + 'static>(
+        &self,
+        root: impl Into<NodeId>,
+    ) -> impl Iterator<Item = TypedId<W>> + '_ {
         preorder_from(self, root.into())
-    }
-
-    /// Return the first widget of type `W` anywhere in the tree, including the
-    /// root.
-    fn first_in_tree<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
-        self.preorder(self.root_id())
-            .find(|id| ViewContext::type_id_of(self, *id) == Some(TypeId::of::<W>()))
-            .map(TypedId::new)
-    }
-
-    /// Return all widgets of type `W` anywhere in the tree, including the root.
-    fn all_in_tree<W: Widget + 'static>(&self) -> Vec<TypedId<W>> {
-        self.preorder(self.root_id())
-            .filter(|id| ViewContext::type_id_of(self, *id) == Some(TypeId::of::<W>()))
-            .map(TypedId::new)
-            .collect()
-    }
-
-    /// Find exactly one node matching a path filter.
-    fn find_one(&self, path: &str) -> Result<NodeId> {
-        let filter = PathFilter::normalized(path)?;
-        let matches = self.find_nodes_matching(&filter);
-        match matches.len() {
-            0 => Err(Error::NotFound(format!("path {}", filter.as_str()))),
-            1 => Ok(matches[0]),
-            _ => Err(Error::MultipleMatches),
-        }
-    }
-
-    /// Return the unique child of type `W`, or error if more than one exists.
-    fn unique_child<W: Widget + 'static>(&self) -> Result<Option<TypedId<W>>> {
-        unique_typed(self, self.children_of(self.node_id()).into_iter())
-    }
-
-    /// Return all direct children of type `W`.
-    fn children_of_type<W: Widget + 'static>(&self) -> Vec<TypedId<W>> {
-        self.children_of(self.node_id())
-            .into_iter()
-            .filter(|id| node_matches_type::<W, _>(self, *id))
-            .map(TypedId::new)
-            .collect()
-    }
-
-    /// Return the unique descendant of type `W`, or error if more than one
-    /// exists.
-    fn unique_descendant<W: Widget + 'static>(&self) -> Result<Option<TypedId<W>>> {
-        unique_typed(self, self.preorder(self.node_id()).skip(1))
-    }
-
-    /// Return all descendants of type `W` (excluding self).
-    fn descendants_of_type<W: Widget + 'static>(&self) -> Vec<TypedId<W>> {
-        self.preorder(self.node_id())
             .skip(1)
             .filter(|id| node_matches_type::<W, _>(self, *id))
             .map(TypedId::new)
-            .collect()
     }
 
-    /// Return the descendant of type `W` that is on the focus path, if any.
-    fn focused_descendant<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
-        self.descendants_of_type::<W>()
-            .into_iter()
-            .find(|id| ViewContext::is_on_focus_path(self, (*id).into()))
-    }
-
-    /// Return the descendant of type `W` on the focus path, or the first if
-    /// none focused.
-    ///
-    /// This searches only within the current node's subtree. Use the tree-wide
-    /// helpers on `ViewContext` if you need to search from an arbitrary
-    /// root.
-    fn focused_or_first_descendant<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
-        let descendants = self.descendants_of_type::<W>();
-        let focused = descendants
-            .iter()
-            .copied()
-            .find(|id| ViewContext::is_on_focus_path(self, (*id).into()));
-        focused.or_else(|| descendants.into_iter().next())
-    }
-
-    /// Return the first leaf node under `root` using pre-order traversal.
-    ///
-    /// A leaf is a node with no children.
-    fn first_leaf(&self, root: impl Into<NodeId>) -> Option<NodeId> {
-        let root = root.into();
-        self.preorder(root)
-            .find(|id| ViewContext::children_of(self, *id).is_empty())
+    /// Return the unique widget of type `W` below `root`. More than one match
+    /// is an error.
+    fn unique_descendant<W: Widget + 'static>(
+        &self,
+        root: impl Into<NodeId>,
+    ) -> Result<Option<TypedId<W>>> {
+        let mut found = self.descendants::<W>(root);
+        let first = found.next();
+        if found.next().is_some() {
+            return Err(Error::MultipleMatches);
+        }
+        Ok(first)
     }
 }
 
@@ -431,21 +350,6 @@ fn node_matches_type<W: Widget + 'static, C: ViewContext + ?Sized>(
     node: NodeId,
 ) -> bool {
     context.type_id_of(node) == Some(TypeId::of::<W>())
-}
-
-/// Convert a node stream into zero or one typed identifier.
-fn unique_typed<W: Widget + 'static, C: ViewContext + ?Sized>(
-    context: &C,
-    ids: impl Iterator<Item = NodeId>,
-) -> Result<Option<TypedId<W>>> {
-    let mut found = None;
-    for id in ids.filter(|id| node_matches_type::<W, _>(context, *id)) {
-        if found.is_some() {
-            return Err(Error::MultipleMatches);
-        }
-        found = Some(TypedId::new(id));
-    }
-    Ok(found)
 }
 
 /// Subtree used by a focus traversal operation.
@@ -812,21 +716,9 @@ pub trait ContextExt: Context + ViewContextExt {
         f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
     ) -> Result<R> {
         let node = self
-            .unique_descendant::<W>()?
+            .unique_descendant::<W>(self.node_id())?
             .ok_or_else(|| Error::NotFound(type_name::<W>().to_string()))?;
         self.with_widget_mut(node, f)
-    }
-
-    /// Execute a closure with the unique descendant of type `W` if it exists.
-    fn try_with_unique_descendant<W: Widget + 'static, R>(
-        &mut self,
-        f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
-    ) -> Result<Option<R>> {
-        let node = self.unique_descendant::<W>()?;
-        let Some(node) = node else {
-            return Ok(None);
-        };
-        self.with_widget_mut(node, f).map(Some)
     }
 }
 
@@ -981,15 +873,11 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
         }
     }
 
-    fn focused_leaf(&self, root: NodeId) -> Option<NodeId> {
+    fn focused_within(&self, root: NodeId) -> Option<NodeId> {
         match self.focus_override {
             Some(focus) => self.core.is_ancestor_or_self(root, focus).then_some(focus),
-            None => self.core.focused_leaf(root),
+            None => self.core.focused_within(root),
         }
-    }
-
-    fn focusable_leaves(&self, root: NodeId) -> Vec<NodeId> {
-        self.core.focusable_leaves(root)
     }
 
     fn parent_of(&self, node: NodeId) -> Option<NodeId> {
@@ -1010,10 +898,6 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
 
     fn path_of(&self, root: NodeId, node: NodeId) -> Path {
         self.core.path_of(root, node)
-    }
-
-    fn locate(&self, root: NodeId, point: Point) -> Result<Option<NodeId>> {
-        self.core.locate_node(root, point)
     }
 
     fn child_slot_of(&self, parent: NodeId, key: &str) -> Option<NodeId> {

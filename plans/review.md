@@ -2215,7 +2215,7 @@ Each stage also updates the docs it touches.
   `compose`, and move `KeyedChildren` into canopy-widgets.
 - [x] C15: delete `Display` and the `set_layout` and `with_layout` families.
   Add `From<Layout> for LayoutOverride`, and fix `columns.rs:780` pinning.
-- [ ] C16: the `descendants::<W>` iterator, removal of the unused lookups, and
+- [x] C16: the `descendants::<W>` iterator, removal of the unused lookups, and
   the `focused_within` rename.
 - [ ] C17: `ScrollOp` with counted lines and pages and a one-line page overlap.
   Replace the five direction matches, and delete fileselect's
