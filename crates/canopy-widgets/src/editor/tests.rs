@@ -8,14 +8,14 @@ use std::{
 };
 
 use canopy::{
-    CanopyBuilder, Context, ContextExt, FocusDirection, FocusScope, NodeName, Register, ScrollAxis,
-    ScrollMark, ScrollOp, Setup, Widget, buf, derive_commands,
+    CanopyBuilder, Context, ContextExt, NodeName, Register, Setup, Widget, buf, derive_commands,
     error::Result,
-    event::{Event, key, mouse},
     geom::{Point, PointI32, Size},
-    layout::{Edges, Layout},
+    input::{Event, key, mouse},
+    layout::{Edges, Layout, ScrollAxis, ScrollMark, ScrollOp},
     style::{AttrSet, Color, Paint, PartialStyle, Style},
     testing::harness::Harness,
+    tree::{FocusDirection, FocusScope},
 };
 
 use super::{

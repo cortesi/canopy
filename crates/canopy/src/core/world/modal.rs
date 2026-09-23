@@ -4,10 +4,11 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::{Core, focus::is_focus_candidate};
 use crate::{
-    FrameworkBindingGroup, Invalidation, NodeId,
+    Invalidation, NodeId,
     error::{Error, Result},
+    input::FrameworkBindingGroup,
     path::Path,
-    style::effects::{self, Effect},
+    style::{effects, effects::Effect},
 };
 
 /// Opaque identity of one modal, unique across applications.
@@ -352,7 +353,7 @@ mod tests {
     use super::*;
     use crate::{
         Context, ViewContext, Widget,
-        event::{Event, key, mouse},
+        input::{Event, key, mouse},
         testing::ttree::{Bb, get_state, reset_state, run_ttree},
         widget::EventOutcome,
     };

@@ -4,10 +4,11 @@ use std::{cell::Cell, rc::Rc, sync::Arc};
 
 use super::{Canopy, CanopyBuilder};
 use crate::{
-    FrameId, Invalidation, ViewContext, Widget, WidgetSemantics,
+    Invalidation, ViewContext, Widget,
     core::snapshot,
     error::{Error, Result},
     geom::{RectI32, Size},
+    runtime::{FrameId, WidgetSemantics},
 };
 
 struct Observed {

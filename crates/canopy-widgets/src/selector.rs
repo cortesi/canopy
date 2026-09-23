@@ -1,11 +1,13 @@
 //! Selector widget for multi-value selection with checkbox-style items.
 
 use canopy::{
-    Context, EventOutcome, NodeName, Render, ViewContext, Widget, WidgetSemantics, derive_commands,
+    Context, EventOutcome, NodeName, ViewContext, Widget, derive_commands,
     error::Result,
-    event::{Event, mouse},
     geom::Size,
+    input::{Event, mouse},
     layout::{MeasureConstraints, Measurement},
+    render::Render,
+    runtime::WidgetSemantics,
     text,
 };
 

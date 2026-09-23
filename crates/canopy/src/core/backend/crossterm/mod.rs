@@ -13,12 +13,14 @@ use tokio::runtime::Builder;
 use self::input::EventSource;
 pub use self::{output::CrosstermRender, session::CrosstermControl};
 use crate::{
-    Canopy, TurnInput,
+    Canopy,
     backend::TerminalSession,
     core::{Core, canopy::TurnSelector, dump::dump},
-    error::{self, Result},
-    event::{Event, key},
+    error,
+    error::Result,
     geom::Size,
+    input::{Event, key},
+    runtime::TurnInput,
 };
 
 /// Host handling of terminal Ctrl+C input.
@@ -164,9 +166,10 @@ mod tests {
 
     use super::*;
     use crate::{
-        CanopyBuilder, EvalRequest,
+        CanopyBuilder,
         backend::BackendControl,
-        event::key::Key,
+        input::key::Key,
+        script::EvalRequest,
         testing::{backend::TestRender, contracts},
     };
 

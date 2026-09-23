@@ -11,17 +11,31 @@ adding behavior.
 ## Public API Surface
 
 Application code imports core types from the crate root and domain types from
-their module; it selects `canopy_widgets` types directly. The root holds the
-facade traits and their handle types: `CanopyBuilder`, `Setup`, `Register`,
-`Canopy`, `Widget`, `Context`, `ViewContext`, `Render`, `NodeName`, `View`, the
-capability context traits, typed node IDs, and the command macros. Value
-libraries live in their modules:
-`canopy::geom`, `canopy::layout`, `canopy::style`, `canopy::event`,
-`canopy::path`, `canopy::commands`, `canopy::script`, `canopy::error`,
-`canopy::help`, `canopy::keyroute`, `canopy::cursor`, `canopy::text`,
-`canopy::render` (backend interfaces), and `canopy::terminal` (the Crossterm
-run loop). The `testing` feature adds `canopy::testing`. Each item has one
+their module; it selects `canopy_widgets` types directly. Each item has one
 canonical location, and there is no prelude.
+
+The root holds the application, the widget, the contexts, and node handles:
+`Canopy`, `CanopyBuilder`, `Setup`, `Register`, `Widget`, `Context`,
+`ContextExt`, `ViewContext`, `ViewContextExt`, `NodeId`, `TypedId`, `NodeName`,
+`EventOutcome`, `ChangeOutcome`, the command derive macros, `slot!`, and
+`rgb!`. Everything else lives in the module that owns its concept:
+
+| Module | Holds |
+| --- | --- |
+| `canopy::input` | Events (`Event`, `key`, `mouse`), `InputSpec`, bindings and their tiers, intents, modals, binding discovery, route analysis, and the route trace |
+| `canopy::tree` | `ChildSlot`, `NodeIdentity`, `FocusDirection`, `FocusScope` |
+| `canopy::layout` | Layout, `View`, scrolling (`ScrollOp`, `ScrollAxis`, `ScrollMark`), and `RevealAlign` |
+| `canopy::render` | `Render`, `RenderBackend`, `NopBackend`, `TermBuf`, `Cell`, `RenderLimits`, and `cursor` |
+| `canopy::runtime` | `TurnInput`, `TurnOutcome`, published frames (`FrameId`, `FrameSnapshot`, `NodeSnapshot`, `WidgetSemantics`), polls and wakes (`PollLifetime`, `NodeWakeHandle`, `wake_channel`), and notices |
+| `canopy::script` | Evaluation (`EvalRequest`, `EvalTicket`, `EvalOutcome`), automation, the script journal, trust, and fixtures |
+| `canopy::commands` | Command metadata, calls, and arguments |
+| `canopy::style` | Style maps, colors, and effects |
+| `canopy::geom`, `canopy::path`, `canopy::text`, `canopy::error` | Geometry, node paths, text width, and errors |
+| `canopy::terminal` | The Crossterm run loop |
+
+The `testing` feature adds `canopy::testing`. A public signature names its
+types by their public path, and a test fails when a capture in `api/` shows a
+private `crate::core::` path.
 
 An application runs in two phases. `CanopyBuilder::configure` passes a `Setup`
 handle, which owns every registration: commands, bindings, intents,

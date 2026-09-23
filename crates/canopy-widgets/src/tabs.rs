@@ -1,12 +1,14 @@
 //! Tabbed pages beneath a one-row tab bar.
 
 use canopy::{
-    Context, ContextExt, EventOutcome, FocusScope, NodeId, NodeName, Render, TypedId, ViewContext,
-    Widget, derive_commands,
+    Context, ContextExt, EventOutcome, NodeId, NodeName, TypedId, ViewContext, Widget,
+    derive_commands,
     error::Result,
-    event::{Event, mouse},
     geom::{Line, Point},
+    input::{Event, mouse},
     layout::{Edges, Layout, LayoutOverride},
+    render::Render,
+    tree::FocusScope,
 };
 use unicode_width::UnicodeWidthStr;
 

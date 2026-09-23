@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::{error::ParseError, event::key, geom::PointI32};
+use crate::{error::ParseError, geom::PointI32, input::key};
 
 /// An abstract specification for a mouse action.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -175,15 +175,15 @@ pub struct MouseEvent {
     /// [`View::viewport_point`], or [`View::content_point`] to find the cell
     /// under the pointer in the space the widget paints.
     ///
-    /// [`View::outer_point`]: crate::View::outer_point
-    /// [`View::viewport_point`]: crate::View::viewport_point
-    /// [`View::content_point`]: crate::View::content_point
+    /// [`View::outer_point`]: crate::layout::View::outer_point
+    /// [`View::viewport_point`]: crate::layout::View::viewport_point
+    /// [`View::content_point`]: crate::layout::View::content_point
     pub location: PointI32,
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{error::Result, event::mouse::*};
+    use crate::{error::Result, input::mouse::*};
 
     fn spec(action: Action, button: Button, modifiers: key::Mods) -> Mouse {
         Mouse {

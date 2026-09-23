@@ -1,12 +1,14 @@
 use std::env;
 
 use canopy::{
-    CanopyBuilder, Context, ContextExt, FocusScope, NodeId, NodeName, Register, Render, Setup,
-    ViewContext, ViewContextExt, Widget, derive_commands,
+    CanopyBuilder, Context, ContextExt, NodeId, NodeName, Register, Setup, ViewContext,
+    ViewContextExt, Widget, derive_commands,
     error::{Error, Result},
     geom::Size,
     layout::{Constraint, Direction, Layout, MeasureConstraints, Measurement},
+    render::Render,
     style::{Attr, AttrSet, StyleMap, default as palette},
+    tree::FocusScope,
 };
 use canopy_widgets::{
     Border, Button, Center, Container, Frame, List, SINGLE, SINGLE_THICK, Selectable, Text,

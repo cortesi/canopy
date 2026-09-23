@@ -1,15 +1,15 @@
 use std::{any::TypeId, cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
+    NodeId, NodeName,
     core::{
-        id::NodeId,
         style::effects::Effect,
         view::View,
         world::scroll::{LocalReveal, NodeReveal},
     },
     geom::{Point, Rect, Size},
     layout::{Layout, LayoutOverride},
-    state::NodeName,
+    runtime::PollLifetime,
     widget::Widget,
 };
 
@@ -35,7 +35,7 @@ pub struct Node {
     /// Current committed attachment generation, absent while detached.
     pub(crate) attachment_generation: Option<u64>,
     /// Poll ownership chosen by the widget at construction.
-    pub(crate) poll_lifetime: crate::PollLifetime,
+    pub(crate) poll_lifetime: PollLifetime,
 
     /// Parent in the arena tree.
     pub(crate) parent: Option<NodeId>,

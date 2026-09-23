@@ -13,10 +13,12 @@ use std::{
 };
 
 use canopy::{
-    Canopy, CanopyBuilder, Context, ContextExt, NodeName, Register, Render, ScriptTrust, Setup,
-    ViewContext, Widget, derive_commands,
+    Canopy, CanopyBuilder, Context, ContextExt, NodeName, Register, Setup, ViewContext, Widget,
+    derive_commands,
     error::Result,
     layout::{Align, Direction, Layout},
+    render::Render,
+    script::ScriptTrust,
     style::{StyleMap, default as palette},
 };
 use canopy_widgets::{KeyHint, Root, StatusBar, Text};

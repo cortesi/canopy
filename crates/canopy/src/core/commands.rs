@@ -11,10 +11,10 @@ use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Map as JsonMap, Number as JsonNumber, Value as JsonValue};
 
 use crate::{
-    Context, ViewContext,
-    core::{Core, NodeId, context::CoreViewContext, world::WidgetOperation},
+    Context, NodeId, ViewContext,
+    core::{Core, context::CoreViewContext, world::WidgetOperation},
     error::{Result as CoreResult, ScriptErrorKind},
-    event::{Event, mouse::MouseEvent},
+    input::{Event, mouse::MouseEvent},
 };
 
 /// Canonical dynamic representation for command arguments and return values.
@@ -1590,7 +1590,7 @@ mod tests {
     use serde::{Serialize, ser};
 
     use super::*;
-    use crate::{Widget, core::id::testing_node_id, error::Error, state::NodeName};
+    use crate::{NodeName, Widget, core::id::testing_node_id, error::Error};
 
     struct StatusOwner;
 

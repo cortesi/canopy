@@ -13,26 +13,26 @@ use futures::{StreamExt, executor::block_on};
 
 use super::*;
 use crate::{
-    Context, FocusDirection, ViewContext,
+    Context, NodeName, ViewContext,
     commands::{CommandNode, CommandSpec, CommandStatus},
-    core::{
-        inputmap::InputSpec,
-        keyroute::{BindingVerdict, KeyExpectation, RouteOutcome, RouteWinner},
-        world::test_support::assert_error_context,
-    },
+    core::{keyroute::BindingVerdict, world::test_support::assert_error_context},
     derive_commands,
     error::{Error, NodeOperationKind, Result, ScriptErrorKind},
-    event::{Event, key, mouse},
     geom::{PointI32, RectI32},
+    input::{
+        BindingActionKind, BindingId, BindingPhase, BindingTier, Event, InputSpec, KeyExpectation,
+        ModalBindings, ModalOptions, RouteOutcome, RouteWinner, key, mouse,
+    },
     layout::{Edges, Layout},
     path::Path,
     render::{NopBackend, Render},
+    runtime::NoticeSource,
     script::LuauFunctionId,
-    state::NodeName,
     testing::{
         backend::TestRender,
         ttree::{Ba, BaLa, BaLb, OutcomeTarget, R, get_state, reset_state, run_ttree},
     },
+    tree::FocusDirection,
     widget::{EventOutcome, Widget},
 };
 
@@ -495,7 +495,7 @@ fn framework_command_bindings_share_route_resolution_and_event_scope() -> Result
         )?;
         c.core
             .input_map
-            .set_modal_bindings(Some(crate::ModalBindings::Framework {
+            .set_modal_bindings(Some(ModalBindings::Framework {
                 group,
                 intents: &[],
             }));
@@ -826,7 +826,7 @@ fn an_early_mouse_binding_respects_modal_admission_and_wheel_fallback() -> Resul
         )?;
         c.core
             .input_map
-            .set_modal_bindings(Some(crate::ModalBindings::Framework {
+            .set_modal_bindings(Some(ModalBindings::Framework {
                 group,
                 intents: &[],
             }));
@@ -1030,7 +1030,7 @@ fn a_widget_handler_failure_is_a_notice_unless_it_is_a_runtime_failure() -> Resu
         .notices()
         .last()
         .expect("the handler failure is a notice");
-    assert_eq!(notice.source, crate::NoticeSource::Widget);
+    assert_eq!(notice.source, NoticeSource::Widget);
     assert_eq!(notice.node, Some(child));
     assert_eq!(notice.message, "handler failed");
     assert_eq!(
@@ -1101,7 +1101,7 @@ fn binding_failures_become_notices_and_still_restore_the_event_scope() -> Result
     assert_eq!(gated_runs(&mut canopy, [root, child]), [0, 1]);
     assert!(canopy.core.current_event().is_none());
     let notice = canopy.notices().last().expect("the failure is a notice");
-    assert_eq!(notice.source, crate::NoticeSource::Binding);
+    assert_eq!(notice.source, NoticeSource::Binding);
     assert_eq!(notice.node, Some(child));
     assert_eq!(notice.kind, ScriptErrorKind::CommandExecution);
     assert_eq!(
@@ -1799,22 +1799,18 @@ fn focused_leaf<W: Widget + 'static>(canopy: &mut Canopy, widget: W) -> Result<N
 }
 
 /// Bind an opaque script callback to one character.
-fn bind_key(canopy: &mut Canopy, key: char) -> Result<crate::BindingId> {
-    bind_key_phase(canopy, key, crate::BindingPhase::AfterWidget)
+fn bind_key(canopy: &mut Canopy, key: char) -> Result<BindingId> {
+    bind_key_phase(canopy, key, BindingPhase::AfterWidget)
 }
 
 /// Bind an opaque script callback with an explicit phase.
-fn bind_key_phase(
-    canopy: &mut Canopy,
-    key: char,
-    phase: crate::BindingPhase,
-) -> Result<crate::BindingId> {
-    use crate::core::inputmap::{BindingAction, BindingOptions};
+fn bind_key_phase(canopy: &mut Canopy, key: char, phase: BindingPhase) -> Result<BindingId> {
+    use crate::input::{BindingAction, BindingOptions};
     let (id, _) = canopy.core.input_map.bind(
         InputSpec::Key(key.into()),
         BindingOptions {
             path: None,
-            tier: crate::BindingTier::Default,
+            tier: BindingTier::Default,
             description: "Test binding".to_string(),
             source: None,
             phase: Some(phase),
@@ -1886,7 +1882,7 @@ fn a_default_prediction_passes_the_key_to_an_after_widget_binding() -> Result<()
     assert_eq!(explanation.steps[0].widget, EventOutcome::Ignore);
     assert_eq!(
         explanation.steps[0].binding.map(|binding| binding.phase),
-        Some(crate::BindingPhase::AfterWidget)
+        Some(BindingPhase::AfterWidget)
     );
     Ok(())
 }
@@ -1928,12 +1924,12 @@ fn send_key_checked_allows_a_widget_to_suppress_an_after_widget_binding() -> Res
 fn send_key_checked_accepts_an_unhandled_route_at_a_modal_boundary() -> Result<()> {
     let mut canopy = app();
     let modal = focused_leaf(&mut canopy, PredictingLeaf)?;
-    canopy.core.open_modal(crate::ModalOptions {
+    canopy.core.open_modal(ModalOptions {
         owner: canopy.root_id(),
         modal,
         initial_focus: modal,
         dim_target: None,
-        bindings: crate::ModalBindings::Application,
+        bindings: ModalBindings::Application,
     })?;
 
     canopy.send_key_checked('u', KeyExpectation::Unhandled)?;
@@ -1948,9 +1944,9 @@ fn send_key_checked_accepts_an_unhandled_route_at_a_modal_boundary() -> Result<(
 }
 
 /// Open a modal over a focused leaf and return the leaf.
-fn modal_leaf(canopy: &mut Canopy, bindings: crate::ModalBindings) -> Result<NodeId> {
+fn modal_leaf(canopy: &mut Canopy, bindings: ModalBindings) -> Result<NodeId> {
     let modal = focused_leaf(canopy, PredictingLeaf)?;
-    canopy.core.open_modal(crate::ModalOptions {
+    canopy.core.open_modal(ModalOptions {
         owner: canopy.root_id(),
         modal,
         initial_focus: modal,
@@ -1977,7 +1973,7 @@ fn bind_prefix_mode(canopy: &mut Canopy) -> Result<()> {
 #[test]
 fn a_transient_mode_under_an_application_modal_takes_the_next_key() -> Result<()> {
     let mut canopy = app();
-    modal_leaf(&mut canopy, crate::ModalBindings::Application)?;
+    modal_leaf(&mut canopy, ModalBindings::Application)?;
     bind_prefix_mode(&mut canopy)?;
 
     // Discovery, analysis, and routing agree that the mode takes the key.
@@ -2017,7 +2013,7 @@ fn a_transient_mode_under_an_application_modal_takes_the_next_key() -> Result<()
     assert!(matches!(
         canopy.explain_key(None, 'z'.into())?.outcome,
         RouteOutcome::Binding(RouteWinner {
-            phase: crate::BindingPhase::AfterWidget,
+            phase: BindingPhase::AfterWidget,
             ..
         })
     ));
@@ -2029,7 +2025,7 @@ fn a_transient_mode_under_an_application_modal_takes_the_next_key() -> Result<()
 #[test]
 fn a_checked_transient_key_under_an_application_modal_matches_its_analysis() -> Result<()> {
     let mut canopy = app();
-    modal_leaf(&mut canopy, crate::ModalBindings::Application)?;
+    modal_leaf(&mut canopy, ModalBindings::Application)?;
     bind_prefix_mode(&mut canopy)?;
     canopy.push_transient_mode("prefix");
     let RouteOutcome::Transient(winner) = canopy.explain_key(None, 'y'.into())?.outcome else {
@@ -2051,7 +2047,7 @@ fn a_framework_modal_suspends_a_transient_mode() -> Result<()> {
     let group = inputmap::FrameworkBindingGroup::new("test.modal");
     modal_leaf(
         &mut canopy,
-        crate::ModalBindings::Framework {
+        ModalBindings::Framework {
             group,
             intents: &[],
         },
@@ -2079,7 +2075,7 @@ fn a_framework_modal_suspends_a_transient_mode() -> Result<()> {
 fn explain_key_reports_before_widget_and_unhandled_outcomes() -> Result<()> {
     let mut canopy = app();
     let leaf = focused_leaf(&mut canopy, PredictingLeaf)?;
-    let id = bind_key_phase(&mut canopy, 'b', crate::BindingPhase::BeforeWidget)?;
+    let id = bind_key_phase(&mut canopy, 'b', BindingPhase::BeforeWidget)?;
 
     let before = canopy.explain_key(Some(leaf), 'b'.into())?;
     assert_eq!(
@@ -2088,8 +2084,8 @@ fn explain_key_reports_before_widget_and_unhandled_outcomes() -> Result<()> {
             binding: id,
             node: leaf,
             path: Path::from("/root/predicting_leaf"),
-            kind: crate::BindingActionKind::Script,
-            phase: crate::BindingPhase::BeforeWidget,
+            kind: BindingActionKind::Script,
+            phase: BindingPhase::BeforeWidget,
         })
     );
 
@@ -2120,8 +2116,8 @@ fn explain_key_matches_the_actual_route() -> Result<()> {
             binding: id,
             node: canopy.root_id(),
             path: Path::from("/root"),
-            kind: crate::BindingActionKind::Script,
-            phase: crate::BindingPhase::AfterWidget,
+            kind: BindingActionKind::Script,
+            phase: BindingPhase::AfterWidget,
         })
     );
 
@@ -2153,7 +2149,7 @@ fn explain_key_reports_transient_binding_and_dismissal() -> Result<()> {
         .input_map
         .bindings()
         .iter()
-        .find(|record| record.tier == crate::BindingTier::Mode("prefix".to_string()))
+        .find(|record| record.tier == BindingTier::Mode("prefix".to_string()))
         .expect("mode binding")
         .id;
 
@@ -2164,8 +2160,8 @@ fn explain_key_reports_transient_binding_and_dismissal() -> Result<()> {
             binding: id,
             node: canopy.root_id(),
             path: Path::from("/root"),
-            kind: crate::BindingActionKind::Script,
-            phase: crate::BindingPhase::AfterWidget,
+            kind: BindingActionKind::Script,
+            phase: BindingPhase::AfterWidget,
         })
     );
     assert!(bound.steps.is_empty());
@@ -2366,8 +2362,8 @@ fn an_intent_dispatches_to_its_accepting_consumer() -> Result<()> {
         matches!(
             explanation.outcome,
             RouteOutcome::Binding(RouteWinner {
-                kind: crate::BindingActionKind::Intent,
-                phase: crate::BindingPhase::BeforeWidget,
+                kind: BindingActionKind::Intent,
+                phase: BindingPhase::BeforeWidget,
                 ..
             })
         ),
@@ -2423,7 +2419,7 @@ fn a_dormant_action_does_not_shadow_the_next_candidate() -> Result<()> {
     assert!(matches!(
         explanation.outcome,
         RouteOutcome::Binding(RouteWinner {
-            phase: crate::BindingPhase::AfterWidget,
+            phase: BindingPhase::AfterWidget,
             ..
         })
     ));
@@ -2494,7 +2490,7 @@ fn a_transient_mode_offers_its_action_before_the_raw_key() -> Result<()> {
         matches!(
             explanation.outcome,
             RouteOutcome::Transient(RouteWinner {
-                kind: crate::BindingActionKind::Intent,
+                kind: BindingActionKind::Intent,
                 ..
             })
         ),

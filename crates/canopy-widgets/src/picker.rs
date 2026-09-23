@@ -16,15 +16,16 @@
 use std::borrow::Cow;
 
 use canopy::{
-    Context, ContextExt, EventOutcome, ModalBindings, ModalOptions, ModalToken, NodeId, NodeName,
-    Register, Render, ScrollOp, Setup, TypedId, ViewContext, Widget, derive_commands,
+    Context, ContextExt, EventOutcome, NodeId, NodeName, Register, Setup, TypedId, ViewContext,
+    Widget, derive_commands,
     error::{Error, Result},
-    event::{Event, key, key::KeyCode},
     geom::{Line, Point, Size},
+    input::{Event, ModalBindings, ModalOptions, ModalToken, key, key::KeyCode},
     layout::{
         CanvasContext, Direction, Edges, Layout, LayoutOverride, MeasureConstraints, Measurement,
-        Sizing,
+        ScrollOp, Sizing,
     },
+    render::Render,
     style::roles,
     text,
 };

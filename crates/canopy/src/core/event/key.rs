@@ -446,7 +446,7 @@ impl fmt::Display for Key {
 
 #[cfg(test)]
 mod tests {
-    use crate::{error::Result, event::key::*};
+    use crate::{error::Result, input::key::*};
 
     #[test]
     fn normalize() -> Result<()> {

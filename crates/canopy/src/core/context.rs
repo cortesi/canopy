@@ -14,14 +14,16 @@ use super::{
     world::{Core, WidgetOperation, scroll::RevealTarget},
 };
 use crate::{
-    ChangeOutcome, ModalOptions, ModalToken, NodeIdentity, Notice,
+    ChangeOutcome,
     commands::{ArgValue, CommandCall, CommandError, CommandStatus, CommandTarget},
     error::{Error, Result},
-    event::{Event, mouse::MouseEvent},
     geom::{Point, Rect, Size},
+    input::{Event, ModalOptions, ModalToken, mouse::MouseEvent},
     layout::{Layout, LayoutOverride},
     path::{Path, PathFilter},
+    runtime::{NodeWakeHandle, Notice, PollLifetime},
     style::StyleMap,
+    tree::NodeIdentity,
     widget::Widget,
 };
 
@@ -72,7 +74,7 @@ macro_rules! slot {
         #[derive(Debug, Clone, Copy)]
         $vis struct $name;
 
-        impl $crate::ChildSlot for $name {
+        impl $crate::tree::ChildSlot for $name {
             type Widget = $name;
             const KEY: &'static str = ::std::stringify!($name);
         }
@@ -82,7 +84,7 @@ macro_rules! slot {
         #[derive(Debug, Clone, Copy)]
         $vis struct $name;
 
-        impl $crate::ChildSlot for $name {
+        impl $crate::tree::ChildSlot for $name {
             type Widget = $widget;
             const KEY: &'static str = ::std::stringify!($name);
         }
@@ -636,7 +638,7 @@ pub trait Context: ViewContext + sealed::Context {
 
     /// Capture a thread-safe wake handle for this widget's work lifetime.
     /// Attachment handles require this node to be attached when acquired.
-    fn wake_handle(&self, lifetime: crate::PollLifetime) -> Result<crate::NodeWakeHandle>;
+    fn wake_handle(&self, lifetime: PollLifetime) -> Result<NodeWakeHandle>;
 
     /// Poll this widget once, soon, without waiting for its poll interval.
     /// Requests coalesce until the poll runs.
@@ -1073,13 +1075,13 @@ impl Context for NodeCtx<&mut Core> {
         self.core.detach(child)
     }
 
-    fn wake_handle(&self, lifetime: crate::PollLifetime) -> Result<crate::NodeWakeHandle> {
+    fn wake_handle(&self, lifetime: PollLifetime) -> Result<NodeWakeHandle> {
         self.core.wake_handle(self.node_id, lifetime)
     }
 
     fn request_poll(&mut self) -> Result<()> {
         self.core
-            .wake_handle(self.node_id, crate::PollLifetime::Node)?
+            .wake_handle(self.node_id, PollLifetime::Node)?
             .wake()?;
         Ok(())
     }
@@ -1136,7 +1138,7 @@ impl Context for NodeCtx<&mut Core> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ChildSlot, Widget};
+    use crate::{Widget, tree::ChildSlot};
 
     slot!(Editor);
     impl Widget for Editor {}

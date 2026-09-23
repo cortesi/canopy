@@ -3,7 +3,7 @@
 use std::{path::Path, time::Instant};
 
 use anyhow::{Context, Result, bail};
-use canopy::FixtureInfo;
+use canopy::script::FixtureInfo;
 use canopy_mcp::{
     ApplyFixtureRequest, ApplyFixtureResponse, BootstrapRequest, BootstrapResponse,
     ScriptEvalOutcome, ScriptEvalRequest,

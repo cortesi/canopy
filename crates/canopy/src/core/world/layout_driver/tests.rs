@@ -12,7 +12,7 @@ use super::{
     LayoutPass, align_offset, allocate_flex_shares, clamp_outer, clamp_scroll, constraint_for_axis,
 };
 use crate::{
-    Context, NodeId, ScrollOp,
+    Context, NodeId,
     core::{
         context::CoreContext,
         id::testing_node_id,
@@ -29,7 +29,7 @@ use crate::{
     geom::{Point, Rect, Size},
     layout::{
         Align, Constraint, Direction, Direction as LayoutDirection, Edges, Layout, LayoutOverride,
-        MeasureConstraints, MeasureOverflow, Measurement, Sizing,
+        MeasureConstraints, MeasureOverflow, Measurement, RevealAlign, ScrollOp, Sizing,
     },
 };
 
@@ -674,7 +674,7 @@ fn reveal_uses_new_canvas_and_view_dimensions_once() -> Result<()> {
     *canvas.lock().unwrap() = Size::new(100, 100);
     let mut ctx = CoreContext::new(&mut core, child);
     assert!(
-        ctx.reveal_area(Rect::new(10, 20, 2, 2), crate::RevealAlign::Nearest)
+        ctx.reveal_area(Rect::new(10, 20, 2, 2), RevealAlign::Nearest)
             .changed()
     );
     core.update_layout(Size::new(7, 4))?;
@@ -702,31 +702,28 @@ fn reveal_obeys_request_and_explicit_scroll_order() -> Result<()> {
     core.update_layout(Size::new(10, 4))?;
     let mut ctx = CoreContext::new(&mut core, child);
     assert!(
-        ctx.reveal_area(Rect::new(20, 20, 1, 1), crate::RevealAlign::Nearest)
+        ctx.reveal_area(Rect::new(20, 20, 1, 1), RevealAlign::Nearest)
             .changed()
     );
     assert!(
-        !ctx.reveal_area(Rect::new(20, 20, 1, 1), crate::RevealAlign::Nearest)
+        !ctx.reveal_area(Rect::new(20, 20, 1, 1), RevealAlign::Nearest)
             .changed()
     );
     assert!(
-        ctx.reveal_area(Rect::new(40, 40, 1, 1), crate::RevealAlign::Nearest)
+        ctx.reveal_area(Rect::new(40, 40, 1, 1), RevealAlign::Nearest)
             .changed()
     );
-    assert!(
-        !ctx.reveal_area(Rect::ZERO, crate::RevealAlign::Nearest)
-            .changed()
-    );
+    assert!(!ctx.reveal_area(Rect::ZERO, RevealAlign::Nearest).changed());
     core.update_layout(Size::new(10, 4))?;
     assert_eq!(core.nodes[child].view.scroll, Point { x: 31, y: 37 });
 
     let mut ctx = CoreContext::new(&mut core, child);
-    ctx.reveal_area(Rect::new(80, 80, 1, 1), crate::RevealAlign::Nearest);
+    ctx.reveal_area(Rect::new(80, 80, 1, 1), RevealAlign::Nearest);
     ctx.scroll(ScrollOp::To(Point { x: 2, y: 3 }));
     core.update_layout(Size::new(10, 4))?;
     assert_eq!(core.nodes[child].view.scroll, Point { x: 2, y: 3 });
     let mut ctx = CoreContext::new(&mut core, child);
-    ctx.reveal_area(Rect::new(80, 80, 1, 1), crate::RevealAlign::Nearest);
+    ctx.reveal_area(Rect::new(80, 80, 1, 1), RevealAlign::Nearest);
     assert!(
         ctx.scroll(ScrollOp::By(0, 0)).changed(),
         "cancelling a request changes state"
@@ -740,8 +737,7 @@ fn reveal_obeys_request_and_explicit_scroll_order() -> Result<()> {
 fn reveal_waits_for_visibility_and_does_not_reach_replacement_widgets() -> Result<()> {
     let mut core = Core::new();
     let child = add_reveal_surface(&mut core)?;
-    CoreContext::new(&mut core, child)
-        .reveal_area(Rect::new(40, 40, 1, 1), crate::RevealAlign::Nearest);
+    CoreContext::new(&mut core, child).reveal_area(Rect::new(40, 40, 1, 1), RevealAlign::Nearest);
     core.set_hidden(child, true)?;
     core.update_layout(Size::new(10, 4))?;
     core.set_hidden(child, false)?;
@@ -754,7 +750,7 @@ fn reveal_waits_for_visibility_and_does_not_reach_replacement_widgets() -> Resul
 
     let mut ctx = CoreContext::new(&mut core, child);
     ctx.scroll(ScrollOp::To(Point { x: 0, y: 0 }));
-    ctx.reveal_area(Rect::new(80, 80, 1, 1), crate::RevealAlign::Nearest);
+    ctx.reveal_area(Rect::new(80, 80, 1, 1), RevealAlign::Nearest);
     let (replacement, _) =
         TestWidget::with_canvas(|_c| Measurement::Wrap, |_view, _ctx| Size::new(100, 100));
     core.replace_subtree(child, replacement)?;

@@ -19,10 +19,13 @@
 use std::ops::Range;
 
 use canopy::{
-    Context, NodeName, Render, ScrollDirection, ScrollOp, ViewContext, Widget, derive_commands,
+    Context, NodeName, ViewContext, Widget, derive_commands,
     error::Result,
     geom::{Line, Point, Rect, Size},
-    layout::{CanvasContext, Constraint, MeasureConstraints, Measurement},
+    layout::{
+        CanvasContext, Constraint, MeasureConstraints, Measurement, ScrollDirection, ScrollOp,
+    },
+    render::Render,
     style::Style,
     text,
 };

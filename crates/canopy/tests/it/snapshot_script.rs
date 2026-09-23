@@ -4,12 +4,14 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        CanopyBuilder, Render, ViewContext, Widget, WidgetSemantics,
+        CanopyBuilder, ViewContext, Widget,
         commands::ArgValue,
         derive_commands,
         error::Result,
         geom::{Line, Size},
         layout::Layout,
+        render::Render,
+        runtime::WidgetSemantics,
     };
 
     struct Label {

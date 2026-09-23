@@ -2,9 +2,9 @@
 //! Example widgets used by canopy demos.
 
 use canopy::{
-    CanopyBuilder, Context, ContextExt, Register, ScrollDirection, ScrollOp, Widget,
+    CanopyBuilder, Context, ContextExt, Register, Widget,
     error::{Error, Result},
-    layout::{Direction, Layout, LayoutOverride, Sizing},
+    layout::{Direction, Layout, LayoutOverride, ScrollDirection, ScrollOp, Sizing},
     style::{
         AttrSet, Color, GradientSpec, GradientStop, Paint, StyleBuilder, StyleRules,
         default as palette,

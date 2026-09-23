@@ -11,6 +11,7 @@ use crate::{
     },
     layout::LayoutOverride,
     path::Path,
+    runtime::PollLifetime,
     widget::Widget,
 };
 
@@ -93,7 +94,7 @@ impl Core {
             let generation = attached.then(|| self.next_generation());
             let node = &mut self.nodes[id];
             node.attachment_generation = generation;
-            if node.poll_lifetime == crate::PollLifetime::Attachment {
+            if node.poll_lifetime == PollLifetime::Attachment {
                 node.initialized = false;
             }
         }

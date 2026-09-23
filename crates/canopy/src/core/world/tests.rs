@@ -15,15 +15,15 @@ use super::{
     *,
 };
 use crate::{
-    Context, ContextExt, ModalBindings, ModalOptions, ViewContext, ViewContextExt,
+    Context, ContextExt, ViewContext, ViewContextExt,
     core::{
         context::{CoreContext, CoreViewContext},
-        inputmap::FrameworkBindingGroup,
         script::validate_node_handle,
         testing::model::trace_result,
     },
     error::{Error, NodeOperationKind, Result},
     geom::Size,
+    input::{FrameworkBindingGroup, ModalBindings, ModalOptions},
     layout::{Layout, LayoutOverride, Measurement},
     path::Path,
     widget::Widget,

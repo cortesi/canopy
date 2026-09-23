@@ -646,7 +646,9 @@ mod tests {
         thread,
     };
 
-    use canopy::{CanopyBuilder, Fixture, TurnInput, geom::Size, testing::contracts};
+    use canopy::{
+        CanopyBuilder, geom::Size, runtime::TurnInput, script::Fixture, testing::contracts,
+    };
     use canopy_mcp::{AppMetadata, ExecutionMode, ResetPolicy, serve_uds};
     use futures::{StreamExt, executor};
     use tmcp::schema::ToolResultMode;

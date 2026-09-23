@@ -1,10 +1,11 @@
 use std::cell::RefCell;
 
 use canopy::{
-    Context, NodeName, Render, ScrollDirection, ScrollOp, ViewContext, Widget, derive_commands,
+    Context, NodeName, ViewContext, Widget, derive_commands,
     error::Result,
     geom::{Line, Point, Size},
-    layout::{Constraint, MeasureConstraints, Measurement},
+    layout::{Constraint, MeasureConstraints, Measurement, ScrollDirection, ScrollOp},
+    render::Render,
     text,
 };
 

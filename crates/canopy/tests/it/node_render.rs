@@ -3,10 +3,11 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Context, ContextExt, NodeId, NodeName, Render, ViewContext, Widget, buf,
+        Context, ContextExt, NodeId, NodeName, ViewContext, Widget, buf,
         error::Result,
         geom::Size,
         layout::{Layout, LayoutOverride},
+        render::Render,
         testing::harness::Harness,
     };
 

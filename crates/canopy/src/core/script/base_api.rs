@@ -32,10 +32,10 @@ use super::{
     validate_node_handle, values_to_args, with_current_canopy,
 };
 use crate::{
-    FocusDirection,
     core::{context::matching_nodes, inputmap::IntentCatalog},
     geom::PointI32,
-    keyroute::KeyExpectation,
+    input::{BindingId, KeyExpectation},
+    tree::FocusDirection,
 };
 
 /// The native implementation behind one base API function.
@@ -1474,10 +1474,10 @@ fn parse_key_expectation<'s>(
 /// Read the required binding identifier of one expectation.
 fn expectation_binding(
     fields: &mut BTreeMap<String, ArgValue>,
-) -> StdResult<crate::BindingId, RuntimeError> {
+) -> StdResult<BindingId, RuntimeError> {
     match fields.remove("binding") {
-        Some(ArgValue::UInt(id)) => Ok(crate::BindingId::from_u64(id)),
-        Some(ArgValue::Int(id)) if id >= 0 => Ok(crate::BindingId::from_u64(id as u64)),
+        Some(ArgValue::UInt(id)) => Ok(BindingId::from_u64(id)),
+        Some(ArgValue::Int(id)) if id >= 0 => Ok(BindingId::from_u64(id as u64)),
         _ => Err(RuntimeError::runtime(
             "expectation binding must be a binding number",
         )),

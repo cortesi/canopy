@@ -1,11 +1,12 @@
 //! Dropdown widget for single-value selection with expand/collapse behavior.
 
 use canopy::{
-    Context, EventOutcome, NodeName, Render, ViewContext, Widget, derive_commands,
+    Context, EventOutcome, NodeName, ViewContext, Widget, derive_commands,
     error::{Error, Result},
-    event::{Event, mouse},
     geom::Size,
+    input::{Event, mouse},
     layout::{MeasureConstraints, Measurement},
+    render::Render,
     text,
 };
 

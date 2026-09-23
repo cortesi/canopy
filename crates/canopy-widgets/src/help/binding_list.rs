@@ -3,16 +3,20 @@
 use std::mem;
 
 use canopy::{
-    Context, NodeName, Register, Render, ScrollDirection, ScrollOp, Setup, ViewContext, Widget,
+    Context, NodeName, Register, Setup, ViewContext, Widget,
     commands::CommandStatus,
     derive_commands,
     error::Result,
-    event::key::{Empty, Key, KeyCode},
     geom::{Line, Point, Size},
-    help::{AvailableBinding, BindingSnapshot},
+    input::{
+        AvailableBinding, BindingSnapshot,
+        key::{Empty, Key, KeyCode},
+    },
     layout::{
         CanvasContext, Constraint, Edges, Layout, MeasureConstraints, MeasureOverflow, Measurement,
+        ScrollDirection, ScrollOp,
     },
+    render::Render,
 };
 use unicode_width::UnicodeWidthStr;
 

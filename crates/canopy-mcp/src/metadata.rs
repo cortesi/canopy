@@ -10,9 +10,10 @@ use std::{
 };
 
 use canopy::{
-    Canopy, RenderLimits,
+    Canopy,
     error::{Error, Result as CanopyResult},
     geom::Size,
+    render::RenderLimits,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

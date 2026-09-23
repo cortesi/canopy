@@ -3,9 +3,10 @@
 use std::env;
 
 use canopy::{
-    Context, ContextExt, NodeId, NodeName, Render, TypedId, ViewContext, Widget, derive_commands,
+    Context, ContextExt, NodeId, NodeName, TypedId, ViewContext, Widget, derive_commands,
     error::{Error, Result},
     layout::{Direction, Edges, Layout},
+    render::Render,
     rgb,
     style::{Color, Paint, StyleMap},
 };

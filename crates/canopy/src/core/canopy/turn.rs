@@ -28,7 +28,7 @@ use crate::{
     NodeId,
     commands::ArgValue,
     error::{Error, Result},
-    event::Event,
+    input::Event,
     script,
 };
 

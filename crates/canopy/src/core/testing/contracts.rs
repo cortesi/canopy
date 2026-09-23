@@ -4,18 +4,18 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    Canopy, CanopyBuilder, Context, EventOutcome, ViewContext, Widget, WidgetSemantics,
+    Canopy, CanopyBuilder, Context, EventOutcome, NodeName, ViewContext, Widget,
     commands::ArgValue,
     derive_commands,
     error::Result,
-    event::{
+    geom::Size,
+    input::{
         Event,
         key::{Key, KeyCode},
     },
-    geom::Size,
     layout::Layout,
     render::Render,
-    state::NodeName,
+    runtime::WidgetSemantics,
 };
 
 /// The shared trace script.

@@ -1,10 +1,12 @@
 use canopy::{
-    CanopyBuilder, Context, ContextExt, FocusScope, NodeId, NodeName, Register, Render, Setup,
-    ViewContext, ViewContextExt, Widget, derive_commands,
+    CanopyBuilder, Context, ContextExt, NodeId, NodeName, Register, Setup, ViewContext,
+    ViewContextExt, Widget, derive_commands,
     error::{Error, Result},
     geom::Size,
     layout::{CanvasContext, MeasureConstraints, Measurement},
+    render::Render,
     style::{StyleMap, default as palette},
+    tree::FocusScope,
 };
 use canopy_widgets::{CanvasWidth, Columns, Container, List, Selectable, Text};
 use rand::RngExt;

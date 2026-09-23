@@ -10,8 +10,8 @@ mod tests {
         commands::{CommandStatus, CommandTarget},
         derive_commands,
         error::Result,
-        event::{key, mouse},
         geom::Size,
+        input::{key, mouse},
         layout::{Direction, Layout},
         testing::harness::Harness,
     };

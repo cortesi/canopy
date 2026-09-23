@@ -16,6 +16,12 @@ pub mod canopy {
     //!
     //! # Module Organization
     //!
+    //! - [`input`] - Events, bindings, intents, modals, and route analysis
+    //! - [`tree`] - Slots, identities, and focus traversal
+    //! - [`layout`] - Layout, views, scrolling, and reveals
+    //! - [`render`] - The widget renderer, frame buffers, and backends
+    //! - [`runtime`] - Turns, published frames, polls, wakes, and notices
+    //! - [`script`] - Luau evaluation, automation, and fixtures
     //! - [`geom`] - Geometry primitives (Rect, Point, Size, etc.)
 
     pub mod commands {
@@ -38,7 +44,7 @@ pub mod canopy {
             /// String value.
             String(String),
             /// Opaque node handle.
-            Node(crate::core::NodeId),
+            Node(crate::NodeId),
             /// Array value.
             Array(Vec<Self>),
             /// Map value.
@@ -123,7 +129,7 @@ pub mod canopy {
             /// A node handle no longer points at a live node.
             InvalidNode {
                 /// Stale node id.
-                id: crate::core::NodeId,
+                id: crate::NodeId,
             },
             #[error("node {node:?} does not own command {id} (expected owner {expected})")]
             /// An exact target does not own the requested node command.
@@ -131,7 +137,7 @@ pub mod canopy {
                 /// Requested command identifier.
                 id: String,
                 /// Requested exact node.
-                node: crate::core::NodeId,
+                node: crate::NodeId,
                 /// Required owner name.
                 expected: String,
             },
@@ -242,17 +248,17 @@ pub mod canopy {
             /// Command targets the specified owner without searching.
             Exact {
                 /// Target node ID.
-                target: crate::core::NodeId,
+                target: crate::NodeId,
             },
             /// Command would dispatch to a node in the focus subtree.
             Subtree {
                 /// Target node ID.
-                target: crate::core::NodeId,
+                target: crate::NodeId,
             },
             /// Command would dispatch to an ancestor of focus.
             Ancestor {
                 /// Target node ID.
-                target: crate::core::NodeId,
+                target: crate::NodeId,
             },
         }
 
@@ -302,9 +308,9 @@ pub mod canopy {
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub enum CommandTarget {
             /// Require this exact node to own the command.
-            Exact(crate::core::NodeId),
+            Exact(crate::NodeId),
             /// Search this subtree, then its ancestors.
-            From(crate::core::NodeId),
+            From(crate::NodeId),
             /// Search from the current focus when invoked.
             Focus,
         }
@@ -512,30 +518,6 @@ pub mod canopy {
         }
     }
 
-    pub mod cursor {
-        //! Cursor and position helpers.
-
-        /// Cursor position and shape.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        pub struct Cursor {
-            /// Location of the cursor, relative to (0, 0) in the node view rect.
-            pub location: geom::Point,
-            /// Shape of the cursor.
-            pub shape: CursorShape,
-        }
-
-        /// Cursor glyph shape variants.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        pub enum CursorShape {
-            /// Underscore cursor.
-            Underscore,
-            /// Vertical bar cursor.
-            Line,
-            /// Block cursor.
-            Block,
-        }
-    }
-
     pub mod error {
         //! Core error types.
 
@@ -612,7 +594,7 @@ pub mod canopy {
             Internal(String),
             #[error("re-entrant widget borrow: {0:?}")]
             /// Re-entrant widget borrow attempt.
-            ReentrantWidgetBorrow(crate::core::id::NodeId),
+            ReentrantWidgetBorrow(crate::NodeId),
             #[error("{kind} {operation} for node {node:?} at {path}: {source}")]
             /// Node-bound widget operation failure with its original source.
             NodeOperation {
@@ -621,7 +603,7 @@ pub mod canopy {
                 /// Stable operation name.
                 operation: &'static str,
                 /// Node being operated on.
-                node: crate::core::id::NodeId,
+                node: crate::NodeId,
                 /// Node path at the time of failure.
                 path: String,
                 #[source]
@@ -638,7 +620,7 @@ pub mod canopy {
             /// A live node stores a different widget type than requested.
             NodeTypeMismatch {
                 /// Node whose widget type was checked.
-                node: crate::core::id::NodeId,
+                node: crate::NodeId,
                 /// Requested widget type.
                 expected: &'static str,
             },
@@ -652,20 +634,20 @@ pub mod canopy {
             /// Duplicate child under the same parent.
             DuplicateChild {
                 /// Parent node.
-                parent: crate::core::id::NodeId,
+                parent: crate::NodeId,
                 /// Child node.
-                child: crate::core::id::NodeId,
+                child: crate::NodeId,
             },
             #[error("already attached: {0:?}")]
             /// Child is already attached to a parent.
-            AlreadyAttached(crate::core::id::NodeId),
+            AlreadyAttached(crate::NodeId),
             #[error("would create cycle: parent {parent:?}, child {child:?}")]
             /// Attaching would create a parent/child cycle.
             WouldCreateCycle {
                 /// Parent node involved in the cycle.
-                parent: crate::core::id::NodeId,
+                parent: crate::NodeId,
                 /// Child node involved in the cycle.
-                child: crate::core::id::NodeId,
+                child: crate::NodeId,
             },
             #[error("{operation} is not allowed during a widget mutation callback")]
             /// Operation attempted before a mutable widget callback returned.
@@ -684,7 +666,7 @@ pub mod canopy {
             Command(crate::commands::CommandError),
             #[error("checked key dispatch diverged from the analyzed route")]
             /// A checked key dispatch diverged from its prospective analysis.
-            KeyDispatchDivergence(Box<crate::core::keyroute::KeyDispatchDivergence>),
+            KeyDispatchDivergence(Box<crate::input::KeyDispatchDivergence>),
             #[error("parse error: {0}")]
             /// Parsing failure.
             Parse(ParseError),
@@ -708,10 +690,10 @@ pub mod canopy {
             },
             #[error("node not found: {0:?}")]
             /// Node not found in the arena.
-            NodeNotFound(crate::core::id::NodeId),
+            NodeNotFound(crate::NodeId),
             #[error("node is detached: {0:?}")]
             /// Node exists but is not attached to the root tree.
-            NodeDetached(crate::core::id::NodeId),
+            NodeDetached(crate::NodeId),
             #[error(transparent)]
             /// An application's own failure, returned unwrapped from app code.
             ///
@@ -907,8 +889,9 @@ pub mod canopy {
         }
     }
 
-    pub mod event {
-        //! Input event types.
+    pub mod input {
+        //! Input: events, bindings and their tiers, intents, modals, and what the
+        //! route does with a key.
 
         pub mod key {
             //! Keyboard event types.
@@ -1176,9 +1159,9 @@ pub mod canopy {
                 /// [`View::viewport_point`], or [`View::content_point`] to find the cell
                 /// under the pointer in the space the widget paints.
                 ///
-                /// [`View::outer_point`]: crate::View::outer_point
-                /// [`View::viewport_point`]: crate::View::viewport_point
-                /// [`View::content_point`]: crate::View::content_point
+                /// [`View::outer_point`]: crate::layout::View::outer_point
+                /// [`View::viewport_point`]: crate::layout::View::viewport_point
+                /// [`View::content_point`]: crate::layout::View::content_point
                 pub location: crate::geom::PointI32,
             }
 
@@ -1210,11 +1193,159 @@ pub mod canopy {
                 fn from(o: MouseEvent) -> Self {}
             }
 
-            impl Inject for crate::event::mouse::MouseEvent {
+            impl Inject for crate::input::mouse::MouseEvent {
                 fn inject(ctx: &dyn Context) -> Option<Self> {}
 
                 fn requirement() -> Option<CommandRequirement> {}
             }
+        }
+
+        /// One effective binding in a contextual snapshot.
+        ///
+        /// `I` is the input kind: [`Key`] for a key binding and [`Mouse`] for a mouse
+        /// binding. Every other field means the same thing for both.
+        #[derive(Clone, Debug)]
+        pub struct AvailableBinding<I> {
+            /// Stable binding identifier.
+            pub id: crate::input::BindingId,
+            /// Normalized input.
+            pub input: I,
+            /// Required user-facing description.
+            pub description: String,
+            /// Resolution tier.
+            pub tier: crate::input::BindingTier,
+            /// Original path filter.
+            pub path_filter: String,
+            /// Route path at which this binding wins.
+            pub route_path: crate::path::Path,
+            /// Kind of action this binding runs.
+            pub action: crate::input::BindingActionKind,
+            /// Intent name, present when the action is an intent.
+            pub intent: Option<crate::input::IntentName>,
+            /// Phase relative to widget input handling.
+            pub phase: crate::input::BindingPhase,
+            /// Declarative command details, absent for opaque script callbacks and
+            /// intents.
+            pub command: Option<BindingCommand>,
+            /// Optional diagnostic source.
+            pub source: Option<String>,
+        }
+
+        /// Action executed by a binding.
+        #[derive(Clone, Debug, PartialEq)]
+        pub enum BindingAction {
+            /// Stored Luau callback.
+            Script(crate::script::LuauFunctionId),
+            /// Rust command call.
+            Command(crate::commands::CommandCall),
+            /// Named operation the route offers to widgets on the way up.
+            Intent(IntentName),
+        }
+
+        /// Class of target a binding record owns.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub enum BindingActionKind {
+            /// Stored Luau callback.
+            Script,
+            /// Rust command call.
+            Command,
+            /// Named operation offered to widgets on the route.
+            Intent,
+        }
+
+        /// Owned command details captured with an effective key binding.
+        #[derive(Clone, Debug)]
+        pub struct BindingCommand {
+            /// Stored command call, with its arguments and target policy.
+            pub call: crate::commands::CommandCall,
+            /// Availability at capture time, absent when the command is not
+            /// registered.
+            pub availability: Option<crate::commands::CommandAvailability>,
+        }
+
+        /// Monotonic identifier for a binding.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        pub struct BindingId(_);
+
+        /// Options shared by native and scripted application bindings.
+        #[derive(Clone, Debug)]
+        pub struct BindingOptions {
+            /// Optional validated path selector. Omission matches the current route.
+            pub path: Option<crate::path::PathFilter>,
+            /// Resolution tier. Scripts install application tiers only; the
+            /// framework tier is registered during setup.
+            pub tier: BindingTier,
+            /// Required user-facing description.
+            pub description: String,
+            /// Optional diagnostic source.
+            pub source: Option<String>,
+            /// Phase that sets when the binding runs relative to the widget.
+            ///
+            /// `None` means the phase was omitted at registration. Commands and
+            /// callbacks then default to `after_widget`. An intent always runs
+            /// before the widget, so an explicit `after_widget` on one is an error.
+            pub phase: Option<BindingPhase>,
+        }
+
+        /// Binding phase relative to widget input handling.
+        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+        pub enum BindingPhase {
+            /// Execute before the focused widget.
+            BeforeWidget,
+            #[default]
+            /// Execute only after the widget ignores the input.
+            AfterWidget,
+        }
+
+        /// Owned snapshot of the effective bindings for one focus context.
+        ///
+        /// The snapshot answers what one context would do with an input, not what the
+        /// next event will do. A route is only hypothetical here: hit testing and mouse
+        /// capture pick the real mouse target. Key discovery asks each widget along the
+        /// route through [`crate::Widget::key_outcome`], so a key a widget consumes
+        /// hides the after-widget bindings it would shadow.
+        #[derive(Clone, Debug)]
+        pub struct BindingSnapshot {
+            /// Node used as the discovery focus.
+            pub focus: crate::NodeId,
+            /// Path from the root to the focus.
+            pub focus_path: crate::path::Path,
+            /// Active non-default modes in resolution order.
+            pub active_modes: Vec<String>,
+            /// Transient mode that takes the next key.
+            ///
+            /// This is the newest active mode when it is transient. It is absent
+            /// while a framework-group modal suspends transient modes.
+            pub transient_mode: Option<String>,
+            /// Framework group the open modal admits.
+            pub framework_group: Option<crate::input::FrameworkBindingGroup>,
+            /// Effective key bindings, each with a route to the node where it acts.
+            ///
+            /// An intent binding appears only when a widget on the route accepts it.
+            pub bindings: Vec<AvailableBinding<crate::input::key::Key>>,
+            /// Effective mouse bindings, with one winner per normalized mouse input.
+            ///
+            /// The route starts at the requested node, as a click on it would. The
+            /// pointer's own position plays no part.
+            pub mouse_bindings: Vec<AvailableBinding<crate::input::mouse::Mouse>>,
+        }
+
+        /// Resolution tier for one binding.
+        ///
+        /// Variant order is resolution order: the framework group an open modal
+        /// admits, then the global tier, then active modes newest first, then the
+        /// default tier. Only framework-tier records belong to the framework; every
+        /// other tier holds application bindings that script APIs can change.
+        #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+        pub enum BindingTier {
+            /// Framework-owned bindings that only a modal admits.
+            Framework(FrameworkBindingGroup),
+            /// Highest-priority application tier.
+            Global,
+            /// Named application mode.
+            Mode(String),
+            /// Default application tier.
+            Default,
         }
 
         /// This enum represents all the event types that drive the application.
@@ -1234,101 +1365,29 @@ pub mod canopy {
             Paste(String),
         }
 
-        impl Inject for crate::event::Event {
-            fn inject(ctx: &dyn Context) -> Option<Self> {}
+        /// Stable name for one framework-owned binding group.
+        #[derive(Clone, Copy, Debug, Display, Eq, Hash, PartialEq)]
+        pub struct FrameworkBindingGroup(_);
 
-            fn requirement() -> Option<CommandRequirement> {}
+        /// Input event used for bindings.
+        #[derive(Clone, Copy, Debug, Display, Eq, Hash, PartialEq)]
+        pub enum InputSpec {
+            /// Mouse input.
+            Mouse(crate::input::mouse::Mouse),
+            /// Keyboard input.
+            Key(crate::input::key::Key),
         }
-    }
 
-    pub mod help {
-        //! Help snapshot API.
-        //! Contextual binding discovery.
-
-        /// One effective binding in a contextual snapshot.
+        /// Validated name of a bindable intent.
         ///
-        /// `I` is the input kind: [`Key`] for a key binding and [`Mouse`] for a mouse
-        /// binding. Every other field means the same thing for both.
-        #[derive(Clone, Debug)]
-        pub struct AvailableBinding<I> {
-            /// Stable binding identifier.
-            pub id: crate::core::inputmap::BindingId,
-            /// Normalized input.
-            pub input: I,
-            /// Required user-facing description.
-            pub description: String,
-            /// Resolution tier.
-            pub tier: crate::core::inputmap::BindingTier,
-            /// Original path filter.
-            pub path_filter: String,
-            /// Route path at which this binding wins.
-            pub route_path: crate::path::Path,
-            /// Kind of action this binding runs.
-            pub action: crate::core::inputmap::BindingActionKind,
-            /// Intent name, present when the action is an intent.
-            pub intent: Option<crate::core::inputmap::IntentName>,
-            /// Phase relative to widget input handling.
-            pub phase: crate::core::inputmap::BindingPhase,
-            /// Declarative command details, absent for opaque script callbacks and
-            /// intents.
-            pub command: Option<BindingCommand>,
-            /// Optional diagnostic source.
-            pub source: Option<String>,
-        }
+        /// A name is nonempty and dotted, such as `canopy.clear`. The dotted
+        /// form names the namespace that owns the behavior.
+        #[derive(Clone, Debug, Display, Eq, Hash, Ord, PartialEq, PartialOrd)]
+        pub struct IntentName(_);
 
-        /// Owned command details captured with an effective key binding.
-        #[derive(Clone, Debug)]
-        pub struct BindingCommand {
-            /// Stored command call, with its arguments and target policy.
-            pub call: crate::commands::CommandCall,
-            /// Availability at capture time, absent when the command is not
-            /// registered.
-            pub availability: Option<crate::commands::CommandAvailability>,
-        }
-
-        /// Owned snapshot of the effective bindings for one focus context.
-        ///
-        /// The snapshot answers what one context would do with an input, not what the
-        /// next event will do. A route is only hypothetical here: hit testing and mouse
-        /// capture pick the real mouse target. Key discovery asks each widget along the
-        /// route through [`crate::Widget::key_outcome`], so a key a widget consumes
-        /// hides the after-widget bindings it would shadow.
-        #[derive(Clone, Debug)]
-        pub struct BindingSnapshot {
-            /// Node used as the discovery focus.
-            pub focus: crate::core::NodeId,
-            /// Path from the root to the focus.
-            pub focus_path: crate::path::Path,
-            /// Active non-default modes in resolution order.
-            pub active_modes: Vec<String>,
-            /// Transient mode that takes the next key.
-            ///
-            /// This is the newest active mode when it is transient. It is absent
-            /// while a framework-group modal suspends transient modes.
-            pub transient_mode: Option<String>,
-            /// Framework group the open modal admits.
-            pub framework_group: Option<crate::core::inputmap::FrameworkBindingGroup>,
-            /// Effective key bindings, each with a route to the node where it acts.
-            ///
-            /// An intent binding appears only when a widget on the route accepts it.
-            pub bindings: Vec<AvailableBinding<crate::event::key::Key>>,
-            /// Effective mouse bindings, with one winner per normalized mouse input.
-            ///
-            /// The route starts at the requested node, as a click on it would. The
-            /// pointer's own position plays no part.
-            pub mouse_bindings: Vec<AvailableBinding<crate::event::mouse::Mouse>>,
-        }
-    }
-
-    pub mod keyroute {
-        //! Prospective key-route analysis.
-        //!
-        //! The analyzer walks the same route as key dispatch without running widget
-        //! effects, so a caller can explain where one key would go. Every widget
-        //! predicts its keys, so the analysis is exact for the current state. It is
-        //! still advisory: normal routing resolves and dispatches one node at a time,
-        //! because an ignored widget can change the tree, focus, or bindings before
-        //! the route reaches an ancestor.
+        /// One intent an application registers as bindable.
+        #[derive(Clone, Debug, Eq, PartialEq)]
+        pub struct IntentSpec {}
 
         /// A checked key dispatch diverged from its prospective analysis.
         #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1340,18 +1399,18 @@ pub mod canopy {
             /// Widget outcome the route actually produced, when one was observed.
             pub actual_widget: Option<crate::widget::EventOutcome>,
             /// Binding the route actually resolved, when one was observed.
-            pub actual_binding: Option<crate::core::inputmap::BindingId>,
+            pub actual_binding: Option<crate::input::BindingId>,
         }
 
         /// What a checked key dispatch expects to happen.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub enum KeyExpectation {
             /// A specific widget consumes the key.
-            Widget(crate::core::NodeId),
+            Widget(crate::NodeId),
             /// A specific binding runs.
-            Binding(crate::core::inputmap::BindingId),
+            Binding(crate::input::BindingId),
             /// A specific transient-mode binding runs.
-            Transient(crate::core::inputmap::BindingId),
+            Transient(crate::input::BindingId),
             /// A transient mode ends without running a binding.
             TransientDismiss,
             /// No binding or widget handles the key.
@@ -1362,9 +1421,9 @@ pub mod canopy {
         #[derive(Clone, Debug, Eq, PartialEq)]
         pub struct KeyRouteExplanation {
             /// Raw key being analyzed.
-            pub key: crate::event::key::Key,
+            pub key: crate::input::key::Key,
             /// Node the route starts from.
-            pub focus: crate::core::NodeId,
+            pub focus: crate::NodeId,
             /// Path from the root to the focus.
             pub focus_path: crate::path::Path,
             /// Nodes examined in focus-to-root order, stopping at the outcome.
@@ -1377,7 +1436,7 @@ pub mod canopy {
         #[derive(Clone, Debug, Eq, PartialEq)]
         pub struct KeyRouteStep {
             /// Examined node.
-            pub node: crate::core::NodeId,
+            pub node: crate::NodeId,
             /// Route path at which the node was examined.
             pub path: crate::path::Path,
             /// Binding selected at this node, when one exists.
@@ -1385,6 +1444,40 @@ pub mod canopy {
             /// Widget prediction for the key.
             pub widget: crate::widget::EventOutcome,
         }
+
+        /// Bindings admitted within a modal's route to its owner.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub enum ModalBindings {
+            /// Admit this framework group first, then application bindings to the
+            /// listed intents, on the bounded modal route.
+            Framework {
+                /// Framework group that owns the modal.
+                group: crate::input::FrameworkBindingGroup,
+                /// Exact intent names the modal admits from application bindings.
+                intents: &'static [&'static str],
+            },
+            /// Admit ordinary application bindings on the bounded modal route.
+            Application,
+        }
+
+        /// Nodes and binding admission owned by one modal.
+        #[derive(Clone, Copy, Debug)]
+        pub struct ModalOptions {
+            /// Ancestor that owns the modal lifetime and bounds binding routing.
+            pub owner: crate::NodeId,
+            /// Subtree that receives normal input while this scope is on top.
+            pub modal: crate::NodeId,
+            /// Focusable node inside the modal to focus on successful open.
+            pub initial_focus: crate::NodeId,
+            /// Optional subtree dimmed while the scope remains active.
+            pub dim_target: Option<crate::NodeId>,
+            /// Binding ownership admitted by this scope.
+            pub bindings: ModalBindings,
+        }
+
+        /// Opaque identity of one modal, unique across applications.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct ModalToken(_);
 
         /// What would act first on a key.
         #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1398,7 +1491,7 @@ pub mod canopy {
             /// A widget consumes the key.
             Widget {
                 /// Consuming node.
-                node: crate::core::NodeId,
+                node: crate::NodeId,
                 /// Route path of the consuming node.
                 path: crate::path::Path,
             },
@@ -1408,37 +1501,174 @@ pub mod canopy {
             Unhandled,
         }
 
+        /// One entry in the most recent input route trace.
+        #[derive(Clone, Debug, Eq, PartialEq)]
+        pub struct RouteTraceEntry {
+            /// What this entry records.
+            pub kind: RouteTraceKind,
+            /// Node associated with this route step.
+            pub node: Option<crate::NodeId>,
+            /// Path visible to binding resolution at this route step.
+            pub path: String,
+            /// Human-readable route detail.
+            pub detail: String,
+        }
+
+        /// What one entry in a key or mouse route trace records.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub enum RouteTraceKind {
+            /// The route start was selected.
+            Start,
+            /// A before-widget binding matched.
+            BeforeWidgetBinding,
+            /// An intent was offered to the node's widget, or declined there.
+            OfferIntent,
+            /// The event was offered to the node's widget, or the widget's key
+            /// prediction disagreed with its result.
+            Widget,
+            /// An after-widget binding matched after the widget ignored the event.
+            AfterWidgetBinding,
+            /// A resolved binding ran.
+            RunBinding,
+            /// The runtime applied the input's default action to a node.
+            DefaultAction,
+            /// Routing moved from a node to its parent.
+            Bubble,
+            /// A widget or binding handled the event.
+            Handled,
+            /// Routing ended without a handler.
+            Unhandled,
+            /// A binding or a widget handler failed, and the failure became a notice
+            /// that consumed the input.
+            Notice,
+        }
+
         /// The binding that acts on a key, and where it resolved.
         #[derive(Clone, Debug, Eq, PartialEq)]
         pub struct RouteWinner {
             /// Winning binding.
-            pub binding: crate::core::inputmap::BindingId,
+            pub binding: crate::input::BindingId,
             /// Node the binding resolved at. For an intent, this is the
             /// accepting node.
-            pub node: crate::core::NodeId,
+            pub node: crate::NodeId,
             /// Route path of the winning binding.
             pub path: crate::path::Path,
             /// Kind of target the binding runs.
-            pub kind: crate::core::inputmap::BindingActionKind,
+            pub kind: crate::input::BindingActionKind,
             /// Phase of the binding relative to the node's widget.
-            pub phase: crate::core::inputmap::BindingPhase,
+            pub phase: crate::input::BindingPhase,
         }
 
         /// The binding selected at one examined route node.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct StepBinding {
             /// Selected binding.
-            pub id: crate::core::inputmap::BindingId,
+            pub id: crate::input::BindingId,
             /// Kind of target the binding runs.
-            pub kind: crate::core::inputmap::BindingActionKind,
+            pub kind: crate::input::BindingActionKind,
             /// Phase of the binding relative to the node's widget.
-            pub phase: crate::core::inputmap::BindingPhase,
+            pub phase: crate::input::BindingPhase,
+        }
+
+        impl BindingAction {
+            #[must_use]
+            /// Return the intent name, when this action is an intent.
+            pub fn intent(&self) -> Option<&IntentName> {}
+
+            /// Return a stable target-kind label.
+            pub fn label(&self) -> &'static str {}
+        }
+
+        impl BindingActionKind {
+            #[must_use]
+            /// Return a stable target-kind label.
+            pub fn label(self) -> &'static str {}
+        }
+
+        impl BindingId {
+            /// Reconstruct a binding identifier from its numeric form.
+            pub fn from_u64(id: u64) -> Self {}
+
+            /// Return the numeric binding identifier.
+            pub fn as_u64(self) -> u64 {}
+        }
+
+        impl BindingPhase {
+            /// Parse a scripting label into a binding phase.
+            pub fn parse(value: &str) -> Option<Self> {}
+
+            /// Return a stable scripting and diagnostic label.
+            pub fn label(&self) -> &'static str {}
+        }
+
+        impl BindingTier {
+            /// Return a stable scripting and diagnostic label.
+            pub fn label(&self) -> &'static str {}
+
+            /// Return the framework group, if this is the framework tier.
+            pub fn framework_group(&self) -> Option<FrameworkBindingGroup> {}
+
+            /// Return the named mode, if this is a mode tier.
+            pub fn mode(&self) -> Option<&str> {}
+
+            /// Return whether this tier holds framework-owned bindings.
+            pub fn is_framework(&self) -> bool {}
+        }
+
+        impl FrameworkBindingGroup {
+            /// Construct a framework binding group.
+            pub const fn new(name: &'static str) -> Self {}
+
+            /// Return the diagnostic group name.
+            pub const fn as_str(self) -> &'static str {}
+        }
+
+        impl From<Key> for InputSpec {
+            fn from(key: Key) -> Self {}
+        }
+
+        impl From<Mouse> for InputSpec {
+            fn from(mouse: Mouse) -> Self {}
+        }
+
+        impl From<char> for InputSpec {
+            fn from(key: char) -> Self {}
+        }
+
+        impl InputSpec {
+            /// Normalize key variants for matching.
+            pub fn normalize(self) -> Self {}
+        }
+
+        impl Inject for crate::input::Event {
+            fn inject(ctx: &dyn Context) -> Option<Self> {}
+
+            fn requirement() -> Option<CommandRequirement> {}
+        }
+
+        impl IntentName {
+            #[must_use]
+            /// Return the intent name.
+            pub fn as_str(&self) -> &str {}
+
+            /// Validate `name` and return it.
+            pub fn new(name: impl Into<String>) -> Result<Self> {}
+        }
+
+        impl IntentSpec {
+            /// Build a spec from a name and a description.
+            pub fn new(name: impl Into<String>, description: impl Into<String>) -> Result<Self> {}
         }
 
         impl RouteOutcome {
             #[must_use]
             /// Return the winning binding, when a binding acts.
             pub fn winner(&self) -> Option<&RouteWinner> {}
+        }
+
+        impl RouteTraceKind {
+            /// Return a stable scripting and diagnostic label.
+            pub fn label(self) -> &'static str {}
         }
     }
 
@@ -1655,6 +1885,87 @@ pub mod canopy {
             Wrap,
         }
 
+        /// How a reveal places a rectangle inside a viewport.
+        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+        pub enum RevealAlign {
+            #[default]
+            /// Make the smallest move that shows the rectangle. A viewport that
+            /// already lies inside a larger rectangle stays where it is.
+            Nearest,
+            /// Center each axis on which the rectangle is shorter than the viewport,
+            /// and use `Nearest` on the others.
+            Center,
+            /// Place the rectangle's start `context` cells past the viewport origin,
+            /// clamping to the scrollable range. Text reads top to bottom, so only
+            /// the vertical axis offsets; the horizontal axis uses `Nearest`.
+            Top(u32),
+        }
+
+        /// The axis a scrollbar measures.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub enum ScrollAxis {
+            /// Rows, with a track that runs top to bottom.
+            Vertical,
+            /// Columns, with a track that runs left to right.
+            Horizontal,
+        }
+
+        /// Direction of a line or page scroll.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub enum ScrollDirection {
+            /// Toward the top of the canvas.
+            Up,
+            /// Toward the bottom of the canvas.
+            Down,
+            /// Toward the left edge of the canvas.
+            Left,
+            /// Toward the right edge of the canvas.
+            Right,
+        }
+
+        /// A position indicator drawn on a scrollbar track.
+        ///
+        /// `start` and `end` bound a half-open region of canvas cells, counted from
+        /// the start of the target's canvas along the scrollbar's axis, so a mark
+        /// can cover one row or a whole multi-line match. The scrollbar maps the
+        /// region onto its track the same proportional way it places the thumb, so
+        /// a mark sits beside the content it annotates; every nonempty region owns
+        /// at least one track cell, and an empty region draws nothing. Each covered
+        /// cell outside the thumb draws with `style` and `glyph`; each cell under
+        /// the thumb keeps the thumb's glyph and the mark's style, so the position
+        /// reads through in the mark's color.
+        ///
+        /// The mark color must read from the style's foreground. Block thumb glyphs
+        /// hide the background, so a text-highlight style with a dark foreground
+        /// turns the mark dark just when the thumb slides over it; give marks a
+        /// style whose foreground is the mark color instead.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct ScrollMark {
+            /// First canvas cell of the marked region.
+            pub start: u32,
+            /// One past the last canvas cell of the marked region.
+            pub end: u32,
+            /// Style path of the mark.
+            pub style: &'static str,
+            /// Glyph of the mark where it sits outside the thumb.
+            pub glyph: char,
+        }
+
+        /// One scroll of a view. Every operation clamps the result to the canvas.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub enum ScrollOp {
+            /// Scroll to an absolute offset.
+            To(crate::geom::Point),
+            /// Scroll by a signed offset.
+            By(i32, i32),
+            /// Scroll a number of lines in a direction.
+            Lines(ScrollDirection, u32),
+            /// Scroll a number of pages in a direction. A page is the view extent on
+            /// that axis less one line, so consecutive pages keep one line of
+            /// overlap.
+            Pages(ScrollDirection, u32),
+        }
+
         /// Sizing strategy for a single axis.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub enum Sizing {
@@ -1664,9 +1975,39 @@ pub mod canopy {
             Flex(u32),
         }
 
+        /// Render-time view information for a node.
+        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+        pub struct View {
+            /// Outer rect in screen coordinates (signed for scroll translations).
+            pub outer: crate::geom::RectI32,
+            /// Content rect in screen coordinates (outer inset by padding).
+            pub content: crate::geom::RectI32,
+            /// Viewport offset in content coordinates (scroll position).
+            pub scroll: crate::geom::Point,
+            /// Canvas size in content coordinates.
+            pub canvas: crate::geom::Size,
+        }
+
         impl CanvasChild {
             /// Construct a new canvas child.
             pub fn new(rect: Rect, canvas: Size) -> Self {}
+        }
+
+        impl CommandType for ScrollDirection {
+            fn luau_decls(registry: &mut canopy::commands::DeclRegistry<'_>) {}
+
+            fn luau_ty() -> canopy::commands::declaration::Type {}
+        }
+
+        impl FromArgValue for ScrollDirection {
+            fn from_arg_value(
+                v: &canopy::commands::ArgValue,
+            ) -> ::std::result::Result<Self, canopy::commands::CommandError> {
+            }
+        }
+
+        impl ToArgValue for ScrollDirection {
+            fn to_arg_value(self) -> canopy::commands::ArgValue {}
         }
 
         impl Constraint {
@@ -1843,6 +2184,75 @@ pub mod canopy {
             pub fn main(&self, direction: Direction) -> Constraint {}
         }
 
+        impl ScrollOp {
+            /// Page vertically by a signed count: negative moves up, positive moves
+            /// down, and zero stays put.
+            pub fn pages(delta: i32) -> Self {}
+        }
+
+        impl View {
+            /// Build a view from signed outer and content rects, a scroll offset, and a
+            /// canvas size.
+            pub fn new(outer: RectI32, content: RectI32, scroll: Point, canvas: Size) -> Self {}
+
+            /// Calculates the (pre, active, post) rectangles needed to draw a
+            /// horizontal scroll bar for this view in the specified margin rect.
+            pub fn hactive(&self, margin: Rect) -> Result<Option<(Rect, Rect, Rect)>> {}
+
+            /// Calculates the (pre, active, post) rectangles needed to draw a vertical
+            /// scroll bar for this view in the specified margin rect.
+            pub fn vactive(&self, margin: Rect) -> Result<Option<(Rect, Rect, Rect)>> {}
+
+            /// Convert a screen point to viewport-local coordinates, before scroll.
+            /// Returns a geometry error if the result is outside the signed range.
+            pub fn screen_to_viewport(&self, point: PointI32) -> Result<PointI32> {}
+
+            /// Convert a viewport-local point to outer-local coordinates, including
+            /// padding. Returns a geometry error if the result is outside the signed
+            /// range.
+            pub fn viewport_to_outer(&self, point: PointI32) -> Result<PointI32> {}
+
+            /// Convert a viewport-local point to scrolled content coordinates.
+            /// Returns a geometry error if the result is outside the signed range.
+            pub fn viewport_to_content(&self, point: PointI32) -> Result<PointI32> {}
+
+            /// Local outer rectangle with origin at (0,0).
+            pub fn outer_rect_local(&self) -> Rect {}
+
+            /// Offset from the outer origin to the content origin, in local
+            /// coordinates.
+            pub fn content_origin(&self) -> Point {}
+
+            /// Return the canvas cell under a widget-local location, scroll included,
+            /// or `None` outside the visible content.
+            pub fn content_point(&self, location: PointI32) -> Option<Point> {}
+
+            /// Return the outer-local cell a widget-local location falls in, padding
+            /// included, or `None` outside the outer rect.
+            ///
+            /// This is the space `outer_rect_local()` paints in.
+            pub fn outer_point(&self, location: PointI32) -> Option<Point> {}
+
+            /// Return the visible content cell a widget-local location falls in,
+            /// before scroll, or `None` outside the content rect.
+            pub fn viewport_point(&self, location: PointI32) -> Option<Point> {}
+
+            /// Size of the content rect.
+            pub fn content_size(&self) -> Size {}
+
+            /// Size of the outer rect.
+            pub fn outer_size(&self) -> Size {}
+
+            /// True if the view has no visible cells.
+            pub fn is_empty(&self) -> bool {}
+
+            /// Visible view rectangle in content coordinates.
+            pub fn view_rect(&self) -> Rect {}
+
+            /// Visible view rectangle in local outer coordinates.
+            pub fn view_rect_local(&self) -> Rect {}
+        }
+
         impl<'a> CanvasContext<'a> {
             /// Child layout results in this node's content coordinate space.
             pub fn children(&self) -> &[CanvasChild] {}
@@ -1857,6 +2267,11 @@ pub mod canopy {
 
     pub mod path {
         //! Path and traversal helpers.
+
+        /// A node name, which consists of lowercase ASCII alphanumeric characters, plus
+        /// underscores.
+        #[derive(Clone, Debug, Display, Eq, Hash, PartialEq)]
+        pub struct NodeName {}
 
         /// A path of node name components.
         #[derive(Clone, Debug, Display, Eq, PartialEq)]
@@ -1889,6 +2304,17 @@ pub mod canopy {
             pub fn pop(&mut self) -> Option<String> {}
         }
 
+        impl NodeName {
+            /// Create a new NodeName, returning an error if the string contains invalid
+            /// characters.
+            pub fn new(name: &str) -> Result<Self> {}
+
+            /// Takes a string and munges it into a valid node name. It does this by
+            /// first converting the string to snake case, then removing all invalid
+            /// characters.
+            pub fn convert(name: &str) -> Self {}
+        }
+
         impl PathFilter {
             /// Compile a filter after normalizing it to a full-path match.
             pub fn normalized(filter: &str) -> Result<Self> {}
@@ -1905,7 +2331,44 @@ pub mod canopy {
     }
 
     pub mod render {
-        //! Rendering backend interfaces.
+        //! Rendering: the widget renderer, frame buffers, backends, and cursors.
+
+        pub mod cursor {
+            //! Cursor and position helpers.
+
+            /// Cursor position and shape.
+            #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+            pub struct Cursor {
+                /// Location of the cursor, relative to (0, 0) in the node view rect.
+                pub location: geom::Point,
+                /// Shape of the cursor.
+                pub shape: CursorShape,
+            }
+
+            /// Cursor glyph shape variants.
+            #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+            pub enum CursorShape {
+                /// Underscore cursor.
+                Underscore,
+                /// Vertical bar cursor.
+                Line,
+                /// Block cursor.
+                Block,
+            }
+        }
+
+        /// A terminal cell with glyph and style.
+        #[derive(Clone, Debug, PartialEq)]
+        pub struct Cell {
+            /// Base glyph character.
+            pub ch: char,
+            /// Additional grapheme characters stored with the base glyph.
+            pub suffix: String,
+            /// ResolvedStyle applied to the cell.
+            pub style: crate::style::ResolvedStyle,
+            /// True when this cell continues a wide glyph from the previous column.
+            pub continuation: bool,
+        }
 
         /// A render backend that discards all output.
         ///
@@ -1913,6 +2376,25 @@ pub mod canopy {
         /// producing user-visible output, so callers can inspect the buffer directly.
         #[derive(Default)]
         pub struct NopBackend;
+
+        /// A renderer that only renders to a specific rectangle within the target
+        /// terminal buffer.
+        pub struct Render<'a> {}
+
+        /// Limits for a materialized visible render target.
+        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+        pub struct RenderLimits {
+            /// Maximum visible render-target width.
+            pub max_width: u32,
+            /// Maximum visible render-target height.
+            pub max_height: u32,
+            /// Maximum total number of materialized terminal cells.
+            pub max_cells: usize,
+        }
+
+        /// A 2D terminal buffer of styled cells.
+        #[derive(Clone, Debug, PartialEq)]
+        pub struct TermBuf {}
 
         /// The trait implemented by renderers.
         pub trait RenderBackend {
@@ -1944,6 +2426,11 @@ pub mod canopy {
             fn text(&mut self, loc: geom::Point, txt: &str) -> Result<()>;
         }
 
+        impl Cell {
+            /// Return this cell's rendered text.
+            pub fn rendered_text(&self) -> String {}
+        }
+
         impl NopBackend {
             /// Construct a no-op backend.
             pub fn new() -> Self {}
@@ -1956,6 +2443,288 @@ pub mod canopy {
 
             fn text(&mut self, _loc: geom::Point, _txt: &str) -> Result<()> {}
         }
+
+        impl RenderLimits {
+            /// Construct explicit visible render-target limits.
+            pub const fn new(max_width: u32, max_height: u32, max_cells: usize) -> Self {}
+
+            /// Validate a visible target size and return its exact cell count.
+            pub fn cell_count(self, size: Size) -> Result<usize> {}
+        }
+
+        impl TermBuf {
+            /// Construct a buffer filled with the given character and style.
+            pub fn new(size: impl Into<Size>, ch: char, style: ResolvedStyle) -> Result<Self> {}
+
+            /// Diff this terminal buffer against a previous state, emitting changes
+            /// to the provided render backend. The caller flushes the backend.
+            pub fn emit_diff<R: RenderBackend>(&self, prev: &Self, backend: &mut R) -> Result<()> {}
+
+            /// Draw text clipped to the given line.
+            pub fn text(&mut self, style: &ResolvedStyle, l: Line, txt: &str) -> Result<()> {}
+
+            /// Emit this terminal buffer in full to the provided backend,
+            /// batching runs of text with the same style. The caller flushes the
+            /// backend.
+            pub fn emit<R: RenderBackend>(&self, backend: &mut R) -> Result<()> {}
+
+            /// Fill a rectangle with a glyph and style.
+            pub fn fill(&mut self, style: &ResolvedStyle, r: Rect, ch: char) -> Result<()> {}
+
+            /// Get a cell by position.
+            pub fn get(&self, p: Point) -> Option<&Cell> {}
+
+            /// Return the buffer bounds as a rectangle.
+            pub fn rect(&self) -> Rect {}
+
+            /// Return the buffer size.
+            pub fn size(&self) -> Size {}
+
+            /// Return the cells in row-major order.
+            pub fn cells(&self) -> &[Cell] {}
+
+            /// Return the rendered screen as newline-joined plain text.
+            pub fn screen_text(&self) -> String {}
+
+            /// Return the rendered screen as rows of cell strings.
+            pub fn rows(&self) -> Vec<Vec<String>> {}
+        }
+
+        impl<'a> Render<'a> {
+            /// Apply a named style to the painted grapheme at a point, preserving its
+            /// text.
+            pub fn restyle(&mut self, style: &str, point: geom::Point) {}
+
+            /// Apply the current effect stack to a style.
+            /// Use this when you have a Style from a source other than the style
+            /// manager.
+            pub fn apply_effects(&self, style: Style) -> Style {}
+
+            /// Fill a rectangle with a specified character. Writes out of bounds will
+            /// be clipped.
+            pub fn fill(&mut self, style: &str, r: geom::Rect, c: char) -> Result<()> {}
+
+            /// Print text in the specified line. If the text is wider than the
+            /// rectangle, it will be truncated; if it is shorter, it will be padded.
+            pub fn text(&mut self, style: &str, l: geom::Line, txt: &str) -> Result<()> {}
+
+            /// Push a style layer.
+            pub fn push_layer(&mut self, name: &str) {}
+
+            /// Resolve a style by name and apply the current effect stack.
+            pub fn resolve_style(&self, name: &str) -> Style {}
+
+            /// Write a grapheme with a resolved style, including continuation cells.
+            pub fn put_grapheme(
+                &mut self,
+                style: ResolvedStyle,
+                p: geom::Point,
+                grapheme: &str,
+            ) -> Result<()> {
+            }
+
+            /// Write a single cell with a resolved style.
+            pub fn put_cell(
+                &mut self,
+                style: ResolvedStyle,
+                p: geom::Point,
+                ch: char,
+            ) -> Result<()> {
+            }
+        }
+    }
+
+    pub mod runtime {
+        //! The runtime: turns, published frames, polls and wakes, and notices.
+
+        /// Identifier of an immutable publication.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct FrameId(pub u64);
+
+        /// Immutable data from one successfully prepared frame.
+        #[derive(Clone, Debug, PartialEq)]
+        pub struct FrameSnapshot {
+            /// Publication generation shared with turn outcomes.
+            pub frame_id: crate::runtime::FrameId,
+            /// The rendered frame buffer, shared with the backend emitter.
+            pub buffer: std::sync::Arc<super::termbuf::TermBuf>,
+            /// All live arena nodes, including detached trees.
+            pub nodes: Vec<NodeSnapshot>,
+            /// Focus owner at publication.
+            pub focus: Option<crate::NodeId>,
+        }
+
+        /// Owned identity, geometry, and semantics for one live arena node.
+        #[derive(Clone, Debug, PartialEq)]
+        pub struct NodeSnapshot {
+            /// Arena identity at publication, retained even after removal.
+            pub id: crate::NodeId,
+            /// Structural parent at publication.
+            pub parent: Option<crate::NodeId>,
+            /// Children in source order.
+            pub children: Vec<crate::NodeId>,
+            /// Widget path name.
+            pub name: String,
+            /// Explicit application identity.
+            pub identity: Option<crate::tree::NodeIdentity>,
+            /// Whether the root tree contains this node.
+            pub attached: bool,
+            /// Attached with no hidden ancestor.
+            pub displayed: bool,
+            /// Intersection with the viewport and all ancestor content clips.
+            pub intersects_viewport: bool,
+            /// Current view geometry, absent when not displayed.
+            pub view: Option<super::view::View>,
+            /// Whether this node owns focus.
+            pub focused: bool,
+            /// Widget-provided observations captured after paint.
+            pub semantics: WidgetSemantics,
+        }
+
+        /// Thread-safe handle that requests a poll of one widget incarnation.
+        ///
+        /// Producers keep results in their own bounded channels. This handle never owns
+        /// the application or widget and expires when its registered lifetime ends.
+        #[derive(Clone, Debug)]
+        pub struct NodeWakeHandle {}
+
+        /// A recoverable failure, reported to the user and to scripts.
+        #[derive(Clone, Debug, Eq, PartialEq)]
+        pub struct Notice {
+            /// Human-readable failure message.
+            pub message: String,
+            /// Stable failure category, as script error payloads report it.
+            pub kind: crate::error::ScriptErrorKind,
+            /// Where the failure arose.
+            pub source: NoticeSource,
+            /// Node the binding, handler, or poll ran on, when known.
+            pub node: Option<crate::NodeId>,
+        }
+
+        /// Where a notice arose.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub enum NoticeSource {
+            /// A binding's command or callback failed.
+            Binding,
+            /// A widget's event or intent handler failed.
+            Widget,
+            /// A widget's poll failed.
+            Poll,
+        }
+
+        /// Lifetime of runtime-managed widget work.
+        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+        pub enum PollLifetime {
+            #[default]
+            /// Continue while the widget exists, including while hidden or detached.
+            Node,
+            /// End when the widget is detached, replaced, or removed.
+            Attachment,
+        }
+
+        /// One runtime input.
+        pub enum TurnInput {
+            /// Deliver input events that arrived together, in order.
+            ///
+            /// The turn dispatches each event and prepares one frame for the batch, so
+            /// a burst of input costs one render. Layout settles before a mouse event
+            /// that follows another event, so hit testing sees the geometry the earlier
+            /// events left. Dispatch stops at the first error or exit request.
+            Events(Vec<crate::input::Event>),
+            /// Service ready background work.
+            Wake,
+            /// Start a top-level evaluation.
+            StartEval(EvalRequest),
+            /// Cancel an evaluation owned by this runtime.
+            CancelEval(EvalId),
+            /// Prepare changes made through native access.
+            Prepare,
+        }
+
+        /// Observable effects of one turn.
+        #[derive(Default)]
+        pub struct TurnOutcome {
+            /// Frame published by this turn, if any.
+            pub frame: Option<FrameId>,
+            /// Evaluation accepted by this turn.
+            pub started: Option<EvalId>,
+            /// Evaluations completed after publication without an automation ticket.
+            pub completed: Vec<EvalOutcome>,
+            /// Requested application exit status.
+            pub exit_code: Option<i32>,
+        }
+
+        /// Result of requesting a poll through a node wake handle.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub enum WakeOutcome {
+            /// The owner now has pending work.
+            Queued,
+            /// The owner already had pending work.
+            Coalesced,
+            /// The owning widget, attachment, or application no longer exists.
+            Expired,
+        }
+
+        /// Sending half of a bounded channel that polls its owner on every send.
+        ///
+        /// A background producer sends results here, and the owning widget drains
+        /// the receiver from `Widget::poll`. The owner needs no polling interval while
+        /// it waits: each successful send queues one coalesced poll.
+        #[derive(Clone, Debug)]
+        pub struct WakeSender<T> {}
+
+        /// Optional application observations, without arbitrary widget serialization.
+        #[derive(Clone, Debug, Default, PartialEq)]
+        pub struct WidgetSemantics {
+            /// Application role independent of structural wrappers.
+            pub role: Option<String>,
+            /// Human-readable accessible label.
+            pub label: Option<String>,
+            /// Explicitly exposed value; sensitive values must be omitted.
+            pub value: Option<String>,
+            /// Whether this widget is selected, when applicable.
+            pub selected: Option<bool>,
+            /// Stable application keys selected by a collection.
+            pub selected_keys: Vec<crate::commands::ArgValue>,
+            /// Availability of the widget's activation command.
+            pub activation_status: Option<crate::commands::CommandStatus>,
+        }
+
+        /// Create a bounded channel whose sends poll the owner of `handle`.
+        ///
+        /// `capacity` bounds the values in flight; a full channel blocks `send`
+        /// and fails `try_send`.
+        pub fn wake_channel<T>(
+            handle: NodeWakeHandle,
+            capacity: usize,
+        ) -> (WakeSender<T>, std::sync::mpsc::Receiver<T>) {
+        }
+
+        impl FrameSnapshot {
+            /// Return the screen size: the dimensions of the rendered buffer.
+            pub fn size(&self) -> Size {}
+        }
+
+        impl NodeWakeHandle {
+            /// Queue one owner poll, coalesce with existing work, or report expiration.
+            pub fn wake(&self) -> Result<WakeOutcome> {}
+        }
+
+        impl NoticeSource {
+            /// Return a stable scripting and diagnostic label.
+            pub fn label(self) -> &'static str {}
+        }
+
+        impl<T> WakeSender<T> {
+            /// Send `value` without blocking, then poll the owner.
+            pub fn try_send(&self, value: T) -> StdResult<(), TrySendError<T>> {}
+
+            /// Send `value`, blocking while the channel is full, then poll the owner.
+            ///
+            /// Fails only when the receiver is gone. A wake that finds its owner
+            /// expired is not an error: nobody is left to read the value.
+            pub fn send(&self, value: T) -> StdResult<(), SendError<T>> {}
+        }
     }
 
     #[expect(
@@ -1964,6 +2733,67 @@ pub mod canopy {
     )]
     pub mod script {
         //! Scripting support.
+
+        /// Base `canopy` scripting API declarations and native registration.
+        pub type AutomationCallback = Box<dyn FnOnce(&mut Canopy) + Send + 'static>;
+
+        /// Base `canopy` scripting API declarations and native registration.
+        #[derive(Clone)]
+        pub struct AutomationHandle {}
+
+        /// Base `canopy` scripting API declarations and native registration.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        pub struct EvalId(pub u64);
+
+        /// Base `canopy` scripting API declarations and native registration.
+        pub struct EvalOutcome {
+            /// Evaluation that completed.
+            pub id: EvalId,
+            /// Completion value or failure.
+            pub result: crate::error::Result<crate::commands::ArgValue>,
+            /// Output isolated to this evaluation.
+            pub logs: Vec<String>,
+            /// Assertions isolated to this evaluation.
+            pub assertions: Vec<script::ScriptAssertion>,
+        }
+
+        /// Base `canopy` scripting API declarations and native registration.
+        #[derive(Clone, Debug)]
+        pub struct EvalRequest {
+            /// Owned Luau source.
+            pub source: String,
+            /// Absolute execution budget, including parked time.
+            pub timeout: Option<std::time::Duration>,
+            /// Node the evaluation dispatches from when a call names no target,
+            /// retained across invocation segments.
+            pub origin: crate::NodeId,
+        }
+
+        /// Base `canopy` scripting API declarations and native registration.
+        pub struct EvalTicket {
+            /// Accepted queue identity, including failed admission results.
+            pub id: EvalId,
+            /// Evaluation completion after publication.
+            pub completion: oneshot::Receiver<EvalOutcome>,
+        }
+
+        /// Base `canopy` scripting API declarations and native registration.
+        #[derive(Clone)]
+        pub struct Fixture {
+            /// Fixture name.
+            pub name: String,
+            /// Human-readable fixture description.
+            pub description: String,
+        }
+
+        /// Base `canopy` scripting API declarations and native registration.
+        #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+        pub struct FixtureInfo {
+            /// Fixture name.
+            pub name: String,
+            /// Human-readable fixture description.
+            pub description: String,
+        }
 
         /// Stable handle for a stored Luau closure.
         #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -2006,6 +2836,91 @@ pub mod canopy {
             Error,
             /// The diagnostic does not fail script evaluation.
             Warning,
+        }
+
+        /// Base `canopy` scripting API declarations and native registration.
+        #[derive(Clone, Debug, Deserialize, Serialize)]
+        pub struct ScriptJournalEntry {
+            /// Monotonic journal id.
+            pub id: u64,
+            /// Typed origin serialized as the established journal string.
+            pub origin: ScriptOrigin,
+            /// Evaluated source text.
+            pub source: String,
+            /// Whether the evaluation completed successfully.
+            pub ok: bool,
+            /// Error message when `ok` is false.
+            pub error: Option<String>,
+            /// Logs emitted by the script.
+            pub logs: Vec<String>,
+            /// Assertions emitted by the script.
+            pub assertions: Vec<script::ScriptAssertion>,
+            /// Wall-clock duration in milliseconds.
+            pub duration_ms: u64,
+        }
+
+        #[serde(from = "String", into = "String")]
+        /// Base `canopy` scripting API declarations and native registration.
+        #[derive(Clone, Debug, Deserialize, Display, Eq, PartialEq, Serialize)]
+        pub enum ScriptOrigin {
+            /// Top-level application evaluation.
+            Eval,
+            /// Builder configuration loaded from a path.
+            Config(String),
+            /// Application or mounted startup source.
+            Startup(String),
+            /// Builder-owned binding source.
+            Bindings(String),
+            /// Widget default-binding source.
+            DefaultBindings(String),
+            /// Origin retained from a journal written by another producer.
+            Other(String),
+        }
+
+        /// Base `canopy` scripting API declarations and native registration.
+        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+        pub enum ScriptTrust {
+            #[default]
+            /// Do not mount, inspect, require, or execute this root.
+            Disabled,
+            /// Execute local scripts with the application's full native authority.
+            TrustedLocal,
+        }
+
+        impl EvalOutcome {
+            /// Return the evaluation result.
+            pub fn into_result(self) -> Result<ArgValue> {}
+        }
+
+        impl Fixture {
+            /// Construct a fixture from owned name/description values.
+            pub fn new(
+                name: impl Into<String>,
+                description: impl Into<String>,
+                setup: impl 'static + Fn(&mut Canopy) -> Result<()> + Send + Sync,
+            ) -> Self {
+            }
+
+            /// Return fixture metadata without the setup closure.
+            pub fn info(&self) -> FixtureInfo {}
+        }
+
+        impl From<ScriptOrigin> for String {
+            fn from(origin: ScriptOrigin) -> Self {}
+        }
+
+        impl From<String> for ScriptOrigin {
+            fn from(origin: String) -> Self {}
+        }
+
+        impl JsonSchema for FixtureInfo {
+            fn inline_schema() -> bool {}
+
+            fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
+
+            fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+            fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
         }
 
         impl JsonSchema for ScriptAssertion {
@@ -2055,6 +2970,21 @@ pub mod canopy {
 
             /// Return true when the result contains failing diagnostics.
             pub fn has_errors(&self) -> bool {}
+        }
+
+        impl super::AutomationHandle {
+            /// Submit evaluation work without blocking the UI thread while it runs.
+            pub fn submit_eval(&self, request: EvalRequest) -> Result<EvalTicket> {}
+
+            /// Execute a closure on the UI thread and wait for its result.
+            pub fn request<R, F>(&self, callback: F) -> Result<R>
+            where
+                F: 'static + FnOnce(&mut Canopy) -> Result<R> + Send,
+                R: 'static + Send, {
+            }
+
+            /// Queue a callback to run on the UI thread.
+            pub fn submit(&self, callback: AutomationCallback) -> Result<()> {}
         }
     }
 
@@ -2759,6 +3689,87 @@ pub mod canopy {
         pub fn truncate_start(s: &str, budget: usize) -> std::borrow::Cow<'_, str> {}
     }
 
+    pub mod tree {
+        //! Tree structure: slots, identities, and focus traversal.
+
+        /// Direction for focus movement.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub enum FocusDirection {
+            /// Move to the next focusable node.
+            Next,
+            /// Move to the previous focusable node.
+            Prev,
+            /// Move focus up.
+            Up,
+            /// Move focus down.
+            Down,
+            /// Move focus left.
+            Left,
+            /// Move focus right.
+            Right,
+        }
+
+        /// Subtree used by a focus traversal operation.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub enum FocusScope {
+            /// The current widget's subtree.
+            Current,
+            /// The complete widget tree.
+            Root,
+            /// A subtree rooted at an explicit node.
+            Node(super::id::NodeId),
+        }
+
+        /// Application identity unique within an explicit arena subtree.
+        #[derive(Clone, Debug, Eq, PartialEq)]
+        pub struct NodeIdentity {
+            /// Scope root, which may itself be detached.
+            pub scope: crate::NodeId,
+            /// Application-defined key independent of structural slots.
+            pub key: String,
+        }
+
+        /// A typed slot for slots.
+        ///
+        /// This trait associates a string key with a specific widget type, providing
+        /// compile-time type safety for keyed child access.
+        ///
+        /// Use the [`crate::slot!`] macro to define keys:
+        ///
+        /// ```
+        /// use canopy::{ChildSlot, Widget, slot};
+        ///
+        /// pub struct Modal;
+        /// impl Widget for Modal {}
+        ///
+        /// slot!(ModalSlot: Modal);
+        /// assert_eq!(ModalSlot::KEY, "ModalSlot");
+        /// ```
+        pub trait ChildSlot {
+            /// The string key used for storage.
+            const KEY: &'static str;
+            /// The widget type associated with this key.
+            type Widget: 'static + Widget;
+        }
+
+        impl CommandType for FocusDirection {
+            fn luau_decls(registry: &mut canopy::commands::DeclRegistry<'_>) {}
+
+            fn luau_ty() -> canopy::commands::declaration::Type {}
+        }
+
+        impl FromArgValue for FocusDirection {
+            fn from_arg_value(
+                v: &canopy::commands::ArgValue,
+            ) -> ::std::result::Result<Self, canopy::commands::CommandError> {
+            }
+        }
+
+        impl ToArgValue for FocusDirection {
+            fn to_arg_value(self) -> canopy::commands::ArgValue {}
+        }
+    }
+
     #[macro_export]
     /// Build a [`Color`](crate::style::Color) from a `#RRGGBB` or `RRGGBB` literal
     /// at compile time.
@@ -2787,87 +3798,6 @@ pub mod canopy {
     ($vis:vis $name:ident) => { ... };
     ($vis:vis $name:ident : $widget:ty) => { ... };
 }
-    /// Callback marshalled onto the UI thread for live automation.
-    pub type AutomationCallback = Box<dyn FnOnce(&mut Canopy) + Send + 'static>;
-
-    /// Handle for submitting automation work to a live canopy runloop.
-    #[derive(Clone)]
-    pub struct AutomationHandle {}
-
-    /// Action executed by a binding.
-    #[derive(Clone, Debug, PartialEq)]
-    pub enum BindingAction {
-        /// Stored Luau callback.
-        Script(crate::script::LuauFunctionId),
-        /// Rust command call.
-        Command(crate::commands::CommandCall),
-        /// Named operation the route offers to widgets on the way up.
-        Intent(IntentName),
-    }
-
-    /// Class of target a binding record owns.
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-    pub enum BindingActionKind {
-        /// Stored Luau callback.
-        Script,
-        /// Rust command call.
-        Command,
-        /// Named operation offered to widgets on the route.
-        Intent,
-    }
-
-    /// Monotonic identifier for a binding.
-    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-    pub struct BindingId(_);
-
-    /// Options shared by native and scripted application bindings.
-    #[derive(Clone, Debug)]
-    pub struct BindingOptions {
-        /// Optional validated path selector. Omission matches the current route.
-        pub path: Option<crate::path::PathFilter>,
-        /// Resolution tier. Scripts install application tiers only; the
-        /// framework tier is registered during setup.
-        pub tier: BindingTier,
-        /// Required user-facing description.
-        pub description: String,
-        /// Optional diagnostic source.
-        pub source: Option<String>,
-        /// Phase that sets when the binding runs relative to the widget.
-        ///
-        /// `None` means the phase was omitted at registration. Commands and
-        /// callbacks then default to `after_widget`. An intent always runs
-        /// before the widget, so an explicit `after_widget` on one is an error.
-        pub phase: Option<BindingPhase>,
-    }
-
-    /// Binding phase relative to widget input handling.
-    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-    pub enum BindingPhase {
-        /// Execute before the focused widget.
-        BeforeWidget,
-        #[default]
-        /// Execute only after the widget ignores the input.
-        AfterWidget,
-    }
-
-    /// Resolution tier for one binding.
-    ///
-    /// Variant order is resolution order: the framework group an open modal
-    /// admits, then the global tier, then active modes newest first, then the
-    /// default tier. Only framework-tier records belong to the framework; every
-    /// other tier holds application bindings that script APIs can change.
-    #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-    pub enum BindingTier {
-        /// Framework-owned bindings that only a modal admits.
-        Framework(FrameworkBindingGroup),
-        /// Highest-priority application tier.
-        Global,
-        /// Named application mode.
-        Mode(String),
-        /// Default application tier.
-        Default,
-    }
-
     /// Application runtime state and renderer coordination.
     pub struct Canopy {}
 
@@ -2890,19 +3820,6 @@ pub mod canopy {
     #[derive(Default)]
     pub struct CanopyBuilder {}
 
-    /// A terminal cell with glyph and style.
-    #[derive(Clone, Debug, PartialEq)]
-    pub struct Cell {
-        /// Base glyph character.
-        pub ch: char,
-        /// Additional grapheme characters stored with the base glyph.
-        pub suffix: String,
-        /// ResolvedStyle applied to the cell.
-        pub style: crate::style::ResolvedStyle,
-        /// True when this cell continues a wide glyph from the previous column.
-        pub continuation: bool,
-    }
-
     /// Outcome of an accepted state mutation.
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub enum ChangeOutcome {
@@ -2914,47 +3831,6 @@ pub mod canopy {
 
     pub use canopy_derive::CommandArg;
     pub use canopy_derive::CommandEnum;
-    /// Globally unique evaluation identifier, never reused by another application.
-    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-    pub struct EvalId(pub u64);
-
-    /// Completed script value or failure.
-    pub struct EvalOutcome {
-        /// Evaluation that completed.
-        pub id: EvalId,
-        /// Completion value or failure.
-        pub result: crate::error::Result<crate::commands::ArgValue>,
-        /// Output isolated to this evaluation.
-        pub logs: Vec<String>,
-        /// Assertions isolated to this evaluation.
-        pub assertions: Vec<script::ScriptAssertion>,
-    }
-
-    /// One top-level script request.
-    #[derive(Clone, Debug)]
-    pub struct EvalRequest {
-        /// Owned Luau source.
-        pub source: String,
-        /// Absolute execution budget, including parked time.
-        pub timeout: Option<std::time::Duration>,
-        /// Node the evaluation dispatches from when a call names no target,
-        /// retained across invocation segments.
-        pub origin: crate::NodeId,
-    }
-
-    /// Completion receiver that is awaited outside the UI thread.
-    ///
-    /// The public receiver is intentionally the futures oneshot type: evaluation
-    /// completion is a single-consumer event, and wrapping it would duplicate the
-    /// same polling and cancellation contract. Dropping the completion receiver
-    /// cancels queued or active evaluation work on its next driver turn.
-    pub struct EvalTicket {
-        /// Accepted queue identity, including failed admission results.
-        pub id: EvalId,
-        /// Evaluation completion after publication.
-        pub completion: oneshot::Receiver<EvalOutcome>,
-    }
-
     /// The result of an event handler.
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub enum EventOutcome {
@@ -2964,399 +3840,14 @@ pub mod canopy {
         Ignore,
     }
 
-    /// A named, reproducible application state.
-    #[derive(Clone)]
-    pub struct Fixture {
-        /// Fixture name.
-        pub name: String,
-        /// Human-readable fixture description.
-        pub description: String,
-    }
-
-    /// Serializable metadata about a registered fixture.
-    #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-    pub struct FixtureInfo {
-        /// Fixture name.
-        pub name: String,
-        /// Human-readable fixture description.
-        pub description: String,
-    }
-
-    /// Direction for focus movement.
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-    pub enum FocusDirection {
-        /// Move to the next focusable node.
-        Next,
-        /// Move to the previous focusable node.
-        Prev,
-        /// Move focus up.
-        Up,
-        /// Move focus down.
-        Down,
-        /// Move focus left.
-        Left,
-        /// Move focus right.
-        Right,
-    }
-
-    /// Subtree used by a focus traversal operation.
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-    pub enum FocusScope {
-        /// The current widget's subtree.
-        Current,
-        /// The complete widget tree.
-        Root,
-        /// A subtree rooted at an explicit node.
-        Node(super::id::NodeId),
-    }
-
-    /// Identifier of an immutable publication.
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-    pub struct FrameId(pub u64);
-
-    /// Immutable data from one successfully prepared frame.
-    #[derive(Clone, Debug, PartialEq)]
-    pub struct FrameSnapshot {
-        /// Publication generation shared with turn outcomes.
-        pub frame_id: crate::FrameId,
-        /// The rendered frame buffer, shared with the backend emitter.
-        pub buffer: std::sync::Arc<super::termbuf::TermBuf>,
-        /// All live arena nodes, including detached trees.
-        pub nodes: Vec<NodeSnapshot>,
-        /// Focus owner at publication.
-        pub focus: Option<crate::NodeId>,
-    }
-
-    /// Stable name for one framework-owned binding group.
-    #[derive(Clone, Copy, Debug, Display, Eq, Hash, PartialEq)]
-    pub struct FrameworkBindingGroup(_);
-
-    /// Input event used for bindings.
-    #[derive(Clone, Copy, Debug, Display, Eq, Hash, PartialEq)]
-    pub enum InputSpec {
-        /// Mouse input.
-        Mouse(crate::event::mouse::Mouse),
-        /// Keyboard input.
-        Key(crate::event::key::Key),
-    }
-
-    /// Validated name of a bindable intent.
-    ///
-    /// A name is nonempty and dotted, such as `canopy.clear`. The dotted
-    /// form names the namespace that owns the behavior.
-    #[derive(Clone, Debug, Display, Eq, Hash, Ord, PartialEq, PartialOrd)]
-    pub struct IntentName(_);
-
-    /// One intent an application registers as bindable.
-    #[derive(Clone, Debug, Eq, PartialEq)]
-    pub struct IntentSpec {}
-
-    /// Bindings admitted within a modal's route to its owner.
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-    pub enum ModalBindings {
-        /// Admit this framework group first, then application bindings to the
-        /// listed intents, on the bounded modal route.
-        Framework {
-            /// Framework group that owns the modal.
-            group: crate::FrameworkBindingGroup,
-            /// Exact intent names the modal admits from application bindings.
-            intents: &'static [&'static str],
-        },
-        /// Admit ordinary application bindings on the bounded modal route.
-        Application,
-    }
-
-    /// Nodes and binding admission owned by one modal.
-    #[derive(Clone, Copy, Debug)]
-    pub struct ModalOptions {
-        /// Ancestor that owns the modal lifetime and bounds binding routing.
-        pub owner: crate::NodeId,
-        /// Subtree that receives normal input while this scope is on top.
-        pub modal: crate::NodeId,
-        /// Focusable node inside the modal to focus on successful open.
-        pub initial_focus: crate::NodeId,
-        /// Optional subtree dimmed while the scope remains active.
-        pub dim_target: Option<crate::NodeId>,
-        /// Binding ownership admitted by this scope.
-        pub bindings: ModalBindings,
-    }
-
-    /// Opaque identity of one modal, unique across applications.
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-    pub struct ModalToken(_);
-
     /// Opaque identifier for a node in an application tree.
     #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
     pub struct NodeId(_);
-
-    /// Application identity unique within an explicit arena subtree.
-    #[derive(Clone, Debug, Eq, PartialEq)]
-    pub struct NodeIdentity {
-        /// Scope root, which may itself be detached.
-        pub scope: crate::core::id::NodeId,
-        /// Application-defined key independent of structural slots.
-        pub key: String,
-    }
 
     /// A node name, which consists of lowercase ASCII alphanumeric characters, plus
     /// underscores.
     #[derive(Clone, Debug, Display, Eq, Hash, PartialEq)]
     pub struct NodeName {}
-
-    /// Owned identity, geometry, and semantics for one live arena node.
-    #[derive(Clone, Debug, PartialEq)]
-    pub struct NodeSnapshot {
-        /// Arena identity at publication, retained even after removal.
-        pub id: crate::NodeId,
-        /// Structural parent at publication.
-        pub parent: Option<crate::NodeId>,
-        /// Children in source order.
-        pub children: Vec<crate::NodeId>,
-        /// Widget path name.
-        pub name: String,
-        /// Explicit application identity.
-        pub identity: Option<crate::NodeIdentity>,
-        /// Whether the root tree contains this node.
-        pub attached: bool,
-        /// Attached with no hidden ancestor.
-        pub displayed: bool,
-        /// Intersection with the viewport and all ancestor content clips.
-        pub intersects_viewport: bool,
-        /// Current view geometry, absent when not displayed.
-        pub view: Option<super::view::View>,
-        /// Whether this node owns focus.
-        pub focused: bool,
-        /// Widget-provided observations captured after paint.
-        pub semantics: WidgetSemantics,
-    }
-
-    /// Thread-safe handle that requests a poll of one widget incarnation.
-    ///
-    /// Producers keep results in their own bounded channels. This handle never owns
-    /// the application or widget and expires when its registered lifetime ends.
-    #[derive(Clone, Debug)]
-    pub struct NodeWakeHandle {}
-
-    /// A recoverable failure, reported to the user and to scripts.
-    #[derive(Clone, Debug, Eq, PartialEq)]
-    pub struct Notice {
-        /// Human-readable failure message.
-        pub message: String,
-        /// Stable failure category, as script error payloads report it.
-        pub kind: crate::error::ScriptErrorKind,
-        /// Where the failure arose.
-        pub source: NoticeSource,
-        /// Node the binding, handler, or poll ran on, when known.
-        pub node: Option<crate::NodeId>,
-    }
-
-    /// Where a notice arose.
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-    pub enum NoticeSource {
-        /// A binding's command or callback failed.
-        Binding,
-        /// A widget's event or intent handler failed.
-        Widget,
-        /// A widget's poll failed.
-        Poll,
-    }
-
-    /// Lifetime of runtime-managed widget work.
-    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-    pub enum PollLifetime {
-        #[default]
-        /// Continue while the widget exists, including while hidden or detached.
-        Node,
-        /// End when the widget is detached, replaced, or removed.
-        Attachment,
-    }
-
-    /// A renderer that only renders to a specific rectangle within the target
-    /// terminal buffer.
-    pub struct Render<'a> {}
-
-    /// Limits for a materialized visible render target.
-    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-    pub struct RenderLimits {
-        /// Maximum visible render-target width.
-        pub max_width: u32,
-        /// Maximum visible render-target height.
-        pub max_height: u32,
-        /// Maximum total number of materialized terminal cells.
-        pub max_cells: usize,
-    }
-
-    /// How a reveal places a rectangle inside a viewport.
-    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-    pub enum RevealAlign {
-        #[default]
-        /// Make the smallest move that shows the rectangle. A viewport that
-        /// already lies inside a larger rectangle stays where it is.
-        Nearest,
-        /// Center each axis on which the rectangle is shorter than the viewport,
-        /// and use `Nearest` on the others.
-        Center,
-        /// Place the rectangle's start `context` cells past the viewport origin,
-        /// clamping to the scrollable range. Text reads top to bottom, so only
-        /// the vertical axis offsets; the horizontal axis uses `Nearest`.
-        Top(u32),
-    }
-
-    /// One entry in the most recent input route trace.
-    #[derive(Clone, Debug, Eq, PartialEq)]
-    pub struct RouteTraceEntry {
-        /// What this entry records.
-        pub kind: RouteTraceKind,
-        /// Node associated with this route step.
-        pub node: Option<crate::NodeId>,
-        /// Path visible to binding resolution at this route step.
-        pub path: String,
-        /// Human-readable route detail.
-        pub detail: String,
-    }
-
-    /// What one entry in a key or mouse route trace records.
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-    pub enum RouteTraceKind {
-        /// The route start was selected.
-        Start,
-        /// A before-widget binding matched.
-        BeforeWidgetBinding,
-        /// An intent was offered to the node's widget, or declined there.
-        OfferIntent,
-        /// The event was offered to the node's widget, or the widget's key
-        /// prediction disagreed with its result.
-        Widget,
-        /// An after-widget binding matched after the widget ignored the event.
-        AfterWidgetBinding,
-        /// A resolved binding ran.
-        RunBinding,
-        /// The runtime applied the input's default action to a node.
-        DefaultAction,
-        /// Routing moved from a node to its parent.
-        Bubble,
-        /// A widget or binding handled the event.
-        Handled,
-        /// Routing ended without a handler.
-        Unhandled,
-        /// A binding or a widget handler failed, and the failure became a notice
-        /// that consumed the input.
-        Notice,
-    }
-
-    /// Replayable record of one script evaluation.
-    #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct ScriptJournalEntry {
-        /// Monotonic journal id.
-        pub id: u64,
-        /// Typed origin serialized as the established journal string.
-        pub origin: ScriptOrigin,
-        /// Evaluated source text.
-        pub source: String,
-        /// Whether the evaluation completed successfully.
-        pub ok: bool,
-        /// Error message when `ok` is false.
-        pub error: Option<String>,
-        /// Logs emitted by the script.
-        pub logs: Vec<String>,
-        /// Assertions emitted by the script.
-        pub assertions: Vec<script::ScriptAssertion>,
-        /// Wall-clock duration in milliseconds.
-        pub duration_ms: u64,
-    }
-
-    #[serde(from = "String", into = "String")]
-    /// Typed source of one script-journal entry.
-    #[derive(Clone, Debug, Deserialize, Display, Eq, PartialEq, Serialize)]
-    pub enum ScriptOrigin {
-        /// Top-level application evaluation.
-        Eval,
-        /// Builder configuration loaded from a path.
-        Config(String),
-        /// Application or mounted startup source.
-        Startup(String),
-        /// Builder-owned binding source.
-        Bindings(String),
-        /// Widget default-binding source.
-        DefaultBindings(String),
-        /// Origin retained from a journal written by another producer.
-        Other(String),
-    }
-
-    /// Authority granted to scripts loaded from an application-declared root.
-    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-    pub enum ScriptTrust {
-        #[default]
-        /// Do not mount, inspect, require, or execute this root.
-        Disabled,
-        /// Execute local scripts with the application's full native authority.
-        TrustedLocal,
-    }
-
-    /// The axis a scrollbar measures.
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-    pub enum ScrollAxis {
-        /// Rows, with a track that runs top to bottom.
-        Vertical,
-        /// Columns, with a track that runs left to right.
-        Horizontal,
-    }
-
-    /// Direction of a line or page scroll.
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-    pub enum ScrollDirection {
-        /// Toward the top of the canvas.
-        Up,
-        /// Toward the bottom of the canvas.
-        Down,
-        /// Toward the left edge of the canvas.
-        Left,
-        /// Toward the right edge of the canvas.
-        Right,
-    }
-
-    /// A position indicator drawn on a scrollbar track.
-    ///
-    /// `start` and `end` bound a half-open region of canvas cells, counted from
-    /// the start of the target's canvas along the scrollbar's axis, so a mark
-    /// can cover one row or a whole multi-line match. The scrollbar maps the
-    /// region onto its track the same proportional way it places the thumb, so
-    /// a mark sits beside the content it annotates; every nonempty region owns
-    /// at least one track cell, and an empty region draws nothing. Each covered
-    /// cell outside the thumb draws with `style` and `glyph`; each cell under
-    /// the thumb keeps the thumb's glyph and the mark's style, so the position
-    /// reads through in the mark's color.
-    ///
-    /// The mark color must read from the style's foreground. Block thumb glyphs
-    /// hide the background, so a text-highlight style with a dark foreground
-    /// turns the mark dark just when the thumb slides over it; give marks a
-    /// style whose foreground is the mark color instead.
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-    pub struct ScrollMark {
-        /// First canvas cell of the marked region.
-        pub start: u32,
-        /// One past the last canvas cell of the marked region.
-        pub end: u32,
-        /// Style path of the mark.
-        pub style: &'static str,
-        /// Glyph of the mark where it sits outside the thumb.
-        pub glyph: char,
-    }
-
-    /// One scroll of a view. Every operation clamps the result to the canvas.
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-    pub enum ScrollOp {
-        /// Scroll to an absolute offset.
-        To(crate::geom::Point),
-        /// Scroll by a signed offset.
-        By(i32, i32),
-        /// Scroll a number of lines in a direction.
-        Lines(ScrollDirection, u32),
-        /// Scroll a number of pages in a direction. A page is the view extent on
-        /// that axis less one line, so consecutive pages keep one line of
-        /// overlap.
-        Pages(ScrollDirection, u32),
-    }
 
     /// Registration handle for an application that is not yet finalized.
     ///
@@ -3367,121 +3858,13 @@ pub mod canopy {
     /// the initial theme; the running application can replace it.
     pub struct Setup {}
 
-    /// A 2D terminal buffer of styled cells.
-    #[derive(Clone, Debug, PartialEq)]
-    pub struct TermBuf {}
-
-    /// One runtime input.
-    pub enum TurnInput {
-        /// Deliver input events that arrived together, in order.
-        ///
-        /// The turn dispatches each event and prepares one frame for the batch, so
-        /// a burst of input costs one render. Layout settles before a mouse event
-        /// that follows another event, so hit testing sees the geometry the earlier
-        /// events left. Dispatch stops at the first error or exit request.
-        Events(Vec<crate::event::Event>),
-        /// Service ready background work.
-        Wake,
-        /// Start a top-level evaluation.
-        StartEval(EvalRequest),
-        /// Cancel an evaluation owned by this runtime.
-        CancelEval(EvalId),
-        /// Prepare changes made through native access.
-        Prepare,
-    }
-
-    /// Observable effects of one turn.
-    #[derive(Default)]
-    pub struct TurnOutcome {
-        /// Frame published by this turn, if any.
-        pub frame: Option<FrameId>,
-        /// Evaluation accepted by this turn.
-        pub started: Option<EvalId>,
-        /// Evaluations completed after publication without an automation ticket.
-        pub completed: Vec<EvalOutcome>,
-        /// Requested application exit status.
-        pub exit_code: Option<i32>,
-    }
-
     /// Type-safe wrapper around a node identifier tied to a widget type.
     #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
     pub struct TypedId<T> {}
 
-    /// Render-time view information for a node.
-    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-    pub struct View {
-        /// Outer rect in screen coordinates (signed for scroll translations).
-        pub outer: crate::geom::RectI32,
-        /// Content rect in screen coordinates (outer inset by padding).
-        pub content: crate::geom::RectI32,
-        /// Viewport offset in content coordinates (scroll position).
-        pub scroll: crate::geom::Point,
-        /// Canvas size in content coordinates.
-        pub canvas: crate::geom::Size,
-    }
-
-    /// Result of requesting a poll through a node wake handle.
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-    pub enum WakeOutcome {
-        /// The owner now has pending work.
-        Queued,
-        /// The owner already had pending work.
-        Coalesced,
-        /// The owning widget, attachment, or application no longer exists.
-        Expired,
-    }
-
-    /// Sending half of a bounded channel that polls its owner on every send.
-    ///
-    /// A background producer sends results here, and the owning widget drains
-    /// the receiver from `Widget::poll`. The owner needs no polling interval while
-    /// it waits: each successful send queues one coalesced poll.
-    #[derive(Clone, Debug)]
-    pub struct WakeSender<T> {}
-
-    /// Optional application observations, without arbitrary widget serialization.
-    #[derive(Clone, Debug, Default, PartialEq)]
-    pub struct WidgetSemantics {
-        /// Application role independent of structural wrappers.
-        pub role: Option<String>,
-        /// Human-readable accessible label.
-        pub label: Option<String>,
-        /// Explicitly exposed value; sensitive values must be omitted.
-        pub value: Option<String>,
-        /// Whether this widget is selected, when applicable.
-        pub selected: Option<bool>,
-        /// Stable application keys selected by a collection.
-        pub selected_keys: Vec<crate::commands::ArgValue>,
-        /// Availability of the widget's activation command.
-        pub activation_status: Option<crate::commands::CommandStatus>,
-    }
-
     pub use canopy_derive::command;
     pub use canopy_derive::derive_commands;
     pub use canopy_geom as geom;
-    /// A typed slot for slots.
-    ///
-    /// This trait associates a string key with a specific widget type, providing
-    /// compile-time type safety for keyed child access.
-    ///
-    /// Use the [`crate::slot!`] macro to define keys:
-    ///
-    /// ```
-    /// use canopy::{ChildSlot, Widget, slot};
-    ///
-    /// pub struct Modal;
-    /// impl Widget for Modal {}
-    ///
-    /// slot!(ModalSlot: Modal);
-    /// assert_eq!(ModalSlot::KEY, "ModalSlot");
-    /// ```
-    pub trait ChildSlot {
-        /// The string key used for storage.
-        const KEY: &'static str;
-        /// The widget type associated with this key.
-        type Widget: 'static + Widget;
-    }
-
     /// Mutable context available to widgets during event handling.
     ///
     /// Applications consume contexts supplied by Canopy and cannot implement this
@@ -3643,7 +4026,7 @@ pub mod canopy {
 
         /// Capture a thread-safe wake handle for this widget's work lifetime.
         /// Attachment handles require this node to be attached when acquired.
-        fn wake_handle(&self, lifetime: crate::PollLifetime) -> Result<crate::NodeWakeHandle>;
+        fn wake_handle(&self, lifetime: PollLifetime) -> Result<NodeWakeHandle>;
 
         /// Execute a closure with mutable access to a widget and its node-bound
         /// context.
@@ -4011,61 +4394,6 @@ pub mod canopy {
         fn semantics(&self, _ctx: &dyn ViewContext) -> Result<WidgetSemantics> {}
     }
 
-    /// Create a bounded channel whose sends poll the owner of `handle`.
-    ///
-    /// `capacity` bounds the values in flight; a full channel blocks `send`
-    /// and fails `try_send`.
-    pub fn wake_channel<T>(
-        handle: NodeWakeHandle,
-        capacity: usize,
-    ) -> (WakeSender<T>, std::sync::mpsc::Receiver<T>) {
-    }
-
-    impl BindingAction {
-        #[must_use]
-        /// Return the intent name, when this action is an intent.
-        pub fn intent(&self) -> Option<&IntentName> {}
-
-        /// Return a stable target-kind label.
-        pub fn label(&self) -> &'static str {}
-    }
-
-    impl BindingActionKind {
-        #[must_use]
-        /// Return a stable target-kind label.
-        pub fn label(self) -> &'static str {}
-    }
-
-    impl BindingId {
-        /// Reconstruct a binding identifier from its numeric form.
-        pub fn from_u64(id: u64) -> Self {}
-
-        /// Return the numeric binding identifier.
-        pub fn as_u64(self) -> u64 {}
-    }
-
-    impl BindingPhase {
-        /// Parse a scripting label into a binding phase.
-        pub fn parse(value: &str) -> Option<Self> {}
-
-        /// Return a stable scripting and diagnostic label.
-        pub fn label(&self) -> &'static str {}
-    }
-
-    impl BindingTier {
-        /// Return a stable scripting and diagnostic label.
-        pub fn label(&self) -> &'static str {}
-
-        /// Return the framework group, if this is the framework tier.
-        pub fn framework_group(&self) -> Option<FrameworkBindingGroup> {}
-
-        /// Return the named mode, if this is a mode tier.
-        pub fn mode(&self) -> Option<&str> {}
-
-        /// Return whether this tier holds framework-owned bindings.
-        pub fn is_framework(&self) -> bool {}
-    }
-
     impl CanopyBuilder {
         #[must_use]
         /// Construct widgets after the finalized setup sources have run.
@@ -4108,61 +4436,22 @@ pub mod canopy {
         pub fn build(self) -> Result<Canopy> {}
     }
 
-    impl Cell {
-        /// Return this cell's rendered text.
-        pub fn rendered_text(&self) -> String {}
-    }
-
     impl ChangeOutcome {
         /// Return whether the request changed state.
         pub fn changed(self) -> bool {}
     }
 
-    impl CommandType for FocusDirection {
-        fn luau_decls(registry: &mut canopy::commands::DeclRegistry<'_>) {}
-
-        fn luau_ty() -> canopy::commands::declaration::Type {}
-    }
-
-    impl FromArgValue for FocusDirection {
-        fn from_arg_value(
-            v: &canopy::commands::ArgValue,
-        ) -> ::std::result::Result<Self, canopy::commands::CommandError> {
-        }
-    }
-
-    impl ToArgValue for FocusDirection {
-        fn to_arg_value(self) -> canopy::commands::ArgValue {}
-    }
-
-    impl CommandType for ScrollDirection {
-        fn luau_decls(registry: &mut canopy::commands::DeclRegistry<'_>) {}
-
-        fn luau_ty() -> canopy::commands::declaration::Type {}
-    }
-
-    impl FromArgValue for ScrollDirection {
-        fn from_arg_value(
-            v: &canopy::commands::ArgValue,
-        ) -> ::std::result::Result<Self, canopy::commands::CommandError> {
-        }
-    }
-
-    impl ToArgValue for ScrollDirection {
-        fn to_arg_value(self) -> canopy::commands::ArgValue {}
-    }
-
-    impl CommandType for crate::core::NodeId {
+    impl CommandType for crate::NodeId {
         fn luau_decls(registry: &mut DeclRegistry<'_>) {}
 
         fn luau_ty() -> declaration::Type {}
     }
 
-    impl FromArgValue for crate::core::NodeId {
+    impl FromArgValue for crate::NodeId {
         fn from_arg_value(v: &ArgValue) -> Result<Self, CommandError> {}
     }
 
-    impl ToArgValue for crate::core::NodeId {
+    impl ToArgValue for crate::NodeId {
         fn to_arg_value(self) -> ArgValue {}
     }
 
@@ -4365,86 +4654,6 @@ pub mod canopy {
         }
     }
 
-    impl EvalOutcome {
-        /// Return the evaluation result.
-        pub fn into_result(self) -> Result<ArgValue> {}
-    }
-
-    impl Fixture {
-        /// Construct a fixture from owned name/description values.
-        pub fn new(
-            name: impl Into<String>,
-            description: impl Into<String>,
-            setup: impl 'static + Fn(&mut Canopy) -> Result<()> + Send + Sync,
-        ) -> Self {
-        }
-
-        /// Return fixture metadata without the setup closure.
-        pub fn info(&self) -> FixtureInfo {}
-    }
-
-    impl FrameSnapshot {
-        /// Return the screen size: the dimensions of the rendered buffer.
-        pub fn size(&self) -> Size {}
-    }
-
-    impl FrameworkBindingGroup {
-        /// Construct a framework binding group.
-        pub const fn new(name: &'static str) -> Self {}
-
-        /// Return the diagnostic group name.
-        pub const fn as_str(self) -> &'static str {}
-    }
-
-    impl From<Key> for InputSpec {
-        fn from(key: Key) -> Self {}
-    }
-
-    impl From<Mouse> for InputSpec {
-        fn from(mouse: Mouse) -> Self {}
-    }
-
-    impl From<char> for InputSpec {
-        fn from(key: char) -> Self {}
-    }
-
-    impl InputSpec {
-        /// Normalize key variants for matching.
-        pub fn normalize(self) -> Self {}
-    }
-
-    impl From<ScriptOrigin> for String {
-        fn from(origin: ScriptOrigin) -> Self {}
-    }
-
-    impl From<String> for ScriptOrigin {
-        fn from(origin: String) -> Self {}
-    }
-
-    impl IntentName {
-        #[must_use]
-        /// Return the intent name.
-        pub fn as_str(&self) -> &str {}
-
-        /// Validate `name` and return it.
-        pub fn new(name: impl Into<String>) -> Result<Self> {}
-    }
-
-    impl IntentSpec {
-        /// Build a spec from a name and a description.
-        pub fn new(name: impl Into<String>, description: impl Into<String>) -> Result<Self> {}
-    }
-
-    impl JsonSchema for FixtureInfo {
-        fn inline_schema() -> bool {}
-
-        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
-
-        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-
-        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-    }
-
     impl NodeName {
         /// Create a new NodeName, returning an error if the string contains invalid
         /// characters.
@@ -4454,35 +4663,6 @@ pub mod canopy {
         /// first converting the string to snake case, then removing all invalid
         /// characters.
         pub fn convert(name: &str) -> Self {}
-    }
-
-    impl NodeWakeHandle {
-        /// Queue one owner poll, coalesce with existing work, or report expiration.
-        pub fn wake(&self) -> Result<WakeOutcome> {}
-    }
-
-    impl NoticeSource {
-        /// Return a stable scripting and diagnostic label.
-        pub fn label(self) -> &'static str {}
-    }
-
-    impl RenderLimits {
-        /// Construct explicit visible render-target limits.
-        pub const fn new(max_width: u32, max_height: u32, max_cells: usize) -> Self {}
-
-        /// Validate a visible target size and return its exact cell count.
-        pub fn cell_count(self, size: Size) -> Result<usize> {}
-    }
-
-    impl RouteTraceKind {
-        /// Return a stable scripting and diagnostic label.
-        pub fn label(self) -> &'static str {}
-    }
-
-    impl ScrollOp {
-        /// Page vertically by a signed count: negative moves up, positive moves
-        /// down, and zero stays put.
-        pub fn pages(delta: i32) -> Self {}
     }
 
     impl Setup {
@@ -4566,171 +4746,7 @@ pub mod canopy {
         pub fn style_mut(&mut self) -> &mut StyleMap {}
     }
 
-    impl TermBuf {
-        /// Construct a buffer filled with the given character and style.
-        pub fn new(size: impl Into<Size>, ch: char, style: ResolvedStyle) -> Result<Self> {}
-
-        /// Diff this terminal buffer against a previous state, emitting changes
-        /// to the provided render backend. The caller flushes the backend.
-        pub fn emit_diff<R: RenderBackend>(&self, prev: &Self, backend: &mut R) -> Result<()> {}
-
-        /// Draw text clipped to the given line.
-        pub fn text(&mut self, style: &ResolvedStyle, l: Line, txt: &str) -> Result<()> {}
-
-        /// Emit this terminal buffer in full to the provided backend,
-        /// batching runs of text with the same style. The caller flushes the
-        /// backend.
-        pub fn emit<R: RenderBackend>(&self, backend: &mut R) -> Result<()> {}
-
-        /// Fill a rectangle with a glyph and style.
-        pub fn fill(&mut self, style: &ResolvedStyle, r: Rect, ch: char) -> Result<()> {}
-
-        /// Get a cell by position.
-        pub fn get(&self, p: Point) -> Option<&Cell> {}
-
-        /// Return the buffer bounds as a rectangle.
-        pub fn rect(&self) -> Rect {}
-
-        /// Return the buffer size.
-        pub fn size(&self) -> Size {}
-
-        /// Return the cells in row-major order.
-        pub fn cells(&self) -> &[Cell] {}
-
-        /// Return the rendered screen as newline-joined plain text.
-        pub fn screen_text(&self) -> String {}
-
-        /// Return the rendered screen as rows of cell strings.
-        pub fn rows(&self) -> Vec<Vec<String>> {}
-    }
-
-    impl View {
-        /// Build a view from signed outer and content rects, a scroll offset, and a
-        /// canvas size.
-        pub fn new(outer: RectI32, content: RectI32, scroll: Point, canvas: Size) -> Self {}
-
-        /// Calculates the (pre, active, post) rectangles needed to draw a
-        /// horizontal scroll bar for this view in the specified margin rect.
-        pub fn hactive(&self, margin: Rect) -> Result<Option<(Rect, Rect, Rect)>> {}
-
-        /// Calculates the (pre, active, post) rectangles needed to draw a vertical
-        /// scroll bar for this view in the specified margin rect.
-        pub fn vactive(&self, margin: Rect) -> Result<Option<(Rect, Rect, Rect)>> {}
-
-        /// Convert a screen point to viewport-local coordinates, before scroll.
-        /// Returns a geometry error if the result is outside the signed range.
-        pub fn screen_to_viewport(&self, point: PointI32) -> Result<PointI32> {}
-
-        /// Convert a viewport-local point to outer-local coordinates, including
-        /// padding. Returns a geometry error if the result is outside the signed
-        /// range.
-        pub fn viewport_to_outer(&self, point: PointI32) -> Result<PointI32> {}
-
-        /// Convert a viewport-local point to scrolled content coordinates.
-        /// Returns a geometry error if the result is outside the signed range.
-        pub fn viewport_to_content(&self, point: PointI32) -> Result<PointI32> {}
-
-        /// Local outer rectangle with origin at (0,0).
-        pub fn outer_rect_local(&self) -> Rect {}
-
-        /// Offset from the outer origin to the content origin, in local
-        /// coordinates.
-        pub fn content_origin(&self) -> Point {}
-
-        /// Return the canvas cell under a widget-local location, scroll included,
-        /// or `None` outside the visible content.
-        pub fn content_point(&self, location: PointI32) -> Option<Point> {}
-
-        /// Return the outer-local cell a widget-local location falls in, padding
-        /// included, or `None` outside the outer rect.
-        ///
-        /// This is the space `outer_rect_local()` paints in.
-        pub fn outer_point(&self, location: PointI32) -> Option<Point> {}
-
-        /// Return the visible content cell a widget-local location falls in,
-        /// before scroll, or `None` outside the content rect.
-        pub fn viewport_point(&self, location: PointI32) -> Option<Point> {}
-
-        /// Size of the content rect.
-        pub fn content_size(&self) -> Size {}
-
-        /// Size of the outer rect.
-        pub fn outer_size(&self) -> Size {}
-
-        /// True if the view has no visible cells.
-        pub fn is_empty(&self) -> bool {}
-
-        /// Visible view rectangle in content coordinates.
-        pub fn view_rect(&self) -> Rect {}
-
-        /// Visible view rectangle in local outer coordinates.
-        pub fn view_rect_local(&self) -> Rect {}
-    }
-
-    impl super::AutomationHandle {
-        /// Submit evaluation work without blocking the UI thread while it runs.
-        pub fn submit_eval(&self, request: EvalRequest) -> Result<EvalTicket> {}
-
-        /// Execute a closure on the UI thread and wait for its result.
-        pub fn request<R, F>(&self, callback: F) -> Result<R>
-        where
-            F: 'static + FnOnce(&mut Canopy) -> Result<R> + Send,
-            R: 'static + Send, {
-        }
-
-        /// Queue a callback to run on the UI thread.
-        pub fn submit(&self, callback: AutomationCallback) -> Result<()> {}
-    }
-
-    impl<'a> Render<'a> {
-        /// Apply a named style to the painted grapheme at a point, preserving its
-        /// text.
-        pub fn restyle(&mut self, style: &str, point: geom::Point) {}
-
-        /// Apply the current effect stack to a style.
-        /// Use this when you have a Style from a source other than the style
-        /// manager.
-        pub fn apply_effects(&self, style: Style) -> Style {}
-
-        /// Fill a rectangle with a specified character. Writes out of bounds will
-        /// be clipped.
-        pub fn fill(&mut self, style: &str, r: geom::Rect, c: char) -> Result<()> {}
-
-        /// Print text in the specified line. If the text is wider than the
-        /// rectangle, it will be truncated; if it is shorter, it will be padded.
-        pub fn text(&mut self, style: &str, l: geom::Line, txt: &str) -> Result<()> {}
-
-        /// Push a style layer.
-        pub fn push_layer(&mut self, name: &str) {}
-
-        /// Resolve a style by name and apply the current effect stack.
-        pub fn resolve_style(&self, name: &str) -> Style {}
-
-        /// Write a grapheme with a resolved style, including continuation cells.
-        pub fn put_grapheme(
-            &mut self,
-            style: ResolvedStyle,
-            p: geom::Point,
-            grapheme: &str,
-        ) -> Result<()> {
-        }
-
-        /// Write a single cell with a resolved style.
-        pub fn put_cell(&mut self, style: ResolvedStyle, p: geom::Point, ch: char) -> Result<()> {}
-    }
-
     impl<T> From<TypedId<T>> for NodeId {
         fn from(value: TypedId<T>) -> Self {}
-    }
-
-    impl<T> WakeSender<T> {
-        /// Send `value` without blocking, then poll the owner.
-        pub fn try_send(&self, value: T) -> StdResult<(), TrySendError<T>> {}
-
-        /// Send `value`, blocking while the channel is full, then poll the owner.
-        ///
-        /// Fails only when the receiver is gone. A wake that finds its owner
-        /// expired is not an error: nobody is left to read the value.
-        pub fn send(&self, value: T) -> StdResult<(), SendError<T>> {}
     }
 }

@@ -2,7 +2,7 @@ use std::mem;
 
 use canopy::{
     Context, EventOutcome,
-    event::{Event, key},
+    input::{Event, key},
 };
 use unicode_segmentation::UnicodeSegmentation;
 

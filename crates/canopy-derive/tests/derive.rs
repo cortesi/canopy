@@ -11,7 +11,7 @@ mod tests {
             CommandReturnSpec, CommandStatus,
         },
         error::{Error, Result},
-        event::{Event, mouse::MouseEvent},
+        input::{Event, mouse::MouseEvent},
     };
     use canopy_derive::derive_commands;
     use pretty_assertions::assert_eq;

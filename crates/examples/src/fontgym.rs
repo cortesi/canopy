@@ -1,13 +1,18 @@
 use std::{f32::consts::TAU, time::Duration};
 
 use canopy::{
-    CanopyBuilder, ChangeOutcome, Context, ContextExt, EventOutcome, NodeId, NodeName, Render,
-    ScrollDirection, ScrollOp, ViewContext, Widget,
-    cursor::{Cursor, CursorShape},
+    CanopyBuilder, ChangeOutcome, Context, ContextExt, EventOutcome, NodeId, NodeName, ViewContext,
+    Widget,
     error::Result,
-    event::{Event, key},
     geom::{Line, Point, Size},
-    layout::{Align, Edges, Layout, MeasureConstraints, Measurement},
+    input::{Event, key},
+    layout::{
+        Align, Edges, Layout, MeasureConstraints, Measurement, ScrollDirection, ScrollOp, View,
+    },
+    render::{
+        Render,
+        cursor::{Cursor, CursorShape},
+    },
     rgb,
     style::{Attr, Color, StyleMap},
     text,
@@ -259,7 +264,7 @@ impl FocusFrame {
     }
 
     /// Return the vertical scroll delta `command` requests.
-    fn scroll_delta(view: canopy::View, command: FocusScroll) -> i32 {
+    fn scroll_delta(view: View, command: FocusScroll) -> i32 {
         let page = i32::try_from(view.content.h).unwrap_or(i32::MAX);
         match command {
             FocusScroll::Up => -1,
@@ -1066,7 +1071,10 @@ pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
 #[cfg(test)]
 mod tests {
     use canopy::{
-        RevealAlign, ViewContextExt, geom::Rect, layout::Constraint, testing::harness::Harness,
+        ViewContextExt,
+        geom::Rect,
+        layout::{Constraint, RevealAlign},
+        testing::harness::Harness,
     };
 
     use super::*;

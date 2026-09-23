@@ -6,13 +6,13 @@ use std::{
 };
 
 use canopy::{
-    Context, ContextExt, EventOutcome, NodeId, NodeName, ScrollAxis, ScrollMark, ScrollOp,
-    ViewContext, Widget,
+    Context, ContextExt, EventOutcome, NodeId, NodeName, ViewContext, Widget,
     error::Result,
-    event::{Event, key, mouse},
     geom::{Point, PointI32, Rect, Size},
+    input::{Event, key, mouse},
     layout::{
         CanvasContext, Direction, Edges, Layout, LayoutOverride, MeasureConstraints, Measurement,
+        ScrollAxis, ScrollMark, ScrollOp,
     },
     style::Color,
     testing::harness::Harness,

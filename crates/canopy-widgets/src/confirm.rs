@@ -1,18 +1,19 @@
 //! A modal question with a yes or no answer.
 
 use canopy::{
-    Context, ContextExt, EventOutcome, FocusDirection, FocusScope, NodeId, NodeName, Register,
-    Render, Setup, ViewContext, Widget,
+    Context, ContextExt, EventOutcome, NodeId, NodeName, Register, Setup, ViewContext, Widget,
     commands::{CommandCall, CommandStatus, CommandTarget},
     derive_commands,
     error::{Error, Result},
-    event::Event,
     geom::Size,
+    input::Event,
     layout::{
         Align, CanvasContext, Direction, Edges, Layout, LayoutOverride, MeasureConstraints,
         Measurement, Sizing,
     },
+    render::Render,
     text,
+    tree::{FocusDirection, FocusScope},
 };
 
 use crate::{Button, Container, boxed::ROUND, frame::Frame};
@@ -430,10 +431,9 @@ impl Widget for ConfirmBody {
 #[cfg(test)]
 mod tests {
     use canopy::{
-        ModalBindings, ModalOptions,
         commands::CommandStatus,
-        event::{key, mouse},
         geom::PointI32,
+        input::{FrameworkBindingGroup, ModalBindings, ModalOptions, key, mouse},
         testing::harness::Harness,
     };
 
@@ -905,7 +905,7 @@ mod tests {
                     .with_widget_mut(dialog, |confirm: &mut Confirm, _| confirm.initial_focus())?;
                 Ok((context.node_id(), dialog, focus))
             })?;
-        let group = canopy::FrameworkBindingGroup::new("confirm.test_dialog");
+        let group = FrameworkBindingGroup::new("confirm.test_dialog");
         harness.canopy.with_root_context(|context| {
             context.open_modal(ModalOptions {
                 owner,

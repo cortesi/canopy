@@ -6,7 +6,7 @@ mod tests {
 
     use anyhow::Result as AnyResult;
     use canopy::{
-        ContextExt, error::Result, event::key::KeyCode, geom::Size, testing::harness::Harness,
+        ContextExt, error::Result, geom::Size, input::key::KeyCode, testing::harness::Harness,
     };
     use canopy_widgets::{Input, List};
     use todo::{TodoEntry, create_app, store::Store};

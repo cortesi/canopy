@@ -3,8 +3,7 @@
 use std::hint::black_box;
 
 use canopy::{
-    Canopy, CanopyBuilder, Context, ContextExt, NodeId, NodeName, Render, TermBuf, TurnInput,
-    ViewContext, Widget,
+    Canopy, CanopyBuilder, Context, ContextExt, NodeId, NodeName, ViewContext, Widget,
     commands::CommandTarget,
     derive_commands,
     error::Result,
@@ -12,7 +11,8 @@ use canopy::{
     layout::{
         CanvasContext, Direction, Edges, Layout, MeasureConstraints, MeasureOverflow, Measurement,
     },
-    render::RenderBackend,
+    render::{Render, RenderBackend, TermBuf},
+    runtime::TurnInput,
     style::{AttrSet, Color, ResolvedStyle},
 };
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};

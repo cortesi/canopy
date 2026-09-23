@@ -3,11 +3,11 @@
 use std::path::Path;
 
 use canopy::{
-    CommandEnum, Context, Register, Render, ScrollDirection, ScrollOp, Setup, ViewContext, Widget,
-    derive_commands,
+    CommandEnum, Context, Register, Setup, ViewContext, Widget, derive_commands,
     error::{Error, Result},
     geom::{Point, Rect, Size},
-    layout::{CanvasContext, Layout},
+    layout::{CanvasContext, Layout, ScrollDirection, ScrollOp},
+    render::Render,
     style::{AttrSet, Color, Style},
 };
 use image::{DynamicImage, ImageDecoder, RgbaImage};
@@ -542,6 +542,7 @@ mod tests {
 
     use canopy::{
         CanopyBuilder, ContextExt,
+        render::TermBuf,
         style::{
             GradientSpec, GradientStop, Paint,
             effects::{self, Effect, StyleEffect},
@@ -693,7 +694,7 @@ mod tests {
         Ok(())
     }
 
-    fn render_effect_image(effects: Vec<Effect>) -> Result<canopy::TermBuf> {
+    fn render_effect_image(effects: Vec<Effect>) -> Result<TermBuf> {
         let image = RgbaImage::from_fn(2, 2, |x, y| {
             if y == 0 {
                 Rgba([200, 100, 40, if x == 0 { 255 } else { 128 }])

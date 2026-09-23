@@ -3,10 +3,9 @@ use std::mem;
 use std::{cmp::Ordering, collections::HashSet, fmt, hash::Hash};
 
 use crate::{
-    ModalBindings,
     commands::CommandCall,
     error::{Error, Result},
-    event::{key::Key, mouse::Mouse},
+    input::{ModalBindings, key::Key, mouse::Mouse},
     path::{Path, PathFilter, PathMatch},
     script::LuauFunctionId,
 };

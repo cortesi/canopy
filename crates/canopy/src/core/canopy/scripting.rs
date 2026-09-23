@@ -14,13 +14,13 @@ use serde::{Deserialize, Serialize};
 
 use super::{Canopy, EvalRequest};
 use crate::{
-    commands,
+    NodeId, commands,
     core::{
-        NodeId,
         fixture::{Fixture, FixtureInfo},
         inputmap,
     },
-    error::{self, Result},
+    error,
+    error::Result,
     script,
 };
 

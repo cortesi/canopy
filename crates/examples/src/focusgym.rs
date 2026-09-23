@@ -1,9 +1,11 @@
 use canopy::{
-    CanopyBuilder, Context, ContextExt, FocusDirection, FocusScope, Register, Render, Setup,
-    ViewContext, ViewContextExt, Widget, derive_commands,
+    CanopyBuilder, Context, ContextExt, Register, Setup, ViewContext, ViewContextExt, Widget,
+    derive_commands,
     error::Result,
     geom::Size,
     layout::{Direction, Layout, Sizing},
+    render::Render,
+    tree::{FocusDirection, FocusScope},
 };
 use canopy_widgets::Root;
 

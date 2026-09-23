@@ -114,8 +114,10 @@ mod tests {
 
     use super::*;
     use crate::{
-        Context, NodeWakeHandle, PollLifetime, TurnInput, Widget, error::ScriptErrorKind,
-        geom::Size, wake_channel,
+        Context, Widget,
+        error::ScriptErrorKind,
+        geom::Size,
+        runtime::{NodeWakeHandle, NoticeSource, PollLifetime, TurnInput, wake_channel},
     };
 
     #[derive(Clone)]
@@ -229,7 +231,7 @@ mod tests {
             .notices()
             .last()
             .expect("the failed poll is a notice");
-        assert_eq!(notice.source, crate::NoticeSource::Poll);
+        assert_eq!(notice.source, NoticeSource::Poll);
         assert_eq!(notice.kind, ScriptErrorKind::App);
         assert_eq!(notice.message, "poll failed");
         assert_eq!(notice.node, Some(canopy.root_id()));

@@ -2,15 +2,14 @@
 use std::cell::RefCell;
 
 use crate::{
-    Canopy, CanopyBuilder, Context, NodeId, ViewContext,
+    Canopy, CanopyBuilder, Context, NodeId, NodeName, ViewContext,
     core::Core,
     derive_commands,
     error::Result,
-    event::{Event, key::Key},
     geom::Size,
+    input::{Event, key::Key},
     layout::{Direction, Layout},
     render::Render,
-    state::NodeName,
     testing::backend::TestRender,
     widget::{EventOutcome, Widget},
 };

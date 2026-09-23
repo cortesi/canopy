@@ -3,8 +3,8 @@
 #![cfg(not(feature = "devtools"))]
 
 use canopy::{
-    CanopyBuilder, Context, ContextExt, Register, TurnInput, Widget, commands::CommandNode,
-    error::Result, geom::Size,
+    CanopyBuilder, Context, ContextExt, Register, Widget, commands::CommandNode, error::Result,
+    geom::Size, runtime::TurnInput,
 };
 use canopy_widgets::{Input, List, Root, Selectable};
 

@@ -17,18 +17,12 @@ use super::{
     widget_access::{WidgetCellGuard, WidgetMutGuard, WidgetReadGuard},
 };
 use crate::{
-    ChangeOutcome,
+    ChangeOutcome, NodeId, NodeName,
     commands::CommandSet,
-    core::{
-        context::CoreContext,
-        id::{NodeArena, NodeId},
-        node::Node,
-        path::Path,
-    },
+    core::{context::CoreContext, id::NodeArena, node::Node, path::Path},
     error::{Error, NodeOperationKind, Result},
-    event::Event,
+    input::Event,
     layout::Layout,
-    state::NodeName,
     style::StyleMap,
     widget::Widget,
 };

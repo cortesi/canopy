@@ -2,8 +2,9 @@
 
 use super::Core;
 use crate::{
-    Invalidation, NodeId, NodeIdentity,
+    Invalidation, NodeId,
     error::{Error, Result},
+    tree::NodeIdentity,
 };
 
 impl Core {

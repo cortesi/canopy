@@ -3,12 +3,14 @@
 use std::{borrow::Cow, ops::Range};
 
 use canopy::{
-    Context, ContextExt, NodeName, Register, Render, Setup, ViewContext, Widget, WidgetSemantics,
+    Context, ContextExt, NodeName, Register, Setup, ViewContext, Widget,
     commands::{CommandCall, CommandStatus},
     derive_commands,
     error::Result,
     geom::{Line, Size},
     layout::{Layout, MeasureConstraints, Measurement},
+    render::Render,
+    runtime::WidgetSemantics,
     style::{WidgetState, roles},
     text,
 };
@@ -348,15 +350,19 @@ fn names_grapheme(grapheme: &str, accelerator: char) -> bool {
 #[cfg(test)]
 mod tests {
     use canopy::{
-        FocusDirection, FocusScope, FrameworkBindingGroup, InputSpec, ModalBindings, ModalOptions,
         NodeId, Register, Setup, ViewContextExt,
         commands::{CommandError, CommandTarget},
         error::Error,
-        event::{key, key::Key, mouse, mouse::Mouse},
         geom::PointI32,
+        input::{
+            BindingAction, BindingOptions, BindingPhase, BindingTier, FrameworkBindingGroup,
+            InputSpec, ModalBindings, ModalOptions, key, key::Key, mouse, mouse::Mouse,
+        },
         layout::Direction,
+        runtime::NoticeSource,
         style::Color,
         testing::harness::Harness,
+        tree::{FocusDirection, FocusScope},
     };
 
     use super::*;
@@ -769,7 +775,7 @@ mod tests {
             .notices()
             .last()
             .expect("the failed activation is a notice");
-        assert_eq!(notice.source, canopy::NoticeSource::Binding);
+        assert_eq!(notice.source, NoticeSource::Binding);
         Ok(())
     }
 
@@ -1062,14 +1068,14 @@ mod tests {
             ] {
                 setup.bind(
                     input,
-                    canopy::BindingOptions {
+                    BindingOptions {
                         path: Some("**/dialog/**/".parse()?),
-                        tier: canopy::BindingTier::Framework(GUARDED),
+                        tier: BindingTier::Framework(GUARDED),
                         description: description.to_string(),
                         source: None,
-                        phase: Some(canopy::BindingPhase::AfterWidget),
+                        phase: Some(BindingPhase::AfterWidget),
                     },
-                    canopy::BindingAction::Command(Button::call_press()),
+                    BindingAction::Command(Button::call_press()),
                 )?;
             }
             Ok(())

@@ -3,13 +3,13 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Context, ContextExt, EventOutcome, ModalBindings, ModalOptions, NodeId, NodeName, Register,
-        Render, RouteTraceKind, ScrollDirection, ScrollOp, Setup, ViewContext, Widget,
+        Context, ContextExt, EventOutcome, NodeId, NodeName, Register, Setup, ViewContext, Widget,
         derive_commands,
         error::Result,
-        event::{Event, key, mouse},
         geom::{Line, Point, PointI32, Size},
-        layout::{CanvasContext, Layout},
+        input::{Event, ModalBindings, ModalOptions, RouteTraceKind, key, mouse},
+        layout::{CanvasContext, Layout, ScrollDirection, ScrollOp},
+        render::Render,
         testing::harness::Harness,
     };
 

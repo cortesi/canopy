@@ -1,10 +1,11 @@
 use canopy::{
-    Context, EventOutcome, NodeId, NodeName, Render, ScrollAxis, ViewContext, Widget,
-    derive_commands,
+    Context, EventOutcome, NodeId, NodeName, ViewContext, Widget, derive_commands,
     error::Result,
-    event::Event,
-    geom::{self, Rect},
-    layout::{Edges, Layout},
+    geom,
+    geom::Rect,
+    input::Event,
+    layout::{Edges, Layout, ScrollAxis},
+    render::Render,
 };
 use unicode_width::UnicodeWidthStr;
 

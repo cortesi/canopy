@@ -9,10 +9,9 @@ use crate::{
         context::CoreViewContext, notice::NoticeSource, snapshot, termbuf::TermBuf, view::View,
         world::WidgetOperation,
     },
-    cursor,
     error::{Error, Result},
     geom::{Point, Rect, Size},
-    render::{Render, RenderBackend},
+    render::{Render, RenderBackend, cursor},
     style::{StyleManager, effects::Effect},
 };
 

@@ -5,6 +5,13 @@ use std::result::Result;
 use thiserror::Error;
 
 use crate::geom::{Rect, Size};
+pub use crate::{
+    core::{
+        context::{RevealAlign, ScrollDirection, ScrollOp},
+        view::View,
+    },
+    widget::{ScrollAxis, ScrollMark},
+};
 
 /// Stack direction for children.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

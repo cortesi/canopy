@@ -5,10 +5,12 @@
 //! focus and no keys, so the mode still receives the next key.
 
 use canopy::{
-    ChildSlot, Context, ContextExt, NodeId, NodeName, Render, ViewContext, Widget,
+    Context, ContextExt, NodeId, NodeName, ViewContext, Widget,
     error::Result,
     geom::Size,
     layout::{Align, Constraint, Direction, Edges, Layout, MeasureConstraints, Measurement},
+    render::Render,
+    tree::ChildSlot,
 };
 
 use super::binding_list::{BindingRow, display_lines, key_rows_of, natural_width, render_line};

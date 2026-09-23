@@ -12,7 +12,7 @@ mod tests {
         },
         derive_commands,
         error::{Error, Result},
-        event::Event,
+        input::Event,
     };
     use serde::{Deserialize, Serialize};
 

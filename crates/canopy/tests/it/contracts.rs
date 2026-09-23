@@ -3,7 +3,7 @@
 
 #[cfg(test)]
 mod tests {
-    use canopy::{EvalRequest, TurnInput, error::Result, testing::contracts};
+    use canopy::{error::Result, runtime::TurnInput, script::EvalRequest, testing::contracts};
 
     #[test]
     fn native_shared_trace_publishes_and_preserves_another_app() -> Result<()> {

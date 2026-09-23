@@ -6,21 +6,17 @@ use super::{AUTOMATION_SERVICE_BUDGET, AdapterEvent, Canopy};
 use crate::{
     NodeId, commands,
     core::{
-        Core,
-        inputmap::{
-            self, BindingActionKind, BindingId, BindingPhase, IntentName, ResolvedBinding,
-            RunBinding, RunTarget,
-        },
-        keyroute::{
-            KeyDispatchDivergence, KeyExpectation, KeyRouteExplanation, KeyRouteStep, RouteOutcome,
-            StepBinding,
-        },
+        Core, inputmap,
+        inputmap::{ResolvedBinding, RunBinding, RunTarget},
         notice::NoticeSource,
         world::scroll::DefaultAction,
     },
     error::{Error, Result},
-    event::{Event, key, mouse},
     geom::{Point, PointI32, Size},
+    input::{
+        BindingActionKind, BindingId, BindingPhase, Event, IntentName, KeyDispatchDivergence,
+        KeyExpectation, KeyRouteExplanation, KeyRouteStep, RouteOutcome, StepBinding, key, mouse,
+    },
     path::Path,
     script::LuauFunctionId,
     widget::EventOutcome,

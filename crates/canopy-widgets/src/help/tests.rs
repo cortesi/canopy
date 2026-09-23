@@ -1,13 +1,14 @@
 use std::mem;
 
 use canopy::{
-    BindingActionKind, BindingId, BindingPhase, BindingTier, CanopyBuilder, Context, ContextExt,
-    NodeId, ViewContext, Widget, buf,
+    CanopyBuilder, Context, ContextExt, NodeId, ViewContext, Widget, buf,
     commands::{CommandArgs, CommandAvailability, CommandCall, CommandId, CommandStatus},
     error::Result,
-    event::{key, mouse},
     geom::{Point, PointI32, Size},
-    help::{AvailableBinding, BindingCommand, BindingSnapshot},
+    input::{
+        AvailableBinding, BindingActionKind, BindingCommand, BindingId, BindingPhase,
+        BindingSnapshot, BindingTier, key, mouse,
+    },
     layout::Layout,
     path::Path,
     style::default::TEXT,
@@ -437,7 +438,7 @@ fn command_help_keeps_user_feedback_without_command_diagnostics() {
             ArgValue, CommandArgs, CommandAvailability, CommandCall, CommandId, CommandRequirement,
             CommandStatus, CommandTarget,
         },
-        help::BindingCommand,
+        input::BindingCommand,
     };
 
     let mut binding = binding(1, 'd', "Delete selection", BindingPhase::BeforeWidget);

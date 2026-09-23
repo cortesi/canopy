@@ -6,13 +6,16 @@ mod tests {
     use std::{sync::Arc, time::Duration};
 
     use canopy::{
-        Canopy, CanopyBuilder, Context, ContextExt, EvalRequest, EventOutcome, Render, TurnInput,
-        TypedId, ViewContext, ViewContextExt, Widget,
+        Canopy, CanopyBuilder, Context, ContextExt, EventOutcome, TypedId, ViewContext,
+        ViewContextExt, Widget,
         commands::ArgValue,
         error::{Error, Result},
-        event::{Event, key, mouse},
         geom::{Line, PointI32, Size},
+        input::{Event, key, mouse},
         layout::Layout,
+        render::Render,
+        runtime::TurnInput,
+        script::EvalRequest,
         testing::ManualClock,
     };
 

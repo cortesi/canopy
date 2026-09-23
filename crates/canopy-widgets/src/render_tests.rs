@@ -3,12 +3,12 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Context, ContextExt, NodeName, ScrollOp, ViewContextExt, Widget, buf,
+        Context, ContextExt, NodeName, ViewContextExt, Widget, buf,
         commands::{CommandNode, CommandSpec},
         error::Result,
-        event::{key, mouse},
         geom::{Point, PointI32, Size},
-        layout::{Edges, Layout},
+        input::{key, mouse},
+        layout::{Edges, Layout, ScrollOp},
         testing::harness::Harness,
     };
 

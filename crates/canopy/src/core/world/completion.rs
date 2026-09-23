@@ -4,9 +4,11 @@ use std::collections::VecDeque;
 
 use super::Core;
 use crate::{
-    ModalToken, NodeId,
+    NodeId,
     core::wake::PollOwner,
     error::{Error, Result},
+    input::ModalToken,
+    runtime::{NodeWakeHandle, PollLifetime},
 };
 
 /// Maximum retained completion requests across one outer dispatch and its
@@ -69,13 +71,13 @@ impl Core {
     pub(crate) fn work_stamp(
         &self,
         node: NodeId,
-        lifetime: crate::PollLifetime,
+        lifetime: PollLifetime,
     ) -> Result<Option<PollOwner>> {
         let entry = self.nodes.get(node).ok_or(Error::NodeNotFound(node))?;
         let attachment = match (lifetime, entry.attachment_generation) {
-            (crate::PollLifetime::Node, _) => None,
-            (crate::PollLifetime::Attachment, Some(generation)) => Some(generation),
-            (crate::PollLifetime::Attachment, None) => return Ok(None),
+            (PollLifetime::Node, _) => None,
+            (PollLifetime::Attachment, Some(generation)) => Some(generation),
+            (PollLifetime::Attachment, None) => return Ok(None),
         };
         Ok(Some(PollOwner {
             node,
@@ -88,8 +90,8 @@ impl Core {
     pub(crate) fn wake_handle(
         &self,
         node: NodeId,
-        lifetime: crate::PollLifetime,
-    ) -> Result<crate::NodeWakeHandle> {
+        lifetime: PollLifetime,
+    ) -> Result<NodeWakeHandle> {
         let stamp = self
             .work_stamp(node, lifetime)?
             .ok_or(Error::NodeDetached(node))?;
@@ -197,7 +199,10 @@ impl Core {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Context, PollLifetime, WakeOutcome, Widget};
+    use crate::{
+        Context, Widget,
+        runtime::{PollLifetime, WakeOutcome},
+    };
 
     struct Leaf {
         veto: bool,

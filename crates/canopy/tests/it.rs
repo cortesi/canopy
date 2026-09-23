@@ -5,6 +5,9 @@
 //! to one link step. Cargo resolves a test root's modules against `tests/`
 //! itself, so each module names its path explicitly.
 
+/// API capture path checks.
+#[path = "it/api_capture.rs"]
+mod api_capture;
 /// Command dispatch, argument, and error integration tests.
 #[path = "it/commands.rs"]
 mod commands;

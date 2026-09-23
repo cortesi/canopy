@@ -11,14 +11,14 @@ use tokio::time::sleep_until;
 
 use super::buf::BufTest;
 use crate::{
-    Canopy, CanopyBuilder, Context, ContextExt, NodeId, Register, Setup, TurnInput, TypedId,
-    ViewContextExt,
+    Canopy, CanopyBuilder, Context, ContextExt, NodeId, Register, Setup, TypedId, ViewContextExt,
     core::{canopy::TurnSelector, termbuf::TermBuf},
     error::{Error, Result},
-    event::{Event, key, mouse},
     geom::Size,
+    input::{Event, key, mouse},
     layout::LayoutOverride,
     render::NopBackend,
+    runtime::TurnInput,
     script,
     widget::Widget,
 };
@@ -339,8 +339,14 @@ mod tests {
 
     use super::*;
     use crate::{
-        NodeWakeHandle, PollLifetime, ViewContext, error::Result, geom::Line, layout::Layout,
-        render::Render, state::NodeName, testing::ManualClock, widget::Widget,
+        NodeName, ViewContext,
+        error::Result,
+        geom::Line,
+        layout::Layout,
+        render::Render,
+        runtime::{NodeWakeHandle, PollLifetime},
+        testing::ManualClock,
+        widget::Widget,
     };
 
     struct TestNode;

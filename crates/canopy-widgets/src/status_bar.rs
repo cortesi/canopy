@@ -3,10 +3,11 @@
 use std::mem;
 
 use canopy::{
-    Context, ContextExt, NodeName, Render, ViewContext, Widget,
+    Context, ContextExt, NodeName, ViewContext, Widget,
     error::Result,
     geom::{Line, Size},
     layout::{Layout, LayoutOverride, MeasureConstraints, Measurement, Sizing},
+    render::Render,
 };
 use unicode_width::UnicodeWidthStr;
 

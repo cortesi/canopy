@@ -18,8 +18,8 @@ use crate::{
     commands::ArgValue,
     derive_commands,
     error::{Error, Result},
-    event::Event,
     geom::Size,
+    input::Event,
     widget::{EventOutcome, Widget},
 };
 

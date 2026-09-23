@@ -5,14 +5,18 @@ use std::{collections::HashMap, fmt::Display, path::Path};
 
 use anyhow::Result as AnyResult;
 use canopy::{
-    Canopy, CanopyBuilder, ChildSlot, Context, ContextExt, ModalBindings, ModalOptions, ModalToken,
-    NodeId, NodeName, Register, Render, Setup, ViewContext, ViewContextExt, Widget,
+    Canopy, CanopyBuilder, Context, ContextExt, NodeId, NodeName, Register, Setup, ViewContext,
+    ViewContextExt, Widget,
     commands::CommandStatus,
     derive_commands,
     error::{Error, Result},
     geom::{Rect, Size},
+    input::{ModalBindings, ModalOptions, ModalToken},
     layout::{Constraint, Direction, Layout, LayoutOverride, MeasureConstraints, Measurement},
+    render::Render,
+    script::Fixture,
     style::{StyleMap, default as palette},
+    tree::ChildSlot,
 };
 use canopy_widgets::{
     Center, Frame, Input, KeyHint, List, Root, Selectable, StatusBar, Text, ValueExposure,
@@ -479,7 +483,7 @@ fn with_todo<R>(
 
 /// Register the Todo automation fixtures.
 fn register_fixtures(setup: &mut Setup) -> Result<()> {
-    setup.register_fixture(canopy::Fixture::new(
+    setup.register_fixture(Fixture::new(
         "empty",
         "App with no todo items and no modal open",
         |cnpy| {
@@ -489,7 +493,7 @@ fn register_fixtures(setup: &mut Setup) -> Result<()> {
             })
         },
     ))?;
-    setup.register_fixture(canopy::Fixture::new(
+    setup.register_fixture(Fixture::new(
         "with_items",
         "App with a pre-populated todo list",
         |cnpy| {
@@ -502,7 +506,7 @@ fn register_fixtures(setup: &mut Setup) -> Result<()> {
             })
         },
     ))?;
-    setup.register_fixture(canopy::Fixture::new(
+    setup.register_fixture(Fixture::new(
         "modal_open",
         "App with the add-item modal open and ready for typing",
         |cnpy| {

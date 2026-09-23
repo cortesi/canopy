@@ -2,8 +2,12 @@
 
 use super::Core;
 use crate::{
-    ChangeOutcome, ChangeSet, Context, Invalidation, ScrollOp, Widget, core::context::CoreContext,
-    error::Result, geom::Point, layout::LayoutOverride, style::StyleMap,
+    ChangeOutcome, ChangeSet, Context, Invalidation, Widget,
+    core::context::CoreContext,
+    error::Result,
+    geom::Point,
+    layout::{LayoutOverride, ScrollOp},
+    style::StyleMap,
 };
 
 struct Leaf;

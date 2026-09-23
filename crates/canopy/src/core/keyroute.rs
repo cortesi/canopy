@@ -8,14 +8,13 @@
 //! the route reaches an ancestor.
 
 use crate::{
+    NodeId,
     core::{
-        Core, NodeId,
-        inputmap::{
-            BindingActionKind, BindingId, BindingPhase, BindingRecord, InputSpec, RegistryStatus,
-        },
+        Core,
+        inputmap::{BindingRecord, RegistryStatus},
     },
     error::Result,
-    event::key::Key,
+    input::{BindingActionKind, BindingId, BindingPhase, InputSpec, key::Key},
     path::Path,
     widget::EventOutcome,
 };
@@ -196,7 +195,7 @@ impl Core {
 
 /// Combined registry and prospective-route verdict for one record.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum BindingVerdict {
+pub enum BindingVerdict {
     /// The record wins the key route.
     Exact,
     /// A widget consumes the key before the record.

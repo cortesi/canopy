@@ -1,8 +1,8 @@
 mod logs;
 
 use canopy::{
-    Context, ContextExt, NodeId, NodeName, Register, Render, Setup, ViewContext, Widget,
-    derive_commands, error::Result, layout::Layout,
+    Context, ContextExt, NodeId, NodeName, Register, Setup, ViewContext, Widget, derive_commands,
+    error::Result, layout::Layout, render::Render,
 };
 use logs::Logs;
 

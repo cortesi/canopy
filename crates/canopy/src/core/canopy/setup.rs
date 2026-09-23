@@ -4,9 +4,11 @@ use std::path::PathBuf;
 
 use super::{Canopy, Hook};
 use crate::{
-    Fixture, RenderLimits, commands,
+    commands,
     core::inputmap,
     error::{Error, Result},
+    render::RenderLimits,
+    script::Fixture,
     style::StyleMap,
 };
 

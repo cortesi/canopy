@@ -1,13 +1,16 @@
 use canopy::{
-    Canopy, ChildSlot, Context, ContextExt, FocusDirection, FocusScope, FrameworkBindingGroup,
-    ModalBindings, ModalOptions, ModalToken, NodeId, NodeName, Register, Render, ScrollOp, Setup,
-    TypedId, ViewContext, Widget,
+    Canopy, Context, ContextExt, NodeId, NodeName, Register, Setup, TypedId, ViewContext, Widget,
     commands::CommandCall,
     derive_commands,
     error::{Error, Result},
-    event::key::Key,
     geom::{Line, Point},
-    layout::{Align, Direction, Layout, LayoutOverride},
+    input::{
+        BindingAction, BindingOptions, BindingPhase, BindingTier, FrameworkBindingGroup,
+        ModalBindings, ModalOptions, ModalToken, key::Key,
+    },
+    layout::{Align, Direction, Layout, LayoutOverride, ScrollOp},
+    render::Render,
+    tree::{ChildSlot, FocusDirection, FocusScope},
 };
 
 #[cfg(feature = "devtools")]
@@ -426,14 +429,14 @@ fn register_help_bindings(setup: &mut Setup) -> Result<()> {
     for (key, description, command) in bindings {
         setup.bind(
             Key::parse_spec(key)?,
-            canopy::BindingOptions {
+            BindingOptions {
                 path: Some("/root/help/**/".parse()?),
-                tier: canopy::BindingTier::Framework(HELP_BINDINGS),
+                tier: BindingTier::Framework(HELP_BINDINGS),
                 description: description.to_string(),
                 source: None,
-                phase: Some(canopy::BindingPhase::BeforeWidget),
+                phase: Some(BindingPhase::BeforeWidget),
             },
-            canopy::BindingAction::Command(command),
+            BindingAction::Command(command),
         )?;
     }
     Ok(())
@@ -444,15 +447,13 @@ mod tests {
     use std::cell::Cell as LocalCell;
 
     use canopy::{
-        BindingTier, CanopyBuilder, Cell, Context, EventOutcome, NodeName, Render, ViewContext,
-        Widget,
+        CanopyBuilder, Context, EventOutcome, NodeName, ViewContext, Widget,
         commands::{CommandNode, CommandSpec},
         error::Result,
-        event::{Event, key, mouse},
         geom::{Line, Point, PointI32, Size},
-        help::BindingSnapshot,
+        input::{BindingSnapshot, BindingTier, Event, key, mouse},
         layout::Layout,
-        render::NopBackend,
+        render::{Cell, NopBackend, Render},
         testing::harness::Harness,
     };
 

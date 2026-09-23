@@ -13,6 +13,12 @@
 //!
 //! # Module Organization
 //!
+//! - [`input`] - Events, bindings, intents, modals, and route analysis
+//! - [`tree`] - Slots, identities, and focus traversal
+//! - [`layout`] - Layout, views, scrolling, and reveals
+//! - [`render`] - The widget renderer, frame buffers, and backends
+//! - [`runtime`] - Turns, published frames, polls, wakes, and notices
+//! - [`script`] - Luau evaluation, automation, and fixtures
 //! - [`geom`] - Geometry primitives (Rect, Point, Size, etc.)
 
 // Allow derive macros to reference `canopy::` from within this crate
@@ -27,34 +33,63 @@ pub mod layout;
 pub(crate) mod widget;
 
 pub(crate) use core::backend;
-pub use core::termbuf::{Cell, RenderLimits, TermBuf};
 #[cfg(any(test, feature = "testing"))]
 pub use core::testing;
-// Stable app-author surface.
+// The app-author root: the application, widgets, contexts, and node handles.
 pub use core::{
-    AutomationCallback, AutomationHandle, BindingAction, BindingActionKind, BindingId,
-    BindingOptions, BindingPhase, BindingTier, Canopy, CanopyBuilder, ChangeOutcome, ChildSlot,
-    Context, ContextExt, EvalId, EvalOutcome, EvalRequest, EvalTicket, Fixture, FixtureInfo,
-    FocusDirection, FocusScope, FrameId, FrameSnapshot, FrameworkBindingGroup, InputSpec,
-    IntentName, IntentSpec, ModalBindings, ModalOptions, ModalToken, NodeId, NodeIdentity,
-    NodeSnapshot, NodeWakeHandle, Notice, NoticeSource, PollLifetime, Register, RevealAlign,
-    RouteTraceEntry, RouteTraceKind, ScriptJournalEntry, ScriptOrigin, ScriptTrust,
-    ScrollDirection, ScrollOp, Setup, TurnInput, TurnOutcome, TypedId, ViewContext, ViewContextExt,
-    WakeOutcome, WakeSender, WidgetSemantics, wake_channel,
+    Canopy, CanopyBuilder, ChangeOutcome, Context, ContextExt, NodeId, Register, Setup, TypedId,
+    ViewContext, ViewContextExt, path::NodeName,
 };
 // App-author modules used by widget implementations and derive output.
-pub use core::{commands, cursor, error, event, help, keyroute, path, script, style, text};
-// App-facing handle types re-exported from private core modules.
-pub use core::{render::Render, state::NodeName, view::View};
+pub use core::{commands, error, path, script, style, text};
 
 // Internal module paths used across the crate.
 pub(crate) use crate::core::change::{ChangeSet, Invalidation};
-use crate::core::state;
 
-/// Rendering backend interfaces.
+/// Input: events, bindings and their tiers, intents, modals, and what the
+/// route does with a key.
+pub mod input {
+    pub use crate::core::{
+        canopy::{RouteTraceEntry, RouteTraceKind},
+        event::{Event, key, mouse},
+        help::{AvailableBinding, BindingCommand, BindingSnapshot},
+        inputmap::{
+            BindingAction, BindingActionKind, BindingId, BindingOptions, BindingPhase, BindingTier,
+            FrameworkBindingGroup, InputSpec, IntentName, IntentSpec,
+        },
+        keyroute::{
+            KeyDispatchDivergence, KeyExpectation, KeyRouteExplanation, KeyRouteStep, RouteOutcome,
+            RouteWinner, StepBinding,
+        },
+        world::modal::{ModalBindings, ModalOptions, ModalToken},
+    };
+}
+
+/// Tree structure: slots, identities, and focus traversal.
+pub mod tree {
+    pub use crate::core::{
+        context::{ChildSlot, FocusDirection, FocusScope},
+        node::NodeIdentity,
+    };
+}
+
+/// The runtime: turns, published frames, polls and wakes, and notices.
+pub mod runtime {
+    pub use crate::core::{
+        canopy::{FrameId, TurnInput, TurnOutcome},
+        notice::{Notice, NoticeSource},
+        snapshot::{FrameSnapshot, NodeSnapshot, WidgetSemantics},
+        wake::{NodeWakeHandle, PollLifetime, WakeOutcome, WakeSender, wake_channel},
+    };
+}
+
+/// Rendering: the widget renderer, frame buffers, backends, and cursors.
 pub mod render {
-    pub(crate) use crate::core::render::Render;
-    pub use crate::core::render::{NopBackend, RenderBackend};
+    pub use crate::core::{
+        cursor,
+        render::{NopBackend, Render, RenderBackend},
+        termbuf::{Cell, RenderLimits, TermBuf},
+    };
 }
 
 /// Crossterm terminal run-loop integration.
@@ -65,4 +100,4 @@ pub mod terminal {
 // Re-export derive macros
 pub use canopy_derive::{CommandArg, CommandEnum, command, derive_commands};
 // Re-export widget trait and event outcome
-pub use widget::{EventOutcome, ScrollAxis, ScrollMark, Widget};
+pub use widget::{EventOutcome, Widget};

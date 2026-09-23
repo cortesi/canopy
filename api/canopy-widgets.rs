@@ -561,7 +561,7 @@ pub mod canopy_widgets {
         pub fn scroll_target(
             ctx: &dyn ViewContext,
             owner: canopy::NodeId,
-            axis: canopy::ScrollAxis,
+            axis: canopy::layout::ScrollAxis,
         ) -> canopy::error::Result<Option<ScrollTarget>> {
         }
 
@@ -586,9 +586,9 @@ pub mod canopy_widgets {
             /// the context's node. A node that shows its whole canvas draws nothing.
             /// Rendering cannot release mouse capture, so a drag whose node or track
             /// has changed draws no active thumb and ends at the next event. After
-            /// the thumb, each target's [`ScrollMark`](canopy::ScrollMark)s draw over
-            /// the track, so scrolling the thumb across a mark keeps the mark's
-            /// color under the thumb's glyph.
+            /// the thumb, each target's [`ScrollMark`](canopy::layout::ScrollMark)s
+            /// draw over the track, so scrolling the thumb across a mark keeps the
+            /// mark's color under the thumb's glyph.
             pub fn render(
                 &mut self,
                 render: &mut Render<'_>,
@@ -652,7 +652,7 @@ pub mod canopy_widgets {
 
             fn on_event(
                 &mut self,
-                event: &event::Event,
+                event: &input::Event,
                 ctx: &mut dyn Context,
             ) -> Result<EventOutcome> {
             }
@@ -2282,9 +2282,9 @@ pub mod canopy_widgets {
         /// the context's node. A node that shows its whole canvas draws nothing.
         /// Rendering cannot release mouse capture, so a drag whose node or track
         /// has changed draws no active thumb and ends at the next event. After
-        /// the thumb, each target's [`ScrollMark`](canopy::ScrollMark)s draw over
-        /// the track, so scrolling the thumb across a mark keeps the mark's
-        /// color under the thumb's glyph.
+        /// the thumb, each target's [`ScrollMark`](canopy::layout::ScrollMark)s
+        /// draw over the track, so scrolling the thumb across a mark keeps the
+        /// mark's color under the thumb's glyph.
         pub fn render(
             &mut self,
             render: &mut Render<'_>,

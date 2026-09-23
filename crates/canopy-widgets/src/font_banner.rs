@@ -1,8 +1,9 @@
 use canopy::{
-    Render, ViewContext, Widget,
+    ViewContext, Widget,
     error::Result,
     geom::{Point, Rect, Size},
     layout::Layout,
+    render::Render,
     style::ResolvedStyle,
 };
 

@@ -7,16 +7,18 @@
 use std::{collections::HashSet, hash::Hash};
 
 use canopy::{
-    Context, ContextExt, EventOutcome, NodeId, NodeName, Render, RevealAlign, ScrollDirection,
-    ScrollOp, TypedId, ViewContext, Widget, WidgetSemantics,
+    Context, ContextExt, EventOutcome, NodeId, NodeName, TypedId, ViewContext, Widget,
     commands::{ArgValue, CommandArgs, CommandCall, CommandStatus, ToArgValue},
     derive_commands,
     error::{Error, Result},
-    event::{Event, mouse},
     geom::{Line, Point, PointI32, Size},
+    input::{Event, mouse},
     layout::{
         CanvasContext, Constraint, Edges, Layout, MeasureConstraints, MeasureOverflow, Measurement,
+        RevealAlign, ScrollDirection, ScrollOp,
     },
+    render::Render,
+    runtime::WidgetSemantics,
 };
 use unicode_width::UnicodeWidthStr;
 
@@ -945,7 +947,7 @@ mod tests {
         NodeId, NodeName, Register, Setup, ViewContext,
         commands::CommandTarget,
         derive_commands,
-        event::key,
+        input::key,
         layout::{Edges, Layout},
         testing::harness::Harness,
     };

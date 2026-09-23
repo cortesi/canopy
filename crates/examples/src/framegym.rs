@@ -1,9 +1,9 @@
 use canopy::{
-    CanopyBuilder, Context, ContextExt, Register, Render, ScrollDirection, ScrollOp, Setup,
-    ViewContext, Widget, derive_commands,
+    CanopyBuilder, Context, ContextExt, Register, Setup, ViewContext, Widget, derive_commands,
     error::Result,
     geom::{Line, Point, Size},
-    layout::{CanvasContext, Layout, MeasureConstraints, Measurement},
+    layout::{CanvasContext, Layout, MeasureConstraints, Measurement, ScrollDirection, ScrollOp},
+    render::Render,
 };
 use canopy_widgets::Frame;
 

@@ -9,9 +9,9 @@
 //! highlight spans it holds.
 
 use canopy::{
-    Render,
     error::Result,
     geom::{Point, Rect},
+    render::Render,
     style::Style,
     text::{grapheme_width, tab_width},
 };

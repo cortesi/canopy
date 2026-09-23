@@ -7,11 +7,13 @@ mod tests;
 
 pub use binding_list::BindingList;
 use canopy::{
-    ChildSlot, Context, ContextExt, EventOutcome, NodeId, NodeName, Register, Render, Setup,
-    TypedId, ViewContext, Widget, derive_commands,
+    Context, ContextExt, EventOutcome, NodeId, NodeName, Register, Setup, TypedId, ViewContext,
+    Widget, derive_commands,
     error::Result,
-    event::Event,
+    input::Event,
     layout::{Align, Direction, Edges, Layout, Sizing},
+    render::Render,
+    tree::ChildSlot,
 };
 pub use mode::ModeHelp;
 

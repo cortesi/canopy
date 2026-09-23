@@ -1,7 +1,8 @@
 use canopy::{
-    ContextExt, FocusScope, NodeId, ViewContextExt,
+    ContextExt, NodeId, ViewContextExt,
     error::{Error, Result},
     testing::harness::Harness,
+    tree::FocusScope,
 };
 use canopy_widgets::{Columns, List};
 

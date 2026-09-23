@@ -1,10 +1,12 @@
 use super::Core;
 use crate::{
-    ChangeOutcome, FocusDirection, RevealAlign,
-    core::{context::CoreViewContext, id::NodeId, widget_access::WidgetReadGuard},
+    ChangeOutcome, NodeId,
+    core::{context::CoreViewContext, widget_access::WidgetReadGuard},
     error::{Error, Result},
     geom::RectI32,
+    layout::RevealAlign,
     path::Path,
+    tree::FocusDirection,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

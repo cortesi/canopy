@@ -7,9 +7,10 @@
 //! measurement and visible-row iteration.
 
 use canopy::{
-    Context, RevealAlign, View,
-    event::mouse,
+    Context,
     geom::{PointI32, Rect},
+    input::mouse,
+    layout::{RevealAlign, View},
     text,
 };
 

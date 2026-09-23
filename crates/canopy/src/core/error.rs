@@ -5,9 +5,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{
-    commands::CommandError,
-    core::{id::NodeId, keyroute::KeyDispatchDivergence},
-    geom,
+    NodeId, commands::CommandError, geom, input::KeyDispatchDivergence,
     layout::LayoutValidationError,
 };
 

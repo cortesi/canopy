@@ -45,11 +45,12 @@ pub use turn::{
 #[cfg(test)]
 mod turn_cleanup_tests;
 use crate::{
-    commands,
-    core::{Core, NodeId, TypedId, dump::dump},
-    error::{self, Result},
-    event::{Event, key::Key},
+    NodeId, TypedId, commands,
+    core::{Core, dump::dump},
+    error,
+    error::Result,
     geom::Size,
+    input::{Event, key::Key},
     style::{StyleMap, default::default_dark},
     widget::Widget,
 };

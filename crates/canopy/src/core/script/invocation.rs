@@ -365,7 +365,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        core::inputmap::BindingAction,
+        input::BindingAction,
         testing::ttree::{R, run_ttree},
     };
 

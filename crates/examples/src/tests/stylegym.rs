@@ -1,11 +1,8 @@
 use canopy::{
     ContextExt, Register, ViewContextExt,
     error::Result,
-    event::{
-        key::{self, KeyCode},
-        mouse,
-    },
     geom::{Point, PointI32, Size},
+    input::{key, key::KeyCode, mouse},
     style::{Attr, AttrSet, PartialStyle, ResolvedStyle, default as default_theme},
     testing::harness::Harness,
 };

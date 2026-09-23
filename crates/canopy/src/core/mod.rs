@@ -28,8 +28,6 @@ pub mod render;
 pub mod script;
 /// Immutable frame observations.
 pub mod snapshot;
-/// Shared node name types.
-pub mod state;
 /// Styling and color helpers.
 pub mod style;
 /// Testing utilities.
@@ -67,27 +65,8 @@ mod widget_access;
 pub mod world;
 
 // Public exports from internal modules
-pub use canopy::{
-    AutomationCallback, AutomationHandle, Canopy, CanopyBuilder, EvalId, EvalOutcome, EvalRequest,
-    EvalTicket, FrameId, Register, RouteTraceEntry, RouteTraceKind, ScriptJournalEntry,
-    ScriptOrigin, ScriptTrust, Setup, TurnInput, TurnOutcome,
-};
+pub use canopy::{Canopy, CanopyBuilder, Register, Setup};
 pub use change::ChangeOutcome;
-pub use context::{
-    ChildSlot, Context, ContextExt, FocusDirection, FocusScope, RevealAlign, ScrollDirection,
-    ScrollOp, ViewContext, ViewContextExt,
-};
-pub use fixture::{Fixture, FixtureInfo};
+pub use context::{Context, ContextExt, ViewContext, ViewContextExt};
 pub use id::{NodeId, TypedId};
-pub use inputmap::{
-    BindingAction, BindingActionKind, BindingId, BindingOptions, BindingPhase, BindingTier,
-    FrameworkBindingGroup, InputSpec, IntentName, IntentSpec,
-};
-pub use node::NodeIdentity;
-pub use notice::{Notice, NoticeSource};
-pub use snapshot::{FrameSnapshot, NodeSnapshot, WidgetSemantics};
-pub use wake::{NodeWakeHandle, PollLifetime, WakeOutcome, WakeSender, wake_channel};
-pub use world::{
-    Core,
-    modal::{ModalBindings, ModalOptions, ModalToken},
-};
+pub use world::Core;

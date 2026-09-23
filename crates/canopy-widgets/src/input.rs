@@ -1,10 +1,11 @@
 use canopy::{
-    Context, EventOutcome, IntentSpec, NodeName, Register, Render, Setup, ViewContext, Widget,
-    WidgetSemantics, cursor, derive_commands,
+    Context, EventOutcome, NodeName, Register, Setup, ViewContext, Widget, derive_commands,
     error::Result,
-    event::{Event, key},
     geom::{Line, Point, Size},
+    input::{Event, IntentSpec, key},
     layout::{Layout, MeasureConstraints, Measurement},
+    render::{Render, cursor},
+    runtime::WidgetSemantics,
     style::{WidgetState, roles},
     text,
 };
@@ -402,7 +403,7 @@ mod tests {
     use canopy::{
         CanopyBuilder, EventOutcome, Widget,
         error::Result,
-        event::{Event, key},
+        input::{Event, key},
     };
     use unicode_width::UnicodeWidthStr;
 

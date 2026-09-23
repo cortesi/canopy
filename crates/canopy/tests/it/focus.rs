@@ -3,8 +3,13 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, CanopyBuilder, ContextExt, FocusDirection, FocusScope, NodeId, NodeName,
-        ViewContext, Widget, error::Result, geom::Size, layout::Layout, testing::grid::Grid,
+        Canopy, CanopyBuilder, ContextExt, NodeId, NodeName, ViewContext, Widget,
+        error::Result,
+        geom::Size,
+        layout::Layout,
+        runtime::TurnInput,
+        testing::grid::Grid,
+        tree::{FocusDirection, FocusScope},
     };
 
     /// Return the name of the focused grid cell, if a cell holds focus.
@@ -198,7 +203,7 @@ mod tests {
         })?;
 
         canopy.set_screen_size(Size::new(10, 10))?;
-        canopy.turn(canopy::TurnInput::Prepare)?;
+        canopy.turn(TurnInput::Prepare)?;
         canopy.with_root_context(|context| {
             context.set_layout_override(
                 first.into(),
@@ -206,7 +211,7 @@ mod tests {
             )
         })?;
         canopy.set_screen_size(Size::new(10, 10))?;
-        canopy.turn(canopy::TurnInput::Prepare)?;
+        canopy.turn(TurnInput::Prepare)?;
 
         assert_eq!(
             canopy.with_root_view(|context| context.focused_within(context.root_id())),

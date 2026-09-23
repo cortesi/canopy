@@ -4,12 +4,13 @@ use std::sync::Arc;
 
 use super::{Canopy, CanopyBuilder};
 use crate::{
-    ContextExt, FrameId, FrameSnapshot, TermBuf, ViewContext, Widget,
+    ContextExt, ViewContext, Widget,
     commands::ArgValue,
     error::{Error, Result},
     geom::{Line, Point, Size},
     layout::Layout,
-    render::{Render, RenderBackend},
+    render::{Render, RenderBackend, TermBuf},
+    runtime::{FrameId, FrameSnapshot},
     style::{AttrSet, Color, ResolvedStyle},
     testing::backend::TestRender,
 };

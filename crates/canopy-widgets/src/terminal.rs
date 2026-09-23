@@ -1,11 +1,14 @@
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use canopy::{
-    Context, EventOutcome, NodeName, Render, ViewContext, Widget, cursor, derive_commands,
+    Context, EventOutcome, NodeName, ViewContext, Widget, derive_commands,
     error::{Error, Result},
-    event::{self, key, mouse},
-    geom::{self, Size},
+    geom,
+    geom::Size,
+    input,
+    input::{key, mouse},
     layout::{CanvasContext, MeasureConstraints, Measurement},
+    render::{Render, cursor},
     rgb,
     style::{AttrSet, Color, ResolvedStyle, Style},
     text,
@@ -518,25 +521,25 @@ impl Widget for Terminal {
         Ok(())
     }
 
-    fn on_event(&mut self, event: &event::Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
+    fn on_event(&mut self, event: &input::Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
         if self.session.is_none() {
             return Ok(EventOutcome::Ignore);
         }
 
         match event {
-            event::Event::Key(key) => {
+            input::Event::Key(key) => {
                 if self.handle_key(*key) {
                     Ok(EventOutcome::Handle)
                 } else {
                     Ok(EventOutcome::Ignore)
                 }
             }
-            event::Event::Paste(content) => {
+            input::Event::Paste(content) => {
                 self.clear_selection();
                 self.handle_paste(content);
                 Ok(EventOutcome::Handle)
             }
-            event::Event::Mouse(mouse_event) => {
+            input::Event::Mouse(mouse_event) => {
                 ctx.set_focus(ctx.node_id())?;
                 let Some(state) = self.state() else {
                     return Ok(EventOutcome::Ignore);
@@ -588,11 +591,11 @@ impl Widget for Terminal {
                 };
                 Ok(outcome)
             }
-            event::Event::FocusGained => {
+            input::Event::FocusGained => {
                 self.sync_focus(true);
                 Ok(EventOutcome::Handle)
             }
-            event::Event::FocusLost => {
+            input::Event::FocusLost => {
                 self.sync_focus(false);
                 Ok(EventOutcome::Handle)
             }
@@ -904,12 +907,13 @@ mod tests {
     use std::sync::Arc;
 
     use canopy::{
-        CanopyBuilder, ContextExt, TermBuf,
-        event::{key, mouse},
+        CanopyBuilder, ContextExt,
+        input::{key, mouse},
         layout::Layout,
+        render::TermBuf,
         style::{
-            GradientSpec, GradientStop, Paint,
-            effects::{self, Effect, StyleEffect},
+            GradientSpec, GradientStop, Paint, effects,
+            effects::{Effect, StyleEffect},
         },
         testing::harness::Harness,
     };
@@ -948,7 +952,7 @@ mod tests {
             let key = key::Key::parse_spec(spec).expect("valid key spec");
             let (predicted, outcome) = app.with_root_context(|ctx| {
                 let predicted = terminal.key_outcome(key, ctx);
-                Ok((predicted, terminal.on_event(&event::Event::Key(key), ctx)?))
+                Ok((predicted, terminal.on_event(&input::Event::Key(key), ctx)?))
             })?;
             assert_eq!(
                 predicted, outcome,

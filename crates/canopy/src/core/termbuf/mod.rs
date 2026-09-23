@@ -4,10 +4,9 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
     core::text,
-    cursor,
     error::{Error, Result},
     geom::{Line, Point, Rect, Size},
-    render::RenderBackend,
+    render::{RenderBackend, cursor},
     style::{Attr, ResolvedStyle},
 };
 

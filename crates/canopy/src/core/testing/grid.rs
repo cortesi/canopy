@@ -1,11 +1,11 @@
 //! Grid test utility for creating configurable grid layouts.
 
 use crate::{
-    Canopy, Context, ContextExt, NodeId, ViewContext,
+    Canopy, Context, ContextExt, NodeId, NodeName, ViewContext,
     error::Result,
     geom::Size,
     layout::{Layout, LayoutOverride},
-    state::NodeName,
+    runtime::TurnInput,
     widget::Widget,
 };
 
@@ -98,7 +98,7 @@ impl Grid {
             })
         })?;
         canopy.set_screen_size(grid.expected_size())?;
-        canopy.turn(crate::TurnInput::Prepare)?;
+        canopy.turn(TurnInput::Prepare)?;
         Ok(grid)
     }
 

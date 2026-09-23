@@ -2,9 +2,10 @@
 
 use super::{super::test_support::*, *};
 use crate::{
-    Context, ModalBindings, ModalOptions, ViewContext,
+    Context, ViewContext,
     core::context::CoreContext,
     geom::Size,
+    input::{ModalBindings, ModalOptions},
     layout::{CanvasContext, Direction, Edges, Layout, Measurement},
     widget::Widget,
 };

@@ -4,11 +4,14 @@ use std::{
 };
 
 use canopy::{
-    AutomationHandle, Canopy, EvalRequest, FixtureInfo, ScriptOrigin,
+    Canopy,
     commands::{ArgValue, CommandStatus, CommandTarget},
     error::{Error as CanopyError, Result as CanopyResult, ScriptErrorKind},
     render::NopBackend,
-    script::{ScriptAssertion, ScriptCheckDiagnostic},
+    script::{
+        AutomationHandle, EvalRequest, FixtureInfo, ScriptAssertion, ScriptCheckDiagnostic,
+        ScriptOrigin,
+    },
 };
 use ruau_script_api::{
     ScriptApiAvailability, ScriptApiCatalog, ScriptApiEntry, ScriptApiError, ScriptApiGuide,
@@ -935,8 +938,9 @@ fn canopy_error_info(error: &CanopyError) -> ScriptErrorInfo {
 #[cfg(test)]
 mod tests {
     use canopy::{
-        CanopyBuilder, Fixture, FocusDirection, NodeName, Register, Setup, Widget, derive_commands,
-        error::Result as CanopyResult, geom::Size, testing::contracts,
+        CanopyBuilder, NodeName, Register, Setup, Widget, derive_commands,
+        error::Result as CanopyResult, geom::Size, render::RenderLimits, script::Fixture,
+        testing::contracts, tree::FocusDirection,
     };
 
     use super::*;
@@ -1105,7 +1109,7 @@ mod tests {
             let changes = factory_changes.clone();
             CanopyBuilder::new()
                 .configure(move |setup| {
-                    setup.set_render_limits(canopy::RenderLimits::new(10, 10, 100));
+                    setup.set_render_limits(RenderLimits::new(10, 10, 100));
                     setup.register_fixture(Fixture::new(
                         "mutate",
                         "Count fixture changes",

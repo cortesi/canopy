@@ -64,7 +64,7 @@ pub mod canopy_mcp {
         pub id: u64,
         #[schemars(with = "String")]
         /// Script origin.
-        pub origin: canopy::ScriptOrigin,
+        pub origin: canopy::script::ScriptOrigin,
         /// Whether the evaluation completed successfully.
         pub ok: bool,
         /// Number of logs emitted by this evaluation.
@@ -96,7 +96,7 @@ pub mod canopy_mcp {
         /// Compact discovery inventory for the generated API.
         pub api_sources: Vec<ruau_script_api::ScriptApiEntry>,
         /// Registered fixtures.
-        pub fixtures: Vec<canopy::FixtureInfo>,
+        pub fixtures: Vec<canopy::script::FixtureInfo>,
         /// Default top-level script target policy.
         pub default_target: String,
         /// Availability from the root used by top-level script evaluation.
@@ -400,7 +400,7 @@ pub mod canopy_mcp {
     /// permissions.
     pub fn serve_uds(
         socket_path: impl AsRef<std::path::Path>,
-        automation: canopy::AutomationHandle,
+        automation: canopy::script::AutomationHandle,
         metadata: crate::AppMetadata,
     ) -> crate::Result<UdsServerHandle> {
     }

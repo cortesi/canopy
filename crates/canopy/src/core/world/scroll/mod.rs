@@ -7,10 +7,11 @@
 
 use super::{Core, WidgetOperation, layout_driver::clamp_scroll};
 use crate::{
-    ChangeOutcome, RevealAlign, ScrollOp,
-    core::{id::NodeId, node::Node},
+    ChangeOutcome, NodeId,
+    core::node::Node,
     error::{Error, Result},
     geom::{Point, PointI32, Rect},
+    layout::{RevealAlign, ScrollOp},
 };
 
 /// Runtime behavior applied to a route node that no widget or binding handled.

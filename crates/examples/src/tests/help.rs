@@ -1,8 +1,8 @@
 use canopy::{
-    Register, RouteTraceKind,
+    Register,
     error::Result,
-    event::key::Key,
     geom::{Point, Size},
+    input::{RouteTraceKind, key::Key},
     testing::harness::Harness,
 };
 

@@ -8,10 +8,12 @@
 //! the pointer, and a drag keeps the thumb under the pointer.
 
 use canopy::{
-    Context, EventOutcome, NodeId, Render, ScrollAxis, ScrollOp, View, ViewContext,
+    Context, EventOutcome, NodeId, ViewContext,
     error::Result,
-    event::mouse,
     geom::{Point, PointI32, Rect, RectI32, Size},
+    input::mouse,
+    layout::{ScrollAxis, ScrollOp, View},
+    render::Render,
 };
 
 /// The glyphs drawn on scrollbar tracks, following the
@@ -332,9 +334,9 @@ impl Scrollbar {
     /// the context's node. A node that shows its whole canvas draws nothing.
     /// Rendering cannot release mouse capture, so a drag whose node or track
     /// has changed draws no active thumb and ends at the next event. After
-    /// the thumb, each target's [`ScrollMark`](canopy::ScrollMark)s draw over
-    /// the track, so scrolling the thumb across a mark keeps the mark's
-    /// color under the thumb's glyph.
+    /// the thumb, each target's [`ScrollMark`](canopy::layout::ScrollMark)s
+    /// draw over the track, so scrolling the thumb across a mark keeps the
+    /// mark's color under the thumb's glyph.
     pub fn render(
         &mut self,
         render: &mut Render,

@@ -3,7 +3,7 @@ use crate::{
     commands::{CommandArgs, CommandCall, CommandId, CommandTarget},
     core::id::testing_node_id,
     error::Result,
-    event::{key, mouse::Mouse},
+    input::{key, mouse::Mouse},
 };
 
 const HELP: FrameworkBindingGroup = FrameworkBindingGroup::new("root.help");

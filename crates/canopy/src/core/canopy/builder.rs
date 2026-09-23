@@ -184,7 +184,7 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
-    use crate::{TurnInput, geom::Size};
+    use crate::{geom::Size, runtime::TurnInput};
 
     #[test]
     fn build_preserves_phase_order_without_preparing_or_running_startup() -> Result<()> {

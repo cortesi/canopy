@@ -8,7 +8,7 @@ use std::{
     thread,
 };
 
-use canopy::AutomationHandle;
+use canopy::script::AutomationHandle;
 use ruau_script_api::{ScriptApiError, ScriptApiQuery, ScriptApiResponse};
 use serde::{Deserialize, Serialize};
 use tmcp::{
@@ -419,8 +419,9 @@ mod tests {
     };
 
     use canopy::{
-        CanopyBuilder, ContextExt, Fixture, NodeName, Register, Setup, Widget, derive_commands,
-        error::Result as CanopyResult, geom::Size, testing::contracts,
+        CanopyBuilder, ContextExt, NodeName, Register, Setup, Widget, derive_commands,
+        error::Result as CanopyResult, geom::Size, runtime::TurnInput, script::Fixture,
+        testing::contracts,
     };
     use tokio::{net::UnixStream, sync::mpsc as async_mpsc};
 
@@ -762,7 +763,7 @@ mod tests {
             .build()?;
         canopy.replace_root(EchoNode::new())?;
         canopy.set_screen_size(Size::new(20, 5))?;
-        canopy.turn(canopy::TurnInput::Prepare)?;
+        canopy.turn(TurnInput::Prepare)?;
         let automation = canopy.automation_handle();
         let mut events = canopy.take_event_receiver().expect("test owns events");
         let directory = tempfile::tempdir()?;
@@ -794,7 +795,7 @@ mod tests {
                 break result;
             }
             executor::block_on(events.next()).expect("MCP work wakes UI");
-            canopy.turn(canopy::TurnInput::Wake)?;
+            canopy.turn(TurnInput::Wake)?;
         };
         worker.join().expect("MCP client worker");
         server.stop()?;
@@ -926,7 +927,9 @@ mod tests {
     }
     #[test]
     fn live_pending_eval_allows_native_progress_and_reports_busy() -> crate::Result<()> {
-        use canopy::{EvalRequest, TurnInput, error::Error as CanopyError, geom::Size};
+        use canopy::{
+            error::Error as CanopyError, geom::Size, runtime::TurnInput, script::EvalRequest,
+        };
         use futures::{StreamExt, executor};
 
         let mut canopy = CanopyBuilder::new().configure(EchoNode::register).build()?;

@@ -10,11 +10,10 @@ use super::{
     size_to_arg,
 };
 use crate::{
-    FrameSnapshot, NodeSnapshot,
     core::termbuf::TermBuf,
-    event::key::Key,
-    help,
-    keyroute::{KeyRouteExplanation, KeyRouteStep, RouteOutcome},
+    input,
+    input::{KeyRouteExplanation, KeyRouteStep, RouteOutcome, key::Key},
+    runtime::{FrameSnapshot, NodeSnapshot},
     widget::EventOutcome,
 };
 
@@ -627,7 +626,7 @@ pub(super) fn route_trace_to_arg(canopy: &Canopy) -> ArgValue {
 ///
 /// Key and mouse records carry the same fields, so one conversion serves both
 /// and the two lists cannot drift apart.
-fn available_binding_to_arg<I: ToString>(binding: help::AvailableBinding<I>) -> ArgValue {
+fn available_binding_to_arg<I: ToString>(binding: input::AvailableBinding<I>) -> ArgValue {
     let mut record = BTreeMap::from([
         ("id".to_string(), ArgValue::UInt(binding.id.as_u64())),
         (

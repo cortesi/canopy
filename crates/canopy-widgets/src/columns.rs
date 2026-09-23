@@ -1,12 +1,13 @@
 //! Panes side by side, with dividers that show their scroll positions.
 
 use canopy::{
-    Context, EventOutcome, FocusScope, NodeId, NodeName, Render, ScrollAxis, ViewContext, Widget,
-    derive_commands,
+    Context, EventOutcome, NodeId, NodeName, ViewContext, Widget, derive_commands,
     error::Result,
-    event::Event,
     geom::Rect,
-    layout::{Direction, Edges, Layout},
+    input::Event,
+    layout::{Direction, Edges, Layout, ScrollAxis},
+    render::Render,
+    tree::FocusScope,
 };
 
 use crate::scrollbar::{Scrollbar, ScrollbarGlyphs, THIN, edge_track, pane_target};

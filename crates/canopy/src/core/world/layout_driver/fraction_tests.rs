@@ -3,12 +3,10 @@
 use std::sync::{Arc, Mutex};
 
 use crate::{
-    core::{
-        id::NodeId,
-        world::{
-            Core,
-            test_support::{LayoutWidget, TestWidget, attach_root_child},
-        },
+    NodeId,
+    core::world::{
+        Core,
+        test_support::{LayoutWidget, TestWidget, attach_root_child},
     },
     error::Result,
     geom::Size,

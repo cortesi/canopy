@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use canopy::{CanopyBuilder, TurnInput, Widget, derive_commands, geom::Size};
+use canopy::{CanopyBuilder, Widget, derive_commands, geom::Size, runtime::TurnInput};
 use tmcp::schema::ClientRequest;
 use tokio::{
     io::{duplex, split},

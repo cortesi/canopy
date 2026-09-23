@@ -6,17 +6,18 @@
 //! modal overlay shows how the pane dims.
 
 use canopy::{
-    CanopyBuilder, ChildSlot, Context, ContextExt, NodeId, NodeName, Register, Render,
-    ScrollDirection, Setup, TypedId, View, ViewContext, ViewContextExt, Widget, derive_commands,
+    CanopyBuilder, Context, ContextExt, NodeId, NodeName, Register, Setup, TypedId, ViewContext,
+    ViewContextExt, Widget, derive_commands,
     error::Result,
     geom::{Line, Point, Rect, Size},
-    layout::{CanvasContext, Direction, Edges, Layout},
+    layout::{CanvasContext, Direction, Edges, Layout, ScrollDirection, View},
+    render::Render,
     style::{
         AttrSet, Color, PartialStyle, ResolvedStyle, StyleMap, default as default_theme, dracula,
-        effects::{self, Effect},
-        gruvbox, solarized,
+        effects, effects::Effect, gruvbox, solarized,
     },
     text,
+    tree::ChildSlot,
 };
 use canopy_widgets::{
     Button, Center, Container, Dropdown, Frame, Input, Label, Root, Scroll, Selector, Tabs,

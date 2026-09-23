@@ -6,9 +6,11 @@ use std::{
 use ruau::{declaration, module, vm::NativeModule};
 
 use crate::{
-    FixtureInfo, NoticeSource, RouteTraceKind,
     commands::{CommandParamKind, CommandReturnSpec, CommandSet, CommandSpec, DeclRegistry},
     core::inputmap::IntentCatalog,
+    input::RouteTraceKind,
+    runtime::NoticeSource,
+    script::FixtureInfo,
 };
 
 /// Header comment shared by every rendered canopy API surface.

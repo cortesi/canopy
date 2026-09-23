@@ -11,11 +11,11 @@ use std::{
 };
 
 use canopy::{
-    Context, ContextExt, NodeName, Register, Render, ScrollDirection, Setup, ViewContext, Widget,
-    derive_commands,
+    Context, ContextExt, NodeName, Register, Setup, ViewContext, Widget, derive_commands,
     error::{Error, Result},
     geom::Size,
-    layout::{CanvasContext, Constraint, Layout, MeasureConstraints, Measurement},
+    layout::{CanvasContext, Constraint, Layout, MeasureConstraints, Measurement, ScrollDirection},
+    render::Render,
 };
 use tracing_subscriber::fmt;
 

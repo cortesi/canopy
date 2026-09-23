@@ -1,11 +1,12 @@
 use std::time::Duration;
 
 use canopy::{
-    CanopyBuilder, Context, ContextExt, NodeName, Register, Render, Setup, ViewContext,
-    ViewContextExt, Widget, derive_commands,
+    CanopyBuilder, Context, ContextExt, NodeName, Register, Setup, ViewContext, ViewContextExt,
+    Widget, derive_commands,
     error::Result,
     geom::Size,
     layout::{Edges, Layout, MeasureConstraints, Measurement},
+    render::Render,
     style::StyleMap,
 };
 use canopy_widgets::{Border, Center, Container, Frame, List, SINGLE, Selectable, Text};

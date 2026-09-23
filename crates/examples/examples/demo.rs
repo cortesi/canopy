@@ -4,7 +4,7 @@ use std::{error::Error, fs, path::PathBuf, process, result::Result as StdResult}
 
 use canopy::{
     CanopyBuilder, Register,
-    event::key::Key,
+    input::key::Key,
     terminal::{InterruptPolicy, RunOptions},
 };
 use canopy_examples::{

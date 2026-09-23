@@ -5,15 +5,20 @@ mod tests {
     use std::{cell::Cell, fs, path::Path, rc::Rc};
 
     use canopy::{
-        BindingOptions, BindingPhase, BindingTier, Canopy, CanopyBuilder, CommandArg, Context,
-        ContextExt, EventOutcome, FrameworkBindingGroup, NodeId, Register, Render, ScriptOrigin,
-        ScriptTrust, Setup, TurnInput, ViewContext, Widget,
+        Canopy, CanopyBuilder, CommandArg, Context, ContextExt, EventOutcome, NodeId, Register,
+        Setup, ViewContext, Widget,
         commands::ArgValue,
         derive_commands,
         error::{Error, Result, ScriptErrorKind},
-        event::{Event, key::Key, mouse},
         geom::{Line, Size},
+        input::{
+            BindingAction, BindingOptions, BindingPhase, BindingTier, Event, FrameworkBindingGroup,
+            key::Key, mouse,
+        },
         layout::Layout,
+        render::Render,
+        runtime::TurnInput,
+        script::{ScriptOrigin, ScriptTrust},
         testing::{backend::TestRender, harness::Harness},
     };
     use serde::{Deserialize, Serialize};
@@ -608,7 +613,7 @@ mod tests {
                         source: None,
                         phase: Some(BindingPhase::AfterWidget),
                     },
-                    canopy::BindingAction::Command(ApiLeaf::call_get()),
+                    BindingAction::Command(ApiLeaf::call_get()),
                 )?;
                 record.set(Some(id));
                 Ok(())

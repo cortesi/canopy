@@ -1,10 +1,11 @@
 use std::mem;
 
 use canopy::{
-    Context, Render,
+    Context,
     error::Result,
-    event::key,
     geom::{Line, Point, Rect},
+    input::key,
+    render::Render,
 };
 
 use super::widget::{Editor, prompt_text};

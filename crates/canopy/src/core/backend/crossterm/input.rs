@@ -11,11 +11,12 @@ use crossterm::event as cevent;
 use futures::{channel::mpsc::UnboundedReceiver, stream::Stream};
 
 use crate::{
-    TurnInput,
     core::canopy::AdapterEvent,
-    error::{self, Result},
-    event::{Event, key, mouse},
+    error,
+    error::Result,
     geom::{PointI32, Size},
+    input::{Event, key, mouse},
+    runtime::TurnInput,
 };
 
 /// Most ready input events one turn takes before it renders.

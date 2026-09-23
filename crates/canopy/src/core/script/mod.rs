@@ -33,23 +33,31 @@ use ruau::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+/// Base `canopy` scripting API declarations and native registration.
+pub use super::{
+    canopy::{
+        AutomationCallback, AutomationHandle, EvalId, EvalOutcome, EvalRequest, EvalTicket,
+        ScriptJournalEntry, ScriptOrigin, ScriptTrust,
+    },
+    fixture::{Fixture, FixtureInfo},
+};
 use crate::{
-    Canopy, ChangeOutcome, FixtureInfo, NodeId,
-    commands::{self, ArgValue, CommandArgs, CommandSet, CommandSpec},
+    Canopy, ChangeOutcome, NodeId, commands,
+    commands::{ArgValue, CommandArgs, CommandSet, CommandSpec},
     core::{
         Core,
         context::{Context, CoreContext, CoreViewContext, FocusScope, ViewContext},
         inputmap,
         termbuf::Cell,
     },
-    error::{self, Result},
-    event::{key, mouse},
+    error,
+    error::Result,
     geom::{Point, RectI32, Size},
+    input::{key, mouse},
     path::PathFilter,
     style::{AttrSet, Color},
 };
 
-/// Base `canopy` scripting API declarations and native registration.
 mod base_api;
 /// Guards and the bridge between a running script scope and the live `Canopy`.
 mod bridge;

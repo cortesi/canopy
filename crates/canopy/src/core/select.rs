@@ -6,14 +6,10 @@
 //! through this module, so they cannot disagree about the winner.
 
 use crate::{
-    core::{
-        Core, NodeId,
-        context::CoreViewContext,
-        inputmap::{BindingId, BindingRecord, InputSpec},
-        world::WidgetOperation,
-    },
+    NodeId,
+    core::{Core, context::CoreViewContext, inputmap::BindingRecord, world::WidgetOperation},
     error::Result,
-    event::{Event, key::Key},
+    input::{BindingId, Event, InputSpec, key::Key},
     path::Path,
     widget::EventOutcome,
 };

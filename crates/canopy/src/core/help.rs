@@ -1,16 +1,14 @@
 //! Contextual binding discovery.
 
 use crate::{
+    NodeId,
     commands::{CommandAvailability, CommandCall, CommandResolver},
-    core::{
-        Core, NodeId,
-        inputmap::{
-            BindingAction, BindingActionKind, BindingId, BindingPhase, BindingTier,
-            FrameworkBindingGroup, InputSpec, IntentName,
-        },
-    },
+    core::Core,
     error::Result,
-    event::{key::Key, mouse::Mouse},
+    input::{
+        BindingAction, BindingActionKind, BindingId, BindingPhase, BindingTier,
+        FrameworkBindingGroup, InputSpec, IntentName, key::Key, mouse::Mouse,
+    },
     path::Path,
 };
 
@@ -206,16 +204,14 @@ mod tests {
 
     use super::*;
     use crate::{
-        ViewContext,
+        NodeName, ViewContext,
         commands::{
             CommandArgs, CommandCall, CommandId, CommandNode, CommandResolution, CommandStatus,
             CommandTarget,
         },
-        core::inputmap::{BindingAction, BindingOptions, InputSpec},
         error::Error,
-        event::key::KeyCode,
+        input::{BindingAction, BindingOptions, InputSpec, ModalBindings, key::KeyCode},
         script::LuauFunctionId,
-        state::NodeName,
         widget::{EventOutcome, Widget},
     };
 
@@ -276,7 +272,7 @@ mod tests {
     ) -> Result<()> {
         core.input_map.bind(
             InputSpec::Key(key.into()),
-            crate::BindingOptions {
+            BindingOptions {
                 tier,
                 path: Some(path.parse()?),
                 description: description.into(),
@@ -300,7 +296,7 @@ mod tests {
         let mouse = Mouse::parse_spec(spec)?;
         core.input_map.bind(
             InputSpec::Mouse(mouse),
-            crate::BindingOptions {
+            BindingOptions {
                 tier,
                 path: Some(path.parse()?),
                 description: description.into(),
@@ -431,7 +427,7 @@ mod tests {
             }),
         )?;
         core.input_map
-            .set_modal_bindings(Some(crate::ModalBindings::Framework {
+            .set_modal_bindings(Some(ModalBindings::Framework {
                 group,
                 intents: &[],
             }));
@@ -562,7 +558,7 @@ mod tests {
 
     #[test]
     fn command_binding_snapshot_captures_intent_and_current_status() -> Result<()> {
-        use crate::{commands::CommandNode, core::inputmap::BindingOptions};
+        use crate::{commands::CommandNode, input::BindingOptions};
 
         let mut core = Core::new();
         let enabled = Rc::new(Cell::new(false));
@@ -791,7 +787,7 @@ mod tests {
             }),
         )?;
         core.input_map
-            .set_modal_bindings(Some(crate::ModalBindings::Framework {
+            .set_modal_bindings(Some(ModalBindings::Framework {
                 group,
                 intents: &[],
             }));

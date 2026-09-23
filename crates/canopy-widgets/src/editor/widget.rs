@@ -1,13 +1,17 @@
 use std::collections::HashMap;
 
 use canopy::{
-    Context, EventOutcome, FocusDirection, NodeName, Render, RevealAlign, ScrollAxis, ScrollMark,
-    ViewContext, Widget, cursor, derive_commands,
+    Context, EventOutcome, NodeName, ViewContext, Widget, derive_commands,
     error::Result,
-    event::{Event, key, mouse},
     geom::{Line, Point, Rect, Size},
-    layout::{CanvasContext, Constraint, MeasureConstraints, Measurement},
+    input::{Event, key, mouse},
+    layout::{
+        CanvasContext, Constraint, MeasureConstraints, Measurement, RevealAlign, ScrollAxis,
+        ScrollMark,
+    },
+    render::{Render, cursor},
     style::Style,
+    tree::FocusDirection,
 };
 
 use super::{

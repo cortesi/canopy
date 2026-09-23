@@ -11,11 +11,10 @@ use tokio::runtime::Builder;
 
 use super::{base_api::read_node_id, bridge::REENTRANT_CANOPY, *};
 use crate::{
-    CanopyBuilder, Widget,
+    CanopyBuilder, NodeName, Widget,
     core::{id::testing_node_id, inputmap::IntentCatalog, testing::model::trace_result},
     derive_commands,
     error::Result,
-    state::NodeName,
     testing::ttree::{get_state, run_ttree},
 };
 
