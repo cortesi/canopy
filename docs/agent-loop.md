@@ -47,16 +47,16 @@ choosing actions. The payload includes the operating guide, an API source
 inventory, an API digest, fixture metadata, current command availability, and a
 compact script-journal summary.
 
-The `metadata` record declares `app`, `execution`, `session_id`, `viewport`,
-`reset`, and `api_digest`. Headless `fresh-app-per-eval` requests reconstruct the
-UI and receive independent session IDs. `live-session` requests reuse the app
-and retain one session ID across client reconnects. Domain isolation comes from
+The `metadata` record declares `app`, `execution`, `instance_id`, `screen`,
+`reset`, `fixture`, and `api_digest`. Headless `fresh-app-per-eval` requests
+reconstruct the UI and receive independent instance IDs. `live-session`
+requests reuse the app and retain one instance ID across client reconnects.
+Domain isolation comes from
 the declared reset policy, never from UI reconstruction. A pre-build failure
 can omit the API digest. Node tokens remain temporary references within a
 session, not durable replay targets.
 
-`default_target = "root"` identifies the top-level eval origin.
-`default_commands` reports root-relative availability, while `focus_commands`
+Top-level evaluations start at the root. `default_commands` reports root-relative availability, while `focus_commands`
 reports focus-relative availability. Choose an explicit target when multiple
 widgets share a command owner. Use `canopy.call_exact(node, id, ...)` to keep a
 selected owner stable across tree changes, or `canopy.call_focus(id, ...)` to
@@ -188,18 +188,18 @@ own `setup`.
 
 ## Replay
 
-Save an eval as a replay journal when it captures a useful interaction:
+Save an eval as a replay file when it captures a useful interaction:
 
 ```sh
 cargo run -p canopyctl -- eval \
-  --journal-out tmp/todo-delete.json \
+  --replay-out tmp/todo-delete.json \
   --fixture with_items \
   'todo.select_first(); todo.delete_item(); return canopy.screen_text()' \
   -- cargo run -p todo -- mcp :memory:
 ```
 
-The journal uses `canopy.replay/1` and records application/API identity, execution
-mode, viewport, fixture and reset contracts, and ordered source/expected-success
+The replay file uses `canopy.replay/1` and records application/API identity,
+execution mode, screen size, fixture and reset contracts, and ordered source/expected-success
 steps. Replay uses the recorded fixture and dimensions:
 
 ```sh

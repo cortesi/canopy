@@ -10,7 +10,7 @@ use canopy::{
     render::NopBackend,
     script::{
         AutomationHandle, EvalOutcome, EvalRequest, FixtureInfo, ScriptAssertion,
-        ScriptCheckDiagnostic, ScriptOrigin,
+        ScriptCheckDiagnostic,
     },
 };
 use ruau_script_api::{
@@ -26,7 +26,7 @@ use tokio::{sync::oneshot, task::spawn_blocking};
 
 #[cfg(test)]
 use crate::metadata::test_app_factory as app_factory;
-use crate::{AppFactory, ExecutionMetadata, ResetPolicy, Result, Viewport, metadata::LiveContext};
+use crate::{AppFactory, ExecutionMetadata, Result, ScreenSize, metadata::LiveContext};
 
 /// Short operating guide returned by the bootstrap tool.
 const BOOTSTRAP_GUIDE: &str = "Use script_eval for actions and assertions. Scripts run against \
@@ -41,7 +41,7 @@ canopy.call_focus for focus-relative actions and canopy.call_exact for a stable 
 #[tool_params]
 pub struct ScriptEvalRequest {
     /// Luau source code to execute.
-    pub script: String,
+    pub source: String,
     /// Optional named fixture applied before evaluation.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fixture: Option<String>,
@@ -51,17 +51,17 @@ pub struct ScriptEvalRequest {
     /// Optional headless dimensions; live requests may only confirm current
     /// dimensions.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub viewport: Option<Viewport>,
+    pub screen: Option<ScreenSize>,
 }
 
 impl ScriptEvalRequest {
-    /// Construct a request with default fixture, timeout, and viewport options.
-    pub fn new(script: impl Into<String>) -> Self {
+    /// Construct a request with default fixture, timeout, and screen options.
+    pub fn new(source: impl Into<String>) -> Self {
         Self {
-            script: script.into(),
+            source: source.into(),
             fixture: None,
             timeout_ms: None,
-            viewport: None,
+            screen: None,
         }
     }
 }
@@ -70,9 +70,9 @@ impl ScriptEvalRequest {
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 #[tool_params]
 pub struct BootstrapRequest {
-    /// Requested headless viewport, or a live viewport compatibility check.
+    /// Requested headless screen, or a live screen compatibility check.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub viewport: Option<Viewport>,
+    pub screen: Option<ScreenSize>,
 }
 
 /// Timing information for a script evaluation.
@@ -150,7 +150,7 @@ pub struct ScriptErrorInfo {
 
 /// Structured response for the `script_eval` tool and smoke runner.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct ScriptEvalOutcome {
+pub struct EvalReport {
     /// Execution identity and domain reset behavior for this request.
     pub metadata: ExecutionMetadata,
     /// Whether the script completed successfully.
@@ -198,9 +198,8 @@ pub struct BootstrapCommand {
 pub struct BootstrapJournalEntry {
     /// Monotonic journal id.
     pub id: u64,
-    /// Script origin.
-    #[schemars(with = "String")]
-    pub origin: ScriptOrigin,
+    /// Where the source came from, such as `eval` or `startup:NAME`.
+    pub origin: String,
     /// Whether the evaluation completed successfully.
     pub ok: bool,
     /// Number of logs emitted by this evaluation.
@@ -223,8 +222,6 @@ pub struct BootstrapResponse {
     pub api_sources: Vec<ScriptApiEntry>,
     /// Registered fixtures.
     pub fixtures: Vec<FixtureInfo>,
-    /// Default top-level script target policy.
-    pub default_target: String,
     /// Availability from the root used by top-level script evaluation.
     pub default_commands: Vec<BootstrapCommand>,
     /// Availability from the currently focused node.
@@ -233,7 +230,7 @@ pub struct BootstrapResponse {
     pub journal: Vec<BootstrapJournalEntry>,
 }
 
-impl ScriptEvalOutcome {
+impl EvalReport {
     /// Attach boundary-owned metadata to any success or failure outcome.
     fn with_metadata(mut self, metadata: ExecutionMetadata) -> Self {
         self.metadata = metadata;
@@ -293,23 +290,17 @@ impl AppFactory {
         Ok(canopy.script_api()?.to_string())
     }
 
-    /// Return the evaluator's registered fixture catalog.
-    pub fn fixtures(&self) -> Result<Vec<FixtureInfo>> {
-        let canopy = self.build()?;
-        Ok(canopy.fixture_infos())
-    }
-
     /// Bootstrap at requested dimensions, validated before factory invocation.
     pub fn bootstrap(&self, request: &BootstrapRequest) -> Result<BootstrapResponse> {
-        let viewport = request.viewport.unwrap_or_default();
-        viewport.validate()?;
-        let mut metadata = ExecutionMetadata::fresh(self.metadata(), viewport);
-        let canopy = build_headless(self, viewport, None, &mut metadata)?;
+        let screen = request.screen.unwrap_or_default();
+        screen.validate()?;
+        let mut metadata = ExecutionMetadata::fresh(self.metadata(), screen);
+        let canopy = build_headless(self, screen, None, &mut metadata)?;
         Ok(bootstrap_for_canopy(&canopy, metadata)?)
     }
 
     /// Evaluate a Luau script against a fresh headless app.
-    pub fn evaluate(&self, request: &ScriptEvalRequest) -> ScriptEvalOutcome {
+    pub fn evaluate(&self, request: &ScriptEvalRequest) -> EvalReport {
         self.evaluate_with(request, |canopy, request| canopy.eval(request))
     }
 
@@ -318,7 +309,7 @@ impl AppFactory {
         &self,
         request: &ScriptEvalRequest,
         cancelled: oneshot::Receiver<()>,
-    ) -> ScriptEvalOutcome {
+    ) -> EvalReport {
         self.evaluate_with(request, |canopy, request| {
             canopy.eval_with_cancellation(request, async {
                 let _closed = cancelled.await;
@@ -331,12 +322,12 @@ impl AppFactory {
         &self,
         request: &ScriptEvalRequest,
         eval: impl FnOnce(&mut Canopy, EvalRequest) -> CanopyResult<EvalOutcome>,
-    ) -> ScriptEvalOutcome {
-        let viewport = request.viewport.unwrap_or_default();
-        let mut metadata = ExecutionMetadata::fresh(self.metadata(), viewport);
+    ) -> EvalReport {
+        let screen = request.screen.unwrap_or_default();
+        let mut metadata = ExecutionMetadata::fresh(self.metadata(), screen);
         let outcome = (|| {
-            if let Err(error) = viewport.validate() {
-                return ScriptEvalOutcome::error_only(
+            if let Err(error) = screen.validate() {
+                return EvalReport::error_only(
                     ScriptErrorType::Invalid,
                     error.to_string(),
                     Vec::new(),
@@ -345,10 +336,10 @@ impl AppFactory {
             }
             let total_start = Instant::now();
             let mut canopy =
-                match build_headless(self, viewport, request.fixture.as_deref(), &mut metadata) {
+                match build_headless(self, screen, request.fixture.as_deref(), &mut metadata) {
                     Ok(canopy) => canopy,
                     Err(error) => {
-                        return ScriptEvalOutcome::error_only(
+                        return EvalReport::error_only(
                             ScriptErrorType::Build,
                             error.to_string(),
                             Vec::new(),
@@ -406,7 +397,6 @@ pub fn bootstrap_for_canopy(
         guide: format!("{BOOTSTRAP_GUIDE} Call script_api for declarations."),
         api_sources: overview.entries,
         fixtures: canopy.fixture_infos(),
-        default_target: "root".to_string(),
         default_commands,
         focus_commands,
         journal: bootstrap_journal(canopy),
@@ -502,7 +492,7 @@ fn bootstrap_journal(canopy: &Canopy) -> Vec<BootstrapJournalEntry> {
         .rev()
         .map(|entry| BootstrapJournalEntry {
             id: entry.id,
-            origin: entry.origin.clone(),
+            origin: entry.origin.to_string(),
             ok: entry.ok,
             log_count: entry.logs.len(),
             assertion_count: entry.assertions.len(),
@@ -521,7 +511,7 @@ pub fn stable_digest(text: &str) -> String {
     format!("{hash:016x}")
 }
 
-/// Check a live request without changing fixtures, viewport, or application
+/// Check a live request without changing fixtures, screen, or application
 /// state.
 fn validate_live_request(
     request: &ScriptEvalRequest,
@@ -532,22 +522,22 @@ fn validate_live_request(
             "live sessions do not support eval(fixture=...); use apply_fixture instead".into(),
         ));
     }
-    validate_live_viewport(request.viewport, metadata)
+    validate_live_screen(request.screen, metadata)
 }
 
 /// Validate live dimensions as a compatibility check; never resize the live
 /// app.
-pub fn validate_live_viewport(
-    viewport: Option<Viewport>,
+pub fn validate_live_screen(
+    screen: Option<ScreenSize>,
     metadata: &ExecutionMetadata,
 ) -> CanopyResult<()> {
-    if let Some(viewport) = viewport {
-        viewport
+    if let Some(screen) = screen {
+        screen
             .validate()
             .map_err(|error| CanopyError::Invalid(error.to_string()))?;
-        if Some(viewport) != metadata.viewport {
+        if Some(screen) != metadata.screen {
             return Err(CanopyError::Invalid(
-                "requested viewport differs from live viewport".into(),
+                "requested screen differs from live screen".into(),
             ));
         }
     }
@@ -559,7 +549,7 @@ pub async fn evaluate_live_request(
     automation: AutomationHandle,
     request: ScriptEvalRequest,
     context: LiveContext,
-) -> ScriptEvalOutcome {
+) -> EvalReport {
     let metadata_handle = automation.clone();
     let observed_context = context.clone();
     let metadata = match spawn_blocking(move || {
@@ -571,7 +561,7 @@ pub async fn evaluate_live_request(
     {
         Ok(metadata) => metadata,
         Err(message) => {
-            return ScriptEvalOutcome::error_only(
+            return EvalReport::error_only(
                 ScriptErrorType::Runtime,
                 message,
                 Vec::new(),
@@ -581,7 +571,7 @@ pub async fn evaluate_live_request(
         }
     };
     if let Err(error) = validate_live_request(&request, &metadata) {
-        return ScriptEvalOutcome::error_only(
+        return EvalReport::error_only(
             ScriptErrorType::Invalid,
             error.to_string(),
             Vec::new(),
@@ -598,7 +588,7 @@ pub async fn evaluate_live_request(
 async fn evaluate_live_request_inner(
     automation: AutomationHandle,
     request: ScriptEvalRequest,
-) -> ScriptEvalOutcome {
+) -> EvalReport {
     let start = Instant::now();
     let ticket = match automation.submit_eval(eval_request(&request)) {
         Ok(ticket) => ticket,
@@ -614,7 +604,7 @@ async fn evaluate_live_request_inner(
     };
     match ticket.completion.await {
         Ok(completion) => outcome_from(completion, live_timing(start)),
-        Err(error) => ScriptEvalOutcome::error_only(
+        Err(error) => EvalReport::error_only(
             ScriptErrorType::Runtime,
             format!("live evaluation completion channel closed: {error}"),
             Vec::new(),
@@ -642,7 +632,7 @@ fn live_timing(start: Instant) -> ScriptTiming {
 ///
 /// A source that failed to typecheck never ran; it reports its diagnostics as
 /// a typecheck failure.
-fn outcome_from(completion: EvalOutcome, timing: ScriptTiming) -> ScriptEvalOutcome {
+fn outcome_from(completion: EvalOutcome, timing: ScriptTiming) -> EvalReport {
     let EvalOutcome {
         result,
         logs,
@@ -652,7 +642,7 @@ fn outcome_from(completion: EvalOutcome, timing: ScriptTiming) -> ScriptEvalOutc
     } = completion;
     match result {
         Ok(value) => match value.to_external_json_value() {
-            Ok(value) => ScriptEvalOutcome {
+            Ok(value) => EvalReport {
                 metadata: ExecutionMetadata::default(),
                 success: true,
                 state: ScriptTaskState::Completed,
@@ -672,7 +662,7 @@ fn outcome_from(completion: EvalOutcome, timing: ScriptTiming) -> ScriptEvalOutc
             ),
         },
         Err(_) if diagnostics.iter().any(ScriptCheckDiagnostic::is_error) => {
-            ScriptEvalOutcome::error_only(
+            EvalReport::error_only(
                 ScriptErrorType::Typecheck,
                 "script failed Luau type checking",
                 diagnostics,
@@ -692,18 +682,16 @@ fn outcome_from(completion: EvalOutcome, timing: ScriptTiming) -> ScriptEvalOutc
 /// Build and initially render a fresh headless app for one script request.
 fn build_headless(
     factory: &AppFactory,
-    viewport: Viewport,
+    screen: ScreenSize,
     fixture: Option<&str>,
     metadata: &mut ExecutionMetadata,
 ) -> Result<Canopy> {
     let mut canopy = factory.build()?;
     metadata.api_digest = Some(stable_digest(canopy.script_api()?));
-    canopy.set_screen_size(viewport.into())?;
+    canopy.set_screen_size(screen.into())?;
     if let Some(fixture) = fixture {
         canopy.apply_fixture(fixture)?;
-        if metadata.reset != ResetPolicy::Isolated {
-            metadata.reset = ResetPolicy::Fixture;
-        }
+        metadata.fixture = Some(fixture.to_owned());
     }
     canopy.render(&mut NopBackend::new())?;
     Ok(canopy)
@@ -711,7 +699,7 @@ fn build_headless(
 
 /// Build the runtime request for a script request's source and timeout.
 fn eval_request(request: &ScriptEvalRequest) -> EvalRequest {
-    let eval = EvalRequest::new(request.script.clone());
+    let eval = EvalRequest::new(request.source.clone());
     match request.timeout_ms.filter(|timeout| *timeout > 0) {
         Some(timeout) => eval.timeout(Duration::from_millis(timeout)),
         None => eval,
@@ -725,7 +713,7 @@ fn failure_with_logs(
     assertions: Vec<ScriptAssertion>,
     diagnostics: Vec<ScriptCheckDiagnostic>,
     timing: ScriptTiming,
-) -> ScriptEvalOutcome {
+) -> EvalReport {
     failed_info(
         script_error_info(error),
         logs,
@@ -742,8 +730,8 @@ fn failed_info(
     assertions: Vec<ScriptAssertion>,
     diagnostics: Vec<ScriptCheckDiagnostic>,
     timing: ScriptTiming,
-) -> ScriptEvalOutcome {
-    ScriptEvalOutcome {
+) -> EvalReport {
+    EvalReport {
         metadata: ExecutionMetadata::default(),
         success: false,
         state: info.error_type.into(),
@@ -809,6 +797,7 @@ mod tests {
     };
 
     use super::*;
+    use crate::ResetPolicy;
 
     #[test]
     fn stable_digest_matches_fnv1a_vectors() {
@@ -897,27 +886,26 @@ mod tests {
             app: "persistent-test".into(),
             reset: ResetPolicy::External,
         });
-        let evaluator = factory;
+        let factory = factory;
         let mut request = ScriptEvalRequest {
-            viewport: Some(Viewport {
+            screen: Some(ScreenSize {
                 width: 24,
                 height: 5,
             }),
             ..ScriptEvalRequest::new("return script_target.get()")
         };
-        let first = evaluator.evaluate(&request);
-        let second = evaluator.evaluate(&request);
+        let first = factory.evaluate(&request);
+        let second = factory.evaluate(&request);
         assert!(first.success && second.success);
-        assert_ne!(first.metadata.session_id, second.metadata.session_id);
+        assert_ne!(first.metadata.instance_id, second.metadata.instance_id);
         assert_eq!(first.metadata.app, "persistent-test");
         assert_eq!(first.metadata.reset, ResetPolicy::External);
-        assert_eq!(first.metadata.viewport, request.viewport);
+        assert_eq!(first.metadata.screen, request.screen);
         assert!(first.metadata.api_digest.is_some());
         request.fixture = Some("seeded".into());
-        assert_eq!(
-            evaluator.evaluate(&request).metadata.reset,
-            ResetPolicy::Fixture
-        );
+        let seeded = factory.evaluate(&request).metadata;
+        assert_eq!(seeded.reset, ResetPolicy::External);
+        assert_eq!(seeded.fixture.as_deref(), Some("seeded"));
         let isolated = test_factory_with(crate::AppMetadata {
             app: "isolated-test".into(),
             reset: ResetPolicy::Isolated,
@@ -929,35 +917,35 @@ mod tests {
     }
 
     #[test]
-    fn invalid_viewport_never_constructs_the_factory() {
-        let evaluator = app_factory(|| panic!("invalid viewport constructed app"));
-        for viewport in [
-            Viewport {
+    fn an_invalid_screen_never_constructs_the_factory() {
+        let factory = app_factory(|| panic!("invalid screen constructed app"));
+        for screen in [
+            ScreenSize {
                 width: 0,
                 height: 1,
             },
-            Viewport {
+            ScreenSize {
                 width: 2049,
                 height: 1,
             },
-            Viewport {
+            ScreenSize {
                 width: 2048,
                 height: 2048,
             },
         ] {
             assert!(
-                evaluator
+                factory
                     .bootstrap(&BootstrapRequest {
-                        viewport: Some(viewport)
+                        screen: Some(screen)
                     })
                     .is_err()
             );
-            let outcome = evaluator.evaluate(&ScriptEvalRequest {
-                viewport: Some(viewport),
+            let outcome = factory.evaluate(&ScriptEvalRequest {
+                screen: Some(screen),
                 ..ScriptEvalRequest::new("return 1")
             });
             assert!(!outcome.success);
-            assert_eq!(outcome.metadata.viewport, Some(viewport));
+            assert_eq!(outcome.metadata.screen, Some(screen));
             assert_eq!(outcome.metadata.api_digest, None);
         }
     }
@@ -970,7 +958,7 @@ mod tests {
         };
         let changes = Arc::new(AtomicUsize::new(0));
         let factory_changes = changes.clone();
-        let evaluator = app_factory(move || {
+        let factory = app_factory(move || {
             let changes = factory_changes.clone();
             CanopyBuilder::new()
                 .configure(move |setup| {
@@ -987,9 +975,9 @@ mod tests {
                 .build()
                 .map_err(Into::into)
         });
-        let outcome = evaluator.evaluate(&ScriptEvalRequest {
+        let outcome = factory.evaluate(&ScriptEvalRequest {
             fixture: Some("mutate".into()),
-            viewport: Some(Viewport {
+            screen: Some(ScreenSize {
                 width: 20,
                 height: 5,
             }),
@@ -1011,32 +999,32 @@ mod tests {
         let copy = context.clone();
         let first = context.metadata(&canopy)?;
         let second = copy.metadata(&canopy)?;
-        assert_eq!(first.session_id, second.session_id);
+        assert_eq!(first.instance_id, second.instance_id);
         assert_eq!(first.execution, crate::ExecutionMode::LiveSession);
         assert_eq!(first.reset, ResetPolicy::External);
         let mut request = ScriptEvalRequest::new("script_target.set(99)");
-        request.viewport = Some(Viewport {
+        request.screen = Some(ScreenSize {
             width: 30,
             height: 5,
         });
         assert!(validate_live_request(&request, &first).is_err());
         assert_eq!(canopy.snapshot().unwrap().size(), Size::new(20, 5));
-        request.viewport = None;
+        request.screen = None;
         assert!(validate_live_request(&request, &first).is_ok());
         Ok(())
     }
 
     #[test]
-    fn shared_trace_through_headless_evaluator() -> crate::Result<()> {
-        let evaluator = AppFactory::new(
+    fn shared_trace_through_headless_factory() -> crate::Result<()> {
+        let factory = AppFactory::new(
             crate::AppMetadata {
                 app: "contract".into(),
                 reset: ResetPolicy::Isolated,
             },
             || Ok(contracts::app()?),
         );
-        let result = evaluator.evaluate(&ScriptEvalRequest {
-            viewport: Some(Viewport {
+        let result = factory.evaluate(&ScriptEvalRequest {
+            screen: Some(ScreenSize {
                 width: 12,
                 height: 3,
             }),
@@ -1052,9 +1040,8 @@ mod tests {
 
     #[test]
     fn bootstrap_declares_script_default() -> crate::Result<()> {
-        let evaluator = test_factory();
-        let bootstrap = evaluator.bootstrap(&BootstrapRequest::default())?;
-        assert_eq!(bootstrap.default_target, "root");
+        let factory = test_factory();
+        let bootstrap = factory.bootstrap(&BootstrapRequest::default())?;
         assert!(
             bootstrap
                 .default_commands
@@ -1069,8 +1056,8 @@ mod tests {
 
     #[test]
     fn script_api_lists_commands() -> crate::Result<()> {
-        let evaluator = test_factory();
-        let api = evaluator.script_api()?;
+        let factory = test_factory();
+        let api = factory.script_api()?;
         assert!(api.contains("declare script_target"));
         assert!(api.contains("set: (value: number) -> ()"));
         assert!(api.contains("-- seeded: Set script_target to a known value"));
@@ -1085,8 +1072,8 @@ mod tests {
 
     #[test]
     fn script_api_generated_tail_matches_snapshot() -> crate::Result<()> {
-        let evaluator = test_factory();
-        let api = evaluator.script_api()?;
+        let factory = test_factory();
+        let api = factory.script_api()?;
         let marker = "export type FocusDirection";
         let (_, tail) = api
             .split_once(marker)
@@ -1121,8 +1108,8 @@ declare command: {
 
     #[test]
     fn evaluate_returns_value_and_logs() {
-        let evaluator = test_factory();
-        let outcome = evaluator.evaluate(&ScriptEvalRequest::new(
+        let factory = test_factory();
+        let outcome = factory.evaluate(&ScriptEvalRequest::new(
             r#"
                 canopy.log("hello")
                 script_target.set(7)
@@ -1138,8 +1125,8 @@ declare command: {
 
     #[test]
     fn evaluate_returns_node_handles_as_external_tokens() {
-        let evaluator = test_factory();
-        let outcome = evaluator.evaluate(&ScriptEvalRequest::new(
+        let factory = test_factory();
+        let outcome = factory.evaluate(&ScriptEvalRequest::new(
             "local root = canopy.root()\nprint(root)\nreturn root".to_string(),
         ));
 
@@ -1152,8 +1139,8 @@ declare command: {
 
     #[test]
     fn evaluate_applies_fixtures_and_named_optional_args() {
-        let evaluator = test_factory();
-        let outcome = evaluator.evaluate(&ScriptEvalRequest {
+        let factory = test_factory();
+        let outcome = factory.evaluate(&ScriptEvalRequest {
             fixture: Some("seeded".to_string()),
             ..ScriptEvalRequest::new(
                 r#"
@@ -1171,8 +1158,8 @@ declare command: {
 
     #[test]
     fn evaluate_reports_cooperative_timeout() {
-        let evaluator = test_factory();
-        let outcome = evaluator.evaluate(&ScriptEvalRequest {
+        let factory = test_factory();
+        let outcome = factory.evaluate(&ScriptEvalRequest {
             timeout_ms: Some(1),
             ..ScriptEvalRequest::new("while true do end")
         });
@@ -1187,8 +1174,8 @@ declare command: {
 
     #[test]
     fn evaluate_reports_typecheck_errors() {
-        let evaluator = test_factory();
-        let outcome = evaluator.evaluate(&ScriptEvalRequest::new(
+        let factory = test_factory();
+        let outcome = factory.evaluate(&ScriptEvalRequest::new(
             r#"script_target.set("bad")"#.to_string(),
         ));
         assert!(!outcome.success);
@@ -1202,8 +1189,8 @@ declare command: {
 
     #[test]
     fn evaluate_reports_structured_command_errors() {
-        let evaluator = test_factory();
-        let outcome = evaluator.evaluate(&ScriptEvalRequest::new(
+        let factory = test_factory();
+        let outcome = factory.evaluate(&ScriptEvalRequest::new(
             r#"canopy.call_named("missing::command", {})"#.to_string(),
         ));
 

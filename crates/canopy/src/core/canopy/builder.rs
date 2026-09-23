@@ -25,15 +25,15 @@ type AssembleCallback = Box<dyn FnOnce(&mut Canopy) -> Result<()>>;
 
 /// Script work retained in insertion order until after API finalization.
 enum SetupSource {
-    /// Inline bindings with a stable diagnostic name.
-    Bindings {
+    /// A named Luau script, such as a keymap.
+    Script {
         /// Diagnostic and journal identity supplied by the application.
         name: String,
         /// Owned Luau source evaluated before assembly.
         source: String,
     },
-    /// Explicitly requested local configuration file.
-    Config(PathBuf),
+    /// An explicitly requested local script file.
+    ScriptFile(PathBuf),
 }
 
 /// Assemble one application through registration, scripts, and widget creation.
@@ -81,20 +81,21 @@ impl CanopyBuilder {
         self
     }
 
-    /// Evaluate named binding source after finalization and before assembly.
+    /// Evaluate a named Luau script after finalization and before assembly.
+    /// A script can run any Luau; keymaps are the common case.
     #[must_use]
-    pub fn bindings(mut self, name: impl Into<String>, source: impl Into<String>) -> Self {
-        self.sources.push(SetupSource::Bindings {
+    pub fn script(mut self, name: impl Into<String>, source: impl Into<String>) -> Self {
+        self.sources.push(SetupSource::Script {
             name: name.into(),
             source: source.into(),
         });
         self
     }
 
-    /// Evaluate an explicitly trusted local config file before assembly.
+    /// Evaluate an explicitly trusted local script file before assembly.
     #[must_use]
-    pub fn config(mut self, path: impl Into<PathBuf>) -> Self {
-        self.sources.push(SetupSource::Config(path.into()));
+    pub fn script_file(mut self, path: impl Into<PathBuf>) -> Self {
+        self.sources.push(SetupSource::ScriptFile(path.into()));
         self
     }
 
@@ -139,10 +140,8 @@ impl CanopyBuilder {
         let mut canopy = setup.finalize(trusted(self.user_root), trusted(self.project_root))?;
         for source in self.sources {
             match source {
-                SetupSource::Bindings { name, source } => {
-                    canopy.evaluate_bindings(&name, &source)?
-                }
-                SetupSource::Config(path) => canopy.run_config(&path)?,
+                SetupSource::Script { name, source } => canopy.evaluate_bindings(&name, &source)?,
+                SetupSource::ScriptFile(path) => canopy.run_config(&path)?,
             }
         }
         for assemble in self.assemble {
@@ -168,7 +167,7 @@ impl Canopy {
             host.execute(self, self.root_id(), script).map(|_| ())
         })();
         self.record_script_journal(
-            ScriptOrigin::Bindings(name.to_owned()),
+            ScriptOrigin::Build(name.to_owned()),
             text,
             baseline,
             &result,
@@ -211,13 +210,13 @@ mod tests {
                     "function setup() canopy.set_mode(\"startup\") end",
                 )
             })
-            .bindings("first", "canopy.set_mode(\"first\")")
-            .config(config)
+            .script("first", "canopy.set_mode(\"first\")")
+            .script_file(config)
             .configure(move |_| {
                 configure_second.borrow_mut().push("configure second");
                 Ok(())
             })
-            .bindings(
+            .script(
                 "last",
                 "canopy.assert(canopy.mode() == \"config\"); canopy.set_mode(\"last\")",
             )
@@ -238,9 +237,9 @@ mod tests {
         assert!(canopy.snapshot().is_none());
         let journal = canopy.script_journal();
         assert_eq!(journal.len(), 3);
-        assert_eq!(journal[0].origin.to_string(), "bindings:first");
-        assert!(journal[1].origin.to_string().starts_with("config:"));
-        assert_eq!(journal[2].origin.to_string(), "bindings:last");
+        assert_eq!(journal[0].origin.to_string(), "build:first");
+        assert!(journal[1].origin.to_string().starts_with("script-file:"));
+        assert_eq!(journal[2].origin.to_string(), "build:last");
         canopy.set_screen_size(Size::new(10, 3))?;
         canopy.turn(TurnInput::Prepare)?;
         assert_eq!(canopy.mode(), "startup");
@@ -261,11 +260,11 @@ mod tests {
                 Ok(())
             });
             if phase == "bindings" {
-                builder = builder.bindings("bad", "error(\"bindings failed\")");
+                builder = builder.script("bad", "error(\"bindings failed\")");
             }
             if phase == "config" {
                 let directory = tempdir().expect("create test directory");
-                builder = builder.config(directory.path().join("missing.luau"));
+                builder = builder.script_file(directory.path().join("missing.luau"));
             }
             builder = builder.assemble(move |_| {
                 last.borrow_mut().push("assemble");
@@ -290,7 +289,7 @@ mod tests {
         let observed = Rc::clone(&assembled);
         let result = CanopyBuilder::new()
             .configure(|setup| setup.register_startup_script("invalid", "function setup("))
-            .bindings("unreachable", "error(\"binding should not run\")")
+            .script("unreachable", "error(\"binding should not run\")")
             .assemble(move |_| {
                 *observed.borrow_mut() = true;
                 Ok(())

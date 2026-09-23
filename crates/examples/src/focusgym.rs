@@ -273,5 +273,5 @@ impl Register for FocusGym {
 /// Queue this demo's bindings and native configuration in their builder phases.
 #[must_use]
 pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
-    builder.bindings("focusgym", DEFAULT_BINDINGS)
+    builder.script("focusgym", DEFAULT_BINDINGS)
 }

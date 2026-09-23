@@ -26,7 +26,7 @@ use crate::{
     metadata::LiveContext,
     script::{
         ScriptEvalRequest, bootstrap_for_canopy, evaluate_live_request, query_script_api,
-        validate_live_viewport,
+        validate_live_screen,
     },
 };
 
@@ -54,17 +54,17 @@ fn to_tool_result(value: impl Serialize) -> ToolResult<CallToolResult> {
 /// Minimal stdio MCP server for canopy automation.
 #[derive(Clone)]
 struct CanopyMcpServer {
-    /// Headless evaluator shared by all tool calls.
-    evaluator: AppFactory,
+    /// Headless factory shared by all tool calls.
+    factory: AppFactory,
     /// Bound app construction and execution across concurrent requests.
     workers: Arc<Semaphore>,
 }
 
 impl CanopyMcpServer {
     /// Share a small blocking-work budget between all connection clones.
-    fn new(evaluator: AppFactory) -> Self {
+    fn new(factory: AppFactory) -> Self {
         Self {
-            evaluator,
+            factory,
             workers: Arc::new(Semaphore::new(4)),
         }
     }
@@ -81,7 +81,7 @@ impl CanopyMcpServer {
             () = request_cancelled(context) => return Err(tool_error("request cancelled")),
             permit = Arc::clone(&self.workers).acquire_owned() => permit.map_err(tool_error)?,
         };
-        let evaluator = self.evaluator.clone();
+        let factory = self.factory.clone();
         let (cancel, mut cancelled) = oneshot::channel();
         let worker = spawn_blocking(move || {
             // The worker retains its permit even if the async caller leaves.
@@ -92,7 +92,7 @@ impl CanopyMcpServer {
             ) {
                 return Err(tool_error("request cancelled"));
             }
-            work(evaluator, cancelled)
+            work(factory, cancelled)
         });
         tokio::select! {
             biased;
@@ -141,8 +141,8 @@ impl CanopyMcpServer {
         context: &ServerCtx,
         params: BootstrapRequest,
     ) -> ToolResult<CallToolResult> {
-        self.run_headless(context, move |evaluator, _cancelled| {
-            to_tool_result(evaluator.bootstrap(&params).map_err(tool_error)?)
+        self.run_headless(context, move |factory, _cancelled| {
+            to_tool_result(factory.bootstrap(&params).map_err(tool_error)?)
         })
         .await
     }
@@ -154,8 +154,8 @@ impl CanopyMcpServer {
         context: &ServerCtx,
         params: ScriptEvalRequest,
     ) -> ToolResult<CallToolResult> {
-        self.run_headless(context, move |evaluator, cancelled| {
-            Ok(evaluator
+        self.run_headless(context, move |factory, cancelled| {
+            Ok(factory
                 .evaluate_cancellable(&params, cancelled)
                 .to_tool_result())
         })
@@ -169,18 +169,9 @@ impl CanopyMcpServer {
         context: &ServerCtx,
         params: ScriptApiQuery,
     ) -> ToolResult<CallToolResult> {
-        self.run_headless(context, move |evaluator, _cancelled| {
-            let api = evaluator.script_api().map_err(tool_error)?;
+        self.run_headless(context, move |factory, _cancelled| {
+            let api = factory.script_api().map_err(tool_error)?;
             script_api_tool_result(query_script_api(api, &params))
-        })
-        .await
-    }
-
-    #[tool]
-    /// List the application's registered fixtures.
-    async fn fixtures(&self, context: &ServerCtx) -> ToolResult<CallToolResult> {
-        self.run_headless(context, move |evaluator, _cancelled| {
-            to_tool_result(evaluator.fixtures().map_err(tool_error)?)
         })
         .await
     }
@@ -197,7 +188,7 @@ impl LiveCanopyMcpServer {
         let bootstrap = block_in_place(move || {
             automation.request(move |canopy| {
                 let metadata = context.metadata(canopy)?;
-                validate_live_viewport(params.viewport, &metadata)?;
+                validate_live_screen(params.screen, &metadata)?;
                 bootstrap_for_canopy(canopy, metadata)
             })
         })
@@ -231,16 +222,6 @@ impl LiveCanopyMcpServer {
     }
 
     #[tool]
-    /// List the running app's registered fixtures.
-    async fn fixtures(&self) -> ToolResult<CallToolResult> {
-        let automation = self.automation.clone();
-        let fixtures =
-            block_in_place(move || automation.request(|canopy| Ok(canopy.fixture_infos())))
-                .map_err(tool_error)?;
-        to_tool_result(fixtures)
-    }
-
-    #[tool]
     /// Apply a named fixture to the running app and trigger a re-render.
     async fn apply_fixture(&self, params: ApplyFixtureRequest) -> ToolResult<CallToolResult> {
         let name = params.name;
@@ -250,7 +231,7 @@ impl LiveCanopyMcpServer {
         block_in_place(move || {
             automation.request(move |canopy| {
                 canopy.apply_fixture(&name)?;
-                context.fixture_applied();
+                context.fixture_applied(&name);
                 Ok(())
             })
         })
@@ -282,7 +263,7 @@ fn script_api_tool_result(
     }
 }
 
-/// Serve `bootstrap`, `script_eval`, `script_api`, and `fixtures` over stdio
+/// Serve `bootstrap`, `script_eval`, and `script_api` over stdio
 /// for an app factory.
 /// This low-level entry point grants trusted-local access to all exposed native
 /// actions. Calling this function is the application's automation opt-in.
@@ -635,7 +616,7 @@ mod tests {
             .script_eval(
                 &context(),
                 ScriptEvalRequest {
-                    viewport: Some(crate::Viewport {
+                    screen: Some(crate::ScreenSize {
                         width: 12,
                         height: 3,
                     }),
@@ -644,7 +625,7 @@ mod tests {
             )
             .await
             .expect("direct MCP evaluation");
-        let outcome: crate::ScriptEvalOutcome =
+        let outcome: crate::EvalReport =
             serde_json::from_value(response.structured_content.expect("structured result"))
                 .expect("typed eval outcome");
         assert!(outcome.success, "{outcome:?}");
@@ -717,7 +698,7 @@ mod tests {
             !applied.is_error(),
             "fixture application failed: {applied:?}"
         );
-        let outcome: crate::ScriptEvalOutcome = client
+        let outcome: crate::EvalReport = client
             .call_tool_structured(
                 "script_eval",
                 ScriptEvalRequest::new("return echo_node.get()"),
@@ -725,15 +706,21 @@ mod tests {
             .await?;
         assert!(outcome.success);
         assert_eq!(outcome.value, Some(serde_json::Value::from(7)));
-        assert_eq!(outcome.metadata.reset, crate::ResetPolicy::Fixture);
-        assert_eq!(outcome.metadata.session_id, before.metadata.session_id);
+        assert_eq!(
+            outcome.metadata,
+            crate::ExecutionMetadata {
+                fixture: Some("seeded".into()),
+                ..before.metadata.clone()
+            },
+            "a fixture keeps the live instance and reset policy"
+        );
         drop(client);
         let reconnected = live_client(path).await?;
         let after: crate::BootstrapResponse = reconnected
             .call_tool_structured("bootstrap", BootstrapRequest::default())
             .await?;
-        assert_eq!(after.metadata.session_id, before.metadata.session_id);
-        assert_eq!(after.metadata.reset, crate::ResetPolicy::Fixture);
+        assert_eq!(after.metadata.instance_id, before.metadata.instance_id);
+        assert_eq!(after.metadata.fixture.as_deref(), Some("seeded"));
         assert_eq!(after.metadata.execution, crate::ExecutionMode::LiveSession);
         Ok(())
     }
@@ -839,7 +826,7 @@ mod tests {
     #[tokio::test]
     async fn script_eval_with_many_waits_survives_tokio_coop_budget() {
         // Cross Tokio's cooperative budget with ready host roundtrips while
-        // the synchronous evaluator is nested inside a Tokio task.
+        // the synchronous factory is nested inside a Tokio task.
         let script =
             "for _ = 1, 300 do canopy.wait_for(function() return true end, 50) end return echo_node.ping()"
                 .to_string();
@@ -884,20 +871,6 @@ mod tests {
             assert_eq!(payload["state"], "timed_out");
             assert_eq!(payload["error"]["type"], "timeout");
         }
-    }
-
-    #[tokio::test]
-    async fn fixtures_returns_registered_fixture_metadata() {
-        let result = server().fixtures(&context()).await.expect("fixtures");
-        let payload = result.structured_content.expect("structured content");
-        assert_eq!(
-            payload[0]["name"],
-            serde_json::Value::String("seeded".into())
-        );
-        assert_eq!(
-            payload[0]["description"],
-            serde_json::Value::String("Set echo_node to a known value".into())
-        );
     }
 
     #[tokio::test]

@@ -215,5 +215,5 @@ impl Register for CharGym {
 /// Queue this demo's bindings and native configuration in their builder phases.
 #[must_use]
 pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
-    builder.bindings("chargym", crate::text_scroll_bindings("text", "char_gym"))
+    builder.script("chargym", crate::text_scroll_bindings("text", "char_gym"))
 }

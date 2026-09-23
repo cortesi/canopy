@@ -470,5 +470,5 @@ pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
             setup_style(setup.style_mut());
             Ok(())
         })
-        .bindings("termgym", DEFAULT_BINDINGS)
+        .script("termgym", DEFAULT_BINDINGS)
 }

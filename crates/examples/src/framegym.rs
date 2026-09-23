@@ -162,10 +162,8 @@ impl Register for FrameGym {
 /// Queue this demo's bindings and native configuration in their builder phases.
 #[must_use]
 pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
-    builder
-        .bindings("framegym-prefix", FRAMEGYM_PREFIX)
-        .bindings(
-            "framegym-scroll",
-            crate::text_scroll_bindings("test_pattern", "frame_gym"),
-        )
+    builder.script("framegym-prefix", FRAMEGYM_PREFIX).script(
+        "framegym-scroll",
+        crate::text_scroll_bindings("test_pattern", "frame_gym"),
+    )
 }

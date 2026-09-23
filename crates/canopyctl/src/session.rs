@@ -3,10 +3,9 @@
 use std::{path::Path, time::Instant};
 
 use anyhow::{Context, Result, bail};
-use canopy::script::FixtureInfo;
 use canopy_mcp::{
-    ApplyFixtureRequest, ApplyFixtureResponse, BootstrapRequest, BootstrapResponse,
-    ScriptEvalOutcome, ScriptEvalRequest,
+    ApplyFixtureRequest, ApplyFixtureResponse, BootstrapRequest, BootstrapResponse, EvalReport,
+    ScriptEvalRequest,
 };
 use ruau_script_api::ScriptApiQuery;
 use tmcp::{
@@ -85,13 +84,13 @@ impl Session {
     }
 
     /// Evaluate one Luau script through the session.
-    pub async fn eval(&self, mut request: ScriptEvalRequest) -> Result<ScriptEvalOutcome> {
+    pub async fn eval(&self, mut request: ScriptEvalRequest) -> Result<EvalReport> {
         if self.kind == SessionKind::Headless && request.fixture.is_none() {
             request.fixture = self.default_fixture.clone();
         }
         let result = self.client.call_tool("script_eval", request).await?;
         result
-            .extract_as::<ScriptEvalOutcome>(ToolResultMode::Structured)
+            .extract_as::<EvalReport>(ToolResultMode::Structured)
             .context("decode structured script_eval outcome")
     }
 
@@ -105,17 +104,12 @@ impl Session {
         self.kind
     }
 
-    /// Request bootstrap information at an optional headless viewport.
+    /// Request bootstrap information at an optional headless screen.
     pub async fn bootstrap(&self, request: BootstrapRequest) -> Result<BootstrapResponse> {
         Ok(self
             .client
             .call_tool_structured("bootstrap", request)
             .await?)
-    }
-
-    /// Request the fixture catalog.
-    pub async fn fixtures(&self) -> Result<Vec<FixtureInfo>> {
-        Ok(self.client.call_tool_structured("fixtures", ()).await?)
     }
 
     /// Apply or remember a fixture for the session.
@@ -212,8 +206,8 @@ pub mod tests {
 
     use canopy::testing::contracts;
     use canopy_mcp::{
-        AppFactory, AppMetadata, ExecutionMetadata, ExecutionMode, ResetPolicy, ScriptErrorInfo,
-        ScriptErrorType, ScriptTaskState, ScriptTiming, Viewport,
+        AppFactory, AppMetadata, ExecutionMetadata, ExecutionMode, ResetPolicy, ScreenSize,
+        ScriptErrorInfo, ScriptErrorType, ScriptTaskState, ScriptTiming,
     };
     use serde_json::{Value, json};
     use tmcp::{Server, ToolError, ToolResult, mcp_server};
@@ -226,47 +220,37 @@ pub mod tests {
 
     use super::*;
 
-    /// Real evaluator exposed over MCP for cross-adapter contract tests.
+    /// Real factory exposed over MCP for cross-adapter contract tests.
     #[derive(Clone)]
-    struct EvaluatorPeer {
-        /// The same public evaluator used by headless MCP applications.
-        evaluator: AppFactory,
+    struct FactoryPeer {
+        /// The same public factory used by headless MCP applications.
+        factory: AppFactory,
         /// Sources observed at the transport boundary.
         calls: Arc<Mutex<Vec<String>>>,
     }
 
     #[mcp_server]
-    impl EvaluatorPeer {
+    impl FactoryPeer {
         #[tool]
         async fn script_eval(&self, request: ScriptEvalRequest) -> ToolResult<CallToolResult> {
-            self.calls.lock().await.push(request.script.clone());
-            Ok(block_in_place(|| self.evaluator.evaluate(&request)).to_tool_result())
+            self.calls.lock().await.push(request.source.clone());
+            Ok(block_in_place(|| self.factory.evaluate(&request)).to_tool_result())
         }
 
         #[tool]
         async fn bootstrap(&self, request: BootstrapRequest) -> ToolResult<CallToolResult> {
-            let response = block_in_place(|| self.evaluator.bootstrap(&request))
+            let response = block_in_place(|| self.factory.bootstrap(&request))
                 .map_err(|error| ToolError::internal(error.to_string()))?;
             CallToolResult::structured(response)
                 .map_err(|error| ToolError::internal(error.to_string()))
         }
-
-        #[tool]
-        async fn fixtures(&self) -> ToolResult<CallToolResult> {
-            let fixtures = self
-                .evaluator
-                .fixtures()
-                .map_err(|error| ToolError::internal(error.to_string()))?;
-            CallToolResult::structured(fixtures)
-                .map_err(|error| ToolError::internal(error.to_string()))
-        }
     }
 
-    /// Connect a real fresh-app evaluator through an in-memory MCP transport.
-    pub async fn evaluator_session() -> Result<(Session, Arc<Mutex<Vec<String>>>, JoinHandle<()>)> {
+    /// Connect a real fresh-app factory through an in-memory MCP transport.
+    pub async fn factory_session() -> Result<(Session, Arc<Mutex<Vec<String>>>, JoinHandle<()>)> {
         let calls = Arc::new(Mutex::new(Vec::new()));
-        let peer = EvaluatorPeer {
-            evaluator: AppFactory::new(
+        let peer = FactoryPeer {
+            factory: AppFactory::new(
                 AppMetadata {
                     app: "canopyctl-test".into(),
                     reset: ResetPolicy::Isolated,
@@ -281,7 +265,7 @@ pub mod tests {
             Server::new(move || peer.clone())
                 .serve_stream(reader, writer)
                 .await
-                .expect("evaluator transport");
+                .expect("factory transport");
         });
         let (reader, writer) = split(client_stream);
         let mut client = Client::new(CLIENT_NAME, CLIENT_VERSION);
@@ -307,8 +291,8 @@ pub mod tests {
     impl Peer {
         #[tool]
         async fn script_eval(&self, request: ScriptEvalRequest) -> ToolResult<CallToolResult> {
-            self.calls.lock().await.push(request.script.clone());
-            match request.script.as_str() {
+            self.calls.lock().await.push(request.source.clone());
+            match request.source.as_str() {
                 "missing" => return Ok(CallToolResult::new()),
                 "malformed" => {
                     return Ok(
@@ -317,19 +301,20 @@ pub mod tests {
                 }
                 _ => {}
             }
-            let state = match request.script.as_str() {
+            let state = match request.source.as_str() {
                 "failure" => ScriptTaskState::Failed,
                 "timeout" => ScriptTaskState::TimedOut,
                 _ => ScriptTaskState::Completed,
             };
             let success = state == ScriptTaskState::Completed;
-            let outcome = ScriptEvalOutcome {
+            let outcome = EvalReport {
                 metadata: ExecutionMetadata {
                     app: "test".into(),
                     execution: ExecutionMode::LiveSession,
-                    session_id: "test-session".into(),
-                    viewport: Some(Viewport::default()),
+                    instance_id: "test-session".into(),
+                    screen: Some(ScreenSize::default()),
                     reset: ResetPolicy::External,
+                    fixture: None,
                     api_digest: Some("test-digest".into()),
                 },
                 success,

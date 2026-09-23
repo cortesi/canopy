@@ -1106,7 +1106,7 @@ mod tests {
         // leaf directly.
         let mut canopy = leaf_builder()
             .project_script_root(project_root.clone(), ScriptTrust::TrustedLocal)
-            .config(config)
+            .script_file(config)
             .build()?;
 
         canopy.eval_script(r#"canopy.send_key("x")"#)?;

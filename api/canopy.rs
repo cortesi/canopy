@@ -2839,11 +2839,11 @@ pub mod canopy {
         }
 
         /// Base `canopy` scripting API declarations and native registration.
-        #[derive(Clone, Debug, Deserialize, Serialize)]
+        #[derive(Clone, Debug)]
         pub struct ScriptJournalEntry {
             /// Monotonic journal id.
             pub id: u64,
-            /// Typed origin serialized as the established journal string.
+            /// Where the source came from.
             pub origin: ScriptOrigin,
             /// Evaluated source text.
             pub source: String,
@@ -2859,22 +2859,19 @@ pub mod canopy {
             pub duration_ms: u64,
         }
 
-        #[serde(from = "String", into = "String")]
         /// Base `canopy` scripting API declarations and native registration.
-        #[derive(Clone, Debug, Deserialize, Display, Eq, PartialEq, Serialize)]
+        #[derive(Clone, Debug, Display, Eq, PartialEq)]
         pub enum ScriptOrigin {
             /// Top-level application evaluation.
             Eval,
-            /// Builder configuration loaded from a path.
-            Config(String),
+            /// A builder script file loaded from a path.
+            ScriptFile(String),
             /// Application or mounted startup source.
             Startup(String),
-            /// Builder-owned binding source.
-            Bindings(String),
+            /// A named builder script.
+            Build(String),
             /// Widget default-binding source.
             DefaultBindings(String),
-            /// Origin retained from a journal written by another producer.
-            Other(String),
         }
 
         /// Base `canopy` scripting API declarations and native registration.
@@ -2912,14 +2909,6 @@ pub mod canopy {
 
             /// Return fixture metadata without the setup closure.
             pub fn info(&self) -> FixtureInfo {}
-        }
-
-        impl From<ScriptOrigin> for String {
-            fn from(origin: ScriptOrigin) -> Self {}
-        }
-
-        impl From<String> for ScriptOrigin {
-            fn from(origin: String) -> Self {}
         }
 
         impl JsonSchema for FixtureInfo {
@@ -4424,12 +4413,13 @@ pub mod canopy {
         pub fn user_script_root(self, path: PathBuf, trust: ScriptTrust) -> Self {}
 
         #[must_use]
-        /// Evaluate an explicitly trusted local config file before assembly.
-        pub fn config(self, path: impl Into<PathBuf>) -> Self {}
+        /// Evaluate a named Luau script after finalization and before assembly.
+        /// A script can run any Luau; keymaps are the common case.
+        pub fn script(self, name: impl Into<String>, source: impl Into<String>) -> Self {}
 
         #[must_use]
-        /// Evaluate named binding source after finalization and before assembly.
-        pub fn bindings(self, name: impl Into<String>, source: impl Into<String>) -> Self {}
+        /// Evaluate an explicitly trusted local script file before assembly.
+        pub fn script_file(self, path: impl Into<PathBuf>) -> Self {}
 
         #[must_use]
         /// Register commands, bindings, fixtures, styles, and other state that the

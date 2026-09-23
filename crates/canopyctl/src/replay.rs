@@ -3,7 +3,7 @@
 use std::{fs, path::Path};
 
 use anyhow::{Context, Result, anyhow, bail};
-use canopy_mcp::{ExecutionMetadata, ExecutionMode, ResetPolicy, ScriptEvalOutcome, Viewport};
+use canopy_mcp::{EvalReport, ExecutionMetadata, ExecutionMode, ResetPolicy, ScreenSize};
 use serde::{Deserialize, Serialize};
 
 /// Version identifier accepted by the strict replay parser.
@@ -21,8 +21,8 @@ pub struct ReplayEnvelope {
     pub api_digest: String,
     /// Whether each evaluation starts a new app or shares a live app.
     pub execution: ExecutionMode,
-    /// Viewport used for the recorded evaluation.
-    pub viewport: Viewport,
+    /// Screen size used for the recorded evaluation.
+    pub screen: ScreenSize,
     /// Explicit reset fixture, if any.
     pub fixture: Option<String>,
     /// Declared domain-state reset contract.
@@ -58,7 +58,7 @@ impl ReplayEnvelope {
         if self.app.trim().is_empty() || self.api_digest.trim().is_empty() {
             bail!("replay app and api_digest must be nonempty");
         }
-        self.viewport.validate()?;
+        self.screen.validate()?;
         if self.steps.is_empty() {
             bail!("replay must contain at least one step");
         }
@@ -69,9 +69,6 @@ impl ReplayEnvelope {
         {
             bail!("replay fixture name must be nonempty");
         }
-        if self.reset == ResetPolicy::Fixture && self.fixture.is_none() {
-            bail!("fixture reset requires an explicit fixture name");
-        }
         Ok(())
     }
 
@@ -81,14 +78,9 @@ impl ReplayEnvelope {
             .api_digest
             .as_deref()
             .ok_or_else(|| anyhow!("target bootstrap has no API digest"))?;
-        let viewport = target
-            .viewport
-            .ok_or_else(|| anyhow!("target bootstrap has no viewport"))?;
-        let reset = if self.fixture.is_some() && target.reset != ResetPolicy::Isolated {
-            ResetPolicy::Fixture
-        } else {
-            target.reset
-        };
+        let screen = target
+            .screen
+            .ok_or_else(|| anyhow!("target bootstrap has no screen"))?;
         let mut differences = Vec::new();
         for (field, recorded, actual) in [
             ("app", self.app.clone(), target.app.clone()),
@@ -99,14 +91,14 @@ impl ReplayEnvelope {
                 serde_json::to_string(&target.execution)?,
             ),
             (
-                "viewport",
-                serde_json::to_string(&self.viewport)?,
-                serde_json::to_string(&viewport)?,
+                "screen",
+                serde_json::to_string(&self.screen)?,
+                serde_json::to_string(&screen)?,
             ),
             (
                 "reset",
                 serde_json::to_string(&self.reset)?,
-                serde_json::to_string(&reset)?,
+                serde_json::to_string(&target.reset)?,
             ),
         ] {
             if recorded != actual {
@@ -117,11 +109,7 @@ impl ReplayEnvelope {
     }
 
     /// Record one evaluation using its actual execution metadata.
-    pub fn record(
-        source: String,
-        fixture: Option<String>,
-        outcome: &ScriptEvalOutcome,
-    ) -> Result<Self> {
+    pub fn record(source: String, fixture: Option<String>, outcome: &EvalReport) -> Result<Self> {
         let metadata = &outcome.metadata;
         let envelope = Self {
             schema: REPLAY_SCHEMA.into(),
@@ -131,9 +119,9 @@ impl ReplayEnvelope {
                 .clone()
                 .ok_or_else(|| anyhow!("cannot record replay without an API digest"))?,
             execution: metadata.execution,
-            viewport: metadata
-                .viewport
-                .ok_or_else(|| anyhow!("cannot record replay without a viewport"))?,
+            screen: metadata
+                .screen
+                .ok_or_else(|| anyhow!("cannot record replay without a screen"))?,
             fixture,
             reset: metadata.reset,
             steps: vec![ReplayStep {
@@ -188,7 +176,7 @@ mod tests {
     fn envelope_json() -> Value {
         json!({
             "schema": "canopy.replay/1", "app": "test", "api_digest": "digest",
-            "execution": "fresh-app-per-eval", "viewport": {"width": 12, "height": 3},
+            "execution": "fresh-app-per-eval", "screen": {"width": 12, "height": 3},
             "fixture": null, "reset": "external",
             "steps": [{"source": "return true", "expect": {"success": true}}]
         })
@@ -204,7 +192,7 @@ mod tests {
             },
             {
                 let mut value = envelope_json();
-                value["viewport"]["width"] = json!(0);
+                value["screen"]["width"] = json!(0);
                 value
             },
             {
@@ -240,16 +228,17 @@ mod tests {
             app: "different".into(),
             api_digest: Some("different".into()),
             execution: ExecutionMode::LiveSession,
-            session_id: "nondurable".into(),
-            viewport: Some(Viewport {
+            instance_id: "nondurable".into(),
+            screen: Some(ScreenSize {
                 width: 14,
                 height: 4,
             }),
             reset: ResetPolicy::Isolated,
+            fixture: None,
         };
         let differences = envelope.mismatches(&metadata)?;
         assert_eq!(differences.len(), 5);
-        for field in ["app:", "api_digest:", "execution:", "viewport:", "reset:"] {
+        for field in ["app:", "api_digest:", "execution:", "screen:", "reset:"] {
             assert!(
                 differences
                     .iter()
@@ -266,12 +255,12 @@ mod tests {
                 .any(|difference| difference.starts_with("reset:"))
         );
         metadata.reset = ResetPolicy::External;
-        envelope.reset = ResetPolicy::Fixture;
         assert!(
-            !envelope
+            envelope
                 .mismatches(&metadata)?
                 .iter()
-                .any(|difference| difference.starts_with("reset:"))
+                .any(|difference| difference.starts_with("reset:")),
+            "a fixture does not change the declared reset policy"
         );
         Ok(())
     }

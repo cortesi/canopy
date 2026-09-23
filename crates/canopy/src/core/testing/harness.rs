@@ -86,8 +86,8 @@ impl<W: Widget + 'static> HarnessBuilder<W> {
     /// A widget's defaults reach a test this way, for instance
     /// `button.default_bindings()`, which registration alone does not run.
     #[must_use]
-    pub fn bindings(mut self, name: impl Into<String>, source: impl Into<String>) -> Self {
-        self.builder = self.builder.bindings(name, source);
+    pub fn script(mut self, name: impl Into<String>, source: impl Into<String>) -> Self {
+        self.builder = self.builder.script(name, source);
         self
     }
 

@@ -3,8 +3,8 @@
 use std::{
     process,
     sync::{
-        Arc,
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc, Mutex, PoisonError,
+        atomic::{AtomicU64, Ordering},
     },
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -38,22 +38,20 @@ pub enum ResetPolicy {
     /// Domain state can persist outside the UI instance.
     #[default]
     External,
-    /// An explicitly applied fixture resets the relevant domain state.
-    Fixture,
     /// Each factory invocation owns independent domain state.
     Isolated,
 }
 
 /// Terminal dimensions in cells, serialized independently of internal geometry.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-pub struct Viewport {
+pub struct ScreenSize {
     /// Number of columns.
     pub width: u32,
     /// Number of rows.
     pub height: u32,
 }
 
-impl Default for Viewport {
+impl Default for ScreenSize {
     fn default() -> Self {
         Self {
             width: 120,
@@ -62,25 +60,25 @@ impl Default for Viewport {
     }
 }
 
-impl Viewport {
+impl ScreenSize {
     /// Reject empty or excessive headless dimensions before constructing an
     /// app.
     pub fn validate(self) -> crate::Result<()> {
         if self.width == 0 || self.height == 0 {
-            return Err(Error::Invalid("viewport dimensions must be nonzero".into()).into());
+            return Err(Error::Invalid("screen dimensions must be nonzero".into()).into());
         }
         RenderLimits::default().cell_count(self.into())?;
         Ok(())
     }
 }
 
-impl From<Viewport> for Size {
-    fn from(viewport: Viewport) -> Self {
-        Self::new(viewport.width, viewport.height)
+impl From<ScreenSize> for Size {
+    fn from(screen: ScreenSize) -> Self {
+        Self::new(screen.width, screen.height)
     }
 }
 
-impl From<Size> for Viewport {
+impl From<Size> for ScreenSize {
     fn from(size: Size) -> Self {
         Self {
             width: size.w,
@@ -162,12 +160,15 @@ pub struct ExecutionMetadata {
     pub execution: ExecutionMode,
     /// Opaque identity of the application session, not a durable node
     /// reference.
-    pub session_id: String,
-    /// Evaluated or requested viewport, absent when live metadata could not be
+    pub instance_id: String,
+    /// Evaluated or requested screen, absent when live metadata could not be
     /// observed.
-    pub viewport: Option<Viewport>,
-    /// Effective domain reset contract.
+    pub screen: Option<ScreenSize>,
+    /// The application's declared domain reset contract.
     pub reset: ResetPolicy,
+    /// Fixture applied before this evaluation, if any. A fixture resets the
+    /// domain state it covers, whatever the reset policy.
+    pub fixture: Option<String>,
     /// Generated API identity, absent only when preparation could not obtain
     /// it.
     pub api_digest: Option<String>,
@@ -177,7 +178,7 @@ pub struct ExecutionMetadata {
 static NEXT_SESSION: AtomicU64 = AtomicU64::new(1);
 
 /// Allocate an opaque session identity without constructing application state.
-fn session_id() -> String {
+fn instance_id() -> String {
     let epoch = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -191,13 +192,14 @@ fn session_id() -> String {
 
 impl ExecutionMetadata {
     /// Metadata for a fresh request before construction begins.
-    pub(crate) fn fresh(app: &AppMetadata, viewport: Viewport) -> Self {
+    pub(crate) fn fresh(app: &AppMetadata, screen: ScreenSize) -> Self {
         Self {
             app: app.app.clone(),
             execution: ExecutionMode::FreshAppPerEval,
-            session_id: session_id(),
-            viewport: Some(viewport),
+            instance_id: instance_id(),
+            screen: Some(screen),
             reset: app.reset,
+            fixture: None,
             api_digest: None,
         }
     }
@@ -209,9 +211,9 @@ pub struct LiveContext {
     /// Application declaration, shared across requests.
     app: AppMetadata,
     /// Session identity retained across client reconnects.
-    session_id: String,
-    /// Whether this live session has explicitly applied a fixture.
-    fixture_applied: Arc<AtomicBool>,
+    instance_id: String,
+    /// The fixture this live session applied last, if any.
+    fixture: Arc<Mutex<Option<String>>>,
 }
 
 impl LiveContext {
@@ -219,14 +221,14 @@ impl LiveContext {
     pub(crate) fn new(app: AppMetadata) -> Self {
         Self {
             app,
-            session_id: session_id(),
-            fixture_applied: Arc::new(AtomicBool::new(false)),
+            instance_id: instance_id(),
+            fixture: Arc::default(),
         }
     }
 
     /// Record a successful explicit domain fixture application.
-    pub(crate) fn fixture_applied(&self) {
-        self.fixture_applied.store(true, Ordering::Relaxed);
+    pub(crate) fn fixture_applied(&self, name: &str) {
+        *self.fixture.lock().unwrap_or_else(PoisonError::into_inner) = Some(name.to_owned());
     }
 
     /// Metadata available even if the live application cannot be reached.
@@ -234,23 +236,25 @@ impl LiveContext {
         ExecutionMetadata {
             app: self.app.app.clone(),
             execution: ExecutionMode::LiveSession,
-            session_id: self.session_id.clone(),
-            viewport: None,
-            reset: if self.fixture_applied.load(Ordering::Relaxed) {
-                ResetPolicy::Fixture
-            } else {
-                ResetPolicy::External
-            },
+            instance_id: self.instance_id.clone(),
+            screen: None,
+            // A live application's domain state outlives any one evaluation.
+            reset: ResetPolicy::External,
+            fixture: self
+                .fixture
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .clone(),
             api_digest: None,
         }
     }
 
-    /// Observe live identity and viewport without preparing or mutating a
+    /// Observe live identity and screen without preparing or mutating a
     /// frame.
     pub(crate) fn metadata(&self, canopy: &Canopy) -> CanopyResult<ExecutionMetadata> {
         let mut metadata = self.unavailable_metadata();
         if let Some(snapshot) = canopy.snapshot() {
-            metadata.viewport = Some(snapshot.size().into());
+            metadata.screen = Some(snapshot.size().into());
         }
         metadata.api_digest = Some(stable_digest(canopy.script_api()?));
         Ok(metadata)

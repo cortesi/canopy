@@ -525,7 +525,7 @@ mod tests {
             ..Host::default()
         })
         .register::<Host>()
-        .bindings(
+        .script(
             "dialog-defaults",
             "button.default_bindings()\nconfirm.default_bindings()",
         )

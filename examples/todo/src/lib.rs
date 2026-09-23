@@ -531,9 +531,9 @@ fn app_builder(config: Option<&Path>) -> CanopyBuilder {
             style(setup.style_mut());
             register_fixtures(setup)
         })
-        .bindings("todo-defaults", DEFAULT_BINDINGS);
+        .script("todo-defaults", DEFAULT_BINDINGS);
     if let Some(config) = config {
-        builder.config(config.to_owned())
+        builder.script_file(config.to_owned())
     } else {
         builder
     }

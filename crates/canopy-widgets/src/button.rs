@@ -431,7 +431,7 @@ mod tests {
     ) -> Result<Harness> {
         let mut harness = Harness::builder(root)
             .register::<W>()
-            .bindings("button-defaults", "button.default_bindings()")
+            .script("button-defaults", "button.default_bindings()")
             .size(width, height)
             .build()?;
         harness.render()?;

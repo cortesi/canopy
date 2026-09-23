@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     AppFactory, Error, Result,
-    script::{ScriptEvalOutcome, ScriptEvalRequest},
+    script::{EvalReport, ScriptEvalRequest},
 };
 
 /// Configuration for a smoke-suite run.
@@ -43,7 +43,7 @@ pub struct ScriptOutcome {
     /// Fixture derived for this script, if any.
     pub fixture: Option<String>,
     /// Structured script outcome, carrying success, timing, and error details.
-    pub outcome: ScriptEvalOutcome,
+    pub outcome: EvalReport,
 }
 
 /// Aggregated result for a smoke suite.
@@ -65,9 +65,8 @@ impl SuiteOutcome {
 pub struct SuiteScript {
     /// Script path on disk.
     pub path: PathBuf,
-    /// Fixture derived for this script, if any.
-    pub fixture: Option<String>,
-    /// Evaluation request carrying the script source and suite options.
+    /// Evaluation request carrying the script source, its derived fixture,
+    /// and suite options.
     pub request: ScriptEvalRequest,
 }
 
@@ -83,7 +82,6 @@ pub fn plan_suite(config: &SuiteConfig) -> Result<Vec<SuiteScript>> {
             let source = fs::read_to_string(&path)?;
             Ok(SuiteScript {
                 path,
-                fixture: fixture.clone(),
                 request: ScriptEvalRequest {
                     fixture,
                     timeout_ms: config.timeout_ms,
@@ -101,7 +99,7 @@ pub fn run_suite(factory: &AppFactory, config: &SuiteConfig) -> Result<SuiteOutc
         let outcome = factory.evaluate(&script.request);
         results.push(ScriptOutcome {
             path: script.path,
-            fixture: script.fixture,
+            fixture: script.request.fixture,
             outcome,
         });
         if config.fail_fast && !results.last().expect("just pushed").outcome.success {

@@ -74,7 +74,7 @@ fn fixture(workers: usize) -> Fixture {
                     "function setup() canopy.set_mode('ready') end",
                 )
             })
-            .bindings("bindings", "canopy.set_mode('building')")
+            .script("bindings", "canopy.set_mode('building')")
             .assemble(move |canopy| canopy.replace_root(probe).map(|_| ()))
             .build()?)
     });

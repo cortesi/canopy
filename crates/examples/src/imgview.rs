@@ -22,5 +22,5 @@ canopy.keymap({
 /// Queue this demo's bindings and native configuration in their builder phases.
 #[must_use]
 pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
-    builder.bindings("imgview", DEFAULT_BINDINGS)
+    builder.script("imgview", DEFAULT_BINDINGS)
 }

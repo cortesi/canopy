@@ -62,9 +62,8 @@ pub mod canopy_mcp {
     pub struct BootstrapJournalEntry {
         /// Monotonic journal id.
         pub id: u64,
-        #[schemars(with = "String")]
-        /// Script origin.
-        pub origin: canopy::script::ScriptOrigin,
+        /// Where the source came from, such as `eval` or `startup:NAME`.
+        pub origin: String,
         /// Whether the evaluation completed successfully.
         pub ok: bool,
         /// Number of logs emitted by this evaluation.
@@ -81,8 +80,8 @@ pub mod canopy_mcp {
     #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
     pub struct BootstrapRequest {
         #[serde(skip_serializing_if = "Option::is_none")]
-        /// Requested headless viewport, or a live viewport compatibility check.
-        pub viewport: Option<crate::Viewport>,
+        /// Requested headless screen, or a live screen compatibility check.
+        pub screen: Option<crate::ScreenSize>,
     }
 
     /// Bootstrap payload for an agent entering a Canopy app.
@@ -97,8 +96,6 @@ pub mod canopy_mcp {
         pub api_sources: Vec<ruau_script_api::ScriptApiEntry>,
         /// Registered fixtures.
         pub fixtures: Vec<canopy::script::FixtureInfo>,
-        /// Default top-level script target policy.
-        pub default_target: String,
         /// Availability from the root used by top-level script evaluation.
         pub default_commands: Vec<BootstrapCommand>,
         /// Availability from the currently focused node.
@@ -136,6 +133,34 @@ pub mod canopy_mcp {
         NoScripts(std::path::PathBuf),
     }
 
+    /// Structured response for the `script_eval` tool and smoke runner.
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct EvalReport {
+        /// Execution identity and domain reset behavior for this request.
+        pub metadata: crate::ExecutionMetadata,
+        /// Whether the script completed successfully.
+        pub success: bool,
+        /// Final task state for the evaluation.
+        pub state: ScriptTaskState,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        /// Optional JSON-serializable script return value.
+        pub value: Option<serde_json::Value>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        /// Log lines emitted during evaluation.
+        pub logs: Vec<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        /// Assertion outcomes recorded during evaluation.
+        pub assertions: Vec<canopy::script::ScriptAssertion>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        /// Typecheck diagnostics captured before execution.
+        pub diagnostics: Vec<canopy::script::ScriptCheckDiagnostic>,
+        /// Timing information for the request.
+        pub timing: ScriptTiming,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        /// Error payload when evaluation fails.
+        pub error: Option<ScriptErrorInfo>,
+    }
+
     /// Owned execution metadata returned even when an evaluation fails.
     #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
     pub struct ExecutionMetadata {
@@ -145,12 +170,15 @@ pub mod canopy_mcp {
         pub execution: ExecutionMode,
         /// Opaque identity of the application session, not a durable node
         /// reference.
-        pub session_id: String,
-        /// Evaluated or requested viewport, absent when live metadata could not be
+        pub instance_id: String,
+        /// Evaluated or requested screen, absent when live metadata could not be
         /// observed.
-        pub viewport: Option<Viewport>,
-        /// Effective domain reset contract.
+        pub screen: Option<ScreenSize>,
+        /// The application's declared domain reset contract.
         pub reset: ResetPolicy,
+        /// Fixture applied before this evaluation, if any. A fixture resets the
+        /// domain state it covers, whatever the reset policy.
+        pub fixture: Option<String>,
         /// Generated API identity, absent only when preparation could not obtain
         /// it.
         pub api_digest: Option<String>,
@@ -187,14 +215,21 @@ pub mod canopy_mcp {
         #[default]
         /// Domain state can persist outside the UI instance.
         External,
-        /// An explicitly applied fixture resets the relevant domain state.
-        Fixture,
         /// Each factory invocation owns independent domain state.
         Isolated,
     }
 
     /// Result type used by `canopy-mcp`.
     pub type Result<T> = std::result::Result<T, Error>;
+
+    /// Terminal dimensions in cells, serialized independently of internal geometry.
+    #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+    pub struct ScreenSize {
+        /// Number of columns.
+        pub width: u32,
+        /// Number of rows.
+        pub height: u32,
+    }
 
     /// Error details included in a failed script evaluation.
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -234,41 +269,13 @@ pub mod canopy_mcp {
         Invalid,
     }
 
-    /// Structured response for the `script_eval` tool and smoke runner.
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct ScriptEvalOutcome {
-        /// Execution identity and domain reset behavior for this request.
-        pub metadata: crate::ExecutionMetadata,
-        /// Whether the script completed successfully.
-        pub success: bool,
-        /// Final task state for the evaluation.
-        pub state: ScriptTaskState,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        /// Optional JSON-serializable script return value.
-        pub value: Option<serde_json::Value>,
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        /// Log lines emitted during evaluation.
-        pub logs: Vec<String>,
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        /// Assertion outcomes recorded during evaluation.
-        pub assertions: Vec<canopy::script::ScriptAssertion>,
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        /// Typecheck diagnostics captured before execution.
-        pub diagnostics: Vec<canopy::script::ScriptCheckDiagnostic>,
-        /// Timing information for the request.
-        pub timing: ScriptTiming,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        /// Error payload when evaluation fails.
-        pub error: Option<ScriptErrorInfo>,
-    }
-
     #[serde(crate = "::tmcp::__private::serde")]
     #[schemars(crate = "::tmcp::__private::schemars")]
     /// Request payload for the `script_eval` tool.
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct ScriptEvalRequest {
         /// Luau source code to execute.
-        pub script: String,
+        pub source: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         /// Optional named fixture applied before evaluation.
         pub fixture: Option<String>,
@@ -278,7 +285,7 @@ pub mod canopy_mcp {
         #[serde(skip_serializing_if = "Option::is_none")]
         /// Optional headless dimensions; live requests may only confirm current
         /// dimensions.
-        pub viewport: Option<crate::Viewport>,
+        pub screen: Option<crate::ScreenSize>,
     }
 
     /// Result of running one smoke script.
@@ -289,7 +296,7 @@ pub mod canopy_mcp {
         /// Fixture derived for this script, if any.
         pub fixture: Option<String>,
         /// Structured script outcome, carrying success, timing, and error details.
-        pub outcome: crate::script::ScriptEvalOutcome,
+        pub outcome: crate::script::EvalReport,
     }
 
     #[serde(rename_all = "snake_case")]
@@ -344,23 +351,13 @@ pub mod canopy_mcp {
     pub struct SuiteScript {
         /// Script path on disk.
         pub path: std::path::PathBuf,
-        /// Fixture derived for this script, if any.
-        pub fixture: Option<String>,
-        /// Evaluation request carrying the script source and suite options.
+        /// Evaluation request carrying the script source, its derived fixture,
+        /// and suite options.
         pub request: crate::script::ScriptEvalRequest,
     }
 
     /// Handle for a running live UDS MCP listener.
     pub struct UdsServerHandle {}
-
-    /// Terminal dimensions in cells, serialized independently of internal geometry.
-    #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-    pub struct Viewport {
-        /// Number of columns.
-        pub width: u32,
-        /// Number of rows.
-        pub height: u32,
-    }
 
     /// Launch a Canopy app in the selected mode, and return the process exit
     /// code.
@@ -387,7 +384,7 @@ pub mod canopy_mcp {
     ) -> crate::Result<SuiteOutcome> {
     }
 
-    /// Serve `bootstrap`, `script_eval`, `script_api`, and `fixtures` over stdio
+    /// Serve `bootstrap`, `script_eval`, and `script_api` over stdio
     /// for an app factory.
     /// This low-level entry point grants trusted-local access to all exposed native
     /// actions. Calling this function is the application's automation opt-in.
@@ -422,13 +419,10 @@ pub mod canopy_mcp {
         pub fn bootstrap(&self, request: &BootstrapRequest) -> Result<BootstrapResponse> {}
 
         /// Evaluate a Luau script against a fresh headless app.
-        pub fn evaluate(&self, request: &ScriptEvalRequest) -> ScriptEvalOutcome {}
+        pub fn evaluate(&self, request: &ScriptEvalRequest) -> EvalReport {}
 
         /// Render and return the app's Luau API definition.
         pub fn script_api(&self) -> Result<String> {}
-
-        /// Return the evaluator's registered fixture catalog.
-        pub fn fixtures(&self) -> Result<Vec<FixtureInfo>> {}
     }
 
     impl Drop for UdsServerHandle {
@@ -461,6 +455,45 @@ pub mod canopy_mcp {
         fn from(source: tmcp::Error) -> Self {}
     }
 
+    impl EvalReport {
+        /// Encode the outcome as an MCP tool result.
+        pub fn to_tool_result(&self) -> CallToolResult {}
+    }
+
+    impl JsonSchema for EvalReport {
+        fn inline_schema() -> bool {}
+
+        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
+
+        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+    }
+
+    impl From<ScreenSize> for canopy::geom::Size {
+        fn from(screen: ScreenSize) -> Self {}
+    }
+
+    impl From<Size> for ScreenSize {
+        fn from(size: Size) -> Self {}
+    }
+
+    impl JsonSchema for ScreenSize {
+        fn inline_schema() -> bool {}
+
+        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
+
+        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+    }
+
+    impl ScreenSize {
+        /// Reject empty or excessive headless dimensions before constructing an
+        /// app.
+        pub fn validate(self) -> crate::Result<()> {}
+    }
+
     impl From<ScriptErrorType> for ScriptTaskState {
         fn from(error_type: ScriptErrorType) -> Self {}
     }
@@ -487,30 +520,6 @@ pub mod canopy_mcp {
         fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
 
         fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-    }
-
-    impl From<Size> for Viewport {
-        fn from(size: Size) -> Self {}
-    }
-
-    impl From<Viewport> for canopy::geom::Size {
-        fn from(viewport: Viewport) -> Self {}
-    }
-
-    impl JsonSchema for Viewport {
-        fn inline_schema() -> bool {}
-
-        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
-
-        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-
-        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-    }
-
-    impl Viewport {
-        /// Reject empty or excessive headless dimensions before constructing an
-        /// app.
-        pub fn validate(self) -> crate::Result<()> {}
     }
 
     impl JsonSchema for ApplyFixtureRequest {
@@ -613,21 +622,6 @@ pub mod canopy_mcp {
         fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
     }
 
-    impl JsonSchema for ScriptEvalOutcome {
-        fn inline_schema() -> bool {}
-
-        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
-
-        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-
-        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
-    }
-
-    impl ScriptEvalOutcome {
-        /// Encode the outcome as an MCP tool result.
-        pub fn to_tool_result(&self) -> CallToolResult {}
-    }
-
     impl JsonSchema for ScriptEvalRequest {
         fn inline_schema() -> bool {}
 
@@ -639,8 +633,8 @@ pub mod canopy_mcp {
     }
 
     impl ScriptEvalRequest {
-        /// Construct a request with default fixture, timeout, and viewport options.
-        pub fn new(script: impl Into<String>) -> Self {}
+        /// Construct a request with default fixture, timeout, and screen options.
+        pub fn new(source: impl Into<String>) -> Self {}
     }
 
     impl JsonSchema for ScriptTiming {

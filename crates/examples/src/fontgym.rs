@@ -1065,7 +1065,7 @@ canopy.keymap({
 /// Queue this demo's bindings and native configuration in their builder phases.
 #[must_use]
 pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
-    builder.bindings("fontgym", DEFAULT_BINDINGS)
+    builder.script("fontgym", DEFAULT_BINDINGS)
 }
 
 #[cfg(test)]

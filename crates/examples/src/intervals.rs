@@ -262,5 +262,5 @@ pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
             setup_style(setup.style_mut());
             Ok(())
         })
-        .bindings("intervals", DEFAULT_BINDINGS)
+        .script("intervals", DEFAULT_BINDINGS)
 }

@@ -23,8 +23,8 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use canopy_mcp::{
-    ApplyFixtureRequest, ApplyFixtureResponse, BootstrapRequest, ScriptEvalOutcome,
-    ScriptEvalRequest, SuiteConfig, Viewport, plan_suite,
+    ApplyFixtureRequest, ApplyFixtureResponse, BootstrapRequest, EvalReport, ScreenSize,
+    ScriptEvalRequest, SuiteConfig, plan_suite,
 };
 use clap::{Args, Parser, Subcommand};
 use ruau_script_api::{ScriptApiQuery, ScriptApiResponse};
@@ -159,12 +159,12 @@ struct EvalArgs {
     /// Optional evaluation timeout override in milliseconds.
     #[arg(long)]
     timeout_ms: Option<u64>,
-    /// Optional headless viewport as WIDTHxHEIGHT.
-    #[arg(long, value_parser = parse_viewport)]
-    viewport: Option<Viewport>,
+    /// Optional headless screen as WIDTHxHEIGHT.
+    #[arg(long, value_parser = parse_screen)]
+    screen: Option<ScreenSize>,
     /// Write a versioned replay envelope containing this evaluation.
     #[arg(long)]
-    journal_out: Option<PathBuf>,
+    replay_out: Option<PathBuf>,
     /// Command override passed after `--`.
     #[arg(last = true)]
     command: Vec<String>,
@@ -239,14 +239,6 @@ impl CanopyctlMcpServer {
         let session = self.sessions.session().await.map_err(tool_error)?;
         session.api(&params).await.map_err(tool_error)
     }
-
-    #[tool]
-    /// Return the fixture catalog for the active session.
-    async fn fixtures(&self) -> ToolResult<CallToolResult> {
-        let session = self.sessions.session().await.map_err(tool_error)?;
-        let fixtures = session.fixtures().await.map_err(tool_error)?;
-        to_tool_result(fixtures)
-    }
 }
 
 #[tokio::main]
@@ -309,11 +301,12 @@ async fn smoke_command(config: LoadedConfig, args: SmokeArgs) -> Result<()> {
 async fn smoke_scripts(session: &Session, suite: &SuiteConfig) -> Result<()> {
     let mut failed = 0usize;
     for script in plan_suite(suite)? {
+        let fixture = script.request.fixture.clone();
+        let test_name = smoke_test_name(&suite.suite_dir, &script.path, fixture.as_deref());
+        let fixture = fixture.unwrap_or_else(|| "-".to_owned());
         let started = Instant::now();
         let outcome = session.eval(script.request).await?;
         let elapsed = started.elapsed().as_millis();
-        let fixture = script.fixture.as_deref().unwrap_or("-");
-        let test_name = smoke_test_name(&suite.suite_dir, &script.path, script.fixture.as_deref());
         if outcome.success {
             println!("PASS fixture={fixture} test={test_name} ({elapsed}ms)");
         } else {
@@ -334,17 +327,17 @@ async fn smoke_scripts(session: &Session, suite: &SuiteConfig) -> Result<()> {
     Ok(())
 }
 
-/// Parse and validate one CLI viewport before an app is spawned.
-fn parse_viewport(text: &str) -> result::Result<Viewport, String> {
+/// Parse and validate one CLI screen before an app is spawned.
+fn parse_screen(text: &str) -> result::Result<ScreenSize, String> {
     let (width, height) = text
         .split_once('x')
-        .ok_or_else(|| "viewport must be WIDTHxHEIGHT".to_owned())?;
-    let viewport = Viewport {
-        width: width.parse().map_err(|_| "invalid viewport width")?,
-        height: height.parse().map_err(|_| "invalid viewport height")?,
+        .ok_or_else(|| "screen must be WIDTHxHEIGHT".to_owned())?;
+    let screen = ScreenSize {
+        width: width.parse().map_err(|_| "invalid screen width")?,
+        height: height.parse().map_err(|_| "invalid screen height")?,
     };
-    viewport.validate().map_err(|error| error.to_string())?;
-    Ok(viewport)
+    screen.validate().map_err(|error| error.to_string())?;
+    Ok(screen)
 }
 
 /// Execute `canopyctl replay` after parsing all sources and assumptions.
@@ -366,16 +359,14 @@ async fn replay_file(
     args: &ReplayArgs,
 ) -> Result<()> {
     envelope.validate()?;
-    let requested = (session.kind() == SessionKind::Headless).then_some(envelope.viewport);
+    let requested = (session.kind() == SessionKind::Headless).then_some(envelope.screen);
     let target = session
-        .bootstrap(BootstrapRequest {
-            viewport: requested,
-        })
+        .bootstrap(BootstrapRequest { screen: requested })
         .await?;
     target
         .metadata
-        .viewport
-        .context("target bootstrap has no viewport")?
+        .screen
+        .context("target bootstrap has no screen")?
         .validate()?;
     if let Some(name) = &envelope.fixture
         && !target.fixtures.iter().any(|fixture| fixture.name == *name)
@@ -415,7 +406,7 @@ async fn replay_entries(
     session: &Session,
     steps: Vec<ReplayStep>,
     fixture: Option<String>,
-    viewport: Option<Viewport>,
+    screen: Option<ScreenSize>,
     args: &ReplayArgs,
 ) -> Result<()> {
     let mut failed = 0usize;
@@ -433,7 +424,7 @@ async fn replay_entries(
             .eval(ScriptEvalRequest {
                 fixture: fixture.clone(),
                 timeout_ms: args.timeout_ms,
-                viewport,
+                screen,
                 ..ScriptEvalRequest::new(step.source)
             })
             .await?;
@@ -493,7 +484,8 @@ fn smoke_test_name(suite_dir: &Path, script_path: &Path, fixture: Option<&str>) 
 async fn fixtures_command(config: LoadedConfig, args: SpawnArgs) -> Result<()> {
     let command = config.headless_command(&args.command)?;
     let session = Session::spawn_headless(&command).await?;
-    for fixture in session.fixtures().await? {
+    let bootstrap = session.bootstrap(BootstrapRequest::default()).await?;
+    for fixture in bootstrap.fixtures {
         println!("{}\t{}", fixture.name, fixture.description);
     }
     Ok(())
@@ -508,14 +500,14 @@ async fn eval_command(config: LoadedConfig, args: EvalArgs) -> Result<()> {
         .eval(ScriptEvalRequest {
             fixture: args.fixture.clone(),
             timeout_ms: args.timeout_ms,
-            viewport: args.viewport,
+            screen: args.screen,
             ..ScriptEvalRequest::new(script.clone())
         })
         .await?;
     write_eval_output(
         &outcome,
         script,
-        args.journal_out.as_deref(),
+        args.replay_out.as_deref(),
         args.fixture,
         &mut io::stdout().lock(),
     )?;
@@ -528,15 +520,15 @@ async fn eval_command(config: LoadedConfig, args: EvalArgs) -> Result<()> {
 /// Write evaluation output and its optional journal before exit status
 /// handling.
 fn write_eval_output(
-    outcome: &ScriptEvalOutcome,
+    outcome: &EvalReport,
     script: String,
-    journal_out: Option<&Path>,
+    replay_out: Option<&Path>,
     fixture: Option<String>,
     output: &mut impl Write,
 ) -> Result<()> {
     serde_json::to_writer_pretty(&mut *output, outcome)?;
     writeln!(output)?;
-    if let Some(path) = journal_out {
+    if let Some(path) = replay_out {
         write_replay(path, &ReplayEnvelope::record(script, fixture, outcome)?)?;
     }
     Ok(())
@@ -657,7 +649,7 @@ mod tests {
     use super::*;
     use crate::{
         replay::ReplayExpectation,
-        session::tests::{evaluator_session, manager_with_session, peer_session, request},
+        session::tests::{factory_session, manager_with_session, peer_session, request},
     };
 
     #[test]
@@ -698,8 +690,8 @@ mod tests {
                         schema: "canopy.replay/1".into(), app: bootstrap.metadata.app,
                         api_digest: bootstrap.metadata.api_digest.expect("live digest"),
                         execution: ExecutionMode::LiveSession,
-                        viewport: bootstrap.metadata.viewport.context("live viewport")?,
-                        fixture: Some("seed".into()), reset: ResetPolicy::Fixture,
+                        screen: bootstrap.metadata.screen.context("live screen")?,
+                        fixture: Some("seed".into()), reset: ResetPolicy::External,
                         steps: [
                             "canopy.assert(canopy.mode() == \"seed\"); canopy.set_mode(\"first\")",
                             "canopy.assert(canopy.mode() == \"first\"); canopy.set_mode(\"second\")",
@@ -730,18 +722,18 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn shared_contract_crosses_real_evaluator_proxy_and_versioned_replay() -> Result<()> {
-        let (session, _, peer) = evaluator_session().await?;
+    async fn shared_contract_crosses_real_factory_proxy_and_versioned_replay() -> Result<()> {
+        let (session, _, peer) = factory_session().await?;
         let proxy = CanopyctlMcpServer {
             sessions: manager_with_session(session).await?,
         };
         let mut request = request(contracts::SCRIPT);
-        request.viewport = Some(Viewport {
+        request.screen = Some(ScreenSize {
             width: 12,
             height: 3,
         });
         let response = proxy.script_eval(request).await?;
-        let outcome = response.extract_as::<ScriptEvalOutcome>(ToolResultMode::Structured)?;
+        let outcome = response.extract_as::<EvalReport>(ToolResultMode::Structured)?;
         assert!(outcome.success, "{:?}", outcome.error);
         assert_eq!(
             outcome.value,
@@ -750,7 +742,7 @@ mod tests {
         let envelope = ReplayEnvelope::record(contracts::SCRIPT.to_owned(), None, &outcome)?;
         let encoded = serde_json::to_string(&envelope)?;
         let replay = replay::parse_replay(&encoded)?;
-        let (mut session, calls, replay_peer) = evaluator_session().await?;
+        let (mut session, calls, replay_peer) = factory_session().await?;
         replay_file(&mut session, replay, &ReplayArgs::default()).await?;
         assert_eq!(calls.lock().await.as_slice(), [contracts::SCRIPT]);
         peer.abort();
@@ -761,10 +753,10 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn strict_preflight_blocks_execution_and_overrides_never_hide_missing_fixtures()
     -> Result<()> {
-        let (mut session, calls, peer) = evaluator_session().await?;
+        let (mut session, calls, peer) = factory_session().await?;
         let target = session
             .bootstrap(BootstrapRequest {
-                viewport: Some(Viewport {
+                screen: Some(ScreenSize {
                     width: 12,
                     height: 3,
                 }),
@@ -775,7 +767,7 @@ mod tests {
             app: "wrong app".into(),
             api_digest: "wrong digest".into(),
             execution: ExecutionMode::LiveSession,
-            viewport: target.metadata.viewport.context("target viewport")?,
+            screen: target.metadata.screen.context("target screen")?,
             fixture: None,
             reset: ResetPolicy::External,
             steps: vec![ReplayStep {
@@ -798,7 +790,6 @@ mod tests {
         assert_eq!(calls.lock().await.len(), 1);
         calls.lock().await.clear();
         envelope.fixture = Some("missing fixture".into());
-        envelope.reset = ResetPolicy::Fixture;
         let error = replay_file(&mut session, envelope, &args)
             .await
             .unwrap_err();
@@ -810,7 +801,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn selected_recorded_failures_are_executed_and_compared() -> Result<()> {
-        let (session, calls, peer) = evaluator_session().await?;
+        let (session, calls, peer) = factory_session().await?;
         let steps = vec![ReplayStep {
             source: "error(\"expected failure\")".into(),
             expect: ReplayExpectation { success: false },
@@ -866,9 +857,9 @@ mod tests {
             ])
             .is_err()
         );
-        assert!(parse_viewport("0x3").is_err());
-        assert!(parse_viewport("12x0").is_err());
-        assert!(parse_viewport("12x3").is_ok());
+        assert!(parse_screen("0x3").is_err());
+        assert!(parse_screen("12x0").is_err());
+        assert!(parse_screen("12x3").is_ok());
         Ok(())
     }
 
@@ -950,7 +941,7 @@ mod tests {
             None,
             &mut output,
         )?;
-        let decoded: ScriptEvalOutcome = serde_json::from_slice(&output)?;
+        let decoded: EvalReport = serde_json::from_slice(&output)?;
         assert!(!decoded.success);
         assert_eq!(decoded, outcome);
         let envelope = load_replay(&journal)?;

@@ -124,7 +124,7 @@ pub fn create_app(user_script_root: Option<PathBuf>) -> Result<Canopy> {
     if let Some(root) = user_script_root {
         builder = builder.user_script_root(root, ScriptTrust::TrustedLocal);
     } else {
-        builder = builder.bindings("hello-defaults", DEFAULT_BINDINGS);
+        builder = builder.script("hello-defaults", DEFAULT_BINDINGS);
     }
     builder.build()
 }

@@ -517,7 +517,7 @@ without disabling Tokio's cooperative budget.
 Use `canopy.snapshot()` to read one completed frame. It returns detached records
 for cells, focus, and every live arena node, including detached nodes. Reading a
 snapshot runs no hooks and does not advance its `frame_id`. It returns `nil`
-until a viewport has been prepared. A headless evaluation prepares its initial
+until a first frame has been prepared. A headless evaluation prepares its initial
 frame before running user source.
 
 After commands return, call `canopy.prepare()` to publish pending changes. Calls
@@ -547,7 +547,7 @@ event dispatch.
 
 ## Versioned replay
 
-`canopyctl eval --journal-out trace.json` writes a `canopy.replay/1` envelope
+`canopyctl eval --replay-out trace.json` writes a `canopy.replay/1` envelope
 from the evaluation's actual metadata. Recording requires an API digest; a
 failure before app construction still produces evaluation JSON, but cannot
 produce a complete replay envelope.
@@ -558,7 +558,7 @@ produce a complete replay envelope.
   "app": "todo",
   "api_digest": "recorded-api-digest",
   "execution": "fresh-app-per-eval",
-  "viewport": { "width": 120, "height": 40 },
+  "screen": { "width": 120, "height": 40 },
   "fixture": "with_items",
   "reset": "isolated",
   "steps": [
@@ -570,9 +570,9 @@ produce a complete replay envelope.
 }
 ```
 
-Replay checks application identity, API digest, execution mode, viewport, and
-domain reset policy before applying a fixture or evaluating source. Headless
-replay requests the recorded viewport. Live replay checks the current viewport
+Replay checks application identity, API digest, execution mode, screen size,
+and domain reset policy before applying a fixture or evaluating source. Headless
+replay requests the recorded screen size. Live replay checks the current screen
 and uses the explicitly selected socket. For example:
 
 ```sh

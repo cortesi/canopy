@@ -10,7 +10,6 @@ use std::{
 };
 
 use ruau::{filesystem::DirectoryMountsError, source::SourceProvider};
-use serde::{Deserialize, Serialize};
 
 use super::Canopy;
 #[cfg(any(test, feature = "testing"))]
@@ -256,66 +255,38 @@ pub struct DefaultBindingsRun {
 }
 
 /// Typed source of one script-journal entry.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(from = "String", into = "String")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ScriptOrigin {
     /// Top-level application evaluation.
     Eval,
-    /// Builder configuration loaded from a path.
-    Config(String),
+    /// A builder script file loaded from a path.
+    ScriptFile(String),
     /// Application or mounted startup source.
     Startup(String),
-    /// Builder-owned binding source.
-    Bindings(String),
+    /// A named builder script.
+    Build(String),
     /// Widget default-binding source.
     DefaultBindings(String),
-    /// Origin retained from a journal written by another producer.
-    Other(String),
 }
 
 impl fmt::Display for ScriptOrigin {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Eval => formatter.write_str("eval"),
-            Self::Config(value) => write!(formatter, "config:{value}"),
+            Self::ScriptFile(value) => write!(formatter, "script-file:{value}"),
             Self::Startup(value) => write!(formatter, "startup:{value}"),
-            Self::Bindings(value) => write!(formatter, "bindings:{value}"),
+            Self::Build(value) => write!(formatter, "build:{value}"),
             Self::DefaultBindings(value) => write!(formatter, "default-bindings:{value}"),
-            Self::Other(value) => formatter.write_str(value),
         }
     }
 }
 
-impl From<ScriptOrigin> for String {
-    fn from(origin: ScriptOrigin) -> Self {
-        origin.to_string()
-    }
-}
-
-impl From<String> for ScriptOrigin {
-    fn from(origin: String) -> Self {
-        if origin == "eval" {
-            Self::Eval
-        } else if let Some(value) = origin.strip_prefix("config:") {
-            Self::Config(value.to_owned())
-        } else if let Some(value) = origin.strip_prefix("startup:") {
-            Self::Startup(value.to_owned())
-        } else if let Some(value) = origin.strip_prefix("bindings:") {
-            Self::Bindings(value.to_owned())
-        } else if let Some(value) = origin.strip_prefix("default-bindings:") {
-            Self::DefaultBindings(value.to_owned())
-        } else {
-            Self::Other(origin)
-        }
-    }
-}
-
-/// Replayable record of one script evaluation.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Record of one script evaluation.
+#[derive(Debug, Clone)]
 pub struct ScriptJournalEntry {
     /// Monotonic journal id.
     pub id: u64,
-    /// Typed origin serialized as the established journal string.
+    /// Where the source came from.
     pub origin: ScriptOrigin,
     /// Evaluated source text.
     pub source: String,
@@ -541,7 +512,7 @@ impl Canopy {
                 .map(|_| ())
         })();
         self.record_script_journal(
-            ScriptOrigin::Config(path.display().to_string()),
+            ScriptOrigin::ScriptFile(path.display().to_string()),
             &source,
             baseline,
             &result,

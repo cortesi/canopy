@@ -134,5 +134,5 @@ canopy.bind("q", { path = "root", description = "Quit" }, command.root.quit())
 /// Queue this demo's bindings and native configuration in their builder phases.
 #[must_use]
 pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
-    builder.bindings("textgym", DEFAULT_BINDINGS)
+    builder.script("textgym", DEFAULT_BINDINGS)
 }

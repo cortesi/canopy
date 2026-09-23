@@ -96,5 +96,5 @@ pub fn file_title(path: &Path) -> String {
 /// Queue this demo's bindings and native configuration in their builder phases.
 #[must_use]
 pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
-    builder.bindings("widget_editor", DEFAULT_BINDINGS)
+    builder.script("widget_editor", DEFAULT_BINDINGS)
 }

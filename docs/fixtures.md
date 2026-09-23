@@ -10,23 +10,23 @@ in two ways:
 ## Execution and reset contracts
 
 Each bootstrap and eval response includes `metadata` with the application name,
-execution mode, session ID, viewport, reset policy, and API digest. The modes are
-`fresh-app-per-eval` and `live-session`. A fresh UI does not imply fresh domain
-data. Each headless eval receives a new session ID; a live listener keeps its ID
-across evaluations and client reconnects.
+execution mode, instance ID, screen size, reset policy, applied fixture, and API
+digest. The modes are `fresh-app-per-eval` and `live-session`. A fresh UI does
+not imply fresh domain data. Each headless eval receives a new instance ID; a
+live listener keeps its ID across evaluations and client reconnects.
 
 Factories declare identity and reset behavior with
 `AppFactory::new(AppMetadata { app, reset }, build)`.
-`ResetPolicy::External` permits persistent domain state, `Isolated` declares
-independent state per factory call, and `Fixture` describes an explicitly applied
-domain fixture. Every application integration supplies its own declaration.
+`ResetPolicy::External` permits persistent domain state, and `Isolated`
+declares independent state per factory call. Every application integration
+supplies its own declaration.
 
-Todo declares `isolated` for `:memory:` and `external` for file databases.
-An explicitly applied fixture changes an external headless request's effective
-reset policy to `fixture`; isolated requests remain isolated. Live sessions report
-`external` until a successful explicit `apply_fixture` call, then `fixture`.
-Reconnecting never resets domain state. Failed fixture calls do not change the
-reported reset policy.
+Todo declares `isolated` for `:memory:` and `external` for file databases. The
+reset policy is always the declared one. An explicitly applied fixture is
+reported separately, in `metadata.fixture`: a headless request names the fixture
+it applied, and a live session names the last fixture a successful
+`apply_fixture` call applied. Reconnecting never resets domain state. Failed
+fixture calls do not change the reported fixture.
 
 Live fixture callbacks execute inside a runtime turn. They must use native
 mutation APIs or typed command dispatch. Starting a synchronous top-level eval
@@ -36,10 +36,10 @@ the eval turn and can use synchronous evaluation. Fixtures intended for both
 adapters should use native setup code.
 
 Headless bootstrap and eval requests accept an optional
-`viewport: { width, height }`, defaulting to 120 by 40 cells. Empty or excessive
+`screen: { width, height }`, defaulting to 120 by 40 cells. Empty or excessive
 dimensions fail before factory construction. App-specific render limits are
 checked before fixture application. Live requests can confirm their current
-viewport but cannot resize it. Smoke suites accept the metadata-bearing
+screen size but cannot resize it. Smoke suites accept the metadata-bearing
 `AppFactory` directly and preserve its declaration in every outcome.
 
 ## Todo Example

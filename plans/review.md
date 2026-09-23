@@ -2271,7 +2271,7 @@ Each stage also updates the docs it touches.
 - [x] C27: `EvalRequest::new`, one log channel, one typecheck, and a
   `testing`-gated `eval_script`. Delete `evaluate_live` and the `execute`
   timeout parameter.
-- [ ] C28:
+- [x] C28:
   - `ResetPolicy { Isolated, External }` plus `ExecutionMetadata.fixture`.
   - `EvalReport`, `--replay-out`, `instance_id`, `source`, and `screen`.
   - Remove the fixtures tool, and rename builder `script` and `script_file`.

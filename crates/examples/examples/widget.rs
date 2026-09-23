@@ -223,7 +223,7 @@ fn widget_builder(command: &Command) -> CanopyBuilder {
         Command::Image(_) => imgview::binding_setup(builder.configure(ImageView::register)),
         Command::Term => builder
             .configure(|setup| setup.add_commands::<TermDemo>())
-            .bindings("widget-terminal", TERM_BINDINGS),
+            .script("widget-terminal", TERM_BINDINGS),
         Command::Editor(_) => {
             widget_editor::binding_setup(builder.configure(WidgetEditor::register))
         }
