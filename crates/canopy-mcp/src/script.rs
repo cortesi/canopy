@@ -5,12 +5,12 @@ use std::{
 
 use canopy::{
     Canopy,
-    commands::{ArgValue, CommandStatus, CommandTarget},
+    commands::{CommandStatus, CommandTarget},
     error::{Error as CanopyError, Result as CanopyResult, ScriptErrorKind},
     render::NopBackend,
     script::{
-        AutomationHandle, EvalRequest, FixtureInfo, ScriptAssertion, ScriptCheckDiagnostic,
-        ScriptOrigin,
+        AutomationHandle, EvalOutcome, EvalRequest, FixtureInfo, ScriptAssertion,
+        ScriptCheckDiagnostic, ScriptOrigin,
     },
 };
 use ruau_script_api::{
@@ -310,7 +310,7 @@ impl AppFactory {
 
     /// Evaluate a Luau script against a fresh headless app.
     pub fn evaluate(&self, request: &ScriptEvalRequest) -> ScriptEvalOutcome {
-        self.evaluate_with(request, eval_script)
+        self.evaluate_with(request, |canopy, request| canopy.eval(request))
     }
 
     /// Evaluate on a Tokio blocking worker, cancelling when its caller leaves.
@@ -319,22 +319,18 @@ impl AppFactory {
         request: &ScriptEvalRequest,
         cancelled: oneshot::Receiver<()>,
     ) -> ScriptEvalOutcome {
-        self.evaluate_with(request, |canopy, script, timeout_ms| {
-            let request = eval_request(canopy, script, timeout_ms);
-            canopy
-                .eval_with_cancellation(request, async {
-                    let _closed = cancelled.await;
-                })?
-                .into_result()
-                .map_err(Into::into)
+        self.evaluate_with(request, |canopy, request| {
+            canopy.eval_with_cancellation(request, async {
+                let _closed = cancelled.await;
+            })
         })
     }
 
-    /// Share setup, typechecking, diagnostics, and rendering across drivers.
+    /// Share setup, reporting, and rendering across drivers.
     fn evaluate_with(
         &self,
         request: &ScriptEvalRequest,
-        eval: impl FnOnce(&mut Canopy, &str, Option<u64>) -> Result<ArgValue>,
+        eval: impl FnOnce(&mut Canopy, EvalRequest) -> CanopyResult<EvalOutcome>,
     ) -> ScriptEvalOutcome {
         let viewport = request.viewport.unwrap_or_default();
         let mut metadata = ExecutionMetadata::fresh(self.metadata(), viewport);
@@ -361,7 +357,28 @@ impl AppFactory {
                     }
                 };
             let build_ms = elapsed_ms(total_start);
-            evaluate_in(&mut canopy, request, build_ms, total_start, true, eval)
+            let exec_start = Instant::now();
+            let completion = eval(&mut canopy, eval_request(request)).and_then(|completion| {
+                // Nothing else drives a headless screen, so render the
+                // state the script left.
+                canopy.render(&mut NopBackend::new())?;
+                Ok(completion)
+            });
+            let timing = ScriptTiming {
+                build_ms,
+                exec_ms: elapsed_ms(exec_start),
+                total_ms: elapsed_ms(total_start),
+            };
+            match completion {
+                Ok(completion) => outcome_from(completion, timing),
+                Err(error) => failed_info(
+                    canopy_error_info(&error),
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                    timing,
+                ),
+            }
         })();
         outcome.with_metadata(metadata)
     }
@@ -504,37 +521,6 @@ pub fn stable_digest(text: &str) -> String {
     format!("{hash:016x}")
 }
 
-/// Evaluate a Luau script against an existing live canopy app.
-#[cfg(test)]
-pub fn evaluate_live(
-    canopy: &mut Canopy,
-    request: &ScriptEvalRequest,
-    context: &LiveContext,
-) -> ScriptEvalOutcome {
-    let metadata = match context.metadata(canopy) {
-        Ok(metadata) => metadata,
-        Err(error) => {
-            return ScriptEvalOutcome::error_only(
-                ScriptErrorType::Invalid,
-                error.to_string(),
-                Vec::new(),
-                ScriptTiming::default(),
-            )
-            .with_metadata(context.unavailable_metadata());
-        }
-    };
-    let outcome = match validate_live_request(request, &metadata) {
-        Ok(()) => evaluate_in(canopy, request, 0, Instant::now(), false, eval_script),
-        Err(error) => ScriptEvalOutcome::error_only(
-            ScriptErrorType::Invalid,
-            error.to_string(),
-            Vec::new(),
-            ScriptTiming::default(),
-        ),
-    };
-    outcome.with_metadata(metadata)
-}
-
 /// Check a live request without changing fixtures, viewport, or application
 /// state.
 fn validate_live_request(
@@ -613,99 +599,26 @@ async fn evaluate_live_request_inner(
     automation: AutomationHandle,
     request: ScriptEvalRequest,
 ) -> ScriptEvalOutcome {
-    let total_start = Instant::now();
-    let preflight_handle = automation.clone();
-    let source = request.script.clone();
-    let preflight = spawn_blocking(move || {
-        preflight_handle.request(move |canopy| {
-            let gate = typecheck_for_eval(canopy, &source, live_timing(total_start, total_start));
-            Ok((canopy.root_id(), gate))
-        })
-    })
-    .await;
-    let (origin, gate) = match preflight {
-        Ok(Ok(preflight)) => preflight,
-        Ok(Err(error)) => {
-            return failed_info(
-                canopy_error_info(&error),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                live_timing(total_start, total_start),
-            );
-        }
-        Err(error) => {
-            return ScriptEvalOutcome::error_only(
-                ScriptErrorType::Runtime,
-                error.to_string(),
-                Vec::new(),
-                live_timing(total_start, total_start),
-            );
-        }
-    };
-    let diagnostics = match gate {
-        TypecheckGate::Ready(diagnostics) => diagnostics,
-        TypecheckGate::Failed(outcome) => return *outcome,
-    };
-    let exec_start = Instant::now();
-    let ticket = match automation.submit_eval(EvalRequest {
-        source: request.script,
-        timeout: request
-            .timeout_ms
-            .filter(|timeout| *timeout > 0)
-            .map(Duration::from_millis),
-        origin,
-    }) {
+    let start = Instant::now();
+    let ticket = match automation.submit_eval(eval_request(&request)) {
         Ok(ticket) => ticket,
         Err(error) => {
             return failed_info(
                 canopy_error_info(&error),
                 Vec::new(),
                 Vec::new(),
-                diagnostics,
-                live_timing(total_start, exec_start),
+                Vec::new(),
+                live_timing(start),
             );
         }
     };
-    let completion = match ticket.completion.await {
-        Ok(completion) => completion,
-        Err(error) => {
-            return ScriptEvalOutcome::error_only(
-                ScriptErrorType::Runtime,
-                format!("live evaluation completion channel closed: {error}"),
-                diagnostics,
-                live_timing(total_start, exec_start),
-            );
-        }
-    };
-    let timing = live_timing(total_start, exec_start);
-    match completion.result.as_ref() {
-        Ok(value) => match value.to_external_json_value() {
-            Ok(value) => ScriptEvalOutcome {
-                metadata: ExecutionMetadata::default(),
-                success: true,
-                state: ScriptTaskState::Completed,
-                value: Some(value),
-                logs: completion.logs,
-                assertions: completion.assertions,
-                diagnostics,
-                timing,
-                error: None,
-            },
-            Err(error) => failure_with_logs(
-                &crate::Error::from(error),
-                completion.logs,
-                completion.assertions,
-                diagnostics,
-                timing,
-            ),
-        },
-        Err(error) => failed_info(
-            canopy_error_info(error),
-            completion.logs,
-            completion.assertions,
-            diagnostics,
-            timing,
+    match ticket.completion.await {
+        Ok(completion) => outcome_from(completion, live_timing(start)),
+        Err(error) => ScriptEvalOutcome::error_only(
+            ScriptErrorType::Runtime,
+            format!("live evaluation completion channel closed: {error}"),
+            Vec::new(),
+            live_timing(start),
         ),
     }
 }
@@ -716,69 +629,63 @@ fn elapsed_ms(start: Instant) -> u64 {
 }
 
 /// Timing for live evaluation, where construction belongs to the running app.
-fn live_timing(total_start: Instant, exec_start: Instant) -> ScriptTiming {
+fn live_timing(start: Instant) -> ScriptTiming {
+    let elapsed = elapsed_ms(start);
     ScriptTiming {
         build_ms: 0,
-        exec_ms: elapsed_ms(exec_start),
-        total_ms: elapsed_ms(total_start),
+        exec_ms: elapsed,
+        total_ms: elapsed,
     }
 }
 
-/// Typecheck, evaluate, and report one script against an already-built canopy
-/// app.
+/// Report one completed evaluation, headless or live.
 ///
-/// `render` is supplied for headless evaluation, where nothing else drives the
-/// screen after the script runs; a live app renders on its own event loop.
-fn evaluate_in(
-    canopy: &mut Canopy,
-    request: &ScriptEvalRequest,
-    build_ms: u64,
-    total_start: Instant,
-    render: bool,
-    eval: impl FnOnce(&mut Canopy, &str, Option<u64>) -> Result<ArgValue>,
-) -> ScriptEvalOutcome {
-    let diagnostics = match typecheck_for_eval(
-        canopy,
-        &request.script,
-        ScriptTiming {
-            build_ms,
-            exec_ms: 0,
-            total_ms: elapsed_ms(total_start),
+/// A source that failed to typecheck never ran; it reports its diagnostics as
+/// a typecheck failure.
+fn outcome_from(completion: EvalOutcome, timing: ScriptTiming) -> ScriptEvalOutcome {
+    let EvalOutcome {
+        result,
+        logs,
+        assertions,
+        diagnostics,
+        ..
+    } = completion;
+    match result {
+        Ok(value) => match value.to_external_json_value() {
+            Ok(value) => ScriptEvalOutcome {
+                metadata: ExecutionMetadata::default(),
+                success: true,
+                state: ScriptTaskState::Completed,
+                value: Some(value),
+                logs,
+                assertions,
+                diagnostics,
+                timing,
+                error: None,
+            },
+            Err(error) => failure_with_logs(
+                &crate::Error::from(error),
+                logs,
+                assertions,
+                diagnostics,
+                timing,
+            ),
         },
-    ) {
-        TypecheckGate::Ready(diagnostics) => diagnostics,
-        TypecheckGate::Failed(outcome) => return *outcome,
-    };
-
-    let exec_start = Instant::now();
-    let eval_result = eval(canopy, &request.script, request.timeout_ms).and_then(|value| {
-        if render {
-            canopy.render(&mut NopBackend::new())?;
+        Err(_) if diagnostics.iter().any(ScriptCheckDiagnostic::is_error) => {
+            ScriptEvalOutcome::error_only(
+                ScriptErrorType::Typecheck,
+                "script failed Luau type checking",
+                diagnostics,
+                timing,
+            )
         }
-        Ok(value.to_external_json_value()?)
-    });
-    let exec_ms = elapsed_ms(exec_start);
-    let timing = ScriptTiming {
-        build_ms,
-        exec_ms,
-        total_ms: elapsed_ms(total_start),
-    };
-    let logs = canopy.take_script_logs();
-    let assertions = canopy.take_script_assertions();
-
-    match eval_result {
-        Ok(value) => ScriptEvalOutcome {
-            metadata: ExecutionMetadata::default(),
-            success: true,
-            state: ScriptTaskState::Completed,
-            value: Some(value),
+        Err(error) => failed_info(
+            canopy_error_info(&error),
             logs,
             assertions,
             diagnostics,
             timing,
-            error: None,
-        },
-        Err(error) => failure_with_logs(&error, logs, assertions, diagnostics, timing),
+        ),
     }
 }
 
@@ -802,56 +709,13 @@ fn build_headless(
     Ok(canopy)
 }
 
-/// Evaluate a script with an optional cooperative timeout.
-fn eval_script(canopy: &mut Canopy, script: &str, timeout_ms: Option<u64>) -> Result<ArgValue> {
-    let request = eval_request(canopy, script, timeout_ms);
-    canopy.eval(request)?.into_result().map_err(Into::into)
-}
-
-/// Resolve the root and shared timeout policy before borrowing the driver.
-fn eval_request(canopy: &Canopy, script: &str, timeout_ms: Option<u64>) -> EvalRequest {
-    EvalRequest {
-        source: script.to_string(),
-        timeout: timeout_ms
-            .filter(|timeout| *timeout > 0)
-            .map(Duration::from_millis),
-        origin: canopy.root_id(),
+/// Build the runtime request for a script request's source and timeout.
+fn eval_request(request: &ScriptEvalRequest) -> EvalRequest {
+    let eval = EvalRequest::new(request.script.clone());
+    match request.timeout_ms.filter(|timeout| *timeout > 0) {
+        Some(timeout) => eval.timeout(Duration::from_millis(timeout)),
+        None => eval,
     }
-}
-
-/// Result of the shared typecheck gate used by headless and live evaluation.
-enum TypecheckGate {
-    /// Typechecking succeeded and evaluation may continue.
-    Ready(Vec<ScriptCheckDiagnostic>),
-    /// Typechecking failed and evaluation should stop.
-    Failed(Box<ScriptEvalOutcome>),
-}
-
-/// Run Luau typechecking and return a failure outcome when evaluation should
-/// stop.
-fn typecheck_for_eval(canopy: &mut Canopy, script: &str, timing: ScriptTiming) -> TypecheckGate {
-    let result = match canopy.check_script("canopy/mcp-eval", script) {
-        Ok(result) => result,
-        Err(error) => {
-            return TypecheckGate::Failed(Box::new(ScriptEvalOutcome::error_only(
-                ScriptErrorType::Typecheck,
-                error.to_string(),
-                Vec::new(),
-                timing,
-            )));
-        }
-    };
-    let has_errors = result.has_errors();
-    let diagnostics = result.into_diagnostics();
-    if has_errors {
-        return TypecheckGate::Failed(Box::new(ScriptEvalOutcome::error_only(
-            ScriptErrorType::Typecheck,
-            "script failed Luau type checking",
-            diagnostics,
-            timing,
-        )));
-    }
-    TypecheckGate::Ready(diagnostics)
 }
 
 /// Build a failed outcome while preserving logs, assertions, and diagnostics.
@@ -1144,26 +1008,21 @@ mod tests {
             app: "live-test".into(),
             reset: ResetPolicy::Isolated,
         });
-        let mut request = ScriptEvalRequest::new("return script_target.get()");
-        let first = evaluate_live(&mut canopy, &request, &context);
-        let second = evaluate_live(&mut canopy, &request, &context.clone());
-        assert!(first.success && second.success);
-        assert_eq!(first.metadata.session_id, second.metadata.session_id);
-        assert_eq!(first.metadata.execution, crate::ExecutionMode::LiveSession);
-        assert_eq!(first.metadata.reset, ResetPolicy::External);
+        let copy = context.clone();
+        let first = context.metadata(&canopy)?;
+        let second = copy.metadata(&canopy)?;
+        assert_eq!(first.session_id, second.session_id);
+        assert_eq!(first.execution, crate::ExecutionMode::LiveSession);
+        assert_eq!(first.reset, ResetPolicy::External);
+        let mut request = ScriptEvalRequest::new("script_target.set(99)");
         request.viewport = Some(Viewport {
             width: 30,
             height: 5,
         });
-        request.script = "script_target.set(99)".into();
-        assert!(!evaluate_live(&mut canopy, &request, &context).success);
+        assert!(validate_live_request(&request, &first).is_err());
         assert_eq!(canopy.snapshot().unwrap().size(), Size::new(20, 5));
         request.viewport = None;
-        request.script = "return script_target.get()".into();
-        assert_eq!(
-            evaluate_live(&mut canopy, &request, &context).value,
-            first.value
-        );
+        assert!(validate_live_request(&request, &first).is_ok());
         Ok(())
     }
 
@@ -1358,13 +1217,8 @@ declare command: {
     }
 
     #[test]
-    fn evaluate_live_reports_json_conversion_errors() -> crate::Result<()> {
-        let mut canopy = test_factory().build()?;
-        let outcome = evaluate_live(
-            &mut canopy,
-            &ScriptEvalRequest::new("return function() end".to_string()),
-            &LiveContext::new(crate::AppMetadata::test()),
-        );
+    fn evaluation_reports_json_conversion_errors() -> crate::Result<()> {
+        let outcome = test_factory().evaluate(&ScriptEvalRequest::new("return function() end"));
 
         assert!(!outcome.success);
         assert_eq!(outcome.state, ScriptTaskState::Failed);
@@ -1377,35 +1231,23 @@ declare command: {
     }
 
     #[test]
-    fn evaluate_live_rejects_fixture_parameter() -> crate::Result<()> {
-        let mut canopy = test_factory().build()?;
-        let outcome = evaluate_live(
-            &mut canopy,
-            &ScriptEvalRequest {
-                fixture: Some("seeded".to_string()),
-                ..ScriptEvalRequest::new("return script_target.get()")
-            },
-            &LiveContext::new(crate::AppMetadata::test()),
-        );
-
-        assert!(!outcome.success);
-        assert_eq!(outcome.state, ScriptTaskState::Failed);
-        assert_eq!(
-            outcome.error.as_ref().map(|error| error.error_type),
-            Some(ScriptErrorType::Invalid)
-        );
+    fn live_requests_reject_the_fixture_parameter() -> crate::Result<()> {
+        let canopy = test_factory().build()?;
+        let metadata = LiveContext::new(crate::AppMetadata::test()).metadata(&canopy)?;
+        let request = ScriptEvalRequest {
+            fixture: Some("seeded".to_string()),
+            ..ScriptEvalRequest::new("return script_target.get()")
+        };
+        assert!(validate_live_request(&request, &metadata).is_err());
         Ok(())
     }
 
     #[test]
-    fn evaluate_live_observes_applied_fixture() -> crate::Result<()> {
+    fn live_evaluation_observes_an_applied_fixture() -> crate::Result<()> {
         let mut canopy = test_factory().build()?;
         canopy.apply_fixture("seeded")?;
-        let outcome = evaluate_live(
-            &mut canopy,
-            &ScriptEvalRequest::new("return script_target.get()".to_string()),
-            &LiveContext::new(crate::AppMetadata::test()),
-        );
+        let completion = canopy.eval(EvalRequest::new("return script_target.get()"))?;
+        let outcome = outcome_from(completion, ScriptTiming::default());
 
         assert!(outcome.success);
         assert_eq!(outcome.state, ScriptTaskState::Completed);

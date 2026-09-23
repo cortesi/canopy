@@ -12,9 +12,13 @@ use std::{
 use ruau::{filesystem::DirectoryMountsError, source::SourceProvider};
 use serde::{Deserialize, Serialize};
 
-use super::{Canopy, EvalRequest};
+use super::Canopy;
+#[cfg(any(test, feature = "testing"))]
+use super::EvalRequest;
+#[cfg(any(test, feature = "testing"))]
+use crate::commands::ArgValue;
 use crate::{
-    NodeId, commands,
+    NodeId,
     core::{
         fixture::{Fixture, FixtureInfo},
         inputmap,
@@ -236,18 +240,6 @@ pub struct ScriptJournalBaseline {
     assertions: usize,
 }
 
-impl ScriptJournalBaseline {
-    /// Return the baseline of a top-level evaluation that started at
-    /// `started`.
-    pub(super) fn top_level(started: Instant) -> Self {
-        Self {
-            started,
-            logs: 0,
-            assertions: 0,
-        }
-    }
-}
-
 /// Data needed to run a default-bindings script after dropping the Canopy
 /// borrow.
 pub struct DefaultBindingsRun {
@@ -343,13 +335,9 @@ impl Canopy {
     /// Evaluate a Luau source string at the root and return its value.
     ///
     /// The synchronous caller restrictions of [`Self::eval`] apply.
-    pub fn eval_script(&mut self, source: &str) -> Result<commands::ArgValue> {
-        let outcome = self.eval(EvalRequest {
-            source: source.to_owned(),
-            timeout: None,
-            origin: self.root_id(),
-        })?;
-        outcome.into_result()
+    #[cfg(any(test, feature = "testing"))]
+    pub fn eval_script(&mut self, source: &str) -> Result<ArgValue> {
+        self.eval(EvalRequest::new(source))?.into_result()
     }
 
     /// Run app, user, and project startup scripts once, during the first
@@ -411,7 +399,7 @@ impl Canopy {
         let baseline = self.begin_script_journal();
         let host = self.script.host.clone();
         let result = host
-            .execute(self, self.core.root_id(), script_id, None)
+            .execute(self, self.core.root_id(), script_id)
             .map(|_| ());
         self.record_script_journal(origin, source, baseline, &result);
         if result.is_ok() {
@@ -503,14 +491,16 @@ impl Canopy {
         self.script.host.check_script(source_name, source)
     }
 
-    /// Drain and return log lines recorded by the most recent script
-    /// evaluation.
+    /// Drain and return log lines recorded outside a top-level evaluation,
+    /// such as by binding callbacks.
+    #[cfg(any(test, feature = "testing"))]
     pub fn take_script_logs(&mut self) -> Vec<String> {
         self.script.host.take_logs()
     }
 
-    /// Drain and return assertion outcomes from the most recent script
+    /// Drain and return assertion outcomes recorded outside a top-level
     /// evaluation.
+    #[cfg(any(test, feature = "testing"))]
     pub fn take_script_assertions(&mut self) -> Vec<script::ScriptAssertion> {
         self.script.host.take_assertions()
     }
@@ -547,7 +537,7 @@ impl Canopy {
                 None => self.script.host.compile(&source)?,
             };
             let host = self.script.host.clone();
-            host.execute(self, self.core.root_id(), script_id, None)
+            host.execute(self, self.core.root_id(), script_id)
                 .map(|_| ())
         })();
         self.record_script_journal(
@@ -742,6 +732,41 @@ impl Canopy {
         let logs = logs.split_off(baseline.logs.min(logs.len()));
         let mut assertions = self.script.host.assertions();
         let assertions = assertions.split_off(baseline.assertions.min(assertions.len()));
+        self.push_journal_entry(origin, source, result, logs, assertions, duration_ms);
+    }
+
+    /// Append a top-level evaluation to the journal, with the output its own
+    /// invocation collected.
+    pub(super) fn record_eval_journal<T>(
+        &mut self,
+        source: &str,
+        started: Instant,
+        result: &Result<T>,
+        logs: &[String],
+        assertions: &[script::ScriptAssertion],
+    ) {
+        let duration_ms = u64::try_from(self.now().saturating_duration_since(started).as_millis())
+            .unwrap_or(u64::MAX);
+        self.push_journal_entry(
+            ScriptOrigin::Eval,
+            source,
+            result,
+            logs.to_vec(),
+            assertions.to_vec(),
+            duration_ms,
+        );
+    }
+
+    /// Append one entry to the journal.
+    fn push_journal_entry<T>(
+        &mut self,
+        origin: ScriptOrigin,
+        source: &str,
+        result: &Result<T>,
+        logs: Vec<String>,
+        assertions: Vec<script::ScriptAssertion>,
+        duration_ms: u64,
+    ) {
         let id = self.journal.allocate_id();
         self.journal.push(ScriptJournalEntry {
             id,

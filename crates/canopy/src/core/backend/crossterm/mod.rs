@@ -207,7 +207,6 @@ mod tests {
         let request = EvalRequest {
             source: contracts::SCRIPT.into(),
             timeout: None,
-            origin: canopy.root_id(),
         };
         let mut outcome = canopy.turn(TurnInput::StartEval(request))?;
         if outcome.completed.is_empty() {

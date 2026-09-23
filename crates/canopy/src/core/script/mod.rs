@@ -14,8 +14,7 @@ use std::{
     rc::Rc,
     result::Result as StdResult,
     sync::{Arc, Mutex},
-    task::Poll,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use ruau::{
@@ -24,7 +23,7 @@ use ruau::{
         BlockingRuntime, BlockingRuntimeError, FunctionHandle, LifecycleError, RootHandle, Runtime,
     },
     source::{ModuleId, Source, SourceProvider},
-    surface::{CheckOptions, PrepareOptions, PreparedGraph, Surface, VmConfig},
+    surface::{CheckOptions, PrepareGraphError, PrepareOptions, PreparedGraph, Surface, VmConfig},
     typecheck::{DiagnosticRecord, ModuleDiagnosticRecord, Severity},
     vm::{
         Ambient, CallOptions, Cancel, Limits, RuntimeCapabilities, Scope, SinkQuota, StashedClosure,
@@ -585,6 +584,28 @@ fn check_source_with_surface(surface: &Surface, source: &Source) -> ScriptCheckR
     }
 }
 
+/// Most script output lines, or assertions, one buffer retains. Each call
+/// already has its own print quota; this bounds what accumulates across the
+/// binding callbacks of a long-running app, whose buffer nothing drains. The
+/// oldest half goes once it fills.
+const SCRIPT_OUTPUT_LIMIT: usize = 16_384;
+
+/// Append `item`, dropping the oldest half of `buffer` once it is full.
+fn push_bounded<T>(buffer: &mut Vec<T>, item: T) {
+    if buffer.len() >= SCRIPT_OUTPUT_LIMIT {
+        buffer.drain(..SCRIPT_OUTPUT_LIMIT / 2);
+    }
+    buffer.push(item);
+}
+
+/// Why compiling a source failed.
+enum CompileFailure<E> {
+    /// Graph preparation, including typechecking, failed.
+    Prepare(E),
+    /// Any other failure.
+    Other(error::Error),
+}
+
 /// Return the Luau-safe global name for a command owner.
 fn luau_global_owner_name(owner: &str) -> String {
     const KEYWORDS: &[&str] = &[
@@ -658,15 +679,15 @@ impl LuauHost {
 
     /// Append a log line to the current evaluation state.
     fn push_log(&self, message: String) {
-        self.state.borrow_mut().logs.push(message);
+        push_bounded(&mut self.state.borrow_mut().logs, message);
     }
 
     /// Append an assertion result to the current evaluation state.
     fn push_assertion(&self, passed: bool, message: String) {
-        self.state
-            .borrow_mut()
-            .assertions
-            .push(ScriptAssertion { passed, message });
+        push_bounded(
+            &mut self.state.borrow_mut().assertions,
+            ScriptAssertion { passed, message },
+        );
     }
 
     /// Drain deferred `on_start` hooks in registration order.
@@ -689,7 +710,8 @@ impl LuauHost {
         !self.state.borrow().on_start_hooks.is_empty()
     }
 
-    /// Take the logs collected during the most recent evaluation.
+    /// Take the logs collected outside a top-level evaluation.
+    #[cfg(any(test, feature = "testing"))]
     pub fn take_logs(&self) -> Vec<String> {
         mem::take(&mut self.state.borrow_mut().logs)
     }
@@ -699,7 +721,8 @@ impl LuauHost {
         self.state.borrow().logs.clone()
     }
 
-    /// Take the assertions collected during the most recent evaluation.
+    /// Take the assertions collected outside a top-level evaluation.
+    #[cfg(any(test, feature = "testing"))]
     pub fn take_assertions(&self) -> Vec<ScriptAssertion> {
         mem::take(&mut self.state.borrow_mut().assertions)
     }
@@ -819,31 +842,65 @@ impl LuauHost {
         self.compile_source(&Source::text(ModuleId::new(b"canopy".to_vec()), source))
     }
 
+    /// Compile an evaluation's source. A typecheck failure returns its
+    /// diagnostics beside the error, so a caller can report both without
+    /// checking the source a second time.
+    pub(crate) fn compile_eval(
+        &self,
+        source: &str,
+    ) -> StdResult<ScriptId, (error::Error, Vec<ScriptCheckDiagnostic>)> {
+        let source = Source::text(ModuleId::new(b"canopy".to_vec()), source);
+        self.compile_source_with(&source, &mut |error| {
+            (
+                prepare_graph_error_to_canopy(error),
+                prepare_graph_diagnostics(error),
+            )
+        })
+        .map_err(|error| match error {
+            CompileFailure::Prepare(failure) => failure,
+            CompileFailure::Other(error) => (error, Vec::new()),
+        })
+    }
+
     /// Compile a source while preserving its module identity and diagnostic
     /// metadata.
     pub(crate) fn compile_source(&self, source: &Source) -> Result<ScriptId> {
-        self.ensure_eval_idle()?;
-        let runtime_source = strict_named_source(source)?;
+        self.compile_source_with(source, &mut prepare_graph_error_to_canopy)
+            .map_err(|error| match error {
+                CompileFailure::Prepare(error) | CompileFailure::Other(error) => error,
+            })
+    }
+
+    /// Compile a source, mapping a graph preparation failure with `prepare`.
+    fn compile_source_with<E>(
+        &self,
+        source: &Source,
+        prepare: &mut dyn FnMut(&PrepareGraphError) -> E,
+    ) -> StdResult<ScriptId, CompileFailure<E>> {
+        self.ensure_eval_idle().map_err(CompileFailure::Other)?;
+        let runtime_source = strict_named_source(source).map_err(CompileFailure::Other)?;
         let prepared = if let Some(surface) = self.state.borrow().surface.clone() {
             Some(
                 surface
                     .prepare_graph_ready(runtime_source.clone())
-                    .map_err(|error| prepare_graph_error_to_canopy(&error))?,
+                    .map_err(|error| CompileFailure::Prepare(prepare(&error)))?,
             )
         } else {
             // Compiling before finalization proves the source is well formed;
             // the retained runtime recompiles it from the prepared
             // graph.
-            compile_chunk(runtime_source.as_str().expect("strict source is UTF-8"))?;
+            compile_chunk(runtime_source.as_str().expect("strict source is UTF-8"))
+                .map_err(CompileFailure::Other)?;
             None
         };
         let sid = self
             .state
             .borrow_mut()
             .scripts
-            .insert(runtime_source, prepared)?;
+            .insert(runtime_source, prepared)
+            .map_err(CompileFailure::Other)?;
         if self.is_finalized() {
-            self.load_script(sid)?;
+            self.load_script(sid).map_err(CompileFailure::Other)?;
         }
         Ok(sid)
     }
@@ -955,37 +1012,20 @@ impl LuauHost {
     }
 
     /// Execute a compiled script and return its value.
-    ///
-    /// A `timeout` bounds cooperative execution; `None` runs without one.
     pub fn execute(
         &self,
         canopy: &mut Canopy,
         node_id: impl Into<NodeId>,
         sid: ScriptId,
-        timeout: Option<Duration>,
     ) -> Result<ArgValue> {
         let node_id = node_id.into();
         let mut invocation = self.start_invocation(node_id, sid)?;
         if let Some(entry) = canopy.core.nodes.get(node_id) {
             invocation.set_origin_incarnation(entry.incarnation);
         }
-        invocation.set_reporting_timeout(timeout);
-        let started = Instant::now();
         let mut gas = SCRIPT_GAS_LIMIT;
         let future = poll_fn(|cx| {
-            let remaining = timeout.map(|timeout| timeout.saturating_sub(started.elapsed()));
-            if remaining == Some(Duration::ZERO) {
-                return Poll::Ready(self.abort_invocation(&mut invocation).and_then(|()| {
-                    Err(error::Error::ScriptTimeout {
-                        timeout_ms: timeout
-                            .unwrap_or_default()
-                            .as_millis()
-                            .try_into()
-                            .unwrap_or(u64::MAX),
-                    })
-                }));
-            }
-            let step = self.poll_invocation(canopy, &mut invocation, cx, gas, remaining);
+            let step = self.poll_invocation(canopy, &mut invocation, cx, gas, None);
             gas = gas.saturating_sub(step.gas_spent);
             step.poll
         });

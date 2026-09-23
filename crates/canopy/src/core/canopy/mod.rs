@@ -28,7 +28,7 @@ mod rendering_tests;
 mod routing;
 pub use routing::{RouteTraceEntry, RouteTraceKind};
 mod scripting;
-use scripting::{ScriptJournal, ScriptJournalBaseline, ScriptState};
+use scripting::{ScriptJournal, ScriptState};
 pub use scripting::{ScriptJournalEntry, ScriptOrigin};
 mod setup;
 pub use setup::{Register, Setup};

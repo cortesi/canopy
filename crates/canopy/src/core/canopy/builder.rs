@@ -165,7 +165,7 @@ impl Canopy {
         let result = (|| {
             let host = self.script.host.clone();
             let script = host.compile_source(&source)?;
-            host.execute(self, self.root_id(), script, None).map(|_| ())
+            host.execute(self, self.root_id(), script).map(|_| ())
         })();
         self.record_script_journal(
             ScriptOrigin::Bindings(name.to_owned()),

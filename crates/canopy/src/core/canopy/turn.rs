@@ -25,7 +25,6 @@ use tokio::{task::yield_now, time::sleep};
 
 use super::{AdapterEvent, Canopy};
 use crate::{
-    NodeId,
     commands::ArgValue,
     error::{Error, Result},
     input::Event,
@@ -65,16 +64,30 @@ pub(super) enum AutomationMessage {
     Eval(EvalId, EvalRequest, oneshot::Sender<EvalOutcome>),
 }
 
-/// One top-level script request.
+/// One top-level script request. An evaluation's origin is always the root.
 #[derive(Clone, Debug)]
 pub struct EvalRequest {
     /// Owned Luau source.
     pub source: String,
     /// Absolute execution budget, including parked time.
     pub timeout: Option<Duration>,
-    /// Node the evaluation dispatches from when a call names no target,
-    /// retained across invocation segments.
-    pub origin: NodeId,
+}
+
+impl EvalRequest {
+    /// Request an evaluation of `source` with no timeout.
+    pub fn new(source: impl Into<String>) -> Self {
+        Self {
+            source: source.into(),
+            timeout: None,
+        }
+    }
+
+    /// Bound the evaluation, including parked time, by `timeout`.
+    #[must_use]
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+        self
+    }
 }
 /// One runtime input.
 pub enum TurnInput {
@@ -104,6 +117,9 @@ pub struct EvalOutcome {
     pub logs: Vec<String>,
     /// Assertions isolated to this evaluation.
     pub assertions: Vec<script::ScriptAssertion>,
+    /// Typecheck diagnostics for the source. A source that failed to
+    /// typecheck never ran, and its result is the parse error.
+    pub diagnostics: Vec<script::ScriptCheckDiagnostic>,
 }
 
 impl EvalOutcome {
@@ -280,15 +296,19 @@ impl Driver {
 }
 impl Canopy {
     /// Admit an evaluation before changing retained runtime state.
-    fn start_eval(&mut self, id: EvalId, request: EvalRequest) -> Result<()> {
+    ///
+    /// A busy runtime is an error. Any other failure to start completes the
+    /// evaluation at once, and the returned outcome reports it with the
+    /// source's diagnostics.
+    fn start_eval(&mut self, id: EvalId, request: EvalRequest) -> Result<Option<EvalOutcome>> {
         if self.driver.active.is_some() || self.script.host.is_eval_active() {
             return Err(busy());
         }
-        let baseline = self.begin_script_journal();
-        self.script.host.set_diagnostics(Vec::new(), Vec::new());
+        let started = self.now();
+        let origin = self.core.root_id();
+        let mut diagnostics = Vec::new();
         let prepared = (|| {
             self.prepare_frame(false)?;
-            self.core.validate_attached_node(request.origin)?;
             let deadline = request
                 .timeout
                 .map(|d| {
@@ -297,23 +317,31 @@ impl Canopy {
                         .ok_or_else(|| Error::Invalid("evaluation deadline overflow".into()))
                 })
                 .transpose()?;
-            let script = self.script.host.compile(&request.source)?;
-            let mut invocation = self.script.host.start_invocation(request.origin, script)?;
+            let script =
+                self.script
+                    .host
+                    .compile_eval(&request.source)
+                    .map_err(|(error, found)| {
+                        diagnostics = found;
+                        error
+                    })?;
+            let mut invocation = self.script.host.start_invocation(origin, script)?;
             invocation.set_reporting_timeout(request.timeout);
-            invocation.set_origin_incarnation(self.core.nodes[request.origin].incarnation);
+            invocation.set_origin_incarnation(self.core.nodes[origin].incarnation);
             Ok((deadline, invocation))
         })();
         let (deadline, invocation) = match prepared {
             Ok(prepared) => prepared,
             Err(error) => {
                 let result: Result<()> = Err(error);
-                self.record_script_journal(
-                    super::ScriptOrigin::Eval,
-                    &request.source,
-                    baseline,
-                    &result,
-                );
-                return result;
+                self.record_eval_journal(&request.source, started, &result, &[], &[]);
+                return Ok(Some(EvalOutcome {
+                    id,
+                    result: result.map(|()| ArgValue::Null),
+                    logs: Vec::new(),
+                    assertions: Vec::new(),
+                    diagnostics,
+                }));
             }
         };
         self.driver.active = Some(ActiveEval {
@@ -322,10 +350,10 @@ impl Canopy {
             deadline,
             gas: script::SCRIPT_GAS_LIMIT,
             invocation,
-            started: self.now(),
+            started,
         });
         self.driver.wake.ready.store(true, Ordering::Release);
-        Ok(())
+        Ok(None)
     }
     /// Service one typed automation request without starting a nested turn.
     pub(super) fn service_message(&mut self, message: AutomationMessage) {
@@ -333,8 +361,11 @@ impl Canopy {
             AutomationMessage::Callback(callback) => callback(self),
             AutomationMessage::Eval(_, _, sender) if sender.is_canceled() => {}
             AutomationMessage::Eval(id, request, sender) => match self.start_eval(id, request) {
-                Ok(()) => {
+                Ok(None) => {
                     self.driver.tickets.insert(id, sender);
+                }
+                Ok(Some(outcome)) => {
+                    let _closed = sender.send(outcome);
                 }
                 Err(error) => {
                     let _closed = sender.send(EvalOutcome {
@@ -342,6 +373,7 @@ impl Canopy {
                         result: Err(error),
                         logs: Vec::new(),
                         assertions: Vec::new(),
+                        diagnostics: Vec::new(),
                     });
                 }
             },
@@ -415,7 +447,9 @@ impl Canopy {
             }
             TurnInput::StartEval(request) => {
                 let id = EvalId::next();
-                self.start_eval(id, request)?;
+                if let Some(failed) = self.start_eval(id, request)? {
+                    outcome.completed.push(failed);
+                }
                 outcome.started = Some(id);
             }
             TurnInput::CancelEval(id) => {
@@ -488,6 +522,7 @@ impl Canopy {
                 result,
                 logs,
                 assertions,
+                diagnostics: Vec::new(),
             };
             if let Some(sender) = self.driver.tickets.remove(&active.id) {
                 let _closed = sender.send(completion);
@@ -595,14 +630,12 @@ impl Canopy {
         self.driver.publication.clear_waiters();
         self.driver.wake.ready.store(false, Ordering::Release);
         let (logs, assertions) = active.invocation.take_diagnostics();
-        self.script
-            .host
-            .set_diagnostics(logs.clone(), assertions.clone());
-        self.record_script_journal(
-            super::ScriptOrigin::Eval,
+        self.record_eval_journal(
             &active.request.source,
-            super::ScriptJournalBaseline::top_level(active.started),
+            active.started,
             result,
+            &logs,
+            &assertions,
         );
         (logs, assertions)
     }
@@ -740,6 +773,7 @@ impl Drop for Canopy {
                 )),
                 logs: Vec::new(),
                 assertions: Vec::new(),
+                diagnostics: Vec::new(),
             });
         }
     }

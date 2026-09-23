@@ -67,7 +67,7 @@ fn closure_key(index: u8) -> char {
 
 fn execute_registry_script(canopy: &mut Canopy, host: &LuauHost, source: &str) -> Result<()> {
     let script = host.compile(source)?;
-    host.execute(canopy, canopy.core.root_id(), script, None)
+    host.execute(canopy, canopy.core.root_id(), script)
         .map(|_| ())
 }
 
@@ -534,7 +534,7 @@ fn execute_with_many_waits_survives_tokio_coop_budget() -> Result<()> {
                     "for _ = 1, 300 do canopy.wait_for(function() return true end, 50) end return 42",
                 )?;
                 assert_eq!(
-                    host.execute(c, c.core.root_id(), script, Some(Duration::from_secs(2)))?,
+                    host.execute(c, c.core.root_id(), script)?,
                     ArgValue::Int(42)
                 );
                 Ok(())
@@ -547,7 +547,7 @@ fn tprint_output_lands_in_script_logs() -> Result<()> {
     run_ttree(|c, _, _| {
         let scr = c.script.host.compile(r#"print("plain print", 42)"#)?;
         let host = c.script.host.clone();
-        host.execute(c, c.core.root_id(), scr, None)?;
+        host.execute(c, c.core.root_id(), scr)?;
         let logs = host.take_logs();
         assert!(
             logs.iter().any(|line| line.contains("plain print")),
@@ -562,7 +562,7 @@ fn print_quota_and_sequential_diagnostics_are_per_invocation() -> Result<()> {
     run_ttree(|c, _, _| {
         let host = c.script.host.clone();
         let noisy = host.compile("for i = 1, 5000 do print(i) end")?;
-        host.execute(c, c.core.root_id(), noisy, None)?;
+        host.execute(c, c.core.root_id(), noisy)?;
         let logs = host.take_logs();
         let marker = String::from_utf8_lossy(SinkQuota::TRUNCATION_MARKER)
             .trim_end()
@@ -571,7 +571,7 @@ fn print_quota_and_sequential_diagnostics_are_per_invocation() -> Result<()> {
         assert!(logs.len() <= 4097, "quota should bound captured calls");
 
         let quiet = host.compile("return true")?;
-        host.execute(c, c.core.root_id(), quiet, None)?;
+        host.execute(c, c.core.root_id(), quiet)?;
         assert!(host.take_logs().is_empty());
         Ok(())
     })
@@ -635,24 +635,24 @@ fn binding_replacement_releases_old_and_failed_callbacks() -> Result<()> {
         let install = host.compile(
             r#"canopy.bind("a", { path = "", description = "First binding" }, function() local value = true end)"#,
         )?;
-        host.execute(c, c.core.root_id(), install, None)?;
+        host.execute(c, c.core.root_id(), install)?;
         assert_eq!(host.state.borrow().closures.functions.len(), 1);
 
         let replace = host.compile(
             r#"canopy.bind("a", { path = "", description = "Second binding" }, function() local value = false end)"#,
         )?;
-        host.execute(c, c.core.root_id(), replace, None)?;
+        host.execute(c, c.core.root_id(), replace)?;
         assert_eq!(host.state.borrow().closures.functions.len(), 1);
 
         let invalid =
             host.compile(r#"canopy.bind("a", { path = "invalid-name", description = "Invalid path" }, function() end)"#)?;
-        host.execute(c, c.core.root_id(), invalid, None)
+        host.execute(c, c.core.root_id(), invalid)
             .expect_err("invalid replacement path should fail");
         assert_eq!(host.state.borrow().closures.functions.len(), 1);
 
         let exhausted = host.compile("canopy.on_start(function() end)")?;
         host.state.borrow_mut().closures.next_function_id = u64::MAX;
-        host.execute(c, c.core.root_id(), exhausted, None)
+        host.execute(c, c.core.root_id(), exhausted)
             .expect_err("closure identifier exhaustion should fail");
         assert_eq!(host.state.borrow().closures.functions.len(), 1);
         Ok(())
@@ -704,7 +704,7 @@ fn tscript_bindings_carry_declaration_sites() -> Result<()> {
             .host
             .compile("canopy.bind(\"z\", { description = \"Test binding\" }, function() end)")?;
         let host = c.script.host.clone();
-        host.execute(c, c.core.root_id(), scr, None)?;
+        host.execute(c, c.core.root_id(), scr)?;
         let check = c.script.host.compile(
             r#"
             for _, binding in canopy.bindings() do
@@ -721,7 +721,7 @@ fn tscript_bindings_carry_declaration_sites() -> Result<()> {
             canopy.assert(false, "binding for z not found")
             "#,
         )?;
-        host.execute(c, c.core.root_id(), check, None)?;
+        host.execute(c, c.core.root_id(), check)?;
         Ok(())
     })
 }
@@ -731,7 +731,7 @@ fn texecute() -> Result<()> {
     run_ttree(|c, _, tree| {
         let scr = c.script.host.compile(r#"bb_la.c_leaf()"#)?;
         let host = c.script.host.clone();
-        host.execute(c, tree.b_a, scr, None)?;
+        host.execute(c, tree.b_a, scr)?;
         assert_eq!(get_state().path, ["bb_la.c_leaf()"]);
         Ok(())
     })?;
@@ -743,7 +743,7 @@ fn truntime_error_returns_script_error() -> Result<()> {
     run_ttree(|c, _, tree| {
         let scr = c.script.host.compile(r#"canopy.assert(false, "boom")"#)?;
         let host = c.script.host.clone();
-        let err = host.execute(c, tree.b_a, scr, None);
+        let err = host.execute(c, tree.b_a, scr);
         assert!(matches!(
             err,
             Err(error::Error::ScriptStructured {
@@ -760,7 +760,7 @@ fn script_context_stack_pops_after_runtime_error() -> Result<()> {
     run_ttree(|c, _, tree| {
         let scr = c.script.host.compile(r#"error("boom")"#)?;
         let host = c.script.host.clone();
-        let err = host.execute(c, tree.a, scr, None);
+        let err = host.execute(c, tree.a, scr);
         assert!(matches!(
             err,
             Err(error::Error::ScriptStructured {

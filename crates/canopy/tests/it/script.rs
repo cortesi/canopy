@@ -18,7 +18,7 @@ mod tests {
         layout::Layout,
         render::Render,
         runtime::TurnInput,
-        script::{ScriptOrigin, ScriptTrust},
+        script::{EvalRequest, ScriptOrigin, ScriptTrust},
         testing::{backend::TestRender, harness::Harness},
     };
     use serde::{Deserialize, Serialize};
@@ -1380,13 +1380,16 @@ mod tests {
             .size(10, 1)
             .build()?;
 
-        let value = harness
-            .canopy
-            .eval_script(r#"canopy.log("hello"); canopy.assert(true, "ok"); return 7"#)?;
-        assert_eq!(value, ArgValue::Int(7));
-        assert_eq!(harness.canopy.take_script_logs(), vec!["hello"]);
-
-        let assertions = harness.canopy.take_script_assertions();
+        let outcome = harness.canopy.eval(EvalRequest::new(
+            r#"canopy.log("hello"); canopy.assert(true, "ok"); return 7"#,
+        ))?;
+        assert_eq!(outcome.logs, vec!["hello"]);
+        let assertions = outcome.assertions.clone();
+        assert_eq!(outcome.into_result()?, ArgValue::Int(7));
+        assert!(
+            harness.canopy.take_script_logs().is_empty(),
+            "evaluation output stays on its outcome"
+        );
         assert_eq!(assertions.len(), 1);
         assert!(assertions[0].passed);
         assert_eq!(assertions[0].message, "ok");

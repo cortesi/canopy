@@ -2268,7 +2268,7 @@ Each stage also updates the docs it touches.
     `canopy.target`.
   - Migrate the smoke scripts in both repositories, including fh's 2
     `screen_cells`, 5 `node_region`, and 1 `fixtures()` sites.
-- [ ] C27: `EvalRequest::new`, one log channel, one typecheck, and a
+- [x] C27: `EvalRequest::new`, one log channel, one typecheck, and a
   `testing`-gated `eval_script`. Delete `evaluate_live` and the `execute`
   timeout parameter.
 - [ ] C28:

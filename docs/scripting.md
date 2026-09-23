@@ -55,10 +55,13 @@ automation can progress while an evaluation waits. Resumed segments retain their
 original script origin. Focus-targeted calls resolve current focus when invoked.
 
 Only one top-level evaluation may run at a time. Another evaluation or module
-reload fails with `ScriptBusy`. Live callers submit an `EvalRequest`
-through `AutomationHandle::submit_eval` and await the returned `EvalTicket` outside
-the UI thread. Its completion contains the value or error, logs, and assertions.
-Completion arrives through the original ticket after runtime preparation.
+reload fails with `ScriptBusy`. Live callers submit an `EvalRequest::new(source)`,
+optionally with a `timeout`, through `AutomationHandle::submit_eval` and await
+the returned `EvalTicket` outside the UI thread. An evaluation always starts at
+the root. Its completion, an `EvalOutcome`, is the one channel for the value or
+error, logs, assertions, and typecheck diagnostics: a source that fails to
+typecheck completes at once with its diagnostics and never runs. Completion
+arrives through the original ticket after runtime preparation.
 Dropping its completion receiver cancels queued or active work. Active work wakes
 the UI driver and records cancellation on the next turn.
 

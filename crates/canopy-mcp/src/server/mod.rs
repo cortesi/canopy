@@ -964,11 +964,7 @@ mod tests {
             !worker.is_finished(),
             "MCP must await the pending runtime ticket"
         );
-        let busy = automation.submit_eval(EvalRequest {
-            source: "return 99".to_string(),
-            timeout: None,
-            origin: canopy.root_id(),
-        })?;
+        let busy = automation.submit_eval(EvalRequest::new("return 99"))?;
         let (mutation_tx, mutation_rx) = mpsc::channel();
         automation.submit(Box::new(move |canopy| {
             let result = canopy.with_root_context(|ctx| {

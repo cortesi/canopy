@@ -12,7 +12,9 @@ use ruau::{
     },
 };
 
-use super::{ScriptCheckResult, commands, error, module_diagnostic_to_script};
+use super::{
+    ScriptCheckDiagnostic, ScriptCheckResult, commands, error, module_diagnostic_to_script,
+};
 
 /// Convert a Ruau compile error to Canopy's parse error shape.
 pub(super) fn compile_error_to_canopy(err: &CompileError) -> error::Error {
@@ -25,6 +27,20 @@ pub(super) fn compile_error_to_canopy(err: &CompileError) -> error::Error {
 }
 
 /// Convert preparation failures into Canopy's existing public error categories.
+/// Return the structured diagnostics a graph preparation failure carries.
+pub(super) fn prepare_graph_diagnostics(error: &PrepareGraphError) -> Vec<ScriptCheckDiagnostic> {
+    error
+        .diagnostics()
+        .map(|diagnostics| {
+            diagnostics
+                .records()
+                .map(module_diagnostic_to_script)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Convert a graph preparation failure into the canopy error it reports.
 pub(super) fn prepare_graph_error_to_canopy(error: &PrepareGraphError) -> error::Error {
     if let Some(diagnostics) = error.diagnostics()
         && diagnostics.has_errors()

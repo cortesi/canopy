@@ -78,7 +78,6 @@ fn completed_script_does_not_leave_a_ready_runtime_wake() -> Result<()> {
     let mut outcome = canopy.turn(TurnInput::StartEval(EvalRequest {
         source: "canopy.wait_for(function() return true end); return 42".into(),
         timeout: None,
-        origin: canopy.root_id(),
     }))?;
     for _ in 0..20 {
         if !outcome.completed.is_empty() {
@@ -142,7 +141,6 @@ fn cancellable_headless_waits_and_reuse_work_in_supported_contexts() -> Result<(
         let request = |source: &str| EvalRequest {
             source: source.into(),
             timeout: Some(Duration::from_secs(2)),
-            origin: canopy.root_id(),
         };
         let ready =
             request("for _ = 1, 300 do canopy.wait_for(function() return true end) end return 42");
@@ -176,13 +174,11 @@ fn cancellable_headless_waits_and_reuse_work_in_supported_contexts() -> Result<(
                     .expect("cancellation recorded")
                     .contains("cancel")
             );
-            let root = canopy.root_id();
             assert_eq!(
                 canopy
                     .eval(EvalRequest {
                         source: "return 7".into(),
                         timeout: None,
-                        origin: root,
                     })?
                     .into_result()?,
                 ArgValue::Int(7)
@@ -241,7 +237,6 @@ fn dropping_live_ticket_cancels_before_admission_and_while_parked() -> Result<()
         let ticket = canopy.automation_handle().submit_eval(EvalRequest {
             source: source.into(),
             timeout: None,
-            origin: canopy.root_id(),
         })?;
         if admitted {
             canopy.turn(TurnInput::Wake)?;

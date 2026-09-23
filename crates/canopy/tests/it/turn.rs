@@ -101,21 +101,20 @@ mod tests {
         Ok((canopy, widget, clock))
     }
 
-    fn waiting_request(canopy: &Canopy, timeout: Option<Duration>) -> EvalRequest {
+    fn waiting_request(timeout: Option<Duration>) -> EvalRequest {
         EvalRequest {
             source: "return canopy.wait_for(function() \
                      return canopy.screen_text():find(\"ready\", 1, true) ~= nil \
                      end, 1000)"
                 .into(),
             timeout,
-            origin: canopy.root_id(),
         }
     }
 
     #[test]
     fn parked_screen_wait_completes_after_native_publication() -> Result<()> {
         let (mut canopy, widget, _clock) = eval_app()?;
-        let started = canopy.turn(TurnInput::StartEval(waiting_request(&canopy, None)))?;
+        let started = canopy.turn(TurnInput::StartEval(waiting_request(None)))?;
         let id = started.started.expect("evaluation accepted");
         assert!(started.completed.is_empty());
         let parked = canopy.turn(TurnInput::Wake)?;
@@ -144,12 +143,11 @@ mod tests {
     #[test]
     fn active_evaluation_rejects_eval_and_reload_then_cancel_releases_admission() -> Result<()> {
         let (mut canopy, _widget, _clock) = eval_app()?;
-        let started = canopy.turn(TurnInput::StartEval(waiting_request(&canopy, None)))?;
+        let started = canopy.turn(TurnInput::StartEval(waiting_request(None)))?;
         let id = started.started.unwrap();
         let second = canopy.turn(TurnInput::StartEval(EvalRequest {
             source: "return 7".into(),
             timeout: None,
-            origin: canopy.root_id(),
         }));
         assert!(matches!(second, Err(Error::ScriptBusy(_))));
         assert!(matches!(
@@ -168,7 +166,6 @@ mod tests {
         let restarted = canopy.turn(TurnInput::StartEval(EvalRequest {
             source: "return 7".into(),
             timeout: None,
-            origin: canopy.root_id(),
         }))?;
         assert_ne!(restarted.started, Some(id));
         assert_eq!(restarted.completed.len(), 1);
@@ -183,10 +180,7 @@ mod tests {
     fn manual_clock_expires_parked_evaluation_at_its_deadline() -> Result<()> {
         let (mut canopy, _widget, clock) = eval_app()?;
         let timeout = Duration::from_millis(10);
-        let started = canopy.turn(TurnInput::StartEval(waiting_request(
-            &canopy,
-            Some(timeout),
-        )))?;
+        let started = canopy.turn(TurnInput::StartEval(waiting_request(Some(timeout))))?;
         let id = started.started.unwrap();
         assert!(started.completed.is_empty());
         clock.advance(Duration::from_millis(9))?;

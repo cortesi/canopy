@@ -2755,6 +2755,9 @@ pub mod canopy {
             pub logs: Vec<String>,
             /// Assertions isolated to this evaluation.
             pub assertions: Vec<script::ScriptAssertion>,
+            /// Typecheck diagnostics for the source. A source that failed to
+            /// typecheck never ran, and its result is the parse error.
+            pub diagnostics: Vec<script::ScriptCheckDiagnostic>,
         }
 
         /// Base `canopy` scripting API declarations and native registration.
@@ -2764,9 +2767,6 @@ pub mod canopy {
             pub source: String,
             /// Absolute execution budget, including parked time.
             pub timeout: Option<std::time::Duration>,
-            /// Node the evaluation dispatches from when a call names no target,
-            /// retained across invocation segments.
-            pub origin: crate::NodeId,
         }
 
         /// Base `canopy` scripting API declarations and native registration.
@@ -2890,6 +2890,15 @@ pub mod canopy {
         impl EvalOutcome {
             /// Return the evaluation result.
             pub fn into_result(self) -> Result<ArgValue> {}
+        }
+
+        impl EvalRequest {
+            #[must_use]
+            /// Bound the evaluation, including parked time, by `timeout`.
+            pub fn timeout(self, timeout: Duration) -> Self {}
+
+            /// Request an evaluation of `source` with no timeout.
+            pub fn new(source: impl Into<String>) -> Self {}
         }
 
         impl Fixture {
@@ -4493,19 +4502,6 @@ pub mod canopy {
 
         /// Apply a named fixture to the current app instance.
         pub fn apply_fixture(&mut self, name: &str) -> Result<()> {}
-
-        /// Drain and return assertion outcomes from the most recent script
-        /// evaluation.
-        pub fn take_script_assertions(&mut self) -> Vec<script::ScriptAssertion> {}
-
-        /// Drain and return log lines recorded by the most recent script
-        /// evaluation.
-        pub fn take_script_logs(&mut self) -> Vec<String> {}
-
-        /// Evaluate a Luau source string at the root and return its value.
-        ///
-        /// The synchronous caller restrictions of [`Self::eval`] apply.
-        pub fn eval_script(&mut self, source: &str) -> Result<commands::ArgValue> {}
 
         /// Return registered fixture metadata in stable name order.
         pub fn fixture_infos(&self) -> Vec<FixtureInfo> {}

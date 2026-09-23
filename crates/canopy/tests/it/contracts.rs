@@ -11,11 +11,7 @@ mod tests {
         let mut other = contracts::app()?;
         other.turn(TurnInput::Prepare)?;
         let before = other.snapshot().unwrap();
-        let request = EvalRequest {
-            source: contracts::SCRIPT.into(),
-            timeout: None,
-            origin: app.root_id(),
-        };
+        let request = EvalRequest::new(contracts::SCRIPT);
         let mut outcome = app.turn(TurnInput::StartEval(request))?;
         if outcome.completed.is_empty() {
             outcome = app.turn(TurnInput::Wake)?;
