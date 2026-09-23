@@ -1,7 +1,7 @@
 #![deny(unsafe_code)]
 //! Todo application used as Canopy's end-to-end example and smoke-test target.
 
-use std::{collections::HashMap, fmt::Display, path::Path};
+use std::{collections::HashMap, fmt::Display};
 
 use anyhow::Result as AnyResult;
 use canopy::{
@@ -18,6 +18,7 @@ use canopy::{
     style::{StyleMap, default as palette},
     tree::ChildSlot,
 };
+use canopy_mcp::{ConfigHome, UserConfig};
 use canopy_widgets::{
     Center, Frame, Input, KeyHint, List, Root, Selectable, StatusBar, Text, ValueExposure,
 };
@@ -413,50 +414,9 @@ impl Register for Todo {
     }
 }
 
-/// Default Luau bindings for the todo app.
-pub(crate) const DEFAULT_BINDINGS: &str = r#"
-canopy.bind("ctrl-g", {
-    path = "/root/**/",
-    phase = "before_widget",
-    tier = "global",
-    description = "Show key bindings",
-}, command.root.toggle_help())
-canopy.keymap({
-    { key = "q", description = "Quit", action = command.root.quit() },
-    { key = "ctrl-x", description = "Clear text", action = "canopy.clear" },
-    { key = "d", description = "Delete item", action = command.todo.delete_item() },
-    { key = "a", description = "Add item", action = command.todo.enter_item() },
-    { key = "g", description = "First item", action = command.todo.select_first() },
-    { key = { "j", "Down" }, description = "Next item", action = command.todo.select_by(1) },
-    { key = { "k", "Up" }, description = "Previous item", action = command.todo.select_by(-1) },
-    { key = { "Space", "PageDown" }, description = "Page down", action = command.todo.page(1) },
-    { key = "PageUp", description = "Page up", action = command.todo.page(-1) },
-    {
-        mouse = "ScrollUp",
-        description = "Previous item",
-        action = function()
-            todo.select_by(-1)
-        end,
-    },
-    {
-        mouse = "ScrollDown",
-        description = "Next item",
-        action = function()
-            todo.select_by(1)
-        end,
-    },
-})
-
-canopy.keymap({
-    path = "input",
-    phase = "before_widget",
-    { key = "Left", description = "Cursor left", action = command.input.left() },
-    { key = "Right", description = "Cursor right", action = command.input.right() },
-    { key = "Backspace", description = "Delete char", action = command.input.backspace() },
-    { key = "Enter", description = "Confirm new item", action = command.todo.accept_add() },
-    { key = "Escape", description = "Cancel add", action = command.todo.cancel_add() },
-})
-"#;
+/// Default configuration: the startup script that runs when the user has no
+/// `init.luau`.
+pub const DEFAULT_CONFIG: &str = include_str!("default_config.luau");
 
 /// Install the todo application's style rules.
 pub(crate) fn style(style: &mut StyleMap) {
@@ -522,27 +482,22 @@ fn register_fixtures(setup: &mut Setup) -> Result<()> {
     Ok(())
 }
 
-/// Queue API registration and binding sources without constructing a database.
-fn app_builder(config: Option<&Path>) -> CanopyBuilder {
-    let builder = CanopyBuilder::new()
+/// Queue API registration and configuration without constructing a database.
+fn app_builder(home: Option<&ConfigHome>) -> CanopyBuilder {
+    CanopyBuilder::new()
         .configure(|setup| {
             Root::register(setup)?;
             Todo::register(setup)?;
             style(setup.style_mut());
             register_fixtures(setup)
         })
-        .script("todo-defaults", DEFAULT_BINDINGS);
-    if let Some(config) = config {
-        builder.script_file(config.to_owned())
-    } else {
-        builder
-    }
+        .user_config(home, DEFAULT_CONFIG)
 }
 
-/// Create a todo application with an explicit database and optional user
-/// config.
-pub fn create_app(store: store::Store, config: Option<&Path>) -> AnyResult<Canopy> {
-    Ok(app_builder(config)
+/// Create a todo application with an explicit database. A `home` holding
+/// `init.luau` replaces [`DEFAULT_CONFIG`].
+pub fn create_app(store: store::Store, home: Option<&ConfigHome>) -> AnyResult<Canopy> {
+    Ok(app_builder(home)
         .assemble(move |cnpy| {
             let todo = Todo::new(store);
             Root::new().install(cnpy, todo)?;

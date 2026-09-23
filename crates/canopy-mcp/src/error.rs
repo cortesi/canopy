@@ -30,6 +30,9 @@ pub enum Error {
     /// The UDS listener stopped before reporting startup readiness.
     #[error("UDS listener failed to report readiness")]
     ListenerReadinessClosed,
+    /// The user configuration home could not be resolved.
+    #[error("configuration: {0}")]
+    Config(String),
     /// A smoke suite did not resolve to any Luau scripts.
     #[error("no .luau scripts found under {0}")]
     NoScripts(PathBuf),

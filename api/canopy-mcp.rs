@@ -104,6 +104,10 @@ pub mod canopy_mcp {
         pub journal: Vec<BootstrapJournalEntry>,
     }
 
+    /// A resolved directory for a user's Luau configuration.
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    pub struct ConfigHome {}
+
     /// Errors returned by `canopy-mcp`.
     #[derive(Debug, Display, Error)]
     pub enum Error {
@@ -128,6 +132,9 @@ pub mod canopy_mcp {
         #[error("UDS listener failed to report readiness")]
         /// The UDS listener stopped before reporting startup readiness.
         ListenerReadinessClosed,
+        #[error("configuration: {0}")]
+        /// The user configuration home could not be resolved.
+        Config(String),
         #[error("no .luau scripts found under {0}")]
         /// A smoke suite did not resolve to any Luau scripts.
         NoScripts(std::path::PathBuf),
@@ -359,6 +366,19 @@ pub mod canopy_mcp {
     /// Handle for a running live UDS MCP listener.
     pub struct UdsServerHandle {}
 
+    /// Mount a user configuration on a [`CanopyBuilder`].
+    pub trait UserConfig {
+        #[must_use]
+        /// Mount `home` as the trusted `@user` root when it holds
+        /// [`INIT_SCRIPT`], and otherwise run `defaults` as the startup script.
+        ///
+        /// `defaults` follows the startup-script contract: it defines `setup()`.
+        fn user_config(self, home: Option<&ConfigHome>, defaults: &'static str) -> Self;
+    }
+
+    /// Startup file a configuration home must hold to be mounted.
+    pub const INIT_SCRIPT: &str = "init.luau";
+
     /// Launch a Canopy app in the selected mode, and return the process exit
     /// code.
     ///
@@ -423,6 +443,38 @@ pub mod canopy_mcp {
 
         /// Render and return the app's Luau API definition.
         pub fn script_api(&self) -> Result<String> {}
+    }
+
+    impl ConfigHome {
+        /// Resolve the configuration home of `app` for a launch in `mode`.
+        ///
+        /// Headless MCP is hermetic: it resolves to no home, and an explicit
+        /// `flag` there is an error. `no_config` also resolves to no home, and
+        /// conflicts with an explicit `flag`. Otherwise the home is `flag`, then
+        /// the `{APP}_CONFIG_HOME` environment variable, then `$HOME/.{app}`.
+        pub fn resolve(
+            app: &str,
+            flag: Option<PathBuf>,
+            no_config: bool,
+            mode: &LaunchMode,
+        ) -> Result<Option<Self>> {
+        }
+
+        /// Return the home directory.
+        pub fn path(&self) -> &Path {}
+
+        /// Return whether the home holds [`INIT_SCRIPT`], and so is mounted.
+        pub fn has_init(&self) -> bool {}
+
+        /// Use `path` as the configuration home.
+        pub fn new(path: impl Into<PathBuf>) -> Self {}
+
+        /// Write `defaults` as the home's [`INIT_SCRIPT`] unless one exists,
+        /// creating the directory. Return whether it wrote.
+        ///
+        /// This is opt-in. An existing file, including one a concurrent first run
+        /// just created, is never replaced.
+        pub fn write_defaults(&self, defaults: &str) -> io::Result<bool> {}
     }
 
     impl Drop for UdsServerHandle {

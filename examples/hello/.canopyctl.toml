@@ -1,5 +1,5 @@
 [app]
-headless = ["cargo", "run", "-p", "hello", "--", "--no-config", "mcp"]
+headless = ["cargo", "run", "-p", "hello", "--", "mcp"]
 run = ["cargo", "run", "-p", "hello", "--"]
 mcp_args = ["--mcp={socket}"]
 

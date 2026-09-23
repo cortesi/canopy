@@ -76,7 +76,10 @@ mod tests {
                 || file.starts_with("crates/canopy-widgets/tests/luau/")
                 || file.starts_with("examples/todo/smoke/")
                 || file.starts_with("examples/hello/smoke/")
-                || file == "examples/hello/src/default_bindings.luau";
+                // Each app's tests build it without a home, which compiles
+                // its defaults under the startup-script contract.
+                || file == "examples/hello/src/default_config.luau"
+                || file == "examples/todo/src/default_config.luau";
             assert!(owned, "tracked Luau file has no checker owner: {file}");
         }
         Ok(())

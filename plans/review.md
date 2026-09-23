@@ -2276,7 +2276,7 @@ Each stage also updates the docs it touches.
   - `EvalReport`, `--replay-out`, `instance_id`, `source`, and `screen`.
   - Remove the fixtures tool, and rename builder `script` and `script_file`.
   - Update fh's `tests/smoke.rs` and its harness `bindings()` call.
-- [ ] C41: `ConfigHome` and `CanopyBuilder::user_config` in canopy-mcp.
+- [x] C41: `ConfigHome` and `CanopyBuilder::user_config` in canopy-mcp.
   Convert hello, todo, and fh, and drop `--no-config` from the
   `.canopyctl.toml` files.
 

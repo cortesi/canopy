@@ -47,14 +47,18 @@ pub mod todo {
     /// Widget for a todo entry.
     pub struct TodoEntry {}
 
+    /// Default configuration: the startup script that runs when the user has no
+    /// `init.luau`.
+    pub const DEFAULT_CONFIG: &str = "-- Todo\'s default configuration. Todo reads ~/.todo/init.luau when that file\n-- exists, and uses these defaults otherwise. Set TODO_CONFIG_HOME to read the\n-- file from another directory.\n\nfunction setup()\n    canopy.bind(\"ctrl-g\", {\n        path = \"/root/**/\",\n        phase = \"before_widget\",\n        tier = \"global\",\n        description = \"Show key bindings\",\n    }, command.root.toggle_help())\n    canopy.keymap({\n        { key = \"q\", description = \"Quit\", action = command.root.quit() },\n        { key = \"ctrl-x\", description = \"Clear text\", action = \"canopy.clear\" },\n        { key = \"d\", description = \"Delete item\", action = command.todo.delete_item() },\n        { key = \"a\", description = \"Add item\", action = command.todo.enter_item() },\n        { key = \"g\", description = \"First item\", action = command.todo.select_first() },\n        { key = { \"j\", \"Down\" }, description = \"Next item\", action = command.todo.select_by(1) },\n        { key = { \"k\", \"Up\" }, description = \"Previous item\", action = command.todo.select_by(-1) },\n        { key = { \"Space\", \"PageDown\" }, description = \"Page down\", action = command.todo.page(1) },\n        { key = \"PageUp\", description = \"Page up\", action = command.todo.page(-1) },\n        {\n            mouse = \"ScrollUp\",\n            description = \"Previous item\",\n            action = function()\n                todo.select_by(-1)\n            end,\n        },\n        {\n            mouse = \"ScrollDown\",\n            description = \"Next item\",\n            action = function()\n                todo.select_by(1)\n            end,\n        },\n    })\n\n    canopy.keymap({\n        path = \"input\",\n        phase = \"before_widget\",\n        { key = \"Left\", description = \"Cursor left\", action = command.input.left() },\n        { key = \"Right\", description = \"Cursor right\", action = command.input.right() },\n        { key = \"Backspace\", description = \"Delete char\", action = command.input.backspace() },\n        { key = \"Enter\", description = \"Confirm new item\", action = command.todo.accept_add() },\n        { key = \"Escape\", description = \"Cancel add\", action = command.todo.cancel_add() },\n    })\nend\n";
+
     /// Build the todo command and fixture API without assembling a widget tree.
     pub fn api_app() -> canopy::error::Result<canopy::Canopy> {}
 
-    /// Create a todo application with an explicit database and optional user
-    /// config.
+    /// Create a todo application with an explicit database. A `home` holding
+    /// `init.luau` replaces [`DEFAULT_CONFIG`].
     pub fn create_app(
         store: store::Store,
-        config: Option<&std::path::Path>,
+        home: Option<&canopy_mcp::ConfigHome>,
     ) -> anyhow::Result<canopy::Canopy> {
     }
 

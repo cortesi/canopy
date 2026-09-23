@@ -11,32 +11,19 @@ pub mod hello {
     /// A greeting and a counter driven by one command.
     pub struct Hello {}
 
-    /// Default keymap copied to a user's configuration directory on first use.
-    pub const DEFAULT_BINDINGS: &str = "root.default_bindings()\n\ncanopy.keymap({\n    { key = \"+\", description = \"Count up\", action = command.hello.bump(1) },\n    { key = \"-\", description = \"Count down\", action = command.hello.bump(-1) },\n})\n";
-
-    /// Startup module that loads the editable user keymap.
-    pub const DEFAULT_INIT: &str = r#"local bindings = require("./bindings")
-
-function setup()
-    bindings.setup()
-end
-"#;
+    /// Default configuration: the startup script that runs when the user has no
+    /// `init.luau`, and the file a first run writes for them to edit.
+    pub const DEFAULT_CONFIG: &str = "-- Hello\'s default configuration.\n--\n-- Hello reads ~/.hello/init.luau when that file exists, and uses these defaults\n-- otherwise. The first interactive run writes them there for you to edit. Set\n-- HELLO_CONFIG_HOME to read the file from another directory.\n\nfunction setup()\n    root.default_bindings()\n\n    canopy.keymap({\n        { key = \"+\", description = \"Count up\", action = command.hello.bump(1) },\n        { key = \"-\", description = \"Count down\", action = command.hello.bump(-1) },\n    })\nend\n";
 
     /// Create the full Canopy application.
     ///
-    /// Pass `Some(root)` to mount a trusted user configuration directory, and
-    /// `None` to fall back to the compiled-in defaults. Headless and API launch
-    /// modes must always pass `None` so they never read or create user state.
+    /// A `home` holding `init.luau` is mounted as the trusted user configuration;
+    /// otherwise the application runs [`DEFAULT_CONFIG`]. Headless and API launch
+    /// modes pass `None` so they never read user state.
     pub fn create_app(
-        user_script_root: Option<std::path::PathBuf>,
+        home: Option<&canopy_mcp::ConfigHome>,
     ) -> canopy::error::Result<canopy::Canopy> {
     }
-
-    /// Create the default user config without replacing existing files.
-    ///
-    /// A first run writes `init.luau` and `bindings.luau`. Every later run leaves
-    /// whatever the user has since edited in place.
-    pub fn ensure_user_config(root: &std::path::Path) -> io::Result<()> {}
 
     impl CommandNode for Hello {
         fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}

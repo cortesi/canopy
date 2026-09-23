@@ -20,7 +20,7 @@ hello/
 ├── smoke/bootstrap.luau
 └── crates/hello/
     ├── Cargo.toml
-    ├── src/default_bindings.luau
+    ├── src/default_config.luau
     ├── src/lib.rs
     ├── src/main.rs
     └── tests/smoke.rs
@@ -160,17 +160,17 @@ impl Register for Hello {
 
 `CanopyBuilder` runs setup in three ordered phases. `configure` receives a
 `Setup` handle, which registers commands, bindings, fixtures, and the initial
-styles before API finalization. Named `bindings` and `config` sources run next.
-`assemble` then creates the widget tree on the finalized `Canopy`:
+styles before API finalization. Named `script` and `script_file` sources run
+next. `assemble` then creates the widget tree on the finalized `Canopy`:
 
 ```rust
 /// Create the full Canopy application.
 ///
-/// Pass `Some(root)` to mount a trusted user configuration directory, and
-/// `None` to fall back to the compiled-in defaults. Headless and API launch
-/// modes must always pass `None` so they never read or create user state.
-pub fn create_app(user_script_root: Option<PathBuf>) -> Result<Canopy> {
-    let mut builder = CanopyBuilder::new()
+/// A `home` holding `init.luau` is mounted as the trusted user configuration;
+/// otherwise the application runs [`DEFAULT_CONFIG`]. Headless and API launch
+/// modes pass `None` so they never read user state.
+pub fn create_app(home: Option<&ConfigHome>) -> Result<Canopy> {
+    CanopyBuilder::new()
         .configure(|setup| {
             Root::register(setup)?;
             Hello::register(setup)?;
@@ -180,30 +180,19 @@ pub fn create_app(user_script_root: Option<PathBuf>) -> Result<Canopy> {
         .assemble(|canopy| {
             Root::new().install(canopy, Hello::new())?;
             Ok(())
-        });
-
-    if let Some(root) = user_script_root {
-        builder = builder.user_script_root(root, ScriptTrust::TrustedLocal);
-    } else {
-        builder = builder.script("hello-defaults", DEFAULT_BINDINGS);
-    }
-    builder.build()
+        })
+        .user_config(home, DEFAULT_CONFIG)
+        .build()
 }
 ```
 
-The two constants the builder reads are compiled into the binary:
+`user_config` comes from `canopy_mcp::UserConfig`. The defaults it falls back
+to are compiled into the binary:
 
 ```rust
-/// Default keymap copied to a user's configuration directory on first use.
-pub const DEFAULT_BINDINGS: &str = include_str!("default_bindings.luau");
-
-/// Startup module that loads the editable user keymap.
-pub const DEFAULT_INIT: &str = r#"local bindings = require("./bindings")
-
-function setup()
-    bindings.setup()
-end
-"#;
+/// Default configuration: the startup script that runs when the user has no
+/// `init.luau`, and the file a first run writes for them to edit.
+pub const DEFAULT_CONFIG: &str = include_str!("default_config.luau");
 ```
 
 The phase order matters because commands must exist before any binding names
@@ -220,11 +209,13 @@ closure that builds a fresh application on demand, so `src/main.rs` only has
 to parse arguments and choose a mode:
 
 ```rust
-use std::{env, path::PathBuf, process::ExitCode};
+use std::{path::PathBuf, process::ExitCode};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use canopy::terminal::RunOptions;
-use canopy_mcp::{AppFactory, AppMetadata, Error as McpError, LaunchMode, ResetPolicy, launch};
+use canopy_mcp::{
+    AppFactory, AppMetadata, ConfigHome, Error as McpError, LaunchMode, ResetPolicy, launch,
+};
 use clap::{Parser, Subcommand};
 
 /// Minimal Canopy application.
@@ -244,11 +235,12 @@ struct Args {
     mcp: Option<PathBuf>,
 
     /// Do not read or create the user Luau configuration.
-    #[arg(long, global = true)]
+    #[arg(long)]
     no_config: bool,
 
-    /// Directory containing `init.luau` and `bindings.luau`.
-    #[arg(long, global = true)]
+    /// Directory holding `init.luau`, in place of `HELLO_CONFIG_HOME` or
+    /// `~/.hello`.
+    #[arg(long)]
     config_home: Option<PathBuf>,
 }
 
@@ -261,9 +253,6 @@ enum Command {
 
 fn main() -> Result<ExitCode> {
     let args = Args::parse();
-    if args.no_config && args.config_home.is_some() {
-        bail!("--no-config conflicts with --config-home");
-    }
 
     // The API is a property of the application itself, so it is rendered
     // without user state.
@@ -271,18 +260,6 @@ fn main() -> Result<ExitCode> {
         print!("{}", hello::create_app(None)?.script_api()?);
         return Ok(ExitCode::SUCCESS);
     }
-
-    // Headless mode must never read or create user state; `.canopyctl.toml`
-    // passes `--no-config` to the headless command so automation runs stay
-    // hermetic.
-    let config_root = if args.no_config {
-        None
-    } else {
-        let root = args.config_home.map_or_else(default_config_root, Ok)?;
-        hello::ensure_user_config(&root)
-            .with_context(|| format!("initialize user config at {}", root.display()))?;
-        Some(root)
-    };
 
     let mode = match args.command {
         Some(Command::Mcp) => LaunchMode::HeadlessMcp,
@@ -292,23 +269,22 @@ fn main() -> Result<ExitCode> {
         },
     };
 
+    // Headless mode resolves no home, so automation runs stay hermetic. An
+    // interactive first run writes the defaults for the user to edit.
+    let home = ConfigHome::resolve("hello", args.config_home, args.no_config, &mode)?;
+    if let Some(home) = &home {
+        home.write_defaults(hello::DEFAULT_CONFIG)
+            .with_context(|| format!("write default config to {}", home.path().display()))?;
+    }
+
     let factory = AppFactory::new(
         AppMetadata {
             app: "hello".into(),
             reset: ResetPolicy::Isolated,
         },
-        move || hello::create_app(config_root.clone()).map_err(McpError::app),
+        move || hello::create_app(home.as_ref()).map_err(McpError::app),
     );
     Ok(launch(factory, mode)?)
-}
-
-/// Resolve the default persistent script root.
-fn default_config_root() -> Result<PathBuf> {
-    if let Some(path) = env::var_os("HELLO_CONFIG_HOME") {
-        return Ok(PathBuf::from(path));
-    }
-    let home = env::var_os("HOME").context("HOME is not set; use --config-home")?;
-    Ok(PathBuf::from(home).join(".hello"))
 }
 ```
 
@@ -342,7 +318,7 @@ and [Agent loop](./agent-loop.md) for the automation protocol.
 
 ```toml
 [app]
-headless = ["cargo", "run", "-p", "hello", "--", "--no-config", "mcp"]
+headless = ["cargo", "run", "-p", "hello", "--", "mcp"]
 run = ["cargo", "run", "-p", "hello", "--"]
 mcp_args = ["--mcp={socket}"]
 
@@ -354,8 +330,8 @@ timeout_ms = 5000
 
 Headless and API modes must never read or create user state. A smoke run that
 reads a developer's keymap fails on a different machine, and one that writes a
-keymap edits real files. The `--no-config` argument above is what keeps the
-headless command hermetic.
+keymap edits real files. The `mcp` subcommand is hermetic by construction: it
+resolves no configuration home, so the headless command needs no extra flag.
 
 `canopyctl` spawns the application from the directory that holds
 `.canopyctl.toml`, and `mcp_args` substitutes `{socket}` for the live socket
@@ -422,105 +398,55 @@ fn luau_smoke_suite_passes() -> Result<()> {
 
 ## 5. User configuration
 
-An application can mount a directory of the user's own Luau. Enable it with a
-trust declaration, because roots default to disabled:
+A user's Luau configuration lives in a configuration home: a directory that may
+hold `init.luau`. `canopy_mcp::ConfigHome::resolve` finds it: an explicit
+`--config-home`, then the `{APP}_CONFIG_HOME` environment variable, then
+`$HOME/.{app}`. Headless MCP resolves no home, so automation runs are hermetic
+by construction, and `--no-config` opts out anywhere else.
 
-```rust
-builder = builder.user_script_root(root, ScriptTrust::TrustedLocal);
-```
+`CanopyBuilder::user_config(home, defaults)` mounts the home as the trusted
+`@user` root when it holds `init.luau`, and otherwise runs `defaults` as the
+startup script. Both follow the startup-script contract: they define `setup()`
+and keep every effect inside it. `TrustedLocal` scripts run with the
+application's full native authority. See [Scripting](./scripting.md) for the
+mount, trust, and module resolution rules.
 
-`TrustedLocal` scripts run with the application's full native authority. See
-[Scripting](./scripting.md) for the mount, trust, and module resolution rules.
-
-`src/default_bindings.luau` is the shipped keymap. `root.default_bindings()`
+`src/default_config.luau` is the shipped configuration. `root.default_bindings()`
 installs the framework defaults, including `Ctrl+g` for contextual help.
 `canopy.keymap` binds each entry's keys to an action, and
 `command.hello.bump(1)` is a typed command value with its arguments:
 
 ```luau
-root.default_bindings()
-
-canopy.keymap({
-    { key = "+", description = "Count up", action = command.hello.bump(1) },
-    { key = "-", description = "Count down", action = command.hello.bump(-1) },
-})
-```
-
-The root needs an `init.luau` that defines `setup`. Keep the top level to
-imports and put every effect inside `setup`:
-
-```luau
-local bindings = require("./bindings")
+-- Hello's default configuration.
+--
+-- Hello reads ~/.hello/init.luau when that file exists, and uses these defaults
+-- otherwise. The first interactive run writes them there for you to edit. Set
+-- HELLO_CONFIG_HOME to read the file from another directory.
 
 function setup()
-    bindings.setup()
+    root.default_bindings()
+
+    canopy.keymap({
+        { key = "+", description = "Count up", action = command.hello.bump(1) },
+        { key = "-", description = "Count down", action = command.hello.bump(-1) },
+    })
 end
 ```
 
-Write the defaults on first run and never overwrite them afterward:
+Nothing writes to the home unless the application opts in. Hello writes the
+defaults on its first interactive run with `ConfigHome::write_defaults`, which
+creates the file only when none exists, so an edited file is never replaced.
 
-```rust
-/// Create the default user config without replacing existing files.
-///
-/// A first run writes `init.luau` and `bindings.luau`. Every later run leaves
-/// whatever the user has since edited in place.
-pub fn ensure_user_config(root: &Path) -> io::Result<()> {
-    fs::create_dir_all(root)?;
-    create_new_file(&root.join("init.luau"), DEFAULT_INIT)?;
-    let module = format!(
-        "local bindings = {{}}\n\nfunction bindings.setup()\n{}\nend\n\nreturn bindings\n",
-        indent(DEFAULT_BINDINGS, "    ")
-    );
-    create_new_file(&root.join("bindings.luau"), &module)
-}
-```
-
-`create_new` is what makes this safe. It fails when the file exists, so an
-edited file is never replaced. `fs::write` would truncate it:
-
-```rust
-/// Create a file atomically with respect to concurrent first runs.
-///
-/// `create_new` is the point of this helper. `fs::write` would silently
-/// replace a configuration file the user had already edited.
-fn create_new_file(path: &Path, contents: &str) -> io::Result<()> {
-    match OpenOptions::new().write(true).create_new(true).open(path) {
-        Ok(mut file) => file.write_all(contents.as_bytes()),
-        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => Ok(()),
-        Err(error) => Err(error),
-    }
-}
-```
-
-This is the part of the contract that damages user data when it is wrong, so
-test it. Write a file, run the initializer again, and assert the file survived:
-
-```rust
-#[test]
-fn first_run_config_preserves_existing_bindings() -> anyhow::Result<()> {
-    let directory = tempdir()?;
-    ensure_user_config(directory.path())?;
-    let bindings = directory.path().join("bindings.luau");
-    fs::write(&bindings, "return { setup = function() end }")?;
-    ensure_user_config(directory.path())?;
-    assert_eq!(
-        fs::read_to_string(bindings)?,
-        "return { setup = function() end }"
-    );
-    assert!(fs::read_to_string(directory.path().join("init.luau"))?.contains("setup"));
-    Ok(())
-}
-```
-
-Give tests a temporary root so they never touch the developer's real
+Give tests a temporary home so they never touch the developer's real
 configuration:
 
 ```rust
 #[test]
-fn persistent_user_root_loads_default_bindings() -> anyhow::Result<()> {
+fn a_written_home_loads_the_default_bindings() -> anyhow::Result<()> {
     let directory = tempdir()?;
-    ensure_user_config(directory.path())?;
-    let canopy = create_app(Some(directory.path().to_path_buf()))?;
+    let home = ConfigHome::new(directory.path());
+    assert!(home.write_defaults(DEFAULT_CONFIG)?);
+    let canopy = create_app(Some(&home))?;
     let mut harness = Harness::from_canopy(canopy, Size::new(40, 6))?;
     harness.render()?;
     harness.script(
