@@ -4,11 +4,9 @@
 //! user interfaces with canopy.
 
 /// Border widget with customizable glyphs.
-mod boxed;
+mod border;
 /// Button widget with command dispatch.
 mod button;
-/// Content centering container.
-mod center;
 /// Multi-click tracker shared by editor and terminal.
 mod click;
 /// Panes side by side with scroll position dividers.
@@ -48,8 +46,6 @@ mod keyed;
 mod label;
 /// Typed list container with selection.
 mod list;
-/// Padding container widget.
-mod pad;
 /// Modal filtered list of items.
 mod picker;
 /// Application root widget.
@@ -77,9 +73,8 @@ pub mod text_buffer;
 /// Wrapping an existing node in a container widget.
 mod wrap;
 
-pub use boxed::{Border, BoxGlyphs, DOUBLE, ROUND, SINGLE, SINGLE_THICK};
+pub use border::{Border, BoxGlyphs, DOUBLE, ROUND, SINGLE, SINGLE_THICK};
 pub use button::Button;
-pub use center::Center;
 pub use columns::Columns;
 pub use confirm::{Answer, Confirm};
 pub use container::Container;
@@ -93,7 +88,6 @@ pub use input::{CLEAR_INTENT, Input, ValueExposure, register_clear_intent};
 pub use keyed::KeyedChildren;
 pub use label::Label;
 pub use list::{AutoKey, List, Selectable};
-pub use pad::Pad;
 pub use picker::{Picker, PickerFilter, PickerList, Truncate};
 pub use root::Root;
 pub use scroll::Scroll;

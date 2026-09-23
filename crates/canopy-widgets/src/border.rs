@@ -148,6 +148,6 @@ impl Widget for Border {
     }
 
     fn name(&self) -> NodeName {
-        NodeName::convert("box")
+        NodeName::convert("border")
     }
 }

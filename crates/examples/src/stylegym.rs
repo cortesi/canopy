@@ -21,7 +21,7 @@ use canopy::{
     tree::ChildSlot,
 };
 use canopy_widgets::{
-    Button, Center, Container, Dropdown, Frame, Input, Label, Root, Scroll, Selector, Tabs,
+    Button, Container, Dropdown, Frame, Input, Label, Root, Scroll, Selector, Tabs,
     editor::{Editor, EditorConfig, LineNumbers, WrapMode, highlight::SyntectHighlighter},
 };
 
@@ -312,7 +312,7 @@ canopy::slot!(EffectsSelectorSlot: Selector<EffectOption>);
 canopy::slot!(RightContainerSlot: Container);
 canopy::slot!(MainFrameSlot: Frame);
 canopy::slot!(TabsSlot: Tabs);
-canopy::slot!(ModalSlot: Center);
+canopy::slot!(ModalSlot: Container);
 
 /// Which style components a rule sets itself rather than inheriting.
 #[derive(Clone, Copy)]
@@ -919,7 +919,7 @@ impl Stylegym {
             if ctx.child_slot_of(ctx.node_id(), ModalSlot::KEY).is_some() {
                 return Ok(());
             }
-            let modal_id = ctx.add_slot::<ModalSlot>(ctx.node_id(), Center::new())?;
+            let modal_id = ctx.add_slot::<ModalSlot>(ctx.node_id(), Container::center())?;
             let frame_id = ctx.add_child(modal_id, Frame::new().with_title("Demo Modal"))?;
             ctx.add_child(frame_id, ModalContent)?;
 

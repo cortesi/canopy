@@ -20,12 +20,12 @@ use canopy::{
 };
 use canopy_mcp::{ConfigHome, UserConfig};
 use canopy_widgets::{
-    Center, Frame, Input, KeyHint, List, Root, Selectable, StatusBar, Text, ValueExposure,
+    Container, Frame, Input, KeyHint, List, Root, Selectable, StatusBar, Text, ValueExposure,
 };
 
 // Typed keys for keyed children
 canopy::slot!(MainSlot: MainContent);
-canopy::slot!(ModalSlot: Center);
+canopy::slot!(ModalSlot: Container);
 
 pub mod store;
 
@@ -187,7 +187,7 @@ impl Todo {
 
         let scope = c.node_id();
         c.edit_structure(&mut |c| {
-            let modal = c.add_slot::<ModalSlot>(scope, Center::new())?;
+            let modal = c.add_slot::<ModalSlot>(scope, Container::center())?;
             let frame = c.add_child(modal, Frame::new())?;
             c.set_layout_override(
                 frame.into(),

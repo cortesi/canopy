@@ -17,9 +17,9 @@ use canopy::{
 };
 pub use mode::ModeHelp;
 
-use crate::{center::Center, frame::Frame};
+use crate::{container::Container, frame::Frame};
 
-canopy::slot!(pub(crate) ModalSlot: Center);
+canopy::slot!(pub(crate) ModalSlot: Container);
 canopy::slot!(pub(crate) FrameSlot: Frame);
 canopy::slot!(pub(crate) BindingListSlot: BindingList);
 
@@ -48,7 +48,7 @@ impl Help {
                 .into(),
         )?;
 
-        let modal = context.create_detached(Center::new())?;
+        let modal = context.create_detached(Container::center())?;
         context.attach_slot(modal.into(), FrameSlot::KEY, frame.into())?;
         // Two rows above and below keep the frame clear of the screen edges,
         // so a tall modal never fills the window.

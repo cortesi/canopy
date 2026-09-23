@@ -6,7 +6,7 @@ use canopy::{
     layout::{Edges, Layout},
 };
 use canopy_widgets::{
-    Frame, Pad,
+    Container, Frame,
     editor::{EditMode, Editor, EditorConfig, WrapMode, highlight::SyntectHighlighter},
 };
 
@@ -56,7 +56,7 @@ impl Widget for WidgetEditor {
             self.extension.as_str(),
         ))));
 
-        let pad_id = c.add_child(c.node_id(), Pad::uniform(1))?;
+        let pad_id = c.add_child(c.node_id(), Container::padded(Edges::all(1)))?;
         let frame_id = c.add_child(pad_id, Frame::new().with_title(self.title.clone()))?;
         let editor_id = c.add_child(frame_id, editor)?;
 

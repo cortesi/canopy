@@ -11,7 +11,7 @@ use canopy::{
     tree::FocusScope,
 };
 use canopy_widgets::{
-    Border, Button, Center, Container, Frame, List, SINGLE, SINGLE_THICK, Selectable, Text,
+    Border, Button, Container, Frame, List, SINGLE, SINGLE_THICK, Selectable, Text,
     terminal::{Terminal, TerminalConfig},
 };
 use unicode_width::UnicodeWidthStr;
@@ -99,7 +99,7 @@ impl Widget for TermEntry {
 
     fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
         let box_id = ctx.add_child(ctx.node_id(), Border::new().with_glyphs(SINGLE).with_fill())?;
-        let center_id = ctx.add_child(box_id, Center::new())?;
+        let center_id = ctx.add_child(box_id, Container::center())?;
         ctx.add_child(
             center_id,
             Text::new(self.label.clone()).with_wrap_width(self.label_width()),

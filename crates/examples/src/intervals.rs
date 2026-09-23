@@ -9,7 +9,7 @@ use canopy::{
     render::Render,
     style::{StyleRules, WidgetState, themes::Palette},
 };
-use canopy_widgets::{Border, Center, Container, Frame, List, SINGLE, Selectable, Text};
+use canopy_widgets::{Border, Container, Frame, List, SINGLE, Selectable, Text};
 use unicode_width::UnicodeWidthStr;
 
 use crate::flex_row;
@@ -137,7 +137,7 @@ impl Widget for CounterItem {
 
     fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
         let box_id = ctx.add_child(ctx.node_id(), Border::new().with_glyphs(SINGLE).with_fill())?;
-        let center_id = ctx.add_child(box_id, Center::new())?;
+        let center_id = ctx.add_child(box_id, Container::center())?;
         ctx.add_child(center_id, Text::new(self.label()))?;
         self.update_box_layout(ctx)?;
         Ok(())

@@ -9,7 +9,7 @@ use canopy::{
     text,
 };
 
-use super::boxed::{BoxGlyphs, ROUND};
+use super::border::{BoxGlyphs, ROUND};
 use crate::scrollbar::{Scrollbar, ScrollbarGlyphs, THIN, edge_track, scroll_target};
 
 /// A frame around an element with an optional title and scroll positions.

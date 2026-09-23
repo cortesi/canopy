@@ -16,7 +16,7 @@ use canopy::{
     tree::{FocusDirection, FocusScope},
 };
 
-use crate::{Button, Container, boxed::ROUND, frame::Frame};
+use crate::{Button, Container, border::ROUND, frame::Frame};
 
 /// Columns of blank between the body's text and each of its sides.
 const SIDE_PADDING: u32 = 1;

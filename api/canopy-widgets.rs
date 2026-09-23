@@ -929,16 +929,6 @@ pub mod canopy_widgets {
         Fixed(u32),
     }
 
-    /// Container that centers its child within available space.
-    ///
-    /// For a dimmed overlay, push an effect on the background content with
-    /// `c.push_effect(background_id, effects::brightness(0.5))`. This container
-    /// stays at full brightness because it is a sibling of the dimmed content, not
-    /// a descendant. Insert it as a sibling inside a parent that uses `Stack`
-    /// layout so it can overlay the existing view.
-    #[derive(Default)]
-    pub struct Center;
-
     /// Panes side by side, each followed by a divider.
     ///
     /// Children are panes with normal child sizing. `Columns` places them in a
@@ -1083,9 +1073,6 @@ pub mod canopy_widgets {
     /// selection state independently of focus.
     #[derive(Default)]
     pub struct List<W: Selectable, K: 'static + Clone + Eq + Hash + ToArgValue = AutoKey> {}
-
-    /// Container that adds padding around its child.
-    pub struct Pad {}
 
     /// A centred modal holding a filtered list of items.
     ///
@@ -1403,21 +1390,6 @@ pub mod canopy_widgets {
         fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
 
         fn semantics(&self, ctx: &dyn ViewContext) -> Result<WidgetSemantics> {}
-    }
-
-    impl Center {
-        /// Create a new Center widget.
-        pub fn new() -> Self {}
-    }
-
-    impl CommandNode for Center {
-        fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-    }
-
-    impl Widget for Center {
-        fn layout(&self) -> Layout {}
-
-        fn name(&self) -> NodeName {}
     }
 
     impl Columns {
@@ -1856,24 +1828,6 @@ pub mod canopy_widgets {
         fn semantics(&self, _ctx: &dyn ViewContext) -> Result<WidgetSemantics> {}
     }
 
-    impl CommandNode for Pad {
-        fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-    }
-
-    impl Pad {
-        /// Create a pad with the provided edge padding.
-        pub fn new(padding: Edges) -> Self {}
-
-        /// Create a pad with uniform padding on all sides.
-        pub fn uniform(padding: u32) -> Self {}
-    }
-
-    impl Widget for Pad {
-        fn layout(&self) -> Layout {}
-
-        fn name(&self) -> NodeName {}
-    }
-
     impl CommandNode for Root {
         fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
     }
@@ -2116,6 +2070,18 @@ pub mod canopy_widgets {
 
         /// Construct a container with any layout.
         pub fn new(layout: Layout) -> Self {}
+
+        /// Fill the available space and center each child on both axes, overlapped.
+        ///
+        /// For a dimmed overlay, push an effect on the background content with
+        /// `c.push_effect(background_id, effects::brightness(0.5))`. The centered
+        /// content stays at full brightness because it is a sibling of the dimmed
+        /// content, not a descendant. Insert it inside a parent that uses `Stack`
+        /// layout so it can overlay the existing view.
+        pub fn center() -> Self {}
+
+        /// Fill the available space and inset the children by `padding`.
+        pub fn padded(padding: Edges) -> Self {}
 
         /// Fill the available space and overlap children, the last on top.
         pub fn stack() -> Self {}

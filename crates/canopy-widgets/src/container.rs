@@ -2,7 +2,7 @@
 
 use canopy::{
     NodeName, Widget,
-    layout::{Direction, Layout},
+    layout::{Align, Direction, Edges, Layout},
 };
 
 /// A widget that lays out its children and has no other behavior.
@@ -39,6 +39,28 @@ impl Container {
     /// Fill the available space and overlap children, the last on top.
     pub fn stack() -> Self {
         Self::new(Layout::fill().direction(Direction::Stack))
+    }
+
+    /// Fill the available space and center each child on both axes, overlapped.
+    ///
+    /// For a dimmed overlay, push an effect on the background content with
+    /// `c.push_effect(background_id, effects::brightness(0.5))`. The centered
+    /// content stays at full brightness because it is a sibling of the dimmed
+    /// content, not a descendant. Insert it inside a parent that uses `Stack`
+    /// layout so it can overlay the existing view.
+    pub fn center() -> Self {
+        Self::new(
+            Layout::fill()
+                .direction(Direction::Stack)
+                .align_horizontal(Align::Center)
+                .align_vertical(Align::Center),
+        )
+        .with_name("center")
+    }
+
+    /// Fill the available space and inset the children by `padding`.
+    pub fn padded(padding: Edges) -> Self {
+        Self::new(Layout::fill().padding(padding)).with_name("pad")
     }
 
     /// Name this node's path segment.

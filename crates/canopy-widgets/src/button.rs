@@ -17,13 +17,13 @@ use canopy::{
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
-    Border, Center,
-    boxed::{BoxGlyphs, SINGLE},
+    Border, Container,
+    border::{BoxGlyphs, SINGLE},
 };
 
 canopy::slot!(LabelSlot: ButtonLabel);
 canopy::slot!(BoxSlot: Border);
-canopy::slot!(CenterSlot: Center);
+canopy::slot!(CenterSlot: Container);
 
 /// Default activation bindings exposed through `button.default_bindings()`.
 ///
@@ -176,7 +176,7 @@ impl Button {
                 .with_border_style(roles::BORDER)
                 .with_fill()
         })?;
-        let center_id = ctx.get_or_create_slot::<CenterSlot>(box_id, Center::new)?;
+        let center_id = ctx.get_or_create_slot::<CenterSlot>(box_id, Container::center)?;
         let label_id = ctx.get_or_create_slot::<LabelSlot>(center_id, ButtonLabel::default)?;
         let label = self.label.clone();
         let accelerator = self.accelerator;
@@ -573,7 +573,7 @@ mod tests {
                 let center = ctx.get_slot::<CenterSlot>(border)?;
                 let label = ctx.get_slot::<LabelSlot>(center)?;
                 ctx.edit_structure(&mut |ctx| {
-                    let wrapper = ctx.create_detached(Center::new())?;
+                    let wrapper = ctx.create_detached(Container::center())?;
                     ctx.detach(label.into())?;
                     ctx.attach(wrapper.into(), label.into())?;
                     ctx.attach(center.into(), wrapper.into())

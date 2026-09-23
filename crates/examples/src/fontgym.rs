@@ -18,7 +18,7 @@ use canopy::{
     text,
 };
 use canopy_widgets::{
-    Container, Frame, List, Pad, SINGLE_THICK, Selectable, Text,
+    Container, Frame, List, SINGLE_THICK, Selectable, Text,
     font::{Font, FontBanner, FontEffects, FontRenderer, LayoutOptions},
     wrap,
 };
@@ -969,7 +969,7 @@ fn panel(
     let pad = wrap(
         ctx,
         child,
-        Pad::new(Edges::symmetric(PANEL_PADDING_V, PANEL_PADDING_H)),
+        Container::padded(Edges::symmetric(PANEL_PADDING_V, PANEL_PADDING_H)),
     )?;
     let frame = wrap(
         ctx,
