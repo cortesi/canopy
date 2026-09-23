@@ -9,7 +9,10 @@ use canopy::{
     rgb,
     style::StyleMap,
 };
-use canopy_widgets::font::{Font, FontBanner, FontEffects, FontRenderer, LayoutOptions};
+use canopy_widgets::{
+    FontBanner,
+    font::{Font, FontEffects, FontRenderer, LayoutOptions},
+};
 
 /// Style path used for widget demo text.
 const FONT_STYLE_PATH: &str = "widget/font";

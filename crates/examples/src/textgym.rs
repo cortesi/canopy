@@ -3,7 +3,7 @@ use canopy::{
     error::Result,
     layout::{Edges, Layout, LayoutOverride},
 };
-use canopy_widgets::{CanvasWidth, Container, Frame, Selectable, Text, wrap};
+use canopy_widgets::{CanvasWidth, Container, Frame, Selectable, Text};
 
 /// Text sample using the default tab stop.
 const DEFAULT_TEXT: &str = concat!(
@@ -111,8 +111,8 @@ fn section(
 ) -> Result<NodeId> {
     let text_id = c.create_detached(text)?;
     c.set_layout_override(text_id.into(), Layout::fill().into())?;
-    let frame_id = wrap(c, text_id, Frame::new().with_title(title))?;
-    let pad_id = wrap(c, frame_id, Container::padded(Edges::all(OUTER_PADDING)))?;
+    let frame_id = c.wrap_node(text_id, Frame::new().with_title(title))?;
+    let pad_id = c.wrap_node(frame_id, Container::padded(Edges::all(OUTER_PADDING)))?;
     c.set_layout_override(
         pad_id.into(),
         LayoutOverride::from(

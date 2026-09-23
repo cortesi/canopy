@@ -19,8 +19,8 @@ use canopy::{
 };
 
 use crate::{
-    Columns, Frame, List, Scroll, ScrollbarGlyphs, Selectable, Tabs,
-    scrollbar::{ScrollTarget, scroll_target},
+    Columns, Frame, List, Scroll, Selectable, Tabs,
+    scrollbar::{ScrollTarget, ScrollbarGlyphs, scroll_target},
 };
 
 /// Builds a subtree under the scene root and returns the nodes a test uses.

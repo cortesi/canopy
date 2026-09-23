@@ -12,7 +12,7 @@ use canopy::{
     tree::{FocusDirection, FocusScope},
 };
 
-use crate::{Button, Container, Dialog, border::ROUND, frame::Frame};
+use crate::{BoxGlyphs, Button, Container, Dialog, frame::Frame};
 
 /// Columns of blank between the body's text and each of its sides.
 const SIDE_PADDING: u32 = 1;
@@ -296,7 +296,9 @@ impl Widget for Confirm {
             let button: NodeId = context
                 .add_child(
                     answers,
-                    Button::new(label).with_glyphs(ROUND).with_accelerator(key),
+                    Button::new(label)
+                        .with_glyphs(BoxGlyphs::ROUND)
+                        .with_accelerator(key),
                 )?
                 .into();
             context.set_layout_override(

@@ -38,7 +38,7 @@ use crate::{
 
 /// How a diff view arranges the two versions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Strategy {
+pub enum Mode {
     /// One column: removed lines above added lines.
     Unified,
     /// Two columns: the old version left, the new version right.
@@ -141,7 +141,7 @@ pub struct DiffView {
     /// The line diff being shown.
     diff: Diff,
     /// How the two sides are laid out.
-    strategy: Strategy,
+    strategy: Mode,
     /// How much unchanged text the rows show.
     scope: Scope,
     /// Rows for the current scope, in unified order.
@@ -178,7 +178,7 @@ impl DiffView {
     pub fn from_prepared(prepared: PreparedDiff) -> Self {
         Self {
             diff: prepared.diff,
-            strategy: Strategy::Unified,
+            strategy: Mode::Unified,
             scope: prepared.scope,
             rows: prepared.rows,
             side_rows: Vec::new(),
@@ -206,7 +206,7 @@ impl DiffView {
 
     /// Set the display strategy.
     #[must_use]
-    pub fn with_strategy(mut self, strategy: Strategy) -> Self {
+    pub fn with_strategy(mut self, strategy: Mode) -> Self {
         self.strategy = strategy;
         self.ensure_side_rows();
         self
@@ -264,7 +264,7 @@ impl DiffView {
 
     /// Pair the rows for side-by-side layout, once, when that layout needs it.
     fn ensure_side_rows(&mut self) {
-        if self.strategy == Strategy::SideBySide && self.side_rows.is_empty() {
+        if self.strategy == Mode::SideBySide && self.side_rows.is_empty() {
             self.side_rows = side_rows(&self.rows);
         }
     }
@@ -330,7 +330,7 @@ impl DiffView {
         let gutter = digits + 2;
         let line_width = self.old_width.max(self.new_width) + 1;
         match self.strategy {
-            Strategy::Unified => {
+            Mode::Unified => {
                 let width = (gutter + line_width).max(view_w);
                 Geometry {
                     digits,
@@ -339,7 +339,7 @@ impl DiffView {
                     width,
                 }
             }
-            Strategy::SideBySide => {
+            Mode::SideBySide => {
                 let natural_half = gutter + line_width;
                 let natural = natural_half * 2 + 1;
                 let half = if view_w >= natural {
@@ -379,8 +379,8 @@ impl DiffView {
     /// Return the number of body rows for the current strategy.
     fn body_rows(&self) -> usize {
         match self.strategy {
-            Strategy::Unified => self.rows.len(),
-            Strategy::SideBySide => self.side_rows.len(),
+            Mode::Unified => self.rows.len(),
+            Mode::SideBySide => self.side_rows.len(),
         }
     }
 
@@ -670,8 +670,8 @@ impl Widget for DiffView {
         rndr.push_layer("diff_view");
         self.prepare_highlighters();
         match self.strategy {
-            Strategy::Unified => self.draw_unified(rndr, ctx),
-            Strategy::SideBySide => self.draw_side_by_side(rndr, ctx),
+            Mode::Unified => self.draw_unified(rndr, ctx),
+            Mode::SideBySide => self.draw_side_by_side(rndr, ctx),
         }
     }
 
@@ -690,8 +690,8 @@ impl Widget for DiffView {
     fn canvas(&self, view: Size, _ctx: &CanvasContext) -> Size {
         let geom = self.geometry(view.w);
         let rows = match self.strategy {
-            Strategy::Unified => self.rows.len(),
-            Strategy::SideBySide => self.side_rows.len(),
+            Mode::Unified => self.rows.len(),
+            Mode::SideBySide => self.side_rows.len(),
         };
         Size::new(geom.width, column(rows))
     }

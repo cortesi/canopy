@@ -16,10 +16,7 @@ use canopy::{
 };
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::{
-    Border, Container,
-    border::{BoxGlyphs, SINGLE},
-};
+use crate::{Border, Container, border::BoxGlyphs};
 
 canopy::slot!(LabelSlot: ButtonLabel);
 canopy::slot!(BoxSlot: Border);
@@ -74,7 +71,7 @@ impl Button {
             label: label.into(),
             accelerator: None,
             command: None,
-            glyphs: SINGLE,
+            glyphs: BoxGlyphs::SINGLE,
             active: false,
         }
     }

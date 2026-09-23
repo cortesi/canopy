@@ -24,6 +24,46 @@ pub struct BoxGlyphs {
 }
 
 impl BoxGlyphs {
+    /// Single line thin Unicode box drawing set.
+    pub const SINGLE: Self = Self {
+        topleft: '┌',
+        topright: '┐',
+        bottomleft: '└',
+        bottomright: '┘',
+        horizontal: '─',
+        vertical: '│',
+    };
+
+    /// Double line Unicode box drawing set.
+    pub const DOUBLE: Self = Self {
+        topleft: '╔',
+        topright: '╗',
+        bottomleft: '╚',
+        bottomright: '╝',
+        horizontal: '═',
+        vertical: '║',
+    };
+
+    /// Single line thick Unicode box drawing set.
+    pub const SINGLE_THICK: Self = Self {
+        topleft: '┏',
+        topright: '┓',
+        bottomleft: '┗',
+        bottomright: '┛',
+        horizontal: '━',
+        vertical: '┃',
+    };
+
+    /// Round corner thin Unicode box drawing set.
+    pub const ROUND: Self = Self {
+        topleft: '╭',
+        topright: '╮',
+        bottomleft: '╰',
+        bottomright: '╯',
+        horizontal: '─',
+        vertical: '│',
+    };
+
     /// Draw a box border using these glyphs.
     pub(crate) fn draw(
         &self,
@@ -43,46 +83,6 @@ impl BoxGlyphs {
     }
 }
 
-/// Single line thin Unicode box drawing set.
-pub const SINGLE: BoxGlyphs = BoxGlyphs {
-    topleft: '┌',
-    topright: '┐',
-    bottomleft: '└',
-    bottomright: '┘',
-    horizontal: '─',
-    vertical: '│',
-};
-
-/// Double line Unicode box drawing set.
-pub const DOUBLE: BoxGlyphs = BoxGlyphs {
-    topleft: '╔',
-    topright: '╗',
-    bottomleft: '╚',
-    bottomright: '╝',
-    horizontal: '═',
-    vertical: '║',
-};
-
-/// Single line thick Unicode box drawing set.
-pub const SINGLE_THICK: BoxGlyphs = BoxGlyphs {
-    topleft: '┏',
-    topright: '┓',
-    bottomleft: '┗',
-    bottomright: '┛',
-    horizontal: '━',
-    vertical: '┃',
-};
-
-/// Round corner thin Unicode box drawing set.
-pub const ROUND: BoxGlyphs = BoxGlyphs {
-    topleft: '╭',
-    topright: '╮',
-    bottomleft: '╰',
-    bottomright: '╯',
-    horizontal: '─',
-    vertical: '│',
-};
-
 /// A simple box container around its children.
 pub struct Border {
     /// Glyph set for rendering.
@@ -97,7 +97,7 @@ impl Border {
     /// Construct a box.
     pub fn new() -> Self {
         Self {
-            glyphs: SINGLE,
+            glyphs: BoxGlyphs::SINGLE,
             border_style: "border".to_string(),
             fill_style: None,
         }

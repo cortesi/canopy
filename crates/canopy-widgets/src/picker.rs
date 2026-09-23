@@ -13,8 +13,6 @@
 //! [`Picker::open_overlay`]: the list keeps its filter and selection under it,
 //! and takes the keyboard back when the overlay closes.
 
-use std::borrow::Cow;
-
 use canopy::{
     Context, ContextExt, EventOutcome, NodeId, NodeName, Register, Setup, TypedId, ViewContext,
     Widget, derive_commands,
@@ -26,7 +24,7 @@ use canopy::{
     },
     render::Render,
     style::roles,
-    text,
+    text::Truncate,
 };
 
 use crate::{
@@ -46,26 +44,6 @@ const FRAME_MARGIN: u32 = 1;
 const FILTER_ROWS: u32 = 1;
 /// Marks where typed text lands while the filter is taking keys.
 const CARET: char = '▏';
-
-/// Which end of a label a row drops when it does not fit.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Truncate {
-    /// Drop the tail, which is how ordinary text reads.
-    #[default]
-    End,
-    /// Drop the head, which keeps the last components of a path visible.
-    Start,
-}
-
-impl Truncate {
-    /// Return `label` cut to `budget` columns at this end.
-    fn apply<'a>(self, label: &'a str, budget: usize) -> Cow<'a, str> {
-        match self {
-            Self::End => text::truncate_end(label, budget),
-            Self::Start => text::truncate_start(label, budget),
-        }
-    }
-}
 
 /// A centred modal holding a filtered list of items.
 ///

@@ -3602,6 +3602,16 @@ pub mod canopy {
     pub mod text {
         //! Text utilities.
 
+        /// Which end of a string a truncation drops when it does not fit.
+        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+        pub enum Truncate {
+            #[default]
+            /// Drop the tail, which is how ordinary text reads.
+            End,
+            /// Drop the head, which keeps the last components of a path visible.
+            Start,
+        }
+
         /// Return the cells one grapheme occupies at `column`, expanding a tab to the
         /// next multiple of `tab_stop`.
         pub fn cell_width(grapheme: &str, column: usize, tab_stop: usize) -> usize {}
@@ -3638,6 +3648,11 @@ pub mod canopy {
         /// This is the one width measure: layout, measurement, and painting agree on
         /// it because it counts grapheme widths as rendering does.
         pub fn width(s: &str) -> u32 {}
+
+        impl Truncate {
+            /// Return `s` cut to `budget` columns at this end.
+            pub fn apply(self, s: &str, budget: usize) -> Cow<'_, str> {}
+        }
     }
 
     pub mod tree {
@@ -4064,6 +4079,17 @@ pub mod canopy {
         ) -> Result<R>
         where
             W: 'static + Widget, {
+        }
+
+        /// Put `child` inside a new detached `widget` node and return the wrapper.
+        ///
+        /// The child keeps its identity: it is detached from its current parent
+        /// and reattached under the wrapper, which the caller then attaches.
+        fn wrap_node<W: 'static + Widget>(
+            &mut self,
+            child: impl Into<NodeId>,
+            widget: W,
+        ) -> Result<TypedId<W>> {
         }
     }
 

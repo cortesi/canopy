@@ -722,6 +722,22 @@ pub trait ContextExt: Context + ViewContextExt {
         Ok(TypedId::new(id))
     }
 
+    /// Put `child` inside a new detached `widget` node and return the wrapper.
+    ///
+    /// The child keeps its identity: it is detached from its current parent
+    /// and reattached under the wrapper, which the caller then attaches.
+    fn wrap_node<W: Widget + 'static>(
+        &mut self,
+        child: impl Into<NodeId>,
+        widget: W,
+    ) -> Result<TypedId<W>> {
+        let child = child.into();
+        let wrapper = self.create_detached(widget)?;
+        self.detach(child)?;
+        self.attach(NodeId::from(wrapper), child)?;
+        Ok(wrapper)
+    }
+
     /// Add a widget as a child of `parent` and return the new typed node ID.
     fn add_child<W: Widget + 'static>(
         &mut self,

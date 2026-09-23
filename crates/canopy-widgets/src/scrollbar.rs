@@ -34,13 +34,15 @@ pub struct ScrollbarGlyphs {
     pub track_horizontal: char,
 }
 
-/// Thin-line scrollbar glyphs over thin-line chrome.
-pub const THIN: ScrollbarGlyphs = ScrollbarGlyphs {
-    thumb_vertical: '█',
-    thumb_horizontal: '▄',
-    track_vertical: '│',
-    track_horizontal: '─',
-};
+impl ScrollbarGlyphs {
+    /// Thin-line scrollbar glyphs over thin-line chrome.
+    pub const THIN: Self = Self {
+        thumb_vertical: '█',
+        thumb_horizontal: '▄',
+        track_vertical: '│',
+        track_horizontal: '─',
+    };
+}
 
 /// A node whose canvas overflows its content along one axis.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

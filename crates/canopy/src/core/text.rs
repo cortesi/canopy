@@ -125,6 +125,26 @@ fn cells(s: &str) -> usize {
     s.graphemes(true).map(grapheme_width).sum()
 }
 
+/// Which end of a string a truncation drops when it does not fit.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Truncate {
+    /// Drop the tail, which is how ordinary text reads.
+    #[default]
+    End,
+    /// Drop the head, which keeps the last components of a path visible.
+    Start,
+}
+
+impl Truncate {
+    /// Return `s` cut to `budget` columns at this end.
+    pub fn apply(self, s: &str, budget: usize) -> Cow<'_, str> {
+        match self {
+            Self::End => truncate_end(s, budget),
+            Self::Start => truncate_start(s, budget),
+        }
+    }
+}
+
 /// Marker standing in for the text a truncation removed.
 const ELLIPSIS: &str = "…";
 

@@ -11,7 +11,7 @@ use canopy::{
     tree::FocusScope,
 };
 use canopy_widgets::{
-    Border, Button, Container, Frame, List, SINGLE, SINGLE_THICK, Selectable, Text,
+    Border, BoxGlyphs, Button, Container, Frame, List, Selectable, Text,
     terminal::{Terminal, TerminalConfig},
 };
 use unicode_width::UnicodeWidthStr;
@@ -98,7 +98,10 @@ impl Widget for TermEntry {
     }
 
     fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        let box_id = ctx.add_child(ctx.node_id(), Border::new().with_glyphs(SINGLE).with_fill())?;
+        let box_id = ctx.add_child(
+            ctx.node_id(),
+            Border::new().with_glyphs(BoxGlyphs::SINGLE).with_fill(),
+        )?;
         let center_id = ctx.add_child(box_id, Container::center())?;
         ctx.add_child(
             center_id,
@@ -397,7 +400,7 @@ impl Widget for TermGym {
         let term_frame_id = c.add_child(
             c.node_id(),
             Frame::new()
-                .with_glyphs(SINGLE_THICK)
+                .with_glyphs(BoxGlyphs::SINGLE_THICK)
                 .with_title("terminal"),
         )?;
         c.add_child(term_frame_id, TerminalStack::new())?;

@@ -11,7 +11,7 @@ use canopy::{
     style::{Color, Paint, StyleMap},
 };
 use canopy_widgets::{
-    Button, Frame, ROUND,
+    BoxGlyphs, Button, Frame,
     terminal::{Terminal, TerminalConfig},
 };
 
@@ -157,7 +157,7 @@ impl Widget for TermDemo {
         for label in TAB_LABELS {
             let tab_id = ctx.add_child(
                 tab_bar_id,
-                Button::new(label.to_string()).with_glyphs(ROUND),
+                Button::new(label.to_string()).with_glyphs(BoxGlyphs::ROUND),
             )?;
             ctx.set_layout_override(
                 tab_id.into(),

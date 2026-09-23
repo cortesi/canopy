@@ -11,6 +11,8 @@ use std::ops::Range;
 
 use imara_diff::{Algorithm, InternedInput};
 
+pub use crate::diff_view::{Mode, PreparedDiff};
+
 /// How much unchanged text the rows show.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Scope {

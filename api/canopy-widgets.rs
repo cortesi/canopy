@@ -6,6 +6,151 @@ pub mod canopy_widgets {
     //! This crate provides a collection of reusable widgets for building terminal
     //! user interfaces with canopy.
 
+    pub mod diff {
+        //! Line diffs of two full texts, and DiffView's supporting types.
+        //! Line diffs of two full texts and the rows a diff view shows.
+        //!
+        //! A [`Diff`] holds both versions and the changed line ranges between them.
+        //! [`Diff::rows`] derives the display sequence for a [`Scope`]: every line in
+        //! whole-file scope, or each change block with context and gap rows in context
+        //! scope. Unified and side-by-side renderers consume the same rows, and every
+        //! row names the line numbers it shows, so a renderer can ask a syntax
+        //! highlighter for the correct side and line.
+
+        /// A line diff of two full texts.
+        pub struct Diff {}
+
+        /// One row of a diff.
+        ///
+        /// Rows are ordered the way a unified diff reads: removed lines precede added
+        /// lines inside a change, and a side-by-side renderer pairs consecutive
+        /// removed and added runs at render time.
+        #[derive(Clone, Debug, Eq, PartialEq)]
+        pub enum DiffRow {
+            /// A line both versions hold at the same place.
+            Unchanged {
+                /// Zero-based line in the old version.
+                old: usize,
+                /// Zero-based line in the new version.
+                new: usize,
+            },
+            /// A line only the old version holds.
+            Removed {
+                /// Zero-based line in the old version.
+                old: usize,
+            },
+            /// A line only the new version holds.
+            Added {
+                /// Zero-based line in the new version.
+                new: usize,
+            },
+            /// A run of unchanged lines the context scope hides.
+            Gap {
+                /// Hidden old lines.
+                old: std::ops::Range<usize>,
+                /// Hidden new lines.
+                new: std::ops::Range<usize>,
+            },
+            /// The heading that opens one change block in context scope.
+            Header {
+                /// Old lines the block shows, changes and context together.
+                old: std::ops::Range<usize>,
+                /// New lines the block shows, changes and context together.
+                new: std::ops::Range<usize>,
+            },
+        }
+
+        /// How a diff view arranges the two versions.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub enum Mode {
+            /// One column: removed lines above added lines.
+            Unified,
+            /// Two columns: the old version left, the new version right.
+            SideBySide,
+        }
+
+        /// The expensive parts of a diff view, ready to adopt without recomputation.
+        ///
+        /// A host that computes diffs off the UI thread builds one of these there and
+        /// hands it to [`DiffView::from_prepared`], so the UI thread only moves data.
+        pub struct PreparedDiff {}
+
+        /// How much unchanged text the rows show.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub enum Scope {
+            /// Every line of both versions.
+            WholeFile,
+            /// Changes with this many unchanged lines around them.
+            Context(usize),
+        }
+
+        impl Diff {
+            #[must_use]
+            /// Compute the line diff of `old` and `new`.
+            ///
+            /// The caller bounds the texts; a 1 MiB side is the intended ceiling for
+            /// interactive use. An empty side or two equal texts skip the diff
+            /// algorithm, which makes a whole-file creation or deletion immediate.
+            pub fn new(old: impl Into<String>, new: impl Into<String>) -> Self {}
+
+            #[must_use]
+            /// Return one new line without its terminator.
+            pub fn new_line(&self, line: usize) -> &str {}
+
+            #[must_use]
+            /// Return one old line without its terminator.
+            pub fn old_line(&self, line: usize) -> &str {}
+
+            #[must_use]
+            /// Return the display rows for `scope`.
+            ///
+            /// Each call rebuilds the sequence; a view caches the result until its
+            /// scope or texts change.
+            pub fn rows(&self, scope: Scope) -> Vec<DiffRow> {}
+
+            #[must_use]
+            /// Return the new version text.
+            pub fn new_text(&self) -> &str {}
+
+            #[must_use]
+            /// Return the number of lines in the new version.
+            pub fn new_len(&self) -> usize {}
+
+            #[must_use]
+            /// Return the number of lines in the old version.
+            pub fn old_len(&self) -> usize {}
+
+            #[must_use]
+            /// Return the number of lines the new version adds.
+            pub fn insertions(&self) -> usize {}
+
+            #[must_use]
+            /// Return the number of lines the old version holds and the new does not.
+            pub fn deletions(&self) -> usize {}
+
+            #[must_use]
+            /// Return the old version text.
+            pub fn old_text(&self) -> &str {}
+
+            #[must_use]
+            /// Return whether the versions differ.
+            pub fn changed(&self) -> bool {}
+        }
+
+        impl PreparedDiff {
+            #[must_use]
+            /// Compute every part of a view for `diff` at `scope` and `tab_stop`.
+            ///
+            /// Side-by-side pairing is deferred until a view needs it, because a
+            /// unified view never does.
+            pub fn new(diff: Diff, scope: Scope, tab_stop: usize) -> Self {}
+
+            #[must_use]
+            /// Return the line diff.
+            pub fn diff(&self) -> &Diff {}
+        }
+    }
+
     #[expect(
         clippy::multiple_inherent_impl,
         reason = "Editor methods are split by rendering, vi, and prompt concerns."
@@ -64,6 +209,24 @@ pub mod canopy_widgets {
             Absolute,
             /// Render relative line numbers (current line stays absolute).
             Relative,
+        }
+
+        /// A position in the text buffer expressed as a logical line and a char index.
+        #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+        pub struct TextPosition {
+            /// Logical line index (0-based).
+            pub line: usize,
+            /// Char index within the line (0-based).
+            pub column: usize,
+        }
+
+        /// A half-open text range expressed in buffer coordinates.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        pub struct TextRange {
+            /// Range start position (inclusive).
+            pub start: TextPosition,
+            /// Range end position (exclusive).
+            pub end: TextPosition,
         }
 
         /// Wrapping behavior for the editor.
@@ -251,6 +414,22 @@ pub mod canopy_widgets {
             /// Construct a default editor configuration.
             pub fn new() -> Self {}
         }
+
+        impl TextPosition {
+            /// Create a new text position.
+            pub fn new(line: usize, column: usize) -> Self {}
+        }
+
+        impl TextRange {
+            /// Construct a text range.
+            pub fn new(start: TextPosition, end: TextPosition) -> Self {}
+
+            /// Return a range with start/end ordered.
+            pub fn normalized(self) -> Self {}
+
+            /// Return true if the range is empty.
+            pub fn is_empty(self) -> bool {}
+        }
     }
 
     pub mod font {
@@ -259,9 +438,6 @@ pub mod canopy_widgets {
         /// Rasterized font data for terminal rendering.
         #[derive(Clone)]
         pub struct Font {}
-
-        /// Render large ASCII-font text into a bounded region.
-        pub struct FontBanner {}
 
         /// Rendering effects applied to font output.
         #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -283,9 +459,6 @@ pub mod canopy_widgets {
         /// Renderer that converts fonts into terminal text.
         pub struct FontRenderer {}
 
-        /// Widget that renders an image into terminal cells.
-        pub struct ImageView {}
-
         /// Alignment configuration for font layouts.
         #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
         pub struct LayoutOptions {
@@ -295,123 +468,12 @@ pub mod canopy_widgets {
             pub v_align: canopy::layout::Align,
         }
 
-        impl CommandNode for ImageView {
-            fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-        }
-
-        impl ImageView {
-            #[must_use]
-            /// Create an image view with nothing to show yet.
-            ///
-            /// The view holds a single transparent pixel until [`Self::set_image`] or
-            /// [`Self::set_path`] gives it real content. Callers that mount a viewer
-            /// before they have an image should keep it hidden until then.
-            pub fn empty() -> Self {}
-
-            /// Create a new image view widget from a file path.
-            pub fn from_path(path: impl AsRef<Path>) -> Result<Self> {}
-
-            /// Create a new image view widget.
-            pub fn new(image: &RgbaImage) -> Self {}
-
-            /// Load a thumbnail within `bounds`, preserving its aspect ratio.
-            ///
-            /// Small images keep their original pixels. Larger images are averaged
-            /// after compositing transparency onto black. Zooming uses the thumbnail;
-            /// use [`Self::set_path`] to retain full-resolution zooming instead.
-            ///
-            /// The source is limited to 32 * 1024 * 1024 pixels and the decoder has a
-            /// 128 MiB allocation budget. Conversion can allocate one additional RGBA
-            /// source buffer. Each thumbnail edge is capped at 1024 pixels, even when
-            /// `bounds` is larger. Sampling tables use at most 24 * (width + 1) *
-            /// (height + 1) bytes for the thumbnail dimensions. Zero bounds are
-            /// invalid. On failure, the current image is preserved. Callers should
-            /// also bound the encoded file size.
-            pub fn set_preview_path(&mut self, path: impl AsRef<Path>, bounds: Size) -> Result<()> {
-            }
-
-            /// Pan by one step in the specified direction.
-            /// @param dir The pan direction.
-            pub fn pan(&mut self, ctx: &mut dyn Context, dir: ScrollDirection) -> Result<()> {}
-
-            /// Show a different image, returning the view to its auto-fitted state.
-            pub fn set_image(&mut self, image: &RgbaImage) {}
-
-            /// Show the image at `path`, returning the view to its auto-fitted state.
-            ///
-            /// The view keeps its current image when the file cannot be read.
-            pub fn set_path(&mut self, path: impl AsRef<Path>) -> Result<()> {}
-
-            /// Zoom around the view center.
-            /// @param dir The zoom direction.
-            pub fn zoom(&mut self, ctx: &mut dyn Context, dir: ZoomDirection) -> Result<()> {}
-
-            /// Build a positional call with typed user arguments.
-            pub fn call_pan(dir: ScrollDirection) -> canopy::commands::CommandCall {}
-
-            /// Build a positional call with typed user arguments.
-            pub fn call_zoom(dir: ZoomDirection) -> canopy::commands::CommandCall {}
-
-            /// Return the command spec for this command.
-            pub fn spec_pan() -> &'static canopy::commands::CommandSpec {}
-
-            /// Return the command spec for this command.
-            pub fn spec_zoom() -> &'static canopy::commands::CommandSpec {}
-        }
-
-        impl Register for ImageView {
-            /// Register commands for the image viewer widget.
-            fn register(setup: &mut Setup) -> Result<()> {}
-        }
-
-        impl Widget for ImageView {
-            /// Accept focus so key bindings apply to this widget.
-            fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
-
-            /// Fill the available space in the terminal view.
-            fn layout(&self) -> Layout {}
-
-            /// Render the current image view into the terminal buffer.
-            fn render(&mut self, render: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
-
-            fn canvas(&self, view: Size, _ctx: &CanvasContext<'_>) -> Size {}
-        }
-
         impl Font {
             /// Load a font from in-memory bytes.
             pub fn from_bytes(data: impl AsRef<[u8]>) -> Result<Self> {}
 
             /// Return the font name, if provided in metadata.
             pub fn name(&self) -> Option<&str> {}
-        }
-
-        impl FontBanner {
-            /// Configure layout options for the banner.
-            pub fn with_layout_options(self, options: LayoutOptions) -> Self {}
-
-            /// Configure rendering effects for the banner.
-            pub fn with_effects(self, effects: FontEffects) -> Self {}
-
-            /// Configure the banner style path.
-            pub fn with_style(self, style: impl Into<String>) -> Self {}
-
-            /// Construct a banner with text and a renderer.
-            pub fn new(text: impl Into<String>, renderer: FontRenderer) -> Self {}
-
-            /// Update rendering effects for the banner.
-            pub fn set_effects(&mut self, effects: FontEffects) {}
-
-            /// Update the banner renderer.
-            pub fn set_renderer(&mut self, renderer: FontRenderer) {}
-
-            /// Update the banner text.
-            pub fn set_text(&mut self, text: impl Into<String>) {}
-        }
-
-        impl Widget for FontBanner {
-            fn layout(&self) -> Layout {}
-
-            fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
         }
 
         impl FontRenderer {
@@ -502,6 +564,18 @@ pub mod canopy_widgets {
         }
     }
 
+    pub mod list {
+        //! List's supporting types.
+
+        /// Monotonic key for list items.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        pub struct AutoKey(_);
+
+        impl ToArgValue for AutoKey {
+            fn to_arg_value(self) -> ArgValue {}
+        }
+    }
+
     pub mod scrollbar {
         //! Proportional scrollbars and the nodes they display.
         //!
@@ -548,9 +622,6 @@ pub mod canopy_widgets {
             /// Background line of a horizontal track around the thumb.
             pub track_horizontal: char,
         }
-
-        /// Thin-line scrollbar glyphs over thin-line chrome.
-        pub const THIN: ScrollbarGlyphs = _;
 
         /// Return the one node beneath `owner` whose canvas overflows along `axis`.
         ///
@@ -611,6 +682,11 @@ pub mod canopy_widgets {
                 tracks: &[(NodeId, Rect)],
             ) -> Result<EventOutcome> {
             }
+        }
+
+        impl ScrollbarGlyphs {
+            /// Thin-line scrollbar glyphs over thin-line chrome.
+            pub const THIN: Self = _;
         }
     }
 
@@ -681,197 +757,6 @@ pub mod canopy_widgets {
         }
     }
 
-    pub mod text_buffer {
-        //! Shared text editing machinery for Input and Editor.
-        //! Feature-independent rope storage, editing, and selection helpers.
-
-        /// A text selection expressed as an anchor and head position.
-        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-        pub struct Selection {}
-
-        /// Rope-backed text buffer with selection and undo/redo support.
-        #[derive(Clone, Debug)]
-        pub struct TextBuffer {}
-
-        /// A position in the text buffer expressed as a logical line and a char index.
-        #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-        pub struct TextPosition {
-            /// Logical line index (0-based).
-            pub line: usize,
-            /// Char index within the line (0-based).
-            pub column: usize,
-        }
-
-        /// A half-open text range expressed in buffer coordinates.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        pub struct TextRange {
-            /// Range start position (inclusive).
-            pub start: TextPosition,
-            /// Range end position (exclusive).
-            pub end: TextPosition,
-        }
-
-        /// Scoped text edit transaction.
-        pub struct TextTransaction<'a> {}
-
-        impl Deref for TextTransaction<'_> {
-            fn deref(&self) -> &Self::Target {}
-
-            type Target = TextBuffer;
-        }
-
-        impl DerefMut for TextTransaction<'_> {
-            fn deref_mut(&mut self) -> &mut Self::Target {}
-        }
-
-        impl Drop for TextTransaction<'_> {
-            fn drop(&mut self) {}
-        }
-
-        impl Selection {
-            /// Construct a collapsed selection at a position.
-            pub fn caret(position: TextPosition) -> Self {}
-
-            /// Construct a selection from anchor and head positions.
-            pub fn new(anchor: TextPosition, head: TextPosition) -> Self {}
-
-            /// Return the anchor position.
-            pub fn anchor(self) -> TextPosition {}
-
-            /// Return the head position.
-            pub fn head(self) -> TextPosition {}
-
-            /// Return the selection range as a normalized text range.
-            pub fn range(self) -> TextRange {}
-
-            /// Return true if the selection is empty.
-            pub fn is_empty(self) -> bool {}
-
-            /// Update the head position.
-            pub fn set_head(&mut self, head: TextPosition) {}
-        }
-
-        impl TextBuffer {
-            /// Begin a grouped transaction that commits when the guard is dropped.
-            pub fn transaction(&mut self) -> TextTransaction<'_> {}
-
-            /// Begin a grouped transaction.
-            pub fn begin_transaction(&mut self) {}
-
-            /// Commit the active transaction, if any.
-            pub fn commit_transaction(&mut self) {}
-
-            /// Create a new buffer from an initial string.
-            pub fn new(text: impl Into<String>) -> Self {}
-
-            /// Delete the selection or the grapheme after the cursor.
-            pub fn delete_forward(&mut self, allow_line_wrap: bool) -> bool {}
-
-            /// Delete the selection or the grapheme before the cursor.
-            pub fn delete_backward(&mut self, allow_line_wrap: bool) -> bool {}
-
-            /// Insert text at the cursor, replacing any selection.
-            pub fn insert_text(&mut self, text: &str) {}
-
-            /// Move the cursor left by one grapheme.
-            pub fn move_left(&mut self, allow_line_wrap: bool) -> bool {}
-
-            /// Move the cursor right by one grapheme.
-            pub fn move_right(&mut self, allow_line_wrap: bool) -> bool {}
-
-            /// Move the cursor to the end of the current line.
-            pub fn move_line_end(&mut self) {}
-
-            /// Move the cursor to the first non-whitespace character in the line.
-            pub fn move_line_first_non_ws(&mut self) {}
-
-            /// Move the cursor to the start of the current line.
-            pub fn move_line_start(&mut self) {}
-
-            /// Redo the most recently undone transaction.
-            pub fn redo(&mut self) -> bool {}
-
-            /// Replace a range with the provided text.
-            pub fn replace_range(&mut self, range: TextRange, text: &str) {}
-
-            /// Replace the cursor and collapse the selection.
-            pub fn set_cursor(&mut self, pos: TextPosition) {}
-
-            /// Replace the selection, clamping to bounds.
-            pub fn set_selection(&mut self, selection: Selection) {}
-
-            /// Return the closest position for a display column within a line.
-            pub fn position_for_column(
-                &self,
-                line: usize,
-                column: usize,
-                tab_stop: usize,
-            ) -> TextPosition {
-            }
-
-            /// Return the current buffer revision.
-            pub fn revision(&self) -> u64 {}
-
-            /// Return the current selection.
-            pub fn selection(&self) -> Selection {}
-
-            /// Return the cursor position (selection head).
-            pub fn cursor(&self) -> TextPosition {}
-
-            /// Return the display column for a position.
-            pub fn column_for_position(&self, pos: TextPosition, tab_stop: usize) -> usize {}
-
-            /// Return the end position for a line, optionally including the newline.
-            pub fn line_end_position(&self, line: usize, include_newline: bool) -> TextPosition {}
-
-            /// Return the full buffer contents as a string.
-            pub fn text(&self) -> String {}
-
-            /// Return the line length in chars, excluding any trailing newline.
-            pub fn line_char_len(&self, line: usize) -> usize {}
-
-            /// Return the range a forward delete at `from` would remove.
-            ///
-            /// At the end of a line the range joins the next line when
-            /// `allow_line_wrap` is set. Returns `None` when there is nothing after
-            /// the position to delete.
-            pub fn forward_delete_range(
-                &self,
-                from: TextPosition,
-                allow_line_wrap: bool,
-            ) -> Option<TextRange> {
-            }
-
-            /// Return the text in a range.
-            pub fn range_text(&self, range: TextRange) -> String {}
-
-            /// Return the text of a logical line without a trailing newline.
-            pub fn line_text(&self, line: usize) -> String {}
-
-            /// Return the total number of logical lines.
-            pub fn line_count(&self) -> usize {}
-
-            /// Undo the most recent transaction.
-            pub fn undo(&mut self) -> bool {}
-        }
-
-        impl TextPosition {
-            /// Create a new text position.
-            pub fn new(line: usize, column: usize) -> Self {}
-        }
-
-        impl TextRange {
-            /// Construct a text range.
-            pub fn new(start: TextPosition, end: TextPosition) -> Self {}
-
-            /// Return a range with start/end ordered.
-            pub fn normalized(self) -> Self {}
-
-            /// Return true if the range is empty.
-            pub fn is_empty(self) -> bool {}
-        }
-    }
-
     /// One of the two answers a question takes.
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
     pub enum Answer {
@@ -881,10 +766,6 @@ pub mod canopy_widgets {
         /// Decline it, which is where a dialog opens unless a host says otherwise.
         No,
     }
-
-    /// Monotonic key for list items.
-    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-    pub struct AutoKey(_);
 
     /// A simple box container around its children.
     #[derive(Default)]
@@ -978,49 +859,6 @@ pub mod canopy_widgets {
     #[derive(Default)]
     pub struct Dialog {}
 
-    /// A line diff of two full texts.
-    pub struct Diff {}
-
-    /// One row of a diff.
-    ///
-    /// Rows are ordered the way a unified diff reads: removed lines precede added
-    /// lines inside a change, and a side-by-side renderer pairs consecutive
-    /// removed and added runs at render time.
-    #[derive(Clone, Debug, Eq, PartialEq)]
-    pub enum DiffRow {
-        /// A line both versions hold at the same place.
-        Unchanged {
-            /// Zero-based line in the old version.
-            old: usize,
-            /// Zero-based line in the new version.
-            new: usize,
-        },
-        /// A line only the old version holds.
-        Removed {
-            /// Zero-based line in the old version.
-            old: usize,
-        },
-        /// A line only the new version holds.
-        Added {
-            /// Zero-based line in the new version.
-            new: usize,
-        },
-        /// A run of unchanged lines the context scope hides.
-        Gap {
-            /// Hidden old lines.
-            old: std::ops::Range<usize>,
-            /// Hidden new lines.
-            new: std::ops::Range<usize>,
-        },
-        /// The heading that opens one change block in context scope.
-        Header {
-            /// Old lines the block shows, changes and context together.
-            old: std::ops::Range<usize>,
-            /// New lines the block shows, changes and context together.
-            new: std::ops::Range<usize>,
-        },
-    }
-
     /// A line diff with a display strategy, a scope, and optional highlighting.
     pub struct DiffView {}
 
@@ -1032,6 +870,9 @@ pub mod canopy_widgets {
     pub struct Dropdown<T>
     where
         T: ItemLabel, {}
+
+    /// Render large ASCII-font text into a bounded region.
+    pub struct FontBanner {}
 
     /// A frame around an element with an optional title and scroll positions.
     ///
@@ -1117,24 +958,9 @@ pub mod canopy_widgets {
     where
         T: ItemLabel, {}
 
-    /// The expensive parts of a diff view, ready to adopt without recomputation.
-    ///
-    /// A host that computes diffs off the UI thread builds one of these there and
-    /// hands it to [`DiffView::from_prepared`], so the UI thread only moves data.
-    pub struct PreparedDiff {}
-
     /// A Root widget that lives at the base of a Canopy app.
     #[derive(Default)]
     pub struct Root {}
-
-    /// How much unchanged text the rows show.
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-    pub enum Scope {
-        /// Every line of both versions.
-        WholeFile,
-        /// Changes with this many unchanged lines around them.
-        Context(usize),
-    }
 
     /// A container that lays its children out past its viewport and scrolls over
     /// them.
@@ -1149,33 +975,6 @@ pub mod canopy_widgets {
     /// through the runtime's default action, focus changes reveal the focused
     /// node, and an enclosing frame draws its position.
     pub struct Scroll {}
-
-    /// A proportional scrollbar for one axis.
-    ///
-    /// The owner resolves its tracks before each render and event, and passes each
-    /// track with the node it scrolls. A drag stays bound to the node and track it
-    /// started on. It ends when either changes, or when another node takes mouse
-    /// capture.
-    #[derive(Clone, Copy, Debug)]
-    pub struct Scrollbar {}
-
-    /// The glyphs drawn on scrollbar tracks, following the
-    /// [`BoxGlyphs`](crate::BoxGlyphs) pattern.
-    ///
-    /// Owners draw thumbs with the `thumb_*` glyphs and track backgrounds with
-    /// the `track_*` glyphs. Marks that blend into the track reuse the track
-    /// glyph of their axis and read through color alone.
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-    pub struct ScrollbarGlyphs {
-        /// Thumb on a vertical track.
-        pub thumb_vertical: char,
-        /// Thumb on a horizontal track.
-        pub thumb_horizontal: char,
-        /// Background line of a vertical track around the thumb.
-        pub track_vertical: char,
-        /// Background line of a horizontal track around the thumb.
-        pub track_horizontal: char,
-    }
 
     /// A single-choice widget that shows every item.
     ///
@@ -1204,15 +1003,6 @@ pub mod canopy_widgets {
     #[derive(Default)]
     pub struct StatusBar {}
 
-    /// How a diff view arranges the two versions.
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-    pub enum Strategy {
-        /// One column: removed lines above added lines.
-        Unified,
-        /// Two columns: the old version left, the new version right.
-        SideBySide,
-    }
-
     /// A row of tabs over a set of pages, one page visible at a time.
     ///
     /// Each page is a child node. Tabs hides every page but the active one. When a
@@ -1227,16 +1017,6 @@ pub mod canopy_widgets {
 
     /// Multiline text widget with wrapping and scrolling.
     pub struct Text {}
-
-    /// Which end of a label a row drops when it does not fit.
-    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-    pub enum Truncate {
-        #[default]
-        /// Drop the tail, which is how ordinary text reads.
-        End,
-        /// Drop the head, which keeps the last components of a path visible.
-        Start,
-    }
 
     /// Policy for publishing an input value in semantic snapshots.
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -1280,35 +1060,9 @@ pub mod canopy_widgets {
     /// first accepting widget, which clears or resets its own state.
     pub const CLEAR_INTENT: &str = "canopy.clear";
 
-    /// Double line Unicode box drawing set.
-    pub const DOUBLE: BoxGlyphs = _;
-
-    /// Round corner thin Unicode box drawing set.
-    pub const ROUND: BoxGlyphs = _;
-
-    /// Single line thin Unicode box drawing set.
-    pub const SINGLE: BoxGlyphs = _;
-
-    /// Single line thick Unicode box drawing set.
-    pub const SINGLE_THICK: BoxGlyphs = _;
-
-    /// Thin-line scrollbar glyphs over thin-line chrome.
-    pub const THIN: ScrollbarGlyphs = _;
-
     /// Register [`CLEAR_INTENT`]. Each widget type that accepts the intent calls
     /// this from its `Register` impl; registering it again is harmless.
     pub fn register_clear_intent(setup: &mut canopy::Setup) -> canopy::error::Result<()> {}
-
-    /// Wrap `child` in a new `widget` node and return the wrapper's typed id.
-    ///
-    /// The child keeps its identity: it is detached from its current parent and
-    /// reattached under the wrapper.
-    pub fn wrap<W: 'static + Widget>(
-        c: &mut dyn Context,
-        child: impl Into<canopy::NodeId>,
-        widget: W,
-    ) -> canopy::error::Result<canopy::TypedId<W>> {
-    }
 
     impl Border {
         /// Build a box with a specified glyph set.
@@ -1330,6 +1084,17 @@ pub mod canopy_widgets {
         fn name(&self) -> NodeName {}
 
         fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
+    }
+
+    impl BoxGlyphs {
+        /// Double line Unicode box drawing set.
+        pub const DOUBLE: Self = _;
+        /// Round corner thin Unicode box drawing set.
+        pub const ROUND: Self = _;
+        /// Single line thick Unicode box drawing set.
+        pub const SINGLE_THICK: Self = _;
+        /// Single line thin Unicode box drawing set.
+        pub const SINGLE: Self = _;
     }
 
     impl Button {
@@ -1568,7 +1333,7 @@ pub mod canopy_widgets {
 
         #[must_use]
         /// Set the display strategy.
-        pub fn with_strategy(self, strategy: Strategy) -> Self {}
+        pub fn with_strategy(self, strategy: Mode) -> Self {}
 
         #[must_use]
         /// Set the tab stop width in columns.
@@ -2087,57 +1852,33 @@ pub mod canopy_widgets {
         fn render(&mut self, render: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
     }
 
-    impl Diff {
-        #[must_use]
-        /// Compute the line diff of `old` and `new`.
-        ///
-        /// The caller bounds the texts; a 1 MiB side is the intended ceiling for
-        /// interactive use. An empty side or two equal texts skip the diff
-        /// algorithm, which makes a whole-file creation or deletion immediate.
-        pub fn new(old: impl Into<String>, new: impl Into<String>) -> Self {}
+    impl FontBanner {
+        /// Configure layout options for the banner.
+        pub fn with_layout_options(self, options: LayoutOptions) -> Self {}
 
-        #[must_use]
-        /// Return one new line without its terminator.
-        pub fn new_line(&self, line: usize) -> &str {}
+        /// Configure rendering effects for the banner.
+        pub fn with_effects(self, effects: FontEffects) -> Self {}
 
-        #[must_use]
-        /// Return one old line without its terminator.
-        pub fn old_line(&self, line: usize) -> &str {}
+        /// Configure the banner style path.
+        pub fn with_style(self, style: impl Into<String>) -> Self {}
 
-        #[must_use]
-        /// Return the display rows for `scope`.
-        ///
-        /// Each call rebuilds the sequence; a view caches the result until its
-        /// scope or texts change.
-        pub fn rows(&self, scope: Scope) -> Vec<DiffRow> {}
+        /// Construct a banner with text and a renderer.
+        pub fn new(text: impl Into<String>, renderer: FontRenderer) -> Self {}
 
-        #[must_use]
-        /// Return the new version text.
-        pub fn new_text(&self) -> &str {}
+        /// Update rendering effects for the banner.
+        pub fn set_effects(&mut self, effects: FontEffects) {}
 
-        #[must_use]
-        /// Return the number of lines in the new version.
-        pub fn new_len(&self) -> usize {}
+        /// Update the banner renderer.
+        pub fn set_renderer(&mut self, renderer: FontRenderer) {}
 
-        #[must_use]
-        /// Return the number of lines in the old version.
-        pub fn old_len(&self) -> usize {}
+        /// Update the banner text.
+        pub fn set_text(&mut self, text: impl Into<String>) {}
+    }
 
-        #[must_use]
-        /// Return the number of lines the new version adds.
-        pub fn insertions(&self) -> usize {}
+    impl Widget for FontBanner {
+        fn layout(&self) -> Layout {}
 
-        #[must_use]
-        /// Return the number of lines the old version holds and the new does not.
-        pub fn deletions(&self) -> usize {}
-
-        #[must_use]
-        /// Return the old version text.
-        pub fn old_text(&self) -> &str {}
-
-        #[must_use]
-        /// Return whether the versions differ.
-        pub fn changed(&self) -> bool {}
+        fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
     }
 
     impl Frame {
@@ -2224,19 +1965,6 @@ pub mod canopy_widgets {
         fn render(&mut self, render: &mut Render<'_>, context: &dyn ViewContext) -> Result<()> {}
     }
 
-    impl PreparedDiff {
-        #[must_use]
-        /// Compute every part of a view for `diff` at `scope` and `tab_stop`.
-        ///
-        /// Side-by-side pairing is deferred until a view needs it, because a
-        /// unified view never does.
-        pub fn new(diff: Diff, scope: Scope, tab_stop: usize) -> Self {}
-
-        #[must_use]
-        /// Return the line diff.
-        pub fn diff(&self) -> &Diff {}
-    }
-
     impl Scroll {
         /// Place children in a row that scrolls horizontally.
         pub fn horizontal() -> Self {}
@@ -2254,53 +1982,6 @@ pub mod canopy_widgets {
         fn layout(&self) -> Layout {}
 
         fn name(&self) -> NodeName {}
-    }
-
-    impl Scrollbar {
-        #[must_use]
-        /// Also draw the track around the thumb with `style` and `glyph`.
-        pub const fn with_track(self, style: &'static str, glyph: char) -> Self {}
-
-        #[must_use]
-        /// Draw the thumb with `style` while a drag holds it.
-        pub const fn with_active(self, style: &'static str) -> Self {}
-
-        /// Construct a horizontal scrollbar whose thumb uses `style` and `glyph`.
-        pub const fn horizontal(style: &'static str, glyph: char) -> Self {}
-
-        /// Construct a vertical scrollbar whose thumb uses `style` and `glyph`.
-        pub const fn vertical(style: &'static str, glyph: char) -> Self {}
-
-        /// Draw the thumb of each track's node.
-        ///
-        /// `tracks` pairs each node with its track, in the outer coordinates of
-        /// the context's node. A node that shows its whole canvas draws nothing.
-        /// Rendering cannot release mouse capture, so a drag whose node or track
-        /// has changed draws no active thumb and ends at the next event. After
-        /// the thumb, each target's [`ScrollMark`](canopy::layout::ScrollMark)s
-        /// draw over the track, so scrolling the thumb across a mark keeps the
-        /// mark's color under the thumb's glyph.
-        pub fn render(
-            &mut self,
-            render: &mut Render<'_>,
-            ctx: &dyn ViewContext,
-            tracks: &[(NodeId, Rect)],
-        ) -> Result<()> {
-        }
-
-        /// Handle a mouse event for the scrollbars drawn in `tracks`.
-        ///
-        /// `tracks` holds the tracks resolved for this event, as passed to
-        /// [`Scrollbar::render`]. A press on a track captures the mouse for the
-        /// context's node and the release frees it. Returns
-        /// [`EventOutcome::Handle`] for events the scrollbar uses.
-        pub fn handle_mouse(
-            &mut self,
-            ctx: &mut dyn Context,
-            event: &mouse::MouseEvent,
-            tracks: &[(NodeId, Rect)],
-        ) -> Result<EventOutcome> {
-        }
     }
 
     impl StatusBar {
@@ -2324,10 +2005,6 @@ pub mod canopy_widgets {
         fn on_mount(&mut self, context: &mut dyn Context) -> Result<()> {}
 
         fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
-    }
-
-    impl ToArgValue for AutoKey {
-        fn to_arg_value(self) -> ArgValue {}
     }
 
     impl<K, W> KeyedChildren<K, W>

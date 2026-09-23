@@ -24,7 +24,7 @@ use crate::{
     click::ClickTracker,
     highlight::{HighlightSpan, Highlighter},
     run_paint,
-    scrollbar::THIN,
+    scrollbar::ScrollbarGlyphs,
     text_buffer::{Selection, TextBuffer, TextPosition, TextRange, single_line},
 };
 
@@ -35,7 +35,7 @@ const SEARCH_MATCH_TOP_CONTEXT: u32 = 3;
 ///
 /// This is the shared thin track vertical, so a mark blends into the
 /// surrounding divider or border and only its color stands out.
-const SEARCH_MARK: char = THIN.track_vertical;
+const SEARCH_MARK: char = ScrollbarGlyphs::THIN.track_vertical;
 
 /// One text-entry action.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -19,6 +19,8 @@ pub(crate) mod widget;
 
 pub use widget::Editor;
 
+pub use crate::text_buffer::{TextPosition, TextRange};
+
 #[cfg(test)]
 mod tests;
 

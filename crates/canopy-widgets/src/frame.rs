@@ -9,8 +9,8 @@ use canopy::{
     text,
 };
 
-use super::border::{BoxGlyphs, ROUND};
-use crate::scrollbar::{Scrollbar, ScrollbarGlyphs, THIN, edge_track, scroll_target};
+use super::border::BoxGlyphs;
+use crate::scrollbar::{Scrollbar, ScrollbarGlyphs, edge_track, scroll_target};
 
 /// A frame around an element with an optional title and scroll positions.
 ///
@@ -37,11 +37,11 @@ pub struct Frame {
 impl Frame {
     /// Construct a frame.
     pub fn new() -> Self {
-        let (vertical, horizontal) = Self::scrollbars(THIN);
+        let (vertical, horizontal) = Self::scrollbars(ScrollbarGlyphs::THIN);
         Self {
-            box_glyphs: ROUND,
+            box_glyphs: BoxGlyphs::ROUND,
             title: None,
-            scrollbar_glyphs: THIN,
+            scrollbar_glyphs: ScrollbarGlyphs::THIN,
             vertical,
             horizontal,
         }

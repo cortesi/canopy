@@ -13,8 +13,9 @@ mod tests {
     };
 
     use crate::{
-        BoxGlyphs, Button, Dialog, DiffView, Dropdown, Frame, KeyHint, List, Root, Scope, Selector,
-        StatusBar, Strategy, Text,
+        BoxGlyphs, Button, Dialog, DiffView, Dropdown, Frame, KeyHint, List, Root, Selector,
+        StatusBar, Text,
+        diff::{Mode, Scope},
     };
 
     fn click_at(location: Point) -> mouse::MouseEvent {
@@ -589,7 +590,7 @@ mod tests {
     #[test]
     fn diff_view_pairs_sides_in_side_by_side_layout() -> Result<()> {
         let view = DiffView::new("one\ntwo\nthree\n", "one\nchanged\nthree\n")
-            .with_strategy(Strategy::SideBySide);
+            .with_strategy(Mode::SideBySide);
         let root = SnapshotRoot::new(view);
         let mut harness = Harness::builder(root).size(24, 4).build()?;
         harness.render()?;

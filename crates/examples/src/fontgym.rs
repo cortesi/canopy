@@ -18,9 +18,8 @@ use canopy::{
     text,
 };
 use canopy_widgets::{
-    Container, Frame, List, SINGLE_THICK, Selectable, Text,
-    font::{Font, FontBanner, FontEffects, FontRenderer, LayoutOptions},
-    wrap,
+    BoxGlyphs, Container, FontBanner, Frame, List, Selectable, Text,
+    font::{Font, FontEffects, FontRenderer, LayoutOptions},
 };
 
 use crate::fixed_row;
@@ -172,7 +171,9 @@ impl Widget for FontGym {
         })?;
 
         let font_frame_id = ctx.create_detached(FocusFrame::new(
-            Frame::new().with_title("Fonts").with_glyphs(SINGLE_THICK),
+            Frame::new()
+                .with_title("Fonts")
+                .with_glyphs(BoxGlyphs::SINGLE_THICK),
             list_id,
         ))?;
         ctx.set_children(font_frame_id.into(), vec![list_id.into()])?;
@@ -203,7 +204,7 @@ impl Widget for FontGym {
         ))?;
         ctx.set_layout_override(input_id.into(), Layout::fill().into())?;
 
-        let input_frame = wrap(ctx, input_id, Frame::new().with_title("Text input"))?;
+        let input_frame = ctx.wrap_node(input_id, Frame::new().with_title("Text input"))?;
         let stack_id = ctx.add_child(ctx.node_id(), Container::column())?;
         ctx.set_children(
             stack_id.into(),
@@ -966,15 +967,15 @@ fn panel(
     title: &str,
     min_width: u32,
 ) -> Result<NodeId> {
-    let pad = wrap(
-        ctx,
+    let pad = ctx.wrap_node(
         child,
         Container::padded(Edges::symmetric(PANEL_PADDING_V, PANEL_PADDING_H)),
     )?;
-    let frame = wrap(
-        ctx,
+    let frame = ctx.wrap_node(
         pad,
-        Frame::new().with_title(title).with_glyphs(SINGLE_THICK),
+        Frame::new()
+            .with_title(title)
+            .with_glyphs(BoxGlyphs::SINGLE_THICK),
     )?;
     ctx.set_layout_override(
         frame.into(),

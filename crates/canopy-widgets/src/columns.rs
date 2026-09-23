@@ -10,7 +10,7 @@ use canopy::{
     tree::FocusScope,
 };
 
-use crate::scrollbar::{Scrollbar, ScrollbarGlyphs, THIN, edge_track, pane_target};
+use crate::scrollbar::{Scrollbar, ScrollbarGlyphs, edge_track, pane_target};
 
 /// Panes side by side, each followed by a divider.
 ///
@@ -38,8 +38,8 @@ impl Columns {
     /// Construct columns with no panes.
     pub fn new() -> Self {
         Self {
-            glyphs: THIN,
-            scrollbar: Self::scrollbar(THIN),
+            glyphs: ScrollbarGlyphs::THIN,
+            scrollbar: Self::scrollbar(ScrollbarGlyphs::THIN),
         }
     }
 

@@ -73,8 +73,11 @@ changing the contract.
 
 `canopy-widgets` enables its complete bundle by default. Basic forms can set
 `default-features = false`; Input, List, Root, Help, and Editor remain
-available. The shared `canopy_widgets::text_buffer` module is independent of
-Editor. Editor does not re-export text-buffer types. Every widget measures
+available. Input and Editor share a crate-private text buffer; `editor`
+re-exports only `TextPosition` and `TextRange`, which `Editor::set_matches`
+takes. Every widget is exported at the crate root once, and a module is public
+only when it carries a family of supporting types: `editor`, `highlight`,
+`font`, `terminal`, `scrollbar`, `diff`, and `list`. Every widget measures
 text with `canopy::text::width`, and tab-aware cells with
 `canopy::text::cell_width`, so measurement and painting agree.
 

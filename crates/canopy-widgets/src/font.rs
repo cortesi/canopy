@@ -11,8 +11,6 @@ use canopy::{
 };
 use fontdue::{Font as FontdueFont, FontSettings, LineMetrics, Metrics};
 
-pub use crate::{font_banner::FontBanner, image_view::ImageView};
-
 /// Supersampling scale factor used to rasterize glyphs before downsampling.
 const COVERAGE_SCALE: u32 = 8;
 

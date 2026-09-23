@@ -23,9 +23,9 @@ use super::{
     vi::ViMode,
 };
 use crate::{
-    THIN,
     editor::{EditMode, Editor, EditorConfig, LineNumbers, WrapMode},
     highlight::{HighlightSpan, Highlighter},
+    scrollbar::ScrollbarGlyphs,
     text_buffer::{Selection, TextPosition, TextRange},
 };
 
@@ -1308,7 +1308,7 @@ fn scroll_marks_report_one_row_per_match_line() {
             start: 0,
             end: 1,
             style: "editor/search/mark",
-            glyph: THIN.track_vertical,
+            glyph: ScrollbarGlyphs::THIN.track_vertical,
         }]
     );
     assert!(

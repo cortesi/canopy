@@ -17,8 +17,8 @@ mod confirm;
 mod container;
 /// Framed panel centred over the view.
 mod dialog;
-/// Line diffs of two full texts.
-mod diff;
+/// Line diffs of two full texts, and DiffView's supporting types.
+pub mod diff;
 /// Diff view widget over the line-diff row model.
 mod diff_view;
 /// Dropdown selection widget.
@@ -49,7 +49,7 @@ mod inspector;
 mod keyed;
 mod label;
 /// Typed list container with selection.
-mod list;
+mod list_view;
 /// Modal filtered list of items.
 mod picker;
 /// Application root widget.
@@ -73,35 +73,37 @@ pub mod terminal;
 /// Multiline text widget.
 mod text;
 /// Shared text editing machinery for Input and Editor.
-pub mod text_buffer;
-/// Wrapping an existing node in a container widget.
-mod wrap;
+mod text_buffer;
 
-pub use border::{Border, BoxGlyphs, DOUBLE, ROUND, SINGLE, SINGLE_THICK};
+pub use border::{Border, BoxGlyphs};
 pub use button::Button;
 pub use columns::Columns;
 pub use confirm::{Answer, Confirm};
 pub use container::Container;
 pub use dialog::Dialog;
-pub use diff::{Diff, DiffRow, Scope};
-pub use diff_view::{DiffView, PreparedDiff, Strategy};
+pub use diff_view::DiffView;
 pub use dropdown::Dropdown;
+#[cfg(feature = "graphics")]
+pub use font_banner::FontBanner;
 pub use frame::Frame;
 #[cfg(feature = "graphics")]
 pub use image_view::ImageView;
 pub use input::{CLEAR_INTENT, Input, ValueExposure, register_clear_intent};
 pub use keyed::KeyedChildren;
 pub use label::ItemLabel;
-pub use list::{AutoKey, List, Selectable};
-pub use picker::{Picker, PickerFilter, PickerList, Truncate};
+pub use list_view::{List, Selectable};
+pub use picker::{Picker, PickerFilter, PickerList};
 pub use root::Root;
 pub use scroll::Scroll;
-pub use scrollbar::{Scrollbar, ScrollbarGlyphs, THIN};
 pub use selector::Selector;
 pub use status_bar::{KeyHint, StatusBar};
 pub use tabs::Tabs;
 pub use text::{CanvasWidth, Text};
-pub use wrap::wrap;
+
+/// List's supporting types.
+pub mod list {
+    pub use crate::list_view::AutoKey;
+}
 
 #[cfg(test)]
 mod render_tests;
