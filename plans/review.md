@@ -2252,8 +2252,10 @@ Each stage also updates the docs it touches.
 - [x] C12: create the module map in `crates/canopy/src/lib.rs`. Fix the
   `crate::core::` capture leaks, add a check that fails on them, and move
   `NodeName` to `path.rs`. Migrate about 25 fh import blocks.
-- [ ] C50 renames (fh): dotfiles, `sync_panes`, `WidthPolicy`, `find_field`,
+- [x] C50 renames (fh): dotfiles, `sync_panes`, `WidthPolicy`, `find_field`,
   `WatchContext`, `testdata`, and `columns_dialog`.
+  - Note: `Commander::prepare` became `fill_question`. fh's `Prepared` and
+    `set_prepared` wait for C46's `DiffModel`.
 - [x] Rewrite the "Public API Surface" section of `architecture.md`.
 
 ### Stage 5: Scripting and automation surface
