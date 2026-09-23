@@ -173,11 +173,11 @@ pub mod canopy_mcp {
         Run {
             /// Optional live MCP Unix-domain socket path.
             mcp_socket: Option<std::path::PathBuf>,
+            /// Terminal adapter policy for the run loop.
+            options: canopy::terminal::RunOptions,
         },
         /// Serve the headless MCP automation server over stdio.
         HeadlessMcp,
-        /// Print the generated Luau API and exit.
-        Api,
     }
 
     #[serde(rename_all = "snake_case")]
@@ -362,16 +362,16 @@ pub mod canopy_mcp {
         pub height: u32,
     }
 
-    /// Launch a Canopy app in the selected mode.
+    /// Launch a Canopy app in the selected mode, and return the process exit
+    /// code.
     ///
-    /// The caller owns CLI parsing and app-specific configuration. This function
-    /// owns the repeated framework wiring: API output, headless MCP, live MCP, and
-    /// the terminal runloop.
+    /// The caller owns CLI parsing and app-specific configuration, including
+    /// printing the Luau API. This function owns the repeated framework wiring:
+    /// headless MCP, live MCP, and the terminal runloop.
     pub fn launch(
         factory: crate::AppFactory,
         mode: LaunchMode,
-        run_options: canopy::terminal::RunOptions,
-    ) -> crate::Result<i32> {
+    ) -> crate::Result<std::process::ExitCode> {
     }
 
     /// Resolve the ordered smoke scripts for a suite run into evaluation requests.

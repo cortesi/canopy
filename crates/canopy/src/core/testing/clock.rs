@@ -13,7 +13,8 @@ use crate::{
 /// Monotonic clock advanced by the test instead of elapsed wall time.
 ///
 /// Share it through an `Arc` and install it before preparing the application.
-/// Advancing time does not run callbacks; deliver `Work::Wake` to service them.
+/// Advancing time does not run callbacks; deliver `TurnInput::Wake` to service
+/// them.
 #[derive(Debug)]
 pub struct ManualClock {
     /// Current test instant, changed only by explicit advancement.

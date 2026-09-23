@@ -11,7 +11,7 @@ use crossterm::event as cevent;
 use futures::{channel::mpsc::UnboundedReceiver, stream::Stream};
 
 use crate::{
-    Work,
+    TurnInput,
     core::canopy::AdapterEvent,
     error::{self, Result},
     event::{Event, key, mouse},
@@ -125,9 +125,9 @@ where
     /// crossterm's keeps the waker from its first pending poll to report the
     /// next event, so draining with a throwaway waker would leave the run
     /// loop asleep.
-    pub(super) async fn next_work(&mut self) -> Result<Work> {
+    pub(super) async fn next_input(&mut self) -> Result<TurnInput> {
         let AdapterEvent::Input(first) = self.next().await? else {
-            return Ok(Work::Wake);
+            return Ok(TurnInput::Wake);
         };
         let mut batch = vec![first];
         poll_fn(|cx| {
@@ -135,7 +135,7 @@ where
             Poll::Ready(())
         })
         .await;
-        Ok(Work::Input(batch))
+        Ok(TurnInput::Events(batch))
     }
 
     /// Move waiting input into `batch` until none is ready.
@@ -448,9 +448,11 @@ mod tests {
             Err(io::Error::other("after release")),
         ]);
         let mut events = EventSource::new(terminal, rx);
-        assert!(matches!(block_on(events.next_work())?, Work::Input(batch) if batch.len() == 1));
         assert!(
-            matches!(block_on(events.next_work()), Err(error::Error::TerminalIo(error)) if error.to_string() == "after release")
+            matches!(block_on(events.next_input())?, TurnInput::Events(batch) if batch.len() == 1)
+        );
+        assert!(
+            matches!(block_on(events.next_input()), Err(error::Error::TerminalIo(error)) if error.to_string() == "after release")
         );
         Ok(())
     }
@@ -463,9 +465,11 @@ mod tests {
             Ok(terminal_key(cevent::KeyEventKind::Release)),
         ]);
         let mut events = EventSource::new(terminal, rx);
-        assert!(matches!(block_on(events.next_work())?, Work::Input(batch) if batch.len() == 1));
+        assert!(
+            matches!(block_on(events.next_input())?, TurnInput::Events(batch) if batch.len() == 1)
+        );
         assert!(matches!(
-            block_on(events.next_work()),
+            block_on(events.next_input()),
             Err(error::Error::Driver(_))
         ));
         Ok(())
@@ -497,7 +501,7 @@ mod tests {
         ])
         .chain(stream::pending());
         let mut events = EventSource::new(terminal, rx);
-        let Work::Input(batch) = block_on(events.next_work())? else {
+        let TurnInput::Events(batch) = block_on(events.next_input())? else {
             panic!("the terminal produced input");
         };
         assert_eq!(
@@ -515,7 +519,7 @@ mod tests {
             .collect::<Vec<_>>();
         let terminal = stream::iter(drags).chain(stream::pending());
         let mut events = EventSource::new(terminal, rx);
-        let Work::Input(first) = block_on(events.next_work())? else {
+        let TurnInput::Events(first) = block_on(events.next_input())? else {
             panic!("the terminal produced input");
         };
         assert_eq!(
@@ -523,7 +527,7 @@ mod tests {
             [format!("Drag@{INPUT_BATCH_LIMIT}")],
             "the drags collapse to the last one taken"
         );
-        let Work::Input(rest) = block_on(events.next_work())? else {
+        let TurnInput::Events(rest) = block_on(events.next_input())? else {
             panic!("the terminal produced input");
         };
         assert_eq!(
@@ -565,7 +569,7 @@ mod tests {
             let mut events = EventSource::new(OneWakerStream(state.clone()), rx);
             // Draining after the first key finds nothing and leaves its waker
             // with the stream, as crossterm does.
-            let first = block_on(events.next_work());
+            let first = block_on(events.next_input());
             let pusher = thread::spawn(move || {
                 thread::sleep(Duration::from_millis(50));
                 let mut guard = state.lock().expect("stream state");
@@ -574,10 +578,12 @@ mod tests {
                     waker.wake();
                 }
             });
-            let second = block_on(events.next_work());
+            let second = block_on(events.next_input());
             pusher.join().expect("pusher thread");
-            let _sent = done_tx
-                .send(matches!(first, Ok(Work::Input(_))) && matches!(second, Ok(Work::Input(_))));
+            let _sent = done_tx.send(
+                matches!(first, Ok(TurnInput::Events(_)))
+                    && matches!(second, Ok(TurnInput::Events(_))),
+            );
         });
         // A regression parks the worker forever, so wait with a timeout and
         // join only a worker that finished.

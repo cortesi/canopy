@@ -77,14 +77,14 @@ pub struct EvalRequest {
     pub origin: NodeId,
 }
 /// One runtime input.
-pub enum Work {
+pub enum TurnInput {
     /// Deliver input events that arrived together, in order.
     ///
     /// The turn dispatches each event and prepares one frame for the batch, so
     /// a burst of input costs one render. Layout settles before a mouse event
     /// that follows another event, so hit testing sees the geometry the earlier
     /// events left. Dispatch stops at the first error or exit request.
-    Input(Vec<Event>),
+    Events(Vec<Event>),
     /// Service ready background work.
     Wake,
     /// Start a top-level evaluation.
@@ -393,7 +393,7 @@ impl Canopy {
     }
 
     /// Advance one bounded runtime turn.
-    pub fn turn(&mut self, work: Work) -> Result<TurnOutcome> {
+    pub fn turn(&mut self, work: TurnInput) -> Result<TurnOutcome> {
         if self.driver.in_turn {
             return Err(busy());
         }
@@ -403,29 +403,29 @@ impl Canopy {
         result
     }
     /// Dispatch, poll and publish one turn after admission.
-    fn turn_inner(&mut self, work: Work) -> Result<TurnOutcome> {
+    fn turn_inner(&mut self, work: TurnInput) -> Result<TurnOutcome> {
         let mut outcome = TurnOutcome::default();
         let mut completed = None;
         let before = self.driver.publication.generation();
         let mut dispatch_error = None;
         self.driver.publication.advance(self.now());
         match work {
-            Work::Input(events) => {
+            TurnInput::Events(events) => {
                 dispatch_error = self.dispatch_batch(&events).err();
             }
-            Work::StartEval(request) => {
+            TurnInput::StartEval(request) => {
                 let id = EvalId::next();
                 self.start_eval(id, request)?;
                 outcome.started = Some(id);
             }
-            Work::CancelEval(id) => {
+            TurnInput::CancelEval(id) => {
                 if self.driver.active.as_ref().is_some_and(|a| a.id == id) {
                     let mut active = self.driver.active.take().expect("active evaluation exists");
                     self.script.host.abort_invocation(&mut active.invocation)?;
                     completed = Some((active, Err(Error::ScriptCancelled)));
                 }
             }
-            Work::Wake | Work::Prepare => {}
+            TurnInput::Wake | TurnInput::Prepare => {}
         }
         self.service_automation();
         self.poller
@@ -621,9 +621,9 @@ impl HeadlessEval<'_> {
     async fn run(&mut self, request: EvalRequest) -> Result<EvalOutcome> {
         let canopy = &mut *self.canopy;
         let events = self.events.as_mut().expect("headless driver owns events");
-        let mut outcome = canopy.turn(Work::StartEval(request))?;
+        let mut outcome = canopy.turn(TurnInput::StartEval(request))?;
         let id = outcome.started.expect("start turn accepts evaluation");
-        let mut selector = WorkSelector::default();
+        let mut selector = TurnSelector::default();
         loop {
             if let Some(index) = outcome.completed.iter().position(|done| done.id == id) {
                 let completion = outcome.completed.swap_remove(index);
@@ -645,19 +645,19 @@ impl HeadlessEval<'_> {
 /// that stays ready cannot starve the others. The terminal adapter and headless
 /// evaluation share this selector.
 #[derive(Default)]
-pub struct WorkSelector {
+pub struct TurnSelector {
     /// Source polled first on the next wait.
     next_source: usize,
 }
 
-impl WorkSelector {
+impl TurnSelector {
     /// Wait for the next turn input.
     ///
     /// The wait holds only a shared application borrow, which ends before the
     /// caller runs the turn, so no widget or VM borrow crosses suspension.
-    pub async fn next<E>(&mut self, canopy: &mut Canopy, event: E) -> Result<Work>
+    pub async fn next<E>(&mut self, canopy: &mut Canopy, event: E) -> Result<TurnInput>
     where
-        E: Future<Output = Result<Work>>,
+        E: Future<Output = Result<TurnInput>>,
     {
         let deadline = canopy.next_deadline();
         let canopy = &*canopy;
@@ -676,11 +676,11 @@ impl WorkSelector {
         &mut self,
         canopy: &mut Canopy,
         events: &mut UnboundedReceiver<AdapterEvent>,
-    ) -> Result<Work> {
+    ) -> Result<TurnInput> {
         let event = async {
             match events.next().await {
-                Some(AdapterEvent::Input(event)) => Ok(Work::Input(vec![event])),
-                Some(AdapterEvent::Wake) => Ok(Work::Wake),
+                Some(AdapterEvent::Input(event)) => Ok(TurnInput::Events(vec![event])),
+                Some(AdapterEvent::Wake) => Ok(TurnInput::Wake),
                 None => Err(Error::Driver("adapter event channel closed".into())),
             }
         };
@@ -688,9 +688,9 @@ impl WorkSelector {
     }
 
     /// Return the first ready source, starting from the rotating priority.
-    async fn select<E, W, D>(&mut self, event: E, wake: W, deadline: D) -> Result<Work>
+    async fn select<E, W, D>(&mut self, event: E, wake: W, deadline: D) -> Result<TurnInput>
     where
-        E: Future<Output = Result<Work>>,
+        E: Future<Output = Result<TurnInput>>,
         W: Future<Output = Result<()>>,
         D: Future<Output = ()>,
     {
@@ -700,8 +700,11 @@ impl WorkSelector {
                 let source = (self.next_source + offset) % 3;
                 let ready = match source {
                     0 => event.as_mut().poll(cx),
-                    1 => wake.as_mut().poll(cx).map(|wake| wake.map(|()| Work::Wake)),
-                    _ => deadline.as_mut().poll(cx).map(|()| Ok(Work::Wake)),
+                    1 => wake
+                        .as_mut()
+                        .poll(cx)
+                        .map(|wake| wake.map(|()| TurnInput::Wake)),
+                    _ => deadline.as_mut().poll(cx).map(|()| Ok(TurnInput::Wake)),
                 };
                 if ready.is_ready() {
                     self.next_source = (source + 1) % 3;
@@ -752,20 +755,20 @@ mod tests {
 
     #[test]
     fn selector_rotates_between_ready_input_wake_and_deadline() -> Result<()> {
-        let mut selector = WorkSelector::default();
+        let mut selector = TurnSelector::default();
         for expected_source in 0..3 {
             let work = block_on(selector.select(
-                ready(Ok(Work::Input(vec![Event::FocusGained]))),
+                ready(Ok(TurnInput::Events(vec![Event::FocusGained]))),
                 ready(Ok(())),
                 ready(()),
             ))?;
             assert_eq!(selector.next_source, (expected_source + 1) % 3);
             if expected_source == 0 {
                 assert!(
-                    matches!(&work, Work::Input(events) if matches!(events.as_slice(), [Event::FocusGained]))
+                    matches!(&work, TurnInput::Events(events) if matches!(events.as_slice(), [Event::FocusGained]))
                 );
             } else {
-                assert!(matches!(work, Work::Wake));
+                assert!(matches!(work, TurnInput::Wake));
             }
         }
         Ok(())
@@ -773,12 +776,12 @@ mod tests {
 
     #[test]
     fn selector_services_deadlines_without_input() -> Result<()> {
-        let work = block_on(WorkSelector::default().select(
-            pending::<Result<Work>>(),
+        let work = block_on(TurnSelector::default().select(
+            pending::<Result<TurnInput>>(),
             pending::<Result<()>>(),
             ready(()),
         ))?;
-        assert!(matches!(work, Work::Wake));
+        assert!(matches!(work, TurnInput::Wake));
         Ok(())
     }
 }

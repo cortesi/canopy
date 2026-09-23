@@ -646,7 +646,7 @@ mod tests {
         thread,
     };
 
-    use canopy::{CanopyBuilder, Fixture, Work, geom::Size, testing::contracts};
+    use canopy::{CanopyBuilder, Fixture, TurnInput, geom::Size, testing::contracts};
     use canopy_mcp::{AppMetadata, ExecutionMode, ResetPolicy, serve_uds};
     use futures::{StreamExt, executor};
     use tmcp::schema::ToolResultMode;
@@ -672,7 +672,7 @@ mod tests {
             })
             .build()?;
         canopy.set_screen_size(Size::new(20, 5))?;
-        canopy.turn(Work::Prepare)?;
+        canopy.turn(TurnInput::Prepare)?;
         let automation = canopy.automation_handle();
         let mut events = canopy.take_event_receiver().expect("test owns events");
         let directory = tempfile::tempdir()?;
@@ -717,7 +717,7 @@ mod tests {
                 break result;
             }
             executor::block_on(events.next()).expect("live MCP wakes the UI");
-            canopy.turn(Work::Wake)?;
+            canopy.turn(TurnInput::Wake)?;
         };
         worker.join().expect("live replay worker exits");
         listener.stop()?;

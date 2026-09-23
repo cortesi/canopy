@@ -70,7 +70,7 @@ pub mod world;
 pub use canopy::{
     AutomationCallback, AutomationHandle, Canopy, CanopyBuilder, EvalId, EvalOutcome, EvalRequest,
     EvalTicket, FrameId, Register, RouteTraceEntry, RouteTraceKind, ScriptJournalEntry,
-    ScriptOrigin, ScriptTrust, Setup, TurnOutcome, Work,
+    ScriptOrigin, ScriptTrust, Setup, TurnInput, TurnOutcome,
 };
 pub use change::ChangeOutcome;
 pub use context::{
@@ -86,7 +86,7 @@ pub use inputmap::{
 pub use node::NodeIdentity;
 pub use notice::{Notice, NoticeSource};
 pub use snapshot::{FrameSnapshot, NodeSnapshot, WidgetSemantics};
-pub use wake::{NodeWakeHandle, WakeOutcome, WorkLifetime};
+pub use wake::{NodeWakeHandle, PollLifetime, WakeOutcome, WakeSender, wake_channel};
 pub use world::{
     Core,
     modal::{ModalBindings, ModalOptions, ModalToken},

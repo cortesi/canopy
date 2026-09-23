@@ -220,10 +220,7 @@ closure that builds a fresh application on demand, so `src/main.rs` only has
 to parse arguments and choose a mode:
 
 ```rust
-#![deny(unsafe_code)]
-//! Command-line entry point for the Hello example application.
-
-use std::{env, path::PathBuf, process};
+use std::{env, path::PathBuf, process::ExitCode};
 
 use anyhow::{Context, Result, bail};
 use canopy::terminal::RunOptions;
@@ -262,16 +259,23 @@ enum Command {
     Mcp,
 }
 
-fn main() -> Result<()> {
+fn main() -> Result<ExitCode> {
     let args = Args::parse();
     if args.no_config && args.config_home.is_some() {
         bail!("--no-config conflicts with --config-home");
     }
 
-    // Headless and API modes must never read or create user state. `--api`
-    // opts out here; `.canopyctl.toml` passes `--no-config` to the headless
-    // command so automation runs stay hermetic.
-    let config_root = if args.no_config || args.api {
+    // The API is a property of the application itself, so it is rendered
+    // without user state.
+    if args.api {
+        print!("{}", hello::create_app(None)?.script_api()?);
+        return Ok(ExitCode::SUCCESS);
+    }
+
+    // Headless mode must never read or create user state; `.canopyctl.toml`
+    // passes `--no-config` to the headless command so automation runs stay
+    // hermetic.
+    let config_root = if args.no_config {
         None
     } else {
         let root = args.config_home.map_or_else(default_config_root, Ok)?;
@@ -282,9 +286,9 @@ fn main() -> Result<()> {
 
     let mode = match args.command {
         Some(Command::Mcp) => LaunchMode::HeadlessMcp,
-        None if args.api => LaunchMode::Api,
         None => LaunchMode::Run {
             mcp_socket: args.mcp,
+            options: RunOptions::default(),
         },
     };
 
@@ -295,11 +299,7 @@ fn main() -> Result<()> {
         },
         move || hello::create_app(config_root.clone()).map_err(McpError::app),
     );
-    let code = launch(factory, mode, RunOptions::default())?;
-    if code != 0 {
-        process::exit(code);
-    }
-    Ok(())
+    Ok(launch(factory, mode)?)
 }
 
 /// Resolve the default persistent script root.

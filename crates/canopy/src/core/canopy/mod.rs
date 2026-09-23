@@ -40,7 +40,7 @@ mod testing;
 mod tests;
 mod turn;
 pub use turn::{
-    EvalId, EvalOutcome, EvalRequest, EvalTicket, FrameId, TurnOutcome, Work, WorkSelector,
+    EvalId, EvalOutcome, EvalRequest, EvalTicket, FrameId, TurnInput, TurnOutcome, TurnSelector,
 };
 #[cfg(test)]
 mod turn_cleanup_tests;
@@ -288,7 +288,7 @@ impl Canopy {
     /// Prepare pending changes after widget mutation callbacks have returned.
     ///
     /// This is the synchronous boundary for native callers that need snapshots
-    /// or geometry before the next driver turn. `turn(Work::Prepare)` also
+    /// or geometry before the next driver turn. `turn(TurnInput::Prepare)` also
     /// services queued automation and advances the driver lifecycle.
     pub(crate) fn prepare(&mut self) -> Result<()> {
         if self.core.callback_depth != 0 {

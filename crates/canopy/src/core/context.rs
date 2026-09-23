@@ -636,7 +636,11 @@ pub trait Context: ViewContext + sealed::Context {
 
     /// Capture a thread-safe wake handle for this widget's work lifetime.
     /// Attachment handles require this node to be attached when acquired.
-    fn wake_handle(&self, lifetime: crate::WorkLifetime) -> Result<crate::NodeWakeHandle>;
+    fn wake_handle(&self, lifetime: crate::PollLifetime) -> Result<crate::NodeWakeHandle>;
+
+    /// Poll this widget once, soon, without waiting for its poll interval.
+    /// Requests coalesce until the poll runs.
+    fn request_poll(&mut self) -> Result<()>;
 
     /// Replace the children list for a parent node.
     ///
@@ -1069,8 +1073,15 @@ impl Context for NodeCtx<&mut Core> {
         self.core.detach(child)
     }
 
-    fn wake_handle(&self, lifetime: crate::WorkLifetime) -> Result<crate::NodeWakeHandle> {
+    fn wake_handle(&self, lifetime: crate::PollLifetime) -> Result<crate::NodeWakeHandle> {
         self.core.wake_handle(self.node_id, lifetime)
+    }
+
+    fn request_poll(&mut self) -> Result<()> {
+        self.core
+            .wake_handle(self.node_id, crate::PollLifetime::Node)?
+            .wake()?;
+        Ok(())
     }
 
     fn remove_after_dispatch(&mut self, node: NodeId) -> Result<()> {

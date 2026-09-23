@@ -6,7 +6,7 @@ use crate::{
         context::CoreContext,
         node::Node,
         view::View,
-        wake::WorkStamp,
+        wake::PollOwner,
         widget_access::{WidgetCellPolicy, validate_slot},
     },
     layout::LayoutOverride,
@@ -93,7 +93,7 @@ impl Core {
             let generation = attached.then(|| self.next_generation());
             let node = &mut self.nodes[id];
             node.attachment_generation = generation;
-            if node.poll_lifetime == crate::WorkLifetime::Attachment {
+            if node.poll_lifetime == crate::PollLifetime::Attachment {
                 node.initialized = false;
             }
         }
@@ -102,7 +102,7 @@ impl Core {
     /// Commit live work identities and expire provisional or retired handles.
     fn sync_work_stamps(&self) -> Result<()> {
         self.wake_registry
-            .sync(self.nodes.iter().map(|(node, entry)| WorkStamp {
+            .sync(self.nodes.iter().map(|(node, entry)| PollOwner {
                 node,
                 incarnation: entry.incarnation,
                 attachment: entry.attachment_generation,

@@ -108,12 +108,14 @@ mod tests {
     use std::{
         cell::{Cell, RefCell},
         rc::Rc,
+        thread,
         time::Duration,
     };
 
     use super::*;
     use crate::{
-        Context, NodeWakeHandle, Widget, Work, WorkLifetime, error::ScriptErrorKind, geom::Size,
+        Context, NodeWakeHandle, PollLifetime, TurnInput, Widget, error::ScriptErrorKind,
+        geom::Size, wake_channel,
     };
 
     #[derive(Clone)]
@@ -128,7 +130,7 @@ mod tests {
 
     impl Widget for PollCounter {
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
-            *self.wake.borrow_mut() = Some(ctx.wake_handle(WorkLifetime::Node)?);
+            *self.wake.borrow_mut() = Some(ctx.wake_handle(PollLifetime::Node)?);
             Ok(())
         }
 
@@ -154,7 +156,7 @@ mod tests {
         canopy.set_clock_for_testing(clock.clone())?;
         canopy.replace_root(counter.clone())?;
         canopy.set_screen_size(Size::new(10, 2))?;
-        canopy.turn(Work::Prepare)?;
+        canopy.turn(TurnInput::Prepare)?;
         Ok((canopy, clock, counter))
     }
 
@@ -167,13 +169,13 @@ mod tests {
             Some(clock.now() + Duration::from_millis(10))
         );
         clock.advance(Duration::from_millis(9))?;
-        canopy.turn(Work::Wake)?;
+        canopy.turn(TurnInput::Wake)?;
         assert_eq!(counter.count.get(), 1);
         clock.advance(Duration::from_millis(1))?;
-        canopy.turn(Work::Wake)?;
+        canopy.turn(TurnInput::Wake)?;
         assert_eq!(counter.count.get(), 2);
         counter.wake.borrow().as_ref().unwrap().wake()?;
-        canopy.turn(Work::Wake)?;
+        canopy.turn(TurnInput::Wake)?;
         assert_eq!(counter.count.get(), 3);
         assert!(
             canopy
@@ -184,11 +186,44 @@ mod tests {
     }
 
     #[test]
+    fn a_wake_channel_send_polls_its_owner() -> Result<()> {
+        let (mut canopy, _clock, counter) = polling_app(Duration::from_millis(10))?;
+        counter.interval.set(None);
+        counter.wake.borrow().as_ref().unwrap().wake()?;
+        canopy.turn(TurnInput::Wake)?;
+        assert_eq!(
+            canopy.next_deadline(),
+            None,
+            "the owner waits with no timer"
+        );
+        let handle = counter.wake.borrow().clone().unwrap();
+        let (sender, receiver) = wake_channel(handle, 1);
+        thread::spawn(move || sender.send(7u8))
+            .join()
+            .expect("the producer thread finishes")
+            .expect("the receiver is live");
+        canopy.turn(TurnInput::Wake)?;
+        assert_eq!(counter.count.get(), 3, "the send polled the owner");
+        assert_eq!(receiver.try_recv().ok(), Some(7));
+        Ok(())
+    }
+
+    #[test]
+    fn request_poll_polls_the_calling_widget() -> Result<()> {
+        let (mut canopy, _clock, counter) = polling_app(Duration::from_secs(60))?;
+        let root = canopy.root_id();
+        canopy.with_context(root, |ctx| ctx.request_poll())?;
+        canopy.turn(TurnInput::Wake)?;
+        assert_eq!(counter.count.get(), 2);
+        Ok(())
+    }
+
+    #[test]
     fn a_failed_poll_is_a_notice_and_keeps_its_cadence() -> Result<()> {
         let (mut canopy, clock, counter) = polling_app(Duration::from_millis(10))?;
         counter.fail.set(Some(false));
         clock.advance(Duration::from_millis(10))?;
-        canopy.turn(Work::Wake)?;
+        canopy.turn(TurnInput::Wake)?;
         assert_eq!(counter.count.get(), 2);
         let notice = canopy
             .notices()
@@ -205,14 +240,14 @@ mod tests {
         );
 
         clock.advance(Duration::from_millis(10))?;
-        canopy.turn(Work::Wake)?;
+        canopy.turn(TurnInput::Wake)?;
         assert_eq!(counter.count.get(), 3);
         assert_eq!(canopy.notices().len(), 2);
 
         counter.fail.set(Some(true));
         clock.advance(Duration::from_millis(10))?;
         assert!(
-            canopy.turn(Work::Wake).is_err(),
+            canopy.turn(TurnInput::Wake).is_err(),
             "a runtime failure in a poll stays fatal"
         );
         Ok(())
@@ -224,16 +259,16 @@ mod tests {
         clock.advance(Duration::from_millis(2))?;
         counter.interval.set(None);
         counter.wake.borrow().as_ref().unwrap().wake()?;
-        canopy.turn(Work::Wake)?;
+        canopy.turn(TurnInput::Wake)?;
         assert_eq!(counter.count.get(), 2);
         assert_eq!(canopy.next_deadline(), None);
 
         clock.advance(Duration::from_millis(8))?;
-        canopy.turn(Work::Wake)?;
+        canopy.turn(TurnInput::Wake)?;
         assert_eq!(counter.count.get(), 2, "the old timer must stay canceled");
 
         counter.wake.borrow().as_ref().unwrap().wake()?;
-        canopy.turn(Work::Wake)?;
+        canopy.turn(TurnInput::Wake)?;
         assert_eq!(
             counter.count.get(),
             3,
@@ -252,11 +287,11 @@ mod tests {
                 Some(clock.now() + Duration::from_millis(1))
             );
             for _ in 0..10 {
-                canopy.turn(Work::Wake)?;
+                canopy.turn(TurnInput::Wake)?;
             }
             assert_eq!(counter.count.get(), 1);
             clock.advance(Duration::from_millis(1))?;
-            canopy.turn(Work::Wake)?;
+            canopy.turn(TurnInput::Wake)?;
             assert_eq!(counter.count.get(), 2);
             assert_eq!(
                 canopy.next_deadline(),

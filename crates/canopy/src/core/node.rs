@@ -35,7 +35,7 @@ pub struct Node {
     /// Current committed attachment generation, absent while detached.
     pub(crate) attachment_generation: Option<u64>,
     /// Poll ownership chosen by the widget at construction.
-    pub(crate) poll_lifetime: crate::WorkLifetime,
+    pub(crate) poll_lifetime: crate::PollLifetime,
 
     /// Parent in the arena tree.
     pub(crate) parent: Option<NodeId>,

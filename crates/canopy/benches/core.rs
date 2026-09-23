@@ -3,8 +3,8 @@
 use std::hint::black_box;
 
 use canopy::{
-    Canopy, CanopyBuilder, Context, ContextExt, NodeId, NodeName, Render, TermBuf, ViewContext,
-    Widget, Work,
+    Canopy, CanopyBuilder, Context, ContextExt, NodeId, NodeName, Render, TermBuf, TurnInput,
+    ViewContext, Widget,
     commands::CommandTarget,
     derive_commands,
     error::Result,
@@ -290,7 +290,7 @@ fn build_browser() -> Result<Canopy> {
         context.set_children(browser, panes)
     })?;
     app.set_screen_size(SCREEN)?;
-    app.turn(Work::Prepare)?;
+    app.turn(TurnInput::Prepare)?;
     Ok(app)
 }
 
@@ -379,7 +379,8 @@ fn filled_buffer() -> TermBuf {
 fn bench_layout(c: &mut Criterion) {
     c.bench_function("layout_large_tree", |b| {
         let mut app = build_tree().expect("benchmark tree should build");
-        app.turn(Work::Prepare).expect("first frame should prepare");
+        app.turn(TurnInput::Prepare)
+            .expect("first frame should prepare");
         b.iter(|| {
             app.layout_for_testing().expect("layout should succeed");
         });
@@ -398,14 +399,22 @@ fn bench_turn_invalidation(c: &mut Criterion) {
         b.iter(|| {
             app.with_root_context(|_| Ok(()))
                 .expect("callback should succeed");
-            black_box(app.turn(Work::Prepare).expect("turn should succeed").frame);
+            black_box(
+                app.turn(TurnInput::Prepare)
+                    .expect("turn should succeed")
+                    .frame,
+            );
         });
     });
     c.bench_function("browser_turn_paint", |b| {
         let mut app = build_browser().expect("browser tree should build");
         b.iter(|| {
             app.style_mut();
-            black_box(app.turn(Work::Prepare).expect("turn should succeed").frame);
+            black_box(
+                app.turn(TurnInput::Prepare)
+                    .expect("turn should succeed")
+                    .frame,
+            );
         });
     });
     c.bench_function("browser_layout_pass", |b| {
@@ -517,7 +526,7 @@ fn bench_script_startup(c: &mut Criterion) {
                 .build()
                 .expect("startup script should finalize");
             black_box(
-                app.turn(Work::Prepare)
+                app.turn(TurnInput::Prepare)
                     .expect("startup script should execute"),
             );
         });

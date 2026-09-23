@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    Context, WidgetSemantics, WorkLifetime,
+    Context, PollLifetime, WidgetSemantics,
     core::context::ViewContext,
     cursor,
     error::Result,
@@ -192,8 +192,8 @@ pub trait Widget: Any {
     /// Node lifetime preserves background work while detached. Attachment
     /// lifetime pauses polling on detach and initializes it again after
     /// reattachment.
-    fn poll_lifetime(&self) -> WorkLifetime {
-        WorkLifetime::Node
+    fn poll_lifetime(&self) -> PollLifetime {
+        PollLifetime::Node
     }
 
     /// Scheduled poll endpoint.

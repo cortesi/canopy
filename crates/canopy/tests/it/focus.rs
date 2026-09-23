@@ -198,7 +198,7 @@ mod tests {
         })?;
 
         canopy.set_screen_size(Size::new(10, 10))?;
-        canopy.turn(canopy::Work::Prepare)?;
+        canopy.turn(canopy::TurnInput::Prepare)?;
         canopy.with_root_context(|context| {
             context.set_layout_override(
                 first.into(),
@@ -206,7 +206,7 @@ mod tests {
             )
         })?;
         canopy.set_screen_size(Size::new(10, 10))?;
-        canopy.turn(canopy::Work::Prepare)?;
+        canopy.turn(canopy::TurnInput::Prepare)?;
 
         assert_eq!(
             canopy.with_root_view(|context| context.focused_within(context.root_id())),

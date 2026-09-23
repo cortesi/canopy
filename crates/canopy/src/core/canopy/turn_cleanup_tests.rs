@@ -12,7 +12,7 @@ use std::{
 use futures::{channel::mpsc::UnboundedSender, task::noop_waker};
 use tokio::{runtime::Builder, time::sleep};
 
-use super::{AdapterEvent, Canopy, CanopyBuilder, EvalRequest, Work};
+use super::{AdapterEvent, Canopy, CanopyBuilder, EvalRequest, TurnInput};
 use crate::{
     Context, ViewContext,
     commands::ArgValue,
@@ -68,14 +68,14 @@ fn application() -> Result<(Canopy, Arc<AtomicUsize>)> {
     })?;
     canopy.set_screen_size(Size::new(10, 3))?;
     canopy.core.set_focus(canopy.root_id())?;
-    canopy.turn(Work::Prepare)?;
+    canopy.turn(TurnInput::Prepare)?;
     Ok((canopy, mutations))
 }
 
 #[test]
 fn completed_script_does_not_leave_a_ready_runtime_wake() -> Result<()> {
     let (mut canopy, _) = application()?;
-    let mut outcome = canopy.turn(Work::StartEval(EvalRequest {
+    let mut outcome = canopy.turn(TurnInput::StartEval(EvalRequest {
         source: "canopy.wait_for(function() return true end); return 42".into(),
         timeout: None,
         origin: canopy.root_id(),
@@ -84,7 +84,7 @@ fn completed_script_does_not_leave_a_ready_runtime_wake() -> Result<()> {
         if !outcome.completed.is_empty() {
             break;
         }
-        outcome = canopy.turn(Work::Wake)?;
+        outcome = canopy.turn(TurnInput::Wake)?;
     }
     assert_eq!(outcome.completed.len(), 1);
     assert!(matches!(
@@ -94,7 +94,7 @@ fn completed_script_does_not_leave_a_ready_runtime_wake() -> Result<()> {
     let waker = noop_waker();
     let context = TaskContext::from_waker(&waker);
     assert!(canopy.poll_runtime_wake(&context).is_pending());
-    canopy.turn(Work::Wake)?;
+    canopy.turn(TurnInput::Wake)?;
     assert!(canopy.poll_runtime_wake(&context).is_pending());
     Ok(())
 }
@@ -244,12 +244,12 @@ fn dropping_live_ticket_cancels_before_admission_and_while_parked() -> Result<()
             origin: canopy.root_id(),
         })?;
         if admitted {
-            canopy.turn(Work::Wake)?;
+            canopy.turn(TurnInput::Wake)?;
             assert!(canopy.script.host.is_eval_active());
             // Drain the initial VM notification so the dropped ticket must
             // supply its own wake.
             for _ in 0..10 {
-                canopy.turn(Work::Wake)?;
+                canopy.turn(TurnInput::Wake)?;
             }
             let waker = noop_waker();
             assert!(
@@ -267,7 +267,7 @@ fn dropping_live_ticket_cancels_before_admission_and_while_parked() -> Result<()
                     .is_ready()
             );
         }
-        canopy.turn(Work::Wake)?;
+        canopy.turn(TurnInput::Wake)?;
         assert!(!canopy.script.host.is_eval_active());
         assert_eq!(
             canopy

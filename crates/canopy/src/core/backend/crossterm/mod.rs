@@ -13,9 +13,9 @@ use tokio::runtime::Builder;
 use self::input::EventSource;
 pub use self::{output::CrosstermRender, session::CrosstermControl};
 use crate::{
-    Canopy, Work,
+    Canopy, TurnInput,
     backend::TerminalSession,
-    core::{Core, canopy::WorkSelector, dump::dump},
+    core::{Core, canopy::TurnSelector, dump::dump},
     error::{self, Result},
     event::{Event, key},
     geom::Size,
@@ -43,8 +43,8 @@ pub struct RunOptions {
 /// Decide host interruption without starting or mutating a terminal session.
 ///
 /// An interrupt anywhere in a batch stops the host before the batch dispatches.
-fn interrupt_exit_code(work: &Work, options: RunOptions) -> Option<i32> {
-    let Work::Input(events) = work else {
+fn interrupt_exit_code(work: &TurnInput, options: RunOptions) -> Option<i32> {
+    let TurnInput::Events(events) = work else {
         return None;
     };
     events
@@ -65,7 +65,7 @@ fn interrupt_exit_code(work: &Work, options: RunOptions) -> Option<i32> {
 /// Restore an intercepted terminal session before any widget sees the key.
 fn intercept_interrupt(
     session: &mut TerminalSession,
-    work: &Work,
+    work: &TurnInput,
     options: RunOptions,
 ) -> Result<Option<i32>> {
     let code = interrupt_exit_code(work, options);
@@ -128,9 +128,9 @@ pub fn runloop(mut cnpy: Canopy, options: RunOptions) -> Result<i32> {
         .map_err(|error| error::Error::Driver(format!("cannot start event runtime: {error}")))?;
     let _runtime_context = runtime.enter();
 
-    let mut selector = WorkSelector::default();
+    let mut selector = TurnSelector::default();
     // The first turn prepares the initial frame.
-    let mut work = Work::Prepare;
+    let mut work = TurnInput::Prepare;
     loop {
         if let Some(code) = intercept_interrupt(&mut session, &work, options)? {
             stop_and_dump(
@@ -149,7 +149,7 @@ pub fn runloop(mut cnpy: Canopy, options: RunOptions) -> Result<i32> {
             cnpy.emit_frame(&mut be)
                 .map_err(|error| handle_render_error(error, &cnpy.core, &mut session))?;
         }
-        work = runtime.block_on(selector.next(&mut cnpy, events.next_work()))?;
+        work = runtime.block_on(selector.next(&mut cnpy, events.next_input()))?;
     }
 }
 
@@ -173,7 +173,7 @@ mod tests {
     #[test]
     fn shared_trace_crosses_terminal_ingestion_driver_and_emission() -> Result<()> {
         let mut canopy = contracts::app()?;
-        canopy.turn(Work::Prepare)?;
+        canopy.turn(TurnInput::Prepare)?;
         let mut backend = TestRender::new();
         canopy.emit_frame(&mut backend)?;
         let (_tx, rx) = unbounded();
@@ -182,9 +182,9 @@ mod tests {
             cevent::KeyModifiers::empty(),
         )))]);
         let mut events = EventSource::new(terminal, rx);
-        let work = block_on(WorkSelector::default().next(&mut canopy, events.next_work()))?;
+        let work = block_on(TurnSelector::default().next(&mut canopy, events.next_input()))?;
         assert!(
-            matches!(&work, Work::Input(events) if matches!(events.as_slice(), [Event::Key(_)]))
+            matches!(&work, TurnInput::Events(events) if matches!(events.as_slice(), [Event::Key(_)]))
         );
         let outcome = canopy.turn(work)?;
         assert!(outcome.frame.is_some());
@@ -206,9 +206,9 @@ mod tests {
             timeout: None,
             origin: canopy.root_id(),
         };
-        let mut outcome = canopy.turn(Work::StartEval(request))?;
+        let mut outcome = canopy.turn(TurnInput::StartEval(request))?;
         if outcome.completed.is_empty() {
-            outcome = canopy.turn(Work::Wake)?;
+            outcome = canopy.turn(TurnInput::Wake)?;
         }
         assert_eq!(outcome.completed.len(), 1);
         assert_eq!(
@@ -276,8 +276,8 @@ mod tests {
             let mut canopy = CanopyBuilder::new().build()?;
             canopy.replace_root(PolicyTerminal(received.clone()))?;
             canopy.set_screen_size(Size::new(8, 2))?;
-            canopy.turn(Work::Prepare)?;
-            let work = Work::Input(vec![Event::Key(pressed)]);
+            canopy.turn(TurnInput::Prepare)?;
+            let work = TurnInput::Events(vec![Event::Key(pressed)]);
             let result = intercept_interrupt(
                 &mut session,
                 &work,

@@ -7,7 +7,7 @@ mod tests {
     use canopy::{
         BindingOptions, BindingPhase, BindingTier, Canopy, CanopyBuilder, CommandArg, Context,
         ContextExt, EventOutcome, FrameworkBindingGroup, NodeId, Register, Render, ScriptOrigin,
-        ScriptTrust, Setup, ViewContext, Widget, Work,
+        ScriptTrust, Setup, TurnInput, ViewContext, Widget,
         commands::ArgValue,
         derive_commands,
         error::{Error, Result, ScriptErrorKind},
@@ -918,13 +918,13 @@ mod tests {
             })
             .build()?;
 
-        canopy.turn(Work::Prepare)?;
+        canopy.turn(TurnInput::Prepare)?;
         assert_eq!(startup_runs(&canopy), 3);
         assert_eq!(
             canopy.eval_script("return api_leaf.get()")?,
             ArgValue::Int(33)
         );
-        canopy.turn(Work::Prepare)?;
+        canopy.turn(TurnInput::Prepare)?;
         assert_eq!(startup_runs(&canopy), 3, "startup runs once");
 
         Ok(())
@@ -964,7 +964,7 @@ mod tests {
             .build()?;
 
         assert!(
-            canopy.turn(Work::Prepare).is_err(),
+            canopy.turn(TurnInput::Prepare).is_err(),
             "startup execution should fail"
         );
         canopy.eval_script(r#"canopy.send_key("x")"#)?;
@@ -1003,7 +1003,7 @@ mod tests {
             .build()?;
 
         assert!(
-            canopy.turn(Work::Prepare).is_err(),
+            canopy.turn(TurnInput::Prepare).is_err(),
             "second startup should fail"
         );
         assert_eq!(

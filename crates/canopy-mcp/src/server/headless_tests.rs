@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use canopy::{CanopyBuilder, Widget, Work, derive_commands, geom::Size};
+use canopy::{CanopyBuilder, TurnInput, Widget, derive_commands, geom::Size};
 use tmcp::schema::ClientRequest;
 use tokio::{
     io::{duplex, split},
@@ -319,7 +319,7 @@ async fn live_transport_cancellation_and_disconnect_wake_the_ui_driver() {
                 .build()
                 .expect("live app");
             canopy.set_screen_size(Size::new(20, 5)).unwrap();
-            canopy.turn(Work::Prepare).unwrap();
+            canopy.turn(TurnInput::Prepare).unwrap();
             ready_tx
                 .send(canopy.automation_handle())
                 .ok()
@@ -331,7 +331,7 @@ async fn live_transport_cancellation_and_disconnect_wake_the_ui_driver() {
                     .block_on(async { timeout(DEADLINE, events.next()).await })
                     .expect("UI receives a wake")
                     .expect("UI event");
-                canopy.turn(Work::Wake).expect("UI turn");
+                canopy.turn(TurnInput::Wake).expect("UI turn");
                 if !reported
                     && canopy.script_journal().iter().any(|entry| {
                         entry.source == SOURCE

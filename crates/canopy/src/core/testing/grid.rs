@@ -98,7 +98,7 @@ impl Grid {
             })
         })?;
         canopy.set_screen_size(grid.expected_size())?;
-        canopy.turn(crate::Work::Prepare)?;
+        canopy.turn(crate::TurnInput::Prepare)?;
         Ok(grid)
     }
 

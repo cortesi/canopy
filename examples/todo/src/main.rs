@@ -1,7 +1,7 @@
 #![deny(unsafe_code)]
 //! Command-line entry point for the Todo example application.
 
-use std::{path::PathBuf, process};
+use std::{path::PathBuf, process::ExitCode};
 
 use anyhow::{Result, bail};
 use canopy::terminal::RunOptions;
@@ -62,39 +62,27 @@ fn make_factory(path: String, config: Option<PathBuf>) -> AppFactory {
     )
 }
 
-fn main() -> Result<()> {
+fn main() -> Result<ExitCode> {
     let args = Args::parse();
 
+    if args.api {
+        print!("{}", todo::api_app()?.script_api()?);
+        return Ok(ExitCode::SUCCESS);
+    }
     let code = match args.command {
-        Some(Command::Mcp { path }) => launch(
-            make_factory(path, args.config),
-            LaunchMode::HeadlessMcp,
-            RunOptions::default(),
-        )?,
-        None if args.api => launch(
-            AppFactory::new(
-                AppMetadata {
-                    app: "todo".into(),
-                    reset: ResetPolicy::Isolated,
-                },
-                || Ok(todo::api_app()?),
-            ),
-            LaunchMode::Api,
-            RunOptions::default(),
-        )?,
+        Some(Command::Mcp { path }) => {
+            launch(make_factory(path, args.config), LaunchMode::HeadlessMcp)?
+        }
         None => {
             let Some(path) = args.path else {
                 bail!("specify a SQLite database path, --api, or the mcp subcommand");
             };
             let mode = LaunchMode::Run {
                 mcp_socket: args.mcp,
+                options: RunOptions::default(),
             };
-            launch(make_factory(path, args.config), mode, RunOptions::default())?
+            launch(make_factory(path, args.config), mode)?
         }
     };
-    if code != 0 {
-        process::exit(code);
-    }
-
-    Ok(())
+    Ok(code)
 }

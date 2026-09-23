@@ -131,7 +131,7 @@ changes, so old poll callbacks and wake handles cannot reach the replacement.
 Detaching clears the parent link but preserves mounted widgets. Reattachment does
 not repeat completed mount hooks. Layout caches refresh when the subtree returns.
 
-Runtime-managed work declares `WorkLifetime::Node` or `WorkLifetime::Attachment`.
+Runtime-managed work declares `PollLifetime::Node` or `PollLifetime::Attachment`.
 Node lifetime ends on widget replacement or removal. Attachment lifetime also ends
 on detach. Reattachment starts a new attachment generation. An edit updates the
 generations of the subtree it moves and no others. Hiding ends neither
@@ -403,13 +403,13 @@ rendering. Rendering must not rely on stale views.
 
 ## Runtime Turns
 
-`Canopy::turn(Work)` drives input, background wakes, evaluation start or cancellation,
+`Canopy::turn(TurnInput)` drives input, background wakes, evaluation start or cancellation,
 and explicit preparation. `TurnOutcome` reports the published `FrameId`, evaluation
 admission, unticketed completion, and exit status. Ticket-backed evaluations complete
 through their `EvalTicket`. Crossterm, headless evaluation, and the test harness use
 this driver.
 
-`Work::Input` carries the input events that arrived together. The turn dispatches
+`TurnInput::Events` carries the input events that arrived together. The turn dispatches
 them in order and prepares one frame, so a burst of input costs one render. Layout
 settles before each mouse event that follows another event, so hit testing sees
 current geometry. The terminal adapter drains waiting input into a bounded batch
@@ -454,7 +454,7 @@ harness share one work selector. It waits on adapter input, runtime
 notifications, and the next driver deadline, and it takes ready sources in
 rotating order, so a source that stays ready cannot starve the others. Tests can
 install `testing::ManualClock` before initialization, advance it, then deliver
-`Work::Wake`. `Harness::wait_until` runs real turns through the same selector
+`TurnInput::Wake`. `Harness::wait_until` runs real turns through the same selector
 until a condition holds, which is the native counterpart of Luau
 `canopy.wait_for`.
 
@@ -639,7 +639,7 @@ Script-owned IDs, function handles, and binding handles are runtime capabilities
 They remain valid only while the app, node, script host, and registry entry remain
 alive.
 
-MCP and live automation cross the event-loop boundary. Work submitted from another
+MCP and live automation cross the event-loop boundary. TurnInput submitted from another
 thread must marshal back to the UI thread before touching `Canopy` or `Core`.
 `AutomationHandle::submit_eval` queues an `EvalRequest` and returns an `EvalTicket`.
 Await its completion outside the UI thread. The queue applies bounded backpressure.

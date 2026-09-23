@@ -2241,7 +2241,7 @@ Each stage also updates the docs it touches.
     fh sites.
   - Narrow `TermBuf` and `StyleManager` visibility, and add
     `StyleMap::resolve`.
-- [ ] C20: `TurnInput` and `PollLifetime`. `RunOptions` moves into
+- [x] C20: `TurnInput` and `PollLifetime`. `RunOptions` moves into
   `LaunchMode::Run`, `LaunchMode::Api` goes, and `launch` returns `ExitCode`.
 - [ ] C43 runtime part: `wake_channel` and `Context::request_poll`. fh's three
   polling workers and its self-wake handles switch over.

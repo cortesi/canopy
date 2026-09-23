@@ -3161,6 +3161,16 @@ pub mod canopy {
         Poll,
     }
 
+    /// Lifetime of runtime-managed widget work.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    pub enum PollLifetime {
+        #[default]
+        /// Continue while the widget exists, including while hidden or detached.
+        Node,
+        /// End when the widget is detached, replaced, or removed.
+        Attachment,
+    }
+
     /// A renderer that only renders to a specific rectangle within the target
     /// terminal buffer.
     pub struct Render<'a> {}
@@ -3361,6 +3371,25 @@ pub mod canopy {
     #[derive(Clone, Debug, PartialEq)]
     pub struct TermBuf {}
 
+    /// One runtime input.
+    pub enum TurnInput {
+        /// Deliver input events that arrived together, in order.
+        ///
+        /// The turn dispatches each event and prepares one frame for the batch, so
+        /// a burst of input costs one render. Layout settles before a mouse event
+        /// that follows another event, so hit testing sees the geometry the earlier
+        /// events left. Dispatch stops at the first error or exit request.
+        Events(Vec<crate::event::Event>),
+        /// Service ready background work.
+        Wake,
+        /// Start a top-level evaluation.
+        StartEval(EvalRequest),
+        /// Cancel an evaluation owned by this runtime.
+        CancelEval(EvalId),
+        /// Prepare changes made through native access.
+        Prepare,
+    }
+
     /// Observable effects of one turn.
     #[derive(Default)]
     pub struct TurnOutcome {
@@ -3402,6 +3431,14 @@ pub mod canopy {
         Expired,
     }
 
+    /// Sending half of a bounded channel that polls its owner on every send.
+    ///
+    /// A background producer sends results here, and the owning widget drains
+    /// the receiver from `Widget::poll`. The owner needs no polling interval while
+    /// it waits: each successful send queues one coalesced poll.
+    #[derive(Clone, Debug)]
+    pub struct WakeSender<T> {}
+
     /// Optional application observations, without arbitrary widget serialization.
     #[derive(Clone, Debug, Default, PartialEq)]
     pub struct WidgetSemantics {
@@ -3417,35 +3454,6 @@ pub mod canopy {
         pub selected_keys: Vec<crate::commands::ArgValue>,
         /// Availability of the widget's activation command.
         pub activation_status: Option<crate::commands::CommandStatus>,
-    }
-
-    /// One runtime input.
-    pub enum Work {
-        /// Deliver input events that arrived together, in order.
-        ///
-        /// The turn dispatches each event and prepares one frame for the batch, so
-        /// a burst of input costs one render. Layout settles before a mouse event
-        /// that follows another event, so hit testing sees the geometry the earlier
-        /// events left. Dispatch stops at the first error or exit request.
-        Input(Vec<crate::event::Event>),
-        /// Service ready background work.
-        Wake,
-        /// Start a top-level evaluation.
-        StartEval(EvalRequest),
-        /// Cancel an evaluation owned by this runtime.
-        CancelEval(EvalId),
-        /// Prepare changes made through native access.
-        Prepare,
-    }
-
-    /// Lifetime of runtime-managed widget work.
-    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-    pub enum WorkLifetime {
-        #[default]
-        /// Continue while the widget exists, including while hidden or detached.
-        Node,
-        /// End when the widget is detached, replaced, or removed.
-        Attachment,
     }
 
     pub use canopy_derive::command;
@@ -3567,6 +3575,10 @@ pub mod canopy {
         /// Remove a node and all descendants from the arena.
         fn remove_subtree(&mut self, node: NodeId) -> Result<()>;
 
+        /// Poll this widget once, soon, without waiting for its poll interval.
+        /// Requests coalesce until the poll runs.
+        fn request_poll(&mut self) -> Result<()>;
+
         /// Reveal this node's logical anchor once layout settles.
         ///
         /// Layout asks [`Widget::reveal_anchor`] for the anchor using the final
@@ -3631,7 +3643,7 @@ pub mod canopy {
 
         /// Capture a thread-safe wake handle for this widget's work lifetime.
         /// Attachment handles require this node to be attached when acquired.
-        fn wake_handle(&self, lifetime: crate::WorkLifetime) -> Result<crate::NodeWakeHandle>;
+        fn wake_handle(&self, lifetime: crate::PollLifetime) -> Result<crate::NodeWakeHandle>;
 
         /// Execute a closure with mutable access to a widget and its node-bound
         /// context.
@@ -3964,7 +3976,7 @@ pub mod canopy {
         /// Node lifetime preserves background work while detached. Attachment
         /// lifetime pauses polling on detach and initializes it again after
         /// reattachment.
-        fn poll_lifetime(&self) -> WorkLifetime {}
+        fn poll_lifetime(&self) -> PollLifetime {}
 
         /// Validation hook before a widget is removed or replaced.
         ///
@@ -3997,6 +4009,16 @@ pub mod canopy {
         /// access. Sensitive values must be omitted; this hook does not
         /// serialize widget state.
         fn semantics(&self, _ctx: &dyn ViewContext) -> Result<WidgetSemantics> {}
+    }
+
+    /// Create a bounded channel whose sends poll the owner of `handle`.
+    ///
+    /// `capacity` bounds the values in flight; a full channel blocks `send`
+    /// and fails `try_send`.
+    pub fn wake_channel<T>(
+        handle: NodeWakeHandle,
+        capacity: usize,
+    ) -> (WakeSender<T>, std::sync::mpsc::Receiver<T>) {
     }
 
     impl BindingAction {
@@ -4218,7 +4240,7 @@ pub mod canopy {
         }
 
         /// Advance one bounded runtime turn.
-        pub fn turn(&mut self, work: Work) -> Result<TurnOutcome> {}
+        pub fn turn(&mut self, work: TurnInput) -> Result<TurnOutcome> {}
 
         /// Drive a synchronous headless evaluation until completion or
         /// cancellation.
@@ -4699,5 +4721,16 @@ pub mod canopy {
 
     impl<T> From<TypedId<T>> for NodeId {
         fn from(value: TypedId<T>) -> Self {}
+    }
+
+    impl<T> WakeSender<T> {
+        /// Send `value` without blocking, then poll the owner.
+        pub fn try_send(&self, value: T) -> StdResult<(), TrySendError<T>> {}
+
+        /// Send `value`, blocking while the channel is full, then poll the owner.
+        ///
+        /// Fails only when the receiver is gone. A wake that finds its owner
+        /// expired is not an error: nobody is left to read the value.
+        pub fn send(&self, value: T) -> StdResult<(), SendError<T>> {}
     }
 }

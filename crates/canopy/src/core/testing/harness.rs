@@ -11,9 +11,9 @@ use tokio::time::sleep_until;
 
 use super::buf::BufTest;
 use crate::{
-    Canopy, CanopyBuilder, Context, ContextExt, NodeId, Register, Setup, TypedId, ViewContextExt,
-    Work,
-    core::{canopy::WorkSelector, termbuf::TermBuf},
+    Canopy, CanopyBuilder, Context, ContextExt, NodeId, Register, Setup, TurnInput, TypedId,
+    ViewContextExt,
+    core::{canopy::TurnSelector, termbuf::TermBuf},
     error::{Error, Result},
     event::{Event, key, mouse},
     geom::Size,
@@ -114,7 +114,7 @@ impl Harness {
     /// Wrap an already configured Canopy application in a test harness.
     pub fn from_canopy(mut canopy: Canopy, size: Size) -> Result<Self> {
         canopy.set_screen_size(size)?;
-        canopy.turn(Work::Prepare)?;
+        canopy.turn(TurnInput::Prepare)?;
         let root = canopy.root_id();
         Ok(Self {
             canopy,
@@ -149,14 +149,14 @@ impl Harness {
         T: Into<key::Key>,
     {
         self.canopy
-            .turn(Work::Input(vec![Event::Key(k.into())]))
+            .turn(TurnInput::Events(vec![Event::Key(k.into())]))
             .map(|_| ())
     }
 
     /// Send a mouse event and render.
     pub fn mouse(&mut self, m: mouse::MouseEvent) -> Result<()> {
         self.canopy
-            .turn(Work::Input(vec![Event::Mouse(m)]))
+            .turn(TurnInput::Events(vec![Event::Mouse(m)]))
             .map(|_| ())
     }
 
@@ -273,8 +273,8 @@ impl Harness {
         let deadline = Instant::now()
             .checked_add(timeout)
             .ok_or_else(|| Error::Invalid("wait timeout exceeds the clock range".into()))?;
-        let mut selector = WorkSelector::default();
-        self.canopy.turn(Work::Prepare)?;
+        let mut selector = TurnSelector::default();
+        self.canopy.turn(TurnInput::Prepare)?;
         loop {
             if predicate(self)? {
                 return Ok(());
@@ -284,18 +284,18 @@ impl Harness {
                     "the condition did not hold within {timeout:?}"
                 )));
             }
-            if let Some(work) = self.next_work(&mut selector, deadline)? {
+            if let Some(work) = self.next_input(&mut selector, deadline)? {
                 self.canopy.turn(work)?;
             }
         }
     }
 
     /// Wait for the next turn input, or return `None` at `deadline`.
-    fn next_work(
+    fn next_input(
         &mut self,
-        selector: &mut WorkSelector,
+        selector: &mut TurnSelector,
         deadline: Instant,
-    ) -> Result<Option<Work>> {
+    ) -> Result<Option<TurnInput>> {
         let mut events = self
             .canopy
             .event_rx
@@ -339,7 +339,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        NodeWakeHandle, ViewContext, WorkLifetime, error::Result, geom::Line, layout::Layout,
+        NodeWakeHandle, PollLifetime, ViewContext, error::Result, geom::Line, layout::Layout,
         render::Render, state::NodeName, testing::ManualClock, widget::Widget,
     };
 
@@ -402,7 +402,7 @@ mod tests {
 
     impl Widget for Poller {
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
-            *self.wake.lock().expect("wake lock") = Some(ctx.wake_handle(WorkLifetime::Node)?);
+            *self.wake.lock().expect("wake lock") = Some(ctx.wake_handle(PollLifetime::Node)?);
             Ok(())
         }
 

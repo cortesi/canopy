@@ -5,7 +5,7 @@ use std::collections::VecDeque;
 use super::Core;
 use crate::{
     ModalToken, NodeId,
-    core::wake::WorkStamp,
+    core::wake::PollOwner,
     error::{Error, Result},
 };
 
@@ -53,7 +53,7 @@ pub(super) struct CompletionBatch {
 impl Core {
     /// Test whether scheduled work still belongs to the same live widget or
     /// attachment.
-    pub(crate) fn work_stamp_valid(&self, stamp: WorkStamp) -> bool {
+    pub(crate) fn work_stamp_valid(&self, stamp: PollOwner) -> bool {
         self.nodes.get(stamp.node).is_some_and(|node| {
             node.incarnation == stamp.incarnation
                 && stamp
@@ -69,15 +69,15 @@ impl Core {
     pub(crate) fn work_stamp(
         &self,
         node: NodeId,
-        lifetime: crate::WorkLifetime,
-    ) -> Result<Option<WorkStamp>> {
+        lifetime: crate::PollLifetime,
+    ) -> Result<Option<PollOwner>> {
         let entry = self.nodes.get(node).ok_or(Error::NodeNotFound(node))?;
         let attachment = match (lifetime, entry.attachment_generation) {
-            (crate::WorkLifetime::Node, _) => None,
-            (crate::WorkLifetime::Attachment, Some(generation)) => Some(generation),
-            (crate::WorkLifetime::Attachment, None) => return Ok(None),
+            (crate::PollLifetime::Node, _) => None,
+            (crate::PollLifetime::Attachment, Some(generation)) => Some(generation),
+            (crate::PollLifetime::Attachment, None) => return Ok(None),
         };
-        Ok(Some(WorkStamp {
+        Ok(Some(PollOwner {
             node,
             incarnation: entry.incarnation,
             attachment,
@@ -88,7 +88,7 @@ impl Core {
     pub(crate) fn wake_handle(
         &self,
         node: NodeId,
-        lifetime: crate::WorkLifetime,
+        lifetime: crate::PollLifetime,
     ) -> Result<crate::NodeWakeHandle> {
         let stamp = self
             .work_stamp(node, lifetime)?
@@ -197,7 +197,7 @@ impl Core {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Context, WakeOutcome, Widget, WorkLifetime};
+    use crate::{Context, PollLifetime, WakeOutcome, Widget};
 
     struct Leaf {
         veto: bool,
@@ -298,8 +298,8 @@ mod tests {
     struct AttachmentLeaf;
 
     impl Widget for AttachmentLeaf {
-        fn poll_lifetime(&self) -> WorkLifetime {
-            WorkLifetime::Attachment
+        fn poll_lifetime(&self) -> PollLifetime {
+            PollLifetime::Attachment
         }
 
         fn pre_remove(&mut self, ctx: &mut dyn Context) -> Result<()> {
@@ -333,17 +333,17 @@ mod tests {
 
     #[test]
     fn nested_failure_does_not_expire_committed_wakes_before_outer_rollback() -> Result<()> {
-        for lifetime in [WorkLifetime::Node, WorkLifetime::Attachment] {
+        for lifetime in [PollLifetime::Node, PollLifetime::Attachment] {
             let mut core = Core::new();
             let node = core.create_detached(Leaf { veto: false })?;
             core.attach(core.root, node)?;
             let original = core.wake_handle(node, lifetime)?;
-            let stamp = WorkStamp {
+            let stamp = PollOwner {
                 node,
                 incarnation: core.nodes[node].incarnation,
                 attachment: match lifetime {
-                    WorkLifetime::Node => None,
-                    WorkLifetime::Attachment => core.nodes[node].attachment_generation,
+                    PollLifetime::Node => None,
+                    PollLifetime::Attachment => core.nodes[node].attachment_generation,
                 },
             };
             assert_eq!(original.wake()?, WakeOutcome::Queued);
@@ -374,8 +374,8 @@ mod tests {
         let mut core = Core::new();
         let node = core.create_detached(Leaf { veto: false })?;
         core.attach(core.root, node)?;
-        let node_handle = core.wake_handle(node, WorkLifetime::Node)?;
-        let attached_handle = core.wake_handle(node, WorkLifetime::Attachment)?;
+        let node_handle = core.wake_handle(node, PollLifetime::Node)?;
+        let attached_handle = core.wake_handle(node, PollLifetime::Attachment)?;
         let incarnation = core.nodes[node].incarnation;
         let attachment = core.nodes[node].attachment_generation;
         core.set_hidden(node, true)?;
@@ -397,11 +397,11 @@ mod tests {
         core.wake_registry.drain()?;
         core.attach(core.root, node)?;
         assert_ne!(core.nodes[node].attachment_generation, attachment);
-        let reattached = core.wake_handle(node, WorkLifetime::Attachment)?;
+        let reattached = core.wake_handle(node, PollLifetime::Attachment)?;
         core.replace_subtree(node, Leaf { veto: false })?;
         assert_eq!(node_handle.wake()?, WakeOutcome::Expired);
         assert_eq!(reattached.wake()?, WakeOutcome::Expired);
-        let replacement = core.wake_handle(node, WorkLifetime::Node)?;
+        let replacement = core.wake_handle(node, PollLifetime::Node)?;
         core.remove_subtree(node)?;
         assert_eq!(replacement.wake()?, WakeOutcome::Expired);
         Ok(())

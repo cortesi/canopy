@@ -762,7 +762,7 @@ mod tests {
             .build()?;
         canopy.replace_root(EchoNode::new())?;
         canopy.set_screen_size(Size::new(20, 5))?;
-        canopy.turn(canopy::Work::Prepare)?;
+        canopy.turn(canopy::TurnInput::Prepare)?;
         let automation = canopy.automation_handle();
         let mut events = canopy.take_event_receiver().expect("test owns events");
         let directory = tempfile::tempdir()?;
@@ -794,7 +794,7 @@ mod tests {
                 break result;
             }
             executor::block_on(events.next()).expect("MCP work wakes UI");
-            canopy.turn(canopy::Work::Wake)?;
+            canopy.turn(canopy::TurnInput::Wake)?;
         };
         worker.join().expect("MCP client worker");
         server.stop()?;
@@ -926,7 +926,7 @@ mod tests {
     }
     #[test]
     fn live_pending_eval_allows_native_progress_and_reports_busy() -> crate::Result<()> {
-        use canopy::{EvalRequest, Work, error::Error as CanopyError, geom::Size};
+        use canopy::{EvalRequest, TurnInput, error::Error as CanopyError, geom::Size};
         use futures::{StreamExt, executor};
 
         let mut canopy = CanopyBuilder::new().configure(EchoNode::register).build()?;
@@ -936,7 +936,7 @@ mod tests {
             started: Some(started_tx),
         })?;
         canopy.set_screen_size(Size::new(20, 5))?;
-        canopy.turn(Work::Prepare)?;
+        canopy.turn(TurnInput::Prepare)?;
         let automation = canopy.automation_handle();
         let mut events = canopy
             .take_event_receiver()
@@ -951,7 +951,7 @@ mod tests {
         });
         while started_rx.try_recv().is_err() {
             executor::block_on(events.next()).expect("queued work wakes the UI");
-            let outcome = canopy.turn(Work::Wake)?;
+            let outcome = canopy.turn(TurnInput::Wake)?;
             assert!(
                 outcome.completed.is_empty(),
                 "wait must remain pending before mutation"
@@ -977,7 +977,7 @@ mod tests {
                 .expect("mutation observer connected");
         }))?;
         executor::block_on(events.next()).expect("native mutation wakes the UI");
-        canopy.turn(Work::Wake)?;
+        canopy.turn(TurnInput::Wake)?;
         mutation_rx.recv().expect("native callback ran")?;
         let busy_result = executor::block_on(busy.completion).expect("busy request completed");
         assert!(matches!(
@@ -985,7 +985,7 @@ mod tests {
             Err(CanopyError::ScriptBusy(_))
         ));
         while !worker.is_finished() {
-            canopy.turn(Work::Wake)?;
+            canopy.turn(TurnInput::Wake)?;
         }
         let response = worker.join().expect("MCP worker exits");
         let payload = response

@@ -118,7 +118,9 @@ fn prepare_rejects_an_active_empty_widget_cell_before_preparation() -> Result<()
     *slot.borrow_mut() = widget;
     assert!(matches!(
         result,
-        Err(Error::InvalidPhase { operation: "prepare" })
+        Err(Error::InvalidPhase {
+            operation: "prepare"
+        })
     ));
     assert!(app.snapshot().is_none());
     app.prepare()?;

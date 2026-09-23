@@ -184,7 +184,7 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
-    use crate::{Work, geom::Size};
+    use crate::{TurnInput, geom::Size};
 
     #[test]
     fn build_preserves_phase_order_without_preparing_or_running_startup() -> Result<()> {
@@ -242,7 +242,7 @@ mod tests {
         assert!(journal[1].origin.to_string().starts_with("config:"));
         assert_eq!(journal[2].origin.to_string(), "bindings:last");
         canopy.set_screen_size(Size::new(10, 3))?;
-        canopy.turn(Work::Prepare)?;
+        canopy.turn(TurnInput::Prepare)?;
         assert_eq!(canopy.mode(), "startup");
         Ok(())
     }
@@ -323,7 +323,7 @@ mod tests {
             let mut canopy = builder.build()?;
             assert!(canopy.script.module_source.is_none());
             canopy.set_screen_size(Size::new(10, 3))?;
-            canopy.turn(Work::Prepare)?;
+            canopy.turn(TurnInput::Prepare)?;
             assert!(
                 canopy
                     .eval_script(&format!("return require(\"@{namespace}/payload\")"))
@@ -355,7 +355,7 @@ mod tests {
         assert_eq!(canopy.mode(), "");
         assert!(canopy.snapshot().is_none());
         canopy.set_screen_size(Size::new(10, 3))?;
-        canopy.turn(Work::Prepare)?;
+        canopy.turn(TurnInput::Prepare)?;
         assert_eq!(canopy.mode(), "trusted");
         Ok(())
     }

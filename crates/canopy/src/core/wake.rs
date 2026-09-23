@@ -2,7 +2,11 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    sync::{Arc, Mutex, Weak},
+    result::Result as StdResult,
+    sync::{
+        Arc, Mutex, Weak,
+        mpsc::{self, Receiver, SendError, SyncSender, TrySendError},
+    },
     task::{Context, Poll},
 };
 
@@ -15,7 +19,7 @@ use crate::{
 
 /// Lifetime of runtime-managed widget work.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum WorkLifetime {
+pub enum PollLifetime {
     /// Continue while the widget exists, including while hidden or detached.
     #[default]
     Node,
@@ -36,7 +40,7 @@ pub enum WakeOutcome {
 
 /// Identity captured by a scheduled callback or wake handle.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct WorkStamp {
+pub struct PollOwner {
     /// Arena node that owns the work.
     pub(crate) node: NodeId,
     /// Widget identity independent of the arena slot generation.
@@ -45,7 +49,7 @@ pub struct WorkStamp {
     pub(crate) attachment: Option<u64>,
 }
 
-impl WorkStamp {
+impl PollOwner {
     /// Capture the same widget with node lifetime.
     fn node_lifetime(self) -> Self {
         Self {
@@ -60,7 +64,7 @@ impl WorkStamp {
 struct WakeState {
     /// Provisional and committed lifetime registrations, each with a pending
     /// bit.
-    registrations: HashMap<WorkStamp, bool>,
+    registrations: HashMap<PollOwner, bool>,
 }
 
 /// Shared notification state retained by the application registry.
@@ -79,7 +83,7 @@ struct SharedWake {
 #[derive(Clone, Debug)]
 pub struct NodeWakeHandle {
     /// Lifetime captured when this handle was acquired.
-    stamp: WorkStamp,
+    stamp: PollOwner,
     /// Non-owning reference that expires when the registry is dropped.
     shared: Weak<SharedWake>,
 }
@@ -110,6 +114,69 @@ impl NodeWakeHandle {
     }
 }
 
+/// Sending half of a bounded channel that polls its owner on every send.
+///
+/// A background producer sends results here, and the owning widget drains
+/// the receiver from `Widget::poll`. The owner needs no polling interval while
+/// it waits: each successful send queues one coalesced poll.
+#[derive(Debug)]
+pub struct WakeSender<T> {
+    /// Bounded channel to the owner.
+    sender: SyncSender<T>,
+    /// Wake handle for the owning widget.
+    wake: NodeWakeHandle,
+}
+
+impl<T> Clone for WakeSender<T> {
+    fn clone(&self) -> Self {
+        Self {
+            sender: self.sender.clone(),
+            wake: self.wake.clone(),
+        }
+    }
+}
+
+impl<T> WakeSender<T> {
+    /// Send `value`, blocking while the channel is full, then poll the owner.
+    ///
+    /// Fails only when the receiver is gone. A wake that finds its owner
+    /// expired is not an error: nobody is left to read the value.
+    pub fn send(&self, value: T) -> StdResult<(), SendError<T>> {
+        self.sender.send(value)?;
+        self.notify();
+        Ok(())
+    }
+
+    /// Send `value` without blocking, then poll the owner.
+    pub fn try_send(&self, value: T) -> StdResult<(), TrySendError<T>> {
+        self.sender.try_send(value)?;
+        self.notify();
+        Ok(())
+    }
+
+    /// Queue a poll of the owner after a successful send.
+    fn notify(&self) {
+        // Only a poisoned registry fails here, and the application that
+        // owns it has already panicked, so the producer has nobody to tell.
+        self.wake.wake().ok();
+    }
+}
+
+/// Create a bounded channel whose sends poll the owner of `handle`.
+///
+/// `capacity` bounds the values in flight; a full channel blocks `send`
+/// and fails `try_send`.
+pub fn wake_channel<T>(handle: NodeWakeHandle, capacity: usize) -> (WakeSender<T>, Receiver<T>) {
+    let (sender, receiver) = mpsc::sync_channel(capacity);
+    (
+        WakeSender {
+            sender,
+            wake: handle,
+        },
+        receiver,
+    )
+}
+
 /// Driver notification registry, bounded by registered owner lifetimes.
 ///
 /// A pending flag and one registered task waker replace an event queue. During
@@ -125,7 +192,7 @@ impl WakeRegistry {
     /// Create a handle after the caller validates its current widget identity.
     ///
     /// The registration is provisional until the enclosing tree edit settles.
-    pub(crate) fn handle(&self, stamp: WorkStamp) -> Result<NodeWakeHandle> {
+    pub(crate) fn handle(&self, stamp: PollOwner) -> Result<NodeWakeHandle> {
         self.shared
             .state
             .lock()
@@ -144,7 +211,7 @@ impl WakeRegistry {
     /// Each supplied stamp represents the node's current incarnation and
     /// optional attachment. Node-lifetime work remains valid when
     /// attachment is absent.
-    pub(crate) fn sync(&self, owners: impl IntoIterator<Item = WorkStamp>) -> Result<()> {
+    pub(crate) fn sync(&self, owners: impl IntoIterator<Item = PollOwner>) -> Result<()> {
         let active: HashSet<_> = owners
             .into_iter()
             .flat_map(|stamp| [stamp.node_lifetime(), stamp])
@@ -172,7 +239,7 @@ impl WakeRegistry {
     }
 
     /// Drain at most one callback per owning widget incarnation.
-    pub(crate) fn drain(&self) -> Result<Vec<WorkStamp>> {
+    pub(crate) fn drain(&self) -> Result<Vec<PollOwner>> {
         let mut state = self.shared.state.lock().map_err(|_| poisoned_registry())?;
         let mut pending = Vec::new();
         for (stamp, queued) in &mut state.registrations {
@@ -221,8 +288,8 @@ mod tests {
     use super::*;
     use crate::core::id::testing_node_id;
 
-    fn owner() -> WorkStamp {
-        WorkStamp {
+    fn owner() -> PollOwner {
+        PollOwner {
             node: testing_node_id(),
             incarnation: 1,
             attachment: Some(1),
@@ -251,7 +318,7 @@ mod tests {
         let registry = WakeRegistry::default();
         let old = owner();
         let original = registry.handle(old)?;
-        let replacement = registry.handle(WorkStamp {
+        let replacement = registry.handle(PollOwner {
             incarnation: 2,
             ..old
         })?;
@@ -267,7 +334,7 @@ mod tests {
     fn committed_replacement_expires_old_wake_and_keeps_mount_wake() -> Result<()> {
         let registry = WakeRegistry::default();
         let old = owner();
-        let new = WorkStamp {
+        let new = PollOwner {
             incarnation: 2,
             attachment: Some(2),
             ..old

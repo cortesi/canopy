@@ -3,7 +3,7 @@
 #![cfg(not(feature = "devtools"))]
 
 use canopy::{
-    CanopyBuilder, Context, ContextExt, Register, Widget, Work, commands::CommandNode,
+    CanopyBuilder, Context, ContextExt, Register, TurnInput, Widget, commands::CommandNode,
     error::Result, geom::Size,
 };
 use canopy_widgets::{Input, List, Root, Selectable};
@@ -35,7 +35,7 @@ mod tests {
         let mut app = CanopyBuilder::new().configure(Root::register).build()?;
         Root::new().install(&mut app, Form)?;
         app.set_screen_size(Size::new(30, 10))?;
-        app.turn(Work::Prepare)?;
+        app.turn(TurnInput::Prepare)?;
         let snapshot = app.snapshot().unwrap();
         assert!(snapshot.nodes.iter().any(|node| node.name == "input"));
         assert!(snapshot.nodes.iter().any(|node| node.name == "list"));
