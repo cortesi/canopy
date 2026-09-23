@@ -1,7 +1,7 @@
 mod logs;
 
 use canopy::{
-    Canopy, Context, ContextExt, Loader, NodeId, NodeName, Render, ViewContext, Widget,
+    Context, ContextExt, NodeId, NodeName, Register, Render, Setup, ViewContext, Widget,
     derive_commands, error::Result, layout::Layout,
 };
 use logs::Logs;
@@ -71,11 +71,11 @@ impl Widget for Inspector {
     }
 }
 
-impl Loader for Inspector {
-    fn load(c: &mut Canopy) -> Result<()> {
-        c.add_commands::<Self>()?;
-        c.register_default_bindings("inspector", DEFAULT_BINDINGS)?;
-        Logs::load(c)?;
+impl Register for Inspector {
+    fn register(setup: &mut Setup) -> Result<()> {
+        setup.add_commands::<Self>()?;
+        setup.register_default_bindings("inspector", DEFAULT_BINDINGS)?;
+        Logs::register(setup)?;
         Ok(())
     }
 }

@@ -904,7 +904,7 @@ mod tests {
     use std::sync::Arc;
 
     use canopy::{
-        Canopy, ContextExt, TermBuf,
+        CanopyBuilder, ContextExt, TermBuf,
         event::{key, mouse},
         layout::Layout,
         style::{
@@ -920,7 +920,7 @@ mod tests {
     #[test]
     fn key_capture_matches_event_handling() -> Result<()> {
         let (mut terminal, _receiver) = stream_terminal();
-        let mut app = Canopy::new();
+        let mut app = CanopyBuilder::new().build()?;
         for spec in [
             "a",
             "Z",
@@ -981,8 +981,6 @@ mod tests {
             ctx.set_layout_of(terminal, Layout::fill())
         }
     }
-
-    impl canopy::Loader for TerminalHost {}
 
     #[test]
     fn terminal_wheel_input_never_scrolls_an_enclosing_viewport() -> Result<()> {
@@ -1122,7 +1120,7 @@ mod tests {
     }
 
     fn render_effect_run(effects: Vec<Effect>) -> Result<TermBuf> {
-        let mut canopy = canopy::Canopy::new();
+        let mut canopy = CanopyBuilder::new().build()?;
         canopy.with_root_context(|ctx| {
             ctx.set_layout(Layout::fill())?;
             let _ = ctx.add_child(EffectRun)?;

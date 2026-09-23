@@ -20,8 +20,8 @@ pub mod canopy_examples {
             pub fn new() -> Self {}
         }
 
-        impl Loader for CharGym {
-            fn load(c: &mut Canopy) -> Result<()> {}
+        impl Register for CharGym {
+            fn register(setup: &mut Setup) -> Result<()> {}
         }
 
         impl Widget for CharGym {
@@ -51,8 +51,8 @@ pub mod canopy_examples {
             pub fn new() -> Self {}
         }
 
-        impl Loader for EditorGym {
-            fn load(c: &mut Canopy) -> Result<()> {}
+        impl Register for EditorGym {
+            fn register(setup: &mut Setup) -> Result<()> {}
         }
 
         impl Widget for EditorGym {
@@ -84,8 +84,8 @@ pub mod canopy_examples {
             pub fn new() -> Self {}
         }
 
-        impl Loader for FocusGym {
-            fn load(c: &mut Canopy) -> Result<()> {}
+        impl Register for FocusGym {
+            fn register(setup: &mut Setup) -> Result<()> {}
         }
 
         impl Widget for FocusGym {
@@ -134,8 +134,8 @@ pub mod canopy_examples {
             pub fn new() -> Self {}
         }
 
-        impl Loader for FrameGym {
-            fn load(c: &mut Canopy) -> Result<()> {}
+        impl Register for FrameGym {
+            fn register(setup: &mut Setup) -> Result<()> {}
         }
 
         impl Widget for FrameGym {
@@ -171,8 +171,8 @@ pub mod canopy_examples {
             pub fn new() -> Self {}
         }
 
-        impl Loader for Intervals {
-            fn load(c: &mut Canopy) -> Result<()> {}
+        impl Register for Intervals {
+            fn register(setup: &mut Setup) -> Result<()> {}
         }
 
         impl Widget for Intervals {
@@ -206,8 +206,8 @@ pub mod canopy_examples {
             pub fn new() -> Self {}
         }
 
-        impl Loader for ListGym {
-            fn load(c: &mut Canopy) -> Result<()> {}
+        impl Register for ListGym {
+            fn register(setup: &mut Setup) -> Result<()> {}
         }
 
         impl Widget for ListGym {
@@ -227,13 +227,13 @@ pub mod canopy_examples {
         /// Queue this demo's bindings and native configuration in their builder phases.
         pub fn binding_setup(builder: canopy::CanopyBuilder) -> canopy::CanopyBuilder {}
 
-        impl Loader for Pager {
-            fn load(c: &mut Canopy) -> Result<()> {}
-        }
-
         impl Pager {
             /// Construct a pager with initial contents.
             pub fn new(contents: &str) -> Self {}
+        }
+
+        impl Register for Pager {
+            fn register(setup: &mut Setup) -> Result<()> {}
         }
 
         impl Widget for Pager {
@@ -264,8 +264,8 @@ pub mod canopy_examples {
             fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
         }
 
-        impl Loader for Stylegym {
-            fn load(c: &mut Canopy) -> Result<()> {}
+        impl Register for Stylegym {
+            fn register(setup: &mut Setup) -> Result<()> {}
         }
 
         impl Stylegym {
@@ -295,8 +295,8 @@ pub mod canopy_examples {
             fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
         }
 
-        impl Loader for TermGym {
-            fn load(c: &mut Canopy) -> Result<()> {}
+        impl Register for TermGym {
+            fn register(setup: &mut Setup) -> Result<()> {}
         }
 
         impl TermGym {
@@ -473,8 +473,8 @@ pub mod canopy_examples {
         /// Return a short title for the editor frame.
         pub fn file_title(path: &std::path::Path) -> String {}
 
-        impl Loader for WidgetEditor {
-            fn load(c: &mut Canopy) -> Result<()> {}
+        impl Register for WidgetEditor {
+            fn register(setup: &mut Setup) -> Result<()> {}
         }
 
         impl Widget for WidgetEditor {

@@ -296,7 +296,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use canopy::Canopy;
+    use canopy::CanopyBuilder;
 
     use super::*;
 
@@ -356,7 +356,7 @@ mod tests {
         ];
         let mut selector = Selector::new(items);
         assert!(selector.selection_invariant_holds());
-        Canopy::new().with_root_context(|ctx| {
+        CanopyBuilder::new().build()?.with_root_context(|ctx| {
             selector.toggle(ctx)?;
             selector.select_by(ctx, 2)?;
             selector.toggle(ctx)?;
@@ -422,7 +422,9 @@ mod tests {
             .with_glyphs("· ", "✓ ");
         assert_eq!(selector.glyphs, ("· ", "✓ "));
         selector.selected.push(1);
-        let semantics = Canopy::new().with_root_view(|ctx| selector.semantics(ctx))?;
+        let semantics = CanopyBuilder::new()
+            .build()?
+            .with_root_view(|ctx| selector.semantics(ctx))?;
         assert_eq!(semantics.role.as_deref(), Some("selector"));
         assert_eq!(semantics.label.as_deref(), Some("Columns"));
         assert_eq!(semantics.value.as_deref(), Some("Modified"));
@@ -432,7 +434,7 @@ mod tests {
     #[test]
     fn empty_selector_invariants_hold_after_commands() -> Result<()> {
         let mut selector = Selector::<String>::new(Vec::new());
-        Canopy::new().with_root_context(|ctx| {
+        CanopyBuilder::new().build()?.with_root_context(|ctx| {
             selector.toggle(ctx)?;
             selector.select_by(ctx, 1)?;
             selector.select_first(ctx)?;

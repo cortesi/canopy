@@ -229,13 +229,13 @@ where
 
 #[cfg(test)]
 mod tests {
-    use canopy::{Canopy, Loader, testing::harness::Harness};
+    use canopy::{Register, Setup, testing::harness::Harness};
 
     use super::*;
 
-    impl Loader for Dropdown<String> {
-        fn load(c: &mut Canopy) -> Result<()> {
-            c.add_commands::<Self>()?;
+    impl Register for Dropdown<String> {
+        fn register(setup: &mut Setup) -> Result<()> {
+            setup.add_commands::<Self>()?;
             Ok(())
         }
     }
@@ -276,7 +276,10 @@ mod tests {
             "Option 3".to_string(),
         ];
         let root = Dropdown::new(items)?;
-        let mut harness = Harness::builder(root).size(20, 6).build()?;
+        let mut harness = Harness::builder(root)
+            .register::<Dropdown<String>>()
+            .size(20, 6)
+            .build()?;
         harness.render()?;
         harness.script(include_str!("../tests/luau/dropdown_select_second.luau"))?;
         harness.with_root_widget::<Dropdown<String>, _>(|dropdown| {
@@ -294,9 +297,10 @@ mod tests {
             "Option 3".to_string(),
         ];
         let mut harness = Harness::builder(Dropdown::new(items)?)
+            .register::<Dropdown<String>>()
             .size(20, 6)
             .build()?;
-        harness.with_root_context(|dropdown: &mut Dropdown<String>, ctx| {
+        harness.with_root_widget_context(|dropdown: &mut Dropdown<String>, ctx| {
             assert!(dropdown.selection_invariant_holds());
             dropdown.selected = 1;
             dropdown.cursor.set_index(1);

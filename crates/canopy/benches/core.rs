@@ -3,8 +3,8 @@
 use std::hint::black_box;
 
 use canopy::{
-    Canopy, Context, ContextExt, KeyedChildren, NodeId, NodeName, Render, TermBuf, ViewContext,
-    Widget, Work,
+    Canopy, CanopyBuilder, Context, ContextExt, KeyedChildren, NodeId, NodeName, Render, TermBuf,
+    ViewContext, Widget, Work,
     commands::CommandTarget,
     derive_commands,
     error::Result,
@@ -231,7 +231,7 @@ impl Widget for BrowserNode {
 /// Build a file-browser tree: framed listings side by side, each listing
 /// holding rows of a name and a size cell.
 fn build_browser() -> Result<Canopy> {
-    let mut app = Canopy::new();
+    let mut app = CanopyBuilder::new().build()?;
     app.with_root_context(|context| {
         let browser: NodeId = context
             .create_detached(BrowserNode::new(
@@ -296,7 +296,7 @@ fn build_browser() -> Result<Canopy> {
 
 /// Build a deterministic tree for layout and render benchmarks.
 fn build_tree() -> Result<Canopy> {
-    let mut app = Canopy::new();
+    let mut app = CanopyBuilder::new().build()?;
     populate_tree(&mut app)?;
     app.set_root_size(SCREEN)?;
     Ok(app)
@@ -317,8 +317,9 @@ fn populate_tree(app: &mut Canopy) -> Result<NodeId> {
 /// Build a benchmark tree whose command target is visited after the main
 /// subtree.
 fn build_command_tree() -> Result<Canopy> {
-    let mut app = Canopy::new();
-    app.add_commands::<CommandLeaf>()?;
+    let mut app = CanopyBuilder::new()
+        .configure(|setup| setup.add_commands::<CommandLeaf>())
+        .build()?;
     let root_child = populate_tree(&mut app)?;
     app.with_context(root_child, |context| {
         let command_leaf: NodeId = context.create_detached(CommandLeaf)?.into();
@@ -505,24 +506,21 @@ fn bench_command_resolution(c: &mut Criterion) {
 /// Benchmark first-run startup script finalization, compilation, and execution.
 fn bench_script_startup(c: &mut Criterion) {
     c.bench_function("script_startup", |b| {
-        b.iter_batched(
-            || {
-                let mut app = Canopy::new();
-                app.register_startup_script(
-                    "benchmark",
-                    "function setup() local values = { 1, 2, 3, 4 }; assert(#values == 4) end",
-                )
-                .expect("startup script should register");
-                app
-            },
-            |mut app| {
-                black_box(
-                    app.run_startup_scripts()
-                        .expect("startup script should execute"),
-                );
-            },
-            BatchSize::SmallInput,
-        );
+        b.iter(|| {
+            let mut app = CanopyBuilder::new()
+                .configure(|setup| {
+                    setup.register_startup_script(
+                        "benchmark",
+                        "function setup() local values = { 1, 2, 3, 4 }; assert(#values == 4) end",
+                    )
+                })
+                .build()
+                .expect("startup script should finalize");
+            black_box(
+                app.turn(Work::Prepare)
+                    .expect("startup script should execute"),
+            );
+        });
     });
 }
 
@@ -571,7 +569,9 @@ fn bench_keyed_reconciliation(c: &mut Criterion) {
         ("keyed_reconcile_unchanged_1000", 0),
         ("keyed_reconcile_rolling_1000", 1),
     ] {
-        let mut app = Canopy::new();
+        let mut app = CanopyBuilder::new()
+            .build()
+            .expect("an empty application builds");
         let mut items = KeyedChildren::<usize, BenchNode>::new();
         app.with_root_context(|ctx| {
             items.reconcile(

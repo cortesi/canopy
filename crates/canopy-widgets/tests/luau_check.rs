@@ -4,21 +4,19 @@
 mod tests {
     use std::{error::Error, fs, path::PathBuf};
 
-    use canopy::{Canopy, Loader, testing::luau::assert_typechecks};
+    use canopy::{Canopy, CanopyBuilder, Register, testing::luau::assert_typechecks};
     use canopy_widgets::{Dropdown, List, Root, Text};
 
     fn finalized_surfaces() -> Result<(Canopy, Canopy, Canopy), Box<dyn Error>> {
-        let mut dropdown = Canopy::new();
-        dropdown.add_commands::<Dropdown<String>>()?;
-        dropdown.finalize_api()?;
+        let dropdown = CanopyBuilder::new()
+            .configure(|setup| setup.add_commands::<Dropdown<String>>())
+            .build()?;
 
-        let mut list = Canopy::new();
-        list.add_commands::<List<Text>>()?;
-        list.finalize_api()?;
+        let list = CanopyBuilder::new()
+            .configure(|setup| setup.add_commands::<List<Text>>())
+            .build()?;
 
-        let mut root = Canopy::new();
-        Root::load(&mut root)?;
-        root.finalize_api()?;
+        let root = CanopyBuilder::new().configure(Root::register).build()?;
         Ok((dropdown, list, root))
     }
 

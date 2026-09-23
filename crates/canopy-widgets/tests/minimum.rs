@@ -3,8 +3,8 @@
 #![cfg(not(feature = "devtools"))]
 
 use canopy::{
-    Canopy, Context, ContextExt, Loader, Widget, Work, commands::CommandNode, error::Result,
-    geom::Size,
+    CanopyBuilder, Context, ContextExt, Register, Widget, Work, commands::CommandNode,
+    error::Result, geom::Size,
 };
 use canopy_widgets::{Input, List, Root, Selectable};
 
@@ -32,10 +32,8 @@ mod tests {
 
     #[test]
     fn minimum_forms_have_help_and_no_inspector() -> Result<()> {
-        let mut app = Canopy::new();
-        Root::load(&mut app)?;
+        let mut app = CanopyBuilder::new().configure(Root::register).build()?;
         Root::new().install(&mut app, Form)?;
-        app.finalize_api()?;
         app.set_root_size(Size::new(30, 10))?;
         app.turn(Work::Prepare)?;
         let snapshot = app.snapshot().unwrap();

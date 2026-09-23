@@ -2,14 +2,14 @@
 
 #[cfg(test)]
 mod tests {
-    use canopy::{Canopy, ContextExt, NodeId, Widget, commands::ArgValue, error::Result};
+    use canopy::{CanopyBuilder, ContextExt, NodeId, Widget, commands::ArgValue, error::Result};
 
     struct Marker;
     impl Widget for Marker {}
 
     #[test]
     fn script_keys_are_scoped_and_follow_wrapping() -> Result<()> {
-        let mut canopy = Canopy::new();
+        let mut canopy = CanopyBuilder::new().build()?;
         let (first, first_item, second) = canopy.with_root_context(|ctx| {
             let root = ctx.root_id();
             let first = NodeId::from(ctx.add_child(Marker)?);

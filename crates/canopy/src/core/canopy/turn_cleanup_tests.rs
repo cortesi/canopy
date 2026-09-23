@@ -12,7 +12,7 @@ use std::{
 use futures::{channel::mpsc::UnboundedSender, task::noop_waker};
 use tokio::{runtime::Builder, time::sleep};
 
-use super::{AdapterEvent, Canopy, EvalRequest, Work};
+use super::{AdapterEvent, Canopy, CanopyBuilder, EvalRequest, Work};
 use crate::{
     Context, ViewContext,
     commands::ArgValue,
@@ -58,9 +58,9 @@ impl Widget for CleanupProbe {
 
 /// Construct a rendered application with the input probe focused.
 fn application() -> Result<(Canopy, Arc<AtomicUsize>)> {
-    let mut canopy = Canopy::new();
-    canopy.add_commands::<CleanupProbe>()?;
-    canopy.finalize_api()?;
+    let mut canopy = CanopyBuilder::new()
+        .configure(|setup| setup.add_commands::<CleanupProbe>())
+        .build()?;
     let mutations = Arc::new(AtomicUsize::new(0));
     canopy.replace_root(CleanupProbe {
         events: canopy.event_tx.clone(),
@@ -209,8 +209,11 @@ fn cancellable_headless_waits_and_reuse_work_in_supported_contexts() -> Result<(
 
 #[test]
 fn synchronous_headless_rejects_current_thread_tasks_without_consuming_driver() -> Result<()> {
-    let mut canopy = Canopy::new();
-    canopy.register_startup_script("startup", "function setup() print('startup ran') end")?;
+    let mut canopy = CanopyBuilder::new()
+        .configure(|setup| {
+            setup.register_startup_script("startup", "function setup() print('startup ran') end")
+        })
+        .build()?;
     Builder::new_current_thread()
         .enable_time()
         .build()

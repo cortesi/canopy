@@ -29,6 +29,8 @@ pub use routing::{RouteTraceEntry, RouteTraceKind};
 mod scripting;
 use scripting::{ScriptJournal, ScriptJournalBaseline, ScriptState};
 pub use scripting::{ScriptJournalEntry, ScriptOrigin};
+mod setup;
+pub use setup::{Register, Setup};
 #[cfg(test)]
 mod snapshot_tests;
 #[cfg(any(test, feature = "testing"))]
@@ -203,11 +205,6 @@ impl Canopy {
         }
     }
 
-    /// Return whether the application API has been finalized by its builder.
-    pub fn is_api_finalized(&self) -> bool {
-        self.script.host.is_finalized()
-    }
-
     /// Return a handle for submitting automation work to this app's UI thread.
     pub fn automation_handle(&self) -> AutomationHandle {
         AutomationHandle {
@@ -220,15 +217,6 @@ impl Canopy {
     /// Return the root node ID.
     pub fn root_id(&self) -> NodeId {
         self.core.root_id()
-    }
-
-    /// Replace the visible render-target limits.
-    pub fn set_render_limits(&mut self, limits: RenderLimits) -> Result<()> {
-        if let Some(size) = self.frame.root_size {
-            limits.cell_count(size)?;
-        }
-        self.frame.render_limits = limits;
-        Ok(())
     }
 
     /// Create a detached widget node.
@@ -327,66 +315,6 @@ impl Canopy {
         f(&context)
     }
 
-    /// Install an idempotent framework-owned command binding.
-    ///
-    /// `options.tier` must be [`inputmap::BindingTier::Framework`], and names
-    /// the group the binding joins.
-    pub fn bind_framework(
-        &mut self,
-        input: impl Into<inputmap::InputSpec>,
-        options: inputmap::BindingOptions,
-        command: commands::CommandCall,
-    ) -> Result<inputmap::BindingId> {
-        self.core.input_map.bind_framework(input, options, command)
-    }
-
-    /// Install or replace an application command binding.
-    ///
-    /// An omitted command target resolves from the node where the binding wins.
-    pub fn bind_command(
-        &mut self,
-        input: impl Into<inputmap::InputSpec>,
-        options: inputmap::BindingOptions,
-        command: commands::CommandCall,
-    ) -> Result<inputmap::BindingId> {
-        let (id, removed) = self.core.input_map.replace_application_binding(
-            input.into(),
-            options,
-            inputmap::BindingTarget::Command(command),
-        )?;
-        self.release_removed_bindings(removed);
-        Ok(id)
-    }
-
-    /// Install or replace an application widget action binding.
-    ///
-    /// The action name must already be registered in this application's
-    /// catalog.
-    pub fn bind_widget_action(
-        &mut self,
-        input: impl Into<inputmap::InputSpec>,
-        options: inputmap::BindingOptions,
-        action: inputmap::WidgetActionName,
-    ) -> Result<inputmap::BindingId> {
-        let (id, removed) = self.core.input_map.replace_application_binding(
-            input.into(),
-            options,
-            inputmap::BindingTarget::WidgetAction(action),
-        )?;
-        self.release_removed_bindings(removed);
-        Ok(id)
-    }
-
-    /// Register one bindable widget action for this application.
-    ///
-    /// Registration is native-only and must happen before `finalize_api`.
-    /// The catalog carries names and descriptions; widgets decide whether
-    /// they consume an action.
-    pub fn register_widget_action(&mut self, spec: inputmap::WidgetActionSpec) -> Result<()> {
-        self.ensure_api_unfinalized("widget action registration")?;
-        self.core.input_map.register_widget_action(spec)
-    }
-
     /// Remove an application binding by ID.
     ///
     /// A framework-owned ID returns an error.
@@ -442,14 +370,6 @@ impl Canopy {
         self.core.input_map.push_transient_mode(mode);
     }
 
-    /// Register a hook that runs against the root context before the next
-    /// frame whenever the input mode stack has changed.
-    ///
-    /// Registering a name again replaces its hook. Hooks run in name order.
-    pub fn register_mode_hook(&mut self, name: &'static str, hook: ModeHook) {
-        self.mode_hooks.insert(name, hook);
-    }
-
     /// Return whether the mode stack changed since the mode hooks last ran.
     pub(super) fn mode_hooks_pending(&self) -> bool {
         !self.mode_hooks.is_empty()
@@ -477,15 +397,6 @@ impl Canopy {
     /// Return the most recent key or mouse route trace.
     pub fn route_trace(&self) -> &[RouteTraceEntry] {
         &self.route_trace
-    }
-
-    /// Load the commands from a command node using the default node name.
-    /// Returns an error if any command id is already registered.
-    pub fn add_commands<T: commands::CommandNode>(&mut self) -> Result<()> {
-        self.ensure_api_unfinalized("command registration")?;
-        let cmds = <T>::commands();
-        self.core.commands.add(cmds)?;
-        Ok(())
     }
 
     /// Return command availability using an explicit target policy.
@@ -596,15 +507,5 @@ impl Canopy {
         }
 
         out
-    }
-}
-
-/// A trait that allows widgets to perform recursive initialization of
-/// themselves and their children.
-pub trait Loader {
-    /// Load commands or resources into the canopy instance.
-    /// Returns an error if loading fails.
-    fn load(_: &mut Canopy) -> Result<()> {
-        Ok(())
     }
 }

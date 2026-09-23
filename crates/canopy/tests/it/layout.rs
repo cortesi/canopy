@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        ContextExt, Loader, NodeId, NodeName, Render, ViewContext, Widget,
+        ContextExt, NodeId, NodeName, Render, ViewContext, Widget,
         error::Result,
         geom::Size,
         layout::{Edges, Layout, MeasureConstraints, Measurement},
@@ -67,8 +67,6 @@ mod tests {
             NodeName::convert("root")
         }
     }
-
-    impl Loader for Root {}
 
     #[test]
     fn child_respects_parent_padding() -> Result<()> {

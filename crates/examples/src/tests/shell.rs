@@ -1,6 +1,6 @@
 //! Launcher shell render checks.
 
-use canopy::{Loader, error::Result, geom::Size, testing::harness::Harness};
+use canopy::{Register, error::Result, geom::Size, testing::harness::Harness};
 use canopy_widgets::Root;
 
 use crate::{DemoShell, chargym, demo_canopy};
@@ -8,7 +8,7 @@ use crate::{DemoShell, chargym, demo_canopy};
 #[test]
 fn the_launcher_shell_adds_a_footer_naming_the_demo_and_the_help_key() -> Result<()> {
     let canopy = demo_canopy()
-        .configure(chargym::CharGym::load)
+        .configure(chargym::CharGym::register)
         .assemble(|canopy| {
             Root::new().install(canopy, DemoShell::new(chargym::CharGym::new()))?;
             Ok(())

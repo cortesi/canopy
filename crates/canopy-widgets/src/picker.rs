@@ -828,12 +828,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use canopy::{Loader, geom::Size, testing::harness::Harness};
+    use canopy::{geom::Size, testing::harness::Harness};
 
     use super::*;
     use crate::Confirm;
-
-    impl Loader for Picker<String> {}
 
     /// Build a picker showing `items`, rendered once.
     fn picker(items: &[&str], width: u32, height: u32) -> Result<Harness> {
@@ -847,7 +845,7 @@ mod tests {
             .build()?;
         harness.render()?;
         let items: Vec<String> = items.iter().map(|item| (*item).to_string()).collect();
-        harness.with_root_context(|picker: &mut Picker<String>, context| {
+        harness.with_root_widget_context(|picker: &mut Picker<String>, context| {
             picker.show(context, "Bookmarks", "<no bookmarks>", items)
         })?;
         harness.render()?;
@@ -859,7 +857,7 @@ mod tests {
         harness: &mut Harness,
         command: impl FnOnce(&mut PickerList<String>, &mut dyn Context) -> Result<()>,
     ) -> Result<()> {
-        harness.with_root_context(|picker: &mut Picker<String>, context| {
+        harness.with_root_widget_context(|picker: &mut Picker<String>, context| {
             let list = picker.list()?;
             context.with_widget_mut(list, command)
         })?;
@@ -870,7 +868,7 @@ mod tests {
     /// Return a value read from the list inside the picker.
     fn from_list<R>(harness: &mut Harness, read: impl FnOnce(&PickerList<String>) -> R) -> R {
         harness
-            .with_root_context(|picker: &mut Picker<String>, context| {
+            .with_root_widget_context(|picker: &mut Picker<String>, context| {
                 let list = picker.list()?;
                 context.with_widget_mut(list, |list: &mut PickerList<String>, _| Ok(read(list)))
             })
@@ -892,9 +890,10 @@ mod tests {
 
     /// Return where the picker's frame, list, and filter field sit.
     fn parts(harness: &mut Harness) -> Result<Geometry> {
-        let (list, filter) = harness.with_root_context(|picker: &mut Picker<String>, _| {
-            Ok((picker.list()?, picker.filter()?))
-        })?;
+        let (list, filter) =
+            harness.with_root_widget_context(|picker: &mut Picker<String>, _| {
+                Ok((picker.list()?, picker.filter()?))
+            })?;
         let frame = harness
             .find_nodes("**/picker/**/frame")?
             .first()
@@ -993,7 +992,7 @@ mod tests {
         })?;
         assert_eq!(from_list(&mut harness, PickerList::shown_count), 1);
 
-        harness.with_root_context(|picker: &mut Picker<String>, context| {
+        harness.with_root_widget_context(|picker: &mut Picker<String>, context| {
             let list = picker.list()?;
             context.with_widget_mut(list, |list: &mut PickerList<String>, context| {
                 assert!(
@@ -1041,7 +1040,7 @@ mod tests {
                         list.set_filter(context, "al".into())
                     })?;
                 }
-                harness.with_root_context(|picker: &mut Picker<String>, context| {
+                harness.with_root_widget_context(|picker: &mut Picker<String>, context| {
                     let list = picker.list()?;
                     context.with_widget_mut(list, |list: &mut PickerList<String>, context| {
                         let key = key::Key::parse_spec(spec).expect("valid key spec");
@@ -1105,7 +1104,8 @@ mod tests {
     /// The modal gives the list the keyboard, so the key reaches the filter
     /// here the way it does in an application.
     fn commit(harness: &mut Harness) -> Result<()> {
-        let list = harness.with_root_context(|picker: &mut Picker<String>, _| picker.list())?;
+        let list =
+            harness.with_root_widget_context(|picker: &mut Picker<String>, _| picker.list())?;
         harness.canopy.with_root_context(|context| {
             context.set_focus(list)?;
             Ok(())
@@ -1289,7 +1289,7 @@ mod tests {
         let borrowed: Vec<&str> = items.iter().map(String::as_str).collect();
         let mut harness = picker(&borrowed, 40, 12)?;
         let (overlay, focus) =
-            harness.with_root_context(|picker: &mut Picker<String>, context| {
+            harness.with_root_widget_context(|picker: &mut Picker<String>, context| {
                 let overlay = picker.add_overlay(context, Confirm::new())?;
                 let focus =
                     context.with_widget_mut(overlay, |confirm: &mut Confirm, context| {
@@ -1315,13 +1315,14 @@ mod tests {
             list.set_filter(context, "entry".into())?;
             list.select_by(context, 1)
         })?;
-        let list = harness.with_root_context(|picker: &mut Picker<String>, _| picker.list())?;
+        let list =
+            harness.with_root_widget_context(|picker: &mut Picker<String>, _| picker.list())?;
         harness.canopy.with_root_context(|context| {
             context.set_focus(list)?;
             Ok(())
         })?;
 
-        let token = harness.with_root_context(|picker: &mut Picker<String>, context| {
+        let token = harness.with_root_widget_context(|picker: &mut Picker<String>, context| {
             picker.open_overlay(context, overlay.into(), focus, ModalBindings::Application)
         })?;
         harness.render()?;
@@ -1447,7 +1448,7 @@ mod tests {
                 .size(size.w, size.h)
                 .build()?;
             harness.render()?;
-            harness.with_root_context(|picker: &mut Picker<String>, context| {
+            harness.with_root_widget_context(|picker: &mut Picker<String>, context| {
                 picker.show(
                     context,
                     "Bookmarks",

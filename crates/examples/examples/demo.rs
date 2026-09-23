@@ -3,7 +3,7 @@
 use std::{error::Error, fs, path::PathBuf, process, result::Result as StdResult};
 
 use canopy::{
-    CanopyBuilder, Loader,
+    CanopyBuilder, Register,
     event::key::Key,
     terminal::{InterruptPolicy, RunOptions},
 };
@@ -92,25 +92,31 @@ impl Demo {
     /// Queue the demo's API registration and binding setup.
     fn configure(&self, builder: CanopyBuilder) -> CanopyBuilder {
         match self {
-            Self::Cedit { .. } => {
-                widget_editor::binding_setup(builder.configure(widget_editor::WidgetEditor::load))
-            }
-            Self::Chargym => chargym::binding_setup(builder.configure(chargym::CharGym::load)),
+            Self::Cedit { .. } => widget_editor::binding_setup(
+                builder.configure(widget_editor::WidgetEditor::register),
+            ),
+            Self::Chargym => chargym::binding_setup(builder.configure(chargym::CharGym::register)),
             Self::Editorgym => {
-                editorgym::binding_setup(builder.configure(editorgym::EditorGym::load))
+                editorgym::binding_setup(builder.configure(editorgym::EditorGym::register))
             }
-            Self::Focusgym => focusgym::binding_setup(builder.configure(focusgym::FocusGym::load)),
-            Self::Fontgym => fontgym::binding_setup(builder.configure(fontgym::FontGym::load)),
-            Self::Framegym => framegym::binding_setup(builder.configure(framegym::FrameGym::load)),
-            Self::Imgview { .. } => imgview::binding_setup(builder.configure(ImageView::load)),
+            Self::Focusgym => {
+                focusgym::binding_setup(builder.configure(focusgym::FocusGym::register))
+            }
+            Self::Fontgym => fontgym::binding_setup(builder),
+            Self::Framegym => {
+                framegym::binding_setup(builder.configure(framegym::FrameGym::register))
+            }
+            Self::Imgview { .. } => imgview::binding_setup(builder.configure(ImageView::register)),
             Self::Intervals => {
-                intervals::binding_setup(builder.configure(intervals::Intervals::load))
+                intervals::binding_setup(builder.configure(intervals::Intervals::register))
             }
-            Self::Listgym => listgym::binding_setup(builder.configure(listgym::ListGym::load)),
-            Self::Pager { .. } => pager::binding_setup(builder.configure(pager::Pager::load)),
-            Self::Stylegym => stylegym::binding_setup(builder.configure(stylegym::Stylegym::load)),
-            Self::Termgym => termgym::binding_setup(builder.configure(termgym::TermGym::load)),
-            Self::Textgym => textgym::binding_setup(builder.configure(textgym::TextGym::load)),
+            Self::Listgym => listgym::binding_setup(builder.configure(listgym::ListGym::register)),
+            Self::Pager { .. } => pager::binding_setup(builder.configure(pager::Pager::register)),
+            Self::Stylegym => {
+                stylegym::binding_setup(builder.configure(stylegym::Stylegym::register))
+            }
+            Self::Termgym => termgym::binding_setup(builder.configure(termgym::TermGym::register)),
+            Self::Textgym => textgym::binding_setup(builder),
         }
     }
 

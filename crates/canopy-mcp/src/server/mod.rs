@@ -419,7 +419,7 @@ mod tests {
     };
 
     use canopy::{
-        Canopy, CanopyBuilder, ContextExt, Fixture, Loader, NodeName, Widget, derive_commands,
+        CanopyBuilder, ContextExt, Fixture, NodeName, Register, Setup, Widget, derive_commands,
         error::Result as CanopyResult, geom::Size, testing::contracts,
     };
     use tokio::{net::UnixStream, sync::mpsc as async_mpsc};
@@ -439,9 +439,13 @@ mod tests {
         let folder = directory.path().join("folder");
         fs::create_dir(&folder)?;
         for path in [&file, &link, &dangling, &folder] {
-            let error = serve_uds(path, Canopy::new().automation_handle(), AppMetadata::test())
-                .err()
-                .expect("reject non-socket");
+            let error = serve_uds(
+                path,
+                CanopyBuilder::new().build()?.automation_handle(),
+                AppMetadata::test(),
+            )
+            .err()
+            .expect("reject non-socket");
             assert!(
                 matches!(error, crate::Error::Io(error) if error.kind() == io::ErrorKind::AlreadyExists)
             );
@@ -462,7 +466,7 @@ mod tests {
             }
             let server = serve_uds(
                 &path,
-                Canopy::new().automation_handle(),
+                CanopyBuilder::new().build()?.automation_handle(),
                 AppMetadata::test(),
             )?;
             assert!(fs::symlink_metadata(&path)?.file_type().is_socket());
@@ -515,18 +519,18 @@ mod tests {
         }
     }
 
-    impl Loader for EchoNode {
-        fn load(cnpy: &mut Canopy) -> CanopyResult<()> {
-            cnpy.add_commands::<Self>()
+    impl Register for EchoNode {
+        fn register(setup: &mut Setup) -> CanopyResult<()> {
+            setup.add_commands::<Self>()
         }
     }
 
     fn server() -> CanopyMcpServer {
         CanopyMcpServer::new(app_factory(|| {
             CanopyBuilder::new()
-                .configure(|canopy| {
-                    EchoNode::load(canopy)?;
-                    canopy.register_fixture(Fixture::new(
+                .configure(|setup| {
+                    EchoNode::register(setup)?;
+                    setup.register_fixture(Fixture::new(
                         "seeded",
                         "Set echo_node to a known value",
                         |canopy| canopy.eval_script("echo_node.set(41)").map(|_| ()),
@@ -736,24 +740,26 @@ mod tests {
     #[test]
     fn live_metadata_survives_real_socket_reconnects() -> crate::Result<()> {
         use futures::{StreamExt, executor};
-        let mut canopy = Canopy::new();
-        EchoNode::load(&mut canopy)?;
-        canopy.register_fixture(Fixture::new(
-            "seeded",
-            "Set persistent live state",
-            |canopy| {
-                canopy.with_root_context(|ctx| {
-                    ctx.dispatch_exact(ctx.node_id(), &EchoNode::call_set(7))?;
-                    Ok(())
-                })
-            },
-        ))?;
-        canopy.register_fixture(Fixture::new(
-            "scripted",
-            "Attempt recursive top-level evaluation",
-            |canopy| canopy.eval_script("echo_node.set(99)").map(|_| ()),
-        ))?;
-        canopy.finalize_api()?;
+        let mut canopy = CanopyBuilder::new()
+            .configure(|setup| {
+                EchoNode::register(setup)?;
+                setup.register_fixture(Fixture::new(
+                    "seeded",
+                    "Set persistent live state",
+                    |canopy| {
+                        canopy.with_root_context(|ctx| {
+                            ctx.dispatch_exact(ctx.node_id(), &EchoNode::call_set(7))?;
+                            Ok(())
+                        })
+                    },
+                ))?;
+                setup.register_fixture(Fixture::new(
+                    "scripted",
+                    "Attempt recursive top-level evaluation",
+                    |canopy| canopy.eval_script("echo_node.set(99)").map(|_| ()),
+                ))
+            })
+            .build()?;
         canopy.replace_root(EchoNode::new())?;
         canopy.set_root_size(Size::new(20, 5))?;
         canopy.turn(canopy::Work::Prepare)?;
@@ -923,9 +929,7 @@ mod tests {
         use canopy::{EvalRequest, Work, error::Error as CanopyError, geom::Size};
         use futures::{StreamExt, executor};
 
-        let mut canopy = Canopy::new();
-        EchoNode::load(&mut canopy)?;
-        canopy.finalize_api()?;
+        let mut canopy = CanopyBuilder::new().configure(EchoNode::register).build()?;
         let (started_tx, started_rx) = mpsc::channel();
         canopy.replace_root(EchoNode {
             value: 0,

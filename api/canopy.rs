@@ -2895,11 +2895,11 @@ pub mod canopy {
 
     /// Assemble one application through registration, scripts, and widget creation.
     ///
-    /// Configuration callbacks run first, then the API is finalized. Binding and
-    /// config sources run next in their shared insertion order, followed by
-    /// assembly callbacks. Callbacks are owned and need not be `Send`. The first
-    /// runtime preparation performs startup and publishes geometry; `build` does
-    /// neither.
+    /// Configuration callbacks run first against a [`Setup`] handle, then the API
+    /// is finalized. Binding and config sources run next in their shared insertion
+    /// order, followed by assembly callbacks against the finalized [`Canopy`].
+    /// Callbacks are owned and need not be `Send`. The first runtime preparation
+    /// performs startup and publishes geometry; `build` does neither.
     ///
     /// A failed build returns no application. Native or database effects performed
     /// by callbacks are not rolled back. Retrying requires a fresh builder and
@@ -3325,6 +3325,15 @@ pub mod canopy {
         /// Application-defined key independent of structural child keys.
         pub key: String,
     }
+
+    /// Registration handle for an application that is not yet finalized.
+    ///
+    /// [`CanopyBuilder::configure`](super::CanopyBuilder::configure) passes this
+    /// handle. It owns every operation that extends the command, binding, and
+    /// script surface. The builder finalizes the API after the configure callbacks
+    /// return, so none of this can change at runtime. The style map set here is
+    /// the initial theme; the running application can replace it.
+    pub struct Setup {}
 
     /// A 2D terminal buffer of styled cells.
     #[derive(Clone, Debug)]
@@ -3796,12 +3805,16 @@ pub mod canopy {
         }
     }
 
-    /// A trait that allows widgets to perform recursive initialization of
-    /// themselves and their children.
-    pub trait Loader {
-        /// Load commands or resources into the canopy instance.
-        /// Returns an error if loading fails.
-        fn load(_: &mut Canopy) -> Result<()> {}
+    /// Per-type registration that runs before the application API is finalized.
+    ///
+    /// An implementation registers what its type needs at runtime: commands,
+    /// default bindings, framework bindings, widget actions, fixtures, and mode
+    /// hooks. It never touches the widget tree; widgets are built during assembly.
+    /// A composite type registers the types it mounts by calling their
+    /// implementations.
+    pub trait Register {
+        /// Register this type's commands, bindings, and resources.
+        fn register(setup: &mut Setup) -> Result<()>;
     }
 
     /// Read-only context available to widgets during render and measure.
@@ -4183,11 +4196,9 @@ pub mod canopy {
         pub fn bindings(self, name: impl Into<String>, source: impl Into<String>) -> Self {}
 
         #[must_use]
-        /// Register commands, fixtures, defaults, and other pre-finalization state.
-        pub fn configure(
-            self,
-            configure: impl 'static + FnOnce(&mut Canopy) -> Result<()>,
-        ) -> Self {
+        /// Register commands, bindings, fixtures, styles, and other state that the
+        /// API fixes when it finalizes.
+        pub fn configure(self, configure: impl 'static + FnOnce(&mut Setup) -> Result<()>) -> Self {
         }
 
         #[must_use]
@@ -4309,15 +4320,6 @@ pub mod canopy {
         /// The synchronous caller restrictions of [`Self::eval`] apply.
         pub fn eval_script(&mut self, source: &str) -> Result<commands::ArgValue> {}
 
-        /// Register a Luau script as the default bindings for a widget namespace.
-        pub fn register_default_bindings(&mut self, name: &str, script: &str) -> Result<()> {}
-
-        /// Register a named fixture available to headless and live automation.
-        pub fn register_fixture(&mut self, fixture: Fixture) -> Result<()> {}
-
-        /// Register an app-level startup script.
-        pub fn register_startup_script(&mut self, name: &str, source: &str) -> Result<()> {}
-
         /// Return registered fixture metadata in stable name order.
         pub fn fixture_infos(&self) -> Vec<FixtureInfo> {}
 
@@ -4386,45 +4388,6 @@ pub mod canopy {
         /// Get a reference to the current render buffer, if any.
         pub fn buf(&self) -> Option<&TermBuf> {}
 
-        /// Install an idempotent framework-owned command binding.
-        ///
-        /// `options.tier` must be [`inputmap::BindingTier::Framework`], and names
-        /// the group the binding joins.
-        pub fn bind_framework(
-            &mut self,
-            input: impl Into<inputmap::InputSpec>,
-            options: inputmap::BindingOptions,
-            command: commands::CommandCall,
-        ) -> Result<inputmap::BindingId> {
-        }
-
-        /// Install or replace an application command binding.
-        ///
-        /// An omitted command target resolves from the node where the binding wins.
-        pub fn bind_command(
-            &mut self,
-            input: impl Into<inputmap::InputSpec>,
-            options: inputmap::BindingOptions,
-            command: commands::CommandCall,
-        ) -> Result<inputmap::BindingId> {
-        }
-
-        /// Install or replace an application widget action binding.
-        ///
-        /// The action name must already be registered in this application's
-        /// catalog.
-        pub fn bind_widget_action(
-            &mut self,
-            input: impl Into<inputmap::InputSpec>,
-            options: inputmap::BindingOptions,
-            action: inputmap::WidgetActionName,
-        ) -> Result<inputmap::BindingId> {
-        }
-
-        /// Load the commands from a command node using the default node name.
-        /// Returns an error if any command id is already registered.
-        pub fn add_commands<T: commands::CommandNode>(&mut self) -> Result<()> {}
-
         /// Mutate the active style map before the next render.
         pub fn style_mut(&mut self) -> &mut StyleMap {}
 
@@ -4445,32 +4408,11 @@ pub mod canopy {
         /// state.
         pub fn snapshot(&self) -> Option<Arc<FrameSnapshot>> {}
 
-        /// Register a hook that runs against the root context before the next
-        /// frame whenever the input mode stack has changed.
-        ///
-        /// Registering a name again replaces its hook. Hooks run in name order.
-        pub fn register_mode_hook(
-            &mut self,
-            name: &'static str,
-            hook: fn(_: &mut dyn crate::Context) -> crate::error::Result<()>,
-        ) {
-        }
-
-        /// Register one bindable widget action for this application.
-        ///
-        /// Registration is native-only and must happen before `finalize_api`.
-        /// The catalog carries names and descriptions; widgets decide whether
-        /// they consume an action.
-        pub fn register_widget_action(&mut self, spec: inputmap::WidgetActionSpec) -> Result<()> {}
-
         /// Replace the root widget while preserving its stable node ID.
         pub fn replace_root<W>(&mut self, widget: W) -> Result<TypedId<W>>
         where
             W: 'static + Widget, {
         }
-
-        /// Replace the visible render-target limits.
-        pub fn set_render_limits(&mut self, limits: RenderLimits) -> Result<()> {}
 
         /// Return a handle for submitting automation work to this app's UI thread.
         pub fn automation_handle(&self) -> AutomationHandle {}
@@ -4500,9 +4442,6 @@ pub mod canopy {
 
         /// Return the root node ID.
         pub fn root_id(&self) -> NodeId {}
-
-        /// Return whether the application API has been finalized by its builder.
-        pub fn is_api_finalized(&self) -> bool {}
 
         /// Run a closure against a mutable context bound to a node.
         pub fn with_context<R>(
@@ -4614,6 +4553,88 @@ pub mod canopy {
     impl RouteTraceKind {
         /// Return a stable scripting and diagnostic label.
         pub fn label(self) -> &'static str {}
+    }
+
+    impl Setup {
+        /// Install an idempotent framework-owned command binding.
+        ///
+        /// `options.tier` must be [`inputmap::BindingTier::Framework`], and names
+        /// the group the binding joins.
+        pub fn bind_framework(
+            &mut self,
+            input: impl Into<inputmap::InputSpec>,
+            options: inputmap::BindingOptions,
+            command: commands::CommandCall,
+        ) -> Result<inputmap::BindingId> {
+        }
+
+        /// Install or replace an application command binding.
+        ///
+        /// An omitted command target resolves from the node where the binding wins.
+        pub fn bind_command(
+            &mut self,
+            input: impl Into<inputmap::InputSpec>,
+            options: inputmap::BindingOptions,
+            command: commands::CommandCall,
+        ) -> Result<inputmap::BindingId> {
+        }
+
+        /// Install or replace an application widget action binding.
+        ///
+        /// The action must already be registered with
+        /// [`Self::register_widget_action`].
+        pub fn bind_widget_action(
+            &mut self,
+            input: impl Into<inputmap::InputSpec>,
+            options: inputmap::BindingOptions,
+            action: inputmap::WidgetActionName,
+        ) -> Result<inputmap::BindingId> {
+        }
+
+        /// Register a Luau script as the default bindings for a command owner.
+        ///
+        /// Scripts reach it as `<owner>.default_bindings()`. Registering the same
+        /// source again is a no-op; different source for the same owner is an
+        /// error.
+        pub fn register_default_bindings(&mut self, owner: &str, script: &str) -> Result<()> {}
+
+        /// Register a hook that runs against the root context before the next
+        /// frame whenever the mode stack has changed.
+        ///
+        /// Registering a name again replaces its hook. Hooks run in name order.
+        pub fn register_mode_hook(
+            &mut self,
+            name: &'static str,
+            hook: fn(_: &mut dyn crate::Context) -> crate::error::Result<()>,
+        ) {
+        }
+
+        /// Register a named fixture available to headless and live automation.
+        pub fn register_fixture(&mut self, fixture: Fixture) -> Result<()> {}
+
+        /// Register an application startup script.
+        ///
+        /// Startup scripts define a `setup()` global and run during the first
+        /// frame preparation, before the user and project `init.luau` modules.
+        pub fn register_startup_script(&mut self, name: &str, source: &str) -> Result<()> {}
+
+        /// Register one bindable widget action.
+        ///
+        /// The catalog carries names and descriptions; widgets decide whether
+        /// they consume an action.
+        pub fn register_widget_action(&mut self, spec: inputmap::WidgetActionSpec) -> Result<()> {}
+
+        /// Register the commands of a command node under its owner name.
+        ///
+        /// Registering an equivalent definition again is a no-op. A conflicting
+        /// definition is an error and registers nothing from the batch.
+        pub fn add_commands<T: commands::CommandNode>(&mut self) -> Result<()> {}
+
+        /// Replace the limits on the visible render target.
+        pub fn set_render_limits(&mut self, limits: RenderLimits) {}
+
+        /// Return the initial style map for mutation.
+        pub fn style_mut(&mut self) -> &mut StyleMap {}
     }
 
     impl TermBuf {

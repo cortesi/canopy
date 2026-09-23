@@ -2199,12 +2199,12 @@ Each stage also updates the docs it touches.
   - `Setup::bind`, which absorbs `bind_framework` (3 fh sites).
   - Mode renames in Rust and Luau, including fh's 27 `input_mode()` sites.
   - Delete `bind_mouse`.
-- [ ] C5:
+- [x] C5:
   - The `Setup` handle and the `Register` trait. Retire `Canopy::new`.
   - `HarnessBuilder::register::<W>()`, keeping `Harness::from_canopy`.
   - Migrate fh's 3 `Loader` impls, the style installers, and 61 harness
     builders.
-- [ ] C47: `Harness::wait_until` and `with_unique`. Replace fh's sleep loops
+- [x] C47: `Harness::wait_until` and `with_unique`. Replace fh's sleep loops
   and private poll calls.
 - [ ] C39: notices, `Error::App`, and Root's notice display. Delete fh's
   error-to-footer plumbing.

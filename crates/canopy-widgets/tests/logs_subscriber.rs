@@ -7,7 +7,7 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, CanopyBuilder, Loader, Widget,
+        CanopyBuilder, Register, Widget,
         commands::{CommandNode, CommandSpec},
         error::Result,
         geom::Size,
@@ -26,12 +26,6 @@ mod tests {
         }
     }
 
-    impl Loader for App {
-        fn load(c: &mut Canopy) -> Result<()> {
-            Root::load(c)
-        }
-    }
-
     #[test]
     fn logs_poll_reports_a_conflicting_subscriber_instead_of_panicking() -> Result<()> {
         tracing_subscriber::fmt()
@@ -39,7 +33,7 @@ mod tests {
             .expect("test owns the subscriber");
 
         let canopy = CanopyBuilder::new()
-            .configure(Root::load)
+            .configure(Root::register)
             .assemble(|canopy| {
                 Root::new().with_inspector(true).install(canopy, App)?;
                 Ok(())

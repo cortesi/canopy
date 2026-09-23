@@ -8,12 +8,11 @@ mod tests {
         path::{Path, PathBuf},
     };
 
-    use canopy::{Canopy, error::Result as CanopyResult};
+    use canopy::{CanopyBuilder, error::Result as CanopyResult};
 
     #[test]
     fn tracked_luau_preamble_validates() -> CanopyResult<()> {
-        let mut canopy = Canopy::new();
-        canopy.finalize_api()
+        CanopyBuilder::new().build().map(|_| ())
     }
 
     /// Return the workspace root, two levels above this crate's manifest.

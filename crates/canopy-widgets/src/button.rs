@@ -3,7 +3,7 @@
 use std::{borrow::Cow, ops::Range};
 
 use canopy::{
-    Canopy, Context, ContextExt, Loader, NodeName, Render, ViewContext, Widget, WidgetSemantics,
+    Context, ContextExt, NodeName, Register, Render, Setup, ViewContext, Widget, WidgetSemantics,
     commands::{CommandCall, CommandStatus},
     derive_commands,
     error::Result,
@@ -46,9 +46,9 @@ canopy.keymap({
 ///
 /// Activation is the `button::press` command, which a click, `Enter`, or
 /// `Space` reaches through ordinary bindings. Install them with
-/// [`Loader::load`] and `button.default_bindings()`, or bind `press` however an
-/// application prefers. A modal that admits only its own framework group must
-/// bind activation in that group.
+/// [`Register::register`] and `button.default_bindings()`, or bind `press`
+/// however an application prefers. A modal that admits only its own framework
+/// group must bind activation in that group.
 ///
 /// User activation of a disabled action is consumed without dispatching.
 /// Calling [`Button::press`] directly still reports command errors.
@@ -188,10 +188,10 @@ impl Button {
     }
 }
 
-impl Loader for Button {
-    fn load(canopy: &mut Canopy) -> Result<()> {
-        canopy.add_commands::<Self>()?;
-        canopy.register_default_bindings("button", DEFAULT_BINDINGS)
+impl Register for Button {
+    fn register(setup: &mut Setup) -> Result<()> {
+        setup.add_commands::<Self>()?;
+        setup.register_default_bindings("button", DEFAULT_BINDINGS)
     }
 }
 
@@ -345,8 +345,8 @@ fn names_grapheme(grapheme: &str, accelerator: char) -> bool {
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, FocusDirection, FocusScope, FrameworkBindingGroup, InputSpec, Loader,
-        ModalBindings, ModalOptions, NodeId, ViewContextExt,
+        FocusDirection, FocusScope, FrameworkBindingGroup, InputSpec, ModalBindings, ModalOptions,
+        NodeId, Register, Setup, ViewContextExt,
         commands::{CommandError, CommandTarget},
         error::Error,
         event::{key, key::Key, mouse, mouse::Mouse},
@@ -404,23 +404,24 @@ mod tests {
         }
     }
 
-    impl Loader for ActionOwner {
-        fn load(canopy: &mut Canopy) -> Result<()> {
-            Button::load(canopy)?;
-            canopy.add_commands::<Self>()
+    impl Register for ActionOwner {
+        fn register(setup: &mut Setup) -> Result<()> {
+            Button::register(setup)?;
+            setup.add_commands::<Self>()
         }
     }
 
     /// Build a harness whose application installed the button defaults.
     ///
-    /// Loading registers the script; an application runs it, and so does a
+    /// Registration adds the script; an application runs it, and so does a
     /// test, before any configuration that might replace a binding.
-    fn activating<W: Widget + Loader + 'static>(
+    fn activating<W: Widget + Register + 'static>(
         root: W,
         width: u32,
         height: u32,
     ) -> Result<Harness> {
         let mut harness = Harness::builder(root)
+            .register::<W>()
             .bindings("button-defaults", "button.default_bindings()")
             .size(width, height)
             .build()?;
@@ -493,16 +494,19 @@ mod tests {
         }
     }
 
-    impl Loader for ActionScene {
-        fn load(canopy: &mut Canopy) -> Result<()> {
-            ActionOwner::load(canopy)
+    impl Register for ActionScene {
+        fn register(setup: &mut Setup) -> Result<()> {
+            ActionOwner::register(setup)
         }
     }
 
     #[test]
     fn detached_buttons_and_removed_targets_still_publish() -> Result<()> {
-        let mut harness = Harness::builder(ActionScene).size(20, 4).build()?;
-        let (owner, button) = harness.with_root_context(|_: &mut ActionScene, ctx| {
+        let mut harness = Harness::builder(ActionScene)
+            .register::<ActionScene>()
+            .size(20, 4)
+            .build()?;
+        let (owner, button) = harness.with_root_widget_context(|_: &mut ActionScene, ctx| {
             let children = ctx.children();
             Ok((children[0], children[1]))
         })?;
@@ -563,7 +567,7 @@ mod tests {
                 .style
         };
         let before = label_style(&harness);
-        harness.with_root_context(|_: &mut ActionOwner, ctx| {
+        harness.with_root_widget_context(|_: &mut ActionOwner, ctx| {
             ctx.with_unique_descendant::<Button, _>(|_, ctx| {
                 let border = ctx.get_slot::<BoxSlot>()?.expect("button border");
                 let center = ctx
@@ -648,10 +652,10 @@ mod tests {
         }
     }
 
-    impl Loader for Tally {
-        fn load(canopy: &mut Canopy) -> Result<()> {
-            Button::load(canopy)?;
-            canopy.add_commands::<Self>()
+    impl Register for Tally {
+        fn register(setup: &mut Setup) -> Result<()> {
+            Button::register(setup)?;
+            setup.add_commands::<Self>()
         }
     }
 
@@ -794,9 +798,9 @@ mod tests {
         }
     }
 
-    impl Loader for Decorative {
-        fn load(canopy: &mut Canopy) -> Result<()> {
-            Button::load(canopy)
+    impl Register for Decorative {
+        fn register(setup: &mut Setup) -> Result<()> {
+            Button::register(setup)
         }
     }
 
@@ -858,10 +862,10 @@ mod tests {
         }
     }
 
-    impl Loader for SelfRemoving {
-        fn load(canopy: &mut Canopy) -> Result<()> {
-            Button::load(canopy)?;
-            canopy.add_commands::<Self>()
+    impl Register for SelfRemoving {
+        fn register(setup: &mut Setup) -> Result<()> {
+            Button::register(setup)?;
+            setup.add_commands::<Self>()
         }
     }
 
@@ -911,9 +915,9 @@ mod tests {
         }
     }
 
-    impl Loader for Mnemonic {
-        fn load(canopy: &mut Canopy) -> Result<()> {
-            Button::load(canopy)
+    impl Register for Mnemonic {
+        fn register(setup: &mut Setup) -> Result<()> {
+            Button::register(setup)
         }
     }
 
@@ -1031,10 +1035,10 @@ mod tests {
         }
     }
 
-    impl Loader for Guarded {
-        fn load(canopy: &mut Canopy) -> Result<()> {
-            Button::load(canopy)?;
-            canopy.add_commands::<Self>()?;
+    impl Register for Guarded {
+        fn register(setup: &mut Setup) -> Result<()> {
+            Button::register(setup)?;
+            setup.add_commands::<Self>()?;
             // The dialog owns activation inside its own group, because a
             // framework-group modal admits nothing else. The records are the
             // same three inputs, on a path of the dialog's own.
@@ -1043,7 +1047,7 @@ mod tests {
                 (InputSpec::Key(Key::parse_spec("Space")?), "Activate"),
                 (InputSpec::Mouse(Mouse::parse_spec("LeftDown")?), "Activate"),
             ] {
-                canopy.bind_framework(
+                setup.bind_framework(
                     input,
                     canopy::BindingOptions {
                         path: Some("**/dialog/**/".parse()?),
@@ -1062,13 +1066,14 @@ mod tests {
     #[test]
     fn a_framework_group_modal_admits_only_its_own_activation_bindings() -> Result<()> {
         let mut harness = activating(Guarded::default(), 20, 6)?;
-        let (owner, dialog, button) = harness.with_root_context(|guarded: &mut Guarded, ctx| {
-            Ok((
-                ctx.node_id(),
-                guarded.dialog.expect("dialog mounted"),
-                guarded.button.expect("button mounted"),
-            ))
-        })?;
+        let (owner, dialog, button) =
+            harness.with_root_widget_context(|guarded: &mut Guarded, ctx| {
+                Ok((
+                    ctx.node_id(),
+                    guarded.dialog.expect("dialog mounted"),
+                    guarded.button.expect("button mounted"),
+                ))
+            })?;
 
         // Outside the modal the ordinary defaults carry the click.
         harness.mouse(press_at(origin(&harness, button)))?;
@@ -1150,17 +1155,6 @@ mod tests {
         harness.mouse(press_at(location))?;
         harness.with_root_widget(|owner: &mut ActionOwner| {
             assert_eq!(owner.activations, 0, "the override took the click");
-        });
-
-        // Loading again is idempotent and installs nothing, so a replaced
-        // binding stays replaced.
-        Button::load(&mut harness.canopy).expect_err("loading after finalization is refused");
-        harness.mouse(press_at(location))?;
-        harness.with_root_widget(|owner: &mut ActionOwner| {
-            assert_eq!(
-                owner.activations, 0,
-                "loading does not reinstall the default"
-            );
         });
         Ok(())
     }

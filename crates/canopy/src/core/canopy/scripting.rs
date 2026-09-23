@@ -108,6 +108,79 @@ impl Default for ScriptState {
     }
 }
 
+impl ScriptState {
+    /// Register a Luau script as the default bindings for a command owner.
+    pub(super) fn register_default_bindings(&mut self, owner: &str, script: &str) -> Result<()> {
+        if owner.trim().is_empty() {
+            return Err(error::Error::Invalid(
+                "default binding owner name cannot be empty".into(),
+            ));
+        }
+        if let Some(existing) = self.default_bindings.get(owner) {
+            if existing.source == script {
+                return Ok(());
+            }
+            return Err(error::Error::Invalid(format!(
+                "conflicting default bindings already registered for owner {owner}"
+            )));
+        }
+        self.default_bindings.insert(
+            owner.to_string(),
+            DefaultBindingsScript {
+                source: script.to_string(),
+                script_id: None,
+            },
+        );
+        Ok(())
+    }
+
+    /// Register an application startup script.
+    pub(super) fn register_startup_script(&mut self, name: &str, source: &str) -> Result<()> {
+        if name.trim().is_empty() {
+            return Err(error::Error::Invalid(
+                "startup script name cannot be empty".into(),
+            ));
+        }
+        if let Some(existing) = self
+            .startup_scripts
+            .iter()
+            .find(|script| script.name == name)
+        {
+            if existing.source == source {
+                return Ok(());
+            }
+            return Err(error::Error::Invalid(format!(
+                "conflicting startup script already registered for {name}"
+            )));
+        }
+        self.startup_scripts.push(StartupScript {
+            name: name.to_string(),
+            source: source.to_string(),
+            script_id: None,
+            ran: false,
+        });
+        Ok(())
+    }
+
+    /// Register a named fixture available to headless and live automation.
+    pub(super) fn register_fixture(&mut self, fixture: Fixture) -> Result<()> {
+        if fixture.name.trim().is_empty() {
+            return Err(error::Error::Invalid("fixture name cannot be empty".into()));
+        }
+        if let Some(existing) = self.fixtures.get(&fixture.name) {
+            if Arc::ptr_eq(&existing.setup, &fixture.setup) {
+                return Ok(());
+            }
+            return Err(error::Error::Invalid(format!(
+                "conflicting fixture already registered for {}",
+                fixture.name
+            )));
+        }
+        self.fixtures.insert(fixture.name.clone(), fixture);
+        Ok(())
+    }
+}
+
 /// Bounded in-memory history of script evaluations.
 pub struct ScriptJournal {
     /// Retained entries, oldest first.
@@ -288,62 +361,9 @@ impl Canopy {
         outcome.into_result()
     }
 
-    /// Finalize the script API surface if an evaluation needs it.
-    pub(super) fn ensure_finalized(&mut self) -> Result<()> {
-        if self.script.host.is_finalized() {
-            return Ok(());
-        }
-        self.finalize_api_inner()
-    }
-
-    /// Configure the `@user` persistent script root for the builder.
-    pub(super) fn set_user_script_root_inner(&mut self, root: impl Into<PathBuf>) -> Result<()> {
-        self.ensure_api_unfinalized("script module roots")?;
-        self.script.module_roots.set_user_root(root);
-        Ok(())
-    }
-
-    /// Configure the `@project` persistent script root for the builder.
-    pub(super) fn set_project_script_root_inner(&mut self, root: impl Into<PathBuf>) -> Result<()> {
-        self.ensure_api_unfinalized("script module roots")?;
-        self.script.module_roots.set_project_root(root);
-        Ok(())
-    }
-
-    /// Register an app-level startup script.
-    pub fn register_startup_script(&mut self, name: &str, source: &str) -> Result<()> {
-        self.ensure_api_unfinalized("startup script registration")?;
-        if name.trim().is_empty() {
-            return Err(error::Error::Invalid(
-                "startup script name cannot be empty".into(),
-            ));
-        }
-        if let Some(existing) = self
-            .script
-            .startup_scripts
-            .iter()
-            .find(|script| script.name == name)
-        {
-            if existing.source == source {
-                return Ok(());
-            }
-            return Err(error::Error::Invalid(format!(
-                "conflicting startup script already registered for {name}"
-            )));
-        }
-        self.script.startup_scripts.push(StartupScript {
-            name: name.to_string(),
-            source: source.to_string(),
-            script_id: None,
-            ran: false,
-        });
-        Ok(())
-    }
-
     /// Run app, user, and project startup scripts during preparation.
-    pub(super) fn run_startup_scripts_inner(&mut self) -> Result<usize> {
+    pub(super) fn run_startup_scripts(&mut self) -> Result<usize> {
         self.driver.startup_attempted = true;
-        self.ensure_finalized()?;
         let host = self.script.host.clone();
         let mut ran = 0;
         let startup_scripts = self
@@ -482,56 +502,6 @@ impl Canopy {
         }
     }
 
-    /// Register a Luau script as the default bindings for a widget namespace.
-    pub fn register_default_bindings(&mut self, name: &str, script: &str) -> Result<()> {
-        self.ensure_api_unfinalized("default binding registration")?;
-        if name.trim().is_empty() {
-            return Err(error::Error::Invalid(
-                "default binding owner name cannot be empty".into(),
-            ));
-        }
-        if self.owner_has_default_bindings_command(name) {
-            return Err(error::Error::Invalid(format!(
-                "owner {name} already defines a command named default_bindings"
-            )));
-        }
-        if let Some(existing) = self.script.default_bindings.get(name) {
-            if existing.source == script {
-                return Ok(());
-            }
-            return Err(error::Error::Invalid(format!(
-                "conflicting default bindings already registered for owner {name}"
-            )));
-        }
-        self.script.default_bindings.insert(
-            name.to_string(),
-            DefaultBindingsScript {
-                source: script.to_string(),
-                script_id: None,
-            },
-        );
-        Ok(())
-    }
-
-    /// Register a named fixture available to headless and live automation.
-    pub fn register_fixture(&mut self, fixture: Fixture) -> Result<()> {
-        self.ensure_api_unfinalized("fixture registration")?;
-        if fixture.name.trim().is_empty() {
-            return Err(error::Error::Invalid("fixture name cannot be empty".into()));
-        }
-        if let Some(existing) = self.script.fixtures.get(&fixture.name) {
-            if Arc::ptr_eq(&existing.setup, &fixture.setup) {
-                return Ok(());
-            }
-            return Err(error::Error::Invalid(format!(
-                "conflicting fixture already registered for {}",
-                fixture.name
-            )));
-        }
-        self.script.fixtures.insert(fixture.name.clone(), fixture);
-        Ok(())
-    }
-
     /// Return registered fixture metadata in stable name order.
     pub fn fixture_infos(&self) -> Vec<FixtureInfo> {
         let mut fixtures = self
@@ -563,7 +533,6 @@ impl Canopy {
         source_name: &str,
         source: &str,
     ) -> Result<script::ScriptCheckResult> {
-        self.ensure_finalized()?;
         self.script.host.check_script(source_name, source)
     }
 
@@ -589,12 +558,11 @@ impl Canopy {
     }
 
     /// Evaluate a Luau config file during builder setup.
-    pub(super) fn run_config_inner(&mut self, path: &FsPath) -> Result<()> {
+    pub(super) fn run_config(&mut self, path: &FsPath) -> Result<()> {
         let baseline = self.begin_script_journal();
         let source = fs::read_to_string(path)
             .map_err(|err| error::Error::Invalid(format!("config read failed: {err}")))?;
         let result = (|| {
-            self.ensure_finalized()?;
             let mounted_source = match &self.script.module_source {
                 Some(mounts) => match mounts.source_for_path(path) {
                     Ok(source) => Some(source),
@@ -625,10 +593,7 @@ impl Canopy {
     }
 
     /// Finalize the script API surface for the consuming builder.
-    pub(super) fn finalize_api_inner(&mut self) -> Result<()> {
-        if self.script.host.is_finalized() {
-            return Ok(());
-        }
+    pub(super) fn finalize_api(&mut self) -> Result<()> {
         let module_source = self.script.module_roots.module_source().map_err(|error| {
             error::Error::Invalid(format!("script module roots are invalid: {error}"))
         })?;
@@ -688,7 +653,6 @@ impl Canopy {
         }
         self.script.module_source = module_source;
         self.script.api_text = Some(definitions);
-        self.core.input_map.freeze_widget_actions();
         Ok(())
     }
 
@@ -736,25 +700,6 @@ impl Canopy {
             run.baseline,
             result,
         );
-    }
-
-    /// Return true if the named owner already exports a `default_bindings`
-    /// command.
-    fn owner_has_default_bindings_command(&self, owner: &str) -> bool {
-        self.core
-            .commands
-            .iter()
-            .any(|(_, spec)| spec.owner == owner && spec.name == "default_bindings")
-    }
-
-    /// Ensure the script surface can still be extended.
-    pub(super) fn ensure_api_unfinalized(&self, subject: &str) -> Result<()> {
-        if self.script.host.is_finalized() {
-            return Err(error::Error::Invalid(format!(
-                "{subject} is sealed after finalize_api()"
-            )));
-        }
-        Ok(())
     }
 
     /// Validate paired `.luau`/`.d.luau` modules under persistent roots.

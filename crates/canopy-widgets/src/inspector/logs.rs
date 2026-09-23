@@ -11,7 +11,7 @@ use std::{
 };
 
 use canopy::{
-    Canopy, Context, ContextExt, FocusDirection, Loader, NodeName, Render, ViewContext, Widget,
+    Context, ContextExt, FocusDirection, NodeName, Register, Render, Setup, ViewContext, Widget,
     derive_commands,
     error::{Error, Result},
     geom::Size,
@@ -301,9 +301,9 @@ impl Logs {
     }
 }
 
-impl Loader for Logs {
-    fn load(c: &mut Canopy) -> Result<()> {
-        c.add_commands::<Self>()?;
+impl Register for Logs {
+    fn register(setup: &mut Setup) -> Result<()> {
+        setup.add_commands::<Self>()?;
         Ok(())
     }
 }
@@ -363,8 +363,11 @@ mod tests {
             install: InstallState::Active,
             ..Logs::new()
         };
-        let mut harness = Harness::builder(logs).size(80, 4).build()?;
-        harness.with_root_context(|logs: &mut Logs, ctx| {
+        let mut harness = Harness::builder(logs)
+            .register::<Logs>()
+            .size(80, 4)
+            .build()?;
+        harness.with_root_widget_context(|logs: &mut Logs, ctx| {
             let mut writer = LogWriter {
                 buf: logs.buf.clone(),
             };
@@ -396,7 +399,7 @@ mod tests {
         })?;
         harness.render()?;
         assert!(harness.tbuf().contains_text("entry 15"));
-        harness.with_root_context(|logs: &mut Logs, ctx| logs.select_last(ctx))?;
+        harness.with_root_widget_context(|logs: &mut Logs, ctx| logs.select_last(ctx))?;
         harness.render()?;
         assert!(harness.tbuf().contains_text("entry 1014"));
         Ok(())
@@ -408,9 +411,10 @@ mod tests {
             install: InstallState::Active,
             ..Logs::new()
         })
+        .register::<Logs>()
         .size(80, 4)
         .build()?;
-        harness.with_root_context(|logs: &mut Logs, ctx| {
+        harness.with_root_widget_context(|logs: &mut Logs, ctx| {
             let list = ctx.get_slot::<ListSlot>()?.expect("list mounted");
             ctx.remove_subtree(list.into())?;
             LogWriter {
@@ -454,9 +458,10 @@ mod tests {
             install: InstallState::Active,
             ..Logs::new()
         })
+        .register::<Logs>()
         .size(80, 4)
         .build()?;
-        harness.with_root_context(|logs: &mut Logs, ctx| {
+        harness.with_root_widget_context(|logs: &mut Logs, ctx| {
             logs.buf.lock().unwrap().push_back("a".repeat(80));
             logs.flush_buffer(ctx)
         })?;

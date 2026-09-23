@@ -4,7 +4,7 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, Render, ViewContext, Widget, WidgetSemantics,
+        CanopyBuilder, Render, ViewContext, Widget, WidgetSemantics,
         commands::ArgValue,
         derive_commands,
         error::Result,
@@ -43,8 +43,9 @@ mod tests {
 
     #[test]
     fn snapshot_records_stay_detached_across_mutation_and_flush() -> Result<()> {
-        let mut canopy = Canopy::new();
-        canopy.add_commands::<Label>()?;
+        let mut canopy = CanopyBuilder::new()
+            .configure(|setup| setup.add_commands::<Label>())
+            .build()?;
         canopy.replace_root(Label { text: "old".into() })?;
         assert!(canopy.snapshot().is_none());
         canopy.set_root_size(Size::new(8, 2))?;
@@ -82,7 +83,7 @@ mod tests {
 
     #[test]
     fn snapshot_is_nil_until_a_viewport_can_be_published() -> Result<()> {
-        let mut canopy = Canopy::new();
+        let mut canopy = CanopyBuilder::new().build()?;
         assert_eq!(
             canopy.eval_script("return canopy.snapshot() == nil")?,
             ArgValue::Bool(true)

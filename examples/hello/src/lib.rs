@@ -13,11 +13,11 @@ use std::{
 };
 
 use canopy::{
-    Canopy, CanopyBuilder, Context, ContextExt, Loader, NodeName, Render, ScriptTrust, ViewContext,
-    Widget, derive_commands,
+    Canopy, CanopyBuilder, Context, ContextExt, NodeName, Register, Render, ScriptTrust, Setup,
+    ViewContext, Widget, derive_commands,
     error::Result,
     layout::{Align, Direction, Layout},
-    style::default as palette,
+    style::{StyleMap, default as palette},
 };
 use canopy_widgets::{KeyHint, Root, StatusBar, Text};
 
@@ -94,9 +94,9 @@ impl Widget for Hello {
     }
 }
 
-impl Loader for Hello {
-    fn load(canopy: &mut Canopy) -> Result<()> {
-        canopy.add_commands::<Self>()
+impl Register for Hello {
+    fn register(setup: &mut Setup) -> Result<()> {
+        setup.add_commands::<Self>()
     }
 }
 
@@ -107,10 +107,10 @@ impl Loader for Hello {
 /// modes must always pass `None` so they never read or create user state.
 pub fn create_app(user_script_root: Option<PathBuf>) -> Result<Canopy> {
     let mut builder = CanopyBuilder::new()
-        .configure(|canopy| {
-            Root::load(canopy)?;
-            Hello::load(canopy)?;
-            install_styles(canopy);
+        .configure(|setup| {
+            Root::register(setup)?;
+            Hello::register(setup)?;
+            install_styles(setup.style_mut());
             Ok(())
         })
         .assemble(|canopy| {
@@ -168,13 +168,9 @@ fn indent(source: &str, prefix: &str) -> String {
 }
 
 /// Install the application palette and per-element styles.
-fn install_styles(canopy: &mut Canopy) {
-    *canopy.style_mut() = palette::default_dark();
-    canopy
-        .style_mut()
-        .rules()
-        .fg("hello/greeting", palette::ACCENT)
-        .apply();
+fn install_styles(style: &mut StyleMap) {
+    *style = palette::default_dark();
+    style.rules().fg("hello/greeting", palette::ACCENT).apply();
 }
 
 #[cfg(test)]

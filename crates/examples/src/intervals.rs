@@ -1,11 +1,12 @@
 use std::time::Duration;
 
 use canopy::{
-    Canopy, CanopyBuilder, Context, ContextExt, Loader, NodeName, Render, ViewContext,
+    CanopyBuilder, Context, ContextExt, NodeName, Register, Render, Setup, ViewContext,
     ViewContextExt, Widget, derive_commands,
     error::Result,
     geom::Size,
     layout::{Edges, Layout, MeasureConstraints, Measurement},
+    style::StyleMap,
 };
 use canopy_widgets::{Border, Center, Container, Frame, List, SINGLE, Selectable, Text};
 use unicode_width::UnicodeWidthStr;
@@ -235,17 +236,17 @@ impl Widget for Intervals {
     }
 }
 
-impl Loader for Intervals {
-    fn load(c: &mut Canopy) -> Result<()> {
-        c.add_commands::<Self>()?;
-        c.add_commands::<List<CounterItem>>()?;
+impl Register for Intervals {
+    fn register(setup: &mut Setup) -> Result<()> {
+        setup.add_commands::<Self>()?;
+        setup.add_commands::<List<CounterItem>>()?;
         Ok(())
     }
 }
 
 /// Install native styles during the configuration phase.
-fn setup_style(cnpy: &mut Canopy) {
-    crate::selectable_entry_styles(cnpy.style_mut().rules(), "intervals/entry")
+fn setup_style(style: &mut StyleMap) {
+    crate::selectable_entry_styles(style.rules(), "intervals/entry")
         .no_prefix()
         .apply();
 }
@@ -254,8 +255,8 @@ fn setup_style(cnpy: &mut Canopy) {
 #[must_use]
 pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
     builder
-        .configure(|cnpy| {
-            setup_style(cnpy);
+        .configure(|setup| {
+            setup_style(setup.style_mut());
             Ok(())
         })
         .bindings("intervals", DEFAULT_BINDINGS)

@@ -1,8 +1,8 @@
 use std::{f32::consts::TAU, time::Duration};
 
 use canopy::{
-    CanopyBuilder, ChangeOutcome, Context, ContextExt, EventOutcome, Loader, NodeId, NodeName,
-    Render, ViewContext, Widget,
+    CanopyBuilder, ChangeOutcome, Context, ContextExt, EventOutcome, NodeId, NodeName, Render,
+    ViewContext, Widget,
     cursor::{Cursor, CursorShape},
     error::Result,
     event::{Event, key},
@@ -217,8 +217,6 @@ impl Widget for FontGym {
         Some(Duration::from_millis(GRADIENT_POLL_MS))
     }
 }
-
-impl Loader for FontGym {}
 
 /// Focusable frame wrapper that delegates rendering and handles keyboard
 /// scroll.
@@ -1159,7 +1157,7 @@ mod tests {
 
     #[test]
     fn input_cursor_and_measurement_use_display_columns() -> Result<()> {
-        let mut canopy = canopy::Canopy::new();
+        let mut canopy = canopy::CanopyBuilder::new().build()?;
         let status = canopy.create_detached(Text::new(""))?;
         for (text, columns, width) in [
             ("界a", vec![0, 2, 3], 3),

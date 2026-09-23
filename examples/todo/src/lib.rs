@@ -5,14 +5,15 @@ use std::{collections::HashMap, fmt::Display, path::Path};
 
 use anyhow::Result as AnyResult;
 use canopy::{
-    Canopy, CanopyBuilder, Context, ContextExt, InteractionToken, Loader, ModalBindings,
-    ModalOptions, NodeId, NodeName, Render, ViewContext, ViewContextExt, Widget, WidgetActionSpec,
+    Canopy, CanopyBuilder, Context, ContextExt, InteractionToken, ModalBindings, ModalOptions,
+    NodeId, NodeName, Register, Render, Setup, ViewContext, ViewContextExt, Widget,
+    WidgetActionSpec,
     commands::CommandStatus,
     derive_commands,
     error::{Error, Result},
     geom::{Rect, Size},
     layout::{Constraint, Direction, Layout, LayoutOverride, MeasureConstraints, Measurement},
-    style::default as palette,
+    style::{StyleMap, default as palette},
 };
 use canopy_widgets::{
     Center, Frame, Input, KeyHint, List, Root, Selectable, StatusBar, TEXT_CLEAR_ACTION, Text,
@@ -409,11 +410,11 @@ impl Widget for Todo {
     }
 }
 
-impl Loader for Todo {
-    fn load(c: &mut Canopy) -> Result<()> {
-        c.add_commands::<Self>()?;
-        c.add_commands::<List<TodoEntry, i64>>()?;
-        c.add_commands::<Input>()?;
+impl Register for Todo {
+    fn register(setup: &mut Setup) -> Result<()> {
+        setup.add_commands::<Self>()?;
+        setup.add_commands::<List<TodoEntry, i64>>()?;
+        setup.add_commands::<Input>()?;
         Ok(())
     }
 }
@@ -464,11 +465,8 @@ canopy.keymap({
 "#;
 
 /// Install the todo application's style rules.
-pub(crate) fn style(cnpy: &mut Canopy) {
-    cnpy.style_mut()
-        .rules()
-        .fg("list/selected", palette::ACCENT)
-        .apply();
+pub(crate) fn style(style: &mut StyleMap) {
+    style.rules().fg("list/selected", palette::ACCENT).apply();
 }
 
 /// Convert persistence failures into application errors.
@@ -490,8 +488,8 @@ fn with_todo<R>(
 }
 
 /// Register the Todo automation fixtures.
-fn register_fixtures(cnpy: &mut Canopy) -> Result<()> {
-    cnpy.register_fixture(canopy::Fixture::new(
+fn register_fixtures(setup: &mut Setup) -> Result<()> {
+    setup.register_fixture(canopy::Fixture::new(
         "empty",
         "App with no todo items and no modal open",
         |cnpy| {
@@ -501,7 +499,7 @@ fn register_fixtures(cnpy: &mut Canopy) -> Result<()> {
             })
         },
     ))?;
-    cnpy.register_fixture(canopy::Fixture::new(
+    setup.register_fixture(canopy::Fixture::new(
         "with_items",
         "App with a pre-populated todo list",
         |cnpy| {
@@ -514,7 +512,7 @@ fn register_fixtures(cnpy: &mut Canopy) -> Result<()> {
             })
         },
     ))?;
-    cnpy.register_fixture(canopy::Fixture::new(
+    setup.register_fixture(canopy::Fixture::new(
         "modal_open",
         "App with the add-item modal open and ready for typing",
         |cnpy| {
@@ -533,15 +531,15 @@ fn register_fixtures(cnpy: &mut Canopy) -> Result<()> {
 /// Queue API registration and binding sources without constructing a database.
 fn app_builder(config: Option<&Path>) -> CanopyBuilder {
     let builder = CanopyBuilder::new()
-        .configure(|cnpy| {
-            Root::load(cnpy)?;
-            <Todo as Loader>::load(cnpy)?;
-            style(cnpy);
-            cnpy.register_widget_action(WidgetActionSpec::new(
+        .configure(|setup| {
+            Root::register(setup)?;
+            Todo::register(setup)?;
+            style(setup.style_mut());
+            setup.register_widget_action(WidgetActionSpec::new(
                 TEXT_CLEAR_ACTION,
                 "Clear the focused input",
             )?)?;
-            register_fixtures(cnpy)
+            register_fixtures(setup)
         })
         .bindings("todo-defaults", DEFAULT_BINDINGS);
     if let Some(config) = config {
@@ -610,7 +608,7 @@ mod tests {
         }) else {
             panic!("todo entry has a fixed measurement");
         };
-        let mut canopy = Canopy::new();
+        let mut canopy = CanopyBuilder::new().build()?;
         canopy.replace_root(entry)?;
         let mut harness = Harness::from_canopy(canopy, size)?;
         harness.render()?;

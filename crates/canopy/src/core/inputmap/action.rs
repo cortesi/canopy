@@ -86,24 +86,16 @@ impl WidgetActionSpec {
 
 /// Bindable widget actions for one application, with their descriptions.
 ///
-/// The catalog freezes when the script API finalizes. Registration after the
-/// freeze fails with the same error as other late API registration.
+/// Actions are registered during setup, before the script API finalizes.
 #[derive(Clone, Debug, Default)]
 pub struct WidgetActionCatalog {
     /// Registered actions in name order.
     actions: BTreeMap<WidgetActionName, String>,
-    /// Whether the catalog rejects further registration.
-    frozen: bool,
 }
 
 impl WidgetActionCatalog {
     /// Register one action. An identical spec is idempotent.
     pub(crate) fn register(&mut self, spec: WidgetActionSpec) -> Result<()> {
-        if self.frozen {
-            return Err(Error::Invalid(
-                "widget action registration is sealed after finalize_api()".to_string(),
-            ));
-        }
         match self.actions.get(&spec.name) {
             Some(existing) if *existing == spec.description => Ok(()),
             Some(_) => Err(Error::Invalid(format!(
@@ -115,11 +107,6 @@ impl WidgetActionCatalog {
                 Ok(())
             }
         }
-    }
-
-    /// Freeze the catalog after the script API finalizes.
-    pub(crate) fn freeze(&mut self) {
-        self.frozen = true;
     }
 
     /// Return whether the catalog holds no actions.

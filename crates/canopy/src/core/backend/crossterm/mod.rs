@@ -164,7 +164,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        EvalRequest,
+        CanopyBuilder, EvalRequest,
         backend::BackendControl,
         event::key::Key,
         testing::{backend::TestRender, contracts},
@@ -273,7 +273,7 @@ mod tests {
             let stops = Arc::new(AtomicUsize::new(0));
             let received = Arc::new(AtomicUsize::new(0));
             let mut session = TerminalSession::new(Box::new(PolicyBackend(stops.clone())))?;
-            let mut canopy = Canopy::new();
+            let mut canopy = CanopyBuilder::new().build()?;
             canopy.replace_root(PolicyTerminal(received.clone()))?;
             canopy.set_root_size(Size::new(8, 2))?;
             canopy.turn(Work::Prepare)?;

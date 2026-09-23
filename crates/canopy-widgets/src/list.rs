@@ -953,7 +953,7 @@ fn drag_exceeded(origin: PointI32, current: PointI32, threshold: u32) -> bool {
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, Loader, NodeId, NodeName, ViewContext,
+        NodeId, NodeName, Register, Setup, ViewContext,
         commands::CommandTarget,
         derive_commands,
         event::key,
@@ -994,9 +994,9 @@ mod tests {
         }
     }
 
-    impl Loader for ActivationRoot {
-        fn load(canopy: &mut Canopy) -> Result<()> {
-            canopy.add_commands::<Self>()
+    impl Register for ActivationRoot {
+        fn register(setup: &mut Setup) -> Result<()> {
+            setup.add_commands::<Self>()
         }
     }
 
@@ -1007,6 +1007,7 @@ mod tests {
                 fail,
                 activations: 0,
             })
+            .register::<ActivationRoot>()
             .size(20, 4)
             .build()?;
             harness.render()?;
@@ -1026,7 +1027,7 @@ mod tests {
             event.location.x = 0;
             let result = harness.mouse(event);
             assert_eq!(result.is_err(), fail && !drag);
-            harness.with_root_context(|root: &mut ActivationRoot, ctx| {
+            harness.with_root_widget_context(|root: &mut ActivationRoot, ctx| {
                 assert_eq!(root.activations, usize::from(!drag));
                 assert!(!ctx.with_unique_descendant::<List<Text>, _>(|_, ctx| {
                     Ok(ctx.has_mouse_capture())
@@ -1072,23 +1073,23 @@ mod tests {
         }
     }
 
-    impl Loader for List<Text> {
-        fn load(c: &mut Canopy) -> Result<()> {
-            c.add_commands::<Self>()?;
+    impl Register for List<Text> {
+        fn register(setup: &mut Setup) -> Result<()> {
+            setup.add_commands::<Self>()?;
             Ok(())
         }
     }
 
-    impl Loader for List<Row> {
-        fn load(c: &mut Canopy) -> Result<()> {
-            c.add_commands::<Self>()?;
+    impl Register for List<Row> {
+        fn register(setup: &mut Setup) -> Result<()> {
+            setup.add_commands::<Self>()?;
             Ok(())
         }
     }
 
-    impl Loader for List<Row, i64> {
-        fn load(canopy: &mut Canopy) -> Result<()> {
-            canopy.add_commands::<Self>()
+    impl Register for List<Row, i64> {
+        fn register(setup: &mut Setup) -> Result<()> {
+            setup.add_commands::<Self>()
         }
     }
 
@@ -1110,9 +1111,10 @@ mod tests {
     #[test]
     fn keyed_reorder_preserves_selection_widget_and_focus() -> Result<()> {
         let mut harness = Harness::builder(List::<Row, i64>::new())
+            .register::<List<Row, i64>>()
             .size(20, 10)
             .build()?;
-        let selected = harness.with_root_context(|list: &mut List<Row, i64>, ctx| {
+        let selected = harness.with_root_widget_context(|list: &mut List<Row, i64>, ctx| {
             reconcile_rows(list, ctx, &[10, 20, 30])?;
             list.select_by(ctx, 1)?;
             let selected = list.item_for_key(&20).expect("selected row");
@@ -1134,29 +1136,31 @@ mod tests {
     #[test]
     fn checks_toggle_the_selected_row_and_update_widgets() -> Result<()> {
         let mut harness = Harness::builder(List::<Row, i64>::new().with_checks())
+            .register::<List<Row, i64>>()
             .size(20, 10)
             .build()?;
-        let (toggled, other) = harness.with_root_context(|list: &mut List<Row, i64>, ctx| {
-            reconcile_rows(list, ctx, &[10, 20, 30])?;
-            let toggled = list.item_for_key(&20).expect("toggled row");
-            let other = list.item_for_key(&10).expect("other row");
-            list.select_key(ctx, &20)?;
-            assert!(list.checks_enabled());
-            assert!(list.checked_keys().is_empty());
-            assert!(list.toggle(ctx)?, "toggle returns the new state");
-            assert!(list.is_checked(&20));
-            assert_eq!(list.checked_len(), 1);
-            assert_eq!(list.checked_keys(), vec![&20]);
-            assert_eq!(
-                list.semantics(ctx)?.selected_keys,
-                vec![20_i64.to_arg_value()],
-                "semantics report the checks"
-            );
-            assert!(!list.toggle(ctx)?, "a second toggle clears it");
-            assert!(!list.is_checked(&20));
-            assert!(list.toggle(ctx)?);
-            Ok((toggled, other))
-        })?;
+        let (toggled, other) =
+            harness.with_root_widget_context(|list: &mut List<Row, i64>, ctx| {
+                reconcile_rows(list, ctx, &[10, 20, 30])?;
+                let toggled = list.item_for_key(&20).expect("toggled row");
+                let other = list.item_for_key(&10).expect("other row");
+                list.select_key(ctx, &20)?;
+                assert!(list.checks_enabled());
+                assert!(list.checked_keys().is_empty());
+                assert!(list.toggle(ctx)?, "toggle returns the new state");
+                assert!(list.is_checked(&20));
+                assert_eq!(list.checked_len(), 1);
+                assert_eq!(list.checked_keys(), vec![&20]);
+                assert_eq!(
+                    list.semantics(ctx)?.selected_keys,
+                    vec![20_i64.to_arg_value()],
+                    "semantics report the checks"
+                );
+                assert!(!list.toggle(ctx)?, "a second toggle clears it");
+                assert!(!list.is_checked(&20));
+                assert!(list.toggle(ctx)?);
+                Ok((toggled, other))
+            })?;
         assert!(
             harness.with_widget(toggled, |row: &mut Row| row.checked),
             "the checked row learns its state"
@@ -1171,9 +1175,10 @@ mod tests {
     #[test]
     fn check_all_and_clear_update_every_row() -> Result<()> {
         let mut harness = Harness::builder(List::<Row, i64>::new().with_checks())
+            .register::<List<Row, i64>>()
             .size(20, 10)
             .build()?;
-        let ids = harness.with_root_context(|list: &mut List<Row, i64>, ctx| {
+        let ids = harness.with_root_widget_context(|list: &mut List<Row, i64>, ctx| {
             reconcile_rows(list, ctx, &[10, 20])?;
             list.check_all(ctx)?;
             assert_eq!(list.checked_keys(), vec![&10, &20]);
@@ -1184,7 +1189,8 @@ mod tests {
         for id in &ids {
             assert!(harness.with_widget(*id, |row: &mut Row| row.checked));
         }
-        harness.with_root_context(|list: &mut List<Row, i64>, ctx| list.clear_checks(ctx))?;
+        harness
+            .with_root_widget_context(|list: &mut List<Row, i64>, ctx| list.clear_checks(ctx))?;
         for id in &ids {
             assert!(!harness.with_widget(*id, |row: &mut Row| row.checked));
         }
@@ -1195,9 +1201,10 @@ mod tests {
     #[test]
     fn checks_follow_reconcile_and_validate_keys() -> Result<()> {
         let mut harness = Harness::builder(List::<Row, i64>::new().with_checks())
+            .register::<List<Row, i64>>()
             .size(20, 10)
             .build()?;
-        harness.with_root_context(|list: &mut List<Row, i64>, ctx| {
+        harness.with_root_widget_context(|list: &mut List<Row, i64>, ctx| {
             reconcile_rows(list, ctx, &[10, 20, 30])?;
             assert!(list.set_checked(ctx, &99, true).is_err());
             list.set_checked(ctx, &20, true)?;
@@ -1224,9 +1231,10 @@ mod tests {
     #[test]
     fn a_plain_list_has_no_checks() -> Result<()> {
         let mut harness = Harness::builder(List::<Row, i64>::new())
+            .register::<List<Row, i64>>()
             .size(20, 10)
             .build()?;
-        harness.with_root_context(|list: &mut List<Row, i64>, ctx| {
+        harness.with_root_widget_context(|list: &mut List<Row, i64>, ctx| {
             reconcile_rows(list, ctx, &[10])?;
             assert!(!list.checks_enabled());
             assert!(!list.toggle(ctx)?, "toggle is inert without checks");
@@ -1240,9 +1248,10 @@ mod tests {
     #[test]
     fn keyed_selection_removal_prefers_old_neighbors() -> Result<()> {
         let mut harness = Harness::builder(List::<Row, i64>::new())
+            .register::<List<Row, i64>>()
             .size(20, 10)
             .build()?;
-        harness.with_root_context(|list: &mut List<Row, i64>, ctx| {
+        harness.with_root_widget_context(|list: &mut List<Row, i64>, ctx| {
             reconcile_rows(list, ctx, &[10, 20, 30, 40])?;
             list.select_key(ctx, &20)?;
             reconcile_rows(list, ctx, &[40, 10, 30])?;
@@ -1261,9 +1270,10 @@ mod tests {
     #[test]
     fn keyed_duplicate_and_failed_updates_preserve_mapping() -> Result<()> {
         let mut harness = Harness::builder(List::<Row, i64>::new())
+            .register::<List<Row, i64>>()
             .size(20, 10)
             .build()?;
-        harness.with_root_context(|list: &mut List<Row, i64>, ctx| {
+        harness.with_root_widget_context(|list: &mut List<Row, i64>, ctx| {
             reconcile_rows(list, ctx, &[10, 20])?;
             let first = list.item_for_key(&10);
             let mut creates = 0;
@@ -1303,9 +1313,10 @@ mod tests {
     #[test]
     fn keyed_list_rejects_unmanaged_children_before_callbacks() -> Result<()> {
         let mut harness = Harness::builder(List::<Row, i64>::new())
+            .register::<List<Row, i64>>()
             .size(20, 10)
             .build()?;
-        harness.with_root_context(|list: &mut List<Row, i64>, ctx| {
+        harness.with_root_widget_context(|list: &mut List<Row, i64>, ctx| {
             let header = ctx.add_child(Text::new("unmanaged header"))?;
             let result = list.reconcile(
                 ctx,
@@ -1356,9 +1367,9 @@ mod tests {
         }
     }
 
-    impl Loader for KeyedActivationRoot {
-        fn load(canopy: &mut Canopy) -> Result<()> {
-            canopy.add_commands::<Self>()
+    impl Register for KeyedActivationRoot {
+        fn register(setup: &mut Setup) -> Result<()> {
+            setup.add_commands::<Self>()
         }
     }
 
@@ -1366,6 +1377,7 @@ mod tests {
     fn blank_space_below_rows_neither_selects_nor_activates() -> Result<()> {
         for press_y in [1, 2, 4] {
             let mut harness = Harness::builder(KeyedActivationRoot::default())
+                .register::<KeyedActivationRoot>()
                 .size(20, 5)
                 .build()?;
             harness.render()?;
@@ -1377,7 +1389,7 @@ mod tests {
             };
             harness.mouse(event)?;
             if press_y >= 2 {
-                harness.with_root_context(|_: &mut KeyedActivationRoot, ctx| {
+                harness.with_root_widget_context(|_: &mut KeyedActivationRoot, ctx| {
                     ctx.with_unique_descendant::<List<Text, i64>, _>(|_, ctx| {
                         assert!(!ctx.has_mouse_capture(), "blank space cannot capture");
                         Ok(())
@@ -1387,7 +1399,7 @@ mod tests {
             event.action = mouse::Action::Up;
             event.location.y = 4;
             harness.mouse(event)?;
-            harness.with_root_context(|root: &mut KeyedActivationRoot, ctx| {
+            harness.with_root_widget_context(|root: &mut KeyedActivationRoot, ctx| {
                 assert_eq!(
                     root.activation, None,
                     "release outside a row cannot activate"
@@ -1406,9 +1418,10 @@ mod tests {
     #[test]
     fn release_in_padding_above_rows_does_not_activate() -> Result<()> {
         let mut harness = Harness::builder(KeyedActivationRoot::default())
+            .register::<KeyedActivationRoot>()
             .size(20, 5)
             .build()?;
-        harness.with_root_context(|_: &mut KeyedActivationRoot, ctx| {
+        harness.with_root_widget_context(|_: &mut KeyedActivationRoot, ctx| {
             ctx.with_unique_descendant::<List<Text, i64>, _>(|_, ctx| {
                 ctx.set_layout(Layout::fill().padding(Edges::new(1, 0, 0, 0)))
             })
@@ -1436,10 +1449,11 @@ mod tests {
     #[test]
     fn paging_beyond_short_list_clamps_to_first_and_last_rows() -> Result<()> {
         let mut harness = Harness::builder(KeyedActivationRoot::default())
+            .register::<KeyedActivationRoot>()
             .size(20, 5)
             .build()?;
         harness.render()?;
-        harness.with_root_context(|_: &mut KeyedActivationRoot, ctx| {
+        harness.with_root_widget_context(|_: &mut KeyedActivationRoot, ctx| {
             ctx.with_unique_descendant::<List<Text, i64>, _>(|list, ctx| {
                 list.page(ctx, 0)?;
                 assert_eq!(list.selected_key(), Some(&10));
@@ -1459,6 +1473,7 @@ mod tests {
     #[test]
     fn pending_activation_follows_key_through_reorder() -> Result<()> {
         let mut harness = Harness::builder(KeyedActivationRoot::default())
+            .register::<KeyedActivationRoot>()
             .size(20, 4)
             .build()?;
         harness.render()?;
@@ -1469,7 +1484,7 @@ mod tests {
             location: PointI32 { x: 0, y: 0 },
         };
         harness.mouse(event)?;
-        harness.with_root_context(|_: &mut KeyedActivationRoot, ctx| {
+        harness.with_root_widget_context(|_: &mut KeyedActivationRoot, ctx| {
             ctx.with_unique_descendant::<List<Text, i64>, _>(|list, ctx| {
                 list.reconcile(
                     ctx,
@@ -1497,6 +1512,7 @@ mod tests {
     #[test]
     fn removing_pressed_key_cancels_activation_and_capture() -> Result<()> {
         let mut harness = Harness::builder(KeyedActivationRoot::default())
+            .register::<KeyedActivationRoot>()
             .size(20, 4)
             .build()?;
         harness.render()?;
@@ -1506,7 +1522,7 @@ mod tests {
             modifiers: key::Empty,
             location: PointI32 { x: 0, y: 0 },
         })?;
-        harness.with_root_context(|root: &mut KeyedActivationRoot, ctx| {
+        harness.with_root_widget_context(|root: &mut KeyedActivationRoot, ctx| {
             ctx.with_unique_descendant::<List<Text, i64>, _>(|list, ctx| {
                 list.reconcile(
                     ctx,
@@ -1543,7 +1559,10 @@ mod tests {
     #[test]
     fn test_list_append_and_select() -> Result<()> {
         let root = List::<Text>::new();
-        let mut harness = Harness::builder(root).size(20, 10).build()?;
+        let mut harness = Harness::builder(root)
+            .register::<List<Text>>()
+            .size(20, 10)
+            .build()?;
 
         // Add items
         harness.with_root_widget::<List<Text>, _>(|list| {
@@ -1551,7 +1570,7 @@ mod tests {
             assert_eq!(list.len(), 0);
         });
 
-        harness.with_root_context(|list: &mut List<Text>, ctx| {
+        harness.with_root_widget_context(|list: &mut List<Text>, ctx| {
             list.append(ctx, Text::new("Item 1"))?;
             list.append(ctx, Text::new("Item 2"))?;
             list.append(ctx, Text::new("Item 3"))?;
@@ -1569,9 +1588,12 @@ mod tests {
     #[test]
     fn test_list_navigation() -> Result<()> {
         let root = List::<Text>::new();
-        let mut harness = Harness::builder(root).size(20, 10).build()?;
+        let mut harness = Harness::builder(root)
+            .register::<List<Text>>()
+            .size(20, 10)
+            .build()?;
 
-        harness.with_root_context(|list: &mut List<Text>, ctx| {
+        harness.with_root_widget_context(|list: &mut List<Text>, ctx| {
             list.append(ctx, Text::new("Item 1"))?;
             list.append(ctx, Text::new("Item 2"))?;
             list.append(ctx, Text::new("Item 3"))?;
@@ -1591,9 +1613,12 @@ mod tests {
     #[test]
     fn test_list_remove() -> Result<()> {
         let root = List::<Text>::new();
-        let mut harness = Harness::builder(root).size(20, 10).build()?;
+        let mut harness = Harness::builder(root)
+            .register::<List<Text>>()
+            .size(20, 10)
+            .build()?;
 
-        harness.with_root_context(|list: &mut List<Text>, ctx| {
+        harness.with_root_widget_context(|list: &mut List<Text>, ctx| {
             list.append(ctx, Text::new("Item 1"))?;
             list.append(ctx, Text::new("Item 2"))?;
             list.append(ctx, Text::new("Item 3"))?;
@@ -1614,9 +1639,12 @@ mod tests {
     #[test]
     fn test_list_clear() -> Result<()> {
         let root = List::<Text>::new();
-        let mut harness = Harness::builder(root).size(20, 10).build()?;
+        let mut harness = Harness::builder(root)
+            .register::<List<Text>>()
+            .size(20, 10)
+            .build()?;
 
-        harness.with_root_context(|list: &mut List<Text>, ctx| {
+        harness.with_root_widget_context(|list: &mut List<Text>, ctx| {
             list.append(ctx, Text::new("Item 1"))?;
             list.append(ctx, Text::new("Item 2"))?;
             Ok(())
@@ -1636,9 +1664,12 @@ mod tests {
     #[test]
     fn selection_and_focus_follow_selected_row() -> Result<()> {
         let root = List::<Row>::new();
-        let mut harness = Harness::builder(root).size(20, 10).build()?;
+        let mut harness = Harness::builder(root)
+            .register::<List<Row>>()
+            .size(20, 10)
+            .build()?;
 
-        let first = harness.with_root_context(|list: &mut List<Row>, ctx| {
+        let first = harness.with_root_widget_context(|list: &mut List<Row>, ctx| {
             let first = list.append(ctx, Row::new())?;
             list.append(ctx, Row::new())?;
             list.append(ctx, Row::new())?;
@@ -1652,7 +1683,7 @@ mod tests {
         assert_eq!(row_selection(&mut harness), [true, false, false]);
         assert_eq!(focused_row(&harness), Some(first.into()));
 
-        let third = harness.with_root_context(|list: &mut List<Row>, ctx| {
+        let third = harness.with_root_widget_context(|list: &mut List<Row>, ctx| {
             list.select_by(ctx, 2)?;
             Ok(list.selected_item().expect("selected row"))
         })?;
@@ -1664,7 +1695,7 @@ mod tests {
         assert_eq!(row_selection(&mut harness), [false, false, true]);
         assert_eq!(focused_row(&harness), Some(third.into()));
 
-        let second = harness.with_root_context(|list: &mut List<Row>, ctx| {
+        let second = harness.with_root_widget_context(|list: &mut List<Row>, ctx| {
             assert!(list.remove(ctx, 2)?);
             Ok(list.selected_item().expect("selected row"))
         })?;

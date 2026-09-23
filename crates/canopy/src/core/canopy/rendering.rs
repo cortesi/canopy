@@ -261,7 +261,7 @@ impl Canopy {
     /// Prepare and publish pending state without writing to a backend.
     pub(super) fn prepare_frame(&mut self, force: bool) -> Result<bool> {
         if !self.driver.startup_attempted {
-            self.run_startup_scripts_inner()?;
+            self.run_startup_scripts()?;
         }
         if !force
             && !self.core.changes.is_pending()

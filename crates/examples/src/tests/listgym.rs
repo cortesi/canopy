@@ -5,33 +5,40 @@ use canopy_widgets::{Columns, List};
 
 use crate::listgym::{ListEntry, ListGym};
 
+/// Build a harness around a registered list gym.
+fn listgym() -> Result<Harness> {
+    Harness::builder(ListGym::new())
+        .register::<ListGym>()
+        .build()
+}
+
 fn list_len(harness: &mut Harness) -> Result<usize> {
-    harness.with_root_context(|_root: &mut ListGym, ctx| {
+    harness.with_root_widget_context(|_root: &mut ListGym, ctx| {
         ctx.with_unique_descendant::<List<ListEntry>, _>(|list, _| Ok(list.len()))
     })
 }
 
 fn list_selected_index(harness: &mut Harness) -> Result<Option<usize>> {
-    harness.with_root_context(|_root: &mut ListGym, ctx| {
+    harness.with_root_widget_context(|_root: &mut ListGym, ctx| {
         ctx.with_unique_descendant::<List<ListEntry>, _>(|list, _| Ok(list.selected_index()))
     })
 }
 
 fn column_count(harness: &mut Harness) -> Result<usize> {
-    harness.with_root_context(|_root: &mut ListGym, ctx| {
+    harness.with_root_widget_context(|_root: &mut ListGym, ctx| {
         ctx.with_unique_descendant::<Columns, _>(|_columns, ctx| Ok(ctx.children().len()))
     })
 }
 
 fn list_count(harness: &mut Harness) -> Result<usize> {
-    harness.with_root_context(|_root: &mut ListGym, ctx| {
+    harness.with_root_widget_context(|_root: &mut ListGym, ctx| {
         let view = ctx as &dyn ViewContext;
         Ok(view.all_in_tree::<List<ListEntry>>().len())
     })
 }
 
 fn focused_list_index(harness: &mut Harness) -> Result<Option<usize>> {
-    harness.with_root_context(|_root: &mut ListGym, ctx| {
+    harness.with_root_widget_context(|_root: &mut ListGym, ctx| {
         let focused = (ctx as &dyn ViewContext).focused_descendant::<List<ListEntry>>();
         let lists = (ctx as &dyn ViewContext).descendants_of_type::<List<ListEntry>>();
         Ok(focused.and_then(|focused_id| {
@@ -43,7 +50,7 @@ fn focused_list_index(harness: &mut Harness) -> Result<Option<usize>> {
 
 /// Focus the first entry of the list at `index`.
 fn focus_list(harness: &mut Harness, index: usize) -> Result<()> {
-    harness.with_root_context(|_root: &mut ListGym, ctx| {
+    harness.with_root_widget_context(|_root: &mut ListGym, ctx| {
         let lists = (ctx as &dyn ViewContext).descendants_of_type::<List<ListEntry>>();
         let entry = ctx.focusable_leaves(lists[index].into())[0];
         ctx.set_focus(entry).map(|_| ())
@@ -52,8 +59,7 @@ fn focus_list(harness: &mut Harness, index: usize) -> Result<()> {
 
 #[test]
 fn test_listgym_initial_state() -> Result<()> {
-    let root = ListGym::new();
-    let mut harness = Harness::new(root)?;
+    let mut harness = listgym()?;
     harness.render()?;
 
     let len = list_len(&mut harness)?;
@@ -64,7 +70,7 @@ fn test_listgym_initial_state() -> Result<()> {
 
 #[test]
 fn test_harness_script_with_list_navigation() -> Result<()> {
-    let mut harness = Harness::new(ListGym::new())?;
+    let mut harness = listgym()?;
     harness.render()?;
 
     let initial_selected = list_selected_index(&mut harness)?;
@@ -81,7 +87,7 @@ fn test_harness_script_with_list_navigation() -> Result<()> {
 
 #[test]
 fn test_listgym_adds_and_deletes_columns() -> Result<()> {
-    let mut harness = Harness::new(ListGym::new())?;
+    let mut harness = listgym()?;
     harness.render()?;
 
     let initial_cols = column_count(&mut harness)?;
@@ -99,7 +105,7 @@ fn test_listgym_adds_and_deletes_columns() -> Result<()> {
 
 #[test]
 fn test_listgym_add_item_command() -> Result<()> {
-    let mut harness = Harness::new(ListGym::new())?;
+    let mut harness = listgym()?;
     harness.render()?;
 
     let before = list_len(&mut harness)?;
@@ -114,7 +120,7 @@ fn test_listgym_add_item_command() -> Result<()> {
 
 #[test]
 fn test_listgym_tabs_between_columns() -> Result<()> {
-    let mut harness = Harness::new(ListGym::new())?;
+    let mut harness = listgym()?;
     harness.render()?;
 
     harness.script("list_gym.add_column()")?;
@@ -134,12 +140,12 @@ fn test_listgym_tabs_between_columns() -> Result<()> {
 
 #[test]
 fn a_new_column_follows_the_focused_one_and_takes_focus() -> Result<()> {
-    let mut harness = Harness::new(ListGym::new())?;
+    let mut harness = listgym()?;
     harness.render()?;
     harness.script("list_gym.add_column()")?;
     harness.render()?;
     focus_list(&mut harness, 0)?;
-    let first = harness.with_root_context(|_root: &mut ListGym, ctx| {
+    let first = harness.with_root_widget_context(|_root: &mut ListGym, ctx| {
         Ok(NodeId::from(
             (ctx as &dyn ViewContext).descendants_of_type::<List<ListEntry>>()[1],
         ))
@@ -149,7 +155,7 @@ fn a_new_column_follows_the_focused_one_and_takes_focus() -> Result<()> {
     harness.render()?;
     assert_eq!(list_count(&mut harness)?, 3);
     assert_eq!(focused_list_index(&mut harness)?, Some(1));
-    let moved = harness.with_root_context(|_root: &mut ListGym, ctx| {
+    let moved = harness.with_root_widget_context(|_root: &mut ListGym, ctx| {
         Ok(NodeId::from(
             (ctx as &dyn ViewContext).descendants_of_type::<List<ListEntry>>()[2],
         ))
@@ -161,7 +167,7 @@ fn a_new_column_follows_the_focused_one_and_takes_focus() -> Result<()> {
 #[test]
 fn removing_any_column_leaves_focus_on_a_neighbor() -> Result<()> {
     for (removed, expected) in [(0, 0), (1, 1), (2, 1)] {
-        let mut harness = Harness::new(ListGym::new())?;
+        let mut harness = listgym()?;
         harness.render()?;
         harness.script("list_gym.add_column()")?;
         harness.script("list_gym.add_column()")?;
@@ -178,7 +184,7 @@ fn removing_any_column_leaves_focus_on_a_neighbor() -> Result<()> {
         );
     }
 
-    let mut harness = Harness::new(ListGym::new())?;
+    let mut harness = listgym()?;
     harness.render()?;
     focus_list(&mut harness, 0)?;
     harness.script("list_gym.delete_column()")?;

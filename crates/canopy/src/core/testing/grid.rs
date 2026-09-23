@@ -185,7 +185,9 @@ mod tests {
         ];
 
         for (recursion, divisions, expected) in test_cases {
-            let mut canopy = Canopy::new();
+            let mut canopy = crate::CanopyBuilder::new()
+                .build()
+                .expect("an empty application builds");
             let grid =
                 Grid::install(&mut canopy, recursion, divisions).expect("Failed to build grid");
             let dimensions = grid.dimensions();

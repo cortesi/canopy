@@ -11,7 +11,7 @@ use tokio::runtime::Builder;
 
 use super::{base_api::read_node_id, bridge::REENTRANT_CANOPY, *};
 use crate::{
-    Widget,
+    CanopyBuilder, Widget,
     core::{id::testing_node_id, inputmap::WidgetActionCatalog, testing::model::trace_result},
     derive_commands,
     error::Result,
@@ -164,9 +164,8 @@ proptest! {
 
     #[test]
     fn script_closure_registry_matches_model(operations in closure_operation_strategy()) {
-        let mut canopy = Canopy::new();
-        canopy
-            .finalize_api()
+        let mut canopy = CanopyBuilder::new()
+            .build()
             .map_err(|error| TestCaseError::fail(error.to_string()))?;
         let host = canopy.script.host.clone();
         let mut model = ClosureModel::new();
@@ -195,8 +194,8 @@ fn script_check_severity_serializes_to_stable_strings() {
 #[test]
 fn reentrant_canopy_guard_restores_nested_stack() -> Result<()> {
     REENTRANT_CANOPY.with(|stack| assert!(stack.borrow().is_empty()));
-    let mut outer = Canopy::new();
-    let mut inner = Canopy::new();
+    let mut outer = CanopyBuilder::new().build()?;
+    let mut inner = CanopyBuilder::new().build()?;
 
     {
         let _outer_guard = ReentrantCanopyGuard::push(&mut outer);
@@ -531,7 +530,6 @@ fn execute_with_many_waits_survives_tokio_coop_budget() -> Result<()> {
         .expect("test runtime")
         .block_on(async {
             run_ttree(|c, _, _| {
-                c.finalize_api()?;
                 let host = c.script.host.clone();
                 let script = host.compile(
                     "for _ = 1, 300 do canopy.wait_for(function() return true end, 50) end return 42",
@@ -548,7 +546,6 @@ fn execute_with_many_waits_survives_tokio_coop_budget() -> Result<()> {
 #[test]
 fn tprint_output_lands_in_script_logs() -> Result<()> {
     run_ttree(|c, _, _| {
-        c.finalize_api()?;
         let scr = c.script.host.compile(r#"print("plain print", 42)"#)?;
         let host = c.script.host.clone();
         host.execute(c, c.core.root_id(), scr, None)?;
@@ -564,7 +561,6 @@ fn tprint_output_lands_in_script_logs() -> Result<()> {
 #[test]
 fn print_quota_and_sequential_diagnostics_are_per_invocation() -> Result<()> {
     run_ttree(|c, _, _| {
-        c.finalize_api()?;
         let host = c.script.host.clone();
         let noisy = host.compile("for i = 1, 5000 do print(i) end")?;
         host.execute(c, c.core.root_id(), noisy, None)?;
@@ -585,7 +581,6 @@ fn print_quota_and_sequential_diagnostics_are_per_invocation() -> Result<()> {
 #[test]
 fn node_handle_marshal_hook_returns_external_token_record() -> Result<()> {
     run_ttree(|c, _, tree| {
-        c.finalize_api()?;
         let host = c.script.host.clone();
         let mut runtime_cell = host.runtime.borrow_mut();
         let runtime = runtime_cell.as_mut().expect("finalized runtime");
@@ -609,7 +604,6 @@ fn node_handle_marshal_hook_returns_external_token_record() -> Result<()> {
 #[test]
 fn retained_node_handle_is_rejected_after_removal() -> Result<()> {
     run_ttree(|c, _, tree| {
-        c.finalize_api()?;
         let host = c.script.host.clone();
         c.core.remove_subtree(tree.a)?;
         let anchor = c.core.root_id();
@@ -638,7 +632,6 @@ fn retained_node_handle_is_rejected_after_removal() -> Result<()> {
 #[test]
 fn binding_replacement_releases_old_and_failed_callbacks() -> Result<()> {
     run_ttree(|c, _, _| {
-        c.finalize_api()?;
         let host = c.script.host.clone();
         let install = host.compile(
             r#"canopy.bind("a", { path = "", description = "First binding" }, function() local value = true end)"#,
@@ -707,7 +700,6 @@ fn wait_for_timeout_surfaces_as_script_timeout() -> Result<()> {
 #[test]
 fn tscript_bindings_carry_declaration_sites() -> Result<()> {
     run_ttree(|c, _, _| {
-        c.finalize_api()?;
         let scr = c
             .script
             .host
@@ -738,7 +730,6 @@ fn tscript_bindings_carry_declaration_sites() -> Result<()> {
 #[test]
 fn texecute() -> Result<()> {
     run_ttree(|c, _, tree| {
-        c.finalize_api()?;
         let scr = c.script.host.compile(r#"bb_la.c_leaf()"#)?;
         let host = c.script.host.clone();
         host.execute(c, tree.b_a, scr, None)?;
@@ -751,7 +742,6 @@ fn texecute() -> Result<()> {
 #[test]
 fn truntime_error_returns_script_error() -> Result<()> {
     run_ttree(|c, _, tree| {
-        c.finalize_api()?;
         let scr = c.script.host.compile(r#"canopy.assert(false, "boom")"#)?;
         let host = c.script.host.clone();
         let err = host.execute(c, tree.b_a, scr, None);
@@ -769,7 +759,6 @@ fn truntime_error_returns_script_error() -> Result<()> {
 #[test]
 fn script_context_stack_pops_after_runtime_error() -> Result<()> {
     run_ttree(|c, _, tree| {
-        c.finalize_api()?;
         let scr = c.script.host.compile(r#"error("boom")"#)?;
         let host = c.script.host.clone();
         let err = host.execute(c, tree.a, scr, None);
@@ -788,7 +777,6 @@ fn script_context_stack_pops_after_runtime_error() -> Result<()> {
 #[test]
 fn tcheck_script_reports_type_errors() -> Result<()> {
     run_ttree(|c, _, _| {
-        c.finalize_api()?;
         let result = c
             .script
             .host
@@ -813,7 +801,6 @@ fn tcheck_script_reports_type_errors() -> Result<()> {
 #[test]
 fn tcompile_rejects_type_errors_when_finalized() -> Result<()> {
     run_ttree(|c, _, _| {
-        c.finalize_api()?;
         let err = c.script.host.compile("local value: string = 1");
         assert!(matches!(err, Err(error::Error::Parse(_))));
         Ok(())
@@ -939,15 +926,15 @@ impl Widget for ScriptCallProbe {
 
 /// Construct two owners of the same command, with the second focused.
 fn script_call_probes() -> Result<(Canopy, NodeId, NodeId)> {
-    let mut canopy = Canopy::new();
+    let mut canopy = CanopyBuilder::new()
+        .configure(|setup| setup.add_commands::<ScriptCallProbe>())
+        .build()?;
     let first = canopy.core.create_detached(ScriptCallProbe { value: 1 })?;
     let second = canopy.core.create_detached(ScriptCallProbe { value: 2 })?;
     canopy
         .core
         .set_children(canopy.core.root_id(), vec![first, second])?;
-    canopy.add_commands::<ScriptCallProbe>()?;
     canopy.core.set_focus(second)?;
-    canopy.finalize_api()?;
     Ok((canopy, first, second))
 }
 

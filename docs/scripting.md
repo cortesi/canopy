@@ -148,8 +148,9 @@ arguments, so a bad argument fails the binding call before it installs a
 binding. In a strict script the typechecker finds the same errors before the
 script runs. Keep functions for composed actions.
 
-An application registers a widget action in native configuration before the
-script API finalizes. A string action names one of those registered actions:
+An application registers a widget action with `Setup::register_widget_action`
+before the script API finalizes. A string action names one of those registered
+actions:
 
 ```luau
 canopy.keymap({
@@ -248,7 +249,7 @@ still apply. `Root` lists the keys of a transient mode in a small panel until
 the mode ends.
 
 Native Rust uses generated typed `Widget::call_command(arguments...)` builders
-with `Canopy::bind_command`. A `CommandCall` holds the command id, its
+with `Setup::bind_command` during setup. A `CommandCall` holds the command id, its
 arguments, and an optional target. `CommandCall::with_target` sets exact,
 relative, or focus targeting, and a Button, List, or native binding keeps it
 with the stored call. A call without a target resolves from its origin: the
@@ -321,15 +322,20 @@ script for that owner.
 ## Persistent Modules
 
 `CanopyBuilder` makes setup order explicit. Its owned `configure` callbacks
-register commands, fixtures, and defaults before API finalization. Named
-`bindings` and `config` sources run next, in insertion order. Owned `assemble`
-callbacks then create the widget tree. `build()` consumes the builder and
-returns no application on failure. Native and database effects are not rolled
-back; retry with a fresh builder and suitable application resources.
+receive a `Setup` handle. `Setup` holds every registration that the API fixes
+when it finalizes: commands, default bindings, framework and application
+bindings, widget actions, startup scripts, fixtures, mode hooks, render limits,
+and the initial styles. A type registers what it needs in its `Register` impl.
+Named `bindings` and `config` sources run after finalization, in insertion
+order. Owned `assemble` callbacks then create the widget tree on the finalized
+`Canopy`. `build()` consumes the builder and returns no application on failure.
+Native and database effects are not rolled back; retry with a fresh builder and
+suitable application resources.
 
 Build does not prepare a frame or run startup. The first runtime preparation
 runs startup, calculates geometry, then invokes `on_start` before publication.
-`CanopyBuilder` is the only way to construct an application.
+`CanopyBuilder` is the only way to construct an application, and the only way
+to register. Nothing registers after finalization.
 
 Builder user and project script roots default to disabled. Register each root
 with `user_script_root(path, ScriptTrust::TrustedLocal)` or
@@ -356,7 +362,7 @@ mount root (`@user` or `@project`), matching directory-module resolution.
 ## Startup Scripts
 
 Startup scripts run once, after the app finalizes its script API. The layer
-order is: app scripts registered with `Canopy::register_startup_script`, then
+order is: app scripts registered with `Setup::register_startup_script`, then
 `@user/init.luau`, then `@project/init.luau`.
 
 Every startup root must define:

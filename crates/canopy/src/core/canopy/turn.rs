@@ -286,7 +286,6 @@ impl Canopy {
         let baseline = self.begin_script_journal();
         self.script.host.set_diagnostics(Vec::new(), Vec::new());
         let prepared = (|| {
-            self.ensure_finalized()?;
             self.prepare_frame(false)?;
             self.core.validate_attached_node(request.anchor)?;
             let deadline = request
@@ -632,14 +631,7 @@ impl HeadlessEval<'_> {
             // VM and adapter wakes can stay ready indefinitely. Yield
             // explicitly so Tokio replenishes its cooperative budget.
             yield_now().await;
-            let event = async {
-                match events.next().await {
-                    Some(AdapterEvent::Input(event)) => Ok(Work::Input(vec![event])),
-                    Some(AdapterEvent::Wake) => Ok(Work::Wake),
-                    None => Err(Error::Driver("headless event channel closed".into())),
-                }
-            };
-            let work = selector.next(canopy, event).await?;
+            let work = selector.next_from(canopy, events).await?;
             outcome = canopy.turn(work)?;
         }
     }
@@ -676,6 +668,22 @@ impl WorkSelector {
         };
         self.select(event, poll_fn(|cx| canopy.poll_runtime_wake(cx)), timer)
             .await
+    }
+
+    /// Wait for the next turn input, taking adapter events from `events`.
+    pub(crate) async fn next_from(
+        &mut self,
+        canopy: &mut Canopy,
+        events: &mut UnboundedReceiver<AdapterEvent>,
+    ) -> Result<Work> {
+        let event = async {
+            match events.next().await {
+                Some(AdapterEvent::Input(event)) => Ok(Work::Input(vec![event])),
+                Some(AdapterEvent::Wake) => Ok(Work::Wake),
+                None => Err(Error::Driver("adapter event channel closed".into())),
+            }
+        };
+        self.next(canopy, event).await
     }
 
     /// Return the first ready source, starting from the rotating priority.

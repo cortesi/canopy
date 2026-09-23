@@ -8,7 +8,7 @@ use std::{
 };
 
 use canopy::{
-    CanopyBuilder, Loader,
+    CanopyBuilder, Register,
     error::{self, Result},
 };
 use canopy_examples::{
@@ -220,11 +220,13 @@ fn widget_builder(command: &Command) -> CanopyBuilder {
     let builder = canopy_examples::demo_canopy();
     match command {
         Command::Font(_) | Command::List(_) => builder,
-        Command::Image(_) => imgview::binding_setup(builder.configure(ImageView::load)),
+        Command::Image(_) => imgview::binding_setup(builder.configure(ImageView::register)),
         Command::Term => builder
-            .configure(|canopy| canopy.add_commands::<TermDemo>())
+            .configure(|setup| setup.add_commands::<TermDemo>())
             .bindings("widget-terminal", TERM_BINDINGS),
-        Command::Editor(_) => widget_editor::binding_setup(builder.configure(WidgetEditor::load)),
+        Command::Editor(_) => {
+            widget_editor::binding_setup(builder.configure(WidgetEditor::register))
+        }
     }
 }
 
@@ -286,6 +288,8 @@ end)
 
 #[cfg(test)]
 mod tests {
+    use canopy::Widget;
+
     use super::*;
 
     #[test]
@@ -313,7 +317,8 @@ mod tests {
                     false,
                     FontEffects::default(),
                 );
-                let error = canopy::Canopy::new()
+                let error = canopy::CanopyBuilder::new()
+                    .build()?
                     .with_root_context(|ctx| demo.on_mount(ctx))
                     .unwrap_err();
                 assert!(

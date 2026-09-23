@@ -12,9 +12,10 @@ adding behavior.
 
 Application code imports core types from the crate root and domain types from
 their module; it selects `canopy_widgets` types directly. The root holds the
-facade traits and their handle types: `Canopy`, `Widget`, `Context`,
-`ViewContext`, `Render`, `NodeName`, `View`, the capability context traits,
-typed node IDs, and the command macros. Value libraries live in their modules:
+facade traits and their handle types: `CanopyBuilder`, `Setup`, `Register`,
+`Canopy`, `Widget`, `Context`, `ViewContext`, `Render`, `NodeName`, `View`, the
+capability context traits, typed node IDs, and the command macros. Value
+libraries live in their modules:
 `canopy::geom`, `canopy::layout`, `canopy::style`, `canopy::event`,
 `canopy::path`, `canopy::commands`, `canopy::script`, `canopy::error`,
 `canopy::help`, `canopy::keyroute`, `canopy::cursor`, `canopy::text`,
@@ -22,10 +23,19 @@ typed node IDs, and the command macros. Value libraries live in their modules:
 run loop). The `testing` feature adds `canopy::testing`. Each item has one
 canonical location, and there is no prelude.
 
-`Canopy` owns `Core` and the style map. Its fields are private. Apps install root
-widgets with helpers such as `Root::install`, mutate styles through
-`Canopy::style_mut()`, and use `Canopy` methods for scripting, fixtures, input
-modes, rendering, and automation.
+An application runs in two phases. `CanopyBuilder::configure` passes a `Setup`
+handle, which owns every registration: commands, bindings, widget actions,
+startup scripts, fixtures, mode hooks, render limits, and the initial styles.
+Each type registers what it needs in a `Register` impl. The builder then
+finalizes the API and returns a `Canopy`, which has no registration methods.
+
+`Canopy` is the running application. It owns `Core` and the style map, and its
+fields are private. Apps install root widgets with helpers such as
+`Root::install`, restyle at runtime through `Canopy::style_mut()` or
+`Context::set_style`, and use `Canopy` methods for scripting, fixtures, input
+modes, rendering, and automation. The `testing` feature adds hooks that tests
+need and the builder cannot express: a manual clock, the event receiver, script
+module invalidation, the journal limit, and layout timing.
 
 Lower-level runtime state is crate-private. `Core`, `inputmap`, and raw arena
 mutation are not reachable from app code, and `script` and the backend modules
@@ -426,11 +436,14 @@ this: its footer reads the file selector during render, and its listings read
 another node's focus. Any narrower invalidation must keep this guarantee.
 
 Poll deadlines belong to the driver. There is no eager scheduler thread per
-application. The terminal adapter and headless evaluation share one work
-selector. It waits on adapter input, runtime notifications, and the next driver
-deadline, and it takes ready sources in rotating order, so a source that stays
-ready cannot starve the others. Tests can install `testing::ManualClock` before
-initialization, advance it, then deliver `Work::Wake`.
+application. The terminal adapter, headless evaluation, and the test
+harness share one work selector. It waits on adapter input, runtime
+notifications, and the next driver deadline, and it takes ready sources in
+rotating order, so a source that stays ready cannot starve the others. Tests can
+install `testing::ManualClock` before initialization, advance it, then deliver
+`Work::Wake`. `Harness::wait_until` runs real turns through the same selector
+until a condition holds, which is the native counterpart of Luau
+`canopy.wait_for`.
 
 ## Event Routing
 
@@ -446,7 +459,7 @@ The resolver checks the framework group that the top modal admits first.
 Without one, it checks the global tier, active modes from newest to oldest, and
 then the default tier. A transient mode ends that search, so a key it does not
 bind resolves to nothing. Path specificity and insertion order select a winner
-within one tier. Only `Canopy::bind_framework` takes the framework tier, and
+within one tier. Only `Setup::bind_framework` takes the framework tier, and
 application bindings take the other three.
 
 The binding phase chooses dispatch before widget input or after the widget
@@ -457,7 +470,7 @@ still runs after every descendant declines.
 
 An application can also bind a key to a named widget action instead of a
 command or callback. The application registers each action name in its catalog
-before the script API finalizes. The catalog validates binding names and
+with `Setup::register_widget_action`. The catalog validates binding names and
 renders the application's Luau API; a name promises a bindable operation, not a
 consumer in every state. At each node the resolver ranks candidates, and an
 action candidate is eligible only when that node's widget accepts the action in
@@ -574,7 +587,7 @@ no longer belongs to the tree.
 
 Key routing gives a transient mode the next key before any widget sees it. It
 pops the mode, then runs the binding that the key resolved to, if there is one.
-`Canopy::register_mode_hook` registers a function that runs against the root
+`Setup::register_mode_hook` registers a function that runs against the root
 context before a frame whenever the mode stack has changed. Root uses one to
 list the keys of a transient mode in a panel that overlays the main pane. The
 help modal covers that panel, and hides it while help is open.

@@ -1,9 +1,6 @@
-//! Testing-only `Canopy` construction, script control, and driver access.
+//! Testing-only clock, script-module, journal, layout, and driver access.
 
-use std::{
-    path::{Path as FsPath, PathBuf},
-    sync::Arc,
-};
+use std::sync::Arc;
 
 use futures::{Stream, StreamExt};
 
@@ -16,21 +13,6 @@ use crate::{
 };
 
 impl Canopy {
-    /// Construct an unbuilt Canopy instance for low-level tests.
-    pub fn new() -> Self {
-        Self::empty()
-    }
-
-    /// Configure the `@user` persistent script root in a low-level test.
-    pub fn set_user_script_root(&mut self, root: impl Into<PathBuf>) -> Result<()> {
-        self.set_user_script_root_inner(root)
-    }
-
-    /// Configure the `@project` persistent script root in a low-level test.
-    pub fn set_project_script_root(&mut self, root: impl Into<PathBuf>) -> Result<()> {
-        self.set_project_script_root_inner(root)
-    }
-
     /// Invalidate cached exports from persistent script modules.
     ///
     /// Pass a root such as `@user` or `@project` to invalidate one root, or
@@ -57,22 +39,12 @@ impl Canopy {
         Ok(Some(epoch))
     }
 
-    /// Run startup scripts directly in a low-level test.
-    pub fn run_startup_scripts(&mut self) -> Result<usize> {
-        self.run_startup_scripts_inner()
-    }
-
     /// Set the maximum number of retained script journal entries.
     ///
     /// When the journal exceeds the limit the oldest entries are evicted. A
     /// limit of zero disables retention entirely.
     pub fn set_script_journal_limit(&mut self, limit: usize) {
         self.journal.set_limit(limit);
-    }
-
-    /// Evaluate a Luau config file directly in a low-level test.
-    pub fn run_config(&mut self, path: &FsPath) -> Result<()> {
-        self.run_config_inner(path)
     }
 
     /// Remove application bindings and callbacks from the current source epoch.
@@ -82,11 +54,6 @@ impl Canopy {
         for hook in self.script.host.drain_on_start_hooks() {
             self.script.host.release_function(hook);
         }
-    }
-
-    /// Finalize the script API surface for a low-level test application.
-    pub fn finalize_api(&mut self) -> Result<()> {
-        self.finalize_api_inner()
     }
 
     /// Install an explicit test clock before the application starts polling.
@@ -173,11 +140,10 @@ mod tests {
             wake: Rc::new(RefCell::new(None)),
             interval: Rc::new(Cell::new(Some(interval))),
         };
-        let mut canopy = Canopy::new();
+        let mut canopy = crate::CanopyBuilder::new().build()?;
         canopy.set_clock_for_testing(clock.clone())?;
         canopy.replace_root(counter.clone())?;
         canopy.set_root_size(Size::new(10, 2))?;
-        canopy.finalize_api()?;
         canopy.turn(Work::Prepare)?;
         Ok((canopy, clock, counter))
     }

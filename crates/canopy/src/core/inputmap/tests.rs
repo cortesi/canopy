@@ -785,11 +785,6 @@ fn widget_actions_validate_names_phases_and_inputs() -> Result<()> {
         .is_err(),
         "an action accepts keys only"
     );
-    map.freeze_widget_actions();
-    assert!(
-        register_action(&mut map, "test.later").is_err(),
-        "a frozen catalog rejects registration"
-    );
     Ok(())
 }
 

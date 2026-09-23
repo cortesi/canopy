@@ -382,7 +382,7 @@ impl Widget for Input {
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, EventOutcome, Widget,
+        CanopyBuilder, EventOutcome, Widget,
         error::Result,
         event::{Event, key},
     };
@@ -401,7 +401,9 @@ mod tests {
                 .with_label("Account")
                 .with_value_exposure(exposure);
             input.set_value("updated");
-            let semantics = Canopy::new()
+            let semantics = CanopyBuilder::new()
+                .build()
+                .expect("an empty application builds")
                 .with_root_view(|ctx| input.semantics(ctx))
                 .expect("input semantics");
             assert_eq!(semantics.role.as_deref(), Some("input"));
@@ -412,7 +414,9 @@ mod tests {
             );
         }
         assert_eq!(
-            Canopy::new()
+            CanopyBuilder::new()
+                .build()
+                .expect("an empty application builds")
                 .with_root_view(|ctx| Input::new("private").semantics(ctx))
                 .expect("default semantics")
                 .value,
@@ -486,7 +490,7 @@ mod tests {
             "tab",
             "shift-a",
         ];
-        let mut app = Canopy::new();
+        let mut app = CanopyBuilder::new().build()?;
         for spec in specs {
             let mut input = Input::new("");
             let key = key::Key::parse_spec(spec).expect("valid key spec");
@@ -505,7 +509,7 @@ mod tests {
     #[test]
     fn the_clear_action_resets_the_value() -> Result<()> {
         let mut input = Input::new("typed text");
-        Canopy::new().with_root_context(|ctx| {
+        CanopyBuilder::new().build()?.with_root_context(|ctx| {
             assert!(input.accepts_action(TEXT_CLEAR_ACTION, ctx));
             assert!(!input.accepts_action("canopy.text.other", ctx));
             assert_eq!(
@@ -528,7 +532,7 @@ mod tests {
     #[test]
     fn input_ignores_ctrl_and_alt_chords() -> Result<()> {
         let mut input = Input::new("");
-        Canopy::new().with_root_context(|ctx| {
+        CanopyBuilder::new().build()?.with_root_context(|ctx| {
             for mods in [key::Ctrl, key::Alt] {
                 let event = Event::Key(key::Key {
                     key: key::KeyCode::Char('a'),

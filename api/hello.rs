@@ -54,8 +54,8 @@ end
         pub fn spec_bump() -> &'static canopy::commands::CommandSpec {}
     }
 
-    impl Loader for Hello {
-        fn load(canopy: &mut Canopy) -> Result<()> {}
+    impl Register for Hello {
+        fn register(setup: &mut Setup) -> Result<()> {}
     }
 
     impl Widget for Hello {

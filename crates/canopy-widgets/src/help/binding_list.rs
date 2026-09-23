@@ -3,7 +3,7 @@
 use std::mem;
 
 use canopy::{
-    Canopy, Context, Loader, NodeName, Render, ViewContext, Widget,
+    Context, NodeName, Register, Render, Setup, ViewContext, Widget,
     commands::CommandStatus,
     derive_commands,
     error::Result,
@@ -103,9 +103,9 @@ impl BindingList {
     }
 }
 
-impl Loader for BindingList {
-    fn load(canopy: &mut Canopy) -> Result<()> {
-        canopy.add_commands::<Self>()
+impl Register for BindingList {
+    fn register(setup: &mut Setup) -> Result<()> {
+        setup.add_commands::<Self>()
     }
 }
 

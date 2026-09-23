@@ -2,7 +2,7 @@
 //! Example widgets used by canopy demos.
 
 use canopy::{
-    CanopyBuilder, Context, ContextExt, FocusDirection, Loader, Widget,
+    CanopyBuilder, Context, ContextExt, FocusDirection, Register, Widget,
     error::{Error, Result},
     layout::{Direction, Layout, LayoutOverride, Sizing},
     style::{
@@ -152,9 +152,9 @@ pub(crate) fn text_scroll_bindings(receiver: &str, path: &str) -> String {
 /// Start demo registration with Root and its first-preparation help setup.
 #[must_use]
 pub fn demo_canopy() -> CanopyBuilder {
-    CanopyBuilder::new().configure(|cnpy| {
-        Root::load(cnpy)?;
-        cnpy.register_startup_script("examples-help", HELP_BINDING)
+    CanopyBuilder::new().configure(|setup| {
+        Root::register(setup)?;
+        setup.register_startup_script("examples-help", HELP_BINDING)
     })
 }
 

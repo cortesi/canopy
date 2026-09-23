@@ -1,12 +1,12 @@
 use std::env;
 
 use canopy::{
-    Canopy, CanopyBuilder, Context, ContextExt, FocusScope, Loader, NodeId, NodeName, Render,
+    CanopyBuilder, Context, ContextExt, FocusScope, NodeId, NodeName, Register, Render, Setup,
     ViewContext, ViewContextExt, Widget, derive_commands,
     error::{Error, Result},
     geom::Size,
     layout::{Constraint, Direction, Layout, MeasureConstraints, Measurement},
-    style::{Attr, AttrSet, default as palette},
+    style::{Attr, AttrSet, StyleMap, default as palette},
 };
 use canopy_widgets::{
     Border, Button, Center, Container, Frame, List, SINGLE, SINGLE_THICK, Selectable, Text,
@@ -417,16 +417,16 @@ impl Widget for TermGym {
     }
 }
 
-impl Loader for TermGym {
-    fn load(c: &mut Canopy) -> Result<()> {
-        c.add_commands::<Self>()?;
-        c.add_commands::<List<TermEntry>>()?;
+impl Register for TermGym {
+    fn register(setup: &mut Setup) -> Result<()> {
+        setup.add_commands::<Self>()?;
+        setup.add_commands::<List<TermEntry>>()?;
         Ok(())
     }
 }
 
 /// Install native styles during the configuration phase.
-fn setup_style(cnpy: &mut Canopy) {
+fn setup_style(style: &mut StyleMap) {
     use canopy::style::StyleBuilder;
 
     let selected_attrs = AttrSet {
@@ -439,7 +439,7 @@ fn setup_style(cnpy: &mut Canopy) {
         .bg(palette::ACCENT)
         .attrs(selected_attrs);
 
-    let rules = crate::selectable_entry_styles(cnpy.style_mut().rules(), "termgym/entry");
+    let rules = crate::selectable_entry_styles(style.rules(), "termgym/entry");
     rules
         .prefix("termgym/button")
         .style_all(&["border", "fill", "text"], button_normal)
@@ -465,8 +465,8 @@ fn setup_style(cnpy: &mut Canopy) {
 #[must_use]
 pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
     builder
-        .configure(|cnpy| {
-            setup_style(cnpy);
+        .configure(|setup| {
+            setup_style(setup.style_mut());
             Ok(())
         })
         .bindings("termgym", DEFAULT_BINDINGS)

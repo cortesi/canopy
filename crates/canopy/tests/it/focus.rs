@@ -3,8 +3,8 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, ContextExt, FocusDirection, FocusScope, NodeId, NodeName, ViewContext, Widget,
-        error::Result, geom::Size, layout::Layout, testing::grid::Grid,
+        Canopy, CanopyBuilder, ContextExt, FocusDirection, FocusScope, NodeId, NodeName,
+        ViewContext, Widget, error::Result, geom::Size, layout::Layout, testing::grid::Grid,
     };
 
     /// Return the name of the focused grid cell, if a cell holds focus.
@@ -139,7 +139,7 @@ mod tests {
 
     #[test]
     fn test_focus_dir_simple_grid() -> Result<()> {
-        let mut canopy = Canopy::new();
+        let mut canopy = CanopyBuilder::new().build()?;
         let grid = Grid::install(&mut canopy, 1, 2)?;
         let grid_size = grid.expected_size();
         assert_eq!(grid_size, Size::new(20, 20));
@@ -164,21 +164,21 @@ mod tests {
 
     #[test]
     fn test_focus_snake_navigation_3x3() -> Result<()> {
-        let mut canopy = Canopy::new();
+        let mut canopy = CanopyBuilder::new().build()?;
         let grid = Grid::install(&mut canopy, 1, 3)?;
         test_snake_navigation(&grid, &mut canopy)
     }
 
     #[test]
     fn test_focus_snake_navigation_4x4() -> Result<()> {
-        let mut canopy = Canopy::new();
+        let mut canopy = CanopyBuilder::new().build()?;
         let grid = Grid::install(&mut canopy, 2, 2)?;
         test_snake_navigation(&grid, &mut canopy)
     }
 
     #[test]
     fn test_focus_moves_off_zero_view_nodes() -> Result<()> {
-        let mut canopy = Canopy::new();
+        let mut canopy = CanopyBuilder::new().build()?;
         let first = canopy.create_detached(FocusLeaf::new("first"))?;
         let second = canopy.create_detached(FocusLeaf::new("second"))?;
         canopy.with_root_context(|context| {

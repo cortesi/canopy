@@ -440,9 +440,9 @@ pub mod canopy_widgets {
             pub fn spec_zoom() -> &'static canopy::commands::CommandSpec {}
         }
 
-        impl Loader for ImageView {
+        impl Register for ImageView {
             /// Register commands for the image viewer widget.
-            fn load(cnpy: &mut Canopy) -> Result<()> {}
+            fn register(setup: &mut Setup) -> Result<()> {}
         }
 
         impl Widget for ImageView {
@@ -910,9 +910,9 @@ pub mod canopy_widgets {
     ///
     /// Activation is the `button::press` command, which a click, `Enter`, or
     /// `Space` reaches through ordinary bindings. Install them with
-    /// [`Loader::load`] and `button.default_bindings()`, or bind `press` however an
-    /// application prefers. A modal that admits only its own framework group must
-    /// bind activation in that group.
+    /// [`Register::register`] and `button.default_bindings()`, or bind `press`
+    /// however an application prefers. A modal that admits only its own framework
+    /// group must bind activation in that group.
     ///
     /// User activation of a disabled action is consumed without dispatching.
     /// Calling [`Button::press`] directly still reports command errors.
@@ -1364,8 +1364,8 @@ pub mod canopy_widgets {
         fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
     }
 
-    impl Loader for Button {
-        fn load(canopy: &mut Canopy) -> Result<()> {}
+    impl Register for Button {
+        fn register(setup: &mut Setup) -> Result<()> {}
     }
 
     impl Widget for Button {
@@ -1524,8 +1524,8 @@ pub mod canopy_widgets {
         pub fn spec_yes() -> &'static canopy::commands::CommandSpec {}
     }
 
-    impl Loader for Confirm {
-        fn load(canopy: &mut Canopy) -> Result<()> {}
+    impl Register for Confirm {
+        fn register(setup: &mut Setup) -> Result<()> {}
     }
 
     impl Widget for Confirm {
@@ -1738,9 +1738,9 @@ pub mod canopy_widgets {
         pub fn spec_zoom() -> &'static canopy::commands::CommandSpec {}
     }
 
-    impl Loader for ImageView {
+    impl Register for ImageView {
         /// Register commands for the image viewer widget.
-        fn load(cnpy: &mut Canopy) -> Result<()> {}
+        fn register(setup: &mut Setup) -> Result<()> {}
     }
 
     impl Widget for ImageView {
@@ -1855,8 +1855,8 @@ pub mod canopy_widgets {
         fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
     }
 
-    impl Loader for Root {
-        fn load(c: &mut Canopy) -> Result<()> {}
+    impl Register for Root {
+        fn register(setup: &mut Setup) -> Result<()> {}
     }
 
     impl Root {

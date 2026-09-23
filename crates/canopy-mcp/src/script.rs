@@ -935,7 +935,7 @@ fn canopy_error_info(error: &CanopyError) -> ScriptErrorInfo {
 #[cfg(test)]
 mod tests {
     use canopy::{
-        CanopyBuilder, Fixture, FocusDirection, Loader, NodeName, Widget, derive_commands,
+        CanopyBuilder, Fixture, FocusDirection, NodeName, Register, Setup, Widget, derive_commands,
         error::Result as CanopyResult, geom::Size, testing::contracts,
     };
 
@@ -989,18 +989,18 @@ mod tests {
         }
     }
 
-    impl Loader for ScriptTarget {
-        fn load(cnpy: &mut Canopy) -> CanopyResult<()> {
-            cnpy.add_commands::<Self>()
+    impl Register for ScriptTarget {
+        fn register(setup: &mut Setup) -> CanopyResult<()> {
+            setup.add_commands::<Self>()
         }
     }
 
     fn test_app() -> crate::Result<Canopy> {
         CanopyBuilder::new()
-            .configure(|canopy| {
-                ScriptTarget::load(canopy)?;
-                canopy.register_default_bindings("script_target", r#"canopy.log("defaults")"#)?;
-                canopy.register_fixture(Fixture::new(
+            .configure(|setup| {
+                ScriptTarget::register(setup)?;
+                setup.register_default_bindings("script_target", r#"canopy.log("defaults")"#)?;
+                setup.register_fixture(Fixture::new(
                     "seeded",
                     "Set script_target to a known value",
                     |canopy| canopy.eval_script("script_target.set(31)").map(|_| ()),
@@ -1104,9 +1104,9 @@ mod tests {
         let evaluator = app_factory(move || {
             let changes = factory_changes.clone();
             CanopyBuilder::new()
-                .configure(move |canopy| {
-                    canopy.set_render_limits(canopy::RenderLimits::new(10, 10, 100))?;
-                    canopy.register_fixture(Fixture::new(
+                .configure(move |setup| {
+                    setup.set_render_limits(canopy::RenderLimits::new(10, 10, 100));
+                    setup.register_fixture(Fixture::new(
                         "mutate",
                         "Count fixture changes",
                         move |_| {

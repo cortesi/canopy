@@ -5,7 +5,7 @@ mod tests {
     use std::{any::Any, cell::RefCell, collections::BTreeMap};
 
     use canopy::{
-        Canopy, CommandArg, CommandEnum, Context, ContextExt, ViewContext, Widget,
+        CanopyBuilder, CommandArg, CommandEnum, Context, ContextExt, ViewContext, Widget,
         commands::{
             ArgValue, CommandArgs, CommandError, CommandResolution, CommandStatus, CommandTarget,
             FromArgValue, SerdeArg, ToArgValue,
@@ -18,7 +18,9 @@ mod tests {
 
     /// Run `f` against the root context of an empty application.
     fn with_ctx<R>(f: impl FnOnce(&mut dyn Context) -> R) -> R {
-        Canopy::new()
+        CanopyBuilder::new()
+            .build()
+            .expect("an empty application builds")
             .with_root_context(|ctx| Ok(f(ctx)))
             .expect("root context is available")
     }
@@ -68,8 +70,9 @@ mod tests {
     fn test_command_dispatch() -> Result<()> {
         reset_state();
 
-        let mut canopy = Canopy::new();
-        canopy.add_commands::<TestLeaf>()?;
+        let mut canopy = CanopyBuilder::new()
+            .configure(|setup| setup.add_commands::<TestLeaf>())
+            .build()?;
         let branch_id = canopy.with_root_context(|context| {
             let leaf_id = context.create_detached(TestLeaf)?;
             let branch_id = context.create_detached(TestBranch)?;
@@ -91,9 +94,12 @@ mod tests {
     fn duplicate_command_ids_are_deduplicated() -> Result<()> {
         reset_state();
 
-        let mut canopy = Canopy::new();
-        canopy.add_commands::<TestLeaf>()?;
-        canopy.add_commands::<TestLeaf>()?;
+        let mut canopy = CanopyBuilder::new()
+            .configure(|setup| {
+                setup.add_commands::<TestLeaf>()?;
+                setup.add_commands::<TestLeaf>()
+            })
+            .build()?;
 
         let branch_id = canopy.with_root_context(|context| {
             let leaf_id = context.create_detached(TestLeaf)?;
@@ -113,8 +119,9 @@ mod tests {
 
     #[test]
     fn node_dispatch_reports_no_target() -> Result<()> {
-        let mut canopy = Canopy::new();
-        canopy.add_commands::<TestLeaf>()?;
+        let mut canopy = CanopyBuilder::new()
+            .configure(|setup| setup.add_commands::<TestLeaf>())
+            .build()?;
         let call = TestLeaf::call_c_leaf();
 
         let err = canopy
@@ -133,9 +140,12 @@ mod tests {
 
     #[test]
     fn command_resolver_matches_dispatch_targets() -> Result<()> {
-        let mut canopy = Canopy::new();
-        canopy.add_commands::<TestLeaf>()?;
-        canopy.add_commands::<TestBranch>()?;
+        let mut canopy = CanopyBuilder::new()
+            .configure(|setup| {
+                setup.add_commands::<TestLeaf>()?;
+                setup.add_commands::<TestBranch>()
+            })
+            .build()?;
         let (first_leaf, branch_id) = canopy.with_root_context(|context| {
             let first_leaf = context.create_detached(TestLeaf)?;
             let second_leaf = context.create_detached(TestLeaf)?;
@@ -392,8 +402,9 @@ mod tests {
 
     #[test]
     fn exact_from_and_focus_targets_share_discovery_and_recheck_status() -> Result<()> {
-        let mut app = Canopy::new();
-        app.add_commands::<TargetCounter>()?;
+        let mut app = CanopyBuilder::new()
+            .configure(|setup| setup.add_commands::<TargetCounter>())
+            .build()?;
         let (first, second) = app.with_root_context(|ctx| {
             let first = ctx.add_child(TargetCounter {
                 count: 0,

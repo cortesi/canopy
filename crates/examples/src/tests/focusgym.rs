@@ -1,5 +1,5 @@
 use canopy::{
-    Context, NodeId, TermBuf, ViewContext, ViewContextExt,
+    Context, NodeId, Register, TermBuf, ViewContext, ViewContextExt,
     error::{Error, Result},
     geom::{Point, RectI32, Size},
     layout::{Layout, Sizing},
@@ -10,14 +10,19 @@ use super::{Mount, root_harness};
 use crate::focusgym::{Block, FocusGym, binding_setup};
 
 fn setup_harness(size: Size) -> Result<Harness> {
-    root_harness(FocusGym::new(), binding_setup, size, Mount::Replace)
+    root_harness(
+        FocusGym::new(),
+        |builder| binding_setup(builder.configure(FocusGym::register)),
+        size,
+        Mount::Replace,
+    )
 }
 
 fn with_root_block<R>(
     harness: &mut Harness,
     f: impl FnOnce(&mut dyn Context, NodeId) -> Result<R>,
 ) -> Result<R> {
-    harness.with_root_context(|_root: &mut FocusGym, ctx| {
+    harness.with_root_widget_context(|_root: &mut FocusGym, ctx| {
         let root_block = (ctx as &dyn ViewContext)
             .unique_child::<Block>()?
             .ok_or_else(|| Error::NotFound("root block".into()))?;
@@ -266,7 +271,7 @@ fn test_separators_remain_continuous_after_nested_splits() -> Result<()> {
     harness.key('s')?;
 
     let (_, right) = root_children_pair(&mut harness)?;
-    harness.with_root_context(|_root: &mut FocusGym, ctx| {
+    harness.with_root_widget_context(|_root: &mut FocusGym, ctx| {
         ctx.set_focus(right)?;
         Ok(())
     })?;

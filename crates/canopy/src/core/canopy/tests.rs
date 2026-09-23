@@ -38,9 +38,78 @@ use crate::{
 
 static POLL_COUNT: AtomicUsize = AtomicUsize::new(0);
 
+/// Build an application with no registrations.
+fn app() -> Canopy {
+    CanopyBuilder::new()
+        .build()
+        .expect("an empty application builds")
+}
+
+/// Build an application after one registration callback.
+fn app_with(configure: impl FnOnce(&mut Setup) -> Result<()> + 'static) -> Canopy {
+    CanopyBuilder::new()
+        .configure(configure)
+        .build()
+        .expect("the application builds")
+}
+
+/// Build an application that registers the `test.clear` widget action.
+fn clear_action_app() -> Canopy {
+    app_with(|setup| {
+        setup.register_widget_action(inputmap::WidgetActionSpec::new("test.clear", "Clear")?)
+    })
+}
+
+/// Install an application binding on a running application, as a script's
+/// `canopy.bind` does.
+fn bind(
+    canopy: &mut Canopy,
+    input: impl Into<InputSpec>,
+    options: inputmap::BindingOptions,
+    target: inputmap::BindingTarget,
+) -> Result<inputmap::BindingId> {
+    let (id, removed) =
+        canopy
+            .core
+            .input_map
+            .replace_application_binding(input.into(), options, target)?;
+    canopy.release_removed_bindings(removed);
+    Ok(id)
+}
+
+/// Install an application command binding on a running application.
+fn bind_command(
+    canopy: &mut Canopy,
+    input: impl Into<InputSpec>,
+    options: inputmap::BindingOptions,
+    command: commands::CommandCall,
+) -> Result<inputmap::BindingId> {
+    bind(
+        canopy,
+        input,
+        options,
+        inputmap::BindingTarget::Command(command),
+    )
+}
+
+/// Install an application widget action binding on a running application.
+fn bind_widget_action(
+    canopy: &mut Canopy,
+    input: impl Into<InputSpec>,
+    options: inputmap::BindingOptions,
+    action: inputmap::WidgetActionName,
+) -> Result<inputmap::BindingId> {
+    bind(
+        canopy,
+        input,
+        options,
+        inputmap::BindingTarget::WidgetAction(action),
+    )
+}
+
 #[test]
 fn synchronous_automation_request_rejects_ui_thread() {
-    let canopy = Canopy::new();
+    let canopy = app();
     let error = canopy
         .automation_handle()
         .request(|_| Ok(()))
@@ -50,7 +119,7 @@ fn synchronous_automation_request_rejects_ui_thread() {
 
 #[test]
 fn read_only_automation_service_is_bounded_without_redraw() -> Result<()> {
-    let mut canopy = Canopy::new();
+    let mut canopy = app();
     let handle = canopy.automation_handle();
     let count = Arc::new(AtomicUsize::new(0));
     for _ in 0..=AUTOMATION_SERVICE_BUDGET {
@@ -71,7 +140,7 @@ fn read_only_automation_service_is_bounded_without_redraw() -> Result<()> {
 
 #[test]
 fn automation_submission_applies_backpressure() -> Result<()> {
-    let canopy = Canopy::new();
+    let canopy = app();
     let handle = canopy.automation_handle();
     for _ in 0..AUTOMATION_QUEUE_CAPACITY {
         handle.submit(Box::new(|_| {}))?;
@@ -85,7 +154,7 @@ fn automation_submission_applies_backpressure() -> Result<()> {
 
 #[test]
 fn cross_thread_automation_request_completes_via_service_path() -> Result<()> {
-    let mut canopy = Canopy::new();
+    let mut canopy = app();
     let mut events = canopy
         .event_rx
         .take()
@@ -100,7 +169,7 @@ fn cross_thread_automation_request_completes_via_service_path() -> Result<()> {
 }
 
 fn canopy_with_binding_order(inputs: [char; 2]) -> Result<Canopy> {
-    let mut canopy = Canopy::new();
+    let mut canopy = app();
     for input in inputs {
         canopy.eval_script(&format!(
             "canopy.bind({input:?}, {{ description = \"Change mode\" }}, function() canopy.set_mode(\"next\") end)"
@@ -136,7 +205,7 @@ fn help_and_diagnostics_use_canonical_binding_order() -> Result<()> {
 
 #[test]
 fn pending_script_finalization_failure_is_atomic_and_retryable() -> Result<()> {
-    let mut canopy = Canopy::new();
+    let mut canopy = Canopy::empty();
     assert!(canopy.script_api().is_err());
     let host = canopy.script.host.clone();
     let first = host.compile("return 1")?;
@@ -175,9 +244,13 @@ fn every_finalization_checkpoint_is_atomic_and_retryable() -> Result<()> {
     ];
 
     for step in steps {
-        let mut canopy = Canopy::new();
-        canopy.register_default_bindings("fault_owner", "canopy.log('default')")?;
-        canopy.register_startup_script("fault_startup", "function setup() end")?;
+        let mut canopy = Canopy::empty();
+        canopy
+            .script
+            .register_default_bindings("fault_owner", "canopy.log('default')")?;
+        canopy
+            .script
+            .register_startup_script("fault_startup", "function setup() end")?;
         let host = canopy.script.host.clone();
         let first = host.compile("return 1")?;
         let second = host.compile("return 2")?;
@@ -318,7 +391,7 @@ fn make_mouse_event(core: &Core, node_id: NodeId) -> mouse::MouseEvent {
 #[test]
 fn render_errors_include_operation_node_and_path() -> Result<()> {
     let mut render = TestRender::new();
-    let mut canopy = Canopy::new();
+    let mut canopy = app();
     canopy
         .core
         .replace_subtree(canopy.core.root, FailRenderWidget)?;
@@ -343,7 +416,7 @@ fn render_errors_include_operation_node_and_path() -> Result<()> {
 
 #[test]
 fn ignored_mouse_callback_conservatively_requests_render() -> Result<()> {
-    let mut canopy = Canopy::new();
+    let mut canopy = app();
     let app_id = canopy
         .core
         .add_child_to_boxed(canopy.core.root, Box::new(StaticWidget::new()))?;
@@ -368,7 +441,7 @@ fn ignored_mouse_callback_conservatively_requests_render() -> Result<()> {
 
 #[test]
 fn mouse_capture_routes_drag_outside() -> Result<()> {
-    let mut canopy = Canopy::new();
+    let mut canopy = app();
     let app_id = canopy
         .core
         .add_child_to_boxed(canopy.core.root, Box::new(CaptureWidget::new()))?;
@@ -404,7 +477,7 @@ fn mouse_capture_routes_drag_outside() -> Result<()> {
 
 #[test]
 fn mouse_routing_clears_a_stale_internal_capture() -> Result<()> {
-    let mut canopy = Canopy::new();
+    let mut canopy = app();
     let stale = canopy.core.create_detached(CaptureWidget::new())?;
     canopy.core.remove_subtree(stale)?;
     canopy.core.mouse_capture = Some(stale);
@@ -423,7 +496,7 @@ fn mouse_routing_clears_a_stale_internal_capture() -> Result<()> {
 #[test]
 fn set_widget_resets_initialization() -> Result<()> {
     POLL_COUNT.store(0, Ordering::SeqCst);
-    let mut canopy = Canopy::new();
+    let mut canopy = app();
     let node_id = canopy
         .core
         .add_child_to_boxed(canopy.core.root, Box::new(PollWidget::new()))?;
@@ -490,7 +563,7 @@ fn tbindings() -> Result<()> {
 fn framework_command_bindings_share_route_resolution_and_event_scope() -> Result<()> {
     run_ttree(|c, _, tree| {
         let group = inputmap::FrameworkBindingGroup::new("test.modal");
-        let binding = c.bind_framework(
+        let binding = c.core.input_map.bind_framework(
             'h',
             inputmap::BindingOptions {
                 path: Some("/r/**/".parse()?),
@@ -531,7 +604,8 @@ fn explicit_binding_phases_override_the_same_selector_and_change_route_trace() -
             inputmap::BindingPhase::BeforeWidget,
             inputmap::BindingPhase::AfterWidget,
         ] {
-            c.bind_command(
+            bind_command(
+                c,
                 'h',
                 inputmap::BindingOptions {
                     path: Some("/r/**/".parse()?),
@@ -597,7 +671,8 @@ fn a_mouse_binding_runs_in_the_phase_it_declares() -> Result<()> {
             inputmap::BindingPhase::BeforeWidget,
             inputmap::BindingPhase::AfterWidget,
         ] {
-            c.bind_command(
+            bind_command(
+                c,
                 click,
                 mouse_options("/r/ba/ba_la/", phase)?,
                 BaLa::call_c_leaf(),
@@ -632,7 +707,8 @@ fn one_winner_decides_each_route_node_and_phases_stay_local() -> Result<()> {
         // An ancestor's early binding is early only at the ancestor. The leaf's
         // widget still sees the click first, because the route reaches the leaf
         // before the ancestor exists as a route node at all.
-        c.bind_command(
+        bind_command(
+            c,
             click,
             mouse_options("/r/", inputmap::BindingPhase::BeforeWidget)?,
             R::call_c_root(),
@@ -647,7 +723,8 @@ fn one_winner_decides_each_route_node_and_phases_stay_local() -> Result<()> {
         // A more specific path wins at the leaf, and its phase is the one the
         // leaf uses. The ancestor binding never runs, because the route ends at
         // the first node that acts.
-        c.bind_command(
+        bind_command(
+            c,
             click,
             mouse_options("/r/**/ba_la/", inputmap::BindingPhase::BeforeWidget)?,
             BaLa::call_c_leaf(),
@@ -658,7 +735,8 @@ fn one_winner_decides_each_route_node_and_phases_stay_local() -> Result<()> {
 
         // A widget that handles the click ends the route before the winning
         // late binding at that node, and no second binding is tried.
-        c.bind_command(
+        bind_command(
+            c,
             click,
             mouse_options("/r/**/ba_la/", inputmap::BindingPhase::AfterWidget)?,
             BaLa::call_c_leaf(),
@@ -710,8 +788,7 @@ impl Widget for ClickProbe {
 
 #[test]
 fn early_mouse_bindings_keep_capture_and_node_local_coordinates() -> Result<()> {
-    let mut c = Canopy::new();
-    c.add_commands::<ClickProbe>()?;
+    let mut c = app_with(|setup| setup.add_commands::<ClickProbe>());
     let probe = c.core.create_detached(ClickProbe { seen: Vec::new() })?;
     c.core.set_children(c.core.root, vec![probe])?;
     c.core
@@ -728,7 +805,8 @@ fn early_mouse_bindings_keep_capture_and_node_local_coordinates() -> Result<()> 
         }
         .into(),
     );
-    c.bind_command(
+    bind_command(
+        &mut c,
         drag,
         mouse_options("/root/click_probe/", inputmap::BindingPhase::BeforeWidget)?,
         ClickProbe::call_note(),
@@ -800,7 +878,8 @@ fn an_early_mouse_binding_respects_modal_admission_and_wheel_fallback() -> Resul
         );
         // An unbound wheel still reaches its default action rather than an
         // early binding that does not match this route.
-        c.bind_command(
+        bind_command(
+            c,
             wheel,
             mouse_options("/r/bb/**/", inputmap::BindingPhase::BeforeWidget)?,
             R::call_c_root(),
@@ -817,7 +896,8 @@ fn an_early_mouse_binding_respects_modal_admission_and_wheel_fallback() -> Resul
 
         // A framework group blocks application bindings whatever their phase.
         let group = inputmap::FrameworkBindingGroup::new("test.modal");
-        c.bind_command(
+        bind_command(
+            c,
             inputmap::InputSpec::Mouse(click_on(&c.core, tree.a_a).into()),
             mouse_options("/r/**/", inputmap::BindingPhase::BeforeWidget)?,
             R::call_c_root(),
@@ -884,8 +964,7 @@ impl Widget for Gated {
 
 /// Build a root and one child, both gated, with the child focused.
 fn gated_pair() -> Result<(Canopy, NodeId, NodeId)> {
-    let mut canopy = Canopy::new();
-    canopy.add_commands::<Gated>()?;
+    let mut canopy = app_with(|setup| setup.add_commands::<Gated>());
     canopy.core.replace_subtree(
         canopy.core.root,
         Gated {
@@ -928,12 +1007,14 @@ fn gated_options(path: &str) -> Result<inputmap::BindingOptions> {
 #[test]
 fn a_disabled_declarative_winner_is_consumed_without_running_or_bubbling() -> Result<()> {
     let (mut canopy, root, child) = gated_pair()?;
-    canopy.bind_command(
+    bind_command(
+        &mut canopy,
         'g',
         gated_options("/gated/gated/")?,
         Gated::call_act().with_target(commands::CommandTarget::Exact(child)),
     )?;
-    canopy.bind_command(
+    bind_command(
+        &mut canopy,
         'g',
         gated_options("/gated/")?,
         Gated::call_act().with_target(commands::CommandTarget::Exact(root)),
@@ -978,7 +1059,8 @@ fn binding_failures_propagate_and_still_restore_the_event_scope() -> Result<()> 
             gated.fail = true;
         }
     })?;
-    canopy.bind_command(
+    bind_command(
+        &mut canopy,
         'g',
         gated_options("/gated/gated/")?,
         Gated::call_act().with_target(commands::CommandTarget::Exact(child)),
@@ -1001,7 +1083,7 @@ fn binding_failures_propagate_and_still_restore_the_event_scope() -> Result<()> 
 
 #[test]
 fn input_mode_binding_target_switches_modes() -> Result<()> {
-    let mut canopy = Canopy::new();
+    let mut canopy = app();
     canopy.eval_script(r#"canopy.bind("i", { description = "Insert mode" }, function() canopy.set_mode("insert") end)"#)?;
 
     canopy.key(None, 'i')?;
@@ -1018,7 +1100,7 @@ fn input_mode_binding_target_switches_modes() -> Result<()> {
 
 #[test]
 fn a_transient_mode_takes_the_next_key_before_widgets() -> Result<()> {
-    let mut canopy = Canopy::new();
+    let mut canopy = app();
     canopy.eval_script(
         r#"
         canopy.bind("z", { description = "Default z" }, function() canopy.set_mode("default") end)
@@ -1063,11 +1145,13 @@ fn mode_hooks_run_once_for_each_mode_change() -> Result<()> {
         Ok(())
     }
 
-    let mut canopy = Canopy::new();
+    let mut canopy = app_with(|setup| {
+        setup.register_mode_hook("test.count", count);
+        Ok(())
+    });
     canopy.set_root_size(Size::new(10, 4))?;
     let mut backend = NopBackend::new();
     canopy.render(&mut backend)?;
-    canopy.register_mode_hook("test.count", count);
     canopy.render(&mut backend)?;
     assert_eq!(RUNS.load(Ordering::Relaxed), 0, "no mode change yet");
 
@@ -1105,16 +1189,15 @@ fn route_trace_records_unhandled_key_pipeline() -> Result<()> {
 
 #[test]
 fn register_default_bindings_is_idempotent_for_identical_scripts() -> Result<()> {
-    run_ttree(|c, _, _| {
-        c.register_default_bindings("r", "canopy.log(\"once\")")?;
-        c.register_default_bindings("r", "canopy.log(\"once\")")?;
+    let mut setup = Setup::new();
+    setup.add_commands::<R>()?;
+    setup.register_default_bindings("r", "canopy.log(\"once\")")?;
+    setup.register_default_bindings("r", "canopy.log(\"once\")")?;
 
-        let err = c
-            .register_default_bindings("r", "canopy.log(\"twice\")")
-            .unwrap_err();
-        assert!(matches!(err, error::Error::Invalid(_)));
-        Ok(())
-    })?;
+    let err = setup
+        .register_default_bindings("r", "canopy.log(\"twice\")")
+        .unwrap_err();
+    assert!(matches!(err, error::Error::Invalid(_)));
     Ok(())
 }
 
@@ -1489,8 +1572,7 @@ fn tkey_no_render() -> Result<()> {
     }
 
     let mut tr = TestRender::new();
-    let mut canopy = Canopy::new();
-    canopy.add_commands::<N>()?;
+    let mut canopy = app_with(|setup| setup.add_commands::<N>());
     canopy.core.replace_subtree(canopy.core.root, N)?;
 
     canopy.set_root_size(Size::new(10, 1))?;
@@ -1537,7 +1619,7 @@ fn zero_size_child_ok() -> Result<()> {
 
     let size = Size::new(5, 1);
     let mut cr = NopBackend::new();
-    let mut canopy = Canopy::new();
+    let mut canopy = app();
     canopy
         .core
         .replace_subtree(canopy.core.root, Parent::new())?;
@@ -1555,14 +1637,17 @@ fn zero_size_child_ok() -> Result<()> {
 
 #[test]
 fn visible_render_limits_reject_sizes_before_publication() -> Result<()> {
-    let mut canopy = Canopy::new();
+    let mut canopy = app();
     assert!(matches!(
         canopy.set_root_size(Size::new(2049, 1)),
         Err(Error::RenderWidthLimit { .. })
     ));
     assert_eq!(canopy.frame.root_size, None);
 
-    canopy.set_render_limits(RenderLimits::new(4, 4, 15))?;
+    let mut canopy = app_with(|setup| {
+        setup.set_render_limits(RenderLimits::new(4, 4, 15));
+        Ok(())
+    });
     assert!(matches!(
         canopy.set_root_size(Size::new(4, 4)),
         Err(Error::RenderCellLimit { .. })
@@ -1570,12 +1655,11 @@ fn visible_render_limits_reject_sizes_before_publication() -> Result<()> {
     assert_eq!(canopy.frame.root_size, None);
 
     let accepted = RenderLimits::new(4, 4, 16);
-    canopy.set_render_limits(accepted)?;
+    let mut canopy = app_with(move |setup| {
+        setup.set_render_limits(accepted);
+        Ok(())
+    });
     canopy.set_root_size(Size::new(4, 4))?;
-    assert!(matches!(
-        canopy.set_render_limits(RenderLimits::new(3, 4, 16)),
-        Err(Error::RenderWidthLimit { .. })
-    ));
     assert_eq!(canopy.frame.render_limits, accepted);
     Ok(())
 }
@@ -1689,7 +1773,7 @@ fn bind_key_phase(
 #[test]
 #[should_panic(expected = "key prediction mismatch")]
 fn an_ignored_prediction_that_handles_panics_in_debug() {
-    let mut canopy = Canopy::new();
+    let mut canopy = app();
     focused_leaf(&mut canopy, OverclaimingLeaf).expect("leaf mounted");
     canopy.key(None, 'x').expect("route dispatched");
 }
@@ -1698,14 +1782,14 @@ fn an_ignored_prediction_that_handles_panics_in_debug() {
 #[test]
 #[should_panic(expected = "key prediction mismatch")]
 fn a_handled_prediction_that_ignores_panics_in_debug() {
-    let mut canopy = Canopy::new();
+    let mut canopy = app();
     focused_leaf(&mut canopy, UnderclaimingLeaf).expect("leaf mounted");
     canopy.key(None, 'x').expect("route dispatched");
 }
 
 #[test]
 fn a_prediction_mismatch_records_a_route_trace_entry() {
-    let mut canopy = Canopy::new();
+    let mut canopy = app();
     focused_leaf(&mut canopy, OverclaimingLeaf).expect("leaf mounted");
     // A debug build also fails an assertion once the entry is recorded.
     let _outcome = catch_unwind(AssertUnwindSafe(|| canopy.key(None, 'x')));
@@ -1717,7 +1801,7 @@ fn a_prediction_mismatch_records_a_route_trace_entry() {
 
 #[test]
 fn explain_key_reports_a_widget_outcome_for_the_focus() -> Result<()> {
-    let mut canopy = Canopy::new();
+    let mut canopy = app();
     let leaf = focused_leaf(&mut canopy, PredictingLeaf)?;
     let explanation = canopy.explain_key(Some(leaf), 'x'.into())?;
     assert_eq!(explanation.focus, leaf);
@@ -1735,7 +1819,7 @@ fn explain_key_reports_a_widget_outcome_for_the_focus() -> Result<()> {
 
 #[test]
 fn a_default_prediction_passes_the_key_to_an_after_widget_binding() -> Result<()> {
-    let mut canopy = Canopy::new();
+    let mut canopy = app();
     let leaf = focused_leaf(&mut canopy, PlainLeaf)?;
     let id = bind_key(&mut canopy, 'q')?;
     let explanation = canopy.explain_key(Some(leaf), 'q'.into())?;
@@ -1754,7 +1838,7 @@ fn a_default_prediction_passes_the_key_to_an_after_widget_binding() -> Result<()
 
 #[test]
 fn send_key_checked_delivers_a_matching_binding_from_a_script() -> Result<()> {
-    let mut canopy = Canopy::new();
+    let mut canopy = app();
     // The check runs from evaluated source, so a replay that records the
     // source repeats it.
     canopy.eval_script(
@@ -1770,7 +1854,7 @@ fn send_key_checked_delivers_a_matching_binding_from_a_script() -> Result<()> {
 
 #[test]
 fn send_key_checked_allows_a_widget_to_suppress_an_after_widget_binding() -> Result<()> {
-    let mut canopy = Canopy::new();
+    let mut canopy = app();
     let leaf = focused_leaf(&mut canopy, PredictingLeaf)?;
     bind_key(&mut canopy, 'x')?;
 
@@ -1787,7 +1871,7 @@ fn send_key_checked_allows_a_widget_to_suppress_an_after_widget_binding() -> Res
 
 #[test]
 fn send_key_checked_accepts_an_unhandled_route_at_a_modal_boundary() -> Result<()> {
-    let mut canopy = Canopy::new();
+    let mut canopy = app();
     let modal = focused_leaf(&mut canopy, PredictingLeaf)?;
     canopy.core.open_modal(crate::ModalOptions {
         owner: canopy.root_id(),
@@ -1837,7 +1921,7 @@ fn bind_prefix_mode(canopy: &mut Canopy) -> Result<()> {
 
 #[test]
 fn a_transient_mode_under_an_application_modal_takes_the_next_key() -> Result<()> {
-    let mut canopy = Canopy::new();
+    let mut canopy = app();
     modal_leaf(&mut canopy, crate::ModalBindings::Application)?;
     bind_prefix_mode(&mut canopy)?;
 
@@ -1889,7 +1973,7 @@ fn a_transient_mode_under_an_application_modal_takes_the_next_key() -> Result<()
 
 #[test]
 fn a_checked_transient_key_under_an_application_modal_matches_its_analysis() -> Result<()> {
-    let mut canopy = Canopy::new();
+    let mut canopy = app();
     modal_leaf(&mut canopy, crate::ModalBindings::Application)?;
     bind_prefix_mode(&mut canopy)?;
     canopy.push_transient_input_mode("prefix");
@@ -1908,7 +1992,7 @@ fn a_checked_transient_key_under_an_application_modal_matches_its_analysis() -> 
 
 #[test]
 fn a_framework_modal_suspends_a_transient_mode() -> Result<()> {
-    let mut canopy = Canopy::new();
+    let mut canopy = app();
     let group = inputmap::FrameworkBindingGroup::new("test.modal");
     modal_leaf(&mut canopy, crate::ModalBindings::Framework(group))?;
     bind_prefix_mode(&mut canopy)?;
@@ -1932,7 +2016,7 @@ fn a_framework_modal_suspends_a_transient_mode() -> Result<()> {
 
 #[test]
 fn explain_key_reports_before_widget_and_unhandled_outcomes() -> Result<()> {
-    let mut canopy = Canopy::new();
+    let mut canopy = app();
     let leaf = focused_leaf(&mut canopy, PredictingLeaf)?;
     let id = bind_key_phase(&mut canopy, 'b', crate::BindingPhase::BeforeWidget)?;
 
@@ -1955,7 +2039,7 @@ fn explain_key_reports_before_widget_and_unhandled_outcomes() -> Result<()> {
 
 #[test]
 fn explain_key_matches_the_actual_route() -> Result<()> {
-    let mut canopy = Canopy::new();
+    let mut canopy = app();
     canopy.eval_script(
         r#"canopy.bind("q", { description = "Switch" }, function() canopy.set_mode("ran") end)"#,
     )?;
@@ -1993,7 +2077,7 @@ fn explain_key_matches_the_actual_route() -> Result<()> {
 
 #[test]
 fn explain_key_reports_transient_binding_and_dismissal() -> Result<()> {
-    let mut canopy = Canopy::new();
+    let mut canopy = app();
     canopy.eval_script(
         r#"
         canopy.keymap({
@@ -2036,7 +2120,7 @@ fn explain_key_reports_transient_binding_and_dismissal() -> Result<()> {
 
 #[test]
 fn send_key_checked_rechecks_between_calls() -> Result<()> {
-    let mut canopy = Canopy::new();
+    let mut canopy = app();
     canopy.eval_script(
         r#"canopy.bind("x", { description = "Switch" }, function() canopy.set_mode("ran") end)"#,
     )?;
@@ -2062,7 +2146,7 @@ fn send_key_checked_rechecks_between_calls() -> Result<()> {
 
 #[test]
 fn send_key_checked_rechecks_focus_and_tree_changes() -> Result<()> {
-    let mut canopy = Canopy::new();
+    let mut canopy = app();
     let first = focused_leaf(&mut canopy, PredictingLeaf)?;
     let second = canopy.core.create_detached(PredictingLeaf)?;
     canopy.core.attach(canopy.root_id(), second)?;
@@ -2086,7 +2170,7 @@ fn send_key_checked_rechecks_focus_and_tree_changes() -> Result<()> {
 
 #[test]
 fn send_key_checked_rejects_a_mismatched_expectation_without_delivery() -> Result<()> {
-    let mut canopy = Canopy::new();
+    let mut canopy = app();
     canopy.eval_script(
         r#"canopy.bind("x", { description = "Switch" }, function() canopy.set_mode("ran") end)"#,
     )?;
@@ -2157,19 +2241,18 @@ fn mount_action_leaf(canopy: &mut Canopy, leaf: ActionLeaf) -> Result<NodeId> {
 
 #[test]
 fn the_rendered_api_narrows_the_action_arm_to_registered_names() -> Result<()> {
-    let mut empty = Canopy::new();
-    empty.finalize_api()?;
+    let empty = app();
     assert!(
         !empty.script_api()?.contains("WidgetActionName"),
         "an empty catalog leaves the action arm at commands and callbacks"
     );
 
-    let mut canopy = Canopy::new();
-    canopy.register_widget_action(inputmap::WidgetActionSpec::new(
-        "test.clear",
-        "Clear the test leaf",
-    )?)?;
-    canopy.finalize_api()?;
+    let mut canopy = app_with(|setup| {
+        setup.register_widget_action(inputmap::WidgetActionSpec::new(
+            "test.clear",
+            "Clear the test leaf",
+        )?)
+    });
     let api = canopy.script_api()?;
     assert!(
         api.contains("export type WidgetActionName = \"test.clear\""),
@@ -2200,8 +2283,7 @@ fn the_rendered_api_narrows_the_action_arm_to_registered_names() -> Result<()> {
 
 #[test]
 fn a_widget_action_dispatches_to_its_accepting_consumer() -> Result<()> {
-    let mut canopy = Canopy::new();
-    canopy.register_widget_action(inputmap::WidgetActionSpec::new("test.clear", "Clear")?)?;
+    let mut canopy = clear_action_app();
     let calls = Arc::new(AtomicUsize::new(0));
     let leaf = mount_action_leaf(
         &mut canopy,
@@ -2248,8 +2330,7 @@ fn a_widget_action_dispatches_to_its_accepting_consumer() -> Result<()> {
 
 #[test]
 fn a_dormant_action_does_not_shadow_the_next_candidate() -> Result<()> {
-    let mut canopy = Canopy::new();
-    canopy.register_widget_action(inputmap::WidgetActionSpec::new("test.clear", "Clear")?)?;
+    let mut canopy = clear_action_app();
     let raw = Arc::new(AtomicUsize::new(0));
     let leaf = mount_action_leaf(
         &mut canopy,
@@ -2290,8 +2371,7 @@ fn a_dormant_action_does_not_shadow_the_next_candidate() -> Result<()> {
 
 #[test]
 fn a_dormant_global_action_falls_through_to_the_default_tier() -> Result<()> {
-    let mut canopy = Canopy::new();
-    canopy.register_widget_action(inputmap::WidgetActionSpec::new("test.clear", "Clear")?)?;
+    let mut canopy = clear_action_app();
     mount_action_leaf(
         &mut canopy,
         ActionLeaf {
@@ -2325,8 +2405,7 @@ fn a_dormant_global_action_falls_through_to_the_default_tier() -> Result<()> {
 
 #[test]
 fn a_transient_mode_offers_its_action_before_the_raw_key() -> Result<()> {
-    let mut canopy = Canopy::new();
-    canopy.register_widget_action(inputmap::WidgetActionSpec::new("test.clear", "Clear")?)?;
+    let mut canopy = clear_action_app();
     let calls = Arc::new(AtomicUsize::new(0));
     let raw = Arc::new(AtomicUsize::new(0));
     mount_action_leaf(
@@ -2370,8 +2449,7 @@ fn a_transient_mode_offers_its_action_before_the_raw_key() -> Result<()> {
 
 #[test]
 fn a_transient_mode_dismisses_a_dormant_action() -> Result<()> {
-    let mut canopy = Canopy::new();
-    canopy.register_widget_action(inputmap::WidgetActionSpec::new("test.clear", "Clear")?)?;
+    let mut canopy = clear_action_app();
     let raw = Arc::new(AtomicUsize::new(0));
     mount_action_leaf(
         &mut canopy,
@@ -2407,8 +2485,7 @@ fn a_transient_mode_dismisses_a_dormant_action() -> Result<()> {
 
 #[test]
 fn only_the_first_accepting_consumer_runs() -> Result<()> {
-    let mut canopy = Canopy::new();
-    canopy.register_widget_action(inputmap::WidgetActionSpec::new("test.clear", "Clear")?)?;
+    let mut canopy = clear_action_app();
     let leaf_calls = Arc::new(AtomicUsize::new(0));
     let parent_calls = Arc::new(AtomicUsize::new(0));
     let parent = canopy.core.create_detached(ActionLeaf {
@@ -2441,8 +2518,7 @@ fn only_the_first_accepting_consumer_runs() -> Result<()> {
 
 #[test]
 fn a_declining_child_leaves_an_action_to_its_accepting_ancestor() -> Result<()> {
-    let mut canopy = Canopy::new();
-    canopy.register_widget_action(inputmap::WidgetActionSpec::new("test.clear", "Clear")?)?;
+    let mut canopy = clear_action_app();
     let parent_calls = Arc::new(AtomicUsize::new(0));
     let parent = canopy.core.create_detached(ActionLeaf {
         action: "test.clear",
@@ -2462,7 +2538,8 @@ fn a_declining_child_leaves_an_action_to_its_accepting_ancestor() -> Result<()> 
     canopy.core.attach(parent, leaf)?;
     canopy.core.set_focus(leaf)?;
     let key = key::Key::parse_spec("ctrl-x")?;
-    let id = canopy.bind_widget_action(
+    let id = bind_widget_action(
+        &mut canopy,
         key,
         default_options(None, "Clear", None)?,
         inputmap::WidgetActionName::new("test.clear")?,
@@ -2521,8 +2598,7 @@ fn default_options(
 
 #[test]
 fn a_disabled_command_claims_the_key_after_a_dormant_action() -> Result<()> {
-    let mut canopy = Canopy::new();
-    canopy.register_widget_action(inputmap::WidgetActionSpec::new("test.clear", "Clear")?)?;
+    let mut canopy = clear_action_app();
     canopy.core.commands.add(DisabledLeaf::commands())?;
     let calls = Arc::new(AtomicUsize::new(0));
     mount_action_leaf(
@@ -2536,12 +2612,14 @@ fn a_disabled_command_claims_the_key_after_a_dormant_action() -> Result<()> {
         },
     )?;
     let key = key::Key::parse_spec("ctrl-x")?;
-    canopy.bind_widget_action(
+    bind_widget_action(
+        &mut canopy,
         key,
         default_options(Some("action_leaf/"), "Dormant clear", None)?,
         inputmap::WidgetActionName::new("test.clear")?,
     )?;
-    canopy.bind_command(
+    bind_command(
+        &mut canopy,
         key,
         default_options(
             None,
@@ -2569,8 +2647,7 @@ fn a_disabled_command_claims_the_key_after_a_dormant_action() -> Result<()> {
 
 #[test]
 fn a_disabled_command_claims_the_key_before_an_accepting_action() -> Result<()> {
-    let mut canopy = Canopy::new();
-    canopy.register_widget_action(inputmap::WidgetActionSpec::new("test.clear", "Clear")?)?;
+    let mut canopy = clear_action_app();
     canopy.core.commands.add(DisabledLeaf::commands())?;
     let calls = Arc::new(AtomicUsize::new(0));
     mount_action_leaf(
@@ -2584,7 +2661,8 @@ fn a_disabled_command_claims_the_key_before_an_accepting_action() -> Result<()> 
         },
     )?;
     let key = key::Key::parse_spec("ctrl-x")?;
-    canopy.bind_command(
+    bind_command(
+        &mut canopy,
         key,
         default_options(
             Some("action_leaf/"),
@@ -2593,7 +2671,8 @@ fn a_disabled_command_claims_the_key_before_an_accepting_action() -> Result<()> 
         )?,
         DisabledLeaf::call_fire(),
     )?;
-    canopy.bind_widget_action(
+    bind_widget_action(
+        &mut canopy,
         key,
         default_options(None, "Clear", None)?,
         inputmap::WidgetActionName::new("test.clear")?,
@@ -2616,8 +2695,7 @@ fn a_disabled_command_claims_the_key_before_an_accepting_action() -> Result<()> 
 
 #[test]
 fn an_unreadable_widget_declines_an_action() -> Result<()> {
-    let mut canopy = Canopy::new();
-    canopy.register_widget_action(inputmap::WidgetActionSpec::new("test.clear", "Clear")?)?;
+    let mut canopy = clear_action_app();
     let calls = Arc::new(AtomicUsize::new(0));
     let leaf = mount_action_leaf(
         &mut canopy,
@@ -2630,7 +2708,8 @@ fn an_unreadable_widget_declines_an_action() -> Result<()> {
         },
     )?;
     let key = key::Key::parse_spec("ctrl-x")?;
-    canopy.bind_widget_action(
+    bind_widget_action(
+        &mut canopy,
         key,
         default_options(None, "Clear", None)?,
         inputmap::WidgetActionName::new("test.clear")?,
@@ -2659,8 +2738,7 @@ fn an_unreadable_widget_declines_an_action() -> Result<()> {
 
 #[test]
 fn checked_dispatch_accepts_an_action_expectation() -> Result<()> {
-    let mut canopy = Canopy::new();
-    canopy.register_widget_action(inputmap::WidgetActionSpec::new("test.clear", "Clear")?)?;
+    let mut canopy = clear_action_app();
     let calls = Arc::new(AtomicUsize::new(0));
     mount_action_leaf(
         &mut canopy,
@@ -2673,7 +2751,8 @@ fn checked_dispatch_accepts_an_action_expectation() -> Result<()> {
         },
     )?;
     let key = key::Key::parse_spec("ctrl-x")?;
-    let id = canopy.bind_widget_action(
+    let id = bind_widget_action(
+        &mut canopy,
         key,
         default_options(None, "Clear", None)?,
         inputmap::WidgetActionName::new("test.clear")?,
@@ -2697,10 +2776,7 @@ fn checked_dispatch_accepts_an_action_expectation() -> Result<()> {
 #[test]
 #[should_panic(expected = "accepts_action promised Handle")]
 fn an_inconsistent_action_consumer_trips_the_debug_assert() {
-    let mut canopy = Canopy::new();
-    canopy
-        .register_widget_action(inputmap::WidgetActionSpec::new("test.clear", "Clear").unwrap())
-        .unwrap();
+    let mut canopy = clear_action_app();
     let calls = Arc::new(AtomicUsize::new(0));
     mount_action_leaf(
         &mut canopy,

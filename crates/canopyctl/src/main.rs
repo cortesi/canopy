@@ -646,7 +646,7 @@ mod tests {
         thread,
     };
 
-    use canopy::{Canopy, Fixture, Work, geom::Size, testing::contracts};
+    use canopy::{CanopyBuilder, Fixture, Work, geom::Size, testing::contracts};
     use canopy_mcp::{AppMetadata, ExecutionMode, ResetPolicy, serve_uds};
     use futures::{StreamExt, executor};
     use tmcp::schema::ToolResultMode;
@@ -660,15 +660,17 @@ mod tests {
 
     #[test]
     fn live_replay_applies_fixture_once_and_preserves_state_between_steps() -> Result<()> {
-        let mut canopy = Canopy::new();
         let applications = Arc::new(AtomicUsize::new(0));
         let observed = Arc::clone(&applications);
-        canopy.register_fixture(Fixture::new("seed", "Seed live state", move |canopy| {
-            observed.fetch_add(1, Ordering::Relaxed);
-            canopy.set_input_mode("seed");
-            Ok(())
-        }))?;
-        canopy.finalize_api()?;
+        let mut canopy = CanopyBuilder::new()
+            .configure(move |setup| {
+                setup.register_fixture(Fixture::new("seed", "Seed live state", move |canopy| {
+                    observed.fetch_add(1, Ordering::Relaxed);
+                    canopy.set_input_mode("seed");
+                    Ok(())
+                }))
+            })
+            .build()?;
         canopy.set_root_size(Size::new(20, 5))?;
         canopy.turn(Work::Prepare)?;
         let automation = canopy.automation_handle();

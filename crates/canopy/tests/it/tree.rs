@@ -3,7 +3,8 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, Context, ContextExt, NodeId, NodeName, ViewContext, ViewContextExt, Widget,
+        Canopy, CanopyBuilder, Context, ContextExt, NodeId, NodeName, ViewContext, ViewContextExt,
+        Widget,
         error::{Error, Result},
         geom::{Point, Size},
         path::Path,
@@ -42,7 +43,7 @@ mod tests {
 
     #[test]
     fn failed_mount_restores_structure_but_retains_widget_mutation() -> Result<()> {
-        let mut canopy = Canopy::new();
+        let mut canopy = CanopyBuilder::new().build()?;
         canopy.with_root_context(|ctx| {
             let child = ctx.create_detached(MountCounter::default())?;
             for expected_attempts in 1..=2 {
@@ -61,7 +62,7 @@ mod tests {
 
     #[test]
     fn nested_structural_rollback_retains_widget_mutation() -> Result<()> {
-        let mut canopy = Canopy::new();
+        let mut canopy = CanopyBuilder::new().build()?;
         canopy.with_root_context(|ctx| {
             let child = ctx.create_detached(TreeWidget::new("original"))?;
             let root = ctx.node_id();
@@ -111,7 +112,7 @@ mod tests {
 
     #[test]
     fn preorder_yields_the_tree_in_declaration_order() -> Result<()> {
-        let mut canopy = Canopy::new();
+        let mut canopy = CanopyBuilder::new().build()?;
         let (root, ..) = build_tree(&mut canopy)?;
 
         let names = canopy.with_root_view(|context| {
@@ -126,7 +127,7 @@ mod tests {
 
     #[test]
     fn test_node_path() -> Result<()> {
-        let mut canopy = Canopy::new();
+        let mut canopy = CanopyBuilder::new().build()?;
         let (root, _ba, _bb, ba_la, _ba_lb, _bb_la, _bb_lb) = build_tree(&mut canopy)?;
 
         canopy.with_root_view(|context| {
@@ -157,7 +158,7 @@ mod tests {
 
     #[test]
     fn test_locate_single_cell_grid() -> Result<()> {
-        let mut canopy = Canopy::new();
+        let mut canopy = CanopyBuilder::new().build()?;
         let grid = Grid::install(&mut canopy, 0, 2)?;
         let grid_size = grid.expected_size();
         assert_eq!(grid_size, Size::new(10, 10));
@@ -187,7 +188,7 @@ mod tests {
 
     #[test]
     fn test_locate_2x2_grid() -> Result<()> {
-        let mut canopy = Canopy::new();
+        let mut canopy = CanopyBuilder::new().build()?;
         let grid = Grid::install(&mut canopy, 1, 2)?;
         let grid_size = grid.expected_size();
         assert_eq!(grid_size, Size::new(20, 20));
@@ -216,7 +217,7 @@ mod tests {
 
     #[test]
     fn test_locate_3x3_grid() -> Result<()> {
-        let mut canopy = Canopy::new();
+        let mut canopy = CanopyBuilder::new().build()?;
         let grid = Grid::install(&mut canopy, 1, 3)?;
         let grid_size = grid.expected_size();
         assert_eq!(grid_size, Size::new(30, 30));
@@ -236,7 +237,7 @@ mod tests {
 
     #[test]
     fn test_locate_nested_grid() -> Result<()> {
-        let mut canopy = Canopy::new();
+        let mut canopy = CanopyBuilder::new().build()?;
         let grid = Grid::install(&mut canopy, 2, 2)?;
         let grid_size = grid.expected_size();
         assert_eq!(grid_size, Size::new(40, 40));
@@ -258,7 +259,7 @@ mod tests {
 
     #[test]
     fn test_grid_boundary_conditions() -> Result<()> {
-        let mut canopy = Canopy::new();
+        let mut canopy = CanopyBuilder::new().build()?;
         let grid = Grid::install(&mut canopy, 1, 2)?;
 
         let result = locate_name(&canopy, grid.root, Point { x: 100, y: 100 })?;

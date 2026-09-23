@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    Canopy, Context, EventOutcome, ViewContext, Widget, WidgetSemantics,
+    Canopy, CanopyBuilder, Context, EventOutcome, ViewContext, Widget, WidgetSemantics,
     commands::ArgValue,
     derive_commands,
     error::Result,
@@ -110,12 +110,16 @@ impl Widget for Contract {
 
 /// Create a finalized, unprepared fixture with a fixed 12 by 3 viewport.
 pub fn app() -> Result<Canopy> {
-    let mut app = Canopy::new();
-    app.add_commands::<Contract>()?;
-    app.replace_root(Contract { value: 0 })?;
-    app.with_root_context(|ctx| ctx.set_semantic_key(ctx.root_id(), ctx.root_id(), "contract"))?;
+    let mut app = CanopyBuilder::new()
+        .configure(|setup| setup.add_commands::<Contract>())
+        .assemble(|app| {
+            app.replace_root(Contract { value: 0 })?;
+            app.with_root_context(|ctx| {
+                ctx.set_semantic_key(ctx.root_id(), ctx.root_id(), "contract")
+            })
+        })
+        .build()?;
     app.set_root_size(Size::new(12, 3))?;
-    app.finalize_api()?;
     Ok(app)
 }
 

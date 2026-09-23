@@ -5,7 +5,8 @@ mod tests {
     use std::any::Any;
 
     use canopy::{
-        Canopy, ContextExt, Loader, NodeId, NodeName, TypedId, ViewContext, ViewContextExt, Widget,
+        Canopy, CanopyBuilder, ContextExt, NodeId, NodeName, Register, TypedId, ViewContext,
+        ViewContextExt, Widget,
         commands::{CommandStatus, CommandTarget},
         derive_commands,
         error::Result,
@@ -65,17 +66,19 @@ mod tests {
     }
 
     fn setup() -> Result<Setup> {
-        let mut canopy = Canopy::new();
-        Root::load(&mut canopy)?;
-        canopy.add_commands::<Counter>()?;
-        canopy.add_commands::<Button>()?;
+        let mut canopy = CanopyBuilder::new()
+            .configure(|setup| {
+                Root::register(setup)?;
+                setup.add_commands::<Counter>()?;
+                setup.add_commands::<Button>()
+            })
+            .build()?;
         let app = Root::new().install(&mut canopy, App)?;
         let (first, second) = canopy.with_context(app, |ctx| {
             let first = ctx.add_child(Counter::default())?;
             let second = ctx.add_child(Counter::default())?;
             Ok((first, second))
         })?;
-        canopy.finalize_api()?;
         Ok(Setup {
             canopy,
             app,

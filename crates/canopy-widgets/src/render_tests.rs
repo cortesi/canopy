@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, Context, ContextExt, Loader, NodeName, ViewContext, ViewContextExt, Widget, buf,
+        Context, ContextExt, NodeName, ViewContext, ViewContextExt, Widget, buf,
         commands::{CommandNode, CommandSpec},
         error::Result,
         event::{key, mouse},
@@ -38,17 +38,17 @@ mod tests {
         .to_vec();
         let root = SnapshotRoot::new(Dropdown::new(items)?);
         let mut harness = Harness::builder(root).size(10, 4).build()?;
-        harness.with_root_context(|_root: &mut SnapshotRoot<Dropdown<String>>, ctx| {
+        harness.with_root_widget_context(|_root: &mut SnapshotRoot<Dropdown<String>>, ctx| {
             ctx.with_unique_descendant::<Dropdown<String>, _>(|dropdown, ctx| dropdown.toggle(ctx))
         })?;
         harness.render()?;
-        harness.with_root_context(|_root: &mut SnapshotRoot<Dropdown<String>>, ctx| {
+        harness.with_root_widget_context(|_root: &mut SnapshotRoot<Dropdown<String>>, ctx| {
             ctx.with_unique_descendant::<Dropdown<String>, _>(|_, ctx| {
                 ctx.set_layout(Layout::fill().padding(Edges::all(1)))
             })
         })?;
         harness.render()?;
-        harness.with_root_context(|_root: &mut SnapshotRoot<Dropdown<String>>, ctx| {
+        harness.with_root_widget_context(|_root: &mut SnapshotRoot<Dropdown<String>>, ctx| {
             ctx.with_unique_descendant::<Dropdown<String>, _>(|_, ctx| {
                 assert!(ctx.scroll_to(3, 2).changed());
                 Ok(())
@@ -58,7 +58,7 @@ mod tests {
         assert!(harness.tbuf().contains_text("Charlie-"));
         assert_eq!(harness.buf().get(Point { x: 1, y: 1 }).unwrap().ch, 'C');
         harness.mouse(click_at(Point { x: 1, y: 1 }))?;
-        harness.with_root_context(|_root: &mut SnapshotRoot<Dropdown<String>>, ctx| {
+        harness.with_root_widget_context(|_root: &mut SnapshotRoot<Dropdown<String>>, ctx| {
             ctx.with_unique_descendant::<Dropdown<String>, _>(|dropdown, _| {
                 assert_eq!(dropdown.selected_index(), 2);
                 Ok(())
@@ -75,13 +75,13 @@ mod tests {
             .to_vec();
         let root = SnapshotRoot::new(Selector::new(items));
         let mut harness = Harness::builder(root).size(10, 4).build()?;
-        harness.with_root_context(|_root: &mut SnapshotRoot<Selector<String>>, ctx| {
+        harness.with_root_widget_context(|_root: &mut SnapshotRoot<Selector<String>>, ctx| {
             ctx.with_unique_descendant::<Selector<String>, _>(|_, ctx| {
                 ctx.set_layout(Layout::fill().padding(Edges::all(1)))
             })
         })?;
         harness.render()?;
-        harness.with_root_context(|_root: &mut SnapshotRoot<Selector<String>>, ctx| {
+        harness.with_root_widget_context(|_root: &mut SnapshotRoot<Selector<String>>, ctx| {
             ctx.with_unique_descendant::<Selector<String>, _>(|_, ctx| {
                 assert!(ctx.scroll_to(4, 2).changed());
                 Ok(())
@@ -91,7 +91,7 @@ mod tests {
         assert!(harness.tbuf().contains_text("Charlie-"));
         assert_eq!(harness.buf().get(Point { x: 1, y: 1 }).unwrap().ch, 'C');
         harness.mouse(click_at(Point { x: 1, y: 1 }))?;
-        harness.with_root_context(|_root: &mut SnapshotRoot<Selector<String>>, ctx| {
+        harness.with_root_widget_context(|_root: &mut SnapshotRoot<Selector<String>>, ctx| {
             ctx.with_unique_descendant::<Selector<String>, _>(|selector, _| {
                 assert_eq!(selector.selected_items(), [&"Charlie-long".to_string()]);
                 Ok(())
@@ -109,14 +109,14 @@ mod tests {
             .size(12, 2)
             .build()?;
         harness.render()?;
-        harness.with_root_context(|_: &mut SnapshotRoot<Selector<String>>, ctx| {
+        harness.with_root_widget_context(|_: &mut SnapshotRoot<Selector<String>>, ctx| {
             ctx.with_unique_descendant::<Selector<String>, _>(|selector, ctx| {
                 selector.select_last(ctx)
             })
         })?;
         harness.render()?;
         assert!(harness.tbuf().contains_text("[ ] Fifth"));
-        harness.with_root_context(|_: &mut SnapshotRoot<Selector<String>>, ctx| {
+        harness.with_root_widget_context(|_: &mut SnapshotRoot<Selector<String>>, ctx| {
             ctx.with_unique_descendant::<Selector<String>, _>(|selector, ctx| {
                 selector.toggle(ctx)?;
                 selector.select_by(ctx, -3)
@@ -124,7 +124,7 @@ mod tests {
         })?;
         harness.render()?;
         assert!(harness.tbuf().contains_text("[ ] Second"));
-        harness.with_root_context(|_: &mut SnapshotRoot<Selector<String>>, ctx| {
+        harness.with_root_widget_context(|_: &mut SnapshotRoot<Selector<String>>, ctx| {
             ctx.with_unique_descendant::<Selector<String>, _>(|selector, ctx| {
                 assert_eq!(selector.selected_items(), [&"Fifth".to_string()]);
                 selector.select_first(ctx)
@@ -146,7 +146,7 @@ mod tests {
         harness.render()?;
         // Expansion and navigation can happen in the same command turn,
         // before the expanded canvas has been measured.
-        harness.with_root_context(|_: &mut SnapshotRoot<Dropdown<String>>, ctx| {
+        harness.with_root_widget_context(|_: &mut SnapshotRoot<Dropdown<String>>, ctx| {
             ctx.with_unique_descendant::<Dropdown<String>, _>(|dropdown, ctx| {
                 dropdown.toggle(ctx)?;
                 dropdown.select_by(ctx, 4)
@@ -154,17 +154,17 @@ mod tests {
         })?;
         harness.render()?;
         assert!(harness.tbuf().contains_text("Fifth"));
-        harness.with_root_context(|_: &mut SnapshotRoot<Dropdown<String>>, ctx| {
+        harness.with_root_widget_context(|_: &mut SnapshotRoot<Dropdown<String>>, ctx| {
             ctx.with_unique_descendant::<Dropdown<String>, _>(|dropdown, ctx| dropdown.confirm(ctx))
         })?;
         harness.render()?;
         assert!(harness.tbuf().contains_text("Fifth ▼"));
-        harness.with_root_context(|_: &mut SnapshotRoot<Dropdown<String>>, ctx| {
+        harness.with_root_widget_context(|_: &mut SnapshotRoot<Dropdown<String>>, ctx| {
             ctx.with_unique_descendant::<Dropdown<String>, _>(|dropdown, ctx| dropdown.toggle(ctx))
         })?;
         harness.render()?;
         assert!(harness.tbuf().contains_text("Fifth"));
-        harness.with_root_context(|_: &mut SnapshotRoot<Dropdown<String>>, ctx| {
+        harness.with_root_widget_context(|_: &mut SnapshotRoot<Dropdown<String>>, ctx| {
             ctx.with_unique_descendant::<Dropdown<String>, _>(|dropdown, ctx| {
                 dropdown.select_by(ctx, -4)
             })
@@ -215,12 +215,6 @@ mod tests {
         }
     }
 
-    impl<W: Widget + 'static> Loader for SnapshotRoot<W> {
-        fn load(_c: &mut Canopy) -> Result<()> {
-            Ok(())
-        }
-    }
-
     fn mouse_at(action: mouse::Action, x: i32, y: i32) -> mouse::MouseEvent {
         mouse::MouseEvent {
             action,
@@ -239,7 +233,7 @@ mod tests {
         let mut harness = Harness::builder(SnapshotRoot::new(Frame::new()))
             .size(12, 8)
             .build()?;
-        harness.with_root_context(|_root: &mut SnapshotRoot<Frame>, ctx| {
+        harness.with_root_widget_context(|_root: &mut SnapshotRoot<Frame>, ctx| {
             ctx.with_unique_descendant::<Frame, _>(|_, ctx| {
                 ctx.add_child(Text::new(text))?;
                 Ok(())
@@ -288,10 +282,11 @@ mod tests {
         let first = harness
             .canopy
             .with_root_view(|ctx| ctx.unique_descendant::<crate::Input>().unwrap().unwrap());
-        let second = harness.with_root_context(|_: &mut SnapshotRoot<crate::Input>, ctx| {
-            ctx.add_child(crate::Input::new(""))
-        })?;
-        harness.with_root_context(|_: &mut SnapshotRoot<crate::Input>, ctx| {
+        let second =
+            harness.with_root_widget_context(|_: &mut SnapshotRoot<crate::Input>, ctx| {
+                ctx.add_child(crate::Input::new(""))
+            })?;
+        harness.with_root_widget_context(|_: &mut SnapshotRoot<crate::Input>, ctx| {
             ctx.set_focus(first.into()).map(|_| ())
         })?;
         harness.render()?;
@@ -314,7 +309,7 @@ mod tests {
             harness.tbuf().lines()
         );
         assert_eq!(harness.buf().get(prompt).unwrap().ch, '查');
-        harness.with_root_context(|_: &mut SnapshotRoot<crate::Input>, ctx| {
+        harness.with_root_widget_context(|_: &mut SnapshotRoot<crate::Input>, ctx| {
             ctx.with_widget_mut(first, |input: &mut crate::Input, _| {
                 assert_eq!(input.value(), "hello");
                 assert_eq!(input.cursor().unwrap().location.x, 10);
@@ -347,7 +342,7 @@ mod tests {
         let mut harness = Harness::builder(SnapshotRoot::new(crate::Input::new("hello")))
             .size(20, 3)
             .build()?;
-        harness.with_root_context(|_root: &mut SnapshotRoot<crate::Input>, ctx| {
+        harness.with_root_widget_context(|_root: &mut SnapshotRoot<crate::Input>, ctx| {
             ctx.with_unique_descendant::<crate::Input, _>(|_, ctx| ctx.set_layout(Layout::column()))
         })?;
         harness.render()?;
@@ -364,7 +359,7 @@ mod tests {
         let mut harness = Harness::builder(SnapshotRoot::new(crate::Tabs::new()))
             .size(30, 4)
             .build()?;
-        harness.with_root_context(|_root: &mut SnapshotRoot<crate::Tabs>, ctx| {
+        harness.with_root_widget_context(|_root: &mut SnapshotRoot<crate::Tabs>, ctx| {
             ctx.with_unique_descendant::<crate::Tabs, _>(|tabs, ctx| {
                 tabs.add_tab(ctx, "One", Text::new("first page"))?;
                 tabs.add_tab(ctx, "Two", Text::new("second page"))?;
@@ -383,7 +378,7 @@ mod tests {
         assert!(harness.tbuf().contains_text("second page"));
         assert!(!harness.tbuf().contains_text("first page"));
 
-        harness.with_root_context(|_root: &mut SnapshotRoot<crate::Tabs>, ctx| {
+        harness.with_root_widget_context(|_root: &mut SnapshotRoot<crate::Tabs>, ctx| {
             ctx.with_unique_descendant::<crate::Tabs, _>(|tabs, ctx| {
                 tabs.select_by(ctx, 1)?;
                 assert_eq!(tabs.active(), 0, "moving past the last tab wraps");
@@ -474,7 +469,7 @@ mod tests {
         let mut harness = Harness::builder(root).size(10, 4).build()?;
 
         harness.render()?;
-        harness.with_root_context(|_root: &mut SnapshotRoot<List<Text>>, ctx| {
+        harness.with_root_widget_context(|_root: &mut SnapshotRoot<List<Text>>, ctx| {
             let view = ctx as &dyn ViewContext;
             let list_id = view.typed_id::<List<Text>>(view.find_one("**/list")?)?;
             ctx.with_widget_mut::<List<Text>, _>(list_id, |list, ctx| {
@@ -550,7 +545,7 @@ mod tests {
         let mut harness = Harness::builder(root).size(8, 1).build()?;
         harness.render()?;
         harness.tbuf().assert_matches(buf![" 1 abcde"]);
-        harness.with_root_context(|_root: &mut SnapshotRoot<DiffView>, ctx| {
+        harness.with_root_widget_context(|_root: &mut SnapshotRoot<DiffView>, ctx| {
             ctx.with_unique_descendant::<DiffView, _>(|_, ctx| {
                 assert!(ctx.scroll_to(5, 0).changed());
                 Ok(())

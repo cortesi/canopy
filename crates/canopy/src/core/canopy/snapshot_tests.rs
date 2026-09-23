@@ -2,7 +2,7 @@
 
 use std::{cell::Cell, rc::Rc, sync::Arc};
 
-use super::Canopy;
+use super::{Canopy, CanopyBuilder};
 use crate::{
     FrameId, Invalidation, ViewContext, Widget, WidgetSemantics,
     core::snapshot,
@@ -38,9 +38,8 @@ impl Widget for Leaf {}
 
 /// Make an application with explicit initial preparation still pending.
 fn app() -> Result<Canopy> {
-    let mut app = Canopy::new();
+    let mut app = CanopyBuilder::new().build()?;
     app.set_root_size(Size::new(8, 4))?;
-    app.finalize_api()?;
     Ok(app)
 }
 

@@ -6,8 +6,8 @@ mod tests {
     use std::{sync::Arc, time::Duration};
 
     use canopy::{
-        Canopy, Context, ContextExt, EvalRequest, EventOutcome, Render, TypedId, ViewContext,
-        ViewContextExt, Widget, Work,
+        Canopy, CanopyBuilder, Context, ContextExt, EvalRequest, EventOutcome, Render, TypedId,
+        ViewContext, ViewContextExt, Widget, Work,
         commands::ArgValue,
         error::{Error, Result},
         event::{Event, key, mouse},
@@ -41,7 +41,7 @@ mod tests {
 
     #[test]
     fn native_mutations_and_failed_callbacks_publish_the_retained_state() -> Result<()> {
-        let mut canopy = Canopy::new();
+        let mut canopy = CanopyBuilder::new().build()?;
         let widget = canopy.replace_root(TextWidget { text: "old".into() })?;
         canopy.set_root_size(Size::new(8, 3))?;
         assert!(canopy.turn(Work::Prepare)?.frame.is_some());
@@ -70,7 +70,7 @@ mod tests {
 
     #[test]
     fn read_only_access_does_not_schedule_publication() -> Result<()> {
-        let mut canopy = Canopy::new();
+        let mut canopy = CanopyBuilder::new().build()?;
         let widget = canopy.replace_root(TextWidget {
             text: "visible".into(),
         })?;
@@ -89,11 +89,10 @@ mod tests {
 
     fn eval_app() -> Result<(Canopy, TypedId<TextWidget>, Arc<ManualClock>)> {
         let clock = Arc::new(ManualClock::new());
-        let mut canopy = Canopy::new();
+        let mut canopy = CanopyBuilder::new().build()?;
         canopy.set_clock_for_testing(Arc::clone(&clock))?;
         let widget = canopy.replace_root(TextWidget { text: "old".into() })?;
         canopy.set_root_size(Size::new(8, 3))?;
-        canopy.finalize_api()?;
         canopy.turn(Work::Prepare)?;
         Ok((canopy, widget, clock))
     }
@@ -276,7 +275,7 @@ mod tests {
 
     #[test]
     fn an_input_batch_dispatches_every_event_and_publishes_one_frame() -> Result<()> {
-        let mut canopy = Canopy::new();
+        let mut canopy = CanopyBuilder::new().build()?;
         let split = canopy.replace_root(Split::default())?;
         canopy.set_root_size(Size::new(8, 4))?;
         let prepared = canopy.turn(Work::Prepare)?.frame.expect("first frame");
@@ -296,7 +295,7 @@ mod tests {
 
     #[test]
     fn an_input_batch_settles_layout_before_each_mouse_event() -> Result<()> {
-        let mut canopy = Canopy::new();
+        let mut canopy = CanopyBuilder::new().build()?;
         let split = canopy.replace_root(Split::default())?;
         canopy.set_root_size(Size::new(8, 4))?;
         canopy.turn(Work::Prepare)?;

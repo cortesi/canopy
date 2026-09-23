@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Context, ContextExt, Loader, NodeId, NodeName, TypedId, Widget, error::Result,
+        Context, ContextExt, NodeId, NodeName, TypedId, Widget, error::Result,
         testing::harness::Harness,
     };
 
@@ -39,8 +39,6 @@ mod tests {
             NodeName::convert("mount_probe")
         }
     }
-
-    impl Loader for MountProbe {}
 
     struct ChildProbe {
         mount_calls: usize,

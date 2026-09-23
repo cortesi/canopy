@@ -146,19 +146,21 @@ impl Widget for Hello {
 }
 ```
 
-A `Loader` impl registers the commands:
+A `Register` impl registers the type's commands. It runs before the API is
+finalized, and it never touches the widget tree:
 
 ```rust
-impl Loader for Hello {
-    fn load(canopy: &mut Canopy) -> Result<()> {
-        canopy.add_commands::<Self>()
+impl Register for Hello {
+    fn register(setup: &mut Setup) -> Result<()> {
+        setup.add_commands::<Self>()
     }
 }
 ```
 
-`CanopyBuilder` runs setup in three ordered phases. `configure` registers
-commands, fixtures, and defaults before API finalization. Named `bindings` and
-`config` sources run next. `assemble` then creates the widget tree:
+`CanopyBuilder` runs setup in three ordered phases. `configure` receives a
+`Setup` handle, which registers commands, bindings, fixtures, and the initial
+styles before API finalization. Named `bindings` and `config` sources run next.
+`assemble` then creates the widget tree on the finalized `Canopy`:
 
 ```rust
 /// Create the full Canopy application.
@@ -168,10 +170,10 @@ commands, fixtures, and defaults before API finalization. Named `bindings` and
 /// modes must always pass `None` so they never read or create user state.
 pub fn create_app(user_script_root: Option<PathBuf>) -> Result<Canopy> {
     let mut builder = CanopyBuilder::new()
-        .configure(|canopy| {
-            Root::load(canopy)?;
-            Hello::load(canopy)?;
-            install_styles(canopy);
+        .configure(|setup| {
+            Root::register(setup)?;
+            Hello::register(setup)?;
+            install_styles(setup.style_mut());
             Ok(())
         })
         .assemble(|canopy| {
@@ -320,7 +322,7 @@ fn default_config_root() -> Result<PathBuf> {
 `hello` keeps its counter in the widget tree, so it declares `Isolated` and
 registers no fixture. An application that owns a database or writes files
 declares `External` and registers a reset fixture with
-`Canopy::register_fixture` inside `configure`. Automation then applies that
+`Setup::register_fixture` inside `configure`. Automation then applies that
 fixture to return the application to a known state between evaluations.
 
 The command line chooses a `LaunchMode`, and nothing else changes between modes.

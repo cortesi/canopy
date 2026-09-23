@@ -5,7 +5,7 @@ mod tests {
     use std::{cell::Cell, rc::Rc};
 
     use canopy::{
-        Canopy, Context, ContextExt, Loader, NodeName, Widget,
+        CanopyBuilder, Context, ContextExt, NodeName, Register, Widget,
         commands::CommandTarget,
         derive_commands,
         error::{Error, Result},
@@ -50,10 +50,13 @@ mod tests {
     #[test]
     fn button_close_removes_its_dialog_only_after_successful_dispatch() -> Result<()> {
         for fail in [false, true] {
-            let mut canopy = Canopy::new();
-            Root::load(&mut canopy)?;
-            canopy.add_commands::<Dialog>()?;
-            canopy.add_commands::<Button>()?;
+            let mut canopy = CanopyBuilder::new()
+                .configure(|setup| {
+                    Root::register(setup)?;
+                    setup.add_commands::<Dialog>()?;
+                    setup.add_commands::<Button>()
+                })
+                .build()?;
             let app = Root::new().install(&mut canopy, App)?;
             let removed = Rc::new(Cell::new(false));
             let (dialog, button) = canopy.with_context(app, |ctx| {
@@ -69,7 +72,6 @@ mod tests {
                 )?;
                 Ok((dialog, button))
             })?;
-            canopy.finalize_api()?;
             let outcome = canopy.with_context(button, |ctx| {
                 ctx.dispatch_exact(button.into(), &Button::call_press())?;
                 Ok(())

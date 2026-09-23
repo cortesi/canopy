@@ -3,7 +3,7 @@
 use std::hint::black_box;
 
 use canopy::{
-    Canopy, Context, ContextExt, Loader, Widget, derive_commands, error::Result, layout::Layout,
+    Context, ContextExt, Register, Setup, Widget, derive_commands, error::Result, layout::Layout,
     testing::harness::Harness,
 };
 use canopy_widgets::editor::{
@@ -49,9 +49,9 @@ impl Widget for BenchmarkEditorWrapper {
     }
 }
 
-impl Loader for BenchmarkEditorWrapper {
-    fn load(c: &mut Canopy) -> Result<()> {
-        c.add_commands::<Editor>()?;
+impl Register for BenchmarkEditorWrapper {
+    fn register(setup: &mut Setup) -> Result<()> {
+        setup.add_commands::<Editor>()?;
         Ok(())
     }
 }
@@ -71,6 +71,7 @@ fn benchmark_editor_rendering(c: &mut Criterion) {
     c.bench_function("editor_render", |b| {
         let wrapper = BenchmarkEditorWrapper::new(sample_text);
         let mut harness = Harness::builder(wrapper)
+            .register::<BenchmarkEditorWrapper>()
             .size(80, 24)
             .build()
             .expect("Failed to create harness");

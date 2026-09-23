@@ -1,8 +1,8 @@
 use std::mem;
 
 use canopy::{
-    BindingId, BindingPhase, BindingTargetKind, BindingTier, Context, ContextExt, Loader, NodeId,
-    ViewContext, Widget, buf,
+    BindingId, BindingPhase, BindingTargetKind, BindingTier, CanopyBuilder, Context, ContextExt,
+    NodeId, ViewContext, Widget, buf,
     commands::{CommandArgs, CommandAvailability, CommandCall, CommandId, CommandStatus},
     error::Result,
     event::{key, mouse},
@@ -73,7 +73,10 @@ fn list_with_mice(
     mice: Vec<AvailableBinding<mouse::Mouse>>,
 ) -> BindingList {
     let mut list = BindingList::new();
-    let focus = canopy::Canopy::new().root_id();
+    let focus = CanopyBuilder::new()
+        .build()
+        .expect("an empty application builds")
+        .root_id();
     let mut captured = snapshot(focus, bindings);
     captured.mouse_bindings = mice;
     drop(list.replace_snapshot(Some(captured)));
@@ -82,7 +85,10 @@ fn list_with_mice(
 
 fn list_with(bindings: Vec<AvailableBinding<key::Key>>) -> BindingList {
     let mut list = BindingList::new();
-    let focus = canopy::Canopy::new().root_id();
+    let focus = CanopyBuilder::new()
+        .build()
+        .expect("an empty application builds")
+        .root_id();
     drop(list.replace_snapshot(Some(snapshot(focus, bindings))));
     list
 }
@@ -93,6 +99,7 @@ fn harness_with(
     bindings: Vec<AvailableBinding<key::Key>>,
 ) -> Result<Harness> {
     let mut harness = Harness::builder(BindingList::new())
+        .register::<BindingList>()
         .size(width, height)
         .build()?;
     let focus = harness.root;
@@ -348,7 +355,7 @@ fn wheel_and_resize_keep_scroll_within_the_exact_canvas() -> Result<()> {
         .with_root_view(|context| context.view_of(harness.root).expect("list view"));
     assert_eq!(after_wheel.scroll.y, 3);
 
-    harness.with_root_context(|list: &mut BindingList, context| {
+    harness.with_root_widget_context(|list: &mut BindingList, context| {
         list.scroll_to_bottom(context);
         Ok(())
     })?;
@@ -607,5 +614,3 @@ impl Widget for FramedList {
         })
     }
 }
-
-impl Loader for FramedList {}

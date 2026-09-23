@@ -3,7 +3,7 @@
 use std::hint::black_box;
 
 use canopy::{
-    Context, ContextExt, Loader, Widget, derive_commands, error::Result, layout::Layout,
+    Context, ContextExt, Widget, derive_commands, error::Result, layout::Layout,
     testing::harness::Harness,
 };
 use canopy_widgets::Text;
@@ -40,8 +40,6 @@ impl Widget for BenchmarkTextWrapper {
         Ok(())
     }
 }
-
-impl Loader for BenchmarkTextWrapper {}
 
 /// Benchmark rendering a text node.
 fn benchmark_text_rendering(c: &mut Criterion) {

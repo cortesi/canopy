@@ -124,14 +124,7 @@ impl AppFactory {
 
     /// Build one fully configured application instance.
     pub fn build(&self) -> crate::Result<Canopy> {
-        let canopy = (self.factory)()?;
-        if !canopy.is_api_finalized() {
-            return Err(Error::Invalid(
-                "AppFactory must return an application built by CanopyBuilder".into(),
-            )
-            .into());
-        }
-        Ok(canopy)
+        (self.factory)()
     }
 
     /// Read the application declaration without constructing its UI.
@@ -156,31 +149,6 @@ impl AppMetadata {
             app: "canopy-test".into(),
             reset: ResetPolicy::Isolated,
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn factory_rejects_an_application_that_bypasses_the_builder() {
-        let factory = AppFactory::new(
-            AppMetadata {
-                app: "test".into(),
-                reset: ResetPolicy::Isolated,
-            },
-            || Ok(Canopy::new()),
-        );
-        let error = match factory.build() {
-            Ok(_) => panic!("raw Canopy should be rejected"),
-            Err(error) => error,
-        };
-        assert!(
-            error
-                .to_string()
-                .contains("application built by CanopyBuilder")
-        );
     }
 }
 

@@ -1,5 +1,5 @@
 use canopy::{
-    Canopy, CanopyBuilder, ChildSlot, Context, ContextExt, FocusDirection, Loader, Render,
+    CanopyBuilder, ChildSlot, Context, ContextExt, FocusDirection, Register, Render, Setup,
     ViewContext, Widget, derive_commands,
     error::Result,
     geom::{Line, Size},
@@ -151,9 +151,9 @@ impl Widget for FrameGym {
     }
 }
 
-impl Loader for FrameGym {
-    fn load(c: &mut Canopy) -> Result<()> {
-        c.add_commands::<TestPattern>()?;
+impl Register for FrameGym {
+    fn register(setup: &mut Setup) -> Result<()> {
+        setup.add_commands::<TestPattern>()?;
         Ok(())
     }
 }

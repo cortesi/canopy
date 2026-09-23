@@ -8,8 +8,8 @@ use std::{
 };
 
 use canopy::{
-    Canopy, Context, ContextExt, FocusDirection, FocusScope, Loader, NodeName, ScrollAxis,
-    ScrollMark, Widget, buf, derive_commands,
+    CanopyBuilder, Context, ContextExt, FocusDirection, FocusScope, NodeName, Register, ScrollAxis,
+    ScrollMark, Setup, Widget, buf, derive_commands,
     error::Result,
     event::{Event, key, mouse},
     geom::{Point, PointI32, Size},
@@ -80,10 +80,10 @@ impl Widget for EditorHost {
     }
 }
 
-impl Loader for EditorHost {
-    fn load(c: &mut Canopy) -> Result<()> {
-        c.add_commands::<Editor>()?;
-        c.add_commands::<Self>()?;
+impl Register for EditorHost {
+    fn register(setup: &mut Setup) -> Result<()> {
+        setup.add_commands::<Editor>()?;
+        setup.add_commands::<Self>()?;
         Ok(())
     }
 }
@@ -91,12 +91,13 @@ impl Loader for EditorHost {
 fn build_harness(text: &str, config: EditorConfig, width: u32, height: u32) -> Harness {
     let host = EditorHost::new(text, config);
     let mut harness = Harness::builder(host)
+        .register::<EditorHost>()
         .size(width, height)
         .build()
         .expect("Failed to build harness");
     harness.render().expect("Failed to render");
     harness
-        .with_root_context(|_root: &mut EditorHost, ctx| {
+        .with_root_widget_context(|_root: &mut EditorHost, ctx| {
             ctx.focus_first(FocusScope::Current)?;
             Ok(())
         })
@@ -107,7 +108,7 @@ fn build_harness(text: &str, config: EditorConfig, width: u32, height: u32) -> H
 
 fn with_editor<R>(harness: &mut Harness, f: impl FnOnce(&mut Editor) -> R) -> R {
     harness
-        .with_root_context(|_root: &mut EditorHost, ctx| {
+        .with_root_widget_context(|_root: &mut EditorHost, ctx| {
             ctx.with_typed_slot::<EditorSlot, _>(|editor, _| Ok(f(editor)))
         })
         .expect("editor missing")
@@ -139,7 +140,7 @@ fn editor_cursor_location(harness: &mut Harness) -> Point {
 
 fn editor_view_scroll(harness: &mut Harness) -> Point {
     harness
-        .with_root_context(|_root: &mut EditorHost, ctx| {
+        .with_root_widget_context(|_root: &mut EditorHost, ctx| {
             ctx.with_typed_slot::<EditorSlot, _>(|_editor, ctx| Ok(ctx.view().scroll))
         })
         .expect("editor missing")
@@ -147,7 +148,7 @@ fn editor_view_scroll(harness: &mut Harness) -> Point {
 
 fn scroll_editor_to(harness: &mut Harness, x: u32, y: u32) {
     harness
-        .with_root_context(|_root: &mut EditorHost, ctx| {
+        .with_root_widget_context(|_root: &mut EditorHost, ctx| {
             ctx.with_typed_slot::<EditorSlot, _>(|_editor, ctx| {
                 ctx.scroll_to(x, y);
                 Ok(())
@@ -203,7 +204,9 @@ const CAPTURE_KEYS: &[&str] = &[
 
 /// Assert that `key_outcome` agrees with `on_event` after `setup` keys run.
 fn assert_capture_matches(mode: EditMode, read_only: bool, setup: &[&str]) {
-    let mut app = Canopy::new();
+    let mut app = CanopyBuilder::new()
+        .build()
+        .expect("an empty application builds");
     for spec in CAPTURE_KEYS {
         let config = EditorConfig::new()
             .with_mode(mode)
@@ -744,7 +747,7 @@ fn nested_padding_scroll_and_captured_pointer_agree_on_wide_grapheme() {
     let text = ["ab界cdefghijklmnopqrstuvwxyz"; 10].join("\n");
     let mut harness = build_harness(&text, config, 18, 8);
     harness
-        .with_root_context(|_root: &mut EditorHost, ctx| {
+        .with_root_widget_context(|_root: &mut EditorHost, ctx| {
             ctx.set_layout(Layout::fill().padding(Edges::all(1)))?;
             ctx.with_typed_slot::<EditorSlot, _>(|_editor, ctx| {
                 ctx.set_layout(Layout::fill().padding(Edges::all(1)))
@@ -772,7 +775,7 @@ fn nested_padding_scroll_and_captured_pointer_agree_on_wide_grapheme() {
         .unwrap();
     assert_eq!(editor_cursor(&mut harness), TextPosition::new(2, 2));
     harness
-        .with_root_context(|_root: &mut EditorHost, ctx| {
+        .with_root_widget_context(|_root: &mut EditorHost, ctx| {
             ctx.with_typed_slot::<EditorSlot, _>(|_editor, ctx| ctx.capture_mouse())
         })
         .unwrap();
@@ -790,7 +793,7 @@ fn nested_padding_scroll_and_captured_pointer_agree_on_wide_grapheme() {
     assert_eq!(editor_cursor(&mut harness), TextPosition::new(2, 0));
     harness.mouse(mouse_event(mouse::Action::Up, 0, 2)).unwrap();
     harness
-        .with_root_context(|_root: &mut EditorHost, ctx| {
+        .with_root_widget_context(|_root: &mut EditorHost, ctx| {
             ctx.with_typed_slot::<EditorSlot, _>(|_editor, ctx| ctx.release_mouse())
         })
         .unwrap();
@@ -809,7 +812,7 @@ fn padded_editor_mouse_uses_content_coordinates_with_gutter_and_scroll() {
         let text = ["abcdefghijklmnopqrstuvwxyz"; 10].join("\n");
         let mut harness = build_harness(&text, config, 18, 6);
         harness
-            .with_root_context(|_root: &mut EditorHost, ctx| {
+            .with_root_widget_context(|_root: &mut EditorHost, ctx| {
                 ctx.with_typed_slot::<EditorSlot, _>(|_editor, ctx| {
                     ctx.set_layout(Layout::fill().padding(Edges::all(1)))
                 })
@@ -1033,7 +1036,7 @@ fn run_search(
     operation: impl FnOnce(&mut Editor, &mut dyn Context),
 ) -> (usize, usize, u32) {
     let (matches, position) = harness
-        .with_root_context(|_root: &mut EditorHost, ctx| {
+        .with_root_widget_context(|_root: &mut EditorHost, ctx| {
             ctx.with_typed_slot::<EditorSlot, _>(|editor, ctx| {
                 operation(editor, ctx);
                 Ok((editor.search_matches(), editor.search_position()))
@@ -1048,7 +1051,7 @@ fn run_search(
 /// Run an editor operation, then lay out and render the result.
 fn edit_in_one_turn(harness: &mut Harness, operation: impl FnOnce(&mut Editor, &mut dyn Context)) {
     harness
-        .with_root_context(|_root: &mut EditorHost, ctx| {
+        .with_root_widget_context(|_root: &mut EditorHost, ctx| {
             ctx.with_typed_slot::<EditorSlot, _>(|editor, ctx| {
                 operation(editor, ctx);
                 Ok(())

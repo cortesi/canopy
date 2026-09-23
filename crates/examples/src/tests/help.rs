@@ -1,5 +1,5 @@
 use canopy::{
-    Loader, RouteTraceKind, error::Result, event::key::Key, geom::Size, testing::harness::Harness,
+    Register, RouteTraceKind, error::Result, event::key::Key, geom::Size, testing::harness::Harness,
 };
 
 use super::{Mount, root_harness};
@@ -7,7 +7,8 @@ use crate::{demo_canopy, termgym, widget_editor};
 
 #[test]
 fn demo_api_build_does_not_assemble_or_publish() -> Result<()> {
-    let canopy = termgym::binding_setup(demo_canopy().configure(termgym::TermGym::load)).build()?;
+    let canopy =
+        termgym::binding_setup(demo_canopy().configure(termgym::TermGym::register)).build()?;
     assert!(canopy.snapshot().is_none());
     assert!(
         canopy
@@ -150,7 +151,7 @@ fn prove_help_flow(mut harness: Harness, hidden: &[&str], shown: &[&str]) -> Res
 fn termgym_help_opens_over_a_consuming_terminal_and_restores_input() -> Result<()> {
     let harness = root_harness(
         termgym::TermGym::new(),
-        termgym::binding_setup,
+        |builder| termgym::binding_setup(builder.configure(termgym::TermGym::register)),
         Size::new(80, 24),
         Mount::Wrap,
     )?;
@@ -165,7 +166,9 @@ fn termgym_help_opens_over_a_consuming_terminal_and_restores_input() -> Result<(
 fn widget_editor_help_opens_over_a_consuming_editor_and_restores_input() -> Result<()> {
     let harness = root_harness(
         widget_editor::WidgetEditor::new("fn main() {}\n", "rs", "test.rs"),
-        widget_editor::binding_setup,
+        |builder| {
+            widget_editor::binding_setup(builder.configure(widget_editor::WidgetEditor::register))
+        },
         Size::new(80, 40),
         Mount::Wrap,
     )?;

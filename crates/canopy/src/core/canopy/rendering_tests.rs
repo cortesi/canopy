@@ -1,6 +1,6 @@
 //! Published snapshots and emitted frames have separate baselines.
 
-use super::Canopy;
+use super::{Canopy, CanopyBuilder};
 use crate::{
     ContextExt, TermBuf, ViewContext, Widget,
     commands::ArgValue,
@@ -25,10 +25,9 @@ impl Widget for Paint {
 }
 
 fn app() -> Result<Canopy> {
-    let mut canopy = Canopy::new();
+    let mut canopy = CanopyBuilder::new().build()?;
     canopy.replace_root(Paint('a'))?;
     canopy.set_root_size(Size::new(1, 1))?;
-    canopy.finalize_api()?;
     Ok(canopy)
 }
 
@@ -173,7 +172,7 @@ fn frame(text: &str) -> Result<TermBuf> {
 
 #[test]
 fn failed_shift_is_not_repeated_on_retry() -> Result<()> {
-    let mut canopy = Canopy::new();
+    let mut canopy = CanopyBuilder::new().build()?;
     let mut backend = FailingBackend::default();
     canopy.frame.termbuf = Some(frame("abcdef")?);
     canopy.emit_frame(&mut backend)?;
@@ -194,7 +193,7 @@ fn failed_shift_is_not_repeated_on_retry() -> Result<()> {
 
 #[test]
 fn each_emitted_frame_flushes_once() -> Result<()> {
-    let mut canopy = Canopy::new();
+    let mut canopy = CanopyBuilder::new().build()?;
     let mut backend = FailingBackend::default();
     // A full paint, a shifted diff, and an unchanged diff.
     for (count, text) in ["abcdef", "Zabcde", "Zabcde"].into_iter().enumerate() {

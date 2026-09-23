@@ -67,9 +67,9 @@ fn fixture(workers: usize) -> Fixture {
             dropped: dropped_tx.clone(),
         };
         Ok(CanopyBuilder::new()
-            .configure(|canopy| {
-                canopy.add_commands::<Probe>()?;
-                canopy.register_startup_script(
+            .configure(|setup| {
+                setup.add_commands::<Probe>()?;
+                setup.register_startup_script(
                     "startup",
                     "function setup() canopy.set_mode('ready') end",
                 )
@@ -314,7 +314,7 @@ async fn live_transport_cancellation_and_disconnect_wake_the_ui_driver() {
                 dropped: async_mpsc::unbounded_channel().0,
             };
             let mut canopy = CanopyBuilder::new()
-                .configure(|canopy| canopy.add_commands::<Probe>())
+                .configure(|setup| setup.add_commands::<Probe>())
                 .assemble(move |canopy| canopy.replace_root(probe).map(|_| ()))
                 .build()
                 .expect("live app");

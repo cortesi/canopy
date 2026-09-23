@@ -4,11 +4,8 @@ use std::path::PathBuf;
 
 use ruau::source::{ModuleId, Source};
 
-use super::{Canopy, ScriptOrigin};
-use crate::{
-    error::{Error, Result},
-    script::ScriptModuleRoots,
-};
+use super::{Canopy, ScriptOrigin, Setup};
+use crate::error::{Error, Result};
 
 /// Authority granted to scripts loaded from an application-declared root.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -20,8 +17,11 @@ pub enum ScriptTrust {
     TrustedLocal,
 }
 
-/// An owned setup callback consumed exactly once by its phase.
-type SetupCallback = Box<dyn FnOnce(&mut Canopy) -> Result<()>>;
+/// An owned registration callback consumed exactly once.
+type ConfigureCallback = Box<dyn FnOnce(&mut Setup) -> Result<()>>;
+
+/// An owned assembly callback consumed exactly once.
+type AssembleCallback = Box<dyn FnOnce(&mut Canopy) -> Result<()>>;
 
 /// Script work retained in insertion order until after API finalization.
 enum SetupSource {
@@ -38,11 +38,11 @@ enum SetupSource {
 
 /// Assemble one application through registration, scripts, and widget creation.
 ///
-/// Configuration callbacks run first, then the API is finalized. Binding and
-/// config sources run next in their shared insertion order, followed by
-/// assembly callbacks. Callbacks are owned and need not be `Send`. The first
-/// runtime preparation performs startup and publishes geometry; `build` does
-/// neither.
+/// Configuration callbacks run first against a [`Setup`] handle, then the API
+/// is finalized. Binding and config sources run next in their shared insertion
+/// order, followed by assembly callbacks against the finalized [`Canopy`].
+/// Callbacks are owned and need not be `Send`. The first runtime preparation
+/// performs startup and publishes geometry; `build` does neither.
 ///
 /// A failed build returns no application. Native or database effects performed
 /// by callbacks are not rolled back. Retrying requires a fresh builder and
@@ -55,11 +55,11 @@ enum SetupSource {
 #[derive(Default)]
 pub struct CanopyBuilder {
     /// Registration callbacks in configuration-phase order.
-    configure: Vec<SetupCallback>,
+    configure: Vec<ConfigureCallback>,
     /// Explicit binding and config sources in evaluation order.
     sources: Vec<SetupSource>,
     /// Widget assembly callbacks in assembly-phase order.
-    assemble: Vec<SetupCallback>,
+    assemble: Vec<AssembleCallback>,
     /// Last declared user-root path and trust decision.
     user_root: Option<(PathBuf, ScriptTrust)>,
     /// Last declared project-root path and trust decision.
@@ -73,12 +73,10 @@ impl CanopyBuilder {
         Self::default()
     }
 
-    /// Register commands, fixtures, defaults, and other pre-finalization state.
+    /// Register commands, bindings, fixtures, styles, and other state that the
+    /// API fixes when it finalizes.
     #[must_use]
-    pub fn configure(
-        mut self,
-        configure: impl FnOnce(&mut Canopy) -> Result<()> + 'static,
-    ) -> Self {
+    pub fn configure(mut self, configure: impl FnOnce(&mut Setup) -> Result<()> + 'static) -> Self {
         self.configure.push(Box::new(configure));
         self
     }
@@ -130,27 +128,21 @@ impl CanopyBuilder {
 
     /// Consume all setup phases, returning the application only on success.
     pub fn build(self) -> Result<Canopy> {
-        let mut canopy = Canopy::empty();
+        let mut setup = Setup::new();
         for configure in self.configure {
-            configure(&mut canopy)?;
+            configure(&mut setup)?;
         }
-        canopy.ensure_api_unfinalized("builder registration phase")?;
-        // Builder root declarations are authoritative, including disabled
-        // defaults.
-        canopy.script.module_roots = ScriptModuleRoots::default();
-        if let Some((path, ScriptTrust::TrustedLocal)) = self.user_root {
-            canopy.set_user_script_root_inner(path)?;
-        }
-        if let Some((path, ScriptTrust::TrustedLocal)) = self.project_root {
-            canopy.set_project_script_root_inner(path)?;
-        }
-        canopy.finalize_api_inner()?;
+        let trusted = |root: Option<(PathBuf, ScriptTrust)>| match root {
+            Some((path, ScriptTrust::TrustedLocal)) => Some(path),
+            _ => None,
+        };
+        let mut canopy = setup.finalize(trusted(self.user_root), trusted(self.project_root))?;
         for source in self.sources {
             match source {
                 SetupSource::Bindings { name, source } => {
                     canopy.evaluate_bindings(&name, &source)?
                 }
-                SetupSource::Config(path) => canopy.run_config_inner(&path)?,
+                SetupSource::Config(path) => canopy.run_config(&path)?,
             }
         }
         for assemble in self.assemble {
@@ -212,18 +204,16 @@ mod tests {
                 assemble_first.borrow_mut().push("assemble first");
                 Ok(())
             })
-            .configure(move |canopy| {
-                assert!(!canopy.script.host.is_finalized());
+            .configure(move |setup| {
                 configure_first.borrow_mut().push("configure first");
-                canopy.register_startup_script(
+                setup.register_startup_script(
                     "deferred",
                     "function setup() canopy.set_mode(\"startup\") end",
                 )
             })
             .bindings("first", "canopy.set_mode(\"first\")")
             .config(config)
-            .configure(move |canopy| {
-                assert!(!canopy.script.host.is_finalized());
+            .configure(move |_| {
                 configure_second.borrow_mut().push("configure second");
                 Ok(())
             })
@@ -299,7 +289,7 @@ mod tests {
         let assembled = Rc::new(RefCell::new(false));
         let observed = Rc::clone(&assembled);
         let result = CanopyBuilder::new()
-            .configure(|canopy| canopy.register_startup_script("invalid", "function setup("))
+            .configure(|setup| setup.register_startup_script("invalid", "function setup("))
             .bindings("unreachable", "error(\"binding should not run\")")
             .assemble(move |_| {
                 *observed.borrow_mut() = true;
@@ -321,11 +311,7 @@ mod tests {
         .expect("write test script");
         fs::write(directory.path().join("payload.luau"), "return 9").expect("write test script");
         for namespace in ["user", "project"] {
-            let configured_path = directory.path().to_owned();
-            let mut builder = CanopyBuilder::new().configure(move |canopy| {
-                canopy.set_user_script_root(&configured_path)?;
-                canopy.set_project_script_root(&configured_path)
-            });
+            let mut builder = CanopyBuilder::new();
             if namespace == "user" {
                 builder = builder
                     .user_script_root(directory.path().to_owned(), ScriptTrust::TrustedLocal)

@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Context, ContextExt, Loader, NodeId, NodeName, Render, ViewContext, Widget, buf,
+        Context, ContextExt, NodeId, NodeName, Render, ViewContext, Widget, buf,
         error::Result,
         geom::Size,
         layout::{Layout, Sizing},
@@ -56,8 +56,6 @@ mod tests {
             NodeName::convert("root")
         }
     }
-
-    impl Loader for Root {}
 
     fn style_flex_child(core: &mut dyn Context, id: NodeId) -> Result<()> {
         core.with_layout_of(id, &mut |layout| {

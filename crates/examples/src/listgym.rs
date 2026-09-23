@@ -1,10 +1,10 @@
 use canopy::{
-    Canopy, CanopyBuilder, Context, ContextExt, FocusScope, Loader, NodeId, NodeName, Render,
+    CanopyBuilder, Context, ContextExt, FocusScope, NodeId, NodeName, Register, Render, Setup,
     ViewContext, ViewContextExt, Widget, derive_commands,
     error::{Error, Result},
     geom::Size,
     layout::{CanvasContext, MeasureConstraints, Measurement},
-    style::default as palette,
+    style::{StyleMap, default as palette},
 };
 use canopy_widgets::{CanvasWidth, Columns, Container, List, Selectable, Text};
 use rand::RngExt;
@@ -237,18 +237,18 @@ impl Widget for ListGym {
     }
 }
 
-impl Loader for ListGym {
-    fn load(c: &mut Canopy) -> Result<()> {
-        c.add_commands::<List<ListEntry>>()?;
-        c.add_commands::<Columns>()?;
-        c.add_commands::<Self>()?;
+impl Register for ListGym {
+    fn register(setup: &mut Setup) -> Result<()> {
+        setup.add_commands::<List<ListEntry>>()?;
+        setup.add_commands::<Columns>()?;
+        setup.add_commands::<Self>()?;
         Ok(())
     }
 }
 
 /// Install native styles during the configuration phase.
-fn setup_style(cnpy: &mut Canopy) {
-    cnpy.style_mut()
+fn setup_style(style: &mut StyleMap) {
+    style
         .rules()
         .fg("red/text", palette::RED)
         .fg("blue/text", palette::BLUE)
@@ -260,8 +260,8 @@ fn setup_style(cnpy: &mut Canopy) {
 #[must_use]
 pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
     builder
-        .configure(|cnpy| {
-            setup_style(cnpy);
+        .configure(|setup| {
+            setup_style(setup.style_mut());
             Ok(())
         })
         .bindings("listgym", DEFAULT_BINDINGS)

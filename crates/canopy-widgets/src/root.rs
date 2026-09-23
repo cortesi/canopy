@@ -1,7 +1,7 @@
 use canopy::{
     Canopy, ChildSlot, Context, ContextExt, FocusDirection, FocusScope, FrameworkBindingGroup,
-    InteractionToken, Loader, ModalBindings, ModalOptions, NodeId, NodeName, TypedId, ViewContext,
-    Widget,
+    InteractionToken, ModalBindings, ModalOptions, NodeId, NodeName, Register, Setup, TypedId,
+    ViewContext, Widget,
     commands::CommandCall,
     derive_commands,
     error::{Error, Result},
@@ -322,23 +322,23 @@ impl Widget for Root {
     }
 }
 
-impl Loader for Root {
-    fn load(c: &mut Canopy) -> Result<()> {
-        c.add_commands::<Self>()?;
+impl Register for Root {
+    fn register(setup: &mut Setup) -> Result<()> {
+        setup.add_commands::<Self>()?;
         #[cfg(feature = "devtools")]
         {
-            c.register_default_bindings(
+            setup.register_default_bindings(
                 "root",
                 &format!("{DEFAULT_BINDINGS}\n{DEVTOOLS_BINDINGS}"),
             )?;
-            Inspector::load(c)?;
+            Inspector::register(setup)?;
         }
         #[cfg(not(feature = "devtools"))]
-        c.register_default_bindings("root", DEFAULT_BINDINGS)?;
-        Button::load(c)?;
-        Help::load(c)?;
-        register_help_bindings(c)?;
-        c.register_mode_hook("root.mode_help", sync_mode_help);
+        setup.register_default_bindings("root", DEFAULT_BINDINGS)?;
+        Button::register(setup)?;
+        Help::register(setup)?;
+        register_help_bindings(setup)?;
+        setup.register_mode_hook("root.mode_help", sync_mode_help);
         Ok(())
     }
 }
@@ -352,7 +352,7 @@ fn sync_mode_help(context: &mut dyn Context) -> Result<()> {
 }
 
 /// Register the Root-owned controls admitted by the help modal.
-fn register_help_bindings(canopy: &mut Canopy) -> Result<()> {
+fn register_help_bindings(setup: &mut Setup) -> Result<()> {
     let bindings: [(&str, &str, CommandCall); 13] = [
         ("Up", "Scroll up", BindingList::call_scroll_up()),
         ("k", "Scroll up", BindingList::call_scroll_up()),
@@ -369,7 +369,7 @@ fn register_help_bindings(canopy: &mut Canopy) -> Result<()> {
         ("Ctrl+g", "Close help", Root::call_toggle_help()),
     ];
     for (key, description, command) in bindings {
-        canopy.bind_framework(
+        setup.bind_framework(
             Key::parse_spec(key)?,
             canopy::BindingOptions {
                 path: Some("/root/help/**/".parse()?),
@@ -391,7 +391,8 @@ mod tests {
     #[cfg(feature = "devtools")]
     use canopy::testing::harness::Harness;
     use canopy::{
-        BindingTier, Cell, Context, EventOutcome, NodeName, Render, ViewContext, Widget,
+        BindingTier, CanopyBuilder, Cell, Context, EventOutcome, NodeName, Render, ViewContext,
+        Widget,
         commands::{CommandNode, CommandSpec},
         error::Result,
         event::Event,
@@ -469,8 +470,7 @@ mod tests {
     }
 
     fn setup_root_tree() -> Result<(Canopy, NopBackend, NodeId, NodeId)> {
-        let mut canopy = Canopy::new();
-        Root::load(&mut canopy)?;
+        let mut canopy = CanopyBuilder::new().configure(Root::register).build()?;
 
         let app_id = Root::new().install(&mut canopy, App)?;
         let left = canopy.create_detached(FocusLeaf::new("left"))?;
@@ -481,7 +481,6 @@ mod tests {
             context.set_layout_of(left, Layout::fill())?;
             context.set_layout_of(right, Layout::fill())
         })?;
-        canopy.finalize_api()?;
         canopy.set_root_size(Size::new(60, 14))?;
 
         let mut backend = NopBackend::new();
@@ -536,8 +535,7 @@ mod tests {
 
     #[test]
     fn install_app_preserves_app_layout_direction() -> Result<()> {
-        let mut canopy = Canopy::new();
-        Root::load(&mut canopy)?;
+        let mut canopy = CanopyBuilder::new().configure(Root::register).build()?;
 
         let app = Root::new().install(&mut canopy, RowApp)?;
         let layout = canopy.with_root_view(|context| context.layout_of(app.into()));
@@ -549,10 +547,8 @@ mod tests {
     #[test]
     #[cfg(feature = "devtools")]
     fn inspector_pane_draws_its_frame() -> Result<()> {
-        let mut canopy = Canopy::new();
-        Root::load(&mut canopy)?;
+        let mut canopy = CanopyBuilder::new().configure(Root::register).build()?;
         Root::new().with_inspector(true).install(&mut canopy, App)?;
-        canopy.finalize_api()?;
 
         let mut harness = Harness::from_canopy(canopy, Size::new(40, 8))?;
         harness.render()?;
@@ -859,10 +855,8 @@ mod tests {
 
     #[test]
     fn help_overlays_the_dimmed_application() -> Result<()> {
-        let mut canopy = Canopy::new();
-        Root::load(&mut canopy)?;
+        let mut canopy = CanopyBuilder::new().configure(Root::register).build()?;
         Root::new().install(&mut canopy, Banner)?;
-        canopy.finalize_api()?;
         canopy.set_root_size(Size::new(60, 14))?;
         let mut backend = NopBackend::new();
         let mut corner = |canopy: &mut Canopy| -> Result<Cell> {

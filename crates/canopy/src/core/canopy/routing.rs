@@ -1034,7 +1034,7 @@ mod guard_tests {
 
     #[test]
     fn an_incomplete_checked_route_diverges() -> Result<()> {
-        let canopy = Canopy::new();
+        let canopy = super::super::CanopyBuilder::new().build()?;
         let explanation = canopy.core.explain_key(None, 'x'.into())?;
         let mut guard = KeyRouteGuard::new(&explanation, KeyExpectation::Unhandled);
 
@@ -1054,7 +1054,7 @@ mod guard_tests {
 
     #[test]
     fn a_widget_divergence_records_the_actual_outcome() -> Result<()> {
-        let canopy = Canopy::new();
+        let canopy = super::super::CanopyBuilder::new().build()?;
         let explanation = canopy.core.explain_key(None, 'x'.into())?;
         let mut guard = KeyRouteGuard::new(&explanation, KeyExpectation::Unhandled);
         let step = explanation.steps.first().expect("root step");
@@ -1071,7 +1071,7 @@ mod guard_tests {
 
     #[test]
     fn a_binding_divergence_records_the_actual_binding() -> Result<()> {
-        let mut canopy = Canopy::new();
+        let mut canopy = super::super::CanopyBuilder::new().build()?;
         canopy.eval_script(r#"canopy.bind("x", { description = "Expected" }, function() end)"#)?;
         let explanation = canopy.core.explain_key(None, 'x'.into())?;
         let RouteOutcome::Binding(winner) = &explanation.outcome else {

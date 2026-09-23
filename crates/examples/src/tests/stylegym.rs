@@ -1,5 +1,5 @@
 use canopy::{
-    ContextExt, ViewContextExt,
+    ContextExt, Register, ViewContextExt,
     error::Result,
     event::{
         key::{self, KeyCode},
@@ -24,11 +24,17 @@ const SYNTAX: usize = 3;
 const TEXT: usize = 4;
 
 fn setup_harness(size: Size) -> Result<Harness> {
-    root_harness(Stylegym::new(), binding_setup, size, Mount::Replace)
+    root_harness(
+        Stylegym::new(),
+        |builder| binding_setup(builder.configure(Stylegym::register)),
+        size,
+        Mount::Replace,
+    )
 }
 
 fn show_tab(harness: &mut Harness, index: usize) -> Result<()> {
-    harness.with_root_context(|stylegym: &mut Stylegym, ctx| stylegym.show_tab(ctx, index))?;
+    harness
+        .with_root_widget_context(|stylegym: &mut Stylegym, ctx| stylegym.show_tab(ctx, index))?;
     harness.render()
 }
 
@@ -95,7 +101,7 @@ fn thumb_rows(harness: &Harness, x: usize) -> usize {
 fn installed_stylegym_keeps_controls_beside_styles() -> Result<()> {
     let harness = root_harness(
         Stylegym::new(),
-        binding_setup,
+        |builder| binding_setup(builder.configure(Stylegym::register)),
         Size::new(80, 24),
         Mount::Wrap,
     )?;
@@ -165,7 +171,7 @@ fn press(harness: &mut Harness, key: char, times: usize) -> Result<()> {
 fn scroll_keys_follow_the_active_page() -> Result<()> {
     let mut harness = root_harness(
         Stylegym::new(),
-        binding_setup,
+        |builder| binding_setup(builder.configure(Stylegym::register)),
         Size::new(80, 12),
         Mount::Wrap,
     )?;
@@ -200,7 +206,7 @@ fn palette_and_rules_follow_the_selected_theme() -> Result<()> {
     assert_on_screen(&harness, &accent);
     assert_off_screen(&harness, blue);
 
-    harness.with_root_context(|stylegym: &mut Stylegym, ctx| {
+    harness.with_root_widget_context(|stylegym: &mut Stylegym, ctx| {
         ctx.with_unique_descendant::<Dropdown<ThemeOption>, _>(|dropdown, ctx| {
             dropdown.toggle(ctx)?;
             dropdown.select_by(ctx, 1)?;
@@ -223,7 +229,7 @@ fn italic_effect_excludes_styles_frame() -> Result<()> {
     let mut harness = setup_harness(Size::new(80, 24))?;
     show_tab(&mut harness, TEXT)?;
 
-    harness.with_root_context(|stylegym: &mut Stylegym, ctx| {
+    harness.with_root_widget_context(|stylegym: &mut Stylegym, ctx| {
         ctx.with_unique_descendant::<Selector<EffectOption>, _>(|selector, selector_ctx| {
             selector.select_by(selector_ctx, 6)?;
             selector.toggle(selector_ctx)
@@ -265,7 +271,7 @@ fn sample_and_frame_style(harness: &Harness) -> (ResolvedStyle, ResolvedStyle) {
 }
 
 fn select_invert_and_apply(harness: &mut Harness) -> Result<()> {
-    harness.with_root_context(|stylegym: &mut Stylegym, ctx| {
+    harness.with_root_widget_context(|stylegym: &mut Stylegym, ctx| {
         ctx.with_unique_descendant::<Selector<EffectOption>, _>(|selector, selector_ctx| {
             selector.select_by(selector_ctx, 3)?;
             selector.toggle(selector_ctx)
@@ -282,7 +288,8 @@ fn modal_dimming_survives_effect_changes_without_accumulating() -> Result<()> {
     let baseline = sample_and_frame_style(&effects_first);
     select_invert_and_apply(&mut effects_first)?;
     let undimmed_invert = sample_and_frame_style(&effects_first);
-    effects_first.with_root_context(|stylegym: &mut Stylegym, ctx| stylegym.show_modal(ctx))?;
+    effects_first
+        .with_root_widget_context(|stylegym: &mut Stylegym, ctx| stylegym.show_modal(ctx))?;
     effects_first.render()?;
     let expected = sample_and_frame_style(&effects_first);
     assert_ne!(expected.0, undimmed_invert.0);
@@ -290,16 +297,18 @@ fn modal_dimming_survives_effect_changes_without_accumulating() -> Result<()> {
 
     let mut modal_first = setup_harness(Size::new(80, 24))?;
     show_tab(&mut modal_first, TEXT)?;
-    modal_first.with_root_context(|stylegym: &mut Stylegym, ctx| stylegym.show_modal(ctx))?;
+    modal_first
+        .with_root_widget_context(|stylegym: &mut Stylegym, ctx| stylegym.show_modal(ctx))?;
     select_invert_and_apply(&mut modal_first)?;
     assert_eq!(sample_and_frame_style(&modal_first), expected);
     for _ in 0..2 {
         modal_first
-            .with_root_context(|stylegym: &mut Stylegym, ctx| stylegym.apply_effects(ctx))?;
+            .with_root_widget_context(|stylegym: &mut Stylegym, ctx| stylegym.apply_effects(ctx))?;
         modal_first.render()?;
         assert_eq!(sample_and_frame_style(&modal_first), expected);
     }
-    modal_first.with_root_context(|stylegym: &mut Stylegym, ctx| stylegym.hide_modal(ctx))?;
+    modal_first
+        .with_root_widget_context(|stylegym: &mut Stylegym, ctx| stylegym.hide_modal(ctx))?;
     modal_first.render()?;
     assert_eq!(sample_and_frame_style(&modal_first), undimmed_invert);
     Ok(())
@@ -349,7 +358,7 @@ fn focusing_an_offscreen_control_scrolls_the_widgets_page() -> Result<()> {
     assert_on_screen(&harness, "Pressed");
     assert_off_screen(&harness, "Also checked");
 
-    harness.with_root_context(|_stylegym: &mut Stylegym, ctx| {
+    harness.with_root_widget_context(|_stylegym: &mut Stylegym, ctx| {
         let selector = ctx
             .unique_descendant::<Selector<String>>()?
             .expect("the widgets page has a selector");

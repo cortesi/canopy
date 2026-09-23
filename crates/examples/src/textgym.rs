@@ -1,5 +1,5 @@
 use canopy::{
-    CanopyBuilder, Context, ContextExt, Loader, NodeId, ViewContext, Widget,
+    CanopyBuilder, Context, ContextExt, NodeId, ViewContext, Widget,
     error::Result,
     layout::{Edges, Layout},
 };
@@ -123,8 +123,6 @@ fn section(
     )?;
     Ok(pad_id.into())
 }
-
-impl Loader for TextGym {}
 
 /// Default bindings for the text gym demo.
 const DEFAULT_BINDINGS: &str = r#"

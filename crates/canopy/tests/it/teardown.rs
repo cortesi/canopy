@@ -5,7 +5,7 @@ mod tests {
     use std::{cell::RefCell, rc::Rc};
 
     use canopy::{
-        Canopy, Context, ContextExt, NodeId, NodeName, Widget, derive_commands,
+        CanopyBuilder, Context, ContextExt, NodeId, NodeName, Widget, derive_commands,
         error::{Error, Result},
     };
 
@@ -72,9 +72,12 @@ mod tests {
         for script in [false, true] {
             for fail in [false, true] {
                 let log = Rc::new(RefCell::new(Vec::new()));
-                let mut canopy = Canopy::new();
-                canopy.add_commands::<Dialog>()?;
-                canopy.add_commands::<Trigger>()?;
+                let mut canopy = CanopyBuilder::new()
+                    .configure(|setup| {
+                        setup.add_commands::<Dialog>()?;
+                        setup.add_commands::<Trigger>()
+                    })
+                    .build()?;
                 let (dialog, trigger) = canopy.with_root_context(|ctx| {
                     let dialog = ctx.add_child(Dialog {
                         log: Rc::clone(&log),
@@ -89,7 +92,6 @@ mod tests {
                     )?;
                     Ok((dialog, trigger))
                 })?;
-                canopy.finalize_api()?;
                 let outcome = if script {
                     canopy.eval_script("trigger.press()").map(|_| ())
                 } else {

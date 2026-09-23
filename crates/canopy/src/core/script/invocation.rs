@@ -406,7 +406,6 @@ mod tests {
     #[test]
     fn parked_script_releases_borrows_and_isolates_callback_diagnostics() -> Result<()> {
         run_ttree(|canopy, _, tree| {
-            canopy.finalize_api()?;
             let host = canopy.script.host.clone();
             let script = host.compile(r#"
                 canopy.bind("x", {description = "Independent callback", phase = "before_widget"}, function()
@@ -483,7 +482,6 @@ mod tests {
     #[test]
     fn detached_print_quota_and_result_survive_multiple_segments() -> Result<()> {
         run_ttree(|canopy, _, tree| {
-            canopy.finalize_api()?;
             let host = canopy.script.host.clone();
             let script = host.compile(
                 r#"
@@ -517,7 +515,6 @@ mod tests {
     #[test]
     fn resumed_script_rejects_replaced_anchor_before_returning() -> Result<()> {
         run_ttree(|canopy, _, tree| {
-            canopy.finalize_api()?;
             let host = canopy.script.host.clone();
             let script = host.compile("canopy.wait_for(function() return false end); return 42")?;
             let mut invocation = host.start_invocation(tree.root, script)?;
@@ -556,7 +553,6 @@ mod tests {
     #[test]
     fn detached_vm_timeout_reports_the_original_budget() -> Result<()> {
         run_ttree(|canopy, _, tree| {
-            canopy.finalize_api()?;
             let host = canopy.script.host.clone();
             let script = host.compile("while true do end")?;
             let mut invocation = host.start_invocation(tree.root, script)?;
@@ -582,7 +578,6 @@ mod tests {
     #[test]
     fn detached_segments_share_a_total_gas_budget() -> Result<()> {
         run_ttree(|canopy, _, tree| {
-            canopy.finalize_api()?;
             let host = canopy.script.host.clone();
             let script = host.compile(
                 r#"

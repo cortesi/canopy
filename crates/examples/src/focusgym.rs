@@ -1,6 +1,6 @@
 use canopy::{
-    Canopy, CanopyBuilder, Context, ContextExt, FocusDirection, FocusScope, Loader, NodeId, Render,
-    ViewContext, ViewContextExt, Widget, derive_commands,
+    CanopyBuilder, Context, ContextExt, FocusDirection, FocusScope, NodeId, Register, Render,
+    Setup, ViewContext, ViewContextExt, Widget, derive_commands,
     error::Result,
     geom::Size,
     layout::{Direction, Layout, Sizing},
@@ -256,11 +256,11 @@ impl Widget for FocusGym {
     }
 }
 
-impl Loader for FocusGym {
-    fn load(c: &mut Canopy) -> Result<()> {
-        Root::load(c)?;
-        c.add_commands::<Self>()?;
-        c.add_commands::<Block>()?;
+impl Register for FocusGym {
+    fn register(setup: &mut Setup) -> Result<()> {
+        Root::register(setup)?;
+        setup.add_commands::<Self>()?;
+        setup.add_commands::<Block>()?;
         Ok(())
     }
 }

@@ -6,7 +6,7 @@ mod shell;
 mod stylegym;
 mod termgym;
 
-use canopy::{CanopyBuilder, Loader, Widget, error::Result, geom::Size, testing::harness::Harness};
+use canopy::{CanopyBuilder, Widget, error::Result, geom::Size, testing::harness::Harness};
 use canopy_widgets::Root;
 
 use crate::demo_canopy;
@@ -19,16 +19,18 @@ pub enum Mount {
     Wrap,
 }
 
+/// Build a demo harness. `setup` adds the demo's registration and bindings to
+/// the shared demo builder.
 pub fn root_harness<W>(
     app: W,
-    setup: fn(CanopyBuilder) -> CanopyBuilder,
+    setup: impl FnOnce(CanopyBuilder) -> CanopyBuilder,
     size: Size,
     mount: Mount,
 ) -> Result<Harness>
 where
-    W: Widget + Loader + 'static,
+    W: Widget + 'static,
 {
-    let canopy = setup(demo_canopy().configure(W::load))
+    let canopy = setup(demo_canopy())
         .assemble(move |canopy| {
             match mount {
                 Mount::Replace => {

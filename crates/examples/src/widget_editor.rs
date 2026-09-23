@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use canopy::{
-    Canopy, CanopyBuilder, Context, ContextExt, Loader, Widget,
+    CanopyBuilder, Context, ContextExt, Register, Setup, Widget,
     error::Result,
     layout::{Edges, Layout},
 };
@@ -66,9 +66,9 @@ impl Widget for WidgetEditor {
     }
 }
 
-impl Loader for WidgetEditor {
-    fn load(c: &mut Canopy) -> Result<()> {
-        c.add_commands::<Editor>()?;
+impl Register for WidgetEditor {
+    fn register(setup: &mut Setup) -> Result<()> {
+        setup.add_commands::<Editor>()?;
         Ok(())
     }
 }

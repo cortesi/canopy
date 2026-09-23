@@ -6,8 +6,8 @@ use std::{
 };
 
 use canopy::{
-    Context, ContextExt, EventOutcome, Loader, NodeId, NodeName, ScrollAxis, ScrollMark,
-    ViewContext, Widget,
+    Context, ContextExt, EventOutcome, NodeId, NodeName, ScrollAxis, ScrollMark, ViewContext,
+    Widget,
     error::Result,
     event::{Event, key, mouse},
     geom::{Point, PointI32, Rect, Size},
@@ -46,8 +46,6 @@ impl Widget for Scene {
         Ok(())
     }
 }
-
-impl Loader for Scene {}
 
 /// A leaf with a fixed canvas.
 struct Surface {

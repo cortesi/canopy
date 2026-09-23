@@ -68,8 +68,8 @@ pub mod world;
 // Public exports from internal modules
 pub use canopy::{
     AutomationCallback, AutomationHandle, Canopy, CanopyBuilder, EvalId, EvalOutcome, EvalRequest,
-    EvalTicket, FrameId, Loader, RouteTraceEntry, RouteTraceKind, ScriptJournalEntry, ScriptOrigin,
-    ScriptTrust, TurnOutcome, Work,
+    EvalTicket, FrameId, Register, RouteTraceEntry, RouteTraceKind, ScriptJournalEntry,
+    ScriptOrigin, ScriptTrust, Setup, TurnOutcome, Work,
 };
 pub use change::ChangeOutcome;
 pub use children::{ChildBuilder, ChildConfig, KeyedChildren};

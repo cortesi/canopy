@@ -5,7 +5,7 @@ mod tests {
     use std::{any::Any, marker::PhantomData, result};
 
     use canopy::{
-        self, Canopy, Context, ViewContext, Widget,
+        self, Canopy, CanopyBuilder, Context, ViewContext, Widget,
         commands::{
             ArgValue, CommandArgs, CommandError, CommandNode, CommandParamKind, CommandRequirement,
             CommandReturnSpec, CommandStatus,
@@ -17,16 +17,23 @@ mod tests {
     use pretty_assertions::assert_eq;
     use serde::de::DeserializeOwned;
 
+    /// Build an application with no registrations.
+    fn app() -> Canopy {
+        CanopyBuilder::new()
+            .build()
+            .expect("an empty application builds")
+    }
+
     /// Run `f` against the root context of an empty application.
     fn with_ctx<R>(f: impl FnOnce(&mut dyn Context) -> R) -> R {
-        Canopy::new()
+        app()
             .with_root_context(|ctx| Ok(f(ctx)))
             .expect("root context is available")
     }
 
     /// Run `f` against the root view of an empty application.
     fn with_view<R>(f: impl FnOnce(&dyn ViewContext) -> R) -> R {
-        Canopy::new().with_root_view(f)
+        app().with_root_view(f)
     }
 
     #[derive(serde::Serialize, serde::Deserialize, canopy_derive::CommandArg)]

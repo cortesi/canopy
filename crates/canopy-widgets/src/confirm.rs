@@ -1,8 +1,8 @@
 //! A modal question with a yes or no answer.
 
 use canopy::{
-    Canopy, Context, ContextExt, EventOutcome, FocusDirection, FocusScope, Loader, NodeId,
-    NodeName, Render, ViewContext, Widget,
+    Context, ContextExt, EventOutcome, FocusDirection, FocusScope, NodeId, NodeName, Register,
+    Render, Setup, ViewContext, Widget,
     commands::{CommandCall, CommandStatus, CommandTarget},
     derive_commands,
     error::{Error, Result},
@@ -259,11 +259,11 @@ impl Confirm {
     }
 }
 
-impl Loader for Confirm {
-    fn load(canopy: &mut Canopy) -> Result<()> {
-        Button::load(canopy)?;
-        canopy.add_commands::<Self>()?;
-        canopy.register_default_bindings("confirm", DEFAULT_BINDINGS)
+impl Register for Confirm {
+    fn register(setup: &mut Setup) -> Result<()> {
+        Button::register(setup)?;
+        setup.add_commands::<Self>()?;
+        setup.register_default_bindings("confirm", DEFAULT_BINDINGS)
     }
 }
 
@@ -511,10 +511,10 @@ mod tests {
         }
     }
 
-    impl Loader for Host {
-        fn load(canopy: &mut Canopy) -> Result<()> {
-            Confirm::load(canopy)?;
-            canopy.add_commands::<Self>()
+    impl Register for Host {
+        fn register(setup: &mut Setup) -> Result<()> {
+            Confirm::register(setup)?;
+            setup.add_commands::<Self>()
         }
     }
 
@@ -524,6 +524,7 @@ mod tests {
             yes_enabled: true,
             ..Host::default()
         })
+        .register::<Host>()
         .bindings(
             "dialog-defaults",
             "button.default_bindings()\nconfirm.default_bindings()",
@@ -537,7 +538,7 @@ mod tests {
 
     /// Ask `message` and focus the dialog's default answer.
     fn ask(harness: &mut Harness, message: &str) -> Result<()> {
-        let focus = harness.with_root_context(|host: &mut Host, context| {
+        let focus = harness.with_root_widget_context(|host: &mut Host, context| {
             let dialog = host.dialog()?;
             context.set_hidden_of(dialog, false)?;
             context.with_widget_mut(dialog, |confirm: &mut Confirm, context| {
@@ -559,7 +560,7 @@ mod tests {
 
     /// Return one answer's button node.
     fn answer_node(harness: &mut Harness, answer: Answer) -> Result<NodeId> {
-        let dialog = harness.with_root_context(|host: &mut Host, _| host.dialog())?;
+        let dialog = harness.with_root_widget_context(|host: &mut Host, _| host.dialog())?;
         harness.canopy.with_context(dialog, |context| {
             context.with_widget_mut(dialog, |confirm: &mut Confirm, _| confirm.answer(answer))
         })
@@ -822,7 +823,7 @@ mod tests {
         );
 
         // The reason stays reachable, and declining still works.
-        let dialog_node = harness.with_root_context(|host: &mut Host, _| host.dialog())?;
+        let dialog_node = harness.with_root_widget_context(|host: &mut Host, _| host.dialog())?;
         let status = harness.canopy.with_context(dialog_node, |context| {
             context.with_widget_mut(dialog_node, |confirm: &mut Confirm, context| {
                 confirm.yes_status(context)
@@ -837,7 +838,7 @@ mod tests {
     #[test]
     fn a_click_outside_the_answers_does_not_answer() -> Result<()> {
         let mut harness = dialog("/tmp/a", 40, 12)?;
-        let dialog_node = harness.with_root_context(|host: &mut Host, _| host.dialog())?;
+        let dialog_node = harness.with_root_widget_context(|host: &mut Host, _| host.dialog())?;
         let body = harness.canopy.with_context(dialog_node, |context| {
             context.with_widget_mut(dialog_node, |confirm: &mut Confirm, _| confirm.body())
         })?;
@@ -880,7 +881,7 @@ mod tests {
         assert_eq!(focus(&harness), Some(no));
 
         // A host can open on the affirmative answer deliberately.
-        let dialog_node = harness.with_root_context(|host: &mut Host, _| host.dialog())?;
+        let dialog_node = harness.with_root_widget_context(|host: &mut Host, _| host.dialog())?;
         harness.canopy.with_context(dialog_node, |context| {
             context.with_widget_mut(dialog_node, |confirm: &mut Confirm, _| {
                 confirm.set_default_answer(Answer::Yes);
@@ -896,7 +897,7 @@ mod tests {
     fn a_framework_group_modal_keeps_the_question_standing() -> Result<()> {
         let mut harness = dialog("/tmp/a", 40, 12)?;
         let (owner, dialog_node, focus) =
-            harness.with_root_context(|host: &mut Host, context| {
+            harness.with_root_widget_context(|host: &mut Host, context| {
                 let dialog = host.dialog()?;
                 let focus = context
                     .with_widget_mut(dialog, |confirm: &mut Confirm, _| confirm.initial_focus())?;

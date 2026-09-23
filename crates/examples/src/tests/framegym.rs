@@ -1,5 +1,5 @@
 use canopy::{
-    ContextExt, ViewContext,
+    ContextExt, Register, ViewContext,
     error::Result,
     geom::{self, Size},
     layout::{Edges, Layout},
@@ -27,14 +27,14 @@ fn metrics(ctx: &dyn ViewContext) -> ViewMetrics {
 fn framegym_harness() -> Result<Harness> {
     root_harness(
         FrameGym::new(),
-        binding_setup,
+        |builder| binding_setup(builder.configure(FrameGym::register)),
         Size::new(20, 20),
         Mount::Replace,
     )
 }
 
 fn frame_views(harness: &mut Harness) -> Result<(ViewMetrics, ViewMetrics, Layout)> {
-    harness.with_root_context(|_root: &mut FrameGym, ctx| {
+    harness.with_root_widget_context(|_root: &mut FrameGym, ctx| {
         ctx.with_typed_slot::<FrameSlot, _>(|_frame, frame_ctx| {
             let frame_view = metrics(frame_ctx);
             let frame_layout = frame_ctx.layout();
@@ -48,7 +48,7 @@ fn frame_views(harness: &mut Harness) -> Result<(ViewMetrics, ViewMetrics, Layou
 }
 
 fn pattern_scroll(harness: &mut Harness) -> Result<geom::Point> {
-    harness.with_root_context(|_root: &mut FrameGym, ctx| {
+    harness.with_root_widget_context(|_root: &mut FrameGym, ctx| {
         ctx.with_typed_slot::<FrameSlot, _>(|_frame, frame_ctx| {
             frame_ctx.with_typed_slot::<PatternSlot, _>(|_pattern, pattern_ctx| {
                 Ok(pattern_ctx.view().scroll)

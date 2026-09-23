@@ -194,7 +194,7 @@ impl Widget for Tabs {
 mod tests {
     use std::{cell::RefCell, rc::Rc};
 
-    use canopy::{Loader, testing::harness::Harness};
+    use canopy::testing::harness::Harness;
 
     use super::*;
 
@@ -230,8 +230,6 @@ mod tests {
             Ok(())
         }
     }
-
-    impl Loader for Scene {}
 
     #[test]
     fn switching_away_from_the_focused_page_focuses_the_new_page() -> Result<()> {

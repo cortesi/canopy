@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, ContextExt, Loader, Widget,
+        CanopyBuilder, ContextExt, Register, Widget,
         error::Result,
         geom::{Point, Size},
         layout::LayoutOverride,
@@ -13,15 +13,13 @@ mod tests {
 
     #[test]
     fn frame_override_survives_refresh_and_clears_to_widget_defaults() -> Result<()> {
-        let mut canopy = Canopy::new();
-        Root::load(&mut canopy)?;
+        let mut canopy = CanopyBuilder::new().configure(Root::register).build()?;
         let frame = Root::new().install(&mut canopy, Frame::new())?;
         canopy.with_context(frame, |ctx| {
             let text = ctx.create_detached(Text::new("retained"))?;
             ctx.attach(frame.into(), text.into())?;
             ctx.set_layout_override_of(frame.into(), LayoutOverride::new().fixed_height(3))
         })?;
-        canopy.finalize_api()?;
         let mut harness = Harness::from_canopy(canopy, Size::new(20, 8))?;
         harness.render()?;
 

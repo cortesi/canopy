@@ -1,5 +1,5 @@
 use canopy::{
-    Canopy, CanopyBuilder, Context, ContextExt, FocusDirection, Loader, NodeId, Widget,
+    CanopyBuilder, Context, ContextExt, FocusDirection, NodeId, Register, Setup, Widget,
     derive_commands,
     error::Result,
     geom::Size,
@@ -314,10 +314,10 @@ impl Widget for EditorGym {
     }
 }
 
-impl Loader for EditorGym {
-    fn load(c: &mut Canopy) -> Result<()> {
-        c.add_commands::<Self>()?;
-        c.add_commands::<Editor>()?;
+impl Register for EditorGym {
+    fn register(setup: &mut Setup) -> Result<()> {
+        setup.add_commands::<Self>()?;
+        setup.add_commands::<Editor>()?;
         Ok(())
     }
 }

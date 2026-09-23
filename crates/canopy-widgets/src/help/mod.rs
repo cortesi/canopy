@@ -7,7 +7,7 @@ mod tests;
 
 pub use binding_list::BindingList;
 use canopy::{
-    Canopy, ChildSlot, Context, ContextExt, EventOutcome, Loader, NodeId, NodeName, Render,
+    ChildSlot, Context, ContextExt, EventOutcome, NodeId, NodeName, Register, Render, Setup,
     TypedId, ViewContext, Widget, derive_commands,
     error::{Error, Result},
     event::Event,
@@ -103,10 +103,10 @@ impl Widget for Help {
     }
 }
 
-impl Loader for Help {
-    fn load(canopy: &mut Canopy) -> Result<()> {
-        canopy.add_commands::<Self>()?;
-        BindingList::load(canopy)?;
+impl Register for Help {
+    fn register(setup: &mut Setup) -> Result<()> {
+        setup.add_commands::<Self>()?;
+        BindingList::register(setup)?;
         Ok(())
     }
 }

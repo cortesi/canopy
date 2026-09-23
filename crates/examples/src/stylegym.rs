@@ -6,8 +6,8 @@
 //! modal overlay shows how the pane dims.
 
 use canopy::{
-    Canopy, CanopyBuilder, ChildSlot, Context, ContextExt, FocusDirection, Loader, NodeId,
-    NodeName, Render, TypedId, View, ViewContext, Widget, derive_commands,
+    CanopyBuilder, ChildSlot, Context, ContextExt, FocusDirection, NodeId, NodeName, Register,
+    Render, Setup, TypedId, View, ViewContext, Widget, derive_commands,
     error::Result,
     geom::{Line, Point, Rect, Size},
     layout::{CanvasContext, Direction, Edges, Layout},
@@ -1076,17 +1076,17 @@ impl Widget for Stylegym {
     }
 }
 
-impl Loader for Stylegym {
-    fn load(c: &mut Canopy) -> Result<()> {
-        Root::load(c)?;
-        c.add_commands::<Self>()?;
-        c.add_commands::<Dropdown<ThemeOption>>()?;
-        c.add_commands::<Selector<EffectOption>>()?;
-        c.add_commands::<Tabs>()?;
-        c.add_commands::<StyleSheet>()?;
-        c.add_commands::<TextSamples>()?;
-        c.add_commands::<Input>()?;
-        c.add_commands::<Editor>()?;
+impl Register for Stylegym {
+    fn register(setup: &mut Setup) -> Result<()> {
+        Root::register(setup)?;
+        setup.add_commands::<Self>()?;
+        setup.add_commands::<Dropdown<ThemeOption>>()?;
+        setup.add_commands::<Selector<EffectOption>>()?;
+        setup.add_commands::<Tabs>()?;
+        setup.add_commands::<StyleSheet>()?;
+        setup.add_commands::<TextSamples>()?;
+        setup.add_commands::<Input>()?;
+        setup.add_commands::<Editor>()?;
         Ok(())
     }
 }

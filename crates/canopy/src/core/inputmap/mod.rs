@@ -493,11 +493,6 @@ impl InputMap {
         self.actions.register(spec)
     }
 
-    /// Freeze the widget action catalog when the script API finalizes.
-    pub(crate) fn freeze_widget_actions(&mut self) {
-        self.actions.freeze();
-    }
-
     /// Return the registered widget actions in name order.
     #[must_use]
     pub(crate) fn widget_actions(&self) -> &WidgetActionCatalog {

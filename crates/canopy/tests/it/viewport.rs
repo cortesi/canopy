@@ -3,8 +3,8 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, Context, ContextExt, EventOutcome, Loader, ModalBindings, ModalOptions, NodeId,
-        NodeName, Render, RouteTraceKind, ViewContext, Widget, derive_commands,
+        Context, ContextExt, EventOutcome, ModalBindings, ModalOptions, NodeId, NodeName, Register,
+        Render, RouteTraceKind, Setup, ViewContext, Widget, derive_commands,
         error::Result,
         event::{Event, key, mouse},
         geom::{Line, Point, PointI32, Size},
@@ -63,16 +63,19 @@ mod tests {
         }
     }
 
-    impl Loader for ScrollTest {
-        fn load(c: &mut Canopy) -> Result<()> {
-            c.add_commands::<Self>()?;
+    impl Register for ScrollTest {
+        fn register(setup: &mut Setup) -> Result<()> {
+            setup.add_commands::<Self>()?;
             Ok(())
         }
     }
 
     #[test]
     fn test_scroll_behavior() -> Result<()> {
-        let mut harness = Harness::builder(ScrollTest::new()).size(30, 10).build()?;
+        let mut harness = Harness::builder(ScrollTest::new())
+            .register::<ScrollTest>()
+            .size(30, 10)
+            .build()?;
         harness.canopy.eval_script(
             r#"
 canopy.bind("Down", { description = "Scroll down" }, function()
@@ -146,8 +149,6 @@ end)
             NodeName::convert("outer")
         }
     }
-
-    impl Loader for Outer {}
 
     /// Build a 20 by 10 cell harness around [`Outer`] and return the inner
     /// pane.

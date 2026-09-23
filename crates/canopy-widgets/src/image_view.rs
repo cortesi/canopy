@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use canopy::{
-    Canopy, CommandEnum, Context, FocusDirection, Loader, Render, ViewContext, Widget,
+    CommandEnum, Context, FocusDirection, Register, Render, Setup, ViewContext, Widget,
     derive_commands,
     error::{Error, Result},
     geom::{Point, Rect, Size},
@@ -534,10 +534,10 @@ impl Widget for ImageView {
     }
 }
 
-impl Loader for ImageView {
+impl Register for ImageView {
     /// Register commands for the image viewer widget.
-    fn load(cnpy: &mut Canopy) -> Result<()> {
-        cnpy.add_commands::<Self>()?;
+    fn register(setup: &mut Setup) -> Result<()> {
+        setup.add_commands::<Self>()?;
         Ok(())
     }
 }
@@ -547,7 +547,7 @@ mod tests {
     use std::{fs, sync::Arc};
 
     use canopy::{
-        ContextExt,
+        CanopyBuilder, ContextExt,
         style::{
             GradientSpec, GradientStop, Paint,
             effects::{self, Effect, StyleEffect},
@@ -707,7 +707,7 @@ mod tests {
                 Rgba([40, 80, 120, 255])
             }
         });
-        let mut canopy = Canopy::new();
+        let mut canopy = CanopyBuilder::new().build()?;
         canopy.with_root_context(|ctx| {
             ctx.set_layout(Layout::fill())?;
             let _ = ctx.add_child(ImageView::new(&image))?;

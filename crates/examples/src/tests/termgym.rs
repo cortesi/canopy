@@ -1,5 +1,5 @@
 use canopy::{
-    BindingPhase, ContextExt, NodeId, RouteTraceKind, ViewContextExt, error::Result,
+    BindingPhase, ContextExt, NodeId, Register, RouteTraceKind, ViewContextExt, error::Result,
     event::key::Key, geom::Size, path::Path, testing::harness::Harness,
 };
 use canopy_widgets::terminal::Terminal;
@@ -11,7 +11,7 @@ use crate::termgym::{TermGym, binding_setup};
 fn termgym_harness() -> Result<(Harness, NodeId)> {
     let harness = root_harness(
         TermGym::new(),
-        binding_setup,
+        |builder| binding_setup(builder.configure(TermGym::register)),
         Size::new(80, 24),
         Mount::Replace,
     )?;
