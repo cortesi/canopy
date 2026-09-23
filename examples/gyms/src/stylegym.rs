@@ -39,7 +39,6 @@ canopy.keymap({
 
 canopy.keymap({
     path = "stylegym/",
-    { key = "q", description = "Quit", action = command.root.quit() },
     { key = "m", description = "Show modal", action = command.stylegym.show_modal() },
     { key = "Esc", description = "Hide modal", action = command.stylegym.hide_modal() },
     { key = { "l", "Right", "]" }, description = "Next tab", action = command.stylegym.next_tab(1) },
@@ -212,7 +211,7 @@ end
 
 /// Theme option for the dropdown.
 #[derive(Clone)]
-pub(crate) struct ThemeOption {
+pub struct ThemeOption {
     /// Theme display name.
     pub name: &'static str,
     /// Function returning the theme's palette.
@@ -227,7 +226,7 @@ impl ItemLabel for ThemeOption {
 
 /// Effect option for the selector.
 #[derive(Clone)]
-pub(crate) struct EffectOption {
+pub struct EffectOption {
     /// Effect display name.
     pub name: &'static str,
     /// Style effect applied when this option is chosen, if any.
@@ -366,7 +365,7 @@ enum SheetRow {
 /// Each path row shows a foreground swatch, a background swatch, the path, the
 /// resolved foreground and background, a sample painted with the style, and
 /// the resolved attributes. Values the rule inherits are muted.
-pub(crate) struct StyleSheet {
+pub struct StyleSheet {
     /// Rows in display order.
     rows: Vec<SheetRow>,
 }
@@ -674,7 +673,7 @@ const TEXT_ROWS: &[(&str, &str)] = &[
 ];
 
 /// The text samples page: named colors and text attributes.
-pub(crate) struct TextSamples;
+pub struct TextSamples;
 
 #[derive_commands]
 impl TextSamples {}

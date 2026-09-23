@@ -22,7 +22,7 @@ canopy::slot!(pub(crate) FrameSlot: Frame);
 canopy::slot!(pub(crate) PatternSlot: TestPattern);
 
 /// A widget that renders a test pattern.
-pub(crate) struct TestPattern {
+pub struct TestPattern {
     /// Virtual canvas size.
     size: Size,
 }

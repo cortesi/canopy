@@ -2371,12 +2371,17 @@ Each stage also updates the docs it touches.
 
 ### Stage 7: Repository structure and docs
 
-- [ ] C36:
+- [x] C36:
   - Move the gyms to `examples/gyms`, driven through `launch` with a
     `.canopyctl.toml`.
   - Delete the `widget` showcase.
   - Make binding scripts start with `root.default_bindings()`, in both
     repositories.
+  - `gyms` is one binary (`cargo run -p gyms -- <gym>`) with global
+    `--headless`, `--mcp`, `--inspector`, and `--api` flags; its smoke suite
+    drives the list gym. Termgym's `TerminalStack` moved in from the deleted
+    showcase. The startup script that re-bound Ctrl+g goes, as do the gyms',
+    todo's, and fh's duplicate Ctrl+g and `q` bindings.
 - [ ] C38 Stage 7: rewrite the "Public API Surface" section of
   `architecture.md` around the final module map and the surface rules. Update
   `styles.md`, and add the `AGENTS.md` map.

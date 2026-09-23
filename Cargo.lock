@@ -331,17 +331,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "canopy-examples"
-version = "0.1.0"
-dependencies = [
- "canopy",
- "canopy-widgets",
- "clap",
- "rand 0.10.2",
- "unicode-width",
-]
-
-[[package]]
 name = "canopy-geom"
 version = "0.0.1"
 dependencies = [
@@ -1212,6 +1201,18 @@ name = "glob"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
+
+[[package]]
+name = "gyms"
+version = "0.1.0"
+dependencies = [
+ "canopy",
+ "canopy-mcp",
+ "canopy-widgets",
+ "clap",
+ "rand 0.10.2",
+ "unicode-width",
+]
 
 [[package]]
 name = "half"

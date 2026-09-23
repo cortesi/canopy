@@ -21,6 +21,7 @@ const ENTRY_HEIGHT: u32 = 1 + ENTRY_PADDING * 2;
 
 /// Default bindings for the intervals demo.
 const DEFAULT_BINDINGS: &str = r#"
+root.default_bindings()
 canopy.keymap({
     path = "intervals",
     { key = "a", description = "Add item", action = command.intervals.add_item() },
@@ -44,12 +45,11 @@ canopy.keymap({
     { key = "d", description = "Delete item", action = command.list.delete_selected() },
     { key = { "PageDown", "Space" }, description = "Page down", action = command.list.page(1) },
     { key = "PageUp", description = "Page up", action = command.list.page(-1) },
-    { key = "q", description = "Quit", action = command.root.quit() },
 })
 "#;
 
 /// Counter widget that increments on a timer.
-pub(crate) struct CounterItem {
+pub struct CounterItem {
     /// Current counter value.
     value: u64,
     /// Selection state.

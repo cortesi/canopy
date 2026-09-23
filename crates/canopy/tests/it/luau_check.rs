@@ -76,6 +76,7 @@ mod tests {
                 || file.starts_with("crates/canopy-widgets/tests/luau/")
                 || file.starts_with("examples/todo/smoke/")
                 || file.starts_with("examples/hello/smoke/")
+                || file.starts_with("examples/gyms/smoke/")
                 // Each app's tests build it without a home, which compiles
                 // its defaults under the startup-script contract.
                 || file == "examples/hello/src/default_config.luau"

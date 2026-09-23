@@ -78,7 +78,7 @@ canopy.keymap({
 "#;
 
 /// A focusable block that can split into children.
-pub(crate) struct Block {
+pub struct Block {
     /// True for horizontal layout.
     horizontal: bool,
 }

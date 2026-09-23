@@ -35,7 +35,6 @@ canopy.keymap({
     { key = "a", description = "Add item", action = command.list_gym.add_item() },
     { key = "A", description = "Append item", action = command.list_gym.append_item() },
     { key = "C", description = "Clear list", action = command.list_gym.clear() },
-    { key = "q", description = "Quit", action = command.root.quit() },
     { key = "g", description = "First item", action = command.list.select_first() },
     { key = "G", description = "Last item", action = command.list.select_last() },
     { key = "d", description = "Delete item", action = command.list.delete_selected() },
@@ -57,7 +56,7 @@ canopy.keymap({
 "#;
 
 /// Focusable list entry that renders text content.
-pub(crate) struct ListEntry {
+pub struct ListEntry {
     /// Text content for the entry.
     text: Text,
 }

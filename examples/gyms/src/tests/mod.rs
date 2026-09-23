@@ -3,6 +3,7 @@ mod framegym;
 mod help;
 mod listgym;
 mod shell;
+mod smoke;
 mod stylegym;
 mod termgym;
 

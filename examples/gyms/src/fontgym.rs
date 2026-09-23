@@ -79,7 +79,7 @@ const BANNERS: [BannerSpec; 4] = [
             rgb!("#FF003C"),
             rgb!("#7A00FF"),
         ],
-        font: include_bytes!("../../canopy-widgets/assets/fonts/Bungee-Regular.ttf"),
+        font: include_bytes!("../../../crates/canopy-widgets/assets/fonts/Bungee-Regular.ttf"),
     },
     BannerSpec {
         style: "font/banner/ocean",
@@ -90,7 +90,7 @@ const BANNERS: [BannerSpec; 4] = [
             rgb!("#003BFF"),
             rgb!("#00FF9D"),
         ],
-        font: include_bytes!("../../canopy-widgets/assets/fonts/FiraMono-Regular.ttf"),
+        font: include_bytes!("../../../crates/canopy-widgets/assets/fonts/FiraMono-Regular.ttf"),
     },
     BannerSpec {
         style: "font/banner/ember",
@@ -101,7 +101,7 @@ const BANNERS: [BannerSpec; 4] = [
             rgb!("#FF1F00"),
             rgb!("#B00000"),
         ],
-        font: include_bytes!("../../canopy-widgets/assets/fonts/FiraMono-Regular.ttf"),
+        font: include_bytes!("../../../crates/canopy-widgets/assets/fonts/FiraMono-Regular.ttf"),
     },
     BannerSpec {
         style: "font/banner/violet",
@@ -112,7 +112,7 @@ const BANNERS: [BannerSpec; 4] = [
             rgb!("#7209B7"),
             rgb!("#4361EE"),
         ],
-        font: include_bytes!("../../canopy-widgets/assets/fonts/Tangerine-Regular.ttf"),
+        font: include_bytes!("../../../crates/canopy-widgets/assets/fonts/Tangerine-Regular.ttf"),
     },
 ];
 
@@ -1057,6 +1057,7 @@ fn status_text(height: u32, state: FontEffects) -> String {
 
 /// Focus controls shared by eager and builder setup.
 const DEFAULT_BINDINGS: &str = r#"
+root.default_bindings()
 canopy.keymap({
     { key = "Tab", description = "Next focus", action = command.root.focus("next") },
     { key = "BackTab", description = "Previous focus", action = command.root.focus("prev") },

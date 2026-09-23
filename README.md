@@ -67,7 +67,10 @@ All interface operations are defined cleanly as traversals of this node tree.
 The gyms exercise each widget family. Run one by name:
 
 ```sh
-cargo run -p canopy-examples --example demo -- stylegym
+cargo run -p gyms -- stylegym
 ```
 
-Run `cargo run -p canopy-examples --example demo -- --help` to list them.
+Run `cargo run -p gyms -- --help` to list them. Like `examples/hello` and
+`examples/todo`, the gyms launch through `canopy_mcp::launch`, so
+`canopyctl` drives them: `--headless` serves MCP over stdio, and
+`examples/gyms/.canopyctl.toml` points the smoke suite at the list gym.

@@ -16,7 +16,27 @@ use canopy_widgets::{
 };
 use unicode_width::UnicodeWidthStr;
 
-use crate::{fixed_row, flex_row, widget::TerminalStack};
+use crate::{fixed_row, flex_row};
+
+/// Stack container for terminal widgets.
+struct TerminalStack;
+
+impl TerminalStack {
+    /// Construct a terminal stack container.
+    fn new() -> Self {
+        Self
+    }
+}
+
+impl Widget for TerminalStack {
+    fn layout(&self) -> Layout {
+        Layout::fill().direction(Direction::Stack)
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("term_stack")
+    }
+}
 
 /// Height for each terminal entry row, including borders.
 const ENTRY_HEIGHT: u32 = 3;

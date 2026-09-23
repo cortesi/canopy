@@ -21,7 +21,6 @@ canopy.keymap({
     { key = "PageDown", description = "Page down", action = "canopy.nav.page_down" },
     { key = "PageUp", description = "Page up", action = "canopy.nav.page_up" },
 })
-canopy.bind("q", { path = "root", description = "Quit" }, command.root.quit())
 "#;
 
 /// Seed text for the single-line editor sample.

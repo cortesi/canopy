@@ -128,7 +128,7 @@ fn section(
 
 /// Default bindings for the text gym demo.
 const DEFAULT_BINDINGS: &str = r#"
-canopy.bind("q", { path = "root", description = "Quit" }, command.root.quit())
+root.default_bindings()
 "#;
 
 /// Queue this demo's bindings and native configuration in their builder phases.

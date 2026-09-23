@@ -3,14 +3,9 @@
 -- file from another directory.
 
 function setup()
-    canopy.bind("ctrl-g", {
-        path = "/root/**/",
-        phase = "before_widget",
-        tier = "global",
-        description = "Show key bindings",
-    }, command.root.toggle_help())
+    root.default_bindings()
+
     canopy.keymap({
-        { key = "q", description = "Quit", action = command.root.quit() },
         { key = "ctrl-x", description = "Clear text", action = "canopy.clear" },
         { key = "d", description = "Delete item", action = command.todo.delete_item() },
         { key = "a", description = "Add item", action = command.todo.enter_item() },

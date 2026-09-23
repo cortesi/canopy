@@ -41,7 +41,7 @@ jobs:
         run: >-
           cargo +nightly fmt
           -p canopy -p canopy-derive -p canopy-geom -p canopy-mcp
-          -p canopy-widgets -p canopyctl -p canopy-examples -p hello -p todo -p xtask
+          -p canopy-widgets -p canopyctl -p gyms -p hello -p todo -p xtask
           -- --check --config-path rustfmt.toml
 
       - name: Check lints

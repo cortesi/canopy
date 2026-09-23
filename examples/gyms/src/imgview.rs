@@ -2,7 +2,7 @@ use canopy::CanopyBuilder;
 
 /// Default bindings for the image viewer demo.
 const DEFAULT_BINDINGS: &str = r#"
-canopy.bind("q", { description = "Quit" }, command.root.quit())
+root.default_bindings()
 canopy.keymap({
     path = "image_view/",
     phase = "before_widget",

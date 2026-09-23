@@ -7,8 +7,7 @@ use crate::{DemoShell, chargym, demo_canopy};
 
 #[test]
 fn the_launcher_shell_adds_a_footer_naming_the_demo_and_the_help_key() -> Result<()> {
-    let canopy = demo_canopy()
-        .configure(chargym::CharGym::register)
+    let canopy = chargym::binding_setup(demo_canopy().configure(chargym::CharGym::register))
         .assemble(|canopy| {
             Root::new().install(canopy, DemoShell::new(chargym::CharGym::new()))?;
             Ok(())
