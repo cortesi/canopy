@@ -2392,5 +2392,9 @@ Each stage also updates the docs it touches.
   - Most listed lines were already rewritten by the changes that renamed
     their subjects; this pass fixed "dot entries", the config-home
     paragraph, and the API mode.
-- [ ] Final validation: all captures are current in both repositories, and
+- [x] Final validation: all captures are current in both repositories, and
   the checks, tests, and smoke suites pass in both.
+  - canopy: `ncode check`, `ncode test` (1095 passed), `ncode api` (all
+    captures unchanged), and `cargo xtask smoke` (gyms, hello, and todo
+    suites) pass. fh: `ncode check`, `ncode test` (249 passed), `ncode api`
+    (unchanged), and `canopyctl smoke` (18 scripts) pass.
