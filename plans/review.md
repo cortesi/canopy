@@ -2354,8 +2354,14 @@ Each stage also updates the docs it touches.
   - `Spinner` is a stateless frame set (`DOTS`, `LINE`) that a busy widget
     samples, not a widget. DiffView gains `Register`, `set_highlighters`, and
     `with_message`; fh's worker payload becomes `DiffContent`.
-- [ ] C48: run the nested-modal spike. Adopt the overlay layer only if its
+- [x] C48: run the nested-modal spike. Adopt the overlay layer only if its
   invariants hold.
+  - The overlay layer is the root's children: `ContextExt::add_modal` adds a
+    hidden child of the root, and `open_modal` accepts such a modal over any
+    owner the top modal admits, with its route ending at the modal. Tests in
+    `world/modal.rs` prove dimming, admission, focus restoration, rollback,
+    and retirement, so `Picker::add_overlay`, `open_overlay`, and fh's second
+    Confirm are gone.
 - [ ] C51: fh adopts C31 to C48 and deletes its workaround code.
 
 ### Stage 7: Repository structure and docs

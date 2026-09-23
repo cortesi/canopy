@@ -625,6 +625,13 @@ ordinary application bindings that a configuration can replace or unbind.
 groups admits none of them, so a widget used there ships activation in its own
 group, as Confirm does.
 
+A modal normally opens inside its owner. A modal in the overlay layer, a
+child of the root that `ContextExt::add_modal` adds hidden, may instead open
+over any owner the current top modal admits, even an owner that is itself
+modal, such as a question over a picker. Its route ends at the modal rather
+than climbing to the root, closing the owner's scope closes it, and removing
+the owner retires it, as for a nested modal.
+
 Root captures a help snapshot before it opens a modal with `ModalOptions` and
 `ModalBindings::Framework` for `HELP_BINDINGS`. The modal dims the main pane, and
 the help overlay draws only its panel, so the dimmed application stays visible

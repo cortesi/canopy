@@ -2360,38 +2360,8 @@ pub mod canopy_widgets {
         /// reads the list while it accepts finds it free.
         pub fn accept(&mut self, context: &mut dyn Context) -> Result<()> {}
 
-        /// Add `widget` over the dialog, hidden until [`Self::open_overlay`]
-        /// shows it.
-        ///
-        /// The overlay is a child of the picker, which is what lets a scope show
-        /// it while the picker's own scope is open: Canopy nests a scope only
-        /// inside the modal it covers. Add it after the picker has mounted.
-        pub fn add_overlay<W>(&self, context: &mut dyn Context, widget: W) -> Result<TypedId<W>>
-        where
-            W: 'static + Widget, {
-        }
-
         /// Close the picker by running the host's cancel call.
         pub fn cancel(&mut self, context: &mut dyn Context) -> Result<()> {}
-
-        /// Open `overlay` in a modal over the list.
-        ///
-        /// The scope is owned by the picker, so it nests inside the scope that
-        /// shows the picker. It shows the overlay, dims the dialog behind it,
-        /// gives `initial_focus` the keyboard, and admits `bindings`. The list
-        /// keeps its filter and selection, and takes the keyboard back when the
-        /// host closes the scope with the returned token.
-        /// @param overlay A node added with [`Self::add_overlay`].
-        /// @param initial_focus The node inside `overlay` that takes the keyboard.
-        /// @param bindings The bindings the scope admits.
-        pub fn open_overlay(
-            &self,
-            context: &mut dyn Context,
-            overlay: NodeId,
-            initial_focus: NodeId,
-            bindings: ModalBindings,
-        ) -> Result<ModalToken> {
-        }
 
         /// Return the filter field, or an error before the picker mounts.
         pub fn filter(&self) -> Result<NodeId> {}

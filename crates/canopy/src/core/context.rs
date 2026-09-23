@@ -722,6 +722,20 @@ pub trait ContextExt: Context + ViewContextExt {
         Ok(TypedId::new(id))
     }
 
+    /// Add `widget` to the overlay layer, hidden, and return it.
+    ///
+    /// The overlay layer is the root's children, which a root such as
+    /// `Root` stacks over the application. A modal there may open over any
+    /// owner the current top modal admits, even when the owner is itself a
+    /// modal, such as a question over a picker. Opening it shows it, and
+    /// closing it hides it again.
+    fn add_modal<W: Widget + 'static>(&mut self, widget: W) -> Result<TypedId<W>> {
+        let root = self.root_id();
+        let node = self.add_child(root, widget)?;
+        self.set_hidden(node.into(), true)?;
+        Ok(node)
+    }
+
     /// Put `child` inside a new detached `widget` node and return the wrapper.
     ///
     /// The child keeps its identity: it is detached from its current parent

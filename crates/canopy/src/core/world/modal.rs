@@ -97,6 +97,9 @@ struct ModalScope {
     dim: Option<Identity>,
     /// Exact prior focus followed by its nearest ancestors.
     focus_ancestry: Vec<Identity>,
+    /// Whether the modal sits in the overlay layer rather than inside its
+    /// owner, so its route ends at the modal itself.
+    overlay: bool,
 }
 
 /// Stack of admitted modals, included in structural rollback snapshots.
@@ -122,6 +125,11 @@ impl Core {
             .get(identity.node)
             .is_some_and(|entry| entry.incarnation == identity.incarnation)
             && self.is_attached_to_root(identity.node)
+    }
+
+    /// Whether `node` sits in the overlay layer: a child of the root.
+    fn is_overlay(&self, node: NodeId) -> bool {
+        self.nodes.get(node).and_then(|entry| entry.parent) == Some(self.root)
     }
 
     /// Whether a token still owns a scope, including a close awaiting
@@ -180,6 +188,14 @@ impl Core {
         if self.modal_owner() == Some(node) {
             return None;
         }
+        // An overlay modal is not inside its owner, so its route ends at the
+        // modal rather than climbing through the root.
+        if let Some(scope) = self.modals.scopes.last()
+            && scope.overlay
+            && scope.options.modal == node
+        {
+            return None;
+        }
         self.nodes.get(node).and_then(|entry| entry.parent)
     }
 
@@ -217,9 +233,14 @@ impl Core {
             .dim_target
             .map(|node| self.modal_identity(node))
             .transpose()?;
-        if !self.is_ancestor_or_self(options.owner, options.modal)
+        // A modal in the overlay layer, a child of the root, may open over
+        // its owner rather than inside it, and outside the current region:
+        // only its owner must be admitted.
+        let overlay = self.is_overlay(options.modal)
+            && !self.is_ancestor_or_self(options.owner, options.modal);
+        if !(overlay || self.is_ancestor_or_self(options.owner, options.modal))
             || !self.is_ancestor_or_self(options.modal, options.initial_focus)
-            || !self.modal_admits(options.modal)
+            || !(overlay || self.modal_admits(options.modal))
             || !self.modal_admits(options.owner)
             || self
                 .modals
@@ -255,6 +276,7 @@ impl Core {
             modal,
             dim,
             focus_ancestry,
+            overlay,
         });
         self.sync_modal_bindings();
         let result = if is_focus_candidate(self, options.initial_focus, false) {
@@ -336,7 +358,8 @@ impl Core {
             .position(|(index, scope)| {
                 !self.modal_identity_live(scope.owner)
                     || !self.modal_identity_live(scope.modal)
-                    || !self.is_ancestor_or_self(scope.options.owner, scope.options.modal)
+                    || !(scope.overlay
+                        || self.is_ancestor_or_self(scope.options.owner, scope.options.modal))
                     || (index > 0
                         && !self.is_ancestor_or_self(
                             self.modals.scopes[index - 1].options.modal,
@@ -358,7 +381,7 @@ mod tests {
     use crate::{
         Context, ViewContext, Widget,
         input::{Event, key, mouse},
-        testing::ttree::{Bb, get_state, reset_state, run_ttree},
+        testing::ttree::{Bb, TestTree, get_state, reset_state, run_ttree},
         widget::EventOutcome,
     };
 
@@ -398,6 +421,89 @@ mod tests {
                 get_state().path.is_empty(),
                 "outside input must not reach capture or background"
             );
+            Ok(())
+        })
+    }
+
+    /// Open `a` as a picker-like modal over the root, then `b`, a child of the
+    /// root, as an overlay modal owned by `a`.
+    fn open_overlay_over_a(core: &mut Core, tree: &TestTree) -> Result<(ModalToken, ModalToken)> {
+        core.set_focus(tree.a_a)?;
+        core.set_hidden(tree.b, true)?;
+        let picker = core.open_modal(ModalOptions {
+            owner: tree.root,
+            modal: tree.a,
+            initial_focus: tree.a_a,
+            dim_target: None,
+            bindings: ModalBindings::Application,
+        })?;
+        let question = core.open_modal(ModalOptions {
+            owner: tree.a,
+            modal: tree.b,
+            initial_focus: tree.b_a,
+            dim_target: Some(tree.a),
+            bindings: ModalBindings::Application,
+        })?;
+        Ok((picker, question))
+    }
+
+    #[test]
+    fn an_overlay_modal_opens_over_its_owner_and_takes_admission() -> Result<()> {
+        run_ttree(|canopy, _, tree| {
+            let core = &mut canopy.core;
+            let (_, question) = open_overlay_over_a(core, &tree)?;
+            // Admission moves to the overlay, and the owner's region is shut.
+            assert_eq!(core.modal_region(), Some(tree.b));
+            assert!(!core.nodes[tree.b].hidden, "opening shows the overlay");
+            assert_eq!(core.focus, Some(tree.b_a));
+            assert!(core.modal_admits(tree.b_a));
+            assert!(!core.modal_admits(tree.a_a));
+            assert!(core.set_focus(tree.a_a).is_err());
+            // The route ends at the overlay rather than climbing to the root.
+            let route: Vec<_> = core.route(tree.b_a).map(|(node, _)| node).collect();
+            assert_eq!(route, [tree.b_a, tree.b]);
+            // The owner's dialog dims behind the question.
+            assert!(!core.modal_effects_for(tree.a).is_empty());
+            // Closing restores focus inside the owner's region, and its dim.
+            core.close_modal_after_dispatch(question)?;
+            assert_eq!(core.modal_region(), Some(tree.a));
+            assert_eq!(core.focus, Some(tree.a_a));
+            assert!(core.nodes[tree.b].hidden, "closing hides the overlay");
+            assert!(core.modal_effects_for(tree.a).is_empty());
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn closing_the_owner_closes_its_overlay_and_rollback_restores_both() -> Result<()> {
+        run_ttree(|canopy, _, tree| {
+            let (picker, _) = open_overlay_over_a(&mut canopy.core, &tree)?;
+            // A failed edit that closes nothing leaves the stack as it was.
+            let failed = canopy.with_root_context(|context| {
+                context.edit_structure(&mut |context| {
+                    context.set_hidden(tree.a, true)?;
+                    Err(Error::Invalid("abandoned".into()))
+                })
+            });
+            assert!(failed.is_err());
+            assert!(!canopy.core.nodes[tree.a].hidden, "the edit rolls back");
+            assert_eq!(canopy.core.modal_region(), Some(tree.b));
+            assert_eq!(canopy.core.focus, Some(tree.b_a));
+            // Closing the older scope closes the overlay above it.
+            canopy.core.close_modal_after_dispatch(picker)?;
+            assert_eq!(canopy.core.modal_region(), None);
+            assert!(canopy.core.nodes[tree.b].hidden, "the overlay closes");
+            assert!(canopy.core.nodes[tree.a].hidden, "the picker closes");
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn removing_the_owner_retires_its_overlay() -> Result<()> {
+        run_ttree(|canopy, _, tree| {
+            open_overlay_over_a(&mut canopy.core, &tree)?;
+            canopy.with_root_context(|context| context.remove_subtree(tree.a))?;
+            assert_eq!(canopy.core.modal_region(), None, "both scopes retire");
             Ok(())
         })
     }

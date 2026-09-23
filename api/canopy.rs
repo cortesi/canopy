@@ -4104,6 +4104,15 @@ pub mod canopy {
         ) -> Result<TypedId<W>> {
         }
 
+        /// Add `widget` to the overlay layer, hidden, and return it.
+        ///
+        /// The overlay layer is the root's children, which a root such as
+        /// `Root` stacks over the application. A modal there may open over any
+        /// owner the current top modal admits, even when the owner is itself a
+        /// modal, such as a question over a picker. Opening it shows it, and
+        /// closing it hides it again.
+        fn add_modal<W: 'static + Widget>(&mut self, widget: W) -> Result<TypedId<W>> {}
+
         /// Add `widget` as the keyed child `K` of `parent` and return its typed
         /// node ID.
         fn add_slot<K: ChildSlot>(

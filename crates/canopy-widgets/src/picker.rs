@@ -8,10 +8,10 @@
 //! The widget owns the list and the filter, and nothing else. It never reads
 //! or writes what it shows, so a host can back it with bookmarks, a history, or
 //! anything else that renders as one line. A host that needs more than
-//! choosing, such as a question before a row is removed, adds its own modal
-//! over the dialog with [`Picker::add_overlay`] and opens it with
-//! [`Picker::open_overlay`]: the list keeps its filter and selection under it,
-//! and takes the keyboard back when the overlay closes.
+//! choosing, such as a question before a row is removed, opens its own modal
+//! in the overlay layer (`ContextExt::add_modal`) with the picker as its
+//! owner: the list keeps its filter and selection under it, and takes the
+//! keyboard back when the overlay closes.
 
 use canopy::{
     Context, ContextExt, EventOutcome, NodeId, NodeName, Register, Setup, TypedId, ViewContext,
@@ -22,7 +22,7 @@ use canopy::{
     geom::{Line, Point, Size},
     input::{
         BindingAction, BindingOptions, BindingPhase, BindingTier, Event, FrameworkBindingGroup,
-        IntentName, ModalBindings, ModalOptions, ModalToken, NavIntent,
+        IntentName, NavIntent,
         key::{self, Key, KeyCode},
     },
     layout::{
@@ -179,50 +179,6 @@ where
     pub fn filter(&self) -> Result<NodeId> {
         self.filter
             .ok_or_else(|| Error::NotFound("picker filter".into()))
-    }
-
-    /// Add `widget` over the dialog, hidden until [`Self::open_overlay`]
-    /// shows it.
-    ///
-    /// The overlay is a child of the picker, which is what lets a scope show
-    /// it while the picker's own scope is open: Canopy nests a scope only
-    /// inside the modal it covers. Add it after the picker has mounted.
-    pub fn add_overlay<W>(&self, context: &mut dyn Context, widget: W) -> Result<TypedId<W>>
-    where
-        W: Widget + 'static,
-    {
-        let overlay = context.add_child(context.node_id(), widget)?;
-        context.set_hidden(overlay.into(), true)?;
-        Ok(overlay)
-    }
-
-    /// Open `overlay` in a modal over the list.
-    ///
-    /// The scope is owned by the picker, so it nests inside the scope that
-    /// shows the picker. It shows the overlay, dims the dialog behind it,
-    /// gives `initial_focus` the keyboard, and admits `bindings`. The list
-    /// keeps its filter and selection, and takes the keyboard back when the
-    /// host closes the scope with the returned token.
-    /// @param overlay A node added with [`Self::add_overlay`].
-    /// @param initial_focus The node inside `overlay` that takes the keyboard.
-    /// @param bindings The bindings the scope admits.
-    pub fn open_overlay(
-        &self,
-        context: &mut dyn Context,
-        overlay: NodeId,
-        initial_focus: NodeId,
-        bindings: ModalBindings,
-    ) -> Result<ModalToken> {
-        let dialog = self
-            .dialog
-            .ok_or_else(|| Error::NotFound("picker dialog".into()))?;
-        context.open_modal(ModalOptions {
-            owner: context.node_id(),
-            modal: overlay,
-            initial_focus,
-            dim_target: Some(dialog),
-            bindings,
-        })
     }
 
     /// Return the typed list, or an error before the picker mounts.
@@ -818,7 +774,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use canopy::{geom::Size, testing::harness::Harness};
+    use canopy::{
+        geom::Size,
+        input::{ModalBindings, ModalOptions},
+        testing::harness::Harness,
+    };
 
     use super::*;
     use crate::{Confirm, input::CARET};
@@ -1281,7 +1241,8 @@ mod tests {
         let mut harness = picker(&borrowed, 40, 12)?;
         let (overlay, focus) =
             harness.with_root_widget_context(|picker: &mut Picker<String>, context| {
-                let overlay = picker.add_overlay(context, Confirm::new())?;
+                let _ = picker;
+                let overlay = context.add_modal(Confirm::new())?;
                 let focus =
                     context.with_widget_mut(overlay, |confirm: &mut Confirm, context| {
                         confirm.ask(context, "Delete", "/tmp/entry-1")?;
@@ -1313,8 +1274,14 @@ mod tests {
             Ok(())
         })?;
 
-        let token = harness.with_root_widget_context(|picker: &mut Picker<String>, context| {
-            picker.open_overlay(context, overlay.into(), focus, ModalBindings::Application)
+        let token = harness.with_root_widget_context(|_: &mut Picker<String>, context| {
+            context.open_modal(ModalOptions {
+                owner: context.node_id(),
+                modal: overlay.into(),
+                initial_focus: focus,
+                dim_target: None,
+                bindings: ModalBindings::Application,
+            })
         })?;
         harness.render()?;
         assert!(
