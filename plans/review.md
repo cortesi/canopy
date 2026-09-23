@@ -2175,7 +2175,7 @@ Each stage also updates the docs it touches.
   - Move the Luau inventory into a test.
   - Apply the xtask fixes.
   - Delete fh's xtask.
-- [ ] C49 (fh):
+- [x] C49 (fh):
   - Split `commander.rs`, canopy-fileselect's `lib.rs`, and `columns.rs`.
   - Switch the read-only callbacks to `with_widget`.
   - Add `fh::factory`, and shrink both public surfaces.
