@@ -234,8 +234,15 @@ impl Root {
                 Ok((previous, scroll))
             })?;
 
+        // Help is an overlay, so it can open over another modal. The root
+        // owns it unless that modal shuts the root out; then the focus inside
+        // the modal owns it, and closing the modal closes help too.
+        let owner = match origin_focus {
+            Some(focus) if !c.modal_admits(c.node_id()) => focus,
+            _ => c.node_id(),
+        };
         let opened = c.open_modal(ModalOptions {
-            owner: c.node_id(),
+            owner,
             modal: help,
             initial_focus: list.into(),
             dim_target: Some(self.main_pane_id(c)?),
@@ -1086,6 +1093,45 @@ mod tests {
             canopy.assert(canopy.key_for(command.root.show_help()) == nil)
             "#,
         )
+    }
+
+    #[test]
+    fn ctrl_g_opens_help_over_a_framework_modal() -> Result<()> {
+        const DIALOG: FrameworkBindingGroup = FrameworkBindingGroup::new("test.dialog");
+        let (mut canopy, _backend, _left, right) = setup_root_tree()?;
+        install_help_trigger(&mut canopy)?;
+        canopy.with_root_context(|context| {
+            let app = context.parent_of(right).expect("app node");
+            context.open_modal(ModalOptions {
+                owner: app,
+                modal: right,
+                initial_focus: right,
+                dim_target: None,
+                bindings: ModalBindings::Framework {
+                    groups: &[DIALOG],
+                    intents: &[],
+                },
+            })?;
+            Ok(())
+        })?;
+
+        send_key(&mut canopy, "ctrl-g")?;
+        assert_eq!(
+            canopy.available_bindings(None)?.framework_group,
+            Some(HELP_BINDINGS),
+            "the global help binding reaches through the dialog"
+        );
+        send_key(&mut canopy, "ctrl-g")?;
+        assert_eq!(
+            canopy.available_bindings(None)?.framework_group,
+            Some(DIALOG),
+            "closing help returns to the dialog"
+        );
+        assert_eq!(
+            canopy.with_root_view(|context| context.focused_within(context.root_id())),
+            Some(right)
+        );
+        Ok(())
     }
 
     #[test]

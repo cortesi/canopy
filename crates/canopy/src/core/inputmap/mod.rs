@@ -64,7 +64,7 @@ impl fmt::Display for FrameworkBindingGroup {
 pub enum BindingTier {
     /// Framework-owned bindings that only a modal admits.
     Framework(FrameworkBindingGroup),
-    /// Highest-priority application tier.
+    /// Highest-priority application tier, which every modal admits.
     Global,
     /// Named application mode.
     Mode(String),
@@ -682,8 +682,10 @@ impl InputMap {
 
     /// Return ranked binding candidates at one route node, best first.
     ///
-    /// The order is modal admission, then the global tier, the newest active
-    /// modes, and the default tier. Within a tier, path specificity and
+    /// The order is the framework groups an open modal admits, then the
+    /// global tier, the newest active modes, and the default tier. A framework
+    /// modal admits every global binding, and only its listed intents from
+    /// the other application tiers. Within a tier, path specificity and
     /// insertion order rank the candidates. A transient mode ends the walk,
     /// so nothing older follows it, unless a framework group suspends it.
     pub(crate) fn candidates(&self, path: &Path, input: InputSpec) -> Vec<BindingCandidate<'_>> {
@@ -694,7 +696,9 @@ impl InputMap {
                 for group in *groups {
                     self.extend_framework_group(&mut out, path, input, *group);
                 }
-                if !intents.is_empty() {
+                if intents.is_empty() {
+                    self.extend_tier(&mut out, path, input, |tier| *tier == BindingTier::Global);
+                } else {
                     self.extend_application_tiers(&mut out, path, input, false);
                 }
             }
@@ -773,13 +777,18 @@ impl InputMap {
 
     /// Return whether the active modal admission admits one record.
     ///
-    /// Admission ignores route position and widget state. Route selection and
+    /// A framework modal admits its groups, every global binding, and
+    /// application bindings to its listed intents. Global bindings reach
+    /// every modal, as they reach past a transient mode, so a key such as
+    /// help works everywhere. Admission ignores route position and widget
+    /// state. Route selection and
     /// `candidate_keys` share this predicate.
     pub(crate) fn admits_record(&self, record: &BindingRecord) -> bool {
         match &self.modal_bindings {
             Some(ModalBindings::Framework { groups, intents }) => match &record.tier {
                 BindingTier::Framework(record_group) => groups.contains(record_group),
-                BindingTier::Global | BindingTier::Mode(_) | BindingTier::Default => record
+                BindingTier::Global => true,
+                BindingTier::Mode(_) | BindingTier::Default => record
                     .action
                     .intent()
                     .is_some_and(|name| intents.contains(&name.as_str())),

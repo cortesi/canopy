@@ -18,8 +18,8 @@ pub struct ModalToken(u64);
 /// Bindings admitted within a modal's route to its owner.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ModalBindings {
-    /// Admit these framework groups first, then application bindings to the
-    /// listed intents, on the bounded modal route.
+    /// Admit these framework groups first, then every global binding and
+    /// application bindings to the listed intents, on the bounded modal route.
     ///
     /// A host admits its own group and the groups the widgets inside the
     /// modal ship, such as [`Confirm::BINDINGS`](../../canopy_widgets). The

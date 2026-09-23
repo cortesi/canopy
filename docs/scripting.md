@@ -274,7 +274,7 @@ The next key pops a transient mode. When the mode binds that key, the binding
 runs after the pop, so it can enter another mode. It runs before the focused
 widget sees the key, whatever its phase. Any other key only pops the mode, and
 does not fall through to older modes or to the default tier. Global bindings
-still apply. `Root` lists the keys of a transient mode in a small panel until
+still apply, and they also reach through every modal. `Root` lists the keys of a transient mode in a small panel until
 the mode ends.
 
 Native Rust installs bindings during setup with `Setup::bind(input, options,

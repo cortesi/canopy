@@ -186,6 +186,10 @@ pub trait ViewContext: sealed::ViewContext {
     /// Whether a modal remains open, including pending deferred closes.
     fn modal_is_open(&self, token: ModalToken) -> bool;
 
+    /// Whether the top modal admits `node`, so it can receive input and own
+    /// a new modal. Every node is admitted while no modal is open.
+    fn modal_admits(&self, node: NodeId) -> bool;
+
     /// Return the notice the application shows: the newest one, from its
     /// record until the next input event.
     fn notice(&self) -> Option<&Notice>;
@@ -984,6 +988,10 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
 
     fn modal_is_open(&self, token: ModalToken) -> bool {
         self.core.modal_is_open(token)
+    }
+
+    fn modal_admits(&self, node: NodeId) -> bool {
+        self.core.modal_admits(node)
     }
 
     fn notice(&self) -> Option<&Notice> {

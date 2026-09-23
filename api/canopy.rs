@@ -1372,7 +1372,7 @@ pub mod canopy {
         pub enum BindingTier {
             /// Framework-owned bindings that only a modal admits.
             Framework(FrameworkBindingGroup),
-            /// Highest-priority application tier.
+            /// Highest-priority application tier, which every modal admits.
             Global,
             /// Named application mode.
             Mode(String),
@@ -1480,8 +1480,8 @@ pub mod canopy {
         /// Bindings admitted within a modal's route to its owner.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub enum ModalBindings {
-            /// Admit these framework groups first, then application bindings to the
-            /// listed intents, on the bounded modal route.
+            /// Admit these framework groups first, then every global binding and
+            /// application bindings to the listed intents, on the bounded modal route.
             ///
             /// A host admits its own group and the groups the widgets inside the
             /// modal ship, such as [`Confirm::BINDINGS`](../../canopy_widgets). The
@@ -4256,6 +4256,10 @@ pub mod canopy {
 
         /// Layout configuration for a specific node.
         fn layout_of(&self, node: NodeId) -> Option<Layout>;
+
+        /// Whether the top modal admits `node`, so it can receive input and own
+        /// a new modal. Every node is admitted while no modal is open.
+        fn modal_admits(&self, node: NodeId) -> bool;
 
         /// Whether a modal remains open, including pending deferred closes.
         fn modal_is_open(&self, token: ModalToken) -> bool;

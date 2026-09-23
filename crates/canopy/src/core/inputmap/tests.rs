@@ -510,9 +510,11 @@ fn diagnostics_distinguish_tier_path_insertion_route_and_framework_group_causes(
         intents: &[],
     }));
     assert_eq!(
-        map.registry_status(global, &route).label(),
+        map.registry_status(earlier_route, &route).label(),
         "blocked by framework group root.help"
     );
+    // Global bindings reach through every modal.
+    assert_eq!(map.registry_status(global, &route).label(), "effective");
     map.set_modal_bindings(None);
     Ok(())
 }

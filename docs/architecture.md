@@ -497,7 +497,8 @@ commands. Framework targets dispatch commands.
 A `BindingTier` is a binding's resolution layer, and its variant order is the
 resolution order: `Framework(group)`, `Global`, `Mode(name)`, then `Default`.
 The resolver checks the framework group that the top modal admits first.
-Without one, it checks the global tier, active modes from newest to oldest, and
+A framework modal also admits every global binding, so a key such as help
+works everywhere. Without a modal, the resolver checks the global tier, active modes from newest to oldest, and
 then the default tier. A transient mode ends that search, so a key it does not
 bind resolves to nothing. Path specificity and insertion order select a winner
 within one tier. `Setup::bind` installs a binding in any tier: a framework
@@ -526,7 +527,7 @@ the route trace, and never aborts the application. In a transient mode the
 mode pops before its intent runs, and an intent without a consumer dismisses
 the mode the way an unbound key does. A framework modal can admit application
 bindings to named intents: `ModalBindings::Framework { groups, intents }` admits
-the listed intents after its framework groups, and only while a widget inside
+the global tier and the listed intents after its framework groups, and only while a widget inside
 the modal accepts them.
 
 A widget that runs inside modals ships a framework group from its `Register`
