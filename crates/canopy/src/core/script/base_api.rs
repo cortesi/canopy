@@ -27,9 +27,8 @@ use super::{
     error, fixtures_to_arg, host_return, host_value, inputmap, key, key_explanation_to_arg,
     luau_global_owner_name, mouse, node_handle_type, node_id_from_value, node_info_to_arg,
     node_list_to_arg, notices_to_arg, owned_truthy, ret_arg, ret_none, ret_one, route_trace_to_arg,
-    screen_cells_to_arg, screen_text, screen_text_for_rect, screen_to_arg, script_callback_label,
-    script_journal_to_arg, snapshot_to_arg, tree_node_to_arg, validate_node_handle, values_to_args,
-    with_current_canopy,
+    screen_text, screen_text_for_rect, script_callback_label, script_journal_to_arg,
+    snapshot_to_arg, validate_node_handle, values_to_args, with_current_canopy,
 };
 use crate::{
     core::{context::matching_nodes, inputmap::IntentCatalog},
@@ -114,45 +113,6 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
         handler: Handler::Sync(host_find_nodes),
     },
     BaseFunction {
-        name: "parent",
-        docs: Some("Return the parent of a node, or nil at the root."),
-        signature: || {
-            FunctionSignature::new()
-                .param(("id", Type::named("NodeId")))
-                .ret(Type::named("NodeId").optional())
-        },
-        handler: Handler::Sync(host_parent),
-    },
-    BaseFunction {
-        name: "children",
-        docs: None,
-        signature: || {
-            FunctionSignature::new()
-                .param(("id", Type::named("NodeId")))
-                .ret(Type::named("NodeId").array())
-        },
-        handler: Handler::Sync(host_children),
-    },
-    BaseFunction {
-        name: "tree",
-        docs: Some("Return a recursive snapshot of the entire tree rooted at `canopy.root()`."),
-        signature: || FunctionSignature::new().ret(Type::named("TreeNode")),
-        handler: Handler::Sync(host_tree),
-    },
-    BaseFunction {
-        name: "node_at",
-        docs: Some(
-            "Hit-test a screen coordinate and return the deepest visible node at that point.",
-        ),
-        signature: || {
-            FunctionSignature::new()
-                .param(("x", Type::Number))
-                .param(("y", Type::Number))
-                .ret(Type::named("NodeId").optional())
-        },
-        handler: Handler::Sync(host_node_at),
-    },
-    BaseFunction {
         name: "set_focus",
         docs: Some("Attempt to move focus directly to a node."),
         signature: || {
@@ -163,24 +123,18 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
         handler: Handler::Sync(host_set_focus),
     },
     BaseFunction {
-        name: "focus_next",
-        docs: Some("Move focus to the next focusable node in global focus order."),
-        signature: FunctionSignature::new,
-        handler: Handler::Sync(host_focus_next),
-    },
-    BaseFunction {
-        name: "focus_prev",
-        docs: Some("Move focus to the previous focusable node in global focus order."),
-        signature: FunctionSignature::new,
-        handler: Handler::Sync(host_focus_prev),
-    },
-    BaseFunction {
-        name: "focus_dir",
-        docs: None,
+        name: "move_focus",
+        docs: Some(
+            "Move focus in a direction: `next` and `prev` follow focus order, and \
+             the arrows follow screen geometry.",
+        ),
         signature: || {
-            FunctionSignature::new().param(("dir", Type::literals(["up", "down", "left", "right"])))
+            FunctionSignature::new().param((
+                "dir",
+                Type::literals(["next", "prev", "up", "down", "left", "right"]),
+            ))
         },
-        handler: Handler::Sync(host_focus_dir),
+        handler: Handler::Sync(host_move_focus),
     },
     BaseFunction {
         name: "send_key",
@@ -285,14 +239,17 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
         handler: Handler::Sync(host_call_named),
     },
     BaseFunction {
-        name: "resolve",
-        docs: Some("Return the command dispatch target for an owner, or nil if none is mounted."),
+        name: "target",
+        docs: Some(
+            "Return the node an owner's command would dispatch to from the script origin, \
+             or nil when none is mounted.",
+        ),
         signature: || {
             FunctionSignature::new()
                 .param(("owner", Type::String))
                 .ret(Type::named("NodeId").optional())
         },
-        handler: Handler::Sync(host_resolve),
+        handler: Handler::Sync(host_target),
     },
     BaseFunction {
         name: "bindings",
@@ -355,45 +312,21 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
         handler: Handler::Sync(host_prepare),
     },
     BaseFunction {
-        name: "screen",
-        docs: Some("Return the rendered screen as rows of cell strings."),
-        signature: || FunctionSignature::new().ret(Type::String.array().array()),
-        handler: Handler::Sync(host_screen),
-    },
-    BaseFunction {
-        name: "screen_cells",
-        docs: Some("Return the rendered screen as rows of styled cell records."),
-        signature: || FunctionSignature::new().ret(Type::named("ScreenCell").array().array()),
-        handler: Handler::Sync(host_screen_cells),
-    },
-    BaseFunction {
         name: "screen_text",
-        docs: Some("Return the rendered screen as newline-joined plain text."),
-        signature: || FunctionSignature::new().ret(Type::String),
+        docs: Some(
+            "Prepare pending changes, then return the published frame's text, one line per \
+             row. A node target crops to its content rectangle, and a rect target crops to \
+             that screen rectangle.",
+        ),
+        signature: || {
+            FunctionSignature::new()
+                .param((
+                    "target",
+                    Type::union([Type::named("NodeId"), Type::named("Rect")]).optional(),
+                ))
+                .ret(Type::String)
+        },
         handler: Handler::Sync(host_screen_text),
-    },
-    BaseFunction {
-        name: "screen_region",
-        docs: Some("Return rendered plain text inside a screen rectangle."),
-        signature: || {
-            FunctionSignature::new()
-                .param(("x", Type::Number))
-                .param(("y", Type::Number))
-                .param(("w", Type::Number))
-                .param(("h", Type::Number))
-                .ret(Type::String)
-        },
-        handler: Handler::Sync(host_screen_region),
-    },
-    BaseFunction {
-        name: "node_region",
-        docs: Some("Return rendered plain text inside a node's content rectangle."),
-        signature: || {
-            FunctionSignature::new()
-                .param(("id", Type::named("NodeId")))
-                .ret(Type::String)
-        },
-        handler: Handler::Sync(host_node_region),
     },
     BaseFunction {
         name: "route_trace",
@@ -525,6 +458,12 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
         handler: Handler::Sync(host_assert),
     },
     BaseFunction {
+        name: "fixtures",
+        docs: Some("List the registered fixtures."),
+        signature: || FunctionSignature::new().ret(Type::named("FixtureInfo").array()),
+        handler: Handler::Sync(host_fixtures),
+    },
+    BaseFunction {
         name: "wait_for",
         docs: Some("Wait until a predicate returns a truthy value."),
         signature: || {
@@ -537,28 +476,6 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
                 .ret(Type::Boolean)
         },
         handler: Handler::Async(|| async_host_fn(wait_for_predicate)),
-    },
-    BaseFunction {
-        name: "wait_for_node",
-        docs: Some("Wait until a command owner resolves to a mounted node."),
-        signature: || {
-            FunctionSignature::new()
-                .param(("owner", Type::String))
-                .param(("timeout_ms", Type::Number.optional()))
-                .ret(Type::Boolean)
-        },
-        handler: Handler::Async(|| async_host_fn(wait_for_node)),
-    },
-    BaseFunction {
-        name: "wait_for_screen_text",
-        docs: Some("Wait until the rendered screen contains text."),
-        signature: || {
-            FunctionSignature::new()
-                .param(("text", Type::String))
-                .param(("timeout_ms", Type::Number.optional()))
-                .ret(Type::Boolean)
-        },
-        handler: Handler::Async(|| async_host_fn(wait_for_screen_text)),
     },
 ];
 
@@ -587,13 +504,6 @@ pub(super) fn register(builder: &mut module::Builder, action_type: &Type) {
              with required discovery metadata.",
         ),
         host_bind,
-    );
-    builder.borrowed_function(
-        "fixtures",
-        Binding::global(Type::func(
-            FunctionSignature::new().ret(Type::named("FixtureInfo").array()),
-        )),
-        host_fixtures,
     );
 }
 
@@ -753,48 +663,6 @@ impl<'s> FromLuaMulti<'s> for WaitForArgs {
     }
 }
 
-/// Parsed arguments for `canopy.wait_for_node`.
-struct WaitForNodeArgs {
-    /// Command owner that should become available.
-    owner: String,
-    /// Optional timeout in milliseconds.
-    timeout_ms: Option<u64>,
-}
-
-/// Read a required string argument and an optional timeout.
-fn parse_wait_string<'s>(
-    values: MultiValue<'s>,
-    scope: &Scope<'s>,
-    field: &str,
-) -> StdResult<(String, Option<u64>), RuntimeError> {
-    let mut args = HostArgCursor::new(scope, values);
-    let value = args.required::<String>(field)?;
-    let timeout_ms = args.optional::<u64>("timeout_ms")?;
-    Ok((value, timeout_ms))
-}
-
-impl<'s> FromLuaMulti<'s> for WaitForNodeArgs {
-    fn from_lua_multi(values: MultiValue<'s>, scope: &Scope<'s>) -> StdResult<Self, RuntimeError> {
-        let (owner, timeout_ms) = parse_wait_string(values, scope, "owner")?;
-        Ok(Self { owner, timeout_ms })
-    }
-}
-
-/// Parsed arguments for `canopy.wait_for_screen_text`.
-struct WaitForScreenTextArgs {
-    /// Text fragment expected on screen.
-    text: String,
-    /// Optional timeout in milliseconds.
-    timeout_ms: Option<u64>,
-}
-
-impl<'s> FromLuaMulti<'s> for WaitForScreenTextArgs {
-    fn from_lua_multi(values: MultiValue<'s>, scope: &Scope<'s>) -> StdResult<Self, RuntimeError> {
-        let (text, timeout_ms) = parse_wait_string(values, scope, "text")?;
-        Ok(Self { text, timeout_ms })
-    }
-}
-
 /// Build a timeout error for an async wait helper.
 fn wait_timeout(timeout_ms: u64) -> RuntimeError {
     RuntimeError::from(error::Error::ScriptTimeout { timeout_ms })
@@ -878,56 +746,6 @@ async fn wait_for_predicate(
                     error.value().display_lua()
                 ))),
             }
-        })
-    })
-    .await
-}
-
-/// Async implementation of `canopy.wait_for_node`.
-async fn wait_for_node(
-    ctx: AsyncHostContext,
-    args: WaitForNodeArgs,
-) -> StdResult<HostReturn, RuntimeError> {
-    wait_until(ctx, args.timeout_ms, move |ctx| {
-        let owner = args.owner.clone();
-        Box::pin(async move {
-            ctx.scope(move |scope| {
-                let canopy = canopy_context(scope)?;
-                let registered = canopy
-                    .core
-                    .commands
-                    .iter()
-                    .any(|(_, spec)| spec.owner == owner);
-                let start = canopy.core.focus.unwrap_or(canopy.core.root);
-                Ok(registered
-                    && commands::CommandResolver::for_target(
-                        &canopy.core,
-                        commands::CommandTarget::From(start),
-                    )
-                    .resolve_owner(&owner)
-                    .is_some())
-            })
-            .await
-        })
-    })
-    .await
-}
-
-/// Async implementation of `canopy.wait_for_screen_text`.
-async fn wait_for_screen_text(
-    ctx: AsyncHostContext,
-    args: WaitForScreenTextArgs,
-) -> StdResult<HostReturn, RuntimeError> {
-    wait_until(ctx, args.timeout_ms, move |ctx| {
-        let text = args.text.clone();
-        Box::pin(async move {
-            ctx.scope(move |scope| {
-                let canopy = canopy_context(scope)?;
-                Ok(canopy
-                    .published_buf()
-                    .is_some_and(|buffer| buffer.screen_text().contains(&text)))
-            })
-            .await
         })
     })
     .await
@@ -1235,45 +1053,6 @@ fn host_find_nodes<'s>(
     })
 }
 
-/// `canopy.parent`: return a node's parent, or nil for the root.
-fn host_parent<'s>(
-    scope: &Scope<'s>,
-    args: MultiValue<'s>,
-) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = HostArgCursor::new(scope, args);
-    let node_id = read_node_id(scope, &mut args, "id")?;
-    host_value(scope, |canopy, _| {
-        let root_ctx = CoreViewContext::new(&canopy.core, canopy.core.root_id());
-        Ok(root_ctx
-            .parent_of(node_id)
-            .map(ArgValue::Node)
-            .unwrap_or(ArgValue::Null))
-    })
-}
-
-/// `canopy.children`: return a node's children.
-fn host_children<'s>(
-    scope: &Scope<'s>,
-    args: MultiValue<'s>,
-) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = HostArgCursor::new(scope, args);
-    let node_id = read_node_id(scope, &mut args, "id")?;
-    host_value(scope, |canopy, _| {
-        let root_ctx = CoreViewContext::new(&canopy.core, canopy.core.root_id());
-        Ok(node_list_to_arg(root_ctx.children_of(node_id)))
-    })
-}
-
-/// `canopy.tree`: return the recursive node tree from the root.
-fn host_tree<'s>(
-    scope: &Scope<'s>,
-    _args: MultiValue<'s>,
-) -> StdResult<MultiValue<'s>, RuntimeError> {
-    host_value(scope, |canopy, _| {
-        tree_node_to_arg(canopy, canopy.core.root_id())
-    })
-}
-
 /// `canopy.set_focus`: focus a node, returning whether focus moved.
 fn host_set_focus<'s>(
     scope: &Scope<'s>,
@@ -1287,23 +1066,6 @@ fn host_set_focus<'s>(
         ctx.set_focus(node_id).map(ChangeOutcome::changed)
     })?;
     Ok(ret_one(ScopedValue::Boolean(focused)))
-}
-
-/// `canopy.node_at`: return the node at screen coordinates, or nil.
-fn host_node_at<'s>(
-    scope: &Scope<'s>,
-    args: MultiValue<'s>,
-) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = HostArgCursor::new(scope, args);
-    let x = args.required::<u32>("x")?;
-    let y = args.required::<u32>("y")?;
-    host_value(scope, |canopy, _| {
-        Ok(canopy
-            .core
-            .locate_node(canopy.core.root_id(), Point { x, y })?
-            .map(ArgValue::Node)
-            .unwrap_or(ArgValue::Null))
-    })
 }
 
 /// Move root focus in one direction.
@@ -1320,24 +1082,8 @@ fn host_focus_move<'s>(
     Ok(ret_none())
 }
 
-/// `canopy.focus_next`: move focus to the next focusable node.
-fn host_focus_next<'s>(
-    scope: &Scope<'s>,
-    _args: MultiValue<'s>,
-) -> StdResult<MultiValue<'s>, RuntimeError> {
-    host_focus_move(scope, FocusDirection::Next)
-}
-
-/// `canopy.focus_prev`: move focus to the previous focusable node.
-fn host_focus_prev<'s>(
-    scope: &Scope<'s>,
-    _args: MultiValue<'s>,
-) -> StdResult<MultiValue<'s>, RuntimeError> {
-    host_focus_move(scope, FocusDirection::Prev)
-}
-
-/// `canopy.focus_dir`: move focus in a direction.
-fn host_focus_dir<'s>(
+/// `canopy.move_focus`: move focus in a direction.
+fn host_move_focus<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
@@ -1566,8 +1312,8 @@ fn host_commands<'s>(
     })
 }
 
-/// `canopy.resolve`: return the dispatch target for an owner.
-fn host_resolve<'s>(
+/// `canopy.target`: return the dispatch target for an owner.
+fn host_target<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
@@ -2028,74 +1774,52 @@ fn host_prepare<'s>(
     Ok(ret_none())
 }
 
-/// `canopy.screen`: return the rendered screen as rows of cell strings.
-fn host_screen<'s>(
-    scope: &Scope<'s>,
-    _args: MultiValue<'s>,
-) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let rows = with_current_canopy(scope, |canopy, _| screen_to_arg(canopy))?;
-    ret_arg(scope, &rows)
-}
-
-/// `canopy.screen_cells`: return the rendered screen with style metadata.
-fn host_screen_cells<'s>(
-    scope: &Scope<'s>,
-    _args: MultiValue<'s>,
-) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let rows = with_current_canopy(scope, |canopy, _| screen_cells_to_arg(canopy))?;
-    ret_arg(scope, &rows)
-}
-
-/// `canopy.screen_text`: return the rendered screen as plain text.
+/// `canopy.screen_text`: return the published frame's text, whole or
+/// cropped to a node or a rect.
 fn host_screen_text<'s>(
     scope: &Scope<'s>,
-    _args: MultiValue<'s>,
-) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let text = with_current_canopy(scope, |canopy, _| screen_text(canopy))?;
-    Ok(ret_one(ScopedValue::String(scope.create_string(&text)?)))
-}
-
-/// `canopy.screen_region`: return rendered plain text inside a screen
-/// rectangle.
-fn host_screen_region<'s>(
-    scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
     let mut args = HostArgCursor::new(scope, args);
-    let x = args.required::<i64>("x")?;
-    let y = args.required::<i64>("y")?;
-    let w = args.required::<i64>("w")?;
-    let h = args.required::<i64>("h")?;
-    // Out-of-range coordinates clamp to the screen bounds rather than failing.
-    let top_left = PointI32::clamped_from_i64(x, y);
-    let rect = RectI32::new(
-        top_left.x,
-        top_left.y,
-        u32::try_from(w.max(0)).unwrap_or(u32::MAX),
-        u32::try_from(h.max(0)).unwrap_or(u32::MAX),
-    );
-    let text = with_current_canopy(scope, |canopy, _| screen_text_for_rect(canopy, rect))?;
-    Ok(ret_one(ScopedValue::String(scope.create_string(&text)?)))
-}
-
-/// `canopy.node_region`: return rendered plain text inside a node's content
-/// rect.
-fn host_node_region<'s>(
-    scope: &Scope<'s>,
-    args: MultiValue<'s>,
-) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = HostArgCursor::new(scope, args);
-    let node_id = read_node_id(scope, &mut args, "id")?;
-    let text = with_current_canopy(scope, |canopy, _| {
-        canopy.prepare()?;
-        let view = canopy
-            .core
-            .nodes
-            .get(node_id)
-            .ok_or_else(|| error::Error::from(commands::CommandError::InvalidNode { id: node_id }))?
-            .view;
-        screen_text_for_rect(canopy, view.content)
-    })?;
+    let text = match args.raw() {
+        None | Some(ScopedValue::Nil) => {
+            with_current_canopy(scope, |canopy, _| screen_text(canopy))?
+        }
+        Some(ScopedValue::Table(rect)) => {
+            let field = |name: &str| -> StdResult<i64, RuntimeError> {
+                rect.get::<_, i64>(scope, name).map_err(|_| {
+                    RuntimeError::runtime(format!("rect field `{name}` must be a number"))
+                })
+            };
+            let (x, y, w, h) = (field("x")?, field("y")?, field("w")?, field("h")?);
+            // Out-of-range coordinates clamp to the screen bounds rather than
+            // failing.
+            let top_left = PointI32::clamped_from_i64(x, y);
+            let rect = RectI32::new(
+                top_left.x,
+                top_left.y,
+                u32::try_from(w.max(0)).unwrap_or(u32::MAX),
+                u32::try_from(h.max(0)).unwrap_or(u32::MAX),
+            );
+            with_current_canopy(scope, |canopy, _| screen_text_for_rect(canopy, rect))?
+        }
+        Some(value) => {
+            let node_id = node_id_from_value(scope, value)?;
+            with_current_canopy(scope, |canopy, _| {
+                validate_node_handle(&canopy.core, node_id)?;
+                canopy.prepare()?;
+                let view = canopy
+                    .core
+                    .nodes
+                    .get(node_id)
+                    .ok_or_else(|| {
+                        error::Error::from(commands::CommandError::InvalidNode { id: node_id })
+                    })?
+                    .view;
+                screen_text_for_rect(canopy, view.content)
+            })?
+        }
+    };
     Ok(ret_one(ScopedValue::String(scope.create_string(&text)?)))
 }
 
@@ -2194,7 +1918,7 @@ fn host_on_start<'s>(
     Ok(ret_none())
 }
 
-/// `fixtures`: list all registered fixtures.
+/// `canopy.fixtures`: list all registered fixtures.
 fn host_fixtures<'s>(
     scope: &Scope<'s>,
     _args: MultiValue<'s>,

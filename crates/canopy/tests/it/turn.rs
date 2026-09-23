@@ -103,7 +103,10 @@ mod tests {
 
     fn waiting_request(canopy: &Canopy, timeout: Option<Duration>) -> EvalRequest {
         EvalRequest {
-            source: "return canopy.wait_for_screen_text(\"ready\", 1000)".into(),
+            source: "return canopy.wait_for(function() \
+                     return canopy.screen_text():find(\"ready\", 1, true) ~= nil \
+                     end, 1000)"
+                .into(),
             timeout,
             origin: canopy.root_id(),
         }

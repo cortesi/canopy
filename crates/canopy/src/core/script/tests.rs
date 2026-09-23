@@ -1,6 +1,6 @@
 //! Tests for the Luau scripting host.
 
-use std::{any::Any, collections::BTreeMap};
+use std::collections::BTreeMap;
 
 use proptest::{
     prelude::*,
@@ -11,7 +11,7 @@ use tokio::runtime::Builder;
 
 use super::{base_api::read_node_id, bridge::REENTRANT_CANOPY, *};
 use crate::{
-    CanopyBuilder, NodeName, Widget,
+    CanopyBuilder, Widget,
     core::{id::testing_node_id, inputmap::IntentCatalog, testing::model::trace_result},
     derive_commands,
     error::Result,
@@ -806,78 +806,6 @@ fn tcompile_rejects_type_errors_when_finalized() -> Result<()> {
     })
 }
 
-/// Mounted node whose name no registered command owns.
-struct WaitUnownedNode;
-
-impl crate::Widget for WaitUnownedNode {
-    fn name(&self) -> NodeName {
-        NodeName::convert("wait_unowned")
-    }
-}
-
-fn wait_command_invoke(
-    _target: &mut dyn Any,
-    _ctx: &mut dyn crate::Context,
-    _args: &CommandArgs,
-) -> StdResult<ArgValue, commands::CommandError> {
-    Ok(ArgValue::Null)
-}
-
-fn wait_command_check(_args: &CommandArgs) -> StdResult<(), commands::CommandError> {
-    Ok(())
-}
-
-static WAIT_EXTRA_NODE: CommandSpec = CommandSpec {
-    id: commands::CommandId("ba_la::wait_extra"),
-    name: "wait_extra",
-    owner: "ba_la",
-    params: &[],
-    ret: commands::CommandReturnSpec::Unit,
-    doc: None,
-    invoke: wait_command_invoke,
-    check: wait_command_check,
-    status: None,
-};
-
-#[test]
-fn wait_for_node_preserves_registration_and_focus_resolution() -> Result<()> {
-    run_ttree(|canopy, _, tree| {
-        static WAIT_COMMANDS: &[&CommandSpec] = &[&WAIT_EXTRA_NODE];
-        canopy.core.commands.add(WAIT_COMMANDS)?;
-        canopy
-            .core
-            .add_child_to_boxed(tree.root, Box::new(WaitUnownedNode))?;
-        canopy.core.set_focus(tree.root)?;
-        assert_eq!(
-            canopy.eval_script(r#"return canopy.wait_for_node("ba_la", 10)"#)?,
-            ArgValue::Bool(true)
-        );
-        for owner in ["ba", "wait_unowned", "missing"] {
-            let error = canopy
-                .eval_script(&format!("return canopy.wait_for_node({owner:?}, 1)"))
-                .expect_err("unregistered or absent node owner must time out");
-            assert!(matches!(
-                error,
-                error::Error::ScriptTimeout { timeout_ms: 1 }
-            ));
-        }
-        canopy.core.set_focus(tree.b)?;
-        let error = canopy
-            .eval_script(r#"return canopy.wait_for_node("ba_la", 1)"#)
-            .expect_err("owner outside focus subtree and ancestors must time out");
-        assert!(matches!(
-            error,
-            error::Error::ScriptTimeout { timeout_ms: 1 }
-        ));
-        canopy.core.set_focus(tree.a_a)?;
-        assert_eq!(
-            canopy.eval_script(r#"return canopy.wait_for_node("ba_la", 10)"#)?,
-            ArgValue::Bool(true)
-        );
-        Ok(())
-    })
-}
-
 /// A repeated command owner used to check script argument and target contracts.
 struct ScriptCallProbe {
     value: i64,
@@ -941,7 +869,7 @@ fn script_call_probes() -> Result<(Canopy, NodeId, NodeId)> {
 fn explicit_script_targets_match_discovery_and_survive_owner_insertion() -> Result<()> {
     let (mut canopy, first, second) = script_call_probes()?;
     assert_eq!(canopy.eval_script(r#"
-        local children = canopy.children(canopy.root())
+        local children = canopy.node_info(canopy.root()).children
         local first, second = children[1], children[2]
         assert(first and second)
         assert(canopy.call_from(canopy.root(), "script_call_probe::identify") == 1)
@@ -965,7 +893,7 @@ fn explicit_script_targets_match_discovery_and_survive_owner_insertion() -> Resu
     assert_eq!(
         canopy.eval_script(
             r#"
-        local second = canopy.children(canopy.root())[3]
+        local second = canopy.node_info(canopy.root()).children[3]
         assert(canopy.call_from(canopy.root(), "script_call_probe::identify") == 3)
         return canopy.call_exact(second, "script_call_probe::identify")
     "#

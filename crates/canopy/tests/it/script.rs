@@ -184,7 +184,7 @@ mod tests {
             local root = canopy.root()
             local root_info = canopy.node_info(root)
             canopy.assert(root_info.name == "api_root", "root node should expose the widget name")
-            canopy.assert(canopy.parent(root) == nil, "root should not have a parent")
+            canopy.assert(root_info.parent == nil, "root should not have a parent")
 
             local leaves = canopy.find_nodes("api_root/api_leaf")
             canopy.assert(#leaves == 2, "expected two focusable leaves")
@@ -195,9 +195,9 @@ mod tests {
                 canopy.find_node("api_root/api_leaf") == first,
                 "find_node should return the first matching leaf"
             )
-            canopy.assert(canopy.parent(first) == root, "leaf parent should be the root")
+            canopy.assert(canopy.node_info(first).parent == root, "leaf parent should be the root")
 
-            local children = canopy.children(root)
+            local children = root_info.children
             canopy.assert(#children == 2, "root should expose both children")
             canopy.assert(children[1] == first, "first child should match the first leaf")
             canopy.assert(children[2] == second, "second child should match the second leaf")
@@ -214,12 +214,12 @@ mod tests {
             canopy.set_focus(second)
             canopy.assert(canopy.focused() == second, "focus should move to the second leaf")
 
-            canopy.focus_prev()
+            canopy.move_focus("prev")
             canopy.assert(canopy.focused() == first, "focus_prev should move back to the first leaf")
-            canopy.focus_next()
+            canopy.move_focus("next")
             canopy.assert(canopy.focused() == second, "focus_next should move to the second leaf")
             canopy.set_focus(first)
-            canopy.focus_dir("right")
+            canopy.move_focus("right")
             canopy.assert(canopy.focused() == second, "focus_dir right should move to the second leaf")
 
             canopy.send_click(1, 1)
@@ -758,15 +758,18 @@ mod tests {
             r##"
             canopy.send_key("x")
 
-            local cells = canopy.screen_cells()
+            canopy.prepare()
+            local frame = canopy.snapshot()
+            assert(frame)
+            local cells = frame.cells
             canopy.assert(#cells > 0, "screen cells should include rows")
             canopy.assert(cells[1][1].fg:sub(1, 1) == "#", "cell fg should be RGB text")
 
-            local region = canopy.screen_region(0, 0, 8, 1)
+            local region = canopy.screen_text({x = 0, y = 0, w = 8, h = 1})
             canopy.assert(type(region) == "string", "screen region should be text")
 
             local leaves = canopy.find_nodes("api_root/api_leaf")
-            canopy.assert(canopy.node_region(leaves[1]):find("0") ~= nil, "node region should crop text")
+            canopy.assert(canopy.screen_text(leaves[1]):find("0") ~= nil, "a node target should crop text")
 
             local trace = canopy.route_trace()
             canopy.assert(#trace > 0, "route trace should record the injected key")
@@ -1301,7 +1304,7 @@ mod tests {
 
         let resolved = harness
             .canopy
-            .eval_script(r#"return canopy.resolve("script_target") ~= nil"#)?;
+            .eval_script(r#"return canopy.target("script_target") ~= nil"#)?;
         assert_eq!(resolved, ArgValue::Bool(true));
 
         let forged_node = harness.canopy.eval_script(
@@ -1466,44 +1469,38 @@ mod tests {
         harness.script(
             r#"
             for _, size in {{-1, 1}, {1, -1}, {0, 1}, {1, 0}} do
-                canopy.assert(canopy.screen_region(0, 0, size[1], size[2]) == "")
+                canopy.assert(canopy.screen_text({x = 0, y = 0, w = size[1], h = size[2]}) == "")
             end
             local screen = canopy.screen_text()
-            canopy.assert(canopy.screen_region(0, 0, 20, 5) == screen)
-            canopy.assert(canopy.screen_region(0, 0, 5000000000, 5000000000) == screen)
-            canopy.assert(canopy.screen_region(-1, -1, 21, 6) == screen)
-            canopy.assert(canopy.screen_region(30, 30, 10, 10) == "")
-            canopy.assert(canopy.screen_region(0, 0, 1, 1) == "0")
+            canopy.assert(canopy.screen_text({x = 0, y = 0, w = 20, h = 5}) == screen)
+            canopy.assert(canopy.screen_text({x = 0, y = 0, w = 5000000000, h = 5000000000}) == screen)
+            canopy.assert(canopy.screen_text({x = -1, y = -1, w = 21, h = 6}) == screen)
+            canopy.assert(canopy.screen_text({x = 30, y = 30, w = 10, h = 10}) == "")
+            canopy.assert(canopy.screen_text({x = 0, y = 0, w = 1, h = 1}) == "0")
         "#,
         )
     }
 
     #[test]
-    fn recursive_tree_declarations_match_runtime_records() -> Result<()> {
+    fn node_info_declarations_match_runtime_records() -> Result<()> {
         let mut harness = Harness::builder(ApiRoot)
             .register::<ApiRoot>()
             .size(20, 5)
             .build()?;
         let source = r#"
-            local function visit(node: TreeNode)
-                local name: string = node.name
-                canopy.node_info(node.id)
-                for _, child in node.children do
+            local function visit(node: NodeId)
+                local info = canopy.node_info(node)
+                local name: string = info.name
+                for _, child in info.children do
+                    canopy.assert(canopy.node_info(child).parent == node)
                     visit(child)
                 end
             end
-            visit(canopy.tree())
-            for _, child in canopy.node_info(canopy.root()).children do
-                canopy.node_info(child)
-            end
+            visit(canopy.root())
         "#;
-        let checked = harness.canopy.check_script("recursive-tree.luau", source)?;
+        let checked = harness.canopy.check_script("node-info.luau", source)?;
         assert!(!checked.has_errors(), "{:?}", checked.diagnostics());
         harness.script(source)?;
-        let invalid = harness
-            .canopy
-            .check_script("tree-is-not-handle.luau", "canopy.node_info(canopy.tree())")?;
-        assert!(invalid.has_errors());
         Ok(())
     }
 }

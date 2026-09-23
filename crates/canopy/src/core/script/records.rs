@@ -32,7 +32,7 @@ pub(super) fn snapshot_to_arg(frame: &FrameSnapshot) -> ArgValue {
     }
     ArgValue::Map(BTreeMap::from([
         ("frame_id".into(), ArgValue::UInt(frame.frame_id.0)),
-        ("viewport".into(), size_to_arg(size)),
+        ("size".into(), size_to_arg(size)),
         (
             "focus".into(),
             frame.focus.map(ArgValue::Node).unwrap_or(ArgValue::Null),
@@ -176,6 +176,10 @@ pub(super) fn node_info_to_arg(
     let accept_focus = canopy.core.accepts_focus(node_id);
     Ok(BTreeMap::from([
         ("id".to_string(), ArgValue::Node(node_id)),
+        (
+            "parent".to_string(),
+            node.parent.map_or(ArgValue::Null, ArgValue::Node),
+        ),
         ("name".to_string(), ArgValue::String(node.name.to_string())),
         (
             "identity".to_string(),
@@ -208,22 +212,6 @@ pub(super) fn node_info_to_arg(
         ("scroll".to_string(), point_to_arg(node.scroll)),
         ("accept_focus".to_string(), ArgValue::Bool(accept_focus)),
     ]))
-}
-
-/// Convert a node into a recursive tree record.
-pub(super) fn tree_node_to_arg(canopy: &Canopy, node_id: NodeId) -> Result<ArgValue> {
-    let mut info = node_info_to_arg(canopy, node_id)?;
-    let Some(node) = canopy.core.nodes.get(node_id) else {
-        return Err(error::Error::NotFound(format!("node {node_id:?}")));
-    };
-    let children = node
-        .children
-        .iter()
-        .copied()
-        .map(|child_id| tree_node_to_arg(canopy, child_id))
-        .collect::<Result<Vec<_>>>()?;
-    info.insert("children".to_string(), ArgValue::Array(children));
-    Ok(ArgValue::Map(info))
 }
 
 /// Convert registered fixtures into a scripting array.
@@ -463,36 +451,6 @@ fn rendered_buffer(canopy: &mut Canopy) -> Result<&TermBuf> {
     canopy
         .published_buf()
         .ok_or_else(|| error::Error::script("screen unavailable before render"))
-}
-
-/// Convert the current rendered screen buffer into its scripting record.
-pub(super) fn screen_to_arg(canopy: &mut Canopy) -> Result<ArgValue> {
-    let buffer = rendered_buffer(canopy)?;
-    Ok(ArgValue::Array(
-        buffer
-            .rows()
-            .into_iter()
-            .map(|row| ArgValue::Array(row.into_iter().map(ArgValue::String).collect()))
-            .collect(),
-    ))
-}
-
-/// Convert the current rendered screen buffer into styled cell records.
-pub(super) fn screen_cells_to_arg(canopy: &mut Canopy) -> Result<ArgValue> {
-    let buffer = rendered_buffer(canopy)?;
-    let size = buffer.size();
-    let mut rows = Vec::with_capacity(size.h as usize);
-    for y in 0..size.h {
-        let mut row = Vec::with_capacity(size.w as usize);
-        for x in 0..size.w {
-            let cell = buffer
-                .get(Point { x, y })
-                .expect("buffer coordinates should always be valid");
-            row.push(cell_to_arg(x, y, cell));
-        }
-        rows.push(ArgValue::Array(row));
-    }
-    Ok(ArgValue::Array(rows))
 }
 
 /// Convert one terminal cell into a scripting record.

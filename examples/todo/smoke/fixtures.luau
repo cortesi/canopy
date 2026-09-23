@@ -1,6 +1,6 @@
 local names = {}
 
-for _, fixture in ipairs(fixtures()) do
+for _, fixture in ipairs(canopy.fixtures()) do
     names[fixture.name] = true
 end
 

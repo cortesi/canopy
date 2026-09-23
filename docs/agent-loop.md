@@ -71,7 +71,7 @@ cargo run -p canopyctl -- bootstrap -- cargo run -p todo -- mcp :memory:
 ```
 
 Inside Luau, use `canopy.api()`, `canopy.commands()`, `canopy.bindings()`,
-`canopy.available_bindings(node?)`, and `fixtures()` when a scenario must
+`canopy.available_bindings(node?)`, and `canopy.fixtures()` when a scenario must
 inspect the app in the same eval that acts on it. `bindings()` returns the
 complete registry. `available_bindings()` returns the effective key-binding
 snapshot for one focus context.
@@ -83,7 +83,7 @@ fixture directly; live sessions apply fixtures before eval.
 
 ```sh
 cargo run -p canopyctl -- eval --fixture with_items \
-  'return #fixtures() > 0' \
+  'return #canopy.fixtures() > 0' \
   -- cargo run -p todo -- mcp :memory:
 ```
 
@@ -99,7 +99,7 @@ observation before coordinate input. This example runs after the `with_items`
 fixture:
 
 ```luau
-local todo_node = canopy.resolve("todo")
+local todo_node = canopy.target("todo")
 canopy.assert(todo_node ~= nil, "todo widget should be mounted")
 canopy.assert(
     canopy.screen_text():find("Buy milk") ~= nil,
@@ -116,9 +116,9 @@ canopy.assert(text:find("Buy milk") == nil, "deleted item should disappear")
 
 Observation helpers are script-visible:
 
-- `canopy.screen_text()` for simple text assertions.
-- `canopy.screen_cells()` for styled cell assertions.
-- `canopy.screen_region(x, y, w, h)` and `canopy.node_region(node)` for crops.
+- `canopy.screen_text(target?)` for text assertions, cropped to a node or a
+  `Rect` when given one.
+- `canopy.snapshot().cells` for styled cell assertions.
 - `canopy.route_trace()` for the most recent key or mouse route. Each entry
   has a snake_case `kind`, such as `before_widget_binding` or `handled`. A
   route whose binding or widget handler failed ends with a `notice` entry.
@@ -166,8 +166,7 @@ canopy.send_key("ctrl-g")
 canopy.assert(canopy.focused() == origin, "help must restore exact focus")
 ```
 
-Use `canopy.wait_for(fn, timeout_ms?)`, `canopy.wait_for_node(owner, timeout_ms?)`,
-or `canopy.wait_for_screen_text(text, timeout_ms?)` to observe asynchronous state.
+Use `canopy.wait_for(fn, timeout_ms?)` to observe asynchronous state.
 Waits subscribe to snapshot publication and deadlines, then release runtime borrows
 while parked. The shared driver continues terminal input, timers, node wakes, and
 bounded native automation. Predicates resume after publication on a later turn.

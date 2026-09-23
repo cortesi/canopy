@@ -2262,7 +2262,7 @@ Each stage also updates the docs it touches.
 
 - [x] C25: positional owner functions. Delete `cmd`, `cmd_on`, and the
   inference code, and rewrite the `scripting.md` Commands section.
-- [ ] C26:
+- [x] C26:
   - Delete `screen`, `screen_cells`, and the unused lookups.
   - Add `screen_text(target?)`, `move_focus`, `canopy.fixtures()`, and
     `canopy.target`.

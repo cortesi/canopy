@@ -30,10 +30,11 @@ use crate::{AppFactory, ExecutionMetadata, ResetPolicy, Result, Viewport, metada
 
 /// Short operating guide returned by the bootstrap tool.
 const BOOTSTRAP_GUIDE: &str = "Use script_eval for actions and assertions. Scripts run against \
-the generated Luau API, can call canopy.available_bindings(), canopy.commands(), canopy.screen_text(), \
-canopy.screen_cells(), canopy.route_trace(), and canopy.script_journal(), and should prefer typed \
-command calls over coordinate input when possible. Top-level scripts start at root; \
-use canopy.call_focus for focus-relative actions and canopy.call_exact for a stable node target.";
+the generated Luau API. canopy.screen_text() returns the published frame's text after a prepare, \
+and canopy.snapshot() returns its cells and nodes. canopy.available_bindings(), canopy.commands(), \
+canopy.route_trace(), and canopy.script_journal() describe input and history. Prefer typed \
+command calls over coordinate input when possible. Top-level scripts start at root; use \
+canopy.call_focus for focus-relative actions and canopy.call_exact for a stable node target.";
 
 /// Request payload for the `script_eval` tool.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -403,7 +404,7 @@ pub fn script_api_catalog(api: String) -> result::Result<ScriptApiCatalog, Scrip
             tasks: vec![
                 ScriptApiTask {
                     name: "Inspect the app".to_owned(),
-                    instruction: "Request canopy.screen_text, canopy.screen_cells, or canopy.route_trace.".to_owned(),
+                    instruction: "Request canopy.screen_text, canopy.snapshot, or canopy.route_trace.".to_owned(),
                 },
                 ScriptApiTask {
                     name: "Run commands".to_owned(),
@@ -411,7 +412,7 @@ pub fn script_api_catalog(api: String) -> result::Result<ScriptApiCatalog, Scrip
                 },
                 ScriptApiTask {
                     name: "Use fixtures".to_owned(),
-                    instruction: "Call the fixtures() global and apply a named fixture before evaluation.".to_owned(),
+                    instruction: "Call canopy.fixtures() and apply a named fixture before evaluation.".to_owned(),
                 },
             ],
         },

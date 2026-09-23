@@ -16,8 +16,8 @@ Canopy renders the file from the same native modules it installs on the script
 surface, in install order:
 
 1. The header comment in `crates/canopy/luau/preamble.d.luau`.
-2. The base `canopy` module, with its record types, the `canopy` global, and
-   `fixtures()`. Read the current type list from `canopy.api()` or
+2. The base `canopy` module, with its record types and the `canopy` global.
+   Read the current type list from `canopy.api()` or
    `canopyctl api`.
 3. One module per widget owner, carrying its command table and default-binding
    helper.
@@ -398,7 +398,7 @@ conformance contract; they do not need their own `setup`.
 
 Fixtures are named setup functions registered by Rust code. Automation tooling
 can apply a fixture before evaluation. The generated `.d.luau` file lists
-fixture names and descriptions as comments, and `fixtures()` returns them at
+fixture names and descriptions as comments, and `canopy.fixtures()` returns them at
 runtime.
 
 Headless MCP evaluation supports `fixture`. Live evaluation does not; live
@@ -444,12 +444,11 @@ MCP evaluation returns:
 
 ## Waiting for State
 
-Use `canopy.wait_for(predicate, timeout_ms?)`,
-`canopy.wait_for_node(owner, timeout_ms?)`, or
-`canopy.wait_for_screen_text(text, timeout_ms?)` for asynchronous state changes.
-These helpers subscribe to snapshot publication and optional deadlines. They
-recheck before parking to avoid a lost publication wake. The runtime services
-input and automation between resumed segments. Wait helpers do not run their own
+Use `canopy.wait_for(predicate, timeout_ms?)` for asynchronous state changes.
+The predicate reads whatever the change shows, such as `canopy.target(owner)`
+or `canopy.screen_text()`. The wait subscribes to snapshot publication and
+optional deadlines. It rechecks before parking to avoid a lost publication wake. The runtime services
+input and automation between resumed segments. A wait does not run its own
 event loop or recursively service automation.
 
 Screen observation reads published cells. Refreshing a snapshot does not advance
@@ -530,9 +529,11 @@ screen rectangle. Intersection includes ancestor clipping but makes no claim
 about occlusion. Widget semantics expose only declared roles, labels, selection,
 activation status, and explicitly enabled values. Sensitive input values are omitted.
 
-Legacy `screen`, `screen_cells`, and `screen_text` queries still prepare pending
-changes. Use a snapshot for attachment, ancestor visibility, and clipping
-decisions.
+`canopy.screen_text(target?)` prepares pending changes, then returns the
+published frame's text, one line per row. A node target crops to the node's
+content rectangle, and a `Rect` target crops to that screen rectangle.
+`canopy.snapshot().cells` holds the styled cells. Use a snapshot for
+attachment, ancestor visibility, and clipping decisions.
 
 The generated API is test-covered by an exact golden tail that includes command
 enums, optional named arguments, fixtures, and default bindings.

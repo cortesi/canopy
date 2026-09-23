@@ -129,22 +129,9 @@ pub(super) fn register_framework_declarations(
         ]),
     ));
     builder.alias(
-        declaration::Alias::new(
-            "NodeInfo",
-            declaration::Type::table(node_info_fields(
-                declaration::Type::named("NodeId").array(),
-                "Direct child nodes in tree order.",
-            )),
-        )
-        .doc("Summary information for a node in the widget tree."),
+        declaration::Alias::new("NodeInfo", declaration::Type::table(node_info_fields()))
+            .doc("Summary information for a node in the widget tree."),
     );
-    builder.alias(declaration::Alias::new(
-        "TreeNode",
-        declaration::Type::table(node_info_fields(
-            declaration::Type::named("TreeNode").array(),
-            "Recursive child tree entries in tree order.",
-        )),
-    ));
     builder.alias(declaration::Alias::new(
         "CommandTarget",
         declaration::Type::table([
@@ -697,7 +684,7 @@ fn register_snapshot_info(builder: &mut module::Builder) {
         "FrameSnapshot",
         Type::table([
             Field::new("frame_id", Type::Number),
-            Field::new("viewport", Type::named("Size")),
+            Field::new("size", Type::named("Size")).doc("Screen size in cells."),
             Field::new("focus", Type::named("NodeId").optional()),
             Field::new("nodes", Type::named("NodeSnapshot").array()),
             Field::new("cells", Type::named("ScreenCell").array().array()),
@@ -758,12 +745,8 @@ pub(super) fn command_doc(spec: &CommandSpec) -> Option<String> {
     (!lines.is_empty()).then(|| lines.join("\n"))
 }
 
-/// Shared node record fields, with the child representation selected by the
-/// alias.
-fn node_info_fields(
-    children: declaration::Type,
-    children_doc: &'static str,
-) -> Vec<declaration::Field> {
+/// Node record fields.
+fn node_info_fields() -> Vec<declaration::Field> {
     vec![
         declaration::Field::new("id", declaration::Type::named("NodeId"))
             .doc("Stable node handle for use in other API calls."),
@@ -780,7 +763,10 @@ fn node_info_fields(
             .doc("True when this node lies on the path to the focused node."),
         declaration::Field::new("hidden", declaration::Type::Boolean)
             .doc("True when the node's hidden flag is set."),
-        declaration::Field::new("children", children).doc(children_doc),
+        declaration::Field::new("parent", declaration::Type::named("NodeId").optional())
+            .doc("Parent node, or nil at the root and for detached nodes."),
+        declaration::Field::new("children", declaration::Type::named("NodeId").array())
+            .doc("Direct child nodes in tree order."),
         declaration::Field::new("rect", declaration::Type::named("Rect").optional())
             .doc("Outer rectangle on screen, or nil for zero-sized nodes."),
         declaration::Field::new("content_rect", declaration::Type::named("Rect").optional())

@@ -11,10 +11,10 @@
 --- - Widget globals such as `root`, `list`, or `editor` are rendered from registered Rust
 ---   commands and expose the command surface for that widget owner.
 --- - `default_bindings()` is rendered on widget globals that registered built-in bindings.
---- - `fixtures()` lists named reproducible app states that can be applied by automation
+--- - `canopy.fixtures()` lists named reproducible app states that can be applied by automation
 ---   tooling before evaluation.
 --- - `canopy.log()` and `canopy.assert()` support script-driven diagnostics and testing.
 ---
 --- Command declarations are stable for the life of the process. Widget mount state only
---- affects runtime resolution: `canopy.resolve(owner)` previews the node target from the
---- current script anchor, and `canopy.commands()` reports the same availability decision.
+--- affects runtime resolution: `canopy.target(owner)` previews the node target from the
+--- script origin, and `canopy.commands()` reports the same availability decision.
