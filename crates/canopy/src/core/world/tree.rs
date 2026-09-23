@@ -581,6 +581,7 @@ impl Core {
     }
 
     /// Create a node in the arena detached from the tree.
+    #[cfg(test)]
     pub fn create_detached<W>(&mut self, widget: W) -> Result<NodeId>
     where
         W: Widget + 'static,
@@ -608,6 +609,7 @@ impl Core {
 
     /// Add a boxed widget as a child of a specific parent and return the new
     /// node ID.
+    #[cfg(test)]
     pub fn add_child_to_boxed(
         &mut self,
         parent: impl Into<NodeId>,
@@ -623,6 +625,7 @@ impl Core {
 
     /// Add a boxed widget as a keyed child of a specific parent and return the
     /// new node ID.
+    #[cfg(test)]
     pub fn add_child_to_slot_boxed(
         &mut self,
         parent: impl Into<NodeId>,
@@ -675,30 +678,6 @@ impl Core {
             self.mount_subtree_pre_order(child)?;
         }
         self.repair_focus_and_capture(None)
-    }
-
-    /// Attach all configured topology and identities before invoking mount
-    /// hooks.
-    pub(crate) fn attach_composed(
-        &mut self,
-        parent: NodeId,
-        roots: &[(NodeId, Option<&str>)],
-        keys: &[(NodeId, NodeId, String)],
-    ) -> Result<()> {
-        self.with_tree_edit("attach composition", |core| {
-            for (node, key) in roots {
-                core.attach_topology(parent, *node, *key)?;
-            }
-            for (node, scope, key) in keys {
-                core.set_semantic_key(*node, *scope, key)?;
-            }
-            if core.is_attached_to_root(parent) {
-                for (node, _) in roots {
-                    core.mount_subtree_pre_order(*node)?;
-                }
-            }
-            core.repair_focus_and_capture(None)
-        })
     }
 
     /// Update validated topology without running mount callbacks yet.

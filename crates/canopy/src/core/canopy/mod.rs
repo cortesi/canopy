@@ -251,14 +251,6 @@ impl Canopy {
         self.core.root_id()
     }
 
-    /// Create a detached widget node.
-    pub fn create_detached<W>(&mut self, widget: W) -> Result<TypedId<W>>
-    where
-        W: Widget + 'static,
-    {
-        Ok(TypedId::new(self.core.create_detached(widget)?))
-    }
-
     /// Replace the root widget while preserving its stable node ID.
     pub fn replace_root<W>(&mut self, widget: W) -> Result<TypedId<W>>
     where

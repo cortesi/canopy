@@ -59,6 +59,10 @@ name = "logs_subscriber"
 required-features = ["devtools"]
 
 [[bench]]
+name = "keyed"
+harness = false
+
+[[bench]]
 name = "rendering"
 harness = false
 

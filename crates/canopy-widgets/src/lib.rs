@@ -43,6 +43,8 @@ mod input;
 /// Experimental inspector overlay internals.
 #[cfg(feature = "devtools")]
 mod inspector;
+/// Keyed child reconciler used by List.
+mod keyed;
 mod label;
 /// Typed list container with selection.
 mod list;
@@ -88,6 +90,7 @@ pub use frame::Frame;
 #[cfg(feature = "graphics")]
 pub use image_view::ImageView;
 pub use input::{Input, TEXT_CLEAR_ACTION, ValueExposure};
+pub use keyed::KeyedChildren;
 pub use label::Label;
 pub use list::{AutoKey, List, Selectable};
 pub use pad::Pad;

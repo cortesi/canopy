@@ -155,23 +155,18 @@ impl Todo {
         }
 
         let scope = c.node_id();
-        c.compose(scope, |tree| {
-            tree.keyed::<MainSlot>(MainContent, |main| {
-                main.layout_override(LayoutOverride::full(Layout::fill()))?;
-                main.child(Frame::new(), |frame| {
-                    frame.child(List::<TodoEntry, i64>::new(), |list| {
-                        list.semantic_key(scope, "todo.list")
-                    })?;
-                    Ok(())
-                })?;
-                main.child(
-                    StatusBar::new()
-                        .with_left(Text::new("todo").with_style("status_bar/text"))
-                        .with_right(KeyHint::new("ctrl-g", "help")),
-                    |_| Ok(()),
-                )?;
-                Ok(())
-            })?;
+        c.edit_structure(&mut |c| {
+            let main = c.add_slot::<MainSlot>(scope, MainContent)?;
+            c.set_layout_override(main.into(), LayoutOverride::full(Layout::fill()))?;
+            let frame = c.add_child(main, Frame::new())?;
+            let list = c.add_child(frame, List::<TodoEntry, i64>::new())?;
+            c.set_semantic_key(list.into(), scope, "todo.list")?;
+            c.add_child(
+                main,
+                StatusBar::new()
+                    .with_left(Text::new("todo").with_style("status_bar/text"))
+                    .with_right(KeyHint::new("ctrl-g", "help")),
+            )?;
             Ok(())
         })?;
         let items = self.store.todos().map_err(store_error)?;
@@ -188,28 +183,25 @@ impl Todo {
         }
 
         let scope = c.node_id();
-        c.compose(scope, |tree| {
-            tree.keyed::<ModalSlot>(Center::new(), |modal| {
-                modal.child(Frame::new(), |frame| {
-                    frame.layout_override(LayoutOverride {
-                        min_width: Some(Some(30)),
-                        max_width: Some(Some(50)),
-                        ..LayoutOverride::new().fixed_height(3)
-                    })?;
-                    frame.child(
-                        Input::new("")
-                            .with_label("New todo item")
-                            .with_value_exposure(ValueExposure::Public),
-                        |input| {
-                            input.layout_override(LayoutOverride::full(Layout::fill()))?;
-                            input.semantic_key(scope, "todo.input")
-                        },
-                    )?;
-                    Ok(())
-                })?;
-                Ok(())
-            })?;
-            Ok(())
+        c.edit_structure(&mut |c| {
+            let modal = c.add_slot::<ModalSlot>(scope, Center::new())?;
+            let frame = c.add_child(modal, Frame::new())?;
+            c.set_layout_override(
+                frame.into(),
+                LayoutOverride {
+                    min_width: Some(Some(30)),
+                    max_width: Some(Some(50)),
+                    ..LayoutOverride::new().fixed_height(3)
+                },
+            )?;
+            let input = c.add_child(
+                frame,
+                Input::new("")
+                    .with_label("New todo item")
+                    .with_value_exposure(ValueExposure::Public),
+            )?;
+            c.set_layout_override(input.into(), LayoutOverride::full(Layout::fill()))?;
+            c.set_semantic_key(input.into(), scope, "todo.input")
         })
     }
 

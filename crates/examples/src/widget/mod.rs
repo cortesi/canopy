@@ -112,10 +112,13 @@ impl Widget for DemoHost {
         let pad_id = ctx.add_child(parent_id, Pad::uniform(self.inner_padding))?;
         let sized_id: NodeId = if self.frame {
             let frame_id = ctx.add_child(pad_id, Frame::new())?;
-            ctx.add_child_to_boxed(frame_id.into(), child)?;
+            let child = ctx.create_detached_boxed(child)?;
+            ctx.attach(frame_id.into(), child)?;
             frame_id.into()
         } else {
-            ctx.add_child_to_boxed(pad_id.into(), child)?
+            let child = ctx.create_detached_boxed(child)?;
+            ctx.attach(pad_id.into(), child)?;
+            child
         };
         let mut layout = Layout::fill().padding(Edges::all(self.inner_padding));
         if let Some(width) = self.size.width {

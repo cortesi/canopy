@@ -109,10 +109,12 @@ impl Widget for StatusBar {
             },
         )?;
         for widget in mem::take(&mut self.left) {
-            context.add_child_to_boxed(left.into(), widget)?;
+            let child = context.create_detached_boxed(widget)?;
+            context.attach(left.into(), child)?;
         }
         for widget in mem::take(&mut self.right) {
-            context.add_child_to_boxed(right.into(), widget)?;
+            let child = context.create_detached_boxed(widget)?;
+            context.attach(right.into(), child)?;
         }
         Ok(())
     }

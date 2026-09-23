@@ -4,7 +4,6 @@
 /// Backend implementations.
 pub mod backend;
 /// Keyed child collection helpers.
-pub mod children;
 /// Command definition and dispatch.
 pub mod commands;
 /// Cursor and position helpers.
@@ -74,7 +73,6 @@ pub use canopy::{
     ScriptOrigin, ScriptTrust, Setup, TurnOutcome, Work,
 };
 pub use change::ChangeOutcome;
-pub use children::{ChildBuilder, ChildConfig, KeyedChildren};
 pub use context::{
     ChildSlot, Context, ContextExt, FocusDirection, FocusScope, RevealAlign, ViewContext,
     ViewContextExt,

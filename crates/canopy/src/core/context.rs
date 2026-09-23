@@ -91,24 +91,11 @@ macro_rules! slot {
 
 /// Implementation hooks reserved for Canopy's built-in contexts.
 pub mod sealed {
-    use super::{NodeId, Result};
-
     /// Marker implemented only by Canopy's built-in read-only contexts.
     pub trait ViewContext {}
 
-    /// Mutation hooks implemented only by Canopy's built-in mutable contexts.
-    pub trait Context {
-        /// Borrow this implementation through the public context interface.
-        fn as_context(&mut self) -> &mut dyn super::Context;
-
-        /// Attach the topology produced by a completed composition pass.
-        fn attach_composed(
-            &mut self,
-            parent: NodeId,
-            roots: &[(NodeId, Option<&str>)],
-            slots: &[(NodeId, NodeId, String)],
-        ) -> Result<()>;
-    }
+    /// Marker implemented only by Canopy's built-in mutable contexts.
+    pub trait Context {}
 }
 
 /// Read-only context available to widgets during render and measure.
@@ -679,19 +666,6 @@ pub trait Context: ViewContext + sealed::Context {
         }
     }
 
-    /// Add a boxed widget as a child of a specific parent and return the new
-    /// node ID.
-    fn add_child_to_boxed(&mut self, parent: NodeId, widget: Box<dyn Widget>) -> Result<NodeId>;
-
-    /// Add a boxed widget as a keyed child of a specific parent and return the
-    /// new node ID.
-    fn add_child_to_slot_boxed(
-        &mut self,
-        parent: NodeId,
-        key: &str,
-        widget: Box<dyn Widget>,
-    ) -> Result<NodeId>;
-
     /// Attach a detached child to a parent.
     fn attach(&mut self, parent: NodeId, child: NodeId) -> Result<()>;
 
@@ -751,16 +725,6 @@ pub trait ContextExt: Context + ViewContextExt {
         self.dispatch(&call.clone().with_target(CommandTarget::Exact(node)))
     }
 
-    /// Build detached children and attach them after configuration succeeds.
-    /// Structural rollback follows [`Context::edit_structure`].
-    fn compose<R>(
-        &mut self,
-        parent: NodeId,
-        build: impl FnOnce(&mut crate::ChildBuilder<'_>) -> Result<R>,
-    ) -> Result<R> {
-        super::children::compose(sealed::Context::as_context(self), parent, build)
-    }
-
     /// Set the layout for a specific node.
     fn set_layout_of(&mut self, node: impl Into<NodeId>, layout: Layout) -> Result<()> {
         Context::set_layout_override(self, node.into(), LayoutOverride::full(layout))
@@ -804,8 +768,7 @@ pub trait ContextExt: Context + ViewContextExt {
         parent: impl Into<NodeId>,
         widget: W,
     ) -> Result<TypedId<W>> {
-        let id = self.add_child_to_boxed(parent.into(), widget.into())?;
-        Ok(TypedId::new(id))
+        add_attached(self, parent.into(), None, widget.into()).map(TypedId::new)
     }
 
     /// Return the typed keyed child `K` of `parent`. A missing slot is a
@@ -838,8 +801,7 @@ pub trait ContextExt: Context + ViewContextExt {
         parent: impl Into<NodeId>,
         widget: K::Widget,
     ) -> Result<TypedId<K::Widget>> {
-        let id = self.add_child_to_slot_boxed(parent.into(), K::KEY, widget.into())?;
-        Ok(TypedId::new(id))
+        add_attached(self, parent.into(), Some(K::KEY), widget.into()).map(TypedId::new)
     }
 
     /// Execute a closure with the typed keyed child `K` of `parent`.
@@ -877,6 +839,28 @@ pub trait ContextExt: Context + ViewContextExt {
 }
 
 impl<T: Context + ?Sized> ContextExt for T {}
+
+/// Create `widget` and attach it under `parent`, keyed when `key` is given.
+/// A failed attach removes the new node again.
+fn add_attached<C: Context + ?Sized>(
+    ctx: &mut C,
+    parent: NodeId,
+    key: Option<&str>,
+    widget: Box<dyn Widget>,
+) -> Result<NodeId> {
+    let mut once = OneShot::new(widget);
+    ctx.edit_structure(&mut |ctx| {
+        once.call(|widget| {
+            let child = ctx.create_detached_boxed(widget)?;
+            match key {
+                Some(key) => ctx.attach_slot(parent, key, child)?,
+                None => ctx.attach(parent, child)?,
+            }
+            Ok(child)
+        })
+    })?;
+    once.finish()
+}
 
 /// Context bound to a specific node, over a shared or exclusive borrow of the
 /// core.
@@ -1045,20 +1029,7 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
     }
 }
 
-impl sealed::Context for NodeCtx<&mut Core> {
-    fn as_context(&mut self) -> &mut dyn Context {
-        self
-    }
-
-    fn attach_composed(
-        &mut self,
-        parent: NodeId,
-        roots: &[(NodeId, Option<&str>)],
-        keys: &[(NodeId, NodeId, String)],
-    ) -> Result<()> {
-        self.core.attach_composed(parent, roots, keys)
-    }
-}
+impl sealed::Context for NodeCtx<&mut Core> {}
 
 impl Context for NodeCtx<&mut Core> {
     fn set_semantic_key(&mut self, node: NodeId, scope: NodeId, key: &str) -> Result<()> {
@@ -1177,19 +1148,6 @@ impl Context for NodeCtx<&mut Core> {
 
     fn current_event(&self) -> Option<&Event> {
         self.core.current_event()
-    }
-
-    fn add_child_to_boxed(&mut self, parent: NodeId, widget: Box<dyn Widget>) -> Result<NodeId> {
-        self.core.add_child_to_boxed(parent, widget)
-    }
-
-    fn add_child_to_slot_boxed(
-        &mut self,
-        parent: NodeId,
-        key: &str,
-        widget: Box<dyn Widget>,
-    ) -> Result<NodeId> {
-        self.core.add_child_to_slot_boxed(parent, key, widget)
     }
 
     fn attach(&mut self, parent: NodeId, child: NodeId) -> Result<()> {

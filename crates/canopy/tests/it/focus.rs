@@ -179,16 +179,16 @@ mod tests {
     #[test]
     fn test_focus_moves_off_zero_view_nodes() -> Result<()> {
         let mut canopy = CanopyBuilder::new().build()?;
-        let first = canopy.create_detached(FocusLeaf::new("first"))?;
-        let second = canopy.create_detached(FocusLeaf::new("second"))?;
-        canopy.with_root_context(|context| {
+        let (first, second) = canopy.with_root_context(|context| {
+            let first = context.create_detached(FocusLeaf::new("first"))?;
+            let second = context.create_detached(FocusLeaf::new("second"))?;
             let root = context.root_id();
             context.set_children(root, vec![first.into(), second.into()])?;
             context.set_layout_of(root, Layout::column().flex_horizontal(1).flex_vertical(1))?;
             context.set_layout_of(first, Layout::column().fixed_width(10).fixed_height(5))?;
             context.set_layout_of(second, Layout::fill())?;
             context.set_focus(first.into())?;
-            Ok(())
+            Ok((first, second))
         })?;
 
         canopy.set_root_size(Size::new(10, 10))?;

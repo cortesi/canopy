@@ -7,8 +7,8 @@
 use std::{collections::HashSet, hash::Hash};
 
 use canopy::{
-    Context, ContextExt, EventOutcome, FocusDirection, KeyedChildren, NodeId, NodeName, Render,
-    RevealAlign, TypedId, ViewContext, Widget, WidgetSemantics,
+    Context, ContextExt, EventOutcome, FocusDirection, NodeId, NodeName, Render, RevealAlign,
+    TypedId, ViewContext, Widget, WidgetSemantics,
     commands::{ArgValue, CommandArgs, CommandCall, CommandStatus, ToArgValue},
     derive_commands,
     error::{Error, Result},
@@ -19,6 +19,8 @@ use canopy::{
     },
 };
 use unicode_width::UnicodeWidthStr;
+
+use crate::keyed::KeyedChildren;
 
 /// List selection indicator configuration.
 struct SelectionIndicator {

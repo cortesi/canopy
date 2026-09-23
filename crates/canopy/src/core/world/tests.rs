@@ -15,7 +15,7 @@ use super::{
     *,
 };
 use crate::{
-    Context, ContextExt, KeyedChildren, ModalBindings, ModalOptions, ViewContext, ViewContextExt,
+    Context, ContextExt, ModalBindings, ModalOptions, ViewContext, ViewContextExt,
     core::{
         context::{CoreContext, CoreViewContext},
         inputmap::FrameworkBindingGroup,
@@ -248,31 +248,6 @@ impl Widget for FaultWidget {
                 Err(Error::TreeEditDuringRollback { .. })
             );
             self.record(HookEvent::RollbackEditRejected(rejected));
-        }
-    }
-}
-
-#[derive(Debug)]
-struct ReconcileWidget {
-    fail_mount: bool,
-}
-
-impl ReconcileWidget {
-    fn succeeds() -> Self {
-        Self { fail_mount: false }
-    }
-
-    fn fails_mount() -> Self {
-        Self { fail_mount: true }
-    }
-}
-
-impl Widget for ReconcileWidget {
-    fn on_mount(&mut self, _ctx: &mut dyn Context) -> Result<()> {
-        if self.fail_mount {
-            Err(Error::Invalid("reconcile mount failure".into()))
-        } else {
-            Ok(())
         }
     }
 }
@@ -1548,156 +1523,6 @@ fn failed_widget_replacement_keeps_the_old_owners_modal_bindings() -> Result<()>
 }
 
 #[test]
-fn keyed_reconcile_removes_in_current_child_order() -> Result<()> {
-    let mut core = Core::new();
-    let parent = core.create_detached(simple_widget())?;
-    core.attach(core.root, parent)?;
-    let log = Arc::new(Mutex::new(Vec::new()));
-    let mut keyed = KeyedChildren::<&'static str, FaultWidget>::new();
-    let mut ctx = CoreContext::new(&mut core, parent);
-    let rows = keyed.reconcile(
-        &mut ctx,
-        ["a", "b", "c", "d"],
-        |key| Ok(FaultWidget::new(key, Arc::clone(&log))),
-        |_, _, _| Ok(()),
-    )?;
-    ctx.set_children(
-        ctx.node_id(),
-        [2, 0, 3, 1].map(|index| rows[index].into()).to_vec(),
-    )?;
-    log.lock().unwrap().clear();
-    let retained = keyed.reconcile(
-        &mut ctx,
-        ["b"],
-        |_| panic!("all requested keys already exist"),
-        |_, _, _| Ok(()),
-    )?;
-    assert_eq!(retained, [rows[1]]);
-    let removed: Vec<_> = log
-        .lock()
-        .unwrap()
-        .iter()
-        .filter_map(|event| {
-            if let HookEvent::PreRemove(name) = event {
-                Some(*name)
-            } else {
-                None
-            }
-        })
-        .collect();
-    assert_eq!(removed, ["c", "a", "d"]);
-    Ok(())
-}
-
-#[test]
-fn keyed_reconcile_update_failure_preserves_core_and_helper_state() -> Result<()> {
-    let mut core = Core::new();
-    let parent = core.create_detached(simple_widget())?;
-    core.attach(core.root, parent)?;
-    let mut keyed = KeyedChildren::<&'static str, ReconcileWidget>::new();
-    let before = StructuralSnapshot::capture(&core);
-
-    let error = {
-        let mut ctx = CoreContext::new(&mut core, parent);
-        keyed
-            .reconcile(
-                &mut ctx,
-                ["a", "b"],
-                |_key| Ok(ReconcileWidget::succeeds()),
-                |key, id, ctx| {
-                    if *key == "a" {
-                        ctx.set_hidden(id.into(), true)?;
-                        Ok(())
-                    } else {
-                        Err(Error::Invalid("reconcile update failure".into()))
-                    }
-                },
-            )
-            .expect_err("update failure should abort reconcile")
-    };
-
-    assert!(matches!(error, Error::Invalid(_)));
-    assert_eq!(StructuralSnapshot::capture(&core), before);
-    assert!(keyed.is_empty());
-    core.validate_invariants()
-}
-
-#[test]
-fn keyed_reconcile_mount_failure_preserves_core_and_helper_state() -> Result<()> {
-    let mut core = Core::new();
-    let parent = core.create_detached(simple_widget())?;
-    core.attach(core.root, parent)?;
-    let mut keyed = KeyedChildren::<&'static str, ReconcileWidget>::new();
-    let before = StructuralSnapshot::capture(&core);
-
-    let error = {
-        let mut ctx = CoreContext::new(&mut core, parent);
-        keyed
-            .reconcile(
-                &mut ctx,
-                ["a", "b"],
-                |key| {
-                    Ok(if *key == "b" {
-                        ReconcileWidget::fails_mount()
-                    } else {
-                        ReconcileWidget::succeeds()
-                    })
-                },
-                |_key, _id, _ctx| Ok(()),
-            )
-            .expect_err("mount failure should abort reconcile")
-    };
-
-    assert!(matches!(error, Error::Invalid(_)));
-    assert_eq!(StructuralSnapshot::capture(&core), before);
-    assert!(keyed.is_empty());
-    core.validate_invariants()
-}
-
-#[test]
-fn keyed_reconcile_defers_removal_until_updates_succeed() -> Result<()> {
-    let mut core = Core::new();
-    let parent = core.create_detached(simple_widget())?;
-    core.attach(core.root, parent)?;
-    let mut keyed = KeyedChildren::<&'static str, ReconcileWidget>::new();
-    {
-        let mut ctx = CoreContext::new(&mut core, parent);
-        keyed.reconcile(
-            &mut ctx,
-            ["a", "b"],
-            |_key| Ok(ReconcileWidget::succeeds()),
-            |_key, _id, _ctx| Ok(()),
-        )?;
-    }
-    let before = StructuralSnapshot::capture(&core);
-    let a = keyed.id_for(&"a").expect("a should exist");
-
-    {
-        let mut ctx = CoreContext::new(&mut core, parent);
-        keyed
-            .reconcile(
-                &mut ctx,
-                ["b", "c"],
-                |_key| Ok(ReconcileWidget::succeeds()),
-                |key, _id, _ctx| {
-                    if *key == "c" {
-                        Err(Error::Invalid("late update failure".into()))
-                    } else {
-                        Ok(())
-                    }
-                },
-            )
-            .expect_err("late update failure should abort reconcile");
-    }
-
-    assert_eq!(StructuralSnapshot::capture(&core), before);
-    assert_eq!(keyed.keys(), &["a", "b"]);
-    assert_eq!(keyed.id_for(&"a"), Some(a));
-    assert!(core.nodes.contains_key(a.into()));
-    core.validate_invariants()
-}
-
-#[test]
 fn focus_recovery_excludes_hidden_ancestor_subtrees() -> Result<()> {
     for laid_out in [false, true] {
         for display_none in [false, true] {
@@ -1929,42 +1754,5 @@ fn hidden_or_refusing_focused_widget_still_recovers_during_callbacks() -> Result
 
     core.repair_focus_and_capture(None)?;
     assert_eq!(core.focus_id(), None);
-    Ok(())
-}
-
-#[test]
-fn keyed_reconcile_preserves_ids_when_reordered_and_rejects_duplicates_first() -> Result<()> {
-    let mut core = Core::new();
-    let parent = core.create_detached(simple_widget())?;
-    core.attach(core.root, parent)?;
-    let mut keyed = KeyedChildren::<&str, ReconcileWidget>::new();
-    let mut ctx = CoreContext::new(&mut core, parent);
-    let first = keyed.reconcile(
-        &mut ctx,
-        ["a", "b"],
-        |_| Ok(ReconcileWidget::succeeds()),
-        |_, _, _| Ok(()),
-    )?;
-    let second = keyed.reconcile(
-        &mut ctx,
-        ["b", "a"],
-        |_| panic!("reordered keys must reuse widgets"),
-        |_, _, _| Ok(()),
-    )?;
-    assert_eq!(second, [first[1], first[0]]);
-    assert_eq!(
-        ctx.children_of(ctx.node_id()),
-        second.iter().copied().map(NodeId::from).collect::<Vec<_>>()
-    );
-    let error = keyed
-        .reconcile(
-            &mut ctx,
-            ["a", "a"],
-            |_| panic!("duplicates must fail before creation"),
-            |_, _, _| panic!("duplicates must fail before update"),
-        )
-        .expect_err("duplicate keys must fail");
-    assert!(matches!(error, Error::Invalid(_)));
-    assert_eq!(keyed.keys(), &["b", "a"]);
     Ok(())
 }

@@ -1060,6 +1060,16 @@ pub mod canopy_widgets {
     /// measures nothing and draws nothing.
     pub struct KeyHint {}
 
+    /// Ordered keyed child collection helper.
+    ///
+    /// Stores a stable mapping from keys to node IDs plus a current order. Use
+    /// [`KeyedChildren::reconcile`] to create, update, and reorder children based
+    /// on a desired key list. The collection owns all children of its context node;
+    /// unmanaged children are rejected before callbacks run. Place persistent
+    /// headers and footers outside a dedicated collection container.
+    #[derive(Debug, Default)]
+    pub struct KeyedChildren<K, W> {}
+
     /// A typed list container for widget items.
     ///
     /// List items are actual widgets in the tree, enabling composition and focus
@@ -2313,6 +2323,52 @@ pub mod canopy_widgets {
 
     impl ToArgValue for AutoKey {
         fn to_arg_value(self) -> ArgValue {}
+    }
+
+    impl<K, W> KeyedChildren<K, W>
+    where
+        K: Clone + Eq + Hash,
+        W: 'static + Widget,
+    {
+        /// Construct an empty keyed collection.
+        pub fn new() -> Self {}
+
+        /// Iterate node IDs in the current order.
+        pub fn iter_ids(&self) -> impl '_ + Iterator<Item = TypedId<W>> {}
+
+        /// Reconcile this collection against the desired key order.
+        ///
+        /// Errors restore structure and leave this collection unchanged. Mutations
+        /// performed by `create` and `update` have the rollback limits documented
+        /// by [`Context::edit_structure`], including retained widget state and
+        /// external effects.
+        pub fn reconcile<I, C, U>(
+            &mut self,
+            ctx: &mut dyn Context,
+            desired: I,
+            create: C,
+            update: U,
+        ) -> Result<Vec<TypedId<W>>>
+        where
+            C: FnMut(&K) -> Result<W>,
+            I: IntoIterator<Item = K>,
+            U: FnMut(&K, TypedId<W>, &mut dyn Context) -> Result<()>, {
+        }
+
+        /// Return the node ID at a given index, if present.
+        pub fn id_at(&self, index: usize) -> Option<TypedId<W>> {}
+
+        /// Return the node ID for a key, if present.
+        pub fn id_for(&self, key: &K) -> Option<TypedId<W>> {}
+
+        /// Return the number of ordered keys.
+        pub fn len(&self) -> usize {}
+
+        /// Return the ordered key slice.
+        pub fn keys(&self) -> &[K] {}
+
+        /// Return true if there are no ordered keys.
+        pub fn is_empty(&self) -> bool {}
     }
 
     impl<T> CommandNode for Dropdown<T>

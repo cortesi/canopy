@@ -146,8 +146,8 @@ mod tests {
         CanopyBuilder::new()
             .configure(ApiLeaf::register)
             .assemble(|canopy| {
-                let leaf = canopy.create_detached(ApiLeaf::new())?;
                 canopy.with_root_context(|context| {
+                    let leaf = context.create_detached(ApiLeaf::new())?;
                     context.set_children(context.node_id(), vec![leaf.into()])
                 })
             })

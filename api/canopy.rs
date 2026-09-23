@@ -19,6 +19,7 @@ pub mod canopy {
     //! - [`geom`] - Geometry primitives (Rect, Point, Size, etc.)
 
     pub mod commands {
+        //! Keyed child collection helpers.
         //! Command definition and dispatch.
 
         /// Canonical dynamic representation for command arguments and return values.
@@ -2966,15 +2967,6 @@ pub mod canopy {
         Changed,
     }
 
-    /// Restricted builder for new children of one existing parent.
-    ///
-    /// Configuration completes while nodes are detached. The enclosing structural
-    /// edit attaches roots in source order, then registers scoped semantic keys.
-    pub struct ChildBuilder<'a> {}
-
-    /// Configuration access limited to a newly created detached node.
-    pub struct ChildConfig<'a, W> {}
-
     pub use canopy_derive::CommandArg;
     pub use canopy_derive::CommandEnum;
     /// Globally unique evaluation identifier, never reused by another application.
@@ -3107,16 +3099,6 @@ pub mod canopy {
     /// Opaque identity of one modal scope, unique across applications.
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub struct InteractionToken(_);
-
-    /// Ordered keyed child collection helper.
-    ///
-    /// Stores a stable mapping from keys to node IDs plus a current order. Use
-    /// [`KeyedChildren::reconcile`] to create, update, and reorder children based
-    /// on a desired key list. The collection owns all children of its context node;
-    /// unmanaged children are rejected before callbacks run. Place persistent
-    /// headers and footers outside a dedicated collection container.
-    #[derive(Debug, Default)]
-    pub struct KeyedChildren<K, W> {}
 
     /// Bindings admitted within a modal's route to its owner.
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -3527,20 +3509,6 @@ pub mod canopy {
     /// Applications consume contexts supplied by Canopy and cannot implement this
     /// trait themselves.
     pub trait Context: ViewContext + sealed::Context {
-        /// Add a boxed widget as a child of a specific parent and return the new
-        /// node ID.
-        fn add_child_to_boxed(&mut self, parent: NodeId, widget: Box<dyn Widget>)
-        -> Result<NodeId>;
-
-        /// Add a boxed widget as a keyed child of a specific parent and return the
-        /// new node ID.
-        fn add_child_to_slot_boxed(
-            &mut self,
-            parent: NodeId,
-            key: &str,
-            widget: Box<dyn Widget>,
-        ) -> Result<NodeId>;
-
         /// Attach a detached child to a parent.
         fn attach(&mut self, parent: NodeId, child: NodeId) -> Result<()>;
 
@@ -3748,15 +3716,6 @@ pub mod canopy {
             parent: impl Into<NodeId>,
             widget: K::Widget,
         ) -> Result<TypedId<K::Widget>> {
-        }
-
-        /// Build detached children and attach them after configuration succeeds.
-        /// Structural rollback follows [`Context::edit_structure`].
-        fn compose<R>(
-            &mut self,
-            parent: NodeId,
-            build: impl FnOnce(&mut crate::ChildBuilder<'_>) -> Result<R>,
-        ) -> Result<R> {
         }
 
         /// Create a widget node detached from the tree.
@@ -4240,24 +4199,6 @@ pub mod canopy {
         pub fn changed(self) -> bool {}
     }
 
-    impl ChildBuilder<'_> {
-        /// Configure a child occupying a typed structural slot.
-        pub fn keyed<K: crate::ChildSlot>(
-            &mut self,
-            widget: K::Widget,
-            configure: impl FnOnce(&mut ChildConfig<'_, K::Widget>) -> Result<()>,
-        ) -> Result<TypedId<K::Widget>> {
-        }
-
-        /// Configure an unkeyed child before attaching it to the existing parent.
-        pub fn child<W: 'static + Widget>(
-            &mut self,
-            widget: W,
-            configure: impl FnOnce(&mut ChildConfig<'_, W>) -> Result<()>,
-        ) -> Result<TypedId<W>> {
-        }
-    }
-
     impl CommandType for FocusDirection {
         fn luau_decls(registry: &mut canopy::commands::DeclRegistry<'_>) {}
 
@@ -4387,12 +4328,6 @@ pub mod canopy {
         /// complete operation, including application construction, to a blocking
         /// worker. The application stays on its owning thread.
         pub fn eval(&mut self, request: EvalRequest) -> Result<EvalOutcome> {}
-
-        /// Create a detached widget node.
-        pub fn create_detached<W>(&mut self, widget: W) -> Result<TypedId<W>>
-        where
-            W: 'static + Widget, {
-        }
 
         /// Explain where `key` would go for a node or the current focus.
         ///
@@ -4881,80 +4816,7 @@ pub mod canopy {
         pub fn put_cell(&mut self, style: ResolvedStyle, p: geom::Point, ch: char) -> Result<()> {}
     }
 
-    impl<K, W> KeyedChildren<K, W>
-    where
-        K: Clone + Eq + Hash,
-        W: 'static + Widget,
-    {
-        /// Construct an empty keyed collection.
-        pub fn new() -> Self {}
-
-        /// Iterate node IDs in the current order.
-        pub fn iter_ids(&self) -> impl '_ + Iterator<Item = TypedId<W>> {}
-
-        /// Reconcile this collection against the desired key order.
-        ///
-        /// Errors restore structure and leave this collection unchanged. Mutations
-        /// performed by `create` and `update` have the rollback limits documented
-        /// by [`Context::edit_structure`], including retained widget state and
-        /// external effects.
-        pub fn reconcile<I, C, U>(
-            &mut self,
-            ctx: &mut dyn Context,
-            desired: I,
-            create: C,
-            update: U,
-        ) -> Result<Vec<TypedId<W>>>
-        where
-            C: FnMut(&K) -> Result<W>,
-            I: IntoIterator<Item = K>,
-            U: FnMut(&K, TypedId<W>, &mut dyn Context) -> Result<()>, {
-        }
-
-        /// Return the node ID at a given index, if present.
-        pub fn id_at(&self, index: usize) -> Option<TypedId<W>> {}
-
-        /// Return the node ID for a key, if present.
-        pub fn id_for(&self, key: &K) -> Option<TypedId<W>> {}
-
-        /// Return the number of ordered keys.
-        pub fn len(&self) -> usize {}
-
-        /// Return the ordered key slice.
-        pub fn keys(&self) -> &[K] {}
-
-        /// Return true if there are no ordered keys.
-        pub fn is_empty(&self) -> bool {}
-    }
-
     impl<T> From<TypedId<T>> for NodeId {
         fn from(value: TypedId<T>) -> Self {}
-    }
-
-    impl<W: 'static + Widget> ChildConfig<'_, W> {
-        /// Configure a descendant in a typed structural slot.
-        pub fn keyed<K: crate::ChildSlot>(
-            &mut self,
-            widget: K::Widget,
-            configure: impl FnOnce(&mut ChildConfig<'_, K::Widget>) -> Result<()>,
-        ) -> Result<TypedId<K::Widget>> {
-        }
-
-        /// Configure and attach a descendant to this new detached parent.
-        pub fn child<C: 'static + Widget>(
-            &mut self,
-            widget: C,
-            configure: impl FnOnce(&mut ChildConfig<'_, C>) -> Result<()>,
-        ) -> Result<TypedId<C>> {
-        }
-
-        /// Register this node's semantic key after its completed tree is attached.
-        pub fn semantic_key(&mut self, scope: NodeId, key: &str) -> Result<()> {}
-
-        /// Return the new node's typed identity.
-        pub fn id(&self) -> TypedId<W> {}
-
-        /// Set persistent layout constraints before mount.
-        pub fn layout_override(&mut self, overrides: LayoutOverride) -> Result<()> {}
     }
 }

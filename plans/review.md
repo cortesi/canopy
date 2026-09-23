@@ -2211,7 +2211,7 @@ Each stage also updates the docs it touches.
 - [x] C13: apply the node-addressed rule to the four context traits. Migrate
   about 150 Canopy sites and about 50 fh sites, using
   `focused_node() == Some(id)` for `is_focused_of`.
-- [ ] C14: remove the boxed add variants, `Canopy::create_detached`, and
+- [x] C14: remove the boxed add variants, `Canopy::create_detached`, and
   `compose`, and move `KeyedChildren` into canopy-widgets.
 - [ ] C15: delete `Display` and the `set_layout` and `with_layout` families.
   Add `From<Layout> for LayoutOverride`, and fix `columns.rs:780` pinning.

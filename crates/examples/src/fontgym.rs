@@ -1158,7 +1158,7 @@ mod tests {
     #[test]
     fn input_cursor_and_measurement_use_display_columns() -> Result<()> {
         let mut canopy = canopy::CanopyBuilder::new().build()?;
-        let status = canopy.create_detached(Text::new(""))?;
+        let status = canopy.with_root_context(|ctx| ctx.create_detached(Text::new("")))?;
         for (text, columns, width) in [
             ("界a", vec![0, 2, 3], 3),
             ("e\u{301}a", vec![0, 1, 1, 2], 2),

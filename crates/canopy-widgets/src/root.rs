@@ -274,10 +274,10 @@ impl Root {
     {
         #[cfg(feature = "devtools")]
         let inspector_active = self.inspector_active;
-        let app_id = canopy.create_detached(app)?;
-        let app_node = NodeId::from(app_id);
         let root_id: NodeId = canopy.replace_root(self)?.into();
         canopy.with_root_context(|context| {
+            let app_id = context.create_detached(app)?;
+            let app_node = NodeId::from(app_id);
             // Main pane holds the app beside the inspector.
             let main_pane: NodeId = context
                 .create_detached(Container::row().with_name("main_pane"))?
@@ -308,9 +308,8 @@ impl Root {
             context.with_layout_of(app_node, &mut |layout| {
                 *layout = layout.width(Sizing::Flex(1)).height(Sizing::Flex(1));
             })?;
-            Ok(())
-        })?;
-        Ok(app_id)
+            Ok(app_id)
+        })
     }
 }
 
@@ -597,13 +596,14 @@ mod tests {
         let mut canopy = CanopyBuilder::new().configure(Root::register).build()?;
 
         let app_id = Root::new().install(&mut canopy, App)?;
-        let left = canopy.create_detached(FocusLeaf::new("left"))?;
-        let right = canopy.create_detached(FocusLeaf::new("right"))?;
-        canopy.with_root_context(|context| {
+        let (left, right) = canopy.with_root_context(|context| {
+            let left = context.create_detached(FocusLeaf::new("left"))?;
+            let right = context.create_detached(FocusLeaf::new("right"))?;
             context.set_children(app_id.into(), vec![left.into(), right.into()])?;
             context.set_layout_of(app_id, Layout::fill().direction(Direction::Row))?;
             context.set_layout_of(left, Layout::fill())?;
-            context.set_layout_of(right, Layout::fill())
+            context.set_layout_of(right, Layout::fill())?;
+            Ok((left, right))
         })?;
         canopy.set_root_size(Size::new(60, 14))?;
 
