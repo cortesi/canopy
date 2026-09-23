@@ -567,9 +567,6 @@ pub trait Context: ViewContext + sealed::Context {
     /// region. Returns an error when the node does not exist.
     fn reveal_node(&mut self, node: NodeId, align: RevealAlign) -> Result<ChangeOutcome>;
 
-    /// Mark this node dirty so the next frame re-runs layout.
-    fn invalidate_layout(&mut self);
-
     /// Replace persistent parent constraints without replacing widget layout
     /// fields.
     fn set_layout_override(&mut self, node: NodeId, overrides: LayoutOverride) -> Result<()>;
@@ -1022,13 +1019,6 @@ impl Context for NodeCtx<&mut Core> {
 
     fn reveal_node(&mut self, node: NodeId, align: RevealAlign) -> Result<ChangeOutcome> {
         self.core.reveal_node(node, align)
-    }
-
-    fn invalidate_layout(&mut self) {
-        self.core.invalidate(crate::Invalidation::Layout);
-        if let Some(node) = self.core.nodes.get_mut(self.node_id) {
-            node.layout_dirty = true;
-        }
     }
 
     fn set_layout_override(&mut self, node: NodeId, overrides: LayoutOverride) -> Result<()> {

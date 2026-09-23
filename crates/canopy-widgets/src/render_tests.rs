@@ -155,7 +155,7 @@ mod tests {
         harness.render()?;
         assert!(harness.tbuf().contains_text("Fifth"));
         harness.with_root_widget_context(|_: &mut SnapshotRoot<Dropdown<String>>, ctx| {
-            ctx.with_unique_descendant::<Dropdown<String>, _>(|dropdown, ctx| dropdown.confirm(ctx))
+            ctx.with_unique_descendant::<Dropdown<String>, _>(|dropdown, _ctx| dropdown.confirm())
         })?;
         harness.render()?;
         assert!(harness.tbuf().contains_text("Fifth ▼"));

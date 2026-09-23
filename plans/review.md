@@ -2220,7 +2220,7 @@ Each stage also updates the docs it touches.
 - [x] C17: `ScrollOp` with counted lines and pages and a one-line page overlap.
   Replace the five direction matches, and delete fileselect's
   `with_preview_view`.
-- [ ] C18 public part: `ChangeSet` and `Invalidation` are already crate-private
+- [x] C18 public part: `ChangeSet` and `Invalidation` are already crate-private
   (done in Stage 2). Delete `invalidate_layout` and its 16 calls, including fileselect's
   `lib.rs:1772-1775` block.
 - [x] C21: merge the error variants, and rename `RunLoop` to `Driver`.

@@ -139,8 +139,8 @@ impl Confirm {
         let body = self.body()?;
         let title = title.to_owned();
         let message = message.to_owned();
-        context.with_widget_mut(body, |body: &mut ConfirmBody, context| {
-            body.show(context, message);
+        context.with_widget_mut(body, |body: &mut ConfirmBody, _context| {
+            body.show(message);
             Ok(())
         })?;
         let frame = context
@@ -368,14 +368,13 @@ impl ConfirmBody {
     }
 
     /// Show `message` as the question.
-    fn show(&mut self, context: &mut dyn Context, message: String) {
+    fn show(&mut self, message: String) {
         let widest = u32::try_from(text::display_width(&message)).unwrap_or(u32::MAX);
         // This is the body's content box. The blank columns beside it are the
         // body's own padding, which layout adds around whatever is measured
         // here, so counting them again would spend them twice.
         self.fitted_width = widest.max(buttons_width());
         self.message = message;
-        context.invalidate_layout();
     }
 }
 

@@ -49,10 +49,7 @@ fn focus_path(harness: &Harness) -> Path {
 fn installed_termgym_keeps_sidebar_beside_terminal() -> Result<()> {
     let (mut harness, app) = termgym_harness()?;
     harness.canopy.with_root_context(|context| {
-        context.with_widget_mut(app, |_termgym: &mut TermGym, context| {
-            context.invalidate_layout();
-            Ok(())
-        })
+        context.with_widget_mut(app, |_termgym: &mut TermGym, _context| Ok(()))
     })?;
     harness.render()?;
 

@@ -3592,9 +3592,6 @@ pub mod canopy {
             direction: FocusDirection,
         ) -> Result<ChangeOutcome>;
 
-        /// Mark this node dirty so the next frame re-runs layout.
-        fn invalidate_layout(&mut self);
-
         /// Open a modal scope that owns focus, input admission, and visual effects.
         fn open_modal(&mut self, options: ModalOptions) -> Result<InteractionToken>;
 

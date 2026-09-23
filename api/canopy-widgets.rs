@@ -2383,10 +2383,10 @@ pub mod canopy_widgets {
         T: 'static + Label,
     {
         /// Collapse without changing selection.
-        pub fn cancel(&mut self, c: &mut dyn Context) -> Result<()> {}
+        pub fn cancel(&mut self) -> Result<()> {}
 
         /// Confirm the highlighted selection and collapse.
-        pub fn confirm(&mut self, c: &mut dyn Context) -> Result<()> {}
+        pub fn confirm(&mut self) -> Result<()> {}
 
         /// Create a new dropdown with the given items.
         ///

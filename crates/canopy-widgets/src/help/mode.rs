@@ -120,9 +120,8 @@ impl ModeHelp {
             frame.set_title(mode);
             Ok(())
         })?;
-        context.with_widget_mut(list, |list: &mut ModeBindings, context| {
+        context.with_widget_mut(list, |list: &mut ModeBindings, _context| {
             list.bindings = bindings;
-            context.invalidate_layout();
             Ok(())
         })?;
         context.set_hidden(overlay, false)?;

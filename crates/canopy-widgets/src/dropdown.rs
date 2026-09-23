@@ -72,8 +72,7 @@ where
     pub fn toggle(&mut self, c: &mut dyn Context) -> Result<()> {
         self.expanded = !self.expanded;
         self.cursor.set_index(self.selected);
-        // Mark layout dirty so parent can resize
-        c.invalidate_layout();
+
         if self.expanded {
             self.cursor.reveal(c);
         }
@@ -96,11 +95,10 @@ where
 
     /// Confirm the highlighted selection and collapse.
     #[command]
-    pub fn confirm(&mut self, c: &mut dyn Context) -> Result<()> {
+    pub fn confirm(&mut self) -> Result<()> {
         if self.expanded {
             self.selected = self.cursor.index().unwrap_or(self.selected);
             self.expanded = false;
-            c.invalidate_layout();
         }
         debug_assert!(self.selection_invariant_holds());
         Ok(())
@@ -116,18 +114,17 @@ where
         }
         if let Some(row) = self.cursor.row_at(&c.view(), event.location) {
             self.cursor.set_index(row);
-            self.confirm(c)?;
+            self.confirm()?;
         }
         Ok(())
     }
 
     /// Collapse without changing selection.
     #[command]
-    pub fn cancel(&mut self, c: &mut dyn Context) -> Result<()> {
+    pub fn cancel(&mut self) -> Result<()> {
         if self.expanded {
             self.expanded = false;
             self.cursor.set_index(self.selected);
-            c.invalidate_layout();
         }
         debug_assert!(self.selection_invariant_holds());
         Ok(())
@@ -306,14 +303,14 @@ mod tests {
             dropdown.cursor.set_index(1);
             dropdown.toggle(ctx)?;
             dropdown.select_by(ctx, 99)?;
-            dropdown.confirm(ctx)?;
+            dropdown.confirm()?;
             assert_eq!(dropdown.selected_index(), 2);
             assert!(!dropdown.expanded);
             assert!(dropdown.selection_invariant_holds());
 
             dropdown.toggle(ctx)?;
             dropdown.select_by(ctx, -99)?;
-            dropdown.cancel(ctx)?;
+            dropdown.cancel()?;
             assert_eq!(dropdown.selected_index(), 2);
             assert!(!dropdown.expanded);
             assert!(dropdown.selection_invariant_holds());

@@ -210,7 +210,7 @@ fn palette_and_rules_follow_the_selected_theme() -> Result<()> {
         ctx.with_unique_descendant::<Dropdown<ThemeOption>, _>(|dropdown, ctx| {
             dropdown.toggle(ctx)?;
             dropdown.select_by(ctx, 1)?;
-            dropdown.confirm(ctx)
+            dropdown.confirm()
         })?;
         stylegym.apply_theme(ctx)
     })?;

@@ -615,7 +615,6 @@ where
 
     /// Redraw the title and the field, re-measure, and reveal the selection.
     fn refresh(&self, context: &mut dyn Context) -> Result<()> {
-        context.invalidate_layout();
         // Nearest keeps a long list still while the selection moves within the
         // rows already on screen.
         self.cursor.reveal(context);

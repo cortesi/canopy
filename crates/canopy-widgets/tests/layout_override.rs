@@ -24,10 +24,8 @@ mod tests {
         harness.render()?;
 
         for _ in 0..2 {
-            harness.canopy.with_context(frame, |ctx| {
-                ctx.invalidate_layout();
-                Ok(())
-            })?;
+            // A mutable callback refreshes the widget's base layout.
+            harness.with_widget(frame, |_: &mut Frame| ());
             harness.render()?;
             harness.canopy.with_root_view(|ctx| {
                 let layout = ctx.layout_of(frame.into()).expect("frame layout");

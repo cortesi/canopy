@@ -590,10 +590,6 @@ fn a_drag_follows_range_changes_and_ends_when_its_target_leaves() -> Result<()> 
     harness.with_widget(body, |surface: &mut Surface| {
         surface.canvas = Size::new(1, 128);
     });
-    harness.canopy.with_context(body, |c| {
-        c.invalidate_layout();
-        Ok(())
-    })?;
     harness.render()?;
     harness.mouse(pointer(mouse::Action::Drag, 19, 8))?;
     assert_eq!(scroll(&harness, body), Point { x: 0, y: 120 });
