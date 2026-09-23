@@ -120,9 +120,15 @@ fn prove_help_flow(mut harness: Harness, hidden: &[&str], shown: &[&str]) -> Res
     }
 
     harness.key(Key::parse_spec("Down").expect("valid key"))?;
-    assert!(harness.canopy.route_trace().iter().any(|entry| {
-        entry.kind == RouteTraceKind::RunBinding && entry.detail == "Scroll down"
-    }));
+    // A help panel that fits cannot scroll, so the navigation intent
+    // declines; the key stays inside the modal and runs nothing behind it.
+    assert!(
+        !harness
+            .canopy
+            .route_trace()
+            .iter()
+            .any(|entry| entry.kind == RouteTraceKind::RunBinding)
+    );
     harness.key(Key::parse_spec("ctrl-g").expect("valid key"))?;
 
     assert_eq!(

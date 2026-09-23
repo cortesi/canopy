@@ -25,8 +25,6 @@ pub mod canopy_examples {
         }
 
         impl Widget for CharGym {
-            fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
-
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
         }
     }
@@ -237,8 +235,6 @@ pub mod canopy_examples {
         }
 
         impl Widget for Pager {
-            fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
-
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
         }
     }

@@ -79,7 +79,7 @@ impl Tabs {
 
     /// Move the active tab by a signed offset, wrapping around.
     #[command]
-    pub fn select_by(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {
+    pub fn cycle(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {
         if self.tabs.is_empty() {
             return Ok(());
         }

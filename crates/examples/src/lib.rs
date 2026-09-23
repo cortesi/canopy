@@ -4,7 +4,7 @@
 use canopy::{
     CanopyBuilder, Context, ContextExt, Register, Widget,
     error::{Error, Result},
-    layout::{Direction, Layout, LayoutOverride, ScrollDirection, ScrollOp, Sizing},
+    layout::{Direction, Layout, LayoutOverride, Sizing},
     style::{
         AttrSet, Color, GradientSpec, GradientStop, Paint, PartialStyle, StyleRules,
         themes::Palette,
@@ -74,16 +74,6 @@ pub(crate) fn banner_gradient(angle_deg: f32, colors: [Color; 4]) -> Paint {
     ))
 }
 
-/// Scroll a context by one line in the given direction.
-pub(crate) fn scroll_in(c: &mut dyn Context, dir: ScrollDirection) {
-    c.scroll(ScrollOp::Lines(dir, 1));
-}
-
-/// Page a context by a signed delta; negative moves up, positive moves down.
-pub(crate) fn page_by(c: &mut dyn Context, delta: i32) {
-    c.scroll(ScrollOp::pages(delta));
-}
-
 /// Add the standard normal and selected entry rules under a path prefix.
 pub(crate) fn selectable_entry_styles<'a>(
     palette: &Palette,
@@ -108,39 +98,22 @@ pub(crate) fn selectable_entry_styles<'a>(
         )
 }
 
-/// Binding template for a full-window scrollable demo.
+/// Navigation keys for a full-window scrollable demo.
 ///
-/// `{receiver}` is the Luau command owner. `{path}` is the binding path.
-const TEXT_SCROLL_BINDINGS: &str = r#"
+/// The keys offer the navigation intents, which scroll whichever view on the
+/// focus route can move. The wheel scrolls by default.
+pub(crate) const TEXT_SCROLL_BINDINGS: &str = r#"
 canopy.keymap({
-    path = "{path}",
-    { key = "g", description = "Top", action = command.{receiver}.scroll_to(0, 0) },
-    {
-        key = { "j", "Down" },
-        mouse = "ScrollDown",
-        description = "Scroll down",
-        action = command.{receiver}.scroll("down"),
-    },
-    {
-        key = { "k", "Up" },
-        mouse = "ScrollUp",
-        description = "Scroll up",
-        action = command.{receiver}.scroll("up"),
-    },
-    { key = { "h", "Left" }, description = "Scroll left", action = command.{receiver}.scroll("left") },
-    { key = { "l", "Right" }, description = "Scroll right", action = command.{receiver}.scroll("right") },
-    { key = { "PageDown", "Space" }, description = "Page down", action = command.{receiver}.page(1) },
-    { key = "PageUp", description = "Page up", action = command.{receiver}.page(-1) },
+    { key = "g", description = "Top", action = "canopy.nav.first" },
+    { key = { "j", "Down" }, description = "Scroll down", action = "canopy.nav.down" },
+    { key = { "k", "Up" }, description = "Scroll up", action = "canopy.nav.up" },
+    { key = { "h", "Left" }, description = "Scroll left", action = "canopy.nav.left" },
+    { key = { "l", "Right" }, description = "Scroll right", action = "canopy.nav.right" },
+    { key = { "PageDown", "Space" }, description = "Page down", action = "canopy.nav.page_down" },
+    { key = "PageUp", description = "Page up", action = "canopy.nav.page_up" },
 })
 canopy.bind("q", { path = "root", description = "Quit" }, command.root.quit())
 "#;
-
-/// Render the shared scroll bindings for one receiver and binding path.
-pub(crate) fn text_scroll_bindings(receiver: &str, path: &str) -> String {
-    TEXT_SCROLL_BINDINGS
-        .replace("{receiver}", receiver)
-        .replace("{path}", path)
-}
 
 /// Start demo registration with Root and its first-preparation help setup.
 #[must_use]

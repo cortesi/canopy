@@ -14,7 +14,7 @@ use canopy::{
 
 use crate::{
     label::ItemLabel,
-    row_cursor::{RowCursor, is_primary_click, label_rows, widest_label},
+    row_cursor::{CursorMove, RowCursor, is_primary_click, label_rows, widest_label},
 };
 
 /// The glyphs a selector draws before an unchosen and the chosen item.
@@ -160,6 +160,17 @@ where
         Ok(())
     }
 
+    /// Move the selection by whole pages.
+    /// @param delta Negative values move up; positive values move down.
+    #[command]
+    pub fn page(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {
+        let rows = c.view().view_rect().h;
+        self.cursor.page(delta, rows);
+        self.cursor.reveal(c);
+        debug_assert!(self.invariant_holds());
+        Ok(())
+    }
+
     /// Select and choose the clicked row.
     fn handle_click(&mut self, c: &mut dyn Context, event: mouse::MouseEvent) -> Result<()> {
         if !is_primary_click(event) {
@@ -206,6 +217,21 @@ where
         // Ignore so mouse bindings can also fire, for example to trigger
         // effects.
         Ok(EventOutcome::Ignore)
+    }
+
+    fn accepts_intent(&self, intent: &str, _ctx: &dyn ViewContext) -> bool {
+        !self.items.is_empty() && CursorMove::of(intent).is_some()
+    }
+
+    fn on_intent(&mut self, intent: &str, ctx: &mut dyn Context) -> Result<EventOutcome> {
+        match CursorMove::of(intent) {
+            Some(CursorMove::By(delta)) => self.select_by(ctx, delta)?,
+            Some(CursorMove::Page(delta)) => self.page(ctx, delta)?,
+            Some(CursorMove::First) => self.select_first(ctx)?,
+            Some(CursorMove::Last) => self.select_last(ctx)?,
+            None => return Ok(EventOutcome::Ignore),
+        }
+        Ok(EventOutcome::Handle)
     }
 
     fn semantics(&self, _ctx: &dyn ViewContext) -> Result<WidgetSemantics> {

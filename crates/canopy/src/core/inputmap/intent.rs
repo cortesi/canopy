@@ -82,13 +82,104 @@ impl IntentSpec {
     }
 }
 
+/// A built-in navigation intent.
+///
+/// Core registers these in every application. At each route node, a widget
+/// that accepts one handles it: a cursor widget moves its selection.
+/// Otherwise the runtime scrolls that node's view when it can move, as the
+/// wheel does, and a view that cannot move declines so the route continues.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NavIntent {
+    /// Move up one row.
+    Up,
+    /// Move down one row.
+    Down,
+    /// Move left one column.
+    Left,
+    /// Move right one column.
+    Right,
+    /// Move up one page.
+    PageUp,
+    /// Move down one page.
+    PageDown,
+    /// Move to the first row.
+    First,
+    /// Move to the last row.
+    Last,
+}
+
+impl NavIntent {
+    /// Every navigation intent.
+    pub const ALL: [Self; 8] = [
+        Self::Up,
+        Self::Down,
+        Self::Left,
+        Self::Right,
+        Self::PageUp,
+        Self::PageDown,
+        Self::First,
+        Self::Last,
+    ];
+
+    /// Return the intent name, such as `canopy.nav.up`.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Up => "canopy.nav.up",
+            Self::Down => "canopy.nav.down",
+            Self::Left => "canopy.nav.left",
+            Self::Right => "canopy.nav.right",
+            Self::PageUp => "canopy.nav.page_up",
+            Self::PageDown => "canopy.nav.page_down",
+            Self::First => "canopy.nav.first",
+            Self::Last => "canopy.nav.last",
+        }
+    }
+
+    /// Return the navigation intent named `name`, if it is one.
+    #[must_use]
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|nav| nav.name() == name)
+    }
+
+    /// Return the catalog description.
+    const fn description(self) -> &'static str {
+        match self {
+            Self::Up => "Move the selection or view up one row",
+            Self::Down => "Move the selection or view down one row",
+            Self::Left => "Move the view left one column",
+            Self::Right => "Move the view right one column",
+            Self::PageUp => "Move the selection or view up one page",
+            Self::PageDown => "Move the selection or view down one page",
+            Self::First => "Move the selection or view to the start",
+            Self::Last => "Move the selection or view to the end",
+        }
+    }
+}
+
 /// Bindable intents for one application, with their descriptions.
 ///
 /// Actions are registered during setup, before the script API finalizes.
-#[derive(Clone, Debug, Default)]
+/// Every catalog starts with the [`NavIntent`]s.
+#[derive(Clone, Debug)]
 pub struct IntentCatalog {
     /// Registered actions in name order.
     actions: BTreeMap<IntentName, String>,
+}
+
+impl Default for IntentCatalog {
+    fn default() -> Self {
+        let actions = NavIntent::ALL
+            .into_iter()
+            .map(|nav| {
+                (
+                    IntentName(nav.name().to_string()),
+                    nav.description().to_string(),
+                )
+            })
+            .collect();
+        Self { actions }
+    }
 }
 
 impl IntentCatalog {

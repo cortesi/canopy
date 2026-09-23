@@ -9,7 +9,7 @@
 use canopy::{
     Context,
     geom::{PointI32, Rect},
-    input::mouse,
+    input::{NavIntent, mouse},
     layout::{RevealAlign, View},
     text,
 };
@@ -154,6 +154,37 @@ pub fn label_rows(len: usize, scroll_y: u32, height: u32) -> impl Iterator<Item 
         .take(height as usize)
         .enumerate()
         .map(|(offset, row)| (offset as u32, row))
+}
+
+/// The selection move a navigation intent asks a cursor widget for.
+///
+/// Every cursor widget answers the vertical intents with the same clamped
+/// commands; the horizontal ones fall through to the view's default scroll.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CursorMove {
+    /// Move by a signed row count.
+    By(i32),
+    /// Move by a signed page count.
+    Page(i32),
+    /// Move to the first row.
+    First,
+    /// Move to the last row.
+    Last,
+}
+
+impl CursorMove {
+    /// Return the move the intent named `intent` asks for, if any.
+    pub fn of(intent: &str) -> Option<Self> {
+        Some(match NavIntent::from_name(intent)? {
+            NavIntent::Up => Self::By(-1),
+            NavIntent::Down => Self::By(1),
+            NavIntent::PageUp => Self::Page(-1),
+            NavIntent::PageDown => Self::Page(1),
+            NavIntent::First => Self::First,
+            NavIntent::Last => Self::Last,
+            NavIntent::Left | NavIntent::Right => return None,
+        })
+    }
 }
 
 #[cfg(test)]

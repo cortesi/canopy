@@ -1,8 +1,8 @@
 use canopy::{
     CanopyBuilder, Context, ContextExt, Register, Setup, ViewContext, Widget, derive_commands,
     error::Result,
-    geom::{Line, Point, Size},
-    layout::{CanvasContext, Layout, MeasureConstraints, Measurement, ScrollDirection, ScrollOp},
+    geom::{Line, Size},
+    layout::{CanvasContext, Layout, MeasureConstraints, Measurement},
     render::Render,
 };
 use canopy_widgets::Frame;
@@ -40,26 +40,6 @@ impl TestPattern {
         Self {
             size: Size::new(500, 500),
         }
-    }
-
-    #[command]
-    /// Scroll to an absolute content position.
-    pub(crate) fn scroll_to(&self, c: &mut dyn Context, x: u32, y: u32) {
-        c.scroll(ScrollOp::To(Point { x, y }));
-    }
-
-    #[command]
-    /// Scroll by one line in the specified direction.
-    /// @param dir The direction to scroll.
-    pub(crate) fn scroll(&self, c: &mut dyn Context, dir: ScrollDirection) {
-        crate::scroll_in(c, dir);
-    }
-
-    #[command]
-    /// Page the view. Negative values move up; positive values move down.
-    /// @param delta Signed page delta.
-    pub(crate) fn page(&self, c: &mut dyn Context, delta: i32) {
-        crate::page_by(c, delta);
     }
 
     /// Return the character for the test pattern at a position.
@@ -162,8 +142,7 @@ impl Register for FrameGym {
 /// Queue this demo's bindings and native configuration in their builder phases.
 #[must_use]
 pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
-    builder.script("framegym-prefix", FRAMEGYM_PREFIX).script(
-        "framegym-scroll",
-        crate::text_scroll_bindings("test_pattern", "frame_gym"),
-    )
+    builder
+        .script("framegym-prefix", FRAMEGYM_PREFIX)
+        .script("framegym-scroll", crate::TEXT_SCROLL_BINDINGS)
 }

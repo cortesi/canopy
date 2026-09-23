@@ -10,7 +10,7 @@ use canopy::{
     ViewContextExt, Widget, derive_commands,
     error::Result,
     geom::{Line, Point, Rect, Size},
-    layout::{CanvasContext, Direction, Edges, Layout, ScrollDirection, View},
+    layout::{CanvasContext, Direction, Edges, Layout, View},
     render::Render,
     style::{
         AttrSet, Color, PartialStyle, ResolvedStyle, StyleMap, effects,
@@ -57,20 +57,20 @@ canopy.keymap({
 
 canopy.keymap({
     path = "style_sheet",
-    { key = { "j", "Down" }, description = "Scroll down", action = command.style_sheet.scroll("down") },
-    { key = { "k", "Up" }, description = "Scroll up", action = command.style_sheet.scroll("up") },
-    { key = { "H", "shift-Left" }, description = "Scroll left", action = command.style_sheet.scroll("left") },
-    { key = { "L", "shift-Right" }, description = "Scroll right", action = command.style_sheet.scroll("right") },
-    { key = { "PageDown", "Space" }, description = "Page down", action = command.style_sheet.page(1) },
-    { key = "PageUp", description = "Page up", action = command.style_sheet.page(-1) },
+    { key = { "j", "Down" }, description = "Scroll down", action = "canopy.nav.down" },
+    { key = { "k", "Up" }, description = "Scroll up", action = "canopy.nav.up" },
+    { key = { "H", "shift-Left" }, description = "Scroll left", action = "canopy.nav.left" },
+    { key = { "L", "shift-Right" }, description = "Scroll right", action = "canopy.nav.right" },
+    { key = { "PageDown", "Space" }, description = "Page down", action = "canopy.nav.page_down" },
+    { key = "PageUp", description = "Page up", action = "canopy.nav.page_up" },
 })
 
 canopy.keymap({
     path = "text_samples",
-    { key = { "j", "Down" }, description = "Scroll down", action = command.text_samples.scroll("down") },
-    { key = { "k", "Up" }, description = "Scroll up", action = command.text_samples.scroll("up") },
-    { key = { "PageDown", "Space" }, description = "Page down", action = command.text_samples.page(1) },
-    { key = "PageUp", description = "Page up", action = command.text_samples.page(-1) },
+    { key = { "j", "Down" }, description = "Scroll down", action = "canopy.nav.down" },
+    { key = { "k", "Up" }, description = "Scroll up", action = "canopy.nav.up" },
+    { key = { "PageDown", "Space" }, description = "Page down", action = "canopy.nav.page_down" },
+    { key = "PageUp", description = "Page up", action = "canopy.nav.page_up" },
 })
 
 canopy.keymap({
@@ -407,18 +407,6 @@ impl StyleSheet {
             }));
     }
 
-    /// Scroll by one line or column.
-    #[command]
-    pub(crate) fn scroll(&self, c: &mut dyn Context, dir: ScrollDirection) {
-        crate::scroll_in(c, dir);
-    }
-
-    /// Scroll by a page; negative moves up.
-    #[command]
-    pub(crate) fn page(&self, c: &mut dyn Context, delta: i32) {
-        crate::page_by(c, delta);
-    }
-
     /// Return the width of the path column.
     fn path_width(&self) -> u32 {
         self.rows
@@ -689,19 +677,7 @@ const TEXT_ROWS: &[(&str, &str)] = &[
 pub(crate) struct TextSamples;
 
 #[derive_commands]
-impl TextSamples {
-    /// Scroll by one line or column.
-    #[command]
-    pub(crate) fn scroll(&self, c: &mut dyn Context, dir: ScrollDirection) {
-        crate::scroll_in(c, dir);
-    }
-
-    /// Scroll by a page; negative moves up.
-    #[command]
-    pub(crate) fn page(&self, c: &mut dyn Context, delta: i32) {
-        crate::page_by(c, delta);
-    }
-}
+impl TextSamples {}
 
 impl Widget for TextSamples {
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
@@ -905,7 +881,7 @@ impl Stylegym {
     /// Move to another tab by a signed offset, wrapping around.
     #[command]
     pub(crate) fn next_tab(&self, c: &mut dyn Context, delta: i32) -> Result<()> {
-        self.with_tabs(c, |tabs, ctx| tabs.select_by(ctx, delta))
+        self.with_tabs(c, |tabs, ctx| tabs.cycle(ctx, delta))
     }
 
     /// Show the modal overlay.

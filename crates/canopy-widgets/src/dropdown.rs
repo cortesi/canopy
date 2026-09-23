@@ -13,7 +13,7 @@ use canopy::{
 
 use crate::{
     label::ItemLabel,
-    row_cursor::{RowCursor, is_primary_click, label_rows, widest_label},
+    row_cursor::{CursorMove, RowCursor, is_primary_click, label_rows, widest_label},
 };
 
 /// A dropdown widget for single-value selection.
@@ -95,6 +95,32 @@ where
         Ok(())
     }
 
+    /// Move the highlight to the first item (when expanded).
+    #[command]
+    pub fn select_first(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.select_by(c, i32::MIN)
+    }
+
+    /// Move the highlight to the last item (when expanded).
+    #[command]
+    pub fn select_last(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.select_by(c, i32::MAX)
+    }
+
+    /// Move the highlight by whole pages (when expanded).
+    /// @param delta Negative values move up; positive values move down.
+    #[command]
+    pub fn page(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {
+        if !self.expanded {
+            return Ok(());
+        }
+        let rows = c.view().view_rect().h;
+        self.cursor.page(delta, rows);
+        self.cursor.reveal(c);
+        debug_assert!(self.selection_invariant_holds());
+        Ok(())
+    }
+
     /// Confirm the highlighted selection and collapse.
     #[command]
     pub fn confirm(&mut self) -> Result<()> {
@@ -160,6 +186,21 @@ impl<T> Widget for Dropdown<T>
 where
     T: ItemLabel + 'static,
 {
+    fn accepts_intent(&self, intent: &str, _ctx: &dyn ViewContext) -> bool {
+        self.expanded && CursorMove::of(intent).is_some()
+    }
+
+    fn on_intent(&mut self, intent: &str, ctx: &mut dyn Context) -> Result<EventOutcome> {
+        match CursorMove::of(intent) {
+            Some(CursorMove::By(delta)) => self.select_by(ctx, delta)?,
+            Some(CursorMove::Page(delta)) => self.page(ctx, delta)?,
+            Some(CursorMove::First) => self.select_first(ctx)?,
+            Some(CursorMove::Last) => self.select_last(ctx)?,
+            None => return Ok(EventOutcome::Ignore),
+        }
+        Ok(EventOutcome::Handle)
+    }
+
     fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
         if let Event::Mouse(mouse_event) = event {
             self.handle_click(ctx, *mouse_event)?;

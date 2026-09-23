@@ -2,6 +2,7 @@ use canopy::{
     ContextExt, Register, ViewContext,
     error::Result,
     geom::{self, Size},
+    input::key::KeyCode,
     layout::{Edges, Layout},
     testing::harness::Harness,
 };
@@ -99,12 +100,12 @@ fn framegym_scroll_commands_update_vertical_scroll() -> Result<()> {
 }
 
 #[test]
-fn framegym_scroll_commands_update_horizontal_scroll() -> Result<()> {
+fn framegym_navigation_keys_scroll_horizontally() -> Result<()> {
     let mut harness = framegym_harness()?;
     harness.render()?;
 
     let initial_scroll = pattern_scroll(&mut harness)?.x;
-    harness.script(r#"test_pattern.scroll("right")"#)?;
+    harness.key(KeyCode::Right)?;
     let updated_scroll = pattern_scroll(&mut harness)?.x;
     assert!(updated_scroll > initial_scroll);
 

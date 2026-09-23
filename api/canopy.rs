@@ -1511,6 +1511,32 @@ pub mod canopy {
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct ModalToken(_);
 
+        /// A built-in navigation intent.
+        ///
+        /// Core registers these in every application. At each route node, a widget
+        /// that accepts one handles it: a cursor widget moves its selection.
+        /// Otherwise the runtime scrolls that node's view when it can move, as the
+        /// wheel does, and a view that cannot move declines so the route continues.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub enum NavIntent {
+            /// Move up one row.
+            Up,
+            /// Move down one row.
+            Down,
+            /// Move left one column.
+            Left,
+            /// Move right one column.
+            Right,
+            /// Move up one page.
+            PageUp,
+            /// Move down one page.
+            PageDown,
+            /// Move to the first row.
+            First,
+            /// Move to the last row.
+            Last,
+        }
+
         /// What would act first on a key.
         #[derive(Clone, Debug, Eq, PartialEq)]
         pub enum RouteOutcome {
@@ -1703,6 +1729,19 @@ pub mod canopy {
         impl IntentSpec {
             /// Build a spec from a name and a description.
             pub fn new(name: impl Into<String>, description: impl Into<String>) -> Result<Self> {}
+        }
+
+        impl NavIntent {
+            #[must_use]
+            /// Return the intent name, such as `canopy.nav.up`.
+            pub const fn name(self) -> &'static str {}
+
+            #[must_use]
+            /// Return the navigation intent named `name`, if it is one.
+            pub fn from_name(name: &str) -> Option<Self> {}
+
+            /// Every navigation intent.
+            pub const ALL: [Self; 8] = _;
         }
 
         impl RouteOutcome {

@@ -3,18 +3,17 @@
 use std::mem;
 
 use canopy::{
-    Context, NodeName, Register, Setup, ViewContext, Widget,
+    NodeName, Register, Setup, ViewContext, Widget,
     commands::CommandStatus,
     derive_commands,
     error::Result,
-    geom::{Line, Point, Size},
+    geom::{Line, Size},
     input::{
         AvailableBinding, BindingSnapshot,
         key::{Empty, Key, KeyCode},
     },
     layout::{
         CanvasContext, Constraint, Edges, Layout, MeasureConstraints, MeasureOverflow, Measurement,
-        ScrollDirection, ScrollOp,
     },
     render::Render,
     text,
@@ -61,46 +60,6 @@ impl BindingList {
     #[cfg(test)]
     pub(crate) fn snapshot(&self) -> Option<&BindingSnapshot> {
         self.snapshot.as_ref()
-    }
-
-    #[command]
-    /// Scroll up by one line.
-    pub fn scroll_up(&self, context: &mut dyn Context) {
-        context.scroll(ScrollOp::Lines(ScrollDirection::Up, 1));
-    }
-
-    #[command]
-    /// Scroll down by one line.
-    pub fn scroll_down(&self, context: &mut dyn Context) {
-        context.scroll(ScrollOp::Lines(ScrollDirection::Down, 1));
-    }
-
-    #[command]
-    /// Scroll up by one viewport.
-    pub fn page_up(&self, context: &mut dyn Context) {
-        context.scroll(ScrollOp::Pages(ScrollDirection::Up, 1));
-    }
-
-    #[command]
-    /// Scroll down by one viewport.
-    pub fn page_down(&self, context: &mut dyn Context) {
-        context.scroll(ScrollOp::Pages(ScrollDirection::Down, 1));
-    }
-
-    #[command]
-    /// Scroll to the first row.
-    pub fn scroll_to_top(&self, context: &mut dyn Context) {
-        context.scroll(ScrollOp::To(Point { x: 0, y: 0 }));
-    }
-
-    #[command]
-    /// Scroll to the last row.
-    pub fn scroll_to_bottom(&self, context: &mut dyn Context) {
-        let view = context.view();
-        context.scroll(ScrollOp::To(Point {
-            x: 0,
-            y: view.canvas.h.saturating_sub(view.view_rect().h),
-        }));
     }
 
     /// Build the exact vertical canvas for one viewport width.

@@ -32,11 +32,12 @@ canopy.assert(
 )
 canopy.assert(canopy.screen_text():find("Keyboard shortcuts") ~= nil, "help must render synchronously")
 
+-- Paging is a navigation intent: a panel that fits declines it, and the key
+-- stays inside help either way.
 canopy.send_key("PageDown")
-local trace = canopy.route_trace()
 canopy.assert(
-    trace[#trace].kind == "handled",
-    "the help paging binding must handle its key"
+    canopy.available_bindings().framework_group == "root.help",
+    "a paging key must leave help open"
 )
 
 canopy.send_key("ctrl-g")

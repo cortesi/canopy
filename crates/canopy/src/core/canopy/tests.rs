@@ -2299,10 +2299,10 @@ fn mount_action_leaf(canopy: &mut Canopy, leaf: IntentLeaf) -> Result<NodeId> {
 
 #[test]
 fn the_rendered_api_narrows_the_action_arm_to_registered_names() -> Result<()> {
-    let empty = app();
+    let bare = app();
     assert!(
-        !empty.script_api()?.contains("IntentName"),
-        "an empty catalog leaves the action arm at commands and callbacks"
+        bare.script_api()?.contains("\"canopy.nav.down\""),
+        "every application binds the built-in navigation intents"
     );
 
     let mut canopy = app_with(|setup| {
@@ -2313,7 +2313,7 @@ fn the_rendered_api_narrows_the_action_arm_to_registered_names() -> Result<()> {
     });
     let api = canopy.script_api()?;
     assert!(
-        api.contains("export type IntentName = \"test.clear\""),
+        api.contains("| \"test.clear\""),
         "the union holds every registered name: {api}"
     );
     assert!(

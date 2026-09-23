@@ -1,12 +1,11 @@
 use canopy::{
     Canopy, Context, ContextExt, NodeId, NodeName, Register, Setup, TypedId, ViewContext, Widget,
-    commands::CommandCall,
     derive_commands,
     error::{Error, Result},
     geom::{Line, Point},
     input::{
         BindingAction, BindingOptions, BindingPhase, BindingTier, FrameworkBindingGroup,
-        ModalBindings, ModalOptions, ModalToken, key::Key,
+        IntentName, ModalBindings, ModalOptions, ModalToken, NavIntent, key::Key,
     },
     layout::{Align, Direction, Layout, LayoutOverride, ScrollOp},
     render::Render,
@@ -414,22 +413,31 @@ fn sync_mode_help(context: &mut dyn Context) -> Result<()> {
 
 /// Register the Root-owned controls admitted by the help modal.
 fn register_help_bindings(setup: &mut Setup) -> Result<()> {
-    let bindings: [(&str, &str, CommandCall); 13] = [
-        ("Up", "Scroll up", BindingList::call_scroll_up()),
-        ("k", "Scroll up", BindingList::call_scroll_up()),
-        ("Down", "Scroll down", BindingList::call_scroll_down()),
-        ("j", "Scroll down", BindingList::call_scroll_down()),
-        ("PageUp", "Page up", BindingList::call_page_up()),
-        ("PageDown", "Page down", BindingList::call_page_down()),
-        ("Space", "Page down", BindingList::call_page_down()),
-        ("Home", "First binding", BindingList::call_scroll_to_top()),
-        ("g", "First binding", BindingList::call_scroll_to_top()),
-        ("End", "Last binding", BindingList::call_scroll_to_bottom()),
-        ("G", "Last binding", BindingList::call_scroll_to_bottom()),
-        ("Esc", "Close help", Root::call_hide_help()),
-        ("Ctrl+g", "Close help", Root::call_toggle_help()),
+    let nav = |intent: NavIntent| IntentName::new(intent.name()).map(BindingAction::Intent);
+    let bindings: [(&str, &str, BindingAction); 13] = [
+        ("Up", "Scroll up", nav(NavIntent::Up)?),
+        ("k", "Scroll up", nav(NavIntent::Up)?),
+        ("Down", "Scroll down", nav(NavIntent::Down)?),
+        ("j", "Scroll down", nav(NavIntent::Down)?),
+        ("PageUp", "Page up", nav(NavIntent::PageUp)?),
+        ("PageDown", "Page down", nav(NavIntent::PageDown)?),
+        ("Space", "Page down", nav(NavIntent::PageDown)?),
+        ("Home", "First binding", nav(NavIntent::First)?),
+        ("g", "First binding", nav(NavIntent::First)?),
+        ("End", "Last binding", nav(NavIntent::Last)?),
+        ("G", "Last binding", nav(NavIntent::Last)?),
+        (
+            "Esc",
+            "Close help",
+            BindingAction::Command(Root::call_hide_help()),
+        ),
+        (
+            "Ctrl+g",
+            "Close help",
+            BindingAction::Command(Root::call_toggle_help()),
+        ),
     ];
-    for (key, description, command) in bindings {
+    for (key, description, action) in bindings {
         setup.bind(
             Key::parse_spec(key)?,
             BindingOptions {
@@ -439,7 +447,7 @@ fn register_help_bindings(setup: &mut Setup) -> Result<()> {
                 source: None,
                 phase: Some(BindingPhase::BeforeWidget),
             },
-            BindingAction::Command(command),
+            action,
         )?;
     }
     Ok(())

@@ -519,6 +519,11 @@ bindings to named intents: `ModalBindings::Framework { group, intents }` admits
 the listed intents after its framework group, and only while a widget inside
 the modal accepts them.
 
+Core registers the navigation intents (`input::NavIntent`) in every catalog.
+A node accepts one when its widget does, or when its view can move that way:
+the runtime then applies the scroll itself, as it does for the wheel, so
+widgets need no scroll or page commands of their own.
+
 Every widget predicts its keys. `Widget::key_outcome` returns the
 `EventOutcome` that `on_event` would return for the same key and pre-event
 state, and its default, `Ignore`, suits a widget that handles no keys. Routing

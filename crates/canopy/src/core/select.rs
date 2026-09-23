@@ -9,7 +9,7 @@ use crate::{
     NodeId,
     core::{Core, context::CoreViewContext, inputmap::BindingRecord, world::WidgetOperation},
     error::Result,
-    input::{BindingId, Event, InputSpec, key::Key},
+    input::{BindingId, Event, InputSpec, NavIntent, key::Key},
     path::Path,
     widget::EventOutcome,
 };
@@ -91,6 +91,12 @@ impl Core {
     /// A widget that cannot be read declines. Selection and dispatch share
     /// this test, so an unreadable widget never becomes an action consumer.
     pub(crate) fn node_accepts_intent(&self, node: NodeId, action: &str, focus: NodeId) -> bool {
+        self.widget_accepts_intent(node, action, focus)
+            || NavIntent::from_name(action).is_some_and(|nav| self.nav_scroll(node, nav).is_some())
+    }
+
+    /// Return whether the widget at `node` itself accepts `action`.
+    fn widget_accepts_intent(&self, node: NodeId, action: &str, focus: NodeId) -> bool {
         let context = CoreViewContext::with_focus(self, node, focus);
         self.with_widget(
             node,
@@ -107,6 +113,16 @@ impl Core {
         action: &str,
         event: &Event,
     ) -> Result<EventOutcome> {
+        // A navigation intent the widget declines is the runtime's default:
+        // it scrolls the node's view.
+        let focus = self.focus.unwrap_or(self.root);
+        if let Some(nav) = NavIntent::from_name(action)
+            && !self.widget_accepts_intent(node, action, focus)
+            && let Some(op) = self.nav_scroll(node, nav)
+        {
+            self.scroll(node, op);
+            return Ok(EventOutcome::Handle);
+        }
         let depth = self.push_event_scope(event);
         let outcome =
             self.with_widget_ctx(node, |widget, context| widget.on_intent(action, context));

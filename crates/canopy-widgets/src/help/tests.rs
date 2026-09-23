@@ -9,7 +9,7 @@ use canopy::{
         AvailableBinding, BindingActionKind, BindingCommand, BindingId, BindingPhase,
         BindingSnapshot, BindingTier, key, mouse,
     },
-    layout::Layout,
+    layout::{Layout, ScrollOp},
     path::Path,
     style::themes,
     testing::harness::Harness,
@@ -357,8 +357,8 @@ fn wheel_and_resize_keep_scroll_within_the_exact_canvas() -> Result<()> {
         .with_root_view(|context| context.view_of(harness.root).expect("list view"));
     assert_eq!(after_wheel.scroll.y, 3);
 
-    harness.with_root_widget_context(|list: &mut BindingList, context| {
-        list.scroll_to_bottom(context);
+    harness.with_root_widget_context(|_list: &mut BindingList, context| {
+        let _ = context.scroll(ScrollOp::To(Point { x: 0, y: u32::MAX }));
         Ok(())
     })?;
     harness.render()?;
@@ -587,8 +587,8 @@ fn scroll_thumb_spans_the_visible_fraction() -> Result<()> {
         let root = context.node_id();
         let frame = ViewContext::children_of(context, root)[0];
         let list = ViewContext::children_of(context, frame)[0];
-        context.with_widget_mut(list, |list: &mut BindingList, context| {
-            list.scroll_to_bottom(context);
+        context.with_widget_mut(list, |_list: &mut BindingList, context| {
+            let _ = context.scroll(ScrollOp::To(Point { x: 0, y: u32::MAX }));
             Ok(())
         })
     })?;

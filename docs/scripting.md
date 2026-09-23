@@ -172,6 +172,25 @@ intent lets the route fall through to the next binding. An
 unregistered name fails at binding registration. Registered names appear in the
 rendered `canopy.api()` and in `canopy.bindings()` output.
 
+Every application has the built-in navigation intents: `canopy.nav.up`,
+`down`, `left`, `right`, `page_up`, `page_down`, `first`, and `last`. A cursor
+widget (List, Selector, PickerList, an open Dropdown) moves its selection.
+Any other node on the route whose view can move scrolls, as the wheel does,
+and a view that cannot move declines. One keymap entry serves every
+scrollable and cursor widget on the focus route:
+
+```luau
+canopy.keymap({
+    { key = { "j", "Down" }, description = "Down", action = "canopy.nav.down" },
+    { key = "PageDown", description = "Page down", action = "canopy.nav.page_down" },
+})
+```
+
+Cursor widgets keep `select_by`, `select_first`, `select_last`, and `page`
+commands for scripts and buttons. A view off the focus route, such as a
+preview beside a list, is moved by an application command that calls
+`scroll_node`.
+
 Use `canopy.keymap` to write a keymap. The named fields of the table are the
 options shared by every entry: `mode`, `path`, `phase`, and `tier`. The array
 part holds the entries. An entry has `key` (one key spec or an array of key

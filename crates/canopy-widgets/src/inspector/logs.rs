@@ -14,7 +14,7 @@ use canopy::{
     Context, ContextExt, NodeName, Register, Setup, ViewContext, Widget, derive_commands,
     error::{Error, Result},
     geom::Size,
-    layout::{CanvasContext, Constraint, Layout, MeasureConstraints, Measurement, ScrollDirection},
+    layout::{CanvasContext, Constraint, Layout, MeasureConstraints, Measurement},
     render::Render,
 };
 use tracing_subscriber::fmt;
@@ -278,25 +278,6 @@ impl Logs {
     /// Move selection by a signed offset.
     pub fn select_by(&self, c: &mut dyn Context, delta: i32) -> Result<()> {
         self.with_list(c, |list, ctx| list.select_by(ctx, delta))
-    }
-
-    /// Scroll the view by one line in the specified direction.
-    /// @param dir The direction to scroll.
-    #[command]
-    pub fn scroll(&self, c: &mut dyn Context, dir: ScrollDirection) -> Result<()> {
-        self.with_list(c, |list, ctx| {
-            list.scroll(ctx, dir);
-            Ok(())
-        })
-    }
-
-    /// Page through the log view.
-    /// Positive values move down; negative values move up.
-    /// @param delta Signed page delta. Positive moves down and negative moves
-    /// up.
-    #[command]
-    pub fn page(&self, c: &mut dyn Context, delta: i32) -> Result<()> {
-        self.with_list(c, |list, ctx| list.page(ctx, delta))
     }
 }
 

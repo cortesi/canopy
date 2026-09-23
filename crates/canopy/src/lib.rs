@@ -55,7 +55,7 @@ pub mod input {
         help::{AvailableBinding, BindingCommand, BindingSnapshot, BindingTarget},
         inputmap::{
             BindingAction, BindingActionKind, BindingId, BindingOptions, BindingPhase, BindingTier,
-            FrameworkBindingGroup, InputSpec, IntentName, IntentSpec,
+            FrameworkBindingGroup, InputSpec, IntentName, IntentSpec, NavIntent,
         },
         keyroute::{
             KeyDispatchDivergence, KeyExpectation, KeyRouteExplanation, KeyRouteStep, RouteOutcome,

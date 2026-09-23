@@ -31,7 +31,7 @@ use crate::{
     Dialog, ItemLabel,
     frame::Frame,
     input::{Input, register_clear_intent},
-    row_cursor::{RowCursor, label_rows, widest_label},
+    row_cursor::{CursorMove, RowCursor, label_rows, widest_label},
 };
 
 /// Columns a row spends on its blank lead column and a trailing gutter.
@@ -333,11 +333,21 @@ where
         }
     }
 
-    /// Move the selection by a signed row count.
-    ///
-    /// The count saturates at both ends, so the smallest and largest values
-    /// select the first and the last item. There is no separate command for
-    /// either end, because it would carry no behaviour of its own.
+    /// Select the first item.
+    #[command]
+    pub fn select_first(&mut self, context: &mut dyn Context) -> Result<()> {
+        self.cursor.select_first();
+        self.refresh(context)
+    }
+
+    /// Select the last item.
+    #[command]
+    pub fn select_last(&mut self, context: &mut dyn Context) -> Result<()> {
+        self.cursor.select_last();
+        self.refresh(context)
+    }
+
+    /// Move the selection by a signed row count, saturating at both ends.
     /// @param delta Negative values move up; positive values move down.
     #[command]
     pub fn select_by(&mut self, context: &mut dyn Context, delta: i32) -> Result<()> {
@@ -679,10 +689,20 @@ where
     }
 
     fn accepts_intent(&self, intent: &str, _context: &dyn ViewContext) -> bool {
-        self.filtering && intent == crate::CLEAR_INTENT
+        (self.filtering && intent == crate::CLEAR_INTENT)
+            || (!self.shown.is_empty() && CursorMove::of(intent).is_some())
     }
 
     fn on_intent(&mut self, intent: &str, context: &mut dyn Context) -> Result<EventOutcome> {
+        if let Some(movement) = CursorMove::of(intent) {
+            match movement {
+                CursorMove::By(delta) => self.select_by(context, delta)?,
+                CursorMove::Page(delta) => self.page(context, delta)?,
+                CursorMove::First => self.select_first(context)?,
+                CursorMove::Last => self.select_last(context)?,
+            }
+            return Ok(EventOutcome::Handle);
+        }
         if !self.filtering || intent != crate::CLEAR_INTENT {
             return Ok(EventOutcome::Ignore);
         }

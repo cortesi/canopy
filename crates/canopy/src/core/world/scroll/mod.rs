@@ -11,7 +11,8 @@ use crate::{
     core::node::Node,
     error::{Error, Result},
     geom::{Point, PointI32, Rect},
-    layout::{RevealAlign, ScrollOp},
+    input::NavIntent,
+    layout::{RevealAlign, ScrollDirection, ScrollOp},
 };
 
 /// Runtime behavior applied to a route node that no widget or binding handled.
@@ -78,6 +79,29 @@ impl Core {
     pub(crate) fn scroll_node(&mut self, node: NodeId, op: ScrollOp) -> Result<ChangeOutcome> {
         self.validate_attached_node(node)?;
         Ok(self.scroll(node, op))
+    }
+
+    /// Return the scroll a navigation intent applies to `node_id`, when its
+    /// view can move that way.
+    pub(crate) fn nav_scroll(&self, node_id: NodeId, nav: NavIntent) -> Option<ScrollOp> {
+        let node = self.nodes.get(node_id)?;
+        let before = node.scroll;
+        let op = match nav {
+            NavIntent::Up => ScrollOp::Lines(ScrollDirection::Up, 1),
+            NavIntent::Down => ScrollOp::Lines(ScrollDirection::Down, 1),
+            NavIntent::Left => ScrollOp::Lines(ScrollDirection::Left, 1),
+            NavIntent::Right => ScrollOp::Lines(ScrollDirection::Right, 1),
+            NavIntent::PageUp => ScrollOp::Pages(ScrollDirection::Up, 1),
+            NavIntent::PageDown => ScrollOp::Pages(ScrollDirection::Down, 1),
+            NavIntent::First => ScrollOp::To(Point { x: before.x, y: 0 }),
+            NavIntent::Last => ScrollOp::To(Point {
+                x: before.x,
+                y: u32::MAX,
+            }),
+        };
+        let mut target = op.target(before, node.content_size);
+        clamp_scroll(&mut target, node.content_size, node.canvas);
+        (target != before).then_some(op)
     }
 
     /// Return what applying `op` to `node_id` would change, without mutating

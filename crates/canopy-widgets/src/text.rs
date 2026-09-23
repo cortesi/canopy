@@ -1,10 +1,10 @@
 use std::cell::RefCell;
 
 use canopy::{
-    Context, NodeName, ViewContext, Widget, derive_commands,
+    NodeName, ViewContext, Widget, derive_commands,
     error::Result,
-    geom::{Line, Point, Size},
-    layout::{Constraint, MeasureConstraints, Measurement, ScrollDirection, ScrollOp},
+    geom::{Line, Size},
+    layout::{Constraint, MeasureConstraints, Measurement},
     render::Render,
     text,
 };
@@ -40,6 +40,8 @@ pub struct Text {
     tab_stop: usize,
     /// Cached wrapped text for the last wrap width.
     wrap_cache: RefCell<Option<WrapCache>>,
+    /// Whether the text takes focus, so navigation keys scroll it.
+    focusable: bool,
 }
 
 impl Selectable for Text {
@@ -61,7 +63,15 @@ impl Text {
             selected: false,
             tab_stop: 4,
             wrap_cache: RefCell::new(None),
+            focusable: false,
         }
+    }
+
+    /// Take focus, so the navigation intents scroll this text.
+    #[must_use]
+    pub fn with_focusable(mut self, focusable: bool) -> Self {
+        self.focusable = focusable;
+        self
     }
 
     /// Add a fixed width for wrapping.
@@ -105,28 +115,6 @@ impl Text {
     pub fn set_text(&mut self, raw: impl Into<String>) {
         self.raw = raw.into();
         self.wrap_cache.borrow_mut().take();
-    }
-
-    #[command]
-    /// Scroll to an absolute content position.
-    pub fn scroll_to(&mut self, c: &mut dyn Context, x: u32, y: u32) {
-        c.scroll(ScrollOp::To(Point { x, y }));
-    }
-
-    /// Scroll by one line in the specified direction.
-    /// @param dir The direction to scroll.
-    #[command]
-    pub fn scroll(&mut self, c: &mut dyn Context, dir: ScrollDirection) {
-        c.scroll(ScrollOp::Lines(dir, 1));
-    }
-
-    /// Page vertically through the text.
-    /// Positive values move down; negative values move up.
-    /// @param delta Signed page delta. Positive moves down and negative moves
-    /// up.
-    #[command]
-    pub fn page(&mut self, c: &mut dyn Context, delta: i32) {
-        c.scroll(ScrollOp::pages(delta));
     }
 
     /// Return the widest unwrapped line, with tabs expanded.
@@ -180,6 +168,10 @@ struct WrapCache {
 }
 
 impl Widget for Text {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+        self.focusable
+    }
+
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
         let view_rect = view.view_rect();

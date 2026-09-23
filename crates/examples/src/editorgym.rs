@@ -1,8 +1,8 @@
 use canopy::{
     CanopyBuilder, Context, ContextExt, NodeId, Register, Setup, Widget, derive_commands,
     error::Result,
-    geom::{Point, Size},
-    layout::{CanvasContext, Direction, Edges, Layout, MeasureOverflow, ScrollDirection, ScrollOp},
+    geom::Size,
+    layout::{CanvasContext, Direction, Edges, Layout, MeasureOverflow},
 };
 use canopy_widgets::{
     Frame,
@@ -18,23 +18,8 @@ canopy.keymap({
     path = "editor_gym",
     { key = "Tab", description = "Next focus", action = command.root.focus("next") },
     { key = "BackTab", description = "Previous focus", action = command.root.focus("prev") },
-    { key = "PageDown", description = "Page down", action = command.editor_gym.page(1) },
-    { key = "PageUp", description = "Page up", action = command.editor_gym.page(-1) },
-    { key = "Home", description = "Top", action = command.editor_gym.scroll_to(0, 0) },
-    {
-        mouse = "ScrollDown",
-        description = "Scroll down",
-        action = function()
-            editor_gym.scroll("down")
-        end,
-    },
-    {
-        mouse = "ScrollUp",
-        description = "Scroll up",
-        action = function()
-            editor_gym.scroll("up")
-        end,
-    },
+    { key = "PageDown", description = "Page down", action = "canopy.nav.page_down" },
+    { key = "PageUp", description = "Page up", action = "canopy.nav.page_up" },
 })
 canopy.bind("q", { path = "root", description = "Quit" }, command.root.quit())
 "#;
@@ -139,26 +124,6 @@ impl EditorGym {
     /// Construct a new editor gym demo.
     pub fn new() -> Self {
         Self
-    }
-
-    #[command]
-    /// Scroll the outer pane by one line in the specified direction.
-    /// @param dir The direction to scroll.
-    pub(crate) fn scroll(&self, c: &mut dyn Context, dir: ScrollDirection) {
-        crate::scroll_in(c, dir);
-    }
-
-    #[command]
-    /// Page the outer pane. Negative values move up; positive values move down.
-    /// @param delta Signed page delta.
-    pub(crate) fn page(&self, c: &mut dyn Context, delta: i32) {
-        crate::page_by(c, delta);
-    }
-
-    #[command]
-    /// Scroll the outer pane to an absolute content position.
-    pub(crate) fn scroll_to(&self, c: &mut dyn Context, x: u32, y: u32) {
-        c.scroll(ScrollOp::To(Point { x, y }));
     }
 
     /// Build the left column of editor samples.

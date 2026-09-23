@@ -385,7 +385,7 @@ mod tests {
 
         harness.with_root_widget_context(|_root: &mut SnapshotRoot<crate::Tabs>, ctx| {
             ctx.with_unique_descendant::<crate::Tabs, _>(|tabs, ctx| {
-                tabs.select_by(ctx, 1)?;
+                tabs.cycle(ctx, 1)?;
                 assert_eq!(tabs.active(), 0, "moving past the last tab wraps");
                 tabs.select(ctx, 9)?;
                 assert_eq!(tabs.active(), 1, "an index past the end clamps");
@@ -446,6 +446,39 @@ mod tests {
             })
         })?;
         assert_eq!(outcome, canopy::EventOutcome::Handle);
+        Ok(())
+    }
+
+    #[test]
+    fn navigation_intents_scroll_a_view_that_can_move_and_decline_otherwise() -> Result<()> {
+        let lines = (0..10)
+            .map(|n| format!("line {n}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let mut harness =
+            Harness::builder(SnapshotRoot::new(Text::new(lines).with_focusable(true)))
+                .script(
+                    "nav",
+                    r#"canopy.keymap({
+                    { key = "j", description = "Down", action = "canopy.nav.down" },
+                    { key = "G", description = "Last", action = "canopy.nav.last" },
+                })"#,
+                )
+                .size(10, 3)
+                .build()?;
+        harness.render()?;
+        let scroll_y = |harness: &Harness| {
+            let text = harness.find_nodes("**/text").unwrap()[0];
+            harness
+                .canopy
+                .with_root_view(|ctx| ctx.view_of(text).expect("text view").scroll.y)
+        };
+        harness.key('j')?;
+        assert_eq!(scroll_y(&harness), 1, "the focused text scrolls a row");
+        harness.key('G')?;
+        assert_eq!(scroll_y(&harness), 7, "last scrolls to the end");
+        harness.key('j')?;
+        assert_eq!(scroll_y(&harness), 7, "a view at its end declines");
         Ok(())
     }
 

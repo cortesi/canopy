@@ -1,8 +1,7 @@
 //! Chargym: A Unicode width and wide character demo.
 
 use canopy::{
-    CanopyBuilder, Context, ContextExt, Register, Setup, ViewContext, Widget, error::Result,
-    layout::Layout,
+    CanopyBuilder, Context, ContextExt, Register, Setup, Widget, error::Result, layout::Layout,
 };
 use canopy_widgets::{CanvasWidth, Frame, Text};
 use unicode_width::UnicodeWidthStr;
@@ -187,15 +186,12 @@ impl CharGym {
 }
 
 impl Widget for CharGym {
-    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
-        true
-    }
-
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         let frame_id = c.add_child(c.node_id(), Frame::new().with_title("chargym"))?;
         c.add_child(
             frame_id,
             Text::new(self.content.clone())
+                .with_focusable(true)
                 .with_wrap_width(WRAP_WIDTH)
                 .with_canvas_width(CanvasWidth::Intrinsic),
         )?;
@@ -215,5 +211,5 @@ impl Register for CharGym {
 /// Queue this demo's bindings and native configuration in their builder phases.
 #[must_use]
 pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
-    builder.script("chargym", crate::text_scroll_bindings("text", "char_gym"))
+    builder.script("chargym", crate::TEXT_SCROLL_BINDINGS)
 }

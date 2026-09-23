@@ -1368,29 +1368,8 @@ pub mod canopy_widgets {
         /// Construct a view of `old` and `new` in unified, whole-file layout.
         pub fn new(old: impl Into<String>, new: impl Into<String>) -> Self {}
 
-        /// Page through the diff.
-        /// @param delta Signed page delta. Positive moves down and negative moves
-        /// up.
-        pub fn page(&mut self, c: &mut dyn Context, delta: i32) {}
-
         /// Replace the view with an already computed diff.
         pub fn set_prepared(&mut self, prepared: PreparedDiff) {}
-
-        /// Scroll by one line or column in the specified direction.
-        /// @param dir The direction to scroll.
-        pub fn scroll(&mut self, c: &mut dyn Context, dir: ScrollDirection) {}
-
-        /// Build a positional call with typed user arguments.
-        pub fn call_page(delta: i32) -> canopy::commands::CommandCall {}
-
-        /// Build a positional call with typed user arguments.
-        pub fn call_scroll(dir: ScrollDirection) -> canopy::commands::CommandCall {}
-
-        /// Return the command spec for this command.
-        pub fn spec_page() -> &'static canopy::commands::CommandSpec {}
-
-        /// Return the command spec for this command.
-        pub fn spec_scroll() -> &'static canopy::commands::CommandSpec {}
     }
 
     impl Widget for DiffView {
@@ -1776,22 +1755,22 @@ pub mod canopy_widgets {
         pub fn new() -> Self {}
 
         /// Move the active tab by a signed offset, wrapping around.
-        pub fn select_by(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {}
+        pub fn cycle(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {}
 
         /// Return the index of the active tab.
         pub fn active(&self) -> usize {}
 
         /// Build a positional call with typed user arguments.
-        pub fn call_select(index: usize) -> canopy::commands::CommandCall {}
+        pub fn call_cycle(delta: i32) -> canopy::commands::CommandCall {}
 
         /// Build a positional call with typed user arguments.
-        pub fn call_select_by(delta: i32) -> canopy::commands::CommandCall {}
+        pub fn call_select(index: usize) -> canopy::commands::CommandCall {}
+
+        /// Return the command spec for this command.
+        pub fn spec_cycle() -> &'static canopy::commands::CommandSpec {}
 
         /// Return the command spec for this command.
         pub fn spec_select() -> &'static canopy::commands::CommandSpec {}
-
-        /// Return the command spec for this command.
-        pub fn spec_select_by() -> &'static canopy::commands::CommandSpec {}
     }
 
     impl Widget for Tabs {
@@ -1833,45 +1812,20 @@ pub mod canopy_widgets {
         /// Set the text rendering style.
         pub fn with_style(self, style: impl Into<String>) -> Self {}
 
+        #[must_use]
+        /// Take focus, so the navigation intents scroll this text.
+        pub fn with_focusable(self, focusable: bool) -> Self {}
+
         /// Construct a text widget with raw content.
         pub fn new(raw: impl Into<String>) -> Self {}
 
-        /// Page vertically through the text.
-        /// Positive values move down; negative values move up.
-        /// @param delta Signed page delta. Positive moves down and negative moves
-        /// up.
-        pub fn page(&mut self, c: &mut dyn Context, delta: i32) {}
-
         /// Replace the raw text content.
         pub fn set_text(&mut self, raw: impl Into<String>) {}
-
-        /// Scroll by one line in the specified direction.
-        /// @param dir The direction to scroll.
-        pub fn scroll(&mut self, c: &mut dyn Context, dir: ScrollDirection) {}
-
-        /// Scroll to an absolute content position.
-        pub fn scroll_to(&mut self, c: &mut dyn Context, x: u32, y: u32) {}
-
-        /// Build a positional call with typed user arguments.
-        pub fn call_page(delta: i32) -> canopy::commands::CommandCall {}
-
-        /// Build a positional call with typed user arguments.
-        pub fn call_scroll(dir: ScrollDirection) -> canopy::commands::CommandCall {}
-
-        /// Build a positional call with typed user arguments.
-        pub fn call_scroll_to(x: u32, y: u32) -> canopy::commands::CommandCall {}
-
-        /// Return the command spec for this command.
-        pub fn spec_page() -> &'static canopy::commands::CommandSpec {}
-
-        /// Return the command spec for this command.
-        pub fn spec_scroll() -> &'static canopy::commands::CommandSpec {}
-
-        /// Return the command spec for this command.
-        pub fn spec_scroll_to() -> &'static canopy::commands::CommandSpec {}
     }
 
     impl Widget for Text {
+        fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
+
         fn canvas(&self, view: Size, _ctx: &canopy::layout::CanvasContext<'_>) -> Size {}
 
         fn measure(&self, c: MeasureConstraints) -> Measurement {}
@@ -2175,6 +2129,16 @@ pub mod canopy_widgets {
         /// Move highlight by a signed offset (when expanded).
         pub fn select_by(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {}
 
+        /// Move the highlight by whole pages (when expanded).
+        /// @param delta Negative values move up; positive values move down.
+        pub fn page(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {}
+
+        /// Move the highlight to the first item (when expanded).
+        pub fn select_first(&mut self, c: &mut dyn Context) -> Result<()> {}
+
+        /// Move the highlight to the last item (when expanded).
+        pub fn select_last(&mut self, c: &mut dyn Context) -> Result<()> {}
+
         /// Toggle the dropdown expanded state.
         pub fn toggle(&mut self, c: &mut dyn Context) -> Result<()> {}
 
@@ -2185,7 +2149,16 @@ pub mod canopy_widgets {
         pub fn call_confirm() -> canopy::commands::CommandCall {}
 
         /// Build a positional call with typed user arguments.
+        pub fn call_page(delta: i32) -> canopy::commands::CommandCall {}
+
+        /// Build a positional call with typed user arguments.
         pub fn call_select_by(delta: i32) -> canopy::commands::CommandCall {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_select_first() -> canopy::commands::CommandCall {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_select_last() -> canopy::commands::CommandCall {}
 
         /// Build a positional call with typed user arguments.
         pub fn call_toggle() -> canopy::commands::CommandCall {}
@@ -2197,7 +2170,16 @@ pub mod canopy_widgets {
         pub fn spec_confirm() -> &'static canopy::commands::CommandSpec {}
 
         /// Return the command spec for this command.
+        pub fn spec_page() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return the command spec for this command.
         pub fn spec_select_by() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return the command spec for this command.
+        pub fn spec_select_first() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return the command spec for this command.
+        pub fn spec_select_last() -> &'static canopy::commands::CommandSpec {}
 
         /// Return the command spec for this command.
         pub fn spec_toggle() -> &'static canopy::commands::CommandSpec {}
@@ -2209,6 +2191,8 @@ pub mod canopy_widgets {
     {
         fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
+        fn accepts_intent(&self, intent: &str, _ctx: &dyn ViewContext) -> bool {}
+
         fn canvas(&self, _view: Size, _ctx: &canopy::layout::CanvasContext<'_>) -> Size {}
 
         fn measure(&self, c: MeasureConstraints) -> Measurement {}
@@ -2216,6 +2200,8 @@ pub mod canopy_widgets {
         fn name(&self) -> NodeName {}
 
         fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {}
+
+        fn on_intent(&mut self, intent: &str, ctx: &mut dyn Context) -> Result<EventOutcome> {}
 
         fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
     }
@@ -2263,11 +2249,7 @@ pub mod canopy_widgets {
         /// repeated removals work without moving the hand.
         pub fn remove_selected(&mut self, context: &mut dyn Context) -> Result<()> {}
 
-        /// Move the selection by a signed row count.
-        ///
-        /// The count saturates at both ends, so the smallest and largest values
-        /// select the first and the last item. There is no separate command for
-        /// either end, because it would carry no behaviour of its own.
+        /// Move the selection by a signed row count, saturating at both ends.
         /// @param delta Negative values move up; positive values move down.
         pub fn select_by(&mut self, context: &mut dyn Context, delta: i32) -> Result<()> {}
 
@@ -2278,6 +2260,12 @@ pub mod canopy_widgets {
         /// Open the filter field. Typed text narrows the list to the items that
         /// contain it.
         pub fn start_filter(&mut self, context: &mut dyn Context) -> Result<()> {}
+
+        /// Select the first item.
+        pub fn select_first(&mut self, context: &mut dyn Context) -> Result<()> {}
+
+        /// Select the last item.
+        pub fn select_last(&mut self, context: &mut dyn Context) -> Result<()> {}
 
         /// Show `items` under `label`, dropping any filter.
         pub fn set_items(
@@ -2306,6 +2294,12 @@ pub mod canopy_widgets {
         pub fn call_select_by(delta: i32) -> canopy::commands::CommandCall {}
 
         /// Build a positional call with typed user arguments.
+        pub fn call_select_first() -> canopy::commands::CommandCall {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_select_last() -> canopy::commands::CommandCall {}
+
+        /// Build a positional call with typed user arguments.
         pub fn call_selected_name() -> canopy::commands::CommandCall {}
 
         /// Build a positional call with typed user arguments.
@@ -2328,6 +2322,12 @@ pub mod canopy_widgets {
 
         /// Return the command spec for this command.
         pub fn spec_select_by() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return the command spec for this command.
+        pub fn spec_select_first() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return the command spec for this command.
+        pub fn spec_select_last() -> &'static canopy::commands::CommandSpec {}
 
         /// Return the command spec for this command.
         pub fn spec_selected_name() -> &'static canopy::commands::CommandSpec {}
@@ -2422,6 +2422,10 @@ pub mod canopy_widgets {
         /// Move the selection by a signed offset.
         pub fn select_by(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {}
 
+        /// Move the selection by whole pages.
+        /// @param delta Negative values move up; positive values move down.
+        pub fn page(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {}
+
         /// Replace the items and the chosen index, in place.
         ///
         /// A choice outside the new items is dropped. The selection moves to the
@@ -2441,6 +2445,9 @@ pub mod canopy_widgets {
         pub fn call_clear_choice() -> canopy::commands::CommandCall {}
 
         /// Build a positional call with typed user arguments.
+        pub fn call_page(delta: i32) -> canopy::commands::CommandCall {}
+
+        /// Build a positional call with typed user arguments.
         pub fn call_select_by(delta: i32) -> canopy::commands::CommandCall {}
 
         /// Build a positional call with typed user arguments.
@@ -2454,6 +2461,9 @@ pub mod canopy_widgets {
 
         /// Return the command spec for this command.
         pub fn spec_clear_choice() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return the command spec for this command.
+        pub fn spec_page() -> &'static canopy::commands::CommandSpec {}
 
         /// Return the command spec for this command.
         pub fn spec_select_by() -> &'static canopy::commands::CommandSpec {}
@@ -2471,6 +2481,8 @@ pub mod canopy_widgets {
     {
         fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
+        fn accepts_intent(&self, intent: &str, _ctx: &dyn ViewContext) -> bool {}
+
         fn canvas(&self, _view: Size, _ctx: &canopy::layout::CanvasContext<'_>) -> Size {}
 
         fn measure(&self, c: MeasureConstraints) -> Measurement {}
@@ -2478,6 +2490,8 @@ pub mod canopy_widgets {
         fn name(&self) -> NodeName {}
 
         fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {}
+
+        fn on_intent(&mut self, intent: &str, ctx: &mut dyn Context) -> Result<EventOutcome> {}
 
         fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
 
@@ -2566,6 +2580,8 @@ pub mod canopy_widgets {
     impl<W: 'static + Selectable, K: 'static + Clone + Eq + Hash + ToArgValue> Widget for List<W, K> {
         fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
+        fn accepts_intent(&self, intent: &str, _ctx: &dyn ViewContext) -> bool {}
+
         fn canvas(&self, view: Size, ctx: &CanvasContext<'_>) -> Size {}
 
         fn layout(&self) -> Layout {}
@@ -2575,6 +2591,8 @@ pub mod canopy_widgets {
         fn name(&self) -> NodeName {}
 
         fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {}
+
+        fn on_intent(&mut self, intent: &str, ctx: &mut dyn Context) -> Result<EventOutcome> {}
 
         fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
 
@@ -2703,10 +2721,6 @@ pub mod canopy_widgets {
         /// Returns true if the list is empty.
         pub fn is_empty(&self) -> bool {}
 
-        /// Scroll the view by one line in the specified direction.
-        /// @param dir The direction to scroll.
-        pub fn scroll(&mut self, c: &mut dyn Context, dir: ScrollDirection) {}
-
         /// Select a domain key, returning an error when it is absent.
         pub fn select_key(&mut self, ctx: &mut dyn Context, key: &K) -> Result<()> {}
 
@@ -2737,9 +2751,6 @@ pub mod canopy_widgets {
         pub fn call_page(delta: i32) -> canopy::commands::CommandCall {}
 
         /// Build a positional call with typed user arguments.
-        pub fn call_scroll(dir: ScrollDirection) -> canopy::commands::CommandCall {}
-
-        /// Build a positional call with typed user arguments.
         pub fn call_select_by(delta: i32) -> canopy::commands::CommandCall {}
 
         /// Build a positional call with typed user arguments.
@@ -2765,9 +2776,6 @@ pub mod canopy_widgets {
 
         /// Return the command spec for this command.
         pub fn spec_page() -> &'static canopy::commands::CommandSpec {}
-
-        /// Return the command spec for this command.
-        pub fn spec_scroll() -> &'static canopy::commands::CommandSpec {}
 
         /// Return the command spec for this command.
         pub fn spec_select_by() -> &'static canopy::commands::CommandSpec {}

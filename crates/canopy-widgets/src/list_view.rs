@@ -15,14 +15,14 @@ use canopy::{
     input::{Event, mouse},
     layout::{
         CanvasContext, Constraint, Edges, Layout, MeasureConstraints, MeasureOverflow, Measurement,
-        RevealAlign, ScrollDirection, ScrollOp,
+        RevealAlign,
     },
     render::Render,
     runtime::WidgetSemantics,
     text,
 };
 
-use crate::keyed::KeyedChildren;
+use crate::{keyed::KeyedChildren, row_cursor::CursorMove};
 
 /// List selection indicator configuration.
 struct SelectionIndicator {
@@ -644,13 +644,6 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
         Ok(())
     }
 
-    /// Scroll the view by one line in the specified direction.
-    /// @param dir The direction to scroll.
-    #[command]
-    pub fn scroll(&mut self, c: &mut dyn Context, dir: ScrollDirection) {
-        c.scroll(ScrollOp::Lines(dir, 1));
-    }
-
     /// Move selection by one page.
     /// Positive values move down; negative values move up. Zero is a no-op.
     /// @param delta Signed page delta. Positive moves down and negative moves
@@ -780,6 +773,21 @@ impl<W: Selectable> List<W, AutoKey> {
 }
 
 impl<W: Selectable + 'static, K: Eq + Hash + Clone + ToArgValue + 'static> Widget for List<W, K> {
+    fn accepts_intent(&self, intent: &str, _ctx: &dyn ViewContext) -> bool {
+        !self.items.is_empty() && CursorMove::of(intent).is_some()
+    }
+
+    fn on_intent(&mut self, intent: &str, ctx: &mut dyn Context) -> Result<EventOutcome> {
+        match CursorMove::of(intent) {
+            Some(CursorMove::By(delta)) => self.select_by(ctx, delta)?,
+            Some(CursorMove::Page(delta)) => self.page(ctx, delta)?,
+            Some(CursorMove::First) => self.select_first(ctx)?,
+            Some(CursorMove::Last) => self.select_last(ctx)?,
+            None => return Ok(EventOutcome::Ignore),
+        }
+        Ok(EventOutcome::Handle)
+    }
+
     fn semantics(&self, ctx: &dyn ViewContext) -> Result<WidgetSemantics> {
         Ok(WidgetSemantics {
             role: Some("list".into()),
@@ -1101,6 +1109,36 @@ mod tests {
         })?;
         assert_eq!(focused_row(&harness), Some(selected.into()));
         assert!(harness.with_widget(selected, |row: &mut Row| row.selected));
+        Ok(())
+    }
+
+    #[test]
+    fn navigation_intents_move_the_selection() -> Result<()> {
+        let mut harness = Harness::builder(List::<Row, i64>::new())
+            .register::<List<Row, i64>>()
+            .script(
+                "nav",
+                r#"canopy.keymap({
+                    { key = "j", description = "Down", action = "canopy.nav.down" },
+                    { key = "G", description = "Last", action = "canopy.nav.last" },
+                    { key = "g", description = "First", action = "canopy.nav.first" },
+                })"#,
+            )
+            .size(20, 10)
+            .build()?;
+        harness.with_root_widget_context(|list: &mut List<Row, i64>, ctx| {
+            reconcile_rows(list, ctx, &[10, 20, 30])
+        })?;
+        harness.render()?;
+        let selected = |harness: &mut Harness| {
+            harness.with_root_widget(|list: &mut List<Row, i64>| list.selected_index())
+        };
+        harness.key('j')?;
+        assert_eq!(selected(&mut harness), Some(1));
+        harness.key('G')?;
+        assert_eq!(selected(&mut harness), Some(2));
+        harness.key('g')?;
+        assert_eq!(selected(&mut harness), Some(0));
         Ok(())
     }
 

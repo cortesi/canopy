@@ -11,7 +11,7 @@ use crate::{
 };
 
 mod intent;
-pub use intent::{IntentCatalog, IntentName, IntentSpec};
+pub use intent::{IntentCatalog, IntentName, IntentSpec, NavIntent};
 
 /// Default mode name.
 const DEFAULT_MODE: &str = "";

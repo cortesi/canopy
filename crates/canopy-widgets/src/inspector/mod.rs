@@ -26,8 +26,8 @@ canopy.keymap({
     },
     { key = "g", description = "First log entry", action = command.logs.select_first() },
     { key = "G", description = "Last log entry", action = command.logs.select_last() },
-    { key = { "Space", "PageDown" }, description = "Page down", action = command.logs.page(1) },
-    { key = "PageUp", description = "Page up", action = command.logs.page(-1) },
+    { key = { "Space", "PageDown" }, description = "Page down", action = "canopy.nav.page_down" },
+    { key = "PageUp", description = "Page up", action = "canopy.nav.page_up" },
 })
 "#;
 

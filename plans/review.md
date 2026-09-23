@@ -2335,8 +2335,13 @@ Each stage also updates the docs it touches.
     replaces List's private index append.
 - [ ] C42: widget framework groups (`Confirm`, `Picker`, `List`), the
   multi-group `ModalBindings`, `Confirm::open`, and `Picker::set_commands`.
-- [ ] C34: the cursor command set, `Tabs::cycle`, and the navigation intents
+- [x] C34: the cursor command set, `Tabs::cycle`, and the navigation intents
   with the runtime scroll default.
+  - A nav intent is eligible at a node whose widget accepts it or whose view
+    can move; `dispatch_action_on_node` applies the scroll for a widget that
+    declines. `Text::with_focusable` lets a pager's text take focus, since
+    intents act on the focus route only. Help's framework group binds the
+    intents; a help panel that fits declines them.
 - [ ] C43 widget part: `TerminalConfig::with_on_exit`.
 - [ ] C46: complete DiffView, add `Spinner`, and rename `DiffModel`.
 - [ ] C48: run the nested-modal spike. Adopt the overlay layer only if its

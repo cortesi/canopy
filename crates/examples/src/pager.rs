@@ -1,6 +1,5 @@
 use canopy::{
-    CanopyBuilder, Context, ContextExt, Register, Setup, ViewContext, Widget, error::Result,
-    layout::Layout,
+    CanopyBuilder, Context, ContextExt, Register, Setup, Widget, error::Result, layout::Layout,
 };
 use canopy_widgets::{Frame, Text};
 
@@ -20,13 +19,12 @@ impl Pager {
 }
 
 impl Widget for Pager {
-    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
-        true
-    }
-
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         let frame_id = c.add_child(c.node_id(), Frame::new())?;
-        c.add_child(frame_id, Text::new(self.contents.clone()))?;
+        c.add_child(
+            frame_id,
+            Text::new(self.contents.clone()).with_focusable(true),
+        )?;
 
         c.set_layout_override(c.node_id(), Layout::fill().into())?;
         Ok(())
@@ -43,5 +41,5 @@ impl Register for Pager {
 /// Queue this demo's bindings and native configuration in their builder phases.
 #[must_use]
 pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
-    builder.script("pager", crate::text_scroll_bindings("text", "pager"))
+    builder.script("pager", crate::TEXT_SCROLL_BINDINGS)
 }
