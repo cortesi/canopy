@@ -9,5 +9,7 @@ mod tests {
         cases.compile_fail("tests/ui/status_mutable_receiver.rs");
         cases.compile_fail("tests/ui/status_wrong_return.rs");
         cases.compile_fail("tests/ui/bare_command.rs");
+        cases.compile_fail("tests/ui/inject_sealed.rs");
+        cases.compile_fail("tests/ui/private_command_builders.rs");
     }
 }

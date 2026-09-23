@@ -149,7 +149,7 @@ impl Core {
             )));
         }
         if self.completion.requests.len() >= MAX_COMPLETION_REQUESTS {
-            return Err(Error::InvalidOperation(format!(
+            return Err(Error::Invalid(format!(
                 "dispatch completion batch exceeds {MAX_COMPLETION_REQUESTS} requests"
             )));
         }
@@ -225,7 +225,7 @@ mod tests {
             }
             Ok::<_, Error>(())
         })?;
-        assert!(matches!(&result, Err(Error::InvalidOperation(message))
+        assert!(matches!(&result, Err(Error::Invalid(message))
             if message == "dispatch completion batch exceeds 1024 requests"));
         assert_eq!(core.completion.requests.len(), MAX_COMPLETION_REQUESTS);
         assert!(core.nodes.contains_key(trigger));

@@ -31,8 +31,8 @@ root.default_bindings()
 canopy.keymap({
     path = "stylegym/",
     phase = "before_widget",
-    { key = "Tab", description = "Next focus", action = command.root.focus("Next") },
-    { key = "BackTab", description = "Previous focus", action = command.root.focus("Prev") },
+    { key = "Tab", description = "Next focus", action = command.root.focus("next") },
+    { key = "BackTab", description = "Previous focus", action = command.root.focus("prev") },
 })
 
 canopy.keymap({
@@ -55,18 +55,18 @@ canopy.keymap({
 
 canopy.keymap({
     path = "style_sheet",
-    { key = { "j", "Down" }, description = "Scroll down", action = command.style_sheet.scroll("Down") },
-    { key = { "k", "Up" }, description = "Scroll up", action = command.style_sheet.scroll("Up") },
-    { key = { "H", "shift-Left" }, description = "Scroll left", action = command.style_sheet.scroll("Left") },
-    { key = { "L", "shift-Right" }, description = "Scroll right", action = command.style_sheet.scroll("Right") },
+    { key = { "j", "Down" }, description = "Scroll down", action = command.style_sheet.scroll("down") },
+    { key = { "k", "Up" }, description = "Scroll up", action = command.style_sheet.scroll("up") },
+    { key = { "H", "shift-Left" }, description = "Scroll left", action = command.style_sheet.scroll("left") },
+    { key = { "L", "shift-Right" }, description = "Scroll right", action = command.style_sheet.scroll("right") },
     { key = { "PageDown", "Space" }, description = "Page down", action = command.style_sheet.page(1) },
     { key = "PageUp", description = "Page up", action = command.style_sheet.page(-1) },
 })
 
 canopy.keymap({
     path = "text_samples",
-    { key = { "j", "Down" }, description = "Scroll down", action = command.text_samples.scroll("Down") },
-    { key = { "k", "Up" }, description = "Scroll up", action = command.text_samples.scroll("Up") },
+    { key = { "j", "Down" }, description = "Scroll down", action = command.text_samples.scroll("down") },
+    { key = { "k", "Up" }, description = "Scroll up", action = command.text_samples.scroll("up") },
     { key = { "PageDown", "Space" }, description = "Page down", action = command.text_samples.page(1) },
     { key = "PageUp", description = "Page up", action = command.text_samples.page(-1) },
 })

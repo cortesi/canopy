@@ -258,7 +258,7 @@ impl LuauHost {
         }
         invocation.anchor_incarnation = Some(entry.incarnation);
         let handle = invocation.handle.ok_or_else(|| {
-            error::Error::InvalidOperation("script invocation is already complete".to_string())
+            error::Error::Invalid("script invocation is already complete".to_string())
         })?;
         let mut runtime = self.runtime_mut("script VM re-entered without a live scope")?;
         invocation.options = mem::take(&mut invocation.options).limits(Limits {

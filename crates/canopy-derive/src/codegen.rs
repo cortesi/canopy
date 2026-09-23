@@ -1,4 +1,5 @@
-use quote::quote;
+use proc_macro2::{Group, Span, TokenTree};
+use quote::{ToTokens, quote};
 use syn::{FnArg, ImplItem, ItemImpl, ReceiverKind, ReturnType, Type};
 
 use crate::{
@@ -84,6 +85,24 @@ fn is_command_status_result(output: &ReturnType) -> bool {
                     .is_some_and(|segment| segment.ident == "CommandStatus")
         )
     })
+}
+
+/// Give every token in a stream, including grouped tokens, the call-site span.
+fn call_site(tokens: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
+    tokens
+        .into_iter()
+        .map(|token| match token {
+            TokenTree::Group(group) => {
+                let mut respanned = Group::new(group.delimiter(), call_site(group.stream()));
+                respanned.set_span(Span::call_site());
+                TokenTree::Group(respanned)
+            }
+            mut token => {
+                token.set_span(Span::call_site());
+                token
+            }
+        })
+        .collect()
 }
 
 /// Render an `Option<&str>` metadata field from an optional string.
@@ -352,12 +371,21 @@ impl CommandMeta {
         )
     }
 
-    /// Identifier for the typed command accessor.
+    /// Identifier for the command spec accessor.
     fn accessor_ident(&self) -> syn::Ident {
         syn::Ident::new(
-            &format!("cmd_{}", self.name),
+            &format!("spec_{}", self.name),
             proc_macro2::Span::call_site(),
         )
+    }
+
+    /// Render the method's visibility for a generated item.
+    ///
+    /// The tokens take the macro's call-site span, so the compiler and
+    /// Clippy treat the item as generated code, as they do the rest of the
+    /// expansion.
+    fn generated_vis(&self) -> proc_macro2::TokenStream {
+        call_site(self.vis.to_token_stream())
     }
 
     /// Identifier for the erased read-only eligibility shim.
@@ -536,7 +564,7 @@ impl CommandMeta {
             fn #invoke_ident(
                 target: &mut dyn ::std::any::Any,
                 ctx: &mut dyn canopy::Context,
-                inv: &canopy::commands::CommandInvocation,
+                args: &canopy::commands::CommandArgs,
             ) -> ::std::result::Result<
                 canopy::commands::ArgValue,
                 canopy::commands::CommandError,
@@ -548,7 +576,7 @@ impl CommandMeta {
                     .downcast_mut::<Self>()
                     .ok_or(canopy::commands::CommandError::TargetTypeMismatch)?;
                 #(#shared_bindings)*
-                match &inv.args {
+                match args {
                     canopy::commands::CommandArgs::Positional(values) => {
                         #arity_check
                         #(#positional_bindings)*
@@ -624,13 +652,14 @@ impl CommandMeta {
         }
     }
 
-    /// Render the public typed command accessor.
+    /// Render the command spec accessor, with the method's visibility.
     fn accessor_tokens(&self) -> proc_macro2::TokenStream {
         let accessor_ident = self.accessor_ident();
         let spec_const_ident = self.spec_const_ident();
+        let vis = self.generated_vis();
         quote! {
-            #[doc = "Return a typed command reference for this command."]
-            pub fn #accessor_ident() -> &'static canopy::commands::CommandSpec {
+            #[doc = "Return the command spec for this command."]
+            #vis fn #accessor_ident() -> &'static canopy::commands::CommandSpec {
                 &Self::#spec_const_ident
             }
         }
@@ -646,9 +675,10 @@ impl CommandMeta {
         let params = self.user_params();
         let names: Vec<&syn::Ident> = params.iter().map(|param| &param.user_ident).collect();
         let types = params.iter().map(|param| &param.ty);
+        let vis = self.generated_vis();
         quote! {
             #[doc = "Build a positional call with typed user arguments."]
-            pub fn #builder_ident(#(#names: #types),*) -> canopy::commands::CommandCall {
+            #vis fn #builder_ident(#(#names: #types),*) -> canopy::commands::CommandCall {
                 Self::#accessor().call_with(canopy::commands::CommandArgs::Positional(vec![
                     #(canopy::commands::ToArgValue::to_arg_value(#names)),*
                 ]))

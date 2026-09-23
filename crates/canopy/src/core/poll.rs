@@ -148,7 +148,7 @@ impl Poller {
     #[cfg(any(test, feature = "testing"))]
     pub(crate) fn set_clock(&mut self, clock: Arc<dyn Clock>) -> Result<()> {
         if !self.pending.deadlines.is_empty() {
-            return Err(Error::InvalidOperation(
+            return Err(Error::Invalid(
                 "cannot replace a clock with pending poll deadlines".into(),
             ));
         }
@@ -167,7 +167,7 @@ impl Poller {
         let deadline = self
             .now()
             .checked_add(duration.max(MIN_POLL_INTERVAL))
-            .ok_or_else(|| Error::RunLoop("poll deadline overflow".into()))?;
+            .ok_or_else(|| Error::Driver("poll deadline overflow".into()))?;
         self.pending.schedule(stamp, deadline);
         Ok(())
     }

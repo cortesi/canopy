@@ -9,10 +9,7 @@ use std::{collections::HashSet, hash::Hash};
 use canopy::{
     Context, ContextExt, EventOutcome, FocusDirection, KeyedChildren, NodeId, NodeName, Render,
     RevealAlign, TypedId, ViewContext, Widget, WidgetSemantics,
-    commands::{
-        ArgValue, CommandAction, CommandArgs, CommandCall, CommandInvocation, CommandScopeFrame,
-        CommandStatus, CommandTarget, ListRowContext, ToArgValue,
-    },
+    commands::{ArgValue, CommandArgs, CommandCall, CommandStatus, ToArgValue},
     derive_commands,
     error::{Error, Result},
     event::{Event, key, mouse},
@@ -38,10 +35,9 @@ struct SelectionIndicator {
 /// Default drag threshold in cells before cancelling activation.
 const DEFAULT_ACTIVATE_DRAG_THRESHOLD: u32 = 4;
 
-/// Build an activation invocation that appends the row index to a stored
-/// command.
-fn invocation_with_index(command: &CommandInvocation, index: usize) -> CommandInvocation {
-    let args = match &command.args {
+/// Build an activation call that appends the row index to a stored call.
+fn call_with_index(call: &CommandCall, index: usize) -> CommandCall {
+    let args = match &call.args {
         CommandArgs::Positional(values) => {
             let mut out = values.clone();
             out.push(index.to_arg_value());
@@ -53,9 +49,10 @@ fn invocation_with_index(command: &CommandInvocation, index: usize) -> CommandIn
             CommandArgs::Named(out)
         }
     };
-    CommandInvocation {
-        id: command.id,
+    CommandCall {
+        id: call.id,
         args,
+        target: call.target,
     }
 }
 
@@ -114,8 +111,8 @@ pub struct List<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static = Aut
     checks: Option<HashSet<K>>,
     /// Optional list-level selection indicator.
     selection_indicator: Option<SelectionIndicator>,
-    /// Optional activation command configuration.
-    on_activate: Option<CommandAction>,
+    /// Optional activation command call.
+    on_activate: Option<CommandCall>,
     /// Pending activation state while handling clicks.
     pending_activate: Option<PendingActivate<K>>,
     /// Optional semantic label for the collection.
@@ -222,7 +219,7 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
 
     /// Inspect the selected row's configured activation command.
     fn command_status(&self, ctx: &dyn ViewContext) -> Result<Option<CommandStatus>> {
-        let Some(action) = self.on_activate.as_ref() else {
+        let Some(call) = self.on_activate.as_ref() else {
             return Ok(None);
         };
         if !ctx.is_attached_of(ctx.node_id()) {
@@ -231,11 +228,7 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
         let Some(index) = self.selected_index() else {
             return Ok(Some(CommandStatus::Disabled("No item selected".into())));
         };
-        ctx.command_status(
-            action.target.unwrap_or(CommandTarget::From(ctx.node_id())),
-            &invocation_with_index(&action.invocation, index),
-        )
-        .map(Some)
+        ctx.command_status(&call_with_index(call, index)).map(Some)
     }
 
     /// Build a list with a list-level selection indicator.
@@ -259,7 +252,7 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
 
     /// Build a list that dispatches a command when a row is activated.
     pub fn with_on_activate(mut self, command: CommandCall) -> Self {
-        self.on_activate = Some(command.action());
+        self.on_activate = Some(command);
         self
     }
 
@@ -658,24 +651,10 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
 
     /// Dispatch the activation command for a selected row.
     fn dispatch_activate(&self, c: &mut dyn Context, index: usize) -> Result<()> {
-        let Some(config) = self.on_activate.as_ref() else {
+        let Some(call) = self.on_activate.as_ref() else {
             return Ok(());
         };
-        let frame = CommandScopeFrame {
-            event: c.current_event().cloned(),
-            mouse: c.current_mouse_event(),
-            list_row: Some(ListRowContext {
-                list: c.node_id(),
-                index,
-                key: self.items.keys()[index].clone().to_arg_value(),
-            }),
-        };
-        let invocation = invocation_with_index(&config.invocation, index);
-        c.dispatch_scoped(
-            config.target.unwrap_or(CommandTarget::From(c.node_id())),
-            frame,
-            &invocation,
-        )?;
+        c.dispatch(&call_with_index(call, index))?;
         Ok(())
     }
 
@@ -978,7 +957,9 @@ fn drag_exceeded(origin: PointI32, current: PointI32, threshold: u32) -> bool {
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, Loader, NodeId, NodeName, ViewContext, derive_commands,
+        Canopy, Loader, NodeId, NodeName, ViewContext,
+        commands::CommandTarget,
+        derive_commands,
         event::key,
         layout::{Edges, Layout},
         testing::harness::Harness,
@@ -1009,7 +990,7 @@ mod tests {
     impl Widget for ActivationRoot {
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
             let list =
-                ctx.add_child(List::<Text>::new().with_on_activate(Self::cmd_activate().call()))?;
+                ctx.add_child(List::<Text>::new().with_on_activate(Self::spec_activate().call()))?;
             ctx.with_widget_mut::<List<Text>, _>(list, |list, ctx| {
                 list.append(ctx, Text::new("First row"))?;
                 Ok(())
@@ -1343,19 +1324,18 @@ mod tests {
         })
     }
 
-    /// Receives domain-keyed row activation together with its current index.
+    /// Receives domain-keyed row activation by its current index.
     #[derive(Default)]
     struct KeyedActivationRoot {
-        /// Last delivered activation index and stable key.
-        activation: Option<(usize, ArgValue)>,
+        /// Last delivered activation index.
+        activation: Option<usize>,
     }
 
     #[derive_commands]
     impl KeyedActivationRoot {
         #[command]
-        fn activate(&mut self, index: usize, row: ListRowContext) {
-            assert_eq!(index, row.index);
-            self.activation = Some((index, row.key));
+        fn activate(&mut self, index: usize) {
+            self.activation = Some(index);
         }
     }
 
@@ -1363,7 +1343,7 @@ mod tests {
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
             let list = ctx.add_child(
                 List::<Text, i64>::new().with_on_activate(
-                    Self::cmd_activate()
+                    Self::spec_activate()
                         .call()
                         .with_target(CommandTarget::Exact(ctx.node_id())),
                 ),
@@ -1509,7 +1489,11 @@ mod tests {
         event.location.y = 1;
         harness.mouse(event)?;
         harness.with_root_widget::<KeyedActivationRoot, _>(|root| {
-            assert_eq!(root.activation, Some((1, 10_i64.to_arg_value())));
+            assert_eq!(
+                root.activation,
+                Some(1),
+                "the row keyed 10 moved to index 1 while pressed"
+            );
         });
         Ok(())
     }

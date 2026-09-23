@@ -192,7 +192,7 @@ mod tests {
             canopy.focus_next()
             canopy.assert(canopy.focused() == second, "focus_next should move to the second leaf")
             canopy.set_focus(first)
-            canopy.focus_dir("Right")
+            canopy.focus_dir("right")
             canopy.assert(canopy.focused() == second, "focus_dir right should move to the second leaf")
 
             canopy.send_click(1, 1)
@@ -200,12 +200,12 @@ mod tests {
                 canopy.cmd_on(first, "api_leaf::get") == 21,
                 "send_click should dispatch a left click to the target node"
             )
-            canopy.send_scroll("Down", 1, 1)
+            canopy.send_scroll("down", 1, 1)
             canopy.assert(
                 canopy.cmd_on(first, "api_leaf::get") == 22,
                 "send_scroll should dispatch a scroll event to the target node"
             )
-            canopy.send_scroll("Right", 1, 1)
+            canopy.send_scroll("right", 1, 1)
             canopy.assert(
                 canopy.cmd_on(first, "api_leaf::get") == 24,
                 "send_scroll should dispatch horizontal wheel steps"
@@ -296,7 +296,7 @@ mod tests {
         )?;
         harness.script(r#"canopy.send_key("x")"#)?;
         assert_eq!(leaf_values(&mut harness), vec![3, 0]);
-        harness.script(r#"canopy.send_scroll("Up", 1, 1)"#)?;
+        harness.script(r#"canopy.send_scroll("up", 1, 1)"#)?;
         assert_eq!(leaf_values(&mut harness), vec![5, 0]);
         Ok(())
     }
@@ -417,7 +417,7 @@ mod tests {
         harness.script(r#"canopy.send_key("b")"#)?;
         assert_eq!(leaf_values(&mut harness), vec![1, 0]);
         harness.script(r#"canopy.send_key("c")"#)?;
-        harness.script(r#"canopy.send_scroll("Up", 1, 1)"#)?;
+        harness.script(r#"canopy.send_scroll("up", 1, 1)"#)?;
         assert_eq!(leaf_values(&mut harness), vec![1, 0]);
 
         // A later keymap replaces an earlier binding with the same selector.
@@ -449,7 +449,7 @@ mod tests {
             end
             "#,
         )?;
-        harness.script(r#"canopy.send_scroll("Down", 1, 1)"#)?;
+        harness.script(r#"canopy.send_scroll("down", 1, 1)"#)?;
         assert_eq!(leaf_values(&mut harness), vec![4, 0]);
         Ok(())
     }
@@ -524,7 +524,7 @@ mod tests {
             assert!(error.to_string().contains(expected), "{source}: {error}");
         }
         harness.script(r#"canopy.send_key("x")"#)?;
-        harness.script(r#"canopy.send_scroll("Up", 1, 1)"#)?;
+        harness.script(r#"canopy.send_scroll("up", 1, 1)"#)?;
         assert_eq!(leaf_values(&mut harness), vec![0, 0]);
         Ok(())
     }

@@ -283,29 +283,27 @@ mod tests {
     }
     #[test]
     fn delete_eligibility_tracks_selection_and_is_rechecked() -> AnyResult<()> {
-        use canopy::commands::{
-            CommandArgs, CommandError, CommandId, CommandInvocation, CommandStatus, CommandTarget,
-        };
+        use canopy::commands::{CommandArgs, CommandCall, CommandError, CommandId, CommandStatus};
 
         let (mut harness, store) = app()?;
-        let target = CommandTarget::From(harness.canopy.root_id());
-        let invocation = CommandInvocation {
+        let call = CommandCall {
             id: CommandId("todo::delete_item"),
             args: CommandArgs::default(),
+            target: None,
         };
         let status = harness
             .canopy
-            .with_root_view(|ctx| ctx.command_status(target, &invocation))?;
+            .with_root_view(|ctx| ctx.command_status(&call))?;
         assert_eq!(status, CommandStatus::Disabled("No item selected".into()));
         add(&mut harness, "one")?;
         let status = harness
             .canopy
-            .with_root_view(|ctx| ctx.command_status(target, &invocation))?;
+            .with_root_view(|ctx| ctx.command_status(&call))?;
         assert_eq!(status, CommandStatus::Enabled);
         harness.canopy.apply_fixture("empty")?;
         let error = harness
             .canopy
-            .with_root_context(|ctx| Ok(ctx.dispatch(target, &invocation)))?
+            .with_root_context(|ctx| Ok(ctx.dispatch(&call)))?
             .unwrap_err();
         assert!(matches!(error, CommandError::Disabled { .. }));
         assert!(store.todos()?.is_empty());

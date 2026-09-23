@@ -743,7 +743,7 @@ mod tests {
             "Set persistent live state",
             |canopy| {
                 canopy.with_root_context(|ctx| {
-                    ctx.dispatch_exact(ctx.node_id(), &EchoNode::call_set(7).invocation())?;
+                    ctx.dispatch_exact(ctx.node_id(), &EchoNode::call_set(7))?;
                     Ok(())
                 })
             },
@@ -965,7 +965,7 @@ mod tests {
         let (mutation_tx, mutation_rx) = mpsc::channel();
         automation.submit(Box::new(move |canopy| {
             let result = canopy.with_root_context(|ctx| {
-                ctx.dispatch_exact(ctx.node_id(), &EchoNode::call_set(7).invocation())?;
+                ctx.dispatch_exact(ctx.node_id(), &EchoNode::call_set(7))?;
                 Ok(())
             });
             mutation_tx

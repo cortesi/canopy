@@ -6,15 +6,15 @@ canopy.bind("q", { description = "Quit" }, command.root.quit())
 canopy.keymap({
     path = "image_view/",
     phase = "before_widget",
-    { key = "i", description = "Zoom in", action = command.image_view.zoom("In") },
-    { key = "o", description = "Zoom out", action = command.image_view.zoom("Out") },
-    { key = { "h", "Left" }, description = "Pan left", action = command.image_view.pan("Left") },
-    { key = { "j", "Down" }, description = "Pan down", action = command.image_view.pan("Down") },
-    { key = { "k", "Up" }, description = "Pan up", action = command.image_view.pan("Up") },
+    { key = "i", description = "Zoom in", action = command.image_view.zoom("in") },
+    { key = "o", description = "Zoom out", action = command.image_view.zoom("out") },
+    { key = { "h", "Left" }, description = "Pan left", action = command.image_view.pan("left") },
+    { key = { "j", "Down" }, description = "Pan down", action = command.image_view.pan("down") },
+    { key = { "k", "Up" }, description = "Pan up", action = command.image_view.pan("up") },
     {
         key = { "l", "Right" },
         description = "Pan right",
-        action = command.image_view.pan("Right"),
+        action = command.image_view.pan("right"),
     },
 })
 "#;

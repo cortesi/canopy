@@ -1002,7 +1002,7 @@ canopy.bind("x", {
     path = "editor",
     phase = "before_widget",
     description = "Cursor left",
-}, command.editor.move_cursor("Left"))
+}, command.editor.move_cursor("left"))
 "#,
         )
         .unwrap();

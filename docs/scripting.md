@@ -130,7 +130,8 @@ become integers; other finite numbers remain floats; non-finite numbers fail
 conversion. Strings must be valid UTF-8. Empty tables become maps, dense
 positive integer tables become arrays, and string-keyed tables become maps.
 Sparse, mixed-key, and unsupported-key tables fail with a path to the nested
-value.
+value. An enum argument or result, such as a `FocusDirection`, is its variant
+name in snake_case, such as `"down"`. Parsing ignores ASCII case.
 
 Live `NodeId` userdata retains its process-local identity. A marshaled Node ID
 token is only an external data record and does not reconstruct that identity.
@@ -173,8 +174,8 @@ local fs = command.file_select
 
 canopy.keymap({
     mode = "preview",
-    { key = "j", description = "Scroll down", action = fs.pan_preview("Down") },
-    { key = { "k", "Up" }, mouse = "ScrollUp", description = "Scroll up", action = fs.pan_preview("Up") },
+    { key = "j", description = "Scroll down", action = fs.pan_preview("down") },
+    { key = { "k", "Up" }, mouse = "ScrollUp", description = "Scroll up", action = fs.pan_preview("up") },
     {
         key = "esc",
         description = "Leave the preview",
@@ -246,9 +247,11 @@ still apply. `Root` lists the keys of a transient mode in a small panel until
 the mode ends.
 
 Native Rust uses generated typed `Widget::call_command(arguments...)` builders
-with `Canopy::bind_command`. `CommandCall::with_target` preserves exact,
-relative, or focus targeting when a Button, List, or native binding stores the
-action.
+with `Canopy::bind_command`. A `CommandCall` holds the command id, its
+arguments, and an optional target. `CommandCall::with_target` sets exact,
+relative, or focus targeting, and a Button, List, or native binding keeps it
+with the stored call. A call without a target resolves from its origin: the
+dispatching node, or the node where a binding wins.
 
 Set `phase = "before_widget"` to run before widget input, or `phase =
 "after_widget"` to run after the widget ignores input. Key and mouse bindings

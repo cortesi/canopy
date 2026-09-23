@@ -5,7 +5,7 @@ use std::{borrow::Cow, ops::Range};
 use canopy::{
     Canopy, Context, ContextExt, EventOutcome, Loader, NodeName, Render, ViewContext, Widget,
     WidgetSemantics,
-    commands::{CommandAction, CommandCall, CommandStatus, CommandTarget},
+    commands::{CommandCall, CommandStatus},
     derive_commands,
     error::Result,
     event::key,
@@ -59,8 +59,8 @@ pub struct Button {
     label: String,
     /// Label character a key is expected to reach this button by.
     accelerator: Option<char>,
-    /// Command invocation to dispatch on click.
-    command: Option<CommandAction>,
+    /// Command call to dispatch on click.
+    command: Option<CommandCall>,
     /// Glyph set for the button border.
     glyphs: BoxGlyphs,
     /// Active state for the button.
@@ -114,7 +114,7 @@ impl Button {
     /// A composed dialog builds its buttons before a host knows what each
     /// answer does, so the action arrives after construction.
     pub fn set_command(&mut self, command: CommandCall) {
-        self.command = Some(command.action());
+        self.command = Some(command);
     }
 
     /// Set whether the button is active.
@@ -135,10 +135,7 @@ impl Button {
         if ctx.current_mouse_event().is_some() {
             ctx.set_focus(ctx.node_id())?;
         }
-        ctx.dispatch(
-            command.target.unwrap_or(CommandTarget::From(ctx.node_id())),
-            &command.invocation,
-        )?;
+        ctx.dispatch(command)?;
         Ok(())
     }
 
@@ -168,12 +165,7 @@ impl Button {
         }
         self.command
             .as_ref()
-            .map(|command| {
-                ctx.command_status(
-                    command.target.unwrap_or(CommandTarget::From(ctx.node_id())),
-                    &command.invocation,
-                )
-            })
+            .map(|command| ctx.command_status(command))
             .transpose()
     }
 
@@ -365,7 +357,7 @@ mod tests {
     use canopy::{
         Canopy, FocusDirection, FocusScope, FrameworkBindingGroup, InputSpec, Loader,
         ModalBindings, ModalOptions, NodeId, ViewContextExt,
-        commands::CommandError,
+        commands::{CommandError, CommandTarget},
         error::Error,
         event::{key, key::Key, mouse, mouse::Mouse},
         geom::PointI32,
@@ -412,7 +404,7 @@ mod tests {
     impl Widget for ActionOwner {
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
             let mut button = Button::new("Save").with_command(
-                Self::cmd_activate()
+                Self::spec_activate()
                     .call()
                     .with_target(CommandTarget::Exact(ctx.node_id())),
             );
@@ -502,7 +494,7 @@ mod tests {
             let owner = ctx.add_child(ActionOwner::default())?;
             ctx.add_child(
                 Button::new("External action").with_command(
-                    ActionOwner::cmd_activate()
+                    ActionOwner::spec_activate()
                         .call()
                         .with_target(CommandTarget::Exact(owner.into())),
                 ),
@@ -865,7 +857,7 @@ mod tests {
             self.button = Some(
                 ctx.add_child(
                     Button::new("Dismiss").with_command(
-                        Self::cmd_dismiss()
+                        Self::spec_dismiss()
                             .call()
                             .with_target(CommandTarget::Exact(owner)),
                     ),

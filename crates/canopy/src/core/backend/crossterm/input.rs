@@ -64,7 +64,7 @@ where
             Pin::new(&mut self.internal).poll_next(cx).map(|event| {
                 event
                     .map(Some)
-                    .ok_or_else(|| error::Error::RunLoop("framework event channel closed".into()))
+                    .ok_or_else(|| error::Error::Driver("framework event channel closed".into()))
             })
         } else {
             Pin::new(&mut self.terminal)
@@ -199,7 +199,7 @@ fn terminal_event(event: Option<io::Result<cevent::Event>>) -> Result<Option<Eve
         }
         Some(Ok(event)) => Ok(Some(translate_event(event))),
         Some(Err(error)) => Err(error::Error::TerminalIo(error)),
-        None => Err(error::Error::RunLoop("terminal event stream closed".into())),
+        None => Err(error::Error::Driver("terminal event stream closed".into())),
     }
 }
 
@@ -422,7 +422,7 @@ mod tests {
         }
         assert!(matches!(
             block_on(events.next()),
-            Err(error::Error::RunLoop(_))
+            Err(error::Error::Driver(_))
         ));
         Ok(())
     }
@@ -466,7 +466,7 @@ mod tests {
         assert!(matches!(block_on(events.next_work())?, Work::Input(batch) if batch.len() == 1));
         assert!(matches!(
             block_on(events.next_work()),
-            Err(error::Error::RunLoop(_))
+            Err(error::Error::Driver(_))
         ));
         Ok(())
     }

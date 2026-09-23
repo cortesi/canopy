@@ -7,8 +7,8 @@ mod tests {
     use canopy::{
         Canopy, CommandArg, CommandEnum, Context, ContextExt, ViewContext, Widget,
         commands::{
-            ArgValue, CommandArgs, CommandError, CommandInvocation, CommandResolution,
-            CommandStatus, CommandTarget, FromArgValue, SerdeArg, ToArgValue,
+            ArgValue, CommandArgs, CommandError, CommandResolution, CommandStatus, CommandTarget,
+            FromArgValue, SerdeArg, ToArgValue,
         },
         derive_commands,
         error::{Error, Result},
@@ -78,10 +78,8 @@ mod tests {
             Ok(branch_id)
         })?;
 
-        let inv = TestLeaf::cmd_c_leaf().call_with(()).invocation();
-        let result = canopy.with_context(branch_id, |context| {
-            Ok(context.dispatch(CommandTarget::From(context.node_id()), &inv))
-        })??;
+        let call = TestLeaf::call_c_leaf();
+        let result = canopy.with_context(branch_id, |context| Ok(context.dispatch(&call)))??;
 
         assert_eq!(result, ArgValue::Null);
         assert_eq!(state_path(), vec!["test_leaf.c_leaf()"]);
@@ -105,10 +103,8 @@ mod tests {
             Ok(branch_id)
         })?;
 
-        let inv = TestLeaf::cmd_c_leaf().call_with(()).invocation();
-        let result = canopy.with_context(branch_id, |context| {
-            Ok(context.dispatch(CommandTarget::From(context.node_id()), &inv))
-        })??;
+        let call = TestLeaf::call_c_leaf();
+        let result = canopy.with_context(branch_id, |context| Ok(context.dispatch(&call)))??;
         assert_eq!(result, ArgValue::Null);
         assert_eq!(state_path(), vec!["test_leaf.c_leaf()"]);
 
@@ -119,19 +115,17 @@ mod tests {
     fn node_dispatch_reports_no_target() -> Result<()> {
         let mut canopy = Canopy::new();
         canopy.add_commands::<TestLeaf>()?;
-        let inv = TestLeaf::cmd_c_leaf().call_with(()).invocation();
+        let call = TestLeaf::call_c_leaf();
 
         let err = canopy
-            .with_root_context(|context| {
-                Ok(context.dispatch(CommandTarget::From(context.node_id()), &inv))
-            })?
+            .with_root_context(|context| Ok(context.dispatch(&call)))?
             .unwrap_err();
-        let owner_name = TestLeaf::cmd_c_leaf().owner;
+        let owner_name = TestLeaf::spec_c_leaf().owner;
 
         assert!(matches!(
             err,
             CommandError::NoTarget { ref id, ref owner }
-                if id == inv.id.0 && owner == owner_name
+                if id == call.id.0 && owner == owner_name
         ));
 
         Ok(())
@@ -157,7 +151,7 @@ mod tests {
         let availability = canopy.command_availability(CommandTarget::From(branch_id.into()))?;
         let leaf_availability = availability
             .iter()
-            .find(|availability| availability.spec.id == TestLeaf::cmd_c_leaf().id)
+            .find(|availability| availability.spec.id == TestLeaf::spec_c_leaf().id)
             .expect("leaf command availability");
         assert_eq!(
             leaf_availability.resolution,
@@ -169,7 +163,7 @@ mod tests {
         let availability = canopy.command_availability(CommandTarget::From(first_leaf.into()))?;
         let branch_availability = availability
             .iter()
-            .find(|availability| availability.spec.id == TestBranch::cmd_c_branch().id)
+            .find(|availability| availability.spec.id == TestBranch::spec_c_branch().id)
             .expect("branch command availability");
         assert_eq!(
             branch_availability.resolution,
@@ -200,6 +194,7 @@ mod tests {
     enum Mode {
         Fast,
         Slow,
+        ExtraFast,
     }
 
     #[test]
@@ -225,11 +220,23 @@ mod tests {
 
     #[test]
     fn command_enum_round_trip() {
-        let value = Mode::Fast;
-        let encoded = value.to_arg_value();
-        assert_eq!(encoded, ArgValue::String("Fast".to_string()));
-        let decoded = Mode::from_arg_value(&ArgValue::String("slow".to_string())).unwrap();
-        assert_eq!(decoded, Mode::Slow);
+        assert_eq!(
+            Mode::Fast.to_arg_value(),
+            ArgValue::String("fast".to_string())
+        );
+        assert_eq!(
+            Mode::ExtraFast.to_arg_value(),
+            ArgValue::String("extra_fast".to_string())
+        );
+        for (name, expected) in [
+            ("slow", Mode::Slow),
+            ("Slow", Mode::Slow),
+            ("extra_fast", Mode::ExtraFast),
+            ("EXTRA_FAST", Mode::ExtraFast),
+        ] {
+            let decoded = Mode::from_arg_value(&ArgValue::String(name.to_string())).unwrap();
+            assert_eq!(decoded, expected);
+        }
     }
 
     #[test]
@@ -277,9 +284,9 @@ mod tests {
     #[test]
     fn positional_arity_mismatch() {
         let mut tester = Tester::new();
-        let inv = Tester::cmd_set_scroll().call_with(()).invocation();
+        let args = CommandArgs::default();
         let err = with_ctx(|ctx| {
-            (Tester::cmd_set_scroll().invoke)(&mut tester as &mut dyn Any, ctx, &inv)
+            (Tester::spec_set_scroll().invoke)(&mut tester as &mut dyn Any, ctx, &args)
         })
         .unwrap_err();
 
@@ -295,12 +302,9 @@ mod tests {
     #[test]
     fn type_mismatch_reports_param() {
         let mut tester = Tester::new();
-        let inv = CommandInvocation {
-            id: Tester::cmd_set_scroll().id,
-            args: CommandArgs::Positional(vec![ArgValue::String("bad".to_string())]),
-        };
+        let args = CommandArgs::Positional(vec![ArgValue::String("bad".to_string())]);
         let err = with_ctx(|ctx| {
-            (Tester::cmd_set_scroll().invoke)(&mut tester as &mut dyn Any, ctx, &inv)
+            (Tester::spec_set_scroll().invoke)(&mut tester as &mut dyn Any, ctx, &args)
         })
         .unwrap_err();
 
@@ -316,12 +320,9 @@ mod tests {
         let mut tester = Tester::new();
         let mut map = BTreeMap::new();
         map.insert("unknown".to_string(), ArgValue::Int(1));
-        let inv = CommandInvocation {
-            id: Tester::cmd_set_scroll().id,
-            args: CommandArgs::Named(map),
-        };
+        let args = CommandArgs::Named(map);
         let err = with_ctx(|ctx| {
-            (Tester::cmd_set_scroll().invoke)(&mut tester as &mut dyn Any, ctx, &inv)
+            (Tester::spec_set_scroll().invoke)(&mut tester as &mut dyn Any, ctx, &args)
         })
         .unwrap_err();
 
@@ -336,12 +337,9 @@ mod tests {
         let mut tester = Tester::new();
         let mut map = BTreeMap::new();
         map.insert("Scroll-Count".to_string(), ArgValue::Int(3));
-        let inv = CommandInvocation {
-            id: Tester::cmd_set_scroll().id,
-            args: CommandArgs::Named(map),
-        };
+        let args = CommandArgs::Named(map);
         let out = with_ctx(|ctx| {
-            (Tester::cmd_set_scroll().invoke)(&mut tester as &mut dyn Any, ctx, &inv)
+            (Tester::spec_set_scroll().invoke)(&mut tester as &mut dyn Any, ctx, &args)
         })
         .unwrap();
 
@@ -352,9 +350,9 @@ mod tests {
     #[test]
     fn missing_injected_value_errors() {
         let mut tester = Tester::new();
-        let inv = Tester::cmd_needs_event().call_with(()).invocation();
+        let args = CommandArgs::default();
         let err = with_ctx(|ctx| {
-            (Tester::cmd_needs_event().invoke)(&mut tester as &mut dyn Any, ctx, &inv)
+            (Tester::spec_needs_event().invoke)(&mut tester as &mut dyn Any, ctx, &args)
         })
         .unwrap_err();
 
@@ -408,7 +406,7 @@ mod tests {
             ctx.set_focus(second.into())?;
             Ok((first, second))
         })?;
-        let invocation = TargetCounter::call_increment(2).invocation();
+        let call = TargetCounter::call_increment(2);
         for (target, expected) in [
             (CommandTarget::From(app.root_id()), first),
             (CommandTarget::Focus, second),
@@ -417,45 +415,50 @@ mod tests {
             let availability = app.command_availability(target)?;
             let command = availability
                 .iter()
-                .find(|entry| entry.spec.id == invocation.id)
+                .find(|entry| entry.spec.id == call.id)
                 .unwrap();
             assert_eq!(
                 command.resolution.map(CommandResolution::target),
                 Some(expected.into())
             );
             assert_eq!(command.status, Some(CommandStatus::Enabled));
-            app.with_root_context(|ctx| Ok(ctx.dispatch(target, &invocation)?))?;
+            let call = call.clone().with_target(target);
+            app.with_root_context(|ctx| Ok(ctx.dispatch(&call)?))?;
         }
+        // A call without a target resolves from the dispatching node.
+        app.with_context(second, |ctx| Ok(ctx.dispatch(&call)?))?;
         app.with_root_context(|ctx| {
             ctx.with_widget_mut(first, |counter: &mut TargetCounter, _| {
                 assert_eq!(counter.count, 2);
                 Ok(())
             })?;
             ctx.with_widget_mut(second, |counter: &mut TargetCounter, _| {
-                assert_eq!(counter.count, 4);
+                assert_eq!(counter.count, 6);
                 counter.enabled = false;
                 Ok(())
             })
         })?;
-        let target = CommandTarget::Exact(second.into());
+        let exact = call
+            .clone()
+            .with_target(CommandTarget::Exact(second.into()));
         app.with_root_view(|ctx| {
             assert_eq!(
-                ctx.command_status(target, &invocation)?,
+                ctx.command_status(&exact)?,
                 CommandStatus::Disabled("counter paused".into())
             );
             Ok::<_, Error>(())
         })?;
         let err = app
-            .with_root_context(|ctx| Ok(ctx.dispatch(target, &invocation)))?
+            .with_root_context(|ctx| Ok(ctx.dispatch(&exact)))?
             .unwrap_err();
         assert!(matches!(err, CommandError::Disabled { reason, .. } if reason == "counter paused"));
         let err = app
-            .with_root_context(|ctx| Ok(ctx.dispatch_exact(ctx.root_id(), &invocation)))?
+            .with_root_context(|ctx| Ok(ctx.dispatch_exact(ctx.root_id(), &call)))?
             .unwrap_err();
         assert!(matches!(err, CommandError::WrongOwner { .. }));
         app.with_root_context(|ctx| ctx.remove_subtree(second.into()))?;
         let err = app
-            .with_root_context(|ctx| Ok(ctx.dispatch(target, &invocation)))?
+            .with_root_context(|ctx| Ok(ctx.dispatch(&exact)))?
             .unwrap_err();
         assert!(matches!(err, CommandError::InvalidNode { .. }));
         Ok(())

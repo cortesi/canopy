@@ -19,7 +19,7 @@ canopy.bind("Tab", {
     path = "widget_editor/",
     phase = "before_widget",
     description = "Next focus",
-}, command.root.focus("Next"))
+}, command.root.focus("next"))
 "#;
 
 /// Widget editor example that opens a Rust file with syntax highlighting.

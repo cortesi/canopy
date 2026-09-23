@@ -44,10 +44,10 @@ canopy.keymap({
     path = "**/confirm/**/",
     { key = "y", description = "Yes", action = command.confirm.yes() },
     { key = "n", description = "No", action = command.confirm.no() },
-    { key = "Left", description = "Previous answer", action = command.confirm.focus("Left") },
-    { key = "Right", description = "Next answer", action = command.confirm.focus("Right") },
-    { key = "Tab", description = "Next answer", action = command.confirm.focus("Next") },
-    { key = "BackTab", description = "Previous answer", action = command.confirm.focus("Prev") },
+    { key = "Left", description = "Previous answer", action = command.confirm.focus("left") },
+    { key = "Right", description = "Next answer", action = command.confirm.focus("right") },
+    { key = "Tab", description = "Next answer", action = command.confirm.focus("next") },
+    { key = "BackTab", description = "Previous answer", action = command.confirm.focus("prev") },
 })
 "#;
 
@@ -231,10 +231,7 @@ impl Confirm {
     /// Activate one answer's button.
     fn press(&self, context: &mut dyn Context, answer: Answer) -> Result<()> {
         let button = self.answer(answer)?;
-        context.dispatch(
-            CommandTarget::Exact(button),
-            &Button::call_press().invocation(),
-        )?;
+        context.dispatch_exact(button, &Button::call_press())?;
         Ok(())
     }
 
@@ -258,10 +255,7 @@ impl Confirm {
                 "the dialog has not mounted".to_string(),
             ));
         };
-        context.command_status(
-            CommandTarget::Exact(button),
-            &Button::call_press().invocation(),
-        )
+        context.command_status(&Button::call_press().with_target(CommandTarget::Exact(button)))
     }
 }
 

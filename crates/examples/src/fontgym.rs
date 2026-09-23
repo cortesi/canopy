@@ -1056,8 +1056,8 @@ fn status_text(height: u32, state: FontEffects) -> String {
 /// Focus controls shared by eager and builder setup.
 const DEFAULT_BINDINGS: &str = r#"
 canopy.keymap({
-    { key = "Tab", description = "Next focus", action = command.root.focus("Next") },
-    { key = "BackTab", description = "Previous focus", action = command.root.focus("Prev") },
+    { key = "Tab", description = "Next focus", action = command.root.focus("next") },
+    { key = "BackTab", description = "Previous focus", action = command.root.focus("prev") },
 })
 "#;
 

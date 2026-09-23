@@ -35,7 +35,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     Canopy, ChangeOutcome, FixtureInfo, NodeId,
-    commands::{self, ArgValue, CommandArgs, CommandInvocation, CommandSet, CommandSpec},
+    commands::{self, ArgValue, CommandArgs, CommandSet, CommandSpec},
     core::{
         Core,
         context::{Context, CoreContext, CoreViewContext, FocusScope, ViewContext},
@@ -84,10 +84,10 @@ static BLOCKING_RUNTIME: BlockingRuntime = BlockingRuntime::new("canopy-script")
 /// Drive a borrowed future only where blocking is supported by the caller.
 pub(crate) fn block_on<T>(future: impl Future<Output = Result<T>>) -> Result<T> {
     BLOCKING_RUNTIME.block_on(future).map_err(|error| match error {
-        BlockingRuntimeError::AsyncContext => error::Error::InvalidOperation(
+        BlockingRuntimeError::AsyncContext => error::Error::Invalid(
             "synchronous script execution cannot block this Tokio context; construct and run the application on a blocking worker".into(),
         ),
-        BlockingRuntimeError::Build(message) => error::Error::RunLoop(message),
+        BlockingRuntimeError::Build(message) => error::Error::Driver(message),
     })?
 }
 
@@ -258,7 +258,7 @@ impl ScriptCache {
     ) -> Result<ScriptId> {
         let id = self.next_script_id;
         self.next_script_id = self.next_script_id.checked_add(1).ok_or_else(|| {
-            error::Error::InvalidOperation("script identifier space exhausted".to_string())
+            error::Error::Invalid("script identifier space exhausted".to_string())
         })?;
         self.scripts.insert(
             id,
@@ -353,7 +353,7 @@ impl ClosureRegistry {
     fn insert(&mut self, stashed: StashedClosure) -> Result<LuauFunctionId> {
         let id = LuauFunctionId(self.next_function_id);
         self.next_function_id = self.next_function_id.checked_add(1).ok_or_else(|| {
-            error::Error::InvalidOperation("closure identifier space exhausted".to_string())
+            error::Error::Invalid("closure identifier space exhausted".to_string())
         })?;
         self.functions
             .insert(id, StoredFunctionTarget::Pending(stashed));
@@ -664,9 +664,7 @@ impl LuauHost {
     /// Type-check a named Luau source against the finalized canopy API.
     pub fn check_script(&self, source_name: &str, source: &str) -> Result<ScriptCheckResult> {
         let surface = self.state.borrow().surface.clone().ok_or_else(|| {
-            error::Error::InvalidOperation(
-                "cannot type-check scripts before finalize_api()".to_string(),
-            )
+            error::Error::Invalid("cannot type-check scripts before finalize_api()".to_string())
         })?;
         let source = named_source(ModuleId::new(source_name), source);
         Ok(check_source_with_surface(&surface, &source))
@@ -676,7 +674,7 @@ impl LuauHost {
     /// and enforce the startup-script obligation.
     fn typecheck_startup_source(&self, source: &Source) -> Result<()> {
         let surface = self.state.borrow().startup_surface.clone().ok_or_else(|| {
-            error::Error::InvalidOperation(
+            error::Error::Invalid(
                 "cannot type-check startup scripts before finalize_api()".to_string(),
             )
         })?;
@@ -762,7 +760,7 @@ impl LuauHost {
         actions: &inputmap::WidgetActionCatalog,
     ) -> Result<String> {
         if self.is_finalized() || self.state.borrow().surface.is_some() {
-            return Err(error::Error::InvalidOperation(
+            return Err(error::Error::Invalid(
                 "Luau API finalization is already active or complete".into(),
             ));
         }
@@ -800,13 +798,14 @@ impl LuauHost {
     /// step succeeds.
     pub(crate) fn publish_finalize(&self) -> Result<()> {
         if self.is_finalized() {
-            return Err(error::Error::InvalidOperation(
-                "Luau API already finalized".into(),
-            ));
+            return Err(error::Error::Invalid("Luau API already finalized".into()));
         }
-        let surface = self.state.borrow().surface.clone().ok_or_else(|| {
-            error::Error::InvalidOperation("Luau API surface is not prepared".into())
-        })?;
+        let surface = self
+            .state
+            .borrow()
+            .surface
+            .clone()
+            .ok_or_else(|| error::Error::Invalid("Luau API surface is not prepared".into()))?;
         let mut runtime = Runtime::new(
             surface.clone(),
             &VmConfig::untrusted(Ambient::production(0), default_vm_limits()),
@@ -936,7 +935,7 @@ impl LuauHost {
         let runtime_source = source_with_text(source, startup_runtime_source(original));
         let runtime_source = strict_named_source(&runtime_source)?;
         let surface = self.state.borrow().surface.clone().ok_or_else(|| {
-            error::Error::InvalidOperation(
+            error::Error::Invalid(
                 "cannot compile startup scripts before finalize_api()".to_string(),
             )
         })?;
@@ -976,7 +975,7 @@ impl LuauHost {
             error::Error::script("cannot load a script while the script VM is executing")
         })?;
         let runtime = runtime_cell.as_mut().ok_or_else(|| {
-            error::Error::InvalidOperation("cannot load scripts before finalize_api()".to_string())
+            error::Error::Invalid("cannot load scripts before finalize_api()".to_string())
         })?;
         if runtime.invalidate_if_source_changed().is_some() {
             self.clear_script_root_caches();
@@ -1083,9 +1082,7 @@ impl LuauHost {
             .try_borrow_mut()
             .map_err(|_| error::Error::script(busy.to_string()))?;
         RefMut::filter_map(runtime, Option::as_mut).map_err(|_| {
-            error::Error::InvalidOperation(
-                "cannot execute scripts before finalize_api()".to_string(),
-            )
+            error::Error::Invalid("cannot execute scripts before finalize_api()".to_string())
         })
     }
 

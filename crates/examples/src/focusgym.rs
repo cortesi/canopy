@@ -17,25 +17,25 @@ canopy.bind("p", { description = "Log demo message" }, function()
 end)
 canopy.keymap({
     path = "focus_gym",
-    { key = "Tab", description = "Next focus", action = command.root.focus("Next") },
+    { key = "Tab", description = "Next focus", action = command.root.focus("next") },
     {
         mouse = "ScrollDown",
         description = "Next focus",
         action = function()
-            root.focus("Next")
+            root.focus("next")
         end,
     },
     {
         mouse = "ScrollUp",
         description = "Previous focus",
         action = function()
-            root.focus("Prev")
+            root.focus("prev")
         end,
     },
-    { key = { "Right", "l" }, description = "Focus right", action = command.root.focus("Right") },
-    { key = { "Left", "h" }, description = "Focus left", action = command.root.focus("Left") },
-    { key = { "Up", "k" }, description = "Focus up", action = command.root.focus("Up") },
-    { key = { "Down", "j" }, description = "Focus down", action = command.root.focus("Down") },
+    { key = { "Right", "l" }, description = "Focus right", action = command.root.focus("right") },
+    { key = { "Left", "h" }, description = "Focus left", action = command.root.focus("left") },
+    { key = { "Up", "k" }, description = "Focus up", action = command.root.focus("up") },
+    { key = { "Down", "j" }, description = "Focus down", action = command.root.focus("down") },
     {
         key = "x",
         description = "Delete focused block",

@@ -50,16 +50,7 @@ pub mod canopy {
         /// command's invoke function. It needs no target, context, or call.
         pub type CheckFn = fn(args: &CommandArgs) -> Result<(), CommandError>;
 
-        /// Stored action with an optional explicit target policy.
-        #[derive(Clone, Debug, PartialEq)]
-        pub struct CommandAction {
-            /// Command and its encoded arguments.
-            pub invocation: CommandInvocation,
-            /// Omission uses the caller's route origin.
-            pub target: Option<CommandTarget>,
-        }
-
-        /// Canonical argument container for command invocation.
+        /// Canonical argument container for a command call.
         #[derive(Clone, Debug, Default, PartialEq)]
         pub enum CommandArgs {
             /// Positional arguments.
@@ -81,9 +72,20 @@ pub mod canopy {
             pub missing_requirements: Vec<CommandRequirement>,
         }
 
-        /// Builder for a command invocation.
-        #[derive(Clone, Debug)]
-        pub struct CommandCall {}
+        /// A command id, its encoded arguments, and an optional target policy.
+        ///
+        /// This is the one value that names a command call: dispatch, eligibility
+        /// checks, bindings, and scripts all take it.
+        #[derive(Clone, Debug, PartialEq)]
+        pub struct CommandCall {
+            /// Command identifier.
+            pub id: CommandId,
+            /// Encoded arguments.
+            pub args: CommandArgs,
+            /// Explicit target policy. `None` resolves from the call's origin: the
+            /// dispatching node for a context, or the node where a binding wins.
+            pub target: Option<CommandTarget>,
+        }
 
         /// Error type for command dispatch and conversion.
         #[derive(Debug, Display, Error)]
@@ -133,7 +135,7 @@ pub mod canopy {
                 expected: String,
             },
             #[error("command {id} is disabled: {reason}")]
-            /// Eligibility changed or the action was already disabled.
+            /// Eligibility changed or the command was already disabled.
             Disabled {
                 /// Requested command identifier.
                 id: String,
@@ -200,15 +202,6 @@ pub mod canopy {
         #[derive(Clone, Copy, Debug, Display, Eq, Hash, PartialEq)]
         pub struct CommandId(pub &'static str);
 
-        /// A command invocation with encoded arguments.
-        #[derive(Clone, Debug, PartialEq)]
-        pub struct CommandInvocation {
-            /// Command identifier.
-            pub id: CommandId,
-            /// Invocation arguments.
-            pub args: CommandArgs,
-        }
-
         /// Identifies how a command parameter is provided.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub enum CommandParamKind {
@@ -240,8 +233,6 @@ pub mod canopy {
             Event,
             /// An originating mouse event.
             Mouse,
-            /// An originating list row.
-            ListRow,
         }
 
         /// Resolution of a command dispatch target.
@@ -273,17 +264,6 @@ pub mod canopy {
             Value(CommandTypeSpec),
         }
 
-        /// Command scope frame for injection.
-        #[derive(Clone, Debug, Default)]
-        pub struct CommandScopeFrame {
-            /// Event snapshot.
-            pub event: Option<crate::event::Event>,
-            /// Mouse event snapshot.
-            pub mouse: Option<crate::event::mouse::MouseEvent>,
-            /// List row context.
-            pub list_row: Option<ListRowContext>,
-        }
-
         /// Static metadata for a command.
         #[derive(Clone, Copy, Debug)]
         pub struct CommandSpec {
@@ -311,9 +291,9 @@ pub mod canopy {
         /// Current command eligibility, separate from authorization and resolution.
         #[derive(Clone, Debug, Eq, PartialEq)]
         pub enum CommandStatus {
-            /// The action can currently run.
+            /// The command can currently run.
             Enabled,
-            /// The action cannot run, with a user-facing reason.
+            /// The command cannot run, with a user-facing reason.
             Disabled(String),
         }
 
@@ -353,19 +333,8 @@ pub mod canopy {
         pub type InvokeFn = fn(
             target: &mut dyn Any,
             ctx: &mut dyn Context,
-            inv: &CommandInvocation,
+            args: &CommandArgs,
         ) -> Result<ArgValue, CommandError>;
-
-        /// Context passed to list row injections.
-        #[derive(Clone, Debug, PartialEq)]
-        pub struct ListRowContext {
-            /// Owning list node id.
-            pub list: crate::core::NodeId,
-            /// Row index.
-            pub index: usize,
-            /// Stable collection key for this row.
-            pub key: ArgValue,
-        }
 
         /// Wrapper for fallible serde argument conversion.
         pub struct SerdeArg<T>(pub T);
@@ -401,8 +370,12 @@ pub mod canopy {
             fn from_arg_value(v: &ArgValue) -> Result<Self, CommandError>;
         }
 
-        /// Trait for injectable parameters.
-        pub trait Inject: Sized {
+        /// A command parameter that Canopy supplies from the current event instead
+        /// of the caller.
+        ///
+        /// The implementations are [`Event`], [`MouseEvent`], and an `Option` of
+        /// either. The trait is sealed.
+        pub trait Inject: Sized + sealed::Inject {
             /// Inject a value from the context, or `None` when the context has none.
             fn inject(ctx: &dyn Context) -> Option<Self>;
 
@@ -450,11 +423,9 @@ pub mod canopy {
             /// Bind this call to a target policy.
             pub fn with_target(self, target: CommandTarget) -> Self {}
 
-            /// Convert into an invocation.
-            pub fn invocation(self) -> CommandInvocation {}
-
-            /// Preserve both arguments and target when storing an action.
-            pub fn action(self) -> CommandAction {}
+            /// Return the explicit target, or a search from `origin` when the call
+            /// has none.
+            pub fn target_or(&self, origin: NodeId) -> CommandTarget {}
         }
 
         impl CommandError {
@@ -514,12 +485,6 @@ pub mod canopy {
 
         impl From<()> for CommandArgs {
             fn from(_: ()) -> Self {}
-        }
-
-        impl Inject for ListRowContext {
-            fn inject(ctx: &dyn Context) -> Option<Self> {}
-
-            fn requirement() -> Option<CommandRequirement> {}
         }
 
         impl<'a> DeclRegistry<'a> {
@@ -637,15 +602,13 @@ pub mod canopy {
             #[error("terminal I/O failed: {0}")]
             /// Terminal I/O failure.
             TerminalIo(io::Error),
-            #[error("runloop: {0}")]
-            /// Run loop failure.
-            RunLoop(String),
+            #[error("driver: {0}")]
+            /// Turn driver failure: a closed channel, a failed backend, or a runtime
+            /// that could not start.
+            Driver(String),
             #[error("internal: {0}")]
-            /// Internal error.
+            /// Internal failure, such as a broken core invariant.
             Internal(String),
-            #[error("invariant violation: {0}")]
-            /// Core invariant violation.
-            Invariant(String),
             #[error("re-entrant widget borrow: {0:?}")]
             /// Re-entrant widget borrow attempt.
             ReentrantWidgetBorrow(crate::core::id::NodeId),
@@ -665,7 +628,7 @@ pub mod canopy {
                 source: Box<Self>,
             },
             #[error("invalid: {0}")]
-            /// Invalid input error.
+            /// Invalid input or operation.
             Invalid(String),
             #[error("not found: {0}")]
             /// Requested item was not found.
@@ -703,9 +666,6 @@ pub mod canopy {
                 /// Child node involved in the cycle.
                 child: crate::core::id::NodeId,
             },
-            #[error("invalid operation: {0}")]
-            /// Invalid structural operation.
-            InvalidOperation(String),
             #[error("{operation} is not allowed during a widget mutation callback")]
             /// Operation attempted before a mutable widget callback returned.
             InvalidPhase {
@@ -764,7 +724,7 @@ pub mod canopy {
             Render,
         }
 
-        /// Parse error marker type.
+        /// A parse failure, with its source position when known.
         #[derive(Clone, Debug, Display, Eq, Error, PartialEq)]
         pub struct ParseError {
             /// Parse error message.
@@ -1299,8 +1259,8 @@ pub mod canopy {
         /// Owned command details captured with an effective key binding.
         #[derive(Clone, Debug)]
         pub struct BindingCommand {
-            /// Stored invocation, arguments, and target policy.
-            pub action: crate::commands::CommandAction,
+            /// Stored command call, with its arguments and target policy.
+            pub call: crate::commands::CommandCall,
             /// Availability at capture time, absent when the command is not
             /// registered.
             pub availability: Option<crate::commands::CommandAvailability>,
@@ -2980,7 +2940,7 @@ pub mod canopy {
     pub enum BindingTargetKind {
         /// Stored Luau callback.
         Script,
-        /// Rust command invocation.
+        /// Rust command call.
         Command,
         /// Named operation offered to widgets on the route.
         WidgetAction,
@@ -3590,32 +3550,19 @@ pub mod canopy {
         /// Create a new widget node detached from the tree.
         fn create_detached_boxed(&mut self, widget: Box<dyn Widget>) -> Result<NodeId>;
 
-        /// Return the current event snapshot for injection.
+        /// Return the event being handled, for injection.
         fn current_event(&self) -> Option<&Event>;
 
-        /// Return the current list-row context for injection.
-        fn current_list_row(&self) -> Option<ListRowContext>;
-
-        /// Return the current mouse event for injection.
-        fn current_mouse_event(&self) -> Option<MouseEvent>;
+        /// Return the event being handled when it is a mouse event, for
+        /// injection.
+        fn current_mouse_event(&self) -> Option<MouseEvent> {}
 
         /// Detach a child from its parent.
         fn detach(&mut self, child: NodeId) -> Result<()>;
 
-        /// Dispatch according to an explicit target policy.
-        fn dispatch(
-            &mut self,
-            target: CommandTarget,
-            cmd: &CommandInvocation,
-        ) -> StdResult<ArgValue, CommandError>;
-
-        /// Invoke with explicit target and input scope.
-        fn dispatch_scoped(
-            &mut self,
-            target: CommandTarget,
-            frame: CommandScopeFrame,
-            cmd: &CommandInvocation,
-        ) -> StdResult<ArgValue, CommandError>;
+        /// Dispatch a command call. A call without a target resolves from the
+        /// current node.
+        fn dispatch(&mut self, call: &CommandCall) -> StdResult<ArgValue, CommandError>;
 
         /// Run immediate mutations with structural rollback on error.
         ///
@@ -3823,11 +3770,11 @@ pub mod canopy {
         /// Create a widget node detached from the tree.
         fn create_detached<W: 'static + Widget>(&mut self, widget: W) -> Result<TypedId<W>> {}
 
-        /// Invoke only the specified command owner.
+        /// Dispatch a command call to exactly `node`, replacing the call's target.
         fn dispatch_exact(
             &mut self,
             node: NodeId,
-            command: &CommandInvocation,
+            call: &CommandCall,
         ) -> StdResult<ArgValue, CommandError> {
         }
 
@@ -3927,14 +3874,10 @@ pub mod canopy {
         /// Children of a specific node in tree order.
         fn children_of(&self, node: NodeId) -> Vec<NodeId>;
 
-        /// Inspect a command for display. Registry and target resolution failures
-        /// are returned as disabled reasons; eligibility hook failures remain
-        /// errors.
-        fn command_status(
-            &self,
-            target: CommandTarget,
-            invocation: &CommandInvocation,
-        ) -> Result<CommandStatus>;
+        /// Inspect a command call for display. A call without a target resolves
+        /// from the current node. Registry and target resolution failures are
+        /// returned as disabled reasons; eligibility hook failures remain errors.
+        fn command_status(&self, call: &CommandCall) -> Result<CommandStatus>;
 
         /// Resolve a semantic key in an explicit live subtree scope.
         fn find_identity(&self, scope: NodeId, key: &str) -> Result<Option<NodeId>>;

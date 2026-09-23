@@ -116,7 +116,7 @@ pub fn runloop(mut cnpy: Canopy, options: RunOptions) -> Result<i32> {
     let rx = cnpy
         .event_rx
         .take()
-        .ok_or_else(|| error::Error::InvalidOperation("event loop already initialized".into()))?;
+        .ok_or_else(|| error::Error::Invalid("event loop already initialized".into()))?;
 
     let mut events = EventSource::new(cevent::EventStream::new(), rx);
     let size = translate_result(terminal::size())?;
@@ -125,7 +125,7 @@ pub fn runloop(mut cnpy: Canopy, options: RunOptions) -> Result<i32> {
     let runtime = Builder::new_current_thread()
         .enable_time()
         .build()
-        .map_err(|error| error::Error::RunLoop(format!("cannot start event runtime: {error}")))?;
+        .map_err(|error| error::Error::Driver(format!("cannot start event runtime: {error}")))?;
     let _runtime_context = runtime.enter();
 
     let mut selector = WorkSelector::default();

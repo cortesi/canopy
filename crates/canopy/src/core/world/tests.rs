@@ -766,7 +766,7 @@ fn validate_invariants_rejects_missing_child_link() -> Result<()> {
     let error = core
         .validate_invariants()
         .expect_err("missing child should fail validation");
-    assert!(matches!(error, Error::Invariant(_)));
+    assert!(matches!(error, Error::Internal(_)));
     Ok(())
 }
 
@@ -783,7 +783,7 @@ fn validate_invariants_rejects_initialized_attached_unmounted_node() -> Result<(
     let error = core
         .validate_invariants()
         .expect_err("initialized attached node must be mounted");
-    assert!(matches!(error, Error::Invariant(_)));
+    assert!(matches!(error, Error::Internal(_)));
     Ok(())
 }
 
@@ -1088,7 +1088,7 @@ fn set_children_rejects_omitted_children() -> Result<()> {
     let err = core
         .set_children(parent, vec![second])
         .expect_err("an omitted child is rejected");
-    assert!(matches!(err, Error::InvalidOperation(_)));
+    assert!(matches!(err, Error::Invalid(_)));
     assert_eq!(core.nodes[parent].children, vec![first, second]);
     assert_eq!(core.nodes[first].parent, Some(parent));
 
@@ -1156,11 +1156,11 @@ fn attach_rejects_root_as_child() -> Result<()> {
 
     assert!(matches!(
         core.attach(parent, root).unwrap_err(),
-        Error::InvalidOperation(_)
+        Error::Invalid(_)
     ));
     assert!(matches!(
         core.set_children(parent, vec![root]).unwrap_err(),
-        Error::InvalidOperation(_)
+        Error::Invalid(_)
     ));
 
     assert!(core.nodes[root].parent.is_none());

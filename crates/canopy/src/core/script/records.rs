@@ -300,8 +300,8 @@ pub(super) fn binding_info_to_arg(binding: &inputmap::BindingRecord) -> ArgValue
     if let Some(action) = binding.target.widget_action() {
         record.insert("action".to_string(), ArgValue::String(action.to_string()));
     }
-    if let inputmap::BindingTarget::Command(action) = &binding.target {
-        insert_command_action(&mut record, action);
+    if let inputmap::BindingTarget::Command(call) = &binding.target {
+        insert_command_call(&mut record, call);
     }
     if let Some(mode) = binding.scope.mode() {
         record.insert("mode".to_string(), ArgValue::String(mode.to_string()));
@@ -312,23 +312,21 @@ pub(super) fn binding_info_to_arg(binding: &inputmap::BindingRecord) -> ArgValue
     ArgValue::Map(record)
 }
 
-/// Add a stored command's arguments and target policy to an observation record.
-fn insert_command_action(
-    record: &mut BTreeMap<String, ArgValue>,
-    action: &commands::CommandAction,
-) {
+/// Add a stored command call's arguments and target policy to an observation
+/// record.
+fn insert_command_call(record: &mut BTreeMap<String, ArgValue>, call: &commands::CommandCall) {
     record.insert(
         "command".to_string(),
-        ArgValue::String(action.invocation.id.0.to_string()),
+        ArgValue::String(call.id.0.to_string()),
     );
     record.insert(
         "arguments".to_string(),
-        match &action.invocation.args {
+        match &call.args {
             commands::CommandArgs::Positional(values) => ArgValue::Array(values.clone()),
             commands::CommandArgs::Named(fields) => ArgValue::Map(fields.clone()),
         },
     );
-    let (kind, node) = match action.target {
+    let (kind, node) = match call.target {
         None => ("route", None),
         Some(commands::CommandTarget::Exact(node)) => ("exact", Some(node)),
         Some(commands::CommandTarget::From(node)) => ("from", Some(node)),
@@ -640,7 +638,7 @@ fn available_binding_to_arg<I: ToString>(binding: help::AvailableBinding<I>) -> 
     }
     if let Some(command) = binding.command {
         let mut detail = BTreeMap::new();
-        insert_command_action(&mut detail, &command.action);
+        insert_command_call(&mut detail, &command.call);
         insert_command_availability(&mut detail, command.availability.as_ref());
         record.insert("command".to_string(), ArgValue::Map(detail));
     }

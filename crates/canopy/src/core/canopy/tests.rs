@@ -44,7 +44,7 @@ fn synchronous_automation_request_rejects_ui_thread() {
         .automation_handle()
         .request(|_| Ok(()))
         .expect_err("UI-thread request should be rejected");
-    assert!(matches!(error, Error::RunLoop(_)));
+    assert!(matches!(error, Error::Driver(_)));
 }
 
 #[test]
@@ -77,7 +77,7 @@ fn automation_submission_applies_backpressure() -> Result<()> {
     }
     assert!(matches!(
         handle.submit(Box::new(|_| {})),
-        Err(Error::RunLoop(_))
+        Err(Error::Driver(_))
     ));
     Ok(())
 }
@@ -486,7 +486,7 @@ fn tbindings() -> Result<()> {
 }
 
 #[test]
-fn framework_command_bindings_share_route_resolution_and_command_scope() -> Result<()> {
+fn framework_command_bindings_share_route_resolution_and_event_scope() -> Result<()> {
     run_ttree(|c, _, tree| {
         let group = inputmap::FrameworkBindingGroup::new("test.modal");
         let binding = c.bind_framework(
@@ -954,7 +954,7 @@ fn a_disabled_declarative_winner_is_consumed_without_running_or_bubbling() -> Re
         "the trace names the reason"
     );
     assert!(
-        canopy.core.current_command_scope().is_none(),
+        canopy.core.current_event().is_none(),
         "the skipped binding restored the event scope"
     );
 
@@ -966,7 +966,7 @@ fn a_disabled_declarative_winner_is_consumed_without_running_or_bubbling() -> Re
     })?;
     canopy.key(None, 'g')?;
     assert_eq!(gated_runs(&mut canopy, [root, child]), [0, 1]);
-    assert!(canopy.core.current_command_scope().is_none());
+    assert!(canopy.core.current_event().is_none());
     Ok(())
 }
 
@@ -989,14 +989,14 @@ fn binding_failures_propagate_and_still_restore_the_event_scope() -> Result<()> 
         "an executed command's failure is not swallowed"
     );
     assert_eq!(gated_runs(&mut canopy, [root, child]), [0, 1]);
-    assert!(canopy.core.current_command_scope().is_none());
+    assert!(canopy.core.current_event().is_none());
 
     // An opaque script callback reports its own failure the same way.
     canopy.eval_script(
         r#"canopy.bind("s", { description = "Fail" }, function() error("script failed") end)"#,
     )?;
     assert!(canopy.key(None, 's').is_err());
-    assert!(canopy.core.current_command_scope().is_none());
+    assert!(canopy.core.current_event().is_none());
     Ok(())
 }
 

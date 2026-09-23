@@ -71,7 +71,7 @@ mod tests {
             })?;
             canopy.finalize_api()?;
             let outcome = canopy.with_context(button, |ctx| {
-                ctx.dispatch_exact(button.into(), &Button::call_press().invocation())?;
+                ctx.dispatch_exact(button.into(), &Button::call_press())?;
                 Ok(())
             });
             assert_eq!(outcome.is_err(), fail);

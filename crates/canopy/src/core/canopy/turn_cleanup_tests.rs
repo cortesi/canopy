@@ -38,7 +38,7 @@ impl CleanupProbe {
     fn queue_failure(&self) -> Result<()> {
         self.events
             .unbounded_send(AdapterEvent::Input(Event::Key('x'.into())))
-            .map_err(|error| Error::RunLoop(error.to_string()))
+            .map_err(|error| Error::Driver(error.to_string()))
     }
 }
 
@@ -50,9 +50,7 @@ impl Widget for CleanupProbe {
     fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {
         if matches!(event, Event::Key(_)) {
             self.mutations.fetch_add(1, Ordering::Relaxed);
-            return Err(Error::InvalidOperation(
-                "input failed after mutation".into(),
-            ));
+            return Err(Error::Invalid("input failed after mutation".into()));
         }
         Ok(EventOutcome::Ignore)
     }
@@ -221,7 +219,7 @@ fn synchronous_headless_rejects_current_thread_tasks_without_consuming_driver() 
             let error = canopy
                 .eval_script("return 1")
                 .expect_err("cannot block this task");
-            assert!(matches!(error, Error::InvalidOperation(_)));
+            assert!(matches!(error, Error::Invalid(_)));
             assert!(error.to_string().contains("blocking worker"));
             assert!(canopy.event_rx.is_some());
             assert!(!canopy.driver.startup_attempted);

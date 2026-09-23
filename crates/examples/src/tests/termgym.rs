@@ -91,8 +91,7 @@ fn f6_toggles_terminal_focus_without_stealing_shell_shortcuts() -> Result<()> {
             .command
             .as_ref()
             .expect("declarative toggle")
-            .action
-            .invocation
+            .call
             .id
             .0,
         "term_gym::toggle_terminal_focus"

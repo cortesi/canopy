@@ -605,8 +605,7 @@ impl Canopy {
         );
 
         let event = input.event_for_node(&self.core, node_id);
-        let frame = self.core.command_scope_for_event(&event);
-        let depth = self.core.push_command_scope(frame);
+        let depth = self.core.push_event_scope(&event);
         let result = match binding.target {
             inputmap::BindingTarget::WidgetAction(_) => {
                 debug_assert!(false, "widget actions dispatch through on_action");
@@ -615,17 +614,14 @@ impl Canopy {
             inputmap::BindingTarget::Script(binding) => self
                 .execute_binding_with_scope(node_id, binding, scope)
                 .map(|()| None),
-            inputmap::BindingTarget::Command(command) => {
-                let target = command
-                    .target
-                    .unwrap_or(commands::CommandTarget::From(node_id));
+            inputmap::BindingTarget::Command(call) => {
                 // Eligibility is read here, inside the event scope, rather than
                 // taken from the last frame, so a status hook sees the same
                 // injections the command would.
-                match commands::command_status(&self.core, target, &command.invocation) {
+                match commands::command_status(&self.core, node_id, &call) {
                     Ok(commands::CommandStatus::Disabled(reason)) => Ok(Some(reason)),
                     Ok(commands::CommandStatus::Enabled) => {
-                        commands::dispatch_target(&mut self.core, target, &command.invocation)
+                        commands::dispatch(&mut self.core, node_id, &call)
                             .map(|_| None)
                             .map_err(Into::into)
                     }
@@ -633,7 +629,7 @@ impl Canopy {
                 }
             }
         };
-        self.core.pop_command_scope(depth);
+        self.core.pop_event_scope(depth);
         let skipped = result?;
 
         // A disabled winner still consumes its input. Falling through would let

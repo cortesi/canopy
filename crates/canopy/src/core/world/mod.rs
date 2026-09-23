@@ -17,7 +17,7 @@ use super::{
 };
 use crate::{
     ChangeOutcome, ViewContext,
-    commands::{CommandScopeFrame, CommandSet},
+    commands::CommandSet,
     core::{
         context::CoreContext,
         id::{NodeArena, NodeId},
@@ -25,7 +25,7 @@ use crate::{
         path::Path,
     },
     error::{Error, NodeOperationKind, Result},
-    event::key::Key,
+    event::{Event, key::Key},
     layout::Layout,
     state::NodeName,
     style::StyleMap,
@@ -97,8 +97,8 @@ pub struct Core {
     pub(crate) commands: CommandSet,
     /// Application and framework input bindings.
     pub(crate) input_map: InputMap,
-    /// Command scope stack for injection.
-    command_scope: Vec<CommandScopeFrame>,
+    /// Events in scope for command injection, innermost last.
+    event_scope: Vec<Event>,
 }
 
 /// Journal for one outermost tree edit and all nested edits it performs.
@@ -224,7 +224,7 @@ impl Core {
             rolling_back_tree_edit: false,
             commands: CommandSet::default(),
             input_map: InputMap::new(),
-            command_scope: Vec::new(),
+            event_scope: Vec::new(),
         }
     }
 
@@ -235,21 +235,22 @@ impl Core {
         }
     }
 
-    /// Return the current command-scope frame, if any.
-    pub(crate) fn current_command_scope(&self) -> Option<&CommandScopeFrame> {
-        self.command_scope.last()
+    /// Return the innermost event in scope for command injection, if any.
+    pub(crate) fn current_event(&self) -> Option<&Event> {
+        self.event_scope.last()
     }
 
-    /// Push a command-scope frame and return the previous depth.
-    pub(crate) fn push_command_scope(&mut self, frame: CommandScopeFrame) -> usize {
-        let depth = self.command_scope.len();
-        self.command_scope.push(frame);
+    /// Put an event in scope for command injection and return the previous
+    /// depth.
+    pub(crate) fn push_event_scope(&mut self, event: &Event) -> usize {
+        let depth = self.event_scope.len();
+        self.event_scope.push(event.clone());
         depth
     }
 
-    /// Restore the command-scope stack to a previous depth.
-    pub(crate) fn pop_command_scope(&mut self, depth: usize) {
-        self.command_scope.truncate(depth);
+    /// Restore the event scope to a previous depth.
+    pub(crate) fn pop_event_scope(&mut self, depth: usize) {
+        self.event_scope.truncate(depth);
     }
 
     /// Return the root node id.

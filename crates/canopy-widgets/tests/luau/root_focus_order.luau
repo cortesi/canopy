@@ -1,2 +1,2 @@
-root.focus("Next")
-root.focus("Prev")
+root.focus("next")
+root.focus("prev")

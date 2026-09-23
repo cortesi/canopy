@@ -1,4 +1,4 @@
-root.focus("Right")
-root.focus("Left")
-root.focus("Up")
-root.focus("Down")
+root.focus("right")
+root.focus("left")
+root.focus("up")
+root.focus("down")

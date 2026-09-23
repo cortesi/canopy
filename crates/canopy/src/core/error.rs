@@ -14,7 +14,7 @@ use crate::{
 /// Result type for canopy operations.
 pub type Result<T> = StdResult<T, Error>;
 
-/// Parse error marker type.
+/// A parse failure, with its source position when known.
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct ParseError {
     /// Parse error message.
@@ -229,15 +229,13 @@ pub enum Error {
     /// Terminal I/O failure.
     #[error("terminal I/O failed: {0}")]
     TerminalIo(#[source] io::Error),
-    #[error("runloop: {0}")]
-    /// Run loop failure.
-    RunLoop(String),
+    /// Turn driver failure: a closed channel, a failed backend, or a runtime
+    /// that could not start.
+    #[error("driver: {0}")]
+    Driver(String),
+    /// Internal failure, such as a broken core invariant.
     #[error("internal: {0}")]
-    /// Internal error.
     Internal(String),
-    /// Core invariant violation.
-    #[error("invariant violation: {0}")]
-    Invariant(String),
     /// Re-entrant widget borrow attempt.
     #[error("re-entrant widget borrow: {0:?}")]
     ReentrantWidgetBorrow(NodeId),
@@ -256,8 +254,8 @@ pub enum Error {
         #[source]
         source: Box<Self>,
     },
+    /// Invalid input or operation.
     #[error("invalid: {0}")]
-    /// Invalid input error.
     Invalid(String),
     /// Requested item was not found.
     #[error("not found: {0}")]
@@ -295,9 +293,6 @@ pub enum Error {
         /// Child node involved in the cycle.
         child: NodeId,
     },
-    /// Invalid structural operation.
-    #[error("invalid operation: {0}")]
-    InvalidOperation(String),
     /// Operation attempted before a mutable widget callback returned.
     #[error("{operation} is not allowed during a widget mutation callback")]
     InvalidPhase {
@@ -366,7 +361,7 @@ impl Error {
             Self::NodeDetached(_) => ScriptErrorKind::NodeDetached,
             Self::NodeTypeMismatch { .. } => ScriptErrorKind::TypeMismatch,
             Self::NotFound(_) => ScriptErrorKind::NotFound,
-            Self::Invalid(_) | Self::InvalidOperation(_) => ScriptErrorKind::Invalid,
+            Self::Invalid(_) => ScriptErrorKind::Invalid,
             Self::InvalidPhase { .. } => ScriptErrorKind::InvalidPhase,
             Self::RenderWidthLimit { .. }
             | Self::RenderHeightLimit { .. }
@@ -377,9 +372,8 @@ impl Error {
             | Self::Geometry(_)
             | Self::InvalidLayout(_)
             | Self::TerminalIo(_)
-            | Self::RunLoop(_)
+            | Self::Driver(_)
             | Self::Internal(_)
-            | Self::Invariant(_)
             | Self::ReentrantWidgetBorrow(_)
             | Self::MultipleMatches
             | Self::DuplicateChildKey(_)
@@ -418,7 +412,7 @@ impl Error {
 
 impl From<mpsc::RecvError> for Error {
     fn from(e: mpsc::RecvError) -> Self {
-        Self::RunLoop(e.to_string())
+        Self::Driver(e.to_string())
     }
 }
 

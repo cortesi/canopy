@@ -292,9 +292,9 @@ impl Canopy {
             let deadline = request
                 .timeout
                 .map(|d| {
-                    self.now().checked_add(d).ok_or_else(|| {
-                        Error::InvalidOperation("evaluation deadline overflow".into())
-                    })
+                    self.now()
+                        .checked_add(d)
+                        .ok_or_else(|| Error::Invalid("evaluation deadline overflow".into()))
                 })
                 .transpose()?;
             let script = self.script.host.compile(&request.source)?;
@@ -636,7 +636,7 @@ impl HeadlessEval<'_> {
                 match events.next().await {
                     Some(AdapterEvent::Input(event)) => Ok(Work::Input(vec![event])),
                     Some(AdapterEvent::Wake) => Ok(Work::Wake),
-                    None => Err(Error::RunLoop("headless event channel closed".into())),
+                    None => Err(Error::Driver("headless event channel closed".into())),
                 }
             };
             let work = selector.next(canopy, event).await?;
@@ -723,7 +723,7 @@ impl Drop for Canopy {
         for (id, sender) in self.driver.tickets.drain() {
             let _closed = sender.send(EvalOutcome {
                 id,
-                result: Err(Error::RunLoop(
+                result: Err(Error::Driver(
                     "application stopped before evaluation completed".into(),
                 )),
                 logs: Vec::new(),

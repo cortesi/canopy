@@ -107,12 +107,12 @@ impl Core {
                     .get(&(identity.scope, identity.key.clone()))
                     != Some(&node)
                 {
-                    return Err(Error::Invariant(
+                    return Err(Error::Internal(
                         "semantic identity is missing from its scope index".into(),
                     ));
                 }
                 if self.tree_edit.is_none() && !self.is_ancestor_or_self(identity.scope, node) {
-                    return Err(Error::Invariant(
+                    return Err(Error::Internal(
                         "semantic identity lies outside its scope subtree".into(),
                     ));
                 }
@@ -125,7 +125,7 @@ impl Core {
                 .and_then(|entry| entry.semantic_identity.as_ref())
                 .is_some_and(|identity| identity.scope == *scope && identity.key == *key)
             {
-                return Err(Error::Invariant(
+                return Err(Error::Internal(
                     "semantic scope index has no matching node identity".into(),
                 ));
             }

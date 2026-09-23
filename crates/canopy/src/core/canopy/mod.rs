@@ -146,15 +146,15 @@ impl AutomationHandle {
             .try_send(message)
             .map_err(|error| match error {
                 mpsc::TrySendError::Full(_) => {
-                    error::Error::RunLoop("automation callback queue is full".into())
+                    error::Error::Driver("automation callback queue is full".into())
                 }
                 mpsc::TrySendError::Disconnected(_) => {
-                    error::Error::RunLoop("automation callback channel closed".into())
+                    error::Error::Driver("automation callback channel closed".into())
                 }
             })?;
         self.wake_tx
             .unbounded_send(AdapterEvent::Wake)
-            .map_err(|_| error::Error::RunLoop("event loop wake channel closed".into()))?;
+            .map_err(|_| error::Error::Driver("event loop wake channel closed".into()))?;
         Ok(())
     }
 
@@ -165,7 +165,7 @@ impl AutomationHandle {
         F: FnOnce(&mut Canopy) -> Result<R> + Send + 'static,
     {
         if thread::current().id() == self.ui_thread {
-            return Err(error::Error::RunLoop(
+            return Err(error::Error::Driver(
                 "synchronous automation request from the UI thread".into(),
             ));
         }
@@ -337,7 +337,7 @@ impl Canopy {
     ) -> Result<inputmap::BindingId> {
         self.core
             .input_map
-            .bind_framework(group, input, options, command.action())
+            .bind_framework(group, input, options, command)
     }
 
     /// Install or replace an application command binding.
@@ -352,7 +352,7 @@ impl Canopy {
         let (id, removed) = self.core.input_map.replace_application_binding(
             input.into(),
             options,
-            inputmap::BindingTarget::Command(command.action()),
+            inputmap::BindingTarget::Command(command),
         )?;
         self.release_removed_bindings(removed);
         Ok(id)

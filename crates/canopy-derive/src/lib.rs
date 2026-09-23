@@ -8,14 +8,16 @@ mod model;
 /// Parsing support for `derive_commands`.
 mod parse;
 
+use convert_case::{Case, Casing};
 use quote::quote;
 use syn::{Attribute, Fields, ItemImpl, Result, parse_macro_input, parse_quote};
 
 /// Generate command metadata and wrappers for `#[command]` methods in an impl
 /// block.
 ///
-/// Each command gets a `cmd_*` metadata accessor and a `call_*` builder with
-/// typed user parameters. Builders omit context and injected parameters.
+/// Each command gets a `spec_*` accessor for its `CommandSpec` and a `call_*`
+/// builder with typed user parameters. Both have the method's visibility.
+/// Builders omit context and injected parameters.
 /// `#[command(enabled = "method")]` adds a read-only eligibility hook. The
 /// method takes `&self` and `&dyn canopy::ViewContext` and returns
 /// `canopy::error::Result<canopy::commands::CommandStatus>`.
@@ -195,8 +197,9 @@ fn doc_tokens(attrs: &[Attribute]) -> proc_macro2::TokenStream {
 /// Derive command conversions for a fieldless enum.
 ///
 /// This emits `CommandType`, `ToArgValue`, and `FromArgValue`
-/// implementations. Variant names are matched case-insensitively and exposed
-/// as string literals in the generated Luau type.
+/// implementations. Each variant crosses the command boundary as its
+/// snake_case name, which is also a string literal in the generated Luau
+/// type. Parsing accepts that name in any ASCII case.
 #[proc_macro_derive(CommandEnum)]
 pub fn derive_command_enum(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as syn::DeriveInput);
@@ -230,19 +233,23 @@ fn expand_command_enum(input: syn::DeriveInput) -> Result<proc_macro2::TokenStre
         variants.push(variant.ident);
     }
 
-    let to_match_arms = variants.iter().map(|variant| {
-        let name = variant.to_string();
-        quote! { Self::#variant => #name }
-    });
+    let names = variants
+        .iter()
+        .map(|variant| variant.to_string().to_case(Case::Snake))
+        .collect::<Vec<_>>();
 
-    let from_match_arms = variants.iter().map(|variant| {
-        let name = variant.to_string();
+    let to_match_arms = variants
+        .iter()
+        .zip(&names)
+        .map(|(variant, name)| quote! { Self::#variant => #name });
+
+    let from_match_arms = variants.iter().zip(&names).map(|(variant, name)| {
         quote! { if value.eq_ignore_ascii_case(#name) { return Ok(Self::#variant); } }
     });
 
-    let luau_values = variants
+    let luau_values = names
         .iter()
-        .map(|variant| syn::LitStr::new(&variant.to_string(), proc_macro2::Span::call_site()));
+        .map(|name| syn::LitStr::new(name, proc_macro2::Span::call_site()));
 
     Ok(quote! {
         impl #impl_generics canopy::commands::ToArgValue for #ident #ty_generics #where_clause {

@@ -100,7 +100,7 @@ impl Canopy {
             || self.script.host.is_eval_active()
             || self.next_deadline().is_some()
         {
-            return Err(Error::InvalidOperation(
+            return Err(Error::Invalid(
                 "test clock must be installed before runtime initialization".into(),
             ));
         }

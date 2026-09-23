@@ -2182,11 +2182,11 @@ Each stage also updates the docs it touches.
 
 ### Stage 3: Core API consolidation
 
-- [ ] C6: one `CommandCall`. Update the derive codegen, `Context::dispatch`,
+- [x] C6: one `CommandCall`. Update the derive codegen, `Context::dispatch`,
   `command_status`, Button, List, routing, and canopy-fileselect's two sites.
-- [ ] C7: remove list-row injection, `dispatch_scoped`, and
+- [x] C7: remove list-row injection, `dispatch_scoped`, and
   `current_list_row`, and seal `Inject`.
-- [ ] C44: snake_case `CommandEnum`, generated-function visibility, and
+- [x] C44: snake_case `CommandEnum`, generated-function visibility, and
   `spec_*`. fh derives its enums and adds `toggle_column(Column)`. Lowercase the
   enum strings in Luau, including 6 sites in fh's `default_config.luau`.
 - [ ] C8, C9: `BindingTier`, a non-optional stored phase, `StepBinding`,
@@ -2223,7 +2223,7 @@ Each stage also updates the docs it touches.
 - [ ] C18 public part: `ChangeSet` and `Invalidation` are already crate-private
   (done in Stage 2). Delete `invalidate_layout` and its 16 calls, including fileselect's
   `lib.rs:1772-1775` block.
-- [ ] C21: merge the error variants, and rename `RunLoop` to `Driver`.
+- [x] C21: merge the error variants, and rename `RunLoop` to `Driver`.
 
 ### Stage 4: Vocabulary and module homes
 

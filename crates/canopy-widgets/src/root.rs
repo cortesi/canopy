@@ -749,7 +749,7 @@ mod tests {
         let x = view.content.tl.x + i32::try_from(view.content.w.saturating_sub(1)).unwrap();
         let y = view.content.tl.y + i32::try_from(view.content.h.saturating_sub(1)).unwrap();
         canopy.eval_script(&format!(
-            "canopy.send_scroll(\"Down\", {x}, {y}); canopy.send_click({x}, {y})"
+            "canopy.send_scroll(\"down\", {x}, {y}); canopy.send_click({x}, {y})"
         ))?;
         canopy.eval_script("canopy.send_click(1, 1)")?;
         canopy.render(&mut backend)?;
@@ -769,7 +769,7 @@ mod tests {
         canopy.eval_script("root.show_help()")?;
         let before = modal_snapshot(&mut canopy)?;
         let result = canopy.with_root_context(|context| {
-            context.dispatch_exact(context.node_id(), &Root::call_hide_help().invocation())?;
+            context.dispatch_exact(context.node_id(), &Root::call_hide_help())?;
             Err::<(), _>(Error::Invalid("outer dispatch failed".into()))
         });
         assert!(result.is_err());

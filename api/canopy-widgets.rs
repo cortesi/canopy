@@ -275,29 +275,29 @@ pub mod canopy_widgets {
             /// Build a positional call with typed user arguments.
             pub fn call_undo() -> canopy::commands::CommandCall {}
 
-            /// Return a typed command reference for this command.
-            pub fn cmd_clear_search() -> &'static canopy::commands::CommandSpec {}
+            /// Return the command spec for this command.
+            pub fn spec_clear_search() -> &'static canopy::commands::CommandSpec {}
 
-            /// Return a typed command reference for this command.
-            pub fn cmd_move_cursor() -> &'static canopy::commands::CommandSpec {}
+            /// Return the command spec for this command.
+            pub fn spec_move_cursor() -> &'static canopy::commands::CommandSpec {}
 
-            /// Return a typed command reference for this command.
-            pub fn cmd_redo() -> &'static canopy::commands::CommandSpec {}
+            /// Return the command spec for this command.
+            pub fn spec_redo() -> &'static canopy::commands::CommandSpec {}
 
-            /// Return a typed command reference for this command.
-            pub fn cmd_search() -> &'static canopy::commands::CommandSpec {}
+            /// Return the command spec for this command.
+            pub fn spec_search() -> &'static canopy::commands::CommandSpec {}
 
-            /// Return a typed command reference for this command.
-            pub fn cmd_search_matches() -> &'static canopy::commands::CommandSpec {}
+            /// Return the command spec for this command.
+            pub fn spec_search_matches() -> &'static canopy::commands::CommandSpec {}
 
-            /// Return a typed command reference for this command.
-            pub fn cmd_search_next() -> &'static canopy::commands::CommandSpec {}
+            /// Return the command spec for this command.
+            pub fn spec_search_next() -> &'static canopy::commands::CommandSpec {}
 
-            /// Return a typed command reference for this command.
-            pub fn cmd_search_position() -> &'static canopy::commands::CommandSpec {}
+            /// Return the command spec for this command.
+            pub fn spec_search_position() -> &'static canopy::commands::CommandSpec {}
 
-            /// Return a typed command reference for this command.
-            pub fn cmd_undo() -> &'static canopy::commands::CommandSpec {}
+            /// Return the command spec for this command.
+            pub fn spec_undo() -> &'static canopy::commands::CommandSpec {}
         }
 
         impl EditorConfig {
@@ -438,11 +438,11 @@ pub mod canopy_widgets {
             /// Build a positional call with typed user arguments.
             pub fn call_zoom(dir: ZoomDirection) -> canopy::commands::CommandCall {}
 
-            /// Return a typed command reference for this command.
-            pub fn cmd_pan() -> &'static canopy::commands::CommandSpec {}
+            /// Return the command spec for this command.
+            pub fn spec_pan() -> &'static canopy::commands::CommandSpec {}
 
-            /// Return a typed command reference for this command.
-            pub fn cmd_zoom() -> &'static canopy::commands::CommandSpec {}
+            /// Return the command spec for this command.
+            pub fn spec_zoom() -> &'static canopy::commands::CommandSpec {}
         }
 
         impl Loader for ImageView {
@@ -1382,8 +1382,8 @@ pub mod canopy_widgets {
         /// Build a positional call with typed user arguments.
         pub fn call_press() -> canopy::commands::CommandCall {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_press() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_press() -> &'static canopy::commands::CommandSpec {}
     }
 
     impl CommandNode for Button {
@@ -1456,8 +1456,8 @@ pub mod canopy_widgets {
         /// Build a positional call with typed user arguments.
         pub fn call_focus_column(delta: i32) -> canopy::commands::CommandCall {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_focus_column() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_focus_column() -> &'static canopy::commands::CommandSpec {}
     }
 
     impl CommandNode for Columns {
@@ -1546,14 +1546,14 @@ pub mod canopy_widgets {
         /// Build a positional call with typed user arguments.
         pub fn call_yes() -> canopy::commands::CommandCall {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_focus() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_focus() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_no() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_no() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_yes() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_yes() -> &'static canopy::commands::CommandSpec {}
     }
 
     impl Loader for Confirm {
@@ -1653,11 +1653,11 @@ pub mod canopy_widgets {
         /// Build a positional call with typed user arguments.
         pub fn call_scroll(dir: FocusDirection) -> canopy::commands::CommandCall {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_page() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_page() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_scroll() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_scroll() -> &'static canopy::commands::CommandSpec {}
     }
 
     impl Widget for DiffView {
@@ -1769,11 +1769,11 @@ pub mod canopy_widgets {
         /// Build a positional call with typed user arguments.
         pub fn call_zoom(dir: ZoomDirection) -> canopy::commands::CommandCall {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_pan() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_pan() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_zoom() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_zoom() -> &'static canopy::commands::CommandSpec {}
     }
 
     impl Loader for ImageView {
@@ -1839,14 +1839,14 @@ pub mod canopy_widgets {
         /// Build a positional call with typed user arguments.
         pub fn call_right() -> canopy::commands::CommandCall {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_backspace() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_backspace() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_left() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_left() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_right() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_right() -> &'static canopy::commands::CommandSpec {}
     }
 
     impl Widget for Input {
@@ -1971,32 +1971,32 @@ pub mod canopy_widgets {
         /// Build a positional call with typed user arguments.
         pub fn call_toggle_inspector() -> canopy::commands::CommandCall {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_focus() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_focus() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_focus_app() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_focus_app() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_hide_help() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_hide_help() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_hide_inspector() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_hide_inspector() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_quit() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_quit() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_show_help() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_show_help() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_show_inspector() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_show_inspector() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_toggle_help() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_toggle_help() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_toggle_inspector() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_toggle_inspector() -> &'static canopy::commands::CommandSpec {}
     }
 
     impl Widget for Root {
@@ -2041,11 +2041,11 @@ pub mod canopy_widgets {
         /// Build a positional call with typed user arguments.
         pub fn call_select_by(delta: i32) -> canopy::commands::CommandCall {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_select() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_select() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_select_by() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_select_by() -> &'static canopy::commands::CommandSpec {}
     }
 
     impl Widget for Tabs {
@@ -2112,14 +2112,14 @@ pub mod canopy_widgets {
         /// Build a positional call with typed user arguments.
         pub fn call_scroll_to(x: u32, y: u32) -> canopy::commands::CommandCall {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_page() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_page() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_scroll() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_scroll() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_scroll_to() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_scroll_to() -> &'static canopy::commands::CommandSpec {}
     }
 
     impl Widget for Text {
@@ -2419,17 +2419,17 @@ pub mod canopy_widgets {
         /// Build a positional call with typed user arguments.
         pub fn call_toggle() -> canopy::commands::CommandCall {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_cancel() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_cancel() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_confirm() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_confirm() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_select_by() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_select_by() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_toggle() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_toggle() -> &'static canopy::commands::CommandSpec {}
     }
 
     impl<T> Widget for Dropdown<T>
@@ -2548,29 +2548,29 @@ pub mod canopy_widgets {
         /// Build a positional call with typed user arguments.
         pub fn call_start_filter() -> canopy::commands::CommandCall {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_clear_filter() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_clear_filter() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_filter() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_filter() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_page() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_page() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_select_by() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_select_by() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_selected_name() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_selected_name() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_set_filter() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_set_filter() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_shown_count() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_shown_count() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_start_filter() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_start_filter() -> &'static canopy::commands::CommandSpec {}
     }
 
     impl<T> Widget for PickerList<T>
@@ -2673,23 +2673,23 @@ pub mod canopy_widgets {
         /// Build a positional call with typed user arguments.
         pub fn call_toggle() -> canopy::commands::CommandCall {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_clear() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_clear() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_select_all() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_select_all() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_select_by() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_select_by() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_select_first() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_select_first() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_select_last() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_select_last() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_toggle() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_toggle() -> &'static canopy::commands::CommandSpec {}
     }
 
     impl<T> Widget for Selector<T>
@@ -2981,35 +2981,35 @@ pub mod canopy_widgets {
         /// Build a positional call with typed user arguments.
         pub fn call_toggle() -> canopy::commands::CommandCall {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_check_all() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_check_all() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_clear() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_clear() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_clear_checks() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_clear_checks() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_delete_selected() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_delete_selected() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_page() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_page() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_scroll() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_scroll() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_select_by() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_select_by() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_select_first() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_select_first() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_select_last() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_select_last() -> &'static canopy::commands::CommandSpec {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_toggle() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_toggle() -> &'static canopy::commands::CommandSpec {}
     }
 
     impl<W: Selectable> List<W, AutoKey> {

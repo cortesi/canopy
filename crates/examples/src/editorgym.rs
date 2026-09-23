@@ -19,8 +19,8 @@ root.default_bindings()
 
 canopy.keymap({
     path = "editor_gym",
-    { key = "Tab", description = "Next focus", action = command.root.focus("Next") },
-    { key = "BackTab", description = "Previous focus", action = command.root.focus("Prev") },
+    { key = "Tab", description = "Next focus", action = command.root.focus("next") },
+    { key = "BackTab", description = "Previous focus", action = command.root.focus("prev") },
     { key = "PageDown", description = "Page down", action = command.editor_gym.page(1) },
     { key = "PageUp", description = "Page up", action = command.editor_gym.page(-1) },
     { key = "Home", description = "Top", action = command.editor_gym.scroll_to(0, 0) },
@@ -28,14 +28,14 @@ canopy.keymap({
         mouse = "ScrollDown",
         description = "Scroll down",
         action = function()
-            editor_gym.scroll("Down")
+            editor_gym.scroll("down")
         end,
     },
     {
         mouse = "ScrollUp",
         description = "Scroll up",
         action = function()
-            editor_gym.scroll("Up")
+            editor_gym.scroll("up")
         end,
     },
 })

@@ -676,7 +676,7 @@ fn script_identifier_exhaustion_is_reported() -> Result<()> {
             .host
             .compile("return true")
             .expect_err("script identifier exhaustion should fail");
-        assert!(matches!(error, error::Error::InvalidOperation(_)));
+        assert!(matches!(error, error::Error::Invalid(_)));
         Ok(())
     })
 }
@@ -832,7 +832,7 @@ impl crate::Widget for WaitUnownedNode {
 fn wait_command_invoke(
     _target: &mut dyn Any,
     _ctx: &mut dyn crate::Context,
-    _invocation: &commands::CommandInvocation,
+    _args: &CommandArgs,
 ) -> StdResult<ArgValue, commands::CommandError> {
     Ok(ArgValue::Null)
 }

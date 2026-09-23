@@ -4,10 +4,7 @@
 mod tests {
     use canopy::{
         Canopy, ContextExt, FocusDirection, FocusScope, NodeId, NodeName, ViewContext, Widget,
-        error::{Error, Result},
-        geom::Size,
-        layout::Layout,
-        testing::grid::Grid,
+        error::Result, geom::Size, layout::Layout, testing::grid::Grid,
     };
 
     /// Return the name of the focused grid cell, if a cell holds focus.
@@ -59,12 +56,11 @@ mod tests {
         let total_cells = grid_width * grid_height;
 
         focus_first(canopy, grid.root)?;
-        let initial = focused_cell(canopy);
-        if initial != Some("cell_0_0".to_string()) {
-            return Err(Error::Invariant(format!(
-                "Expected to start at cell_0_0, but started at {initial:?}"
-            )));
-        }
+        assert_eq!(
+            focused_cell(canopy),
+            Some("cell_0_0".to_string()),
+            "navigation starts at cell_0_0"
+        );
 
         let mut visited_cells: Vec<String> = Vec::new();
         let mut position_errors: Vec<String> = Vec::new();
@@ -110,11 +106,10 @@ mod tests {
                     focus_dir(canopy, grid.root, step)?;
                     let after = focused_cell(canopy);
 
-                    if before == after {
-                        return Err(Error::Invariant(format!(
-                            "Failed to move {step:?} from row {row}, col {col} (stuck at {before:?})"
-                        )));
-                    }
+                    assert_ne!(
+                        before, after,
+                        "failed to move {step:?} from row {row}, col {col}"
+                    );
                 }
             }
 
@@ -123,30 +118,21 @@ mod tests {
                 focus_dir(canopy, grid.root, FocusDirection::Down)?;
                 let after = focused_cell(canopy);
 
-                if before == after {
-                    return Err(Error::Invariant(format!(
-                        "Failed to move down after row {row} (stuck at {before:?})"
-                    )));
-                }
+                assert_ne!(before, after, "failed to move down after row {row}");
             }
         }
 
-        if visited_cells.len() != total_cells {
-            return Err(Error::Invariant(format!(
-                "Only visited {} out of {} cells ({:.1}% coverage)",
-                visited_cells.len(),
-                total_cells,
-                (visited_cells.len() as f64 / total_cells as f64) * 100.0
-            )));
-        }
-
-        if !position_errors.is_empty() {
-            return Err(Error::Invariant(format!(
-                "Navigation completed but {} position errors occurred:\n{}",
-                position_errors.len(),
-                position_errors[..5.min(position_errors.len())].join("\n")
-            )));
-        }
+        assert_eq!(
+            visited_cells.len(),
+            total_cells,
+            "navigation visits every cell"
+        );
+        assert!(
+            position_errors.is_empty(),
+            "{} position errors occurred:\n{}",
+            position_errors.len(),
+            position_errors[..5.min(position_errors.len())].join("\n")
+        );
 
         Ok(())
     }

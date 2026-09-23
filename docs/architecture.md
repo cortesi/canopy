@@ -525,7 +525,8 @@ the wheel reaches the nearest ancestor that can move, and the node's pending
 reveal survives. The route trace records each applied action as
 `RoutePhase::DefaultAction`. Widgets that give the wheel another meaning, such
 as a terminal that reports mouse input to its program, handle the event
-themselves. Command scopes expose the originating event and target.
+themselves. A command that runs while an event is handled can take that event
+as an injected `Event` or `MouseEvent` parameter.
 
 A declarative binding whose command is not available consumes its input without
 running it. The route stops there rather than offering the input to an ancestor,

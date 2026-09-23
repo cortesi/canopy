@@ -15,10 +15,7 @@ use super::{
 };
 use crate::{
     ChangeOutcome, InteractionToken, ModalOptions, SemanticIdentity,
-    commands::{
-        ArgValue, CommandError, CommandInvocation, CommandScopeFrame, CommandStatus, CommandTarget,
-        ListRowContext,
-    },
+    commands::{ArgValue, CommandCall, CommandError, CommandStatus, CommandTarget},
     error::{Error, Result},
     event::{Event, mouse::MouseEvent},
     geom::{Point, Rect},
@@ -157,14 +154,10 @@ pub trait ViewContext: sealed::ViewContext {
         callback: &mut dyn FnMut(&dyn Widget) -> Result<()>,
     ) -> Result<()>;
 
-    /// Inspect a command for display. Registry and target resolution failures
-    /// are returned as disabled reasons; eligibility hook failures remain
-    /// errors.
-    fn command_status(
-        &self,
-        target: CommandTarget,
-        invocation: &CommandInvocation,
-    ) -> Result<CommandStatus>;
+    /// Inspect a command call for display. A call without a target resolves
+    /// from the current node. Registry and target resolution failures are
+    /// returned as disabled reasons; eligibility hook failures remain errors.
+    fn command_status(&self, call: &CommandCall) -> Result<CommandStatus>;
 
     /// Widget type identifier for a specific node.
     fn type_id_of(&self, node: NodeId) -> Option<TypeId>;
@@ -697,29 +690,21 @@ pub trait Context: ViewContext + sealed::Context {
         f: &mut dyn FnMut(&mut dyn Widget, &mut dyn Context) -> Result<()>,
     ) -> Result<()>;
 
-    /// Dispatch according to an explicit target policy.
-    fn dispatch(
-        &mut self,
-        target: CommandTarget,
-        cmd: &CommandInvocation,
-    ) -> StdResult<ArgValue, CommandError>;
+    /// Dispatch a command call. A call without a target resolves from the
+    /// current node.
+    fn dispatch(&mut self, call: &CommandCall) -> StdResult<ArgValue, CommandError>;
 
-    /// Invoke with explicit target and input scope.
-    fn dispatch_scoped(
-        &mut self,
-        target: CommandTarget,
-        frame: CommandScopeFrame,
-        cmd: &CommandInvocation,
-    ) -> StdResult<ArgValue, CommandError>;
-
-    /// Return the current event snapshot for injection.
+    /// Return the event being handled, for injection.
     fn current_event(&self) -> Option<&Event>;
 
-    /// Return the current mouse event for injection.
-    fn current_mouse_event(&self) -> Option<MouseEvent>;
-
-    /// Return the current list-row context for injection.
-    fn current_list_row(&self) -> Option<ListRowContext>;
+    /// Return the event being handled when it is a mouse event, for
+    /// injection.
+    fn current_mouse_event(&self) -> Option<MouseEvent> {
+        match self.current_event()? {
+            Event::Mouse(mouse) => Some(*mouse),
+            _ => None,
+        }
+    }
 
     /// Add a boxed widget as a child of a specific parent and return the new
     /// node ID.
@@ -797,13 +782,13 @@ pub trait Context: ViewContext + sealed::Context {
 
 /// Typed mutation and composition helpers for contexts.
 pub trait ContextExt: Context + ViewContextExt {
-    /// Invoke only the specified command owner.
+    /// Dispatch a command call to exactly `node`, replacing the call's target.
     fn dispatch_exact(
         &mut self,
         node: NodeId,
-        command: &CommandInvocation,
+        call: &CommandCall,
     ) -> StdResult<ArgValue, CommandError> {
-        self.dispatch(CommandTarget::Exact(node), command)
+        self.dispatch(&call.clone().with_target(CommandTarget::Exact(node)))
     }
 
     /// Build detached children and attach them after configuration succeeds.
@@ -1051,12 +1036,8 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
             })?
     }
 
-    fn command_status(
-        &self,
-        target: CommandTarget,
-        invocation: &CommandInvocation,
-    ) -> Result<CommandStatus> {
-        commands::command_status(&self.core, target, invocation)
+    fn command_status(&self, call: &CommandCall) -> Result<CommandStatus> {
+        commands::command_status(&self.core, self.node_id, call)
     }
 
     fn find_identity(&self, scope: NodeId, key: &str) -> Result<Option<NodeId>> {
@@ -1266,42 +1247,12 @@ impl Context for NodeCtx<&mut Core> {
             .with_widget_ctx(node, |widget, ctx| f(widget, ctx))?
     }
 
-    fn dispatch(
-        &mut self,
-        target: CommandTarget,
-        cmd: &CommandInvocation,
-    ) -> StdResult<ArgValue, CommandError> {
-        commands::dispatch_target(self.core, target, cmd)
-    }
-
-    fn dispatch_scoped(
-        &mut self,
-        target: CommandTarget,
-        frame: CommandScopeFrame,
-        cmd: &CommandInvocation,
-    ) -> StdResult<ArgValue, CommandError> {
-        let guard = self.core.push_command_scope(frame);
-        let result = commands::dispatch_target(self.core, target, cmd);
-        self.core.pop_command_scope(guard);
-        result
+    fn dispatch(&mut self, call: &CommandCall) -> StdResult<ArgValue, CommandError> {
+        commands::dispatch(self.core, self.node_id, call)
     }
 
     fn current_event(&self) -> Option<&Event> {
-        self.core
-            .current_command_scope()
-            .and_then(|frame| frame.event.as_ref())
-    }
-
-    fn current_mouse_event(&self) -> Option<MouseEvent> {
-        self.core
-            .current_command_scope()
-            .and_then(|frame| frame.mouse)
-    }
-
-    fn current_list_row(&self) -> Option<ListRowContext> {
-        self.core
-            .current_command_scope()
-            .and_then(|frame| frame.list_row.clone())
+        self.core.current_event()
     }
 
     fn add_child_to_boxed(&mut self, parent: NodeId, widget: Box<dyn Widget>) -> Result<NodeId> {

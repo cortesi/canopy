@@ -3,10 +3,7 @@ use std::mem;
 use canopy::{
     BindingId, BindingOwner, BindingPhase, BindingScope, BindingTargetKind, Context, ContextExt,
     Loader, NodeId, ViewContext, Widget, buf,
-    commands::{
-        CommandAction, CommandArgs, CommandAvailability, CommandId, CommandInvocation,
-        CommandStatus,
-    },
+    commands::{CommandArgs, CommandAvailability, CommandCall, CommandId, CommandStatus},
     error::Result,
     event::{key, mouse},
     geom::{Point, PointI32, Size},
@@ -164,15 +161,13 @@ fn mouse_rows_follow_the_keys_and_share_an_action_with_them() {
 fn a_disabled_mouse_binding_shows_its_reason() {
     let mut click = mouse_binding(1, "LeftDown", "Activate");
     click.command = Some(BindingCommand {
-        action: CommandAction {
-            invocation: CommandInvocation {
-                id: CommandId("button::press"),
-                args: CommandArgs::default(),
-            },
+        call: CommandCall {
+            id: CommandId("button::press"),
+            args: CommandArgs::default(),
             target: None,
         },
         availability: Some(CommandAvailability {
-            spec: crate::Button::cmd_press(),
+            spec: crate::Button::spec_press(),
             resolution: None,
             status: Some(CommandStatus::Disabled("nothing selected".into())),
             missing_requirements: Vec::new(),
@@ -476,26 +471,24 @@ fn separators_read_apart_from_the_keys() -> Result<()> {
 fn command_help_keeps_user_feedback_without_command_diagnostics() {
     use canopy::{
         commands::{
-            ArgValue, CommandAction, CommandArgs, CommandAvailability, CommandId,
-            CommandInvocation, CommandRequirement, CommandStatus, CommandTarget,
+            ArgValue, CommandArgs, CommandAvailability, CommandCall, CommandId, CommandRequirement,
+            CommandStatus, CommandTarget,
         },
         help::BindingCommand,
     };
 
     let mut binding = binding(1, 'd', "Delete selection", BindingPhase::BeforeWidget);
     binding.command = Some(BindingCommand {
-        action: CommandAction {
-            invocation: CommandInvocation {
-                id: CommandId("todo::delete_item"),
-                args: CommandArgs::Positional(vec![ArgValue::Int(7)]),
-            },
+        call: CommandCall {
+            id: CommandId("todo::delete_item"),
+            args: CommandArgs::Positional(vec![ArgValue::Int(7)]),
             target: Some(CommandTarget::Focus),
         },
         availability: Some(CommandAvailability {
-            spec: crate::Button::cmd_press(),
+            spec: crate::Button::spec_press(),
             resolution: None,
             status: Some(CommandStatus::Disabled("no selection".into())),
-            missing_requirements: vec![CommandRequirement::ListRow],
+            missing_requirements: vec![CommandRequirement::Mouse],
         }),
     });
     let list = list_with(vec![binding.clone()]);
@@ -507,7 +500,7 @@ fn command_help_keeps_user_feedback_without_command_diagnostics() {
         .join(" ");
     let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
     assert_eq!(text, "Delete selection — Unavailable: no selection");
-    // Input dispatch supplies event/row context that passive discovery lacks.
+    // Input dispatch supplies event context that passive discovery lacks.
     binding
         .command
         .as_mut()

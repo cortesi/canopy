@@ -655,7 +655,7 @@ impl fmt::Display for CommandId {
     }
 }
 
-/// Canonical argument container for command invocation.
+/// Canonical argument container for a command call.
 #[derive(Clone, Debug, PartialEq)]
 pub enum CommandArgs {
     /// Positional arguments.
@@ -674,15 +674,6 @@ impl From<()> for CommandArgs {
     fn from(_: ()) -> Self {
         Self::Positional(Vec::new())
     }
-}
-
-/// A command invocation with encoded arguments.
-#[derive(Clone, Debug, PartialEq)]
-pub struct CommandInvocation {
-    /// Command identifier.
-    pub id: CommandId,
-    /// Invocation arguments.
-    pub args: CommandArgs,
 }
 
 /// Identifies how a command parameter is provided.
@@ -760,8 +751,6 @@ pub enum CommandRequirement {
     Event,
     /// An originating mouse event.
     Mouse,
-    /// An originating list row.
-    ListRow,
 }
 
 impl CommandRequirement {
@@ -770,7 +759,6 @@ impl CommandRequirement {
         match self {
             Self::Event => "event",
             Self::Mouse => "mouse",
-            Self::ListRow => "list_row",
         }
     }
 }
@@ -778,9 +766,9 @@ impl CommandRequirement {
 /// Current command eligibility, separate from authorization and resolution.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CommandStatus {
-    /// The action can currently run.
+    /// The command can currently run.
     Enabled,
-    /// The action cannot run, with a user-facing reason.
+    /// The command cannot run, with a user-facing reason.
     Disabled(String),
 }
 
@@ -808,13 +796,33 @@ pub enum CommandTarget {
     Focus,
 }
 
-/// Stored action with an optional explicit target policy.
+/// A command id, its encoded arguments, and an optional target policy.
+///
+/// This is the one value that names a command call: dispatch, eligibility
+/// checks, bindings, and scripts all take it.
 #[derive(Clone, Debug, PartialEq)]
-pub struct CommandAction {
-    /// Command and its encoded arguments.
-    pub invocation: CommandInvocation,
-    /// Omission uses the caller's route origin.
+pub struct CommandCall {
+    /// Command identifier.
+    pub id: CommandId,
+    /// Encoded arguments.
+    pub args: CommandArgs,
+    /// Explicit target policy. `None` resolves from the call's origin: the
+    /// dispatching node for a context, or the node where a binding wins.
     pub target: Option<CommandTarget>,
+}
+
+impl CommandCall {
+    /// Bind this call to a target policy.
+    pub fn with_target(mut self, target: CommandTarget) -> Self {
+        self.target = Some(target);
+        self
+    }
+
+    /// Return the explicit target, or a search from `origin` when the call
+    /// has none.
+    pub fn target_or(&self, origin: NodeId) -> CommandTarget {
+        self.target.unwrap_or(CommandTarget::From(origin))
+    }
 }
 
 /// Static metadata for a command return type.
@@ -830,7 +838,7 @@ pub enum CommandReturnSpec {
 pub type InvokeFn = fn(
     target: &mut dyn Any,
     ctx: &mut dyn Context,
-    inv: &CommandInvocation,
+    args: &CommandArgs,
 ) -> Result<ArgValue, CommandError>;
 
 /// Erased argument check signature.
@@ -1026,51 +1034,16 @@ impl CommandSpec {
     }
 
     /// Build a call to this command with no arguments.
-    pub fn call(&'static self) -> CommandCall {
+    pub fn call(&self) -> CommandCall {
         self.call_with(())
     }
 
     /// Build a call to this command.
-    pub fn call_with(&'static self, args: impl Into<CommandArgs>) -> CommandCall {
+    pub fn call_with(&self, args: impl Into<CommandArgs>) -> CommandCall {
         CommandCall {
-            spec: self,
+            id: self.id,
             args: args.into(),
             target: None,
-        }
-    }
-}
-
-/// Builder for a command invocation.
-#[derive(Clone, Debug)]
-pub struct CommandCall {
-    /// Command spec for invocation.
-    spec: &'static CommandSpec,
-    /// Argument payload for invocation.
-    args: CommandArgs,
-    /// Optional explicit target policy.
-    target: Option<CommandTarget>,
-}
-
-impl CommandCall {
-    /// Bind this call to a target policy.
-    pub fn with_target(mut self, target: CommandTarget) -> Self {
-        self.target = Some(target);
-        self
-    }
-
-    /// Preserve both arguments and target when storing an action.
-    pub fn action(self) -> CommandAction {
-        CommandAction {
-            target: self.target,
-            invocation: self.invocation(),
-        }
-    }
-
-    /// Convert into an invocation.
-    pub fn invocation(self) -> CommandInvocation {
-        CommandInvocation {
-            id: self.spec.id,
-            args: self.args,
         }
     }
 }
@@ -1195,7 +1168,7 @@ pub enum CommandError {
         /// Required owner name.
         expected: String,
     },
-    /// Eligibility changed or the action was already disabled.
+    /// Eligibility changed or the command was already disabled.
     #[error("command {id} is disabled: {reason}")]
     Disabled {
         /// Requested command identifier.
@@ -1333,8 +1306,25 @@ impl CommandError {
     }
 }
 
-/// Trait for injectable parameters.
-pub trait Inject: Sized {
+/// Seals [`Inject`]: the command derive selects injected parameters by type
+/// name, so only Canopy's own implementations can take part.
+mod sealed {
+    use super::{Event, MouseEvent};
+
+    /// Marker implemented only for Canopy's injectable types.
+    pub trait Inject {}
+
+    impl Inject for Event {}
+    impl Inject for MouseEvent {}
+    impl<T: Inject> Inject for Option<T> {}
+}
+
+/// A command parameter that Canopy supplies from the current event instead
+/// of the caller.
+///
+/// The implementations are [`Event`], [`MouseEvent`], and an `Option` of
+/// either. The trait is sealed.
+pub trait Inject: sealed::Inject + Sized {
     /// Required event context, if this injection depends on one.
     fn requirement() -> Option<CommandRequirement> {
         None
@@ -1357,32 +1347,12 @@ where
     }
 }
 
-/// Context passed to list row injections.
-#[derive(Debug, Clone, PartialEq)]
-pub struct ListRowContext {
-    /// Owning list node id.
-    pub list: NodeId,
-    /// Row index.
-    pub index: usize,
-    /// Stable collection key for this row.
-    pub key: ArgValue,
-}
-
 impl Inject for MouseEvent {
     fn requirement() -> Option<CommandRequirement> {
         Some(CommandRequirement::Mouse)
     }
     fn inject(ctx: &dyn Context) -> Option<Self> {
         ctx.current_mouse_event()
-    }
-}
-
-impl Inject for ListRowContext {
-    fn requirement() -> Option<CommandRequirement> {
-        Some(CommandRequirement::ListRow)
-    }
-    fn inject(ctx: &dyn Context) -> Option<Self> {
-        ctx.current_list_row()
     }
 }
 
@@ -1393,17 +1363,6 @@ impl Inject for Event {
     fn inject(ctx: &dyn Context) -> Option<Self> {
         ctx.current_event().cloned()
     }
-}
-
-/// Command scope frame for injection.
-#[derive(Debug, Clone, Default)]
-pub struct CommandScopeFrame {
-    /// Event snapshot.
-    pub event: Option<Event>,
-    /// Mouse event snapshot.
-    pub mouse: Option<MouseEvent>,
-    /// List row context.
-    pub list_row: Option<ListRowContext>,
 }
 
 /// Normalize named argument keys for lookup.
@@ -1447,14 +1406,15 @@ pub fn normalize_named_args<'a>(
     Ok(normalized)
 }
 
-/// Resolve and invoke using one explicit target policy.
-pub(crate) fn dispatch_target(
+/// Resolve and invoke a call. A call without a target resolves from
+/// `origin`.
+pub(crate) fn dispatch(
     core: &mut Core,
-    target: CommandTarget,
-    inv: &CommandInvocation,
+    origin: NodeId,
+    call: &CommandCall,
 ) -> Result<ArgValue, CommandError> {
     let checkpoint = core.begin_dispatch();
-    let result = dispatch_target_inner(core, target, inv);
+    let result = dispatch_inner(core, call.target_or(origin), call);
     let completion = core.finish_dispatch(checkpoint, result.is_ok());
     match result {
         Ok(value) => {
@@ -1466,20 +1426,20 @@ pub(crate) fn dispatch_target(
 }
 
 /// Invoke one command inside an established completion boundary.
-fn dispatch_target_inner(
+fn dispatch_inner(
     core: &mut Core,
     target: CommandTarget,
-    inv: &CommandInvocation,
+    call: &CommandCall,
 ) -> Result<ArgValue, CommandError> {
     let spec = core
         .commands
-        .get(inv.id.0)
+        .get(call.id.0)
         .ok_or_else(|| CommandError::UnknownCommand {
-            id: inv.id.0.to_string(),
+            id: call.id.0.to_string(),
         })?;
-    validate_node_args(core, &inv.args)?;
+    validate_node_args(core, &call.args)?;
     let resolution = checked_resolution(&CommandResolver::for_target(core, target), spec)?;
-    dispatch_on_node(core, resolution.target(), spec, inv)
+    dispatch_on_node(core, resolution.target(), spec, &call.args)
 }
 
 /// Reject stale and wrong exact owners before invocation or inspection.
@@ -1503,20 +1463,22 @@ fn checked_resolution(
     })
 }
 
-/// Report unavailable action targets as disabled without hiding hook failures.
+/// Report an unavailable call target as disabled without hiding hook
+/// failures. A call without a target resolves from `origin`.
 pub(crate) fn command_status(
     core: &Core,
-    target: CommandTarget,
-    inv: &CommandInvocation,
+    origin: NodeId,
+    call: &CommandCall,
 ) -> CoreResult<CommandStatus> {
-    let Some(spec) = core.commands.get(inv.id.0) else {
+    let Some(spec) = core.commands.get(call.id.0) else {
         return Ok(CommandStatus::Disabled(
             CommandError::UnknownCommand {
-                id: inv.id.0.to_string(),
+                id: call.id.0.to_string(),
             }
             .to_string(),
         ));
     };
+    let target = call.target_or(origin);
     let resolution = match checked_resolution(&CommandResolver::for_target(core, target), spec) {
         Ok(resolution) => resolution,
         Err(error) => return Ok(CommandStatus::Disabled(error.to_string())),
@@ -1541,9 +1503,9 @@ fn status_at(
     )?
 }
 
-/// Find required injections absent in the current invocation scope.
+/// Find required injections absent from the current event.
 fn missing_requirements(core: &Core, spec: &CommandSpec) -> Vec<CommandRequirement> {
-    let scope = core.current_command_scope();
+    let event = core.current_event();
     let mut missing = Vec::new();
     for requirement in spec
         .params
@@ -1551,11 +1513,10 @@ fn missing_requirements(core: &Core, spec: &CommandSpec) -> Vec<CommandRequireme
         .filter(|p| !p.optional)
         .filter_map(|p| p.requirement.and_then(|f| f()))
     {
-        let present = scope.is_some_and(|scope| match requirement {
-            CommandRequirement::Event => scope.event.is_some(),
-            CommandRequirement::Mouse => scope.mouse.is_some(),
-            CommandRequirement::ListRow => scope.list_row.is_some(),
-        });
+        let present = match requirement {
+            CommandRequirement::Event => event.is_some(),
+            CommandRequirement::Mouse => matches!(event, Some(Event::Mouse(_))),
+        };
         if !present && !missing.contains(&requirement) {
             missing.push(requirement);
         }
@@ -1568,7 +1529,7 @@ fn dispatch_on_node(
     core: &mut Core,
     node_id: NodeId,
     spec: &CommandSpec,
-    inv: &CommandInvocation,
+    args: &CommandArgs,
 ) -> Result<ArgValue, CommandError> {
     core.with_widget_ctx(node_id, |widget, ctx| {
         if let Some(status) = spec.status
@@ -1580,13 +1541,12 @@ fn dispatch_on_node(
                 reason,
             });
         }
-        (spec.invoke)(widget as &mut dyn Any, ctx, inv)
+        (spec.invoke)(widget as &mut dyn Any, ctx, args)
     })
     .map_err(CommandError::execution)?
 }
 
-/// Validate every node handle carried by an invocation before command code sees
-/// it.
+/// Validate every node handle carried by a call before command code sees it.
 fn validate_node_args(core: &Core, args: &CommandArgs) -> Result<(), CommandError> {
     match args {
         CommandArgs::Positional(values) => {
@@ -1666,28 +1626,26 @@ mod tests {
         let owner = core.create_detached(StatusOwner)?;
         let missing = core.create_detached(StatusOwner)?;
         core.remove_subtree(missing)?;
-        let invocation = CommandInvocation {
-            id: FAILING_STATUS.id,
-            args: CommandArgs::default(),
-        };
+        let call = FAILING_STATUS.call();
         let context = CoreViewContext::new(&core, core.root);
         assert!(matches!(
-            context.command_status(CommandTarget::Exact(missing), &invocation)?,
+            context.command_status(&call.clone().with_target(CommandTarget::Exact(missing)))?,
             CommandStatus::Disabled(_)
         ));
         assert!(matches!(
-            context.command_status(CommandTarget::Exact(core.root), &invocation)?,
+            context.command_status(&call.clone().with_target(CommandTarget::Exact(core.root)))?,
             CommandStatus::Disabled(_)
         ));
         assert!(
-            matches!(context.command_status(CommandTarget::Exact(owner), &invocation), Err(Error::Invalid(message)) if message == "eligibility hook failed")
+            matches!(context.command_status(&call.with_target(CommandTarget::Exact(owner))), Err(Error::Invalid(message)) if message == "eligibility hook failed")
         );
-        let unknown = CommandInvocation {
+        let unknown = CommandCall {
             id: CommandId("unknown.action"),
             args: CommandArgs::default(),
+            target: Some(CommandTarget::Exact(owner)),
         };
         assert!(matches!(
-            context.command_status(CommandTarget::Exact(owner), &unknown)?,
+            context.command_status(&unknown)?,
             CommandStatus::Disabled(_)
         ));
         Ok(())
@@ -1696,7 +1654,7 @@ mod tests {
     fn registry_invoke(
         _target: &mut dyn Any,
         _ctx: &mut dyn Context,
-        _invocation: &CommandInvocation,
+        _args: &CommandArgs,
     ) -> Result<ArgValue, CommandError> {
         Ok(ArgValue::Null)
     }

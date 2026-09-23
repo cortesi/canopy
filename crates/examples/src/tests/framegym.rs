@@ -104,7 +104,7 @@ fn framegym_scroll_commands_update_horizontal_scroll() -> Result<()> {
     harness.render()?;
 
     let initial_scroll = pattern_scroll(&mut harness)?.x;
-    harness.script(r#"test_pattern.scroll("Right")"#)?;
+    harness.script(r#"test_pattern.scroll("right")"#)?;
     let updated_scroll = pattern_scroll(&mut harness)?.x;
     assert!(updated_scroll > initial_scroll);
 

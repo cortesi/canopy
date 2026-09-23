@@ -1,18 +1,7 @@
 use super::*;
-use crate::{event::Event, widget::EventOutcome};
+use crate::widget::EventOutcome;
 
 impl Core {
-    /// Build a command-scope frame for a specific event.
-    pub(crate) fn command_scope_for_event(&self, event: &Event) -> CommandScopeFrame {
-        let mut frame = self.current_command_scope().cloned().unwrap_or_default();
-        frame.event = Some(event.clone());
-        frame.mouse = match event {
-            Event::Mouse(mouse) => Some(*mouse),
-            _ => None,
-        };
-        frame
-    }
-
     /// Dispatch an event along the input route from `start` until a widget
     /// handles it.
     ///
@@ -23,9 +12,9 @@ impl Core {
         event: &Event,
     ) -> Result<EventOutcome> {
         let start = start.into();
-        let depth = self.push_command_scope(self.command_scope_for_event(event));
+        let depth = self.push_event_scope(event);
         let outcome = self.dispatch_event_inner(start, event);
-        self.pop_command_scope(depth);
+        self.pop_event_scope(depth);
         outcome
     }
 
@@ -52,9 +41,9 @@ impl Core {
         event: &Event,
     ) -> Result<EventOutcome> {
         let node_id = node_id.into();
-        let depth = self.push_command_scope(self.command_scope_for_event(event));
+        let depth = self.push_event_scope(event);
         let outcome = self.with_widget_ctx(node_id, |w, ctx| w.on_event(event, ctx));
-        self.pop_command_scope(depth);
+        self.pop_event_scope(depth);
         let outcome = outcome??;
         Ok(outcome)
     }

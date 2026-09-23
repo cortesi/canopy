@@ -50,7 +50,7 @@ mod tests {
     impl Trigger {
         #[command]
         fn press(&self, ctx: &mut dyn Context) -> Result<()> {
-            ctx.dispatch_exact(self.dialog, &Dialog::call_close().invocation())?;
+            ctx.dispatch_exact(self.dialog, &Dialog::call_close())?;
             assert!(ctx.type_id_of(self.dialog).is_some());
             self.log.borrow_mut().push("press returned");
             if self.fail {
@@ -94,7 +94,7 @@ mod tests {
                     canopy.eval_script("trigger.press()").map(|_| ())
                 } else {
                     canopy.with_root_context(|ctx| {
-                        ctx.dispatch_exact(trigger.into(), &Trigger::call_press().invocation())?;
+                        ctx.dispatch_exact(trigger.into(), &Trigger::call_press())?;
                         Ok(())
                     })
                 };

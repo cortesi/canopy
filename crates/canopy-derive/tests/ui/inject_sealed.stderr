@@ -1,0 +1,31 @@
+error[E0277]: the trait bound `Row: commands::sealed::Inject` is not satisfied
+ --> tests/ui/inject_sealed.rs:5:17
+  |
+5 | impl Inject for Row {
+  |                 ^^^ unsatisfied trait bound
+  |
+help: the trait `commands::sealed::Inject` is not implemented for `Row`
+ --> tests/ui/inject_sealed.rs:3:1
+  |
+3 | struct Row;
+  | ^^^^^^^^^^
+  = note: `Row` implements similarly named trait `Inject`, but not `commands::sealed::Inject`
+help: the following other types implement trait `commands::sealed::Inject`
+ --> $WORKSPACE/crates/canopy/src/core/commands.rs
+  |
+  |     impl Inject for Event {}
+  |     ^^^^^^^^^^^^^^^^^^^^^ `canopy::event::Event`
+  |     impl Inject for MouseEvent {}
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^ `MouseEvent`
+  |     impl<T: Inject> Inject for Option<T> {}
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Option<T>`
+note: required by a bound in `Inject`
+ --> $WORKSPACE/crates/canopy/src/core/commands.rs
+  |
+  | pub trait Inject: sealed::Inject + Sized {
+  |                   ^^^^^^^^^^^^^^ required by this bound in `Inject`
+  = note: `Inject` is a "sealed trait", because to implement it you also need to implement `canopy::commands::sealed::Inject`, which is not accessible; this is usually done to force you to use one of the provided types that already implement it
+  = help: the following types implement the trait:
+            canopy::event::Event
+            canopy::event::mouse::MouseEvent
+            std::option::Option<T>

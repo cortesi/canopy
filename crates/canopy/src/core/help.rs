@@ -1,7 +1,7 @@
 //! Contextual binding discovery.
 
 use crate::{
-    commands::{CommandAction, CommandAvailability, CommandResolver, CommandTarget},
+    commands::{CommandAvailability, CommandCall, CommandResolver},
     core::{
         Core, NodeId,
         context::CoreViewContext,
@@ -116,8 +116,8 @@ pub struct AvailableBinding<I> {
 /// Owned command details captured with an effective key binding.
 #[derive(Clone, Debug)]
 pub struct BindingCommand {
-    /// Stored invocation, arguments, and target policy.
-    pub action: CommandAction,
+    /// Stored command call, with its arguments and target policy.
+    pub call: CommandCall,
     /// Availability at capture time, absent when the command is not
     /// registered.
     pub availability: Option<CommandAvailability>,
@@ -201,20 +201,17 @@ impl Core {
             .expect("resolved binding record must remain registered");
         let command = match &record.target {
             BindingTarget::Script(_) | BindingTarget::WidgetAction(_) => None,
-            BindingTarget::Command(action) => {
+            BindingTarget::Command(call) => {
                 let availability = self
                     .commands
-                    .get(action.invocation.id.0)
+                    .get(call.id.0)
                     .map(|spec| {
-                        CommandResolver::for_target(
-                            self,
-                            action.target.unwrap_or(CommandTarget::From(node)),
-                        )
-                        .availability_for(spec)
+                        CommandResolver::for_target(self, call.target_or(node))
+                            .availability_for(spec)
                     })
                     .transpose()?;
                 Some(BindingCommand {
-                    action: action.clone(),
+                    call: call.clone(),
                     availability,
                 })
             }
@@ -262,8 +259,8 @@ mod tests {
     use crate::{
         ViewContext,
         commands::{
-            CommandAction, CommandArgs, CommandId, CommandInvocation, CommandNode,
-            CommandResolution, CommandStatus,
+            CommandArgs, CommandCall, CommandId, CommandNode, CommandResolution, CommandStatus,
+            CommandTarget,
         },
         core::inputmap::{BindingOptions, BindingTarget, InputSpec},
         error::Error,
@@ -492,11 +489,9 @@ mod tests {
                 source: None,
                 phase: Some(BindingPhase::AfterWidget),
             },
-            CommandAction {
-                invocation: CommandInvocation {
-                    id: CommandId("binding_list::scroll_down"),
-                    args: CommandArgs::default(),
-                },
+            CommandCall {
+                id: CommandId("binding_list::scroll_down"),
+                args: CommandArgs::default(),
                 target: None,
             },
         )?;
@@ -518,9 +513,7 @@ mod tests {
         })?;
         core.attach(core.root, leaf)?;
         core.commands.add(EligibleLeaf::commands())?;
-        let action = EligibleLeaf::call_update(7)
-            .with_target(CommandTarget::Exact(leaf))
-            .action();
+        let call = EligibleLeaf::call_update(7).with_target(CommandTarget::Exact(leaf));
         core.input_map.replace_application_binding(
             InputSpec::Mouse(Mouse::parse_spec("LeftDown")?),
             BindingOptions {
@@ -530,7 +523,7 @@ mod tests {
                 source: None,
                 phase: Some(BindingPhase::AfterWidget),
             },
-            BindingTarget::Command(action),
+            BindingTarget::Command(call),
         )?;
         let status = |core: &Core| {
             core.available_bindings(Some(leaf))
@@ -641,9 +634,7 @@ mod tests {
         })?;
         core.attach(core.root, leaf)?;
         core.commands.add(EligibleLeaf::commands())?;
-        let action = EligibleLeaf::call_update(7)
-            .with_target(CommandTarget::Exact(leaf))
-            .action();
+        let call = EligibleLeaf::call_update(7).with_target(CommandTarget::Exact(leaf));
         core.input_map.replace_application_binding(
             InputSpec::Key('u'.into()),
             BindingOptions {
@@ -653,14 +644,14 @@ mod tests {
                 source: None,
                 phase: Some(BindingPhase::AfterWidget),
             },
-            BindingTarget::Command(action.clone()),
+            BindingTarget::Command(call.clone()),
         )?;
         let snapshot = core.available_bindings(Some(leaf))?;
         assert!(snapshot.bindings.is_empty());
         let binding = &snapshot.provisional_bindings[0];
         assert_eq!(binding.phase, Some(BindingPhase::AfterWidget));
         let command = binding.command.as_ref().expect("command details");
-        assert_eq!(command.action, action);
+        assert_eq!(command.call, call);
         let availability = command.availability.as_ref().expect("registered command");
         assert_eq!(
             availability.resolution,
@@ -964,11 +955,9 @@ mod tests {
                 source: None,
                 phase: Some(BindingPhase::AfterWidget),
             },
-            CommandAction {
-                invocation: CommandInvocation {
-                    id: CommandId("binding_list::scroll_down"),
-                    args: CommandArgs::default(),
-                },
+            CommandCall {
+                id: CommandId("binding_list::scroll_down"),
+                args: CommandArgs::default(),
                 target: None,
             },
         )?;

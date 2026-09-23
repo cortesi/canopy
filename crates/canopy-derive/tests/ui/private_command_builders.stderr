@@ -1,0 +1,17 @@
+error[E0624]: associated function `call_secret` is private
+  --> tests/ui/private_command_builders.rs:14:23
+   |
+ 6 |     #[derive_commands]
+   |     ------------------ private associated function defined here
+...
+14 |     let _ = app::App::call_secret();
+   |                       ^^^^^^^^^^^ private associated function
+
+error[E0624]: associated function `spec_secret` is private
+  --> tests/ui/private_command_builders.rs:15:23
+   |
+ 6 |     #[derive_commands]
+   |     ------------------ private associated function defined here
+...
+15 |     let _ = app::App::spec_secret();
+   |                       ^^^^^^^^^^^ private associated function

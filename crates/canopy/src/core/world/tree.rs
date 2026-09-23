@@ -747,9 +747,7 @@ impl Core {
             return Err(Error::NodeNotFound(child));
         }
         if child == self.root {
-            return Err(Error::InvalidOperation(
-                "cannot attach root as a child".into(),
-            ));
+            return Err(Error::Invalid("cannot attach root as a child".into()));
         }
         if self.is_ancestor_or_self(child, parent) {
             return Err(Error::WouldCreateCycle { parent, child });
@@ -845,7 +843,7 @@ impl Core {
             .iter()
             .find(|child| !seen.contains(*child))
         {
-            return Err(Error::InvalidOperation(format!(
+            return Err(Error::Invalid(format!(
                 "set children omits child {omitted:?} of {parent:?}; detach or remove it first"
             )));
         }
@@ -891,7 +889,7 @@ impl Core {
     /// Remove a subtree inside an active tree edit.
     fn remove_subtree_inner(&mut self, root_id: NodeId) -> Result<()> {
         if root_id == self.root {
-            return Err(Error::InvalidOperation("cannot remove root".into()));
+            return Err(Error::Invalid("cannot remove root".into()));
         }
         if !self.nodes.contains_key(root_id) {
             return Err(Error::NodeNotFound(root_id));
@@ -1002,7 +1000,7 @@ impl Core {
             .iter()
             .eq(plan.pre_order.iter().map(|entry| &entry.node_id))
         {
-            return Err(Error::InvalidOperation(
+            return Err(Error::Invalid(
                 "removal target changed during lifecycle hooks".into(),
             ));
         }
@@ -1012,7 +1010,7 @@ impl Core {
                 .get(entry.node_id)
                 .ok_or(Error::NodeNotFound(entry.node_id))?;
             if !Rc::ptr_eq(&node.widget, &entry.widget) {
-                return Err(Error::InvalidOperation(
+                return Err(Error::Invalid(
                     "removal widget changed during lifecycle hooks".into(),
                 ));
             }
@@ -1129,7 +1127,7 @@ impl Core {
 
 /// Build an invariant violation error.
 fn invariant_violation(message: impl Into<String>) -> Error {
-    Error::Invariant(message.into())
+    Error::Internal(message.into())
 }
 
 /// Return true when a view contains computed cache data.

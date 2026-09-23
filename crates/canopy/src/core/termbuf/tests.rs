@@ -173,13 +173,13 @@ fn rendering_rejects_noncanonical_buffers() -> Result<()> {
     let mut buf = TermBuf::new(Size::new(1, 1), '\0', def_style())?;
     buf.cells[0] = Cell::continuation(def_style());
     let mut backend = RecBackend::new();
-    assert!(matches!(buf.render(&mut backend), Err(Error::Invariant(_))));
+    assert!(matches!(buf.render(&mut backend), Err(Error::Internal(_))));
 
     let mut ragged = TermBuf::new(Size::new(2, 1), '\0', def_style())?;
     ragged.cells.pop();
     assert!(matches!(
         ragged.render(&mut backend),
-        Err(Error::Invariant(_))
+        Err(Error::Internal(_))
     ));
     Ok(())
 }

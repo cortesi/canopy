@@ -369,7 +369,7 @@ fn register_command_info(builder: &mut module::Builder) {
                 .doc("Whether the parameter is injected or user-supplied."),
             declaration::Field::new(
                 "requirement",
-                declaration::Type::literals(["event", "mouse", "list_row"]).optional(),
+                declaration::Type::literals(["event", "mouse"]).optional(),
             )
             .doc("Injected context kind. Optional parameters do not require its presence."),
             declaration::Field::new("rust_type", declaration::Type::String)
@@ -808,7 +808,7 @@ fn command_availability_fields() -> Vec<declaration::Field> {
         declaration::Field::new("disabled_reason", declaration::Type::String.optional()),
         declaration::Field::new(
             "missing_requirements",
-            declaration::Type::literals(["event", "mouse", "list_row"]).array(),
+            declaration::Type::literals(["event", "mouse"]).array(),
         ),
     ]
 }

@@ -21,17 +21,17 @@ impl WidgetActionName {
     pub fn new(name: impl Into<String>) -> Result<Self> {
         let name = name.into();
         if name.is_empty() {
-            return Err(Error::InvalidOperation(
+            return Err(Error::Invalid(
                 "widget action name cannot be empty".to_string(),
             ));
         }
         if name.split('.').any(str::is_empty) {
-            return Err(Error::InvalidOperation(format!(
+            return Err(Error::Invalid(format!(
                 "widget action name {name:?} must be dotted with nonempty segments"
             )));
         }
         if !name.contains('.') {
-            return Err(Error::InvalidOperation(format!(
+            return Err(Error::Invalid(format!(
                 "widget action name {name:?} must be dotted, such as canopy.text.clear"
             )));
         }
@@ -39,7 +39,7 @@ impl WidgetActionName {
             .chars()
             .any(|character| character.is_whitespace() || character.is_control())
         {
-            return Err(Error::InvalidOperation(format!(
+            return Err(Error::Invalid(format!(
                 "widget action name {name:?} cannot contain whitespace or control characters"
             )));
         }
@@ -73,7 +73,7 @@ impl WidgetActionSpec {
     pub fn new(name: impl Into<String>, description: impl Into<String>) -> Result<Self> {
         let description = description.into();
         if description.trim().is_empty() {
-            return Err(Error::InvalidOperation(
+            return Err(Error::Invalid(
                 "widget action description cannot be empty".to_string(),
             ));
         }
@@ -100,13 +100,13 @@ impl WidgetActionCatalog {
     /// Register one action. An identical spec is idempotent.
     pub(crate) fn register(&mut self, spec: WidgetActionSpec) -> Result<()> {
         if self.frozen {
-            return Err(Error::InvalidOperation(
+            return Err(Error::Invalid(
                 "widget action registration is sealed after finalize_api()".to_string(),
             ));
         }
         match self.actions.get(&spec.name) {
             Some(existing) if *existing == spec.description => Ok(()),
-            Some(_) => Err(Error::InvalidOperation(format!(
+            Some(_) => Err(Error::Invalid(format!(
                 "conflicting widget action already registered for {}",
                 spec.name
             ))),

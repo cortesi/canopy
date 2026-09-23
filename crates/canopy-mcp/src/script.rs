@@ -1228,7 +1228,7 @@ mod tests {
             .split_once(marker)
             .expect("script API should contain the generated owner module");
         let actual = format!("{marker}{tail}");
-        let expected = r#"export type FocusDirection = "Next" | "Prev" | "Up" | "Down" | "Left" | "Right"
+        let expected = r#"export type FocusDirection = "next" | "prev" | "up" | "down" | "left" | "right"
 
 declare script_target: {
     choose: (direction: FocusDirection, count: number?) -> number,
@@ -1294,7 +1294,7 @@ declare command: {
             ..ScriptEvalRequest::new(
                 r#"
                 canopy.assert(script_target.get() == 31, "fixture should run before eval")
-                return canopy.cmd("script_target::choose", { direction = "Right" })
+                return canopy.cmd("script_target::choose", { direction = "right" })
             "#
                 .to_string(),
             )

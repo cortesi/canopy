@@ -431,12 +431,12 @@ impl TermBuf {
     /// Validate the canonical base-plus-continuation cell representation.
     fn validate_canonical(&self) -> Result<()> {
         let width = usize::try_from(self.size.w)
-            .map_err(|_| Error::Invariant("terminal buffer width does not fit usize".into()))?;
+            .map_err(|_| Error::Internal("terminal buffer width does not fit usize".into()))?;
         if width == 0 {
             return if self.cells.is_empty() {
                 Ok(())
             } else {
-                Err(Error::Invariant(
+                Err(Error::Internal(
                     "zero-width terminal buffer contains cells".into(),
                 ))
             };
@@ -454,7 +454,7 @@ impl TermBuf {
                                     && base.style == cell.style
                             });
                     if !valid_base {
-                        return Err(Error::Invariant(format!(
+                        return Err(Error::Internal(format!(
                             "orphan terminal continuation at ({x}, {row_index})"
                         )));
                     }
@@ -462,19 +462,19 @@ impl TermBuf {
                 }
                 let rendered_width = cell.rendered_width();
                 if rendered_width == 0 {
-                    return Err(Error::Invariant(format!(
+                    return Err(Error::Internal(format!(
                         "zero-width terminal base at ({x}, {row_index})"
                     )));
                 }
                 if rendered_width == 2 && !row.get(x + 1).is_some_and(|next| next.continuation) {
-                    return Err(Error::Invariant(format!(
+                    return Err(Error::Internal(format!(
                         "wide terminal base lacks continuation at ({x}, {row_index})"
                     )));
                 }
             }
         }
         if !rows.remainder().is_empty() {
-            return Err(Error::Invariant(
+            return Err(Error::Internal(
                 "terminal buffer cell count is not divisible by its width".into(),
             ));
         }

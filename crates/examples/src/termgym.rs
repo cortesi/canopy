@@ -393,7 +393,7 @@ impl Widget for TermGym {
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         let list_id = c.create_detached(
-            List::<TermEntry>::new().with_on_activate(Self::cmd_activate_terminal().call()),
+            List::<TermEntry>::new().with_on_activate(Self::spec_activate_terminal().call()),
         )?;
         let button_id = c.create_detached(
             Button::new("+ New terminal").with_command(Self::call_new_terminal()),

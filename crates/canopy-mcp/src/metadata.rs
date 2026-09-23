@@ -126,7 +126,7 @@ impl AppFactory {
     pub fn build(&self) -> crate::Result<Canopy> {
         let canopy = (self.factory)()?;
         if !canopy.is_api_finalized() {
-            return Err(Error::InvalidOperation(
+            return Err(Error::Invalid(
                 "AppFactory must return an application built by CanopyBuilder".into(),
             )
             .into());

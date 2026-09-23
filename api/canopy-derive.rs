@@ -13,8 +13,9 @@ pub mod canopy_derive {
     /// Derive command conversions for a fieldless enum.
     ///
     /// This emits `CommandType`, `ToArgValue`, and `FromArgValue`
-    /// implementations. Variant names are matched case-insensitively and exposed
-    /// as string literals in the generated Luau type.
+    /// implementations. Each variant crosses the command boundary as its
+    /// snake_case name, which is also a string literal in the generated Luau
+    /// type. Parsing accepts that name in any ASCII case.
     #[proc_macro_derive(CommandEnum)]
     pub fn CommandEnum(input: proc_macro::TokenStream) -> proc_macro::TokenStream {}
     /// Mark a method as a command inside an impl using `#[derive_commands]`.
@@ -30,8 +31,9 @@ pub mod canopy_derive {
     /// Generate command metadata and wrappers for `#[command]` methods in an impl
     /// block.
     ///
-    /// Each command gets a `cmd_*` metadata accessor and a `call_*` builder with
-    /// typed user parameters. Builders omit context and injected parameters.
+    /// Each command gets a `spec_*` accessor for its `CommandSpec` and a `call_*`
+    /// builder with typed user parameters. Both have the method's visibility.
+    /// Builders omit context and injected parameters.
     /// `#[command(enabled = "method")]` adds a read-only eligibility hook. The
     /// method takes `&self` and `&dyn canopy::ViewContext` and returns
     /// `canopy::error::Result<canopy::commands::CommandStatus>`.

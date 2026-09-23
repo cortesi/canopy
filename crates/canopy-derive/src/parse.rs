@@ -130,7 +130,7 @@ pub fn is_context_ref(ty: &Type, trait_name: &str) -> Option<bool> {
     None
 }
 
-/// True when a type is a builtin injected parameter.
+/// True when a type names one of Canopy's injected parameter types.
 fn is_builtin_injected(ty: &Type) -> bool {
     let Type::Path(path) = ty else {
         return false;
@@ -138,10 +138,7 @@ fn is_builtin_injected(ty: &Type) -> bool {
     let Some(segment) = path.path.segments.last() else {
         return false;
     };
-    matches!(
-        segment.ident.to_string().as_str(),
-        "Event" | "MouseEvent" | "ListRowContext"
-    )
+    matches!(segment.ident.to_string().as_str(), "Event" | "MouseEvent")
 }
 
 /// Parse command return metadata from a signature.
@@ -333,6 +330,7 @@ pub fn parse_command_method(owner: &str, method: &ImplItemFn) -> Result<Option<C
     Ok(Some(CommandMeta {
         cfg_attrs: cfg_attributes(&method.attrs)?,
         name: method.sig.ident.to_string(),
+        vis: method.vis.clone(),
         owner: owner.to_string(),
         params,
         ignore_result: macro_args.ignore_result,

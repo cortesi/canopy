@@ -694,9 +694,10 @@ impl Canopy {
 
     /// Return the rendered Luau definition file for a ready app.
     pub fn script_api(&self) -> Result<&str> {
-        self.script.api_text.as_deref().ok_or_else(|| {
-            error::Error::InvalidOperation("script API is not finalized".to_string())
-        })
+        self.script
+            .api_text
+            .as_deref()
+            .ok_or_else(|| error::Error::Invalid("script API is not finalized".to_string()))
     }
 
     /// Prepare a registered default binding script for a nested scoped run.
@@ -749,7 +750,7 @@ impl Canopy {
     /// Ensure the script surface can still be extended.
     pub(super) fn ensure_api_unfinalized(&self, subject: &str) -> Result<()> {
         if self.script.host.is_finalized() {
-            return Err(error::Error::InvalidOperation(format!(
+            return Err(error::Error::Invalid(format!(
                 "{subject} is sealed after finalize_api()"
             )));
         }

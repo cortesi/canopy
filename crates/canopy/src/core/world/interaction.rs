@@ -247,7 +247,7 @@ impl Core {
             NEXT.try_update(Ordering::Relaxed, Ordering::Relaxed, |next| {
                 next.checked_add(1)
             })
-            .map_err(|_| Error::InvalidOperation("interaction token space exhausted".into()))?,
+            .map_err(|_| Error::Invalid("interaction token space exhausted".into()))?,
         );
         let hidden = self.nodes[options.modal].hidden;
         let focus = self.focus;

@@ -141,15 +141,15 @@ pub(super) fn node_handle_type() -> HostType {
         .build()
 }
 
-/// Script-held command value: a command with checked arguments that a binding
-/// runs later.
+/// Script-held command value: a command call with checked arguments that a
+/// binding runs later.
 #[derive(Clone, Debug, PartialEq)]
-pub(super) struct ScriptCommandCall(pub(super) commands::CommandAction);
+pub(super) struct ScriptCommandCall(pub(super) commands::CommandCall);
 
 impl fmt::Display for ScriptCommandCall {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{}(", self.0.invocation.id.0)?;
-        match &self.0.invocation.args {
+        write!(formatter, "{}(", self.0.id.0)?;
+        match &self.0.args {
             commands::CommandArgs::Positional(values) => {
                 for (index, value) in values.iter().enumerate() {
                     if index > 0 {

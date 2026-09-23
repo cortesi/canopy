@@ -203,7 +203,7 @@ impl WakeRegistry {
 
 /// Preserve a synchronization failure as a runtime error.
 fn poisoned_registry() -> Error {
-    Error::RunLoop("node wake registry lock poisoned".to_string())
+    Error::Driver("node wake registry lock poisoned".to_string())
 }
 
 #[cfg(test)]

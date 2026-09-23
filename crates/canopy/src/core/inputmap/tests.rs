@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    commands::{CommandArgs, CommandId, CommandInvocation, CommandTarget},
+    commands::{CommandArgs, CommandCall, CommandId, CommandTarget},
     core::id::testing_node_id,
     error::Result,
     event::{key, mouse::Mouse},
@@ -13,10 +13,11 @@ fn script(id: u64) -> LuauFunctionId {
     LuauFunctionId::for_test(id)
 }
 
-fn command(id: &'static str) -> CommandInvocation {
-    CommandInvocation {
+fn command(id: &'static str) -> CommandCall {
+    CommandCall {
         id: CommandId(id),
         args: CommandArgs::default(),
+        target: None,
     }
 }
 
@@ -26,7 +27,7 @@ fn bind_framework(
     input: impl Into<InputSpec>,
     path: &str,
     description: &str,
-    command: CommandInvocation,
+    command: CommandCall,
 ) -> Result<BindingId> {
     map.bind_framework(
         group,
@@ -38,10 +39,7 @@ fn bind_framework(
             source: None,
             phase: Some(BindingPhase::AfterWidget),
         },
-        CommandAction {
-            invocation: command,
-            target: None,
-        },
+        command,
     )
 }
 
@@ -236,10 +234,7 @@ fn modal_bindings_block_all_application_tiers() -> Result<()> {
     map.set_modal_bindings(Some(ModalBindings::Framework(HELP)));
     assert_eq!(
         target(&map, "/root/help/binding_list", 'j'),
-        Some(BindingTarget::Command(CommandAction {
-            invocation: command("binding_list::scroll_down"),
-            target: None
-        }))
+        Some(BindingTarget::Command(command("binding_list::scroll_down")))
     );
     assert_eq!(target(&map, "/root/help/binding_list", 'x'), None);
     map.set_modal_bindings(Some(ModalBindings::Framework(OTHER)));
@@ -584,10 +579,7 @@ fn a_mouse_binding_takes_either_phase() -> Result<()> {
         HELP,
         Mouse::parse_spec("LeftDown").unwrap(),
         options,
-        CommandAction {
-            invocation: command("button::press"),
-            target: None,
-        },
+        command("button::press"),
     )?;
     assert_eq!(
         map.binding(id).unwrap().phase,
@@ -601,10 +593,7 @@ fn a_mouse_binding_takes_either_phase() -> Result<()> {
 fn application_command_targets_replace_and_remove_like_callbacks() -> Result<()> {
     let mut map = InputMap::new();
     let script_id = bind(&mut map, BindingScope::Default, 'x', "", "Script", 1)?;
-    let action = BindingTarget::Command(CommandAction {
-        invocation: command("editor::undo"),
-        target: Some(CommandTarget::Focus),
-    });
+    let action = BindingTarget::Command(command("editor::undo").with_target(CommandTarget::Focus));
     let (command_id, removed) = map.replace_application_binding(
         InputSpec::Key('x'.into()),
         options("", BindingPhase::AfterWidget),
@@ -632,10 +621,9 @@ fn application_command_targets_replace_and_remove_like_callbacks() -> Result<()>
 #[test]
 fn application_snapshot_and_clear_include_commands() -> Result<()> {
     let mut map = InputMap::new();
-    let action = BindingTarget::Command(CommandAction {
-        invocation: command("editor::undo"),
-        target: Some(CommandTarget::Exact(testing_node_id())),
-    });
+    let action = BindingTarget::Command(
+        command("editor::undo").with_target(CommandTarget::Exact(testing_node_id())),
+    );
     let (command_id, _) = map.replace_application_binding(
         InputSpec::Key('x'.into()),
         options("", BindingPhase::BeforeWidget),
@@ -669,10 +657,7 @@ fn framework_binding_options_preserve_explicit_phase() -> Result<()> {
     let mut options = options("/root/help/**/", BindingPhase::AfterWidget);
     options.scope = BindingScope::Exclusive(HELP);
     let input = InputSpec::Key('j'.into());
-    let action = CommandAction {
-        invocation: command("binding_list::scroll_down"),
-        target: Some(CommandTarget::Focus),
-    };
+    let action = command("binding_list::scroll_down").with_target(CommandTarget::Focus);
     let id = map.bind_framework(HELP, input, options.clone(), action.clone())?;
     assert_eq!(
         map.bind_framework(HELP, input, options.clone(), action.clone())?,

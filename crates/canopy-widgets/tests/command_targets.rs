@@ -6,7 +6,7 @@ mod tests {
 
     use canopy::{
         Canopy, ContextExt, Loader, NodeId, NodeName, TypedId, ViewContext, ViewContextExt, Widget,
-        commands::{CommandStatus, CommandTarget, ListRowContext},
+        commands::{CommandStatus, CommandTarget},
         derive_commands,
         error::Result,
         event::{key, mouse},
@@ -27,7 +27,7 @@ mod tests {
     #[derive(Default)]
     struct Counter {
         presses: usize,
-        rows: Vec<(NodeId, usize)>,
+        rows: Vec<usize>,
     }
 
     #[derive_commands]
@@ -42,13 +42,8 @@ mod tests {
         }
 
         #[command]
-        #[expect(
-            clippy::needless_pass_by_value,
-            reason = "commands receive owned injected row context"
-        )]
-        fn activate(&mut self, index: usize, row: ListRowContext) {
-            assert_eq!(index, row.index);
-            self.rows.push((row.list, index));
+        fn activate(&mut self, index: usize) {
+            self.rows.push(index);
         }
     }
 
@@ -116,17 +111,17 @@ mod tests {
             ))
         })?;
         canopy.with_root_context(|ctx| {
-            ctx.dispatch_exact(button.into(), &Button::call_press().invocation())?;
+            ctx.dispatch_exact(button.into(), &Button::call_press())?;
             Ok(())
         })?;
         let extra = insert_owner(&mut canopy, app, first, second)?;
         canopy.with_root_context(|ctx| {
-            ctx.dispatch_exact(button.into(), &Button::call_press().invocation())?;
+            ctx.dispatch_exact(button.into(), &Button::call_press())?;
             ctx.detach(button.into())?;
             ctx.attach(second.into(), button.into())?;
             // The button is active while its containing owner checks
             // eligibility.
-            ctx.dispatch_exact(button.into(), &Button::call_press().invocation())?;
+            ctx.dispatch_exact(button.into(), &Button::call_press())?;
             Ok(())
         })?;
         canopy.with_root_view(|ctx| {
@@ -144,17 +139,17 @@ mod tests {
     }
 
     #[test]
-    fn list_retains_exact_target_and_injected_row_after_owner_insertion() -> Result<()> {
+    fn list_retains_exact_target_and_row_index_after_owner_insertion() -> Result<()> {
         let Setup {
             mut canopy,
             app,
             first,
             second,
         } = setup()?;
-        let (list, row) = canopy.with_context(first, |ctx| {
+        let row = canopy.with_context(first, |ctx| {
             let list = ctx.add_child(
                 List::<Text>::new().with_on_activate(
-                    Counter::cmd_activate()
+                    Counter::spec_activate()
                         .call()
                         .with_target(CommandTarget::Exact(second.into())),
                 ),
@@ -162,7 +157,7 @@ mod tests {
             let row = ctx.with_widget_mut(list, |list: &mut List<Text>, ctx| {
                 list.append(ctx, Text::new("Activate"))
             })?;
-            Ok((list, row))
+            Ok(row)
         })?;
         let mut harness = Harness::from_canopy(canopy, Size::new(60, 8))?;
         for insert in [false, true] {
@@ -188,7 +183,7 @@ mod tests {
                 ctx.with_widget_dyn(child, &mut |widget| {
                     let counter = (widget as &dyn Any).downcast_ref::<Counter>().unwrap();
                     if child == NodeId::from(second) {
-                        assert_eq!(counter.rows, vec![(list.into(), 0), (list.into(), 0)]);
+                        assert_eq!(counter.rows, vec![0, 0]);
                     } else {
                         assert!(counter.rows.is_empty());
                     }

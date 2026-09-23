@@ -50,8 +50,8 @@ end
         /// Build a positional call with typed user arguments.
         pub fn call_bump(delta: i32) -> canopy::commands::CommandCall {}
 
-        /// Return a typed command reference for this command.
-        pub fn cmd_bump() -> &'static canopy::commands::CommandSpec {}
+        /// Return the command spec for this command.
+        pub fn spec_bump() -> &'static canopy::commands::CommandSpec {}
     }
 
     impl Loader for Hello {

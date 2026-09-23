@@ -4,7 +4,7 @@ use std::{cmp::Ordering, collections::HashSet, fmt, hash::Hash};
 
 use crate::{
     ModalBindings,
-    commands::CommandAction,
+    commands::CommandCall,
     error::{Error, Result},
     event::{key::Key, mouse::Mouse},
     path::{Path, PathFilter, PathMatch},
@@ -121,8 +121,8 @@ pub struct BindingOptions {
 pub enum BindingTarget {
     /// Stored Luau callback.
     Script(LuauFunctionId),
-    /// Rust command invocation.
-    Command(CommandAction),
+    /// Rust command call.
+    Command(CommandCall),
     /// Named operation the route offers to widgets on the way up.
     WidgetAction(WidgetActionName),
 }
@@ -132,7 +132,7 @@ pub enum BindingTarget {
 pub enum BindingTargetKind {
     /// Stored Luau callback.
     Script,
-    /// Rust command invocation.
+    /// Rust command call.
     Command,
     /// Named operation offered to widgets on the route.
     WidgetAction,
@@ -472,12 +472,12 @@ impl InputMap {
         validate_application_binding(&options, target.widget_action())?;
         if let BindingTarget::WidgetAction(name) = &target {
             if matches!(input, InputSpec::Mouse(_)) {
-                return Err(Error::InvalidOperation(
+                return Err(Error::Invalid(
                     "widget action bindings accept keys only".to_string(),
                 ));
             }
             if !self.actions.contains(name) {
-                return Err(Error::InvalidOperation(format!(
+                return Err(Error::Invalid(format!(
                     "widget action {name} is not registered in this application"
                 )));
             }
@@ -521,13 +521,13 @@ impl InputMap {
         group: FrameworkBindingGroup,
         input: impl Into<InputSpec>,
         options: BindingOptions,
-        command: CommandAction,
+        command: CommandCall,
     ) -> Result<BindingId> {
         let input = input.into();
         validate_description(&options.description)?;
         let scope = BindingScope::Exclusive(group);
         if options.scope != scope {
-            return Err(Error::InvalidOperation(
+            return Err(Error::Invalid(
                 "framework binding scope must match its exclusive group".to_string(),
             ));
         }
@@ -548,7 +548,7 @@ impl InputMap {
             {
                 return Ok(existing.id);
             }
-            return Err(Error::InvalidOperation(format!(
+            return Err(Error::Invalid(format!(
                 "conflicting framework binding for {group}, {input}, and {path_filter}"
             )));
         }
@@ -575,7 +575,7 @@ impl InputMap {
             return Ok(None);
         };
         if !matches!(self.records[index].owner, BindingOwner::Application) {
-            return Err(Error::InvalidOperation(format!(
+            return Err(Error::Invalid(format!(
                 "binding {} is framework-owned",
                 id.as_u64()
             )));
@@ -1033,18 +1033,20 @@ impl InputMap {
     /// Allocate one binding ID without mutating the registry on exhaustion.
     fn allocate_binding_id(&mut self) -> Result<BindingId> {
         let id = BindingId(self.next_id);
-        self.next_id = self.next_id.checked_add(1).ok_or_else(|| {
-            Error::InvalidOperation("binding identifier space exhausted".to_string())
-        })?;
+        self.next_id = self
+            .next_id
+            .checked_add(1)
+            .ok_or_else(|| Error::Invalid("binding identifier space exhausted".to_string()))?;
         Ok(id)
     }
 
     /// Allocate one insertion ID.
     fn allocate_insertion_id(&mut self) -> Result<u64> {
         let id = self.next_insertion_id;
-        self.next_insertion_id = self.next_insertion_id.checked_add(1).ok_or_else(|| {
-            Error::InvalidOperation("binding insertion space exhausted".to_string())
-        })?;
+        self.next_insertion_id = self
+            .next_insertion_id
+            .checked_add(1)
+            .ok_or_else(|| Error::Invalid("binding insertion space exhausted".to_string()))?;
         Ok(id)
     }
 }
@@ -1079,7 +1081,7 @@ pub fn validate_application_binding(
     validate_application_scope(&options.scope, path_filter)?;
     validate_description(&options.description)?;
     if action.is_some() && options.phase.is_some() {
-        return Err(Error::InvalidOperation(
+        return Err(Error::Invalid(
             "widget action bindings do not take a phase".to_string(),
         ));
     }
@@ -1091,19 +1093,19 @@ fn validate_application_scope(scope: &BindingScope, path_filter: &str) -> Result
     match scope {
         BindingScope::Global => {
             if !path_filter.starts_with('/') || !path_filter.ends_with('/') {
-                return Err(Error::InvalidOperation(
+                return Err(Error::Invalid(
                     "global bindings require a start- and end-anchored path".to_string(),
                 ));
             }
         }
         BindingScope::Mode(mode) if mode.is_empty() => {
-            return Err(Error::InvalidOperation(
+            return Err(Error::Invalid(
                 "named binding mode cannot be empty".to_string(),
             ));
         }
         BindingScope::Default | BindingScope::Mode(_) => {}
         BindingScope::Exclusive(_) => {
-            return Err(Error::InvalidOperation(
+            return Err(Error::Invalid(
                 "application bindings cannot use an exclusive scope".to_string(),
             ));
         }
@@ -1114,7 +1116,7 @@ fn validate_application_scope(scope: &BindingScope, path_filter: &str) -> Result
 /// Validate required user-facing binding text.
 fn validate_description(description: &str) -> Result<()> {
     if description.trim().is_empty() {
-        Err(Error::InvalidOperation(
+        Err(Error::Invalid(
             "binding description cannot be empty".to_string(),
         ))
     } else {

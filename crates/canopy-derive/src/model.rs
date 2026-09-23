@@ -76,6 +76,9 @@ pub struct CommandMeta {
     pub(crate) cfg_attrs: Vec<syn::Attribute>,
     /// Command name (snake_case).
     pub(crate) name: String,
+    /// Visibility of the command method, which the generated accessor and
+    /// call builder share.
+    pub(crate) vis: syn::Visibility,
     /// Owner type name.
     pub(crate) owner: String,
     /// Parameters in declaration order.

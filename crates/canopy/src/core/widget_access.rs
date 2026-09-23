@@ -138,7 +138,7 @@ pub fn validate_slot(node_id: NodeId, node: &Node, policy: WidgetSlotPolicy) -> 
     if widget.is_some() || policy == WidgetSlotPolicy::AllowBorrowed {
         return Ok(());
     }
-    Err(Error::Invariant(format!(
+    Err(Error::Internal(format!(
         "node {node_id:?} has an empty widget slot"
     )))
 }

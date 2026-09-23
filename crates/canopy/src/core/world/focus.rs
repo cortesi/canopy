@@ -58,9 +58,7 @@ impl Core {
         if let Some(node) = target {
             self.validate_attached_node(node)?;
             if !self.interaction_admits(node) {
-                return Err(Error::InvalidOperation(
-                    "node is outside the active modal".into(),
-                ));
+                return Err(Error::Invalid("node is outside the active modal".into()));
             }
         }
         if self.focus == target {
@@ -359,9 +357,7 @@ impl Core {
         if let Some(node) = target {
             self.validate_attached_node(node)?;
             if !self.interaction_admits(node) {
-                return Err(Error::InvalidOperation(
-                    "node is outside the active modal".into(),
-                ));
+                return Err(Error::Invalid("node is outside the active modal".into()));
             }
         }
         if self.mouse_capture == target {

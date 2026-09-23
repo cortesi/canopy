@@ -88,7 +88,7 @@ impl FailingBackend {
     fn check_failure(&mut self, operation: Failure) -> Result<()> {
         if self.fail_at == Some(operation) {
             self.fail_at = None;
-            Err(Error::RunLoop("injected backend failure".into()))
+            Err(Error::Driver("injected backend failure".into()))
         } else {
             Ok(())
         }
@@ -143,7 +143,7 @@ fn failed_output_repaints_even_when_the_next_frame_reverts() -> Result<()> {
         backend.fail_at = Some(operation);
         assert!(matches!(
             canopy.emit_frame(&mut backend),
-            Err(Error::RunLoop(message)) if message == "injected backend failure"
+            Err(Error::Driver(message)) if message == "injected backend failure"
         ));
         assert_eq!(canopy.buf().unwrap().screen_text(), "b");
 

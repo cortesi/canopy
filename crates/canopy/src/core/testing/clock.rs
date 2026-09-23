@@ -44,10 +44,10 @@ impl ManualClock {
         let mut now = self
             .now
             .lock()
-            .map_err(|_| Error::InvalidOperation("manual clock lock poisoned".into()))?;
+            .map_err(|_| Error::Invalid("manual clock lock poisoned".into()))?;
         *now = now
             .checked_add(duration)
-            .ok_or_else(|| Error::InvalidOperation("manual clock overflow".into()))?;
+            .ok_or_else(|| Error::Invalid("manual clock overflow".into()))?;
         Ok(())
     }
 }

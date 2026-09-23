@@ -175,7 +175,7 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
         name: "focus_dir",
         docs: None,
         signature: || {
-            FunctionSignature::new().param(("dir", Type::literals(["Up", "Down", "Left", "Right"])))
+            FunctionSignature::new().param(("dir", Type::literals(["up", "down", "left", "right"])))
         },
         handler: Handler::Sync(host_focus_dir),
     },
@@ -216,7 +216,7 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
         docs: None,
         signature: || {
             FunctionSignature::new()
-                .param(("direction", Type::literals(["Up", "Down", "Left", "Right"])))
+                .param(("direction", Type::literals(["up", "down", "left", "right"])))
                 .param(("x", Type::Number))
                 .param(("y", Type::Number))
         },
@@ -2373,10 +2373,7 @@ pub(super) fn build_command_module(commands: &CommandSet) -> Result<Arc<dyn Nati
                     let args = commands::CommandArgs::Positional(values);
                     (spec.check)(&args)
                         .map_err(|err| RuntimeError::from(error::Error::from(err)))?;
-                    let call = ScriptCommandCall(commands::CommandAction {
-                        invocation: commands::CommandInvocation { id: spec.id, args },
-                        target: None,
-                    });
+                    let call = ScriptCommandCall(spec.call_with(args));
                     Ok(ret_one(ScopedValue::Userdata(scope.create_userdata(call)?)))
                 },
             );

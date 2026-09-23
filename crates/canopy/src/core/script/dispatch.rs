@@ -12,8 +12,8 @@ use ruau::{
 };
 
 use super::{
-    ArgValue, Canopy, CommandArgs, CommandInvocation, CommandSpec, NodeId, Result,
-    StoredFunctionTarget, arg_value_to_scoped, commands, error, retained_runtime_error_to_canopy,
+    ArgValue, Canopy, CommandArgs, CommandSpec, NodeId, Result, StoredFunctionTarget,
+    arg_value_to_scoped, commands, error, retained_runtime_error_to_canopy,
     runtime_error_to_canopy, scoped_to_arg_value, script_error_to_canopy, with_current_canopy,
 };
 
@@ -63,16 +63,8 @@ pub(super) fn dispatch_command(
     values: Vec<ArgValue>,
 ) -> Result<ArgValue> {
     with_current_canopy(scope, |canopy, _| {
-        let invocation = CommandInvocation {
-            id: spec.id,
-            args: build_args_from_values(spec, values),
-        };
-        commands::dispatch_target(
-            &mut canopy.core,
-            commands::CommandTarget::From(node_id),
-            &invocation,
-        )
-        .map_err(error::Error::from)
+        let call = spec.call_with(build_args_from_values(spec, values));
+        commands::dispatch(&mut canopy.core, node_id, &call).map_err(error::Error::from)
     })
 }
 
@@ -101,14 +93,14 @@ pub(super) fn dispatch_explicit(
     target: commands::CommandTarget,
     args: CommandArgs,
 ) -> Result<ArgValue> {
-    with_current_canopy(scope, |canopy, _| {
+    with_current_canopy(scope, |canopy, anchor| {
         let spec = canopy.core.commands.get(name).ok_or_else(|| {
             error::Error::from(commands::CommandError::UnknownCommand {
                 id: name.to_string(),
             })
         })?;
-        let invocation = CommandInvocation { id: spec.id, args };
-        commands::dispatch_target(&mut canopy.core, target, &invocation).map_err(error::Error::from)
+        let call = spec.call_with(args).with_target(target);
+        commands::dispatch(&mut canopy.core, anchor, &call).map_err(error::Error::from)
     })
 }
 

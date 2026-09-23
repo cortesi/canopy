@@ -85,10 +85,10 @@ impl Core {
         action: &str,
         event: &Event,
     ) -> Result<EventOutcome> {
-        let depth = self.push_command_scope(self.command_scope_for_event(event));
+        let depth = self.push_event_scope(event);
         let outcome =
             self.with_widget_ctx(node, |widget, context| widget.on_action(action, context));
-        self.pop_command_scope(depth);
+        self.pop_event_scope(depth);
         let outcome = outcome??;
         Ok(outcome)
     }
