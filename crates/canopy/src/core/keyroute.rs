@@ -11,7 +11,7 @@ use crate::{
     core::{
         Core, NodeId,
         inputmap::{
-            BindingId, BindingPhase, BindingRecord, BindingTargetKind, InputSpec, RegistryStatus,
+            BindingActionKind, BindingId, BindingPhase, BindingRecord, InputSpec, RegistryStatus,
         },
     },
     error::Result,
@@ -54,7 +54,7 @@ pub struct StepBinding {
     /// Selected binding.
     pub id: BindingId,
     /// Kind of target the binding runs.
-    pub kind: BindingTargetKind,
+    pub kind: BindingActionKind,
     /// Phase of the binding relative to the node's widget.
     pub phase: BindingPhase,
 }
@@ -64,7 +64,7 @@ impl StepBinding {
     fn of(record: &BindingRecord) -> Self {
         Self {
             id: record.id,
-            kind: BindingTargetKind::of(&record.target),
+            kind: BindingActionKind::of(&record.action),
             phase: record.phase,
         }
     }
@@ -73,7 +73,7 @@ impl StepBinding {
 /// What would act first on a key.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RouteOutcome {
-    /// A binding on the route runs: a before-widget binding, a widget action
+    /// A binding on the route runs: a before-widget binding, an intent
     /// its node accepts, or an after-widget binding whose widget ignores the
     /// key.
     Binding(RouteWinner),
@@ -108,13 +108,13 @@ impl RouteOutcome {
 pub struct RouteWinner {
     /// Winning binding.
     pub binding: BindingId,
-    /// Node the binding resolved at. For a widget action, this is the
+    /// Node the binding resolved at. For an intent, this is the
     /// accepting node.
     pub node: NodeId,
     /// Route path of the winning binding.
     pub path: Path,
     /// Kind of target the binding runs.
-    pub kind: BindingTargetKind,
+    pub kind: BindingActionKind,
     /// Phase of the binding relative to the node's widget.
     pub phase: BindingPhase,
 }
@@ -126,7 +126,7 @@ impl RouteWinner {
             binding: record.id,
             node,
             path,
-            kind: BindingTargetKind::of(&record.target),
+            kind: BindingActionKind::of(&record.action),
             phase: record.phase,
         }
     }
@@ -204,7 +204,7 @@ pub(crate) enum BindingVerdict {
         /// Consuming node.
         node: NodeId,
     },
-    /// A widget action with no accepting consumer on the inspected route.
+    /// An intent with no accepting consumer on the inspected route.
     NoConsumer,
     /// The registry admits the record, but no key-route analysis applies.
     RegistryOnly,
@@ -243,12 +243,12 @@ impl Core {
         let InputSpec::Key(key) = record.input else {
             return BindingVerdict::RegistryOnly;
         };
-        if let Some(action) = record.target.widget_action() {
+        if let Some(action) = record.action.intent() {
             // The route offers the action at every node whose path it matches
             // on the way up, so any accepting node keeps it reachable.
             let consumer = self.route(target).any(|(node, path)| {
                 record.path_match(&path).is_some()
-                    && self.node_accepts_action(node, action.as_str(), target)
+                    && self.node_accepts_intent(node, action.as_str(), target)
             });
             if !consumer {
                 return BindingVerdict::NoConsumer;

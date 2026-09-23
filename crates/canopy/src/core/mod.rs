@@ -80,8 +80,8 @@ pub use context::{
 pub use fixture::{Fixture, FixtureInfo};
 pub use id::{NodeId, TypedId};
 pub use inputmap::{
-    BindingId, BindingOptions, BindingPhase, BindingTarget, BindingTargetKind, BindingTier,
-    FrameworkBindingGroup, InputSpec, WidgetActionName, WidgetActionSpec,
+    BindingAction, BindingActionKind, BindingId, BindingOptions, BindingPhase, BindingTier,
+    FrameworkBindingGroup, InputSpec, IntentName, IntentSpec,
 };
 pub use node::NodeIdentity;
 pub use notice::{Notice, NoticeSource};
@@ -89,5 +89,5 @@ pub use snapshot::{FrameSnapshot, NodeSnapshot, WidgetSemantics};
 pub use wake::{NodeWakeHandle, WakeOutcome, WorkLifetime};
 pub use world::{
     Core,
-    interaction::{InteractionToken, ModalBindings, ModalOptions},
+    modal::{ModalBindings, ModalOptions, ModalToken},
 };

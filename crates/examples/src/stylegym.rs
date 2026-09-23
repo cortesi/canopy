@@ -1089,7 +1089,7 @@ impl Register for Stylegym {
         setup.add_commands::<Tabs>()?;
         setup.add_commands::<StyleSheet>()?;
         setup.add_commands::<TextSamples>()?;
-        setup.add_commands::<Input>()?;
+        Input::register(setup)?;
         setup.add_commands::<Editor>()?;
         Ok(())
     }

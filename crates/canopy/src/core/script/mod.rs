@@ -717,7 +717,7 @@ impl LuauHost {
         default_binding_owners: &BTreeSet<String>,
         module_source: Option<Arc<dyn SourceProvider>>,
         fixtures: &[FixtureInfo],
-        actions: &inputmap::WidgetActionCatalog,
+        actions: &inputmap::IntentCatalog,
     ) -> Result<String> {
         if self.is_finalized() || self.state.borrow().surface.is_some() {
             return Err(error::Error::Invalid(

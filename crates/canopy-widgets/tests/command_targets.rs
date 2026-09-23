@@ -1,4 +1,4 @@
-//! Stored widget actions retain exact command targets as the tree changes.
+//! Stored command calls retain exact targets as the tree changes.
 
 #[cfg(test)]
 mod tests {

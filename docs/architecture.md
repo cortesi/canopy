@@ -24,7 +24,7 @@ run loop). The `testing` feature adds `canopy::testing`. Each item has one
 canonical location, and there is no prelude.
 
 An application runs in two phases. `CanopyBuilder::configure` passes a `Setup`
-handle, which owns every registration: commands, bindings, widget actions,
+handle, which owns every registration: commands, bindings, intents,
 startup scripts, fixtures, mode hooks, render limits, and the initial styles.
 Each type registers what it needs in a `Register` impl. The builder then
 finalizes the API and returns a `Canopy`, which has no registration methods.
@@ -154,7 +154,7 @@ per owner and stores no producer-result queue.
 Structural success commits lifetime expiration and cancels obsolete polling.
 Provisional registrations allow workers started by mount hooks to wake before
 commit. Rollback removes provisional registrations and preserves valid earlier
-wakes. Successful edits also retire modal scopes whose owner or modal widget is
+wakes. Successful edits also retire modals whose owner or modal widget is
 detached or replaced.
 
 ## Invariants
@@ -466,7 +466,7 @@ Without one, it checks the global tier, active modes from newest to oldest, and
 then the default tier. A transient mode ends that search, so a key it does not
 bind resolves to nothing. Path specificity and insertion order select a winner
 within one tier. `Setup::bind` installs a binding in any tier: a framework
-tier is registered idempotently and takes a command or a widget action, and an
+tier is registered idempotently and takes a command or an intent, and an
 application tier replaces any binding with the same tier, input, and path.
 Scripts install only the three application tiers.
 
@@ -476,23 +476,23 @@ effect on the phase. Key and mouse bindings take either phase. The phase
 belongs to the winner at one route node, so an early binding on an ancestor
 still runs after every descendant declines.
 
-An application can also bind a key to a named widget action instead of a
-command or callback. The application registers each action name in its catalog
-with `Setup::register_widget_action`. The catalog validates binding names and
+An application can also bind a key to a named intent instead of a
+command or callback. Each widget type registers the intents it implements in
+the catalog with `Setup::register_intent`, from its `Register` impl. The catalog validates binding names and
 renders the application's Luau API; a name promises a bindable operation, not a
 consumer in every state. At each node the resolver ranks candidates, and an
-action candidate is eligible only when that node's widget accepts the action in
-its current state. A dormant action falls through to the next candidate at the
-same node, so it never shadows a usable binding. An eligible action runs before
+intent candidate is eligible only when that node's widget accepts the intent in
+its current state. A dormant intent falls through to the next candidate at the
+same node, so it never shadows a usable binding. An eligible intent runs before
 the node's raw key handler, so its stored phase is always `before_widget`, and
 an explicit `after_widget` on one is an error. A release mismatch from a
 widget that breaks its acceptance promise is treated as a decline, recorded in
 the route trace, and never aborts the application. In a transient mode the
-mode pops before its action runs, and an action without a consumer dismisses
-the mode the way an unbound key does. A framework modal can admit named
-application actions with `ModalBindings::FrameworkWithActions`, which admits
-only the listed action names after its framework group and only while a widget
-inside the modal accepts them.
+mode pops before its intent runs, and an intent without a consumer dismisses
+the mode the way an unbound key does. A framework modal can admit application
+bindings to named intents: `ModalBindings::Framework { group, intents }` admits
+the listed intents after its framework group, and only while a widget inside
+the modal accepts them.
 
 Every widget predicts its keys. `Widget::key_outcome` returns the
 `EventOutcome` that `on_event` would return for the same key and pre-event
@@ -515,7 +515,7 @@ The mouse route starts at the requested node, as a click on it would. The
 pointer's position plays no part, and hit testing and capture still choose the
 real target. Key discovery asks each widget's `key_outcome` along the route:
 `Handle` hides the after-widget bindings at that node and above, and `Ignore`
-continues. An action without an accepting consumer does not appear. Diagnostic
+continues. An intent without an accepting consumer does not appear. Diagnostic
 binding output uses the same registry and reports why records are active,
 dormant, shadowed, blocked by the top modal's framework group, or unmatched.
 
@@ -534,7 +534,7 @@ discovery and explanation cannot disagree.
 `Canopy::route_trace` records what routing actually did. Each entry has a
 `RouteTraceKind`: `Start`, `BeforeWidgetBinding`, `OfferIntent`, `Widget`,
 `AfterWidgetBinding`, `RunBinding`, `DefaultAction`, `Bubble`, `Handled`,
-`Unhandled`, or `Notice`. A widget action offer traces as `OfferIntent`, and a
+`Unhandled`, or `Notice`. An intent offer traces as `OfferIntent`, and a
 `Notice` entry ends a route whose binding or widget handler failed with a
 notice. Labels are snake_case, such as `before_widget_binding`.
 
@@ -586,12 +586,12 @@ ordinary application bindings that a configuration can replace or unbind.
 group must bind activation in that group itself.
 
 Root captures a help snapshot before it opens a modal with `ModalOptions` and
-`ModalBindings::Framework(HELP_BINDINGS)`. The scope dims the main pane, and the
-help overlay draws only its panel, so the dimmed application stays visible
-around it. The scope admits only Root-owned help controls until the modal
+`ModalBindings::Framework` for `HELP_BINDINGS`. The modal dims the main pane, and
+the help overlay draws only its panel, so the dimmed application stays visible
+around it. The modal admits only Root-owned help controls until the modal
 closes. Root then calls `close_modal` with the returned
-`InteractionToken` and restores the original focus when that node remains live.
-Removing or replacing a subtree retires modal scopes whose owner or modal widget
+`ModalToken` and restores the original focus when that node remains live.
+Removing or replacing a subtree retires modals whose owner or modal widget
 no longer belongs to the tree.
 
 Key routing gives a transient mode the next key before any widget sees it. It

@@ -2229,7 +2229,7 @@ Each stage also updates the docs it touches.
 
 - [x] C4: slot and widget-cell renames, identity renames, script origin, and
   screen size.
-- [ ] C10:
+- [x] C10:
   - Rename widget actions to intents across both repositories, and rename the
     clear intent to `canopy.clear`.
   - Widgets register the intents they implement.

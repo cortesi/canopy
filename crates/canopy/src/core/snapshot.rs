@@ -26,8 +26,8 @@ pub struct WidgetSemantics {
     pub selected: Option<bool>,
     /// Stable application keys selected by a collection.
     pub selected_keys: Vec<ArgValue>,
-    /// Availability of the widget's primary action.
-    pub action_status: Option<CommandStatus>,
+    /// Availability of the widget's activation command.
+    pub activation_status: Option<CommandStatus>,
 }
 
 /// Owned identity, geometry, and semantics for one live arena node.

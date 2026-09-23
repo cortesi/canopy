@@ -2,7 +2,7 @@
 //!
 //! [`Picker`] is the modal subtree: it centres a titled frame over whatever it
 //! covers, and holds a [`PickerList`] of items above a [`PickerFilter`] field.
-//! The host opens it with Canopy's modal scope, which gives the list the
+//! The host opens it with Canopy's modal, which gives the list the
 //! keyboard and dims the application behind it.
 //!
 //! The widget owns the list and the filter, and nothing else. It never reads
@@ -16,8 +16,8 @@
 use std::borrow::Cow;
 
 use canopy::{
-    Context, ContextExt, EventOutcome, InteractionToken, ModalBindings, ModalOptions, NodeId,
-    NodeName, Render, ScrollOp, TypedId, ViewContext, Widget, derive_commands,
+    Context, ContextExt, EventOutcome, ModalBindings, ModalOptions, ModalToken, NodeId, NodeName,
+    Register, Render, ScrollOp, Setup, TypedId, ViewContext, Widget, derive_commands,
     error::{Error, Result},
     event::{Event, key, key::KeyCode},
     geom::{Line, Point, Size},
@@ -32,6 +32,7 @@ use canopy::{
 use crate::{
     Container, Label,
     frame::Frame,
+    input::register_clear_intent,
     row_cursor::{RowCursor, label_rows, widest_label},
 };
 
@@ -166,7 +167,7 @@ where
         Ok(overlay)
     }
 
-    /// Open `overlay` in a modal scope over the list.
+    /// Open `overlay` in a modal over the list.
     ///
     /// The scope is owned by the picker, so it nests inside the scope that
     /// shows the picker. It shows the overlay, dims the dialog behind it,
@@ -182,7 +183,7 @@ where
         overlay: NodeId,
         initial_focus: NodeId,
         bindings: ModalBindings,
-    ) -> Result<InteractionToken> {
+    ) -> Result<ModalToken> {
         let dialog = self
             .dialog
             .ok_or_else(|| Error::NotFound("picker dialog".into()))?;
@@ -727,6 +728,16 @@ enum FilterCommand {
     Push(char),
 }
 
+impl<T> Register for PickerList<T>
+where
+    T: Label + 'static,
+{
+    fn register(setup: &mut Setup) -> Result<()> {
+        setup.add_commands::<Self>()?;
+        register_clear_intent(setup)
+    }
+}
+
 impl<T> Default for PickerList<T>
 where
     T: Label + 'static,
@@ -808,12 +819,12 @@ where
         }
     }
 
-    fn accepts_action(&self, action: &str, _context: &dyn ViewContext) -> bool {
-        self.filtering && action == crate::TEXT_CLEAR_ACTION
+    fn accepts_intent(&self, intent: &str, _context: &dyn ViewContext) -> bool {
+        self.filtering && intent == crate::CLEAR_INTENT
     }
 
-    fn on_action(&mut self, action: &str, context: &mut dyn Context) -> Result<EventOutcome> {
-        if !self.filtering || action != crate::TEXT_CLEAR_ACTION {
+    fn on_intent(&mut self, intent: &str, context: &mut dyn Context) -> Result<EventOutcome> {
+        if !self.filtering || intent != crate::CLEAR_INTENT {
             return Ok(EventOutcome::Ignore);
         }
         // The filter stays open, so the next key narrows the list again.
@@ -996,11 +1007,11 @@ mod tests {
             let list = picker.list()?;
             context.with_widget_mut(list, |list: &mut PickerList<String>, context| {
                 assert!(
-                    list.accepts_action(crate::TEXT_CLEAR_ACTION, context),
+                    list.accepts_intent(crate::CLEAR_INTENT, context),
                     "the open filter consumes the clear action"
                 );
                 assert_eq!(
-                    list.on_action(crate::TEXT_CLEAR_ACTION, context)?,
+                    list.on_intent(crate::CLEAR_INTENT, context)?,
                     EventOutcome::Handle
                 );
                 Ok(())
@@ -1296,7 +1307,7 @@ mod tests {
                         confirm.ask(context, "Delete", "/tmp/entry-1")?;
                         // An answer takes focus only once it has something to
                         // run, as it would in a host.
-                        confirm.set_actions(
+                        confirm.set_commands(
                             context,
                             PickerList::<String>::call_clear_filter(),
                             PickerList::<String>::call_clear_filter(),

@@ -1,7 +1,7 @@
 use std::mem;
 
 use canopy::{
-    BindingId, BindingPhase, BindingTargetKind, BindingTier, CanopyBuilder, Context, ContextExt,
+    BindingActionKind, BindingId, BindingPhase, BindingTier, CanopyBuilder, Context, ContextExt,
     NodeId, ViewContext, Widget, buf,
     commands::{CommandArgs, CommandAvailability, CommandCall, CommandId, CommandStatus},
     error::Result,
@@ -30,8 +30,8 @@ fn binding(
         tier: BindingTier::Default,
         path_filter: String::new(),
         route_path: Path::from("/root/editor"),
-        target: BindingTargetKind::Script,
-        action: None,
+        action: BindingActionKind::Script,
+        intent: None,
         phase,
         command: None,
         source: Some("test".to_string()),
@@ -59,8 +59,8 @@ fn mouse_binding(id: u64, spec: &str, description: &str) -> AvailableBinding<mou
         tier: BindingTier::Default,
         path_filter: String::new(),
         route_path: Path::from("/root/editor"),
-        target: BindingTargetKind::Script,
-        action: None,
+        action: BindingActionKind::Script,
+        intent: None,
         phase: BindingPhase::AfterWidget,
         command: None,
         source: Some("test".to_string()),

@@ -1,6 +1,6 @@
 //! Consumer-aware binding selection shared by routing and analysis.
 //!
-//! The registry ranks candidates. A widget action candidate is eligible only
+//! The registry ranks candidates. An intent candidate is eligible only
 //! when the node's widget accepts the action in its current state. Routing,
 //! route explanation, help, checked dispatch, and diagnostics all select
 //! through this module, so they cannot disagree about the winner.
@@ -40,9 +40,9 @@ impl Core {
             .find(|record| {
                 !excluded.contains(&record.id)
                     && record
-                        .target
-                        .widget_action()
-                        .is_none_or(|action| self.node_accepts_action(node, action.as_str(), focus))
+                        .action
+                        .intent()
+                        .is_none_or(|action| self.node_accepts_intent(node, action.as_str(), focus))
             })
     }
 
@@ -94,17 +94,17 @@ impl Core {
     ///
     /// A widget that cannot be read declines. Selection and dispatch share
     /// this test, so an unreadable widget never becomes an action consumer.
-    pub(crate) fn node_accepts_action(&self, node: NodeId, action: &str, focus: NodeId) -> bool {
+    pub(crate) fn node_accepts_intent(&self, node: NodeId, action: &str, focus: NodeId) -> bool {
         let context = CoreViewContext::with_focus(self, node, focus);
         self.with_widget(
             node,
             WidgetOperation::access("action selection"),
-            |widget, _| widget.accepts_action(action, &context),
+            |widget, _| widget.accepts_intent(action, &context),
         )
         .unwrap_or(false)
     }
 
-    /// Dispatch one widget action to a node.
+    /// Dispatch one intent to a node.
     pub(crate) fn dispatch_action_on_node(
         &mut self,
         node: NodeId,
@@ -113,7 +113,7 @@ impl Core {
     ) -> Result<EventOutcome> {
         let depth = self.push_event_scope(event);
         let outcome =
-            self.with_widget_ctx(node, |widget, context| widget.on_action(action, context));
+            self.with_widget_ctx(node, |widget, context| widget.on_intent(action, context));
         self.pop_event_scope(depth);
         let outcome = outcome??;
         Ok(outcome)

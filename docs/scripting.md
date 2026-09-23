@@ -139,7 +139,7 @@ token is only an external data record and does not reconstruct that identity.
 ## Bindings
 
 A binding action is a `CommandCall`, a function, or the string name of a
-registered widget action. The `command` table holds one constructor for each
+registered intent. The `command` table holds one constructor for each
 node command, grouped by owner. A constructor has the parameters of the owner
 function and returns a `CommandCall` that a binding runs later.
 `command.file_select.select_by(1)` builds the call;
@@ -148,20 +148,21 @@ arguments, so a bad argument fails the binding call before it installs a
 binding. In a strict script the typechecker finds the same errors before the
 script runs. Keep functions for composed actions.
 
-An application registers a widget action with `Setup::register_widget_action`
-before the script API finalizes. A string action names one of those registered
-actions:
+A widget that implements an intent registers it with `Setup::register_intent`
+in its `Register` impl, before the script API finalizes. Registering the same
+intent again is harmless. A string action names one of those registered
+intents:
 
 ```luau
 canopy.keymap({
-    { key = "ctrl-x", description = "Clear text", action = "canopy.text.clear" },
+    { key = "ctrl-x", description = "Clear text", action = "canopy.clear" },
 })
 ```
 
-A widget action takes keys only and always runs `before_widget`, so an explicit
+An intent takes keys only and always runs `before_widget`, so an explicit
 `phase = "after_widget"` on one is an error. The route offers it to the widget
 at each route node. A widget that accepts it consumes the key, and a dormant
-action lets the route fall through to the next binding. An
+intent lets the route fall through to the next binding. An
 unregistered name fails at binding registration. Registered names appear in the
 rendered `canopy.api()` and in `canopy.bindings()` output.
 
@@ -252,8 +253,8 @@ still apply. `Root` lists the keys of a transient mode in a small panel until
 the mode ends.
 
 Native Rust installs bindings during setup with `Setup::bind(input, options,
-target)`. The target is a `BindingTarget`: a command call built by a generated
-`Widget::call_command(arguments...)` builder, or a registered widget action. The
+target)`. The target is a `BindingAction`: a command call built by a generated
+`Widget::call_command(arguments...)` builder, or a registered intent. The
 tier in the options decides the semantics: a framework tier is registered
 idempotently for the group it names, and an application tier replaces any
 binding with the same tier, input, and path. A `CommandCall` holds the command
@@ -301,7 +302,7 @@ node at a time.
 `canopy.route_trace()` reports what routing actually did. Each entry has a
 `kind`: `start`, `before_widget_binding`, `offer_intent`, `widget`,
 `after_widget_binding`, `run_binding`, `default_action`, `bubble`, `handled`,
-`unhandled`, or `notice`. A widget action offer traces as `offer_intent`. A
+`unhandled`, or `notice`. An intent offer traces as `offer_intent`. A
 `notice` entry ends a route whose binding or widget handler failed, and its
 detail is the notice's message. A `widget`
 entry that begins with "key prediction mismatch" marks a widget whose
@@ -333,7 +334,7 @@ script for that owner.
 `CanopyBuilder` makes setup order explicit. Its owned `configure` callbacks
 receive a `Setup` handle. `Setup` holds every registration that the API fixes
 when it finalizes: commands, default bindings, framework and application
-bindings, widget actions, startup scripts, fixtures, mode hooks, render limits,
+bindings, intents, startup scripts, fixtures, mode hooks, render limits,
 and the initial styles. A type registers what it needs in its `Register` impl.
 Named `bindings` and `config` sources run after finalization, in insertion
 order. Owned `assemble` callbacks then create the widget tree on the finalized
@@ -524,7 +525,7 @@ Displayed nodes have no hidden ancestor. Offscreen displayed
 nodes retain their computed rectangles; non-displayed nodes have no current
 screen rectangle. Intersection includes ancestor clipping but makes no claim
 about occlusion. Widget semantics expose only declared roles, labels, selection,
-action status, and explicitly enabled values. Sensitive input values are omitted.
+activation status, and explicitly enabled values. Sensitive input values are omitted.
 
 Legacy `screen`, `screen_cells`, and `screen_text` queries still prepare pending
 changes. Use a snapshot for attachment, ancestor visibility, and clipping

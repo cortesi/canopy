@@ -815,7 +815,7 @@ impl<W: Selectable + 'static, K: Eq + Hash + Clone + ToArgValue + 'static> Widge
             role: Some("list".into()),
             label: self.label.clone(),
             selected_keys,
-            action_status: self.command_status(ctx)?,
+            activation_status: self.command_status(ctx)?,
             ..WidgetSemantics::default()
         })
     }

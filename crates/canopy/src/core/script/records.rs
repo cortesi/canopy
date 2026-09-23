@@ -48,8 +48,8 @@ pub(super) fn snapshot_to_arg(frame: &FrameSnapshot) -> ArgValue {
 /// Serialize owned semantic and geometry data, including expired node tokens.
 fn snapshot_node_to_arg(node: &NodeSnapshot) -> ArgValue {
     let semantics = &node.semantics;
-    let action_status = semantics
-        .action_status
+    let activation_status = semantics
+        .activation_status
         .as_ref()
         .map(|status| {
             let reason = match status {
@@ -148,7 +148,7 @@ fn snapshot_node_to_arg(node: &NodeSnapshot) -> ArgValue {
                     "selected_keys".into(),
                     ArgValue::Array(semantics.selected_keys.clone()),
                 ),
-                ("action_status".into(), action_status),
+                ("activation_status".into(), activation_status),
             ])),
         ),
     ]))
@@ -279,8 +279,8 @@ pub(super) fn binding_info_to_arg(binding: &inputmap::BindingRecord) -> ArgValue
             ArgValue::String(binding.description.clone()),
         ),
         (
-            "target".to_string(),
-            ArgValue::String(binding.target.label().to_string()),
+            "action".to_string(),
+            ArgValue::String(binding.action.label().to_string()),
         ),
         (
             "phase".to_string(),
@@ -288,10 +288,10 @@ pub(super) fn binding_info_to_arg(binding: &inputmap::BindingRecord) -> ArgValue
         ),
     ]);
     insert_tier(&mut record, &binding.tier);
-    if let Some(action) = binding.target.widget_action() {
-        record.insert("action".to_string(), ArgValue::String(action.to_string()));
+    if let Some(intent) = binding.action.intent() {
+        record.insert("intent".to_string(), ArgValue::String(intent.to_string()));
     }
-    if let inputmap::BindingTarget::Command(call) = &binding.target {
+    if let inputmap::BindingAction::Command(call) = &binding.action {
         insert_command_call(&mut record, call);
     }
     if let Some(source) = &binding.source {
@@ -643,8 +643,8 @@ fn available_binding_to_arg<I: ToString>(binding: help::AvailableBinding<I>) -> 
             ArgValue::String(binding.route_path.to_string()),
         ),
         (
-            "target".to_string(),
-            ArgValue::String(binding.target.label().to_string()),
+            "action".to_string(),
+            ArgValue::String(binding.action.label().to_string()),
         ),
         (
             "phase".to_string(),
@@ -652,8 +652,8 @@ fn available_binding_to_arg<I: ToString>(binding: help::AvailableBinding<I>) -> 
         ),
     ]);
     insert_tier(&mut record, &binding.tier);
-    if let Some(action) = binding.action {
-        record.insert("action".to_string(), ArgValue::String(action.to_string()));
+    if let Some(intent) = binding.intent {
+        record.insert("intent".to_string(), ArgValue::String(intent.to_string()));
     }
     if let Some(command) = binding.command {
         let mut detail = BTreeMap::new();
@@ -831,7 +831,7 @@ fn key_route_step_to_arg(step: &KeyRouteStep) -> ArgValue {
             ArgValue::Map(BTreeMap::from([
                 ("id".to_string(), ArgValue::UInt(binding.id.as_u64())),
                 (
-                    "target".to_string(),
+                    "action".to_string(),
                     ArgValue::String(binding.kind.label().to_string()),
                 ),
                 (
@@ -874,7 +874,7 @@ fn key_route_outcome_to_arg(outcome: RouteOutcome) -> ArgValue {
                 ArgValue::String(winner.path.to_string()),
             ),
             (
-                "target".to_string(),
+                "action".to_string(),
                 ArgValue::String(winner.kind.label().to_string()),
             ),
             (

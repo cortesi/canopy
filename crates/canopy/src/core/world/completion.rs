@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 
 use super::Core;
 use crate::{
-    InteractionToken, NodeId,
+    ModalToken, NodeId,
     core::wake::WorkStamp,
     error::{Error, Result},
 };
@@ -25,8 +25,8 @@ pub(super) struct RemovalRequest {
 pub(super) enum CompletionRequest {
     /// Remove a widget incarnation.
     Remove(RemovalRequest),
-    /// Close a modal scope and all its descendants.
-    CloseModal(InteractionToken),
+    /// Close a modal and all its descendants.
+    CloseModal(ModalToken),
 }
 
 impl CompletionRequest {
@@ -132,9 +132,9 @@ impl Core {
         }))
     }
 
-    /// Close a modal scope and its nested scopes after callbacks return, with
+    /// Close a modal and its nested scopes after callbacks return, with
     /// the same failure checkpoint as node removal.
-    pub(crate) fn close_modal_after_dispatch(&mut self, token: InteractionToken) -> Result<()> {
+    pub(crate) fn close_modal_after_dispatch(&mut self, token: ModalToken) -> Result<()> {
         self.enqueue_completion(CompletionRequest::CloseModal(token))
     }
 

@@ -8,8 +8,8 @@ use crate::{
     core::{
         Core,
         inputmap::{
-            self, BindingId, BindingPhase, BindingTargetKind, ResolvedBinding, RunBinding,
-            RunTarget, WidgetActionName,
+            self, BindingActionKind, BindingId, BindingPhase, IntentName, ResolvedBinding,
+            RunBinding, RunTarget,
         },
         keyroute::{
             KeyDispatchDivergence, KeyExpectation, KeyRouteExplanation, KeyRouteStep, RouteOutcome,
@@ -33,7 +33,7 @@ pub enum RouteTraceKind {
     Start,
     /// A before-widget binding matched.
     BeforeWidgetBinding,
-    /// A widget action was offered to the node's widget, or declined there.
+    /// An intent was offered to the node's widget, or declined there.
     OfferIntent,
     /// The event was offered to the node's widget, or the widget's key
     /// prediction disagreed with its result.
@@ -182,8 +182,7 @@ impl Canopy {
             }
         }
         if let Some(capture) = self.core.mouse_capture {
-            if self.core.validate_attached_node(capture).is_ok()
-                && self.core.interaction_admits(capture)
+            if self.core.validate_attached_node(capture).is_ok() && self.core.modal_admits(capture)
             {
                 return Ok((Some(capture), self.core.path_of(self.core.root, capture)));
             } else {
@@ -264,7 +263,7 @@ impl Canopy {
     ) -> Result<bool> {
         self.route_trace.clear();
         if self.core.modal_region().is_some()
-            && !start.is_some_and(|node| self.core.interaction_admits(node))
+            && !start.is_some_and(|node| self.core.modal_admits(node))
         {
             return Ok(true);
         }
@@ -303,16 +302,16 @@ impl Canopy {
                 match binding {
                     ResolvedBinding::Offer {
                         id: binding_id,
-                        action,
+                        intent,
                     } => {
                         self.trace_route(
                             RouteTraceKind::OfferIntent,
                             Some(id),
                             &path,
-                            format!("offered widget action {action}"),
+                            format!("offered intent {intent}"),
                         );
                         let outcome = match self
-                            .offer_widget_action(binding_id, &action, id, input, &mut guard)
+                            .offer_intent(binding_id, &intent, id, input, &mut guard)
                         {
                             Ok(Some(outcome)) => outcome,
                             Ok(None) => return Ok(true),
@@ -325,7 +324,7 @@ impl Canopy {
                                 RouteTraceKind::Handled,
                                 Some(id),
                                 &path,
-                                format!("widget action {action} handled"),
+                                format!("intent {intent} handled"),
                             );
                             return Ok(true);
                         }
@@ -333,7 +332,7 @@ impl Canopy {
                             RouteTraceKind::OfferIntent,
                             Some(id),
                             &path,
-                            format!("widget action {action} declined after acceptance"),
+                            format!("intent {intent} declined after acceptance"),
                         );
                         excluded.push(binding_id);
                         if !self.core.nodes.contains_key(id) {
@@ -341,7 +340,7 @@ impl Canopy {
                                 RouteTraceKind::Unhandled,
                                 Some(id),
                                 &path,
-                                "node removed while running a widget action",
+                                "node removed while running an intent",
                             );
                             return Ok(true);
                         }
@@ -378,7 +377,7 @@ impl Canopy {
                 &path,
                 format!("{event:?}"),
             );
-            let outcome = if self.core.interaction_admits(id) {
+            let outcome = if self.core.modal_admits(id) {
                 // The prediction is read before the widget acts, for the same
                 // pre-event state. A widget that cannot be read gives none,
                 // and dispatch then reports the failure itself.
@@ -450,7 +449,7 @@ impl Canopy {
                     // The callback may have removed the node; a missing node
                     // cannot move.
                     if let Some(action) = input.default_action()
-                        && self.core.interaction_admits(id)
+                        && self.core.modal_admits(id)
                         && self.core.apply_default_action(id, action)
                     {
                         self.trace_route(
@@ -620,29 +619,28 @@ impl Canopy {
         let binding = match binding {
             ResolvedBinding::Offer {
                 id: binding_id,
-                action,
+                intent,
             } => {
                 self.trace_route(
                     RouteTraceKind::OfferIntent,
                     Some(id),
                     &path,
-                    format!("offered widget action {action} in a transient mode"),
+                    format!("offered intent {intent} in a transient mode"),
                 );
-                let outcome =
-                    match self.offer_widget_action(binding_id, &action, id, input, &mut guard) {
-                        Ok(Some(outcome)) => outcome,
-                        Ok(None) => return Ok(true),
-                        Err(error) => {
-                            return self.route_notice(error, NoticeSource::Widget, id, &path);
-                        }
-                    };
+                let outcome = match self.offer_intent(binding_id, &intent, id, input, &mut guard) {
+                    Ok(Some(outcome)) => outcome,
+                    Ok(None) => return Ok(true),
+                    Err(error) => {
+                        return self.route_notice(error, NoticeSource::Widget, id, &path);
+                    }
+                };
                 // A transient decision is spent once the mode pops, so a
-                // declined action ends the key as a transient dismissal. It
+                // declined intent ends the key as a transient dismissal. It
                 // does not reselect into the default tier or run raw.
                 let detail = if outcome == EventOutcome::Handle {
-                    format!("widget action {action} handled")
+                    format!("intent {intent} handled")
                 } else {
-                    format!("widget action {action} declined after acceptance")
+                    format!("intent {intent} declined after acceptance")
                 };
                 self.trace_route(RouteTraceKind::Handled, Some(id), &path, detail);
                 return Ok(true);
@@ -762,14 +760,14 @@ impl Canopy {
         Ok(self.core.focus.unwrap_or(self.core.root))
     }
 
-    /// Offer one selected widget action to its consumer.
+    /// Offer one selected intent to its consumer.
     ///
     /// Returns the consumer's outcome, or `None` when a checked-route guard
     /// tripped; the caller then ends the route without acting further.
-    fn offer_widget_action(
+    fn offer_intent(
         &mut self,
         binding: BindingId,
-        action: &WidgetActionName,
+        action: &IntentName,
         node: NodeId,
         input: RoutedInput,
         guard: &mut Option<&mut KeyRouteGuard>,
@@ -783,7 +781,7 @@ impl Canopy {
         debug_assert_eq!(
             outcome,
             EventOutcome::Handle,
-            "accepts_action promised Handle for {action} at {node:?}"
+            "accepts_intent promised Handle for {action} at {node:?}"
         );
         if let Some(guard) = guard.as_deref_mut() {
             guard.observe_action(binding, node);
@@ -797,7 +795,7 @@ impl Canopy {
     /// Select the first eligible binding at one route node, and copy it to
     /// run.
     ///
-    /// Mouse routing has no widget actions, so it keeps the plain resolver.
+    /// Mouse routing has no intents, so it keeps the plain resolver.
     fn select_at(
         &self,
         input: RoutedInput,
@@ -900,11 +898,11 @@ impl Canopy {
     /// bindings.
     pub(crate) fn release_removed_bindings(
         &mut self,
-        removed: Vec<(inputmap::BindingId, inputmap::BindingTarget)>,
+        removed: Vec<(inputmap::BindingId, inputmap::BindingAction)>,
     ) -> usize {
         let removed_count = removed.len();
         for (_, target) in removed {
-            if let inputmap::BindingTarget::Script(binding) = target {
+            if let inputmap::BindingAction::Script(binding) = target {
                 self.release_binding_target(binding);
             }
         }
@@ -960,7 +958,7 @@ impl KeyRouteGuard {
             match step.binding {
                 Some(StepBinding {
                     id,
-                    kind: BindingTargetKind::WidgetAction,
+                    kind: BindingActionKind::Intent,
                     ..
                 }) => push(GuardEvent::Action(id, step.node)),
                 Some(StepBinding {
@@ -991,10 +989,8 @@ impl KeyRouteGuard {
             RouteOutcome::Transient(winner) => {
                 events.push((GuardEvent::Node(winner.node), None));
                 let event = match winner.kind {
-                    BindingTargetKind::WidgetAction => {
-                        GuardEvent::Action(winner.binding, winner.node)
-                    }
-                    BindingTargetKind::Script | BindingTargetKind::Command => {
+                    BindingActionKind::Intent => GuardEvent::Action(winner.binding, winner.node),
+                    BindingActionKind::Script | BindingActionKind::Command => {
                         GuardEvent::Binding(winner.binding, BindingPhase::BeforeWidget)
                     }
                 };

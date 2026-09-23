@@ -23,7 +23,7 @@ impl Core {
     /// Handlers can change the tree, so each step reads the next node only
     /// after the handler returns.
     fn dispatch_event_inner(&mut self, start: NodeId, event: &Event) -> Result<EventOutcome> {
-        let mut target = self.interaction_admits(start).then_some(start);
+        let mut target = self.modal_admits(start).then_some(start);
         while let Some(id) = target {
             let outcome = self.with_widget_ctx(id, |w, ctx| w.on_event(event, ctx))??;
             if outcome == EventOutcome::Handle {

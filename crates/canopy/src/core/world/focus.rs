@@ -56,7 +56,7 @@ impl Core {
     pub(crate) fn transition_focus(&mut self, target: Option<NodeId>) -> Result<ChangeOutcome> {
         if let Some(node) = target {
             self.validate_attached_node(node)?;
-            if !self.interaction_admits(node) {
+            if !self.modal_admits(node) {
                 return Err(Error::Invalid("node is outside the active modal".into()));
             }
         }
@@ -355,7 +355,7 @@ impl Core {
     fn transition_mouse_capture(&mut self, target: Option<NodeId>) -> Result<ChangeOutcome> {
         if let Some(node) = target {
             self.validate_attached_node(node)?;
-            if !self.interaction_admits(node) {
+            if !self.modal_admits(node) {
                 return Err(Error::Invalid("node is outside the active modal".into()));
             }
         }
@@ -534,7 +534,7 @@ fn focus_acceptance(core: &Core, node_id: NodeId) -> Option<bool> {
 /// Return whether focus may occupy this node apart from widget acceptance: it
 /// is attached, admitted by the active modal, and not hidden.
 fn is_focus_position_valid(core: &Core, node_id: NodeId, require_view: bool) -> bool {
-    if !core.interaction_admits(node_id) {
+    if !core.modal_admits(node_id) {
         return false;
     }
     let Some(node) = core.nodes.get(node_id) else {

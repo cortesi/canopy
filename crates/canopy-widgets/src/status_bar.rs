@@ -156,7 +156,7 @@ impl KeyHint {
         &self.key
     }
 
-    /// Return the action name.
+    /// Return the label shown beside the key.
     pub fn label(&self) -> &str {
         &self.label
     }

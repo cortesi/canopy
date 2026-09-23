@@ -365,7 +365,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        core::inputmap::BindingTarget,
+        core::inputmap::BindingAction,
         testing::ttree::{R, run_ttree},
     };
 
@@ -440,7 +440,7 @@ mod tests {
                 .bindings()
                 .iter()
                 .find_map(|binding| {
-                    if let BindingTarget::Script(id) = &binding.target {
+                    if let BindingAction::Script(id) = &binding.action {
                         Some(*id)
                     } else {
                         None

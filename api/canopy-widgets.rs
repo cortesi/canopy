@@ -963,7 +963,7 @@ pub mod canopy_widgets {
     /// the command each button runs, and keeps whatever agreeing to it does,
     /// including closing the dialog.
     ///
-    /// Open it inside a modal scope with [`Confirm::initial_focus`] as the initial
+    /// Open it inside a modal with [`Confirm::initial_focus`] as the initial
     /// focus, and the scope dims what the dialog covers and gives it the keyboard.
     #[derive(Default)]
     pub struct Confirm {}
@@ -1049,7 +1049,7 @@ pub mod canopy_widgets {
     ///
     /// The whole row changes style with keyboard focus, even when empty. A
     /// visible prompt can name the field independently of its editable value.
-    /// The field consumes [`TEXT_CLEAR_ACTION`] and the field's owner handles the
+    /// The field consumes [`CLEAR_INTENT`] and the field's owner handles the
     /// other editing keys.
     pub struct Input {}
 
@@ -1269,6 +1269,14 @@ pub mod canopy_widgets {
         fn set_selected(&mut self, selected: bool);
     }
 
+    /// Intent that clears the focused field, or resets what the focused widget
+    /// shows.
+    ///
+    /// Every widget that accepts it registers it with [`register_clear_intent`],
+    /// and an application binds a key to it. The route offers the intent to the
+    /// first accepting widget, which clears or resets its own state.
+    pub const CLEAR_INTENT: &str = "canopy.clear";
+
     /// Double line Unicode box drawing set.
     pub const DOUBLE: BoxGlyphs = _;
 
@@ -1281,14 +1289,12 @@ pub mod canopy_widgets {
     /// Single line thick Unicode box drawing set.
     pub const SINGLE_THICK: BoxGlyphs = _;
 
-    /// Action name that clears a single-line input.
-    ///
-    /// An application registers this name and binds a key to it. The route offers
-    /// the action to an accepting widget, which clears its own text in response.
-    pub const TEXT_CLEAR_ACTION: &str = "canopy.text.clear";
-
     /// Thin-line scrollbar glyphs over thin-line chrome.
     pub const THIN: ScrollbarGlyphs = _;
+
+    /// Register [`CLEAR_INTENT`]. Each widget type that accepts the intent calls
+    /// this from its `Register` impl; registering it again is harmless.
+    pub fn register_clear_intent(setup: &mut canopy::Setup) -> canopy::error::Result<()> {}
 
     /// Wrap `child` in a new `widget` node and return the wrapper's typed id.
     ///
@@ -1499,7 +1505,7 @@ pub mod canopy_widgets {
         /// Return the question, or an error before it mounts.
         ///
         /// This is the dialog's body, not its initial focus. Use
-        /// [`Confirm::initial_focus`] when opening a modal scope.
+        /// [`Confirm::initial_focus`] when opening a modal.
         pub fn body(&self) -> Result<NodeId> {}
 
         /// Set what each answer does, before the dialog opens.
@@ -1507,7 +1513,7 @@ pub mod canopy_widgets {
         /// Each command is stored on its own button, so a click, a key, and an
         /// accelerator all run the same one. The dialog decides nothing: closing it
         /// is part of what a host's answer command does.
-        pub fn set_actions(
+        pub fn set_commands(
             &mut self,
             context: &mut dyn Context,
             yes: CommandCall,
@@ -1819,10 +1825,14 @@ pub mod canopy_widgets {
         pub fn spec_right() -> &'static canopy::commands::CommandSpec {}
     }
 
+    impl Register for Input {
+        fn register(setup: &mut Setup) -> Result<()> {}
+    }
+
     impl Widget for Input {
         fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
-        fn accepts_action(&self, action: &str, _context: &dyn ViewContext) -> bool {}
+        fn accepts_intent(&self, intent: &str, _context: &dyn ViewContext) -> bool {}
 
         fn cursor(&self) -> Option<cursor::Cursor> {}
 
@@ -1834,9 +1844,9 @@ pub mod canopy_widgets {
 
         fn name(&self) -> NodeName {}
 
-        fn on_action(&mut self, action: &str, _context: &mut dyn Context) -> Result<EventOutcome> {}
-
         fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {}
+
+        fn on_intent(&mut self, intent: &str, _context: &mut dyn Context) -> Result<EventOutcome> {}
 
         fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
 
@@ -2180,11 +2190,11 @@ pub mod canopy_widgets {
         /// Replace the key and its label.
         pub fn set(&mut self, key: impl Into<String>, label: impl Into<String>) {}
 
-        /// Return the action name.
-        pub fn label(&self) -> &str {}
-
         /// Return the key name.
         pub fn key(&self) -> &str {}
+
+        /// Return the label shown beside the key.
+        pub fn label(&self) -> &str {}
     }
 
     impl Widget for KeyHint {
@@ -2569,13 +2579,20 @@ pub mod canopy_widgets {
         pub fn spec_start_filter() -> &'static canopy::commands::CommandSpec {}
     }
 
+    impl<T> Register for PickerList<T>
+    where
+        T: 'static + Label,
+    {
+        fn register(setup: &mut Setup) -> Result<()> {}
+    }
+
     impl<T> Widget for PickerList<T>
     where
         T: 'static + Label,
     {
         fn accept_focus(&self, _context: &dyn ViewContext) -> bool {}
 
-        fn accepts_action(&self, action: &str, _context: &dyn ViewContext) -> bool {}
+        fn accepts_intent(&self, intent: &str, _context: &dyn ViewContext) -> bool {}
 
         fn canvas(&self, view: Size, _context: &CanvasContext<'_>) -> Size {}
 
@@ -2587,9 +2604,9 @@ pub mod canopy_widgets {
 
         fn name(&self) -> NodeName {}
 
-        fn on_action(&mut self, action: &str, context: &mut dyn Context) -> Result<EventOutcome> {}
-
         fn on_event(&mut self, event: &Event, context: &mut dyn Context) -> Result<EventOutcome> {}
+
+        fn on_intent(&mut self, intent: &str, context: &mut dyn Context) -> Result<EventOutcome> {}
 
         fn render(&mut self, render: &mut Render<'_>, context: &dyn ViewContext) -> Result<()> {}
     }
@@ -2733,7 +2750,7 @@ pub mod canopy_widgets {
             W: 'static + Widget, {
         }
 
-        /// Open `overlay` in a modal scope over the list.
+        /// Open `overlay` in a modal over the list.
         ///
         /// The scope is owned by the picker, so it nests inside the scope that
         /// shows the picker. It shows the overlay, dims the dialog behind it,
@@ -2749,7 +2766,7 @@ pub mod canopy_widgets {
             overlay: NodeId,
             initial_focus: NodeId,
             bindings: ModalBindings,
-        ) -> Result<InteractionToken> {
+        ) -> Result<ModalToken> {
         }
 
         /// Return the filter field, or an error before the picker mounts.

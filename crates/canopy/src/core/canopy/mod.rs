@@ -346,7 +346,7 @@ impl Canopy {
         let Some(target) = self.core.input_map.unbind(id)? else {
             return Ok(false);
         };
-        if let inputmap::BindingTarget::Script(target) = target {
+        if let inputmap::BindingAction::Script(target) = target {
             self.release_binding_target(target);
         }
         Ok(true)

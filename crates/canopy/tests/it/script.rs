@@ -308,7 +308,7 @@ mod tests {
             local found = false
             for _, binding in canopy.bindings() do
                 if binding.id == id then
-                    found = binding.target == "command"
+                    found = binding.action == "command"
                         and binding.command == "api_leaf::set"
                         and binding.arguments[1] == 3
                         and binding.phase == "after_widget"
@@ -608,7 +608,7 @@ mod tests {
                         source: None,
                         phase: Some(BindingPhase::AfterWidget),
                     },
-                    canopy::BindingTarget::Command(ApiLeaf::call_get()),
+                    canopy::BindingAction::Command(ApiLeaf::call_get()),
                 )?;
                 record.set(Some(id));
                 Ok(())
@@ -625,7 +625,7 @@ mod tests {
                 if binding.id == {} then
                     found = binding.tier == "framework"
                         and binding.group == "test.framework"
-                        and binding.target == "command"
+                        and binding.action == "command"
                         and binding.description == "Framework action"
                 end
             end

@@ -53,11 +53,9 @@ fn app_with(configure: impl FnOnce(&mut Setup) -> Result<()> + 'static) -> Canop
         .expect("the application builds")
 }
 
-/// Build an application that registers the `test.clear` widget action.
-fn clear_action_app() -> Canopy {
-    app_with(|setup| {
-        setup.register_widget_action(inputmap::WidgetActionSpec::new("test.clear", "Clear")?)
-    })
+/// Build an application that registers the `test.clear` intent.
+fn clear_intent_app() -> Canopy {
+    app_with(|setup| setup.register_intent(inputmap::IntentSpec::new("test.clear", "Clear")?))
 }
 
 /// Install an application binding on a running application, as a script's
@@ -66,7 +64,7 @@ fn bind(
     canopy: &mut Canopy,
     input: impl Into<InputSpec>,
     options: inputmap::BindingOptions,
-    target: inputmap::BindingTarget,
+    target: inputmap::BindingAction,
 ) -> Result<inputmap::BindingId> {
     let (id, removed) = canopy.core.input_map.bind(input.into(), options, target)?;
     canopy.release_removed_bindings(removed);
@@ -84,22 +82,22 @@ fn bind_command(
         canopy,
         input,
         options,
-        inputmap::BindingTarget::Command(command),
+        inputmap::BindingAction::Command(command),
     )
 }
 
-/// Install an application widget action binding on a running application.
-fn bind_widget_action(
+/// Install an application intent binding on a running application.
+fn bind_intent(
     canopy: &mut Canopy,
     input: impl Into<InputSpec>,
     options: inputmap::BindingOptions,
-    action: inputmap::WidgetActionName,
+    action: inputmap::IntentName,
 ) -> Result<inputmap::BindingId> {
     bind(
         canopy,
         input,
         options,
-        inputmap::BindingTarget::WidgetAction(action),
+        inputmap::BindingAction::Intent(action),
     )
 }
 
@@ -493,11 +491,14 @@ fn framework_command_bindings_share_route_resolution_and_event_scope() -> Result
                 source: None,
                 phase: Some(inputmap::BindingPhase::BeforeWidget),
             },
-            inputmap::BindingTarget::Command(R::call_c_root()),
+            inputmap::BindingAction::Command(R::call_c_root()),
         )?;
         c.core
             .input_map
-            .set_modal_bindings(Some(crate::ModalBindings::Framework(group)));
+            .set_modal_bindings(Some(crate::ModalBindings::Framework {
+                group,
+                intents: &[],
+            }));
         c.core.set_focus(tree.a_a)?;
 
         let snapshot = c.available_bindings(None)?;
@@ -825,7 +826,10 @@ fn an_early_mouse_binding_respects_modal_admission_and_wheel_fallback() -> Resul
         )?;
         c.core
             .input_map
-            .set_modal_bindings(Some(crate::ModalBindings::Framework(group)));
+            .set_modal_bindings(Some(crate::ModalBindings::Framework {
+                group,
+                intents: &[],
+            }));
         reset_state();
         c.mouse(None, click_on(&c.core, tree.a_a))?;
         assert!(
@@ -1805,7 +1809,7 @@ fn bind_key_phase(
     key: char,
     phase: crate::BindingPhase,
 ) -> Result<crate::BindingId> {
-    use crate::core::inputmap::{BindingOptions, BindingTarget};
+    use crate::core::inputmap::{BindingAction, BindingOptions};
     let (id, _) = canopy.core.input_map.bind(
         InputSpec::Key(key.into()),
         BindingOptions {
@@ -1815,7 +1819,7 @@ fn bind_key_phase(
             source: None,
             phase: Some(phase),
         },
-        BindingTarget::Script(LuauFunctionId::for_test(1)),
+        BindingAction::Script(LuauFunctionId::for_test(1)),
     )?;
     Ok(id)
 }
@@ -2045,7 +2049,13 @@ fn a_checked_transient_key_under_an_application_modal_matches_its_analysis() -> 
 fn a_framework_modal_suspends_a_transient_mode() -> Result<()> {
     let mut canopy = app();
     let group = inputmap::FrameworkBindingGroup::new("test.modal");
-    modal_leaf(&mut canopy, crate::ModalBindings::Framework(group))?;
+    modal_leaf(
+        &mut canopy,
+        crate::ModalBindings::Framework {
+            group,
+            intents: &[],
+        },
+    )?;
     bind_prefix_mode(&mut canopy)?;
     canopy.push_transient_mode("prefix");
 
@@ -2078,7 +2088,7 @@ fn explain_key_reports_before_widget_and_unhandled_outcomes() -> Result<()> {
             binding: id,
             node: leaf,
             path: Path::from("/root/predicting_leaf"),
-            kind: crate::BindingTargetKind::Script,
+            kind: crate::BindingActionKind::Script,
             phase: crate::BindingPhase::BeforeWidget,
         })
     );
@@ -2110,7 +2120,7 @@ fn explain_key_matches_the_actual_route() -> Result<()> {
             binding: id,
             node: canopy.root_id(),
             path: Path::from("/root"),
-            kind: crate::BindingTargetKind::Script,
+            kind: crate::BindingActionKind::Script,
             phase: crate::BindingPhase::AfterWidget,
         })
     );
@@ -2154,7 +2164,7 @@ fn explain_key_reports_transient_binding_and_dismissal() -> Result<()> {
             binding: id,
             node: canopy.root_id(),
             path: Path::from("/root"),
-            kind: crate::BindingTargetKind::Script,
+            kind: crate::BindingActionKind::Script,
             phase: crate::BindingPhase::AfterWidget,
         })
     );
@@ -2239,21 +2249,21 @@ fn send_key_checked_rejects_a_mismatched_expectation_without_delivery() -> Resul
     Ok(())
 }
 
-/// A leaf that accepts one widget action and records what it receives.
-struct ActionLeaf {
-    /// Action name this leaf implements.
-    action: &'static str,
-    /// Whether the pure prediction accepts the action.
+/// A leaf that accepts one intent and records what it receives.
+struct IntentLeaf {
+    /// Intent name this leaf implements.
+    intent: &'static str,
+    /// Whether the pure prediction accepts the intent.
     accepted: bool,
-    /// Whether `on_action` honors an accepted action.
+    /// Whether `on_intent` honors an accepted intent.
     honest: bool,
-    /// Number of completed action calls.
+    /// Number of completed intent calls.
     calls: Arc<AtomicUsize>,
     /// Number of raw key events the leaf observed.
     raw: Arc<AtomicUsize>,
 }
 
-impl Widget for ActionLeaf {
+impl Widget for IntentLeaf {
     fn accept_focus(&self, _context: &dyn ViewContext) -> bool {
         true
     }
@@ -2265,12 +2275,12 @@ impl Widget for ActionLeaf {
         Ok(EventOutcome::Ignore)
     }
 
-    fn accepts_action(&self, action: &str, _context: &dyn ViewContext) -> bool {
-        self.accepted && action == self.action
+    fn accepts_intent(&self, intent: &str, _context: &dyn ViewContext) -> bool {
+        self.accepted && intent == self.intent
     }
 
-    fn on_action(&mut self, action: &str, _context: &mut dyn Context) -> Result<EventOutcome> {
-        if !self.accepted || !self.honest || action != self.action {
+    fn on_intent(&mut self, intent: &str, _context: &mut dyn Context) -> Result<EventOutcome> {
+        if !self.accepted || !self.honest || intent != self.intent {
             return Ok(EventOutcome::Ignore);
         }
         self.calls.fetch_add(1, Ordering::Relaxed);
@@ -2278,12 +2288,12 @@ impl Widget for ActionLeaf {
     }
 
     fn name(&self) -> NodeName {
-        NodeName::convert("action_leaf")
+        NodeName::convert("intent_leaf")
     }
 }
 
 /// Mount one action leaf and give it the keyboard.
-fn mount_action_leaf(canopy: &mut Canopy, leaf: ActionLeaf) -> Result<NodeId> {
+fn mount_action_leaf(canopy: &mut Canopy, leaf: IntentLeaf) -> Result<NodeId> {
     let node = canopy.core.create_detached(leaf)?;
     canopy.core.attach(canopy.core.root, node)?;
     canopy.core.set_focus(node)?;
@@ -2294,19 +2304,19 @@ fn mount_action_leaf(canopy: &mut Canopy, leaf: ActionLeaf) -> Result<NodeId> {
 fn the_rendered_api_narrows_the_action_arm_to_registered_names() -> Result<()> {
     let empty = app();
     assert!(
-        !empty.script_api()?.contains("WidgetActionName"),
+        !empty.script_api()?.contains("IntentName"),
         "an empty catalog leaves the action arm at commands and callbacks"
     );
 
     let mut canopy = app_with(|setup| {
-        setup.register_widget_action(inputmap::WidgetActionSpec::new(
+        setup.register_intent(inputmap::IntentSpec::new(
             "test.clear",
             "Clear the test leaf",
         )?)
     });
     let api = canopy.script_api()?;
     assert!(
-        api.contains("export type WidgetActionName = \"test.clear\""),
+        api.contains("export type IntentName = \"test.clear\""),
         "the union holds every registered name: {api}"
     );
     assert!(
@@ -2333,13 +2343,13 @@ fn the_rendered_api_narrows_the_action_arm_to_registered_names() -> Result<()> {
 }
 
 #[test]
-fn a_widget_action_dispatches_to_its_accepting_consumer() -> Result<()> {
-    let mut canopy = clear_action_app();
+fn an_intent_dispatches_to_its_accepting_consumer() -> Result<()> {
+    let mut canopy = clear_intent_app();
     let calls = Arc::new(AtomicUsize::new(0));
     let leaf = mount_action_leaf(
         &mut canopy,
-        ActionLeaf {
-            action: "test.clear",
+        IntentLeaf {
+            intent: "test.clear",
             accepted: true,
             honest: true,
             calls: Arc::clone(&calls),
@@ -2356,7 +2366,7 @@ fn a_widget_action_dispatches_to_its_accepting_consumer() -> Result<()> {
         matches!(
             explanation.outcome,
             RouteOutcome::Binding(RouteWinner {
-                kind: crate::BindingTargetKind::WidgetAction,
+                kind: crate::BindingActionKind::Intent,
                 phase: crate::BindingPhase::BeforeWidget,
                 ..
             })
@@ -2368,25 +2378,25 @@ fn a_widget_action_dispatches_to_its_accepting_consumer() -> Result<()> {
     assert!(
         snapshot.bindings.iter().any(|binding| {
             binding.description == "Clear"
-                && binding.target == inputmap::BindingTargetKind::WidgetAction
+                && binding.action == inputmap::BindingActionKind::Intent
                 && binding
-                    .action
+                    .intent
                     .as_ref()
                     .is_some_and(|name| name.as_str() == "test.clear")
         }),
-        "help shows the exact action row"
+        "help shows the exact intent row"
     );
     Ok(())
 }
 
 #[test]
 fn a_dormant_action_does_not_shadow_the_next_candidate() -> Result<()> {
-    let mut canopy = clear_action_app();
+    let mut canopy = clear_intent_app();
     let raw = Arc::new(AtomicUsize::new(0));
     let leaf = mount_action_leaf(
         &mut canopy,
-        ActionLeaf {
-            action: "test.clear",
+        IntentLeaf {
+            intent: "test.clear",
             accepted: false,
             honest: true,
             calls: Arc::new(AtomicUsize::new(0)),
@@ -2395,7 +2405,7 @@ fn a_dormant_action_does_not_shadow_the_next_candidate() -> Result<()> {
     )?;
     canopy.eval_script(
         r#"
-        canopy.bind("ctrl-x", {description = "Clear", path = "action_leaf/"}, "test.clear")
+        canopy.bind("ctrl-x", {description = "Clear", path = "intent_leaf/"}, "test.clear")
         canopy.bind("ctrl-x", {description = "Fallback"}, function()
             canopy.set_mode("fallback")
         end)
@@ -2422,11 +2432,11 @@ fn a_dormant_action_does_not_shadow_the_next_candidate() -> Result<()> {
 
 #[test]
 fn a_dormant_global_action_falls_through_to_the_default_tier() -> Result<()> {
-    let mut canopy = clear_action_app();
+    let mut canopy = clear_intent_app();
     mount_action_leaf(
         &mut canopy,
-        ActionLeaf {
-            action: "test.clear",
+        IntentLeaf {
+            intent: "test.clear",
             accepted: false,
             honest: true,
             calls: Arc::new(AtomicUsize::new(0)),
@@ -2456,13 +2466,13 @@ fn a_dormant_global_action_falls_through_to_the_default_tier() -> Result<()> {
 
 #[test]
 fn a_transient_mode_offers_its_action_before_the_raw_key() -> Result<()> {
-    let mut canopy = clear_action_app();
+    let mut canopy = clear_intent_app();
     let calls = Arc::new(AtomicUsize::new(0));
     let raw = Arc::new(AtomicUsize::new(0));
     mount_action_leaf(
         &mut canopy,
-        ActionLeaf {
-            action: "test.clear",
+        IntentLeaf {
+            intent: "test.clear",
             accepted: true,
             honest: true,
             calls: Arc::clone(&calls),
@@ -2484,7 +2494,7 @@ fn a_transient_mode_offers_its_action_before_the_raw_key() -> Result<()> {
         matches!(
             explanation.outcome,
             RouteOutcome::Transient(RouteWinner {
-                kind: crate::BindingTargetKind::WidgetAction,
+                kind: crate::BindingActionKind::Intent,
                 ..
             })
         ),
@@ -2500,12 +2510,12 @@ fn a_transient_mode_offers_its_action_before_the_raw_key() -> Result<()> {
 
 #[test]
 fn a_transient_mode_dismisses_a_dormant_action() -> Result<()> {
-    let mut canopy = clear_action_app();
+    let mut canopy = clear_intent_app();
     let raw = Arc::new(AtomicUsize::new(0));
     mount_action_leaf(
         &mut canopy,
-        ActionLeaf {
-            action: "test.clear",
+        IntentLeaf {
+            intent: "test.clear",
             accepted: false,
             honest: true,
             calls: Arc::new(AtomicUsize::new(0)),
@@ -2536,19 +2546,19 @@ fn a_transient_mode_dismisses_a_dormant_action() -> Result<()> {
 
 #[test]
 fn only_the_first_accepting_consumer_runs() -> Result<()> {
-    let mut canopy = clear_action_app();
+    let mut canopy = clear_intent_app();
     let leaf_calls = Arc::new(AtomicUsize::new(0));
     let parent_calls = Arc::new(AtomicUsize::new(0));
-    let parent = canopy.core.create_detached(ActionLeaf {
-        action: "test.clear",
+    let parent = canopy.core.create_detached(IntentLeaf {
+        intent: "test.clear",
         accepted: true,
         honest: true,
         calls: Arc::clone(&parent_calls),
         raw: Arc::new(AtomicUsize::new(0)),
     })?;
     canopy.core.attach(canopy.core.root, parent)?;
-    let leaf = canopy.core.create_detached(ActionLeaf {
-        action: "test.clear",
+    let leaf = canopy.core.create_detached(IntentLeaf {
+        intent: "test.clear",
         accepted: true,
         honest: true,
         calls: Arc::clone(&leaf_calls),
@@ -2569,18 +2579,18 @@ fn only_the_first_accepting_consumer_runs() -> Result<()> {
 
 #[test]
 fn a_declining_child_leaves_an_action_to_its_accepting_ancestor() -> Result<()> {
-    let mut canopy = clear_action_app();
+    let mut canopy = clear_intent_app();
     let parent_calls = Arc::new(AtomicUsize::new(0));
-    let parent = canopy.core.create_detached(ActionLeaf {
-        action: "test.clear",
+    let parent = canopy.core.create_detached(IntentLeaf {
+        intent: "test.clear",
         accepted: true,
         honest: true,
         calls: Arc::clone(&parent_calls),
         raw: Arc::new(AtomicUsize::new(0)),
     })?;
     canopy.core.attach(canopy.core.root, parent)?;
-    let leaf = canopy.core.create_detached(ActionLeaf {
-        action: "test.clear",
+    let leaf = canopy.core.create_detached(IntentLeaf {
+        intent: "test.clear",
         accepted: false,
         honest: true,
         calls: Arc::new(AtomicUsize::new(0)),
@@ -2589,11 +2599,11 @@ fn a_declining_child_leaves_an_action_to_its_accepting_ancestor() -> Result<()> 
     canopy.core.attach(parent, leaf)?;
     canopy.core.set_focus(leaf)?;
     let key = key::Key::parse_spec("ctrl-x")?;
-    let id = bind_widget_action(
+    let id = bind_intent(
         &mut canopy,
         key,
         default_options(None, "Clear", None)?,
-        inputmap::WidgetActionName::new("test.clear")?,
+        inputmap::IntentName::new("test.clear")?,
     )?;
     canopy.key(None, key)?;
     assert_eq!(
@@ -2649,13 +2659,13 @@ fn default_options(
 
 #[test]
 fn a_disabled_command_claims_the_key_after_a_dormant_action() -> Result<()> {
-    let mut canopy = clear_action_app();
+    let mut canopy = clear_intent_app();
     canopy.core.commands.add(DisabledLeaf::commands())?;
     let calls = Arc::new(AtomicUsize::new(0));
     mount_action_leaf(
         &mut canopy,
-        ActionLeaf {
-            action: "test.clear",
+        IntentLeaf {
+            intent: "test.clear",
             accepted: false,
             honest: true,
             calls: Arc::clone(&calls),
@@ -2663,11 +2673,11 @@ fn a_disabled_command_claims_the_key_after_a_dormant_action() -> Result<()> {
         },
     )?;
     let key = key::Key::parse_spec("ctrl-x")?;
-    bind_widget_action(
+    bind_intent(
         &mut canopy,
         key,
-        default_options(Some("action_leaf/"), "Dormant clear", None)?,
-        inputmap::WidgetActionName::new("test.clear")?,
+        default_options(Some("intent_leaf/"), "Dormant clear", None)?,
+        inputmap::IntentName::new("test.clear")?,
     )?;
     bind_command(
         &mut canopy,
@@ -2685,26 +2695,26 @@ fn a_disabled_command_claims_the_key_after_a_dormant_action() -> Result<()> {
             .route_trace()
             .iter()
             .any(|entry| entry.detail.contains("binding disabled")),
-        "the dormant action gives way to the disabled command: {:?}",
+        "the dormant intent gives way to the disabled command: {:?}",
         canopy.route_trace()
     );
     assert_eq!(
         calls.load(Ordering::Relaxed),
         0,
-        "the dormant action never runs"
+        "the dormant intent never runs"
     );
     Ok(())
 }
 
 #[test]
-fn a_disabled_command_claims_the_key_before_an_accepting_action() -> Result<()> {
-    let mut canopy = clear_action_app();
+fn a_disabled_command_claims_the_key_before_an_accepting_intent() -> Result<()> {
+    let mut canopy = clear_intent_app();
     canopy.core.commands.add(DisabledLeaf::commands())?;
     let calls = Arc::new(AtomicUsize::new(0));
     mount_action_leaf(
         &mut canopy,
-        ActionLeaf {
-            action: "test.clear",
+        IntentLeaf {
+            intent: "test.clear",
             accepted: true,
             honest: true,
             calls: Arc::clone(&calls),
@@ -2716,23 +2726,23 @@ fn a_disabled_command_claims_the_key_before_an_accepting_action() -> Result<()> 
         &mut canopy,
         key,
         default_options(
-            Some("action_leaf/"),
+            Some("intent_leaf/"),
             "Disabled fire",
             Some(inputmap::BindingPhase::AfterWidget),
         )?,
         DisabledLeaf::call_fire(),
     )?;
-    bind_widget_action(
+    bind_intent(
         &mut canopy,
         key,
         default_options(None, "Clear", None)?,
-        inputmap::WidgetActionName::new("test.clear")?,
+        inputmap::IntentName::new("test.clear")?,
     )?;
     canopy.key(None, key)?;
     assert_eq!(
         calls.load(Ordering::Relaxed),
         0,
-        "the higher-ranked disabled command hides the action"
+        "the higher-ranked disabled command hides the intent"
     );
     assert!(
         canopy
@@ -2746,12 +2756,12 @@ fn a_disabled_command_claims_the_key_before_an_accepting_action() -> Result<()> 
 
 #[test]
 fn an_unreadable_widget_declines_an_action() -> Result<()> {
-    let mut canopy = clear_action_app();
+    let mut canopy = clear_intent_app();
     let calls = Arc::new(AtomicUsize::new(0));
     let leaf = mount_action_leaf(
         &mut canopy,
-        ActionLeaf {
-            action: "test.clear",
+        IntentLeaf {
+            intent: "test.clear",
             accepted: true,
             honest: true,
             calls: Arc::clone(&calls),
@@ -2759,11 +2769,11 @@ fn an_unreadable_widget_declines_an_action() -> Result<()> {
         },
     )?;
     let key = key::Key::parse_spec("ctrl-x")?;
-    bind_widget_action(
+    bind_intent(
         &mut canopy,
         key,
         default_options(None, "Clear", None)?,
-        inputmap::WidgetActionName::new("test.clear")?,
+        inputmap::IntentName::new("test.clear")?,
     )?;
     let path = canopy.core.path_of(canopy.core.root, leaf);
     canopy
@@ -2789,12 +2799,12 @@ fn an_unreadable_widget_declines_an_action() -> Result<()> {
 
 #[test]
 fn checked_dispatch_accepts_an_action_expectation() -> Result<()> {
-    let mut canopy = clear_action_app();
+    let mut canopy = clear_intent_app();
     let calls = Arc::new(AtomicUsize::new(0));
     mount_action_leaf(
         &mut canopy,
-        ActionLeaf {
-            action: "test.clear",
+        IntentLeaf {
+            intent: "test.clear",
             accepted: true,
             honest: true,
             calls: Arc::clone(&calls),
@@ -2802,11 +2812,11 @@ fn checked_dispatch_accepts_an_action_expectation() -> Result<()> {
         },
     )?;
     let key = key::Key::parse_spec("ctrl-x")?;
-    let id = bind_widget_action(
+    let id = bind_intent(
         &mut canopy,
         key,
         default_options(None, "Clear", None)?,
-        inputmap::WidgetActionName::new("test.clear")?,
+        inputmap::IntentName::new("test.clear")?,
     )?;
     canopy.send_key_checked(key, KeyExpectation::Binding(id))?;
     assert_eq!(calls.load(Ordering::Relaxed), 1);
@@ -2825,14 +2835,14 @@ fn checked_dispatch_accepts_an_action_expectation() -> Result<()> {
 
 #[cfg(debug_assertions)]
 #[test]
-#[should_panic(expected = "accepts_action promised Handle")]
+#[should_panic(expected = "accepts_intent promised Handle")]
 fn an_inconsistent_action_consumer_trips_the_debug_assert() {
-    let mut canopy = clear_action_app();
+    let mut canopy = clear_intent_app();
     let calls = Arc::new(AtomicUsize::new(0));
     mount_action_leaf(
         &mut canopy,
-        ActionLeaf {
-            action: "test.clear",
+        IntentLeaf {
+            intent: "test.clear",
             accepted: true,
             honest: false,
             calls: Arc::clone(&calls),

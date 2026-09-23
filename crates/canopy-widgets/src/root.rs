@@ -1,7 +1,7 @@
 use canopy::{
     Canopy, ChildSlot, Context, ContextExt, FocusDirection, FocusScope, FrameworkBindingGroup,
-    InteractionToken, ModalBindings, ModalOptions, NodeId, NodeName, Register, Render, ScrollOp,
-    Setup, TypedId, ViewContext, Widget,
+    ModalBindings, ModalOptions, ModalToken, NodeId, NodeName, Register, Render, ScrollOp, Setup,
+    TypedId, ViewContext, Widget,
     commands::CommandCall,
     derive_commands,
     error::{Error, Result},
@@ -77,7 +77,7 @@ pub struct Root {
     #[cfg(feature = "devtools")]
     inspector_active: bool,
     /// Token for the open help modal, if any.
-    help_token: Option<InteractionToken>,
+    help_token: Option<ModalToken>,
 }
 
 impl Default for Root {
@@ -232,7 +232,10 @@ impl Root {
             modal: help,
             initial_focus: list.into(),
             dim_target: Some(self.main_pane_id(c)?),
-            bindings: ModalBindings::Framework(HELP_BINDINGS),
+            bindings: ModalBindings::Framework {
+                group: HELP_BINDINGS,
+                intents: &[],
+            },
         });
         match opened {
             Ok(token) => self.help_token = Some(token),
@@ -430,7 +433,7 @@ fn register_help_bindings(setup: &mut Setup) -> Result<()> {
                 source: None,
                 phase: Some(canopy::BindingPhase::BeforeWidget),
             },
-            canopy::BindingTarget::Command(command),
+            canopy::BindingAction::Command(command),
         )?;
     }
     Ok(())

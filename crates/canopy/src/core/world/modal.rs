@@ -1,4 +1,4 @@
-//! Modal input admission and token-owned interaction state.
+//! Modal input admission and the stack of open modals.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -10,28 +10,26 @@ use crate::{
     style::effects::{self, Effect},
 };
 
-/// Opaque identity of one modal scope, unique across applications.
+/// Opaque identity of one modal, unique across applications.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct InteractionToken(u64);
+pub struct ModalToken(u64);
 
 /// Bindings admitted within a modal's route to its owner.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ModalBindings {
-    /// Admit only this framework binding group.
-    Framework(FrameworkBindingGroup),
-    /// Admit this framework group first, then named application widget
-    /// actions from the allowlist, on the bounded modal route.
-    FrameworkWithActions {
+    /// Admit this framework group first, then application bindings to the
+    /// listed intents, on the bounded modal route.
+    Framework {
         /// Framework group that owns the modal.
         group: FrameworkBindingGroup,
-        /// Exact application action names the modal admits.
-        actions: &'static [&'static str],
+        /// Exact intent names the modal admits from application bindings.
+        intents: &'static [&'static str],
     },
     /// Admit ordinary application bindings on the bounded modal route.
     Application,
 }
 
-/// Nodes and binding admission owned by one modal scope.
+/// Nodes and binding admission owned by one modal.
 #[derive(Clone, Copy, Debug)]
 pub struct ModalOptions {
     /// Ancestor that owns the modal lifetime and bounds binding routing.
@@ -83,7 +81,7 @@ struct Identity {
 #[derive(Clone)]
 struct ModalScope {
     /// Stable public handle.
-    token: InteractionToken,
+    token: ModalToken,
     /// Declared input and visual behavior.
     options: ModalOptions,
     /// Owning widget lifetime.
@@ -96,16 +94,16 @@ struct ModalScope {
     focus_ancestry: Vec<Identity>,
 }
 
-/// Stack of admitted modal scopes, included in structural rollback snapshots.
+/// Stack of admitted modals, included in structural rollback snapshots.
 #[derive(Clone, Default)]
-pub(super) struct InteractionState {
+pub(super) struct ModalStack {
     /// Last scope is the sole normal input region.
     scopes: Vec<ModalScope>,
 }
 
 impl Core {
     /// Capture a live node's widget identity.
-    fn interaction_identity(&self, node: NodeId) -> Result<Identity> {
+    fn modal_identity(&self, node: NodeId) -> Result<Identity> {
         self.validate_attached_node(node)?;
         Ok(Identity {
             node,
@@ -114,7 +112,7 @@ impl Core {
     }
 
     /// Whether a saved identity still belongs to the active tree.
-    fn interaction_identity_live(&self, identity: Identity) -> bool {
+    fn modal_identity_live(&self, identity: Identity) -> bool {
         self.nodes
             .get(identity.node)
             .is_some_and(|entry| entry.incarnation == identity.incarnation)
@@ -123,31 +121,22 @@ impl Core {
 
     /// Whether a token still owns a scope, including a close awaiting
     /// completion.
-    pub(crate) fn modal_is_open(&self, token: InteractionToken) -> bool {
-        self.interaction
-            .scopes
-            .iter()
-            .any(|scope| scope.token == token)
+    pub(crate) fn modal_is_open(&self, token: ModalToken) -> bool {
+        self.modals.scopes.iter().any(|scope| scope.token == token)
     }
 
     /// Return the top normal-input subtree, if any.
     pub(crate) fn modal_region(&self) -> Option<NodeId> {
-        self.interaction
-            .scopes
-            .last()
-            .map(|scope| scope.options.modal)
+        self.modals.scopes.last().map(|scope| scope.options.modal)
     }
 
     /// Return the last ancestor eligible for modal binding routing.
     pub(crate) fn modal_owner(&self) -> Option<NodeId> {
-        self.interaction
-            .scopes
-            .last()
-            .map(|scope| scope.options.owner)
+        self.modals.scopes.last().map(|scope| scope.options.owner)
     }
 
     /// Whether normal input, focus, and capture may target this node.
-    pub(crate) fn interaction_admits(&self, node: NodeId) -> bool {
+    pub(crate) fn modal_admits(&self, node: NodeId) -> bool {
         self.modal_region()
             .is_none_or(|modal| self.is_ancestor_or_self(modal, node))
     }
@@ -172,7 +161,7 @@ impl Core {
     pub(crate) fn route(&self, start: NodeId) -> Route<'_> {
         Route {
             core: self,
-            next: self.interaction_admits(start).then_some(start),
+            next: self.modal_admits(start).then_some(start),
             path: self.path_of(self.root, start),
         }
     }
@@ -191,12 +180,12 @@ impl Core {
 
     /// Return effects owned by scopes without altering widget-owned effects.
     pub(crate) fn modal_effects_for(&self, node: NodeId) -> Vec<Effect> {
-        self.interaction
+        self.modals
             .scopes
             .iter()
             .filter(|scope| {
                 scope.dim.is_some_and(|identity| {
-                    identity.node == node && self.interaction_identity_live(identity)
+                    identity.node == node && self.modal_identity_live(identity)
                 })
             })
             .map(|_| effects::brightness(0.5))
@@ -206,7 +195,7 @@ impl Core {
     /// Synchronize the binding map with the top scope after a stack change.
     pub(crate) fn sync_modal_bindings(&mut self) {
         self.input_map.set_modal_bindings(
-            self.interaction
+            self.modals
                 .scopes
                 .last()
                 .map(|scope| scope.options.bindings),
@@ -214,21 +203,21 @@ impl Core {
     }
 
     /// Open one modal transaction, preserving prior interaction on failure.
-    pub(crate) fn open_modal(&mut self, options: ModalOptions) -> Result<InteractionToken> {
+    pub(crate) fn open_modal(&mut self, options: ModalOptions) -> Result<ModalToken> {
         static NEXT: AtomicU64 = AtomicU64::new(1);
-        let owner = self.interaction_identity(options.owner)?;
-        let modal = self.interaction_identity(options.modal)?;
+        let owner = self.modal_identity(options.owner)?;
+        let modal = self.modal_identity(options.modal)?;
         self.validate_attached_node(options.initial_focus)?;
         let dim = options
             .dim_target
-            .map(|node| self.interaction_identity(node))
+            .map(|node| self.modal_identity(node))
             .transpose()?;
         if !self.is_ancestor_or_self(options.owner, options.modal)
             || !self.is_ancestor_or_self(options.modal, options.initial_focus)
-            || !self.interaction_admits(options.modal)
-            || !self.interaction_admits(options.owner)
+            || !self.modal_admits(options.modal)
+            || !self.modal_admits(options.owner)
             || self
-                .interaction
+                .modals
                 .scopes
                 .iter()
                 .any(|scope| scope.options.modal == options.modal)
@@ -240,21 +229,21 @@ impl Core {
         let mut focus_ancestry = Vec::new();
         let mut current = self.focus;
         while let Some(node) = current {
-            focus_ancestry.push(self.interaction_identity(node)?);
+            focus_ancestry.push(self.modal_identity(node)?);
             current = self.nodes[node].parent;
         }
-        let token = InteractionToken(
+        let token = ModalToken(
             NEXT.try_update(Ordering::Relaxed, Ordering::Relaxed, |next| {
                 next.checked_add(1)
             })
-            .map_err(|_| Error::Invalid("interaction token space exhausted".into()))?,
+            .map_err(|_| Error::Invalid("modal token space exhausted".into()))?,
         );
         let hidden = self.nodes[options.modal].hidden;
         let focus = self.focus;
         let capture = self.mouse_capture;
         self.nodes[options.modal].hidden = false;
         self.mouse_capture = None;
-        self.interaction.scopes.push(ModalScope {
+        self.modals.scopes.push(ModalScope {
             token,
             options,
             owner,
@@ -271,7 +260,7 @@ impl Core {
             ))
         };
         if let Err(error) = result {
-            self.interaction.scopes.pop();
+            self.modals.scopes.pop();
             self.sync_modal_bindings();
             self.nodes[options.modal].hidden = hidden;
             self.focus = focus;
@@ -283,20 +272,20 @@ impl Core {
     }
 
     /// Close the requested scope and all younger scopes after callbacks return.
-    pub(crate) fn close_modal_now(&mut self, token: InteractionToken) -> Result<()> {
+    pub(crate) fn close_modal_now(&mut self, token: ModalToken) -> Result<()> {
         let Some(index) = self
-            .interaction
+            .modals
             .scopes
             .iter()
             .position(|scope| scope.token == token)
         else {
             return Ok(());
         };
-        let retired: Vec<_> = self.interaction.scopes.drain(index..).collect();
+        let retired: Vec<_> = self.modals.scopes.drain(index..).collect();
         self.sync_modal_bindings();
         self.mouse_capture = None;
         for scope in retired.iter().rev() {
-            if self.interaction_identity_live(scope.modal) {
+            if self.modal_identity_live(scope.modal) {
                 self.nodes[scope.modal.node].hidden = true;
             }
         }
@@ -305,20 +294,20 @@ impl Core {
         let exact = ancestry
             .first()
             .filter(|identity| {
-                self.interaction_identity_live(**identity)
-                    && self.interaction_admits(identity.node)
+                self.modal_identity_live(**identity)
+                    && self.modal_admits(identity.node)
                     && is_focus_candidate(self, identity.node, false)
             })
             .map(|identity| identity.node);
         let fallback = || {
             ancestry
                 .iter()
-                .filter(|identity| self.interaction_identity_live(**identity))
+                .filter(|identity| self.modal_identity_live(**identity))
                 .find_map(|identity| {
                     self.subtree_pre_order(identity.node)
                         .into_iter()
                         .find(|node| {
-                            self.interaction_admits(*node) && is_focus_candidate(self, *node, false)
+                            self.modal_admits(*node) && is_focus_candidate(self, *node, false)
                         })
                 })
         };
@@ -333,24 +322,24 @@ impl Core {
     }
 
     /// Retire scopes invalidated by a successful structural commit.
-    pub(crate) fn retire_invalid_interactions(&mut self) -> Result<()> {
+    pub(crate) fn retire_invalid_modals(&mut self) -> Result<()> {
         let invalid = self
-            .interaction
+            .modals
             .scopes
             .iter()
             .enumerate()
             .position(|(index, scope)| {
-                !self.interaction_identity_live(scope.owner)
-                    || !self.interaction_identity_live(scope.modal)
+                !self.modal_identity_live(scope.owner)
+                    || !self.modal_identity_live(scope.modal)
                     || !self.is_ancestor_or_self(scope.options.owner, scope.options.modal)
                     || (index > 0
                         && !self.is_ancestor_or_self(
-                            self.interaction.scopes[index - 1].options.modal,
+                            self.modals.scopes[index - 1].options.modal,
                             scope.options.owner,
                         ))
             });
         if let Some(index) = invalid {
-            self.close_modal_now(self.interaction.scopes[index].token)?;
+            self.close_modal_now(self.modals.scopes[index].token)?;
         }
         Ok(())
     }

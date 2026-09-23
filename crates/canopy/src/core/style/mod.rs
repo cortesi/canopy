@@ -60,7 +60,7 @@ pub enum WidgetState {
     Focused,
     /// The widget is selected independently of focus.
     Selected,
-    /// The configured action is disabled.
+    /// The widget's command is disabled.
     Disabled,
     /// The widget is pressed or explicitly active.
     Pressed,

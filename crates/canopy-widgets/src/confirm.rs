@@ -103,7 +103,7 @@ fn centred_width(width: u32) -> u32 {
 /// the command each button runs, and keeps whatever agreeing to it does,
 /// including closing the dialog.
 ///
-/// Open it inside a modal scope with [`Confirm::initial_focus`] as the initial
+/// Open it inside a modal with [`Confirm::initial_focus`] as the initial
 /// focus, and the scope dims what the dialog covers and gives it the keyboard.
 pub struct Confirm {
     /// The question, once mounted.
@@ -157,7 +157,7 @@ impl Confirm {
     /// Each command is stored on its own button, so a click, a key, and an
     /// accelerator all run the same one. The dialog decides nothing: closing it
     /// is part of what a host's answer command does.
-    pub fn set_actions(
+    pub fn set_commands(
         &mut self,
         context: &mut dyn Context,
         yes: CommandCall,
@@ -184,7 +184,7 @@ impl Confirm {
     /// Return the question, or an error before it mounts.
     ///
     /// This is the dialog's body, not its initial focus. Use
-    /// [`Confirm::initial_focus`] when opening a modal scope.
+    /// [`Confirm::initial_focus`] when opening a modal.
     pub fn body(&self) -> Result<NodeId> {
         self.body
             .ok_or_else(|| Error::NotFound("confirm body".to_string()))
@@ -474,7 +474,7 @@ mod tests {
             self.close(context)
         }
 
-        /// Hide the dialog the way closing a modal scope would.
+        /// Hide the dialog the way closing a modal would.
         fn close(&self, context: &mut dyn Context) -> Result<()> {
             let dialog = self.dialog()?;
             context.set_hidden(dialog, true)?;
@@ -498,7 +498,7 @@ mod tests {
             let dialog = context.add_child(context.node_id(), Confirm::new())?;
             self.dialog = Some(dialog.into());
             context.with_widget_mut(dialog, |confirm: &mut Confirm, context| {
-                confirm.set_actions(
+                confirm.set_commands(
                     context,
                     Self::call_accept().with_target(CommandTarget::Exact(owner)),
                     Self::call_decline().with_target(CommandTarget::Exact(owner)),
@@ -910,7 +910,10 @@ mod tests {
                 modal: dialog_node,
                 initial_focus: focus,
                 dim_target: None,
-                bindings: ModalBindings::Framework(group),
+                bindings: ModalBindings::Framework {
+                    group,
+                    intents: &[],
+                },
             })?;
             Ok(())
         })?;

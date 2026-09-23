@@ -28,7 +28,7 @@ fn framework(
     options: BindingOptions,
     command: CommandCall,
 ) -> Result<BindingId> {
-    map.bind(input.into(), options, BindingTarget::Command(command))
+    map.bind(input.into(), options, BindingAction::Command(command))
         .map(|(id, _)| id)
 }
 
@@ -75,14 +75,14 @@ fn bind(
             source: Some("test:1".to_string()),
             phase: Some(BindingPhase::AfterWidget),
         },
-        BindingTarget::Script(script(target)),
+        BindingAction::Script(script(target)),
     )
     .map(|(id, _)| id)
 }
 
-fn target(map: &InputMap, path: &str, key: impl Into<Key>) -> Option<BindingTarget> {
+fn target(map: &InputMap, path: &str, key: impl Into<Key>) -> Option<BindingAction> {
     map.resolve_match(&Path::from(path), InputSpec::Key(key.into()))
-        .map(|binding| binding.target.clone())
+        .map(|binding| binding.action.clone())
 }
 
 #[test]
@@ -98,11 +98,11 @@ fn normalized_keys_share_one_registry_slot() -> Result<()> {
     )?;
     assert_eq!(
         target(&map, "/root", 'A'),
-        Some(BindingTarget::Script(script(1)))
+        Some(BindingAction::Script(script(1)))
     );
     assert_eq!(
         target(&map, "/root", key::Shift + 'A'),
-        Some(BindingTarget::Script(script(1)))
+        Some(BindingAction::Script(script(1)))
     );
     Ok(())
 }
@@ -133,23 +133,23 @@ fn resolution_uses_global_then_newest_mode_then_default() -> Result<()> {
     map.push_mode("modal");
     assert_eq!(
         target(&map, "/root/editor", 'a'),
-        Some(BindingTarget::Script(script(3)))
+        Some(BindingAction::Script(script(3)))
     );
     assert_eq!(
         target(&map, "/root/editor", '?'),
-        Some(BindingTarget::Script(script(4)))
+        Some(BindingAction::Script(script(4)))
     );
     assert_eq!(map.active_modes(), vec!["modal", "normal"]);
 
     map.pop_mode();
     assert_eq!(
         target(&map, "/root/editor", 'a'),
-        Some(BindingTarget::Script(script(2)))
+        Some(BindingAction::Script(script(2)))
     );
     map.pop_mode();
     assert_eq!(
         target(&map, "/root/editor", 'a'),
-        Some(BindingTarget::Script(script(1)))
+        Some(BindingAction::Script(script(1)))
     );
     Ok(())
 }
@@ -168,13 +168,13 @@ fn path_score_then_latest_insertion_selects_the_winner() -> Result<()> {
     )?;
     assert_eq!(
         target(&map, "/root/editor", 'a'),
-        Some(BindingTarget::Script(script(2)))
+        Some(BindingAction::Script(script(2)))
     );
 
     bind(&mut map, BindingTier::Default, 'a', "editor/", "Latest", 3)?;
     assert_eq!(
         target(&map, "/root/editor", 'a'),
-        Some(BindingTarget::Script(script(3)))
+        Some(BindingAction::Script(script(3)))
     );
     Ok(())
 }
@@ -230,7 +230,7 @@ fn the_framework_tier_takes_no_script_and_scripts_take_no_framework_tier() -> Re
         map.bind(
             InputSpec::Key('j'.into()),
             options.clone(),
-            BindingTarget::Script(script(1)),
+            BindingAction::Script(script(1)),
         )
         .is_err(),
         "nothing releases a framework script target"
@@ -264,19 +264,25 @@ fn modal_bindings_block_all_application_tiers() -> Result<()> {
         command("other::close"),
     )?;
 
-    map.set_modal_bindings(Some(ModalBindings::Framework(HELP)));
+    map.set_modal_bindings(Some(ModalBindings::Framework {
+        group: HELP,
+        intents: &[],
+    }));
     assert_eq!(
         target(&map, "/root/help/binding_list", 'j'),
-        Some(BindingTarget::Command(command("binding_list::scroll_down")))
+        Some(BindingAction::Command(command("binding_list::scroll_down")))
     );
     assert_eq!(target(&map, "/root/help/binding_list", 'x'), None);
-    map.set_modal_bindings(Some(ModalBindings::Framework(OTHER)));
+    map.set_modal_bindings(Some(ModalBindings::Framework {
+        group: OTHER,
+        intents: &[],
+    }));
     assert_eq!(target(&map, "/root/help/binding_list", 'j'), None);
     map.set_modal_bindings(None);
     assert_eq!(map.active_framework_group(), None);
     assert_eq!(
         target(&map, "/root/help/binding_list", 'j'),
-        Some(BindingTarget::Script(script(1)))
+        Some(BindingAction::Script(script(1)))
     );
     Ok(())
 }
@@ -311,11 +317,11 @@ fn a_transient_mode_hides_older_modes_and_the_default_tier() -> Result<()> {
     assert_eq!(map.mode(), "prefix");
     assert_eq!(
         target(&map, "/root/editor", 'c'),
-        Some(BindingTarget::Script(script(3)))
+        Some(BindingAction::Script(script(3)))
     );
     assert_eq!(
         target(&map, "/root/editor", '?'),
-        Some(BindingTarget::Script(script(4))),
+        Some(BindingAction::Script(script(4))),
         "global bindings still win"
     );
     assert_eq!(target(&map, "/root/editor", 'b'), None);
@@ -330,11 +336,11 @@ fn a_transient_mode_hides_older_modes_and_the_default_tier() -> Result<()> {
     assert_eq!(map.transient_mode(), None);
     assert_eq!(
         target(&map, "/root/editor", 'b'),
-        Some(BindingTarget::Script(script(2)))
+        Some(BindingAction::Script(script(2)))
     );
     assert_eq!(
         target(&map, "/root/editor", 'a'),
-        Some(BindingTarget::Script(script(1)))
+        Some(BindingAction::Script(script(1)))
     );
     Ok(())
 }
@@ -351,7 +357,7 @@ fn application_mutation_cannot_remove_framework_records() -> Result<()> {
         "Help down",
         command("binding_list::scroll_down"),
     )?;
-    assert_eq!(map.unbind(app)?, Some(BindingTarget::Script(script(1))));
+    assert_eq!(map.unbind(app)?, Some(BindingAction::Script(script(1))));
     assert!(map.unbind(framework).is_err());
     map.clear_application();
     assert_eq!(map.bindings().len(), 1);
@@ -373,7 +379,10 @@ fn startup_restore_preserves_framework_records_and_modal_bindings() -> Result<()
         "Help down",
         command("binding_list::scroll_down"),
     )?;
-    map.set_modal_bindings(Some(ModalBindings::Framework(HELP)));
+    map.set_modal_bindings(Some(ModalBindings::Framework {
+        group: HELP,
+        intents: &[],
+    }));
 
     map.restore_application(snapshot);
     assert_eq!(map.bindings().len(), 2);
@@ -389,7 +398,7 @@ fn identifier_exhaustion_does_not_replace_an_existing_binding() -> Result<()> {
     assert!(bind(&mut map, BindingTier::Default, 'a', "", "New", 2).is_err());
     assert_eq!(
         target(&map, "/root", 'a'),
-        Some(BindingTarget::Script(script(1)))
+        Some(BindingAction::Script(script(1)))
     );
     Ok(())
 }
@@ -414,7 +423,7 @@ fn replacement_is_scoped_by_input_tier_and_exact_path() -> Result<()> {
     assert_eq!(map.bindings().len(), 2);
     assert_eq!(
         target(&map, "/root/editor", 'a'),
-        Some(BindingTarget::Script(script(3)))
+        Some(BindingAction::Script(script(3)))
     );
     Ok(())
 }
@@ -496,7 +505,10 @@ fn diagnostics_distinguish_tier_path_insertion_route_and_framework_group_causes(
         "Help down",
         command("binding_list::scroll_down"),
     )?;
-    map.set_modal_bindings(Some(ModalBindings::Framework(HELP)));
+    map.set_modal_bindings(Some(ModalBindings::Framework {
+        group: HELP,
+        intents: &[],
+    }));
     assert_eq!(
         map.registry_status(global, &route).label(),
         "blocked by framework group root.help"
@@ -529,7 +541,7 @@ fn explicit_phase_is_independent_of_selector() -> Result<()> {
             let (id, _) = map.bind(
                 input,
                 options(path, phase),
-                BindingTarget::Script(script(1)),
+                BindingAction::Script(script(1)),
             )?;
             assert_eq!(map.binding(id).unwrap().phase, phase);
             let resolved = map
@@ -576,7 +588,7 @@ fn a_mouse_binding_takes_either_phase() -> Result<()> {
         map.bind(
             input,
             options("editor/", phase),
-            BindingTarget::Script(script(1)),
+            BindingAction::Script(script(1)),
         )?;
         let resolved = map
             .resolve_match(&Path::from("/root/editor"), input)
@@ -605,13 +617,13 @@ fn a_mouse_binding_takes_either_phase() -> Result<()> {
 fn application_command_targets_replace_and_remove_like_callbacks() -> Result<()> {
     let mut map = InputMap::new();
     let script_id = bind(&mut map, BindingTier::Default, 'x', "", "Script", 1)?;
-    let action = BindingTarget::Command(command("editor::undo").with_target(CommandTarget::Focus));
+    let action = BindingAction::Command(command("editor::undo").with_target(CommandTarget::Focus));
     let (command_id, removed) = map.bind(
         InputSpec::Key('x'.into()),
         options("", BindingPhase::AfterWidget),
         action.clone(),
     )?;
-    assert_eq!(removed, [(script_id, BindingTarget::Script(script(1)))]);
+    assert_eq!(removed, [(script_id, BindingAction::Script(script(1)))]);
     assert_eq!(target(&map, "/root", 'x'), Some(action.clone()));
     assert_eq!(map.unbind(command_id)?, Some(action.clone()));
     assert_eq!(map.unbind(command_id)?, None);
@@ -624,7 +636,7 @@ fn application_command_targets_replace_and_remove_like_callbacks() -> Result<()>
     let (_, removed) = map.bind(
         InputSpec::Key('x'.into()),
         options("", BindingPhase::AfterWidget),
-        BindingTarget::Script(script(2)),
+        BindingAction::Script(script(2)),
     )?;
     assert_eq!(removed, [(command_id, action)]);
     Ok(())
@@ -633,7 +645,7 @@ fn application_command_targets_replace_and_remove_like_callbacks() -> Result<()>
 #[test]
 fn application_snapshot_and_clear_include_commands() -> Result<()> {
     let mut map = InputMap::new();
-    let action = BindingTarget::Command(
+    let action = BindingAction::Command(
         command("editor::undo").with_target(CommandTarget::Exact(testing_node_id())),
     );
     let (command_id, _) = map.bind(
@@ -649,7 +661,7 @@ fn application_snapshot_and_clear_include_commands() -> Result<()> {
         removed,
         [
             (command_id, action.clone()),
-            (script_id, BindingTarget::Script(script(1)))
+            (script_id, BindingAction::Script(script(1)))
         ]
     );
     assert!(map.bindings().is_empty());
@@ -675,12 +687,15 @@ fn framework_binding_options_preserve_explicit_phase() -> Result<()> {
         framework(&mut map, input, options.clone(), action.clone())?,
         id
     );
-    map.set_modal_bindings(Some(ModalBindings::Framework(HELP)));
+    map.set_modal_bindings(Some(ModalBindings::Framework {
+        group: HELP,
+        intents: &[],
+    }));
     let resolved = map
         .resolve_match(&Path::from("/root/help/list"), input)
         .unwrap();
     assert_eq!(resolved.phase, BindingPhase::AfterWidget);
-    assert_eq!(resolved.target, BindingTarget::Command(action.clone()));
+    assert_eq!(resolved.action, BindingAction::Command(action.clone()));
     options.phase = Some(BindingPhase::BeforeWidget);
     assert!(framework(&mut map, input, options, action).is_err());
     assert_eq!(map.binding(id).unwrap().phase, BindingPhase::AfterWidget);
@@ -688,7 +703,7 @@ fn framework_binding_options_preserve_explicit_phase() -> Result<()> {
 }
 
 fn register_action(map: &mut InputMap, name: &str) -> Result<()> {
-    map.register_widget_action(WidgetActionSpec::new(name, "Test action")?)
+    map.register_intent(IntentSpec::new(name, "Test action")?)
 }
 
 fn bind_action(
@@ -712,28 +727,25 @@ fn bind_action(
             source: None,
             phase: None,
         },
-        BindingTarget::WidgetAction(WidgetActionName::new(name)?),
+        BindingAction::Intent(IntentName::new(name)?),
     )
     .map(|(id, _)| id)
 }
 
 #[test]
-fn widget_actions_validate_names_phases_and_inputs() -> Result<()> {
+fn intents_validate_names_phases_and_inputs() -> Result<()> {
     let mut map = InputMap::new();
     register_action(&mut map, "test.clear")?;
     register_action(&mut map, "test.clear")?;
     assert!(
-        map.register_widget_action(WidgetActionSpec::new("test.clear", "Other")?)
+        map.register_intent(IntentSpec::new("test.clear", "Other")?)
             .is_err(),
         "a conflicting description is rejected"
     );
+    assert!(IntentName::new("clear").is_err(), "a name must be dotted");
+    assert!(IntentName::new("").is_err(), "a name cannot be empty");
     assert!(
-        WidgetActionName::new("clear").is_err(),
-        "a name must be dotted"
-    );
-    assert!(WidgetActionName::new("").is_err(), "a name cannot be empty");
-    assert!(
-        WidgetActionName::new("a..b").is_err(),
+        IntentName::new("a..b").is_err(),
         "name segments cannot be empty"
     );
 
@@ -748,7 +760,7 @@ fn widget_actions_validate_names_phases_and_inputs() -> Result<()> {
         map.bind(
             InputSpec::Key('x'.into()),
             options.clone(),
-            BindingTarget::WidgetAction(WidgetActionName::new("test.other")?),
+            BindingAction::Intent(IntentName::new("test.other")?),
         )
         .is_err(),
         "an unregistered action name is rejected"
@@ -759,7 +771,7 @@ fn widget_actions_validate_names_phases_and_inputs() -> Result<()> {
         map.bind(
             InputSpec::Key('x'.into()),
             late,
-            BindingTarget::WidgetAction(WidgetActionName::new("test.clear")?),
+            BindingAction::Intent(IntentName::new("test.clear")?),
         )
         .is_err(),
         "an action cannot run after the widget"
@@ -769,7 +781,7 @@ fn widget_actions_validate_names_phases_and_inputs() -> Result<()> {
     let (id, _) = map.bind(
         InputSpec::Key('x'.into()),
         early,
-        BindingTarget::WidgetAction(WidgetActionName::new("test.clear")?),
+        BindingAction::Intent(IntentName::new("test.clear")?),
     )?;
     assert_eq!(
         map.binding(id).map(|record| record.phase),
@@ -780,7 +792,7 @@ fn widget_actions_validate_names_phases_and_inputs() -> Result<()> {
     let (id, _) = map.bind(
         InputSpec::Key('x'.into()),
         options.clone(),
-        BindingTarget::WidgetAction(WidgetActionName::new("test.clear")?),
+        BindingAction::Intent(IntentName::new("test.clear")?),
     )?;
     assert_eq!(
         map.binding(id).map(|record| record.phase),
@@ -792,7 +804,7 @@ fn widget_actions_validate_names_phases_and_inputs() -> Result<()> {
         map.bind(
             InputSpec::Mouse(Mouse::parse_spec("LeftDown")?),
             options,
-            BindingTarget::WidgetAction(WidgetActionName::new("test.clear")?),
+            BindingAction::Intent(IntentName::new("test.clear")?),
         )
         .is_err(),
         "an action accepts keys only"
@@ -822,9 +834,9 @@ fn a_framework_action_modal_admits_only_allowlisted_actions() -> Result<()> {
         "Other",
     )?;
     bind(&mut map, BindingTier::Default, 'z', "", "Callback", 1)?;
-    map.set_modal_bindings(Some(ModalBindings::FrameworkWithActions {
+    map.set_modal_bindings(Some(ModalBindings::Framework {
         group: HELP,
-        actions: &["test.clear"],
+        intents: &["test.clear"],
     }));
     let path = Path::from("/root/help/list");
     let allowed = map.resolve_match(&path, InputSpec::Key('x'.into()));
@@ -844,7 +856,10 @@ fn a_framework_action_modal_admits_only_allowlisted_actions() -> Result<()> {
     );
     assert!(map.candidate_keys().contains(&Key::from('x')));
 
-    map.set_modal_bindings(Some(ModalBindings::Framework(HELP)));
+    map.set_modal_bindings(Some(ModalBindings::Framework {
+        group: HELP,
+        intents: &[],
+    }));
     assert!(
         map.resolve_match(&path, InputSpec::Key('x'.into()))
             .is_none(),
@@ -867,9 +882,9 @@ fn a_framework_modal_suspends_the_transient_cutoff() -> Result<()> {
         "Allowed",
     )?;
     map.push_transient_mode("prefix");
-    map.set_modal_bindings(Some(ModalBindings::FrameworkWithActions {
+    map.set_modal_bindings(Some(ModalBindings::Framework {
         group: HELP,
-        actions: &["test.clear"],
+        intents: &["test.clear"],
     }));
     let route = [Path::from("/root/help/list")];
     assert_eq!(

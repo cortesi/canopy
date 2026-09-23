@@ -1,6 +1,6 @@
 use canopy::{
-    Context, EventOutcome, NodeName, Render, ViewContext, Widget, WidgetSemantics, cursor,
-    derive_commands,
+    Context, EventOutcome, IntentSpec, NodeName, Register, Render, Setup, ViewContext, Widget,
+    WidgetSemantics, cursor, derive_commands,
     error::Result,
     event::{Event, key},
     geom::{Line, Point, Size},
@@ -149,17 +149,28 @@ impl InputBuffer {
     }
 }
 
-/// Action name that clears a single-line input.
+/// Intent that clears the focused field, or resets what the focused widget
+/// shows.
 ///
-/// An application registers this name and binds a key to it. The route offers
-/// the action to an accepting widget, which clears its own text in response.
-pub const TEXT_CLEAR_ACTION: &str = "canopy.text.clear";
+/// Every widget that accepts it registers it with [`register_clear_intent`],
+/// and an application binds a key to it. The route offers the intent to the
+/// first accepting widget, which clears or resets its own state.
+pub const CLEAR_INTENT: &str = "canopy.clear";
+
+/// Register [`CLEAR_INTENT`]. Each widget type that accepts the intent calls
+/// this from its `Register` impl; registering it again is harmless.
+pub fn register_clear_intent(setup: &mut Setup) -> Result<()> {
+    setup.register_intent(IntentSpec::new(
+        CLEAR_INTENT,
+        "Clear the focused field, or reset what the focused widget shows",
+    )?)
+}
 
 /// Single-line text input widget.
 ///
 /// The whole row changes style with keyboard focus, even when empty. A
 /// visible prompt can name the field independently of its editable value.
-/// The field consumes [`TEXT_CLEAR_ACTION`] and the field's owner handles the
+/// The field consumes [`CLEAR_INTENT`] and the field's owner handles the
 /// other editing keys.
 pub struct Input {
     /// Text buffer for the input.
@@ -258,6 +269,13 @@ impl Input {
     }
 }
 
+impl Register for Input {
+    fn register(setup: &mut Setup) -> Result<()> {
+        setup.add_commands::<Self>()?;
+        register_clear_intent(setup)
+    }
+}
+
 impl Widget for Input {
     fn semantics(&self, _ctx: &dyn ViewContext) -> Result<WidgetSemantics> {
         Ok(WidgetSemantics {
@@ -347,12 +365,12 @@ impl Widget for Input {
         }
     }
 
-    fn accepts_action(&self, action: &str, _context: &dyn ViewContext) -> bool {
-        action == TEXT_CLEAR_ACTION
+    fn accepts_intent(&self, intent: &str, _context: &dyn ViewContext) -> bool {
+        intent == CLEAR_INTENT
     }
 
-    fn on_action(&mut self, action: &str, _context: &mut dyn Context) -> Result<EventOutcome> {
-        if action != TEXT_CLEAR_ACTION {
+    fn on_intent(&mut self, intent: &str, _context: &mut dyn Context) -> Result<EventOutcome> {
+        if intent != CLEAR_INTENT {
             return Ok(EventOutcome::Ignore);
         }
         self.set_value("");
@@ -388,7 +406,7 @@ mod tests {
     };
     use unicode_width::UnicodeWidthStr;
 
-    use super::{Input, InputBuffer, TEXT_CLEAR_ACTION, ValueExposure};
+    use super::{CLEAR_INTENT, Input, InputBuffer, ValueExposure};
 
     #[test]
     fn semantic_values_require_explicit_public_exposure() {
@@ -510,18 +528,15 @@ mod tests {
     fn the_clear_action_resets_the_value() -> Result<()> {
         let mut input = Input::new("typed text");
         CanopyBuilder::new().build()?.with_root_context(|ctx| {
-            assert!(input.accepts_action(TEXT_CLEAR_ACTION, ctx));
-            assert!(!input.accepts_action("canopy.text.other", ctx));
-            assert_eq!(
-                input.on_action(TEXT_CLEAR_ACTION, ctx)?,
-                EventOutcome::Handle
-            );
+            assert!(input.accepts_intent(CLEAR_INTENT, ctx));
+            assert!(!input.accepts_intent("canopy.text.other", ctx));
+            assert_eq!(input.on_intent(CLEAR_INTENT, ctx)?, EventOutcome::Handle);
             assert_eq!(input.value(), "");
 
             // An unknown action is ignored and changes nothing.
             input.set_value("kept");
             assert_eq!(
-                input.on_action("canopy.text.other", ctx)?,
+                input.on_intent("canopy.text.other", ctx)?,
                 EventOutcome::Ignore
             );
             assert_eq!(input.value(), "kept");

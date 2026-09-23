@@ -24,7 +24,7 @@ impl TreeStateSnapshot {
             removal_checkpoint: core.completion.requests.len(),
             nodes: core.nodes.clone(),
             semantic_keys: core.semantic_keys.clone(),
-            interaction: core.interaction.clone(),
+            modals: core.modals.clone(),
             root: core.root,
             focus: core.focus,
             exit_requested: core.exit_requested,
@@ -39,7 +39,7 @@ impl TreeStateSnapshot {
         core.completion.requests.truncate(self.removal_checkpoint);
         core.nodes = self.nodes;
         core.semantic_keys = self.semantic_keys;
-        core.interaction = self.interaction;
+        core.modals = self.modals;
         core.sync_modal_bindings();
         core.root = self.root;
         core.focus = self.focus;
@@ -254,7 +254,7 @@ impl Core {
             Ok(value) => {
                 self.prune_semantic_keys();
                 self.sync_work_stamps()?;
-                self.retire_invalid_interactions()?;
+                self.retire_invalid_modals()?;
                 Ok(value)
             }
             Err(err) => {

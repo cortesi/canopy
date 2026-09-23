@@ -1449,7 +1449,10 @@ fn successful_detach_prunes_modal_bindings_owned_by_the_subtree() -> Result<()> 
         modal,
         initial_focus: modal,
         dim_target: None,
-        bindings: ModalBindings::Framework(group),
+        bindings: ModalBindings::Framework {
+            group,
+            intents: &[],
+        },
     })?;
 
     core.detach(modal)?;
@@ -1473,7 +1476,10 @@ fn failed_removal_keeps_the_restored_owners_modal_bindings() -> Result<()> {
         modal,
         initial_focus: modal,
         dim_target: None,
-        bindings: ModalBindings::Framework(group),
+        bindings: ModalBindings::Framework {
+            group,
+            intents: &[],
+        },
     })?;
 
     assert!(core.remove_subtree(modal).is_err());
@@ -1493,7 +1499,10 @@ fn successful_widget_replacement_retires_the_old_owners_modal_bindings() -> Resu
         modal,
         initial_focus: modal,
         dim_target: None,
-        bindings: ModalBindings::Framework(group),
+        bindings: ModalBindings::Framework {
+            group,
+            intents: &[],
+        },
     })?;
 
     core.replace_subtree(modal, FocusableWidget)?;
@@ -1513,7 +1522,10 @@ fn failed_widget_replacement_keeps_the_old_owners_modal_bindings() -> Result<()>
         modal,
         initial_focus: modal,
         dim_target: None,
-        bindings: ModalBindings::Framework(group),
+        bindings: ModalBindings::Framework {
+            group,
+            intents: &[],
+        },
     })?;
 
     assert!(core.replace_subtree(modal, MountFailWidget).is_err());

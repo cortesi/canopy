@@ -8,7 +8,7 @@ use ruau::{declaration, module, vm::NativeModule};
 use crate::{
     FixtureInfo, NoticeSource, RouteTraceKind,
     commands::{CommandParamKind, CommandReturnSpec, CommandSet, CommandSpec, DeclRegistry},
-    core::inputmap::WidgetActionCatalog,
+    core::inputmap::IntentCatalog,
 };
 
 /// Header comment shared by every rendered canopy API surface.
@@ -88,11 +88,11 @@ fn command_params_sig(spec: &CommandSpec) -> declaration::FunctionSignature {
 
 /// Register framework-owned record and alias declarations.
 ///
-/// Returns the binding action union, which narrows to `WidgetActionName`
-/// whenever the application registered at least one widget action.
+/// Returns the binding action union, which narrows to `IntentName`
+/// whenever the application registered at least one intent.
 pub(super) fn register_framework_declarations(
     builder: &mut module::Builder,
-    actions: &WidgetActionCatalog,
+    actions: &IntentCatalog,
 ) -> declaration::Type {
     builder.alias(declaration::Alias::new(
         "Point",
@@ -211,7 +211,7 @@ pub(super) fn register_framework_declarations(
                 declaration::Field::new("description", declaration::Type::String)
                     .doc("User-facing description of every binding the entry makes."),
                 declaration::Field::new("action", action_type.clone()).doc(
-                    "A CommandCall, a function, or a registered widget action name. An \
+                    "A CommandCall, a function, or a registered intent name. An \
                          action entry takes keys only and runs before_widget.",
                 ),
             ]),
@@ -279,14 +279,14 @@ pub(super) fn register_framework_declarations(
     action_type
 }
 
-/// Register `WidgetActionName` when the catalog holds actions, and return the
+/// Register `IntentName` when the catalog holds actions, and return the
 /// binding action union.
 ///
 /// An empty catalog leaves the union at commands and callbacks, because no
 /// string action can be registered in that application.
 fn register_action_type(
     builder: &mut module::Builder,
-    actions: &WidgetActionCatalog,
+    actions: &IntentCatalog,
 ) -> declaration::Type {
     let mut union = vec![
         declaration::Type::named("CommandCall"),
@@ -296,7 +296,7 @@ fn register_action_type(
         return declaration::Type::union(union);
     }
     let mut doc = String::from(
-        "Registered widget action name. The route offers the action to the focused \
+        "Registered intent name. The route offers the action to the focused \
          widget; a widget that accepts it consumes the key.",
     );
     for (name, description) in actions.iter() {
@@ -307,9 +307,9 @@ fn register_action_type(
         .map(|(name, _)| name.as_str().to_string())
         .collect::<Vec<_>>();
     builder.alias(
-        declaration::Alias::new("WidgetActionName", declaration::Type::literals(literals)).doc(doc),
+        declaration::Alias::new("IntentName", declaration::Type::literals(literals)).doc(doc),
     );
-    union.push(declaration::Type::named("WidgetActionName"));
+    union.push(declaration::Type::named("IntentName"));
     declaration::Type::union(union)
 }
 
@@ -328,16 +328,16 @@ fn phase_field() -> declaration::Field {
         "phase",
         declaration::Type::literals(["before_widget", "after_widget"]),
     )
-    .doc("Phase relative to widget input handling. A widget action is before_widget.")
+    .doc("Phase relative to widget input handling. An intent is before_widget.")
 }
 
-/// The binding target-kind field shared by binding records.
-fn target_field() -> declaration::Field {
+/// The binding action-kind field shared by binding records.
+fn action_field() -> declaration::Field {
     declaration::Field::new(
-        "target",
-        declaration::Type::literals(["script", "command", "widget_action"]),
+        "action",
+        declaration::Type::literals(["script", "command", "intent"]),
     )
-    .doc("Kind of target the binding runs.")
+    .doc("Kind of action the binding runs.")
 }
 
 /// Register the active-binding discovery record.
@@ -368,9 +368,9 @@ fn register_binding_info(builder: &mut module::Builder) {
                 .doc("Required user-facing description."),
             declaration::Field::new("source", declaration::Type::String.optional())
                 .doc("Diagnostic source for application bindings."),
-            target_field(),
-            declaration::Field::new("action", declaration::Type::String.optional())
-                .doc("Widget action name, present for a widget action target."),
+            action_field(),
+            declaration::Field::new("intent", declaration::Type::String.optional())
+                .doc("Intent name, present when the action is an intent."),
         ]),
     ));
 }
@@ -501,9 +501,9 @@ fn register_observation_info(builder: &mut module::Builder) {
             declaration::Field::new("path", declaration::Type::String),
             declaration::Field::new("route_path", declaration::Type::String)
                 .doc("Route path at which this binding wins."),
-            target_field(),
-            declaration::Field::new("action", declaration::Type::String.optional())
-                .doc("Widget action name, present for a widget action target."),
+            action_field(),
+            declaration::Field::new("intent", declaration::Type::String.optional())
+                .doc("Intent name, present when the action is an intent."),
             phase_field(),
             declaration::Field::new("source", declaration::Type::String.optional())
                 .doc("Diagnostic source when available."),
@@ -560,7 +560,7 @@ fn register_observation_info(builder: &mut module::Builder) {
         declaration::Type::table([
             declaration::Field::new("id", declaration::Type::Number)
                 .doc("Stable numeric binding identifier."),
-            target_field(),
+            action_field(),
             phase_field(),
         ]),
     ));
@@ -598,10 +598,10 @@ fn register_observation_info(builder: &mut module::Builder) {
             declaration::Field::new("path", declaration::Type::String.optional())
                 .doc("Route path of node."),
             declaration::Field::new(
-                "target",
-                declaration::Type::literals(["script", "command", "widget_action"]).optional(),
+                "action",
+                declaration::Type::literals(["script", "command", "intent"]).optional(),
             )
-            .doc("Kind of target the winning binding runs."),
+            .doc("Kind of action the winning binding runs."),
             declaration::Field::new(
                 "phase",
                 declaration::Type::literals(["before_widget", "after_widget"]).optional(),
@@ -667,7 +667,7 @@ fn register_snapshot_info(builder: &mut module::Builder) {
             Field::new("selected", Type::Boolean.optional()),
             Field::new("selected_keys", Type::Any.array()),
             Field::new(
-                "action_status",
+                "activation_status",
                 Type::named("SemanticActionStatus").optional(),
             ),
         ]),

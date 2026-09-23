@@ -89,7 +89,7 @@ pub use dropdown::Dropdown;
 pub use frame::Frame;
 #[cfg(feature = "graphics")]
 pub use image_view::ImageView;
-pub use input::{Input, TEXT_CLEAR_ACTION, ValueExposure};
+pub use input::{CLEAR_INTENT, Input, ValueExposure, register_clear_intent};
 pub use keyed::KeyedChildren;
 pub use label::Label;
 pub use list::{AutoKey, List, Selectable};

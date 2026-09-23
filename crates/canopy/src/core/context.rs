@@ -14,7 +14,7 @@ use super::{
     world::{Core, WidgetOperation, scroll::RevealTarget},
 };
 use crate::{
-    ChangeOutcome, InteractionToken, ModalOptions, NodeIdentity, Notice,
+    ChangeOutcome, ModalOptions, ModalToken, NodeIdentity, Notice,
     commands::{ArgValue, CommandCall, CommandError, CommandStatus, CommandTarget},
     error::{Error, Result},
     event::{Event, mouse::MouseEvent},
@@ -175,8 +175,8 @@ pub trait ViewContext: sealed::ViewContext {
     /// Return whether a node exists and is attached to the root tree.
     fn is_attached(&self, node: NodeId) -> bool;
 
-    /// Whether a modal scope remains open, including pending deferred closes.
-    fn modal_is_open(&self, token: InteractionToken) -> bool;
+    /// Whether a modal remains open, including pending deferred closes.
+    fn modal_is_open(&self, token: ModalToken) -> bool;
 
     /// Return the notice the application shows: the newest one, from its
     /// record until the next input event.
@@ -522,11 +522,11 @@ pub trait Context: ViewContext + sealed::Context {
     /// Return effective key bindings for a node or the current focus.
     fn available_bindings(&self, node: Option<NodeId>) -> Result<BindingSnapshot>;
 
-    /// Open a modal scope that owns focus, input admission, and visual effects.
-    fn open_modal(&mut self, options: ModalOptions) -> Result<InteractionToken>;
+    /// Open a modal that owns focus, input admission, and visual effects.
+    fn open_modal(&mut self, options: ModalOptions) -> Result<ModalToken>;
 
     /// Close this scope and its nested scopes after active callbacks return.
-    fn close_modal(&mut self, token: InteractionToken) -> Result<()>;
+    fn close_modal(&mut self, token: ModalToken) -> Result<()>;
 
     /// Scroll this node's view.
     ///
@@ -931,7 +931,7 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
         self.core.nodes.get(node).and_then(|n| n.parent)
     }
 
-    fn modal_is_open(&self, token: InteractionToken) -> bool {
+    fn modal_is_open(&self, token: ModalToken) -> bool {
         self.core.modal_is_open(token)
     }
 
@@ -991,11 +991,11 @@ impl Context for NodeCtx<&mut Core> {
         self.core.available_bindings(node)
     }
 
-    fn open_modal(&mut self, options: ModalOptions) -> Result<InteractionToken> {
+    fn open_modal(&mut self, options: ModalOptions) -> Result<ModalToken> {
         self.core.open_modal(options)
     }
 
-    fn close_modal(&mut self, token: InteractionToken) -> Result<()> {
+    fn close_modal(&mut self, token: ModalToken) -> Result<()> {
         self.core.close_modal_after_dispatch(token)
     }
 

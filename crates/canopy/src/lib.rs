@@ -32,14 +32,14 @@ pub use core::termbuf::{Cell, RenderLimits, TermBuf};
 pub use core::testing;
 // Stable app-author surface.
 pub use core::{
-    AutomationCallback, AutomationHandle, BindingId, BindingOptions, BindingPhase, BindingTarget,
-    BindingTargetKind, BindingTier, Canopy, CanopyBuilder, ChangeOutcome, ChildSlot, Context,
-    ContextExt, EvalId, EvalOutcome, EvalRequest, EvalTicket, Fixture, FixtureInfo, FocusDirection,
-    FocusScope, FrameId, FrameSnapshot, FrameworkBindingGroup, InputSpec, InteractionToken,
-    ModalBindings, ModalOptions, NodeId, NodeIdentity, NodeSnapshot, NodeWakeHandle, Notice,
-    NoticeSource, Register, RevealAlign, RouteTraceEntry, RouteTraceKind, ScriptJournalEntry,
-    ScriptOrigin, ScriptTrust, ScrollDirection, ScrollOp, Setup, TurnOutcome, TypedId, ViewContext,
-    ViewContextExt, WakeOutcome, WidgetActionName, WidgetActionSpec, WidgetSemantics, Work,
+    AutomationCallback, AutomationHandle, BindingAction, BindingActionKind, BindingId,
+    BindingOptions, BindingPhase, BindingTier, Canopy, CanopyBuilder, ChangeOutcome, ChildSlot,
+    Context, ContextExt, EvalId, EvalOutcome, EvalRequest, EvalTicket, Fixture, FixtureInfo,
+    FocusDirection, FocusScope, FrameId, FrameSnapshot, FrameworkBindingGroup, InputSpec,
+    IntentName, IntentSpec, ModalBindings, ModalOptions, ModalToken, NodeId, NodeIdentity,
+    NodeSnapshot, NodeWakeHandle, Notice, NoticeSource, Register, RevealAlign, RouteTraceEntry,
+    RouteTraceKind, ScriptJournalEntry, ScriptOrigin, ScriptTrust, ScrollDirection, ScrollOp,
+    Setup, TurnOutcome, TypedId, ViewContext, ViewContextExt, WakeOutcome, WidgetSemantics, Work,
     WorkLifetime,
 };
 // App-author modules used by widget implementations and derive output.

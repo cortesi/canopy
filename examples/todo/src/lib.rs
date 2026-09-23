@@ -5,9 +5,8 @@ use std::{collections::HashMap, fmt::Display, path::Path};
 
 use anyhow::Result as AnyResult;
 use canopy::{
-    Canopy, CanopyBuilder, ChildSlot, Context, ContextExt, InteractionToken, ModalBindings,
-    ModalOptions, NodeId, NodeName, Register, Render, Setup, ViewContext, ViewContextExt, Widget,
-    WidgetActionSpec,
+    Canopy, CanopyBuilder, ChildSlot, Context, ContextExt, ModalBindings, ModalOptions, ModalToken,
+    NodeId, NodeName, Register, Render, Setup, ViewContext, ViewContextExt, Widget,
     commands::CommandStatus,
     derive_commands,
     error::{Error, Result},
@@ -16,8 +15,7 @@ use canopy::{
     style::{StyleMap, default as palette},
 };
 use canopy_widgets::{
-    Center, Frame, Input, KeyHint, List, Root, Selectable, StatusBar, TEXT_CLEAR_ACTION, Text,
-    ValueExposure,
+    Center, Frame, Input, KeyHint, List, Root, Selectable, StatusBar, Text, ValueExposure,
 };
 
 // Typed keys for keyed children
@@ -138,7 +136,7 @@ pub(crate) struct Todo {
     /// Database owned by this application.
     store: store::Store,
     /// Owned interaction scope for the add-item modal.
-    adder: Option<InteractionToken>,
+    adder: Option<ModalToken>,
 }
 
 #[derive_commands]
@@ -406,7 +404,7 @@ impl Register for Todo {
     fn register(setup: &mut Setup) -> Result<()> {
         setup.add_commands::<Self>()?;
         setup.add_commands::<List<TodoEntry, i64>>()?;
-        setup.add_commands::<Input>()?;
+        Input::register(setup)?;
         Ok(())
     }
 }
@@ -421,7 +419,7 @@ canopy.bind("ctrl-g", {
 }, command.root.toggle_help())
 canopy.keymap({
     { key = "q", description = "Quit", action = command.root.quit() },
-    { key = "ctrl-x", description = "Clear text", action = "canopy.text.clear" },
+    { key = "ctrl-x", description = "Clear text", action = "canopy.clear" },
     { key = "d", description = "Delete item", action = command.todo.delete_item() },
     { key = "a", description = "Add item", action = command.todo.enter_item() },
     { key = "g", description = "First item", action = command.todo.select_first() },
@@ -527,10 +525,6 @@ fn app_builder(config: Option<&Path>) -> CanopyBuilder {
             Root::register(setup)?;
             Todo::register(setup)?;
             style(setup.style_mut());
-            setup.register_widget_action(WidgetActionSpec::new(
-                TEXT_CLEAR_ACTION,
-                "Clear the focused input",
-            )?)?;
             register_fixtures(setup)
         })
         .bindings("todo-defaults", DEFAULT_BINDINGS);

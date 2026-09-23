@@ -119,25 +119,25 @@ pub trait Widget: Any {
         EventOutcome::Ignore
     }
 
-    /// Return whether this widget consumes `action` in its current state.
+    /// Return whether this widget consumes `intent` in its current state.
     ///
     /// This is a pure promise. When it returns true, the next routed
-    /// [`Widget::on_action`] call for the same action and state must return
+    /// [`Widget::on_intent`] call for the same intent and state must return
     /// [`EventOutcome::Handle`]. The default says the widget consumes no
-    /// action, so action bindings stay dormant on its route.
+    /// intent, so intent bindings stay dormant on its route.
     ///
     /// `ctx` is a read-only view bound to this widget's node. Its focus
     /// answers follow the route focus the caller is asking about.
-    fn accepts_action(&self, _action: &str, _ctx: &dyn ViewContext) -> bool {
+    fn accepts_intent(&self, _intent: &str, _ctx: &dyn ViewContext) -> bool {
         false
     }
 
-    /// Perform one named action the route offered to this widget.
+    /// Perform one intent the route offered to this widget.
     ///
-    /// Routing calls this only after [`Widget::accepts_action`] returned true
-    /// for the same action and state. A widget that does not know the action
+    /// Routing calls this only after [`Widget::accepts_intent`] returned true
+    /// for the same intent and state. A widget that does not know the intent
     /// returns [`EventOutcome::Ignore`].
-    fn on_action(&mut self, _action: &str, _ctx: &mut dyn Context) -> Result<EventOutcome> {
+    fn on_intent(&mut self, _intent: &str, _ctx: &mut dyn Context) -> Result<EventOutcome> {
         Ok(EventOutcome::Ignore)
     }
 

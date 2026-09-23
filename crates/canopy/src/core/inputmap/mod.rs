@@ -11,8 +11,8 @@ use crate::{
     script::LuauFunctionId,
 };
 
-mod action;
-pub use action::{WidgetActionCatalog, WidgetActionName, WidgetActionSpec};
+mod intent;
+pub use intent::{IntentCatalog, IntentName, IntentSpec};
 
 /// Default mode name.
 const DEFAULT_MODE: &str = "";
@@ -121,41 +121,41 @@ pub struct BindingOptions {
     /// Phase that sets when the binding runs relative to the widget.
     ///
     /// `None` means the phase was omitted at registration. Commands and
-    /// callbacks then default to `after_widget`. A widget action always runs
+    /// callbacks then default to `after_widget`. An intent always runs
     /// before the widget, so an explicit `after_widget` on one is an error.
     pub phase: Option<BindingPhase>,
 }
 
 /// Action executed by a binding.
 #[derive(Clone, Debug, PartialEq)]
-pub enum BindingTarget {
+pub enum BindingAction {
     /// Stored Luau callback.
     Script(LuauFunctionId),
     /// Rust command call.
     Command(CommandCall),
     /// Named operation the route offers to widgets on the way up.
-    WidgetAction(WidgetActionName),
+    Intent(IntentName),
 }
 
 /// Class of target a binding record owns.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum BindingTargetKind {
+pub enum BindingActionKind {
     /// Stored Luau callback.
     Script,
     /// Rust command call.
     Command,
     /// Named operation offered to widgets on the route.
-    WidgetAction,
+    Intent,
 }
 
-impl BindingTargetKind {
+impl BindingActionKind {
     /// Return the kind of one binding target.
     #[must_use]
-    pub(crate) fn of(target: &BindingTarget) -> Self {
+    pub(crate) fn of(target: &BindingAction) -> Self {
         match target {
-            BindingTarget::Script(_) => Self::Script,
-            BindingTarget::Command(_) => Self::Command,
-            BindingTarget::WidgetAction(_) => Self::WidgetAction,
+            BindingAction::Script(_) => Self::Script,
+            BindingAction::Command(_) => Self::Command,
+            BindingAction::Intent(_) => Self::Intent,
         }
     }
 
@@ -165,22 +165,22 @@ impl BindingTargetKind {
         match self {
             Self::Script => "script",
             Self::Command => "command",
-            Self::WidgetAction => "widget_action",
+            Self::Intent => "intent",
         }
     }
 }
 
-impl BindingTarget {
+impl BindingAction {
     /// Return a stable target-kind label.
     pub fn label(&self) -> &'static str {
-        BindingTargetKind::of(self).label()
+        BindingActionKind::of(self).label()
     }
 
-    /// Return the widget action name, when this is an action target.
+    /// Return the intent name, when this action is an intent.
     #[must_use]
-    pub fn widget_action(&self) -> Option<&WidgetActionName> {
+    pub fn intent(&self) -> Option<&IntentName> {
         match self {
-            Self::WidgetAction(name) => Some(name),
+            Self::Intent(name) => Some(name),
             Self::Script(_) | Self::Command(_) => None,
         }
     }
@@ -203,8 +203,8 @@ pub struct BindingRecord {
     /// action is always `BeforeWidget`: the route offers it before the node's
     /// raw key handler.
     pub phase: BindingPhase,
-    /// Binding target.
-    pub target: BindingTarget,
+    /// What the binding runs.
+    pub action: BindingAction,
     /// Monotonic insertion order.
     pub insertion_id: u64,
     /// Compiled path matcher and its original filter.
@@ -214,15 +214,15 @@ pub struct BindingRecord {
 impl BindingRecord {
     /// Copy the parts of this record that routing needs to act on it.
     pub(crate) fn resolved(&self) -> ResolvedBinding {
-        let target = match &self.target {
-            BindingTarget::WidgetAction(action) => {
+        let target = match &self.action {
+            BindingAction::Intent(intent) => {
                 return ResolvedBinding::Offer {
                     id: self.id,
-                    action: action.clone(),
+                    intent: intent.clone(),
                 };
             }
-            BindingTarget::Script(function) => RunTarget::Script(*function),
-            BindingTarget::Command(call) => RunTarget::Command(call.clone()),
+            BindingAction::Script(function) => RunTarget::Script(*function),
+            BindingAction::Command(call) => RunTarget::Command(call.clone()),
         };
         ResolvedBinding::Run(RunBinding {
             id: self.id,
@@ -275,17 +275,17 @@ impl BindingPhase {
 /// Owned copy of a winning binding, kept while routing acts on it.
 ///
 /// Resolution borrows records. Routing copies the winner here, because acting
-/// on it can change the registry. The route offers a widget action to the
+/// on it can change the registry. The route offers an intent to the
 /// node's widget, and runs a command or callback, so each carries only what
 /// that needs.
 #[derive(Clone, Debug)]
 pub enum ResolvedBinding {
-    /// A widget action the route offers before the node's raw key handler.
+    /// An intent the route offers before the node's raw key handler.
     Offer {
         /// Binding identifier.
         id: BindingId,
-        /// Offered action.
-        action: WidgetActionName,
+        /// Offered intent.
+        intent: IntentName,
     },
     /// A command or callback that runs at its phase.
     Run(RunBinding),
@@ -454,8 +454,8 @@ pub struct ApplicationBindingSnapshot {
 pub struct InputMap {
     /// Flat application and framework binding records.
     records: Vec<BindingRecord>,
-    /// Bindable widget actions the application registered.
-    actions: WidgetActionCatalog,
+    /// Bindable intents the application registered.
+    intents: IntentCatalog,
     /// Active application modes in push order.
     mode_stack: Vec<ActiveMode>,
     /// Number of mode stack updates, so observers can tell when to resync.
@@ -479,7 +479,7 @@ impl InputMap {
     pub fn new() -> Self {
         Self {
             records: Vec::new(),
-            actions: WidgetActionCatalog::default(),
+            intents: IntentCatalog::default(),
             mode_stack: Vec::new(),
             mode_generation: 0,
             modal_bindings: None,
@@ -488,15 +488,15 @@ impl InputMap {
         }
     }
 
-    /// Register one bindable widget action for this application.
-    pub(crate) fn register_widget_action(&mut self, spec: WidgetActionSpec) -> Result<()> {
-        self.actions.register(spec)
+    /// Register one bindable intent for this application.
+    pub(crate) fn register_intent(&mut self, spec: IntentSpec) -> Result<()> {
+        self.intents.register(spec)
     }
 
-    /// Return the registered widget actions in name order.
+    /// Return the registered intents in name order.
     #[must_use]
-    pub(crate) fn widget_actions(&self) -> &WidgetActionCatalog {
-        &self.actions
+    pub(crate) fn intents(&self) -> &IntentCatalog {
+        &self.intents
     }
 
     /// Install one binding, and return its identifier with the application
@@ -512,34 +512,34 @@ impl InputMap {
         &mut self,
         input: InputSpec,
         options: BindingOptions,
-        target: BindingTarget,
-    ) -> Result<(BindingId, Vec<(BindingId, BindingTarget)>)> {
-        if let BindingTarget::WidgetAction(name) = &target {
+        target: BindingAction,
+    ) -> Result<(BindingId, Vec<(BindingId, BindingAction)>)> {
+        if let BindingAction::Intent(name) = &target {
             if matches!(input, InputSpec::Mouse(_)) {
                 return Err(Error::Invalid(
-                    "widget action bindings accept keys only".to_string(),
+                    "intent bindings accept keys only".to_string(),
                 ));
             }
-            if !self.actions.contains(name) {
+            if !self.intents.contains(name) {
                 return Err(Error::Invalid(format!(
-                    "widget action {name} is not registered in this application"
+                    "intent {name} is not registered in this application"
                 )));
             }
         }
-        // A widget action is offered before the node's raw key handler.
+        // An intent is offered before the node's raw key handler.
         let phase = match target {
-            BindingTarget::WidgetAction(_) => BindingPhase::BeforeWidget,
-            BindingTarget::Script(_) | BindingTarget::Command(_) => {
+            BindingAction::Intent(_) => BindingPhase::BeforeWidget,
+            BindingAction::Script(_) | BindingAction::Command(_) => {
                 options.phase.unwrap_or_default()
             }
         };
         let path_filter = options.path.as_ref().map_or("", PathFilter::as_str);
         let input = input.normalize();
         if let Some(group) = options.tier.framework_group() {
-            validate_record(&options, target.widget_action())?;
-            if matches!(target, BindingTarget::Script(_)) {
+            validate_record(&options, target.intent())?;
+            if matches!(target, BindingAction::Script(_)) {
                 return Err(Error::Invalid(
-                    "framework bindings take a command or a widget action".to_string(),
+                    "framework bindings take a command or an intent".to_string(),
                 ));
             }
             if let Some(existing) = self.records.iter().find(|record| {
@@ -550,7 +550,7 @@ impl InputMap {
                 if existing.description == options.description
                     && existing.phase == phase
                     && existing.source == options.source
-                    && existing.target == target
+                    && existing.action == target
                 {
                     return Ok((existing.id, Vec::new()));
                 }
@@ -559,7 +559,7 @@ impl InputMap {
                 )));
             }
         } else {
-            validate_application_binding(&options, target.widget_action())?;
+            validate_application_binding(&options, target.intent())?;
         }
         let path_matcher = options.path.clone().unwrap_or(PathFilter::new("")?);
         // Identifiers are allocated before anything is replaced, so exhaustion
@@ -584,7 +584,7 @@ impl InputMap {
             description: options.description,
             source: options.source,
             phase,
-            target,
+            action: target,
             insertion_id,
             path_matcher,
         });
@@ -592,7 +592,7 @@ impl InputMap {
     }
 
     /// Remove one application binding.
-    pub fn unbind(&mut self, id: BindingId) -> Result<Option<BindingTarget>> {
+    pub fn unbind(&mut self, id: BindingId) -> Result<Option<BindingAction>> {
         let Some(index) = self.records.iter().position(|record| record.id == id) else {
             return Ok(None);
         };
@@ -603,7 +603,7 @@ impl InputMap {
             )));
         }
         let record = self.records.remove(index);
-        Ok(Some(record.target))
+        Ok(Some(record.action))
     }
 
     /// Remove application bindings for an input and selector.
@@ -611,7 +611,7 @@ impl InputMap {
         &mut self,
         input: InputSpec,
         selector: &BindingSelector<'_>,
-    ) -> Vec<(BindingId, BindingTarget)> {
+    ) -> Vec<(BindingId, BindingAction)> {
         let input = input.normalize();
         self.remove_application_records(|record| {
             record.input == input
@@ -626,7 +626,7 @@ impl InputMap {
     }
 
     /// Remove all application bindings and reset application modes.
-    pub fn clear_application(&mut self) -> Vec<(BindingId, BindingTarget)> {
+    pub fn clear_application(&mut self) -> Vec<(BindingId, BindingAction)> {
         let removed = self.remove_application_records(|_| true);
         self.mode_stack.clear();
         self.touch_modes();
@@ -638,13 +638,13 @@ impl InputMap {
     fn remove_application_records(
         &mut self,
         selected: impl Fn(&BindingRecord) -> bool,
-    ) -> Vec<(BindingId, BindingTarget)> {
+    ) -> Vec<(BindingId, BindingAction)> {
         let mut removed = Vec::new();
         self.records.retain(|record| {
             if record.tier.is_framework() || !selected(record) {
                 return true;
             }
-            removed.push((record.id, record.target.clone()));
+            removed.push((record.id, record.action.clone()));
             false
         });
         removed
@@ -682,12 +682,11 @@ impl InputMap {
         let input = input.normalize();
         let mut out = Vec::new();
         match &self.modal_bindings {
-            Some(ModalBindings::Framework(group)) => {
+            Some(ModalBindings::Framework { group, intents }) => {
                 self.extend_framework_group(&mut out, path, input, *group);
-            }
-            Some(ModalBindings::FrameworkWithActions { group, .. }) => {
-                self.extend_framework_group(&mut out, path, input, *group);
-                self.extend_application_tiers(&mut out, path, input, false);
+                if !intents.is_empty() {
+                    self.extend_application_tiers(&mut out, path, input, false);
+                }
             }
             Some(ModalBindings::Application) | None => {
                 self.extend_application_tiers(&mut out, path, input, true);
@@ -768,13 +767,12 @@ impl InputMap {
     /// `candidate_keys` share this predicate.
     pub(crate) fn admits_record(&self, record: &BindingRecord) -> bool {
         match &self.modal_bindings {
-            Some(ModalBindings::Framework(group)) => record.tier.framework_group() == Some(*group),
-            Some(ModalBindings::FrameworkWithActions { group, actions }) => match &record.tier {
+            Some(ModalBindings::Framework { group, intents }) => match &record.tier {
                 BindingTier::Framework(record_group) => record_group == group,
                 BindingTier::Global | BindingTier::Mode(_) | BindingTier::Default => record
-                    .target
-                    .widget_action()
-                    .is_some_and(|name| actions.contains(&name.as_str())),
+                    .action
+                    .intent()
+                    .is_some_and(|name| intents.contains(&name.as_str())),
             },
             Some(ModalBindings::Application) | None => !record.tier.is_framework(),
         }
@@ -893,8 +891,7 @@ impl InputMap {
     /// Return the framework group the top modal admits.
     pub fn active_framework_group(&self) -> Option<FrameworkBindingGroup> {
         match self.modal_bindings {
-            Some(ModalBindings::Framework(group))
-            | Some(ModalBindings::FrameworkWithActions { group, .. }) => Some(group),
+            Some(ModalBindings::Framework { group, .. }) => Some(group),
             Some(ModalBindings::Application) | None => None,
         }
     }
@@ -1022,9 +1019,9 @@ impl InputMap {
             .iter()
             .filter(|record| !record.tier.is_framework())
             .filter(|record| !baseline.contains(&record.id))
-            .filter_map(|record| match record.target {
-                BindingTarget::Script(target) => Some(target),
-                BindingTarget::Command(_) | BindingTarget::WidgetAction(_) => None,
+            .filter_map(|record| match record.action {
+                BindingAction::Script(target) => Some(target),
+                BindingAction::Command(_) | BindingAction::Intent(_) => None,
             })
             .collect()
     }
@@ -1076,11 +1073,11 @@ fn compare_candidates(left: BindingCandidate<'_>, right: BindingCandidate<'_>) -
 /// Validate the options and target of one application binding without
 /// installing it.
 ///
-/// `action` is the widget action name for an action target, and `None` for a
+/// `action` is the intent name for an action target, and `None` for a
 /// command or callback target.
 pub fn validate_application_binding(
     options: &BindingOptions,
-    action: Option<&WidgetActionName>,
+    action: Option<&IntentName>,
 ) -> Result<()> {
     let path_filter = options.path.as_ref().map_or("", PathFilter::as_str);
     validate_application_tier(&options.tier, path_filter)?;
@@ -1088,11 +1085,11 @@ pub fn validate_application_binding(
 }
 
 /// Validate the description and phase of one binding in any tier.
-fn validate_record(options: &BindingOptions, action: Option<&WidgetActionName>) -> Result<()> {
+fn validate_record(options: &BindingOptions, action: Option<&IntentName>) -> Result<()> {
     validate_description(&options.description)?;
     if action.is_some() && options.phase == Some(BindingPhase::AfterWidget) {
         return Err(Error::Invalid(
-            "widget action bindings run before the widget and cannot take after_widget".to_string(),
+            "intent bindings run before the widget and cannot take after_widget".to_string(),
         ));
     }
     Ok(())

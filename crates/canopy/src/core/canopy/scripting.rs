@@ -576,7 +576,7 @@ impl Canopy {
             &default_binding_owners,
             surface_source,
             &self.fixture_infos(),
-            self.core.input_map.widget_actions(),
+            self.core.input_map.intents(),
         )?;
         self.validate_script_module_declarations(module_source.as_ref())?;
         self.compile_registered_default_bindings()?;

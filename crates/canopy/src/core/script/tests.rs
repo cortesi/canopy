@@ -12,7 +12,7 @@ use tokio::runtime::Builder;
 use super::{base_api::read_node_id, bridge::REENTRANT_CANOPY, *};
 use crate::{
     CanopyBuilder, Widget,
-    core::{id::testing_node_id, inputmap::WidgetActionCatalog, testing::model::trace_result},
+    core::{id::testing_node_id, inputmap::IntentCatalog, testing::model::trace_result},
     derive_commands,
     error::Result,
     state::NodeName,
@@ -350,7 +350,7 @@ fn marshaled_table_policy_uses_shared_layouts_and_paths() {
 #[test]
 fn live_and_marshaled_value_policy_agree_without_erasing_node_identity() {
     let surface = Surface::builder()
-        .module(build_base_module(&WidgetActionCatalog::default()).expect("base module builds"))
+        .module(build_base_module(&IntentCatalog::default()).expect("base module builds"))
         .build()
         .expect("surface builds");
     let mut vm = surface
@@ -422,7 +422,7 @@ fn strip_error_root(message: String, root: &str) -> String {
 #[test]
 fn scoped_and_marshaled_value_policy_agree_on_layouts_and_errors() {
     let surface = Surface::builder()
-        .module(build_base_module(&WidgetActionCatalog::default()).expect("base module builds"))
+        .module(build_base_module(&IntentCatalog::default()).expect("base module builds"))
         .build()
         .expect("surface builds");
     let mut vm = surface
@@ -1034,7 +1034,7 @@ fn declarative_script_binding_exposes_arguments_phase_and_route_target() -> Resu
         }, command.script_call_probe.set_value(7))
         for _, binding in canopy.bindings() do
             if binding.input == "x" then
-                assert(binding.target == "command")
+                assert(binding.action == "command")
                 assert(binding.command == "script_call_probe::set_value")
                 assert(binding.arguments[1] == 7)
                 local target = binding.command_target
@@ -1128,7 +1128,7 @@ fn script_explains_routes_and_checks_dispatch() -> Result<()> {
         local outcome = explanation.outcome
         canopy.assert(outcome.kind == "binding", "the binding would run")
         canopy.assert(outcome.phase == "after_widget", "after the widget ignores the key")
-        canopy.assert(outcome.target == "command", "the binding runs a command")
+        canopy.assert(outcome.action == "command", "the binding runs a command")
         canopy.assert(#explanation.steps == 1, "the walk stops at the winner")
         local step = explanation.steps[1]
         canopy.assert(step.widget == "ignore", "every widget predicts its keys")

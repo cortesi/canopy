@@ -13,7 +13,7 @@ use crate::{
 /// Per-type registration that runs before the application API is finalized.
 ///
 /// An implementation registers what its type needs at runtime: commands,
-/// default bindings, framework bindings, widget actions, fixtures, and mode
+/// default bindings, framework bindings, intents, fixtures, and mode
 /// hooks. It never touches the widget tree; widgets are built during assembly.
 /// A composite type registers the types it mounts by calling their
 /// implementations.
@@ -100,12 +100,14 @@ impl Setup {
         self.canopy.script.register_fixture(fixture)
     }
 
-    /// Register one bindable widget action.
+    /// Register one bindable intent.
     ///
     /// The catalog carries names and descriptions; widgets decide whether
-    /// they consume an action.
-    pub fn register_widget_action(&mut self, spec: inputmap::WidgetActionSpec) -> Result<()> {
-        self.canopy.core.input_map.register_widget_action(spec)
+    /// they consume an intent. A widget type registers each intent it
+    /// implements from its `Register` impl. Registering the same intent again
+    /// is harmless; a different description for the same name is an error.
+    pub fn register_intent(&mut self, spec: inputmap::IntentSpec) -> Result<()> {
+        self.canopy.core.input_map.register_intent(spec)
     }
 
     /// Register a hook that runs against the root context before the next
@@ -135,13 +137,13 @@ impl Setup {
     /// and a different binding for the same group, input, and path is an
     /// error. An application tier replaces any binding with the same tier,
     /// input, and path. A command call without a target resolves from the node
-    /// where the binding wins. A widget action must already be registered with
-    /// [`Self::register_widget_action`].
+    /// where the binding wins. An intent must already be registered with
+    /// [`Self::register_intent`].
     pub fn bind(
         &mut self,
         input: impl Into<inputmap::InputSpec>,
         options: inputmap::BindingOptions,
-        target: inputmap::BindingTarget,
+        target: inputmap::BindingAction,
     ) -> Result<inputmap::BindingId> {
         let (id, removed) = self
             .canopy

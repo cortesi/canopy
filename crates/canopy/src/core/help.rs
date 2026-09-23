@@ -5,8 +5,8 @@ use crate::{
     core::{
         Core, NodeId,
         inputmap::{
-            BindingId, BindingPhase, BindingTarget, BindingTargetKind, BindingTier,
-            FrameworkBindingGroup, InputSpec, WidgetActionName,
+            BindingAction, BindingActionKind, BindingId, BindingPhase, BindingTier,
+            FrameworkBindingGroup, InputSpec, IntentName,
         },
     },
     error::Result,
@@ -38,7 +38,7 @@ pub struct BindingSnapshot {
     pub framework_group: Option<FrameworkBindingGroup>,
     /// Effective key bindings, each with a route to the node where it acts.
     ///
-    /// An action binding appears only when a widget on the route accepts it.
+    /// An intent binding appears only when a widget on the route accepts it.
     pub bindings: Vec<AvailableBinding<Key>>,
     /// Effective mouse bindings, with one winner per normalized mouse input.
     ///
@@ -65,14 +65,14 @@ pub struct AvailableBinding<I> {
     pub path_filter: String,
     /// Route path at which this binding wins.
     pub route_path: Path,
-    /// Kind of target this binding owns.
-    pub target: BindingTargetKind,
-    /// Widget action name, present for an action target.
-    pub action: Option<WidgetActionName>,
+    /// Kind of action this binding runs.
+    pub action: BindingActionKind,
+    /// Intent name, present when the action is an intent.
+    pub intent: Option<IntentName>,
     /// Phase relative to widget input handling.
     pub phase: BindingPhase,
     /// Declarative command details, absent for opaque script callbacks and
-    /// widget actions.
+    /// intents.
     pub command: Option<BindingCommand>,
     /// Optional diagnostic source.
     pub source: Option<String>,
@@ -167,9 +167,9 @@ impl Core {
             .input_map
             .binding(id)
             .expect("resolved binding record must remain registered");
-        let command = match &record.target {
-            BindingTarget::Script(_) | BindingTarget::WidgetAction(_) => None,
-            BindingTarget::Command(call) => {
+        let command = match &record.action {
+            BindingAction::Script(_) | BindingAction::Intent(_) => None,
+            BindingAction::Command(call) => {
                 let availability = self
                     .commands
                     .get(call.id.0)
@@ -191,8 +191,8 @@ impl Core {
             tier: record.tier.clone(),
             path_filter: record.path_filter().to_string(),
             route_path,
-            target: BindingTargetKind::of(&record.target),
-            action: record.target.widget_action().cloned(),
+            action: BindingActionKind::of(&record.action),
+            intent: record.action.intent().cloned(),
             phase: record.phase,
             command,
             source: record.source.clone(),
@@ -211,7 +211,7 @@ mod tests {
             CommandArgs, CommandCall, CommandId, CommandNode, CommandResolution, CommandStatus,
             CommandTarget,
         },
-        core::inputmap::{BindingOptions, BindingTarget, InputSpec},
+        core::inputmap::{BindingAction, BindingOptions, InputSpec},
         error::Error,
         event::key::KeyCode,
         script::LuauFunctionId,
@@ -283,7 +283,7 @@ mod tests {
                 source: Some("test".to_string()),
                 phase: Some(phase),
             },
-            BindingTarget::Script(LuauFunctionId::for_test(target)),
+            BindingAction::Script(LuauFunctionId::for_test(target)),
         )?;
         Ok(())
     }
@@ -307,7 +307,7 @@ mod tests {
                 source: Some("test".to_string()),
                 phase: Some(BindingPhase::AfterWidget),
             },
-            BindingTarget::Script(LuauFunctionId::for_test(target)),
+            BindingAction::Script(LuauFunctionId::for_test(target)),
         )?;
         Ok(mouse)
     }
@@ -424,14 +424,17 @@ mod tests {
                 source: None,
                 phase: Some(BindingPhase::AfterWidget),
             },
-            BindingTarget::Command(CommandCall {
+            BindingAction::Command(CommandCall {
                 id: CommandId("binding_list::scroll_down"),
                 args: CommandArgs::default(),
                 target: None,
             }),
         )?;
         core.input_map
-            .set_modal_bindings(Some(crate::ModalBindings::Framework(group)));
+            .set_modal_bindings(Some(crate::ModalBindings::Framework {
+                group,
+                intents: &[],
+            }));
 
         let snapshot = core.available_bindings(Some(leaf))?;
         assert_eq!(snapshot.mouse_bindings.len(), 1);
@@ -458,7 +461,7 @@ mod tests {
                 source: None,
                 phase: Some(BindingPhase::AfterWidget),
             },
-            BindingTarget::Command(call),
+            BindingAction::Command(call),
         )?;
         let status = |core: &Core| {
             core.available_bindings(Some(leaf))
@@ -578,7 +581,7 @@ mod tests {
                 source: None,
                 phase: Some(BindingPhase::AfterWidget),
             },
-            BindingTarget::Command(call.clone()),
+            BindingAction::Command(call.clone()),
         )?;
         let snapshot = core.available_bindings(Some(leaf))?;
         let binding = &snapshot.bindings[0];
@@ -745,7 +748,7 @@ mod tests {
                 source: None,
                 phase: Some(BindingPhase::AfterWidget),
             },
-            BindingTarget::Script(LuauFunctionId::for_test(1)),
+            BindingAction::Script(LuauFunctionId::for_test(1)),
         )?;
 
         let raw = Key::from('\u{1}');
@@ -781,14 +784,17 @@ mod tests {
                 source: None,
                 phase: Some(BindingPhase::AfterWidget),
             },
-            BindingTarget::Command(CommandCall {
+            BindingAction::Command(CommandCall {
                 id: CommandId("binding_list::scroll_down"),
                 args: CommandArgs::default(),
                 target: None,
             }),
         )?;
         core.input_map
-            .set_modal_bindings(Some(crate::ModalBindings::Framework(group)));
+            .set_modal_bindings(Some(crate::ModalBindings::Framework {
+                group,
+                intents: &[],
+            }));
 
         let snapshot = core.available_bindings(Some(leaf))?;
 
@@ -798,7 +804,7 @@ mod tests {
             core.input_map
                 .bindings()
                 .iter()
-                .any(|record| { matches!(record.target, BindingTarget::Command(_)) })
+                .any(|record| { matches!(record.action, BindingAction::Command(_)) })
         );
         Ok(())
     }

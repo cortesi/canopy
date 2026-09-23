@@ -41,10 +41,10 @@ mod completion;
 mod dispatch;
 /// Focus and mouse-capture management.
 mod focus;
-/// Modal interaction scopes and retirement.
-pub mod interaction;
 /// Layout traversal, measurement, and hit-testing.
 pub mod layout_driver;
+/// Open modals, their input admission, and retirement.
+pub mod modal;
 /// Viewport scroll mutation and default input actions.
 pub mod scroll;
 /// Scoped application identity and index invariants.
@@ -65,8 +65,8 @@ pub struct Core {
     pub(crate) nodes: NodeArena<Node>,
     /// Application keys unique within explicit arena scopes.
     semantic_keys: HashMap<(NodeId, String), NodeId>,
-    /// Runtime-owned modal interaction scopes.
-    interaction: interaction::InteractionState,
+    /// Open modals, innermost last.
+    modals: modal::ModalStack,
     /// Root node ID.
     pub(crate) root: NodeId,
     /// Currently focused node.
@@ -149,7 +149,7 @@ struct TreeStateSnapshot {
     /// Scoped identities captured with arena metadata.
     semantic_keys: HashMap<(NodeId, String), NodeId>,
     /// Modal scopes captured with structural state.
-    interaction: interaction::InteractionState,
+    modals: modal::ModalStack,
     /// Root node ID.
     root: NodeId,
     /// Focus target.
@@ -211,7 +211,7 @@ impl Core {
             changes: crate::ChangeSet::default(),
             nodes,
             semantic_keys: HashMap::new(),
-            interaction: interaction::InteractionState::default(),
+            modals: modal::ModalStack::default(),
             root,
             focus: None,
             exit_requested: None,

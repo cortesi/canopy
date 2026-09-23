@@ -203,7 +203,7 @@ impl Widget for Button {
         Ok(WidgetSemantics {
             role: Some("button".into()),
             label: Some(self.label.clone()),
-            action_status: self.command_status(ctx)?,
+            activation_status: self.command_status(ctx)?,
             ..WidgetSemantics::default()
         })
     }
@@ -472,7 +472,7 @@ mod tests {
                 assert_eq!(active.label.as_deref(), Some("Save"));
                 assert_eq!(active.selected, None);
                 assert_eq!(
-                    active.action_status,
+                    active.activation_status,
                     Some(CommandStatus::Disabled("Unavailable".into()))
                 );
                 Ok(())
@@ -527,7 +527,7 @@ mod tests {
             .expect("button retained");
         assert!(!detached.attached);
         assert!(matches!(
-            detached.semantics.action_status,
+            detached.semantics.activation_status,
             Some(CommandStatus::Disabled(_))
         ));
         harness.canopy.with_root_context(|ctx| {
@@ -543,7 +543,7 @@ mod tests {
             .expect("button retained");
         assert!(live.attached);
         assert!(matches!(
-            live.semantics.action_status,
+            live.semantics.activation_status,
             Some(CommandStatus::Disabled(_))
         ));
         Ok(())
@@ -1066,7 +1066,7 @@ mod tests {
                         source: None,
                         phase: Some(canopy::BindingPhase::AfterWidget),
                     },
-                    canopy::BindingTarget::Command(Button::call_press()),
+                    canopy::BindingAction::Command(Button::call_press()),
                 )?;
             }
             Ok(())
@@ -1095,7 +1095,10 @@ mod tests {
                 modal: dialog,
                 initial_focus: button,
                 dim_target: None,
-                bindings: ModalBindings::Framework(GUARDED),
+                bindings: ModalBindings::Framework {
+                    group: GUARDED,
+                    intents: &[],
+                },
             })?;
             Ok(())
         })?;

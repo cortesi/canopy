@@ -33,7 +33,7 @@ use super::{
 };
 use crate::{
     FocusDirection,
-    core::{context::matching_nodes, inputmap::WidgetActionCatalog},
+    core::{context::matching_nodes, inputmap::IntentCatalog},
     geom::PointI32,
     keyroute::KeyExpectation,
 };
@@ -604,7 +604,7 @@ pub(super) fn register(builder: &mut module::Builder, action_type: &Type) {
     builder.borrowed_function(
         "bind",
         Binding::library("canopy", Type::func(bind_signature(action_type))).doc(
-            "Bind a key spec to a CommandCall, a function, or a registered widget action name, \
+            "Bind a key spec to a CommandCall, a function, or a registered intent name, \
              with required discovery metadata.",
         ),
         host_bind,
@@ -974,7 +974,7 @@ fn run_default_bindings_in_scope(scope: &Scope<'_>, owner: &str) -> Result<()> {
 /// Install a binding, replacing any binding with the same input selector.
 fn install_binding(
     scope: &Scope<'_>,
-    target: inputmap::BindingTarget,
+    target: inputmap::BindingAction,
     input: inputmap::InputSpec,
     options: &inputmap::BindingOptions,
 ) -> StdResult<i64, RuntimeError> {
@@ -1001,7 +1001,7 @@ fn install_function_binding<'s>(
     .map_err(RuntimeError::from)?;
     install_binding(
         scope,
-        inputmap::BindingTarget::Script(function_id),
+        inputmap::BindingAction::Script(function_id),
         input,
         options,
     )
@@ -1695,49 +1695,49 @@ fn host_pop_mode<'s>(
 /// host stores when the binding installs.
 #[derive(Clone)]
 enum ScriptAction<'s> {
-    /// A command call or a registered widget action name.
-    Target(inputmap::BindingTarget),
+    /// A command call or a registered intent name.
+    Target(inputmap::BindingAction),
     /// A Luau function.
     Function(Function<'s>),
 }
 
 impl ScriptAction<'_> {
-    /// Return the widget action name, when this action names one.
-    fn widget_action(&self) -> Option<&inputmap::WidgetActionName> {
+    /// Return the intent name, when this action names one.
+    fn intent(&self) -> Option<&inputmap::IntentName> {
         match self {
-            Self::Target(target) => target.widget_action(),
+            Self::Target(target) => target.intent(),
             Self::Function(_) => None,
         }
     }
 }
 
-/// Read a widget action name from one script value.
-fn read_widget_action_name<'s>(
+/// Read an intent name from one script value.
+fn read_intent_name<'s>(
     scope: &Scope<'s>,
     value: ScopedValue<'s>,
-) -> StdResult<inputmap::WidgetActionName, RuntimeError> {
+) -> StdResult<inputmap::IntentName, RuntimeError> {
     let name = String::from_lua(value, scope)?;
-    inputmap::WidgetActionName::new(name).map_err(|error| RuntimeError::runtime(error.to_string()))
+    inputmap::IntentName::new(name).map_err(|error| RuntimeError::runtime(error.to_string()))
 }
 
 /// Convert one script value into a binding action: a `CommandCall`, a
-/// function, or a widget action name.
+/// function, or an intent name.
 fn action_from_value<'s>(
     scope: &Scope<'s>,
     value: ScopedValue<'s>,
 ) -> StdResult<ScriptAction<'s>, RuntimeError> {
     if let Some(call) = command_call_from_value(scope, &value)? {
-        return Ok(ScriptAction::Target(inputmap::BindingTarget::Command(
+        return Ok(ScriptAction::Target(inputmap::BindingAction::Command(
             call.0,
         )));
     }
     match value {
         ScopedValue::Function(function) => Ok(ScriptAction::Function(function)),
-        ScopedValue::String(_) => Ok(ScriptAction::Target(inputmap::BindingTarget::WidgetAction(
-            read_widget_action_name(scope, value)?,
+        ScopedValue::String(_) => Ok(ScriptAction::Target(inputmap::BindingAction::Intent(
+            read_intent_name(scope, value)?,
         ))),
         other => Err(RuntimeError::runtime(format!(
-            "`action` must be a CommandCall, a function, or a widget action name, got {}",
+            "`action` must be a CommandCall, a function, or an intent name, got {}",
             other.type_name()
         ))),
     }
@@ -1771,7 +1771,7 @@ fn install_action_binding<'s>(
 }
 
 /// `canopy.bind`: bind a key spec to a command value, a Luau callback, or a
-/// widget action.
+/// intent.
 fn host_bind<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
@@ -1937,20 +1937,18 @@ fn plan_keymap_entry<'s>(
         ScopedValue::Nil => return Err(entry_error("has no `action`".to_string())),
         value => action_from_value(scope, value).map_err(|err| entry_error(err.to_string()))?,
     };
-    if let Some(name) = action.widget_action() {
+    if let Some(name) = action.intent() {
         let registered = with_current_canopy(scope, |canopy, _| {
-            Ok(canopy.core.input_map.widget_actions().contains(name))
+            Ok(canopy.core.input_map.intents().contains(name))
         })
         .map_err(RuntimeError::from)?;
         if !registered {
-            return Err(entry_error(format!(
-                "uses unregistered widget action `{name}`"
-            )));
+            return Err(entry_error(format!("uses unregistered intent `{name}`")));
         }
     }
     let mut options = options.clone();
     options.description = description;
-    inputmap::validate_application_binding(&options, action.widget_action())
+    inputmap::validate_application_binding(&options, action.intent())
         .map_err(|err| entry_error(format!("is invalid: {err}")))?;
     let mut planned = Vec::new();
     let mut push = |input: inputmap::InputSpec| -> StdResult<(), RuntimeError> {
@@ -2260,7 +2258,7 @@ fn host_fixtures<'s>(
 }
 
 /// Build the declaration-coupled base Canopy module.
-pub(super) fn build_base_module(actions: &WidgetActionCatalog) -> Result<Arc<dyn NativeModule>> {
+pub(super) fn build_base_module(actions: &IntentCatalog) -> Result<Arc<dyn NativeModule>> {
     let mut builder = module::Builder::new("canopy");
     let action_type = defs::register_framework_declarations(&mut builder, actions);
     builder.host_type(
