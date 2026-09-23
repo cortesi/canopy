@@ -2362,7 +2362,12 @@ Each stage also updates the docs it touches.
     `world/modal.rs` prove dimming, admission, focus restoration, rollback,
     and retirement, so `Picker::add_overlay`, `open_overlay`, and fh's second
     Confirm are gone.
-- [ ] C51: fh adopts C31 to C48 and deletes its workaround code.
+- [x] C51: fh adopts C31 to C48 and deletes its workaround code.
+  - Each item landed with its Canopy change: Inputs (C40), the columns Dialog
+    (C32), the shipped keymaps (C42), navigation intents (C34), terminal exit
+    calls (C43), DiffView (C46), binding-resolved hints and `widget_styles`
+    (C31), and the single overlay Confirm (C48). C39, C41, and C44 landed in
+    earlier stages.
 
 ### Stage 7: Repository structure and docs
 
