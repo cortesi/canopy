@@ -17,6 +17,6 @@ fn the_launcher_shell_adds_a_footer_naming_the_demo_and_the_help_key() -> Result
     let mut harness = Harness::from_canopy(canopy, Size::new(60, 12))?;
     harness.render()?;
     assert!(harness.tbuf().contains_text("char_gym"));
-    assert!(harness.tbuf().contains_text("ctrl-g: help"));
+    assert!(harness.tbuf().contains_text("ctrl+g: help"));
     Ok(())
 }

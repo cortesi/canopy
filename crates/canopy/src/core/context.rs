@@ -18,7 +18,7 @@ use crate::{
     commands::{ArgValue, CommandCall, CommandError, CommandStatus, CommandTarget},
     error::{Error, Result},
     geom::{Point, Rect, Size},
-    input::{Event, ModalOptions, ModalToken, mouse::MouseEvent},
+    input::{BindingTarget, Event, ModalOptions, ModalToken, key::Key, mouse::MouseEvent},
     layout::{Layout, LayoutOverride},
     path::{Path, PathFilter},
     runtime::{NodeWakeHandle, Notice, PollLifetime},
@@ -157,6 +157,12 @@ pub trait ViewContext: sealed::ViewContext {
 
     /// Does the current node have focus?
     fn is_focused(&self) -> bool;
+
+    /// Return a key that reaches `target` from the current focus, if any.
+    ///
+    /// Discovery follows the same route as key dispatch, so a key another
+    /// binding or a widget shadows is not offered.
+    fn key_for(&self, target: &BindingTarget) -> Option<Key>;
 
     /// Return the currently focused node, including one not yet laid out.
     fn focused_node(&self) -> Option<NodeId>;
@@ -906,6 +912,10 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
             .get(node)
             .map(|n| n.children.clone())
             .unwrap_or_default()
+    }
+
+    fn key_for(&self, target: &BindingTarget) -> Option<Key> {
+        self.core.key_for(target).ok().flatten()
     }
 
     fn is_focused(&self) -> bool {

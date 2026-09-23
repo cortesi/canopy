@@ -168,7 +168,7 @@ impl Todo {
                 main,
                 StatusBar::new()
                     .with_left(Text::new("todo"))
-                    .with_right(KeyHint::new("ctrl-g", "help")),
+                    .with_right(KeyHint::for_command(Root::call_toggle_help(), "help")),
             )?;
             Ok(())
         })?;
@@ -617,7 +617,7 @@ mod tests {
         let mut harness = Harness::from_canopy(create_app(store, None)?, Size::new(80, 24))?;
         harness.render()?;
         assert!(harness.tbuf().contains_text("todo"));
-        assert!(harness.tbuf().contains_text("ctrl-g: help"));
+        assert!(harness.tbuf().contains_text("ctrl+g: help"));
         Ok(())
     }
 

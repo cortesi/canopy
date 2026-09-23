@@ -105,6 +105,13 @@ and `KeyHint` paints `key` and `text` for its two parts. The built-in themes
 give the bar the panel ground, its text a quiet label, and hint keys the
 accent.
 
+A `KeyHint` names an action, not a key. `KeyHint::for_command(call, label)` and
+`KeyHint::for_intent(name, label)` resolve the key through binding discovery
+when the hint mounts and whenever a binding or the mode stack changes, so a
+rebind updates the hint. `Root::register` installs that resync; an app without
+`Root` calls `KeyHint::register`. A hint whose action no key reaches draws
+nothing.
+
 ## Selectors and dropdowns
 
 `Selector` and `Dropdown` push their node names. The cursor row paints

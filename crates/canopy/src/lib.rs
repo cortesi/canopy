@@ -52,7 +52,7 @@ pub mod input {
     pub use crate::core::{
         canopy::{RouteTraceEntry, RouteTraceKind},
         event::{Event, key, mouse},
-        help::{AvailableBinding, BindingCommand, BindingSnapshot},
+        help::{AvailableBinding, BindingCommand, BindingSnapshot, BindingTarget},
         inputmap::{
             BindingAction, BindingActionKind, BindingId, BindingOptions, BindingPhase, BindingTier,
             FrameworkBindingGroup, InputSpec, IntentName, IntentSpec,

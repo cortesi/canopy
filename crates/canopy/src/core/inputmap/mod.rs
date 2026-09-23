@@ -459,6 +459,8 @@ pub struct InputMap {
     mode_stack: Vec<ActiveMode>,
     /// Number of mode stack updates, so observers can tell when to resync.
     mode_generation: u64,
+    /// Number of binding record updates, so observers can tell when to resync.
+    binding_generation: u64,
     /// Admission imposed by the active modal.
     modal_bindings: Option<ModalBindings>,
     /// Next binding identifier.
@@ -481,6 +483,7 @@ impl InputMap {
             intents: IntentCatalog::default(),
             mode_stack: Vec::new(),
             mode_generation: 0,
+            binding_generation: 0,
             modal_bindings: None,
             next_id: 1,
             next_insertion_id: 1,
@@ -576,6 +579,7 @@ impl InputMap {
                 },
             )
         };
+        self.touch_bindings();
         self.records.push(BindingRecord {
             id,
             input,
@@ -602,6 +606,7 @@ impl InputMap {
             )));
         }
         let record = self.records.remove(index);
+        self.touch_bindings();
         Ok(Some(record.action))
     }
 
@@ -646,6 +651,9 @@ impl InputMap {
             removed.push((record.id, record.action.clone()));
             false
         });
+        if !removed.is_empty() {
+            self.touch_bindings();
+        }
         removed
     }
 
@@ -966,6 +974,16 @@ impl InputMap {
         self.mode_generation = self.mode_generation.wrapping_add(1);
     }
 
+    /// Return a count that changes whenever a binding or the mode stack does.
+    pub(crate) fn input_generation(&self) -> u64 {
+        self.mode_generation.wrapping_add(self.binding_generation)
+    }
+
+    /// Record a binding record update.
+    fn touch_bindings(&mut self) {
+        self.binding_generation = self.binding_generation.wrapping_add(1);
+    }
+
     /// Return the transient mode that keeps resolution from reaching `tier`.
     fn transient_blocker(&self, tier: &BindingTier) -> Option<&str> {
         let floor = match tier {
@@ -1005,6 +1023,7 @@ impl InputMap {
         self.records.sort_by_key(|record| record.insertion_id);
         self.mode_stack = snapshot.mode_stack;
         self.touch_modes();
+        self.touch_bindings();
     }
 
     /// Return script targets added after an application snapshot was captured.

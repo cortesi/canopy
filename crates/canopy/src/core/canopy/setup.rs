@@ -120,6 +120,15 @@ impl Setup {
         self.canopy.mode_hooks.insert(name, hook);
     }
 
+    /// Register a hook that runs against the root context before the next
+    /// frame whenever a binding or the mode stack has changed.
+    ///
+    /// Widgets that name keys, such as status-bar hints, resync here.
+    /// Registering a name again replaces its hook. Hooks run in name order.
+    pub fn register_binding_hook(&mut self, name: &'static str, hook: Hook) {
+        self.canopy.binding_hooks.insert(name, hook);
+    }
+
     /// Register a hook that runs against the root context whenever the shown
     /// notice changes: after a notice is recorded, before the next frame, and
     /// when input dismisses it, before that input routes.

@@ -3,9 +3,11 @@
 use std::mem;
 
 use canopy::{
-    Context, ContextExt, NodeName, ViewContext, Widget,
+    Context, ContextExt, NodeName, Register, Setup, ViewContext, ViewContextExt, Widget,
+    commands::CommandCall,
     error::Result,
     geom::{Line, Size},
+    input::{BindingTarget, IntentName},
     layout::{Layout, LayoutOverride, MeasureConstraints, Measurement, Sizing},
     render::Render,
     style::roles,
@@ -129,32 +131,43 @@ impl Widget for StatusBar {
 
 /// A key and what it does, drawn for a status bar.
 ///
-/// The key paints `status_bar/key` and its label paints `status_bar/text`, so
-/// the hint takes the bar's ground from the `status_bar` rule. An empty key
-/// measures nothing and draws nothing.
+/// The hint names an action, not a key: [`KeyHint::for_command`] and
+/// [`KeyHint::for_intent`] resolve the key through binding discovery when the
+/// hint mounts and whenever a binding or the mode stack changes, so the hint
+/// follows the bindings. [`KeyHint::register`] installs that resync. It paints
+/// the bare `key` and `text` parts of whatever layer holds it, so inside a
+/// status bar they resolve `status_bar/key` and `status_bar/text`. A hint whose
+/// action no key reaches measures nothing and draws nothing.
 pub struct KeyHint {
-    /// Key name, drawn with `status_bar/key`.
-    key: String,
+    /// Action whose key the hint names.
+    target: BindingTarget,
     /// Short action name, drawn after the key as `: label`.
     label: String,
+    /// Label of the key last resolved, empty when no key reaches the action.
+    key: String,
 }
 
 impl KeyHint {
-    /// Construct a hint for one key.
-    pub fn new(key: impl Into<String>, label: impl Into<String>) -> Self {
+    /// Construct a hint for the key that runs `call`.
+    pub fn for_command(call: CommandCall, label: impl Into<String>) -> Self {
+        Self::new(BindingTarget::Command(call), label)
+    }
+
+    /// Construct a hint for the key that offers the intent `name`.
+    pub fn for_intent(name: IntentName, label: impl Into<String>) -> Self {
+        Self::new(BindingTarget::Intent(name), label)
+    }
+
+    /// Construct a hint for `target`, with no key resolved yet.
+    fn new(target: BindingTarget, label: impl Into<String>) -> Self {
         Self {
-            key: key.into(),
+            target,
             label: label.into(),
+            key: String::new(),
         }
     }
 
-    /// Replace the key and its label.
-    pub fn set(&mut self, key: impl Into<String>, label: impl Into<String>) {
-        self.key = key.into();
-        self.label = label.into();
-    }
-
-    /// Return the key name.
+    /// Return the label of the key last resolved.
     pub fn key(&self) -> &str {
         &self.key
     }
@@ -162,6 +175,14 @@ impl KeyHint {
     /// Return the label shown beside the key.
     pub fn label(&self) -> &str {
         &self.label
+    }
+
+    /// Resolve the key label from the current bindings and focus.
+    fn resolve(&mut self, ctx: &dyn ViewContext) {
+        self.key = ctx
+            .key_for(&self.target)
+            .map(|key| key.label())
+            .unwrap_or_default();
     }
 
     /// Return the columns the hint takes, or 0 when it draws nothing.
@@ -186,6 +207,11 @@ impl Widget for KeyHint {
 
     fn measure(&self, c: MeasureConstraints) -> Measurement {
         c.clamp(Size::new(self.width(), 1))
+    }
+
+    fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        self.resolve(ctx);
+        Ok(())
     }
 
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
@@ -223,6 +249,25 @@ impl Widget for KeyHint {
     }
 }
 
+impl Register for KeyHint {
+    fn register(setup: &mut Setup) -> Result<()> {
+        setup.register_binding_hook("key_hints", refresh_key_hints);
+        Ok(())
+    }
+}
+
+/// Resolve every mounted hint's key again after the bindings changed.
+fn refresh_key_hints(ctx: &mut dyn Context) -> Result<()> {
+    let hints: Vec<_> = ctx.descendants::<KeyHint>(ctx.root_id()).collect();
+    for hint in hints {
+        ctx.with_widget_mut(hint, |hint: &mut KeyHint, ctx| {
+            hint.resolve(ctx);
+            Ok(())
+        })?;
+    }
+    Ok(())
+}
+
 /// Return the columns `text` occupies, saturating on absurd lengths.
 fn text_width(text: &str) -> u32 {
     u32::try_from(UnicodeWidthStr::width(text)).unwrap_or(u32::MAX)
@@ -230,32 +275,29 @@ fn text_width(text: &str) -> u32 {
 
 #[cfg(test)]
 mod tests {
+    use canopy::input::IntentName;
+
     use super::*;
+
+    /// A hint for a placeholder intent, with `key` resolved.
+    fn hint(key: &str, label: &str) -> KeyHint {
+        let mut hint = KeyHint::for_intent(IntentName::new("app.help").unwrap(), label);
+        hint.key = key.into();
+        hint
+    }
 
     #[test]
     fn a_hint_takes_its_key_label_and_separator() {
-        let hint = KeyHint::new("ctrl-g", "help");
-        assert_eq!(hint.width(), 12);
+        assert_eq!(hint("ctrl+g", "help").width(), 12);
     }
 
     #[test]
     fn a_hint_with_no_label_takes_only_its_key() {
-        let hint = KeyHint::new("x", "");
-        assert_eq!(hint.width(), 1);
+        assert_eq!(hint("x", "").width(), 1);
     }
 
     #[test]
     fn a_hint_with_no_key_takes_no_columns() {
-        let hint = KeyHint::new("", "help");
-        assert_eq!(hint.width(), 0);
-    }
-
-    #[test]
-    fn setting_a_hint_replaces_both_parts() {
-        let mut hint = KeyHint::new("x", "old");
-        hint.set("ctrl-g", "help");
-        assert_eq!(hint.key(), "ctrl-g");
-        assert_eq!(hint.label(), "help");
-        assert_eq!(hint.width(), 12);
+        assert_eq!(hint("", "help").width(), 0);
     }
 }

@@ -1055,9 +1055,13 @@ pub mod canopy_widgets {
 
     /// A key and what it does, drawn for a status bar.
     ///
-    /// The key paints `status_bar/key` and its label paints `status_bar/text`, so
-    /// the hint takes the bar's ground from the `status_bar` rule. An empty key
-    /// measures nothing and draws nothing.
+    /// The hint names an action, not a key: [`KeyHint::for_command`] and
+    /// [`KeyHint::for_intent`] resolve the key through binding discovery when the
+    /// hint mounts and whenever a binding or the mode stack changes, so the hint
+    /// follows the bindings. [`KeyHint::register`] installs that resync. It paints
+    /// the bare `key` and `text` parts of whatever layer holds it, so inside a
+    /// status bar they resolve `status_bar/key` and `status_bar/text`. A hint whose
+    /// action no key reaches measures nothing and draws nothing.
     pub struct KeyHint {}
 
     /// Ordered keyed child collection helper.
@@ -2183,17 +2187,21 @@ pub mod canopy_widgets {
     }
 
     impl KeyHint {
-        /// Construct a hint for one key.
-        pub fn new(key: impl Into<String>, label: impl Into<String>) -> Self {}
+        /// Construct a hint for the key that offers the intent `name`.
+        pub fn for_intent(name: IntentName, label: impl Into<String>) -> Self {}
 
-        /// Replace the key and its label.
-        pub fn set(&mut self, key: impl Into<String>, label: impl Into<String>) {}
+        /// Construct a hint for the key that runs `call`.
+        pub fn for_command(call: CommandCall, label: impl Into<String>) -> Self {}
 
-        /// Return the key name.
+        /// Return the label of the key last resolved.
         pub fn key(&self) -> &str {}
 
         /// Return the label shown beside the key.
         pub fn label(&self) -> &str {}
+    }
+
+    impl Register for KeyHint {
+        fn register(setup: &mut Setup) -> Result<()> {}
     }
 
     impl Widget for KeyHint {
@@ -2202,6 +2210,8 @@ pub mod canopy_widgets {
         fn measure(&self, c: MeasureConstraints) -> Measurement {}
 
         fn name(&self) -> NodeName {}
+
+        fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {}
 
         fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
     }

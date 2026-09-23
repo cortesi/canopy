@@ -33,7 +33,7 @@ use super::{
 use crate::{
     core::{context::matching_nodes, inputmap::IntentCatalog},
     geom::PointI32,
-    input::{BindingId, KeyExpectation},
+    input::{BindingId, BindingTarget, KeyExpectation},
     tree::FocusDirection,
 };
 
@@ -379,6 +379,23 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
                 .ret(Type::named("KeyRouteExplanation"))
         },
         handler: Handler::Sync(host_explain_key),
+    },
+    BaseFunction {
+        name: "key_for",
+        docs: Some(
+            "Return the label of a key that reaches a CommandCall or a registered intent \
+             name from the current focus, or nil when no key does. Hints and messages use \
+             it to name keys that follow the bindings.",
+        ),
+        signature: || {
+            FunctionSignature::new()
+                .param((
+                    "action",
+                    Type::union([Type::named("CommandCall"), Type::String]),
+                ))
+                .ret(Type::String.optional())
+        },
+        handler: Handler::Sync(host_key_for),
     },
     BaseFunction {
         name: "script_journal",
@@ -1876,6 +1893,27 @@ fn host_explain_key<'s>(
     host_value(scope, |canopy, _| {
         let key = key::Key::parse_spec(&key_spec)?;
         key_explanation_to_arg(canopy, requested, key)
+    })
+}
+
+/// `canopy.key_for`: return the label of a key that reaches an action.
+fn host_key_for<'s>(
+    scope: &Scope<'s>,
+    args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    let mut args = HostArgCursor::new(scope, args);
+    let value = args
+        .raw()
+        .ok_or_else(|| RuntimeError::runtime("argument `action` is required"))?;
+    let target = match command_call_from_value(scope, &value)? {
+        Some(call) => BindingTarget::Command(call.0),
+        None => BindingTarget::Intent(read_intent_name(scope, value)?),
+    };
+    host_value(scope, |canopy, _| {
+        Ok(canopy
+            .core
+            .key_for(&target)?
+            .map_or(ArgValue::Null, |key| ArgValue::String(key.label())))
     })
 }
 

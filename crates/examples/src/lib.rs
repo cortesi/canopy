@@ -28,9 +28,7 @@ function setup()
 end
 "#;
 
-/// Key every demo footer hints at.
-pub(crate) const HELP_KEY: &str = "ctrl-g";
-/// Label every demo footer gives that key.
+/// Label every demo footer gives the help key.
 pub(crate) const HELP_LABEL: &str = "help";
 
 /// Char gym example nodes.
@@ -227,7 +225,7 @@ impl<T: Widget + 'static> Widget for DemoShell<T> {
             c.node_id(),
             StatusBar::new()
                 .with_left(Text::new(self.status.clone()))
-                .with_right(KeyHint::new(HELP_KEY, HELP_LABEL)),
+                .with_right(KeyHint::for_command(Root::call_toggle_help(), HELP_LABEL)),
         )?;
         Ok(())
     }

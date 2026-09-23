@@ -116,6 +116,8 @@ pub struct Canopy {
     journal: ScriptJournal,
     /// Hooks run before a frame after the mode stack changes.
     mode_hooks: Hooks,
+    /// Hooks run when a binding or the mode stack changes.
+    binding_hooks: Hooks,
     /// Hooks run after the shown notice changes.
     notice_hooks: Hooks,
     /// Trace for the most recent key or mouse routing pass.
@@ -237,6 +239,7 @@ impl Canopy {
             script: ScriptState::default(),
             journal: ScriptJournal::default(),
             mode_hooks: Hooks::default(),
+            binding_hooks: Hooks::default(),
             notice_hooks: Hooks::default(),
             style: themes::default_dark().style_map(),
             palette: themes::default_dark(),
@@ -435,19 +438,26 @@ impl Canopy {
         self.core.input_map.push_transient_mode(mode);
     }
 
-    /// Return whether the mode stack or the shown notice changed since their
-    /// hooks last ran.
+    /// Return whether the mode stack, the bindings, or the shown notice
+    /// changed since their hooks last ran.
     pub(super) fn state_hooks_pending(&self) -> bool {
         self.mode_hooks
             .pending(self.core.input_map.mode_generation())
+            || self
+                .binding_hooks
+                .pending(self.core.input_map.input_generation())
             || self.notice_hooks.pending(self.core.notices.generation())
     }
 
-    /// Run the mode hooks and the notice hooks once for the current state.
+    /// Run the mode, binding, and notice hooks once for the current state.
     pub(super) fn run_state_hooks(&mut self) -> Result<()> {
         let mut hooks = self
             .mode_hooks
             .take_due(self.core.input_map.mode_generation());
+        hooks.extend(
+            self.binding_hooks
+                .take_due(self.core.input_map.input_generation()),
+        );
         hooks.extend(self.notice_hooks.take_due(self.core.notices.generation()));
         for hook in hooks {
             self.with_root_context(hook)?;

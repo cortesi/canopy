@@ -435,6 +435,10 @@ pub mod canopy {
             pub fn target_or(&self, origin: NodeId) -> CommandTarget {}
         }
 
+        impl From<CommandCall> for BindingTarget {
+            fn from(call: CommandCall) -> Self {}
+        }
+
         impl CommandError {
             #[doc(hidden)]
             /// Preserve a command implementation's concrete error as the execution
@@ -1089,6 +1093,14 @@ pub mod canopy {
                 /// Shift does not disqualify a character, because a terminal can report
                 /// the produced character and the Shift modifier together.
                 pub fn text_char(&self) -> Option<char> {}
+
+                /// Return the label hints and help show for this key: named keys
+                /// lowercased, arrows drawn as arrows, and the page keys shortened.
+                ///
+                /// Arrows are ambiguous-width characters, and many terminal fonts draw them
+                /// wider than their one cell. Each arrow keeps a blank cell after it for
+                /// the glyph to spill into, so it never covers the next key.
+                pub fn label(&self) -> String {}
             }
         }
 
@@ -1328,6 +1340,15 @@ pub mod canopy {
             /// The route starts at the requested node, as a click on it would. The
             /// pointer's own position plays no part.
             pub mouse_bindings: Vec<AvailableBinding<crate::input::mouse::Mouse>>,
+        }
+
+        /// The action a key hint names: a command call or a registered intent.
+        #[derive(Clone, Debug, PartialEq)]
+        pub enum BindingTarget {
+            /// A command call, matched by command and arguments.
+            Command(crate::commands::CommandCall),
+            /// A registered intent, matched by name.
+            Intent(crate::input::IntentName),
         }
 
         /// Resolution tier for one binding.
@@ -1623,6 +1644,27 @@ pub mod canopy {
             pub const fn as_str(self) -> &'static str {}
         }
 
+        impl From<CommandCall> for BindingTarget {
+            fn from(call: CommandCall) -> Self {}
+        }
+
+        impl From<IntentName> for BindingTarget {
+            fn from(name: IntentName) -> Self {}
+        }
+
+        impl From<IntentName> for BindingTarget {
+            fn from(name: IntentName) -> Self {}
+        }
+
+        impl IntentName {
+            #[must_use]
+            /// Return the intent name.
+            pub fn as_str(&self) -> &str {}
+
+            /// Validate `name` and return it.
+            pub fn new(name: impl Into<String>) -> Result<Self> {}
+        }
+
         impl From<Key> for InputSpec {
             fn from(key: Key) -> Self {}
         }
@@ -1644,15 +1686,6 @@ pub mod canopy {
             fn inject(ctx: &dyn Context) -> Option<Self> {}
 
             fn requirement() -> Option<CommandRequirement> {}
-        }
-
-        impl IntentName {
-            #[must_use]
-            /// Return the intent name.
-            pub fn as_str(&self) -> &str {}
-
-            /// Validate `name` and return it.
-            pub fn new(name: impl Into<String>) -> Result<Self> {}
         }
 
         impl IntentSpec {
@@ -4077,6 +4110,12 @@ pub mod canopy {
         /// Is the specified node on the focus path?
         fn is_on_focus_path(&self, node: NodeId) -> bool;
 
+        /// Return a key that reaches `target` from the current focus, if any.
+        ///
+        /// Discovery follows the same route as key dispatch, so a key another
+        /// binding or a widget shadows is not offered.
+        fn key_for(&self, target: &BindingTarget) -> Option<Key>;
+
         /// Layout configuration for a specific node.
         fn layout_of(&self, node: NodeId) -> Option<Layout>;
 
@@ -4599,6 +4638,18 @@ pub mod canopy {
         /// source again is a no-op; different source for the same owner is an
         /// error.
         pub fn register_default_bindings(&mut self, owner: &str, script: &str) -> Result<()> {}
+
+        /// Register a hook that runs against the root context before the next
+        /// frame whenever a binding or the mode stack has changed.
+        ///
+        /// Widgets that name keys, such as status-bar hints, resync here.
+        /// Registering a name again replaces its hook. Hooks run in name order.
+        pub fn register_binding_hook(
+            &mut self,
+            name: &'static str,
+            hook: fn(_: &mut dyn crate::Context) -> crate::error::Result<()>,
+        ) {
+        }
 
         /// Register a hook that runs against the root context before the next
         /// frame whenever the mode stack has changed.

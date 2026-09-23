@@ -86,7 +86,62 @@ pub struct BindingCommand {
     pub availability: Option<CommandAvailability>,
 }
 
+/// The action a key hint names: a command call or a registered intent.
+#[derive(Clone, Debug, PartialEq)]
+pub enum BindingTarget {
+    /// A command call, matched by command and arguments.
+    Command(CommandCall),
+    /// A registered intent, matched by name.
+    Intent(IntentName),
+}
+
+impl BindingTarget {
+    /// Return whether a binding running `action` reaches this target.
+    fn matches(&self, action: &BindingAction) -> bool {
+        match (self, action) {
+            (Self::Command(call), BindingAction::Command(bound)) => {
+                call.id == bound.id && call.args == bound.args
+            }
+            (Self::Intent(name), _) => action.intent() == Some(name),
+            _ => false,
+        }
+    }
+}
+
+impl From<CommandCall> for BindingTarget {
+    fn from(call: CommandCall) -> Self {
+        Self::Command(call)
+    }
+}
+
+impl From<IntentName> for BindingTarget {
+    fn from(name: IntentName) -> Self {
+        Self::Intent(name)
+    }
+}
+
 impl Core {
+    /// Return a key that reaches `target` from the current focus.
+    ///
+    /// Discovery explains each candidate key as [`Core::available_bindings`]
+    /// does, so a key another binding or a widget shadows is not offered.
+    pub(crate) fn key_for(&self, target: &BindingTarget) -> Result<Option<Key>> {
+        for key in self.input_map.candidate_keys() {
+            let explanation = self.explain_key(None, key)?;
+            let Some(winner) = explanation.outcome.winner() else {
+                continue;
+            };
+            if self
+                .input_map
+                .binding(winner.binding)
+                .is_some_and(|record| target.matches(&record.action))
+            {
+                return Ok(Some(key));
+            }
+        }
+        Ok(None)
+    }
+
     /// Return the effective bindings for a node or the current focus.
     ///
     /// Key discovery explains each candidate key, so it cannot disagree with

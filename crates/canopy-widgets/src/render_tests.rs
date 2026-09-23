@@ -13,8 +13,8 @@ mod tests {
     };
 
     use crate::{
-        BoxGlyphs, Button, DiffView, Dropdown, Frame, KeyHint, List, Scope, Selector, StatusBar,
-        Strategy, Text,
+        BoxGlyphs, Button, DiffView, Dropdown, Frame, KeyHint, List, Root, Scope, Selector,
+        StatusBar, Strategy, Text,
     };
 
     fn click_at(location: Point) -> mouse::MouseEvent {
@@ -417,29 +417,48 @@ mod tests {
         Ok(())
     }
 
+    /// A status bar with a hint for the help command, bound to `Ctrl+g`.
+    fn help_bar_harness(width: u32, height: u32) -> Result<Harness> {
+        let bar = StatusBar::new()
+            .with_left(Text::new("demo"))
+            .with_right(KeyHint::for_command(Root::call_toggle_help(), "help"));
+        Harness::builder(SnapshotRoot::new(bar))
+            .register::<Root>()
+            .script(
+                "help",
+                r#"canopy.bind("Ctrl+g", { description = "Help" }, command.root.toggle_help())"#,
+            )
+            .size(width, height)
+            .build()
+    }
+
+    #[test]
+    fn a_hint_follows_its_binding() -> Result<()> {
+        let mut harness = help_bar_harness(20, 1)?;
+        harness.script(
+            r#"canopy.unbind_key("Ctrl+g")
+            canopy.bind("F1", { description = "Help" }, command.root.toggle_help())"#,
+        )?;
+        harness.render()?;
+        harness.tbuf().assert_matches(buf!["demo        f1: help"]);
+        Ok(())
+    }
+
     #[test]
     fn status_bar_pins_its_status_left_and_its_hint_right() -> Result<()> {
-        let bar = StatusBar::new()
-            .with_left(Text::new("demo").with_style("status_bar/text"))
-            .with_right(KeyHint::new("ctrl-g", "help"));
-        let root = SnapshotRoot::new(bar);
-        let mut harness = Harness::builder(root).size(20, 2).build()?;
+        let mut harness = help_bar_harness(20, 2)?;
         harness.render()?;
         harness
             .tbuf()
-            .assert_matches(buf!["demo    ctrl-g: help" ""]);
+            .assert_matches(buf!["demo    ctrl+g: help" ""]);
         Ok(())
     }
 
     #[test]
     fn a_narrow_status_bar_keeps_the_hint_at_the_left_edge() -> Result<()> {
-        let bar = StatusBar::new()
-            .with_left(Text::new("demo").with_style("status_bar/text"))
-            .with_right(KeyHint::new("ctrl-g", "help"));
-        let root = SnapshotRoot::new(bar);
-        let mut harness = Harness::builder(root).size(10, 1).build()?;
+        let mut harness = help_bar_harness(10, 1)?;
         harness.render()?;
-        harness.tbuf().assert_matches(buf!["ctrl-g: he"]);
+        harness.tbuf().assert_matches(buf!["ctrl+g: he"]);
         Ok(())
     }
 

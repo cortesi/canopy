@@ -305,6 +305,11 @@ the selected binding's `id`, `target`, and `phase`. The `outcome` has a `kind`:
 `node` and `path`. The explanation is advisory, because routing still acts one
 node at a time.
 
+`canopy.key_for(action)` returns the label of a key that reaches a
+`CommandCall` or a registered intent name from the current focus, such as
+`"ctrl+g"`, or nil when no key does. Messages and hints use it to name keys
+that follow the bindings rather than repeating them.
+
 `canopy.route_trace()` reports what routing actually did. Each entry has a
 `kind`: `start`, `before_widget_binding`, `offer_intent`, `widget`,
 `after_widget_binding`, `run_binding`, `default_action`, `bubble`, `handled`,

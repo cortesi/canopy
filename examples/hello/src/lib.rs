@@ -70,7 +70,7 @@ impl Widget for Hello {
             context.node_id(),
             StatusBar::new()
                 .with_left(Text::new("hello"))
-                .with_right(KeyHint::new("ctrl-g", "help")),
+                .with_right(KeyHint::for_command(Root::call_toggle_help(), "help")),
         )?;
         context.set_focus(context.node_id()).map(|_| ())
     }
@@ -130,7 +130,7 @@ mod tests {
         harness.render()?;
         assert!(harness.tbuf().contains_text("Hello, Canopy!"));
         assert!(harness.tbuf().contains_text("count: 0"));
-        assert!(harness.tbuf().contains_text("ctrl-g: help"));
+        assert!(harness.tbuf().contains_text("ctrl+g: help"));
         assert!(
             harness
                 .canopy

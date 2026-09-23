@@ -215,7 +215,7 @@ pub(super) fn key_rows_of(bindings: &[AvailableBinding<Key>]) -> Vec<BindingRow>
         .iter()
         .map(|binding| BindingRow {
             sort: key_sort_key(binding.input),
-            label: key_label(binding.input),
+            label: Key::label(&binding.input),
             description: binding_description(binding),
         })
         .collect()
@@ -351,32 +351,6 @@ fn key_rows(keys: &[String]) -> Vec<String> {
         }
     }
     rows
-}
-
-/// Return the label help shows for `key`: named keys lowercased, arrows drawn
-/// as arrows, and the page keys shortened.
-///
-/// Arrows are ambiguous-width characters, and many terminal fonts draw them
-/// wider than their one cell. Each arrow keeps a blank cell after it for the
-/// glyph to spill into, so it never covers the next key.
-fn key_label(key: Key) -> String {
-    let code = match key.key {
-        KeyCode::Left => "← ".to_string(),
-        KeyCode::Right => "→ ".to_string(),
-        KeyCode::Up => "↑ ".to_string(),
-        KeyCode::Down => "↓ ".to_string(),
-        KeyCode::PageDown => "pgdown".to_string(),
-        KeyCode::PageUp => "pgup".to_string(),
-        KeyCode::Char(' ') => "space".to_string(),
-        // Literal keys keep their case, which distinguishes them.
-        KeyCode::Char(character) => character.to_string(),
-        code => code.to_string().to_ascii_lowercase(),
-    };
-    if key.mods == Empty {
-        code
-    } else {
-        format!("{}+{code}", key.mods.to_string().to_ascii_lowercase())
-    }
 }
 
 /// Return the terminal-cell width of text.

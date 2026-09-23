@@ -16,7 +16,7 @@ use canopy::{
 #[cfg(feature = "devtools")]
 use crate::inspector::Inspector;
 use crate::{
-    Button, Container,
+    Button, Container, KeyHint,
     help::{BindingList, Help, ModeHelp},
 };
 
@@ -341,6 +341,8 @@ impl Widget for Root {
 impl Register for Root {
     fn register(setup: &mut Setup) -> Result<()> {
         setup.add_commands::<Self>()?;
+        // Status-bar hints under the root follow the bindings.
+        KeyHint::register(setup)?;
         #[cfg(feature = "devtools")]
         {
             setup.register_default_bindings(
@@ -1060,6 +1062,19 @@ mod tests {
                 "contextual help should not show the panel"
             )
             canopy.send_key("ctrl-g")
+            "#,
+        )
+    }
+
+    #[test]
+    fn key_for_names_the_key_that_reaches_an_action() -> Result<()> {
+        let (mut canopy, _backend, _left, _right) = setup_root_tree()?;
+        install_help_trigger(&mut canopy)?;
+        run_script(
+            &mut canopy,
+            r#"
+            canopy.assert(canopy.key_for(command.root.toggle_help()) == "ctrl+g")
+            canopy.assert(canopy.key_for(command.root.show_help()) == nil)
             "#,
         )
     }

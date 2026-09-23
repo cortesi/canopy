@@ -132,7 +132,7 @@ impl Widget for Hello {
             context.node_id(),
             StatusBar::new()
                 .with_left(Text::new("hello").with_style("status_bar/text"))
-                .with_right(KeyHint::new("ctrl-g", "help")),
+                .with_right(KeyHint::for_command(Root::call_toggle_help(), "help")),
         )?;
         context.set_focus(context.node_id()).map(|_| ())
     }

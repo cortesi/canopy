@@ -2287,15 +2287,23 @@ Each stage also updates the docs it touches.
   - Selector's choice is `choose`/`clear_choice`/`chosen`, painted as
     `selector/chosen`; stylegym effects became one choice with a "None" option.
     fh needed no change.
-- [ ] C31:
+- [x] C31:
   - [x] Apply the styling rule, and remove the double prefixes.
     - Material change: the resolver now probes the layer stack with outer
       layers dropped before it drops inner ones, so a leaf's own rules
       (`editor/text`) apply under any host layer. Without it, pushing a leaf
       layer broke resolution under fh's `file_select` layer. BindingList
       pushes `help` itself, so it paints help parts wherever it is mounted.
-  - [ ] StatusBar pushes its layer (done), and KeyHint resolves keys through
+  - [x] StatusBar pushes its layer, and KeyHint resolves keys through
     bindings. Add Luau `canopy.key_for`.
+    - Hints resolve on mount and in a new binding hook
+      (`Setup::register_binding_hook`, run when a binding or the mode stack
+      changes), because `measure` has no context. `Root::register` installs
+      the hint resync. Key labels now use help's format (`ctrl+g`). KeyHint
+      paints bare parts without a layer of its own: the resolver probes inner
+      suffixes and outer prefixes of the stack, not middle windows, so a
+      `key_hint` layer under `file_select/status_bar` would miss
+      `status_bar/key`.
   - [x] `roles` becomes shared part names, `style::themes` has a public
     `Palette`, and `Setup::widget_styles` is added.
     - `Palette` gained `faint_fg` for the quiet foreground fh used as
