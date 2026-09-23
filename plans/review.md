@@ -2243,8 +2243,12 @@ Each stage also updates the docs it touches.
     `StyleMap::resolve`.
 - [x] C20: `TurnInput` and `PollLifetime`. `RunOptions` moves into
   `LaunchMode::Run`, `LaunchMode::Api` goes, and `launch` returns `ExitCode`.
-- [ ] C43 runtime part: `wake_channel` and `Context::request_poll`. fh's three
+- [x] C43 runtime part: `wake_channel` and `Context::request_poll`. fh's three
   polling workers and its self-wake handles switch over.
+  - Note: fh's watcher keeps its wake callback. It already wakes on events
+    rather than polling, and a channel would duplicate its dirty and failed
+    flags. The find view and the diff spinner keep a tick only while they
+    animate.
 - [ ] C12: create the module map in `crates/canopy/src/lib.rs`. Fix the
   `crate::core::` capture leaks, add a check that fails on them, and move
   `NodeName` to `path.rs`. Migrate about 25 fh import blocks.
