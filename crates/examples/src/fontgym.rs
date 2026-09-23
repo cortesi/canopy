@@ -2,7 +2,7 @@ use std::{f32::consts::TAU, time::Duration};
 
 use canopy::{
     CanopyBuilder, ChangeOutcome, Context, ContextExt, EventOutcome, NodeId, NodeName, Render,
-    ViewContext, Widget,
+    ScrollDirection, ScrollOp, ViewContext, Widget,
     cursor::{Cursor, CursorShape},
     error::Result,
     event::{Event, key},
@@ -301,10 +301,18 @@ impl Widget for FocusFrame {
             && let Some(command) = Self::classify_key(*raw)
         {
             let changed = match command {
-                FocusScroll::Up => self.scroll_list(ctx, |ctx| ctx.scroll_up())?,
-                FocusScroll::Down => self.scroll_list(ctx, |ctx| ctx.scroll_down())?,
-                FocusScroll::PageUp => self.scroll_list(ctx, |ctx| ctx.page_up())?,
-                FocusScroll::PageDown => self.scroll_list(ctx, |ctx| ctx.page_down())?,
+                FocusScroll::Up => self.scroll_list(ctx, |ctx| {
+                    ctx.scroll(ScrollOp::Lines(ScrollDirection::Up, 1))
+                })?,
+                FocusScroll::Down => self.scroll_list(ctx, |ctx| {
+                    ctx.scroll(ScrollOp::Lines(ScrollDirection::Down, 1))
+                })?,
+                FocusScroll::PageUp => self.scroll_list(ctx, |ctx| {
+                    ctx.scroll(ScrollOp::Pages(ScrollDirection::Up, 1))
+                })?,
+                FocusScroll::PageDown => self.scroll_list(ctx, |ctx| {
+                    ctx.scroll(ScrollOp::Pages(ScrollDirection::Down, 1))
+                })?,
             };
             if changed {
                 return Ok(EventOutcome::Handle);
@@ -323,7 +331,7 @@ impl Widget for FocusFrame {
             return EventOutcome::Ignore;
         };
         let delta = Self::scroll_delta(view, command);
-        if context.scroll_outcome(node, 0, delta) == Some(ChangeOutcome::Changed) {
+        if context.scroll_outcome(node, ScrollOp::By(0, delta)) == Some(ChangeOutcome::Changed) {
             EventOutcome::Handle
         } else {
             EventOutcome::Ignore
@@ -1140,21 +1148,21 @@ mod tests {
         };
 
         for offset in [3, 0, u32::MAX] {
-            harness
-                .canopy
-                .with_root_context(|ctx| ctx.scroll_to_of(list.into(), 0, offset))?;
+            harness.canopy.with_root_context(|ctx| {
+                ctx.scroll_node(list.into(), ScrollOp::To(Point { x: 0, y: offset }))
+            })?;
             check(&mut harness, "up")?;
-            harness
-                .canopy
-                .with_root_context(|ctx| ctx.scroll_to_of(list.into(), 0, offset))?;
+            harness.canopy.with_root_context(|ctx| {
+                ctx.scroll_node(list.into(), ScrollOp::To(Point { x: 0, y: offset }))
+            })?;
             check(&mut harness, "down")?;
         }
 
         // A pending reveal changes a scroll that the clamped offset alone
         // would report as no movement.
-        harness
-            .canopy
-            .with_root_context(|ctx| ctx.scroll_to_of(list.into(), 0, 0))?;
+        harness.canopy.with_root_context(|ctx| {
+            ctx.scroll_node(list.into(), ScrollOp::To(Point { x: 0, y: 0 }))
+        })?;
         harness.canopy.with_root_context(|ctx| {
             ctx.with_widget_mut(list, |_: &mut List<FontBlock>, list_ctx| {
                 list_ctx.reveal_area(Rect::new(0, 0, 1, 1), RevealAlign::Nearest);

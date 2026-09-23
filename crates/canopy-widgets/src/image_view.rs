@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use canopy::{
-    CommandEnum, Context, FocusDirection, Register, Render, Setup, ViewContext, Widget,
+    CommandEnum, Context, Register, Render, ScrollDirection, ScrollOp, Setup, ViewContext, Widget,
     derive_commands,
     error::{Error, Result},
     geom::{Point, Rect, Size},
@@ -472,29 +472,23 @@ impl ImageView {
             ZoomDirection::Out => 1.0 / ZOOM_STEP,
         };
         let scroll = self.zoom_by(view_size, view.scroll, factor);
-        ctx.scroll_to(scroll.x, scroll.y);
+        ctx.scroll(ScrollOp::To(Point {
+            x: scroll.x,
+            y: scroll.y,
+        }));
         Ok(())
     }
 
     /// Pan by one step in the specified direction.
     /// @param dir The pan direction.
     #[command]
-    pub fn pan(&mut self, ctx: &mut dyn Context, dir: FocusDirection) -> Result<()> {
+    pub fn pan(&mut self, ctx: &mut dyn Context, dir: ScrollDirection) -> Result<()> {
         self.auto_fit = false;
-        match dir {
-            FocusDirection::Left | FocusDirection::Prev => {
-                ctx.scroll_by(-PAN_STEP_COLUMNS, 0);
-            }
-            FocusDirection::Right | FocusDirection::Next => {
-                ctx.scroll_by(PAN_STEP_COLUMNS, 0);
-            }
-            FocusDirection::Up => {
-                ctx.scroll_by(0, -PAN_STEP_ROWS);
-            }
-            FocusDirection::Down => {
-                ctx.scroll_by(0, PAN_STEP_ROWS);
-            }
-        }
+        let step = match dir {
+            ScrollDirection::Left | ScrollDirection::Right => PAN_STEP_COLUMNS,
+            ScrollDirection::Up | ScrollDirection::Down => PAN_STEP_ROWS,
+        };
+        ctx.scroll(ScrollOp::Lines(dir, step.unsigned_abs()));
         Ok(())
     }
 }

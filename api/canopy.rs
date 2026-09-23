@@ -3318,6 +3318,19 @@ pub mod canopy {
         Horizontal,
     }
 
+    /// Direction of a line or page scroll.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum ScrollDirection {
+        /// Toward the top of the canvas.
+        Up,
+        /// Toward the bottom of the canvas.
+        Down,
+        /// Toward the left edge of the canvas.
+        Left,
+        /// Toward the right edge of the canvas.
+        Right,
+    }
+
     /// A position indicator drawn on a scrollbar track.
     ///
     /// `start` and `end` bound a half-open region of canvas cells, counted from
@@ -3344,6 +3357,21 @@ pub mod canopy {
         pub style: &'static str,
         /// Glyph of the mark where it sits outside the thumb.
         pub glyph: char,
+    }
+
+    /// One scroll of a view. Every operation clamps the result to the canvas.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum ScrollOp {
+        /// Scroll to an absolute offset.
+        To(crate::geom::Point),
+        /// Scroll by a signed offset.
+        By(i32, i32),
+        /// Scroll a number of lines in a direction.
+        Lines(ScrollDirection, u32),
+        /// Scroll a number of pages in a direction. A page is the view extent on
+        /// that axis less one line, so consecutive pages keep one line of
+        /// overlap.
+        Pages(ScrollDirection, u32),
     }
 
     /// Application identity unique within an explicit arena subtree.
@@ -3570,12 +3598,6 @@ pub mod canopy {
         /// Open a modal scope that owns focus, input admission, and visual effects.
         fn open_modal(&mut self, options: ModalOptions) -> Result<InteractionToken>;
 
-        /// Scroll the view down by one page.
-        fn page_down(&mut self) -> ChangeOutcome {}
-
-        /// Scroll the view up by one page.
-        fn page_up(&mut self) -> ChangeOutcome {}
-
         /// Add an effect to a node that will be applied during rendering.
         /// Effects stack and inherit through the tree.
         fn push_effect(&mut self, node: NodeId, effect: Effect) -> Result<()>;
@@ -3620,33 +3642,18 @@ pub mod canopy {
         /// region. Returns an error when the node does not exist.
         fn reveal_node(&mut self, node: NodeId, align: RevealAlign) -> Result<ChangeOutcome>;
 
-        /// Scroll the view by the given offsets.
-        fn scroll_by(&mut self, x: i32, y: i32) -> ChangeOutcome;
-
-        /// Scroll the view down by one line.
-        fn scroll_down(&mut self) -> ChangeOutcome {}
-
-        /// Scroll the view left by one line.
-        fn scroll_left(&mut self) -> ChangeOutcome {}
-
-        /// Scroll the view right by one line.
-        fn scroll_right(&mut self) -> ChangeOutcome {}
-
-        /// Scroll the view to the specified position.
+        /// Scroll this node's view.
         ///
         /// Scrolling moves the view at once. It supersedes older reveal requests
         /// for this view, even when the offset does not change.
-        fn scroll_to(&mut self, x: u32, y: u32) -> ChangeOutcome;
+        fn scroll(&mut self, op: ScrollOp) -> ChangeOutcome;
 
-        /// Scroll an attached node's view to the specified position.
+        /// Scroll an attached node's view.
         ///
         /// Owners of scrollbars use this to move the node they display. The
-        /// offset is clamped as [`Context::scroll_to`] clamps it. Returns an error
+        /// offset is clamped as [`Context::scroll`] clamps it. Returns an error
         /// when the node is missing or detached.
-        fn scroll_to_of(&mut self, node: NodeId, x: u32, y: u32) -> Result<ChangeOutcome>;
-
-        /// Scroll the view up by one line.
-        fn scroll_up(&mut self) -> ChangeOutcome {}
+        fn scroll_node(&mut self, node: NodeId, op: ScrollOp) -> Result<ChangeOutcome>;
 
         /// Replace the children list for a parent node.
         ///
@@ -3837,14 +3844,14 @@ pub mod canopy {
         /// The root node of the tree.
         fn root_id(&self) -> NodeId;
 
-        /// Return what scrolling `node` by `(x, y)` would change, without
-        /// mutating the tree.
+        /// Return what applying `op` to `node` would change, without mutating
+        /// the tree.
         ///
-        /// This mirrors [`Context::scroll_by`], including the change a cancelled
-        /// pending reveal produces. It returns `None` when the node is missing.
-        /// Contextual key prediction uses this to answer for a scrollable target
-        /// without running widget effects.
-        fn scroll_outcome(&self, node: NodeId, x: i32, y: i32) -> Option<ChangeOutcome>;
+        /// This mirrors [`Context::scroll_node`], including the change a
+        /// cancelled pending reveal produces. It returns `None` when the node is
+        /// missing. Contextual key prediction uses this to answer for a
+        /// scrollable target without running widget effects.
+        fn scroll_outcome(&self, node: NodeId, op: ScrollOp) -> Option<ChangeOutcome>;
 
         /// Return a node's independently assigned semantic identity.
         fn semantic_identity(&self, node: NodeId) -> Option<SemanticIdentity>;
@@ -4151,6 +4158,23 @@ pub mod canopy {
     }
 
     impl ToArgValue for FocusDirection {
+        fn to_arg_value(self) -> canopy::commands::ArgValue {}
+    }
+
+    impl CommandType for ScrollDirection {
+        fn luau_decls(registry: &mut canopy::commands::DeclRegistry<'_>) {}
+
+        fn luau_ty() -> canopy::commands::declaration::Type {}
+    }
+
+    impl FromArgValue for ScrollDirection {
+        fn from_arg_value(
+            v: &canopy::commands::ArgValue,
+        ) -> ::std::result::Result<Self, canopy::commands::CommandError> {
+        }
+    }
+
+    impl ToArgValue for ScrollDirection {
         fn to_arg_value(self) -> canopy::commands::ArgValue {}
     }
 
@@ -4463,6 +4487,12 @@ pub mod canopy {
     impl RouteTraceKind {
         /// Return a stable scripting and diagnostic label.
         pub fn label(self) -> &'static str {}
+    }
+
+    impl ScrollOp {
+        /// Page vertically by a signed count: negative moves up, positive moves
+        /// down, and zero stays put.
+        pub fn pages(delta: i32) -> Self {}
     }
 
     impl Setup {

@@ -18,7 +18,7 @@ use crate::{
     commands::{ArgValue, CommandCall, CommandError, CommandStatus, CommandTarget},
     error::{Error, Result},
     event::{Event, mouse::MouseEvent},
-    geom::{Point, Rect},
+    geom::{Point, Rect, Size},
     layout::{Layout, LayoutOverride},
     path::{Path, PathFilter},
     style::StyleMap,
@@ -120,14 +120,14 @@ pub trait ViewContext: sealed::ViewContext {
     /// Layout configuration for a specific node.
     fn layout_of(&self, node: NodeId) -> Option<Layout>;
 
-    /// Return what scrolling `node` by `(x, y)` would change, without
-    /// mutating the tree.
+    /// Return what applying `op` to `node` would change, without mutating
+    /// the tree.
     ///
-    /// This mirrors [`Context::scroll_by`], including the change a cancelled
-    /// pending reveal produces. It returns `None` when the node is missing.
-    /// Contextual key prediction uses this to answer for a scrollable target
-    /// without running widget effects.
-    fn scroll_outcome(&self, node: NodeId, x: i32, y: i32) -> Option<ChangeOutcome>;
+    /// This mirrors [`Context::scroll_node`], including the change a
+    /// cancelled pending reveal produces. It returns `None` when the node is
+    /// missing. Contextual key prediction uses this to answer for a
+    /// scrollable target without running widget effects.
+    fn scroll_outcome(&self, node: NodeId, op: ScrollOp) -> Option<ChangeOutcome>;
 
     /// Read a widget without extracting its slot or marking it changed.
     fn with_widget_dyn(
@@ -380,6 +380,91 @@ pub enum FocusDirection {
     Right,
 }
 
+/// Direction of a line or page scroll.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, crate::CommandEnum)]
+pub enum ScrollDirection {
+    /// Toward the top of the canvas.
+    Up,
+    /// Toward the bottom of the canvas.
+    Down,
+    /// Toward the left edge of the canvas.
+    Left,
+    /// Toward the right edge of the canvas.
+    Right,
+}
+
+impl ScrollDirection {
+    /// Move `scroll` `amount` cells in this direction, saturating at the
+    /// offset range.
+    fn step(self, scroll: Point, amount: u32) -> Point {
+        let Point { x, y } = scroll;
+        match self {
+            Self::Up => Point {
+                x,
+                y: y.saturating_sub(amount),
+            },
+            Self::Down => Point {
+                x,
+                y: y.saturating_add(amount),
+            },
+            Self::Left => Point {
+                x: x.saturating_sub(amount),
+                y,
+            },
+            Self::Right => Point {
+                x: x.saturating_add(amount),
+                y,
+            },
+        }
+    }
+}
+
+/// One scroll of a view. Every operation clamps the result to the canvas.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScrollOp {
+    /// Scroll to an absolute offset.
+    To(Point),
+    /// Scroll by a signed offset.
+    By(i32, i32),
+    /// Scroll a number of lines in a direction.
+    Lines(ScrollDirection, u32),
+    /// Scroll a number of pages in a direction. A page is the view extent on
+    /// that axis less one line, so consecutive pages keep one line of
+    /// overlap.
+    Pages(ScrollDirection, u32),
+}
+
+impl ScrollOp {
+    /// Page vertically by a signed count: negative moves up, positive moves
+    /// down, and zero stays put.
+    pub fn pages(delta: i32) -> Self {
+        let direction = if delta < 0 {
+            ScrollDirection::Up
+        } else {
+            ScrollDirection::Down
+        };
+        Self::Pages(direction, delta.unsigned_abs())
+    }
+
+    /// Return the unclamped offset this operation targets from `scroll` in a
+    /// view of `size`.
+    pub(crate) fn target(self, scroll: Point, size: Size) -> Point {
+        match self {
+            Self::To(point) => point,
+            Self::By(x, y) => scroll.scroll(x, y),
+            Self::Lines(direction, count) => direction.step(scroll, count),
+            Self::Pages(direction, count) => {
+                let extent = match direction {
+                    ScrollDirection::Up | ScrollDirection::Down => size.h,
+                    ScrollDirection::Left | ScrollDirection::Right => size.w,
+                };
+                let page = extent.saturating_sub(1).max(1);
+                direction.step(scroll, page.saturating_mul(count))
+            }
+        }
+    }
+}
+
 /// How a reveal places a rectangle inside a viewport.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum RevealAlign {
@@ -443,21 +528,18 @@ pub trait Context: ViewContext + sealed::Context {
     /// Close this scope and its nested scopes after active callbacks return.
     fn close_modal(&mut self, token: InteractionToken) -> Result<()>;
 
-    /// Scroll the view to the specified position.
+    /// Scroll this node's view.
     ///
     /// Scrolling moves the view at once. It supersedes older reveal requests
     /// for this view, even when the offset does not change.
-    fn scroll_to(&mut self, x: u32, y: u32) -> ChangeOutcome;
+    fn scroll(&mut self, op: ScrollOp) -> ChangeOutcome;
 
-    /// Scroll the view by the given offsets.
-    fn scroll_by(&mut self, x: i32, y: i32) -> ChangeOutcome;
-
-    /// Scroll an attached node's view to the specified position.
+    /// Scroll an attached node's view.
     ///
     /// Owners of scrollbars use this to move the node they display. The
-    /// offset is clamped as [`Context::scroll_to`] clamps it. Returns an error
+    /// offset is clamped as [`Context::scroll`] clamps it. Returns an error
     /// when the node is missing or detached.
-    fn scroll_to_of(&mut self, node: NodeId, x: u32, y: u32) -> Result<ChangeOutcome>;
+    fn scroll_node(&mut self, node: NodeId, op: ScrollOp) -> Result<ChangeOutcome>;
 
     /// Reveal a rectangle of this node's canvas once layout settles.
     ///
@@ -484,38 +566,6 @@ pub trait Context: ViewContext + sealed::Context {
     /// request waits while the node is hidden, detached, or outside the modal
     /// region. Returns an error when the node does not exist.
     fn reveal_node(&mut self, node: NodeId, align: RevealAlign) -> Result<ChangeOutcome>;
-
-    /// Scroll the view up by one page.
-    fn page_up(&mut self) -> ChangeOutcome {
-        let view = self.view();
-        self.scroll_to(view.scroll.x, view.scroll.y.saturating_sub(view.content.h))
-    }
-
-    /// Scroll the view down by one page.
-    fn page_down(&mut self) -> ChangeOutcome {
-        let view = self.view();
-        self.scroll_to(view.scroll.x, view.scroll.y.saturating_add(view.content.h))
-    }
-
-    /// Scroll the view up by one line.
-    fn scroll_up(&mut self) -> ChangeOutcome {
-        self.scroll_by(0, -1)
-    }
-
-    /// Scroll the view down by one line.
-    fn scroll_down(&mut self) -> ChangeOutcome {
-        self.scroll_by(0, 1)
-    }
-
-    /// Scroll the view left by one line.
-    fn scroll_left(&mut self) -> ChangeOutcome {
-        self.scroll_by(-1, 0)
-    }
-
-    /// Scroll the view right by one line.
-    fn scroll_right(&mut self) -> ChangeOutcome {
-        self.scroll_by(1, 0)
-    }
 
     /// Mark this node dirty so the next frame re-runs layout.
     fn invalidate_layout(&mut self);
@@ -808,8 +858,8 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
         self.core.nodes.get(node).map(|n| n.layout)
     }
 
-    fn scroll_outcome(&self, node: NodeId, x: i32, y: i32) -> Option<ChangeOutcome> {
-        self.core.scroll_outcome(node, x, y)
+    fn scroll_outcome(&self, node: NodeId, op: ScrollOp) -> Option<ChangeOutcome> {
+        self.core.scroll_outcome(node, op)
     }
 
     fn with_widget_dyn(
@@ -952,17 +1002,12 @@ impl Context for NodeCtx<&mut Core> {
         self.core.close_modal_after_dispatch(token)
     }
 
-    fn scroll_to(&mut self, x: u32, y: u32) -> ChangeOutcome {
-        self.core.update_scroll(self.node_id, |_| Point { x, y })
+    fn scroll(&mut self, op: ScrollOp) -> ChangeOutcome {
+        self.core.scroll(self.node_id, op)
     }
 
-    fn scroll_by(&mut self, x: i32, y: i32) -> ChangeOutcome {
-        self.core
-            .update_scroll(self.node_id, |scroll| scroll.scroll(x, y))
-    }
-
-    fn scroll_to_of(&mut self, node: NodeId, x: u32, y: u32) -> Result<ChangeOutcome> {
-        self.core.scroll_to_of(node, x, y)
+    fn scroll_node(&mut self, node: NodeId, op: ScrollOp) -> Result<ChangeOutcome> {
+        self.core.scroll_node(node, op)
     }
 
     fn reveal_area(&mut self, area: Rect, align: RevealAlign) -> ChangeOutcome {
@@ -1106,7 +1151,7 @@ mod tests {
     }
     #[test]
     fn page_scrolling_preserves_unsigned_offsets_and_clamps() {
-        use super::{Context, CoreContext, ViewContext};
+        use super::{Context, CoreContext, ScrollDirection, ScrollOp, ViewContext};
         use crate::{
             core::Core,
             geom::{Point, Size},
@@ -1116,6 +1161,8 @@ mod tests {
         let root = core.root_id();
         for height in [0, 3, i32::MAX as u32 + 1, u32::MAX] {
             let max_y = if height == 0 { 0 } else { u32::MAX - height };
+            // A page keeps one line of overlap.
+            let page = height.saturating_sub(1).max(1);
             let node = &mut core.nodes[root];
             node.content_size = Size::new(1, height);
             node.canvas = Size::new(10, u32::MAX);
@@ -1125,16 +1172,34 @@ mod tests {
             let mut context = CoreContext::new(&mut core, root);
             for step in 1u32..=2 {
                 let before = context.view().scroll.y;
-                let expected = height.saturating_mul(step).min(max_y);
-                assert_eq!(context.page_down().changed(), before != expected);
+                let expected = page.saturating_mul(step).min(max_y);
+                assert_eq!(
+                    context
+                        .scroll(ScrollOp::Pages(ScrollDirection::Down, 1))
+                        .changed(),
+                    before != expected
+                );
                 assert_eq!(context.view().scroll, Point { x: 2, y: expected });
             }
-            context.scroll_to(2, max_y);
-            let expected = max_y.saturating_sub(height);
-            assert_eq!(context.page_up().changed(), max_y != expected);
+            context.scroll(ScrollOp::To(Point { x: 2, y: 0 }));
+            let expected = page.saturating_mul(2).min(max_y);
+            context.scroll(ScrollOp::Pages(ScrollDirection::Down, 2));
             assert_eq!(context.view().scroll, Point { x: 2, y: expected });
-            context.scroll_to(2, 0);
-            assert!(!context.page_up().changed());
+            context.scroll(ScrollOp::To(Point { x: 2, y: max_y }));
+            let expected = max_y.saturating_sub(page);
+            assert_eq!(
+                context
+                    .scroll(ScrollOp::Pages(ScrollDirection::Up, 1))
+                    .changed(),
+                max_y != expected
+            );
+            assert_eq!(context.view().scroll, Point { x: 2, y: expected });
+            context.scroll(ScrollOp::To(Point { x: 2, y: 0 }));
+            assert!(
+                !context
+                    .scroll(ScrollOp::Pages(ScrollDirection::Up, 1))
+                    .changed()
+            );
         }
     }
 }

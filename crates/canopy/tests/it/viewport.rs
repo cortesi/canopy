@@ -4,7 +4,8 @@
 mod tests {
     use canopy::{
         Context, ContextExt, EventOutcome, ModalBindings, ModalOptions, NodeId, NodeName, Register,
-        Render, RouteTraceKind, Setup, ViewContext, Widget, derive_commands,
+        Render, RouteTraceKind, ScrollDirection, ScrollOp, Setup, ViewContext, Widget,
+        derive_commands,
         error::Result,
         event::{Event, key, mouse},
         geom::{Line, Point, PointI32, Size},
@@ -23,7 +24,7 @@ mod tests {
 
         #[command]
         fn scroll_down(&self, c: &mut dyn Context) {
-            let _ = c.scroll_down();
+            let _ = c.scroll(ScrollOp::Lines(ScrollDirection::Down, 1));
         }
     }
 
@@ -220,9 +221,9 @@ end)
         assert!(!phases(&harness).contains(&RouteTraceKind::DefaultAction));
         assert!(phases(&harness).contains(&RouteTraceKind::Unhandled));
 
-        harness
-            .canopy
-            .with_root_context(|context| context.scroll_to_of(inner, 0, u32::MAX))?;
+        harness.canopy.with_root_context(|context| {
+            context.scroll_node(inner, ScrollOp::To(Point { x: 0, y: u32::MAX }))
+        })?;
         harness.render()?;
         assert_eq!(scroll(&harness, inner), Point { x: 0, y: 26 });
         wheel(&mut harness, mouse::Action::ScrollDown, 1, 1)?;
@@ -260,15 +261,15 @@ canopy.keymap({
 
         // The outer binding waits until the inner pane declines.
         harness.canopy.set_mode("");
-        harness
-            .canopy
-            .with_root_context(|context| context.scroll_to_of(inner, 0, 9))?;
+        harness.canopy.with_root_context(|context| {
+            context.scroll_node(inner, ScrollOp::To(Point { x: 0, y: 9 }))
+        })?;
         wheel(&mut harness, mouse::Action::ScrollUp, 1, 1)?;
         assert_eq!(harness.canopy.mode(), "");
         assert_eq!(scroll(&harness, inner), Point { x: 0, y: 6 });
-        harness
-            .canopy
-            .with_root_context(|context| context.scroll_to_of(inner, 0, 0))?;
+        harness.canopy.with_root_context(|context| {
+            context.scroll_node(inner, ScrollOp::To(Point { x: 0, y: 0 }))
+        })?;
         wheel(&mut harness, mouse::Action::ScrollUp, 1, 1)?;
         assert_eq!(harness.canopy.mode(), "outer");
         assert_eq!(scroll(&harness, outer), Point::ZERO);
@@ -280,7 +281,7 @@ canopy.keymap({
         let (mut harness, inner) = nested()?;
         let outer = harness.root;
         harness.canopy.with_root_context(|context| {
-            context.scroll_to_of(inner, 0, u32::MAX)?;
+            context.scroll_node(inner, ScrollOp::To(Point { x: 0, y: u32::MAX }))?;
             context.open_modal(ModalOptions {
                 owner: outer,
                 modal: inner,

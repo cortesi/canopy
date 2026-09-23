@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Context, ContextExt, NodeName, ViewContextExt, Widget, buf,
+        Context, ContextExt, NodeName, ScrollOp, ViewContextExt, Widget, buf,
         commands::{CommandNode, CommandSpec},
         error::Result,
         event::{key, mouse},
@@ -50,7 +50,7 @@ mod tests {
         harness.render()?;
         harness.with_root_widget_context(|_root: &mut SnapshotRoot<Dropdown<String>>, ctx| {
             ctx.with_unique_descendant::<Dropdown<String>, _>(|_, ctx| {
-                assert!(ctx.scroll_to(3, 2).changed());
+                assert!(ctx.scroll(ScrollOp::To(Point { x: 3, y: 2 })).changed());
                 Ok(())
             })
         })?;
@@ -83,7 +83,7 @@ mod tests {
         harness.render()?;
         harness.with_root_widget_context(|_root: &mut SnapshotRoot<Selector<String>>, ctx| {
             ctx.with_unique_descendant::<Selector<String>, _>(|_, ctx| {
-                assert!(ctx.scroll_to(4, 2).changed());
+                assert!(ctx.scroll(ScrollOp::To(Point { x: 4, y: 2 })).changed());
                 Ok(())
             })
         })?;
@@ -552,7 +552,7 @@ mod tests {
         harness.tbuf().assert_matches(buf![" 1 abcde"]);
         harness.with_root_widget_context(|_root: &mut SnapshotRoot<DiffView>, ctx| {
             ctx.with_unique_descendant::<DiffView, _>(|_, ctx| {
-                assert!(ctx.scroll_to(5, 0).changed());
+                assert!(ctx.scroll(ScrollOp::To(Point { x: 5, y: 0 })).changed());
                 Ok(())
             })
         })?;

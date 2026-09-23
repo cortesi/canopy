@@ -1,8 +1,8 @@
 use canopy::{
-    CanopyBuilder, Context, ContextExt, FocusDirection, Register, Render, Setup, ViewContext,
-    Widget, derive_commands,
+    CanopyBuilder, Context, ContextExt, Register, Render, ScrollDirection, ScrollOp, Setup,
+    ViewContext, Widget, derive_commands,
     error::Result,
-    geom::{Line, Size},
+    geom::{Line, Point, Size},
     layout::{CanvasContext, Layout, MeasureConstraints, Measurement},
 };
 use canopy_widgets::Frame;
@@ -45,13 +45,13 @@ impl TestPattern {
     #[command]
     /// Scroll to an absolute content position.
     pub(crate) fn scroll_to(&self, c: &mut dyn Context, x: u32, y: u32) {
-        c.scroll_to(x, y);
+        c.scroll(ScrollOp::To(Point { x, y }));
     }
 
     #[command]
     /// Scroll by one line in the specified direction.
     /// @param dir The direction to scroll.
-    pub(crate) fn scroll(&self, c: &mut dyn Context, dir: FocusDirection) {
+    pub(crate) fn scroll(&self, c: &mut dyn Context, dir: ScrollDirection) {
         crate::scroll_in(c, dir);
     }
 

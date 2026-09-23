@@ -17,10 +17,10 @@ use std::borrow::Cow;
 
 use canopy::{
     Context, ContextExt, EventOutcome, InteractionToken, ModalBindings, ModalOptions, NodeId,
-    NodeName, Render, TypedId, ViewContext, Widget, derive_commands,
+    NodeName, Render, ScrollOp, TypedId, ViewContext, Widget, derive_commands,
     error::{Error, Result},
     event::{Event, key, key::KeyCode},
-    geom::{Line, Size},
+    geom::{Line, Point, Size},
     layout::{
         CanvasContext, Direction, Edges, Layout, LayoutOverride, MeasureConstraints, Measurement,
         Sizing,
@@ -562,7 +562,7 @@ where
         // The list is new, so it opens at its first row rather than wherever
         // the last one was left.
         self.cursor = RowCursor::new(self.shown.len());
-        context.scroll_to(0, 0);
+        context.scroll(ScrollOp::To(Point { x: 0, y: 0 }));
         self.refresh(context)
     }
 

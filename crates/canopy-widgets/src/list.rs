@@ -7,8 +7,8 @@
 use std::{collections::HashSet, hash::Hash};
 
 use canopy::{
-    Context, ContextExt, EventOutcome, FocusDirection, NodeId, NodeName, Render, RevealAlign,
-    TypedId, ViewContext, Widget, WidgetSemantics,
+    Context, ContextExt, EventOutcome, NodeId, NodeName, Render, RevealAlign, ScrollDirection,
+    ScrollOp, TypedId, ViewContext, Widget, WidgetSemantics,
     commands::{ArgValue, CommandArgs, CommandCall, CommandStatus, ToArgValue},
     derive_commands,
     error::{Error, Result},
@@ -663,21 +663,8 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
     /// Scroll the view by one line in the specified direction.
     /// @param dir The direction to scroll.
     #[command]
-    pub fn scroll(&mut self, c: &mut dyn Context, dir: FocusDirection) {
-        match dir {
-            FocusDirection::Up | FocusDirection::Prev => {
-                c.scroll_up();
-            }
-            FocusDirection::Down | FocusDirection::Next => {
-                c.scroll_down();
-            }
-            FocusDirection::Left => {
-                c.scroll_left();
-            }
-            FocusDirection::Right => {
-                c.scroll_right();
-            }
-        }
+    pub fn scroll(&mut self, c: &mut dyn Context, dir: ScrollDirection) {
+        c.scroll(ScrollOp::Lines(dir, 1));
     }
 
     /// Move selection by one page.

@@ -2,7 +2,7 @@
 //! Example widgets used by canopy demos.
 
 use canopy::{
-    CanopyBuilder, Context, ContextExt, FocusDirection, Register, Widget,
+    CanopyBuilder, Context, ContextExt, Register, ScrollDirection, ScrollOp, Widget,
     error::{Error, Result},
     layout::{Direction, Layout, LayoutOverride, Sizing},
     style::{
@@ -77,22 +77,13 @@ pub(crate) fn banner_gradient(angle_deg: f32, colors: [Color; 4]) -> Paint {
 }
 
 /// Scroll a context by one line in the given direction.
-pub(crate) fn scroll_in(c: &mut dyn Context, dir: FocusDirection) {
-    match dir {
-        FocusDirection::Up | FocusDirection::Prev => c.scroll_up(),
-        FocusDirection::Down | FocusDirection::Next => c.scroll_down(),
-        FocusDirection::Left => c.scroll_left(),
-        FocusDirection::Right => c.scroll_right(),
-    };
+pub(crate) fn scroll_in(c: &mut dyn Context, dir: ScrollDirection) {
+    c.scroll(ScrollOp::Lines(dir, 1));
 }
 
 /// Page a context by a signed delta; negative moves up, positive moves down.
 pub(crate) fn page_by(c: &mut dyn Context, delta: i32) {
-    if delta < 0 {
-        c.page_up();
-    } else if delta > 0 {
-        c.page_down();
-    }
+    c.scroll(ScrollOp::pages(delta));
 }
 
 /// Add the standard normal and selected entry rules under a path prefix.

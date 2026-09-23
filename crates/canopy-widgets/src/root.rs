@@ -1,12 +1,12 @@
 use canopy::{
     Canopy, ChildSlot, Context, ContextExt, FocusDirection, FocusScope, FrameworkBindingGroup,
-    InteractionToken, ModalBindings, ModalOptions, NodeId, NodeName, Register, Render, Setup,
-    TypedId, ViewContext, Widget,
+    InteractionToken, ModalBindings, ModalOptions, NodeId, NodeName, Register, Render, ScrollOp,
+    Setup, TypedId, ViewContext, Widget,
     commands::CommandCall,
     derive_commands,
     error::{Error, Result},
     event::key::Key,
-    geom::Line,
+    geom::{Line, Point},
     layout::{Align, Direction, Layout, LayoutOverride},
 };
 
@@ -223,7 +223,7 @@ impl Root {
             c.with_widget_mut(list, |list: &mut BindingList, context| {
                 let previous = list.replace_snapshot(Some(snapshot));
                 let scroll = context.view().scroll;
-                context.scroll_to(0, 0);
+                context.scroll(ScrollOp::To(Point { x: 0, y: 0 }));
                 Ok((previous, scroll))
             })?;
 
@@ -239,7 +239,10 @@ impl Root {
             Err(error) => {
                 c.with_widget_mut(list, |list: &mut BindingList, context| {
                     list.replace_snapshot(previous_snapshot);
-                    context.scroll_to(previous_scroll.x, previous_scroll.y);
+                    context.scroll(ScrollOp::To(Point {
+                        x: previous_scroll.x,
+                        y: previous_scroll.y,
+                    }));
                     Ok(())
                 })?;
                 return Err(error);

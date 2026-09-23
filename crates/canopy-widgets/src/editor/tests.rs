@@ -9,7 +9,7 @@ use std::{
 
 use canopy::{
     CanopyBuilder, Context, ContextExt, FocusDirection, FocusScope, NodeName, Register, ScrollAxis,
-    ScrollMark, Setup, Widget, buf, derive_commands,
+    ScrollMark, ScrollOp, Setup, Widget, buf, derive_commands,
     error::Result,
     event::{Event, key, mouse},
     geom::{Point, PointI32, Size},
@@ -150,7 +150,7 @@ fn scroll_editor_to(harness: &mut Harness, x: u32, y: u32) {
     harness
         .with_root_widget_context(|_root: &mut EditorHost, ctx| {
             ctx.with_slot::<EditorSlot, _>(ctx.node_id(), |_editor, ctx| {
-                ctx.scroll_to(x, y);
+                ctx.scroll(ScrollOp::To(Point { x, y }));
                 Ok(())
             })
         })

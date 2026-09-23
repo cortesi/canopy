@@ -1,8 +1,8 @@
 use canopy::{
-    CanopyBuilder, Context, ContextExt, FocusDirection, NodeId, Register, Setup, Widget,
+    CanopyBuilder, Context, ContextExt, NodeId, Register, ScrollDirection, ScrollOp, Setup, Widget,
     derive_commands,
     error::Result,
-    geom::Size,
+    geom::{Point, Size},
     layout::{CanvasContext, Direction, Edges, Layout, MeasureOverflow},
 };
 use canopy_widgets::{
@@ -146,7 +146,7 @@ impl EditorGym {
     #[command]
     /// Scroll the outer pane by one line in the specified direction.
     /// @param dir The direction to scroll.
-    pub(crate) fn scroll(&self, c: &mut dyn Context, dir: FocusDirection) {
+    pub(crate) fn scroll(&self, c: &mut dyn Context, dir: ScrollDirection) {
         crate::scroll_in(c, dir);
     }
 
@@ -160,7 +160,7 @@ impl EditorGym {
     #[command]
     /// Scroll the outer pane to an absolute content position.
     pub(crate) fn scroll_to(&self, c: &mut dyn Context, x: u32, y: u32) {
-        c.scroll_to(x, y);
+        c.scroll(ScrollOp::To(Point { x, y }));
     }
 
     /// Build the left column of editor samples.

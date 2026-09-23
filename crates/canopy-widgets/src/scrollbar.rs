@@ -8,7 +8,7 @@
 //! the pointer, and a drag keeps the thumb under the pointer.
 
 use canopy::{
-    Context, EventOutcome, NodeId, Render, ScrollAxis, View, ViewContext,
+    Context, EventOutcome, NodeId, Render, ScrollAxis, ScrollOp, View, ViewContext,
     error::Result,
     event::mouse,
     geom::{Point, PointI32, Rect, RectI32, Size},
@@ -537,7 +537,13 @@ impl Scrollbar {
         if offset == view.scroll {
             return Ok(EventOutcome::Ignore);
         }
-        ctx.scroll_to_of(target, offset.x, offset.y)?;
+        ctx.scroll_node(
+            target,
+            ScrollOp::To(Point {
+                x: offset.x,
+                y: offset.y,
+            }),
+        )?;
         Ok(EventOutcome::Handle)
     }
 
@@ -648,7 +654,7 @@ impl Scrollbar {
                 view.scroll.y,
             ),
         };
-        ctx.scroll_to_of(target, x, y)?;
+        ctx.scroll_node(target, ScrollOp::To(Point { x, y }))?;
         Ok(())
     }
 }

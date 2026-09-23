@@ -150,19 +150,25 @@ fn scrolling_another_node_rejects_missing_and_detached_targets() -> Result<()> {
     let root = core.root;
     let mut ctx = CoreContext::new(&mut core, root);
 
-    assert!(ctx.scroll_to_of(child, 5, 200)?.changed());
+    assert!(
+        ctx.scroll_node(child, ScrollOp::To(Point { x: 5, y: 200 }))?
+            .changed()
+    );
     assert_eq!(
         ctx.view_of(child).map(|view| view.scroll),
         Some(Point { x: 5, y: 96 })
     );
-    assert!(!ctx.scroll_to_of(child, 5, 96)?.changed());
+    assert!(
+        !ctx.scroll_node(child, ScrollOp::To(Point { x: 5, y: 96 }))?
+            .changed()
+    );
     assert!(matches!(
-        ctx.scroll_to_of(detached, 1, 1),
+        ctx.scroll_node(detached, ScrollOp::To(Point { x: 1, y: 1 })),
         Err(Error::NodeDetached(_))
     ));
     core.remove_subtree(detached)?;
     assert!(matches!(
-        CoreContext::new(&mut core, root).scroll_to_of(detached, 1, 1),
+        CoreContext::new(&mut core, root).scroll_node(detached, ScrollOp::To(Point { x: 1, y: 1 })),
         Err(Error::NodeNotFound(_))
     ));
     assert!(matches!(
@@ -261,7 +267,7 @@ fn the_last_focus_change_wins_against_tree_order() -> Result<()> {
     core.update_layout(SCREEN)?;
 
     core.set_focus(first)?;
-    CoreContext::new(&mut core, viewport).scroll_to(0, 20);
+    CoreContext::new(&mut core, viewport).scroll(ScrollOp::To(Point { x: 0, y: 20 }));
     core.set_focus(last)?;
     core.set_focus(first)?;
     core.update_layout(SCREEN)?;
@@ -314,7 +320,7 @@ fn an_explicit_scroll_that_cannot_move_still_supersedes_older_reveals() -> Resul
     core.reveal_node(target, RevealAlign::Nearest)?;
     assert!(
         !CoreContext::new(&mut core, viewport)
-            .scroll_to(0, 0)
+            .scroll(ScrollOp::To(Point { x: 0, y: 0 }))
             .changed(),
         "an ordering stamp alone is not a change"
     );
@@ -340,7 +346,7 @@ fn a_retained_request_yields_to_newer_intent_when_its_node_returns() -> Result<(
     core.update_layout(SCREEN)?;
     assert!(core.nodes[target].reveal_in_ancestors.is_some());
 
-    CoreContext::new(&mut core, viewport).scroll_to(0, 5);
+    CoreContext::new(&mut core, viewport).scroll(ScrollOp::To(Point { x: 0, y: 5 }));
     core.update_layout(SCREEN)?;
     core.set_hidden(target, false)?;
     core.update_layout(SCREEN)?;
@@ -359,7 +365,7 @@ fn structural_rollback_restores_a_request_with_its_node() -> Result<()> {
     let mut ctx = CoreContext::new(&mut core, viewport);
     ctx.reveal_area(Rect::new(0, 30, 1, 1), RevealAlign::Nearest);
     let failed = ctx.edit_structure(&mut |ctx| {
-        ctx.scroll_to(0, 2);
+        ctx.scroll(ScrollOp::To(Point { x: 0, y: 2 }));
         Err(Error::Internal("abandon the edit".into()))
     });
     assert!(failed.is_err());
@@ -482,29 +488,29 @@ fn readonly_scroll_outcome_matches_the_mutating_scroll() -> Result<()> {
     core.update_layout(SCREEN)?;
 
     assert_eq!(
-        core.scroll_outcome(viewport, 0, 1),
+        core.scroll_outcome(viewport, ScrollOp::By(0, 1)),
         Some(ChangeOutcome::Changed)
     );
     let expected = core.update_scroll(viewport, |scroll| scroll.scroll(0, 1));
     assert_eq!(expected, ChangeOutcome::Changed);
     assert_eq!(
-        core.scroll_outcome(viewport, 0, 0),
+        core.scroll_outcome(viewport, ScrollOp::By(0, 0)),
         Some(ChangeOutcome::Unchanged),
         "a probe that moves nothing reports no change"
     );
 
-    core.scroll_to_of(viewport, 0, u32::MAX)?;
+    core.scroll_node(viewport, ScrollOp::To(Point { x: 0, y: u32::MAX }))?;
     assert_eq!(
-        core.scroll_outcome(viewport, 0, 1),
+        core.scroll_outcome(viewport, ScrollOp::By(0, 1)),
         Some(ChangeOutcome::Unchanged),
         "a clamped scroll at the boundary changes nothing"
     );
     assert_eq!(
-        core.scroll_outcome(viewport, 0, -1),
+        core.scroll_outcome(viewport, ScrollOp::By(0, -1)),
         Some(ChangeOutcome::Changed)
     );
     let missing = core.create_detached(Leaf(Size::new(1, 1)))?;
     core.remove_subtree(missing)?;
-    assert_eq!(core.scroll_outcome(missing, 0, 1), None);
+    assert_eq!(core.scroll_outcome(missing, ScrollOp::By(0, 1)), None);
     Ok(())
 }

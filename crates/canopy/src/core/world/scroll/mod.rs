@@ -7,7 +7,7 @@
 
 use super::{Core, WidgetOperation, layout_driver::clamp_scroll};
 use crate::{
-    ChangeOutcome, RevealAlign,
+    ChangeOutcome, RevealAlign, ScrollOp,
     core::{id::NodeId, node::Node},
     error::{Error, Result},
     geom::{Point, PointI32, Rect},
@@ -65,22 +65,30 @@ impl Core {
         self.scroll_stamp
     }
 
-    /// Scroll an attached node to an offset, clamped to its canvas.
-    pub(crate) fn scroll_to_of(&mut self, node: NodeId, x: u32, y: u32) -> Result<ChangeOutcome> {
-        self.validate_attached_node(node)?;
-        Ok(self.update_scroll(node, |_| Point { x, y }))
+    /// Apply a scroll operation to a node, clamped to its canvas.
+    pub(crate) fn scroll(&mut self, node_id: NodeId, op: ScrollOp) -> ChangeOutcome {
+        let Some(size) = self.nodes.get(node_id).map(|node| node.content_size) else {
+            return ChangeOutcome::Unchanged;
+        };
+        self.update_scroll(node_id, |scroll| op.target(scroll, size))
     }
 
-    /// Return what scrolling `node_id` by `(x, y)` would change, without
-    /// mutating the tree.
+    /// Apply a scroll operation to an attached node, clamped to its canvas.
+    pub(crate) fn scroll_node(&mut self, node: NodeId, op: ScrollOp) -> Result<ChangeOutcome> {
+        self.validate_attached_node(node)?;
+        Ok(self.scroll(node, op))
+    }
+
+    /// Return what applying `op` to `node_id` would change, without mutating
+    /// the tree.
     ///
-    /// This mirrors [`Core::update_scroll`] for the same start state,
-    /// including the change a cancelled pending reveal produces. It returns
-    /// `None` when the node is missing.
-    pub(crate) fn scroll_outcome(&self, node_id: NodeId, x: i32, y: i32) -> Option<ChangeOutcome> {
+    /// This mirrors [`Core::scroll`] for the same start state, including the
+    /// change a cancelled pending reveal produces. It returns `None` when the
+    /// node is missing.
+    pub(crate) fn scroll_outcome(&self, node_id: NodeId, op: ScrollOp) -> Option<ChangeOutcome> {
         let node = self.nodes.get(node_id)?;
         let before = node.scroll;
-        let mut target = before.scroll(x, y);
+        let mut target = op.target(before, node.content_size);
         clamp_scroll(&mut target, node.content_size, node.canvas);
         Some(if target != before || node.reveal.is_some() {
             ChangeOutcome::Changed

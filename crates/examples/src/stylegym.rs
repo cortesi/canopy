@@ -6,8 +6,8 @@
 //! modal overlay shows how the pane dims.
 
 use canopy::{
-    CanopyBuilder, ChildSlot, Context, ContextExt, FocusDirection, NodeId, NodeName, Register,
-    Render, Setup, TypedId, View, ViewContext, ViewContextExt, Widget, derive_commands,
+    CanopyBuilder, ChildSlot, Context, ContextExt, NodeId, NodeName, Register, Render,
+    ScrollDirection, Setup, TypedId, View, ViewContext, ViewContextExt, Widget, derive_commands,
     error::Result,
     geom::{Line, Point, Rect, Size},
     layout::{CanvasContext, Direction, Edges, Layout},
@@ -411,7 +411,7 @@ impl StyleSheet {
 
     /// Scroll by one line or column.
     #[command]
-    pub(crate) fn scroll(&self, c: &mut dyn Context, dir: FocusDirection) {
+    pub(crate) fn scroll(&self, c: &mut dyn Context, dir: ScrollDirection) {
         crate::scroll_in(c, dir);
     }
 
@@ -694,7 +694,7 @@ pub(crate) struct TextSamples;
 impl TextSamples {
     /// Scroll by one line or column.
     #[command]
-    pub(crate) fn scroll(&self, c: &mut dyn Context, dir: FocusDirection) {
+    pub(crate) fn scroll(&self, c: &mut dyn Context, dir: ScrollDirection) {
         crate::scroll_in(c, dir);
     }
 

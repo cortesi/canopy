@@ -260,8 +260,10 @@ times in one pass.
 Canvas calculation is also infallible. It returns the scrollable content extent,
 which is at least the content size. Layout clamps scroll after every pass.
 
-Scrolling and revealing are separate. `Context::scroll_to()`, `scroll_by()`,
-and `scroll_to_of()` move a view at once. `Context::reveal_area()`,
+Scrolling and revealing are separate. `Context::scroll()` and `scroll_node()`
+apply a `ScrollOp` and move a view at once. A `ScrollOp` scrolls to an offset,
+by an offset, or by a count of lines or pages. A page is the view extent less
+one line, so consecutive pages keep one line of overlap. `Context::reveal_area()`,
 `reveal_anchor()`, and `reveal_node()` queue requests that run after layout
 settles the geometry they show, so a widget can change content and reveal it in
 the same turn. `reveal_anchor()` asks `Widget::reveal_anchor()` for a rectangle
@@ -269,7 +271,7 @@ using the final content size. The editor reveals its cursor this way.
 
 Neither operation can express the other: a scroll moves now, and a reveal waits
 for layout. A scrollbar owner scrolls a node other than itself, so
-`scroll_to_of()` takes a node. The three reveals take different targets: a
+`scroll_node()` takes a node. The three reveals take different targets: a
 rectangle of the node's canvas, an anchor the widget computes after layout, and
 a node in its ancestor views.
 
@@ -351,7 +353,7 @@ setter. It replaces the node's whole override, and
 `LayoutOverride::from(layout)` pins every field of a complete layout.
 
 Painting and input resolve the same tracks. Wheel input on a track scrolls the
-target with `Context::scroll_to_of` only when the step can move. A press starts
+target with `Context::scroll_node` only when the step can move. A press starts
 a drag that stores the target, the track, and the pointer's offset within the
 thumb. Each later event and render resolves the track again. A drag continues
 while the same target and track exist, against the target's current range. It

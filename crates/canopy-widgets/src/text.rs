@@ -1,9 +1,9 @@
 use std::cell::RefCell;
 
 use canopy::{
-    Context, FocusDirection, NodeName, Render, ViewContext, Widget, derive_commands,
+    Context, NodeName, Render, ScrollDirection, ScrollOp, ViewContext, Widget, derive_commands,
     error::Result,
-    geom::{Line, Size},
+    geom::{Line, Point, Size},
     layout::{Constraint, MeasureConstraints, Measurement},
     text,
 };
@@ -104,19 +104,14 @@ impl Text {
     #[command]
     /// Scroll to an absolute content position.
     pub fn scroll_to(&mut self, c: &mut dyn Context, x: u32, y: u32) {
-        c.scroll_to(x, y);
+        c.scroll(ScrollOp::To(Point { x, y }));
     }
 
     /// Scroll by one line in the specified direction.
     /// @param dir The direction to scroll.
     #[command]
-    pub fn scroll(&mut self, c: &mut dyn Context, dir: FocusDirection) {
-        match dir {
-            FocusDirection::Up | FocusDirection::Prev => c.scroll_up(),
-            FocusDirection::Down | FocusDirection::Next => c.scroll_down(),
-            FocusDirection::Left => c.scroll_left(),
-            FocusDirection::Right => c.scroll_right(),
-        };
+    pub fn scroll(&mut self, c: &mut dyn Context, dir: ScrollDirection) {
+        c.scroll(ScrollOp::Lines(dir, 1));
     }
 
     /// Page vertically through the text.
@@ -125,11 +120,7 @@ impl Text {
     /// up.
     #[command]
     pub fn page(&mut self, c: &mut dyn Context, delta: i32) {
-        if delta < 0 {
-            c.page_up();
-        } else if delta > 0 {
-            c.page_down();
-        }
+        c.scroll(ScrollOp::pages(delta));
     }
 
     /// Return the widest unwrapped line, with tabs expanded.

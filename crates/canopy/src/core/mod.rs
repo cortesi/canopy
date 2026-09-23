@@ -74,8 +74,8 @@ pub use canopy::{
 };
 pub use change::ChangeOutcome;
 pub use context::{
-    ChildSlot, Context, ContextExt, FocusDirection, FocusScope, RevealAlign, ViewContext,
-    ViewContextExt,
+    ChildSlot, Context, ContextExt, FocusDirection, FocusScope, RevealAlign, ScrollDirection,
+    ScrollOp, ViewContext, ViewContextExt,
 };
 pub use fixture::{Fixture, FixtureInfo};
 pub use id::{NodeId, TypedId};

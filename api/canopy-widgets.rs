@@ -413,7 +413,7 @@ pub mod canopy_widgets {
 
             /// Pan by one step in the specified direction.
             /// @param dir The pan direction.
-            pub fn pan(&mut self, ctx: &mut dyn Context, dir: FocusDirection) -> Result<()> {}
+            pub fn pan(&mut self, ctx: &mut dyn Context, dir: ScrollDirection) -> Result<()> {}
 
             /// Show a different image, returning the view to its auto-fitted state.
             pub fn set_image(&mut self, image: &RgbaImage) {}
@@ -428,7 +428,7 @@ pub mod canopy_widgets {
             pub fn zoom(&mut self, ctx: &mut dyn Context, dir: ZoomDirection) -> Result<()> {}
 
             /// Build a positional call with typed user arguments.
-            pub fn call_pan(dir: FocusDirection) -> canopy::commands::CommandCall {}
+            pub fn call_pan(dir: ScrollDirection) -> canopy::commands::CommandCall {}
 
             /// Build a positional call with typed user arguments.
             pub fn call_zoom(dir: ZoomDirection) -> canopy::commands::CommandCall {}
@@ -1615,7 +1615,7 @@ pub mod canopy_widgets {
 
         /// Scroll by one line or column in the specified direction.
         /// @param dir The direction to scroll.
-        pub fn scroll(&mut self, c: &mut dyn Context, dir: FocusDirection) {}
+        pub fn scroll(&mut self, c: &mut dyn Context, dir: ScrollDirection) {}
 
         /// Set the display scope and rebuild the rows.
         pub fn set_scope(&mut self, scope: Scope) {}
@@ -1627,7 +1627,7 @@ pub mod canopy_widgets {
         pub fn call_page(delta: i32) -> canopy::commands::CommandCall {}
 
         /// Build a positional call with typed user arguments.
-        pub fn call_scroll(dir: FocusDirection) -> canopy::commands::CommandCall {}
+        pub fn call_scroll(dir: ScrollDirection) -> canopy::commands::CommandCall {}
 
         /// Return the command spec for this command.
         pub fn spec_page() -> &'static canopy::commands::CommandSpec {}
@@ -1721,7 +1721,7 @@ pub mod canopy_widgets {
 
         /// Pan by one step in the specified direction.
         /// @param dir The pan direction.
-        pub fn pan(&mut self, ctx: &mut dyn Context, dir: FocusDirection) -> Result<()> {}
+        pub fn pan(&mut self, ctx: &mut dyn Context, dir: ScrollDirection) -> Result<()> {}
 
         /// Show a different image, returning the view to its auto-fitted state.
         pub fn set_image(&mut self, image: &RgbaImage) {}
@@ -1736,7 +1736,7 @@ pub mod canopy_widgets {
         pub fn zoom(&mut self, ctx: &mut dyn Context, dir: ZoomDirection) -> Result<()> {}
 
         /// Build a positional call with typed user arguments.
-        pub fn call_pan(dir: FocusDirection) -> canopy::commands::CommandCall {}
+        pub fn call_pan(dir: ScrollDirection) -> canopy::commands::CommandCall {}
 
         /// Build a positional call with typed user arguments.
         pub fn call_zoom(dir: ZoomDirection) -> canopy::commands::CommandCall {}
@@ -2053,7 +2053,7 @@ pub mod canopy_widgets {
 
         /// Scroll by one line in the specified direction.
         /// @param dir The direction to scroll.
-        pub fn scroll(&mut self, c: &mut dyn Context, dir: FocusDirection) {}
+        pub fn scroll(&mut self, c: &mut dyn Context, dir: ScrollDirection) {}
 
         /// Scroll to an absolute content position.
         pub fn scroll_to(&mut self, c: &mut dyn Context, x: u32, y: u32) {}
@@ -2071,7 +2071,7 @@ pub mod canopy_widgets {
         pub fn call_page(delta: i32) -> canopy::commands::CommandCall {}
 
         /// Build a positional call with typed user arguments.
-        pub fn call_scroll(dir: FocusDirection) -> canopy::commands::CommandCall {}
+        pub fn call_scroll(dir: ScrollDirection) -> canopy::commands::CommandCall {}
 
         /// Build a positional call with typed user arguments.
         pub fn call_scroll_to(x: u32, y: u32) -> canopy::commands::CommandCall {}
@@ -2922,7 +2922,7 @@ pub mod canopy_widgets {
 
         /// Scroll the view by one line in the specified direction.
         /// @param dir The direction to scroll.
-        pub fn scroll(&mut self, c: &mut dyn Context, dir: FocusDirection) {}
+        pub fn scroll(&mut self, c: &mut dyn Context, dir: ScrollDirection) {}
 
         /// Select a domain key, returning an error when it is absent.
         pub fn select_key(&mut self, ctx: &mut dyn Context, key: &K) -> Result<()> {}
@@ -2957,7 +2957,7 @@ pub mod canopy_widgets {
         pub fn call_page(delta: i32) -> canopy::commands::CommandCall {}
 
         /// Build a positional call with typed user arguments.
-        pub fn call_scroll(dir: FocusDirection) -> canopy::commands::CommandCall {}
+        pub fn call_scroll(dir: ScrollDirection) -> canopy::commands::CommandCall {}
 
         /// Build a positional call with typed user arguments.
         pub fn call_select_by(delta: i32) -> canopy::commands::CommandCall {}

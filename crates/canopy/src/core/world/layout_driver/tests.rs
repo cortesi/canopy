@@ -12,7 +12,7 @@ use super::{
     LayoutPass, align_offset, allocate_flex_shares, clamp_outer, clamp_scroll, constraint_for_axis,
 };
 use crate::{
-    Context, NodeId,
+    Context, NodeId, ScrollOp,
     core::{
         context::CoreContext,
         id::testing_node_id,
@@ -722,13 +722,13 @@ fn reveal_obeys_request_and_explicit_scroll_order() -> Result<()> {
 
     let mut ctx = CoreContext::new(&mut core, child);
     ctx.reveal_area(Rect::new(80, 80, 1, 1), crate::RevealAlign::Nearest);
-    ctx.scroll_to(2, 3);
+    ctx.scroll(ScrollOp::To(Point { x: 2, y: 3 }));
     core.update_layout(Size::new(10, 4))?;
     assert_eq!(core.nodes[child].view.scroll, Point { x: 2, y: 3 });
     let mut ctx = CoreContext::new(&mut core, child);
     ctx.reveal_area(Rect::new(80, 80, 1, 1), crate::RevealAlign::Nearest);
     assert!(
-        ctx.scroll_by(0, 0).changed(),
+        ctx.scroll(ScrollOp::By(0, 0)).changed(),
         "cancelling a request changes state"
     );
     core.update_layout(Size::new(10, 4))?;
@@ -753,7 +753,7 @@ fn reveal_waits_for_visibility_and_does_not_reach_replacement_widgets() -> Resul
     assert_eq!(core.nodes[child].view.scroll, Point { x: 31, y: 37 });
 
     let mut ctx = CoreContext::new(&mut core, child);
-    ctx.scroll_to(0, 0);
+    ctx.scroll(ScrollOp::To(Point { x: 0, y: 0 }));
     ctx.reveal_area(Rect::new(80, 80, 1, 1), crate::RevealAlign::Nearest);
     let (replacement, _) =
         TestWidget::with_canvas(|_c| Measurement::Wrap, |_view, _ctx| Size::new(100, 100));

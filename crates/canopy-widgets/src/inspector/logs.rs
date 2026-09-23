@@ -11,7 +11,7 @@ use std::{
 };
 
 use canopy::{
-    Context, ContextExt, FocusDirection, NodeName, Register, Render, Setup, ViewContext, Widget,
+    Context, ContextExt, NodeName, Register, Render, ScrollDirection, Setup, ViewContext, Widget,
     derive_commands,
     error::{Error, Result},
     geom::Size,
@@ -283,7 +283,7 @@ impl Logs {
     /// Scroll the view by one line in the specified direction.
     /// @param dir The direction to scroll.
     #[command]
-    pub fn scroll(&self, c: &mut dyn Context, dir: FocusDirection) -> Result<()> {
+    pub fn scroll(&self, c: &mut dyn Context, dir: ScrollDirection) -> Result<()> {
         self.with_list(c, |list, ctx| {
             list.scroll(ctx, dir);
             Ok(())

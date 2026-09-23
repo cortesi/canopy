@@ -3,12 +3,12 @@
 use std::mem;
 
 use canopy::{
-    Context, NodeName, Register, Render, Setup, ViewContext, Widget,
+    Context, NodeName, Register, Render, ScrollDirection, ScrollOp, Setup, ViewContext, Widget,
     commands::CommandStatus,
     derive_commands,
     error::Result,
     event::key::{Empty, Key, KeyCode},
-    geom::{Line, Size},
+    geom::{Line, Point, Size},
     help::{AvailableBinding, BindingSnapshot},
     layout::{
         CanvasContext, Constraint, Edges, Layout, MeasureConstraints, MeasureOverflow, Measurement,
@@ -62,38 +62,41 @@ impl BindingList {
     #[command]
     /// Scroll up by one line.
     pub fn scroll_up(&self, context: &mut dyn Context) {
-        context.scroll_up();
+        context.scroll(ScrollOp::Lines(ScrollDirection::Up, 1));
     }
 
     #[command]
     /// Scroll down by one line.
     pub fn scroll_down(&self, context: &mut dyn Context) {
-        context.scroll_down();
+        context.scroll(ScrollOp::Lines(ScrollDirection::Down, 1));
     }
 
     #[command]
     /// Scroll up by one viewport.
     pub fn page_up(&self, context: &mut dyn Context) {
-        context.page_up();
+        context.scroll(ScrollOp::Pages(ScrollDirection::Up, 1));
     }
 
     #[command]
     /// Scroll down by one viewport.
     pub fn page_down(&self, context: &mut dyn Context) {
-        context.page_down();
+        context.scroll(ScrollOp::Pages(ScrollDirection::Down, 1));
     }
 
     #[command]
     /// Scroll to the first row.
     pub fn scroll_to_top(&self, context: &mut dyn Context) {
-        context.scroll_to(0, 0);
+        context.scroll(ScrollOp::To(Point { x: 0, y: 0 }));
     }
 
     #[command]
     /// Scroll to the last row.
     pub fn scroll_to_bottom(&self, context: &mut dyn Context) {
         let view = context.view();
-        context.scroll_to(0, view.canvas.h.saturating_sub(view.view_rect().h));
+        context.scroll(ScrollOp::To(Point {
+            x: 0,
+            y: view.canvas.h.saturating_sub(view.view_rect().h),
+        }));
     }
 
     /// Build the exact vertical canvas for one viewport width.

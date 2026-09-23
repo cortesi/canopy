@@ -6,8 +6,8 @@ use std::{
 };
 
 use canopy::{
-    Context, ContextExt, EventOutcome, NodeId, NodeName, ScrollAxis, ScrollMark, ViewContext,
-    Widget,
+    Context, ContextExt, EventOutcome, NodeId, NodeName, ScrollAxis, ScrollMark, ScrollOp,
+    ViewContext, Widget,
     error::Result,
     event::{Event, key, mouse},
     geom::{Point, PointI32, Rect, Size},
@@ -402,9 +402,10 @@ fn a_frame_track_covers_only_the_rows_beside_its_target() -> Result<()> {
     // The header takes row 1, the body rows 2 through 7, and the footer row 8.
     assert_eq!(rows_with(&harness, 19, 10, '█'), [2]);
 
-    harness
-        .canopy
-        .with_root_context(|c| c.scroll_to_of(body, 0, u32::MAX).map(|_| ()))?;
+    harness.canopy.with_root_context(|c| {
+        c.scroll_node(body, ScrollOp::To(Point { x: 0, y: u32::MAX }))
+            .map(|_| ())
+    })?;
     harness.render()?;
     assert_eq!(rows_with(&harness, 19, 10, '█'), [7]);
     Ok(())
@@ -460,9 +461,10 @@ fn marks_keep_their_color_as_the_thumb_slides_over_them() -> Result<()> {
 
     // Scroll the thumb onto the second mark: its cell keeps the mark color
     // and takes the thumb glyph, while the first mark shows its own glyph.
-    harness
-        .canopy
-        .with_root_context(|c| c.scroll_to_of(body, 0, 50).map(|_| ()))?;
+    harness.canopy.with_root_context(|c| {
+        c.scroll_node(body, ScrollOp::To(Point { x: 0, y: 50 }))
+            .map(|_| ())
+    })?;
     harness.render()?;
     assert_eq!(harness.buf().get(Point { x: 19, y: 5 }).unwrap().ch, '█');
     assert_eq!(color_at(&harness, 19, 5), Some(Color::Blue));
@@ -718,8 +720,9 @@ fn a_list_inside_a_scroll_container_reveals_through_both_views() -> Result<()> {
     let (container, list) = (nodes[0], nodes[1]);
     // Startup focus reveals the first row, so return both views to the top.
     harness.canopy.with_root_context(|c| {
-        c.scroll_to_of(list, 0, 0)?;
-        c.scroll_to_of(container, 0, 0).map(|_| ())
+        c.scroll_node(list, ScrollOp::To(Point { x: 0, y: 0 }))?;
+        c.scroll_node(container, ScrollOp::To(Point { x: 0, y: 0 }))
+            .map(|_| ())
     })?;
     harness.render()?;
     assert_eq!(scroll(&harness, container), Point::ZERO);

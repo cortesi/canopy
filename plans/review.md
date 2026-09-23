@@ -2217,7 +2217,7 @@ Each stage also updates the docs it touches.
   Add `From<Layout> for LayoutOverride`, and fix `columns.rs:780` pinning.
 - [x] C16: the `descendants::<W>` iterator, removal of the unused lookups, and
   the `focused_within` rename.
-- [ ] C17: `ScrollOp` with counted lines and pages and a one-line page overlap.
+- [x] C17: `ScrollOp` with counted lines and pages and a one-line page overlap.
   Replace the five direction matches, and delete fileselect's
   `with_preview_view`.
 - [ ] C18 public part: `ChangeSet` and `Invalidation` are already crate-private

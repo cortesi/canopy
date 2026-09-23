@@ -19,7 +19,7 @@
 use std::ops::Range;
 
 use canopy::{
-    Context, FocusDirection, NodeName, Render, ViewContext, Widget, derive_commands,
+    Context, NodeName, Render, ScrollDirection, ScrollOp, ViewContext, Widget, derive_commands,
     error::Result,
     geom::{Line, Point, Rect, Size},
     layout::{CanvasContext, Constraint, MeasureConstraints, Measurement},
@@ -292,13 +292,8 @@ impl DiffView {
     #[command]
     /// Scroll by one line or column in the specified direction.
     /// @param dir The direction to scroll.
-    pub fn scroll(&mut self, c: &mut dyn Context, dir: FocusDirection) {
-        match dir {
-            FocusDirection::Up | FocusDirection::Prev => c.scroll_up(),
-            FocusDirection::Down | FocusDirection::Next => c.scroll_down(),
-            FocusDirection::Left => c.scroll_left(),
-            FocusDirection::Right => c.scroll_right(),
-        };
+    pub fn scroll(&mut self, c: &mut dyn Context, dir: ScrollDirection) {
+        c.scroll(ScrollOp::Lines(dir, 1));
     }
 
     #[command]
@@ -306,11 +301,7 @@ impl DiffView {
     /// @param delta Signed page delta. Positive moves down and negative moves
     /// up.
     pub fn page(&mut self, c: &mut dyn Context, delta: i32) {
-        if delta < 0 {
-            c.page_up();
-        } else if delta > 0 {
-            c.page_down();
-        }
+        c.scroll(ScrollOp::pages(delta));
     }
 
     /// Rebuild the rows and the cached widths.
