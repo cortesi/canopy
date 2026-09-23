@@ -141,12 +141,10 @@ struct FrameState {
     screen_size: Option<Size>,
     /// Limits for the materialized visible render target.
     render_limits: RenderLimits,
-    /// Last prepared frame buffer.
-    termbuf: Option<TermBuf>,
-    /// Last successfully prepared immutable snapshot.
+    /// Last successfully prepared immutable snapshot, which owns its buffer.
     snapshot: Option<Arc<FrameSnapshot>>,
     /// Last successfully emitted terminal frame, invalidated by output failure.
-    emitted_buf: Option<TermBuf>,
+    emitted_buf: Option<Arc<TermBuf>>,
 }
 
 /// Callback marshalled onto the UI thread for live automation.
@@ -273,9 +271,12 @@ impl Canopy {
         &mut self.style
     }
 
-    /// Get a reference to the current render buffer, if any.
-    pub fn buf(&self) -> Option<&TermBuf> {
-        self.frame.termbuf.as_ref()
+    /// Borrow the buffer of the last published frame, if any.
+    pub(crate) fn published_buf(&self) -> Option<&TermBuf> {
+        self.frame
+            .snapshot
+            .as_ref()
+            .map(|snapshot| &*snapshot.buffer)
     }
 
     /// Read the last publication without running widget hooks or refreshing
@@ -289,9 +290,11 @@ impl Canopy {
     /// This is the synchronous boundary for native callers that need snapshots
     /// or geometry before the next driver turn. `turn(Work::Prepare)` also
     /// services queued automation and advances the driver lifecycle.
-    pub(crate) fn flush(&mut self) -> Result<()> {
+    pub(crate) fn prepare(&mut self) -> Result<()> {
         if self.core.callback_depth != 0 {
-            return Err(error::Error::InvalidPhase { operation: "flush" });
+            return Err(error::Error::InvalidPhase {
+                operation: "prepare",
+            });
         }
         self.prepare_frame(false).map(|_| ())
     }

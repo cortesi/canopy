@@ -58,7 +58,8 @@ mod tests {
             });
             assert_eq!(result.is_err(), fail);
             assert!(canopy.turn(Work::Prepare)?.frame.is_some());
-            let buffer = canopy.buf().expect("published cells");
+            let snapshot = canopy.snapshot().expect("published cells");
+            let buffer = &snapshot.buffer;
             assert_eq!(
                 buffer.screen_text().lines().next().unwrap().trim_end(),
                 text
@@ -197,7 +198,11 @@ mod tests {
         let (mut canopy, _widget, _clock) = eval_app()?;
         let result = canopy.turn(Work::Input(vec![Event::Key('f'.into())]));
         assert!(result.is_err());
-        let text = canopy.buf().expect("published cells").screen_text();
+        let text = canopy
+            .snapshot()
+            .expect("published cells")
+            .buffer
+            .screen_text();
         assert_eq!(text.lines().next().unwrap().trim_end(), "failed");
         assert!(canopy.turn(Work::Prepare)?.frame.is_none());
         Ok(())

@@ -14,7 +14,7 @@ use canopy::{
     event::{Event, key, mouse},
     geom::{Point, PointI32, Size},
     layout::{Edges, Layout},
-    style::{AttrSet, Color, Paint, PartialStyle, Style, StyleManager},
+    style::{AttrSet, Color, Paint, PartialStyle, Style},
     testing::harness::Harness,
 };
 
@@ -255,20 +255,23 @@ fn render_with_line_numbers() {
 
 #[test]
 fn a_display_only_editor_marks_no_current_line_number() {
-    let styles = StyleManager::default();
     for focusable in [true, false] {
         let config = EditorConfig::new()
             .with_line_numbers(LineNumbers::Absolute)
             .with_focusable(focusable);
         let mut harness = build_harness("hi\nok", config, 6, 2);
         harness.render().unwrap();
-        let plain = styles
-            .get(harness.canopy.style(), "editor/line-number")
+        let plain = harness
+            .canopy
+            .style()
+            .resolve("editor/line-number")
             .fg
             .solid_color()
             .expect("the gutter color is solid");
-        let current = styles
-            .get(harness.canopy.style(), "editor/line-number/current")
+        let current = harness
+            .canopy
+            .style()
+            .resolve("editor/line-number/current")
             .fg
             .solid_color()
             .expect("the current gutter color is solid");
@@ -1256,10 +1259,9 @@ fn search_current_other_matches_and_syntax_keep_separate_styles() {
         editor.buffer.set_cursor(TextPosition::new(0, 6));
     });
     harness.render().unwrap();
-    let styles = StyleManager::default();
-    let current = styles.get(harness.canopy.style(), "editor/search/current");
-    let other = styles.get(harness.canopy.style(), "editor/search/match");
-    let selected = styles.get(harness.canopy.style(), "editor/selection");
+    let current = harness.canopy.style().resolve("editor/search/current");
+    let other = harness.canopy.style().resolve("editor/search/match");
+    let selected = harness.canopy.style().resolve("editor/selection");
     let buffer = harness.buf();
     assert_eq!(
         buffer.get(Point { x: 0, y: 0 }).unwrap().style.fg,
@@ -1387,8 +1389,10 @@ fn highlight_spans_inherit_editor_background() {
     });
     harness.key(key::KeyCode::Down).unwrap();
 
-    let base_bg = StyleManager::default()
-        .get(harness.canopy.style(), "editor/text")
+    let base_bg = harness
+        .canopy
+        .style()
+        .resolve("editor/text")
         .bg
         .solid_color()
         .expect("editor text background is solid");

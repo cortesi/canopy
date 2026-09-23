@@ -66,7 +66,7 @@ impl Canopy {
     }
 
     /// Pre-render sweep of the tree.
-    fn pre_render(&mut self) -> Result<bool> {
+    fn mount_pending(&mut self) -> Result<bool> {
         let root = self.core.root;
         let mut focus_seen = false;
         let mut layout_dirty = false;
@@ -218,13 +218,13 @@ impl Canopy {
             effect_stack: &mut effect_stack,
         };
         self.render_recursive(&mut traversal, self.core.root, screen_clip, 0, 0)?;
-        self.post_render(&mut next)?;
+        self.overlay_cursor(&mut next)?;
 
         Ok(next)
     }
 
     /// Post-render sweep of the tree.
-    fn post_render(&self, buf: &mut TermBuf) -> Result<()> {
+    fn overlay_cursor(&self, buf: &mut TermBuf) -> Result<()> {
         let mut current = self.core.focus;
         let mut cursor_spec: Option<(View, cursor::Cursor)> = None;
         while let Some(id) = current {
@@ -264,7 +264,7 @@ impl Canopy {
         if !self.core.changes.layout_pending() {
             return Ok(());
         }
-        self.pre_render()?;
+        self.mount_pending()?;
         self.core.update_layout(screen_size)
     }
 
@@ -287,22 +287,21 @@ impl Canopy {
             self.style = new_style;
         }
         self.run_state_hooks()?;
-        self.pre_render()?;
+        self.mount_pending()?;
         // A first poll during the sweep can record a notice, which its hooks
         // show in this frame.
         if self.state_hooks_pending() {
             self.run_state_hooks()?;
-            self.pre_render()?;
+            self.mount_pending()?;
         }
         self.core.update_layout(screen_size)?;
         if self.run_on_start_hooks()? {
-            self.pre_render()?;
+            self.mount_pending()?;
             self.core.update_layout(screen_size)?;
         }
         let next = self.render_pass(screen_size)?;
         let frame_id = FrameId(self.driver.publication.generation() + 1);
-        let snapshot = snapshot::capture(&self.core, frame_id, &next)?;
-        self.frame.termbuf = Some(next);
+        let snapshot = snapshot::capture(&self.core, frame_id, Arc::new(next))?;
         self.frame.snapshot = Some(Arc::new(snapshot));
         self.core.changes = crate::ChangeSet::default();
         self.driver.publication.publish();
@@ -312,18 +311,18 @@ impl Canopy {
     /// Emit published cells. After a backend failure, repaint the next frame
     /// in full because some output may already have reached the terminal.
     pub(crate) fn emit_frame<R: RenderBackend>(&mut self, be: &mut R) -> Result<()> {
-        let Some(next) = &self.frame.termbuf else {
+        let Some(next) = self.frame.snapshot.as_ref().map(|s| Arc::clone(&s.buffer)) else {
             return Ok(());
         };
         let previous = self.frame.emitted_buf.take();
         be.reset()?;
         if let Some(previous) = previous {
-            next.diff(&previous, be)?;
+            next.emit_diff(&previous, be)?;
         } else {
-            next.render(be)?;
+            next.emit(be)?;
         }
         be.flush()?;
-        self.frame.emitted_buf = Some(next.clone());
+        self.frame.emitted_buf = Some(next);
         Ok(())
     }
 

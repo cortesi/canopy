@@ -1,5 +1,9 @@
 use canopy::{
-    Register, RouteTraceKind, error::Result, event::key::Key, geom::Size, testing::harness::Harness,
+    Register, RouteTraceKind,
+    error::Result,
+    event::key::Key,
+    geom::{Point, Size},
+    testing::harness::Harness,
 };
 
 use super::{Mount, root_harness};
@@ -101,7 +105,7 @@ fn prove_help_flow(mut harness: Harness, hidden: &[&str], shown: &[&str]) -> Res
         .and_then(|node| node.view)
         .map(|view| view.outer)
         .expect("visible help panel");
-    let cell = |x, y| &frame.cells[(y * frame.size.w + x) as usize];
+    let cell = |x, y| frame.buffer.get(Point { x, y }).expect("cell on screen");
     // Binding rows are one panel band each. The footer below them is a raised
     // bar inset by the panel's side padding, so it is checked separately.
     for y in panel.tl.y as u32..panel.tl.y as u32 + panel.h.saturating_sub(1) {

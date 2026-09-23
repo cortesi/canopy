@@ -108,7 +108,7 @@ canopy.assert(
 
 todo.select_first()
 todo.delete_item()
-canopy.flush()
+canopy.prepare()
 
 local text = canopy.screen_text()
 canopy.assert(text:find("Buy milk") == nil, "deleted item should disappear")

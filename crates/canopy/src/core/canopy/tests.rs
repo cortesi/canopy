@@ -1634,12 +1634,12 @@ fn tkey_no_render() -> Result<()> {
     canopy.core.set_focus(canopy.core.root)?;
     canopy.render(&mut tr)?;
     assert!(!tr.buf_empty());
-    let prev_buf = canopy.frame.termbuf.clone().expect("missing termbuf");
+    let prev_buf = canopy.published_buf().cloned().expect("missing buffer");
     tr.text.clear();
 
     canopy.key(None, 'a')?;
     canopy.render(&mut tr)?;
-    let next_buf = canopy.frame.termbuf.clone().expect("missing termbuf");
+    let next_buf = canopy.published_buf().cloned().expect("missing buffer");
     assert_eq!(prev_buf.cells, next_buf.cells);
     Ok(())
 }

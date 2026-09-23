@@ -370,10 +370,12 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
         handler: Handler::Sync(host_snapshot),
     },
     BaseFunction {
-        name: "flush",
-        docs: Some("Publish pending changes after native mutation callbacks have returned."),
+        name: "prepare",
+        docs: Some(
+            "Prepare and publish a frame from pending changes, after native mutation callbacks have returned.",
+        ),
         signature: FunctionSignature::new,
-        handler: Handler::Sync(host_flush),
+        handler: Handler::Sync(host_prepare),
     },
     BaseFunction {
         name: "screen",
@@ -945,7 +947,7 @@ async fn wait_for_screen_text(
             ctx.scope(move |scope| {
                 let canopy = canopy_context(scope)?;
                 Ok(canopy
-                    .buf()
+                    .published_buf()
                     .is_some_and(|buffer| buffer.screen_text().contains(&text)))
             })
             .await
@@ -2075,11 +2077,11 @@ fn host_snapshot<'s>(
 }
 
 /// `canopy.flush`: explicitly prepare pending changes at a host-call boundary.
-fn host_flush<'s>(
+fn host_prepare<'s>(
     scope: &Scope<'s>,
     _args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    with_current_canopy(scope, |canopy, _| canopy.flush())?;
+    with_current_canopy(scope, |canopy, _| canopy.prepare())?;
     Ok(ret_none())
 }
 
@@ -2142,7 +2144,7 @@ fn host_node_region<'s>(
     let mut args = HostArgCursor::new(scope, args);
     let node_id = read_node_id(scope, &mut args, "id")?;
     let text = with_current_canopy(scope, |canopy, _| {
-        canopy.flush()?;
+        canopy.prepare()?;
         let view = canopy
             .core
             .nodes

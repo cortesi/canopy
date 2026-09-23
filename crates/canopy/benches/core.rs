@@ -449,7 +449,7 @@ fn bench_render_diffing(c: &mut Criterion) {
         let mut backend = CountingBackend::default();
         b.iter(|| {
             current
-                .diff(black_box(&previous), black_box(&mut backend))
+                .emit_diff(black_box(&previous), black_box(&mut backend))
                 .expect("diff render should succeed");
             black_box((backend.text_bytes, backend.char_shifts, backend.line_shifts));
         });
@@ -478,7 +478,7 @@ fn bench_render_color_cells(c: &mut Criterion) {
     c.bench_function("render_color_cells_full", |b| {
         b.iter(|| {
             current
-                .render(black_box(&mut backend))
+                .emit(black_box(&mut backend))
                 .expect("full render should succeed");
             black_box(backend.text_bytes);
         });
@@ -486,7 +486,7 @@ fn bench_render_color_cells(c: &mut Criterion) {
     c.bench_function("render_color_cells_diff", |b| {
         b.iter(|| {
             current
-                .diff(black_box(&previous), black_box(&mut backend))
+                .emit_diff(black_box(&previous), black_box(&mut backend))
                 .expect("diff render should succeed");
             black_box(backend.text_bytes);
         });

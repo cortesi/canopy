@@ -4,7 +4,7 @@ canopy.send_key("i")
 canopy.send_key("l")
 canopy.send_key("k")
 canopy.send_key("Enter")
-canopy.flush()
+canopy.prepare()
 local frame = canopy.snapshot()
 if frame == nil then error("missing completed frame") end
 

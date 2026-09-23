@@ -564,7 +564,8 @@ mod tests {
                 .canopy
                 .snapshot()
                 .expect("published button")
-                .cells
+                .buffer
+                .cells()
                 .iter()
                 .find(|cell| cell.ch == 'S')
                 .expect("Save label")
@@ -950,7 +951,8 @@ mod tests {
             let snapshot = harness.canopy.snapshot().expect("published button");
             let style_of = |needle: char| {
                 snapshot
-                    .cells
+                    .buffer
+                    .cells()
                     .iter()
                     .find(|cell| cell.ch == needle)
                     .map(|cell| (cell.style.fg, cell.style.attrs))
@@ -970,7 +972,8 @@ mod tests {
             .chars()
             .map(|needle| {
                 snapshot
-                    .cells
+                    .buffer
+                    .cells()
                     .iter()
                     .find(|cell| cell.ch == needle)
                     .map(|cell| (cell.style.fg, cell.style.attrs))
@@ -1001,7 +1004,7 @@ mod tests {
         );
         let snapshot = harness.canopy.snapshot().expect("published button");
         assert!(
-            !snapshot.cells.iter().any(|cell| cell.ch == 'm'),
+            !snapshot.buffer.cells().iter().any(|cell| cell.ch == 'm'),
             "a key clipped away is not painted somewhere else"
         );
         Ok(())

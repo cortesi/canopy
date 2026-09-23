@@ -1,5 +1,7 @@
 //! Owned observations of one successfully prepared frame.
 
+use std::sync::Arc;
+
 use super::{
     context::CoreViewContext,
     termbuf::TermBuf,
@@ -7,7 +9,7 @@ use super::{
     world::{Core, WidgetOperation},
 };
 use crate::{
-    Cell, FrameId, NodeId, NodeIdentity,
+    FrameId, NodeId, NodeIdentity,
     commands::{ArgValue, CommandStatus},
     error::Result,
     geom::{Rect, Size},
@@ -62,18 +64,27 @@ pub struct NodeSnapshot {
 pub struct FrameSnapshot {
     /// Publication generation shared with turn outcomes.
     pub frame_id: FrameId,
-    /// Screen size: the dimensions of the rendered cells.
-    pub size: Size,
+    /// The rendered frame buffer, shared with the backend emitter.
+    pub buffer: Arc<TermBuf>,
     /// All live arena nodes, including detached trees.
     pub nodes: Vec<NodeSnapshot>,
-    /// Styled terminal cells in row-major order.
-    pub cells: Vec<Cell>,
     /// Focus owner at publication.
     pub focus: Option<NodeId>,
 }
 
+impl FrameSnapshot {
+    /// Return the screen size: the dimensions of the rendered buffer.
+    pub fn size(&self) -> Size {
+        self.buffer.size()
+    }
+}
+
 /// Capture fallible widget observations before replacing any published state.
-pub(super) fn capture(core: &Core, frame_id: FrameId, buffer: &TermBuf) -> Result<FrameSnapshot> {
+pub(super) fn capture(
+    core: &Core,
+    frame_id: FrameId,
+    buffer: Arc<TermBuf>,
+) -> Result<FrameSnapshot> {
     let size = buffer.size();
     let mut nodes = Vec::with_capacity(core.nodes.len());
     let screen = Rect::new(0, 0, size.w, size.h);
@@ -117,12 +128,10 @@ pub(super) fn capture(core: &Core, frame_id: FrameId, buffer: &TermBuf) -> Resul
                 .map(|child| (*child, attached, displayed, child_clip)),
         );
     }
-    let cells = buffer.cells.clone();
     Ok(FrameSnapshot {
         frame_id,
-        size,
+        buffer,
         nodes,
-        cells,
         focus: core.focus,
     })
 }

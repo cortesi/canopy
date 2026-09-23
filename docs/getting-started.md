@@ -376,11 +376,11 @@ canopy.assert(canopy.screen_text():find("Hello, Canopy!") ~= nil, "greeting shou
 canopy.assert(canopy.screen_text():find("count: 0") ~= nil, "counter should start at zero")
 
 hello.bump(2)
-canopy.flush()
+canopy.prepare()
 canopy.assert(canopy.screen_text():find("count: 2") ~= nil, "a command call should update the counter")
 
 canopy.send_key("+")
-canopy.flush()
+canopy.prepare()
 canopy.assert(canopy.screen_text():find("count: 3") ~= nil, "a bound key should run the command")
 ```
 
@@ -526,13 +526,13 @@ fn persistent_user_root_loads_default_bindings() -> anyhow::Result<()> {
     harness.script(
         r#"
         canopy.send_key("+")
-        canopy.flush()
+        canopy.prepare()
         canopy.assert(
             canopy.screen_text():find("count: 1") ~= nil,
             "the user + binding should run the command"
         )
         canopy.send_key("-")
-        canopy.flush()
+        canopy.prepare()
         canopy.assert(
             canopy.screen_text():find("count: 0") ~= nil,
             "the user - binding should run the command"

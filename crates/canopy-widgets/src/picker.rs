@@ -1176,7 +1176,8 @@ mod tests {
                 .canopy
                 .snapshot()
                 .expect("published picker")
-                .cells
+                .buffer
+                .cells()
                 .iter()
                 .find(|cell| cell.ch == needle)
                 .map(|cell| cell.style.bg)

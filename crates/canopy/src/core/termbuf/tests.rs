@@ -173,14 +173,11 @@ fn rendering_rejects_noncanonical_buffers() -> Result<()> {
     let mut buf = TermBuf::new(Size::new(1, 1), '\0', def_style())?;
     buf.cells[0] = Cell::continuation(def_style());
     let mut backend = RecBackend::new();
-    assert!(matches!(buf.render(&mut backend), Err(Error::Internal(_))));
+    assert!(matches!(buf.emit(&mut backend), Err(Error::Internal(_))));
 
     let mut ragged = TermBuf::new(Size::new(2, 1), '\0', def_style())?;
     ragged.cells.pop();
-    assert!(matches!(
-        ragged.render(&mut backend),
-        Err(Error::Internal(_))
-    ));
+    assert!(matches!(ragged.emit(&mut backend), Err(Error::Internal(_))));
     Ok(())
 }
 
@@ -190,7 +187,7 @@ fn canonical_buffer_renders_through_crossterm_backend() -> Result<()> {
     let mut buf = TermBuf::new(Size::new(4, 1), ' ', style)?;
     buf.text(&style, Line::new(0, 0, 4), "a界")?;
     buf.overlay_cursor(Point { x: 2, y: 0 }, cursor::CursorShape::Underscore);
-    buf.render(&mut CrosstermRender::default())
+    buf.emit(&mut CrosstermRender::default())
 }
 
 #[test]
@@ -803,7 +800,7 @@ fn diff_no_change() {
     let tb2 =
         TermBuf::new(Size::new(3, 1), ' ', style).expect("test render target should allocate");
     let mut be = RecBackend::new();
-    tb2.diff(&tb1, &mut be).unwrap();
+    tb2.emit_diff(&tb1, &mut be).unwrap();
     assert!(be.ops.is_empty());
 }
 
@@ -838,7 +835,7 @@ proptest! {
                     model: replay_model,
                     style: base_style,
                 };
-                actual.diff(&previous_actual, &mut backend)?;
+                actual.emit_diff(&previous_actual, &mut backend)?;
                 backend.model.assert_matches(&actual)
             })();
             trace_result(result, &operations, index)?;
@@ -851,7 +848,7 @@ fn diff_vertical_shift_uses_scroll() {
     let prev = buf_from_rows(&["aaa", "bbb", "ccc"]);
     let cur = buf_from_rows(&["xxx", "aaa", "bbb"]);
     let mut be = RegionShiftBackend::default();
-    cur.diff(&prev, &mut be).unwrap();
+    cur.emit_diff(&prev, &mut be).unwrap();
     assert_eq!(be.shift, Some((0, 2, 1)));
     assert_eq!(be.text_ops, 1);
 }
@@ -861,7 +858,7 @@ fn diff_vertical_shift_uses_scroll_interior() {
     let prev = buf_from_rows(&["#####", "#abc#", "#def#", "#ghi#", "#####"]);
     let cur = buf_from_rows(&["#####", "#xxx#", "#abc#", "#def#", "#####"]);
     let mut be = RegionShiftBackend::default();
-    cur.diff(&prev, &mut be).unwrap();
+    cur.emit_diff(&prev, &mut be).unwrap();
     assert_eq!(be.shift, Some((1, 3, 1)));
     assert_eq!(be.text_ops, 1);
 }
@@ -875,8 +872,8 @@ fn diff_interior_shift_replays_to_the_full_repaint() {
         model: ModelBuffer::new(Size::new(5, 5), style),
         style,
     };
-    prev.render(&mut backend).unwrap();
-    cur.diff(&prev, &mut backend).unwrap();
+    prev.emit(&mut backend).unwrap();
+    cur.emit_diff(&prev, &mut backend).unwrap();
     backend.model.assert_matches(&cur).unwrap();
 }
 
@@ -889,8 +886,8 @@ fn diff_skips_the_interior_shift_when_a_side_column_varies() {
         model: ModelBuffer::new(Size::new(5, 5), style),
         style,
     };
-    prev.render(&mut backend).unwrap();
-    cur.diff(&prev, &mut backend).unwrap();
+    prev.emit(&mut backend).unwrap();
+    cur.emit_diff(&prev, &mut backend).unwrap();
     backend.model.assert_matches(&cur).unwrap();
 }
 
@@ -904,7 +901,7 @@ fn diff_single_run() {
     cur.text(&style, Line::new(0, 0, 3), "ab")
         .expect("test buffer mutation should succeed");
     let mut be = RecBackend::new();
-    cur.diff(&prev, &mut be).unwrap();
+    cur.emit_diff(&prev, &mut be).unwrap();
     assert_eq!(be.ops.len(), 2);
     assert_eq!(be.ops[0], format!("style {style:?}"));
     assert_eq!(be.ops[1], "text 0 0 ab");
@@ -926,7 +923,7 @@ fn diff_style_changes() {
         .expect("test buffer mutation should succeed");
 
     let mut be = RecBackend::new();
-    cur.diff(&prev, &mut be).unwrap();
+    cur.emit_diff(&prev, &mut be).unwrap();
 
     assert_eq!(be.ops.len(), 4);
     assert_eq!(be.ops[0], format!("style {style2:?}"));
@@ -945,7 +942,7 @@ fn diff_multi_line() {
     cur.fill(&style, Rect::new(0, 1, 2, 1), 'x')
         .expect("test buffer mutation should succeed");
     let mut be = RecBackend::new();
-    cur.diff(&prev, &mut be).unwrap();
+    cur.emit_diff(&prev, &mut be).unwrap();
     assert_eq!(be.ops.len(), 2);
     assert_eq!(be.ops[0], format!("style {style:?}"));
     assert_eq!(be.ops[1], "text 0 1 xx");
@@ -959,7 +956,7 @@ fn render_whole_buffer() {
     tb.text(&style, Line::new(0, 0, 3), "ab")
         .expect("test buffer mutation should succeed");
     let mut be = RecBackend::new();
-    tb.render(&mut be).unwrap();
+    tb.emit(&mut be).unwrap();
     assert_eq!(
         be.ops,
         vec![format!("style {style:?}"), "text 0 0 ab ".to_string(),]
@@ -977,7 +974,7 @@ fn render_repositions_after_wide_graphemes() {
         .expect("test buffer mutation should succeed");
 
     let mut backend = ReplayBackend::blank(Size::new(8, 1));
-    tb.render(&mut backend).unwrap();
+    tb.emit(&mut backend).unwrap();
 
     assert_eq!(backend.screen_text(), "a界 bc  |");
 }
@@ -1019,7 +1016,7 @@ fn diff_size_change_rerender() {
     cur.text(&style, Line::new(0, 0, 3), "abc")
         .expect("test buffer mutation should succeed");
     let mut be = RecBackend::new();
-    cur.diff(&prev, &mut be).unwrap();
+    cur.emit_diff(&prev, &mut be).unwrap();
     assert_eq!(
         be.ops,
         vec![format!("style {style:?}"), "text 0 0 abc".to_string(),]
@@ -1082,7 +1079,7 @@ fn identical_multirow_buffers_emit_no_operations() -> Result<()> {
         let current = buf_from_rows(&rows);
         let previous = current.clone();
         let mut backend = RegionShiftBackend::default();
-        current.diff(&previous, &mut backend)?;
+        current.emit_diff(&previous, &mut backend)?;
         assert_eq!(backend.shift, None);
         assert_eq!(backend.text_ops, 0);
         assert_eq!(backend.style_ops, 0);
@@ -1092,7 +1089,7 @@ fn identical_multirow_buffers_emit_no_operations() -> Result<()> {
     invalid.cells[0] = Cell::continuation(def_style());
     assert!(
         invalid
-            .diff(&invalid, &mut RegionShiftBackend::default())
+            .emit_diff(&invalid, &mut RegionShiftBackend::default())
             .is_err()
     );
     Ok(())

@@ -249,7 +249,7 @@ impl LiveContext {
     pub(crate) fn metadata(&self, canopy: &Canopy) -> CanopyResult<ExecutionMetadata> {
         let mut metadata = self.unavailable_metadata();
         if let Some(snapshot) = canopy.snapshot() {
-            metadata.viewport = Some(snapshot.size.into());
+            metadata.viewport = Some(snapshot.size().into());
         }
         metadata.api_digest = Some(stable_digest(canopy.script_api()?));
         Ok(metadata)

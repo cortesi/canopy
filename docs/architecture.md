@@ -364,10 +364,17 @@ releases capture.
 
 ## Rendering
 
-Rendering consumes current layout and view state. Canopy renders visible nodes in
-tree order into an offscreen buffer and applies the cursor overlay. Published
-snapshots and backend output use separate buffers. Observation can refresh the
-published snapshot without changing the backend diff baseline. The baseline
+The frame pipeline has five words. To prepare is to build a frame: mount pending
+nodes, run layout, render, and publish. To render is widget painting only:
+Canopy renders visible nodes in tree order into an offscreen buffer, then
+overlays the cursor. To publish is to make a `FrameSnapshot` current; the
+snapshot owns its buffer through an `Arc<TermBuf>`. To emit is to write a
+buffer to a backend, in full (`TermBuf::emit`) or as a diff against the last
+emitted buffer (`TermBuf::emit_diff`). To flush is only to push backend bytes.
+
+Publishing and emitting keep separate baselines, and share buffers rather than
+copying them. Observation can refresh the published snapshot without changing
+the backend diff baseline. The baseline
 advances only after output and backend flush succeed. Each emitted frame flushes
 the backend once. Any backend failure
 invalidates it, so the next attempt repaints in full. A failed write may have
@@ -431,7 +438,7 @@ pending. Frame preparation runs when any level is pending, and it lays out and
 paints the whole tree. Failed mutations retain invalidation for state they
 changed. Read-only automation does not request a redraw. `Canopy::render`
 prepares a frame and emits it to a given backend; headless MCP evaluation and
-rendering tests use it. Scripts prepare pending changes with `canopy.flush()`
+rendering tests use it. Scripts prepare pending changes with `canopy.prepare()`
 when they need snapshots or geometry before the next turn.
 
 Every mutable widget callback invalidates layout before it runs, so any

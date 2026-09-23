@@ -1,4 +1,4 @@
-canopy.flush()
+canopy.prepare()
 local frame = canopy.snapshot()
 if frame == nil then error("missing completed frame") end
 local scope = canopy.find_node("**/todo")

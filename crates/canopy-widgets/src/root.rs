@@ -453,7 +453,6 @@ mod tests {
         help::BindingSnapshot,
         layout::Layout,
         render::NopBackend,
-        style::StyleManager,
         testing::harness::Harness,
     };
 
@@ -563,8 +562,10 @@ mod tests {
             lines[3].contains("disk full"),
             "the bottom row shows the notice: {lines:?}"
         );
-        let expected = StyleManager::default()
-            .get(harness.canopy.style(), "root/notice")
+        let expected = harness
+            .canopy
+            .style()
+            .resolve("root/notice")
             .resolve_solid()
             .expect("the notice style is solid");
         let cell = harness
@@ -995,7 +996,7 @@ mod tests {
         let mut backend = NopBackend::new();
         let mut corner = |canopy: &mut Canopy| -> Result<Cell> {
             canopy.render(&mut backend)?;
-            Ok(canopy.snapshot().expect("published frame").cells[0].clone())
+            Ok(canopy.snapshot().expect("published frame").buffer.cells()[0].clone())
         };
         let before = corner(&mut canopy)?;
         assert_eq!(before.ch, 'B');
@@ -1036,14 +1037,14 @@ mod tests {
             })
 
             canopy.send_key("p")
-            canopy.flush()
+            canopy.prepare()
             local screen = canopy.screen_text()
             canopy.assert(screen:find("panes") ~= nil, "the panel should name the mode")
             canopy.assert(screen:find("Equal widths") ~= nil, "the panel should list the mode keys")
             canopy.assert(screen:find("Default key") == nil, "the panel should omit other keys")
 
             canopy.send_key("x")
-            canopy.flush()
+            canopy.prepare()
             canopy.assert(canopy.mode() == "", "any key should end the mode")
             canopy.assert(
                 canopy.screen_text():find("Equal widths") == nil,
@@ -1052,7 +1053,7 @@ mod tests {
 
             canopy.send_key("p")
             canopy.send_key("ctrl-g")
-            canopy.flush()
+            canopy.prepare()
             canopy.assert(
                 canopy.screen_text():find("Equal widths") == nil,
                 "contextual help should not show the panel"

@@ -1,5 +1,5 @@
 local function published_text(): string
-    canopy.flush()
+    canopy.prepare()
     local frame = canopy.snapshot()
     if frame == nil then error("missing completed frame") end
     local lines: {string} = {}

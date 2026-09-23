@@ -908,7 +908,7 @@ mod tests {
         event::{key, mouse},
         layout::Layout,
         style::{
-            GradientSpec, GradientStop, Paint, StyleManager, StyleMap,
+            GradientSpec, GradientStop, Paint,
             effects::{self, Effect, StyleEffect},
         },
         testing::harness::Harness,
@@ -1023,40 +1023,34 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn renders_terminal_graphemes_with_their_cell_widths() {
-        let base_style = ResolvedStyle::new(Color::White, Color::Black, AttrSet::default());
-        let mut buf = TermBuf::new(geom::Size::new(6, 1), '\0', base_style).expect("buffer");
-        let stylemap = StyleMap::new();
-        let mut styles = StyleManager::new();
-        let run = StyledRunPublic {
-            text: "A⚡e\u{301}B".to_string(),
-            fg: Rgba8 {
-                r: 255,
-                g: 255,
-                b: 255,
-                a: 255,
-            },
-            bg: None,
-            italic: false,
-            underline: false,
-            strikethrough: false,
-            bold: false,
-            hyperlink: None,
-            start_col: 0,
-            end_col: 5,
-        };
+    /// Paint one run of mixed-width graphemes.
+    struct GraphemeRun;
 
-        {
-            let mut rndr = Render::new(
-                &stylemap,
-                &mut styles,
-                &mut buf,
-                geom::Rect::new(0, 0, 6, 1),
-                geom::Point::default(),
-            );
+    impl Widget for GraphemeRun {
+        fn layout(&self) -> Layout {
+            Layout::fill()
+        }
+
+        fn render(&mut self, render: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+            let run = StyledRunPublic {
+                text: "A⚡e\u{301}B".to_string(),
+                fg: Rgba8 {
+                    r: 255,
+                    g: 255,
+                    b: 255,
+                    a: 255,
+                },
+                bg: None,
+                italic: false,
+                underline: false,
+                strikethrough: false,
+                bold: false,
+                hyperlink: None,
+                start_col: 0,
+                end_col: 5,
+            };
             render_run(
-                &mut rndr,
+                render,
                 geom::Point::default(),
                 0,
                 &run,
@@ -1064,10 +1058,23 @@ mod tests {
                 0,
                 Color::Black,
             )
-            .expect("render terminal run");
         }
+    }
 
-        assert_eq!(buf.rows()[0], ["A", "⚡", "", "e\u{301}", "B", " "]);
+    #[test]
+    fn renders_terminal_graphemes_with_their_cell_widths() -> Result<()> {
+        let mut canopy = CanopyBuilder::new().build()?;
+        canopy.with_root_context(|ctx| {
+            ctx.set_layout_override(ctx.node_id(), Layout::fill().into())?;
+            ctx.add_child(ctx.node_id(), GraphemeRun).map(|_| ())
+        })?;
+        let mut harness = Harness::from_canopy(canopy, geom::Size::new(6, 1))?;
+        harness.render()?;
+        assert_eq!(
+            harness.buf().rows()[0],
+            ["A", "⚡", "", "e\u{301}", "B", " "]
+        );
+        Ok(())
     }
 
     /// Exercise the run renderer as a child that inherits its parent's effects.

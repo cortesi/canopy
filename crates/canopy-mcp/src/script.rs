@@ -1152,7 +1152,7 @@ mod tests {
         });
         request.script = "script_target.set(99)".into();
         assert!(!evaluate_live(&mut canopy, &request, &context).success);
-        assert_eq!(canopy.snapshot().unwrap().size, Size::new(20, 5));
+        assert_eq!(canopy.snapshot().unwrap().size(), Size::new(20, 5));
         request.viewport = None;
         request.script = "return script_target.get()".into();
         assert_eq!(

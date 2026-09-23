@@ -62,7 +62,7 @@ impl Canopy {
     /// begins returns an error, so existing deadlines retain their original
     /// time base.
     pub fn set_clock_for_testing(&mut self, clock: Arc<ManualClock>) -> Result<()> {
-        if self.frame.termbuf.is_some()
+        if self.frame.snapshot.is_some()
             || self.core.nodes.values().any(|node| node.initialized)
             || self.script.host.is_eval_active()
             || self.next_deadline().is_some()

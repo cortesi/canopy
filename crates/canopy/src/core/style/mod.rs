@@ -508,6 +508,12 @@ pub struct StyleMap {
 }
 
 impl StyleMap {
+    /// Resolve the style at `path`, as a widget with no pushed layers
+    /// would see it.
+    pub fn resolve(&self, path: &str) -> Style {
+        StyleManager::default().get(self, path)
+    }
+
     /// Construct a style map with defaults.
     pub fn new() -> Self {
         let mut cs = Self {
@@ -712,7 +718,7 @@ impl<'a> StyleRules<'a> {
 /// we try the following lookups in order: ["foo/frame/selected",
 /// "frame/selected", "foo/frame", "frame", "foo", ""].
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct StyleManager {
+pub(crate) struct StyleManager {
     /// Current render level.
     level: usize,
     /// Active layer names.

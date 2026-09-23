@@ -138,7 +138,9 @@ impl Harness {
     /// Access the current render buffer. Panics if a render has not yet been
     /// performed.
     pub fn buf(&self) -> &TermBuf {
-        self.canopy.buf().expect("render buffer not initialized")
+        self.canopy
+            .published_buf()
+            .expect("render buffer not initialized")
     }
 
     /// Send a key event and render.

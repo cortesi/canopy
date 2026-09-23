@@ -60,7 +60,7 @@ mod tests {
             if pending == nil then error("publication disappeared") end
             canopy.assert(pending.frame_id == old.frame_id)
             canopy.assert(pending.nodes[1].semantics.label == "old")
-            canopy.flush()
+            canopy.prepare()
             local fresh = canopy.snapshot()
             if fresh == nil then error("flush must publish") end
             canopy.assert(fresh.frame_id > old.frame_id)

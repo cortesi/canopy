@@ -184,7 +184,7 @@ fn validate_cell_character(ch: char) -> Result<()> {
 }
 
 /// A 2D terminal buffer of styled cells.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct TermBuf {
     /// Buffer size in cells.
     pub(crate) size: Size,
@@ -193,13 +193,18 @@ pub struct TermBuf {
 }
 
 impl TermBuf {
+    /// Return the cells in row-major order.
+    pub fn cells(&self) -> &[Cell] {
+        &self.cells
+    }
+
     /// Construct a buffer filled with the given character and style.
     pub fn new(size: impl Into<Size>, ch: char, style: ResolvedStyle) -> Result<Self> {
         Self::new_with_limits(size, ch, style, RenderLimits::default())
     }
 
     /// Construct a buffer with explicit visible render-target limits.
-    pub fn new_with_limits(
+    pub(crate) fn new_with_limits(
         size: impl Into<Size>,
         ch: char,
         style: ResolvedStyle,
@@ -315,7 +320,7 @@ impl TermBuf {
     }
 
     /// Fill a rectangle, resolving the style separately for each cell.
-    pub fn fill_with(
+    pub(crate) fn fill_with(
         &mut self,
         r: Rect,
         ch: char,
@@ -349,7 +354,7 @@ impl TermBuf {
     }
 
     /// Overlay a cursor on a cell by adjusting its style.
-    pub fn overlay_cursor(&mut self, location: Point, shape: cursor::CursorShape) {
+    pub(crate) fn overlay_cursor(&mut self, location: Point, shape: cursor::CursorShape) {
         let Some(idx) = self.idx(location) else {
             return;
         };
@@ -380,7 +385,7 @@ impl TermBuf {
     ///
     /// The text is clipped to the line and padded with spaces to the line's
     /// width.
-    pub fn text_with(
+    pub(crate) fn text_with(
         &mut self,
         l: Line,
         txt: &str,
@@ -516,11 +521,11 @@ impl TermBuf {
 
     /// Diff this terminal buffer against a previous state, emitting changes
     /// to the provided render backend. The caller flushes the backend.
-    pub fn diff<R: RenderBackend>(&self, prev: &Self, backend: &mut R) -> Result<()> {
+    pub fn emit_diff<R: RenderBackend>(&self, prev: &Self, backend: &mut R) -> Result<()> {
         self.validate_canonical()?;
         prev.validate_canonical()?;
         if self.size != prev.size {
-            return self.render(backend);
+            return self.emit(backend);
         }
         if self.cells == prev.cells {
             return Ok(());
@@ -593,10 +598,10 @@ impl TermBuf {
         Ok(())
     }
 
-    /// Render this terminal buffer in full using the provided backend,
+    /// Emit this terminal buffer in full to the provided backend,
     /// batching runs of text with the same style. The caller flushes the
     /// backend.
-    pub fn render<R: RenderBackend>(&self, backend: &mut R) -> Result<()> {
+    pub fn emit<R: RenderBackend>(&self, backend: &mut R) -> Result<()> {
         self.validate_canonical()?;
         let width = self.size.w as usize;
         let mut text = String::new();

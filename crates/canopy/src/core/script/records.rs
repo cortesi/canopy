@@ -20,19 +20,20 @@ use crate::{
 
 /// Convert a publication without consulting live widget or node state.
 pub(super) fn snapshot_to_arg(frame: &FrameSnapshot) -> ArgValue {
-    let mut rows = Vec::with_capacity(frame.size.h as usize);
-    for y in 0..frame.size.h {
-        let row = (0..frame.size.w)
-            .map(|x| {
-                let index = y as usize * frame.size.w as usize + x as usize;
-                cell_to_arg(x, y, &frame.cells[index])
+    let size = frame.size();
+    let mut rows = Vec::with_capacity(size.h as usize);
+    for y in 0..size.h {
+        let row = (0..size.w)
+            .filter_map(|x| {
+                let cell = frame.buffer.get(Point { x, y })?;
+                Some(cell_to_arg(x, y, cell))
             })
             .collect();
         rows.push(ArgValue::Array(row));
     }
     ArgValue::Map(BTreeMap::from([
         ("frame_id".into(), ArgValue::UInt(frame.frame_id.0)),
-        ("viewport".into(), size_to_arg(frame.size)),
+        ("viewport".into(), size_to_arg(size)),
         (
             "focus".into(),
             frame.focus.map(ArgValue::Node).unwrap_or(ArgValue::Null),
@@ -459,9 +460,9 @@ pub(super) fn command_info_to_arg(availability: &commands::CommandAvailability) 
 
 /// Refresh the app snapshot and borrow its rendered buffer.
 fn rendered_buffer(canopy: &mut Canopy) -> Result<&TermBuf> {
-    canopy.flush()?;
+    canopy.prepare()?;
     canopy
-        .buf()
+        .published_buf()
         .ok_or_else(|| error::Error::script("screen unavailable before render"))
 }
 

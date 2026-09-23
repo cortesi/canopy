@@ -225,13 +225,13 @@ mod tests {
         harness.script(
             r#"
             canopy.send_key("+")
-            canopy.flush()
+            canopy.prepare()
             canopy.assert(
                 canopy.screen_text():find("count: 1") ~= nil,
                 "the user + binding should run the command"
             )
             canopy.send_key("-")
-            canopy.flush()
+            canopy.prepare()
             canopy.assert(
                 canopy.screen_text():find("count: 0") ~= nil,
                 "the user - binding should run the command"

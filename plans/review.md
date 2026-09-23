@@ -2235,7 +2235,7 @@ Each stage also updates the docs it touches.
   - Widgets register the intents they implement.
   - Also `BindingAction`, `activation_status`, `ModalToken`, and
     `world/modal.rs`.
-- [ ] C19:
+- [x] C19:
   - Pipeline renames, `Arc<TermBuf>` snapshots, and one flush per frame.
   - Luau `canopy.prepare()` replaces `canopy.flush()`: 26 Canopy sites and 73
     fh sites.

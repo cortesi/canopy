@@ -2450,36 +2450,6 @@ pub mod canopy {
         #[derive(Clone, Debug, Default, PartialEq)]
         pub struct StyleBuilder {}
 
-        /// A hierarchical style manager.
-        ///
-        /// `Style` objects are entered into the manager with '/'-separated paths. For
-        /// example:
-        ///
-        ///   / white, black
-        ///   /frame -> grey, None
-        ///   /frame/selected -> blue, None
-        ///
-        /// The first entry with the empty path is the global default. Every
-        /// `StyleMap` is guaranteed to have a default Style object with non-None
-        /// foreground and background colors, so style resolution always succeeds.
-        ///
-        /// `Style` objects also contain text attributes.
-        ///
-        /// During rendering, a node may push a name onto the stack of layers tracked by
-        /// the `Style` object. Layers are maintained for a node and all its
-        /// descendants, and `Canopy` manages popping layers back off the stack at the
-        /// appropriate time during rendering.
-        ///
-        /// When a colour is resolved, we first try to find the specified path under
-        /// each layer to the root; failing that we look up the default colours for each
-        /// layer to the root.
-        ///
-        /// So given a layer stack ["foo"], and an attempt to look up "frame/selected",
-        /// we try the following lookups in order: ["foo/frame/selected",
-        /// "frame/selected", "foo/frame", "frame", "foo", ""].
-        #[derive(Clone, Debug, Default, Eq, PartialEq)]
-        pub struct StyleManager {}
-
         /// Map of style paths to partial styles, keyed by canonical path.
         #[derive(Clone, Debug, Default)]
         pub struct StyleMap {}
@@ -2641,23 +2611,6 @@ pub mod canopy {
             pub fn resolve_solid(&self) -> Option<ResolvedStyle> {}
         }
 
-        impl StyleManager {
-            /// Construct a style manager in the reset state.
-            pub fn new() -> Self {}
-
-            /// Decrement the render level and pop any layers at this level.
-            pub fn pop(&mut self) {}
-
-            /// Increment the render level.
-            pub fn push(&mut self) {}
-
-            /// Push onto the layer stack with the current render level.
-            pub fn push_layer(&mut self, name: &str) {}
-
-            /// Resolve a style path.
-            pub fn get(&self, smap: &StyleMap, path: &str) -> Style {}
-        }
-
         impl StyleMap {
             /// Begin a fluent rule-building chain.
             ///
@@ -2683,6 +2636,10 @@ pub mod canopy {
             /// Paths omit the leading `/`, so the root rule's path is empty. The order
             /// is unspecified.
             pub fn entries(&self) -> impl Iterator<Item = (&str, &PartialStyle)> {}
+
+            /// Resolve the style at `path`, as a widget with no pushed layers
+            /// would see it.
+            pub fn resolve(&self, path: &str) -> Style {}
         }
 
         impl WidgetState {
@@ -3062,12 +3019,10 @@ pub mod canopy {
     pub struct FrameSnapshot {
         /// Publication generation shared with turn outcomes.
         pub frame_id: crate::FrameId,
-        /// Screen size: the dimensions of the rendered cells.
-        pub size: crate::geom::Size,
+        /// The rendered frame buffer, shared with the backend emitter.
+        pub buffer: std::sync::Arc<super::termbuf::TermBuf>,
         /// All live arena nodes, including detached trees.
         pub nodes: Vec<NodeSnapshot>,
-        /// Styled terminal cells in row-major order.
-        pub cells: Vec<crate::Cell>,
         /// Focus owner at publication.
         pub focus: Option<crate::NodeId>,
     }
@@ -3403,7 +3358,7 @@ pub mod canopy {
     pub struct Setup {}
 
     /// A 2D terminal buffer of styled cells.
-    #[derive(Clone, Debug)]
+    #[derive(Clone, Debug, PartialEq)]
     pub struct TermBuf {}
 
     /// Observable effects of one turn.
@@ -4300,9 +4255,6 @@ pub mod canopy {
         ) -> Result<super::keyroute::KeyRouteExplanation> {
         }
 
-        /// Get a reference to the current render buffer, if any.
-        pub fn buf(&self) -> Option<&TermBuf> {}
-
         /// Mutate the active style map before the next render.
         pub fn style_mut(&mut self) -> &mut StyleMap {}
 
@@ -4407,6 +4359,11 @@ pub mod canopy {
 
         /// Return fixture metadata without the setup closure.
         pub fn info(&self) -> FixtureInfo {}
+    }
+
+    impl FrameSnapshot {
+        /// Return the screen size: the dimensions of the rendered buffer.
+        pub fn size(&self) -> Size {}
     }
 
     impl FrameworkBindingGroup {
@@ -4591,44 +4548,23 @@ pub mod canopy {
         /// Construct a buffer filled with the given character and style.
         pub fn new(size: impl Into<Size>, ch: char, style: ResolvedStyle) -> Result<Self> {}
 
-        /// Construct a buffer with explicit visible render-target limits.
-        pub fn new_with_limits(
-            size: impl Into<Size>,
-            ch: char,
-            style: ResolvedStyle,
-            limits: RenderLimits,
-        ) -> Result<Self> {
-        }
-
         /// Diff this terminal buffer against a previous state, emitting changes
         /// to the provided render backend. The caller flushes the backend.
-        pub fn diff<R: RenderBackend>(&self, prev: &Self, backend: &mut R) -> Result<()> {}
+        pub fn emit_diff<R: RenderBackend>(&self, prev: &Self, backend: &mut R) -> Result<()> {}
 
         /// Draw text clipped to the given line.
         pub fn text(&mut self, style: &ResolvedStyle, l: Line, txt: &str) -> Result<()> {}
 
+        /// Emit this terminal buffer in full to the provided backend,
+        /// batching runs of text with the same style. The caller flushes the
+        /// backend.
+        pub fn emit<R: RenderBackend>(&self, backend: &mut R) -> Result<()> {}
+
         /// Fill a rectangle with a glyph and style.
         pub fn fill(&mut self, style: &ResolvedStyle, r: Rect, ch: char) -> Result<()> {}
 
-        /// Fill a rectangle, resolving the style separately for each cell.
-        pub fn fill_with(
-            &mut self,
-            r: Rect,
-            ch: char,
-            style_at: impl Fn(Point) -> ResolvedStyle,
-        ) -> Result<()> {
-        }
-
         /// Get a cell by position.
         pub fn get(&self, p: Point) -> Option<&Cell> {}
-
-        /// Overlay a cursor on a cell by adjusting its style.
-        pub fn overlay_cursor(&mut self, location: Point, shape: cursor::CursorShape) {}
-
-        /// Render this terminal buffer in full using the provided backend,
-        /// batching runs of text with the same style. The caller flushes the
-        /// backend.
-        pub fn render<R: RenderBackend>(&self, backend: &mut R) -> Result<()> {}
 
         /// Return the buffer bounds as a rectangle.
         pub fn rect(&self) -> Rect {}
@@ -4636,23 +4572,14 @@ pub mod canopy {
         /// Return the buffer size.
         pub fn size(&self) -> Size {}
 
+        /// Return the cells in row-major order.
+        pub fn cells(&self) -> &[Cell] {}
+
         /// Return the rendered screen as newline-joined plain text.
         pub fn screen_text(&self) -> String {}
 
         /// Return the rendered screen as rows of cell strings.
         pub fn rows(&self) -> Vec<Vec<String>> {}
-
-        /// Write text along a line, resolving the style separately for each cell.
-        ///
-        /// The text is clipped to the line and padded with spaces to the line's
-        /// width.
-        pub fn text_with(
-            &mut self,
-            l: Line,
-            txt: &str,
-            style_at: impl Fn(Point) -> ResolvedStyle,
-        ) -> Result<()> {
-        }
     }
 
     impl View {
@@ -4742,19 +4669,6 @@ pub mod canopy {
         /// Use this when you have a Style from a source other than the style
         /// manager.
         pub fn apply_effects(&self, style: Style) -> Style {}
-
-        /// Construct a renderer that writes into `buf`.
-        ///
-        /// `clip` is the visible rectangle in canvas coordinates, and
-        /// `screen_origin` is where the clip's top-left lands in the buffer.
-        pub fn new(
-            stylemap: &'a StyleMap,
-            style: &'a mut StyleManager,
-            buf: &'a mut TermBuf,
-            clip: geom::Rect,
-            screen_origin: geom::Point,
-        ) -> Self {
-        }
 
         /// Fill a rectangle with a specified character. Writes out of bounds will
         /// be clipped.

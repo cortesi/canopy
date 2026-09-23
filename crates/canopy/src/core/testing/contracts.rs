@@ -33,7 +33,7 @@ canopy.call_named("contract::set", { value = 7, extra = 2 })
 local pending = canopy.snapshot()
 if pending == nil then error("publication disappeared") end
 canopy.assert(pending.frame_id == old.frame_id)
-canopy.flush()
+canopy.prepare()
 canopy.wait_for(function()
     local frame = canopy.snapshot()
     return frame ~= nil and frame.nodes[1].semantics.value == "9"

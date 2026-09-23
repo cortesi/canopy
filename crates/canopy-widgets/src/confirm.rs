@@ -671,7 +671,8 @@ mod tests {
                 .canopy
                 .snapshot()
                 .expect("published dialog")
-                .cells
+                .buffer
+                .cells()
                 .iter()
                 .find(|cell| cell.ch == needle)
                 .map(|cell| (cell.style.fg, cell.style.bg))
@@ -696,7 +697,8 @@ mod tests {
         let snapshot = harness.canopy.snapshot().expect("published dialog");
         let background = |needle: char| {
             snapshot
-                .cells
+                .buffer
+                .cells()
                 .iter()
                 .find(|cell| cell.ch == needle)
                 .map(|cell| cell.style.bg)

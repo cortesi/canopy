@@ -123,7 +123,7 @@ impl<'a> Render<'a> {
     ///
     /// `clip` is the visible rectangle in canvas coordinates, and
     /// `screen_origin` is where the clip's top-left lands in the buffer.
-    pub fn new(
+    pub(crate) fn new(
         stylemap: &'a StyleMap,
         style: &'a mut StyleManager,
         buf: &'a mut TermBuf,

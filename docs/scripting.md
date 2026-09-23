@@ -515,7 +515,7 @@ snapshot runs no hooks and does not advance its `frame_id`. It returns `nil`
 until a viewport has been prepared. A headless evaluation prepares its initial
 frame before running user source.
 
-After commands return, call `canopy.flush()` to publish pending changes. Calls
+After commands return, call `canopy.prepare()` to publish pending changes. Calls
 made while a native widget mutation callback holds its widget fail with
 `InvalidPhase`. Old snapshots retain their values after later publications and
 node removal; their node tokens do not become durable references.
