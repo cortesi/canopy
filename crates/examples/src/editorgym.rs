@@ -6,7 +6,7 @@ use canopy::{
 };
 use canopy_widgets::{
     Frame,
-    editor::{EditMode, Editor, EditorConfig, LineNumbers, WrapMode},
+    editor::{EditMode, Editor, EditorConfig, Interaction, LineNumbers, WrapMode},
     highlight::SyntectHighlighter,
 };
 
@@ -225,7 +225,7 @@ impl EditorGym {
             column_id,
             "Read only",
             READ_ONLY_TEXT,
-            EditorConfig::new().with_read_only(true),
+            EditorConfig::new().with_interaction(Interaction::View),
             Some(6),
             None,
         )?;

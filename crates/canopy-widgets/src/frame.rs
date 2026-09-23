@@ -51,6 +51,7 @@ impl Frame {
     ///
     /// Rebuilding the thumbs drops a drag in progress, so configure glyphs
     /// before mounting.
+    #[must_use]
     pub fn with_scrollbar_glyphs(mut self, glyphs: ScrollbarGlyphs) -> Self {
         self.scrollbar_glyphs = glyphs;
         (self.vertical, self.horizontal) = Self::scrollbars(glyphs);
@@ -68,12 +69,14 @@ impl Frame {
     }
 
     /// Build a frame with a specified glyph set.
+    #[must_use]
     pub fn with_glyphs(mut self, glyphs: BoxGlyphs) -> Self {
         self.box_glyphs = glyphs;
         self
     }
 
     /// Build a frame with a specified title.
+    #[must_use]
     pub fn with_title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
         self

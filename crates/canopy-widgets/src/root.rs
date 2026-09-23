@@ -112,6 +112,7 @@ impl Root {
 
     /// Start with the inspector open.
     #[cfg(feature = "devtools")]
+    #[must_use]
     pub fn with_inspector(mut self, state: bool) -> Self {
         self.inspector_active = state;
         self

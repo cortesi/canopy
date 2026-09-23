@@ -529,7 +529,8 @@ impl Editor {
 
     /// Handle y/n/a/q during replace confirmation.
     fn handle_replace_confirm(&mut self, c: char, ctx: &mut dyn Context) {
-        if self.config.read_only && matches!(self.prompt, Some(PromptState::ReplaceConfirm { .. }))
+        if self.config.interaction.read_only()
+            && matches!(self.prompt, Some(PromptState::ReplaceConfirm { .. }))
         {
             self.prompt = None;
             return;

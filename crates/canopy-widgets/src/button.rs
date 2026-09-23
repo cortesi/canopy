@@ -93,6 +93,7 @@ impl Button {
     }
 
     /// Build a button with a specified glyph set.
+    #[must_use]
     pub fn with_glyphs(mut self, glyphs: BoxGlyphs) -> Self {
         self.glyphs = glyphs;
         self

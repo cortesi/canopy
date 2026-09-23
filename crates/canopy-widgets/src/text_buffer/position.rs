@@ -47,6 +47,7 @@ impl TextRange {
     }
 
     /// Return a range with start/end ordered.
+    #[must_use]
     pub fn normalized(self) -> Self {
         if self.start <= self.end {
             self

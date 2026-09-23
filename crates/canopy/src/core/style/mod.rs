@@ -136,6 +136,7 @@ impl AttrSet {
         Self::default().with(attr)
     }
     /// A helper for progressive construction of attribute sets.
+    #[must_use]
     pub fn with(mut self, attr: Attr) -> Self {
         match attr {
             Attr::Bold => self.bold = true,
@@ -189,6 +190,7 @@ impl GradientSpec {
     }
 
     /// Map all colors in this gradient through a transform.
+    #[must_use]
     pub fn map_colors(&self, f: impl Fn(Color) -> Color) -> Self {
         let stops = self
             .stops
@@ -289,6 +291,7 @@ impl Paint {
     }
 
     /// Map colors within this paint.
+    #[must_use]
     pub fn map_colors(&self, f: impl Fn(Color) -> Color) -> Self {
         match self {
             Self::Solid(color) => Self::Solid(f(*color)),

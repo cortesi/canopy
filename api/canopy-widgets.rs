@@ -190,14 +190,25 @@ pub mod canopy_widgets {
             pub max_height: Option<u32>,
             /// Edit mode behavior.
             pub mode: EditMode,
-            /// Whether the editor is read-only.
-            pub read_only: bool,
-            /// Whether the editor accepts focus.
-            pub focusable: bool,
+            /// Whether the editor edits, views, or only displays its text.
+            pub interaction: Interaction,
             /// Line number rendering mode.
             pub line_numbers: LineNumbers,
             /// Tab stop width in columns.
             pub tab_stop: usize,
+        }
+
+        /// How an editor takes input.
+        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+        pub enum Interaction {
+            #[default]
+            /// Focusable and editable.
+            Edit,
+            /// Focusable and navigable, but read-only.
+            View,
+            /// Read-only and unfocusable: text embedded for display alone, which
+            /// focus traversal skips.
+            Display,
         }
 
         /// Line number rendering mode.
@@ -378,41 +389,52 @@ pub mod canopy_widgets {
         }
 
         impl EditorConfig {
+            #[must_use]
             /// Configure auto-grow behavior.
             pub fn with_auto_grow(self, auto_grow: bool) -> Self {}
 
+            #[must_use]
             /// Configure line number rendering.
             pub fn with_line_numbers(self, line_numbers: LineNumbers) -> Self {}
 
+            #[must_use]
             /// Configure multiline behavior.
             pub fn with_multiline(self, multiline: bool) -> Self {}
 
-            /// Configure read-only behavior.
-            pub fn with_read_only(self, read_only: bool) -> Self {}
-
+            #[must_use]
             /// Configure the edit mode.
             pub fn with_mode(self, mode: EditMode) -> Self {}
 
+            #[must_use]
             /// Configure the maximum height.
             pub fn with_max_height(self, max_height: Option<u32>) -> Self {}
 
+            #[must_use]
             /// Configure the minimum height.
             pub fn with_min_height(self, min_height: u32) -> Self {}
 
+            #[must_use]
             /// Configure the tab stop width.
             pub fn with_tab_stop(self, tab_stop: usize) -> Self {}
 
-            /// Configure whether the editor accepts focus.
-            ///
-            /// A read-only view embedded for display alone should decline focus so
-            /// that focus traversal skips over it.
-            pub fn with_focusable(self, focusable: bool) -> Self {}
+            #[must_use]
+            /// Configure whether the editor edits, views, or only displays its text.
+            pub fn with_interaction(self, interaction: Interaction) -> Self {}
 
+            #[must_use]
             /// Configure wrapping mode.
             pub fn with_wrap(self, wrap: WrapMode) -> Self {}
 
             /// Construct a default editor configuration.
             pub fn new() -> Self {}
+        }
+
+        impl Interaction {
+            /// Return whether edits are refused.
+            pub fn read_only(self) -> bool {}
+
+            /// Return whether the editor accepts focus.
+            pub fn focusable(self) -> bool {}
         }
 
         impl TextPosition {
@@ -421,11 +443,12 @@ pub mod canopy_widgets {
         }
 
         impl TextRange {
-            /// Construct a text range.
-            pub fn new(start: TextPosition, end: TextPosition) -> Self {}
-
+            #[must_use]
             /// Return a range with start/end ordered.
             pub fn normalized(self) -> Self {}
+
+            /// Construct a text range.
+            pub fn new(start: TextPosition, end: TextPosition) -> Self {}
 
             /// Return true if the range is empty.
             pub fn is_empty(self) -> bool {}
@@ -742,6 +765,7 @@ pub mod canopy_widgets {
         }
 
         impl TerminalConfig {
+            #[must_use]
             /// Configure the command argv to run instead of the default shell.
             pub fn with_program<I, S>(self, command: I) -> Self
             where
@@ -749,6 +773,7 @@ pub mod canopy_widgets {
                 S: Into<String>, {
             }
 
+            #[must_use]
             /// Configure the working directory for the terminal process.
             pub fn with_cwd(self, cwd: impl Into<PathBuf>) -> Self {}
 
@@ -1065,17 +1090,20 @@ pub mod canopy_widgets {
     pub fn register_clear_intent(setup: &mut canopy::Setup) -> canopy::error::Result<()> {}
 
     impl Border {
+        #[must_use]
         /// Build a box with a specified glyph set.
         pub fn with_glyphs(self, glyphs: BoxGlyphs) -> Self {}
 
-        /// Construct a box.
-        pub fn new() -> Self {}
-
+        #[must_use]
         /// Enable interior fill using the default fill style name.
         pub fn with_fill(self) -> Self {}
 
+        #[must_use]
         /// Set the border paint role while preserving inherited component layers.
         pub fn with_border_style(self, style: impl Into<String>) -> Self {}
+
+        /// Construct a box.
+        pub fn new() -> Self {}
     }
 
     impl Widget for Border {
@@ -1103,6 +1131,10 @@ pub mod canopy_widgets {
         pub fn with_command(self, command: CommandCall) -> Self {}
 
         #[must_use]
+        /// Build a button with a specified glyph set.
+        pub fn with_glyphs(self, glyphs: BoxGlyphs) -> Self {}
+
+        #[must_use]
         /// Mark the label character that a key reaches this button by.
         ///
         /// The first matching character takes the [`roles::KEY`] style, so
@@ -1114,9 +1146,6 @@ pub mod canopy_widgets {
         /// owns the binding, so the mnemonic and its binding are written together
         /// and a button cannot install a key of its own.
         pub fn with_accelerator(self, accelerator: char) -> Self {}
-
-        /// Build a button with a specified glyph set.
-        pub fn with_glyphs(self, glyphs: BoxGlyphs) -> Self {}
 
         /// Construct a new button with a label.
         pub fn new(label: impl Into<String>) -> Self {}
@@ -1167,6 +1196,7 @@ pub mod canopy_widgets {
     }
 
     impl Columns {
+        #[must_use]
         /// Build columns with replaced scrollbar glyphs.
         ///
         /// Rebuilding the thumbs drops a drag in progress, so configure glyphs
@@ -1463,13 +1493,19 @@ pub mod canopy_widgets {
     }
 
     impl Input {
+        #[must_use]
         /// Add a visible prompt before the editable value, for example `" Glob: "`.
         /// Its width participates in measurement, scrolling, and cursor placement.
         /// The input automatically emphasizes the whole row while it holds focus.
         pub fn with_prompt(self, prompt: impl Into<String>) -> Self {}
 
+        #[must_use]
         /// Configure whether semantic snapshots expose this input's value.
         pub fn with_value_exposure(self, exposure: ValueExposure) -> Self {}
+
+        #[must_use]
+        /// Set the semantic label without changing the displayed value.
+        pub fn with_label(self, label: impl Into<String>) -> Self {}
 
         /// Construct a new input with initial text.
         pub fn new(txt: impl Into<String>) -> Self {}
@@ -1488,9 +1524,6 @@ pub mod canopy_widgets {
 
         /// Return the raw input value without padding.
         pub fn value(&self) -> &str {}
-
-        /// Set the semantic label without changing the displayed value.
-        pub fn with_label(self, label: impl Into<String>) -> Self {}
 
         /// Build a positional call with typed user arguments.
         pub fn call_backspace() -> canopy::commands::CommandCall {}
@@ -1548,6 +1581,10 @@ pub mod canopy_widgets {
     }
 
     impl Root {
+        #[must_use]
+        /// Start with the inspector open.
+        pub fn with_inspector(self, state: bool) -> Self {}
+
         /// Construct a root widget wrapping the application and inspector nodes.
         pub fn new() -> Self {}
 
@@ -1580,9 +1617,6 @@ pub mod canopy_widgets {
 
         /// Show the inspector.
         pub fn show_inspector(&mut self, c: &mut dyn Context) -> Result<()> {}
-
-        /// Start with the inspector open.
-        pub fn with_inspector(self, state: bool) -> Self {}
 
         /// Toggle help modal visibility.
         pub fn toggle_help(&mut self, c: &mut dyn Context) -> Result<()> {}
@@ -1711,11 +1745,25 @@ pub mod canopy_widgets {
     }
 
     impl Text {
+        #[must_use]
         /// Add a fixed width for wrapping.
         pub fn with_wrap_width(self, width: u32) -> Self {}
 
+        #[must_use]
         /// Configure the canvas width behavior.
         pub fn with_canvas_width(self, width: CanvasWidth) -> Self {}
+
+        #[must_use]
+        /// Set the tab stop width for tab expansion.
+        pub fn with_tab_stop(self, tab_stop: usize) -> Self {}
+
+        #[must_use]
+        /// Set the text rendering style when selected.
+        pub fn with_selected_style(self, style: impl Into<String>) -> Self {}
+
+        #[must_use]
+        /// Set the text rendering style.
+        pub fn with_style(self, style: impl Into<String>) -> Self {}
 
         /// Construct a text widget with raw content.
         pub fn new(raw: impl Into<String>) -> Self {}
@@ -1735,15 +1783,6 @@ pub mod canopy_widgets {
 
         /// Scroll to an absolute content position.
         pub fn scroll_to(&mut self, c: &mut dyn Context, x: u32, y: u32) {}
-
-        /// Set the tab stop width for tab expansion.
-        pub fn with_tab_stop(self, tab_stop: usize) -> Self {}
-
-        /// Set the text rendering style when selected.
-        pub fn with_selected_style(self, style: impl Into<String>) -> Self {}
-
-        /// Set the text rendering style.
-        pub fn with_style(self, style: impl Into<String>) -> Self {}
 
         /// Build a positional call with typed user arguments.
         pub fn call_page(delta: i32) -> canopy::commands::CommandCall {}
@@ -1853,12 +1892,15 @@ pub mod canopy_widgets {
     }
 
     impl FontBanner {
+        #[must_use]
         /// Configure layout options for the banner.
         pub fn with_layout_options(self, options: LayoutOptions) -> Self {}
 
+        #[must_use]
         /// Configure rendering effects for the banner.
         pub fn with_effects(self, effects: FontEffects) -> Self {}
 
+        #[must_use]
         /// Configure the banner style path.
         pub fn with_style(self, style: impl Into<String>) -> Self {}
 
@@ -1882,12 +1924,15 @@ pub mod canopy_widgets {
     }
 
     impl Frame {
+        #[must_use]
         /// Build a frame with a specified glyph set.
         pub fn with_glyphs(self, glyphs: BoxGlyphs) -> Self {}
 
+        #[must_use]
         /// Build a frame with a specified title.
         pub fn with_title(self, title: impl Into<String>) -> Self {}
 
+        #[must_use]
         /// Build a frame with replaced scrollbar glyphs.
         ///
         /// Rebuilding the thumbs drops a drag in progress, so configure glyphs
@@ -2496,6 +2541,21 @@ pub mod canopy_widgets {
 
     impl<W: Selectable, K: 'static + Clone + Eq + Hash + ToArgValue> List<W, K> {
         #[must_use]
+        /// Build a list that dispatches a command when a row is activated.
+        pub fn with_command(self, command: CommandCall) -> Self {}
+
+        #[must_use]
+        /// Build a list with a list-level selection indicator.
+        /// Repeat controls whether the indicator renders on every visible line.
+        pub fn with_selection_indicator(
+            self,
+            style: impl Into<String>,
+            text: impl Into<String>,
+            repeat: bool,
+        ) -> Self {
+        }
+
+        #[must_use]
         /// Enable multi-select checks.
         ///
         /// Checked keys are independent of the selected row. The row widget
@@ -2519,21 +2579,12 @@ pub mod canopy_widgets {
         /// Return whether this list tracks checks.
         pub fn checks_enabled(&self) -> bool {}
 
+        #[must_use]
+        /// Set the semantic label of the collection.
+        pub fn with_label(self, label: impl Into<String>) -> Self {}
+
         /// Borrow the stable keys in display order.
         pub fn keys(&self) -> &[K] {}
-
-        /// Build a list that dispatches a command when a row is activated.
-        pub fn with_command(self, command: CommandCall) -> Self {}
-
-        /// Build a list with a list-level selection indicator.
-        /// Repeat controls whether the indicator renders on every visible line.
-        pub fn with_selection_indicator(
-            self,
-            style: impl Into<String>,
-            text: impl Into<String>,
-            repeat: bool,
-        ) -> Self {
-        }
 
         /// Check every row.
         pub fn check_all(&mut self, ctx: &mut dyn Context) -> Result<()> {}
@@ -2615,9 +2666,6 @@ pub mod canopy_widgets {
 
         /// Select an item at the given index.
         pub fn select(&mut self, ctx: &mut dyn Context, index: usize) -> Result<()> {}
-
-        /// Set the semantic label of the collection.
-        pub fn with_label(self, label: impl Into<String>) -> Self {}
 
         /// Toggle the checked state of the selected row.
         ///

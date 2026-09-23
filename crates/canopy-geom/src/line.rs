@@ -35,6 +35,7 @@ impl Line {
     /// the border it was meant to sit inside. Indenting holds the far edge
     /// still, and indenting past that edge leaves an empty line rather than
     /// wrapping around.
+    #[must_use]
     pub fn indent(&self, columns: u32) -> Self {
         Self {
             tl: Point {

@@ -111,6 +111,7 @@ impl TerminalConfig {
     }
 
     /// Configure the command argv to run instead of the default shell.
+    #[must_use]
     pub fn with_program<I, S>(mut self, command: I) -> Self
     where
         I: IntoIterator<Item = S>,
@@ -121,6 +122,7 @@ impl TerminalConfig {
     }
 
     /// Configure the working directory for the terminal process.
+    #[must_use]
     pub fn with_cwd(mut self, cwd: impl Into<PathBuf>) -> Self {
         self.cwd = Some(cwd.into());
         self

@@ -163,13 +163,15 @@ pub mod canopy_geom {
     }
 
     impl Point {
+        #[must_use]
+        /// Shift the point by an offset, avoiding under- or overflow.
+        pub fn scroll(&self, x: i32, y: i32) -> Self {}
+
         /// Construct a point from its coordinates.
         pub const fn new(x: u32, y: u32) -> Self {}
 
         /// Origin point.
         pub const ZERO: Self = _;
-        /// Shift the point by an offset, avoiding under- or overflow.
-        pub fn scroll(&self, x: i32, y: i32) -> Self {}
     }
 
     impl TryFrom<Point> for PointI32 {
@@ -201,12 +203,7 @@ pub mod canopy_geom {
     }
 
     impl Line {
-        /// Construct a line from coordinates and width.
-        pub fn new(x: u32, y: u32, w: u32) -> Self {}
-
-        /// Convert the line into a rectangle of height 1.
-        pub fn rect(&self) -> Rect {}
-
+        #[must_use]
         /// Return this line indented from its start, giving up the columns it
         /// skips.
         ///
@@ -217,6 +214,12 @@ pub mod canopy_geom {
         /// still, and indenting past that edge leaves an empty line rather than
         /// wrapping around.
         pub fn indent(&self, columns: u32) -> Self {}
+
+        /// Construct a line from coordinates and width.
+        pub fn new(x: u32, y: u32, w: u32) -> Self {}
+
+        /// Convert the line into a rectangle of height 1.
+        pub fn rect(&self) -> Rect {}
     }
 
     impl LineSegment {

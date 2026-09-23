@@ -2320,9 +2320,11 @@ Each stage also updates the docs it touches.
     fh's columns dialog use it; the theme's `dialog/*` rules replace the
     per-host frame and button rules. fh's footer already painted whole
     segments, so only its Git cell moved to `Render::runs`.
-- [ ] C33: the module visibility rule, homes for the root names, method
+- [x] C33: the module visibility rule, homes for the root names, method
   renames, the must-use lint, unused-method trims, `ItemLabel`, the Editor
   interaction field, and `text_buffer` narrowing.
+  - `list` is a facade module over the private `list_view`, so `List` keeps
+    one path. `Center` and `Pad` went in C32, so their empty impls did too.
 - [ ] C40: a complete `Input` with command notifications. PickerFilter becomes
   an `Input`.
 - [ ] C42: widget framework groups (`Confirm`, `Picker`, `List`), the

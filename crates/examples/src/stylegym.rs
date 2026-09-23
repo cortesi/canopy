@@ -22,7 +22,7 @@ use canopy::{
 };
 use canopy_widgets::{
     Button, Container, Dropdown, Frame, Input, ItemLabel, Root, Scroll, Selector, Tabs,
-    editor::{Editor, EditorConfig, LineNumbers, WrapMode},
+    editor::{Editor, EditorConfig, Interaction, LineNumbers, WrapMode},
     highlight::SyntectHighlighter,
 };
 
@@ -819,7 +819,7 @@ fn add_syntax_samples(c: &mut dyn Context, parent: NodeId) -> Result<()> {
     ];
     for (title, extension, source, query) in samples {
         let config = EditorConfig::new()
-            .with_read_only(true)
+            .with_interaction(Interaction::View)
             .with_line_numbers(LineNumbers::Absolute)
             .with_wrap(WrapMode::None);
         let mut editor = Editor::with_config(source, config);

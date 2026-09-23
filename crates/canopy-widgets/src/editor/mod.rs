@@ -33,6 +33,31 @@ pub enum WrapMode {
     Soft,
 }
 
+/// How an editor takes input.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Interaction {
+    /// Focusable and editable.
+    #[default]
+    Edit,
+    /// Focusable and navigable, but read-only.
+    View,
+    /// Read-only and unfocusable: text embedded for display alone, which
+    /// focus traversal skips.
+    Display,
+}
+
+impl Interaction {
+    /// Return whether edits are refused.
+    pub fn read_only(self) -> bool {
+        !matches!(self, Self::Edit)
+    }
+
+    /// Return whether the editor accepts focus.
+    pub fn focusable(self) -> bool {
+        !matches!(self, Self::Display)
+    }
+}
+
 /// Editing mode for the editor widget.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EditMode {
@@ -68,10 +93,8 @@ pub struct EditorConfig {
     pub max_height: Option<u32>,
     /// Edit mode behavior.
     pub mode: EditMode,
-    /// Whether the editor is read-only.
-    pub read_only: bool,
-    /// Whether the editor accepts focus.
-    pub focusable: bool,
+    /// Whether the editor edits, views, or only displays its text.
+    pub interaction: Interaction,
     /// Line number rendering mode.
     pub line_numbers: LineNumbers,
     /// Tab stop width in columns.
@@ -87,8 +110,7 @@ impl Default for EditorConfig {
             min_height: 1,
             max_height: None,
             mode: EditMode::Text,
-            read_only: false,
-            focusable: true,
+            interaction: Interaction::Edit,
             line_numbers: LineNumbers::None,
             tab_stop: 4,
         }
@@ -102,63 +124,63 @@ impl EditorConfig {
     }
 
     /// Configure multiline behavior.
+    #[must_use]
     pub fn with_multiline(mut self, multiline: bool) -> Self {
         self.multiline = multiline;
         self
     }
 
     /// Configure wrapping mode.
+    #[must_use]
     pub fn with_wrap(mut self, wrap: WrapMode) -> Self {
         self.wrap = wrap;
         self
     }
 
     /// Configure auto-grow behavior.
+    #[must_use]
     pub fn with_auto_grow(mut self, auto_grow: bool) -> Self {
         self.auto_grow = auto_grow;
         self
     }
 
     /// Configure the minimum height.
+    #[must_use]
     pub fn with_min_height(mut self, min_height: u32) -> Self {
         self.min_height = min_height;
         self
     }
 
     /// Configure the maximum height.
+    #[must_use]
     pub fn with_max_height(mut self, max_height: Option<u32>) -> Self {
         self.max_height = max_height;
         self
     }
 
     /// Configure the edit mode.
+    #[must_use]
     pub fn with_mode(mut self, mode: EditMode) -> Self {
         self.mode = mode;
         self
     }
 
-    /// Configure read-only behavior.
-    pub fn with_read_only(mut self, read_only: bool) -> Self {
-        self.read_only = read_only;
-        self
-    }
-
-    /// Configure whether the editor accepts focus.
-    ///
-    /// A read-only view embedded for display alone should decline focus so
-    /// that focus traversal skips over it.
-    pub fn with_focusable(mut self, focusable: bool) -> Self {
-        self.focusable = focusable;
+    /// Configure whether the editor edits, views, or only displays its text.
+    #[must_use]
+    pub fn with_interaction(mut self, interaction: Interaction) -> Self {
+        self.interaction = interaction;
         self
     }
 
     /// Configure line number rendering.
+    #[must_use]
     pub fn with_line_numbers(mut self, line_numbers: LineNumbers) -> Self {
         self.line_numbers = line_numbers;
         self
     }
 
     /// Configure the tab stop width.
+    #[must_use]
     pub fn with_tab_stop(mut self, tab_stop: usize) -> Self {
         self.tab_stop = tab_stop.max(1);
         self

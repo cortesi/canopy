@@ -135,6 +135,7 @@ impl Color {
 
     /// Scale brightness by a factor. 0.0 = black, 1.0 = unchanged, 2.0 = double
     /// brightness.
+    #[must_use]
     pub fn scale_brightness(self, factor: f32) -> Self {
         let (r, g, b) = self.rgb();
         let scale = |v: u8| ((v as f32 * factor).clamp(0.0, 255.0)) as u8;
@@ -147,6 +148,7 @@ impl Color {
 
     /// Adjust saturation. 0.0 = grayscale, 1.0 = unchanged, 2.0 = double
     /// saturation.
+    #[must_use]
     pub fn saturation(self, factor: f32) -> Self {
         let (r, g, b) = self.rgb();
         let (hue, sat, light) = rgb_to_hsl(r, g, b);
@@ -159,6 +161,7 @@ impl Color {
     }
 
     /// Blend this color with another. ratio 0.0 = self, 1.0 = other.
+    #[must_use]
     pub fn blend(self, other: Self, ratio: f32) -> Self {
         let (r1, g1, b1) = self.rgb();
         let (r2, g2, b2) = other.rgb();
@@ -175,6 +178,7 @@ impl Color {
     }
 
     /// Invert RGB channels (255 - value for each channel).
+    #[must_use]
     pub fn invert_rgb(self) -> Self {
         let (r, g, b) = self.rgb();
         Self::Rgb {
@@ -185,6 +189,7 @@ impl Color {
     }
 
     /// Shift hue by degrees (0-360).
+    #[must_use]
     pub fn shift_hue(self, degrees: f32) -> Self {
         let (r, g, b) = self.rgb();
         let (hue, sat, light) = rgb_to_hsl(r, g, b);

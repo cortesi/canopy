@@ -64,18 +64,21 @@ impl FontBanner {
     }
 
     /// Configure the banner style path.
+    #[must_use]
     pub fn with_style(mut self, style: impl Into<String>) -> Self {
         self.style = style.into();
         self
     }
 
     /// Configure layout options for the banner.
+    #[must_use]
     pub fn with_layout_options(mut self, options: LayoutOptions) -> Self {
         self.options = options;
         self
     }
 
     /// Configure rendering effects for the banner.
+    #[must_use]
     pub fn with_effects(mut self, effects: FontEffects) -> Self {
         self.effects = effects;
         self

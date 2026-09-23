@@ -388,14 +388,16 @@ pub mod canopy_examples {
         }
 
         impl DemoHost {
-            /// Build a demo host for the provided widget.
-            pub fn new(child: impl Into<Box<dyn Widget>>, size: DemoSize, frame: bool) -> Self {}
-
+            #[must_use]
             /// Set the inner padding for the demo host.
             pub fn with_inner_padding(self, padding: u32) -> Self {}
 
+            #[must_use]
             /// Set the outer padding for the demo host.
             pub fn with_outer_padding(self, padding: u32) -> Self {}
+
+            /// Build a demo host for the provided widget.
+            pub fn new(child: impl Into<Box<dyn Widget>>, size: DemoSize, frame: bool) -> Self {}
         }
 
         impl Widget for DemoHost {

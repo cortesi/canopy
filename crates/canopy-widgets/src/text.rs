@@ -65,6 +65,7 @@ impl Text {
     }
 
     /// Add a fixed width for wrapping.
+    #[must_use]
     pub fn with_wrap_width(mut self, width: u32) -> Self {
         self.wrap_width = Some(width);
         self.wrap_cache.borrow_mut().take();
@@ -72,24 +73,28 @@ impl Text {
     }
 
     /// Configure the canvas width behavior.
+    #[must_use]
     pub fn with_canvas_width(mut self, width: CanvasWidth) -> Self {
         self.canvas_width = width;
         self
     }
 
     /// Set the text rendering style.
+    #[must_use]
     pub fn with_style(mut self, style: impl Into<String>) -> Self {
         self.style = style.into();
         self
     }
 
     /// Set the text rendering style when selected.
+    #[must_use]
     pub fn with_selected_style(mut self, style: impl Into<String>) -> Self {
         self.selected_style = Some(style.into());
         self
     }
 
     /// Set the tab stop width for tab expansion.
+    #[must_use]
     pub fn with_tab_stop(mut self, tab_stop: usize) -> Self {
         self.tab_stop = tab_stop.max(1);
         self.wrap_cache.borrow_mut().take();

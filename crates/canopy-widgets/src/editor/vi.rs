@@ -587,14 +587,14 @@ impl Editor {
                 self.start_replace_prompt();
             }
             PlainCommand::Undo => {
-                if !self.config.read_only {
+                if !self.config.interaction.read_only() {
                     self.undo_edit();
                     self.update_preferred_column();
                     self.ensure_cursor_visible(ctx);
                 }
             }
             PlainCommand::Redo => {
-                if !self.config.read_only {
+                if !self.config.interaction.read_only() {
                     self.redo_edit();
                     self.update_preferred_column();
                     self.ensure_cursor_visible(ctx);
@@ -779,7 +779,7 @@ impl Editor {
         match command {
             VisualCommand::Exit => self.exit_visual(),
             VisualCommand::Delete => {
-                if self.config.read_only {
+                if self.config.interaction.read_only() {
                     self.exit_visual();
                     return;
                 }
@@ -804,7 +804,7 @@ impl Editor {
                 self.exit_visual();
             }
             VisualCommand::Change => {
-                if self.config.read_only {
+                if self.config.interaction.read_only() {
                     self.exit_visual();
                     return;
                 }
@@ -885,7 +885,7 @@ impl Editor {
 
     /// Delete the current line and update yank register.
     pub(super) fn delete_line(&mut self) {
-        if self.config.read_only {
+        if self.config.interaction.read_only() {
             return;
         }
         let cursor = self.buffer.cursor();
@@ -913,7 +913,7 @@ impl Editor {
 
     /// Delete from the cursor to the line end and update yank register.
     pub(super) fn delete_to_line_end(&mut self) {
-        if self.config.read_only {
+        if self.config.interaction.read_only() {
             return;
         }
         let cursor = self.buffer.cursor();
@@ -944,7 +944,7 @@ impl Editor {
 
     /// Put the yank register contents before or after the cursor.
     pub(super) fn put_yank(&mut self, before: bool) {
-        if self.config.read_only || self.yank.is_empty() {
+        if self.config.interaction.read_only() || self.yank.is_empty() {
             return;
         }
         let mut content = self.normalize_insert_text(&self.yank);
@@ -979,7 +979,7 @@ impl Editor {
 
     /// Indent or outdent the selected lines.
     pub(super) fn indent_selection(&mut self, indent: bool, mode: VisualMode) {
-        if self.config.read_only {
+        if self.config.interaction.read_only() {
             return;
         }
         if !self.config.multiline {
@@ -1236,7 +1236,7 @@ impl Editor {
 
     /// Repeat the last recorded vi edit.
     pub(super) fn repeat_last_edit(&mut self) {
-        if self.config.read_only {
+        if self.config.interaction.read_only() {
             return;
         }
         let Some(edit) = self.vi.last_edit() else {

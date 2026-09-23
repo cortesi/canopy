@@ -47,6 +47,7 @@ impl Columns {
     ///
     /// Rebuilding the thumbs drops a drag in progress, so configure glyphs
     /// before mounting.
+    #[must_use]
     pub fn with_scrollbar_glyphs(mut self, glyphs: ScrollbarGlyphs) -> Self {
         self.glyphs = glyphs;
         self.scrollbar = Self::scrollbar(glyphs);

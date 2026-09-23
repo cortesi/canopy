@@ -197,6 +197,7 @@ impl Key {
     /// `normalize` must be called explicitly when needed. Comparison is literal
     /// and straightforward and does not normalize. `parse_spec` normalizes
     /// its result.
+    #[must_use]
     pub fn normalize(&self) -> Self {
         let mut normalized = *self;
         if let KeyCode::Char(c) = normalized.key {

@@ -813,6 +813,7 @@ pub struct CommandCall {
 
 impl CommandCall {
     /// Bind this call to a target policy.
+    #[must_use]
     pub fn with_target(mut self, target: CommandTarget) -> Self {
         self.target = Some(target);
         self
@@ -1269,6 +1270,7 @@ impl CommandError {
     }
 
     #[doc(hidden)]
+    #[must_use]
     pub fn with_param(self, param: &str) -> Self {
         match self {
             Self::TypeMismatch { expected, got, .. } => Self::TypeMismatch {

@@ -17,6 +17,7 @@ impl Point {
     }
 
     /// Shift the point by an offset, avoiding under- or overflow.
+    #[must_use]
     pub fn scroll(&self, x: i32, y: i32) -> Self {
         let nx = if x < 0 {
             self.x.saturating_sub(x.unsigned_abs())

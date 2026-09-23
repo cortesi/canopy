@@ -395,6 +395,7 @@ pub enum InputSpec {
 
 impl InputSpec {
     /// Normalize key variants for matching.
+    #[must_use]
     pub fn normalize(self) -> Self {
         match self {
             Self::Mouse(mouse) => Self::Mouse(mouse),

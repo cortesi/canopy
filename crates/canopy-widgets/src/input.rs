@@ -209,6 +209,7 @@ impl Input {
     }
 
     /// Set the semantic label without changing the displayed value.
+    #[must_use]
     pub fn with_label(mut self, label: impl Into<String>) -> Self {
         self.label = Some(label.into());
         self
@@ -217,6 +218,7 @@ impl Input {
     /// Add a visible prompt before the editable value, for example `" Glob: "`.
     /// Its width participates in measurement, scrolling, and cursor placement.
     /// The input automatically emphasizes the whole row while it holds focus.
+    #[must_use]
     pub fn with_prompt(mut self, prompt: impl Into<String>) -> Self {
         self.prompt = single_line(&prompt.into());
         self
@@ -228,6 +230,7 @@ impl Input {
     }
 
     /// Configure whether semantic snapshots expose this input's value.
+    #[must_use]
     pub fn with_value_exposure(mut self, exposure: ValueExposure) -> Self {
         self.value_exposure = exposure;
         self

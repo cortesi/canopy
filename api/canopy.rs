@@ -427,6 +427,7 @@ pub mod canopy {
         }
 
         impl CommandCall {
+            #[must_use]
             /// Bind this call to a target policy.
             pub fn with_target(self, target: CommandTarget) -> Self {}
 
@@ -441,6 +442,10 @@ pub mod canopy {
 
         impl CommandError {
             #[doc(hidden)]
+            #[must_use]
+            pub fn with_param(self, param: &str) -> Self {}
+
+            #[doc(hidden)]
             /// Preserve a command implementation's concrete error as the execution
             /// source.
             pub fn execution(error: impl 'static + Send + StdError + Sync) -> Self {}
@@ -450,9 +455,6 @@ pub mod canopy {
 
             #[doc(hidden)]
             pub fn type_mismatch(expected: &'static str, got: &ArgValue) -> Self {}
-
-            #[doc(hidden)]
-            pub fn with_param(self, param: &str) -> Self {}
         }
 
         impl From<&CommandError> for CanopyErrorPayload {
@@ -1037,6 +1039,7 @@ pub mod canopy {
             }
 
             impl Key {
+                #[must_use]
                 /// Normalize key inputs for binding and matching.
                 ///
                 /// Normalization handles two common sources of divergence across terminals:
@@ -1678,6 +1681,7 @@ pub mod canopy {
         }
 
         impl InputSpec {
+            #[must_use]
             /// Normalize key variants for matching.
             pub fn normalize(self) -> Self {}
         }
@@ -2092,75 +2096,94 @@ pub mod canopy {
         }
 
         impl Layout {
+            #[must_use]
             /// Bound the outer width by a fraction of the parent's width budget.
             pub fn max_width_fraction(self, fraction: Fraction) -> Self {}
 
+            #[must_use]
             /// Center children both horizontally and vertically.
             pub fn align_center(self) -> Self {}
 
-            /// Column layout with measured sizing on both axes.
-            pub fn column() -> Self {}
-
+            #[must_use]
             /// Convenience: fixed outer height without a `Fixed` enum.
             pub fn fixed_height(self, n: u32) -> Self {}
 
+            #[must_use]
             /// Convenience: fixed outer width without a `Fixed` enum.
             pub fn fixed_width(self, n: u32) -> Self {}
+
+            #[must_use]
+            /// Set height sizing strategy directly.
+            pub fn height(self, sizing: Sizing) -> Self {}
+
+            #[must_use]
+            /// Set height to flex with the provided weight.
+            ///
+            /// A zero weight is rejected when the layout is applied.
+            pub fn flex_vertical(self, weight: u32) -> Self {}
+
+            #[must_use]
+            /// Set horizontal alignment of children within content area.
+            pub fn align_horizontal(self, align: Align) -> Self {}
+
+            #[must_use]
+            /// Set padding edges.
+            pub fn padding(self, edges: Edges) -> Self {}
+
+            #[must_use]
+            /// Set the horizontal measurement overflow policy.
+            pub fn overflow_x(self, policy: MeasureOverflow) -> Self {}
+
+            #[must_use]
+            /// Set the layout direction.
+            pub fn direction(self, direction: Direction) -> Self {}
+
+            #[must_use]
+            /// Set the main-axis gap between children.
+            pub fn gap(self, n: u32) -> Self {}
+
+            #[must_use]
+            /// Set the maximum outer height.
+            pub fn max_height(self, n: u32) -> Self {}
+
+            #[must_use]
+            /// Set the maximum outer width.
+            pub fn max_width(self, n: u32) -> Self {}
+
+            #[must_use]
+            /// Set the minimum outer height.
+            pub fn min_height(self, n: u32) -> Self {}
+
+            #[must_use]
+            /// Set the minimum outer width.
+            pub fn min_width(self, n: u32) -> Self {}
+
+            #[must_use]
+            /// Set the vertical measurement overflow policy.
+            pub fn overflow_y(self, policy: MeasureOverflow) -> Self {}
+
+            #[must_use]
+            /// Set vertical alignment of children within content area.
+            pub fn align_vertical(self, align: Align) -> Self {}
+
+            #[must_use]
+            /// Set width sizing strategy directly.
+            pub fn width(self, sizing: Sizing) -> Self {}
+
+            #[must_use]
+            /// Set width to flex with the provided weight.
+            ///
+            /// A zero weight is rejected when the layout is applied.
+            pub fn flex_horizontal(self, weight: u32) -> Self {}
+
+            /// Column layout with measured sizing on both axes.
+            pub fn column() -> Self {}
 
             /// Fill available space with flex sizing on both axes.
             pub fn fill() -> Self {}
 
             /// Row layout with measured sizing on both axes.
             pub fn row() -> Self {}
-
-            /// Set height sizing strategy directly.
-            pub fn height(self, sizing: Sizing) -> Self {}
-
-            /// Set height to flex with the provided weight.
-            ///
-            /// A zero weight is rejected when the layout is applied.
-            pub fn flex_vertical(self, weight: u32) -> Self {}
-
-            /// Set horizontal alignment of children within content area.
-            pub fn align_horizontal(self, align: Align) -> Self {}
-
-            /// Set padding edges.
-            pub fn padding(self, edges: Edges) -> Self {}
-
-            /// Set the horizontal measurement overflow policy.
-            pub fn overflow_x(self, policy: MeasureOverflow) -> Self {}
-
-            /// Set the layout direction.
-            pub fn direction(self, direction: Direction) -> Self {}
-
-            /// Set the main-axis gap between children.
-            pub fn gap(self, n: u32) -> Self {}
-
-            /// Set the maximum outer height.
-            pub fn max_height(self, n: u32) -> Self {}
-
-            /// Set the maximum outer width.
-            pub fn max_width(self, n: u32) -> Self {}
-
-            /// Set the minimum outer height.
-            pub fn min_height(self, n: u32) -> Self {}
-
-            /// Set the minimum outer width.
-            pub fn min_width(self, n: u32) -> Self {}
-
-            /// Set the vertical measurement overflow policy.
-            pub fn overflow_y(self, policy: MeasureOverflow) -> Self {}
-
-            /// Set vertical alignment of children within content area.
-            pub fn align_vertical(self, align: Align) -> Self {}
-
-            /// Set width sizing strategy directly.
-            pub fn width(self, sizing: Sizing) -> Self {}
-
-            /// Set width to flex with the provided weight.
-            ///
-            /// A zero weight is rejected when the layout is applied.
-            pub fn flex_horizontal(self, weight: u32) -> Self {}
 
             /// Validate this layout configuration.
             pub fn validate(&self) -> Result<(), LayoutValidationError> {}
@@ -2172,27 +2195,31 @@ pub mod canopy {
         }
 
         impl LayoutOverride {
-            /// Apply constraints and validate both the widget and resulting layout.
-            pub fn apply(self, base: Layout) -> Result<Layout, LayoutValidationError> {}
-
-            /// Inherit every widget field.
-            pub fn new() -> Self {}
-
+            #[must_use]
             /// Set both outer height bounds.
             pub fn fixed_height(self, value: u32) -> Self {}
 
+            #[must_use]
             /// Set both outer width bounds.
             pub fn fixed_width(self, value: u32) -> Self {}
 
+            #[must_use]
             /// Set height to flex with the provided weight.
             ///
             /// A zero weight is rejected when the override is applied.
             pub fn flex_vertical(self, weight: u32) -> Self {}
 
+            #[must_use]
             /// Set width to flex with the provided weight.
             ///
             /// A zero weight is rejected when the override is applied.
             pub fn flex_horizontal(self, weight: u32) -> Self {}
+
+            /// Apply constraints and validate both the widget and resulting layout.
+            pub fn apply(self, base: Layout) -> Result<Layout, LayoutValidationError> {}
+
+            /// Inherit every widget field.
+            pub fn new() -> Self {}
         }
 
         impl From<LayoutValidationError> for Error {
@@ -3374,6 +3401,7 @@ pub mod canopy {
         pub const fn hex_byte(high: u8, low: u8) -> u8 {}
 
         impl AttrSet {
+            #[must_use]
             /// A helper for progressive construction of attribute sets.
             pub fn with(self, attr: Attr) -> Self {}
 
@@ -3382,27 +3410,32 @@ pub mod canopy {
         }
 
         impl Color {
+            #[must_use]
             /// Adjust saturation. 0.0 = grayscale, 1.0 = unchanged, 2.0 = double
             /// saturation.
             pub fn saturation(self, factor: f32) -> Self {}
 
+            #[must_use]
             /// Blend this color with another. ratio 0.0 = self, 1.0 = other.
             pub fn blend(self, other: Self, ratio: f32) -> Self {}
 
+            #[must_use]
             /// Invert RGB channels (255 - value for each channel).
             pub fn invert_rgb(self) -> Self {}
+
+            #[must_use]
+            /// Scale brightness by a factor. 0.0 = black, 1.0 = unchanged, 2.0 = double
+            /// brightness.
+            pub fn scale_brightness(self, factor: f32) -> Self {}
+
+            #[must_use]
+            /// Shift hue by degrees (0-360).
+            pub fn shift_hue(self, degrees: f32) -> Self {}
 
             /// Return this color's RGB channels.
             ///
             /// Named colors and ANSI-256 values use the standard palette mappings.
             pub fn rgb(self) -> (u8, u8, u8) {}
-
-            /// Scale brightness by a factor. 0.0 = black, 1.0 = unchanged, 2.0 = double
-            /// brightness.
-            pub fn scale_brightness(self, factor: f32) -> Self {}
-
-            /// Shift hue by degrees (0-360).
-            pub fn shift_hue(self, degrees: f32) -> Self {}
         }
 
         impl From<Color> for Paint {
@@ -3418,14 +3451,15 @@ pub mod canopy {
         }
 
         impl Paint {
+            #[must_use]
+            /// Map colors within this paint.
+            pub fn map_colors(&self, f: impl Fn(Color) -> Color) -> Self {}
+
             /// Construct a gradient paint.
             pub fn gradient(spec: GradientSpec) -> Self {}
 
             /// Construct a solid paint.
             pub fn solid(color: Color) -> Self {}
-
-            /// Map colors within this paint.
-            pub fn map_colors(&self, f: impl Fn(Color) -> Color) -> Self {}
 
             /// Resolve the paint at a location.
             pub fn resolve(&self, rect: geom::Rect, point: geom::Point) -> Color {}
@@ -3439,11 +3473,12 @@ pub mod canopy {
         }
 
         impl GradientSpec {
-            /// Construct a gradient from explicit stops.
-            pub fn with_stops(angle_deg: f32, stops: Vec<GradientStop>) -> Self {}
-
+            #[must_use]
             /// Map all colors in this gradient through a transform.
             pub fn map_colors(&self, f: impl Fn(Color) -> Color) -> Self {}
+
+            /// Construct a gradient from explicit stops.
+            pub fn with_stops(angle_deg: f32, stops: Vec<GradientStop>) -> Self {}
 
             /// Resolve a gradient color at a point within a rectangle.
             pub fn color_at(&self, rect: geom::Rect, point: geom::Point) -> Color {}

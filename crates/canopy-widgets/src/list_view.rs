@@ -146,6 +146,7 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
     }
 
     /// Set the semantic label of the collection.
+    #[must_use]
     pub fn with_label(mut self, label: impl Into<String>) -> Self {
         self.label = Some(label.into());
         self
@@ -237,6 +238,7 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
 
     /// Build a list with a list-level selection indicator.
     /// Repeat controls whether the indicator renders on every visible line.
+    #[must_use]
     pub fn with_selection_indicator(
         mut self,
         style: impl Into<String>,
@@ -255,6 +257,7 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
     }
 
     /// Build a list that dispatches a command when a row is activated.
+    #[must_use]
     pub fn with_command(mut self, command: CommandCall) -> Self {
         self.on_activate = Some(command);
         self

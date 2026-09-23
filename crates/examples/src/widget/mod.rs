@@ -68,12 +68,14 @@ impl DemoHost {
     }
 
     /// Set the inner padding for the demo host.
+    #[must_use]
     pub fn with_inner_padding(mut self, padding: u32) -> Self {
         self.inner_padding = padding;
         self
     }
 
     /// Set the outer padding for the demo host.
+    #[must_use]
     pub fn with_outer_padding(mut self, padding: u32) -> Self {
         self.outer_padding = padding;
         self

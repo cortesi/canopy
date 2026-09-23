@@ -23,7 +23,7 @@ use super::{
     vi::ViMode,
 };
 use crate::{
-    editor::{EditMode, Editor, EditorConfig, LineNumbers, WrapMode},
+    editor::{EditMode, Editor, EditorConfig, Interaction, LineNumbers, WrapMode},
     highlight::{HighlightSpan, Highlighter},
     scrollbar::ScrollbarGlyphs,
     text_buffer::{Selection, TextPosition, TextRange},
@@ -208,7 +208,11 @@ fn assert_capture_matches(mode: EditMode, read_only: bool, setup: &[&str]) {
     for spec in CAPTURE_KEYS {
         let config = EditorConfig::new()
             .with_mode(mode)
-            .with_read_only(read_only);
+            .with_interaction(if read_only {
+                Interaction::View
+            } else {
+                Interaction::Edit
+            });
         let mut editor = Editor::with_config("alpha\nbeta", config);
         let probe = key::Key::parse_spec(spec).expect("valid key spec");
         let (predicted, outcome) = app
@@ -256,7 +260,11 @@ fn a_display_only_editor_marks_no_current_line_number() {
     for focusable in [true, false] {
         let config = EditorConfig::new()
             .with_line_numbers(LineNumbers::Absolute)
-            .with_focusable(focusable);
+            .with_interaction(if focusable {
+                Interaction::Edit
+            } else {
+                Interaction::Display
+            });
         let mut harness = build_harness("hi\nok", config, 6, 2);
         harness.render().unwrap();
         let plain = harness
@@ -290,7 +298,11 @@ const READ_ONLY_TEXT: &str = "alpha\nbeta\ngamma";
 fn drive(mode: EditMode, read_only: bool, keys: &[key::KeyCode]) -> (String, u64) {
     let config = EditorConfig::new()
         .with_mode(mode)
-        .with_read_only(read_only);
+        .with_interaction(if read_only {
+            Interaction::View
+        } else {
+            Interaction::Edit
+        });
     let mut harness = build_harness(READ_ONLY_TEXT, config, 20, 6);
     for code in keys {
         harness.key(*code).expect("key dispatch");
@@ -342,9 +354,7 @@ fn read_only_vi_mode_ignores_every_edit_command() {
 
 #[test]
 fn read_only_editor_can_decline_focus() {
-    let config = EditorConfig::new()
-        .with_read_only(true)
-        .with_focusable(false);
+    let config = EditorConfig::new().with_interaction(Interaction::Display);
     let harness = build_harness(READ_ONLY_TEXT, config, 20, 6);
     let focused = harness.canopy.with_root_view(|view| view.focused_node());
     assert!(focused.is_none(), "an unfocusable editor is skipped");
@@ -545,7 +555,7 @@ fn replace_confirmation_preserves_read_only_contents_and_selection() {
     for response in ['y', 'a'] {
         let config = EditorConfig::new()
             .with_mode(EditMode::Vi)
-            .with_read_only(true);
+            .with_interaction(Interaction::View);
         let mut harness = build_harness("aaa", config, 10, 2);
         prepare_replace(&mut harness, "a", "aa");
         let selection = editor_selection(&mut harness);
@@ -578,13 +588,17 @@ fn read_only_history_commands_preserve_text_selection_and_history() {
                 if redo {
                     assert!(editor.buffer.undo());
                 }
-                editor.set_config(editor.config().clone().with_read_only(true));
+                editor.set_config(editor.config().clone().with_interaction(Interaction::View));
             });
             let text = editor_text(&mut harness);
             let selection = editor_selection(&mut harness);
             for read_only in [true, false] {
                 with_editor(&mut harness, |editor| {
-                    editor.set_config(editor.config().clone().with_read_only(read_only));
+                    editor.set_config(editor.config().clone().with_interaction(if read_only {
+                        Interaction::View
+                    } else {
+                        Interaction::Edit
+                    }));
                 });
                 if command_path {
                     harness
@@ -1156,8 +1170,7 @@ fn search_command_uses_smart_case_and_scrolls_to_matches() {
         .collect::<Vec<_>>()
         .join("\n");
     let config = EditorConfig::new()
-        .with_read_only(true)
-        .with_focusable(false)
+        .with_interaction(Interaction::Display)
         .with_wrap(WrapMode::None);
     let mut harness = build_harness(&text, config, 24, 5);
 
@@ -1203,8 +1216,7 @@ fn revealed_search_match_sits_three_rows_below_the_top() {
         .collect::<Vec<_>>()
         .join("\n");
     let config = EditorConfig::new()
-        .with_read_only(true)
-        .with_focusable(false)
+        .with_interaction(Interaction::Display)
         .with_wrap(WrapMode::None);
     let mut harness = build_harness(&text, config, 24, 8);
 
@@ -1520,7 +1532,7 @@ canopy.bind("q", {
 fn read_only_editor_leaves_edit_keys_to_bindings() {
     let config = EditorConfig::new()
         .with_mode(EditMode::Text)
-        .with_read_only(true);
+        .with_interaction(Interaction::View);
     let mut harness = build_harness("text", config, 6, 1);
     harness
         .canopy

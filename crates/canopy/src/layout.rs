@@ -361,6 +361,7 @@ impl LayoutOverride {
     /// Set width to flex with the provided weight.
     ///
     /// A zero weight is rejected when the override is applied.
+    #[must_use]
     pub fn flex_horizontal(mut self, weight: u32) -> Self {
         self.width = Some(Sizing::Flex(weight));
         self
@@ -368,17 +369,20 @@ impl LayoutOverride {
     /// Set height to flex with the provided weight.
     ///
     /// A zero weight is rejected when the override is applied.
+    #[must_use]
     pub fn flex_vertical(mut self, weight: u32) -> Self {
         self.height = Some(Sizing::Flex(weight));
         self
     }
     /// Set both outer width bounds.
+    #[must_use]
     pub fn fixed_width(mut self, value: u32) -> Self {
         self.min_width = Some(Some(value));
         self.max_width = Some(Some(value));
         self
     }
     /// Set both outer height bounds.
+    #[must_use]
     pub fn fixed_height(mut self, value: u32) -> Self {
         self.min_height = Some(Some(value));
         self.max_height = Some(Some(value));
@@ -455,6 +459,7 @@ impl Layout {
     /// Set width to flex with the provided weight.
     ///
     /// A zero weight is rejected when the layout is applied.
+    #[must_use]
     pub fn flex_horizontal(mut self, weight: u32) -> Self {
         self.width = Sizing::Flex(weight);
         self
@@ -463,48 +468,56 @@ impl Layout {
     /// Set height to flex with the provided weight.
     ///
     /// A zero weight is rejected when the layout is applied.
+    #[must_use]
     pub fn flex_vertical(mut self, weight: u32) -> Self {
         self.height = Sizing::Flex(weight);
         self
     }
 
     /// Set the minimum outer width.
+    #[must_use]
     pub fn min_width(mut self, n: u32) -> Self {
         self.min_width = Some(n);
         self
     }
 
     /// Set the maximum outer width.
+    #[must_use]
     pub fn max_width(mut self, n: u32) -> Self {
         self.max_width = Some(n);
         self
     }
 
     /// Bound the outer width by a fraction of the parent's width budget.
+    #[must_use]
     pub fn max_width_fraction(mut self, fraction: Fraction) -> Self {
         self.max_width_fraction = Some(fraction);
         self
     }
 
     /// Set the minimum outer height.
+    #[must_use]
     pub fn min_height(mut self, n: u32) -> Self {
         self.min_height = Some(n);
         self
     }
 
     /// Set the maximum outer height.
+    #[must_use]
     pub fn max_height(mut self, n: u32) -> Self {
         self.max_height = Some(n);
         self
     }
 
     /// Set the horizontal measurement overflow policy.
+    #[must_use]
     pub fn overflow_x(mut self, policy: MeasureOverflow) -> Self {
         self.overflow_x = policy;
         self
     }
 
     /// Set the vertical measurement overflow policy.
+    #[must_use]
     pub fn overflow_y(mut self, policy: MeasureOverflow) -> Self {
         self.overflow_y = policy;
         self
@@ -517,58 +530,68 @@ impl Layout {
     }
 
     /// Convenience: fixed outer width without a `Fixed` enum.
+    #[must_use]
     pub fn fixed_width(self, n: u32) -> Self {
         self.min_width(n).max_width(n)
     }
 
     /// Convenience: fixed outer height without a `Fixed` enum.
+    #[must_use]
     pub fn fixed_height(self, n: u32) -> Self {
         self.min_height(n).max_height(n)
     }
 
     /// Set padding edges.
+    #[must_use]
     pub fn padding(mut self, edges: Edges) -> Self {
         self.padding = edges;
         self
     }
 
     /// Set the main-axis gap between children.
+    #[must_use]
     pub fn gap(mut self, n: u32) -> Self {
         self.gap = n;
         self
     }
 
     /// Set horizontal alignment of children within content area.
+    #[must_use]
     pub fn align_horizontal(mut self, align: Align) -> Self {
         self.align_horizontal = align;
         self
     }
 
     /// Set vertical alignment of children within content area.
+    #[must_use]
     pub fn align_vertical(mut self, align: Align) -> Self {
         self.align_vertical = align;
         self
     }
 
     /// Center children both horizontally and vertically.
+    #[must_use]
     pub fn align_center(self) -> Self {
         self.align_horizontal(Align::Center)
             .align_vertical(Align::Center)
     }
 
     /// Set the layout direction.
+    #[must_use]
     pub fn direction(mut self, direction: Direction) -> Self {
         self.direction = direction;
         self
     }
 
     /// Set width sizing strategy directly.
+    #[must_use]
     pub fn width(mut self, sizing: Sizing) -> Self {
         self.width = sizing;
         self
     }
 
     /// Set height sizing strategy directly.
+    #[must_use]
     pub fn height(mut self, sizing: Sizing) -> Self {
         self.height = sizing;
         self

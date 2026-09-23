@@ -104,18 +104,21 @@ impl Border {
     }
 
     /// Build a box with a specified glyph set.
+    #[must_use]
     pub fn with_glyphs(mut self, glyphs: BoxGlyphs) -> Self {
         self.glyphs = glyphs;
         self
     }
 
     /// Enable interior fill using the default fill style name.
+    #[must_use]
     pub fn with_fill(mut self) -> Self {
         self.fill_style = Some("fill".to_string());
         self
     }
 
     /// Set the border paint role while preserving inherited component layers.
+    #[must_use]
     pub fn with_border_style(mut self, style: impl Into<String>) -> Self {
         self.border_style = style.into();
         self

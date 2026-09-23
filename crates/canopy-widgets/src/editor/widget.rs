@@ -273,7 +273,7 @@ impl Editor {
     /// Every path that changes buffer contents goes through this accessor, so
     /// read-only is decided in one place instead of at each call site.
     pub(super) fn editable(&mut self) -> Option<&mut TextBuffer> {
-        if self.config.read_only {
+        if self.config.interaction.read_only() {
             return None;
         }
         Some(&mut self.buffer)
@@ -500,7 +500,7 @@ impl Editor {
 
     /// Delete the grapheme under the cursor and update yank register.
     pub(super) fn delete_char_forward(&mut self) -> bool {
-        if self.config.read_only {
+        if self.config.interaction.read_only() {
             return false;
         }
         let cursor = self.buffer.cursor();
@@ -539,7 +539,7 @@ impl Editor {
 
     /// Classify one text-entry key without running its edit.
     fn text_command(&self, key: key::Key) -> Option<TextCommand> {
-        if self.config.read_only && Self::is_text_edit_key(key) {
+        if self.config.interaction.read_only() && Self::is_text_edit_key(key) {
             return None;
         }
         Some(match key.key {
@@ -639,13 +639,13 @@ impl Editor {
                     // Every other key commits the active transaction before it
                     // bubbles, including Esc. A read-only edit key returns
                     // before the commit.
-                    if !(self.config.read_only && Self::is_text_edit_key(*key)) {
+                    if !(self.config.interaction.read_only() && Self::is_text_edit_key(*key)) {
                         self.commit_text_entry_transaction();
                     }
                     EventOutcome::Ignore
                 }
             },
-            Event::Paste(_) if self.config.read_only => EventOutcome::Ignore,
+            Event::Paste(_) if self.config.interaction.read_only() => EventOutcome::Ignore,
             Event::Paste(content) => {
                 self.begin_text_entry_transaction();
                 self.handle_insert_text(content);
@@ -744,11 +744,12 @@ impl Editor {
             // The cursor marks the line the user would edit. An editor that
             // declines focus is a display with no cursor to place, so its
             // gutter marks no current line.
-            let style = if self.config.focusable && line_idx == self.buffer.cursor().line {
-                "line-number/current"
-            } else {
-                "line-number"
-            };
+            let style =
+                if self.config.interaction.focusable() && line_idx == self.buffer.cursor().line {
+                    "line-number/current"
+                } else {
+                    "line-number"
+                };
             ctx.r.text(style, gutter_line, &number_text)?;
         }
 
@@ -1054,7 +1055,7 @@ impl Editor {
 
 impl Widget for Editor {
     fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
-        self.config.focusable
+        self.config.interaction.focusable()
     }
 
     fn cursor(&self) -> Option<cursor::Cursor> {
