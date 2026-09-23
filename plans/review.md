@@ -2387,7 +2387,10 @@ Each stage also updates the docs it touches.
   `styles.md`, and add the `AGENTS.md` map.
   - `styles.md` was updated with each styling change (C31, C32, C40); the
     Public API section now lists the widgets' module rule too.
-- [ ] C50 docs (fh): update `architecture.md`, `README.md`, and `find.md` to
+- [x] C50 docs (fh): update `architecture.md`, `README.md`, and `find.md` to
   the vocabulary.
+  - Most listed lines were already rewritten by the changes that renamed
+    their subjects; this pass fixed "dot entries", the config-home
+    paragraph, and the API mode.
 - [ ] Final validation: all captures are current in both repositories, and
   the checks, tests, and smoke suites pass in both.
