@@ -915,7 +915,7 @@ impl Editor {
     /// spanning lines; see [`SearchState::set_matches`]. An empty set clears
     /// the search. Unlike [`Self::search`], the ranges need not come from a
     /// literal query, so callers can highlight regular-expression matches.
-    pub fn highlight_matches(&mut self, ctx: &mut dyn Context, matches: Vec<TextRange>) {
+    pub fn set_matches(&mut self, ctx: &mut dyn Context, matches: Vec<TextRange>) {
         if matches.is_empty() {
             self.search = SearchState::new();
             return;

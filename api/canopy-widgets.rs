@@ -112,7 +112,7 @@ pub mod canopy_widgets {
             /// spanning lines; see [`SearchState::set_matches`]. An empty set clears
             /// the search. Unlike [`Self::search`], the ranges need not come from a
             /// literal query, so callers can highlight regular-expression matches.
-            pub fn highlight_matches(&mut self, ctx: &mut dyn Context, matches: Vec<TextRange>) {}
+            pub fn set_matches(&mut self, ctx: &mut dyn Context, matches: Vec<TextRange>) {}
 
             /// Install a syntax highlighter.
             ///
@@ -667,7 +667,7 @@ pub mod canopy_widgets {
 
         impl TerminalConfig {
             /// Configure the command argv to run instead of the default shell.
-            pub fn with_command<I, S>(self, command: I) -> Self
+            pub fn with_program<I, S>(self, command: I) -> Self
             where
                 I: IntoIterator<Item = S>,
                 S: Into<String>, {
@@ -1031,7 +1031,7 @@ pub mod canopy_widgets {
     /// Opening and navigation scroll the highlighted row into view after layout.
     pub struct Dropdown<T>
     where
-        T: Label, {}
+        T: ItemLabel, {}
 
     /// A frame around an element with an optional title and scroll positions.
     ///
@@ -1096,7 +1096,7 @@ pub mod canopy_widgets {
     #[derive(Default)]
     pub struct Picker<T>
     where
-        T: Label, {}
+        T: ItemLabel, {}
 
     /// The filter field under a picker's list.
     ///
@@ -1115,7 +1115,7 @@ pub mod canopy_widgets {
     #[derive(Default)]
     pub struct PickerList<T>
     where
-        T: Label, {}
+        T: ItemLabel, {}
 
     /// The expensive parts of a diff view, ready to adopt without recomputation.
     ///
@@ -1185,7 +1185,7 @@ pub mod canopy_widgets {
     /// [`Selector::show`], which reinstalls both the items and the choice.
     pub struct Selector<T>
     where
-        T: Label, {}
+        T: ItemLabel, {}
 
     /// A single-line status bar for the top or bottom edge of an application.
     ///
@@ -1251,7 +1251,7 @@ pub mod canopy_widgets {
     }
 
     /// An item that renders as one line of text.
-    pub trait Label {
+    pub trait ItemLabel {
         /// Return the display label for this item.
         fn label(&self) -> &str;
     }
@@ -1322,10 +1322,6 @@ pub mod canopy_widgets {
 
         /// Set the border paint role while preserving inherited component layers.
         pub fn with_border_style(self, style: impl Into<String>) -> Self {}
-    }
-
-    impl CommandNode for Border {
-        fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
     }
 
     impl Widget for Border {
@@ -1424,9 +1420,6 @@ pub mod canopy_widgets {
         /// @param delta Panes to move; negative values move left.
         pub fn focus_column(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {}
 
-        /// Return the scrollbar glyphs these columns draw with.
-        pub fn scrollbar_glyphs(&self) -> ScrollbarGlyphs {}
-
         /// Build a positional call with typed user arguments.
         pub fn call_focus_column(delta: i32) -> canopy::commands::CommandCall {}
 
@@ -1489,12 +1482,6 @@ pub mod canopy_widgets {
         /// Return the answer that takes the keyboard when the dialog opens, or an
         /// error before it mounts.
         pub fn initial_focus(&self) -> Result<NodeId> {}
-
-        /// Return the question, or an error before it mounts.
-        ///
-        /// This is the dialog's body, not its initial focus. Use
-        /// [`Confirm::initial_focus`] when opening a modal.
-        pub fn body(&self) -> Result<NodeId> {}
 
         /// Set what each answer does, before the dialog opens.
         ///
@@ -1572,10 +1559,6 @@ pub mod canopy_widgets {
         pub fn scope(&self) -> Scope {}
 
         #[must_use]
-        /// Return the display strategy.
-        pub fn strategy(&self) -> Strategy {}
-
-        #[must_use]
         /// Return the rows for the current scope.
         pub fn rows(&self) -> &[DiffRow] {}
 
@@ -1599,21 +1582,12 @@ pub mod canopy_widgets {
         /// up.
         pub fn page(&mut self, c: &mut dyn Context, delta: i32) {}
 
-        /// Replace the diff, discarding highlight state.
-        pub fn set_diff(&mut self, diff: Diff) {}
-
         /// Replace the view with an already computed diff.
         pub fn set_prepared(&mut self, prepared: PreparedDiff) {}
 
         /// Scroll by one line or column in the specified direction.
         /// @param dir The direction to scroll.
         pub fn scroll(&mut self, c: &mut dyn Context, dir: ScrollDirection) {}
-
-        /// Set the display scope and rebuild the rows.
-        pub fn set_scope(&mut self, scope: Scope) {}
-
-        /// Set the display strategy.
-        pub fn set_strategy(&mut self, strategy: Strategy) {}
 
         /// Build a positional call with typed user arguments.
         pub fn call_page(delta: i32) -> canopy::commands::CommandCall {}
@@ -1634,45 +1608,6 @@ pub mod canopy_widgets {
         fn measure(&self, c: MeasureConstraints) -> Measurement {}
 
         fn name(&self) -> NodeName {}
-
-        fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
-    }
-
-    impl CommandNode for Frame {
-        fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
-    }
-
-    impl Frame {
-        /// Build a frame with a specified glyph set.
-        pub fn with_glyphs(self, glyphs: BoxGlyphs) -> Self {}
-
-        /// Build a frame with a specified title.
-        pub fn with_title(self, title: impl Into<String>) -> Self {}
-
-        /// Build a frame with replaced scrollbar glyphs.
-        ///
-        /// Rebuilding the thumbs drops a drag in progress, so configure glyphs
-        /// before mounting.
-        pub fn with_scrollbar_glyphs(self, glyphs: ScrollbarGlyphs) -> Self {}
-
-        /// Construct a frame.
-        pub fn new() -> Self {}
-
-        /// Replace the title.
-        pub fn set_title(&mut self, title: impl Into<String>) {}
-
-        /// Return the scrollbar glyphs this frame draws with.
-        pub fn scrollbar_glyphs(&self) -> ScrollbarGlyphs {}
-    }
-
-    impl Widget for Frame {
-        fn layout(&self) -> Layout {}
-
-        fn name(&self) -> NodeName {}
-
-        fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {}
-
-        fn owns_scrollbars(&self) -> bool {}
 
         fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
     }
@@ -2205,6 +2140,38 @@ pub mod canopy_widgets {
         pub fn changed(&self) -> bool {}
     }
 
+    impl Frame {
+        /// Build a frame with a specified glyph set.
+        pub fn with_glyphs(self, glyphs: BoxGlyphs) -> Self {}
+
+        /// Build a frame with a specified title.
+        pub fn with_title(self, title: impl Into<String>) -> Self {}
+
+        /// Build a frame with replaced scrollbar glyphs.
+        ///
+        /// Rebuilding the thumbs drops a drag in progress, so configure glyphs
+        /// before mounting.
+        pub fn with_scrollbar_glyphs(self, glyphs: ScrollbarGlyphs) -> Self {}
+
+        /// Construct a frame.
+        pub fn new() -> Self {}
+
+        /// Replace the title.
+        pub fn set_title(&mut self, title: impl Into<String>) {}
+    }
+
+    impl Widget for Frame {
+        fn layout(&self) -> Layout {}
+
+        fn name(&self) -> NodeName {}
+
+        fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {}
+
+        fn owns_scrollbars(&self) -> bool {}
+
+        fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
+    }
+
     impl KeyHint {
         /// Construct a hint for the key that offers the intent `name`.
         pub fn for_intent(name: IntentName, label: impl Into<String>) -> Self {}
@@ -2411,14 +2378,14 @@ pub mod canopy_widgets {
 
     impl<T> CommandNode for Dropdown<T>
     where
-        T: 'static + Label,
+        T: 'static + ItemLabel,
     {
         fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
     }
 
     impl<T> Dropdown<T>
     where
-        T: 'static + Label,
+        T: 'static + ItemLabel,
     {
         /// Collapse without changing selection.
         pub fn cancel(&mut self) -> Result<()> {}
@@ -2470,7 +2437,7 @@ pub mod canopy_widgets {
 
     impl<T> Widget for Dropdown<T>
     where
-        T: 'static + Label,
+        T: 'static + ItemLabel,
     {
         fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
@@ -2487,14 +2454,14 @@ pub mod canopy_widgets {
 
     impl<T> CommandNode for PickerList<T>
     where
-        T: 'static + Label,
+        T: 'static + ItemLabel,
     {
         fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
     }
 
     impl<T> PickerList<T>
     where
-        T: 'static + Label,
+        T: 'static + ItemLabel,
     {
         #[must_use]
         /// Build an empty list.
@@ -2545,7 +2512,7 @@ pub mod canopy_widgets {
         pub fn start_filter(&mut self, context: &mut dyn Context) -> Result<()> {}
 
         /// Show `items` under `label`, dropping any filter.
-        pub fn show(
+        pub fn set_items(
             &mut self,
             context: &mut dyn Context,
             label: String,
@@ -2609,14 +2576,14 @@ pub mod canopy_widgets {
 
     impl<T> Register for PickerList<T>
     where
-        T: 'static + Label,
+        T: 'static + ItemLabel,
     {
         fn register(setup: &mut Setup) -> Result<()> {}
     }
 
     impl<T> Widget for PickerList<T>
     where
-        T: 'static + Label,
+        T: 'static + ItemLabel,
     {
         fn accept_focus(&self, _context: &dyn ViewContext) -> bool {}
 
@@ -2641,14 +2608,14 @@ pub mod canopy_widgets {
 
     impl<T> CommandNode for Selector<T>
     where
-        T: 'static + Label,
+        T: 'static + ItemLabel,
     {
         fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
     }
 
     impl<T> Selector<T>
     where
-        T: 'static + Label,
+        T: 'static + ItemLabel,
     {
         #[must_use]
         /// Replace the choice glyphs, unchosen first.
@@ -2691,7 +2658,7 @@ pub mod canopy_widgets {
         ///
         /// A choice outside the new items is dropped. The selection moves to the
         /// choice, or to the first item without one.
-        pub fn show(&mut self, items: Vec<T>, chosen: Option<usize>) {}
+        pub fn set_items(&mut self, items: Vec<T>, chosen: Option<usize>) {}
 
         /// Select the first item.
         pub fn select_first(&mut self, c: &mut dyn Context) -> Result<()> {}
@@ -2732,7 +2699,7 @@ pub mod canopy_widgets {
 
     impl<T> Widget for Selector<T>
     where
-        T: 'static + Label,
+        T: 'static + ItemLabel,
     {
         fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
@@ -2751,7 +2718,7 @@ pub mod canopy_widgets {
 
     impl<T> Picker<T>
     where
-        T: 'static + Label,
+        T: 'static + ItemLabel,
     {
         #[must_use]
         /// Build a picker whose rows drop the given end when they do not fit.
@@ -2805,7 +2772,7 @@ pub mod canopy_widgets {
         /// list.
         ///
         /// The filter is dropped, so a picker always opens on the whole list.
-        pub fn show(
+        pub fn set_items(
             &mut self,
             context: &mut dyn Context,
             title: &str,
@@ -2817,7 +2784,7 @@ pub mod canopy_widgets {
 
     impl<T> Widget for Picker<T>
     where
-        T: 'static + Label,
+        T: 'static + ItemLabel,
     {
         fn layout(&self) -> Layout {}
 
@@ -2879,7 +2846,7 @@ pub mod canopy_widgets {
         pub fn keys(&self) -> &[K] {}
 
         /// Build a list that dispatches a command when a row is activated.
-        pub fn with_on_activate(self, command: CommandCall) -> Self {}
+        pub fn with_command(self, command: CommandCall) -> Self {}
 
         /// Build a list with a list-level selection indicator.
         /// Repeat controls whether the indicator renders on every visible line.

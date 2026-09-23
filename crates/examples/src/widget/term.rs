@@ -182,7 +182,7 @@ impl Widget for TermDemo {
                 frame_id,
                 Terminal::new(
                     TerminalConfig::new()
-                        .with_command([label.to_string()])
+                        .with_program([label.to_string()])
                         .with_cwd(cwd.clone()),
                 ),
             )?;

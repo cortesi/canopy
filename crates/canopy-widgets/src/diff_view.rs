@@ -207,7 +207,8 @@ impl DiffView {
     /// Set the display strategy.
     #[must_use]
     pub fn with_strategy(mut self, strategy: Strategy) -> Self {
-        self.set_strategy(strategy);
+        self.strategy = strategy;
+        self.ensure_side_rows();
         self
     }
 
@@ -255,28 +256,10 @@ impl DiffView {
         &self.rows
     }
 
-    /// Return the display strategy.
-    #[must_use]
-    pub fn strategy(&self) -> Strategy {
-        self.strategy
-    }
-
     /// Return the display scope.
     #[must_use]
     pub fn scope(&self) -> Scope {
         self.scope
-    }
-
-    /// Replace the diff, discarding highlight state.
-    pub fn set_diff(&mut self, diff: Diff) {
-        self.diff = diff;
-        self.rebuild();
-    }
-
-    /// Set the display strategy.
-    pub fn set_strategy(&mut self, strategy: Strategy) {
-        self.strategy = strategy;
-        self.ensure_side_rows();
     }
 
     /// Pair the rows for side-by-side layout, once, when that layout needs it.
@@ -284,12 +267,6 @@ impl DiffView {
         if self.strategy == Strategy::SideBySide && self.side_rows.is_empty() {
             self.side_rows = side_rows(&self.rows);
         }
-    }
-
-    /// Set the display scope and rebuild the rows.
-    pub fn set_scope(&mut self, scope: Scope) {
-        self.scope = scope;
-        self.rebuild_rows();
     }
 
     #[command]

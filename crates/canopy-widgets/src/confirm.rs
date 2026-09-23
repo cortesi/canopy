@@ -178,7 +178,7 @@ impl Confirm {
     ///
     /// This is the dialog's body, not its initial focus. Use
     /// [`Confirm::initial_focus`] when opening a modal.
-    pub fn body(&self) -> Result<NodeId> {
+    fn body(&self) -> Result<NodeId> {
         self.body
             .ok_or_else(|| Error::NotFound("confirm body".to_string()))
     }

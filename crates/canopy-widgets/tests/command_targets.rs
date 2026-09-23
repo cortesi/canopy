@@ -158,7 +158,7 @@ mod tests {
         let row = canopy.with_context(first, |ctx| {
             let list = ctx.add_child(
                 ctx.node_id(),
-                List::<Text>::new().with_on_activate(
+                List::<Text>::new().with_command(
                     Counter::spec_activate()
                         .call()
                         .with_target(CommandTarget::Exact(second.into())),

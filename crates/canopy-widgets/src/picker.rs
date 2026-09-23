@@ -30,7 +30,7 @@ use canopy::{
 };
 
 use crate::{
-    Dialog, Label,
+    Dialog, ItemLabel,
     frame::Frame,
     input::register_clear_intent,
     row_cursor::{RowCursor, label_rows, widest_label},
@@ -75,7 +75,7 @@ impl Truncate {
 /// within the same margin.
 pub struct Picker<T>
 where
-    T: Label,
+    T: ItemLabel,
 {
     /// The framed dialog, once mounted, which an overlay covers and dims.
     dialog: Option<NodeId>,
@@ -90,7 +90,7 @@ where
 
 impl<T> Default for Picker<T>
 where
-    T: Label + 'static,
+    T: ItemLabel + 'static,
 {
     fn default() -> Self {
         Self::new()
@@ -99,7 +99,7 @@ where
 
 impl<T> Picker<T>
 where
-    T: Label + 'static,
+    T: ItemLabel + 'static,
 {
     /// Build an empty picker.
     #[must_use]
@@ -126,7 +126,7 @@ where
     /// list.
     ///
     /// The filter is dropped, so a picker always opens on the whole list.
-    pub fn show(
+    pub fn set_items(
         &mut self,
         context: &mut dyn Context,
         title: &str,
@@ -136,7 +136,7 @@ where
         let list = self.typed_list()?;
         let title = title.to_owned();
         context.with_widget_mut(list, |list: &mut PickerList<T>, context| {
-            list.show(context, title, placeholder, items)
+            list.set_items(context, title, placeholder, items)
         })
     }
 
@@ -205,7 +205,7 @@ where
 
 impl<T> Widget for Picker<T>
 where
-    T: Label + 'static,
+    T: ItemLabel + 'static,
 {
     fn layout(&self) -> Layout {
         // A stack centres the dialog over the dimmed application, with any
@@ -414,7 +414,7 @@ impl Widget for PickerFilter {
 /// count, and writes the filter into the field below it.
 pub struct PickerList<T>
 where
-    T: Label,
+    T: ItemLabel,
 {
     /// Every item the host supplied.
     items: Vec<T>,
@@ -443,7 +443,7 @@ where
 #[derive_commands]
 impl<T> PickerList<T>
 where
-    T: Label + 'static,
+    T: ItemLabel + 'static,
 {
     /// Build an empty list.
     #[must_use]
@@ -537,7 +537,7 @@ where
     }
 
     /// Show `items` under `label`, dropping any filter.
-    pub fn show(
+    pub fn set_items(
         &mut self,
         context: &mut dyn Context,
         label: String,
@@ -594,7 +594,7 @@ where
             .shown
             .iter()
             .filter_map(|&item| self.items.get(item))
-            .map(Label::label);
+            .map(ItemLabel::label);
         let widest = widest_label(labels.chain(Some(self.placeholder)));
         self.fitted_width = widest.saturating_add(ROW_PADDING);
         // A filter that hides the selected row pulls the selection back into
@@ -718,7 +718,7 @@ enum FilterCommand {
 
 impl<T> Register for PickerList<T>
 where
-    T: Label + 'static,
+    T: ItemLabel + 'static,
 {
     fn register(setup: &mut Setup) -> Result<()> {
         setup.add_commands::<Self>()?;
@@ -728,7 +728,7 @@ where
 
 impl<T> Default for PickerList<T>
 where
-    T: Label + 'static,
+    T: ItemLabel + 'static,
 {
     fn default() -> Self {
         Self::new()
@@ -737,7 +737,7 @@ where
 
 impl<T> Widget for PickerList<T>
 where
-    T: Label + 'static,
+    T: ItemLabel + 'static,
 {
     fn layout(&self) -> Layout {
         Layout::fill()
@@ -845,7 +845,7 @@ mod tests {
         harness.render()?;
         let items: Vec<String> = items.iter().map(|item| (*item).to_string()).collect();
         harness.with_root_widget_context(|picker: &mut Picker<String>, context| {
-            picker.show(context, "Bookmarks", "<no bookmarks>", items)
+            picker.set_items(context, "Bookmarks", "<no bookmarks>", items)
         })?;
         harness.render()?;
         Ok(harness)
@@ -1449,7 +1449,7 @@ mod tests {
                 .build()?;
             harness.render()?;
             harness.with_root_widget_context(|picker: &mut Picker<String>, context| {
-                picker.show(
+                picker.set_items(
                     context,
                     "Bookmarks",
                     "<no bookmarks>",

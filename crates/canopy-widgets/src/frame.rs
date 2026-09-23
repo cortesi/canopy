@@ -1,5 +1,5 @@
 use canopy::{
-    Context, EventOutcome, NodeId, NodeName, ViewContext, Widget, derive_commands,
+    Context, EventOutcome, NodeId, NodeName, ViewContext, Widget,
     error::Result,
     geom,
     geom::Rect,
@@ -34,7 +34,6 @@ pub struct Frame {
     horizontal: Scrollbar,
 }
 
-#[derive_commands]
 impl Frame {
     /// Construct a frame.
     pub fn new() -> Self {
@@ -66,11 +65,6 @@ impl Frame {
             Scrollbar::horizontal("frame/thumb", glyphs.thumb_horizontal)
                 .with_active("frame/thumb/active"),
         )
-    }
-
-    /// Return the scrollbar glyphs this frame draws with.
-    pub fn scrollbar_glyphs(&self) -> ScrollbarGlyphs {
-        self.scrollbar_glyphs
     }
 
     /// Build a frame with a specified glyph set.

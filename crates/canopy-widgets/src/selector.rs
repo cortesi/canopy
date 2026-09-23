@@ -13,7 +13,7 @@ use canopy::{
 };
 
 use crate::{
-    label::Label,
+    label::ItemLabel,
     row_cursor::{RowCursor, is_primary_click, label_rows, widest_label},
 };
 
@@ -28,7 +28,7 @@ const CHOICE_GLYPHS: (&str, &str) = ("( ) ", "(•) ");
 /// [`Selector::show`], which reinstalls both the items and the choice.
 pub struct Selector<T>
 where
-    T: Label,
+    T: ItemLabel,
 {
     /// Available items.
     items: Vec<T>,
@@ -45,7 +45,7 @@ where
 #[derive_commands]
 impl<T> Selector<T>
 where
-    T: Label + 'static,
+    T: ItemLabel + 'static,
 {
     /// Create a new selector with the given items and no choice.
     pub fn new(items: Vec<T>) -> Self {
@@ -88,7 +88,7 @@ where
     ///
     /// A choice outside the new items is dropped. The selection moves to the
     /// choice, or to the first item without one.
-    pub fn show(&mut self, items: Vec<T>, chosen: Option<usize>) {
+    pub fn set_items(&mut self, items: Vec<T>, chosen: Option<usize>) {
         self.items = items;
         self.cursor = RowCursor::new(self.items.len());
         self.chosen = chosen.filter(|index| *index < self.items.len());
@@ -178,7 +178,7 @@ where
     /// changes the width.
     fn content_size(&self) -> Size {
         let glyph_width = text::width(self.glyphs.0).max(text::width(self.glyphs.1));
-        let max_label_width = widest_label(self.items.iter().map(Label::label));
+        let max_label_width = widest_label(self.items.iter().map(ItemLabel::label));
         let width = glyph_width.saturating_add(max_label_width);
         let height = u32::try_from(self.items.len()).unwrap_or(u32::MAX);
         Size::new(width, height)
@@ -197,7 +197,7 @@ where
 
 impl<T> Widget for Selector<T>
 where
-    T: Label + 'static,
+    T: ItemLabel + 'static,
 {
     fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
         if let Event::Mouse(mouse_event) = event {
@@ -337,7 +337,7 @@ mod tests {
     #[test]
     fn show_replaces_items_and_the_choice() {
         let mut selector = Selector::new(vec!["a".to_string(), "b".to_string()]);
-        selector.show(
+        selector.set_items(
             vec!["x".to_string(), "y".to_string(), "z".to_string()],
             Some(2),
         );
@@ -347,7 +347,7 @@ mod tests {
             2,
             "the selection starts on the choice"
         );
-        selector.show(vec!["x".to_string()], Some(9));
+        selector.set_items(vec!["x".to_string()], Some(9));
         assert_eq!(
             selector.chosen_index(),
             None,
@@ -363,7 +363,7 @@ mod tests {
             .with_label("Sort")
             .with_glyphs("· ", "✓ ");
         assert_eq!(selector.glyphs, ("· ", "✓ "));
-        selector.show(vec!["Size".to_string(), "Modified".to_string()], Some(1));
+        selector.set_items(vec!["Size".to_string(), "Modified".to_string()], Some(1));
         let semantics = CanopyBuilder::new()
             .build()?
             .with_root_view(|ctx| selector.semantics(ctx))?;

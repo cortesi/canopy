@@ -255,7 +255,7 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
     }
 
     /// Build a list that dispatches a command when a row is activated.
-    pub fn with_on_activate(mut self, command: CommandCall) -> Self {
+    pub fn with_command(mut self, command: CommandCall) -> Self {
         self.on_activate = Some(command);
         self
     }
@@ -970,7 +970,7 @@ mod tests {
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
             let list = ctx.add_child(
                 ctx.node_id(),
-                List::<Text>::new().with_on_activate(Self::spec_activate().call()),
+                List::<Text>::new().with_command(Self::spec_activate().call()),
             )?;
             ctx.with_widget_mut::<List<Text>, _>(list, |list, ctx| {
                 list.append(ctx, Text::new("First row"))?;
@@ -1347,7 +1347,7 @@ mod tests {
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
             let list = ctx.add_child(
                 ctx.node_id(),
-                List::<Text, i64>::new().with_on_activate(
+                List::<Text, i64>::new().with_command(
                     Self::spec_activate()
                         .call()
                         .with_target(CommandTarget::Exact(ctx.node_id())),

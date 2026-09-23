@@ -338,7 +338,7 @@ fn binding_groups(rows: &[BindingRow]) -> Vec<BindingGroup> {
 /// Pack key labels into rows no wider than [`KEY_ROW_WIDTH`], with at least one
 /// label on each row.
 ///
-/// A comma and a space separate keys, matching the help footer's guides.
+/// A comma and a space separate keys.
 fn key_rows(keys: &[String]) -> Vec<String> {
     let mut rows: Vec<String> = Vec::new();
     for key in keys {

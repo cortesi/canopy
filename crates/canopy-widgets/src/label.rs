@@ -1,18 +1,18 @@
 //! Display labels for list-style widgets.
 
 /// An item that renders as one line of text.
-pub trait Label {
+pub trait ItemLabel {
     /// Return the display label for this item.
     fn label(&self) -> &str;
 }
 
-impl Label for String {
+impl ItemLabel for String {
     fn label(&self) -> &str {
         self
     }
 }
 
-impl Label for &str {
+impl ItemLabel for &str {
     fn label(&self) -> &str {
         self
     }

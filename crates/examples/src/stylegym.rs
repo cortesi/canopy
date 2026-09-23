@@ -21,7 +21,7 @@ use canopy::{
     tree::ChildSlot,
 };
 use canopy_widgets::{
-    Button, Container, Dropdown, Frame, Input, Label, Root, Scroll, Selector, Tabs,
+    Button, Container, Dropdown, Frame, Input, ItemLabel, Root, Scroll, Selector, Tabs,
     editor::{Editor, EditorConfig, LineNumbers, WrapMode},
     highlight::SyntectHighlighter,
 };
@@ -219,7 +219,7 @@ pub(crate) struct ThemeOption {
     pub builder: fn() -> Palette,
 }
 
-impl Label for ThemeOption {
+impl ItemLabel for ThemeOption {
     fn label(&self) -> &str {
         self.name
     }
@@ -234,7 +234,7 @@ pub(crate) struct EffectOption {
     pub effect: Option<Effect>,
 }
 
-impl Label for EffectOption {
+impl ItemLabel for EffectOption {
     fn label(&self) -> &str {
         self.name
     }

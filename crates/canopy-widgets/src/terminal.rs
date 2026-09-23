@@ -111,7 +111,7 @@ impl TerminalConfig {
     }
 
     /// Configure the command argv to run instead of the default shell.
-    pub fn with_command<I, S>(mut self, command: I) -> Self
+    pub fn with_program<I, S>(mut self, command: I) -> Self
     where
         I: IntoIterator<Item = S>,
         S: Into<String>,
@@ -1328,7 +1328,7 @@ mod tests {
         use std::{thread, time::Instant};
 
         let mut terminal =
-            Terminal::new(TerminalConfig::new().with_command(["sh", "-c", "exit 0"]));
+            Terminal::new(TerminalConfig::new().with_program(["sh", "-c", "exit 0"]));
         assert!(!terminal.exited(), "an unmounted terminal has no process");
         terminal.mount_session()?;
         let deadline = Instant::now() + Duration::from_secs(10);

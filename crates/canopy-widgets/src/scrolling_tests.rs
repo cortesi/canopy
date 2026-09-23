@@ -19,7 +19,7 @@ use canopy::{
 };
 
 use crate::{
-    Columns, Frame, List, Scroll, ScrollbarGlyphs, Selectable, THIN, Tabs,
+    Columns, Frame, List, Scroll, ScrollbarGlyphs, Selectable, Tabs,
     scrollbar::{ScrollTarget, scroll_target},
 };
 
@@ -757,26 +757,12 @@ fn trimmed_column_text(harness: &Harness, x: u32, height: u32) -> String {
 
 #[test]
 fn owners_draw_and_expose_their_configured_scrollbar_glyphs() -> Result<()> {
-    assert_eq!(Frame::new().scrollbar_glyphs(), THIN);
-    assert_eq!(Columns::new().scrollbar_glyphs(), THIN);
     let custom = ScrollbarGlyphs {
         thumb_vertical: 'T',
         thumb_horizontal: 't',
         track_vertical: '|',
         track_horizontal: '-',
     };
-    assert_eq!(
-        Frame::new()
-            .with_scrollbar_glyphs(custom)
-            .scrollbar_glyphs(),
-        custom
-    );
-    assert_eq!(
-        Columns::new()
-            .with_scrollbar_glyphs(custom)
-            .scrollbar_glyphs(),
-        custom
-    );
     // Twenty content columns less one gap leave panes of ten and nine.
     let (harness, _) = scene(21, 6, move |c| {
         let root = c.node_id();

@@ -91,7 +91,7 @@ pub use frame::Frame;
 pub use image_view::ImageView;
 pub use input::{CLEAR_INTENT, Input, ValueExposure, register_clear_intent};
 pub use keyed::KeyedChildren;
-pub use label::Label;
+pub use label::ItemLabel;
 pub use list::{AutoKey, List, Selectable};
 pub use picker::{Picker, PickerFilter, PickerList, Truncate};
 pub use root::Root;

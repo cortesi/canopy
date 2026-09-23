@@ -52,6 +52,10 @@ canopy.bind("ctrl-Right", {
 canopy.bind("a", { path = "inspector", description = "Focus app" }, command.root.focus_app())
 "#;
 
+/// Without developer tools there are no extra root bindings.
+#[cfg(not(feature = "devtools"))]
+const DEVTOOLS_BINDINGS: &str = "";
+
 /// Framework binding group used while contextual help is open.
 const HELP_BINDINGS: FrameworkBindingGroup = FrameworkBindingGroup::new("root.help");
 
@@ -343,16 +347,12 @@ impl Register for Root {
         setup.add_commands::<Self>()?;
         // Status-bar hints under the root follow the bindings.
         KeyHint::register(setup)?;
+        setup.register_default_bindings(
+            "root",
+            &format!("{DEFAULT_BINDINGS}\n{DEVTOOLS_BINDINGS}"),
+        )?;
         #[cfg(feature = "devtools")]
-        {
-            setup.register_default_bindings(
-                "root",
-                &format!("{DEFAULT_BINDINGS}\n{DEVTOOLS_BINDINGS}"),
-            )?;
-            Inspector::register(setup)?;
-        }
-        #[cfg(not(feature = "devtools"))]
-        setup.register_default_bindings("root", DEFAULT_BINDINGS)?;
+        Inspector::register(setup)?;
         Button::register(setup)?;
         Help::register(setup)?;
         register_help_bindings(setup)?;

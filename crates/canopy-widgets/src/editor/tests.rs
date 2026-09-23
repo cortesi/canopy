@@ -1215,7 +1215,7 @@ fn revealed_search_match_sits_three_rows_below_the_top() {
     assert_eq!(top, 21, "row 24 sits three below the top");
 
     let (matches, position, top) = run_search(&mut harness, |editor, ctx| {
-        editor.highlight_matches(
+        editor.set_matches(
             ctx,
             vec![TextRange::new(
                 TextPosition::new(1, 0),
@@ -1227,7 +1227,7 @@ fn revealed_search_match_sits_three_rows_below_the_top() {
     assert_eq!(top, 0, "matches near the start clamp to the top");
 
     let (matches, position, top) = run_search(&mut harness, |editor, ctx| {
-        editor.highlight_matches(
+        editor.set_matches(
             ctx,
             vec![TextRange::new(
                 TextPosition::new(39, 0),

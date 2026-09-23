@@ -1,5 +1,5 @@
 use canopy::{
-    NodeName, ViewContext, Widget, derive_commands,
+    NodeName, ViewContext, Widget,
     error::Result,
     geom,
     layout::{Edges, Layout},
@@ -93,7 +93,6 @@ pub struct Border {
     fill_style: Option<String>,
 }
 
-#[derive_commands]
 impl Border {
     /// Construct a box.
     pub fn new() -> Self {

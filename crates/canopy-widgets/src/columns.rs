@@ -60,11 +60,6 @@ impl Columns {
             .with_track("columns/divider", glyphs.track_vertical)
     }
 
-    /// Return the scrollbar glyphs these columns draw with.
-    pub fn scrollbar_glyphs(&self) -> ScrollbarGlyphs {
-        self.glyphs
-    }
-
     /// Move focus to another displayed pane by a signed offset, wrapping
     /// around.
     ///

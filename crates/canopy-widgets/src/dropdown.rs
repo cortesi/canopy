@@ -12,7 +12,7 @@ use canopy::{
 };
 
 use crate::{
-    label::Label,
+    label::ItemLabel,
     row_cursor::{RowCursor, is_primary_click, label_rows, widest_label},
 };
 
@@ -23,7 +23,7 @@ use crate::{
 /// Opening and navigation scroll the highlighted row into view after layout.
 pub struct Dropdown<T>
 where
-    T: Label,
+    T: ItemLabel,
 {
     /// Available items.
     items: Vec<T>,
@@ -39,7 +39,7 @@ where
 #[derive_commands]
 impl<T> Dropdown<T>
 where
-    T: Label + 'static,
+    T: ItemLabel + 'static,
 {
     /// Create a new dropdown with the given items.
     ///
@@ -134,7 +134,7 @@ where
 
     /// Return the unclamped size required to render the current dropdown state.
     fn content_size(&self) -> Size {
-        let max_label_width = widest_label(self.items.iter().map(Label::label));
+        let max_label_width = widest_label(self.items.iter().map(ItemLabel::label));
         let width = max_label_width.saturating_add(2);
         let height = if self.expanded {
             u32::try_from(self.items.len()).unwrap_or(u32::MAX)
@@ -158,7 +158,7 @@ where
 
 impl<T> Widget for Dropdown<T>
 where
-    T: Label + 'static,
+    T: ItemLabel + 'static,
 {
     fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
         if let Event::Mouse(mouse_event) = event {
