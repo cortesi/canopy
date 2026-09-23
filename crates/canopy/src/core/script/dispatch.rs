@@ -1,10 +1,6 @@
 //! Command dispatch and call-into-Luau helpers.
 
-use std::{
-    collections::{BTreeMap, HashSet},
-    result::Result as StdResult,
-    time::Duration,
-};
+use std::{result::Result as StdResult, time::Duration};
 
 use ruau::{
     session::RootHandle,
@@ -17,45 +13,8 @@ use super::{
     runtime_error_to_canopy, scoped_to_arg_value, script_error_to_canopy, with_current_canopy,
 };
 
-/// Determine whether a map matches a command's named parameters.
-fn map_matches_named(spec: &CommandSpec, map: &BTreeMap<String, ArgValue>) -> bool {
-    if map.is_empty() {
-        return false;
-    }
-    let allowed = spec
-        .params
-        .iter()
-        .filter(|param| param.kind == commands::CommandParamKind::User)
-        .map(|param| commands::normalize_key(param.name))
-        .collect::<HashSet<_>>();
-    let mut matched = false;
-    for key in map.keys() {
-        let normalized = commands::normalize_key(key);
-        if allowed.contains(&normalized) {
-            matched = true;
-        } else {
-            return false;
-        }
-    }
-    matched
-}
-
-/// Build command arguments from converted script values.
-///
-/// A single map argument whose keys name the command's parameters binds by
-/// name; every other shape binds positionally.
-fn build_args_from_values(spec: &CommandSpec, mut values: Vec<ArgValue>) -> CommandArgs {
-    if values.len() != 1 {
-        return CommandArgs::Positional(values);
-    }
-    let arg = values.pop().expect("single argument checked above");
-    match arg {
-        ArgValue::Map(map) if map_matches_named(spec, &map) => CommandArgs::Named(map),
-        arg => CommandArgs::Positional(vec![arg]),
-    }
-}
-
-/// Dispatch a command using the active script context.
+/// Dispatch a command positionally from `node_id` using the active script
+/// context.
 pub(super) fn dispatch_command(
     scope: &Scope<'_>,
     spec: &'static CommandSpec,
@@ -63,30 +22,12 @@ pub(super) fn dispatch_command(
     values: Vec<ArgValue>,
 ) -> Result<ArgValue> {
     with_current_canopy(scope, |canopy, _| {
-        let call = spec.call_with(build_args_from_values(spec, values));
+        let call = spec.call_with(CommandArgs::Positional(values));
         commands::dispatch(&mut canopy.core, node_id, &call).map_err(error::Error::from)
     })
 }
 
-/// Dispatch a command by id using the current focus-relative context.
-pub(super) fn dispatch_command_by_name(
-    scope: &Scope<'_>,
-    name: &str,
-    node_id: Option<NodeId>,
-    values: Vec<ArgValue>,
-) -> Result<ArgValue> {
-    let (origin, spec) = with_current_canopy(scope, |canopy, origin| {
-        let spec = canopy.core.commands.get(name).ok_or_else(|| {
-            error::Error::from(commands::CommandError::UnknownCommand {
-                id: name.to_string(),
-            })
-        })?;
-        Ok((origin, spec))
-    })?;
-    dispatch_command(scope, spec, node_id.unwrap_or(origin), values)
-}
-
-/// Dispatch explicit arguments without the legacy single-map inference.
+/// Dispatch explicit arguments to an explicit target.
 pub(super) fn dispatch_explicit(
     scope: &Scope<'_>,
     name: &str,

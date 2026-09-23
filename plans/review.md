@@ -2260,7 +2260,7 @@ Each stage also updates the docs it touches.
 
 ### Stage 5: Scripting and automation surface
 
-- [ ] C25: positional owner functions. Delete `cmd`, `cmd_on`, and the
+- [x] C25: positional owner functions. Delete `cmd`, `cmd_on`, and the
   inference code, and rewrite the `scripting.md` Commands section.
 - [ ] C26:
   - Delete `screen`, `screen_cells`, and the unused lookups.

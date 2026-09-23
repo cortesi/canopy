@@ -83,20 +83,30 @@ unwinds.
 
 ## Commands
 
-Use explicit command targets in new scripts:
+A command is a typed operation that a widget type owns. Luau reaches it in two
+forms:
+
+- `owner.command(...)` runs the command now. It dispatches from the script
+  origin, which is the root for a top-level evaluation and the route node for
+  a binding.
+- `command.owner.command(...)` builds a `CommandCall` value and runs nothing.
+  A binding runs the call later.
+
+Both forms take positional arguments. A table is always one argument, even
+when its keys match parameter names.
+
+Three functions give an explicit target:
 
 - `canopy.call_exact(node, "owner::command", ...)` invokes only that owner.
-- `canopy.call_from(node, "owner::command", ...)` searches the origin subtree,
+- `canopy.call_from(node, "owner::command", ...)` searches the node's subtree,
   then its ancestors.
-- `canopy.call_focus("owner::command", ...)` resolves current focus at
-  invocation.
+- `canopy.call_focus("owner::command", ...)` resolves current focus when it
+  runs.
 
-These functions always use positional arguments. A table remains one argument,
-including an empty table or a map whose keys match parameter names. Use
-`canopy.call_named(id, fields, target?)` for explicit named arguments:
+`canopy.call_named(id, fields, target?)` takes named arguments:
 
 ```luau
-canopy.call_from(canopy.root(), "app::configure", { options = "dark" })
+app.configure({ options = "dark" })
 canopy.call_named("app::configure", { options = { options = "dark" } }, {
     kind = "exact", node = app_node,
 })
@@ -104,16 +114,9 @@ canopy.call_named("app::configure", { options = { options = "dark" } }, {
 
 Target tables accept `{ kind = "exact", node = id }`,
 `{ kind = "from", node = id }`, or `{ kind = "focus" }`. Omission uses the
-current script origin.
-`canopy.commands(target?)` uses the same target policies. Exact dispatch
-rejects stale nodes and wrong owners. It never searches for a replacement
-target.
-
-Legacy `owner.command(...)`, `canopy.cmd(id, ...)`, and `canopy.cmd_on(node,
-id, ...)` retain their decoding rules. A single table is interpreted as named
-arguments when its keys match user parameters. `cmd_on` retains relative
-subtree-and-ancestor search. Unqualified calls use the script origin, which is
-root for top-level evaluation and the route node for bindings.
+script origin. `canopy.commands(target?)` uses the same target policies. Exact
+dispatch rejects stale nodes and wrong owners. It never searches for a
+replacement target.
 
 Discovery reports resolution, eligibility, disabled reason, and missing event
 requirements separately. Dispatch rechecks eligibility before invoking the

@@ -1298,7 +1298,7 @@ declare command: {
             ..ScriptEvalRequest::new(
                 r#"
                 canopy.assert(script_target.get() == 31, "fixture should run before eval")
-                return canopy.cmd("script_target::choose", { direction = "right" })
+                return canopy.call_named("script_target::choose", { direction = "right" })
             "#
                 .to_string(),
             )
@@ -1344,7 +1344,7 @@ declare command: {
     fn evaluate_reports_structured_command_errors() {
         let evaluator = test_factory();
         let outcome = evaluator.evaluate(&ScriptEvalRequest::new(
-            r#"canopy.cmd("missing::command")"#.to_string(),
+            r#"canopy.call_named("missing::command", {})"#.to_string(),
         ));
 
         assert!(!outcome.success);

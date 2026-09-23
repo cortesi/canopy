@@ -23,13 +23,13 @@ use super::{
     ArgValue, Canopy, ChangeOutcome, CommandSet, Context, CoreContext, CoreViewContext, FocusScope,
     NodeId, PathFilter, Pin, Point, RectI32, ReentrantCanopyGuard, Result, ScriptCommandCall,
     ViewContext, available_bindings_to_arg, base_api, binding_info_to_arg, command_call_from_value,
-    command_call_type, command_info_to_arg, commands, defs, dispatch_command,
-    dispatch_command_by_name, dispatch_explicit, error, fixtures_to_arg, host_return, host_value,
-    inputmap, key, key_explanation_to_arg, luau_global_owner_name, mouse, node_handle_type,
-    node_id_from_value, node_info_to_arg, node_list_to_arg, notices_to_arg, owned_truthy, ret_arg,
-    ret_none, ret_one, route_trace_to_arg, screen_cells_to_arg, screen_text, screen_text_for_rect,
-    screen_to_arg, script_callback_label, script_journal_to_arg, snapshot_to_arg, tree_node_to_arg,
-    validate_node_handle, values_to_args, with_current_canopy,
+    command_call_type, command_info_to_arg, commands, defs, dispatch_command, dispatch_explicit,
+    error, fixtures_to_arg, host_return, host_value, inputmap, key, key_explanation_to_arg,
+    luau_global_owner_name, mouse, node_handle_type, node_id_from_value, node_info_to_arg,
+    node_list_to_arg, notices_to_arg, owned_truthy, ret_arg, ret_none, ret_one, route_trace_to_arg,
+    screen_cells_to_arg, screen_text, screen_text_for_rect, screen_to_arg, script_callback_label,
+    script_journal_to_arg, snapshot_to_arg, tree_node_to_arg, validate_node_handle, values_to_args,
+    with_current_canopy,
 };
 use crate::{
     core::{context::matching_nodes, inputmap::IntentCatalog},
@@ -236,29 +236,6 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
                 .param(("y2", Type::Number))
         },
         handler: Handler::Sync(host_send_drag),
-    },
-    BaseFunction {
-        name: "cmd",
-        docs: Some("Dispatch a command by fully-qualified command id such as `root::quit`."),
-        signature: || {
-            FunctionSignature::new()
-                .param(("name", Type::String))
-                .varargs(Type::Any)
-                .ret(Type::Any)
-        },
-        handler: Handler::Sync(host_cmd),
-    },
-    BaseFunction {
-        name: "cmd_on",
-        docs: Some("Search from a node using the legacy single-map argument inference."),
-        signature: || {
-            FunctionSignature::new()
-                .param(("id", Type::named("NodeId")))
-                .param(("name", Type::String))
-                .varargs(Type::Any)
-                .ret(Type::Any)
-        },
-        handler: Handler::Sync(host_cmd_on),
     },
     BaseFunction {
         name: "call_exact",
@@ -1014,40 +991,6 @@ fn install_function_binding<'s>(
         })
         .ok();
     })
-}
-
-/// Dispatch a command and convert its result for the script.
-fn run_script_command<'s>(
-    scope: &Scope<'s>,
-    name: &str,
-    node: Option<NodeId>,
-    values: Vec<ArgValue>,
-) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let result = dispatch_command_by_name(scope, name, node, values)?;
-    ret_arg(scope, &result)
-}
-
-/// `canopy.cmd`: dispatch a command by fully-qualified id.
-fn host_cmd<'s>(
-    scope: &Scope<'s>,
-    args: MultiValue<'s>,
-) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = HostArgCursor::new(scope, args);
-    let name = args.required::<String>("name")?;
-    let values = values_to_args(scope, iter::from_fn(|| args.raw()).collect())?;
-    run_script_command(scope, &name, None, values)
-}
-
-/// `canopy.cmd_on`: dispatch a command against a specific node.
-fn host_cmd_on<'s>(
-    scope: &Scope<'s>,
-    args: MultiValue<'s>,
-) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = HostArgCursor::new(scope, args);
-    let node_id = read_node_id(scope, &mut args, "id")?;
-    let name = args.required::<String>("name")?;
-    let values = values_to_args(scope, iter::from_fn(|| args.raw()).collect())?;
-    run_script_command(scope, &name, Some(node_id), values)
 }
 
 /// Parse a target selector and validate explicit node handles.

@@ -947,7 +947,7 @@ fn explicit_script_targets_match_discovery_and_survive_owner_insertion() -> Resu
         assert(canopy.call_from(canopy.root(), "script_call_probe::identify") == 1)
         assert(canopy.call_focus("script_call_probe::identify") == 2)
         assert(canopy.call_exact(second, "script_call_probe::identify") == 2)
-        assert(canopy.cmd_on(canopy.root(), "script_call_probe::identify") == 1)
+        assert(canopy.call_from(canopy.root(), "script_call_probe::identify") == 1)
         for _, command in canopy.commands({kind = "exact", node = second}) do
             if command.name == "identify" then
                 assert(command.available and command.target == second and command.status == "enabled")
@@ -1003,7 +1003,9 @@ fn explicit_script_arguments_do_not_infer_named_maps() -> Result<()> {
         assert(canopy.call_named("script_call_probe::optional", {}) == nil)
         local optional = canopy.call_named("script_call_probe::optional", {options = {theme = "light"}})
         assert(optional.theme == "light")
-        assert(canopy.cmd("script_call_probe::echo", {options = "legacy"}) == "legacy")
+        -- Owner functions are positional: a single table is the first argument.
+        local positional = script_call_probe.echo({options = "dark"})
+        assert(positional.options == "dark")
         return true
     "#)?, ArgValue::Bool(true));
     for source in [

@@ -207,8 +207,8 @@ mod tests {
             canopy.assert(canopy.focused() == first, "focus should move to the first leaf")
             canopy.assert(api_leaf.get() == 0, "focused dispatch should hit the first leaf")
 
-            canopy.cmd_on(second, "api_leaf::set", 9)
-            canopy.assert(canopy.cmd_on(second, "api_leaf::get") == 9, "cmd_on should target a node")
+            canopy.call_from(second, "api_leaf::set", 9)
+            canopy.assert(canopy.call_from(second, "api_leaf::get") == 9, "call_from should target a node")
             canopy.assert(api_leaf.get() == 0, "focused dispatch should remain on the first leaf")
 
             canopy.set_focus(second)
@@ -224,22 +224,22 @@ mod tests {
 
             canopy.send_click(1, 1)
             canopy.assert(
-                canopy.cmd_on(first, "api_leaf::get") == 21,
+                canopy.call_from(first, "api_leaf::get") == 21,
                 "send_click should dispatch a left click to the target node"
             )
             canopy.send_scroll("down", 1, 1)
             canopy.assert(
-                canopy.cmd_on(first, "api_leaf::get") == 22,
+                canopy.call_from(first, "api_leaf::get") == 22,
                 "send_scroll should dispatch a scroll event to the target node"
             )
             canopy.send_scroll("right", 1, 1)
             canopy.assert(
-                canopy.cmd_on(first, "api_leaf::get") == 24,
+                canopy.call_from(first, "api_leaf::get") == 24,
                 "send_scroll should dispatch horizontal wheel steps"
             )
             canopy.send_drag(1, 1, 2, 1)
             canopy.assert(
-                canopy.cmd_on(first, "api_leaf::get") == 23,
+                canopy.call_from(first, "api_leaf::get") == 23,
                 "send_drag should press, drag, and release"
             )
         "#,
@@ -698,7 +698,7 @@ mod tests {
             local nested = 0
             nested = canopy.bind("n", { description = "Nested callback" }, function()
                 canopy.unbind(nested)
-                canopy.cmd_on(leaves[2], "api_leaf::set", 41)
+                canopy.call_from(leaves[2], "api_leaf::set", 41)
             end)
 
             local outer = 0
@@ -1207,7 +1207,7 @@ mod tests {
             .size(10, 1)
             .build()?;
 
-        harness.script(r#"canopy.cmd("script_target::set", { count = 7 })"#)?;
+        harness.script(r#"canopy.call_named("script_target::set", { count = 7 })"#)?;
         harness.with_root_widget::<ScriptTarget, _>(|target| {
             assert_eq!(target.value, 7);
         });
@@ -1217,12 +1217,12 @@ mod tests {
             assert_eq!(target.value, 12);
         });
 
-        harness.script(r#"canopy.cmd("script_target::set", { count = 13 })"#)?;
+        harness.script(r#"canopy.call_named("script_target::set", { count = 13 })"#)?;
         harness.with_root_widget::<ScriptTarget, _>(|target| {
             assert_eq!(target.value, 13);
         });
 
-        harness.script(r#"canopy.cmd("script_target::set", 9)"#)?;
+        harness.script(r#"script_target.set(9)"#)?;
         harness.with_root_widget::<ScriptTarget, _>(|target| {
             assert_eq!(target.value, 9);
         });
@@ -1237,7 +1237,7 @@ mod tests {
             assert_eq!(target.value, 99);
         });
 
-        harness.script(r#"canopy.cmd("script_target::set_optional", { count = 14 })"#)?;
+        harness.script(r#"canopy.call_named("script_target::set_optional", { count = 14 })"#)?;
         harness.with_root_widget::<ScriptTarget, _>(|target| {
             assert_eq!(target.value, 14);
         });
@@ -1253,8 +1253,8 @@ mod tests {
         });
 
         let err = harness
-            .script(r#"canopy.cmd("script_target::set", { foo = 11 })"#)
-            .expect_err("unknown named args are structured script errors");
+            .script(r#"canopy.call_from(canopy.root(), "script_target::set", { foo = 11 })"#)
+            .expect_err("a table for a number is a structured script error");
         let Error::ScriptStructured { kind, command, .. } = err else {
             panic!("expected structured script error, got {err:?}");
         };
@@ -1330,7 +1330,7 @@ mod tests {
         let error = harness.canopy.eval_script(
             r#"
             local ok, err = pcall(function()
-                canopy.cmd("missing::command")
+                canopy.call_named("missing::command", {})
             end)
             local detail: any = err
             return { ok = ok, kind = detail.kind, command = detail.command }
