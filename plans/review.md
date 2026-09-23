@@ -2208,7 +2208,7 @@ Each stage also updates the docs it touches.
   and private poll calls.
 - [x] C39: notices, `Error::App`, and Root's notice display. Delete fh's
   error-to-footer plumbing.
-- [ ] C13: apply the node-addressed rule to the four context traits. Migrate
+- [x] C13: apply the node-addressed rule to the four context traits. Migrate
   about 150 Canopy sites and about 50 fh sites, using
   `focused_node() == Some(id)` for `is_focused_of`.
 - [ ] C14: remove the boxed add variants, `Canopy::create_detached`, and

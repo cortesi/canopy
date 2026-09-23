@@ -90,12 +90,12 @@ impl Widget for TextGym {
         fixed_text.set_selected(true);
         let fixed_id = section(c, "Fixed canvas 40 + selected", fixed_text, 26, 6)?;
 
-        let stack_id = c.add_child(Container::column())?;
-        c.set_children_of(
+        let stack_id = c.add_child(c.node_id(), Container::column())?;
+        c.set_children(
             stack_id.into(),
             vec![default_id, wrap_id, intrinsic_id, fixed_id],
         )?;
-        c.set_layout(Layout::fill())?;
+        c.set_layout_of(c.node_id(), Layout::fill())?;
         Ok(())
     }
 }

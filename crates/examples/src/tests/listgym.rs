@@ -26,7 +26,9 @@ fn list_selected_index(harness: &mut Harness) -> Result<Option<usize>> {
 
 fn column_count(harness: &mut Harness) -> Result<usize> {
     harness.with_root_widget_context(|_root: &mut ListGym, ctx| {
-        ctx.with_unique_descendant::<Columns, _>(|_columns, ctx| Ok(ctx.children().len()))
+        ctx.with_unique_descendant::<Columns, _>(|_columns, ctx| {
+            Ok(ctx.children_of(ctx.node_id()).len())
+        })
     })
 }
 

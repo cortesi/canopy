@@ -122,15 +122,11 @@ impl Core {
         f(&mut layout);
         let mut overrides = current.layout_override;
         overrides.record_changes(before, layout);
-        self.set_layout_override_of(node, overrides)
+        self.set_layout_override(node, overrides)
     }
 
     /// Replace all persistent parent constraints for a node.
-    pub fn set_layout_override_of(
-        &mut self,
-        node: NodeId,
-        overrides: LayoutOverride,
-    ) -> Result<()> {
+    pub fn set_layout_override(&mut self, node: NodeId, overrides: LayoutOverride) -> Result<()> {
         let current = self.nodes.get_mut(node).ok_or(Error::NodeNotFound(node))?;
         let layout = overrides.apply(current.base_layout)?;
         if current.layout_override != overrides || current.layout != layout {
@@ -144,13 +140,13 @@ impl Core {
     /// Restore the widget's base layout.
     #[cfg(test)]
     pub fn clear_layout_override_of(&mut self, node: NodeId) -> Result<()> {
-        self.set_layout_override_of(node, LayoutOverride::default())
+        self.set_layout_override(node, LayoutOverride::default())
     }
 
     /// Override every field of a node's layout.
     #[cfg(test)]
     pub fn set_layout_of(&mut self, node: impl Into<NodeId>, layout: Layout) -> Result<()> {
-        self.set_layout_override_of(node.into(), LayoutOverride::full(layout))
+        self.set_layout_override(node.into(), LayoutOverride::full(layout))
     }
 
     /// Replace a widget and remove all descendant nodes.

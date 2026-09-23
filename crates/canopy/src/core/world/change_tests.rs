@@ -25,10 +25,10 @@ fn focus_visibility_and_layout_changes_mark_only_changed_setters() -> Result<()>
     core.set_hidden(leaf, true)?;
     assert_eq!(core.changes.level(), Some(Invalidation::Layout));
     core.changes = ChangeSet::default();
-    core.set_layout_override_of(leaf, LayoutOverride::new().fixed_height(2))?;
+    core.set_layout_override(leaf, LayoutOverride::new().fixed_height(2))?;
     assert_eq!(core.changes.level(), Some(Invalidation::Layout));
     core.changes = ChangeSet::default();
-    core.set_layout_override_of(leaf, LayoutOverride::new().fixed_height(2))?;
+    core.set_layout_override(leaf, LayoutOverride::new().fixed_height(2))?;
     assert!(!core.changes.is_pending());
     Ok(())
 }

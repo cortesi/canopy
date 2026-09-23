@@ -69,8 +69,8 @@ impl EditorHost {
 impl Widget for EditorHost {
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         let editor = Editor::with_config(self.text.clone(), self.config.clone());
-        let editor_id = c.add_slot::<EditorSlot>(editor)?;
-        c.set_layout(Layout::fill())?;
+        let editor_id = c.add_slot::<EditorSlot>(c.node_id(), editor)?;
+        c.set_layout_of(c.node_id(), Layout::fill())?;
         c.set_layout_of(editor_id, Layout::fill())?;
         Ok(())
     }
@@ -109,7 +109,7 @@ fn build_harness(text: &str, config: EditorConfig, width: u32, height: u32) -> H
 fn with_editor<R>(harness: &mut Harness, f: impl FnOnce(&mut Editor) -> R) -> R {
     harness
         .with_root_widget_context(|_root: &mut EditorHost, ctx| {
-            ctx.with_typed_slot::<EditorSlot, _>(|editor, _| Ok(f(editor)))
+            ctx.with_slot::<EditorSlot, _>(ctx.node_id(), |editor, _| Ok(f(editor)))
         })
         .expect("editor missing")
 }
@@ -141,7 +141,7 @@ fn editor_cursor_location(harness: &mut Harness) -> Point {
 fn editor_view_scroll(harness: &mut Harness) -> Point {
     harness
         .with_root_widget_context(|_root: &mut EditorHost, ctx| {
-            ctx.with_typed_slot::<EditorSlot, _>(|_editor, ctx| Ok(ctx.view().scroll))
+            ctx.with_slot::<EditorSlot, _>(ctx.node_id(), |_editor, ctx| Ok(ctx.view().scroll))
         })
         .expect("editor missing")
 }
@@ -149,7 +149,7 @@ fn editor_view_scroll(harness: &mut Harness) -> Point {
 fn scroll_editor_to(harness: &mut Harness, x: u32, y: u32) {
     harness
         .with_root_widget_context(|_root: &mut EditorHost, ctx| {
-            ctx.with_typed_slot::<EditorSlot, _>(|_editor, ctx| {
+            ctx.with_slot::<EditorSlot, _>(ctx.node_id(), |_editor, ctx| {
                 ctx.scroll_to(x, y);
                 Ok(())
             })
@@ -748,9 +748,9 @@ fn nested_padding_scroll_and_captured_pointer_agree_on_wide_grapheme() {
     let mut harness = build_harness(&text, config, 18, 8);
     harness
         .with_root_widget_context(|_root: &mut EditorHost, ctx| {
-            ctx.set_layout(Layout::fill().padding(Edges::all(1)))?;
-            ctx.with_typed_slot::<EditorSlot, _>(|_editor, ctx| {
-                ctx.set_layout(Layout::fill().padding(Edges::all(1)))
+            ctx.set_layout_of(ctx.node_id(), Layout::fill().padding(Edges::all(1)))?;
+            ctx.with_slot::<EditorSlot, _>(ctx.node_id(), |_editor, ctx| {
+                ctx.set_layout_of(ctx.node_id(), Layout::fill().padding(Edges::all(1)))
             })
         })
         .unwrap();
@@ -776,7 +776,7 @@ fn nested_padding_scroll_and_captured_pointer_agree_on_wide_grapheme() {
     assert_eq!(editor_cursor(&mut harness), TextPosition::new(2, 2));
     harness
         .with_root_widget_context(|_root: &mut EditorHost, ctx| {
-            ctx.with_typed_slot::<EditorSlot, _>(|_editor, ctx| ctx.capture_mouse())
+            ctx.with_slot::<EditorSlot, _>(ctx.node_id(), |_editor, ctx| ctx.capture_mouse())
         })
         .unwrap();
     // Captured input still uses viewport-local coordinates at the trailing
@@ -794,7 +794,7 @@ fn nested_padding_scroll_and_captured_pointer_agree_on_wide_grapheme() {
     harness.mouse(mouse_event(mouse::Action::Up, 0, 2)).unwrap();
     harness
         .with_root_widget_context(|_root: &mut EditorHost, ctx| {
-            ctx.with_typed_slot::<EditorSlot, _>(|_editor, ctx| ctx.release_mouse())
+            ctx.with_slot::<EditorSlot, _>(ctx.node_id(), |_editor, ctx| ctx.release_mouse())
         })
         .unwrap();
 }
@@ -813,8 +813,8 @@ fn padded_editor_mouse_uses_content_coordinates_with_gutter_and_scroll() {
         let mut harness = build_harness(&text, config, 18, 6);
         harness
             .with_root_widget_context(|_root: &mut EditorHost, ctx| {
-                ctx.with_typed_slot::<EditorSlot, _>(|_editor, ctx| {
-                    ctx.set_layout(Layout::fill().padding(Edges::all(1)))
+                ctx.with_slot::<EditorSlot, _>(ctx.node_id(), |_editor, ctx| {
+                    ctx.set_layout_of(ctx.node_id(), Layout::fill().padding(Edges::all(1)))
                 })
             })
             .unwrap();
@@ -1037,7 +1037,7 @@ fn run_search(
 ) -> (usize, usize, u32) {
     let (matches, position) = harness
         .with_root_widget_context(|_root: &mut EditorHost, ctx| {
-            ctx.with_typed_slot::<EditorSlot, _>(|editor, ctx| {
+            ctx.with_slot::<EditorSlot, _>(ctx.node_id(), |editor, ctx| {
                 operation(editor, ctx);
                 Ok((editor.search_matches(), editor.search_position()))
             })
@@ -1052,7 +1052,7 @@ fn run_search(
 fn edit_in_one_turn(harness: &mut Harness, operation: impl FnOnce(&mut Editor, &mut dyn Context)) {
     harness
         .with_root_widget_context(|_root: &mut EditorHost, ctx| {
-            ctx.with_typed_slot::<EditorSlot, _>(|editor, ctx| {
+            ctx.with_slot::<EditorSlot, _>(ctx.node_id(), |editor, ctx| {
                 operation(editor, ctx);
                 Ok(())
             })

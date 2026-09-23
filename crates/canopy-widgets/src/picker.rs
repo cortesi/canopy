@@ -161,8 +161,8 @@ where
     where
         W: Widget + 'static,
     {
-        let overlay = context.add_child_to(context.node_id(), widget)?;
-        context.set_hidden_of(overlay.into(), true)?;
+        let overlay = context.add_child(context.node_id(), widget)?;
+        context.set_hidden(overlay.into(), true)?;
         Ok(overlay)
     }
 
@@ -218,13 +218,13 @@ where
 
     fn on_mount(&mut self, context: &mut dyn Context) -> Result<()> {
         let root = context.node_id();
-        let dialog: NodeId = context.add_child_to(root, PickerDialog)?.into();
+        let dialog: NodeId = context.add_child(root, PickerDialog)?.into();
         // The dialog fits its contents rather than filling the view, so a
         // short list is a small dialog. The margin above caps a long one, which
         // then nearly fills the view. The width a narrow dialog holds comes
         // from the list's own measurement, which the view bounds, rather than
         // from a minimum here that a narrow terminal could not honour.
-        context.set_layout_override_of(
+        context.set_layout_override(
             dialog,
             LayoutOverride {
                 width: Some(Sizing::Measure),
@@ -232,16 +232,16 @@ where
                 ..LayoutOverride::new()
             },
         )?;
-        let frame = context.add_child_to(dialog, Frame::new())?;
+        let frame = context.add_child(dialog, Frame::new())?;
         // The list and the field are siblings in a column, so the field sits
         // outside whatever the list scrolls. However many items the list holds,
         // the field keeps its row at the bottom of the frame.
-        let body = context.add_child_to(
+        let body = context.add_child(
             frame,
             Container::new(Layout::fill().direction(Direction::Column)).with_name("picker_body"),
         )?;
-        let list = context.add_child_to(body, PickerList::<T>::new())?;
-        let filter = context.add_child_to(body, PickerFilter::new())?;
+        let list = context.add_child(body, PickerList::<T>::new())?;
+        let filter = context.add_child(body, PickerFilter::new())?;
         // The list takes whatever height is left, and the field keeps its one
         // measured row, so a list too tall to fit scrolls instead of pushing
         // the field off the bottom.
@@ -630,7 +630,7 @@ where
             // show: one being typed, or one left standing after it was given.
             // Hidden, it leaves the layout entirely, so the frame gives the row
             // back to the list.
-            context.set_hidden_of(field, !active && text.is_empty())?;
+            context.set_hidden(field, !active && text.is_empty())?;
             context.with_widget_mut(field, |field: &mut PickerFilter, _| {
                 field.set(text, active);
                 Ok(())

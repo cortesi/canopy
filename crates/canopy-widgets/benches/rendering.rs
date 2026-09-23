@@ -30,10 +30,11 @@ impl BenchmarkTextWrapper {
 impl Widget for BenchmarkTextWrapper {
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         let text_id = c
-            .add_slot::<TextSlot>(Text::new(self.content.clone()))
+            .add_slot::<TextSlot>(c.node_id(), Text::new(self.content.clone()))
             .expect("Failed to attach text");
 
-        c.set_layout(Layout::fill()).expect("Failed to style root");
+        c.set_layout_of(c.node_id(), Layout::fill())
+            .expect("Failed to style root");
 
         c.set_layout_of(text_id, Layout::fill())
             .expect("Failed to style text");

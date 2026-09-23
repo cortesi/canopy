@@ -236,8 +236,8 @@ mod tests {
         }
 
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
-            self.top = Some(ctx.add_child(Clicks { clicks: 0 })?);
-            self.bottom = Some(ctx.add_child(Clicks { clicks: 0 })?);
+            self.top = Some(ctx.add_child(ctx.node_id(), Clicks { clicks: 0 })?);
+            self.bottom = Some(ctx.add_child(ctx.node_id(), Clicks { clicks: 0 })?);
             Ok(())
         }
 
@@ -246,7 +246,7 @@ mod tests {
                 return Ok(EventOutcome::Ignore);
             };
             if *pressed == 'h' {
-                ctx.set_hidden_of(self.top.expect("mounted").into(), true)?;
+                ctx.set_hidden(self.top.expect("mounted").into(), true)?;
             } else if *pressed == 'c' {
                 self.keys += 1;
             } else {

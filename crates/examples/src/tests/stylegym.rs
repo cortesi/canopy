@@ -254,7 +254,7 @@ fn italic_effect_excludes_styles_frame() -> Result<()> {
 
 fn sample_and_frame_style(harness: &Harness) -> (ResolvedStyle, ResolvedStyle) {
     let frame = harness.canopy.with_root_view(|ctx| {
-        let right = ctx.children()[1];
+        let right = ctx.children_of(ctx.node_id())[1];
         let frame = ctx.children_of(right)[0];
         ctx.view_of(frame).expect("styles frame view").outer
     });

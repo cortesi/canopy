@@ -25,10 +25,10 @@ impl Widget for Pager {
     }
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-        let frame_id = c.add_child(Frame::new())?;
-        c.add_child_to(frame_id, Text::new(self.contents.clone()))?;
+        let frame_id = c.add_child(c.node_id(), Frame::new())?;
+        c.add_child(frame_id, Text::new(self.contents.clone()))?;
 
-        c.set_layout(Layout::fill())?;
+        c.set_layout_of(c.node_id(), Layout::fill())?;
         Ok(())
     }
 }

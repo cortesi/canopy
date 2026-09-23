@@ -158,7 +158,7 @@ impl Button {
 
     /// Read command eligibility without conflating it with the active state.
     fn command_status(&self, ctx: &dyn ViewContext) -> Result<Option<CommandStatus>> {
-        if self.command.is_some() && !ctx.is_attached_of(ctx.node_id()) {
+        if self.command.is_some() && !ctx.is_attached(ctx.node_id()) {
             return Ok(Some(CommandStatus::Disabled("Button is detached".into())));
         }
         self.command
@@ -169,14 +169,14 @@ impl Button {
 
     /// Sync the label text widget to the current label.
     fn sync_label(&self, ctx: &mut dyn Context) -> Result<()> {
-        let box_id = ctx.get_or_create_slot::<BoxSlot>(|| {
+        let box_id = ctx.get_or_create_slot::<BoxSlot>(ctx.node_id(), || {
             Border::new()
                 .with_glyphs(self.glyphs)
                 .with_border_style(roles::BUTTON_BORDER)
                 .with_fill()
         })?;
-        let center_id = ctx.get_or_create_slot_of::<CenterSlot>(box_id, Center::new)?;
-        let label_id = ctx.get_or_create_slot_of::<LabelSlot>(center_id, ButtonLabel::default)?;
+        let center_id = ctx.get_or_create_slot::<CenterSlot>(box_id, Center::new)?;
+        let label_id = ctx.get_or_create_slot::<LabelSlot>(center_id, ButtonLabel::default)?;
         let label = self.label.clone();
         let accelerator = self.accelerator;
         ctx.with_widget_mut(label_id, |text: &mut ButtonLabel, _| {
@@ -226,7 +226,7 @@ impl Widget for Button {
         if self.active {
             rndr.push_layer(WidgetState::Pressed.layer());
         }
-        if ctx.is_on_focus_path() {
+        if ctx.is_on_focus_path(ctx.node_id()) {
             rndr.push_layer(WidgetState::Focused.layer());
         }
         if matches!(self.command_status(ctx)?, Some(CommandStatus::Disabled(_))) {
@@ -399,7 +399,7 @@ mod tests {
                     .with_target(CommandTarget::Exact(ctx.node_id())),
             );
             button.set_active(true);
-            ctx.add_child(button)?;
+            ctx.add_child(ctx.node_id(), button)?;
             Ok(())
         }
     }
@@ -482,8 +482,9 @@ mod tests {
 
     impl Widget for ActionScene {
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
-            let owner = ctx.add_child(ActionOwner::default())?;
+            let owner = ctx.add_child(ctx.node_id(), ActionOwner::default())?;
             ctx.add_child(
+                ctx.node_id(),
                 Button::new("External action").with_command(
                     ActionOwner::spec_activate()
                         .call()
@@ -507,7 +508,7 @@ mod tests {
             .size(20, 4)
             .build()?;
         let (owner, button) = harness.with_root_widget_context(|_: &mut ActionScene, ctx| {
-            let children = ctx.children();
+            let children = ctx.children_of(ctx.node_id());
             Ok((children[0], children[1]))
         })?;
         harness.canopy.with_root_context(|ctx| ctx.detach(button))?;
@@ -569,11 +570,9 @@ mod tests {
         let before = label_style(&harness);
         harness.with_root_widget_context(|_: &mut ActionOwner, ctx| {
             ctx.with_unique_descendant::<Button, _>(|_, ctx| {
-                let border = ctx.get_slot::<BoxSlot>()?.expect("button border");
-                let center = ctx
-                    .get_slot_of::<CenterSlot>(border)?
-                    .expect("label center");
-                let label = ctx.get_slot_of::<LabelSlot>(center)?.expect("button label");
+                let border = ctx.get_slot::<BoxSlot>(ctx.node_id())?;
+                let center = ctx.get_slot::<CenterSlot>(border)?;
+                let label = ctx.get_slot::<LabelSlot>(center)?;
                 ctx.edit_structure(&mut |ctx| {
                     let wrapper = ctx.create_detached(Center::new())?;
                     ctx.detach(label.into())?;
@@ -639,6 +638,7 @@ mod tests {
             let owner = ctx.node_id();
             for tag in [1, 2] {
                 ctx.add_child(
+                    ctx.node_id(),
                     Button::new(format!("Button {tag}")).with_command(
                         Self::call_note(tag).with_target(CommandTarget::Exact(owner)),
                     ),
@@ -799,7 +799,7 @@ mod tests {
 
     impl Widget for Decorative {
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
-            ctx.add_child(Button::new("Label only"))?;
+            ctx.add_child(ctx.node_id(), Button::new("Label only"))?;
             Ok(())
         }
     }
@@ -856,6 +856,7 @@ mod tests {
             let owner = ctx.node_id();
             self.button = Some(
                 ctx.add_child(
+                    ctx.node_id(),
                     Button::new("Dismiss").with_command(
                         Self::spec_dismiss()
                             .call()
@@ -916,7 +917,7 @@ mod tests {
 
     impl Widget for Mnemonic {
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
-            ctx.add_child(Button::new(self.0).with_accelerator(self.1))?;
+            ctx.add_child(ctx.node_id(), Button::new(self.0).with_accelerator(self.1))?;
             Ok(())
         }
     }
@@ -1029,8 +1030,8 @@ mod tests {
     impl Widget for Guarded {
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
             let owner = ctx.node_id();
-            let dialog = ctx.add_child(Container::column().with_name("dialog"))?;
-            let button = ctx.add_child_to(
+            let dialog = ctx.add_child(ctx.node_id(), Container::column().with_name("dialog"))?;
+            let button = ctx.add_child(
                 dialog,
                 Button::new("Accept")
                     .with_command(Self::call_accept().with_target(CommandTarget::Exact(owner))),

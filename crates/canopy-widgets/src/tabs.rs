@@ -48,7 +48,7 @@ impl Tabs {
         label: impl Into<String>,
         page: W,
     ) -> Result<TypedId<W>> {
-        let id = c.add_child(page)?;
+        let id = c.add_child(c.node_id(), page)?;
         let node = NodeId::from(id);
         c.with_layout_of(node, &mut |layout| {
             layout.width = Sizing::Flex(1);
@@ -91,9 +91,9 @@ impl Tabs {
         let focus_left = previous
             .filter(|previous| *previous != self.active)
             .and_then(|previous| self.tabs.get(previous))
-            .is_some_and(|(_, page)| c.is_on_focus_path_of(*page));
+            .is_some_and(|(_, page)| c.is_on_focus_path(*page));
         for (index, (_, page)) in self.tabs.iter().enumerate() {
-            c.set_hidden_of(*page, index != self.active)?;
+            c.set_hidden(*page, index != self.active)?;
         }
         // A page that was hidden has no view until the next layout, so the
         // target must not depend on one.
@@ -137,7 +137,7 @@ impl Widget for Tabs {
         }
         let bar = outer.line(0)?;
         rndr.fill("tabs/bar", bar.rect(), ' ')?;
-        let focused = ctx.is_on_focus_path();
+        let focused = ctx.is_on_focus_path(ctx.node_id());
         for (index, text, start, width) in self.spans() {
             let style = if index != self.active {
                 "tabs/tab"
@@ -219,7 +219,7 @@ mod tests {
         }
 
         fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-            let tabs = c.add_child(Tabs::new())?;
+            let tabs = c.add_child(c.node_id(), Tabs::new())?;
             c.set_layout_of(tabs, Layout::fill())?;
             let pages = c.with_widget_mut(tabs, |tabs: &mut Tabs, c| {
                 let one = tabs.add_tab(c, "One", Page)?;

@@ -129,6 +129,7 @@ impl Widget for Hello {
 
     fn on_mount(&mut self, context: &mut dyn Context) -> Result<()> {
         context.add_child(
+            context.node_id(),
             StatusBar::new()
                 .with_left(Text::new("hello").with_style("status_bar/text"))
                 .with_right(KeyHint::new("ctrl-g", "help")),

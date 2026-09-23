@@ -100,18 +100,18 @@ impl Widget for DemoHost {
                 .apply();
             ctx.set_style(style);
         }
-        let center_id = ctx.add_child(Center::new())?;
+        let center_id = ctx.add_child(ctx.node_id(), Center::new())?;
         let parent_id: NodeId = if self.outer_padding > 0 {
-            let outer_pad_id = ctx.add_child_to(center_id, Pad::uniform(self.outer_padding))?;
+            let outer_pad_id = ctx.add_child(center_id, Pad::uniform(self.outer_padding))?;
             let outer_layout = Layout::fill().padding(Edges::all(self.outer_padding));
             ctx.set_layout_of(outer_pad_id, outer_layout)?;
             outer_pad_id.into()
         } else {
             center_id.into()
         };
-        let pad_id = ctx.add_child_to(parent_id, Pad::uniform(self.inner_padding))?;
+        let pad_id = ctx.add_child(parent_id, Pad::uniform(self.inner_padding))?;
         let sized_id: NodeId = if self.frame {
-            let frame_id = ctx.add_child_to(pad_id, Frame::new())?;
+            let frame_id = ctx.add_child(pad_id, Frame::new())?;
             ctx.add_child_to_boxed(frame_id.into(), child)?;
             frame_id.into()
         } else {
@@ -198,8 +198,8 @@ impl Widget for ListDemo {
         let item_texts: Vec<String> = LIST_ITEMS.iter().map(|item| format!(" {item}")).collect();
         let max_width = Self::natural_size().0;
 
-        let center_id = ctx.add_child(Center::new())?;
-        let list_id = ctx.add_child_to(center_id, List::<Text>::new())?;
+        let center_id = ctx.add_child(ctx.node_id(), Center::new())?;
+        let list_id = ctx.add_child(center_id, List::<Text>::new())?;
         let list_layout = Layout::column()
             .overflow_x(MeasureOverflow::Unbounded)
             .fixed_width(max_width);

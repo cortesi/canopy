@@ -100,8 +100,8 @@ mod tests {
         }
 
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
-            let left = ctx.add_child(ApiLeaf::new())?;
-            let right = ctx.add_child(ApiLeaf::new())?;
+            let left = ctx.add_child(ctx.node_id(), ApiLeaf::new())?;
+            let right = ctx.add_child(ctx.node_id(), ApiLeaf::new())?;
             ctx.set_layout_of(left, Layout::fill())?;
             ctx.set_layout_of(right, Layout::fill())?;
             ctx.set_focus(left.into())?;
@@ -147,7 +147,9 @@ mod tests {
             .configure(ApiLeaf::register)
             .assemble(|canopy| {
                 let leaf = canopy.create_detached(ApiLeaf::new())?;
-                canopy.with_root_context(|context| context.set_children(vec![leaf.into()]))
+                canopy.with_root_context(|context| {
+                    context.set_children(context.node_id(), vec![leaf.into()])
+                })
             })
     }
 

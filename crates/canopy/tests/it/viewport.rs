@@ -138,10 +138,13 @@ end)
         }
 
         fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-            let inner = c.add_child(Pane {
-                canvas: Size::new(30, 30),
-                consume_wheel: false,
-            })?;
+            let inner = c.add_child(
+                c.node_id(),
+                Pane {
+                    canvas: Size::new(30, 30),
+                    consume_wheel: false,
+                },
+            )?;
             c.set_layout_of(inner, Layout::column().fixed_width(10).fixed_height(4))
         }
 

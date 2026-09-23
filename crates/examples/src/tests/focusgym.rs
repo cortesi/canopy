@@ -249,15 +249,14 @@ fn test_single_separator_between_root_children() -> Result<()> {
 fn test_delete_focused_block() -> Result<()> {
     let mut harness = setup_harness(Size::new(60, 14))?;
     let (left, right) = root_children_pair(&mut harness)?;
-    let left_focused =
-        with_root_block(&mut harness, |ctx, _root| Ok(ctx.is_on_focus_path_of(left)))?;
+    let left_focused = with_root_block(&mut harness, |ctx, _root| Ok(ctx.is_on_focus_path(left)))?;
     assert!(left_focused);
 
     harness.key('x')?;
 
     let (count, right_focused) = with_root_block(&mut harness, |ctx, root| {
         let count = ctx.children_of(root).len();
-        let right_focused = ctx.is_on_focus_path_of(right);
+        let right_focused = ctx.is_on_focus_path(right);
         Ok((count, right_focused))
     })?;
     assert_eq!(count, 1);
@@ -309,8 +308,8 @@ fn repeated_deletion_preserves_a_root_that_can_split_again() -> Result<()> {
     }
     with_root_block(&mut harness, |ctx, current| {
         assert_eq!(current, root);
-        assert!(ctx.is_attached_of(root));
-        assert!(ctx.is_focused_of(root));
+        assert!(ctx.is_attached(root));
+        assert!(ctx.focused_node() == Some(root));
         assert!(ctx.children_of(root).is_empty());
         Ok(())
     })?;

@@ -126,11 +126,10 @@ impl Widget for Logs {
     }
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-        c.add_slot::<ListSlot>(List::<Text, u64>::new().with_selection_indicator(
-            "list/selected",
-            "█ ",
-            true,
-        ))?;
+        c.add_slot::<ListSlot>(
+            c.node_id(),
+            List::<Text, u64>::new().with_selection_indicator("list/selected", "█ ", true),
+        )?;
         Ok(())
     }
 
@@ -187,7 +186,7 @@ impl Logs {
     where
         F: FnOnce(&mut List<Text, u64>, &mut dyn Context) -> Result<R>,
     {
-        c.with_typed_slot::<ListSlot, _>(f)
+        c.with_slot::<ListSlot, _>(c.node_id(), f)
     }
 
     /// Drain buffered log lines into the list.
@@ -415,7 +414,7 @@ mod tests {
         .size(80, 4)
         .build()?;
         harness.with_root_widget_context(|logs: &mut Logs, ctx| {
-            let list = ctx.get_slot::<ListSlot>()?.expect("list mounted");
+            let list = ctx.get_slot::<ListSlot>(ctx.node_id())?;
             ctx.remove_subtree(list.into())?;
             LogWriter {
                 buf: logs.buf.clone(),
@@ -428,7 +427,7 @@ mod tests {
                 logs.buf.lock().unwrap().front().map(String::as_str),
                 Some("keep this entry")
             );
-            ctx.add_slot::<ListSlot>(List::new())?;
+            ctx.add_slot::<ListSlot>(ctx.node_id(), List::new())?;
             logs.flush_buffer(ctx)?;
             assert_eq!(logs.next_key, 1);
             assert!(logs.buf.lock().unwrap().is_empty());

@@ -12,10 +12,10 @@ mod tests {
         let mut canopy = CanopyBuilder::new().build()?;
         let (first, first_item, second) = canopy.with_root_context(|ctx| {
             let root = ctx.root_id();
-            let first = NodeId::from(ctx.add_child(Marker)?);
-            let second = NodeId::from(ctx.add_child(Marker)?);
-            let first_item = NodeId::from(ctx.add_child_to(first, Marker)?);
-            let second_item = NodeId::from(ctx.add_child_to(second, Marker)?);
+            let first = NodeId::from(ctx.add_child(ctx.node_id(), Marker)?);
+            let second = NodeId::from(ctx.add_child(ctx.node_id(), Marker)?);
+            let first_item = NodeId::from(ctx.add_child(first, Marker)?);
+            let second_item = NodeId::from(ctx.add_child(second, Marker)?);
             ctx.set_semantic_key(first, root, "first")?;
             ctx.set_semantic_key(second, root, "second")?;
             ctx.set_semantic_key(first_item, first, "item")?;

@@ -76,8 +76,8 @@ mod tests {
         let branch_id = canopy.with_root_context(|context| {
             let leaf_id = context.create_detached(TestLeaf)?;
             let branch_id = context.create_detached(TestBranch)?;
-            context.set_children_of(branch_id.into(), vec![leaf_id.into()])?;
-            context.set_children(vec![branch_id.into()])?;
+            context.set_children(branch_id.into(), vec![leaf_id.into()])?;
+            context.set_children(context.node_id(), vec![branch_id.into()])?;
             Ok(branch_id)
         })?;
 
@@ -104,8 +104,8 @@ mod tests {
         let branch_id = canopy.with_root_context(|context| {
             let leaf_id = context.create_detached(TestLeaf)?;
             let branch_id = context.create_detached(TestBranch)?;
-            context.set_children_of(branch_id.into(), vec![leaf_id.into()])?;
-            context.set_children(vec![branch_id.into()])?;
+            context.set_children(branch_id.into(), vec![leaf_id.into()])?;
+            context.set_children(context.node_id(), vec![branch_id.into()])?;
             Ok(branch_id)
         })?;
 
@@ -150,11 +150,11 @@ mod tests {
             let first_leaf = context.create_detached(TestLeaf)?;
             let second_leaf = context.create_detached(TestLeaf)?;
             let branch_id = context.create_detached(TestBranch)?;
-            context.set_children_of(
+            context.set_children(
                 branch_id.into(),
                 vec![first_leaf.into(), second_leaf.into()],
             )?;
-            context.set_children(vec![branch_id.into()])?;
+            context.set_children(context.node_id(), vec![branch_id.into()])?;
             Ok((first_leaf, branch_id))
         })?;
 
@@ -406,14 +406,20 @@ mod tests {
             .configure(|setup| setup.add_commands::<TargetCounter>())
             .build()?;
         let (first, second) = app.with_root_context(|ctx| {
-            let first = ctx.add_child(TargetCounter {
-                count: 0,
-                enabled: true,
-            })?;
-            let second = ctx.add_child(TargetCounter {
-                count: 0,
-                enabled: true,
-            })?;
+            let first = ctx.add_child(
+                ctx.node_id(),
+                TargetCounter {
+                    count: 0,
+                    enabled: true,
+                },
+            )?;
+            let second = ctx.add_child(
+                ctx.node_id(),
+                TargetCounter {
+                    count: 0,
+                    enabled: true,
+                },
+            )?;
             ctx.set_focus(second.into())?;
             Ok((first, second))
         })?;

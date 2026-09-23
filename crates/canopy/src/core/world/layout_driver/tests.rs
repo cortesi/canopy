@@ -1192,7 +1192,7 @@ fn sparse_overrides_survive_refresh_and_clear() -> Result<()> {
     let base = Layout::column().padding(Edges::all(1));
     let node = core.create_detached(LayoutWidget(base))?;
     attach_root_child(&mut core, node)?;
-    core.set_layout_override_of(node, LayoutOverride::new().fixed_height(4))?;
+    core.set_layout_override(node, LayoutOverride::new().fixed_height(4))?;
     for _ in 0..2 {
         core.nodes[node].layout_dirty = true;
         core.update_layout(Size::new(20, 10))?;
@@ -1204,7 +1204,7 @@ fn sparse_overrides_survive_refresh_and_clear() -> Result<()> {
     assert_eq!(core.nodes[node].layout.min_height, Some(4));
     core.clear_layout_override_of(node)?;
     assert_eq!(core.nodes[node].layout, base);
-    core.set_layout_override_of(node, LayoutOverride::new().fixed_height(4))?;
+    core.set_layout_override(node, LayoutOverride::new().fixed_height(4))?;
     core.replace_subtree(node, LayoutWidget(Layout::row()))?;
     assert_eq!(core.nodes[node].layout_override, LayoutOverride::default());
     assert_eq!(core.nodes[node].base_layout, Layout::row());
@@ -1219,7 +1219,7 @@ fn invalid_override_merge_and_refresh_preserve_previous_layout() -> Result<()> {
     let node = core.create_detached(LayoutWidget(Layout::column().max_height(4)))?;
     let before = core.nodes[node].layout;
     assert!(
-        core.set_layout_override_of(
+        core.set_layout_override(
             node,
             LayoutOverride {
                 min_height: Some(Some(5)),
@@ -1230,7 +1230,7 @@ fn invalid_override_merge_and_refresh_preserve_previous_layout() -> Result<()> {
     );
     assert_eq!(core.nodes[node].layout, before);
     assert_eq!(core.nodes[node].layout_override, LayoutOverride::new());
-    core.set_layout_override_of(
+    core.set_layout_override(
         node,
         LayoutOverride {
             min_height: Some(Some(5)),
@@ -1293,13 +1293,13 @@ fn structural_failure_restores_layout_base_and_override() -> Result<()> {
 
     let mut core = Core::new();
     let node = core.create_detached(LayoutWidget(Layout::column().padding(Edges::all(1))))?;
-    core.set_layout_override_of(node, LayoutOverride::new().fixed_height(3))?;
+    core.set_layout_override(node, LayoutOverride::new().fixed_height(3))?;
     let base = core.nodes[node].base_layout;
     let overrides = core.nodes[node].layout_override;
     let layout = core.nodes[node].layout;
     let result: Result<()> = core.with_tree_edit("layout rollback test", |core| {
         core.replace_subtree(node, LayoutWidget(Layout::row()))?;
-        core.set_layout_override_of(node, LayoutOverride::new().fixed_height(7))?;
+        core.set_layout_override(node, LayoutOverride::new().fixed_height(7))?;
         Err(Error::NodeNotFound(testing_node_id()))
     });
     assert!(result.is_err());
@@ -1315,7 +1315,7 @@ fn refreshed_base_must_remain_valid_after_parent_constraints() -> Result<()> {
 
     let mut core = Core::new();
     let node = core.create_detached(LayoutWidget(Layout::column().max_height(10)))?;
-    core.set_layout_override_of(
+    core.set_layout_override(
         node,
         LayoutOverride {
             min_height: Some(Some(5)),

@@ -468,7 +468,7 @@ mod tests {
     impl Widget for Parent {
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
             for value in self.0.drain(..) {
-                ctx.add_child(Leaf(value))?;
+                ctx.add_child(ctx.node_id(), Leaf(value))?;
             }
             Ok(())
         }

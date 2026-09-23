@@ -217,8 +217,8 @@ impl<T: Widget + 'static> Widget for DemoShell<T> {
             .app
             .take()
             .ok_or_else(|| Error::Internal("demo app missing".into()))?;
-        let app_node = c.add_child(app)?;
-        c.set_layout_override_of(
+        let app_node = c.add_child(c.node_id(), app)?;
+        c.set_layout_override(
             app_node.into(),
             LayoutOverride {
                 min_width: Some(None),
@@ -229,6 +229,7 @@ impl<T: Widget + 'static> Widget for DemoShell<T> {
             },
         )?;
         c.add_child(
+            c.node_id(),
             StatusBar::new()
                 .with_left(Text::new(self.status.clone()).with_style("status_bar/text"))
                 .with_right(KeyHint::new(HELP_KEY, HELP_LABEL)),

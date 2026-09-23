@@ -47,10 +47,10 @@ impl Inspector {
     pub(crate) fn install(context: &mut dyn Context) -> Result<NodeId> {
         let logs_id = context.create_detached(Logs::new())?;
         let frame_id = context.create_detached(frame::Frame::new())?;
-        context.set_children_of(frame_id.into(), vec![logs_id.into()])?;
+        context.set_children(frame_id.into(), vec![logs_id.into()])?;
 
         let inspector_id = context.create_detached(Self::new())?;
-        context.set_children_of(inspector_id.into(), vec![frame_id.into()])?;
+        context.set_children(inspector_id.into(), vec![frame_id.into()])?;
 
         Ok(inspector_id.into())
     }

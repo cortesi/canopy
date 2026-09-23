@@ -284,10 +284,10 @@ impl Widget for Confirm {
 
     fn on_mount(&mut self, context: &mut dyn Context) -> Result<()> {
         let root = context.node_id();
-        let frame = context.add_child_to(root, Frame::new())?;
+        let frame = context.add_child(root, Frame::new())?;
         // The frame fits the question rather than filling the view, so the
         // dialog is only as large as what it asks.
-        context.set_layout_override_of(
+        context.set_layout_override(
             frame.into(),
             LayoutOverride {
                 width: Some(Sizing::Measure),
@@ -295,10 +295,10 @@ impl Widget for Confirm {
                 ..LayoutOverride::new()
             },
         )?;
-        let body = context.add_child_to(frame, ConfirmBody::new())?;
+        let body = context.add_child(frame, ConfirmBody::new())?;
         // One row holds both answers, centred as a group, so the gap between
         // them belongs to the dialog rather than to either button.
-        let answers = context.add_child_to(
+        let answers = context.add_child(
             body,
             Container::new(
                 Layout::fill()
@@ -315,7 +315,7 @@ impl Widget for Confirm {
         // binding does not want.
         for (answer, label, key) in [(Answer::Yes, "yes", 'y'), (Answer::No, "no", 'n')] {
             let button: NodeId = context
-                .add_child_to(
+                .add_child(
                     answers,
                     Button::new(label).with_glyphs(ROUND).with_accelerator(key),
                 )?
@@ -477,7 +477,7 @@ mod tests {
         /// Hide the dialog the way closing a modal scope would.
         fn close(&self, context: &mut dyn Context) -> Result<()> {
             let dialog = self.dialog()?;
-            context.set_hidden_of(dialog, true)?;
+            context.set_hidden(dialog, true)?;
             Ok(())
         }
 
@@ -495,7 +495,7 @@ mod tests {
 
         fn on_mount(&mut self, context: &mut dyn Context) -> Result<()> {
             let owner = context.node_id();
-            let dialog = context.add_child(Confirm::new())?;
+            let dialog = context.add_child(context.node_id(), Confirm::new())?;
             self.dialog = Some(dialog.into());
             context.with_widget_mut(dialog, |confirm: &mut Confirm, context| {
                 confirm.set_actions(
@@ -540,7 +540,7 @@ mod tests {
     fn ask(harness: &mut Harness, message: &str) -> Result<()> {
         let focus = harness.with_root_widget_context(|host: &mut Host, context| {
             let dialog = host.dialog()?;
-            context.set_hidden_of(dialog, false)?;
+            context.set_hidden(dialog, false)?;
             context.with_widget_mut(dialog, |confirm: &mut Confirm, context| {
                 confirm.ask(context, "Bookmark", message)?;
                 confirm.initial_focus()

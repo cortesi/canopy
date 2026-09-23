@@ -3692,31 +3692,21 @@ pub mod canopy {
         /// Scroll the view up by one line.
         fn scroll_up(&mut self) -> ChangeOutcome {}
 
-        /// Replace the children list for the current node.
-        ///
-        /// The list must keep every current child, as for
-        /// [`Context::set_children_of`].
-        fn set_children(&mut self, children: Vec<NodeId>) -> Result<()> {}
-
-        /// Replace the children list for a specific parent node.
+        /// Replace the children list for a parent node.
         ///
         /// The list reorders the current children and may add new ones. Omitting
         /// a current child is an error: detach or remove it first.
-        fn set_children_of(&mut self, parent: NodeId, children: Vec<NodeId>) -> Result<()>;
+        fn set_children(&mut self, parent: NodeId, children: Vec<NodeId>) -> Result<()>;
 
         /// Focus an attached node.
         fn set_focus(&mut self, node: NodeId) -> Result<ChangeOutcome>;
 
-        /// Set the current node's visibility.
-        fn set_hidden(&mut self, hidden: bool) -> Result<ChangeOutcome> {}
-
-        /// Set a specific node's visibility.
-        fn set_hidden_of(&mut self, node: NodeId, hidden: bool) -> Result<ChangeOutcome>;
+        /// Set a node's visibility.
+        fn set_hidden(&mut self, node: NodeId, hidden: bool) -> Result<ChangeOutcome>;
 
         /// Replace persistent parent constraints without replacing widget layout
         /// fields.
-        fn set_layout_override_of(&mut self, node: NodeId, overrides: LayoutOverride)
-        -> Result<()>;
+        fn set_layout_override(&mut self, node: NodeId, overrides: LayoutOverride) -> Result<()>;
 
         /// Assign a unique semantic key within a containing subtree scope.
         fn set_semantic_key(&mut self, node: NodeId, scope: NodeId, key: &str) -> Result<()>;
@@ -3728,9 +3718,6 @@ pub mod canopy {
         /// Capture a thread-safe wake handle for this widget's work lifetime.
         /// Attachment handles require this node to be attached when acquired.
         fn wake_handle(&self, lifetime: crate::WorkLifetime) -> Result<crate::NodeWakeHandle>;
-
-        /// Update the layout for the current node.
-        fn with_layout(&mut self, f: &mut dyn FnMut(&mut Layout)) -> Result<()> {}
 
         /// Update the layout for a specific node.
         fn with_layout_of(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Layout)) -> Result<()>;
@@ -3746,31 +3733,21 @@ pub mod canopy {
 
     /// Typed mutation and composition helpers for contexts.
     pub trait ContextExt: Context + ViewContextExt {
-        /// Add a widget as a child of the current node and return the new typed
-        /// node ID.
-        fn add_child<W: 'static + Widget>(&mut self, widget: W) -> Result<TypedId<W>> {}
-
-        /// Add a widget as a child of a specific parent and return the new typed
-        /// node ID.
-        fn add_child_to<W: 'static + Widget>(
+        /// Add a widget as a child of `parent` and return the new typed node ID.
+        fn add_child<W: 'static + Widget>(
             &mut self,
             parent: impl Into<NodeId>,
             widget: W,
         ) -> Result<TypedId<W>> {
         }
 
-        /// Add a typed keyed child to the current node and return its typed node
-        /// ID.
-        fn add_slot<K: ChildSlot>(&mut self, widget: K::Widget) -> Result<TypedId<K::Widget>> {}
-
-        /// Add a typed keyed child to a specific parent and return its typed node
-        /// ID.
-        fn add_slot_to<W: 'static + Widget>(
+        /// Add `widget` as the keyed child `K` of `parent` and return its typed
+        /// node ID.
+        fn add_slot<K: ChildSlot>(
             &mut self,
             parent: impl Into<NodeId>,
-            key: &str,
-            widget: W,
-        ) -> Result<TypedId<W>> {
+            widget: K::Widget,
+        ) -> Result<TypedId<K::Widget>> {
         }
 
         /// Build detached children and attach them after configuration succeeds.
@@ -3793,36 +3770,18 @@ pub mod canopy {
         ) -> StdResult<ArgValue, CommandError> {
         }
 
-        /// Get or create the keyed child under the current node.
+        /// Return the keyed child `K` of `parent`, creating it with `make` when
+        /// it is missing.
         fn get_or_create_slot<K: ChildSlot>(
             &mut self,
-            make: impl FnOnce() -> K::Widget,
-        ) -> Result<TypedId<K::Widget>> {
-        }
-
-        /// Get or create the keyed child under a specific parent node.
-        fn get_or_create_slot_of<K: ChildSlot>(
-            &mut self,
             parent: impl Into<NodeId>,
             make: impl FnOnce() -> K::Widget,
         ) -> Result<TypedId<K::Widget>> {
         }
 
-        /// Get a typed keyed child's node ID.
-        fn get_slot<K: ChildSlot>(&self) -> Result<Option<TypedId<K::Widget>>> {}
-
-        /// Get a typed keyed child's node ID from a specific parent.
-        fn get_slot_of<K: ChildSlot>(
-            &self,
-            parent: impl Into<NodeId>,
-        ) -> Result<Option<TypedId<K::Widget>>> {
-        }
-
-        /// Check if a typed keyed child exists.
-        fn has_slot<K: ChildSlot>(&self) -> Result<bool> {}
-
-        /// Set the layout for the current node.
-        fn set_layout(&mut self, layout: Layout) -> Result<()> {}
+        /// Return the typed keyed child `K` of `parent`. A missing slot is a
+        /// [`Error::NotFound`] that names `K::KEY`.
+        fn get_slot<K: ChildSlot>(&self, parent: impl Into<NodeId>) -> Result<TypedId<K::Widget>> {}
 
         /// Set the layout for a specific node.
         fn set_layout_of(&mut self, node: impl Into<NodeId>, layout: Layout) -> Result<()> {}
@@ -3834,9 +3793,10 @@ pub mod canopy {
         ) -> Result<Option<R>> {
         }
 
-        /// Execute a closure with a typed keyed child.
-        fn with_typed_slot<K: ChildSlot, R>(
+        /// Execute a closure with the typed keyed child `K` of `parent`.
+        fn with_slot<K: ChildSlot, R>(
             &mut self,
+            parent: impl Into<NodeId>,
             f: impl FnOnce(&mut K::Widget, &mut dyn Context) -> Result<R>,
         ) -> Result<R> {
         }
@@ -3881,14 +3841,8 @@ pub mod canopy {
     /// Applications consume contexts supplied by Canopy and cannot implement this
     /// trait themselves.
     pub trait ViewContext: sealed::ViewContext {
-        /// Return a keyed child relative to the current node.
-        fn child_slot(&self, key: &str) -> Option<NodeId> {}
-
         /// Return a keyed child relative to a specific parent node.
         fn child_slot_of(&self, parent: NodeId, key: &str) -> Option<NodeId>;
-
-        /// Children of the current node in tree order.
-        fn children(&self) -> Vec<NodeId> {}
 
         /// Children of a specific node in tree order.
         fn children_of(&self, node: NodeId) -> Vec<NodeId>;
@@ -3927,22 +3881,13 @@ pub mod canopy {
         fn has_mouse_capture(&self) -> bool;
 
         /// Return whether a node exists and is attached to the root tree.
-        fn is_attached_of(&self, node: NodeId) -> bool;
+        fn is_attached(&self, node: NodeId) -> bool;
 
         /// Does the current node have focus?
-        fn is_focused(&self) -> bool {}
-
-        /// Does the specified node have focus?
-        fn is_focused_of(&self, node: NodeId) -> bool;
-
-        /// Is the current node on the focus path?
-        fn is_on_focus_path(&self) -> bool {}
+        fn is_focused(&self) -> bool;
 
         /// Is the specified node on the focus path?
-        fn is_on_focus_path_of(&self, node: NodeId) -> bool;
-
-        /// Cached layout configuration for the current node.
-        fn layout(&self) -> Layout {}
+        fn is_on_focus_path(&self, node: NodeId) -> bool;
 
         /// Layout configuration for a specific node.
         fn layout_of(&self, node: NodeId) -> Option<Layout>;
@@ -3976,7 +3921,7 @@ pub mod canopy {
         /// pending reveal produces. It returns `None` when the node is missing.
         /// Contextual key prediction uses this to answer for a scrollable target
         /// without running widget effects.
-        fn scroll_outcome_of(&self, node: NodeId, x: i32, y: i32) -> Option<ChangeOutcome>;
+        fn scroll_outcome(&self, node: NodeId, x: i32, y: i32) -> Option<ChangeOutcome>;
 
         /// Return a node's independently assigned semantic identity.
         fn semantic_identity(&self, node: NodeId) -> Option<SemanticIdentity>;

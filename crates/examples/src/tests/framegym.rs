@@ -35,11 +35,11 @@ fn framegym_harness() -> Result<Harness> {
 
 fn frame_views(harness: &mut Harness) -> Result<(ViewMetrics, ViewMetrics, Layout)> {
     harness.with_root_widget_context(|_root: &mut FrameGym, ctx| {
-        ctx.with_typed_slot::<FrameSlot, _>(|_frame, frame_ctx| {
+        ctx.with_slot::<FrameSlot, _>(ctx.node_id(), |_frame, frame_ctx| {
             let frame_view = metrics(frame_ctx);
-            let frame_layout = frame_ctx.layout();
-            let pattern_view =
-                frame_ctx.with_typed_slot::<PatternSlot, _>(|_pattern, pattern_ctx| {
+            let frame_layout = frame_ctx.layout_of(frame_ctx.node_id()).unwrap_or_default();
+            let pattern_view = frame_ctx
+                .with_slot::<PatternSlot, _>(frame_ctx.node_id(), |_pattern, pattern_ctx| {
                     Ok(metrics(pattern_ctx))
                 })?;
             Ok((frame_view, pattern_view, frame_layout))
@@ -49,8 +49,8 @@ fn frame_views(harness: &mut Harness) -> Result<(ViewMetrics, ViewMetrics, Layou
 
 fn pattern_scroll(harness: &mut Harness) -> Result<geom::Point> {
     harness.with_root_widget_context(|_root: &mut FrameGym, ctx| {
-        ctx.with_typed_slot::<FrameSlot, _>(|_frame, frame_ctx| {
-            frame_ctx.with_typed_slot::<PatternSlot, _>(|_pattern, pattern_ctx| {
+        ctx.with_slot::<FrameSlot, _>(ctx.node_id(), |_frame, frame_ctx| {
+            frame_ctx.with_slot::<PatternSlot, _>(frame_ctx.node_id(), |_pattern, pattern_ctx| {
                 Ok(pattern_ctx.view().scroll)
             })
         })

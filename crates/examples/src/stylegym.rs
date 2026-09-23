@@ -766,7 +766,7 @@ impl Widget for ModalContent {
 
 /// Add stock widgets under `parent`, one titled frame each.
 fn add_widget_samples(c: &mut dyn Context, parent: NodeId) -> Result<()> {
-    let buttons = c.add_child_to(parent, Frame::new().with_title("Buttons"))?;
+    let buttons = c.add_child(parent, Frame::new().with_title("Buttons"))?;
     c.set_layout_of(
         buttons,
         Layout::column()
@@ -774,11 +774,11 @@ fn add_widget_samples(c: &mut dyn Context, parent: NodeId) -> Result<()> {
             .flex_horizontal(1)
             .padding(Edges::all(1)),
     )?;
-    let row = c.add_child_to(buttons, Container::row())?;
+    let row = c.add_child(buttons, Container::row())?;
     for (label, active) in [("Normal", false), ("Pressed", true)] {
         let mut button = Button::new(label);
         button.set_active(active);
-        let button = c.add_child_to(row, button)?;
+        let button = c.add_child(row, button)?;
         c.set_layout_of(button, Layout::fill().fixed_width(14).fixed_height(3))?;
     }
 
@@ -786,8 +786,8 @@ fn add_widget_samples(c: &mut dyn Context, parent: NodeId) -> Result<()> {
         ("Input", "Focus me and type"),
         ("Another input", "Unfocused"),
     ] {
-        let frame = c.add_child_to(parent, Frame::new().with_title(title))?;
-        c.add_child_to(frame, Input::new(value))?;
+        let frame = c.add_child(parent, Frame::new().with_title(title))?;
+        c.add_child(frame, Input::new(value))?;
         c.set_layout_of(
             frame,
             Layout::column()
@@ -797,9 +797,9 @@ fn add_widget_samples(c: &mut dyn Context, parent: NodeId) -> Result<()> {
         )?;
     }
 
-    let frame = c.add_child_to(parent, Frame::new().with_title("Selector"))?;
+    let frame = c.add_child(parent, Frame::new().with_title("Selector"))?;
     let items = ["Checked", "Also checked", "Unchecked"].map(String::from);
-    let selector = c.add_child_to(frame, Selector::new(items.to_vec()))?;
+    let selector = c.add_child(frame, Selector::new(items.to_vec()))?;
     c.with_widget_mut(selector, |selector: &mut Selector<String>, ctx| {
         selector.toggle(ctx)?;
         selector.select_by(ctx, 1)?;
@@ -828,8 +828,8 @@ fn add_syntax_samples(c: &mut dyn Context, parent: NodeId) -> Result<()> {
             .with_wrap(WrapMode::None);
         let mut editor = Editor::with_config(source, config);
         editor.set_highlighter(Some(Box::new(SyntectHighlighter::new(extension))));
-        let frame = c.add_child_to(parent, Frame::new().with_title(title))?;
-        let editor = c.add_child_to(frame, editor)?;
+        let frame = c.add_child(parent, Frame::new().with_title(title))?;
+        let editor = c.add_child(frame, editor)?;
         c.set_layout_of(editor, Layout::fill())?;
         c.with_widget_mut(editor, |editor: &mut Editor, ctx| {
             editor.search(ctx, query.to_string());
@@ -871,7 +871,7 @@ impl Stylegym {
     where
         F: FnOnce(&mut Container, &mut dyn Context) -> Result<R>,
     {
-        c.with_typed_slot::<RightContainerSlot, _>(f)
+        c.with_slot::<RightContainerSlot, _>(c.node_id(), f)
     }
 
     /// Execute a closure with the tabs that hold the style pages.
@@ -880,7 +880,9 @@ impl Stylegym {
         F: FnOnce(&mut Tabs, &mut dyn Context) -> Result<R>,
     {
         self.with_right_container(c, |_, ctx| {
-            ctx.with_typed_slot::<MainFrameSlot, _>(|_, ctx| ctx.with_typed_slot::<TabsSlot, _>(f))
+            ctx.with_slot::<MainFrameSlot, _>(ctx.node_id(), |_, ctx| {
+                ctx.with_slot::<TabsSlot, _>(ctx.node_id(), f)
+            })
         })
     }
 
@@ -918,12 +920,12 @@ impl Stylegym {
         self.modal_visible = true;
 
         self.with_right_container(c, |_, ctx| {
-            if ctx.has_slot::<ModalSlot>()? {
+            if ctx.child_slot_of(ctx.node_id(), ModalSlot::KEY).is_some() {
                 return Ok(());
             }
-            let modal_id = ctx.add_slot::<ModalSlot>(Center::new())?;
-            let frame_id = ctx.add_child_to(modal_id, Frame::new().with_title("Demo Modal"))?;
-            ctx.add_child_to(frame_id, ModalContent)?;
+            let modal_id = ctx.add_slot::<ModalSlot>(ctx.node_id(), Center::new())?;
+            let frame_id = ctx.add_child(modal_id, Frame::new().with_title("Demo Modal"))?;
+            ctx.add_child(frame_id, ModalContent)?;
 
             let mut layout = Layout::fill().padding(Edges::all(1));
             layout.min_width = Some(35);
@@ -951,7 +953,7 @@ impl Stylegym {
         self.modal_visible = false;
 
         self.with_right_container(c, |_, ctx| {
-            if let Some(modal_id) = ctx.child_slot(ModalSlot::KEY) {
+            if let Some(modal_id) = ctx.child_slot_of(ctx.node_id(), ModalSlot::KEY) {
                 ctx.remove_subtree(modal_id)?;
             }
             Ok(())
@@ -1015,7 +1017,8 @@ impl Widget for Stylegym {
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         // Create left frame (controls) - preserve Frame's padding for border
-        let left_frame_id = c.add_slot::<ControlsSlot>(Frame::new().with_title("Styles"))?;
+        let left_frame_id =
+            c.add_slot::<ControlsSlot>(c.node_id(), Frame::new().with_title("Styles"))?;
         c.set_layout_of(
             left_frame_id,
             Layout::column()
@@ -1026,41 +1029,27 @@ impl Widget for Stylegym {
 
         // Create theme dropdown with its own frame - no fixed height so it can
         // expand
-        let theme_frame_id = c.add_slot_to(
-            left_frame_id,
-            ThemeFrameSlot::KEY,
-            Frame::new().with_title("Theme"),
-        )?;
-        c.add_slot_to(
-            theme_frame_id,
-            ThemeDropdownSlot::KEY,
-            Dropdown::new(available_themes())?,
-        )?;
+        let theme_frame_id =
+            c.add_slot::<ThemeFrameSlot>(left_frame_id, Frame::new().with_title("Theme"))?;
+        c.add_slot::<ThemeDropdownSlot>(theme_frame_id, Dropdown::new(available_themes())?)?;
         c.set_layout_of(
             theme_frame_id,
             Layout::column().flex_horizontal(1).padding(Edges::all(1)),
         )?;
 
         // Create effects selector with its own frame
-        let effects_frame_id = c.add_slot_to(
-            left_frame_id,
-            EffectsFrameSlot::KEY,
-            Frame::new().with_title("Effects"),
-        )?;
-        c.add_slot_to(
-            effects_frame_id,
-            EffectsSelectorSlot::KEY,
-            Selector::new(available_effects()),
-        )?;
+        let effects_frame_id =
+            c.add_slot::<EffectsFrameSlot>(left_frame_id, Frame::new().with_title("Effects"))?;
+        c.add_slot::<EffectsSelectorSlot>(effects_frame_id, Selector::new(available_effects()))?;
         c.set_layout_of(effects_frame_id, Layout::fill().padding(Edges::all(1)))?;
 
         // Create right container with Stack layout for modal overlay
-        let right_container_id = c.add_slot::<RightContainerSlot>(Container::stack())?;
+        let right_container_id =
+            c.add_slot::<RightContainerSlot>(c.node_id(), Container::stack())?;
 
         // Create the styles frame and its tabbed pages
-        let styles_frame_id =
-            c.add_slot_to(right_container_id, MainFrameSlot::KEY, Frame::new())?;
-        let tabs_id = c.add_slot_to(styles_frame_id, TabsSlot::KEY, Tabs::new())?;
+        let styles_frame_id = c.add_slot::<MainFrameSlot>(right_container_id, Frame::new())?;
+        let tabs_id = c.add_slot::<TabsSlot>(styles_frame_id, Tabs::new())?;
         let (palette, rules) = c.with_widget_mut(tabs_id, |tabs: &mut Tabs, ctx| {
             let palette = tabs.add_tab(ctx, "Palette", StyleSheet::palette())?;
             let rules = tabs.add_tab(ctx, "Rules", StyleSheet::rules())?;

@@ -5,8 +5,8 @@ use std::{collections::HashMap, fmt::Display, path::Path};
 
 use anyhow::Result as AnyResult;
 use canopy::{
-    Canopy, CanopyBuilder, Context, ContextExt, InteractionToken, ModalBindings, ModalOptions,
-    NodeId, NodeName, Register, Render, Setup, ViewContext, ViewContextExt, Widget,
+    Canopy, CanopyBuilder, ChildSlot, Context, ContextExt, InteractionToken, ModalBindings,
+    ModalOptions, NodeId, NodeName, Register, Render, Setup, ViewContext, ViewContextExt, Widget,
     WidgetActionSpec,
     commands::CommandStatus,
     derive_commands,
@@ -150,7 +150,7 @@ impl Todo {
 
     /// Build the Todo widget subtree once.
     fn ensure_tree(&self, c: &mut dyn Context) -> Result<()> {
-        if c.has_slot::<MainSlot>()? {
+        if c.child_slot_of(c.node_id(), MainSlot::KEY).is_some() {
             return Ok(());
         }
 
@@ -183,7 +183,7 @@ impl Todo {
 
     /// Build the add-item modal once.
     fn ensure_modal(&self, c: &mut dyn Context) -> Result<()> {
-        if c.has_slot::<ModalSlot>()? {
+        if c.child_slot_of(c.node_id(), ModalSlot::KEY).is_some() {
             return Ok(());
         }
 
@@ -315,8 +315,8 @@ impl Todo {
         })?;
         let input = self.input_id(c)?;
         if !self.adder.is_some_and(|token| c.modal_is_open(token)) {
-            let modal = c.get_slot::<ModalSlot>()?.expect("modal initialized");
-            let main = c.get_slot::<MainSlot>()?.expect("main initialized");
+            let modal = c.get_slot::<ModalSlot>(c.node_id())?;
+            let main = c.get_slot::<MainSlot>(c.node_id())?;
             self.adder = Some(c.open_modal(ModalOptions {
                 owner: c.node_id(),
                 modal: modal.into(),
@@ -681,7 +681,7 @@ mod tests {
         let store = store::Store::open(":memory:")?;
         let mut harness = Harness::from_canopy(create_app(store, None)?, Size::new(80, 24))?;
         with_todo(&mut harness.canopy, |_, ctx| {
-            let main = ctx.get_slot::<MainSlot>()?.expect("main initialized");
+            let main = ctx.get_slot::<MainSlot>(ctx.node_id())?;
             ctx.push_effect(main.into(), effects::brightness(0.8))?;
             Ok(())
         })?;

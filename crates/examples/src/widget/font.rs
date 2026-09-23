@@ -123,7 +123,7 @@ impl Widget for FontDemo {
             .with_style(FONT_STYLE_PATH)
             .with_effects(self.effects)
             .with_layout_options(options);
-        let banner_id = ctx.add_child(banner)?;
+        let banner_id = ctx.add_child(ctx.node_id(), banner)?;
         ctx.set_layout_of(banner_id, Layout::fill())?;
         self.banner_id = Some(banner_id);
         Ok(())

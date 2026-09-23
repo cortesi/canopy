@@ -79,7 +79,7 @@ impl Columns {
         }
         let current = panes
             .iter()
-            .position(|pane| c.is_on_focus_path_of(*pane))
+            .position(|pane| c.is_on_focus_path(*pane))
             .unwrap_or(0);
         let count = i64::try_from(panes.len()).unwrap_or(i64::MAX);
         let next = (i64::try_from(current).unwrap_or(0) + i64::from(delta)).rem_euclid(count);
@@ -90,7 +90,7 @@ impl Columns {
 
     /// Return the displayed panes in order.
     fn panes(ctx: &dyn ViewContext) -> Vec<NodeId> {
-        ctx.children()
+        ctx.children_of(ctx.node_id())
             .into_iter()
             .filter(|pane| ctx.view_of(*pane).is_some_and(|view| !view.is_empty()))
             .collect()

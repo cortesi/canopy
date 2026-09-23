@@ -75,8 +75,8 @@ mod tests {
             .build()?;
         let app = Root::new().install(&mut canopy, App)?;
         let (first, second) = canopy.with_context(app, |ctx| {
-            let first = ctx.add_child(Counter::default())?;
-            let second = ctx.add_child(Counter::default())?;
+            let first = ctx.add_child(ctx.node_id(), Counter::default())?;
+            let second = ctx.add_child(ctx.node_id(), Counter::default())?;
             Ok((first, second))
         })?;
         Ok(Setup {
@@ -95,7 +95,10 @@ mod tests {
     ) -> Result<TypedId<Counter>> {
         canopy.with_context(app, |ctx| {
             let extra = ctx.create_detached(Counter::default())?;
-            ctx.set_children(vec![extra.into(), first.into(), second.into()])?;
+            ctx.set_children(
+                ctx.node_id(),
+                vec![extra.into(), first.into(), second.into()],
+            )?;
             Ok(extra)
         })
     }
@@ -109,9 +112,12 @@ mod tests {
             second,
         } = setup()?;
         let button = canopy.with_context(first, |ctx| {
-            ctx.add_child(Button::new("Press second").with_command(
-                Counter::call_press().with_target(CommandTarget::Exact(second.into())),
-            ))
+            ctx.add_child(
+                ctx.node_id(),
+                Button::new("Press second").with_command(
+                    Counter::call_press().with_target(CommandTarget::Exact(second.into())),
+                ),
+            )
         })?;
         canopy.with_root_context(|ctx| {
             ctx.dispatch_exact(button.into(), &Button::call_press())?;
@@ -151,6 +157,7 @@ mod tests {
         } = setup()?;
         let row = canopy.with_context(first, |ctx| {
             let list = ctx.add_child(
+                ctx.node_id(),
                 List::<Text>::new().with_on_activate(
                     Counter::spec_activate()
                         .call()

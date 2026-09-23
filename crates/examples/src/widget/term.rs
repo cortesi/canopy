@@ -157,9 +157,9 @@ impl Widget for TermDemo {
             .apply();
         ctx.set_style(style);
 
-        let tab_bar_id = ctx.add_child(TabBar::new())?;
+        let tab_bar_id = ctx.add_child(ctx.node_id(), TabBar::new())?;
         for label in TAB_LABELS {
-            let tab_id = ctx.add_child_to(
+            let tab_id = ctx.add_child(
                 tab_bar_id,
                 Button::new(label.to_string()).with_glyphs(ROUND),
             )?;
@@ -170,13 +170,13 @@ impl Widget for TermDemo {
             self.tab_ids.push(tab_id);
         }
 
-        let stack_id = ctx.add_child(TerminalStack::new())?;
+        let stack_id = ctx.add_child(ctx.node_id(), TerminalStack::new())?;
 
         let cwd = env::current_dir().map_err(|err| Error::Internal(err.to_string()))?;
         for label in TAB_LABELS {
-            let frame_id = ctx.add_child_to(stack_id, Frame::new())?;
+            let frame_id = ctx.add_child(stack_id, Frame::new())?;
             ctx.set_layout_of(frame_id, Layout::fill().padding(Edges::all(1)))?;
-            let terminal_id = ctx.add_child_to(
+            let terminal_id = ctx.add_child(
                 frame_id,
                 Terminal::new(
                     TerminalConfig::new()

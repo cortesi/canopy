@@ -94,8 +94,8 @@ fn add_editor_frame(
     if let Some(highlighter) = highlighter {
         editor.set_highlighter(Some(Box::new(highlighter)));
     }
-    let frame_id = c.add_child_to(parent, Frame::new().with_title(title))?;
-    let editor_id = c.add_child_to(frame_id, editor)?;
+    let frame_id = c.add_child(parent, Frame::new().with_title(title))?;
+    let editor_id = c.add_child(frame_id, editor)?;
 
     c.set_layout_of(editor_id, Layout::fill())?;
 
@@ -171,7 +171,7 @@ impl EditorGym {
         let line_numbers = numbered_lines("Line", 30);
         let auto_grow = numbered_lines("Auto", 4);
 
-        let column_id = c.add_child(EditorColumn::new())?;
+        let column_id = c.add_child(c.node_id(), EditorColumn::new())?;
         add_editor_frame(
             c,
             column_id,
@@ -238,7 +238,7 @@ impl EditorGym {
     fn build_right_column(&self, c: &mut dyn Context) -> Result<()> {
         let vi_text = numbered_lines("Vi", 24);
 
-        let column_id = c.add_child(EditorColumn::new())?;
+        let column_id = c.add_child(c.node_id(), EditorColumn::new())?;
         add_editor_frame(
             c,
             column_id,

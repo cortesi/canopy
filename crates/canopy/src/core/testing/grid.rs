@@ -85,7 +85,7 @@ impl Grid {
         let grid = canopy.with_root_context(|context| {
             let grid_root = build_node(context, 0, 0, recursion, divisions)?;
             let root = context.root_id();
-            context.set_children_of(root, vec![grid_root])?;
+            context.set_children(root, vec![grid_root])?;
             context.set_layout_of(root, Layout::fill())?;
             context.with_layout_of(grid_root, &mut |layout| {
                 layout.width = Sizing::Flex(1);
@@ -156,11 +156,11 @@ fn build_node(
             let child = build_node(core, child_x, child_y, recursion - 1, divisions)?;
             row_children.push(child);
         }
-        core.set_children_of(row_node, row_children)?;
+        core.set_children(row_node, row_children)?;
         children.push(row_node);
     }
 
-    core.set_children_of(node_id, children)?;
+    core.set_children(node_id, children)?;
 
     Ok(node_id)
 }

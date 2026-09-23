@@ -18,7 +18,7 @@ mod tests {
         canopy.with_context(frame, |ctx| {
             let text = ctx.create_detached(Text::new("retained"))?;
             ctx.attach(frame.into(), text.into())?;
-            ctx.set_layout_override_of(frame.into(), LayoutOverride::new().fixed_height(3))
+            ctx.set_layout_override(frame.into(), LayoutOverride::new().fixed_height(3))
         })?;
         let mut harness = Harness::from_canopy(canopy, Size::new(20, 8))?;
         harness.render()?;
@@ -44,7 +44,7 @@ mod tests {
         }
 
         harness.canopy.with_root_context(|ctx| {
-            ctx.set_layout_override_of(frame.into(), LayoutOverride::default())
+            ctx.set_layout_override(frame.into(), LayoutOverride::default())
         })?;
         harness.render()?;
         harness.canopy.with_root_view(|ctx| {

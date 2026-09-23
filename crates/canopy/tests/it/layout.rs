@@ -74,8 +74,8 @@ mod tests {
         let (container, child) = h.canopy.with_root_context(|context| {
             let container: NodeId = context.create_detached(Container::new())?.into();
             let child: NodeId = context.create_detached(Huge::new())?.into();
-            context.set_children_of(h.root, vec![container])?;
-            context.set_children_of(container, vec![child])?;
+            context.set_children(h.root, vec![container])?;
+            context.set_children(container, vec![child])?;
             context.set_layout_of(h.root, Layout::fill())?;
             context.set_layout_of(container, Layout::fill().padding(Edges::all(1)))?;
             context.set_layout_of(child, Layout::fill())?;

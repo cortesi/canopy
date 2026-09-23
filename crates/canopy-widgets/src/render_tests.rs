@@ -44,7 +44,7 @@ mod tests {
         harness.render()?;
         harness.with_root_widget_context(|_root: &mut SnapshotRoot<Dropdown<String>>, ctx| {
             ctx.with_unique_descendant::<Dropdown<String>, _>(|_, ctx| {
-                ctx.set_layout(Layout::fill().padding(Edges::all(1)))
+                ctx.set_layout_of(ctx.node_id(), Layout::fill().padding(Edges::all(1)))
             })
         })?;
         harness.render()?;
@@ -77,7 +77,7 @@ mod tests {
         let mut harness = Harness::builder(root).size(10, 4).build()?;
         harness.with_root_widget_context(|_root: &mut SnapshotRoot<Selector<String>>, ctx| {
             ctx.with_unique_descendant::<Selector<String>, _>(|_, ctx| {
-                ctx.set_layout(Layout::fill().padding(Edges::all(1)))
+                ctx.set_layout_of(ctx.node_id(), Layout::fill().padding(Edges::all(1)))
             })
         })?;
         harness.render()?;
@@ -206,7 +206,7 @@ mod tests {
 
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
             let child = self.child.take().expect("snapshot child already mounted");
-            let _ = ctx.add_child(child)?;
+            let _ = ctx.add_child(ctx.node_id(), child)?;
             Ok(())
         }
 
@@ -235,7 +235,7 @@ mod tests {
             .build()?;
         harness.with_root_widget_context(|_root: &mut SnapshotRoot<Frame>, ctx| {
             ctx.with_unique_descendant::<Frame, _>(|_, ctx| {
-                ctx.add_child(Text::new(text))?;
+                ctx.add_child(ctx.node_id(), Text::new(text))?;
                 Ok(())
             })
         })?;
@@ -284,7 +284,7 @@ mod tests {
             .with_root_view(|ctx| ctx.unique_descendant::<crate::Input>().unwrap().unwrap());
         let second =
             harness.with_root_widget_context(|_: &mut SnapshotRoot<crate::Input>, ctx| {
-                ctx.add_child(crate::Input::new(""))
+                ctx.add_child(ctx.node_id(), crate::Input::new(""))
             })?;
         harness.with_root_widget_context(|_: &mut SnapshotRoot<crate::Input>, ctx| {
             ctx.set_focus(first.into()).map(|_| ())
@@ -343,7 +343,9 @@ mod tests {
             .size(20, 3)
             .build()?;
         harness.with_root_widget_context(|_root: &mut SnapshotRoot<crate::Input>, ctx| {
-            ctx.with_unique_descendant::<crate::Input, _>(|_, ctx| ctx.set_layout(Layout::column()))
+            ctx.with_unique_descendant::<crate::Input, _>(|_, ctx| {
+                ctx.set_layout_of(ctx.node_id(), Layout::column())
+            })
         })?;
         harness.render()?;
         assert!(

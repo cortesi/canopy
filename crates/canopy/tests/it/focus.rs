@@ -183,7 +183,7 @@ mod tests {
         let second = canopy.create_detached(FocusLeaf::new("second"))?;
         canopy.with_root_context(|context| {
             let root = context.root_id();
-            context.set_children_of(root, vec![first.into(), second.into()])?;
+            context.set_children(root, vec![first.into(), second.into()])?;
             context.set_layout_of(root, Layout::column().flex_horizontal(1).flex_vertical(1))?;
             context.set_layout_of(first, Layout::column().fixed_width(10).fixed_height(5))?;
             context.set_layout_of(second, Layout::fill())?;

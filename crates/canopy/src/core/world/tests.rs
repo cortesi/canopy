@@ -204,17 +204,17 @@ impl Widget for FaultWidget {
         match self.mount {
             MountAction::Succeed => Ok(()),
             MountAction::FailAfterCoreMutations => {
-                ctx.set_hidden(true)?;
+                ctx.set_hidden(ctx.node_id(), true)?;
                 ctx.exit(73);
                 ctx.set_style(StyleMap::default());
                 Err(Error::Invalid("fault-injected mount failure".into()))
             }
             MountAction::FailFromNestedEdit => {
-                ctx.add_child(MountFailWidget)?;
+                ctx.add_child(ctx.node_id(), MountFailWidget)?;
                 Ok(())
             }
             MountAction::HandleNestedFailure => {
-                let error = match ctx.add_child(MountFailWidget) {
+                let error = match ctx.add_child(ctx.node_id(), MountFailWidget) {
                     Ok(_) => panic!("nested mount should fail"),
                     Err(error) => error,
                 };
@@ -1561,7 +1561,10 @@ fn keyed_reconcile_removes_in_current_child_order() -> Result<()> {
         |key| Ok(FaultWidget::new(key, Arc::clone(&log))),
         |_, _, _| Ok(()),
     )?;
-    ctx.set_children([2, 0, 3, 1].map(|index| rows[index].into()).to_vec())?;
+    ctx.set_children(
+        ctx.node_id(),
+        [2, 0, 3, 1].map(|index| rows[index].into()).to_vec(),
+    )?;
     log.lock().unwrap().clear();
     let retained = keyed.reconcile(
         &mut ctx,
@@ -1603,7 +1606,7 @@ fn keyed_reconcile_update_failure_preserves_core_and_helper_state() -> Result<()
                 |_key| Ok(ReconcileWidget::succeeds()),
                 |key, id, ctx| {
                     if *key == "a" {
-                        ctx.set_hidden_of(id.into(), true)?;
+                        ctx.set_hidden(id.into(), true)?;
                         Ok(())
                     } else {
                         Err(Error::Invalid("reconcile update failure".into()))
@@ -1950,7 +1953,7 @@ fn keyed_reconcile_preserves_ids_when_reordered_and_rejects_duplicates_first() -
     )?;
     assert_eq!(second, [first[1], first[0]]);
     assert_eq!(
-        ctx.children(),
+        ctx.children_of(ctx.node_id()),
         second.iter().copied().map(NodeId::from).collect::<Vec<_>>()
     );
     let error = keyed

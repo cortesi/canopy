@@ -192,15 +192,15 @@ impl Widget for CharGym {
     }
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-        let frame_id = c.add_child(Frame::new().with_title("chargym"))?;
-        c.add_child_to(
+        let frame_id = c.add_child(c.node_id(), Frame::new().with_title("chargym"))?;
+        c.add_child(
             frame_id,
             Text::new(self.content.clone())
                 .with_wrap_width(WRAP_WIDTH)
                 .with_canvas_width(CanvasWidth::Intrinsic),
         )?;
 
-        c.set_layout(Layout::fill())?;
+        c.set_layout_of(c.node_id(), Layout::fill())?;
         Ok(())
     }
 }

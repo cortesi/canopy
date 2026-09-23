@@ -127,11 +127,6 @@ pub trait ViewContext: sealed::ViewContext {
         self.view_of(self.node_id()).unwrap_or_default()
     }
 
-    /// Cached layout configuration for the current node.
-    fn layout(&self) -> Layout {
-        self.layout_of(self.node_id()).unwrap_or_default()
-    }
-
     /// View information for a specific node.
     fn view_of(&self, node: NodeId) -> Option<View>;
 
@@ -145,7 +140,7 @@ pub trait ViewContext: sealed::ViewContext {
     /// pending reveal produces. It returns `None` when the node is missing.
     /// Contextual key prediction uses this to answer for a scrollable target
     /// without running widget effects.
-    fn scroll_outcome_of(&self, node: NodeId, x: i32, y: i32) -> Option<ChangeOutcome>;
+    fn scroll_outcome(&self, node: NodeId, x: i32, y: i32) -> Option<ChangeOutcome>;
 
     /// Read a widget without extracting its slot or marking it changed.
     fn with_widget_dyn(
@@ -168,21 +163,11 @@ pub trait ViewContext: sealed::ViewContext {
     /// Return a node's independently assigned semantic identity.
     fn semantic_identity(&self, node: NodeId) -> Option<SemanticIdentity>;
 
-    /// Children of the current node in tree order.
-    fn children(&self) -> Vec<NodeId> {
-        self.children_of(self.node_id())
-    }
-
     /// Children of a specific node in tree order.
     fn children_of(&self, node: NodeId) -> Vec<NodeId>;
 
     /// Does the current node have focus?
-    fn is_focused(&self) -> bool {
-        self.is_focused_of(self.node_id())
-    }
-
-    /// Does the specified node have focus?
-    fn is_focused_of(&self, node: NodeId) -> bool;
+    fn is_focused(&self) -> bool;
 
     /// Return the currently focused node, including one not yet laid out.
     fn focused_node(&self) -> Option<NodeId>;
@@ -190,13 +175,8 @@ pub trait ViewContext: sealed::ViewContext {
     /// Does the current node hold mouse capture?
     fn has_mouse_capture(&self) -> bool;
 
-    /// Is the current node on the focus path?
-    fn is_on_focus_path(&self) -> bool {
-        self.is_on_focus_path_of(self.node_id())
-    }
-
     /// Is the specified node on the focus path?
-    fn is_on_focus_path_of(&self, node: NodeId) -> bool;
+    fn is_on_focus_path(&self, node: NodeId) -> bool;
 
     /// Return the focused leaf under the subtree rooted at `root`.
     fn focused_leaf(&self, root: NodeId) -> Option<NodeId>;
@@ -208,7 +188,7 @@ pub trait ViewContext: sealed::ViewContext {
     fn parent_of(&self, node: NodeId) -> Option<NodeId>;
 
     /// Return whether a node exists and is attached to the root tree.
-    fn is_attached_of(&self, node: NodeId) -> bool;
+    fn is_attached(&self, node: NodeId) -> bool;
 
     /// Whether a modal scope remains open, including pending deferred closes.
     fn modal_is_open(&self, token: InteractionToken) -> bool;
@@ -222,11 +202,6 @@ pub trait ViewContext: sealed::ViewContext {
 
     /// Locate the deepest visible node at a point within a subtree.
     fn locate(&self, root: NodeId, point: Point) -> Result<Option<NodeId>>;
-
-    /// Return a keyed child relative to the current node.
-    fn child_slot(&self, key: &str) -> Option<NodeId> {
-        self.child_slot_of(self.node_id(), key)
-    }
 
     /// Return a keyed child relative to a specific parent node.
     fn child_slot_of(&self, parent: NodeId, key: &str) -> Option<NodeId>;
@@ -402,12 +377,12 @@ pub trait ViewContextExt: ViewContext {
 
     /// Return the unique child of type `W`, or error if more than one exists.
     fn unique_child<W: Widget + 'static>(&self) -> Result<Option<TypedId<W>>> {
-        unique_typed(self, self.children().into_iter())
+        unique_typed(self, self.children_of(self.node_id()).into_iter())
     }
 
     /// Return all direct children of type `W`.
     fn children_of_type<W: Widget + 'static>(&self) -> Vec<TypedId<W>> {
-        self.children()
+        self.children_of(self.node_id())
             .into_iter()
             .filter(|id| node_matches_type::<W, _>(self, *id))
             .map(TypedId::new)
@@ -433,7 +408,7 @@ pub trait ViewContextExt: ViewContext {
     fn focused_descendant<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
         self.descendants_of_type::<W>()
             .into_iter()
-            .find(|id| ViewContext::is_on_focus_path_of(self, (*id).into()))
+            .find(|id| ViewContext::is_on_focus_path(self, (*id).into()))
     }
 
     /// Return the descendant of type `W` on the focus path, or the first if
@@ -447,7 +422,7 @@ pub trait ViewContextExt: ViewContext {
         let focused = descendants
             .iter()
             .copied()
-            .find(|id| ViewContext::is_on_focus_path_of(self, (*id).into()));
+            .find(|id| ViewContext::is_on_focus_path(self, (*id).into()));
         focused.or_else(|| descendants.into_iter().next())
     }
 
@@ -654,18 +629,12 @@ pub trait Context: ViewContext + sealed::Context {
     /// Mark this node dirty so the next frame re-runs layout.
     fn invalidate_layout(&mut self);
 
-    /// Update the layout for the current node.
-    fn with_layout(&mut self, f: &mut dyn FnMut(&mut Layout)) -> Result<()> {
-        let node = self.node_id();
-        self.with_layout_of(node, f)
-    }
-
     /// Update the layout for a specific node.
     fn with_layout_of(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Layout)) -> Result<()>;
 
     /// Replace persistent parent constraints without replacing widget layout
     /// fields.
-    fn set_layout_override_of(&mut self, node: NodeId, overrides: LayoutOverride) -> Result<()>;
+    fn set_layout_override(&mut self, node: NodeId, overrides: LayoutOverride) -> Result<()>;
 
     /// Create a new widget node detached from the tree.
     fn create_detached_boxed(&mut self, widget: Box<dyn Widget>) -> Result<NodeId>;
@@ -747,27 +716,14 @@ pub trait Context: ViewContext + sealed::Context {
     /// Attachment handles require this node to be attached when acquired.
     fn wake_handle(&self, lifetime: crate::WorkLifetime) -> Result<crate::NodeWakeHandle>;
 
-    /// Replace the children list for the current node.
-    ///
-    /// The list must keep every current child, as for
-    /// [`Context::set_children_of`].
-    fn set_children(&mut self, children: Vec<NodeId>) -> Result<()> {
-        self.set_children_of(self.node_id(), children)
-    }
-
-    /// Replace the children list for a specific parent node.
+    /// Replace the children list for a parent node.
     ///
     /// The list reorders the current children and may add new ones. Omitting
     /// a current child is an error: detach or remove it first.
-    fn set_children_of(&mut self, parent: NodeId, children: Vec<NodeId>) -> Result<()>;
+    fn set_children(&mut self, parent: NodeId, children: Vec<NodeId>) -> Result<()>;
 
-    /// Set the current node's visibility.
-    fn set_hidden(&mut self, hidden: bool) -> Result<ChangeOutcome> {
-        self.set_hidden_of(self.node_id(), hidden)
-    }
-
-    /// Set a specific node's visibility.
-    fn set_hidden_of(&mut self, node: NodeId, hidden: bool) -> Result<ChangeOutcome>;
+    /// Set a node's visibility.
+    fn set_hidden(&mut self, node: NodeId, hidden: bool) -> Result<ChangeOutcome>;
 
     /// Request a cooperative shutdown with the provided status code.
     fn exit(&mut self, code: i32);
@@ -805,14 +761,9 @@ pub trait ContextExt: Context + ViewContextExt {
         super::children::compose(sealed::Context::as_context(self), parent, build)
     }
 
-    /// Set the layout for the current node.
-    fn set_layout(&mut self, layout: Layout) -> Result<()> {
-        self.set_layout_of(self.node_id(), layout)
-    }
-
     /// Set the layout for a specific node.
     fn set_layout_of(&mut self, node: impl Into<NodeId>, layout: Layout) -> Result<()> {
-        Context::set_layout_override_of(self, node.into(), LayoutOverride::full(layout))
+        Context::set_layout_override(self, node.into(), LayoutOverride::full(layout))
     }
 
     /// Execute a closure with mutable access to a runtime-checked widget node.
@@ -847,15 +798,8 @@ pub trait ContextExt: Context + ViewContextExt {
         Ok(TypedId::new(id))
     }
 
-    /// Add a widget as a child of the current node and return the new typed
-    /// node ID.
-    fn add_child<W: Widget + 'static>(&mut self, widget: W) -> Result<TypedId<W>> {
-        self.add_child_to(self.node_id(), widget)
-    }
-
-    /// Add a widget as a child of a specific parent and return the new typed
-    /// node ID.
-    fn add_child_to<W: Widget + 'static>(
+    /// Add a widget as a child of `parent` and return the new typed node ID.
+    fn add_child<W: Widget + 'static>(
         &mut self,
         parent: impl Into<NodeId>,
         widget: W,
@@ -864,76 +808,47 @@ pub trait ContextExt: Context + ViewContextExt {
         Ok(TypedId::new(id))
     }
 
-    /// Check if a typed keyed child exists.
-    fn has_slot<K: ChildSlot>(&self) -> Result<bool> {
-        self.get_slot::<K>().map(|child| child.is_some())
+    /// Return the typed keyed child `K` of `parent`. A missing slot is a
+    /// [`Error::NotFound`] that names `K::KEY`.
+    fn get_slot<K: ChildSlot>(&self, parent: impl Into<NodeId>) -> Result<TypedId<K::Widget>> {
+        let node = self
+            .child_slot_of(parent.into(), K::KEY)
+            .ok_or_else(|| Error::NotFound(format!("slot {}", K::KEY)))?;
+        checked_typed_id(self, node)
     }
 
-    /// Get a typed keyed child's node ID.
-    fn get_slot<K: ChildSlot>(&self) -> Result<Option<TypedId<K::Widget>>> {
-        self.child_slot(K::KEY)
-            .map(|node| checked_typed_id(self, node))
-            .transpose()
-    }
-
-    /// Get a typed keyed child's node ID from a specific parent.
-    fn get_slot_of<K: ChildSlot>(
-        &self,
-        parent: impl Into<NodeId>,
-    ) -> Result<Option<TypedId<K::Widget>>> {
-        ViewContext::child_slot_of(self, parent.into(), K::KEY)
-            .map(|node| checked_typed_id(self, node))
-            .transpose()
-    }
-
-    /// Get or create the keyed child under the current node.
+    /// Return the keyed child `K` of `parent`, creating it with `make` when
+    /// it is missing.
     fn get_or_create_slot<K: ChildSlot>(
-        &mut self,
-        make: impl FnOnce() -> K::Widget,
-    ) -> Result<TypedId<K::Widget>> {
-        let parent = self.node_id();
-        self.get_or_create_slot_of::<K>(parent, make)
-    }
-
-    /// Get or create the keyed child under a specific parent node.
-    fn get_or_create_slot_of<K: ChildSlot>(
         &mut self,
         parent: impl Into<NodeId>,
         make: impl FnOnce() -> K::Widget,
     ) -> Result<TypedId<K::Widget>> {
         let parent = parent.into();
-        if let Some(id) = self.get_slot_of::<K>(parent)? {
-            return Ok(id);
+        if let Some(node) = self.child_slot_of(parent, K::KEY) {
+            return checked_typed_id(self, node);
         }
-        self.add_slot_to(parent, K::KEY, make())
+        self.add_slot::<K>(parent, make())
     }
 
-    /// Add a typed keyed child to the current node and return its typed node
-    /// ID.
-    fn add_slot<K: ChildSlot>(&mut self, widget: K::Widget) -> Result<TypedId<K::Widget>> {
-        self.add_slot_to(self.node_id(), K::KEY, widget)
-    }
-
-    /// Add a typed keyed child to a specific parent and return its typed node
-    /// ID.
-    fn add_slot_to<W: Widget + 'static>(
+    /// Add `widget` as the keyed child `K` of `parent` and return its typed
+    /// node ID.
+    fn add_slot<K: ChildSlot>(
         &mut self,
         parent: impl Into<NodeId>,
-        key: &str,
-        widget: W,
-    ) -> Result<TypedId<W>> {
-        let id = self.add_child_to_slot_boxed(parent.into(), key, widget.into())?;
+        widget: K::Widget,
+    ) -> Result<TypedId<K::Widget>> {
+        let id = self.add_child_to_slot_boxed(parent.into(), K::KEY, widget.into())?;
         Ok(TypedId::new(id))
     }
 
-    /// Execute a closure with a typed keyed child.
-    fn with_typed_slot<K: ChildSlot, R>(
+    /// Execute a closure with the typed keyed child `K` of `parent`.
+    fn with_slot<K: ChildSlot, R>(
         &mut self,
+        parent: impl Into<NodeId>,
         f: impl FnOnce(&mut K::Widget, &mut dyn Context) -> Result<R>,
     ) -> Result<R> {
-        let node = self
-            .child_slot(K::KEY)
-            .ok_or_else(|| Error::NotFound(format!("key {}", K::KEY)))?;
+        let node = self.get_slot::<K>(parent)?;
         self.with_widget_mut(node, f)
     }
 
@@ -1025,8 +940,8 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
         self.core.nodes.get(node).map(|n| n.layout)
     }
 
-    fn scroll_outcome_of(&self, node: NodeId, x: i32, y: i32) -> Option<ChangeOutcome> {
-        self.core.scroll_outcome_of(node, x, y)
+    fn scroll_outcome(&self, node: NodeId, x: i32, y: i32) -> Option<ChangeOutcome> {
+        self.core.scroll_outcome(node, x, y)
     }
 
     fn with_widget_dyn(
@@ -1067,7 +982,8 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
             .unwrap_or_default()
     }
 
-    fn is_focused_of(&self, node: NodeId) -> bool {
+    fn is_focused(&self) -> bool {
+        let node = self.node_id;
         match self.focus_override {
             Some(focus) => focus == node,
             None => self.core.is_focused(node),
@@ -1082,7 +998,7 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
         self.core.mouse_capture == Some(self.node_id)
     }
 
-    fn is_on_focus_path_of(&self, node: NodeId) -> bool {
+    fn is_on_focus_path(&self, node: NodeId) -> bool {
         match self.focus_override {
             Some(focus) => self.core.is_ancestor_or_self(node, focus),
             None => self.core.is_on_focus_path(node),
@@ -1112,7 +1028,7 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
         self.core.notices.shown()
     }
 
-    fn is_attached_of(&self, node: NodeId) -> bool {
+    fn is_attached(&self, node: NodeId) -> bool {
         self.core.is_attached_to_root(node)
     }
 
@@ -1223,8 +1139,8 @@ impl Context for NodeCtx<&mut Core> {
         }
     }
 
-    fn set_layout_override_of(&mut self, node: NodeId, overrides: LayoutOverride) -> Result<()> {
-        self.core.set_layout_override_of(node, overrides)
+    fn set_layout_override(&mut self, node: NodeId, overrides: LayoutOverride) -> Result<()> {
+        self.core.set_layout_override(node, overrides)
     }
 
     fn with_layout_of(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Layout)) -> Result<()> {
@@ -1300,11 +1216,11 @@ impl Context for NodeCtx<&mut Core> {
         self.core.remove_subtree(node)
     }
 
-    fn set_children_of(&mut self, parent: NodeId, children: Vec<NodeId>) -> Result<()> {
+    fn set_children(&mut self, parent: NodeId, children: Vec<NodeId>) -> Result<()> {
         self.core.set_children(parent, children)
     }
 
-    fn set_hidden_of(&mut self, node: NodeId, hidden: bool) -> Result<ChangeOutcome> {
+    fn set_hidden(&mut self, node: NodeId, hidden: bool) -> Result<ChangeOutcome> {
         self.core.set_hidden(node, hidden)
     }
 

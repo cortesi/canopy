@@ -605,8 +605,8 @@ impl Widget for FramedList {
 
     fn on_mount(&mut self, context: &mut dyn Context) -> Result<()> {
         let root = context.node_id();
-        let frame = context.add_child_to(root, Frame::new())?;
-        let list = context.add_child_to(frame, BindingList::new())?;
+        let frame = context.add_child(root, Frame::new())?;
+        let list = context.add_child(frame, BindingList::new())?;
         let bindings = mem::take(&mut self.0);
         context.with_widget_mut(list, |list: &mut BindingList, _| {
             drop(list.replace_snapshot(Some(snapshot(root, bindings))));

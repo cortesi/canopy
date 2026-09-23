@@ -114,7 +114,7 @@ impl Block {
             Some(Direction::Stack) | None => self.horizontal,
         };
 
-        let layout = c.layout();
+        let layout = c.layout_of(c.node_id()).unwrap_or_default();
         let weight = if adjust_horizontal {
             match layout.width {
                 Sizing::Flex(w) => w,
@@ -127,7 +127,7 @@ impl Block {
             }
         };
         let next = weight.saturating_add_signed(delta).max(1);
-        c.with_layout(&mut |layout| {
+        c.with_layout_of(c.node_id(), &mut |layout| {
             if adjust_horizontal {
                 layout.width = Sizing::Flex(next);
             } else {
@@ -139,14 +139,14 @@ impl Block {
     #[command]
     /// Add a nested block if space permits.
     fn add(&self, c: &mut dyn Context) -> Result<()> {
-        if let Some(first_child) = c.children().first().copied()
+        if let Some(first_child) = c.children_of(c.node_id()).first().copied()
             && let Some(view) = c.view_of(first_child)
         {
             let size = view.outer.size();
             if self.size_limited(size) {
                 return Ok(());
             }
-            c.add_child(Self::new(!self.horizontal))?;
+            c.add_child(c.node_id(), Self::new(!self.horizontal))?;
         }
         Ok(())
     }
@@ -156,9 +156,9 @@ impl Block {
     fn split(&self, c: &mut dyn Context) -> Result<()> {
         let view = c.view();
         let size = view.outer.size();
-        if !self.size_limited(size) && c.children().is_empty() {
-            c.add_child(Self::new(!self.horizontal))?;
-            c.add_child(Self::new(!self.horizontal))?;
+        if !self.size_limited(size) && c.children_of(c.node_id()).is_empty() {
+            c.add_child(c.node_id(), Self::new(!self.horizontal))?;
+            c.add_child(c.node_id(), Self::new(!self.horizontal))?;
             c.focus_move(FocusScope::Current, FocusDirection::Next)?;
         }
         Ok(())
@@ -186,12 +186,12 @@ impl Block {
 
 impl Widget for Block {
     fn accept_focus(&self, ctx: &dyn ViewContext) -> bool {
-        ctx.children().is_empty()
+        ctx.children_of(ctx.node_id()).is_empty()
     }
 
     fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         // Only render leaf blocks (those without children)
-        if ctx.children().is_empty() {
+        if ctx.children_of(ctx.node_id()).is_empty() {
             let bc = if ctx.is_focused() { "violet" } else { "blue" };
             let rect = ctx.view().outer_rect_local();
             if rect.is_empty() {
@@ -248,10 +248,10 @@ impl FocusGym {
 
 impl Widget for FocusGym {
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-        c.set_layout(Layout::fill())?;
-        let root_block = c.add_child(Block::new(true))?;
-        c.add_child_to(root_block, Block::new(false))?;
-        c.add_child_to(root_block, Block::new(false))?;
+        c.set_layout_of(c.node_id(), Layout::fill())?;
+        let root_block = c.add_child(c.node_id(), Block::new(true))?;
+        c.add_child(root_block, Block::new(false))?;
+        c.add_child(root_block, Block::new(false))?;
         Ok(())
     }
 }

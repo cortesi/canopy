@@ -191,11 +191,11 @@ pub(super) fn node_info_to_arg(
         ),
         (
             "focused".to_string(),
-            ArgValue::Bool(root_ctx.is_focused_of(node_id)),
+            ArgValue::Bool(root_ctx.focused_node() == Some(node_id)),
         ),
         (
             "on_focus_path".to_string(),
-            ArgValue::Bool(root_ctx.is_on_focus_path_of(node_id)),
+            ArgValue::Bool(root_ctx.is_on_focus_path(node_id)),
         ),
         ("hidden".to_string(), ArgValue::Bool(node.hidden)),
         (

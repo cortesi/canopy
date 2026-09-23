@@ -240,7 +240,7 @@ fn build_browser() -> Result<Canopy> {
                 Layout::fill().direction(Direction::Row),
             ))?
             .into();
-        context.set_children(vec![browser])?;
+        context.set_children(context.node_id(), vec![browser])?;
         let mut panes = Vec::with_capacity(BROWSER_PANES);
         for pane_index in 0..BROWSER_PANES {
             let pane: NodeId = context
@@ -280,14 +280,14 @@ fn build_browser() -> Result<Canopy> {
                         format!("{}K", row_index * 7),
                     ))?
                     .into();
-                context.set_children_of(row, vec![name, size])?;
+                context.set_children(row, vec![name, size])?;
                 rows.push(row);
             }
-            context.set_children_of(listing, rows)?;
-            context.set_children_of(pane, vec![listing])?;
+            context.set_children(listing, rows)?;
+            context.set_children(pane, vec![listing])?;
             panes.push(pane);
         }
-        context.set_children_of(browser, panes)
+        context.set_children(browser, panes)
     })?;
     app.set_root_size(SCREEN)?;
     app.turn(Work::Prepare)?;
@@ -308,7 +308,7 @@ fn populate_tree(app: &mut Canopy) -> Result<NodeId> {
     let mut next_index = 1;
     app.with_root_context(|context| {
         let root_child: NodeId = context.create_detached(BenchNode::branch(0))?.into();
-        context.set_children(vec![root_child])?;
+        context.set_children(context.node_id(), vec![root_child])?;
         add_children(context, root_child, TREE_DEPTH, &mut next_index)?;
         Ok(root_child)
     })
@@ -355,7 +355,7 @@ fn add_children(
         children.push(child);
     }
 
-    context.set_children_of(parent, children)
+    context.set_children(parent, children)
 }
 
 /// Return the solid style used in terminal buffer benchmarks.

@@ -9,7 +9,7 @@ pub use binding_list::BindingList;
 use canopy::{
     ChildSlot, Context, ContextExt, EventOutcome, NodeId, NodeName, Register, Render, Setup,
     TypedId, ViewContext, Widget, derive_commands,
-    error::{Error, Result},
+    error::Result,
     event::Event,
     layout::{Align, Direction, Edges, Layout, Sizing},
 };
@@ -66,17 +66,9 @@ impl Help {
         context: &dyn Context,
         help: NodeId,
     ) -> Result<TypedId<BindingList>> {
-        let modal = context
-            .get_slot_of::<ModalSlot>(help)?
-            .map(NodeId::from)
-            .ok_or_else(|| Error::NotFound("modal".to_string()))?;
-        let frame = context
-            .get_slot_of::<FrameSlot>(modal)?
-            .map(NodeId::from)
-            .ok_or_else(|| Error::NotFound("frame".to_string()))?;
-        context
-            .get_slot_of::<BindingListSlot>(frame)?
-            .ok_or_else(|| Error::NotFound("binding_list".to_string()))
+        let modal = context.get_slot::<ModalSlot>(help)?;
+        let frame = context.get_slot::<FrameSlot>(modal)?;
+        context.get_slot::<BindingListSlot>(frame)
     }
 }
 

@@ -170,7 +170,7 @@ impl Widget for FontGym {
             Frame::new().with_title("Fonts").with_glyphs(SINGLE_THICK),
             list_id,
         ))?;
-        ctx.set_children_of(font_frame_id.into(), vec![list_id.into()])?;
+        ctx.set_children(font_frame_id.into(), vec![list_id.into()])?;
         ctx.set_layout_of(font_frame_id, Layout::fill().padding(Edges::all(1)))?;
 
         let controls_id = ctx.create_detached(ControlsLegend)?;
@@ -184,7 +184,7 @@ impl Widget for FontGym {
         let status_frame = panel(ctx, status_id, "Status", STATUS_PANEL_WIDTH)?;
 
         let status_row_id = ctx.create_detached(StatusRow)?;
-        ctx.set_children_of(status_row_id.into(), vec![controls_frame, status_frame])?;
+        ctx.set_children(status_row_id.into(), vec![controls_frame, status_frame])?;
 
         let input_id = ctx.create_detached(FontGymInput::new(
             DEFAULT_TEXT,
@@ -196,8 +196,8 @@ impl Widget for FontGym {
         ctx.set_layout_of(input_id, Layout::fill())?;
 
         let input_frame = wrap(ctx, input_id, Frame::new().with_title("Text input"))?;
-        let stack_id = ctx.add_child(Container::column())?;
-        ctx.set_children_of(
+        let stack_id = ctx.add_child(ctx.node_id(), Container::column())?;
+        ctx.set_children(
             stack_id.into(),
             vec![
                 input_frame.into(),
@@ -205,8 +205,8 @@ impl Widget for FontGym {
                 font_frame_id.into(),
             ],
         )?;
-        ctx.set_layout_override_of(input_frame.into(), fixed_row(INPUT_HEIGHT))?;
-        ctx.set_layout_override_of(status_row_id.into(), fixed_row(STATUS_HEIGHT))?;
+        ctx.set_layout_override(input_frame.into(), fixed_row(INPUT_HEIGHT))?;
+        ctx.set_layout_override(status_row_id.into(), fixed_row(STATUS_HEIGHT))?;
         ctx.set_focus(input_id.into())?;
         Ok(())
     }
@@ -320,7 +320,7 @@ impl Widget for FocusFrame {
             return EventOutcome::Ignore;
         };
         let delta = Self::scroll_delta(view, command);
-        if context.scroll_outcome_of(node, 0, delta) == Some(ChangeOutcome::Changed) {
+        if context.scroll_outcome(node, 0, delta) == Some(ChangeOutcome::Changed) {
             EventOutcome::Handle
         } else {
             EventOutcome::Ignore
@@ -410,7 +410,7 @@ impl Widget for FontBlock {
         let label_id = ctx.create_detached(FontLabel::new(self.label.clone(), "fontgym/label"))?;
         ctx.set_layout_of(label_id, Layout::fill().fixed_height(LABEL_HEIGHT))?;
 
-        ctx.set_children(vec![banner_id.into(), label_id.into()])?;
+        ctx.set_children(ctx.node_id(), vec![banner_id.into(), label_id.into()])?;
         self.banner_id = Some(banner_id);
         Ok(())
     }

@@ -112,7 +112,7 @@ impl Root {
 
     /// Main pane (app + inspector container) node id.
     fn main_pane_id(&self, c: &dyn Context) -> Result<NodeId> {
-        c.child_slot(KEY_MAIN_PANE)
+        c.child_slot_of(c.node_id(), KEY_MAIN_PANE)
             .ok_or_else(|| Error::NotFound("main_pane".into()))
     }
 
@@ -128,16 +128,12 @@ impl Root {
     #[cfg(feature = "devtools")]
     fn inspector_id(&self, c: &dyn Context) -> Result<NodeId> {
         let main_pane = self.main_pane_id(c)?;
-        c.get_slot_of::<InspectorSlot>(main_pane)?
-            .map(Into::into)
-            .ok_or_else(|| Error::NotFound("inspector".into()))
+        Ok(c.get_slot::<InspectorSlot>(main_pane)?.into())
     }
 
     /// Help node id.
     fn help_id(&self, c: &dyn Context) -> Result<NodeId> {
-        c.get_slot::<HelpSlot>()?
-            .map(Into::into)
-            .ok_or_else(|| Error::NotFound("help".into()))
+        Ok(c.get_slot::<HelpSlot>(c.node_id())?.into())
     }
 
     #[command]
@@ -171,7 +167,7 @@ impl Root {
     pub fn hide_inspector(&mut self, c: &mut dyn Context) -> Result<()> {
         self.inspector_active = false;
         let inspector = self.inspector_id(c)?;
-        c.set_hidden_of(inspector, true)?;
+        c.set_hidden(inspector, true)?;
         let app = self.app_id(c)?;
         c.focus_first(FocusScope::Node(app))?;
         Ok(())
@@ -183,7 +179,7 @@ impl Root {
     pub fn show_inspector(&mut self, c: &mut dyn Context) -> Result<()> {
         self.inspector_active = true;
         let inspector = self.inspector_id(c)?;
-        c.set_hidden_of(inspector, false)?;
+        c.set_hidden(inspector, false)?;
         c.focus_first(FocusScope::Node(inspector))?;
         Ok(())
     }
@@ -206,7 +202,7 @@ impl Root {
     pub fn focus_app(&mut self, c: &mut dyn Context) -> Result<()> {
         let inspector = self.inspector_id(c)?;
         let app = self.app_id(c)?;
-        if c.is_on_focus_path_of(inspector) {
+        if c.is_on_focus_path(inspector) {
             c.focus_first(FocusScope::Node(app))?;
         }
         Ok(())
@@ -303,12 +299,12 @@ impl Root {
             context.attach_slot(root_id, KEY_NOTICE, notice)?;
             context.attach_slot(root_id, ModeHelpSlot::KEY, mode_help)?;
             context.attach_slot(root_id, HelpSlot::KEY, help)?;
-            context.set_hidden_of(notice, context.notice().is_none())?;
-            context.set_hidden_of(mode_help, true)?;
-            context.set_hidden_of(help, true)?;
+            context.set_hidden(notice, context.notice().is_none())?;
+            context.set_hidden(mode_help, true)?;
+            context.set_hidden(help, true)?;
 
             #[cfg(feature = "devtools")]
-            context.set_hidden_of(inspector, !inspector_active)?;
+            context.set_hidden(inspector, !inspector_active)?;
             context.with_layout_of(app_node, &mut |layout| {
                 *layout = layout.width(Sizing::Flex(1)).height(Sizing::Flex(1));
             })?;
@@ -388,20 +384,20 @@ impl Widget for NoticeBar {
 
 /// Show the notice row while a notice is shown, and hide it after.
 fn sync_notice(context: &mut dyn Context) -> Result<()> {
-    let Some(row) = context.child_slot(KEY_NOTICE) else {
+    let Some(row) = context.child_slot_of(context.node_id(), KEY_NOTICE) else {
         return Ok(());
     };
     let hidden = context.notice().is_none();
-    context.set_hidden_of(row, hidden)?;
+    context.set_hidden(row, hidden)?;
     Ok(())
 }
 
 /// Show the keys of a transient mode while it waits, and hide them after.
 fn sync_mode_help(context: &mut dyn Context) -> Result<()> {
-    let Some(overlay) = context.get_slot::<ModeHelpSlot>()? else {
+    let Some(overlay) = context.child_slot_of(context.node_id(), ModeHelpSlot::KEY) else {
         return Ok(());
     };
-    ModeHelp::sync(context, overlay.into())
+    ModeHelp::sync(context, overlay)
 }
 
 /// Register the Root-owned controls admitted by the help modal.
@@ -604,7 +600,7 @@ mod tests {
         let left = canopy.create_detached(FocusLeaf::new("left"))?;
         let right = canopy.create_detached(FocusLeaf::new("right"))?;
         canopy.with_root_context(|context| {
-            context.set_children_of(app_id.into(), vec![left.into(), right.into()])?;
+            context.set_children(app_id.into(), vec![left.into(), right.into()])?;
             context.set_layout_of(app_id, Layout::fill().direction(Direction::Row))?;
             context.set_layout_of(left, Layout::fill())?;
             context.set_layout_of(right, Layout::fill())

@@ -38,10 +38,11 @@ impl Widget for BenchmarkEditorWrapper {
             .with_line_numbers(LineNumbers::Absolute);
         let editor = Editor::with_config(self.text.clone(), config);
         let editor_id = c
-            .add_slot::<EditorSlot>(editor)
+            .add_slot::<EditorSlot>(c.node_id(), editor)
             .expect("Failed to attach editor");
 
-        c.set_layout(Layout::fill()).expect("Failed to style root");
+        c.set_layout_of(c.node_id(), Layout::fill())
+            .expect("Failed to style root");
 
         c.set_layout_of(editor_id, Layout::fill())
             .expect("Failed to style editor");

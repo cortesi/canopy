@@ -128,20 +128,20 @@ fn scene(
 
 /// Add a fill-sized surface with `canvas` under `parent`.
 fn surface(c: &mut dyn Context, parent: NodeId, canvas: Size) -> Result<NodeId> {
-    let node = c.add_child_to(parent, Surface { canvas })?;
+    let node = c.add_child(parent, Surface { canvas })?;
     c.set_layout_of(node, Layout::fill())?;
     Ok(node.into())
 }
 
 /// Add a layout-only container under `parent`.
 fn boxed(c: &mut dyn Context, parent: NodeId, layout: Layout) -> Result<NodeId> {
-    Ok(c.add_child_to(parent, Boxed(layout))?.into())
+    Ok(c.add_child(parent, Boxed(layout))?.into())
 }
 
 /// Add a frame holding a fill-sized surface, returning both nodes.
 fn framed_surface(c: &mut dyn Context, canvas: Size) -> Result<Vec<NodeId>> {
     let root = c.node_id();
-    let frame: NodeId = c.add_child_to(root, Frame::new())?.into();
+    let frame: NodeId = c.add_child(root, Frame::new())?.into();
     let body = surface(c, frame, canvas)?;
     Ok(vec![frame, body])
 }
@@ -248,7 +248,7 @@ fn sibling_targets_are_ambiguous_at_every_enclosing_level() -> Result<()> {
 
     harness
         .canopy
-        .with_root_context(|c| c.set_hidden_of(second, true).map(|_| ()))?;
+        .with_root_context(|c| c.set_hidden(second, true).map(|_| ()))?;
     harness.render()?;
     assert_eq!(
         target(&harness, owner, ScrollAxis::Vertical).map(|found| found.node),
@@ -262,7 +262,7 @@ fn only_the_visible_tab_page_is_a_target() -> Result<()> {
     let (mut harness, nodes) = scene(20, 10, |c| {
         let root = c.node_id();
         let owner = boxed(c, root, Layout::fill())?;
-        let tabs = c.add_child_to(owner, Tabs::new())?;
+        let tabs = c.add_child(owner, Tabs::new())?;
         let pages = c.with_widget_mut(tabs, |tabs: &mut Tabs, c| {
             let canvas = Size::new(1, 50);
             let first = tabs.add_tab(c, "One", Surface { canvas })?;
@@ -295,7 +295,7 @@ fn a_nested_owner_hides_its_subtree_from_enclosing_owners() -> Result<()> {
     let (harness, nodes) = scene(20, 10, |c| {
         let root = c.node_id();
         let owner = boxed(c, root, Layout::fill())?;
-        let frame: NodeId = c.add_child_to(owner, Frame::new())?.into();
+        let frame: NodeId = c.add_child(owner, Frame::new())?.into();
         let inner = surface(c, frame, Size::new(1, 50))?;
         let other = surface(c, owner, Size::new(1, 50))?;
         Ok(vec![owner, frame, inner, other])
@@ -337,7 +337,7 @@ fn a_detached_owner_resolves_no_target_from_cached_views() -> Result<()> {
 
 /// Add a 30 by 30 cell surface with a 60 by 60 cell canvas under `parent`.
 fn oversized_surface(c: &mut dyn Context, parent: NodeId) -> Result<NodeId> {
-    let node = c.add_child_to(
+    let node = c.add_child(
         parent,
         Surface {
             canvas: Size::new(60, 60),
@@ -387,7 +387,7 @@ fn viewports_are_clipped_by_every_ancestor_and_the_screen() -> Result<()> {
 fn a_frame_track_covers_only_the_rows_beside_its_target() -> Result<()> {
     let (mut harness, nodes) = scene(20, 10, |c| {
         let root = c.node_id();
-        let frame: NodeId = c.add_child_to(root, Frame::new())?.into();
+        let frame: NodeId = c.add_child(root, Frame::new())?.into();
         let column = boxed(c, frame, Layout::fill())?;
         let bar = Layout::column().flex_horizontal(1).fixed_height(1);
         boxed(c, column, bar)?;
@@ -425,8 +425,8 @@ fn marks_keep_their_color_as_the_thumb_slides_over_them() -> Result<()> {
     ];
     let (mut harness, nodes) = scene(20, 10, |c| {
         let root = c.node_id();
-        let frame: NodeId = c.add_child_to(root, Frame::new())?.into();
-        let body = c.add_child_to(
+        let frame: NodeId = c.add_child(root, Frame::new())?.into();
+        let body = c.add_child(
             frame,
             MarkedSurface {
                 canvas: Size::new(1, 100),
@@ -472,7 +472,7 @@ fn marks_keep_their_color_as_the_thumb_slides_over_them() -> Result<()> {
 fn a_sidebar_beside_the_target_removes_only_the_vertical_track() -> Result<()> {
     let (harness, _) = scene(20, 10, |c| {
         let root = c.node_id();
-        let frame: NodeId = c.add_child_to(root, Frame::new())?.into();
+        let frame: NodeId = c.add_child(root, Frame::new())?.into();
         let row = boxed(c, frame, Layout::fill().direction(Direction::Row))?;
         surface(c, row, Size::new(100, 100))?;
         boxed(c, row, Layout::column().fixed_width(3).flex_vertical(1))?;
@@ -611,7 +611,7 @@ fn rendering_a_stale_drag_keeps_capture_until_the_next_event() -> Result<()> {
 
     harness
         .canopy
-        .with_root_context(|c| c.set_hidden_of(body, true).map(|_| ()))?;
+        .with_root_context(|c| c.set_hidden(body, true).map(|_| ()))?;
     harness.render()?;
     assert!(rows_with(&harness, 19, 10, '█').is_empty());
     assert!(
@@ -622,7 +622,7 @@ fn rendering_a_stale_drag_keeps_capture_until_the_next_event() -> Result<()> {
     // Hiding a node clears its scroll offset, so the thumb returns at the top.
     harness
         .canopy
-        .with_root_context(|c| c.set_hidden_of(body, false).map(|_| ()))?;
+        .with_root_context(|c| c.set_hidden(body, false).map(|_| ()))?;
     harness.render()?;
     assert_eq!(
         color_at(&harness, 19, 1),
@@ -663,7 +663,7 @@ fn tall_list(
     rows: usize,
     height: &Rc<Cell<u32>>,
 ) -> Result<NodeId> {
-    let list = c.add_child_to(parent, List::<Tall>::new())?;
+    let list = c.add_child(parent, List::<Tall>::new())?;
     c.with_widget_mut(list, |list: &mut List<Tall>, c| {
         for _ in 0..rows {
             list.append(c, Tall(Rc::clone(height)))?;
@@ -702,14 +702,14 @@ fn a_list_reveals_its_selection_with_row_heights_changed_in_the_same_turn() -> R
 fn a_list_inside_a_scroll_container_reveals_through_both_views() -> Result<()> {
     let (mut harness, nodes) = scene(10, 6, |c| {
         let root = c.node_id();
-        let container: NodeId = c.add_child_to(root, Scroll::vertical())?.into();
+        let container: NodeId = c.add_child(root, Scroll::vertical())?.into();
         boxed(
             c,
             container,
             Layout::column().flex_horizontal(1).fixed_height(10),
         )?;
         let list = tall_list(c, container, 10, &Rc::new(Cell::new(1)))?;
-        c.set_layout_override_of(list, LayoutOverride::new().fixed_height(4))?;
+        c.set_layout_override(list, LayoutOverride::new().fixed_height(4))?;
         Ok(vec![container, list])
     })?;
     let (container, list) = (nodes[0], nodes[1]);
@@ -733,7 +733,7 @@ fn a_list_inside_a_scroll_container_reveals_through_both_views() -> Result<()> {
 /// Add columns under the scene root.
 fn add_columns(c: &mut dyn Context) -> Result<NodeId> {
     let root = c.node_id();
-    Ok(c.add_child_to(root, Columns::new())?.into())
+    Ok(c.add_child(root, Columns::new())?.into())
 }
 
 /// Return the characters of screen column `x` over `height` rows.
@@ -779,7 +779,7 @@ fn owners_draw_and_expose_their_configured_scrollbar_glyphs() -> Result<()> {
     let (harness, _) = scene(21, 6, move |c| {
         let root = c.node_id();
         let columns: NodeId = c
-            .add_child_to(root, Columns::new().with_scrollbar_glyphs(custom))?
+            .add_child(root, Columns::new().with_scrollbar_glyphs(custom))?
             .into();
         surface(c, columns, Size::new(1, 1))?;
         surface(c, columns, Size::new(1, 60))?;
@@ -791,7 +791,7 @@ fn owners_draw_and_expose_their_configured_scrollbar_glyphs() -> Result<()> {
     let (harness, _) = scene(20, 10, move |c| {
         let root = c.node_id();
         let frame: NodeId = c
-            .add_child_to(root, Frame::new().with_scrollbar_glyphs(custom))?
+            .add_child(root, Frame::new().with_scrollbar_glyphs(custom))?
             .into();
         surface(c, frame, Size::new(100, 100))?;
         Ok(Vec::new())
@@ -879,8 +879,8 @@ fn wheel_input_and_drags_on_a_divider_scroll_the_pane_on_its_left() -> Result<()
 fn columns_keep_their_panes_from_an_enclosing_frame() -> Result<()> {
     let (harness, _) = scene(22, 8, |c| {
         let root = c.node_id();
-        let frame: NodeId = c.add_child_to(root, Frame::new())?.into();
-        let columns = c.add_child_to(frame, Columns::new())?;
+        let frame: NodeId = c.add_child(root, Frame::new())?.into();
+        let columns = c.add_child(frame, Columns::new())?;
         surface(c, columns.into(), Size::new(1, 60))?;
         Ok(Vec::new())
     })?;
@@ -896,7 +896,7 @@ fn focus_column_wraps_through_displayed_panes() -> Result<()> {
         let mut nodes = vec![columns];
         for _ in 0..3 {
             let pane = boxed(c, columns, Layout::fill())?;
-            let leaf = c.add_child_to(pane, Tall(Rc::new(Cell::new(1))))?;
+            let leaf = c.add_child(pane, Tall(Rc::new(Cell::new(1))))?;
             nodes.extend([pane, leaf.into()]);
         }
         Ok(nodes)
@@ -921,7 +921,7 @@ fn focus_column_wraps_through_displayed_panes() -> Result<()> {
 
     harness
         .canopy
-        .with_root_context(|c| c.set_hidden_of(middle, true).map(|_| ()))?;
+        .with_root_context(|c| c.set_hidden(middle, true).map(|_| ()))?;
     harness.render()?;
     assert_eq!(
         focus_column(&mut harness, 1)?,
@@ -943,7 +943,7 @@ fn focus_column_skips_a_pane_that_refuses_focus() -> Result<()> {
     let (mut harness, nodes) = scene(30, 4, |c| {
         let columns = add_columns(c)?;
         let focusable = boxed(c, columns, Layout::fill())?;
-        let leaf = c.add_child_to(focusable, Tall(Rc::new(Cell::new(1))))?;
+        let leaf = c.add_child(focusable, Tall(Rc::new(Cell::new(1))))?;
         let refusing = boxed(c, columns, Layout::fill())?;
         let inert = boxed(c, refusing, Layout::fill())?;
         Ok(vec![columns, leaf.into(), inert])

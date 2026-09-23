@@ -77,12 +77,7 @@ impl Core {
     /// This mirrors [`Core::update_scroll`] for the same start state,
     /// including the change a cancelled pending reveal produces. It returns
     /// `None` when the node is missing.
-    pub(crate) fn scroll_outcome_of(
-        &self,
-        node_id: NodeId,
-        x: i32,
-        y: i32,
-    ) -> Option<ChangeOutcome> {
+    pub(crate) fn scroll_outcome(&self, node_id: NodeId, x: i32, y: i32) -> Option<ChangeOutcome> {
         let node = self.nodes.get(node_id)?;
         let before = node.scroll;
         let mut target = before.scroll(x, y);

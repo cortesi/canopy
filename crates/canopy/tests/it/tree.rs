@@ -49,7 +49,7 @@ mod tests {
             for expected_attempts in 1..=2 {
                 let error = ctx.edit_structure(&mut |ctx| ctx.attach(ctx.node_id(), child.into()));
                 assert!(matches!(error, Err(Error::Invalid(_))));
-                assert!(ctx.children().is_empty());
+                assert!(ctx.children_of(ctx.node_id()).is_empty());
                 assert!(ctx.type_id_of(child.into()).is_some());
                 ctx.with_widget_mut(child, |widget: &mut MountCounter, _| {
                     assert_eq!(widget.attempts, expected_attempts);
@@ -77,7 +77,7 @@ mod tests {
                     Err(Error::Invalid("nested edit rejected".into()))
                 });
                 assert!(matches!(error, Err(Error::Invalid(_))));
-                assert_eq!(ctx.children(), vec![child.into()]);
+                assert_eq!(ctx.children_of(ctx.node_id()), vec![child.into()]);
                 // The node's captured metadata and the widget's own state
                 // differ.
                 assert_eq!(node_name(ctx, root, child.into()), "original");
@@ -87,7 +87,7 @@ mod tests {
                 })?;
                 Ok(())
             })?;
-            assert_eq!(ctx.children(), vec![child.into()]);
+            assert_eq!(ctx.children_of(ctx.node_id()), vec![child.into()]);
             Ok(())
         })
     }
@@ -103,9 +103,9 @@ mod tests {
             let ba_lb: NodeId = context.create_detached(TreeWidget::new("ba_lb"))?.into();
             let bb_la: NodeId = context.create_detached(TreeWidget::new("bb_la"))?.into();
             let bb_lb: NodeId = context.create_detached(TreeWidget::new("bb_lb"))?.into();
-            context.set_children_of(root, vec![ba, bb])?;
-            context.set_children_of(ba, vec![ba_la, ba_lb])?;
-            context.set_children_of(bb, vec![bb_la, bb_lb])?;
+            context.set_children(root, vec![ba, bb])?;
+            context.set_children(ba, vec![ba_la, ba_lb])?;
+            context.set_children(bb, vec![bb_la, bb_lb])?;
             Ok((root, ba, bb, ba_la, ba_lb, bb_la, bb_lb))
         })
     }

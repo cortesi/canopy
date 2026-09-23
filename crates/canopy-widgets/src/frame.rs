@@ -114,7 +114,7 @@ impl Widget for Frame {
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let outer = ctx.view().outer_rect_local();
         let f = geom::FrameRects::new(outer, 1);
-        let style = if ctx.is_on_focus_path() {
+        let style = if ctx.is_on_focus_path(ctx.node_id()) {
             "frame/focused"
         } else {
             "frame"

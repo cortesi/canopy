@@ -82,7 +82,7 @@ pub fn scroll_target(
     owner: NodeId,
     axis: ScrollAxis,
 ) -> Result<Option<ScrollTarget>> {
-    if !ctx.is_attached_of(owner) {
+    if !ctx.is_attached(owner) {
         return Ok(None);
     }
     let Some(clip) = ancestor_clip(ctx, owner) else {
@@ -104,7 +104,7 @@ pub(crate) fn pane_target(
     pane: NodeId,
     axis: ScrollAxis,
 ) -> Result<Option<ScrollTarget>> {
-    if !ctx.is_attached_of(owner) {
+    if !ctx.is_attached(owner) {
         return Ok(None);
     }
     let Some(clip) = ancestor_clip(ctx, owner) else {

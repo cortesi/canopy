@@ -39,7 +39,7 @@ mod tests {
         }
 
         fn pre_remove(&mut self, ctx: &mut dyn Context) -> Result<()> {
-            for child in ctx.children() {
+            for child in ctx.children_of(ctx.node_id()) {
                 ctx.with_widget_dyn(child, &mut |_| Ok(()))?;
             }
             self.removed.set(true);
@@ -60,11 +60,14 @@ mod tests {
             let app = Root::new().install(&mut canopy, App)?;
             let removed = Rc::new(Cell::new(false));
             let (dialog, button) = canopy.with_context(app, |ctx| {
-                let dialog = ctx.add_child(Dialog {
-                    fail,
-                    removed: Rc::clone(&removed),
-                })?;
-                let button = ctx.add_child_to(
+                let dialog = ctx.add_child(
+                    ctx.node_id(),
+                    Dialog {
+                        fail,
+                        removed: Rc::clone(&removed),
+                    },
+                )?;
+                let button = ctx.add_child(
                     dialog,
                     Button::new("Close").with_command(
                         Dialog::call_close().with_target(CommandTarget::Exact(dialog.into())),

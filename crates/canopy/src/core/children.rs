@@ -106,7 +106,7 @@ where
         }
 
         let parent = ctx.node_id();
-        let children = ctx.children();
+        let children = ctx.children_of(ctx.node_id());
         let direct_children: HashSet<NodeId> = children.iter().copied().collect();
         let expected_type = TypeId::of::<W>();
         let mut planned_map = HashMap::with_capacity(self.map.len() + desired.len());
@@ -207,7 +207,7 @@ where
                     ));
                 }
                 let ordered_nodes = ordered.iter().map(|id| NodeId::from(*id)).collect();
-                ctx.set_children_of(parent, ordered_nodes)?;
+                ctx.set_children(parent, ordered_nodes)?;
                 Ok((working_map, ordered))
             })
         })?;
@@ -297,7 +297,7 @@ impl<W: Widget + 'static> ChildConfig<'_, W> {
 
     /// Set persistent layout constraints before mount.
     pub fn layout_override(&mut self, overrides: LayoutOverride) -> Result<()> {
-        self.ctx.set_layout_override_of(self.id.into(), overrides)
+        self.ctx.set_layout_override(self.id.into(), overrides)
     }
 
     /// Register this node's semantic key after its completed tree is attached.
@@ -396,9 +396,12 @@ mod tests {
                 ctx.find_identity(self.scope, self.label)?,
                 Some(ctx.node_id())
             );
-            assert_eq!(ctx.layout().max_height, Some(3));
+            assert_eq!(
+                ctx.layout_of(ctx.node_id()).unwrap_or_default().max_height,
+                Some(3)
+            );
             if self.label == "parent" {
-                assert_eq!(ctx.children().len(), 1);
+                assert_eq!(ctx.children_of(ctx.node_id()).len(), 1);
             }
             self.log.borrow_mut().push(self.label);
             Ok(())
@@ -450,7 +453,7 @@ mod tests {
             Ok(parent)
         })?;
         assert_eq!(*log.borrow(), ["parent", "nested", "sibling"]);
-        assert_eq!(ctx.children()[0], NodeId::from(parent));
+        assert_eq!(ctx.children_of(ctx.node_id())[0], NodeId::from(parent));
         Ok(())
     }
 
@@ -460,7 +463,7 @@ mod tests {
         let root = core.root_id();
         let mut context = CoreContext::new(&mut core, root);
         let ctx: &mut dyn Context = &mut context;
-        let before = ctx.children();
+        let before = ctx.children_of(ctx.node_id());
         let mut created = None;
         let result = ctx.compose(root, |builder| {
             builder.keyed::<Slot>(Leaf, |child| {
@@ -471,8 +474,8 @@ mod tests {
             Ok(())
         });
         assert!(result.is_err());
-        assert_eq!(ctx.children(), before);
-        assert!(ctx.child_slot("Slot").is_none());
+        assert_eq!(ctx.children_of(ctx.node_id()), before);
+        assert!(ctx.child_slot_of(ctx.node_id(), "Slot").is_none());
         assert!(ctx.type_id_of(created.unwrap().into()).is_none());
         let result: Result<()> = ctx.compose(root, |builder| {
             builder.child(Leaf, |child| {
@@ -482,7 +485,7 @@ mod tests {
             Ok(())
         });
         assert!(result.is_err());
-        assert_eq!(ctx.children(), before);
+        assert_eq!(ctx.children_of(ctx.node_id()), before);
         Ok(())
     }
 
@@ -501,7 +504,7 @@ mod tests {
             |_, _, _| panic!("must reject before update"),
         );
         assert!(result.is_err());
-        assert_eq!(context.children(), [unmanaged]);
+        assert_eq!(context.children_of(context.node_id()), [unmanaged]);
         assert!(collection.is_empty());
         Ok(())
     }
@@ -523,7 +526,10 @@ mod tests {
             },
         );
         assert!(result.is_err());
-        assert_eq!(context.children(), [NodeId::from(original[0])]);
+        assert_eq!(
+            context.children_of(context.node_id()),
+            [NodeId::from(original[0])]
+        );
         assert_eq!(collection.id_for(&1), Some(original[0]));
         Ok(())
     }

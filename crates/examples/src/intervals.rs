@@ -133,9 +133,9 @@ impl Widget for CounterItem {
     }
 
     fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        let box_id = ctx.add_child(Border::new().with_glyphs(SINGLE).with_fill())?;
-        let center_id = ctx.add_child_to(box_id, Center::new())?;
-        ctx.add_child_to(center_id, Text::new(self.label()))?;
+        let box_id = ctx.add_child(ctx.node_id(), Border::new().with_glyphs(SINGLE).with_fill())?;
+        let center_id = ctx.add_child(box_id, Center::new())?;
+        ctx.add_child(center_id, Text::new(self.label()))?;
         self.update_box_layout(ctx)?;
         Ok(())
     }
@@ -203,10 +203,10 @@ impl Widget for Intervals {
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         let root = c.node_id();
-        let column = c.add_child_to(root, Container::column())?;
-        let frame_id = c.add_child_to(column, Frame::new())?;
-        c.add_child_to(frame_id, List::<CounterItem>::new())?;
-        c.set_layout_override_of(frame_id.into(), flex_row(1))
+        let column = c.add_child(root, Container::column())?;
+        let frame_id = c.add_child(column, Frame::new())?;
+        c.add_child(frame_id, List::<CounterItem>::new())?;
+        c.set_layout_override(frame_id.into(), flex_row(1))
     }
 
     fn render(&mut self, r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {

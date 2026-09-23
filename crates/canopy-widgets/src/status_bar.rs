@@ -85,8 +85,8 @@ impl Widget for StatusBar {
         let root = context.node_id();
         // The left zone gives up columns first; the right zone keeps what its
         // widgets measure.
-        let left = context.add_child_to(root, Container::new(Layout::row()).with_name("left"))?;
-        context.set_layout_override_of(
+        let left = context.add_child(root, Container::new(Layout::row()).with_name("left"))?;
+        context.set_layout_override(
             left.into(),
             LayoutOverride {
                 width: Some(Sizing::Flex(1)),
@@ -95,11 +95,11 @@ impl Widget for StatusBar {
                 ..LayoutOverride::new()
             },
         )?;
-        let right = context.add_child_to(
+        let right = context.add_child(
             root,
             Container::new(Layout::row().gap(HINT_GAP)).with_name("right"),
         )?;
-        context.set_layout_override_of(
+        context.set_layout_override(
             right.into(),
             LayoutOverride {
                 width: Some(Sizing::Measure),

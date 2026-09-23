@@ -123,7 +123,7 @@ fn focused_column(ctx: &dyn ViewContext, columns: NodeId) -> Option<(usize, Node
     ctx.children_of(columns)
         .into_iter()
         .enumerate()
-        .find(|(_, pane)| ctx.is_on_focus_path_of(*pane))
+        .find(|(_, pane)| ctx.is_on_focus_path(*pane))
 }
 
 /// Root node for the list gym demo.
@@ -206,7 +206,7 @@ impl ListGym {
         let mut panes = c.children_of(columns);
         let index = focused_column(c, columns).map_or(panes.len(), |(index, _)| index + 1);
         panes.insert(index, list);
-        c.set_children_of(columns, panes)?;
+        c.set_children(columns, panes)?;
         c.focus_first(FocusScope::Node(list))?;
         Ok(())
     }
@@ -229,11 +229,11 @@ impl Widget for ListGym {
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         let root = c.node_id();
-        let layout = c.add_child_to(root, Container::column())?;
-        let columns: NodeId = c.add_child_to(layout, Columns::new())?.into();
-        c.set_layout_override_of(columns, flex_row(1))?;
+        let layout = c.add_child(root, Container::column())?;
+        let columns: NodeId = c.add_child(layout, Columns::new())?.into();
+        c.set_layout_override(columns, flex_row(1))?;
         let list = Self::create_column(c)?;
-        c.set_children_of(columns, vec![list])
+        c.set_children(columns, vec![list])
     }
 }
 

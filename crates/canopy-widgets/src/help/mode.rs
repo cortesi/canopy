@@ -6,7 +6,7 @@
 
 use canopy::{
     ChildSlot, Context, ContextExt, NodeId, NodeName, Render, ViewContext, Widget,
-    error::{Error, Result},
+    error::Result,
     geom::Size,
     layout::{Align, Constraint, Direction, Edges, Layout, MeasureConstraints, Measurement},
 };
@@ -105,7 +105,7 @@ impl ModeHelp {
     pub(crate) fn sync(context: &mut dyn Context, overlay: NodeId) -> Result<()> {
         let snapshot = context.available_bindings(context.focused_node())?;
         let Some(mode) = snapshot.transient_mode else {
-            context.set_hidden_of(overlay, true)?;
+            context.set_hidden(overlay, true)?;
             return Ok(());
         };
         let bindings = snapshot
@@ -115,12 +115,8 @@ impl ModeHelp {
             .collect::<Vec<_>>();
         let bindings = key_rows_of(&bindings);
 
-        let frame = context
-            .get_slot_of::<ModeFrameSlot>(overlay)?
-            .ok_or_else(|| Error::NotFound("mode help frame".into()))?;
-        let list = context
-            .get_slot_of::<ModeBindingsSlot>(NodeId::from(frame))?
-            .ok_or_else(|| Error::NotFound("mode bindings".into()))?;
+        let frame = context.get_slot::<ModeFrameSlot>(overlay)?;
+        let list = context.get_slot::<ModeBindingsSlot>(frame)?;
         context.with_widget_mut(frame, |frame: &mut Frame, _context| {
             frame.set_title(mode);
             Ok(())
@@ -130,7 +126,7 @@ impl ModeHelp {
             context.invalidate_layout();
             Ok(())
         })?;
-        context.set_hidden_of(overlay, false)?;
+        context.set_hidden(overlay, false)?;
         Ok(())
     }
 }

@@ -222,7 +222,7 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
         let Some(call) = self.on_activate.as_ref() else {
             return Ok(None);
         };
-        if !ctx.is_attached_of(ctx.node_id()) {
+        if !ctx.is_attached(ctx.node_id()) {
             return Ok(Some(CommandStatus::Disabled("List is detached".into())));
         }
         let Some(index) = self.selected_index() else {
@@ -338,7 +338,7 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
         }
         let selected = self.selection_after_reconcile(&desired);
         let selection_changed = selected != self.selected;
-        let had_focus = ctx.is_on_focus_path_of(ctx.node_id());
+        let had_focus = ctx.is_on_focus_path(ctx.node_id());
         let previous_focus = ctx.focused_node();
         let checks = self.checks.as_ref();
         let desired_checks = checks.map(|_| desired.iter().cloned().collect::<HashSet<K>>());
@@ -370,7 +370,7 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
         if selection_changed && had_focus {
             self.focus_selected(ctx)?;
         } else if let Some(focus) = previous_focus
-            && ctx.is_attached_of(focus)
+            && ctx.is_attached(focus)
         {
             ctx.set_focus(focus)?;
         }
@@ -642,7 +642,7 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
     /// Set focus on the currently selected item.
     fn focus_selected(&self, c: &mut dyn Context) -> Result<()> {
         if let Some(id) = self.selected_item()
-            && c.is_attached_of(id.into())
+            && c.is_attached(id.into())
         {
             c.set_focus(id.into())?;
         }
@@ -985,8 +985,10 @@ mod tests {
 
     impl Widget for ActivationRoot {
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
-            let list =
-                ctx.add_child(List::<Text>::new().with_on_activate(Self::spec_activate().call()))?;
+            let list = ctx.add_child(
+                ctx.node_id(),
+                List::<Text>::new().with_on_activate(Self::spec_activate().call()),
+            )?;
             ctx.with_widget_mut::<List<Text>, _>(list, |list, ctx| {
                 list.append(ctx, Text::new("First row"))?;
                 Ok(())
@@ -1321,7 +1323,7 @@ mod tests {
             .size(20, 10)
             .build()?;
         harness.with_root_widget_context(|list: &mut List<Row, i64>, ctx| {
-            let header = ctx.add_child(Text::new("unmanaged header"))?;
+            let header = ctx.add_child(ctx.node_id(), Text::new("unmanaged header"))?;
             let result = list.reconcile(
                 ctx,
                 [1],
@@ -1329,7 +1331,7 @@ mod tests {
                 |_, _, _| panic!("update must not run with unmanaged children"),
             );
             assert!(result.is_err());
-            assert_eq!(ctx.children(), vec![header.into()]);
+            assert_eq!(ctx.children_of(ctx.node_id()), vec![header.into()]);
             assert!(list.is_empty());
             Ok(())
         })
@@ -1353,6 +1355,7 @@ mod tests {
     impl Widget for KeyedActivationRoot {
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
             let list = ctx.add_child(
+                ctx.node_id(),
                 List::<Text, i64>::new().with_on_activate(
                     Self::spec_activate()
                         .call()
@@ -1427,7 +1430,10 @@ mod tests {
             .build()?;
         harness.with_root_widget_context(|_: &mut KeyedActivationRoot, ctx| {
             ctx.with_unique_descendant::<List<Text, i64>, _>(|_, ctx| {
-                ctx.set_layout(Layout::fill().padding(Edges::new(1, 0, 0, 0)))
+                ctx.set_layout_of(
+                    ctx.node_id(),
+                    Layout::fill().padding(Edges::new(1, 0, 0, 0)),
+                )
             })
         })?;
         harness.render()?;

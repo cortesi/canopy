@@ -28,7 +28,7 @@ mod tests {
         }
 
         fn pre_remove(&mut self, ctx: &mut dyn Context) -> Result<()> {
-            for child in ctx.children() {
+            for child in ctx.children_of(ctx.node_id()) {
                 ctx.with_widget_dyn(child, &mut |_| Ok(()))?;
             }
             self.log.borrow_mut().push("pre_remove");
@@ -79,10 +79,13 @@ mod tests {
                     })
                     .build()?;
                 let (dialog, trigger) = canopy.with_root_context(|ctx| {
-                    let dialog = ctx.add_child(Dialog {
-                        log: Rc::clone(&log),
-                    })?;
-                    let trigger = ctx.add_child_to(
+                    let dialog = ctx.add_child(
+                        ctx.node_id(),
+                        Dialog {
+                            log: Rc::clone(&log),
+                        },
+                    )?;
+                    let trigger = ctx.add_child(
                         dialog,
                         Trigger {
                             dialog: dialog.into(),

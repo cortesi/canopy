@@ -1,6 +1,6 @@
 use canopy::{
-    CanopyBuilder, ChildSlot, Context, ContextExt, FocusDirection, Register, Render, Setup,
-    ViewContext, Widget, derive_commands,
+    CanopyBuilder, Context, ContextExt, FocusDirection, Register, Render, Setup, ViewContext,
+    Widget, derive_commands,
     error::Result,
     geom::{Line, Size},
     layout::{CanvasContext, Layout, MeasureConstraints, Measurement},
@@ -142,10 +142,11 @@ impl FrameGym {
 
 impl Widget for FrameGym {
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-        let frame_id = c.add_slot::<FrameSlot>(Frame::new().with_title("Frame Gym"))?;
-        let pattern_id = c.add_slot_to(frame_id, PatternSlot::KEY, TestPattern::new())?;
+        let frame_id =
+            c.add_slot::<FrameSlot>(c.node_id(), Frame::new().with_title("Frame Gym"))?;
+        let pattern_id = c.add_slot::<PatternSlot>(frame_id, TestPattern::new())?;
 
-        c.set_layout(Layout::fill())?;
+        c.set_layout_of(c.node_id(), Layout::fill())?;
         c.set_layout_of(pattern_id, Layout::fill())?;
         Ok(())
     }

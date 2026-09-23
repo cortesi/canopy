@@ -96,9 +96,9 @@ impl Widget for TermEntry {
     }
 
     fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        let box_id = ctx.add_child(Border::new().with_glyphs(SINGLE).with_fill())?;
-        let center_id = ctx.add_child_to(box_id, Center::new())?;
-        ctx.add_child_to(
+        let box_id = ctx.add_child(ctx.node_id(), Border::new().with_glyphs(SINGLE).with_fill())?;
+        let center_id = ctx.add_child(box_id, Center::new())?;
+        ctx.add_child(
             center_id,
             Text::new(self.label.clone()).with_wrap_width(self.label_width()),
         )?;
@@ -180,7 +180,10 @@ impl TermGym {
     fn add_terminal(&mut self, c: &mut dyn Context) -> Result<()> {
         let cwd = env::current_dir().map_err(|err| Error::Internal(err.to_string()))?;
         self.with_stack(c, |_, ctx| {
-            let terminal_id = ctx.add_child(Terminal::new(TerminalConfig::new().with_cwd(cwd)))?;
+            let terminal_id = ctx.add_child(
+                ctx.node_id(),
+                Terminal::new(TerminalConfig::new().with_cwd(cwd)),
+            )?;
             ctx.set_layout_of(terminal_id, Layout::fill())?;
             Ok(())
         })?;
@@ -356,7 +359,7 @@ impl TermGym {
         let terminals = self.terminal_ids(c)?;
         if terminals
             .iter()
-            .any(|terminal| c.is_on_focus_path_of(*terminal))
+            .any(|terminal| c.is_on_focus_path(*terminal))
         {
             self.focus_sidebar_list(c)
         } else {
@@ -389,17 +392,18 @@ impl Widget for TermGym {
         let button_id = c.create_detached(
             Button::new("+ New terminal").with_command(Self::call_new_terminal()),
         )?;
-        let sidebar_id = c.add_child(Container::column())?;
-        c.set_children_of(sidebar_id.into(), vec![button_id.into(), list_id.into()])?;
-        c.set_layout_override_of(button_id.into(), fixed_row(ENTRY_HEIGHT))?;
-        c.set_layout_override_of(list_id.into(), flex_row(1))?;
+        let sidebar_id = c.add_child(c.node_id(), Container::column())?;
+        c.set_children(sidebar_id.into(), vec![button_id.into(), list_id.into()])?;
+        c.set_layout_override(button_id.into(), fixed_row(ENTRY_HEIGHT))?;
+        c.set_layout_override(list_id.into(), flex_row(1))?;
 
         let term_frame_id = c.add_child(
+            c.node_id(),
             Frame::new()
                 .with_glyphs(SINGLE_THICK)
                 .with_title("terminal"),
         )?;
-        c.add_child_to(term_frame_id, TerminalStack::new())?;
+        c.add_child(term_frame_id, TerminalStack::new())?;
 
         c.set_layout_of(
             sidebar_id,
