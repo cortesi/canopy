@@ -13,8 +13,9 @@ use canopy::{
     layout::{CanvasContext, Direction, Edges, Layout, ScrollDirection, View},
     render::Render,
     style::{
-        AttrSet, Color, PartialStyle, ResolvedStyle, StyleMap, default as default_theme, dracula,
-        effects, effects::Effect, gruvbox, solarized,
+        AttrSet, Color, PartialStyle, ResolvedStyle, StyleMap, effects,
+        effects::Effect,
+        themes::{self, Palette},
     },
     text,
     tree::ChildSlot,
@@ -213,8 +214,8 @@ end
 pub(crate) struct ThemeOption {
     /// Theme display name.
     pub name: &'static str,
-    /// Function to build the theme's StyleMap.
-    pub builder: fn() -> StyleMap,
+    /// Function returning the theme's palette.
+    pub builder: fn() -> Palette,
 }
 
 impl Label for ThemeOption {
@@ -243,23 +244,23 @@ fn available_themes() -> Vec<ThemeOption> {
     vec![
         ThemeOption {
             name: "Default Dark",
-            builder: default_theme::default_dark,
+            builder: themes::default_dark,
         },
         ThemeOption {
             name: "Solarized Dark",
-            builder: solarized::solarized_dark,
+            builder: themes::solarized_dark,
         },
         ThemeOption {
             name: "Solarized Light",
-            builder: solarized::solarized_light,
+            builder: themes::solarized_light,
         },
         ThemeOption {
             name: "Gruvbox Dark",
-            builder: gruvbox::gruvbox_dark,
+            builder: themes::gruvbox_dark,
         },
         ThemeOption {
             name: "Dracula",
-            builder: dracula::dracula,
+            builder: themes::dracula,
         },
     ]
 }
@@ -884,15 +885,16 @@ impl Stylegym {
     }
 
     /// Install a theme and list its rules.
-    fn install_theme(&self, c: &mut dyn Context, builder: fn() -> StyleMap) -> Result<()> {
-        let map = builder();
+    fn install_theme(&self, c: &mut dyn Context, builder: fn() -> Palette) -> Result<()> {
+        let palette = builder();
+        let map = palette.style_map();
         if let Some(rules) = self.rules {
             c.with_widget_mut(rules, |sheet: &mut StyleSheet, _ctx| {
                 sheet.set_rules(&map);
                 Ok(())
             })?;
         }
-        c.set_style(map);
+        c.set_theme(palette);
         Ok(())
     }
 

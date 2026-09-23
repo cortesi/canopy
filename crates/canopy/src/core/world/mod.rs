@@ -23,7 +23,7 @@ use crate::{
     error::{Error, NodeOperationKind, Result},
     input::Event,
     layout::Layout,
-    style::StyleMap,
+    style::StyleChange,
     widget::Widget,
 };
 
@@ -68,7 +68,7 @@ pub struct Core {
     /// Exit code requested by a widget or command, if any.
     pub(crate) exit_requested: Option<i32>,
     /// Pending style map to be applied before next render.
-    pub(crate) pending_style: Option<StyleMap>,
+    pub(crate) pending_style: Option<StyleChange>,
     /// Node that captures mouse events regardless of cursor position.
     pub(crate) mouse_capture: Option<NodeId>,
     /// Focus repair waiting for mutable callbacks to return their widget
@@ -151,7 +151,7 @@ struct TreeStateSnapshot {
     /// Requested process exit.
     exit_requested: Option<i32>,
     /// Pending style replacement.
-    pending_style: Option<StyleMap>,
+    pending_style: Option<StyleChange>,
     /// Mouse capture target.
     mouse_capture: Option<NodeId>,
     /// Deferred focus repair.

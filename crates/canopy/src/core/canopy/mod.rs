@@ -51,7 +51,10 @@ use crate::{
     error::Result,
     geom::Size,
     input::{Event, key::Key},
-    style::{StyleMap, default::default_dark},
+    style::{
+        StyleMap, WidgetStyles,
+        themes::{self, Palette},
+    },
     widget::Widget,
 };
 
@@ -133,6 +136,10 @@ pub struct Canopy {
 
     /// Style map used for rendering.
     style: StyleMap,
+    /// Palette of the active theme.
+    palette: Palette,
+    /// Rule sets reapplied from the palette whenever the theme changes.
+    widget_styles: Vec<WidgetStyles>,
 }
 
 /// Frame geometry and the buffers the frame pipeline owns.
@@ -231,7 +238,9 @@ impl Canopy {
             journal: ScriptJournal::default(),
             mode_hooks: Hooks::default(),
             notice_hooks: Hooks::default(),
-            style: default_dark(),
+            style: themes::default_dark().style_map(),
+            palette: themes::default_dark(),
+            widget_styles: Vec::new(),
             core,
         }
     }
@@ -267,9 +276,35 @@ impl Canopy {
     }
 
     /// Mutate the active style map before the next render.
+    ///
+    /// A theme switch rebuilds the map, discarding these edits; rules that
+    /// must survive one belong in `Setup::widget_styles`.
     pub fn style_mut(&mut self) -> &mut StyleMap {
         self.core.invalidate(crate::Invalidation::Paint);
         &mut self.style
+    }
+
+    /// Return the palette of the active theme.
+    pub fn palette(&self) -> &Palette {
+        &self.palette
+    }
+
+    /// Switch to the theme `palette`, reapplying every widget style rule set.
+    pub fn set_theme(&mut self, palette: Palette) {
+        self.palette = palette;
+        let mut style = palette.style_map();
+        for rules in &self.widget_styles {
+            rules(&palette, style.rules());
+        }
+        self.style = style;
+        self.core.invalidate(crate::Invalidation::Paint);
+    }
+
+    /// Apply `rules` to the current map, and again after every theme switch.
+    pub(crate) fn add_widget_styles(&mut self, rules: WidgetStyles) {
+        rules(&self.palette, self.style.rules());
+        self.widget_styles.push(rules);
+        self.core.invalidate(crate::Invalidation::Paint);
     }
 
     /// Borrow the buffer of the last published frame, if any.

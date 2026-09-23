@@ -2296,10 +2296,13 @@ Each stage also updates the docs it touches.
       pushes `help` itself, so it paints help parts wherever it is mounted.
   - [ ] StatusBar pushes its layer (done), and KeyHint resolves keys through
     bindings. Add Luau `canopy.key_for`.
-  - [ ] `roles` becomes shared part names (done), `style::themes` has a public
+  - [x] `roles` becomes shared part names, `style::themes` has a public
     `Palette`, and `Setup::widget_styles` is added.
+    - `Palette` gained `faint_fg` for the quiet foreground fh used as
+      `MUTED`. `Context::set_theme` joins `set_style`, which remains for apps
+      that own a whole map (fontgym).
   - [x] `PartialStyle` gains chaining methods, and `StyleBuilder` goes.
-  - [ ] Update `themes.golden`.
+  - [x] Update `themes.golden`.
 - [ ] C32 public parts: public `Dialog`, `Render::runs`, `text::width` and
   `cell_width`, the `highlight` module, Border naming, and the Container
   presets.

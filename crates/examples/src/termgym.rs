@@ -7,7 +7,7 @@ use canopy::{
     geom::Size,
     layout::{Constraint, Direction, Layout, MeasureConstraints, Measurement},
     render::Render,
-    style::{Attr, AttrSet, StyleMap, WidgetState, default as palette},
+    style::{Attr, AttrSet, StyleRules, WidgetState, themes::Palette},
     tree::FocusScope,
 };
 use canopy_widgets::{
@@ -427,20 +427,20 @@ impl Register for TermGym {
 }
 
 /// Install native styles during the configuration phase.
-fn setup_style(style: &mut StyleMap) {
+fn setup_style(palette: &Palette, rules: StyleRules<'_>) {
     use canopy::style::PartialStyle;
 
     let selected_attrs = AttrSet {
         bold: true,
         ..AttrSet::default()
     };
-    let button_normal = PartialStyle::new().fg(palette::TEXT).bg(palette::ELEMENT);
+    let button_normal = PartialStyle::new().fg(palette.fg).bg(palette.element_bg);
     let button_selected = PartialStyle::new()
-        .fg(palette::BG)
-        .bg(palette::ACCENT)
+        .fg(palette.bg)
+        .bg(palette.accent)
         .attrs(selected_attrs);
 
-    let rules = crate::selectable_entry_styles(style.rules(), "termgym/entry");
+    let rules = crate::selectable_entry_styles(palette, rules, "termgym/entry");
     rules
         .prefix("termgym/button")
         .style_all(&["border", "fill", "text"], button_normal)
@@ -449,16 +449,13 @@ fn setup_style(style: &mut StyleMap) {
             button_selected,
         )
         .prefix("termgym/frame")
-        .fg("", palette::BORDER)
+        .fg("", palette.frame)
         .style(
             "focused",
-            PartialStyle::new().fg(palette::YELLOW).attr(Attr::Bold),
+            PartialStyle::new().fg(palette.yellow).attr(Attr::Bold),
         )
-        .fg("active", palette::ORANGE)
-        .style(
-            "title",
-            PartialStyle::new().fg(palette::TEXT).attr(Attr::Bold),
-        )
+        .fg("active", palette.orange)
+        .style("title", PartialStyle::new().fg(palette.fg).attr(Attr::Bold))
         .apply();
 }
 
@@ -467,7 +464,7 @@ fn setup_style(style: &mut StyleMap) {
 pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
     builder
         .configure(|setup| {
-            setup_style(setup.style_mut());
+            setup.widget_styles(setup_style);
             Ok(())
         })
         .script("termgym", DEFAULT_BINDINGS)

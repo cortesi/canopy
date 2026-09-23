@@ -11,7 +11,7 @@ use canopy::{
     },
     layout::Layout,
     path::Path,
-    style::default::TEXT,
+    style::themes,
     testing::harness::Harness,
 };
 
@@ -426,7 +426,7 @@ fn separators_read_apart_from_the_keys() -> Result<()> {
     let separator = cell(2);
     assert!(key.attrs.bold);
     assert!(!separator.attrs.bold);
-    assert_eq!(separator.fg, TEXT);
+    assert_eq!(separator.fg, themes::default_dark().fg);
     assert_ne!(key.fg, separator.fg, "the comma is not a key");
     Ok(())
 }

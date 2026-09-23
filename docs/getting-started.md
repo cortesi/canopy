@@ -174,7 +174,7 @@ pub fn create_app(home: Option<&ConfigHome>) -> Result<Canopy> {
         .configure(|setup| {
             Root::register(setup)?;
             Hello::register(setup)?;
-            install_styles(setup.style_mut());
+            setup.widget_styles(install_styles);
             Ok(())
         })
         .assemble(|canopy| {

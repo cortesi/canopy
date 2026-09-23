@@ -2991,89 +2991,6 @@ pub mod canopy {
     pub mod style {
         //! Styling and color helpers.
 
-        pub mod default {
-            //! Default theme.
-            //! Default theme: a neutral near-black ground, grey chrome, and
-            //! a single accent.
-            //!
-            //! The grey ramp follows opencode's default theme, and the named
-            //! colours come from the One Dark and TokyoNight families that opencode and
-            //! Grok Build draw on.
-
-            /// Signature accent: focus and selection.
-            pub const ACCENT: super::Color = _;
-
-            /// Default background.
-            pub const BG: super::Color = _;
-
-            /// Blue.
-            pub const BLUE: super::Color = _;
-
-            /// Frame borders.
-            pub const BORDER: super::Color = _;
-
-            /// Borders of the active frame.
-            pub const BORDER_ACTIVE: super::Color = _;
-
-            /// Dividers, faint rules, and the selection background.
-            pub const BORDER_SUBTLE: super::Color = _;
-
-            /// Cyan.
-            pub const CYAN: super::Color = _;
-
-            /// Element background: prompts, scrollbar tracks.
-            pub const ELEMENT: super::Color = _;
-
-            /// Green.
-            pub const GREEN: super::Color = _;
-
-            /// Highlight background: raised elements and selections without focus.
-            pub const HIGHLIGHT: super::Color = _;
-
-            /// Magenta.
-            pub const MAGENTA: super::Color = _;
-
-            /// Muted text: comments, gutters, hints.
-            pub const MUTED: super::Color = _;
-
-            /// Orange.
-            pub const ORANGE: super::Color = _;
-
-            /// Panel background: header and status bars, overlays.
-            pub const PANEL: super::Color = _;
-
-            /// Peach.
-            pub const PEACH: super::Color = _;
-
-            /// Red.
-            pub const RED: super::Color = _;
-
-            /// Secondary text: labels and bars.
-            pub const SUBTEXT: super::Color = _;
-
-            /// Default text.
-            pub const TEXT: super::Color = _;
-
-            /// Violet.
-            pub const VIOLET: super::Color = _;
-
-            /// Yellow.
-            pub const YELLOW: super::Color = _;
-
-            /// Build the dark default style map.
-            pub fn default_dark() -> super::StyleMap {}
-        }
-
-        pub mod dracula {
-            //! Dracula theme.
-            //! Dracula theme - a dark theme with vibrant colors.
-            //!
-            //! Based on the Dracula theme: <https://draculatheme.com>
-
-            /// Build a Dracula style map.
-            pub fn dracula() -> super::StyleMap {}
-        }
-
         pub mod effects {
             //! Style effects system.
             //! Style effects system for transforming styles during rendering.
@@ -3112,16 +3029,6 @@ pub mod canopy {
             pub fn saturation(factor: f32) -> Effect {}
         }
 
-        pub mod gruvbox {
-            //! Gruvbox theme.
-            //! Gruvbox theme - a retro groove color scheme.
-            //!
-            //! Based on the gruvbox theme by morhetz: <https://github.com/morhetz/gruvbox>
-
-            /// Build a dark gruvbox style map.
-            pub fn gruvbox_dark() -> super::StyleMap {}
-        }
-
         pub mod roles {
             //! Shared part names that widgets paint beneath their own layer.
             //!
@@ -3158,62 +3065,91 @@ pub mod canopy {
             pub const fn selection(active: bool) -> &'static str {}
         }
 
-        pub mod solarized {
-            //! Solarized theme.
+        pub mod themes {
+            //! Built-in themes: role palettes and the one rule set they share.
+            //!
+            //! A theme is a [`Palette`] of role colours. [`Palette::style_map`] builds the
+            //! rule set every built-in theme shares, so adding a rule here adds it to every
+            //! theme at once. Applications style their own paths from the palette through
+            //! `Setup::widget_styles`, which keeps those rules across theme switches.
 
-            /// Solarized base0.
-            pub const BASE0: super::Color = _;
+            /// The role colours a theme assigns.
+            ///
+            /// Each field names the role a colour plays, not the colour itself, so the same
+            /// rule set can render a light theme, a dark theme, or any other palette.
+            #[derive(Clone, Copy, Debug)]
+            pub struct Palette {
+                /// Default foreground.
+                pub fg: super::Color,
+                /// Default background, and the foreground drawn on top of `accent`.
+                pub bg: super::Color,
+                /// Inactive frame borders.
+                pub frame: super::Color,
+                /// Border of the frame that holds focus.
+                pub frame_focused: super::Color,
+                /// Base colour of scrollbar thumbs, tinted toward the accent.
+                pub frame_thumb: super::Color,
+                /// Frame title text.
+                pub frame_title: super::Color,
+                /// Primary accent: focus and selection.
+                pub accent: super::Color,
+                /// Foreground on panel backgrounds, one step away from `fg`.
+                pub muted_fg: super::Color,
+                /// Quiet foreground a step below `muted_fg`: placeholders, gutters, and
+                /// hints.
+                pub faint_fg: super::Color,
+                /// Background of panels such as the help overlay and prompt.
+                pub panel_bg: super::Color,
+                /// Background of raised elements set on a panel, such as inactive tabs.
+                pub element_bg: super::Color,
+                /// Selection background: editor selections and the active tab.
+                pub selection_bg: super::Color,
+                /// Editor line-number gutter.
+                pub line_number: super::Color,
+                /// Key names in the help overlay.
+                pub key: super::Color,
+                /// Named blue.
+                pub blue: super::Color,
+                /// Named red.
+                pub red: super::Color,
+                /// Named magenta.
+                pub magenta: super::Color,
+                /// Named violet.
+                pub violet: super::Color,
+                /// Named cyan.
+                pub cyan: super::Color,
+                /// Named green.
+                pub green: super::Color,
+                /// Named yellow, also the search-match background.
+                pub yellow: super::Color,
+                /// Named orange, also the current-search-match background.
+                pub orange: super::Color,
+            }
 
-            /// Solarized base00.
-            pub const BASE00: super::Color = _;
+            /// The default theme: a neutral near-black ground, grey chrome, and a single
+            /// accent.
+            ///
+            /// The grey ramp follows opencode's default theme, and the named colours come
+            /// from the One Dark and TokyoNight families that opencode and Grok Build draw
+            /// on.
+            pub fn default_dark() -> Palette {}
 
-            /// Solarized base01.
-            pub const BASE01: super::Color = _;
+            /// The Dracula theme: <https://draculatheme.com>.
+            pub fn dracula() -> Palette {}
 
-            /// Solarized base02.
-            pub const BASE02: super::Color = _;
+            /// The dark gruvbox theme by morhetz: <https://github.com/morhetz/gruvbox>.
+            pub fn gruvbox_dark() -> Palette {}
 
-            /// Solarized base03.
-            pub const BASE03: super::Color = _;
+            /// The dark Solarized theme.
+            pub fn solarized_dark() -> Palette {}
 
-            /// Solarized base1.
-            pub const BASE1: super::Color = _;
+            /// The light Solarized theme.
+            pub fn solarized_light() -> Palette {}
 
-            /// Solarized base2.
-            pub const BASE2: super::Color = _;
-
-            /// Solarized base3.
-            pub const BASE3: super::Color = _;
-
-            /// Solarized blue.
-            pub const BLUE: super::Color = _;
-
-            /// Solarized cyan.
-            pub const CYAN: super::Color = _;
-
-            /// Solarized green.
-            pub const GREEN: super::Color = _;
-
-            /// Solarized magenta.
-            pub const MAGENTA: super::Color = _;
-
-            /// Solarized orange.
-            pub const ORANGE: super::Color = _;
-
-            /// Solarized red.
-            pub const RED: super::Color = _;
-
-            /// Solarized violet.
-            pub const VIOLET: super::Color = _;
-
-            /// Solarized yellow.
-            pub const YELLOW: super::Color = _;
-
-            /// Build a dark solarized style map.
-            pub fn solarized_dark() -> super::StyleMap {}
-
-            /// Build a light solarized style map.
-            pub fn solarized_light() -> super::StyleMap {}
+            impl Palette {
+                /// Build the shared rule set for this palette.
+                pub fn style_map(&self) -> StyleMap {}
+            }
         }
 
         /// A text attribute.
@@ -3517,8 +3453,8 @@ pub mod canopy {
             /// let mut style_map = StyleMap::new();
             /// style_map
             ///     .rules()
-            ///     .fg("red/text", solarized::RED)
-            ///     .fg("blue/text", solarized::BLUE)
+            ///     .fg("red/text", Color::Red)
+            ///     .fg("blue/text", Color::Blue)
             ///     .apply();
             /// ```
             pub fn rules(&mut self) -> StyleRules<'_> {}
@@ -3985,9 +3921,14 @@ pub mod canopy {
         /// fields.
         fn set_layout_override(&mut self, node: NodeId, overrides: LayoutOverride) -> Result<()>;
 
-        /// Set the style map to be used for rendering.
-        /// The style change will be applied before the next render.
+        /// Replace the whole style map before the next render.
+        ///
+        /// Widget style rule sets are not reapplied; prefer [`Self::set_theme`].
         fn set_style(&mut self, style: StyleMap);
+
+        /// Switch to the theme `palette` before the next render, reapplying every
+        /// widget style rule set.
+        fn set_theme(&mut self, palette: Palette);
 
         /// Capture a thread-safe wake handle for this widget's work lifetime.
         /// Attachment handles require this node to be attached when acquired.
@@ -4520,6 +4461,9 @@ pub mod canopy {
         }
 
         /// Mutate the active style map before the next render.
+        ///
+        /// A theme switch rebuilds the map, discarding these edits; rules that
+        /// must survive one belong in `Setup::widget_styles`.
         pub fn style_mut(&mut self) -> &mut StyleMap {}
 
         /// Pop the newest mode and return the newest active mode after the pop.
@@ -4576,6 +4520,9 @@ pub mod canopy {
         /// mode.
         pub fn mode(&self) -> &str {}
 
+        /// Return the palette of the active theme.
+        pub fn palette(&self) -> &Palette {}
+
         /// Return the retained notices, oldest first.
         ///
         /// A failure from an input binding, a widget handler, or a poll that
@@ -4605,6 +4552,9 @@ pub mod canopy {
             f: impl FnOnce(&mut dyn crate::Context) -> Result<R>,
         ) -> Result<R> {
         }
+
+        /// Switch to the theme `palette`, reapplying every widget style rule set.
+        pub fn set_theme(&mut self, palette: Palette) {}
     }
 
     impl NodeName {
@@ -4619,6 +4569,12 @@ pub mod canopy {
     }
 
     impl Setup {
+        /// Add style rules derived from the active palette.
+        ///
+        /// The rules apply over the theme's shared set now and again after every
+        /// theme switch, so a widget crate styles its own paths in any theme.
+        pub fn widget_styles(&mut self, rules: impl 'static + Fn(&Palette, StyleRules<'_>)) {}
+
         /// Install one binding for `input`.
         ///
         /// The tier in `options` decides the semantics. A framework tier
@@ -4695,8 +4651,8 @@ pub mod canopy {
         /// Replace the limits on the visible render target.
         pub fn set_render_limits(&mut self, limits: RenderLimits) {}
 
-        /// Return the initial style map for mutation.
-        pub fn style_mut(&mut self) -> &mut StyleMap {}
+        /// Start with the theme `palette`.
+        pub fn set_theme(&mut self, palette: Palette) {}
     }
 
     impl<T> From<TypedId<T>> for NodeId {

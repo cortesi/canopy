@@ -15,7 +15,7 @@ use canopy::{
     layout::{Constraint, Direction, Layout, LayoutOverride, MeasureConstraints, Measurement},
     render::Render,
     script::Fixture,
-    style::{StyleMap, default as palette},
+    style::{StyleRules, themes::Palette},
     tree::ChildSlot,
 };
 use canopy_mcp::{ConfigHome, UserConfig};
@@ -419,8 +419,8 @@ impl Register for Todo {
 pub const DEFAULT_CONFIG: &str = include_str!("default_config.luau");
 
 /// Install the todo application's style rules.
-pub(crate) fn style(style: &mut StyleMap) {
-    style.rules().fg("list/selected", palette::ACCENT).apply();
+pub(crate) fn style(palette: &Palette, rules: StyleRules<'_>) {
+    rules.fg("list/selected", palette.accent).apply();
 }
 
 /// Convert persistence failures into application errors.
@@ -488,7 +488,7 @@ fn app_builder(home: Option<&ConfigHome>) -> CanopyBuilder {
         .configure(|setup| {
             Root::register(setup)?;
             Todo::register(setup)?;
-            style(setup.style_mut());
+            setup.widget_styles(style);
             register_fixtures(setup)
         })
         .user_config(home, DEFAULT_CONFIG)

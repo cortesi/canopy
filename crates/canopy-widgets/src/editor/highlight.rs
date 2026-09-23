@@ -52,7 +52,10 @@ mod syntect_highlighter {
         sync::OnceLock,
     };
 
-    use canopy::style::{Attr, AttrSet, Color, Paint, Style, default as palette};
+    use canopy::{
+        rgb,
+        style::{Attr, AttrSet, Color, Paint, Style, themes},
+    };
     use syntect::{
         easy::HighlightLines,
         highlighting,
@@ -62,6 +65,9 @@ mod syntect_highlighter {
     use two_face::syntax::extra_newlines;
 
     use super::{HighlightSpan, Highlighter};
+
+    /// Function names, the one syntax colour outside the style palette.
+    const PEACH: Color = rgb!("#fab283");
 
     /// Theme used when the caller names none, matching the Canopy style theme.
     pub const DEFAULT_THEME: &str = "Canopy (dark)";
@@ -124,77 +130,78 @@ mod syntect_highlighter {
     /// Scopes follow opencode's syntax roles: keywords violet, functions peach,
     /// strings green, numbers and constants orange, types yellow.
     fn canopy_theme() -> Theme {
+        let palette = themes::default_dark();
         let rules: [(&str, Option<Color>, Option<FontStyle>); 22] = [
             (
                 "comment, punctuation.definition.comment",
-                Some(palette::MUTED),
+                Some(palette.faint_fg),
                 Some(FontStyle::ITALIC),
             ),
             (
                 "keyword, storage, keyword.operator.word",
-                Some(palette::VIOLET),
+                Some(palette.violet),
                 None,
             ),
-            ("keyword.operator", Some(palette::CYAN), None),
+            ("keyword.operator", Some(palette.cyan), None),
             (
                 "string, punctuation.definition.string",
-                Some(palette::GREEN),
+                Some(palette.green),
                 None,
             ),
             (
                 "constant.character.escape, string.regexp",
-                Some(palette::CYAN),
+                Some(palette.cyan),
                 None,
             ),
-            ("constant, support.constant", Some(palette::ORANGE), None),
+            ("constant, support.constant", Some(palette.orange), None),
             (
                 "entity.name.function, support.function, variable.function",
-                Some(palette::PEACH),
+                Some(PEACH),
                 None,
             ),
             (
                 "entity.name.type, entity.name.class, entity.name.struct, entity.name.enum, \
                  entity.name.trait, entity.name.union, entity.other.inherited-class, \
                  support.type, support.class",
-                Some(palette::YELLOW),
+                Some(palette.yellow),
                 None,
             ),
             (
                 "variable.language, variable.parameter",
-                Some(palette::RED),
+                Some(palette.red),
                 None,
             ),
             (
                 "support.macro, entity.name.macro, meta.annotation, meta.attribute",
-                Some(palette::BLUE),
+                Some(palette.blue),
                 None,
             ),
-            ("entity.name.tag", Some(palette::RED), None),
-            ("entity.other.attribute-name", Some(palette::YELLOW), None),
+            ("entity.name.tag", Some(palette.red), None),
+            ("entity.other.attribute-name", Some(palette.yellow), None),
             (
                 "markup.heading, entity.name.section",
-                Some(palette::VIOLET),
+                Some(palette.violet),
                 Some(FontStyle::BOLD),
             ),
             ("markup.bold", None, Some(FontStyle::BOLD)),
             ("markup.italic", None, Some(FontStyle::ITALIC)),
             (
                 "markup.underline.link, string.other.link",
-                Some(palette::PEACH),
+                Some(PEACH),
                 None,
             ),
-            ("markup.inserted", Some(palette::GREEN), None),
-            ("markup.deleted, invalid", Some(palette::RED), None),
-            ("markup.changed", Some(palette::YELLOW), None),
-            ("markup.raw", Some(palette::GREEN), None),
+            ("markup.inserted", Some(palette.green), None),
+            ("markup.deleted, invalid", Some(palette.red), None),
+            ("markup.changed", Some(palette.yellow), None),
+            ("markup.raw", Some(palette.green), None),
             (
                 "markup.quote",
-                Some(palette::YELLOW),
+                Some(palette.yellow),
                 Some(FontStyle::ITALIC),
             ),
             (
                 "meta.diff.header, meta.diff.range",
-                Some(palette::BLUE),
+                Some(palette.blue),
                 None,
             ),
         ];
@@ -212,11 +219,11 @@ mod syntect_highlighter {
         Theme {
             name: Some(DEFAULT_THEME.to_string()),
             settings: highlighting::ThemeSettings {
-                foreground: Some(syntect_color(palette::TEXT)),
-                background: Some(syntect_color(palette::BG)),
-                caret: Some(syntect_color(palette::ACCENT)),
-                selection: Some(syntect_color(palette::HIGHLIGHT)),
-                gutter_foreground: Some(syntect_color(palette::BORDER_ACTIVE)),
+                foreground: Some(syntect_color(palette.fg)),
+                background: Some(syntect_color(palette.bg)),
+                caret: Some(syntect_color(palette.accent)),
+                selection: Some(syntect_color(palette.element_bg)),
+                gutter_foreground: Some(syntect_color(palette.line_number)),
                 ..highlighting::ThemeSettings::default()
             },
             scopes,

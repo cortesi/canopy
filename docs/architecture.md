@@ -39,14 +39,14 @@ private `crate::core::` path.
 
 An application runs in two phases. `CanopyBuilder::configure` passes a `Setup`
 handle, which owns every registration: commands, bindings, intents,
-startup scripts, fixtures, mode hooks, render limits, and the initial styles.
+startup scripts, fixtures, mode hooks, render limits, the starting theme, and
+the style rules widgets derive from its palette.
 Each type registers what it needs in a `Register` impl. The builder then
 finalizes the API and returns a `Canopy`, which has no registration methods.
 
 `Canopy` is the running application. It owns `Core` and the style map, and its
 fields are private. Apps install root widgets with helpers such as
-`Root::install`, restyle at runtime through `Canopy::style_mut()` or
-`Context::set_style`, and use `Canopy` methods for scripting, fixtures, input
+`Root::install`, switch themes at runtime through `Context::set_theme`, and use `Canopy` methods for scripting, fixtures, input
 modes, rendering, and automation. The `testing` feature adds hooks that tests
 need and the builder cannot express: a manual clock, the event receiver, script
 module invalidation, the journal limit, and layout timing.

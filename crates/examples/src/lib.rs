@@ -7,7 +7,7 @@ use canopy::{
     layout::{Direction, Layout, LayoutOverride, ScrollDirection, ScrollOp, Sizing},
     style::{
         AttrSet, Color, GradientSpec, GradientStop, Paint, PartialStyle, StyleRules,
-        default as palette,
+        themes::Palette,
     },
     terminal::{RunOptions, runloop},
 };
@@ -87,15 +87,19 @@ pub(crate) fn page_by(c: &mut dyn Context, delta: i32) {
 }
 
 /// Add the standard normal and selected entry rules under a path prefix.
-pub(crate) fn selectable_entry_styles<'a>(rules: StyleRules<'a>, prefix: &str) -> StyleRules<'a> {
+pub(crate) fn selectable_entry_styles<'a>(
+    palette: &Palette,
+    rules: StyleRules<'a>,
+    prefix: &str,
+) -> StyleRules<'a> {
     let selected_attrs = AttrSet {
         bold: true,
         ..AttrSet::default()
     };
-    let normal = PartialStyle::new().fg(palette::TEXT).bg(palette::BG);
+    let normal = PartialStyle::new().fg(palette.fg).bg(palette.bg);
     let selected = PartialStyle::new()
-        .fg(palette::BG)
-        .bg(palette::ACCENT)
+        .fg(palette.bg)
+        .bg(palette.accent)
         .attrs(selected_attrs);
     rules
         .prefix(prefix)

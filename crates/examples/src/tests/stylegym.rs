@@ -3,7 +3,7 @@ use canopy::{
     error::Result,
     geom::{Point, PointI32, Size},
     input::{key, key::KeyCode, mouse},
-    style::{Attr, AttrSet, PartialStyle, ResolvedStyle, default as default_theme},
+    style::{Attr, AttrSet, PartialStyle, ResolvedStyle, themes},
     testing::harness::Harness,
 };
 use canopy_widgets::{Dropdown, Selector};
@@ -197,7 +197,7 @@ fn scroll_keys_follow_the_active_page() -> Result<()> {
 fn palette_and_rules_follow_the_selected_theme() -> Result<()> {
     let mut harness = setup_harness(Size::new(120, 40))?;
     // The default theme's accent and Solarized's blue.
-    let (r, g, b) = default_theme::ACCENT.rgb();
+    let (r, g, b) = themes::default_dark().accent.rgb();
     let accent = format!("#{r:02x}{g:02x}{b:02x}");
     let blue = "#268bd2";
     assert_on_screen(&harness, &accent);

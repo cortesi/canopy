@@ -7,7 +7,7 @@ use canopy::{
     geom::Size,
     layout::{Edges, Layout, MeasureConstraints, Measurement},
     render::Render,
-    style::{StyleMap, WidgetState},
+    style::{StyleRules, WidgetState, themes::Palette},
 };
 use canopy_widgets::{Border, Center, Container, Frame, List, SINGLE, Selectable, Text};
 use unicode_width::UnicodeWidthStr;
@@ -248,8 +248,8 @@ impl Register for Intervals {
 }
 
 /// Install native styles during the configuration phase.
-fn setup_style(style: &mut StyleMap) {
-    crate::selectable_entry_styles(style.rules(), "intervals/entry")
+fn setup_style(palette: &Palette, rules: StyleRules<'_>) {
+    crate::selectable_entry_styles(palette, rules, "intervals/entry")
         .no_prefix()
         .apply();
 }
@@ -259,7 +259,7 @@ fn setup_style(style: &mut StyleMap) {
 pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
     builder
         .configure(|setup| {
-            setup_style(setup.style_mut());
+            setup.widget_styles(setup_style);
             Ok(())
         })
         .script("intervals", DEFAULT_BINDINGS)

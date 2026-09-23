@@ -28,6 +28,7 @@ use crate::{
     render::{NopBackend, Render},
     runtime::NoticeSource,
     script::LuauFunctionId,
+    style::Paint,
     testing::{
         backend::TestRender,
         ttree::{Ba, BaLa, BaLb, OutcomeTarget, R, get_state, reset_state, run_ttree},
@@ -2850,4 +2851,24 @@ fn an_inconsistent_action_consumer_trips_the_debug_assert() {
         .eval_script(r#"canopy.bind("ctrl-x", {description = "Clear"}, "test.clear")"#)
         .unwrap();
     drop(canopy.key(None, key::Key::parse_spec("ctrl-x").unwrap()));
+}
+
+#[test]
+fn widget_styles_follow_theme_switches() -> Result<()> {
+    let mut canopy = CanopyBuilder::new()
+        .configure(|setup| {
+            setup.widget_styles(|palette, rules| rules.fg("app/badge", palette.red).apply());
+            Ok(())
+        })
+        .build()?;
+    let badge = |canopy: &Canopy| canopy.style().resolve("app/badge").fg;
+    assert_eq!(badge(&canopy), Paint::Solid(themes::default_dark().red));
+    canopy.set_theme(themes::dracula());
+    assert_eq!(
+        badge(&canopy),
+        Paint::Solid(themes::dracula().red),
+        "the rule set is reapplied from the new palette"
+    );
+    assert_eq!(canopy.palette().accent, themes::dracula().accent);
+    Ok(())
 }

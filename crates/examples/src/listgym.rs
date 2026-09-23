@@ -5,7 +5,7 @@ use canopy::{
     geom::Size,
     layout::{CanvasContext, MeasureConstraints, Measurement},
     render::Render,
-    style::{StyleMap, default as palette},
+    style::{StyleRules, themes::Palette},
     tree::FocusScope,
 };
 use canopy_widgets::{CanvasWidth, Columns, Container, List, Selectable, Text};
@@ -254,12 +254,11 @@ impl Register for ListGym {
 }
 
 /// Install native styles during the configuration phase.
-fn setup_style(style: &mut StyleMap) {
-    style
-        .rules()
-        .fg("red/text", palette::RED)
-        .fg("blue/text", palette::BLUE)
-        .fg("list/selected", palette::ACCENT)
+fn setup_style(palette: &Palette, rules: StyleRules<'_>) {
+    rules
+        .fg("red/text", palette.red)
+        .fg("blue/text", palette.blue)
+        .fg("list/selected", palette.accent)
         .apply();
 }
 
@@ -268,7 +267,7 @@ fn setup_style(style: &mut StyleMap) {
 pub fn binding_setup(builder: CanopyBuilder) -> CanopyBuilder {
     builder
         .configure(|setup| {
-            setup_style(setup.style_mut());
+            setup.widget_styles(setup_style);
             Ok(())
         })
         .script("listgym", DEFAULT_BINDINGS)

@@ -9,7 +9,7 @@ use crate::{
     error::{Error, Result},
     render::RenderLimits,
     script::Fixture,
-    style::StyleMap,
+    style::{StyleRules, themes::Palette},
 };
 
 /// Per-type registration that runs before the application API is finalized.
@@ -161,8 +161,16 @@ impl Setup {
         self.canopy.frame.render_limits = limits;
     }
 
-    /// Return the initial style map for mutation.
-    pub fn style_mut(&mut self) -> &mut StyleMap {
-        &mut self.canopy.style
+    /// Start with the theme `palette`.
+    pub fn set_theme(&mut self, palette: Palette) {
+        self.canopy.set_theme(palette);
+    }
+
+    /// Add style rules derived from the active palette.
+    ///
+    /// The rules apply over the theme's shared set now and again after every
+    /// theme switch, so a widget crate styles its own paths in any theme.
+    pub fn widget_styles(&mut self, rules: impl Fn(&Palette, StyleRules<'_>) + 'static) {
+        self.canopy.add_widget_styles(Box::new(rules));
     }
 }

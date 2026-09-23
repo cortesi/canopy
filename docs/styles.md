@@ -36,6 +36,28 @@ overlay; block cursors then exchange its foreground and background. Styling
 preserves combining characters and wide-cell continuations. An absent cursor
 rule falls back to the input text role.
 
+## Themes and widget styles
+
+`canopy::style::themes` holds the built-in themes: `default_dark`, `dracula`,
+`gruvbox_dark`, `solarized_dark`, and `solarized_light`. Each returns a
+`Palette` of role colours, such as `fg`, `accent`, `panel_bg`, and the named
+`green` and `red`. `Palette::style_map` builds the rule set every built-in
+theme shares.
+
+Style application and widget-crate paths from the palette rather than from
+colour constants:
+
+```rust
+setup.widget_styles(|palette, rules| {
+    rules.fg("app/badge", palette.green).apply();
+});
+```
+
+The rules apply over the theme at once, and again after every
+`Setup::set_theme` or `Context::set_theme`, so a switch keeps them. Edits made
+through `Canopy::style_mut` or a map installed with `Context::set_style` do not
+survive a theme switch.
+
 ## Fields and results
 
 A text field beside a result list must show which part takes the keyboard.

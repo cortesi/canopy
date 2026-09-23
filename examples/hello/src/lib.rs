@@ -12,7 +12,7 @@ use canopy::{
     error::Result,
     layout::{Align, Direction, Layout},
     render::Render,
-    style::{StyleMap, default as palette},
+    style::{StyleRules, themes::Palette},
 };
 use canopy_mcp::{ConfigHome, UserConfig};
 use canopy_widgets::{KeyHint, Root, StatusBar, Text};
@@ -100,7 +100,7 @@ pub fn create_app(home: Option<&ConfigHome>) -> Result<Canopy> {
         .configure(|setup| {
             Root::register(setup)?;
             Hello::register(setup)?;
-            install_styles(setup.style_mut());
+            setup.widget_styles(install_styles);
             Ok(())
         })
         .assemble(|canopy| {
@@ -111,10 +111,9 @@ pub fn create_app(home: Option<&ConfigHome>) -> Result<Canopy> {
         .build()
 }
 
-/// Install the application palette and per-element styles.
-fn install_styles(style: &mut StyleMap) {
-    *style = palette::default_dark();
-    style.rules().fg("hello/greeting", palette::ACCENT).apply();
+/// Install the per-element styles from the active palette.
+fn install_styles(palette: &Palette, rules: StyleRules<'_>) {
+    rules.fg("hello/greeting", palette.accent).apply();
 }
 
 #[cfg(test)]

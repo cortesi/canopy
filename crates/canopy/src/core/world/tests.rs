@@ -26,6 +26,7 @@ use crate::{
     input::{FrameworkBindingGroup, ModalBindings, ModalOptions},
     layout::{Layout, LayoutOverride, Measurement},
     path::Path,
+    style::StyleMap,
     widget::Widget,
 };
 

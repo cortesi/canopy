@@ -1,22 +1,12 @@
 /// Color helpers.
 mod color;
-/// Default theme.
-pub mod default;
-/// Dracula theme.
-pub mod dracula;
 /// Style effects system.
 pub mod effects;
-/// Gruvbox theme.
-pub mod gruvbox;
-/// Shared theme palette and rule set.
-mod palette;
-/// Solarized theme.
-pub mod solarized;
+pub mod themes;
 
 use std::{collections::HashMap, iter};
 
 pub use color::{Color, hex_byte};
-pub(crate) use palette::{Palette, theme};
 
 use crate::geom;
 
@@ -53,6 +43,19 @@ pub mod roles {
         }
     }
 }
+
+/// A style replacement requested during a turn and applied before the next
+/// render.
+#[derive(Clone, Debug)]
+pub(crate) enum StyleChange {
+    /// Switch to a theme, reapplying every widget style rule set.
+    Theme(themes::Palette),
+    /// Replace the whole style map.
+    Map(StyleMap),
+}
+
+/// Style rules a widget crate or application derives from the palette.
+pub(crate) type WidgetStyles = Box<dyn Fn(&themes::Palette, StyleRules<'_>)>;
 
 /// Independent widget states mapped onto the existing style layer stack.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -483,8 +486,8 @@ impl StyleMap {
     /// let mut style_map = StyleMap::new();
     /// style_map
     ///     .rules()
-    ///     .fg("red/text", solarized::RED)
-    ///     .fg("blue/text", solarized::BLUE)
+    ///     .fg("red/text", Color::Red)
+    ///     .fg("blue/text", Color::Blue)
     ///     .apply();
     /// ```
     pub fn rules(&mut self) -> StyleRules<'_> {
@@ -813,10 +816,10 @@ mod tests {
     }
 
     #[test]
-    fn style_builder_defines_a_reusable_rule() {
+    fn partial_style_chains_a_reusable_rule() {
         let selected = PartialStyle::new()
-            .fg(solarized::BASE3)
-            .bg(solarized::BLUE)
+            .fg(Color::White)
+            .bg(Color::Blue)
             .attr(Attr::Bold);
 
         let mut style_map = StyleMap::new();
@@ -824,8 +827,8 @@ mod tests {
 
         let manager = StyleManager::new();
         let resolved = manager.get(&style_map, "item/selected");
-        assert_eq!(resolved.fg, Paint::solid(solarized::BASE3));
-        assert_eq!(resolved.bg, Paint::solid(solarized::BLUE));
+        assert_eq!(resolved.fg, Paint::solid(Color::White));
+        assert_eq!(resolved.bg, Paint::solid(Color::Blue));
         assert_eq!(resolved.attrs, AttrSet::new(Attr::Bold));
     }
 
@@ -841,18 +844,18 @@ mod tests {
                     .bg(Color::Black)
                     .attrs(AttrSet::default()),
             )
-            .fg("red/text", solarized::RED)
-            .fg("blue/text", solarized::BLUE)
+            .fg("red/text", Color::Red)
+            .fg("blue/text", Color::Blue)
             .apply();
 
         let manager = StyleManager::new();
         assert_eq!(
             manager.get(&style_map, "red/text"),
-            solid_style(solarized::RED, Color::Black)
+            solid_style(Color::Red, Color::Black)
         );
         assert_eq!(
             manager.get(&style_map, "blue/text"),
-            solid_style(solarized::BLUE, Color::Black)
+            solid_style(Color::Blue, Color::Black)
         );
     }
 
@@ -875,11 +878,11 @@ mod tests {
     /// Render every built-in theme in a stable order.
     fn dump_all_themes() -> String {
         [
-            ("default_dark", super::default::default_dark()),
-            ("solarized_dark", solarized::solarized_dark()),
-            ("solarized_light", solarized::solarized_light()),
-            ("dracula", dracula::dracula()),
-            ("gruvbox_dark", gruvbox::gruvbox_dark()),
+            ("default_dark", themes::default_dark().style_map()),
+            ("solarized_dark", themes::solarized_dark().style_map()),
+            ("solarized_light", themes::solarized_light().style_map()),
+            ("dracula", themes::dracula().style_map()),
+            ("gruvbox_dark", themes::gruvbox_dark().style_map()),
         ]
         .iter()
         .map(|(name, map)| dump_theme(name, map))
