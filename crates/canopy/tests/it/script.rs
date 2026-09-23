@@ -875,31 +875,6 @@ mod tests {
     }
 
     #[test]
-    fn startup_scripts_accept_additional_global_requirements() -> Result<()> {
-        let mut canopy = raw_canopy_with_leaf()?;
-        canopy.require_startup_global("configure_workspace", "() -> ()")?;
-        canopy.register_startup_script(
-            "app",
-            r#"
-            function configure_workspace()
-                api_leaf.set(1)
-            end
-
-            function setup()
-                configure_workspace()
-            end
-        "#,
-        )?;
-
-        assert_eq!(canopy.run_startup_scripts()?, 1);
-        assert_eq!(
-            canopy.eval_script("return api_leaf.get()")?,
-            ArgValue::Int(1)
-        );
-        Ok(())
-    }
-
-    #[test]
     fn startup_failure_releases_registered_callbacks() -> Result<()> {
         let mut canopy = raw_canopy_with_leaf()?;
         canopy.register_startup_script(
@@ -1427,12 +1402,12 @@ mod tests {
             end
         "#;
         let checked = harness.canopy.check_script("recursive-tree.luau", source)?;
-        assert!(checked.is_ok(), "{:?}", checked.diagnostics());
+        assert!(!checked.has_errors(), "{:?}", checked.diagnostics());
         harness.script(source)?;
         let invalid = harness
             .canopy
             .check_script("tree-is-not-handle.luau", "canopy.node_info(canopy.tree())")?;
-        assert!(!invalid.is_ok());
+        assert!(invalid.has_errors());
         Ok(())
     }
 }

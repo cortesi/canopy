@@ -27,8 +27,7 @@ use ruau::{
     surface::{CheckOptions, PrepareOptions, PreparedGraph, Surface, VmConfig},
     typecheck::{DiagnosticRecord, ModuleDiagnosticRecord, Severity},
     vm::{
-        Ambient, CallOptions, Cancel, Limits, NativeModule, RuntimeCapabilities, Scope, SinkQuota,
-        StashedClosure,
+        Ambient, CallOptions, Cancel, Limits, RuntimeCapabilities, Scope, SinkQuota, StashedClosure,
     },
 };
 use schemars::JsonSchema;
@@ -135,13 +134,23 @@ pub struct ScriptAssertion {
     pub message: String,
 }
 
+/// Severity of a checked Luau source diagnostic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ScriptCheckSeverity {
+    /// The diagnostic fails script evaluation.
+    Error,
+    /// The diagnostic does not fail script evaluation.
+    Warning,
+}
+
 /// Structured Luau typecheck diagnostic.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ScriptCheckDiagnostic {
     /// Diagnostic source name, when the diagnostic belongs to a named source.
     pub source: Option<String>,
-    /// Diagnostic severity such as `error` or `warning`.
-    pub severity: String,
+    /// Diagnostic severity.
+    pub severity: ScriptCheckSeverity,
     /// One-based line number, or zero when the diagnostic is not source-bound.
     pub line: usize,
     /// One-based column number, or zero when the diagnostic is not
@@ -154,7 +163,7 @@ pub struct ScriptCheckDiagnostic {
 impl ScriptCheckDiagnostic {
     /// Return true if this diagnostic should fail script evaluation.
     pub fn is_error(&self) -> bool {
-        self.severity == "error"
+        self.severity == ScriptCheckSeverity::Error
     }
 }
 
@@ -183,11 +192,6 @@ impl ScriptCheckResult {
     /// Construct a result from checker diagnostics.
     pub(crate) fn from_diagnostics(diagnostics: Vec<ScriptCheckDiagnostic>) -> Self {
         Self { diagnostics }
-    }
-
-    /// Return true if there are no failing diagnostics.
-    pub fn is_ok(&self) -> bool {
-        !self.has_errors()
     }
 
     /// Return all diagnostics.
@@ -407,8 +411,6 @@ struct LuauState {
     surface: Option<Surface>,
     /// Script surface with startup-root global obligations.
     startup_surface: Option<Surface>,
-    /// Typed globals every startup script root must define.
-    startup_requirements: Vec<StartupRequirement>,
     /// Whether the command surface has been finalized.
     finalized: bool,
     /// Whether a top-level async eval is currently driving the retained VM.
@@ -417,6 +419,27 @@ struct LuauState {
     on_start_hooks: Vec<LuauFunctionId>,
     /// Optional one-shot finalization failure used by deterministic tests.
     finalize_failure: Option<FinalizeStep>,
+}
+
+impl LuauState {
+    /// Construct empty script host state.
+    fn new() -> Self {
+        Self {
+            scripts: ScriptCache::new(),
+            closures: ClosureRegistry::new(),
+            ..Self::default()
+        }
+    }
+
+    /// Mark a fully prepared script API as ready.
+    fn publish(&mut self) {
+        self.finalized = true;
+    }
+
+    /// Drain deferred `on_start` hooks in registration order.
+    fn drain_on_start_hooks(&mut self) -> Vec<LuauFunctionId> {
+        mem::take(&mut self.on_start_hooks)
+    }
 }
 
 /// Luau host state shared by the canopy runtime.
@@ -547,10 +570,9 @@ pub(crate) fn diagnostic_record_to_script(
     ScriptCheckDiagnostic {
         source,
         severity: match diagnostic.severity {
-            Severity::Error => "error",
-            Severity::Warning | Severity::Info => "warning",
-        }
-        .to_string(),
+            Severity::Error => ScriptCheckSeverity::Error,
+            Severity::Warning | Severity::Info => ScriptCheckSeverity::Warning,
+        },
         line,
         column,
         message: diagnostic.message,
@@ -629,27 +651,6 @@ impl LuauHost {
         self.state.borrow().surface.clone()
     }
 
-    /// Add a required global definition for startup script roots.
-    #[cfg(any(test, feature = "testing"))]
-    pub fn require_startup_global(&self, name: &str, type_text: &str) -> Result<()> {
-        let mut state = self.state.borrow_mut();
-        if state.finalized {
-            return Err(error::Error::InvalidOperation(
-                "startup global requirements are sealed after finalize_api()".into(),
-            ));
-        }
-        if name.trim().is_empty() {
-            return Err(error::Error::Invalid(
-                "startup global requirement name cannot be empty".into(),
-            ));
-        }
-        state.startup_requirements.push(StartupRequirement {
-            name: name.to_string(),
-            type_text: type_text.to_string(),
-        });
-        Ok(())
-    }
-
     /// Mark the retained runtime as busy with a top-level async evaluation.
     fn begin_active_eval(&self) -> Result<ActiveEvalGuard> {
         self.ensure_eval_idle()?;
@@ -680,7 +681,7 @@ impl LuauHost {
             )
         })?;
         let result = check_source_with_surface(&surface, source);
-        if result.is_ok() {
+        if !result.has_errors() {
             Ok(())
         } else {
             Err(error::Error::Parse(error::ParseError::new(
@@ -756,7 +757,6 @@ impl LuauHost {
         &self,
         commands: &CommandSet,
         default_binding_owners: &BTreeSet<String>,
-        extra_modules: &[Arc<dyn NativeModule>],
         module_source: Option<Arc<dyn SourceProvider>>,
         fixtures: &[FixtureInfo],
         actions: &inputmap::WidgetActionCatalog,
@@ -767,7 +767,6 @@ impl LuauHost {
             ));
         }
         let mut modules = vec![build_base_module(actions)?];
-        modules.extend(extra_modules.iter().map(Arc::clone));
         modules.extend(build_owner_modules(commands, default_binding_owners)?);
         modules.push(build_command_module(commands)?);
         let definitions = defs::render_definitions(&modules, fixtures);
@@ -783,13 +782,13 @@ impl LuauHost {
             error::Error::script(format!("building script surface failed: {err}"))
         })?;
         let mut startup_surface = surface.clone();
-        for requirement in &self.state.borrow().startup_requirements {
-            startup_surface
-                .require_global(&requirement.name, &requirement.type_text)
-                .map_err(|err| {
-                    error::Error::script(format!("building startup script checker failed: {err}"))
-                })?;
-        }
+        // Every startup script root must define `setup()`, the built-in
+        // startup obligation.
+        startup_surface
+            .require_global("setup", "() -> ()")
+            .map_err(|err| {
+                error::Error::script(format!("building startup script checker failed: {err}"))
+            })?;
         self.finalize_checkpoint(FinalizeStep::SurfacePrepared)?;
         let mut state = self.state.borrow_mut();
         state.surface = Some(surface);

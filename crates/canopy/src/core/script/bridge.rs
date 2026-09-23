@@ -1,54 +1,17 @@
 //! Guards and the bridge between a running script scope and the live `Canopy`.
 
-use std::{fmt, mem, result::Result as StdResult};
+use std::{fmt, result::Result as StdResult};
 
 use ruau::vm::{
     HostType, HostTypeBuilder, MarshaledPair, RuntimeError, Scope, ScopedValue, ScriptErrorField,
     ValueSnapshot,
 };
 
-use super::{
-    Canopy, ClosureRegistry, Core, LuauFunctionId, LuauState, NodeId, NonNull, Rc, RefCell, Result,
-    ScriptCache, commands, error,
-};
+use super::{Canopy, Core, LuauState, NodeId, NonNull, Rc, RefCell, Result, commands, error};
 
 thread_local! {
     /// Stack of canopy pointers made available to reentrant host calls.
     pub(super) static REENTRANT_CANOPY: RefCell<Vec<NonNull<Canopy>>> = const { RefCell::new(Vec::new()) };
-}
-
-impl LuauState {
-    /// Construct empty script host state.
-    pub(super) fn new() -> Self {
-        Self {
-            scripts: ScriptCache::new(),
-            closures: ClosureRegistry::new(),
-            startup_requirements: vec![StartupRequirement {
-                name: "setup".to_string(),
-                type_text: "() -> ()".to_string(),
-            }],
-            ..Self::default()
-        }
-    }
-
-    /// Mark a fully prepared script API as ready.
-    pub(super) fn publish(&mut self) {
-        self.finalized = true;
-    }
-
-    /// Drain deferred `on_start` hooks in registration order.
-    pub(super) fn drain_on_start_hooks(&mut self) -> Vec<LuauFunctionId> {
-        mem::take(&mut self.on_start_hooks)
-    }
-}
-
-/// One required global definition for startup script roots.
-#[derive(Clone)]
-pub(super) struct StartupRequirement {
-    /// Global name the root script must define.
-    pub(super) name: String,
-    /// Luau type text the definition must satisfy.
-    pub(super) type_text: String,
 }
 
 /// Clears the retained VM active-eval flag when a top-level async eval exits.

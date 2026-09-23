@@ -1,4 +1,7 @@
 //! Child Cargo commands without inherited package identity.
+//!
+//! Kept in sync by hand with `xtask/src/cargo_env.rs`: the xtask leaf rule
+//! forbids sharing it.
 
 use std::{env, ffi::OsStr, process::Command};
 

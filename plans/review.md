@@ -1244,11 +1244,10 @@ Use `wait_for(fn)` in their place.
 - **Type the diagnostic severity.** `ScriptCheckDiagnostic.severity` becomes an
   enum that serializes to the same strings. Keep one of `is_ok` and
   `has_errors`.
-- **Narrow visibility.** Make these `pub` items in private modules
-  `pub(crate)`:
-  - canopy-mcp's `bootstrap_for_canopy`, `query_script_api`, `stable_digest`,
-    and `validate_live_viewport`
-  - canopy's `ScriptJournalBaseline` and `DefaultBindingsRun`
+- **Visibility (dropped).** These `pub` items already sit in private
+  modules, so they are unreachable from outside. The workspace lint
+  `clippy::redundant_pub_crate` requires plain `pub` there, so no narrowing
+  applies.
 - **Delete the `script_native_modules` plumbing.** Only a `#[cfg(test)]`
   method fills it. Also delete `startup_requirements` and
   `require_startup_global`, which only the testing feature reaches.
@@ -2159,12 +2158,12 @@ Each stage also updates the docs it touches.
   - Deferred focus repair inside callbacks, and a recovery hint on `detach`.
 - [x] C24: one route walk, borrowed candidates, `CommandAvailability` without
   a lifetime, and no free commands.
-- [ ] C29: consolidate `base_api.rs` and `value.rs`, move the `bridge.rs`
+- [x] C29: consolidate `base_api.rs` and `value.rs`, move the `bridge.rs`
   helpers, narrow visibility, and delete the native-module and startup-global
   plumbing.
 - [ ] C32 internal parts: `RowCursor`, `HelpPanel` removal, `ScrollAxis`
   reuse, the click threshold, and the shared highlighted-run painter.
-- [ ] C37:
+- [x] C37:
   - Trim the tidy hooks.
   - Move the Luau inventory into a test.
   - Apply the xtask fixes.

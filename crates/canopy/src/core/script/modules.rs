@@ -24,23 +24,23 @@ pub struct ScriptModuleRoots {
 impl ScriptModuleRoots {
     /// Return the configured `@user` root.
     #[must_use]
-    pub fn user_root(&self) -> Option<&Path> {
+    pub(crate) fn user_root(&self) -> Option<&Path> {
         self.user.as_deref()
     }
 
     /// Return the configured `@project` root.
     #[must_use]
-    pub fn project_root(&self) -> Option<&Path> {
+    pub(crate) fn project_root(&self) -> Option<&Path> {
         self.project.as_deref()
     }
 
     /// Mount `@user` at `root`.
-    pub fn set_user_root(&mut self, root: impl Into<PathBuf>) {
+    pub(crate) fn set_user_root(&mut self, root: impl Into<PathBuf>) {
         self.user = Some(root.into());
     }
 
     /// Mount `@project` at `root`.
-    pub fn set_project_root(&mut self, root: impl Into<PathBuf>) {
+    pub(crate) fn set_project_root(&mut self, root: impl Into<PathBuf>) {
         self.project = Some(root.into());
     }
 

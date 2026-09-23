@@ -9,7 +9,7 @@ use std::{
     time::Instant,
 };
 
-use ruau::{filesystem::DirectoryMountsError, source::SourceProvider, vm::NativeModule};
+use ruau::{filesystem::DirectoryMountsError, source::SourceProvider};
 use serde::{Deserialize, Serialize};
 
 use super::{Canopy, EvalRequest};
@@ -75,8 +75,6 @@ pub struct ScriptState {
     pub(super) module_roots: script::ScriptModuleRoots,
     /// Finalized persistent Luau module source, if any.
     pub(super) module_source: Option<Arc<script::ScriptModuleSource>>,
-    /// Extra audited Ruau native modules registered by the app.
-    native_modules: Vec<Arc<dyn NativeModule>>,
     /// App-level startup scripts run before user and project init files.
     pub(super) startup_scripts: Vec<StartupScript>,
     /// Successfully executed filesystem startup modules.
@@ -100,7 +98,6 @@ impl Default for ScriptState {
             api_text: None,
             module_roots: script::ScriptModuleRoots::default(),
             module_source: None,
-            native_modules: Vec::new(),
             startup_scripts: Vec::new(),
             completed_startup_modules: HashSet::new(),
             startup_module_scripts: HashMap::new(),
@@ -310,15 +307,6 @@ impl Canopy {
     pub(super) fn set_project_script_root_inner(&mut self, root: impl Into<PathBuf>) -> Result<()> {
         self.ensure_api_unfinalized("script module roots")?;
         self.script.module_roots.set_project_root(root);
-        Ok(())
-    }
-
-    /// Register an audited Ruau native module on the same surface as Canopy
-    /// commands.
-    #[cfg(test)]
-    pub(crate) fn register_script_module(&mut self, module: Arc<dyn NativeModule>) -> Result<()> {
-        self.ensure_api_unfinalized("script native module registration")?;
-        self.script.native_modules.push(module);
         Ok(())
     }
 
@@ -664,7 +652,6 @@ impl Canopy {
         let definitions = self.script.host.prepare_finalize(
             &self.core.commands,
             &default_binding_owners,
-            &self.script.native_modules,
             surface_source,
             &self.fixture_infos(),
             self.core.input_map.widget_actions(),

@@ -50,9 +50,6 @@ jobs:
       - name: Check isolated widget capabilities
         run: cargo xtask feature-check
 
-      - name: Check Luau declarations
-        run: cargo xtask checks
-
       - name: Compile benchmarks
         run: cargo xtask bench-check
 

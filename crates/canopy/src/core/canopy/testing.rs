@@ -57,12 +57,6 @@ impl Canopy {
         Ok(Some(epoch))
     }
 
-    /// Require every startup script root to define a typed global.
-    pub fn require_startup_global(&mut self, name: &str, type_text: &str) -> Result<()> {
-        self.ensure_api_unfinalized("startup global requirement")?;
-        self.script.host.require_startup_global(name, type_text)
-    }
-
     /// Run startup scripts directly in a low-level test.
     pub fn run_startup_scripts(&mut self) -> Result<usize> {
         self.run_startup_scripts_inner()

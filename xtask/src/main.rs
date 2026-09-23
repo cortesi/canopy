@@ -4,7 +4,6 @@
 mod cargo_env;
 
 use std::{
-    fs, io,
     path::{Path, PathBuf},
     process::{Command, ExitCode, Stdio},
 };
@@ -23,10 +22,8 @@ struct Cli {
 /// Supported xtask commands.
 #[derive(Subcommand)]
 enum Task {
-    /// Build the workspace and isolated widget capability profiles.
+    /// Build the production profile and isolated widget capability profiles.
     FeatureCheck,
-    /// Check API skeletons and tracked Luau sources.
-    Checks,
     /// Compile every benchmark target without running benchmarks.
     BenchCheck,
     /// Run all smoke-test integration targets.
@@ -37,8 +34,7 @@ enum Task {
 fn main() -> ExitCode {
     let root = workspace_root();
     exit_code(match Cli::parse().task {
-        Task::FeatureCheck => run_default_check(&root),
-        Task::Checks => run_luau_check(&root),
+        Task::FeatureCheck => run_feature_check(&root),
         Task::BenchCheck => run_bench_check(&root),
         Task::Smoke => run_smoke(&root),
     })
@@ -85,19 +81,18 @@ fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
-/// Build the production profile, the full workspace, and isolated minimum and
-/// independent widget profiles.
-fn run_default_check(workspace_root: &Path) -> bool {
+/// Build the production profile, then isolated minimum and independent
+/// widget capability profiles.
+fn run_feature_check(workspace_root: &Path) -> bool {
     // The production profile omits `--all-targets` and `--all-features` on
     // purpose. Either flag pulls in dev-dependencies, which re-enable the
     // `testing` feature and hide the warnings this step exists to catch.
+    // A plain `cargo check --workspace --all-targets` step is deliberately
+    // absent here: ncode's own build already covers it.
     if !run_cargo_command(
         workspace_root,
         &["clippy", "--workspace", "--", "-D", "warnings"],
     ) {
-        return false;
-    }
-    if !run_cargo_command(workspace_root, &["check", "--workspace", "--all-targets"]) {
         return false;
     }
     for capability in [
@@ -124,51 +119,6 @@ fn run_default_check(workspace_root: &Path) -> bool {
     true
 }
 
-/// Type-check every tracked Luau source under its owning application surface.
-fn run_luau_check(workspace_root: &Path) -> bool {
-    if let Err(error) = validate_luau_inventory(workspace_root) {
-        eprintln!("{error}");
-        return false;
-    }
-    run_cargo_command(
-        workspace_root,
-        &[
-            "nextest",
-            "run",
-            "--workspace",
-            "--all-features",
-            "-E",
-            "test(tracked_luau)",
-        ],
-    )
-}
-
-/// Reject tracked Luau files outside a directory with an explicit checker
-/// owner.
-fn validate_luau_inventory(workspace_root: &Path) -> Result<(), String> {
-    let output = Command::new("git")
-        .args(["ls-files", "--", "*.luau"])
-        .current_dir(workspace_root)
-        .output()
-        .map_err(|error| format!("listing tracked Luau files failed: {error}"))?;
-    if !output.status.success() {
-        return Err("listing tracked Luau files failed".to_string());
-    }
-    let files = String::from_utf8(output.stdout)
-        .map_err(|error| format!("tracked Luau path is not UTF-8: {error}"))?;
-    for file in files.lines() {
-        let owned = file == "crates/canopy/luau/preamble.d.luau"
-            || file.starts_with("crates/canopy-widgets/tests/luau/")
-            || file.starts_with("examples/todo/smoke/")
-            || file.starts_with("examples/hello/smoke/")
-            || file == "examples/hello/src/default_bindings.luau";
-        if !owned {
-            return Err(format!("tracked Luau file has no checker owner: {file}"));
-        }
-    }
-    Ok(())
-}
-
 /// Compile every benchmark target without running benchmarks.
 fn run_bench_check(workspace_root: &Path) -> bool {
     run_cargo_command(
@@ -183,47 +133,32 @@ fn run_bench_check(workspace_root: &Path) -> bool {
     )
 }
 
-/// Discover directories that define smoke suites via `.canopyctl.toml`.
+/// Discover smoke-suite directories from tracked `.canopyctl.toml` files.
 fn discover_smoke_suites(workspace_root: &Path) -> Result<Vec<PathBuf>, String> {
-    let mut suites = Vec::new();
-    collect_smoke_suites(workspace_root, &mut suites).map_err(|error| error.to_string())?;
+    let output = Command::new("git")
+        .args(["ls-files", "--", "*.canopyctl.toml"])
+        .current_dir(workspace_root)
+        .output()
+        .map_err(|error| format!("listing tracked smoke suites failed: {error}"))?;
+    if !output.status.success() {
+        return Err("listing tracked smoke suites failed".to_string());
+    }
+    let files = String::from_utf8(output.stdout)
+        .map_err(|error| format!("tracked smoke suite path is not UTF-8: {error}"))?;
+    let mut suites = files
+        .lines()
+        .filter_map(|file| Path::new(file).parent())
+        .map(|suite| workspace_root.join(suite))
+        .collect::<Vec<_>>();
     suites.sort();
     Ok(suites)
 }
 
-/// Recursively collect smoke-suite directories under the workspace root.
-fn collect_smoke_suites(dir: &Path, suites: &mut Vec<PathBuf>) -> io::Result<()> {
-    for entry in fs::read_dir(dir)? {
-        let entry = entry?;
-        let path = entry.path();
-        let file_type = entry.file_type()?;
-
-        if file_type.is_dir() {
-            if matches!(
-                entry.file_name().to_str(),
-                Some(".git" | ".cargo" | "target" | "tmp")
-            ) {
-                continue;
-            }
-            collect_smoke_suites(&path, suites)?;
-            continue;
-        }
-
-        if file_type.is_file()
-            && entry.file_name() == ".canopyctl.toml"
-            && let Some(parent) = path.parent()
-        {
-            suites.push(parent.to_path_buf());
-        }
-    }
-    Ok(())
-}
-
-/// Run a cargo command from the workspace root.
-fn run_cargo_command(workspace_root: &Path, args: &[&str]) -> bool {
+/// Run a cargo command from the given directory.
+fn run_cargo_command(directory: &Path, args: &[&str]) -> bool {
     match cargo_env::command("cargo")
         .args(args)
-        .current_dir(workspace_root)
+        .current_dir(directory)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status()

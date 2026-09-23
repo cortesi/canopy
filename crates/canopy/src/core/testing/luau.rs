@@ -9,7 +9,7 @@ use crate::{Canopy, error::Result};
 pub fn assert_typechecks(canopy: &mut Canopy, source_name: &str, source: &str) -> Result<()> {
     let result = canopy.check_script(source_name, source)?;
     assert!(
-        result.is_ok(),
+        !result.has_errors(),
         "{}",
         result
             .diagnostics()

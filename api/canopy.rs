@@ -2066,8 +2066,8 @@ pub mod canopy {
         pub struct ScriptCheckDiagnostic {
             /// Diagnostic source name, when the diagnostic belongs to a named source.
             pub source: Option<String>,
-            /// Diagnostic severity such as `error` or `warning`.
-            pub severity: String,
+            /// Diagnostic severity.
+            pub severity: ScriptCheckSeverity,
             /// One-based line number, or zero when the diagnostic is not source-bound.
             pub line: usize,
             /// One-based column number, or zero when the diagnostic is not
@@ -2080,6 +2080,16 @@ pub mod canopy {
         /// Stable result returned by Luau typechecking APIs.
         #[derive(Clone, Debug, Eq, PartialEq)]
         pub struct ScriptCheckResult {}
+
+        #[serde(rename_all = "snake_case")]
+        /// Severity of a checked Luau source diagnostic.
+        #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+        pub enum ScriptCheckSeverity {
+            /// The diagnostic fails script evaluation.
+            Error,
+            /// The diagnostic does not fail script evaluation.
+            Warning,
+        }
 
         impl JsonSchema for ScriptAssertion {
             fn inline_schema() -> bool {}
@@ -2106,6 +2116,16 @@ pub mod canopy {
             pub fn is_error(&self) -> bool {}
         }
 
+        impl JsonSchema for ScriptCheckSeverity {
+            fn inline_schema() -> bool {}
+
+            fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
+
+            fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+            fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+        }
+
         impl ScriptCheckResult {
             /// Consume the result and return its diagnostics.
             pub fn into_diagnostics(self) -> Vec<ScriptCheckDiagnostic> {}
@@ -2115,9 +2135,6 @@ pub mod canopy {
 
             /// Return all diagnostics.
             pub fn diagnostics(&self) -> &[ScriptCheckDiagnostic] {}
-
-            /// Return true if there are no failing diagnostics.
-            pub fn is_ok(&self) -> bool {}
 
             /// Return true when the result contains failing diagnostics.
             pub fn has_errors(&self) -> bool {}

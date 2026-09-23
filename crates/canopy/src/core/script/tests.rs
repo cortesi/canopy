@@ -181,6 +181,18 @@ proptest! {
 }
 
 #[test]
+fn script_check_severity_serializes_to_stable_strings() {
+    assert_eq!(
+        serde_json::to_value(ScriptCheckSeverity::Error).unwrap(),
+        serde_json::json!("error"),
+    );
+    assert_eq!(
+        serde_json::to_value(ScriptCheckSeverity::Warning).unwrap(),
+        serde_json::json!("warning"),
+    );
+}
+
+#[test]
 fn reentrant_canopy_guard_restores_nested_stack() -> Result<()> {
     REENTRANT_CANOPY.with(|stack| assert!(stack.borrow().is_empty()));
     let mut outer = Canopy::new();
@@ -397,6 +409,102 @@ fn live_and_marshaled_value_policy_agree_without_erasing_node_identity() {
         Ok(())
     })
     .expect("live conversion scope succeeds");
+}
+
+/// Strip a conversion error's root path label so scoped ("value") and
+/// marshaled ("result") error text can be compared for agreement.
+fn strip_error_root(message: String, root: &str) -> String {
+    match message.strip_prefix(root) {
+        Some(rest) => format!("<root>{rest}"),
+        None => message,
+    }
+}
+
+#[test]
+fn scoped_and_marshaled_value_policy_agree_on_layouts_and_errors() {
+    let surface = Surface::builder()
+        .module(build_base_module(&WidgetActionCatalog::default()).expect("base module builds"))
+        .build()
+        .expect("surface builds");
+    let mut vm = surface
+        .vm_builder(&VmConfig::untrusted(
+            Ambient::deterministic(0),
+            Limits::unlimited(),
+        ))
+        .build()
+        .expect("VM builds");
+    vm.step(|scope| {
+        // Dense array: both paths assemble the same sequence.
+        let dense = scope.create_table()?;
+        dense.set_index(scope, 1, "a")?;
+        dense.set_index(scope, 2, "b")?;
+        let dense_marshaled = scope.marshal(ScopedValue::Table(dense))?;
+        assert_eq!(
+            scoped_to_arg_value(scope, ScopedValue::Table(dense)),
+            marshaled_to_arg_value(&dense_marshaled),
+        );
+
+        // String map: both paths assemble the same map.
+        let map = scope.create_table()?;
+        map.set(scope, "x", 1)?;
+        map.set(scope, "y", 2)?;
+        let map_marshaled = scope.marshal(ScopedValue::Table(map))?;
+        assert_eq!(
+            scoped_to_arg_value(scope, ScopedValue::Table(map)),
+            marshaled_to_arg_value(&map_marshaled),
+        );
+
+        // Sparse array: both paths reject with the same reason.
+        let sparse = scope.create_table()?;
+        sparse.set_index(scope, 1, true)?;
+        sparse.set_index(scope, 3, true)?;
+        let sparse_marshaled = scope.marshal(ScopedValue::Table(sparse))?;
+        let scoped_error = scoped_to_arg_value(scope, ScopedValue::Table(sparse))
+            .map_err(|error| strip_error_root(error, "value"));
+        let marshaled_error = marshaled_to_arg_value(&sparse_marshaled)
+            .map_err(|error| strip_error_root(error, "result"));
+        assert_eq!(scoped_error, marshaled_error);
+        assert_eq!(
+            scoped_error,
+            Err("<root>: sparse table missing index 2".to_string())
+        );
+
+        // Mixed integer and string keys: both paths reject with the same
+        // reason.
+        let mixed = scope.create_table()?;
+        mixed.set_index(scope, 1, true)?;
+        mixed.set(scope, "name", "mixed")?;
+        let mixed_marshaled = scope.marshal(ScopedValue::Table(mixed))?;
+        let scoped_error = scoped_to_arg_value(scope, ScopedValue::Table(mixed))
+            .map_err(|error| strip_error_root(error, "value"));
+        let marshaled_error = marshaled_to_arg_value(&mixed_marshaled)
+            .map_err(|error| strip_error_root(error, "result"));
+        assert_eq!(scoped_error, marshaled_error);
+        assert_eq!(
+            scoped_error,
+            Err("<root>: mixed integer and string table keys are not supported".to_string())
+        );
+
+        // Nested error paths: both paths report the same failing sub-path.
+        let nested = scope.create_table()?;
+        nested.set_index(scope, 1, true)?;
+        nested.set_index(scope, 3, true)?;
+        let outer = scope.create_table()?;
+        outer.set(scope, "items", nested)?;
+        let outer_marshaled = scope.marshal(ScopedValue::Table(outer))?;
+        let scoped_error = scoped_to_arg_value(scope, ScopedValue::Table(outer))
+            .map_err(|error| strip_error_root(error, "value"));
+        let marshaled_error = marshaled_to_arg_value(&outer_marshaled)
+            .map_err(|error| strip_error_root(error, "result"));
+        assert_eq!(scoped_error, marshaled_error);
+        assert_eq!(
+            scoped_error,
+            Err("<root>.items: sparse table missing index 2".to_string())
+        );
+
+        Ok(())
+    })
+    .expect("agreement scope succeeds");
 }
 
 #[test]
@@ -685,7 +793,6 @@ fn tcheck_script_reports_type_errors() -> Result<()> {
             .script
             .host
             .check_script("tests/type-error.luau", "local value: string = 1")?;
-        assert!(!result.is_ok());
         assert!(result.has_errors());
         assert!(
             result

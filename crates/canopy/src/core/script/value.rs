@@ -163,26 +163,27 @@ fn scoped_to_arg_value_at<'s>(
     }
 }
 
-/// Convert a scoped table into an `ArgValue`.
-fn table_to_arg_value<'s>(
-    scope: &Scope<'s>,
-    table: Table<'s>,
+/// Assemble a classified table's key/value pairs into an `ArgValue`.
+///
+/// The scoped and marshaled conversion paths each classify their table's
+/// layout and enumerate its pairs in their own representation, then share
+/// this one sequence-or-map assembly policy by construction.
+fn assemble_table_arg_value<K, V>(
+    layout: &TableLayout,
+    pairs: impl IntoIterator<Item = (K, V)>,
     path: &ValuePath,
+    sequence_index: impl Fn(K, &ValuePath) -> StdResult<usize, String>,
+    string_key: impl Fn(K, &ValuePath) -> StdResult<String, String>,
+    convert_value: impl Fn(V, &ValuePath) -> StdResult<ArgValue, String>,
 ) -> StdResult<ArgValue, String> {
-    let layout = table
-        .layout(scope)
-        .map_err(|error| path.error(error.to_string()))?;
-    reject_unsupported_layout(&layout, path)?;
+    reject_unsupported_layout(layout, path)?;
     match layout {
         TableLayout::Empty => Ok(ArgValue::Map(BTreeMap::new())),
         TableLayout::Sequence { len } => {
-            let mut values = vec![None; len];
-            for (key, value) in table
-                .pairs(scope)
-                .map_err(|error| path.error(error.to_string()))?
-            {
-                let index = scoped_sequence_index(key, path)?;
-                values[index - 1] = Some(scoped_to_arg_value_at(scope, value, &path.index(index))?);
+            let mut values = vec![None; *len];
+            for (key, value) in pairs {
+                let index = sequence_index(key, path)?;
+                values[index - 1] = Some(convert_value(value, &path.index(index))?);
             }
             Ok(ArgValue::Array(
                 values
@@ -196,20 +197,36 @@ fn table_to_arg_value<'s>(
         }
         TableLayout::StringMap { .. } => {
             let mut values = BTreeMap::new();
-            for (key, value) in table
-                .pairs(scope)
-                .map_err(|error| path.error(error.to_string()))?
-            {
-                let key = scoped_table_key(scope, key, path)?;
-                values.insert(
-                    key.clone(),
-                    scoped_to_arg_value_at(scope, value, &path.field(&key))?,
-                );
+            for (key, value) in pairs {
+                let key = string_key(key, path)?;
+                values.insert(key.clone(), convert_value(value, &path.field(&key))?);
             }
             Ok(ArgValue::Map(values))
         }
         _ => unreachable!("unsupported layouts were rejected"),
     }
+}
+
+/// Convert a scoped table into an `ArgValue`.
+fn table_to_arg_value<'s>(
+    scope: &Scope<'s>,
+    table: Table<'s>,
+    path: &ValuePath,
+) -> StdResult<ArgValue, String> {
+    let layout = table
+        .layout(scope)
+        .map_err(|error| path.error(error.to_string()))?;
+    let pairs = table
+        .pairs(scope)
+        .map_err(|error| path.error(error.to_string()))?;
+    assemble_table_arg_value(
+        &layout,
+        pairs,
+        path,
+        |key, path| scoped_sequence_index(key, path),
+        |key, path| scoped_table_key(scope, key, path),
+        |value, path| scoped_to_arg_value_at(scope, value, path),
+    )
 }
 
 /// Convert an `ArgValue` into a scoped Luau value.
@@ -316,39 +333,14 @@ fn marshaled_table_to_arg_value(
     path: &ValuePath,
 ) -> StdResult<ArgValue, String> {
     let layout = classify_marshaled_table(pairs);
-    reject_unsupported_layout(&layout, path)?;
-    match layout {
-        TableLayout::Empty => Ok(ArgValue::Map(BTreeMap::new())),
-        TableLayout::Sequence { len } => {
-            let mut values = vec![None; len];
-            for pair in pairs {
-                let index = marshaled_sequence_index(&pair.key, path)?;
-                values[index - 1] =
-                    Some(marshaled_to_arg_value_at(&pair.value, &path.index(index))?);
-            }
-            Ok(ArgValue::Array(
-                values
-                    .into_iter()
-                    .enumerate()
-                    .map(|(index, value)| {
-                        value.ok_or_else(|| path.error(format!("missing index {}", index + 1)))
-                    })
-                    .collect::<StdResult<_, _>>()?,
-            ))
-        }
-        TableLayout::StringMap { .. } => {
-            let mut values = BTreeMap::new();
-            for pair in pairs {
-                let key = marshaled_table_key(&pair.key, path)?;
-                values.insert(
-                    key.clone(),
-                    marshaled_to_arg_value_at(&pair.value, &path.field(&key))?,
-                );
-            }
-            Ok(ArgValue::Map(values))
-        }
-        _ => unreachable!("unsupported layouts were rejected"),
-    }
+    assemble_table_arg_value(
+        &layout,
+        pairs.iter().map(|pair| (&pair.key, &pair.value)),
+        path,
+        marshaled_sequence_index,
+        marshaled_table_key,
+        marshaled_to_arg_value_at,
+    )
 }
 
 /// Read a sequence index from a classified marshaled key.

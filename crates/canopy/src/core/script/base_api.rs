@@ -885,9 +885,7 @@ where
         if let (Some(deadline), Some(timeout_ms)) = (deadline, timeout_ms) {
             let expired = ctx
                 .scope(move |scope| {
-                    let canopy = scope
-                        .context_mut::<Canopy>()
-                        .ok_or_else(|| RuntimeError::runtime("no active canopy context"))?;
+                    let canopy = canopy_context(scope)?;
                     Ok(canopy.now() >= deadline)
                 })
                 .await?;
@@ -928,9 +926,7 @@ async fn wait_for_node(
         let owner = args.owner.clone();
         Box::pin(async move {
             ctx.scope(move |scope| {
-                let canopy = scope
-                    .context_mut::<Canopy>()
-                    .ok_or_else(|| RuntimeError::runtime("no active canopy context"))?;
+                let canopy = canopy_context(scope)?;
                 let registered = canopy
                     .core
                     .commands
@@ -960,9 +956,7 @@ async fn wait_for_screen_text(
         let text = args.text.clone();
         Box::pin(async move {
             ctx.scope(move |scope| {
-                let canopy = scope
-                    .context_mut::<Canopy>()
-                    .ok_or_else(|| RuntimeError::runtime("no active canopy context"))?;
+                let canopy = canopy_context(scope)?;
                 Ok(canopy
                     .buf()
                     .is_some_and(|buffer| buffer.screen_text().contains(&text)))
@@ -990,7 +984,26 @@ fn run_default_bindings_in_scope(scope: &Scope<'_>, owner: &str) -> Result<()> {
     result
 }
 
-/// Store a binding closure and install the binding, releasing the closure if
+/// Install a binding, replacing any binding with the same input selector.
+fn install_binding(
+    scope: &Scope<'_>,
+    target: inputmap::BindingTarget,
+    input: inputmap::InputSpec,
+    options: &inputmap::BindingOptions,
+) -> StdResult<i64, RuntimeError> {
+    with_current_canopy(scope, |canopy, _| {
+        let (binding_id, removed) =
+            canopy
+                .core
+                .input_map
+                .replace_application_binding(input, options.clone(), target)?;
+        canopy.release_removed_bindings(removed);
+        Ok(binding_id.as_u64() as i64)
+    })
+    .map_err(RuntimeError::from)
+}
+
+/// Store a binding closure, install its binding, and release the closure if
 /// installation fails.
 fn install_function_binding<'s>(
     scope: &Scope<'s>,
@@ -999,63 +1012,23 @@ fn install_function_binding<'s>(
     options: &inputmap::BindingOptions,
 ) -> StdResult<i64, RuntimeError> {
     let stashed = scope.stash_function(function)?;
-    with_current_canopy(scope, |canopy, _| {
-        let function_id = canopy.script.host.store_function(stashed)?;
-        let result = canopy.core.input_map.replace_application_binding(
-            input,
-            options.clone(),
-            inputmap::BindingTarget::Script(function_id),
-        );
-        match result {
-            Ok((binding_id, removed)) => {
-                canopy.release_removed_bindings(removed);
-                Ok(binding_id.as_u64() as i64)
-            }
-            Err(err) => {
-                canopy.script.host.release_function(function_id);
-                Err(err)
-            }
-        }
+    let function_id = with_current_canopy(scope, |canopy, _| {
+        canopy.script.host.store_function(stashed)
     })
-    .map_err(RuntimeError::from)
-}
-
-/// Install a command binding, replacing any binding with the same selector.
-fn install_command_binding(
-    scope: &Scope<'_>,
-    action: commands::CommandAction,
-    input: inputmap::InputSpec,
-    options: &inputmap::BindingOptions,
-) -> StdResult<i64, RuntimeError> {
-    with_current_canopy(scope, |canopy, _| {
-        let (binding_id, removed) = canopy.core.input_map.replace_application_binding(
-            input,
-            options.clone(),
-            inputmap::BindingTarget::Command(action),
-        )?;
-        canopy.release_removed_bindings(removed);
-        Ok(binding_id.as_u64() as i64)
+    .map_err(RuntimeError::from)?;
+    install_binding(
+        scope,
+        inputmap::BindingTarget::Script(function_id),
+        input,
+        options,
+    )
+    .inspect_err(|_| {
+        with_current_canopy(scope, |canopy, _| {
+            canopy.script.host.release_function(function_id);
+            Ok(())
+        })
+        .ok();
     })
-    .map_err(RuntimeError::from)
-}
-
-/// Install a named widget action binding.
-fn install_widget_action_binding(
-    scope: &Scope<'_>,
-    action: inputmap::WidgetActionName,
-    input: inputmap::InputSpec,
-    options: &inputmap::BindingOptions,
-) -> StdResult<i64, RuntimeError> {
-    with_current_canopy(scope, |canopy, _| {
-        let (binding_id, removed) = canopy.core.input_map.replace_application_binding(
-            input,
-            options.clone(),
-            inputmap::BindingTarget::WidgetAction(action),
-        )?;
-        canopy.release_removed_bindings(removed);
-        Ok(binding_id.as_u64() as i64)
-    })
-    .map_err(RuntimeError::from)
 }
 
 /// Dispatch a command and convert its result for the script.
@@ -1524,6 +1497,27 @@ fn expectation_binding(
     }
 }
 
+/// Send a left-button mouse action sequence through the reentrant guard.
+fn send_mouse_sequence(
+    scope: &Scope<'_>,
+    canopy: &mut Canopy,
+    events: impl IntoIterator<Item = (mouse::Action, Point)>,
+) -> Result<()> {
+    let _reentrant = ReentrantCanopyGuard::push(canopy);
+    for (action, at) in events {
+        canopy.mouse(
+            Some(scope),
+            mouse::MouseEvent {
+                action,
+                button: mouse::Button::Left,
+                modifiers: key::Empty,
+                location: PointI32::try_from(at)?,
+            },
+        )?;
+    }
+    Ok(())
+}
+
 /// `canopy.send_click`: inject a left click at screen coordinates.
 fn host_send_click<'s>(
     scope: &Scope<'s>,
@@ -1532,25 +1526,12 @@ fn host_send_click<'s>(
     let mut args = HostArgCursor::new(scope, args);
     let x = args.required::<u32>("x")?;
     let y = args.required::<u32>("y")?;
+    let at = Point { x, y };
     with_current_canopy(scope, |canopy, _| {
-        let _reentrant = ReentrantCanopyGuard::push(canopy);
-        canopy.mouse(
-            Some(scope),
-            mouse::MouseEvent {
-                action: mouse::Action::Down,
-                button: mouse::Button::Left,
-                modifiers: key::Empty,
-                location: PointI32::try_from(Point { x, y })?,
-            },
-        )?;
-        canopy.mouse(
-            Some(scope),
-            mouse::MouseEvent {
-                action: mouse::Action::Up,
-                button: mouse::Button::Left,
-                modifiers: key::Empty,
-                location: PointI32::try_from(Point { x, y })?,
-            },
+        send_mouse_sequence(
+            scope,
+            canopy,
+            [(mouse::Action::Down, at), (mouse::Action::Up, at)],
         )
     })?;
     Ok(ret_none())
@@ -1605,23 +1586,15 @@ fn host_send_drag<'s>(
         y: args.required::<u32>("y2")?,
     };
     with_current_canopy(scope, |canopy, _| {
-        let _reentrant = ReentrantCanopyGuard::push(canopy);
-        for (action, at) in [
-            (mouse::Action::Down, from),
-            (mouse::Action::Drag, to),
-            (mouse::Action::Up, to),
-        ] {
-            canopy.mouse(
-                Some(scope),
-                mouse::MouseEvent {
-                    action,
-                    button: mouse::Button::Left,
-                    modifiers: key::Empty,
-                    location: PointI32::try_from(at)?,
-                },
-            )?;
-        }
-        Ok(())
+        send_mouse_sequence(
+            scope,
+            canopy,
+            [
+                (mouse::Action::Down, from),
+                (mouse::Action::Drag, to),
+                (mouse::Action::Up, to),
+            ],
+        )
     })?;
     Ok(ret_none())
 }
@@ -1735,6 +1708,7 @@ fn host_pop_mode<'s>(
 
 /// A binding action read from a script: a command value, a callback, or the
 /// name of a registered widget action.
+#[derive(Clone)]
 enum ScriptAction<'s> {
     /// A `CommandCall` built by a `command` constructor.
     Command(ScriptCommandCall),
@@ -1763,15 +1737,12 @@ fn read_widget_action_name<'s>(
     inputmap::WidgetActionName::new(name).map_err(|error| RuntimeError::runtime(error.to_string()))
 }
 
-/// Read a binding action argument: a `CommandCall`, a function, or a widget
-/// action name.
-fn read_action<'s>(
+/// Convert one script value into a binding action: a `CommandCall`, a
+/// function, or a widget action name.
+fn action_from_value<'s>(
     scope: &Scope<'s>,
-    args: &mut HostArgCursor<'_, 's>,
+    value: ScopedValue<'s>,
 ) -> StdResult<ScriptAction<'s>, RuntimeError> {
-    let value = args
-        .raw()
-        .ok_or_else(|| RuntimeError::runtime("argument `action` is required"))?;
     if let Some(call) = command_call_from_value(scope, &value)? {
         return Ok(ScriptAction::Command(call));
     }
@@ -1781,10 +1752,22 @@ fn read_action<'s>(
             scope, value,
         )?)),
         other => Err(RuntimeError::runtime(format!(
-            "argument `action` must be a CommandCall, a function, or a widget action name, got {}",
+            "`action` must be a CommandCall, a function, or a widget action name, got {}",
             other.type_name()
         ))),
     }
+}
+
+/// Read a binding action argument: a `CommandCall`, a function, or a widget
+/// action name.
+fn read_action<'s>(
+    scope: &Scope<'s>,
+    args: &mut HostArgCursor<'_, 's>,
+) -> StdResult<ScriptAction<'s>, RuntimeError> {
+    let value = args
+        .raw()
+        .ok_or_else(|| RuntimeError::runtime("argument `action` is required"))?;
+    action_from_value(scope, value)
 }
 
 /// Install a binding for a script action.
@@ -1795,13 +1778,21 @@ fn install_action_binding<'s>(
     options: &inputmap::BindingOptions,
 ) -> StdResult<i64, RuntimeError> {
     match action {
-        ScriptAction::Command(call) => install_command_binding(scope, call.0, input, options),
+        ScriptAction::Command(call) => install_binding(
+            scope,
+            inputmap::BindingTarget::Command(call.0),
+            input,
+            options,
+        ),
         ScriptAction::Function(function) => {
             install_function_binding(scope, function, input, options)
         }
-        ScriptAction::WidgetAction(name) => {
-            install_widget_action_binding(scope, name, input, options)
-        }
+        ScriptAction::WidgetAction(name) => install_binding(
+            scope,
+            inputmap::BindingTarget::WidgetAction(name),
+            input,
+            options,
+        ),
     }
 }
 
@@ -1848,16 +1839,6 @@ struct PlannedBinding<'s> {
     options: inputmap::BindingOptions,
     /// Action shared by every binding of the entry.
     action: ScriptAction<'s>,
-}
-
-impl Clone for ScriptAction<'_> {
-    fn clone(&self) -> Self {
-        match self {
-            Self::Command(call) => Self::Command(call.clone()),
-            Self::Function(function) => Self::Function(*function),
-            Self::WidgetAction(name) => Self::WidgetAction(name.clone()),
-        }
-    }
 }
 
 /// Read a field that is one string or an array of strings.
@@ -1993,21 +1974,7 @@ fn plan_keymap_entry<'s>(
         .ok_or_else(|| entry_error("has no `description`".to_string()))?;
     let action = match entry.get::<_, ScopedValue<'_>>(scope, "action")? {
         ScopedValue::Nil => return Err(entry_error("has no `action`".to_string())),
-        value => match command_call_from_value(scope, &value)? {
-            Some(call) => ScriptAction::Command(call),
-            None => match value {
-                ScopedValue::Function(function) => ScriptAction::Function(function),
-                ScopedValue::String(_) => {
-                    ScriptAction::WidgetAction(read_widget_action_name(scope, value)?)
-                }
-                other => {
-                    return Err(entry_error(format!(
-                        "`action` must be a CommandCall, a function, or a widget action name, got {}",
-                        other.type_name()
-                    )));
-                }
-            },
-        },
+        value => action_from_value(scope, value).map_err(|err| entry_error(err.to_string()))?,
     };
     if let Some(name) = action.widget_action() {
         let registered = with_current_canopy(scope, |canopy, _| {
