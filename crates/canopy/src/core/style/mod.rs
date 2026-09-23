@@ -725,7 +725,7 @@ impl StyleManager {
     /// the whole layer stack, then the stack with outer layers dropped, then
     /// the stack with inner layers dropped, and finally no layers. So a
     /// component's own rules apply wherever it is mounted, and a context rule
-    /// such as `confirm/button/border` still beats `button/border`. The first
+    /// such as `dialog/button/border` still beats `button/border`. The first
     /// probe that sets a component wins.
     fn resolve(&self, smap: &StyleMap, layers: &[String], path: &[&str]) -> Style {
         let n = layers.len();

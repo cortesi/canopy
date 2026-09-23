@@ -1,29 +1,23 @@
 //! A modal question with a yes or no answer.
 
 use canopy::{
-    Context, ContextExt, EventOutcome, NodeId, NodeName, Register, Setup, ViewContext, Widget,
+    Context, ContextExt, NodeId, NodeName, Register, Setup, ViewContext, Widget,
     commands::{CommandCall, CommandStatus, CommandTarget},
     derive_commands,
     error::{Error, Result},
     geom::Size,
-    input::Event,
-    layout::{
-        Align, CanvasContext, Direction, Edges, Layout, LayoutOverride, MeasureConstraints,
-        Measurement, Sizing,
-    },
+    layout::{Align, CanvasContext, Direction, Edges, Layout, MeasureConstraints, Measurement},
     render::Render,
     text,
     tree::{FocusDirection, FocusScope},
 };
 
-use crate::{Button, Container, border::ROUND, frame::Frame};
+use crate::{Button, Container, Dialog, border::ROUND, frame::Frame};
 
 /// Columns of blank between the body's text and each of its sides.
 const SIDE_PADDING: u32 = 1;
 /// Columns a row spends on its blank lead column and a trailing gutter.
 const ROW_PADDING: u32 = SIDE_PADDING * 2;
-/// Rows and columns left around the frame, so the view shows through.
-const FRAME_MARGIN: u32 = 1;
 /// Columns between the buttons.
 const BUTTON_GAP: u32 = 2;
 /// Columns a button spends on its border and the space inside it.
@@ -268,12 +262,7 @@ impl Register for Confirm {
 
 impl Widget for Confirm {
     fn layout(&self) -> Layout {
-        // A stack centres the frame over what the dialog covers, and the margin
-        // keeps that visible around it.
         Layout::fill()
-            .direction(Direction::Stack)
-            .align_center()
-            .padding(Edges::all(FRAME_MARGIN))
     }
 
     fn render(&mut self, render: &mut Render, _context: &dyn ViewContext) -> Result<()> {
@@ -283,18 +272,9 @@ impl Widget for Confirm {
 
     fn on_mount(&mut self, context: &mut dyn Context) -> Result<()> {
         let root = context.node_id();
-        let frame = context.add_child(root, Frame::new())?;
-        // The frame fits the question rather than filling the view, so the
-        // dialog is only as large as what it asks.
-        context.set_layout_override(
-            frame.into(),
-            LayoutOverride {
-                width: Some(Sizing::Measure),
-                height: Some(Sizing::Measure),
-                ..LayoutOverride::new()
-            },
-        )?;
-        let body = context.add_child(frame, ConfirmBody::new())?;
+        // The dialog fits the question, so it is only as large as what it
+        // asks.
+        let (_, body) = Dialog::new().add(context, root, ConfirmBody::new())?;
         // One row holds both answers, centred as a group, so the gap between
         // them belongs to the dialog rather than to either button.
         let answers = context.add_child(
@@ -333,15 +313,6 @@ impl Widget for Confirm {
         }
         self.body = Some(body.into());
         Ok(())
-    }
-
-    fn on_event(&mut self, event: &Event, _context: &mut dyn Context) -> Result<EventOutcome> {
-        // A click on the margin, the frame, or the gap between the answers
-        // belongs to the dialog, not to what it covers and not to an answer.
-        match event {
-            Event::Mouse(_) => Ok(EventOutcome::Handle),
-            _ => Ok(EventOutcome::Ignore),
-        }
     }
 
     fn name(&self) -> NodeName {

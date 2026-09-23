@@ -966,6 +966,18 @@ pub mod canopy_widgets {
     /// match.
     pub struct Container {}
 
+    /// A titled frame that fits its body, centred over whatever the dialog
+    /// covers.
+    ///
+    /// The dialog keeps a margin clear around its frame and swallows clicks on
+    /// it, so a click beside the frame never reaches the view behind. It pushes
+    /// the `dialog` layer, so one set of `dialog/<part>` rules styles every
+    /// dialog's frame, ground, and buttons. A host builds one with
+    /// `Dialog::new().with_title(..)` and mounts it with its body through
+    /// [`Dialog::add`].
+    #[derive(Default)]
+    pub struct Dialog {}
+
     /// A line diff of two full texts.
     pub struct Diff {}
 
@@ -1524,8 +1536,6 @@ pub mod canopy_widgets {
         fn layout(&self) -> Layout {}
 
         fn name(&self) -> NodeName {}
-
-        fn on_event(&mut self, event: &Event, _context: &mut dyn Context) -> Result<EventOutcome> {}
 
         fn on_mount(&mut self, context: &mut dyn Context) -> Result<()> {}
 
@@ -2098,6 +2108,48 @@ pub mod canopy_widgets {
         fn layout(&self) -> Layout {}
 
         fn name(&self) -> NodeName {}
+    }
+
+    impl Dialog {
+        #[must_use]
+        /// Cap the frame's width, borders included.
+        pub fn with_max_width(self, width: u32) -> Self {}
+
+        #[must_use]
+        /// Replace the space kept clear around the frame.
+        pub fn with_margin(self, margin: Edges) -> Self {}
+
+        #[must_use]
+        /// Title the frame.
+        pub fn with_title(self, title: impl Into<String>) -> Self {}
+
+        /// Add this dialog under `parent`, framing `body`, and return both.
+        ///
+        /// The frame measures its body, so the dialog is only as large as what it
+        /// shows; the margin caps a large body, which then scrolls.
+        pub fn add<W: 'static + Widget>(
+            self,
+            ctx: &mut dyn Context,
+            parent: NodeId,
+            body: W,
+        ) -> Result<(TypedId<Self>, TypedId<W>)> {
+        }
+
+        /// Construct an untitled dialog with a one-cell margin.
+        pub fn new() -> Self {}
+
+        /// Return the frame of the dialog at `dialog`, to retitle it.
+        pub fn frame(ctx: &dyn Context, dialog: NodeId) -> Result<TypedId<Frame>> {}
+    }
+
+    impl Widget for Dialog {
+        fn layout(&self) -> Layout {}
+
+        fn name(&self) -> NodeName {}
+
+        fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {}
+
+        fn render(&mut self, render: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
     }
 
     impl Diff {

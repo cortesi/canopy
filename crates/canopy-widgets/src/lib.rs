@@ -15,6 +15,8 @@ mod columns;
 mod confirm;
 /// Layout-only container.
 mod container;
+/// Framed panel centred over the view.
+mod dialog;
 /// Line diffs of two full texts.
 mod diff;
 /// Diff view widget over the line-diff row model.
@@ -80,6 +82,7 @@ pub use button::Button;
 pub use columns::Columns;
 pub use confirm::{Answer, Confirm};
 pub use container::Container;
+pub use dialog::Dialog;
 pub use diff::{Diff, DiffRow, Scope};
 pub use diff_view::{DiffView, PreparedDiff, Strategy};
 pub use dropdown::Dropdown;

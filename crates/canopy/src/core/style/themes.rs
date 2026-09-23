@@ -192,16 +192,6 @@ impl Palette {
                     .fg(p.key)
                     .attrs(AttrSet::new(Attr::Bold)),
             )
-            .style_all(
-                &[
-                    "/help/frame",
-                    "/help/frame/focused",
-                    "/help/frame/thumb",
-                    "/help/frame/thumb/active",
-                    "/help/frame/title",
-                ],
-                PartialStyle::new().bg(p.panel_bg),
-            )
             .style(
                 "/help/key",
                 PartialStyle::new()
@@ -267,44 +257,32 @@ impl Palette {
                     .bg(p.selection_bg)
                     .attrs(AttrSet::new(Attr::Bold)),
             )
+            // Every dialog is one panel surface: its ground, its frame, and
+            // its buttons take the panel rather than the view behind it.
             .style_all(
-                &[
-                    "/picker/frame",
-                    "/picker/frame/focused",
-                    "/picker/frame/thumb",
-                    "/picker/frame/thumb/active",
-                    "/picker/frame/title",
-                ],
-                PartialStyle::new().bg(p.panel_bg),
-            )
-            .style_all(
-                &["/confirm/background", "/confirm/message"],
+                &["/dialog/background", "/confirm/message"],
                 PartialStyle::new().fg(p.fg).bg(p.panel_bg),
             )
-            // The frame takes the panel behind it, so the dialog reads as one
-            // surface rather than a border cut out of the view.
             .style_all(
                 &[
-                    "/confirm/frame",
-                    "/confirm/frame/focused",
-                    "/confirm/frame/thumb",
-                    "/confirm/frame/thumb/active",
-                    "/confirm/frame/title",
+                    "/dialog/frame",
+                    "/dialog/frame/focused",
+                    "/dialog/frame/thumb",
+                    "/dialog/frame/thumb/active",
+                    "/dialog/frame/title",
                 ],
                 PartialStyle::new().bg(p.panel_bg),
             )
-            // The dialog's buttons take the panel behind them, so the row reads as
-            // part of the dialog rather than as controls laid on the view.
             .style_all(
-                &["/confirm/button/border", "/confirm/button/text"],
+                &["/dialog/button/border", "/dialog/button/text"],
                 PartialStyle::new().fg(p.fg).bg(p.panel_bg),
             )
             .style(
-                "/confirm/button/focused/border",
+                "/dialog/button/focused/border",
                 PartialStyle::new().fg(p.frame_focused).bg(p.panel_bg),
             )
             .style(
-                "/confirm/button/key",
+                "/dialog/button/key",
                 PartialStyle::new()
                     .fg(p.key)
                     .bg(p.panel_bg)

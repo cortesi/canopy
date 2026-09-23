@@ -22,8 +22,7 @@ use canopy::{
     geom::{Line, Point, Size},
     input::{Event, ModalBindings, ModalOptions, ModalToken, key, key::KeyCode},
     layout::{
-        CanvasContext, Direction, Edges, Layout, LayoutOverride, MeasureConstraints, Measurement,
-        ScrollOp, Sizing,
+        CanvasContext, Direction, Edges, Layout, MeasureConstraints, Measurement, ScrollOp, Sizing,
     },
     render::Render,
     style::roles,
@@ -31,7 +30,7 @@ use canopy::{
 };
 
 use crate::{
-    Container, Label,
+    Dialog, Label,
     frame::Frame,
     input::register_clear_intent,
     row_cursor::{RowCursor, label_rows, widest_label},
@@ -220,28 +219,19 @@ where
 
     fn on_mount(&mut self, context: &mut dyn Context) -> Result<()> {
         let root = context.node_id();
-        let dialog: NodeId = context.add_child(root, PickerDialog)?.into();
         // The dialog fits its contents rather than filling the view, so a
-        // short list is a small dialog. The margin above caps a long one, which
-        // then nearly fills the view. The width a narrow dialog holds comes
-        // from the list's own measurement, which the view bounds, rather than
-        // from a minimum here that a narrow terminal could not honour.
-        context.set_layout_override(
-            dialog,
-            LayoutOverride {
-                width: Some(Sizing::Measure),
-                height: Some(Sizing::Measure),
-                ..LayoutOverride::new()
-            },
-        )?;
-        let frame = context.add_child(dialog, Frame::new())?;
-        // The list and the field are siblings in a column, so the field sits
-        // outside whatever the list scrolls. However many items the list holds,
-        // the field keeps its row at the bottom of the frame.
-        let body = context.add_child(
-            frame,
-            Container::new(Layout::fill().direction(Direction::Column)).with_name("picker_body"),
-        )?;
+        // short list is a small dialog. The picker's own margin caps a long
+        // one, which then nearly fills the view. The width a narrow dialog
+        // holds comes from the list's own measurement, which the view bounds,
+        // rather than from a minimum here that a narrow terminal could not
+        // honour. The list and the field are siblings in a column, so the
+        // field sits outside whatever the list scrolls. However many items the
+        // list holds, the field keeps its row at the bottom of the frame.
+        let (dialog, body) = Dialog::new()
+            .with_margin(Edges::all(0))
+            .add(context, root, PickerBody)?;
+        let dialog: NodeId = dialog.into();
+        let frame: NodeId = Dialog::frame(context, dialog)?.into();
         let list = context.add_child(body, PickerList::<T>::new())?;
         let filter = context.add_child(body, PickerFilter::new())?;
         // The list takes whatever height is left, and the field keeps its one
@@ -258,7 +248,6 @@ where
                 .into(),
         )?;
 
-        let frame: NodeId = frame.into();
         let truncate = self.truncate;
         context.with_widget_mut(list, |list: &mut PickerList<T>, _| {
             list.frame = Some(frame);
@@ -285,16 +274,16 @@ where
     }
 }
 
-/// The framed dialog inside a picker, which carries the picker's style layer.
+/// The body of a picker's dialog, which carries the picker's style layer.
 ///
 /// The layer is pushed here rather than at the picker's root, so an overlay a
 /// host adds beside the dialog is styled as its own widget rather than as a
-/// part of the picker.
-struct PickerDialog;
+/// part of the picker, and the dialog's frame takes the shared dialog rules.
+struct PickerBody;
 
-impl Widget for PickerDialog {
+impl Widget for PickerBody {
     fn layout(&self) -> Layout {
-        Layout::fill()
+        Layout::fill().direction(Direction::Column)
     }
 
     fn render(&mut self, render: &mut Render, _context: &dyn ViewContext) -> Result<()> {
@@ -303,7 +292,7 @@ impl Widget for PickerDialog {
     }
 
     fn name(&self) -> NodeName {
-        NodeName::convert("picker_dialog")
+        NodeName::convert("picker_body")
     }
 }
 

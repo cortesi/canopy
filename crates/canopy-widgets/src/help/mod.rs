@@ -8,20 +8,15 @@ mod tests;
 pub use binding_list::BindingList;
 use canopy::{
     Context, ContextExt, EventOutcome, NodeId, NodeName, Register, Setup, TypedId, ViewContext,
-    Widget, derive_commands,
-    error::Result,
+    ViewContextExt, Widget, derive_commands,
+    error::{Error, Result},
     input::Event,
-    layout::{Align, Direction, Edges, Layout, Sizing},
+    layout::{Edges, Layout},
     render::Render,
-    tree::ChildSlot,
 };
 pub use mode::ModeHelp;
 
-use crate::{container::Container, frame::Frame};
-
-canopy::slot!(pub(crate) ModalSlot: Container);
-canopy::slot!(pub(crate) FrameSlot: Frame);
-canopy::slot!(pub(crate) BindingListSlot: BindingList);
+use crate::Dialog;
 
 /// Transparent overlay that owns the help modal subtree.
 ///
@@ -33,37 +28,15 @@ pub struct Help;
 impl Help {
     /// Build the complete help subtree and return its root.
     pub(crate) fn install(context: &mut dyn Context) -> Result<NodeId> {
-        let bindings = context.create_detached(BindingList::new())?;
-
-        let frame = context.create_detached(Frame::new().with_title("Keyboard shortcuts"))?;
-        context.attach_slot(frame.into(), BindingListSlot::KEY, bindings.into())?;
-        // The frame hugs its rows, so the list scrolls only once the content
-        // outgrows the room the overlay leaves.
-        context.set_layout_override(
-            frame.into(),
-            Layout::fill()
-                .height(Sizing::Measure)
-                .max_width(72)
-                .padding(Edges::all(1))
-                .into(),
-        )?;
-
-        let modal = context.create_detached(Container::center())?;
-        context.attach_slot(modal.into(), FrameSlot::KEY, frame.into())?;
-        // Two rows above and below keep the frame clear of the screen edges,
-        // so a tall modal never fills the window.
-        context.set_layout_override(
-            modal.into(),
-            Layout::fill()
-                .direction(Direction::Stack)
-                .align_horizontal(Align::Center)
-                .align_vertical(Align::Center)
-                .padding(Edges::symmetric(2, 1))
-                .into(),
-        )?;
-
         let help = context.create_detached(Self)?;
-        context.attach_slot(help.into(), ModalSlot::KEY, modal.into())?;
+        // Two rows above and below keep the frame clear of the screen edges,
+        // so a tall modal never fills the window, and the list scrolls only
+        // once the content outgrows the room that leaves.
+        Dialog::new()
+            .with_title("Keyboard shortcuts")
+            .with_max_width(72)
+            .with_margin(Edges::symmetric(2, 1))
+            .add(context, help.into(), BindingList::new())?;
         Ok(help.into())
     }
 
@@ -72,9 +45,9 @@ impl Help {
         context: &dyn Context,
         help: NodeId,
     ) -> Result<TypedId<BindingList>> {
-        let modal = context.get_slot::<ModalSlot>(help)?;
-        let frame = context.get_slot::<FrameSlot>(modal)?;
-        context.get_slot::<BindingListSlot>(frame)
+        context
+            .unique_descendant::<BindingList>(help)?
+            .ok_or_else(|| Error::NotFound("help binding list".into()))
     }
 }
 

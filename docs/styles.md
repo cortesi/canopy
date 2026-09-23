@@ -23,7 +23,7 @@ One rule names every stock widget's styles:
 | `roles::TITLE` | `title` | |
 | `roles::THUMB` | `thumb` | |
 
-Leaves that push their layer: `button`, `input`, `picker`, `confirm`, `help`,
+Leaves that push their layer: `button`, `input`, `picker`, `confirm`, `help`, `dialog`,
 `status_bar`, `selector`, `dropdown`, `editor`, and `diff_view`. Containers
 that paint prefixed paths: `frame`, `tabs`, `columns`, and `root`.
 
@@ -140,8 +140,7 @@ bottom borders use `frame/thumb`. While a drag holds a thumb, the thumb uses
 `frame/thumb/active`, which falls back to `frame/thumb`. The built-in themes
 tint the thumb from the theme's base toward its accent, and give a held thumb
 the full accent, so the position carries a hint of colour without competing
-with selection. The built-in themes define every frame path. The help overlay
-pushes a `help` layer, so its frame also uses the `help/frame` paths.
+with selection. The built-in themes define every frame path.
 
 ## Buttons
 
@@ -152,16 +151,21 @@ and its state layers. So `button/key` styles every accelerator, and
 give the accelerator the help overlay's key colour and leave the button on
 whatever ground it sits on.
 
-## Confirm
+## Dialogs
 
-`Confirm` pushes a `confirm` layer, so the frame around it resolves the
-`confirm/frame` paths and shares the dialog's background rather than sitting on
-the view behind it. The question paints `message`, which resolves
-`confirm/message`. Its answers are
-ordinary buttons, so they resolve `confirm/button/border`,
-`confirm/button/text`, and `confirm/button/key` before the plain `button` paths.
-The built-in themes define all of them, taking the panel background so the
-dialog reads as one surface.
+`Dialog` centres a titled frame that fits its body over what it covers,
+keeps a margin clear around it, and swallows clicks there. It pushes
+`dialog`, so the frame resolves `dialog/frame` and a body's `background`
+resolves `dialog/background`, whatever host holds the dialog. Buttons in a
+dialog resolve `dialog/button/border`, `dialog/button/text`, and
+`dialog/button/key` before the plain `button` paths. The built-in themes give
+all of them the panel background, so every dialog reads as one surface.
+
+`Confirm`, `Picker`, and the help overlay are dialogs. `Confirm` also pushes
+`confirm` around its dialog, and its question paints `message`, which resolves
+`confirm/message`. `Picker` pushes `picker` on its body, inside the dialog, so
+its list and filter keep the `picker/*` paths while its frame takes the shared
+dialog rules.
 
 ## Columns
 
@@ -196,7 +200,7 @@ dropped one at a time, then the stack with its inner layers dropped, and
 finally no layers. Each style component uses its first matching rule. So a
 widget's own rules apply wherever it is mounted: an editor under a host's
 layer still resolves `editor/text`. A context rule such as
-`confirm/button/border` still beats `button/border`, and a host rule such as
+`dialog/button/border` still beats `button/border`, and a host rule such as
 `file_select/selection` still fills what an inner layer leaves unset. Existing
 `button/active/text` rules remain fallbacks when focused or disabled rules are
 absent.

@@ -2311,9 +2311,15 @@ Each stage also updates the docs it touches.
       that own a whole map (fontgym).
   - [x] `PartialStyle` gains chaining methods, and `StyleBuilder` goes.
   - [x] Update `themes.golden`.
-- [ ] C32 public parts: public `Dialog`, `Render::runs`, `text::width` and
+- [x] C32 public parts: public `Dialog`, `Render::runs`, `text::width` and
   `cell_width`, the `highlight` module, Border naming, and the Container
   presets.
+  - `Dialog::new().with_title(..).with_max_width(..).add(ctx, parent, body)`
+    mounts the dialog, its frame, and the body at once, because a mount hook
+    runs too late for a host to reach the frame. Confirm, Picker, Help, and
+    fh's columns dialog use it; the theme's `dialog/*` rules replace the
+    per-host frame and button rules. fh's footer already painted whole
+    segments, so only its Git cell moved to `Render::runs`.
 - [ ] C33: the module visibility rule, homes for the root names, method
   renames, the must-use lint, unused-method trims, `ItemLabel`, the Editor
   interaction field, and `text_buffer` narrowing.

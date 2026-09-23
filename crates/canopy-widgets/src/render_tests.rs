@@ -7,13 +7,13 @@ mod tests {
         commands::{CommandNode, CommandSpec},
         error::Result,
         geom::{Point, PointI32, Size},
-        input::{key, mouse},
+        input::{Event, key, mouse},
         layout::{Edges, Layout, ScrollOp},
         testing::harness::Harness,
     };
 
     use crate::{
-        BoxGlyphs, Button, DiffView, Dropdown, Frame, KeyHint, List, Root, Scope, Selector,
+        BoxGlyphs, Button, Dialog, DiffView, Dropdown, Frame, KeyHint, List, Root, Scope, Selector,
         StatusBar, Strategy, Text,
     };
 
@@ -405,6 +405,46 @@ mod tests {
                 harness.render()?;
             }
         }
+        Ok(())
+    }
+
+    /// A root that mounts a titled dialog around one line of text.
+    struct DialogRoot;
+
+    impl CommandNode for DialogRoot {
+        fn commands() -> &'static [&'static CommandSpec] {
+            &[]
+        }
+    }
+
+    impl Widget for DialogRoot {
+        fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
+            let root = ctx.node_id();
+            Dialog::new()
+                .with_title("Ask")
+                .add(ctx, root, Text::new("hi"))?;
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_dialog_frames_its_body_in_the_centre_and_swallows_margin_clicks() -> Result<()> {
+        let mut harness = Harness::builder(DialogRoot).size(11, 5).build()?;
+        harness.render()?;
+        harness.tbuf().assert_matches(buf![
+            "           "
+            " ╭ Ask ──╮ "
+            " │hi     │ "
+            " ╰───────╯ "
+            "           "
+        ]);
+        let dialog = harness.find_nodes("**/dialog")?[0];
+        let outcome = harness.canopy.with_root_context(|ctx| {
+            ctx.with_widget_mut(dialog, |dialog: &mut Dialog, ctx| {
+                dialog.on_event(&Event::Mouse(click_at(Point { x: 0, y: 0 })), ctx)
+            })
+        })?;
+        assert_eq!(outcome, canopy::EventOutcome::Handle);
         Ok(())
     }
 
