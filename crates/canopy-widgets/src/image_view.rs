@@ -709,7 +709,7 @@ mod tests {
         });
         let mut canopy = CanopyBuilder::new().build()?;
         canopy.with_root_context(|ctx| {
-            ctx.set_layout_of(ctx.node_id(), Layout::fill())?;
+            ctx.set_layout_override(ctx.node_id(), Layout::fill().into())?;
             let _ = ctx.add_child(ctx.node_id(), ImageView::new(&image))?;
             for effect in effects {
                 ctx.push_effect(ctx.node_id(), effect)?;

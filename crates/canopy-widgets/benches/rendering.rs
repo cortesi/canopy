@@ -33,10 +33,10 @@ impl Widget for BenchmarkTextWrapper {
             .add_slot::<TextSlot>(c.node_id(), Text::new(self.content.clone()))
             .expect("Failed to attach text");
 
-        c.set_layout_of(c.node_id(), Layout::fill())
+        c.set_layout_override(c.node_id(), Layout::fill().into())
             .expect("Failed to style root");
 
-        c.set_layout_of(text_id, Layout::fill())
+        c.set_layout_override(text_id.into(), Layout::fill().into())
             .expect("Failed to style text");
         Ok(())
     }

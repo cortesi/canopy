@@ -104,7 +104,7 @@ impl Widget for DemoHost {
         let parent_id: NodeId = if self.outer_padding > 0 {
             let outer_pad_id = ctx.add_child(center_id, Pad::uniform(self.outer_padding))?;
             let outer_layout = Layout::fill().padding(Edges::all(self.outer_padding));
-            ctx.set_layout_of(outer_pad_id, outer_layout)?;
+            ctx.set_layout_override(outer_pad_id.into(), outer_layout.into())?;
             outer_pad_id.into()
         } else {
             center_id.into()
@@ -127,9 +127,9 @@ impl Widget for DemoHost {
         if let Some(height) = self.size.height {
             layout = layout.fixed_height(height);
         }
-        ctx.set_layout_of(pad_id, layout)?;
+        ctx.set_layout_override(pad_id.into(), layout.into())?;
         if !self.frame {
-            ctx.set_layout_of(sized_id, Layout::fill())?;
+            ctx.set_layout_override(sized_id, Layout::fill().into())?;
         }
         Ok(())
     }
@@ -206,14 +206,14 @@ impl Widget for ListDemo {
         let list_layout = Layout::column()
             .overflow_x(MeasureOverflow::Unbounded)
             .fixed_width(max_width);
-        ctx.set_layout_of(list_id, list_layout)?;
+        ctx.set_layout_override(list_id.into(), list_layout.into())?;
         ctx.with_widget_mut(list_id, |list: &mut List<Text>, ctx| {
             for item in item_texts {
                 let text = Text::new(item)
                     .with_style(LIST_STYLE_PATH)
                     .with_selected_style(LIST_SELECTED_STYLE_PATH);
                 let item_id = list.append(ctx, text)?;
-                ctx.set_layout_of(item_id, Layout::fill().fixed_height(1))?;
+                ctx.set_layout_override(item_id.into(), Layout::fill().fixed_height(1).into())?;
             }
             Ok(())
         })?;

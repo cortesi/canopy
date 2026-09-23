@@ -1432,9 +1432,9 @@ mod tests {
             .build()?;
         harness.with_root_widget_context(|_: &mut KeyedActivationRoot, ctx| {
             ctx.with_unique_descendant::<List<Text, i64>, _>(|_, ctx| {
-                ctx.set_layout_of(
+                ctx.set_layout_override(
                     ctx.node_id(),
-                    Layout::fill().padding(Edges::new(1, 0, 0, 0)),
+                    Layout::fill().padding(Edges::new(1, 0, 0, 0)).into(),
                 )
             })
         })?;

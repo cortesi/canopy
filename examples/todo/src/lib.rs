@@ -157,7 +157,7 @@ impl Todo {
         let scope = c.node_id();
         c.edit_structure(&mut |c| {
             let main = c.add_slot::<MainSlot>(scope, MainContent)?;
-            c.set_layout_override(main.into(), LayoutOverride::full(Layout::fill()))?;
+            c.set_layout_override(main.into(), LayoutOverride::from(Layout::fill()))?;
             let frame = c.add_child(main, Frame::new())?;
             let list = c.add_child(frame, List::<TodoEntry, i64>::new())?;
             c.set_semantic_key(list.into(), scope, "todo.list")?;
@@ -200,7 +200,7 @@ impl Todo {
                     .with_label("New todo item")
                     .with_value_exposure(ValueExposure::Public),
             )?;
-            c.set_layout_override(input.into(), LayoutOverride::full(Layout::fill()))?;
+            c.set_layout_override(input.into(), LayoutOverride::from(Layout::fill()))?;
             c.set_semantic_key(input.into(), scope, "todo.input")
         })
     }

@@ -124,7 +124,7 @@ impl Widget for FontDemo {
             .with_effects(self.effects)
             .with_layout_options(options);
         let banner_id = ctx.add_child(ctx.node_id(), banner)?;
-        ctx.set_layout_of(banner_id, Layout::fill())?;
+        ctx.set_layout_override(banner_id.into(), Layout::fill().into())?;
         self.banner_id = Some(banner_id);
         Ok(())
     }

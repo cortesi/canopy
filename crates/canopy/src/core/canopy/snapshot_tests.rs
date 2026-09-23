@@ -8,7 +8,6 @@ use crate::{
     core::snapshot,
     error::{Error, Result},
     geom::{RectI32, Size},
-    layout::{Display, Layout},
 };
 
 struct Observed {
@@ -127,7 +126,7 @@ fn flush_rejects_an_active_empty_widget_slot_before_preparation() -> Result<()> 
 }
 
 #[test]
-fn capture_distinguishes_attachment_display_and_accumulated_clipping() -> Result<()> {
+fn capture_distinguishes_attachment_visibility_and_accumulated_clipping() -> Result<()> {
     let mut app = app()?;
     let root = app.core.root;
     let parent = app.core.create_detached(Leaf)?;
@@ -162,20 +161,6 @@ fn capture_distinguishes_attachment_display_and_accumulated_clipping() -> Result
     assert!(child_entry.attached && !child_entry.displayed);
     assert!(child_entry.view.is_none());
     app.core.nodes[parent].hidden = false;
-    app.core.nodes[parent].layout = Layout {
-        display: Display::None,
-        ..Layout::default()
-    };
-    let suppressed = capture(&app)?;
-    assert!(
-        !suppressed
-            .nodes
-            .iter()
-            .find(|node| node.id == child)
-            .unwrap()
-            .displayed
-    );
-    app.core.nodes[parent].layout.display = Display::Block;
     app.core.nodes[child].view.outer = RectI32::new(-1, 0, 2, 2);
     assert!(
         capture(&app)?

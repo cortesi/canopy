@@ -28,7 +28,7 @@ use crate::{
     error::{Error, NodeOperationKind, Result},
     geom::{Point, Rect, Size},
     layout::{
-        Align, Constraint, Direction, Direction as LayoutDirection, Display, Edges, Layout,
+        Align, Constraint, Direction, Direction as LayoutDirection, Edges, Layout, LayoutOverride,
         MeasureConstraints, MeasureOverflow, Measurement, Sizing,
     },
 };
@@ -215,9 +215,7 @@ fn wrap_flex_child_treated_as_measure_when_parent_not_exact() -> Result<()> {
     core.set_children(parent, vec![child])?;
     attach_root_child(&mut core, parent)?;
     core.set_layout_of(parent, Layout::column())?;
-    core.with_layout_of(child, |layout| {
-        layout.height = Sizing::Flex(1);
-    })?;
+    core.set_layout_override(child, LayoutOverride::new().flex_vertical(1))?;
     core.update_layout(Size::new(20, 20))?;
     let node = &core.nodes[parent];
     assert_eq!(node.content_size.h, 4);
@@ -249,12 +247,8 @@ fn wrap_flex_child_behaves_as_flex_when_parent_exact() -> Result<()> {
     core.set_children(parent, vec![child1, child2])?;
     attach_root_child(&mut core, parent)?;
     core.set_layout_of(parent, Layout::row().flex_horizontal(1))?;
-    core.with_layout_of(child1, |layout| {
-        layout.width = Sizing::Flex(1);
-    })?;
-    core.with_layout_of(child2, |layout| {
-        layout.width = Sizing::Flex(1);
-    })?;
+    core.set_layout_override(child1, LayoutOverride::new().flex_horizontal(1))?;
+    core.set_layout_override(child2, LayoutOverride::new().flex_horizontal(1))?;
     core.update_layout(Size::new(10, 10))?;
     let calls1 = calls1.lock().unwrap();
     let calls2 = calls2.lock().unwrap();
@@ -275,7 +269,7 @@ fn wrap_gap_counts_only_visible_children() -> Result<()> {
     core.set_children(parent, vec![child1, child2, child3])?;
     attach_root_child(&mut core, parent)?;
     core.set_layout_of(parent, Layout::column().gap(2))?;
-    core.set_layout_of(child2, Layout::column().hidden())?;
+    core.set_hidden(child2, true)?;
     core.update_layout(Size::new(20, 20))?;
     let node = &core.nodes[parent];
     assert_eq!(node.content_size.h, 4);
@@ -344,9 +338,8 @@ proptest! {
     }
 
     #[test]
-    fn hidden_display_and_padding_layout_properties(
+    fn hidden_and_padding_layout_properties(
         hidden in any::<bool>(),
-        display_none in any::<bool>(),
         padding in 0u32..8,
         screen_w in 0u32..40,
         screen_h in 0u32..40,
@@ -359,12 +352,7 @@ proptest! {
         prop_assert!(attach_root_child(&mut core, parent).is_ok());
         let parent_layout = Layout::fill().padding(Edges::all(padding));
         prop_assert!(core.set_layout_of(parent, parent_layout).is_ok());
-        let child_layout = if display_none {
-            Layout::fill().hidden()
-        } else {
-            Layout::fill()
-        };
-        let child_layout_set = core.set_layout_of(child, child_layout).is_ok();
+        let child_layout_set = core.set_layout_of(child, Layout::fill()).is_ok();
         prop_assert!(child_layout_set);
         core.set_hidden(child, hidden)?;
 
@@ -378,7 +366,7 @@ proptest! {
         prop_assert_eq!(parent_node.content_size, expected_content);
 
         let child_node = &core.nodes[child];
-        if hidden || display_none {
+        if hidden {
             prop_assert_eq!(child_node.rect.w, 0);
             prop_assert_eq!(child_node.rect.h, 0);
             prop_assert_eq!(child_node.canvas, Size::ZERO);
@@ -399,7 +387,6 @@ proptest! {
         screen_w in boundary_layout_u32(),
         screen_h in boundary_layout_u32(),
         hide_last in any::<bool>(),
-        remove_last in any::<bool>(),
         overflow in any::<bool>(),
     ) {
         let direction = if is_row { Direction::Row } else { Direction::Column };
@@ -447,20 +434,13 @@ proptest! {
             Layout::column().fixed_width(5).flex_vertical(1)
         };
         core.set_layout_of(second, second_layout)?;
-        core.set_layout_of(
-            last,
-            if remove_last {
-                Layout::column().fixed_width(2).fixed_height(1).hidden()
-            } else {
-                Layout::column().fixed_width(2).fixed_height(1)
-            },
-        )?;
+        core.set_layout_of(last, Layout::column().fixed_width(2).fixed_height(1))?;
         core.set_hidden(last, hide_last)?;
         core.update_layout(Size::new(screen_w, screen_h))?;
 
         let visible = [first, second, last]
             .into_iter()
-            .filter(|node| !core.nodes[*node].hidden && core.nodes[*node].layout.display == Display::Block)
+            .filter(|node| !core.nodes[*node].hidden)
             .collect::<Vec<_>>();
         let content = core.nodes[parent].content_size;
         let available_main = direction.main_size(content);
@@ -572,14 +552,12 @@ fn no_overlaps_with_min_expansion() -> Result<()> {
     core.set_children(parent, vec![child1, child2])?;
     attach_root_child(&mut core, parent)?;
     core.set_layout_of(parent, Layout::row().flex_horizontal(1))?;
-    core.with_layout_of(child1, |layout| {
-        layout.width = Sizing::Flex(1);
-        layout.min_width = Some(10);
-    })?;
-    core.with_layout_of(child2, |layout| {
-        layout.width = Sizing::Flex(1);
-        layout.min_width = Some(10);
-    })?;
+    let flex_min = LayoutOverride {
+        min_width: Some(Some(10)),
+        ..LayoutOverride::new().flex_horizontal(1)
+    };
+    core.set_layout_override(child1, flex_min)?;
+    core.set_layout_override(child2, flex_min)?;
     core.update_layout(Size::new(5, 5))?;
     let first = &core.nodes[child1];
     let second = &core.nodes[child2];
@@ -865,7 +843,7 @@ fn random_tree_no_panics() -> Result<()> {
         let mut last = 0u32;
         for child in &node.children {
             let child = &core.nodes[*child];
-            if child.layout.display == Display::None || child.hidden {
+            if child.hidden {
                 continue;
             }
             let pos = match node.layout.direction {
@@ -1145,42 +1123,36 @@ fn flex_shares_keep_large_remainders() {
 
 #[test]
 fn excluded_subtrees_clear_previously_computed_layout() -> Result<()> {
-    for display_none in [false, true] {
-        let mut core = Core::new();
-        let parent = wrap_node(&mut core)?;
-        let (widget, _) = TestWidget::with_canvas(|_| Measurement::Wrap, |_, _| Size::new(50, 50));
-        let child = core.create_detached(widget)?;
-        let grandchild = fixed_leaf(&mut core, 2, 2)?;
-        core.set_children(child, vec![grandchild])?;
-        core.set_children(parent, vec![child])?;
-        attach_root_child(&mut core, parent)?;
-        core.set_layout_of(parent, Layout::fill())?;
-        core.set_layout_of(child, Layout::fill())?;
-        core.update_layout(Size::new(10, 10))?;
-        core.nodes[child].scroll = Point { x: 4, y: 5 };
-        core.update_layout(Size::new(10, 10))?;
-        assert!(!core.nodes[grandchild].view.is_empty());
-        assert_eq!(core.nodes[child].scroll, Point { x: 4, y: 5 });
-        if display_none {
-            core.set_layout_of(parent, Layout::fill().hidden())?;
-        } else {
-            core.set_hidden(parent, true)?;
-        }
-        core.update_layout(Size::new(10, 10))?;
-        for id in [parent, child, grandchild] {
-            let node = &core.nodes[id];
-            assert_eq!(node.rect, Rect::ZERO);
-            assert_eq!(node.content_size, Size::ZERO);
-            assert_eq!(node.canvas, Size::ZERO);
-            assert_eq!(node.scroll, Point::ZERO);
-            assert_eq!(node.view, View::default());
-        }
-        core.set_hidden(parent, false)?;
-        core.set_layout_of(parent, Layout::fill())?;
-        core.update_layout(Size::new(10, 10))?;
-        assert!(!core.nodes[grandchild].view.is_empty());
-        assert_eq!(core.nodes[child].canvas, Size::new(50, 50));
+    let mut core = Core::new();
+    let parent = wrap_node(&mut core)?;
+    let (widget, _) = TestWidget::with_canvas(|_| Measurement::Wrap, |_, _| Size::new(50, 50));
+    let child = core.create_detached(widget)?;
+    let grandchild = fixed_leaf(&mut core, 2, 2)?;
+    core.set_children(child, vec![grandchild])?;
+    core.set_children(parent, vec![child])?;
+    attach_root_child(&mut core, parent)?;
+    core.set_layout_of(parent, Layout::fill())?;
+    core.set_layout_of(child, Layout::fill())?;
+    core.update_layout(Size::new(10, 10))?;
+    core.nodes[child].scroll = Point { x: 4, y: 5 };
+    core.update_layout(Size::new(10, 10))?;
+    assert!(!core.nodes[grandchild].view.is_empty());
+    assert_eq!(core.nodes[child].scroll, Point { x: 4, y: 5 });
+    core.set_hidden(parent, true)?;
+    core.update_layout(Size::new(10, 10))?;
+    for id in [parent, child, grandchild] {
+        let node = &core.nodes[id];
+        assert_eq!(node.rect, Rect::ZERO);
+        assert_eq!(node.content_size, Size::ZERO);
+        assert_eq!(node.canvas, Size::ZERO);
+        assert_eq!(node.scroll, Point::ZERO);
+        assert_eq!(node.view, View::default());
     }
+    core.set_hidden(parent, false)?;
+    core.set_layout_of(parent, Layout::fill())?;
+    core.update_layout(Size::new(10, 10))?;
+    assert!(!core.nodes[grandchild].view.is_empty());
+    assert_eq!(core.nodes[child].canvas, Size::new(50, 50));
     Ok(())
 }
 
@@ -1239,7 +1211,15 @@ fn invalid_override_merge_and_refresh_preserve_previous_layout() -> Result<()> {
         },
     )?;
     assert_eq!(core.nodes[node].layout.max_height, None);
-    core.with_layout_of(node, |layout| layout.gap = 2)?;
+    core.set_layout_override(
+        node,
+        LayoutOverride {
+            min_height: Some(Some(5)),
+            max_height: Some(None),
+            gap: Some(2),
+            ..LayoutOverride::new()
+        },
+    )?;
     assert_eq!(core.nodes[node].layout_override.padding, None);
     let before = core.nodes[node].layout;
     let base = core.nodes[node].base_layout;

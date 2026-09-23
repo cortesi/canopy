@@ -28,7 +28,7 @@ impl Widget for Pager {
         let frame_id = c.add_child(c.node_id(), Frame::new())?;
         c.add_child(frame_id, Text::new(self.contents.clone()))?;
 
-        c.set_layout_of(c.node_id(), Layout::fill())?;
+        c.set_layout_override(c.node_id(), Layout::fill().into())?;
         Ok(())
     }
 }

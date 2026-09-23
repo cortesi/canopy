@@ -9,7 +9,7 @@ use crate::{
         wake::WorkStamp,
         widget_access::{WidgetSlotPolicy, validate_slot},
     },
-    layout::{Layout, LayoutOverride},
+    layout::LayoutOverride,
     path::Path,
     widget::Widget,
 };
@@ -109,22 +109,6 @@ impl Core {
             }))
     }
 
-    /// Update the layout for a node.
-    pub fn with_layout_of(
-        &mut self,
-        node: impl Into<NodeId>,
-        f: impl FnOnce(&mut Layout),
-    ) -> Result<()> {
-        let node = node.into();
-        let current = self.nodes.get(node).ok_or(Error::NodeNotFound(node))?;
-        let before = current.layout;
-        let mut layout = before;
-        f(&mut layout);
-        let mut overrides = current.layout_override;
-        overrides.record_changes(before, layout);
-        self.set_layout_override(node, overrides)
-    }
-
     /// Replace all persistent parent constraints for a node.
     pub fn set_layout_override(&mut self, node: NodeId, overrides: LayoutOverride) -> Result<()> {
         let current = self.nodes.get_mut(node).ok_or(Error::NodeNotFound(node))?;
@@ -146,7 +130,7 @@ impl Core {
     /// Override every field of a node's layout.
     #[cfg(test)]
     pub fn set_layout_of(&mut self, node: impl Into<NodeId>, layout: Layout) -> Result<()> {
-        self.set_layout_override(node.into(), LayoutOverride::full(layout))
+        self.set_layout_override(node.into(), LayoutOverride::from(layout))
     }
 
     /// Replace a widget and remove all descendant nodes.

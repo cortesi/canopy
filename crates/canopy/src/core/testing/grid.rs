@@ -4,7 +4,7 @@ use crate::{
     Canopy, Context, ContextExt, NodeId, ViewContext,
     error::Result,
     geom::Size,
-    layout::{Layout, Sizing},
+    layout::{Layout, LayoutOverride},
     state::NodeName,
     widget::Widget,
 };
@@ -86,11 +86,11 @@ impl Grid {
             let grid_root = build_node(context, 0, 0, recursion, divisions)?;
             let root = context.root_id();
             context.set_children(root, vec![grid_root])?;
-            context.set_layout_of(root, Layout::fill())?;
-            context.with_layout_of(grid_root, &mut |layout| {
-                layout.width = Sizing::Flex(1);
-                layout.height = Sizing::Flex(1);
-            })?;
+            context.set_layout_override(root, Layout::fill().into())?;
+            context.set_layout_override(
+                grid_root,
+                LayoutOverride::new().flex_horizontal(1).flex_vertical(1),
+            )?;
             Ok(Self {
                 root: grid_root,
                 recursion,

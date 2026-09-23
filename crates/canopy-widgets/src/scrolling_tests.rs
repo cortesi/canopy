@@ -129,7 +129,7 @@ fn scene(
 /// Add a fill-sized surface with `canvas` under `parent`.
 fn surface(c: &mut dyn Context, parent: NodeId, canvas: Size) -> Result<NodeId> {
     let node = c.add_child(parent, Surface { canvas })?;
-    c.set_layout_of(node, Layout::fill())?;
+    c.set_layout_override(node.into(), Layout::fill().into())?;
     Ok(node.into())
 }
 
@@ -343,7 +343,10 @@ fn oversized_surface(c: &mut dyn Context, parent: NodeId) -> Result<NodeId> {
             canvas: Size::new(60, 60),
         },
     )?;
-    c.set_layout_of(node, Layout::column().fixed_width(30).fixed_height(30))?;
+    c.set_layout_override(
+        node.into(),
+        Layout::column().fixed_width(30).fixed_height(30).into(),
+    )?;
     Ok(node.into())
 }
 
@@ -433,7 +436,7 @@ fn marks_keep_their_color_as_the_thumb_slides_over_them() -> Result<()> {
                 marks,
             },
         )?;
-        c.set_layout_of(body, Layout::fill())?;
+        c.set_layout_override(body.into(), Layout::fill().into())?;
         Ok(vec![frame, body.into()])
     })?;
     harness

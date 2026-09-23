@@ -35,26 +35,30 @@ impl Help {
 
         let frame = context.create_detached(Frame::new().with_title("Keyboard shortcuts"))?;
         context.attach_slot(frame.into(), BindingListSlot::KEY, bindings.into())?;
-        context.with_layout_of(frame.into(), &mut |layout| {
-            // The frame hugs its rows, so the list scrolls only once the
-            // content outgrows the room the overlay leaves.
-            *layout = Layout::fill()
+        // The frame hugs its rows, so the list scrolls only once the content
+        // outgrows the room the overlay leaves.
+        context.set_layout_override(
+            frame.into(),
+            Layout::fill()
                 .height(Sizing::Measure)
                 .max_width(72)
-                .padding(Edges::all(1));
-        })?;
+                .padding(Edges::all(1))
+                .into(),
+        )?;
 
         let modal = context.create_detached(Center::new())?;
         context.attach_slot(modal.into(), FrameSlot::KEY, frame.into())?;
-        context.with_layout_of(modal.into(), &mut |layout| {
-            // Two rows above and below keep the frame clear of the screen
-            // edges, so a tall modal never fills the window.
-            *layout = Layout::fill()
+        // Two rows above and below keep the frame clear of the screen edges,
+        // so a tall modal never fills the window.
+        context.set_layout_override(
+            modal.into(),
+            Layout::fill()
                 .direction(Direction::Stack)
                 .align_horizontal(Align::Center)
                 .align_vertical(Align::Center)
-                .padding(Edges::symmetric(2, 1));
-        })?;
+                .padding(Edges::symmetric(2, 1))
+                .into(),
+        )?;
 
         let help = context.create_detached(Self)?;
         context.attach_slot(help.into(), ModalSlot::KEY, modal.into())?;

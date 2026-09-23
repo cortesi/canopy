@@ -1493,15 +1493,6 @@ pub mod canopy {
             Stack,
         }
 
-        /// Display mode for layout participation.
-        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-        pub enum Display {
-            /// Node participates in layout and rendering.
-            Block,
-            /// Node is removed from layout and not rendered.
-            None,
-        }
-
         /// Edge insets for padding.
         #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
         pub struct Edges {
@@ -1522,8 +1513,6 @@ pub mod canopy {
         /// Layout configuration for a node.
         #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
         pub struct Layout {
-            /// Whether this node participates in layout/render.
-            pub display: Display,
             /// Stack direction for children.
             pub direction: Direction,
             /// Width sizing strategy (outer size).
@@ -1569,8 +1558,6 @@ pub mod canopy {
         /// `None` inherits a field. For optional bounds, `Some(None)` clears the bound.
         #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
         pub struct LayoutOverride {
-            /// Override for [`Layout::display`].
-            pub display: Option<Display>,
             /// Override for [`Layout::direction`].
             pub direction: Option<Direction>,
             /// Override for [`Layout::width`].
@@ -1725,8 +1712,9 @@ pub mod canopy {
             pub fn of(self, whole: u32) -> u32 {}
         }
 
-        impl From<LayoutValidationError> for Error {
-            fn from(source: LayoutValidationError) -> Self {}
+        impl From<Layout> for LayoutOverride {
+            /// Override every field of a complete layout.
+            fn from(layout: Layout) -> Self {}
         }
 
         impl Layout {
@@ -1747,9 +1735,6 @@ pub mod canopy {
 
             /// Fill available space with flex sizing on both axes.
             pub fn fill() -> Self {}
-
-            /// Remove this node from layout and rendering.
-            pub fn hidden(self) -> Self {}
 
             /// Row layout with measured sizing on both axes.
             pub fn row() -> Self {}
@@ -1795,9 +1780,6 @@ pub mod canopy {
             /// Set vertical alignment of children within content area.
             pub fn align_vertical(self, align: Align) -> Self {}
 
-            /// Set whether this node participates in layout and rendering.
-            pub fn display(self, display: Display) -> Self {}
-
             /// Set width sizing strategy directly.
             pub fn width(self, sizing: Sizing) -> Self {}
 
@@ -1810,15 +1792,17 @@ pub mod canopy {
             pub fn validate(&self) -> Result<(), LayoutValidationError> {}
         }
 
+        impl From<Layout> for LayoutOverride {
+            /// Override every field of a complete layout.
+            fn from(layout: Layout) -> Self {}
+        }
+
         impl LayoutOverride {
             /// Apply constraints and validate both the widget and resulting layout.
             pub fn apply(self, base: Layout) -> Result<Layout, LayoutValidationError> {}
 
             /// Inherit every widget field.
             pub fn new() -> Self {}
-
-            /// Override every field of a complete layout.
-            pub fn full(layout: Layout) -> Self {}
 
             /// Set both outer height bounds.
             pub fn fixed_height(self, value: u32) -> Self {}
@@ -1835,6 +1819,10 @@ pub mod canopy {
             ///
             /// A zero weight is rejected when the override is applied.
             pub fn flex_horizontal(self, weight: u32) -> Self {}
+        }
+
+        impl From<LayoutValidationError> for Error {
+            fn from(source: LayoutValidationError) -> Self {}
         }
 
         impl MeasureConstraints {
@@ -3156,7 +3144,7 @@ pub mod canopy {
         pub semantic_identity: Option<crate::SemanticIdentity>,
         /// Whether the root tree contains this node.
         pub attached: bool,
-        /// Attached with no hidden or display-suppressed ancestor.
+        /// Attached with no hidden ancestor.
         pub displayed: bool,
         /// Intersection with the viewport and all ancestor content clips.
         pub intersects_viewport: bool,
@@ -3687,9 +3675,6 @@ pub mod canopy {
         /// Attachment handles require this node to be attached when acquired.
         fn wake_handle(&self, lifetime: crate::WorkLifetime) -> Result<crate::NodeWakeHandle>;
 
-        /// Update the layout for a specific node.
-        fn with_layout_of(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Layout)) -> Result<()>;
-
         /// Execute a closure with mutable access to a widget and its node-bound
         /// context.
         fn with_widget_dyn_mut(
@@ -3741,9 +3726,6 @@ pub mod canopy {
         /// Return the typed keyed child `K` of `parent`. A missing slot is a
         /// [`Error::NotFound`] that names `K::KEY`.
         fn get_slot<K: ChildSlot>(&self, parent: impl Into<NodeId>) -> Result<TypedId<K::Widget>> {}
-
-        /// Set the layout for a specific node.
-        fn set_layout_of(&mut self, node: impl Into<NodeId>, layout: Layout) -> Result<()> {}
 
         /// Execute a closure with the unique descendant of type `W` if it exists.
         fn try_with_unique_descendant<W: 'static + Widget, R>(

@@ -767,19 +767,23 @@ impl Widget for ModalContent {
 /// Add stock widgets under `parent`, one titled frame each.
 fn add_widget_samples(c: &mut dyn Context, parent: NodeId) -> Result<()> {
     let buttons = c.add_child(parent, Frame::new().with_title("Buttons"))?;
-    c.set_layout_of(
-        buttons,
+    c.set_layout_override(
+        buttons.into(),
         Layout::column()
             .fixed_height(5)
             .flex_horizontal(1)
-            .padding(Edges::all(1)),
+            .padding(Edges::all(1))
+            .into(),
     )?;
     let row = c.add_child(buttons, Container::row())?;
     for (label, active) in [("Normal", false), ("Pressed", true)] {
         let mut button = Button::new(label);
         button.set_active(active);
         let button = c.add_child(row, button)?;
-        c.set_layout_of(button, Layout::fill().fixed_width(14).fixed_height(3))?;
+        c.set_layout_override(
+            button.into(),
+            Layout::fill().fixed_width(14).fixed_height(3).into(),
+        )?;
     }
 
     for (title, value) in [
@@ -788,12 +792,13 @@ fn add_widget_samples(c: &mut dyn Context, parent: NodeId) -> Result<()> {
     ] {
         let frame = c.add_child(parent, Frame::new().with_title(title))?;
         c.add_child(frame, Input::new(value))?;
-        c.set_layout_of(
-            frame,
+        c.set_layout_override(
+            frame.into(),
             Layout::column()
                 .fixed_height(3)
                 .flex_horizontal(1)
-                .padding(Edges::all(1)),
+                .padding(Edges::all(1))
+                .into(),
         )?;
     }
 
@@ -805,12 +810,13 @@ fn add_widget_samples(c: &mut dyn Context, parent: NodeId) -> Result<()> {
         selector.select_by(ctx, 1)?;
         selector.toggle(ctx)
     })?;
-    c.set_layout_of(
-        frame,
+    c.set_layout_override(
+        frame.into(),
         Layout::column()
             .fixed_height(5)
             .flex_horizontal(1)
-            .padding(Edges::all(1)),
+            .padding(Edges::all(1))
+            .into(),
     )?;
     Ok(())
 }
@@ -830,7 +836,7 @@ fn add_syntax_samples(c: &mut dyn Context, parent: NodeId) -> Result<()> {
         editor.set_highlighter(Some(Box::new(SyntectHighlighter::new(extension))));
         let frame = c.add_child(parent, Frame::new().with_title(title))?;
         let editor = c.add_child(frame, editor)?;
-        c.set_layout_of(editor, Layout::fill())?;
+        c.set_layout_override(editor.into(), Layout::fill().into())?;
         c.with_widget_mut(editor, |editor: &mut Editor, ctx| {
             editor.search(ctx, query.to_string());
             Ok(())
@@ -932,7 +938,7 @@ impl Stylegym {
             layout.max_width = Some(40);
             layout.min_height = Some(5);
             layout.max_height = Some(7);
-            ctx.set_layout_of(frame_id, layout)?;
+            ctx.set_layout_override(frame_id.into(), layout.into())?;
             Ok(())
         })?;
 
@@ -1019,12 +1025,13 @@ impl Widget for Stylegym {
         // Create left frame (controls) - preserve Frame's padding for border
         let left_frame_id =
             c.add_slot::<ControlsSlot>(c.node_id(), Frame::new().with_title("Styles"))?;
-        c.set_layout_of(
-            left_frame_id,
+        c.set_layout_override(
+            left_frame_id.into(),
             Layout::column()
                 .fixed_width(32)
                 .flex_vertical(1)
-                .padding(Edges::all(1)),
+                .padding(Edges::all(1))
+                .into(),
         )?;
 
         // Create theme dropdown with its own frame - no fixed height so it can
@@ -1032,16 +1039,22 @@ impl Widget for Stylegym {
         let theme_frame_id =
             c.add_slot::<ThemeFrameSlot>(left_frame_id, Frame::new().with_title("Theme"))?;
         c.add_slot::<ThemeDropdownSlot>(theme_frame_id, Dropdown::new(available_themes())?)?;
-        c.set_layout_of(
-            theme_frame_id,
-            Layout::column().flex_horizontal(1).padding(Edges::all(1)),
+        c.set_layout_override(
+            theme_frame_id.into(),
+            Layout::column()
+                .flex_horizontal(1)
+                .padding(Edges::all(1))
+                .into(),
         )?;
 
         // Create effects selector with its own frame
         let effects_frame_id =
             c.add_slot::<EffectsFrameSlot>(left_frame_id, Frame::new().with_title("Effects"))?;
         c.add_slot::<EffectsSelectorSlot>(effects_frame_id, Selector::new(available_effects()))?;
-        c.set_layout_of(effects_frame_id, Layout::fill().padding(Edges::all(1)))?;
+        c.set_layout_override(
+            effects_frame_id.into(),
+            Layout::fill().padding(Edges::all(1)).into(),
+        )?;
 
         // Create right container with Stack layout for modal overlay
         let right_container_id =

@@ -60,8 +60,11 @@ impl Widget for WidgetEditor {
         let frame_id = c.add_child(pad_id, Frame::new().with_title(self.title.clone()))?;
         let editor_id = c.add_child(frame_id, editor)?;
 
-        c.set_layout_of(editor_id, Layout::fill().padding(Edges::all(1)))?;
-        c.set_layout_of(c.node_id(), Layout::fill())?;
+        c.set_layout_override(
+            editor_id.into(),
+            Layout::fill().padding(Edges::all(1)).into(),
+        )?;
+        c.set_layout_override(c.node_id(), Layout::fill().into())?;
         Ok(())
     }
 }

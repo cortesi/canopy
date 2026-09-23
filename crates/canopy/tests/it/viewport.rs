@@ -145,7 +145,10 @@ end)
                     consume_wheel: false,
                 },
             )?;
-            c.set_layout_of(inner, Layout::column().fixed_width(10).fixed_height(4))
+            c.set_layout_override(
+                inner.into(),
+                Layout::column().fixed_width(10).fixed_height(4).into(),
+            )
         }
 
         fn name(&self) -> NodeName {

@@ -616,9 +616,6 @@ pub trait Context: ViewContext + sealed::Context {
     /// Mark this node dirty so the next frame re-runs layout.
     fn invalidate_layout(&mut self);
 
-    /// Update the layout for a specific node.
-    fn with_layout_of(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Layout)) -> Result<()>;
-
     /// Replace persistent parent constraints without replacing widget layout
     /// fields.
     fn set_layout_override(&mut self, node: NodeId, overrides: LayoutOverride) -> Result<()>;
@@ -723,11 +720,6 @@ pub trait ContextExt: Context + ViewContextExt {
         call: &CommandCall,
     ) -> StdResult<ArgValue, CommandError> {
         self.dispatch(&call.clone().with_target(CommandTarget::Exact(node)))
-    }
-
-    /// Set the layout for a specific node.
-    fn set_layout_of(&mut self, node: impl Into<NodeId>, layout: Layout) -> Result<()> {
-        Context::set_layout_override(self, node.into(), LayoutOverride::full(layout))
     }
 
     /// Execute a closure with mutable access to a runtime-checked widget node.
@@ -1112,10 +1104,6 @@ impl Context for NodeCtx<&mut Core> {
 
     fn set_layout_override(&mut self, node: NodeId, overrides: LayoutOverride) -> Result<()> {
         self.core.set_layout_override(node, overrides)
-    }
-
-    fn with_layout_of(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Layout)) -> Result<()> {
-        self.core.with_layout_of(node, |layout| f(layout))
     }
 
     fn create_detached_boxed(&mut self, widget: Box<dyn Widget>) -> Result<NodeId> {

@@ -978,7 +978,7 @@ mod tests {
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
             let terminal = self.0.take().expect("terminal mounts once");
             let terminal = ctx.add_child(ctx.node_id(), terminal)?;
-            ctx.set_layout_of(terminal, Layout::fill())
+            ctx.set_layout_override(terminal.into(), Layout::fill().into())
         }
     }
 
@@ -1122,7 +1122,7 @@ mod tests {
     fn render_effect_run(effects: Vec<Effect>) -> Result<TermBuf> {
         let mut canopy = CanopyBuilder::new().build()?;
         canopy.with_root_context(|ctx| {
-            ctx.set_layout_of(ctx.node_id(), Layout::fill())?;
+            ctx.set_layout_override(ctx.node_id(), Layout::fill().into())?;
             let _ = ctx.add_child(ctx.node_id(), EffectRun)?;
             for effect in effects {
                 ctx.push_effect(ctx.node_id(), effect)?;

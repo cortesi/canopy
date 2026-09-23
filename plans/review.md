@@ -2213,7 +2213,7 @@ Each stage also updates the docs it touches.
   `focused_node() == Some(id)` for `is_focused_of`.
 - [x] C14: remove the boxed add variants, `Canopy::create_detached`, and
   `compose`, and move `KeyedChildren` into canopy-widgets.
-- [ ] C15: delete `Display` and the `set_layout` and `with_layout` families.
+- [x] C15: delete `Display` and the `set_layout` and `with_layout` families.
   Add `From<Layout> for LayoutOverride`, and fix `columns.rs:780` pinning.
 - [ ] C16: the `descendants::<W>` iterator, removal of the unused lookups, and
   the `focused_within` rename.

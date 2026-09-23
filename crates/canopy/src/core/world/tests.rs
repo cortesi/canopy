@@ -24,7 +24,7 @@ use crate::{
     },
     error::{Error, NodeOperationKind, Result},
     geom::Size,
-    layout::{Layout, Measurement},
+    layout::{Layout, LayoutOverride, Measurement},
     path::Path,
     widget::Widget,
 };
@@ -724,7 +724,7 @@ fn visibility_transition_reports_changes_and_missing_nodes() -> Result<()> {
         Err(Error::NodeNotFound(id)) if id == node
     ));
     assert!(matches!(
-        core.with_layout_of(node, |_| {}),
+        core.set_layout_override(node, LayoutOverride::new()),
         Err(Error::NodeNotFound(id)) if id == node
     ));
     Ok(())
@@ -1525,37 +1525,30 @@ fn failed_widget_replacement_keeps_the_old_owners_modal_bindings() -> Result<()>
 #[test]
 fn focus_recovery_excludes_hidden_ancestor_subtrees() -> Result<()> {
     for laid_out in [false, true] {
-        for display_none in [false, true] {
-            let mut core = Core::new();
-            let parent = core.create_detached(simple_widget())?;
-            let child = core.create_detached(FocusableWidget)?;
-            let sibling = core.create_detached(FocusableWidget)?;
-            core.set_children(parent, vec![child])?;
-            core.set_children(core.root, vec![parent, sibling])?;
-            for id in [core.root, parent, child, sibling] {
-                core.set_layout_of(id, Layout::fill())?;
-            }
-            if laid_out {
-                core.update_layout(Size::new(20, 10))?;
-            }
-            core.set_focus(child)?;
-            if display_none {
-                core.set_layout_of(parent, Layout::fill().hidden())?;
-                core.ensure_focus_valid()?;
-            } else {
-                core.set_hidden(parent, true)?;
-            }
-            assert_eq!(core.focus_id(), Some(sibling));
-            assert!(!core.focusable_leaves(core.root).contains(&child));
-            core.focus_next(core.root)?;
-            assert_eq!(core.focus_id(), Some(sibling));
-            core.set_hidden(sibling, true)?;
-            assert_eq!(core.focus_id(), None);
-            core.set_hidden(parent, false)?;
-            core.set_layout_of(parent, Layout::fill())?;
-            core.focus_first(core.root)?;
-            assert_eq!(core.focus_id(), Some(child));
+        let mut core = Core::new();
+        let parent = core.create_detached(simple_widget())?;
+        let child = core.create_detached(FocusableWidget)?;
+        let sibling = core.create_detached(FocusableWidget)?;
+        core.set_children(parent, vec![child])?;
+        core.set_children(core.root, vec![parent, sibling])?;
+        for id in [core.root, parent, child, sibling] {
+            core.set_layout_of(id, Layout::fill())?;
         }
+        if laid_out {
+            core.update_layout(Size::new(20, 10))?;
+        }
+        core.set_focus(child)?;
+        core.set_hidden(parent, true)?;
+        assert_eq!(core.focus_id(), Some(sibling));
+        assert!(!core.focusable_leaves(core.root).contains(&child));
+        core.focus_next(core.root)?;
+        assert_eq!(core.focus_id(), Some(sibling));
+        core.set_hidden(sibling, true)?;
+        assert_eq!(core.focus_id(), None);
+        core.set_hidden(parent, false)?;
+        core.set_layout_of(parent, Layout::fill())?;
+        core.focus_first(core.root)?;
+        assert_eq!(core.focus_id(), Some(child));
     }
     Ok(())
 }

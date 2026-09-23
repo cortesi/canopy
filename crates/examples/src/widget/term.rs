@@ -113,13 +113,8 @@ impl TermDemo {
 
         for (idx, frame_id) in self.frame_ids.iter().enumerate() {
             let active = idx == self.active;
-            ctx.with_layout_of(*frame_id, &mut |layout| {
-                *layout = if active {
-                    Layout::fill().padding(Edges::all(1))
-                } else {
-                    Layout::fill().hidden()
-                };
-            })?;
+            ctx.set_layout_override(*frame_id, Layout::fill().padding(Edges::all(1)).into())?;
+            ctx.set_hidden(*frame_id, !active)?;
         }
 
         if let Some(active_id) = self.terminal_ids.get(self.active).copied() {
@@ -163,9 +158,12 @@ impl Widget for TermDemo {
                 tab_bar_id,
                 Button::new(label.to_string()).with_glyphs(ROUND),
             )?;
-            ctx.set_layout_of(
-                tab_id,
-                Layout::fill().fixed_height(TAB_HEIGHT).flex_horizontal(1),
+            ctx.set_layout_override(
+                tab_id.into(),
+                Layout::fill()
+                    .fixed_height(TAB_HEIGHT)
+                    .flex_horizontal(1)
+                    .into(),
             )?;
             self.tab_ids.push(tab_id);
         }
@@ -175,7 +173,10 @@ impl Widget for TermDemo {
         let cwd = env::current_dir().map_err(|err| Error::Internal(err.to_string()))?;
         for label in TAB_LABELS {
             let frame_id = ctx.add_child(stack_id, Frame::new())?;
-            ctx.set_layout_of(frame_id, Layout::fill().padding(Edges::all(1)))?;
+            ctx.set_layout_override(
+                frame_id.into(),
+                Layout::fill().padding(Edges::all(1)).into(),
+            )?;
             let terminal_id = ctx.add_child(
                 frame_id,
                 Terminal::new(
@@ -184,7 +185,7 @@ impl Widget for TermDemo {
                         .with_cwd(cwd.clone()),
                 ),
             )?;
-            ctx.set_layout_of(terminal_id, Layout::fill())?;
+            ctx.set_layout_override(terminal_id.into(), Layout::fill().into())?;
             self.frame_ids.push(frame_id.into());
             self.terminal_ids.push(terminal_id.into());
         }

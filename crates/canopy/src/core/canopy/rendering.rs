@@ -12,7 +12,6 @@ use crate::{
     cursor,
     error::{Error, Result},
     geom::{Point, Rect, Size},
-    layout::Display,
     render::{Render, RenderBackend},
     style::{StyleManager, effects::Effect},
 };
@@ -156,7 +155,7 @@ impl Canopy {
     ) -> Result<()> {
         let node = &self.core.nodes[node_id];
 
-        if node.hidden || node.layout.display == Display::None {
+        if node.hidden {
             return Ok(());
         }
 

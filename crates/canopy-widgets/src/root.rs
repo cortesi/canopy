@@ -7,7 +7,7 @@ use canopy::{
     error::{Error, Result},
     event::key::Key,
     geom::Line,
-    layout::{Align, Direction, Layout, Sizing},
+    layout::{Align, Direction, Layout, LayoutOverride},
 };
 
 #[cfg(feature = "devtools")]
@@ -305,9 +305,10 @@ impl Root {
 
             #[cfg(feature = "devtools")]
             context.set_hidden(inspector, !inspector_active)?;
-            context.with_layout_of(app_node, &mut |layout| {
-                *layout = layout.width(Sizing::Flex(1)).height(Sizing::Flex(1));
-            })?;
+            context.set_layout_override(
+                app_node,
+                LayoutOverride::new().flex_horizontal(1).flex_vertical(1),
+            )?;
             Ok(app_id)
         })
     }
@@ -600,9 +601,12 @@ mod tests {
             let left = context.create_detached(FocusLeaf::new("left"))?;
             let right = context.create_detached(FocusLeaf::new("right"))?;
             context.set_children(app_id.into(), vec![left.into(), right.into()])?;
-            context.set_layout_of(app_id, Layout::fill().direction(Direction::Row))?;
-            context.set_layout_of(left, Layout::fill())?;
-            context.set_layout_of(right, Layout::fill())?;
+            context.set_layout_override(
+                app_id.into(),
+                Layout::fill().direction(Direction::Row).into(),
+            )?;
+            context.set_layout_override(left.into(), Layout::fill().into())?;
+            context.set_layout_override(right.into(), Layout::fill().into())?;
             Ok((left, right))
         })?;
         canopy.set_root_size(Size::new(60, 14))?;

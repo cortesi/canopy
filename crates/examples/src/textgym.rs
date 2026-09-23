@@ -1,7 +1,7 @@
 use canopy::{
     CanopyBuilder, Context, ContextExt, NodeId, ViewContext, Widget,
     error::Result,
-    layout::{Edges, Layout},
+    layout::{Edges, Layout, LayoutOverride},
 };
 use canopy_widgets::{CanvasWidth, Container, Frame, Pad, Selectable, Text, wrap};
 
@@ -95,7 +95,7 @@ impl Widget for TextGym {
             stack_id.into(),
             vec![default_id, wrap_id, intrinsic_id, fixed_id],
         )?;
-        c.set_layout_of(c.node_id(), Layout::fill())?;
+        c.set_layout_override(c.node_id(), Layout::fill().into())?;
         Ok(())
     }
 }
@@ -110,16 +110,18 @@ fn section(
     height: u32,
 ) -> Result<NodeId> {
     let text_id = c.create_detached(text)?;
-    c.set_layout_of(text_id, Layout::fill())?;
+    c.set_layout_override(text_id.into(), Layout::fill().into())?;
     let frame_id = wrap(c, text_id, Frame::new().with_title(title))?;
     let pad_id = wrap(c, frame_id, Pad::uniform(OUTER_PADDING))?;
-    c.set_layout_of(
-        pad_id,
-        Layout::column()
-            .flex_horizontal(1)
-            .fixed_width(width.saturating_add(2 * OUTER_PADDING))
-            .fixed_height(height)
-            .padding(Edges::all(OUTER_PADDING)),
+    c.set_layout_override(
+        pad_id.into(),
+        LayoutOverride::from(
+            Layout::column()
+                .flex_horizontal(1)
+                .fixed_width(width.saturating_add(2 * OUTER_PADDING))
+                .fixed_height(height)
+                .padding(Edges::all(OUTER_PADDING)),
+        ),
     )?;
     Ok(pad_id.into())
 }

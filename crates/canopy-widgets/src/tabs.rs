@@ -6,7 +6,7 @@ use canopy::{
     error::Result,
     event::{Event, mouse},
     geom::{Line, Point},
-    layout::{Edges, Layout, Sizing},
+    layout::{Edges, Layout, LayoutOverride},
 };
 use unicode_width::UnicodeWidthStr;
 
@@ -50,10 +50,10 @@ impl Tabs {
     ) -> Result<TypedId<W>> {
         let id = c.add_child(c.node_id(), page)?;
         let node = NodeId::from(id);
-        c.with_layout_of(node, &mut |layout| {
-            layout.width = Sizing::Flex(1);
-            layout.height = Sizing::Flex(1);
-        })?;
+        c.set_layout_override(
+            node,
+            LayoutOverride::new().flex_horizontal(1).flex_vertical(1),
+        )?;
         self.tabs.push((label.into(), node));
         self.sync(c, None)?;
         Ok(id)
@@ -220,7 +220,7 @@ mod tests {
 
         fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
             let tabs = c.add_child(c.node_id(), Tabs::new())?;
-            c.set_layout_of(tabs, Layout::fill())?;
+            c.set_layout_override(tabs.into(), Layout::fill().into())?;
             let pages = c.with_widget_mut(tabs, |tabs: &mut Tabs, c| {
                 let one = tabs.add_tab(c, "One", Page)?;
                 let two = tabs.add_tab(c, "Two", Page)?;

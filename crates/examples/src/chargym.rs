@@ -200,7 +200,7 @@ impl Widget for CharGym {
                 .with_canvas_width(CanvasWidth::Intrinsic),
         )?;
 
-        c.set_layout_of(c.node_id(), Layout::fill())?;
+        c.set_layout_override(c.node_id(), Layout::fill().into())?;
         Ok(())
     }
 }

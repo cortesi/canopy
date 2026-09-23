@@ -247,12 +247,13 @@ where
         // the field off the bottom.
         let rows: NodeId = list.into();
         let field: NodeId = filter.into();
-        context.set_layout_of(rows, Layout::fill())?;
-        context.set_layout_of(
+        context.set_layout_override(rows, Layout::fill().into())?;
+        context.set_layout_override(
             field,
             Layout::fill()
                 .height(Sizing::Measure)
-                .fixed_height(FILTER_ROWS),
+                .fixed_height(FILTER_ROWS)
+                .into(),
         )?;
 
         let frame: NodeId = frame.into();

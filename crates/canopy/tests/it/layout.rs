@@ -76,9 +76,9 @@ mod tests {
             let child: NodeId = context.create_detached(Huge::new())?.into();
             context.set_children(h.root, vec![container])?;
             context.set_children(container, vec![child])?;
-            context.set_layout_of(h.root, Layout::fill())?;
-            context.set_layout_of(container, Layout::fill().padding(Edges::all(1)))?;
-            context.set_layout_of(child, Layout::fill())?;
+            context.set_layout_override(h.root, Layout::fill().into())?;
+            context.set_layout_override(container, Layout::fill().padding(Edges::all(1)).into())?;
+            context.set_layout_override(child, Layout::fill().into())?;
             Ok((container, child))
         })?;
 

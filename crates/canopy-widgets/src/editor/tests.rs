@@ -70,8 +70,8 @@ impl Widget for EditorHost {
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         let editor = Editor::with_config(self.text.clone(), self.config.clone());
         let editor_id = c.add_slot::<EditorSlot>(c.node_id(), editor)?;
-        c.set_layout_of(c.node_id(), Layout::fill())?;
-        c.set_layout_of(editor_id, Layout::fill())?;
+        c.set_layout_override(c.node_id(), Layout::fill().into())?;
+        c.set_layout_override(editor_id.into(), Layout::fill().into())?;
         Ok(())
     }
 
@@ -748,9 +748,9 @@ fn nested_padding_scroll_and_captured_pointer_agree_on_wide_grapheme() {
     let mut harness = build_harness(&text, config, 18, 8);
     harness
         .with_root_widget_context(|_root: &mut EditorHost, ctx| {
-            ctx.set_layout_of(ctx.node_id(), Layout::fill().padding(Edges::all(1)))?;
+            ctx.set_layout_override(ctx.node_id(), Layout::fill().padding(Edges::all(1)).into())?;
             ctx.with_slot::<EditorSlot, _>(ctx.node_id(), |_editor, ctx| {
-                ctx.set_layout_of(ctx.node_id(), Layout::fill().padding(Edges::all(1)))
+                ctx.set_layout_override(ctx.node_id(), Layout::fill().padding(Edges::all(1)).into())
             })
         })
         .unwrap();
@@ -814,7 +814,10 @@ fn padded_editor_mouse_uses_content_coordinates_with_gutter_and_scroll() {
         harness
             .with_root_widget_context(|_root: &mut EditorHost, ctx| {
                 ctx.with_slot::<EditorSlot, _>(ctx.node_id(), |_editor, ctx| {
-                    ctx.set_layout_of(ctx.node_id(), Layout::fill().padding(Edges::all(1)))
+                    ctx.set_layout_override(
+                        ctx.node_id(),
+                        Layout::fill().padding(Edges::all(1)).into(),
+                    )
                 })
             })
             .unwrap();

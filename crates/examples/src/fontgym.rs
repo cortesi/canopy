@@ -143,7 +143,7 @@ impl Widget for FontGym {
         ctx.set_style(font_styles(self.gradient_phase));
 
         let list_id = ctx.create_detached(List::new())?;
-        ctx.set_layout_of(list_id, Layout::fill())?;
+        ctx.set_layout_override(list_id.into(), Layout::fill().into())?;
 
         let blocks = ctx.with_widget_mut(list_id, |list: &mut List<FontBlock>, ctx| {
             let mut ids = Vec::new();
@@ -159,7 +159,7 @@ impl Widget for FontGym {
                     .with_style(spec.style)
                     .with_layout_options(centered);
                 let id = list.append(ctx, FontBlock::new(banner, label, BANNER_HEIGHT))?;
-                ctx.set_layout_of(id, block_layout(BANNER_HEIGHT))?;
+                ctx.set_layout_override(id.into(), block_layout(BANNER_HEIGHT).into())?;
                 ids.push(id);
             }
 
@@ -171,7 +171,10 @@ impl Widget for FontGym {
             list_id,
         ))?;
         ctx.set_children(font_frame_id.into(), vec![list_id.into()])?;
-        ctx.set_layout_of(font_frame_id, Layout::fill().padding(Edges::all(1)))?;
+        ctx.set_layout_override(
+            font_frame_id.into(),
+            Layout::fill().padding(Edges::all(1)).into(),
+        )?;
 
         let controls_id = ctx.create_detached(ControlsLegend)?;
         let controls_frame = panel(ctx, controls_id, "Controls", CONTROLS_PANEL_WIDTH)?;
@@ -193,7 +196,7 @@ impl Widget for FontGym {
             style_state,
             status_id,
         ))?;
-        ctx.set_layout_of(input_id, Layout::fill())?;
+        ctx.set_layout_override(input_id.into(), Layout::fill().into())?;
 
         let input_frame = wrap(ctx, input_id, Frame::new().with_title("Text input"))?;
         let stack_id = ctx.add_child(ctx.node_id(), Container::column())?;
@@ -387,7 +390,7 @@ impl FontBlock {
     fn set_banner_height(&mut self, ctx: &mut dyn Context, height: u32) -> Result<()> {
         self.banner_height = height;
         if let Some(banner_id) = self.banner_id {
-            ctx.set_layout_of(banner_id, Layout::fill().fixed_height(height))?;
+            ctx.set_layout_override(banner_id.into(), Layout::fill().fixed_height(height).into())?;
         }
         Ok(())
     }
@@ -405,10 +408,16 @@ impl Widget for FontBlock {
     fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
         let banner = self.banner.take().expect("banner available on mount");
         let banner_id = ctx.create_detached(banner)?;
-        ctx.set_layout_of(banner_id, Layout::fill().fixed_height(self.banner_height))?;
+        ctx.set_layout_override(
+            banner_id.into(),
+            Layout::fill().fixed_height(self.banner_height).into(),
+        )?;
 
         let label_id = ctx.create_detached(FontLabel::new(self.label.clone(), "fontgym/label"))?;
-        ctx.set_layout_of(label_id, Layout::fill().fixed_height(LABEL_HEIGHT))?;
+        ctx.set_layout_override(
+            label_id.into(),
+            Layout::fill().fixed_height(LABEL_HEIGHT).into(),
+        )?;
 
         ctx.set_children(ctx.node_id(), vec![banner_id.into(), label_id.into()])?;
         self.banner_id = Some(banner_id);
@@ -569,7 +578,7 @@ impl FontGymInput {
             ctx.with_widget_mut(*target, |block: &mut FontBlock, ctx| {
                 block.set_banner_height(ctx, self.banner_height)
             })?;
-            ctx.set_layout_of(*target, block_layout(self.banner_height))?;
+            ctx.set_layout_override((*target).into(), block_layout(self.banner_height).into())?;
         }
         Ok(())
     }
@@ -954,12 +963,13 @@ fn panel(
         pad,
         Frame::new().with_title(title).with_glyphs(SINGLE_THICK),
     )?;
-    ctx.set_layout_of(
-        frame,
+    ctx.set_layout_override(
+        frame.into(),
         Layout::column()
             .flex_horizontal(1)
             .min_width(min_width)
-            .padding(Edges::all(1)),
+            .padding(Edges::all(1))
+            .into(),
     )?;
     Ok(frame.into())
 }

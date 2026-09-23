@@ -183,7 +183,10 @@ impl Button {
             text.set_label(label, accelerator);
             Ok(())
         })?;
-        ctx.set_layout_of(label_id, Layout::column().max_width(self.label_width()))?;
+        ctx.set_layout_override(
+            label_id.into(),
+            Layout::column().max_width(self.label_width()).into(),
+        )?;
         Ok(())
     }
 }

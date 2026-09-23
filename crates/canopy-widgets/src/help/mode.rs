@@ -89,9 +89,8 @@ impl ModeHelp {
         let bindings = context.create_detached(ModeBindings::new())?;
         let frame = context.create_detached(Frame::new())?;
         context.attach_slot(frame.into(), ModeBindingsSlot::KEY, bindings.into())?;
-        context.with_layout_of(frame.into(), &mut |layout| {
-            *layout = Layout::column().padding(Edges::all(1));
-        })?;
+        context
+            .set_layout_override(frame.into(), Layout::column().padding(Edges::all(1)).into())?;
 
         let overlay = context.create_detached(Self)?;
         context.attach_slot(overlay.into(), ModeFrameSlot::KEY, frame.into())?;

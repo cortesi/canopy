@@ -301,7 +301,7 @@ scrolls. Those axes measure children without a bound, and the other axis stays
 bounded. Content that must grow uses measured or fixed sizing on a scrolling
 axis; flex children share only the space that remains.
 
-Hidden nodes and `Display::None` nodes do not participate in visible layout.
+Hidden nodes do not participate in visible layout.
 Layout clears their subtree caches.
 
 Layout errors must surface. Re-entrant widget access and missing nodes must not
@@ -346,7 +346,9 @@ horizontal tracks; horizontal overflow scrolls through wheel input.
 Layout-only grouping uses `Container`, which supplies a row, column, stack, or
 any other layout and has no other behavior. A parent sets each child's sizing
 through layout overrides such as `LayoutOverride::flex_vertical()` and
-`LayoutOverride::fixed_height()`.
+`LayoutOverride::fixed_height()`. `Context::set_layout_override` is the one layout
+setter. It replaces the node's whole override, and
+`LayoutOverride::from(layout)` pins every field of a complete layout.
 
 Painting and input resolve the same tracks. Wheel input on a track scrolls the
 target with `Context::scroll_to_of` only when the step can move. A press starts

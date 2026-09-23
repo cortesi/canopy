@@ -41,10 +41,10 @@ impl Widget for BenchmarkEditorWrapper {
             .add_slot::<EditorSlot>(c.node_id(), editor)
             .expect("Failed to attach editor");
 
-        c.set_layout_of(c.node_id(), Layout::fill())
+        c.set_layout_override(c.node_id(), Layout::fill().into())
             .expect("Failed to style root");
 
-        c.set_layout_of(editor_id, Layout::fill())
+        c.set_layout_override(editor_id.into(), Layout::fill().into())
             .expect("Failed to style editor");
         Ok(())
     }

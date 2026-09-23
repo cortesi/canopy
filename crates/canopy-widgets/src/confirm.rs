@@ -320,11 +320,12 @@ impl Widget for Confirm {
                     Button::new(label).with_glyphs(ROUND).with_accelerator(key),
                 )?
                 .into();
-            context.set_layout_of(
+            context.set_layout_override(
                 button,
                 Layout::fill()
                     .fixed_width(button_width(label))
-                    .fixed_height(BUTTON_ROWS),
+                    .fixed_height(BUTTON_ROWS)
+                    .into(),
             )?;
             match answer {
                 Answer::Yes => self.yes = Some(button),

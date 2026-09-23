@@ -184,9 +184,15 @@ mod tests {
             let second = context.create_detached(FocusLeaf::new("second"))?;
             let root = context.root_id();
             context.set_children(root, vec![first.into(), second.into()])?;
-            context.set_layout_of(root, Layout::column().flex_horizontal(1).flex_vertical(1))?;
-            context.set_layout_of(first, Layout::column().fixed_width(10).fixed_height(5))?;
-            context.set_layout_of(second, Layout::fill())?;
+            context.set_layout_override(
+                root,
+                Layout::column().flex_horizontal(1).flex_vertical(1).into(),
+            )?;
+            context.set_layout_override(
+                first.into(),
+                Layout::column().fixed_width(10).fixed_height(5).into(),
+            )?;
+            context.set_layout_override(second.into(), Layout::fill().into())?;
             context.set_focus(first.into())?;
             Ok((first, second))
         })?;
@@ -194,9 +200,10 @@ mod tests {
         canopy.set_root_size(Size::new(10, 10))?;
         canopy.turn(canopy::Work::Prepare)?;
         canopy.with_root_context(|context| {
-            context.with_layout_of(first.into(), &mut |layout| {
-                *layout = layout.fixed_height(0);
-            })
+            context.set_layout_override(
+                first.into(),
+                Layout::column().fixed_width(10).fixed_height(0).into(),
+            )
         })?;
         canopy.set_root_size(Size::new(10, 10))?;
         canopy.turn(canopy::Work::Prepare)?;

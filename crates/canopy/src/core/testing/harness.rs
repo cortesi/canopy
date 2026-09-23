@@ -16,7 +16,7 @@ use crate::{
     error::{Error, Result},
     event::{Event, key, mouse},
     geom::Size,
-    layout::Sizing,
+    layout::LayoutOverride,
     render::NopBackend,
     script,
     widget::Widget,
@@ -98,9 +98,11 @@ impl<W: Widget + 'static> HarnessBuilder<W> {
             .builder
             .assemble(move |canopy| {
                 canopy.replace_root(root)?;
-                canopy.core.with_layout_of(canopy.core.root, |layout| {
-                    *layout = layout.width(Sizing::Flex(1)).height(Sizing::Flex(1));
-                })
+                let root = canopy.core.root;
+                canopy.core.set_layout_override(
+                    root,
+                    LayoutOverride::new().flex_horizontal(1).flex_vertical(1),
+                )
             })
             .build()?;
         Harness::from_canopy(canopy, self.size)

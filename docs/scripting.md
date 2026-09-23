@@ -520,7 +520,7 @@ made while a native widget mutation callback holds its widget fail with
 node removal; their node tokens do not become durable references.
 
 Node snapshots distinguish `attached`, `displayed`, and `intersects_viewport`.
-Displayed nodes have no hidden or `Display::None` ancestor. Offscreen displayed
+Displayed nodes have no hidden ancestor. Offscreen displayed
 nodes retain their computed rectangles; non-displayed nodes have no current
 screen rectangle. Intersection includes ancestor clipping but makes no claim
 about occlusion. Widget semantics expose only declared roles, labels, selection,

@@ -127,13 +127,13 @@ impl Block {
             }
         };
         let next = weight.saturating_add_signed(delta).max(1);
-        c.with_layout_of(c.node_id(), &mut |layout| {
-            if adjust_horizontal {
-                layout.width = Sizing::Flex(next);
-            } else {
-                layout.height = Sizing::Flex(next);
-            }
-        })
+        let mut layout = layout;
+        if adjust_horizontal {
+            layout.width = Sizing::Flex(next);
+        } else {
+            layout.height = Sizing::Flex(next);
+        }
+        c.set_layout_override(c.node_id(), layout.into())
     }
 
     #[command]
@@ -248,7 +248,7 @@ impl FocusGym {
 
 impl Widget for FocusGym {
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-        c.set_layout_of(c.node_id(), Layout::fill())?;
+        c.set_layout_override(c.node_id(), Layout::fill().into())?;
         let root_block = c.add_child(c.node_id(), Block::new(true))?;
         c.add_child(root_block, Block::new(false))?;
         c.add_child(root_block, Block::new(false))?;

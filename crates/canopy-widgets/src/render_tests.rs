@@ -44,7 +44,7 @@ mod tests {
         harness.render()?;
         harness.with_root_widget_context(|_root: &mut SnapshotRoot<Dropdown<String>>, ctx| {
             ctx.with_unique_descendant::<Dropdown<String>, _>(|_, ctx| {
-                ctx.set_layout_of(ctx.node_id(), Layout::fill().padding(Edges::all(1)))
+                ctx.set_layout_override(ctx.node_id(), Layout::fill().padding(Edges::all(1)).into())
             })
         })?;
         harness.render()?;
@@ -77,7 +77,7 @@ mod tests {
         let mut harness = Harness::builder(root).size(10, 4).build()?;
         harness.with_root_widget_context(|_root: &mut SnapshotRoot<Selector<String>>, ctx| {
             ctx.with_unique_descendant::<Selector<String>, _>(|_, ctx| {
-                ctx.set_layout_of(ctx.node_id(), Layout::fill().padding(Edges::all(1)))
+                ctx.set_layout_override(ctx.node_id(), Layout::fill().padding(Edges::all(1)).into())
             })
         })?;
         harness.render()?;
@@ -344,7 +344,7 @@ mod tests {
             .build()?;
         harness.with_root_widget_context(|_root: &mut SnapshotRoot<crate::Input>, ctx| {
             ctx.with_unique_descendant::<crate::Input, _>(|_, ctx| {
-                ctx.set_layout_of(ctx.node_id(), Layout::column())
+                ctx.set_layout_override(ctx.node_id(), Layout::column().into())
             })
         })?;
         harness.render()?;

@@ -184,7 +184,7 @@ impl TermGym {
                 ctx.node_id(),
                 Terminal::new(TerminalConfig::new().with_cwd(cwd)),
             )?;
-            ctx.set_layout_of(terminal_id, Layout::fill())?;
+            ctx.set_layout_override(terminal_id.into(), Layout::fill().into())?;
             Ok(())
         })?;
 
@@ -210,13 +210,8 @@ impl TermGym {
 
         for (idx, terminal_id) in terminals.iter().enumerate() {
             let active = self.active;
-            c.with_layout_of(*terminal_id, &mut |layout_of| {
-                *layout_of = if idx == active {
-                    Layout::fill()
-                } else {
-                    Layout::fill().hidden()
-                };
-            })?;
+            c.set_layout_override(*terminal_id, Layout::fill().into())?;
+            c.set_hidden(*terminal_id, idx != active)?;
         }
 
         let active = self.active;
@@ -405,9 +400,9 @@ impl Widget for TermGym {
         )?;
         c.add_child(term_frame_id, TerminalStack::new())?;
 
-        c.set_layout_of(
-            sidebar_id,
-            Layout::column().fixed_width(24).flex_vertical(1),
+        c.set_layout_override(
+            sidebar_id.into(),
+            Layout::column().fixed_width(24).flex_vertical(1).into(),
         )?;
 
         self.add_terminal(c)?;

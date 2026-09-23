@@ -4,7 +4,6 @@ use crate::{
     core::{context::CoreViewContext, id::NodeId, widget_access::WidgetReadGuard},
     error::{Error, Result},
     geom::RectI32,
-    layout::Display,
     path::Path,
 };
 
@@ -549,7 +548,7 @@ fn is_focus_position_valid(core: &Core, node_id: NodeId, require_view: bool) -> 
         let Some(entry) = core.nodes.get(current) else {
             return false;
         };
-        if entry.hidden || entry.layout.display == Display::None {
+        if entry.hidden {
             return false;
         }
         match entry.parent {

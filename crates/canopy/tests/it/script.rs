@@ -102,8 +102,8 @@ mod tests {
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
             let left = ctx.add_child(ctx.node_id(), ApiLeaf::new())?;
             let right = ctx.add_child(ctx.node_id(), ApiLeaf::new())?;
-            ctx.set_layout_of(left, Layout::fill())?;
-            ctx.set_layout_of(right, Layout::fill())?;
+            ctx.set_layout_override(left.into(), Layout::fill().into())?;
+            ctx.set_layout_override(right.into(), Layout::fill().into())?;
             ctx.set_focus(left.into())?;
             Ok(())
         }

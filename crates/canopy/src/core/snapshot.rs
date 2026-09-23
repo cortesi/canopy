@@ -11,7 +11,6 @@ use crate::{
     commands::{ArgValue, CommandStatus},
     error::Result,
     geom::{Rect, Size},
-    layout::Display,
 };
 
 /// Optional application observations, without arbitrary widget serialization.
@@ -46,7 +45,7 @@ pub struct NodeSnapshot {
     pub semantic_identity: Option<SemanticIdentity>,
     /// Whether the root tree contains this node.
     pub attached: bool,
-    /// Attached with no hidden or display-suppressed ancestor.
+    /// Attached with no hidden ancestor.
     pub displayed: bool,
     /// Intersection with the viewport and all ancestor content clips.
     pub intersects_viewport: bool,
@@ -88,7 +87,7 @@ pub(super) fn capture(core: &Core, frame_id: FrameId, buffer: &TermBuf) -> Resul
     stack.push((core.root, true, true, Some(screen)));
     while let Some((id, attached, parent_displayed, clip)) = stack.pop() {
         let node = &core.nodes[id];
-        let displayed = parent_displayed && !node.hidden && node.layout.display != Display::None;
+        let displayed = parent_displayed && !node.hidden;
         let intersects_viewport = displayed
             && clip
                 .and_then(|clip| node.view.outer.intersect_rect(clip))

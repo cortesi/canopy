@@ -146,8 +146,8 @@ impl Widget for FrameGym {
             c.add_slot::<FrameSlot>(c.node_id(), Frame::new().with_title("Frame Gym"))?;
         let pattern_id = c.add_slot::<PatternSlot>(frame_id, TestPattern::new())?;
 
-        c.set_layout_of(c.node_id(), Layout::fill())?;
-        c.set_layout_of(pattern_id, Layout::fill())?;
+        c.set_layout_override(c.node_id(), Layout::fill().into())?;
+        c.set_layout_override(pattern_id.into(), Layout::fill().into())?;
         Ok(())
     }
 }
