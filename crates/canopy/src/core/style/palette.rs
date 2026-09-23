@@ -113,10 +113,10 @@ pub fn theme(p: &Palette) -> StyleMap {
         .fg("/button/disabled/text", p.muted_fg)
         .fg("/button/disabled/key", p.muted_fg)
         .fg("/selector", p.fg)
-        .fg("/selector/selected", p.accent)
+        .fg("/selector/chosen", p.accent)
         .style("/selector/focus", StyleBuilder::new().fg(p.bg).bg(p.accent))
         .style(
-            "/selector/focus/selected",
+            "/selector/focus/chosen",
             StyleBuilder::new().fg(p.bg).bg(p.cyan),
         )
         .fg("/dropdown", p.fg)

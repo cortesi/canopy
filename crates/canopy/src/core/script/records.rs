@@ -148,6 +148,10 @@ fn snapshot_node_to_arg(node: &NodeSnapshot) -> ArgValue {
                     "selected_keys".into(),
                     ArgValue::Array(semantics.selected_keys.clone()),
                 ),
+                (
+                    "checked_keys".into(),
+                    ArgValue::Array(semantics.checked_keys.clone()),
+                ),
                 ("activation_status".into(), activation_status),
             ])),
         ),

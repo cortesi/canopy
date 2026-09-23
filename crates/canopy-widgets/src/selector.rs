@@ -1,4 +1,4 @@
-//! Selector widget for multi-value selection with checkbox-style items.
+//! Selector widget for choosing one value from a visible list.
 
 use canopy::{
     Context, EventOutcome, NodeName, ViewContext, Widget, derive_commands,
@@ -16,29 +16,28 @@ use crate::{
     row_cursor::{RowCursor, is_primary_click, label_rows, widest_label},
 };
 
-/// The glyphs a selector draws before an unchecked and checked item.
-const CHECK_GLYPHS: (&str, &str) = ("[ ] ", "[x] ");
+/// The glyphs a selector draws before an unchosen and the chosen item.
+const CHOICE_GLYPHS: (&str, &str) = ("( ) ", "(•) ");
 
-/// A multi-select widget with checkbox-style items.
+/// A single-choice widget that shows every item.
 ///
-/// Items can be toggled on/off independently. The selected indices are tracked
-/// in the order they were selected, allowing for ordered selection if needed.
-/// Navigation scrolls the focused row into view after layout. A host that
-/// changes its item set calls [`Selector::show`], which reinstalls both the
-/// items and the check state.
+/// The selection is the cursor that navigation moves; [`Selector::choose`]
+/// makes the selected item the choice. Navigation scrolls the selected row
+/// into view after layout. A host that changes its item set calls
+/// [`Selector::show`], which reinstalls both the items and the choice.
 pub struct Selector<T>
 where
     T: Label,
 {
     /// Available items.
     items: Vec<T>,
-    /// Cursor over the focused row.
+    /// Cursor over the selected row.
     cursor: RowCursor,
-    /// Selected indices, in selection order.
-    selected: Vec<usize>,
+    /// The chosen index, if any.
+    chosen: Option<usize>,
     /// Optional semantic label.
     label: Option<String>,
-    /// Glyphs drawn before an unchecked and checked item.
+    /// Glyphs drawn before an unchosen and the chosen item.
     glyphs: (&'static str, &'static str),
 }
 
@@ -47,15 +46,15 @@ impl<T> Selector<T>
 where
     T: Label + 'static,
 {
-    /// Create a new selector with the given items.
+    /// Create a new selector with the given items and no choice.
     pub fn new(items: Vec<T>) -> Self {
         let cursor = RowCursor::new(items.len());
         Self {
             items,
             cursor,
-            selected: Vec::new(),
+            chosen: None,
             label: None,
-            glyphs: CHECK_GLYPHS,
+            glyphs: CHOICE_GLYPHS,
         }
     }
 
@@ -66,125 +65,115 @@ where
         self
     }
 
-    /// Replace the checkbox glyphs, unchecked first.
+    /// Start with `index` chosen and selected; an out-of-range index is
+    /// ignored.
     #[must_use]
-    pub fn with_glyphs(mut self, unchecked: &'static str, checked: &'static str) -> Self {
-        self.glyphs = (unchecked, checked);
+    pub fn with_chosen(mut self, index: usize) -> Self {
+        if index < self.items.len() {
+            self.chosen = Some(index);
+            self.cursor.set_index(index);
+        }
         self
     }
 
-    /// Replace the items and the checked indices, in place.
-    ///
-    /// Indices outside the new items are dropped. Focus returns to the first
-    /// item, matching a fresh list.
-    pub fn show(&mut self, items: Vec<T>, checked: &[usize]) {
-        self.items = items;
-        self.cursor = RowCursor::new(self.items.len());
-        self.selected.clear();
-        for index in checked {
-            if *index < self.items.len() && !self.selected.contains(index) {
-                self.selected.push(*index);
-            }
-        }
-        debug_assert!(self.selection_invariant_holds());
+    /// Replace the choice glyphs, unchosen first.
+    #[must_use]
+    pub fn with_glyphs(mut self, unchosen: &'static str, chosen: &'static str) -> Self {
+        self.glyphs = (unchosen, chosen);
+        self
     }
 
-    /// Return the focused item index.
+    /// Replace the items and the chosen index, in place.
+    ///
+    /// A choice outside the new items is dropped. The selection moves to the
+    /// choice, or to the first item without one.
+    pub fn show(&mut self, items: Vec<T>, chosen: Option<usize>) {
+        self.items = items;
+        self.cursor = RowCursor::new(self.items.len());
+        self.chosen = chosen.filter(|index| *index < self.items.len());
+        if let Some(index) = self.chosen {
+            self.cursor.set_index(index);
+        }
+        debug_assert!(self.invariant_holds());
+    }
+
+    /// Return the selected item index, or 0 for an empty selector.
     #[must_use]
-    pub fn focused_index(&self) -> usize {
+    pub fn selected_index(&self) -> usize {
         self.cursor.index().unwrap_or(0)
     }
 
-    /// Return the checked indices, in selection order.
+    /// Return the chosen index.
     #[must_use]
-    pub fn checked_indices(&self) -> &[usize] {
-        &self.selected
+    pub fn chosen_index(&self) -> Option<usize> {
+        self.chosen
     }
 
-    /// Get references to the selected items in selection order.
-    pub fn selected_items(&self) -> Vec<&T> {
-        self.selected
-            .iter()
-            .filter_map(|&idx| self.items.get(idx))
-            .collect()
+    /// Return the chosen item.
+    #[must_use]
+    pub fn chosen(&self) -> Option<&T> {
+        self.chosen.and_then(|index| self.items.get(index))
     }
 
-    /// Toggle selection of the focused item.
+    /// Make the selected item the choice.
     #[command]
-    pub fn toggle(&mut self, _c: &mut dyn Context) -> Result<()> {
-        let Some(focused) = self.cursor.index() else {
-            return Ok(());
-        };
-
-        if let Some(pos) = self.selected.iter().position(|&idx| idx == focused) {
-            // Already selected - remove it
-            self.selected.remove(pos);
-        } else {
-            // Not selected - add it (in selection order)
-            self.selected.push(focused);
+    pub fn choose(&mut self, _c: &mut dyn Context) -> Result<()> {
+        if let Some(selected) = self.cursor.index() {
+            self.chosen = Some(selected);
         }
-        debug_assert!(self.selection_invariant_holds());
+        debug_assert!(self.invariant_holds());
         Ok(())
     }
 
-    /// Move focus by a signed offset.
+    /// Clear the choice.
+    #[command]
+    pub fn clear_choice(&mut self, _c: &mut dyn Context) -> Result<()> {
+        self.chosen = None;
+        Ok(())
+    }
+
+    /// Move the selection by a signed offset.
     #[command]
     pub fn select_by(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {
         self.cursor.select_by(delta);
         self.cursor.reveal(c);
-        debug_assert!(self.selection_invariant_holds());
+        debug_assert!(self.invariant_holds());
         Ok(())
     }
 
-    /// Move focus to the first item.
+    /// Select the first item.
     #[command]
     pub fn select_first(&mut self, c: &mut dyn Context) -> Result<()> {
         self.cursor.select_first();
         self.cursor.reveal(c);
-        debug_assert!(self.selection_invariant_holds());
+        debug_assert!(self.invariant_holds());
         Ok(())
     }
 
-    /// Move focus to the last item.
+    /// Select the last item.
     #[command]
     pub fn select_last(&mut self, c: &mut dyn Context) -> Result<()> {
         self.cursor.select_last();
         self.cursor.reveal(c);
-        debug_assert!(self.selection_invariant_holds());
+        debug_assert!(self.invariant_holds());
         Ok(())
     }
 
-    /// Clear all selections.
-    #[command]
-    pub fn clear(&mut self, _c: &mut dyn Context) -> Result<()> {
-        self.selected.clear();
-        debug_assert!(self.selection_invariant_holds());
-        Ok(())
-    }
-
-    /// Focus and toggle the clicked row.
+    /// Select and choose the clicked row.
     fn handle_click(&mut self, c: &mut dyn Context, event: mouse::MouseEvent) -> Result<()> {
         if !is_primary_click(event) {
             return Ok(());
         }
         if let Some(row) = self.cursor.row_at(&c.view(), event.location) {
             self.cursor.set_index(row);
-            self.toggle(c)?;
+            self.choose(c)?;
         }
-        Ok(())
-    }
-
-    /// Select all items.
-    #[command]
-    pub fn select_all(&mut self, _c: &mut dyn Context) -> Result<()> {
-        self.selected = (0..self.items.len()).collect();
-        debug_assert!(self.selection_invariant_holds());
         Ok(())
     }
 
     /// Return the unclamped size required to render all selector items.
     ///
-    /// Every row reserves the wider checkbox glyph, so checking an item never
+    /// Every row reserves the wider choice glyph, so choosing an item never
     /// changes the width.
     fn content_size(&self) -> Size {
         let glyph_width =
@@ -195,17 +184,14 @@ where
         Size::new(width, height)
     }
 
-    /// Return whether focus and selection indices point at current items.
-    fn selection_invariant_holds(&self) -> bool {
-        let focus_valid = self.cursor.len() == self.items.len()
+    /// Return whether the selection and the choice point at current items.
+    fn invariant_holds(&self) -> bool {
+        let selection_valid = self.cursor.len() == self.items.len()
             && match self.cursor.index() {
                 Some(index) => index < self.items.len(),
                 None => self.items.is_empty(),
             };
-        let selections_valid = self.selected.iter().enumerate().all(|(position, index)| {
-            *index < self.items.len() && !self.selected[..position].contains(index)
-        });
-        focus_valid && selections_valid
+        selection_valid && self.chosen.is_none_or(|index| index < self.items.len())
     }
 }
 
@@ -223,17 +209,10 @@ where
     }
 
     fn semantics(&self, _ctx: &dyn ViewContext) -> Result<WidgetSemantics> {
-        let checked = self
-            .selected
-            .iter()
-            .filter_map(|index| self.items.get(*index))
-            .map(Label::label)
-            .collect::<Vec<_>>()
-            .join(", ");
         Ok(WidgetSemantics {
             role: Some("selector".into()),
             label: self.label.clone(),
-            value: (!checked.is_empty()).then_some(checked),
+            value: self.chosen().map(|item| item.label().to_owned()),
             ..WidgetSemantics::default()
         })
     }
@@ -247,11 +226,10 @@ where
             let item = &self.items[idx];
             let line_rect = rect.line(row)?;
             let label = item.label();
-            let is_selected = self.selected.contains(&idx);
-            let is_item_focused = Some(idx) == self.cursor.index();
+            let is_chosen = self.chosen == Some(idx);
+            let is_selected = Some(idx) == self.cursor.index();
 
-            // Checkbox prefix
-            let prefix = if is_selected {
+            let prefix = if is_chosen {
                 self.glyphs.1
             } else {
                 self.glyphs.0
@@ -260,17 +238,16 @@ where
             let (display, _) =
                 text::slice_by_columns(&display, view.scroll.x as usize, rect.w as usize);
 
-            // Show focus highlight only when the widget has focus
-            if is_item_focused && is_widget_focused {
-                // Focused item - highlight background
+            // Highlight the selection only when the widget has focus.
+            if is_selected && is_widget_focused {
                 rndr.fill("selector/focus", line_rect.rect(), ' ')?;
-                if is_selected {
-                    rndr.text("selector/focus/selected", line_rect, display)?;
+                if is_chosen {
+                    rndr.text("selector/focus/chosen", line_rect, display)?;
                 } else {
                     rndr.text("selector/focus", line_rect, display)?;
                 }
-            } else if is_selected {
-                rndr.text("selector/selected", line_rect, display)?;
+            } else if is_chosen {
+                rndr.text("selector/chosen", line_rect, display)?;
             } else {
                 rndr.text("selector", line_rect, display)?;
             }
@@ -302,84 +279,44 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn test_selector_creation() {
-        let items = vec!["Option 1".to_string(), "Option 2".to_string()];
-        let selector = Selector::new(items);
-        assert_eq!(selector.items.len(), 2);
-        assert!(selector.selected.is_empty());
-        assert_eq!(selector.cursor.index(), Some(0));
+    /// Three string items.
+    fn items() -> Vec<String> {
+        ["Option 1", "Option 2", "Option 3"]
+            .map(String::from)
+            .to_vec()
     }
 
     #[test]
-    fn test_selector_toggle() {
-        let items = vec![
-            "Option 1".to_string(),
-            "Option 2".to_string(),
-            "Option 3".to_string(),
-        ];
-        let mut selector = Selector::new(items);
-
-        // Initially nothing selected
-        assert!(!selector.selected.contains(&0));
-        assert!(selector.selected.is_empty());
-
-        // Toggle focused item (index 0)
-        // Note: We can't easily call commands without a Context, so test the
-        // logic directly
-        selector.selected.push(0);
-        assert!(selector.selected.contains(&0));
-        assert_eq!(selector.selected.len(), 1);
-
-        // Add another selection
-        selector.cursor.set_index(2);
-        selector.selected.push(2);
-        assert!(selector.selected.contains(&2));
-        assert_eq!(selector.selected.len(), 2);
-
-        // Check selection order is preserved
-        assert_eq!(selector.selected.as_slice(), &[0, 2]);
+    fn a_new_selector_selects_the_first_item_and_chooses_nothing() {
+        let selector = Selector::new(items());
+        assert_eq!(selector.selected_index(), 0);
+        assert_eq!(selector.chosen_index(), None);
+        assert!(selector.invariant_holds());
     }
 
     #[test]
-    fn test_selector_empty() {
-        let items: Vec<String> = vec![];
-        let selector = Selector::new(items);
-        assert!(selector.items.is_empty());
-        assert!(selector.selected.is_empty());
-    }
-
-    #[test]
-    fn focus_and_selection_invariants_hold_after_commands() -> Result<()> {
-        let items = vec![
-            "Option 1".to_string(),
-            "Option 2".to_string(),
-            "Option 3".to_string(),
-        ];
-        let mut selector = Selector::new(items);
-        assert!(selector.selection_invariant_holds());
+    fn choose_takes_the_selection_and_replaces_the_choice() -> Result<()> {
+        let mut selector = Selector::new(items());
         CanopyBuilder::new().build()?.with_root_context(|ctx| {
-            selector.toggle(ctx)?;
+            selector.choose(ctx)?;
+            assert_eq!(selector.chosen_index(), Some(0));
             selector.select_by(ctx, 2)?;
-            selector.toggle(ctx)?;
+            assert_eq!(selector.chosen_index(), Some(0), "moving never chooses");
+            selector.choose(ctx)?;
+            assert_eq!(selector.chosen(), Some(&"Option 3".to_string()));
             selector.select_by(ctx, 99)?;
-            selector.toggle(ctx)?;
-            selector.select_all(ctx)?;
-            assert_eq!(selector.cursor.index(), Some(2));
-            assert_eq!(selector.selected.as_slice(), &[0, 1, 2]);
-            assert!(selector.selection_invariant_holds());
-
-            selector.clear(ctx)?;
+            assert_eq!(selector.selected_index(), 2);
+            selector.clear_choice(ctx)?;
+            assert_eq!(selector.chosen_index(), None);
             selector.select_by(ctx, -99)?;
-            assert_eq!(selector.cursor.index(), Some(0));
-            assert!(selector.selected.is_empty());
-            assert!(selector.selection_invariant_holds());
+            assert_eq!(selector.selected_index(), 0);
+            assert!(selector.invariant_holds());
             Ok(())
         })
     }
 
     #[test]
-    fn content_width_measures_the_check_glyphs() {
+    fn content_width_measures_the_choice_glyphs() {
         let items = || vec!["ab".to_string(), "abcd".to_string()];
         assert_eq!(Selector::new(items()).content_size(), Size::new(8, 2));
         assert_eq!(
@@ -402,33 +339,40 @@ mod tests {
     }
 
     #[test]
-    fn show_replaces_items_and_checks_in_order() {
+    fn show_replaces_items_and_the_choice() {
         let mut selector = Selector::new(vec!["a".to_string(), "b".to_string()]);
         selector.show(
             vec!["x".to_string(), "y".to_string(), "z".to_string()],
-            &[2, 0, 9, 2],
+            Some(2),
         );
-        assert_eq!(selector.focused_index(), 0);
+        assert_eq!(selector.chosen_index(), Some(2));
         assert_eq!(
-            selector.checked_indices(),
-            &[2, 0],
-            "out-of-range and repeated indices drop"
+            selector.selected_index(),
+            2,
+            "the selection starts on the choice"
         );
-        assert!(selector.selection_invariant_holds());
+        selector.show(vec!["x".to_string()], Some(9));
+        assert_eq!(
+            selector.chosen_index(),
+            None,
+            "an out-of-range choice drops"
+        );
+        assert_eq!(selector.selected_index(), 0);
+        assert!(selector.invariant_holds());
     }
 
     #[test]
-    fn glyphs_and_semantics_report_the_checks() -> Result<()> {
+    fn glyphs_and_semantics_report_the_choice() -> Result<()> {
         let mut selector = Selector::new(vec!["Size".to_string(), "Modified".to_string()])
-            .with_label("Columns")
+            .with_label("Sort")
             .with_glyphs("· ", "✓ ");
         assert_eq!(selector.glyphs, ("· ", "✓ "));
-        selector.selected.push(1);
+        selector.show(vec!["Size".to_string(), "Modified".to_string()], Some(1));
         let semantics = CanopyBuilder::new()
             .build()?
             .with_root_view(|ctx| selector.semantics(ctx))?;
         assert_eq!(semantics.role.as_deref(), Some("selector"));
-        assert_eq!(semantics.label.as_deref(), Some("Columns"));
+        assert_eq!(semantics.label.as_deref(), Some("Sort"));
         assert_eq!(semantics.value.as_deref(), Some("Modified"));
         Ok(())
     }
@@ -437,18 +381,17 @@ mod tests {
     fn empty_selector_invariants_hold_after_commands() -> Result<()> {
         let mut selector = Selector::<String>::new(Vec::new());
         CanopyBuilder::new().build()?.with_root_context(|ctx| {
-            selector.toggle(ctx)?;
+            selector.choose(ctx)?;
             selector.select_by(ctx, 1)?;
             selector.select_first(ctx)?;
             selector.select_last(ctx)?;
-            selector.select_all(ctx)?;
-            selector.clear(ctx)
+            selector.clear_choice(ctx)
         })?;
 
-        assert!(selector.selection_invariant_holds());
+        assert!(selector.invariant_holds());
         assert_eq!(selector.cursor.index(), None);
-        assert_eq!(selector.focused_index(), 0, "an empty selector reports 0");
-        assert!(selector.selected.is_empty());
+        assert_eq!(selector.selected_index(), 0, "an empty selector reports 0");
+        assert_eq!(selector.chosen_index(), None);
         Ok(())
     }
 }

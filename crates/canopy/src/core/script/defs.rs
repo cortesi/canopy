@@ -655,6 +655,7 @@ fn register_snapshot_info(builder: &mut module::Builder) {
             Field::new("value", Type::String.optional()),
             Field::new("selected", Type::Boolean.optional()),
             Field::new("selected_keys", Type::Any.array()),
+            Field::new("checked_keys", Type::Any.array()),
             Field::new(
                 "activation_status",
                 Type::named("SemanticActionStatus").optional(),

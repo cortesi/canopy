@@ -2282,8 +2282,11 @@ Each stage also updates the docs it touches.
 
 ### Stage 6: Widgets and styling
 
-- [ ] C30: keep List checks, return Selector to single choice, standardize the
+- [x] C30: keep List checks, return Selector to single choice, standardize the
   check vocabulary, and split `checked_keys` from `selected_keys`.
+  - Selector's choice is `choose`/`clear_choice`/`chosen`, painted as
+    `selector/chosen`; stylegym effects became one choice with a "None" option.
+    fh needed no change.
 - [ ] C31:
   - Apply the styling rule, and remove the double prefixes.
   - StatusBar pushes its layer, and KeyHint resolves keys through bindings.

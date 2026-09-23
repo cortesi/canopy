@@ -28,8 +28,10 @@ pub struct WidgetSemantics {
     pub value: Option<String>,
     /// Whether this widget is selected, when applicable.
     pub selected: Option<bool>,
-    /// Stable application keys selected by a collection.
+    /// Stable application keys under a collection's selection cursor.
     pub selected_keys: Vec<ArgValue>,
+    /// Stable application keys a collection has checked, in display order.
+    pub checked_keys: Vec<ArgValue>,
     /// Availability of the widget's activation command.
     pub activation_status: Option<CommandStatus>,
 }

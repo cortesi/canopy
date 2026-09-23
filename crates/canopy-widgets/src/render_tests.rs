@@ -69,7 +69,7 @@ mod tests {
     }
 
     #[test]
-    fn selector_scrolls_labels_and_toggles_the_visible_row() -> Result<()> {
+    fn selector_scrolls_labels_and_chooses_the_visible_row() -> Result<()> {
         let items = ["Alpha-long", "Bravo-long", "Charlie-long", "Delta-long"]
             .map(String::from)
             .to_vec();
@@ -93,7 +93,7 @@ mod tests {
         harness.mouse(click_at(Point { x: 1, y: 1 }))?;
         harness.with_root_widget_context(|_root: &mut SnapshotRoot<Selector<String>>, ctx| {
             ctx.with_unique_descendant::<Selector<String>, _>(|selector, _| {
-                assert_eq!(selector.selected_items(), [&"Charlie-long".to_string()]);
+                assert_eq!(selector.chosen(), Some(&"Charlie-long".to_string()));
                 Ok(())
             })
         })?;
@@ -115,23 +115,23 @@ mod tests {
             })
         })?;
         harness.render()?;
-        assert!(harness.tbuf().contains_text("[ ] Fifth"));
+        assert!(harness.tbuf().contains_text("( ) Fifth"));
         harness.with_root_widget_context(|_: &mut SnapshotRoot<Selector<String>>, ctx| {
             ctx.with_unique_descendant::<Selector<String>, _>(|selector, ctx| {
-                selector.toggle(ctx)?;
+                selector.choose(ctx)?;
                 selector.select_by(ctx, -3)
             })
         })?;
         harness.render()?;
-        assert!(harness.tbuf().contains_text("[ ] Second"));
+        assert!(harness.tbuf().contains_text("( ) Second"));
         harness.with_root_widget_context(|_: &mut SnapshotRoot<Selector<String>>, ctx| {
             ctx.with_unique_descendant::<Selector<String>, _>(|selector, ctx| {
-                assert_eq!(selector.selected_items(), [&"Fifth".to_string()]);
+                assert_eq!(selector.chosen(), Some(&"Fifth".to_string()));
                 selector.select_first(ctx)
             })
         })?;
         harness.render()?;
-        assert!(harness.tbuf().contains_text("[ ] First"));
+        assert!(harness.tbuf().contains_text("( ) First"));
         Ok(())
     }
 

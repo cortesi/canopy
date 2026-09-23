@@ -228,8 +228,8 @@ fn italic_effect_excludes_styles_frame() -> Result<()> {
 
     harness.with_root_widget_context(|stylegym: &mut Stylegym, ctx| {
         ctx.with_unique_descendant::<Selector<EffectOption>, _>(|selector, selector_ctx| {
-            selector.select_by(selector_ctx, 6)?;
-            selector.toggle(selector_ctx)
+            selector.select_by(selector_ctx, 7)?;
+            selector.choose(selector_ctx)
         })?;
         stylegym.apply_effects(ctx)
     })?;
@@ -270,8 +270,8 @@ fn sample_and_frame_style(harness: &Harness) -> (ResolvedStyle, ResolvedStyle) {
 fn select_invert_and_apply(harness: &mut Harness) -> Result<()> {
     harness.with_root_widget_context(|stylegym: &mut Stylegym, ctx| {
         ctx.with_unique_descendant::<Selector<EffectOption>, _>(|selector, selector_ctx| {
-            selector.select_by(selector_ctx, 3)?;
-            selector.toggle(selector_ctx)
+            selector.select_by(selector_ctx, 4)?;
+            selector.choose(selector_ctx)
         })?;
         stylegym.apply_effects(ctx)
     })?;
@@ -353,7 +353,7 @@ fn focusing_an_offscreen_control_scrolls_the_widgets_page() -> Result<()> {
     let mut harness = setup_harness(Size::new(80, 12))?;
     show_tab(&mut harness, WIDGETS)?;
     assert_on_screen(&harness, "Pressed");
-    assert_off_screen(&harness, "Also checked");
+    assert_off_screen(&harness, "Also offered");
 
     harness.with_root_widget_context(|_stylegym: &mut Stylegym, ctx| {
         let selector = ctx
@@ -362,7 +362,7 @@ fn focusing_an_offscreen_control_scrolls_the_widgets_page() -> Result<()> {
         ctx.set_focus(selector.into()).map(|_| ())
     })?;
     harness.render()?;
-    assert_on_screen(&harness, "Also checked");
+    assert_on_screen(&harness, "Also offered");
     assert_off_screen(&harness, "Pressed");
     Ok(())
 }

@@ -95,18 +95,10 @@ canopy.keymap({
     path = "selector",
     phase = "before_widget",
     {
-        key = "Space",
-        description = "Toggle effect",
+        key = { "Space", "Enter" },
+        description = "Choose effect",
         action = function()
-            selector.toggle()
-            stylegym.apply_effects()
-        end,
-    },
-    {
-        key = "Enter",
-        description = "Toggle effect",
-        action = function()
-            selector.toggle()
+            selector.choose()
             stylegym.apply_effects()
         end,
     },
@@ -145,9 +137,9 @@ const PALETTE: &[(&str, &[&str])] = &[
     (
         "Selection",
         &[
-            "selector/selected",
+            "selector/chosen",
             "selector/focus",
-            "selector/focus/selected",
+            "selector/focus/chosen",
             "dropdown/selected",
             "dropdown/highlight",
         ],
@@ -237,8 +229,8 @@ impl Label for ThemeOption {
 pub(crate) struct EffectOption {
     /// Effect display name.
     pub name: &'static str,
-    /// Style effect applied when this option is selected.
-    pub effect: Effect,
+    /// Style effect applied when this option is chosen, if any.
+    pub effect: Option<Effect>,
 }
 
 impl Label for EffectOption {
@@ -277,32 +269,36 @@ fn available_themes() -> Vec<ThemeOption> {
 fn available_effects() -> Vec<EffectOption> {
     vec![
         EffectOption {
+            name: "None",
+            effect: None,
+        },
+        EffectOption {
             name: "Dim",
-            effect: effects::brightness(0.5),
+            effect: Some(effects::brightness(0.5)),
         },
         EffectOption {
             name: "Brighten",
-            effect: effects::brightness(1.5),
+            effect: Some(effects::brightness(1.5)),
         },
         EffectOption {
             name: "Grayscale",
-            effect: effects::saturation(0.0),
+            effect: Some(effects::saturation(0.0)),
         },
         EffectOption {
             name: "Invert",
-            effect: effects::invert_rgb(),
+            effect: Some(effects::invert_rgb()),
         },
         EffectOption {
             name: "Hue Shift",
-            effect: effects::hue_shift(180.0),
+            effect: Some(effects::hue_shift(180.0)),
         },
         EffectOption {
             name: "Bold",
-            effect: effects::bold(),
+            effect: Some(effects::bold()),
         },
         EffectOption {
             name: "Italic",
-            effect: effects::italic(),
+            effect: Some(effects::italic()),
         },
     ]
 }
@@ -804,13 +800,8 @@ fn add_widget_samples(c: &mut dyn Context, parent: NodeId) -> Result<()> {
     }
 
     let frame = c.add_child(parent, Frame::new().with_title("Selector"))?;
-    let items = ["Checked", "Also checked", "Unchecked"].map(String::from);
-    let selector = c.add_child(frame, Selector::new(items.to_vec()))?;
-    c.with_widget_mut(selector, |selector: &mut Selector<String>, ctx| {
-        selector.toggle(ctx)?;
-        selector.select_by(ctx, 1)?;
-        selector.toggle(ctx)
-    })?;
+    let items = ["Chosen", "Also offered", "Unchosen"].map(String::from);
+    c.add_child(frame, Selector::new(items.to_vec()).with_chosen(0))?;
     c.set_layout_override(
         frame.into(),
         Layout::column()
@@ -989,23 +980,19 @@ impl Stylegym {
         Ok(())
     }
 
-    /// Apply the selected effects from the selector to the style pages.
+    /// Apply the chosen effect from the selector to the style pages.
     #[command]
     pub(crate) fn apply_effects(&self, c: &mut dyn Context) -> Result<()> {
-        let selected = match c.unique_descendant::<Selector<EffectOption>>(c.node_id())? {
+        let chosen = match c.unique_descendant::<Selector<EffectOption>>(c.node_id())? {
             Some(selector) => c.with_widget(selector, |selector: &Selector<EffectOption>| {
-                Ok(selector
-                    .selected_items()
-                    .into_iter()
-                    .map(|option| option.effect.clone())
-                    .collect::<Vec<_>>())
+                Ok(selector.chosen().and_then(|option| option.effect.clone()))
             })?,
-            None => Vec::new(),
+            None => None,
         };
 
         self.with_tabs(c, |_tabs, ctx| {
             ctx.clear_effects(ctx.node_id())?;
-            for effect in selected {
+            if let Some(effect) = chosen {
                 ctx.push_effect(ctx.node_id(), effect)?;
             }
             if self.modal_visible {
@@ -1051,7 +1038,10 @@ impl Widget for Stylegym {
         // Create effects selector with its own frame
         let effects_frame_id =
             c.add_slot::<EffectsFrameSlot>(left_frame_id, Frame::new().with_title("Effects"))?;
-        c.add_slot::<EffectsSelectorSlot>(effects_frame_id, Selector::new(available_effects()))?;
+        c.add_slot::<EffectsSelectorSlot>(
+            effects_frame_id,
+            Selector::new(available_effects()).with_chosen(0),
+        )?;
         c.set_layout_override(
             effects_frame_id.into(),
             Layout::fill().padding(Edges::all(1)).into(),

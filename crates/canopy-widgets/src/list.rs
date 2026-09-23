@@ -799,24 +799,21 @@ impl<W: Selectable> List<W, AutoKey> {
 
 impl<W: Selectable + 'static, K: Eq + Hash + Clone + ToArgValue + 'static> Widget for List<W, K> {
     fn semantics(&self, ctx: &dyn ViewContext) -> Result<WidgetSemantics> {
-        // A checked list reports its checks as the collection's selection.
-        let selected_keys = if self.checks.is_some() {
-            self.checked_keys()
-                .into_iter()
-                .cloned()
-                .map(ToArgValue::to_arg_value)
-                .collect()
-        } else {
-            self.selected
-                .iter()
-                .cloned()
-                .map(ToArgValue::to_arg_value)
-                .collect()
-        };
         Ok(WidgetSemantics {
             role: Some("list".into()),
             label: self.label.clone(),
-            selected_keys,
+            selected_keys: self
+                .selected
+                .iter()
+                .cloned()
+                .map(ToArgValue::to_arg_value)
+                .collect(),
+            checked_keys: self
+                .checked_keys()
+                .into_iter()
+                .cloned()
+                .map(ToArgValue::to_arg_value)
+                .collect(),
             activation_status: self.command_status(ctx)?,
             ..WidgetSemantics::default()
         })
@@ -1148,11 +1145,19 @@ mod tests {
                 assert!(list.is_checked(&20));
                 assert_eq!(list.checked_len(), 1);
                 assert_eq!(list.checked_keys(), vec![&20]);
+                list.select_key(ctx, &10)?;
+                let semantics = list.semantics(ctx)?;
                 assert_eq!(
-                    list.semantics(ctx)?.selected_keys,
+                    semantics.checked_keys,
                     vec![20_i64.to_arg_value()],
                     "semantics report the checks"
                 );
+                assert_eq!(
+                    semantics.selected_keys,
+                    vec![10_i64.to_arg_value()],
+                    "semantics report the cursor apart from the checks"
+                );
+                list.select_key(ctx, &20)?;
                 assert!(!list.toggle(ctx)?, "a second toggle clears it");
                 assert!(!list.is_checked(&20));
                 assert!(list.toggle(ctx)?);

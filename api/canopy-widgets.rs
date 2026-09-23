@@ -1173,13 +1173,12 @@ pub mod canopy_widgets {
         pub track_horizontal: char,
     }
 
-    /// A multi-select widget with checkbox-style items.
+    /// A single-choice widget that shows every item.
     ///
-    /// Items can be toggled on/off independently. The selected indices are tracked
-    /// in the order they were selected, allowing for ordered selection if needed.
-    /// Navigation scrolls the focused row into view after layout. A host that
-    /// changes its item set calls [`Selector::show`], which reinstalls both the
-    /// items and the check state.
+    /// The selection is the cursor that navigation moves; [`Selector::choose`]
+    /// makes the selected item the choice. Navigation scrolls the selected row
+    /// into view after layout. A host that changes its item set calls
+    /// [`Selector::show`], which reinstalls both the items and the choice.
     pub struct Selector<T>
     where
         T: Label, {}
@@ -2623,56 +2622,59 @@ pub mod canopy_widgets {
         T: 'static + Label,
     {
         #[must_use]
-        /// Replace the checkbox glyphs, unchecked first.
-        pub fn with_glyphs(self, unchecked: &'static str, checked: &'static str) -> Self {}
+        /// Replace the choice glyphs, unchosen first.
+        pub fn with_glyphs(self, unchosen: &'static str, chosen: &'static str) -> Self {}
 
         #[must_use]
-        /// Return the checked indices, in selection order.
-        pub fn checked_indices(&self) -> &[usize] {}
+        /// Return the chosen index.
+        pub fn chosen_index(&self) -> Option<usize> {}
 
         #[must_use]
-        /// Return the focused item index.
-        pub fn focused_index(&self) -> usize {}
+        /// Return the chosen item.
+        pub fn chosen(&self) -> Option<&T> {}
+
+        #[must_use]
+        /// Return the selected item index, or 0 for an empty selector.
+        pub fn selected_index(&self) -> usize {}
 
         #[must_use]
         /// Set the semantic label.
         pub fn with_label(self, label: impl Into<String>) -> Self {}
 
-        /// Clear all selections.
-        pub fn clear(&mut self, _c: &mut dyn Context) -> Result<()> {}
+        #[must_use]
+        /// Start with `index` chosen and selected; an out-of-range index is
+        /// ignored.
+        pub fn with_chosen(self, index: usize) -> Self {}
 
-        /// Create a new selector with the given items.
+        /// Clear the choice.
+        pub fn clear_choice(&mut self, _c: &mut dyn Context) -> Result<()> {}
+
+        /// Create a new selector with the given items and no choice.
         pub fn new(items: Vec<T>) -> Self {}
 
-        /// Get references to the selected items in selection order.
-        pub fn selected_items(&self) -> Vec<&T> {}
+        /// Make the selected item the choice.
+        pub fn choose(&mut self, _c: &mut dyn Context) -> Result<()> {}
 
-        /// Move focus by a signed offset.
+        /// Move the selection by a signed offset.
         pub fn select_by(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {}
 
-        /// Move focus to the first item.
+        /// Replace the items and the chosen index, in place.
+        ///
+        /// A choice outside the new items is dropped. The selection moves to the
+        /// choice, or to the first item without one.
+        pub fn show(&mut self, items: Vec<T>, chosen: Option<usize>) {}
+
+        /// Select the first item.
         pub fn select_first(&mut self, c: &mut dyn Context) -> Result<()> {}
 
-        /// Move focus to the last item.
+        /// Select the last item.
         pub fn select_last(&mut self, c: &mut dyn Context) -> Result<()> {}
 
-        /// Replace the items and the checked indices, in place.
-        ///
-        /// Indices outside the new items are dropped. Focus returns to the first
-        /// item, matching a fresh list.
-        pub fn show(&mut self, items: Vec<T>, checked: &[usize]) {}
-
-        /// Select all items.
-        pub fn select_all(&mut self, _c: &mut dyn Context) -> Result<()> {}
-
-        /// Toggle selection of the focused item.
-        pub fn toggle(&mut self, _c: &mut dyn Context) -> Result<()> {}
+        /// Build a positional call with typed user arguments.
+        pub fn call_choose() -> canopy::commands::CommandCall {}
 
         /// Build a positional call with typed user arguments.
-        pub fn call_clear() -> canopy::commands::CommandCall {}
-
-        /// Build a positional call with typed user arguments.
-        pub fn call_select_all() -> canopy::commands::CommandCall {}
+        pub fn call_clear_choice() -> canopy::commands::CommandCall {}
 
         /// Build a positional call with typed user arguments.
         pub fn call_select_by(delta: i32) -> canopy::commands::CommandCall {}
@@ -2683,14 +2685,11 @@ pub mod canopy_widgets {
         /// Build a positional call with typed user arguments.
         pub fn call_select_last() -> canopy::commands::CommandCall {}
 
-        /// Build a positional call with typed user arguments.
-        pub fn call_toggle() -> canopy::commands::CommandCall {}
+        /// Return the command spec for this command.
+        pub fn spec_choose() -> &'static canopy::commands::CommandSpec {}
 
         /// Return the command spec for this command.
-        pub fn spec_clear() -> &'static canopy::commands::CommandSpec {}
-
-        /// Return the command spec for this command.
-        pub fn spec_select_all() -> &'static canopy::commands::CommandSpec {}
+        pub fn spec_clear_choice() -> &'static canopy::commands::CommandSpec {}
 
         /// Return the command spec for this command.
         pub fn spec_select_by() -> &'static canopy::commands::CommandSpec {}
@@ -2700,9 +2699,6 @@ pub mod canopy_widgets {
 
         /// Return the command spec for this command.
         pub fn spec_select_last() -> &'static canopy::commands::CommandSpec {}
-
-        /// Return the command spec for this command.
-        pub fn spec_toggle() -> &'static canopy::commands::CommandSpec {}
     }
 
     impl<T> Widget for Selector<T>
