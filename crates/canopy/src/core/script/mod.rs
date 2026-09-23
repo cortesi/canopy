@@ -5,7 +5,7 @@
 
 use std::{
     cell::{RefCell, RefMut},
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{BTreeSet, HashMap},
     fmt,
     future::{Future, poll_fn},
     mem,
@@ -93,25 +93,6 @@ pub(crate) fn block_on<T>(future: impl Future<Output = Result<T>>) -> Result<T> 
 
 /// Script identifier.
 pub(crate) type ScriptId = u64;
-
-/// One-shot fault-injection checkpoints for finalization tests.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum FinalizeStep {
-    /// Audited surfaces have been built but not staged.
-    SurfacePrepared,
-    /// Module declaration conformance has succeeded.
-    DeclarationsValidated,
-    /// Default binding scripts have compiled.
-    DefaultBindingsCompiled,
-    /// Startup scripts have compiled.
-    StartupScriptsCompiled,
-    /// The retained runtime has been built.
-    RuntimeBuilt,
-    /// A pending script is about to be loaded by sorted index.
-    PendingScript(usize),
-    /// All roots are loaded and publication is about to commit.
-    BeforePublish,
-}
 
 /// Stable handle for a stored Luau closure.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -417,8 +398,6 @@ struct LuauState {
     active_eval: bool,
     /// Deferred hooks to execute after the first live render.
     on_start_hooks: Vec<LuauFunctionId>,
-    /// Optional one-shot finalization failure used by deterministic tests.
-    finalize_failure: Option<FinalizeStep>,
 }
 
 impl LuauState {
@@ -627,25 +606,6 @@ impl LuauHost {
         self.state.borrow().finalized
     }
 
-    /// Configure a one-shot finalization failure.
-    #[cfg(test)]
-    pub(crate) fn inject_finalize_failure(&self, step: FinalizeStep) {
-        self.state.borrow_mut().finalize_failure = Some(step);
-    }
-
-    /// Fail once when the configured finalization checkpoint is reached.
-    pub(crate) fn finalize_checkpoint(&self, step: FinalizeStep) -> Result<()> {
-        let mut state = self.state.borrow_mut();
-        if state.finalize_failure == Some(step) {
-            state.finalize_failure = None;
-            Err(error::Error::script(format!(
-                "fault injected at finalization step {step:?}"
-            )))
-        } else {
-            Ok(())
-        }
-    }
-
     /// Return the finalized script surface.
     pub(crate) fn surface(&self) -> Option<Surface> {
         self.state.borrow().surface.clone()
@@ -787,7 +747,6 @@ impl LuauHost {
             .map_err(|err| {
                 error::Error::script(format!("building startup script checker failed: {err}"))
             })?;
-        self.finalize_checkpoint(FinalizeStep::SurfacePrepared)?;
         let mut state = self.state.borrow_mut();
         state.surface = Some(surface);
         state.startup_surface = Some(startup_surface);
@@ -811,7 +770,6 @@ impl LuauHost {
             &VmConfig::untrusted(Ambient::production(0), default_vm_limits()),
         )
         .map_err(|err| error::Error::script(format!("building script VM failed: {err}")))?;
-        self.finalize_checkpoint(FinalizeStep::RuntimeBuilt)?;
 
         let pending = self
             .state
@@ -824,8 +782,7 @@ impl LuauHost {
         let mut pending = pending;
         pending.sort_by_key(|(id, _, _)| *id);
         let mut loaded = Vec::with_capacity(pending.len());
-        for (index, (id, source, prepared)) in pending.into_iter().enumerate() {
-            self.finalize_checkpoint(FinalizeStep::PendingScript(index))?;
+        for (id, source, prepared) in pending {
             let prepared = match prepared {
                 Some(prepared) => prepared,
                 None => surface
@@ -837,7 +794,6 @@ impl LuauHost {
             })?;
             loaded.push((id, prepared, root));
         }
-        self.finalize_checkpoint(FinalizeStep::BeforePublish)?;
         *self.runtime.borrow_mut() = Some(runtime);
         {
             let mut state = self.state.borrow_mut();
@@ -848,31 +804,6 @@ impl LuauHost {
             state.publish();
         }
         Ok(())
-    }
-
-    /// Discard a failed finalization attempt and scripts compiled only for that
-    /// attempt.
-    pub(crate) fn abort_finalize(&self, existing_scripts: &HashSet<ScriptId>) {
-        *self.runtime.borrow_mut() = None;
-        let mut state = self.state.borrow_mut();
-        state
-            .scripts
-            .scripts
-            .retain(|id, _| existing_scripts.contains(id));
-        state.surface = None;
-        state.startup_surface = None;
-        state.finalized = false;
-    }
-
-    /// Return the script IDs that existed before a finalization attempt.
-    pub(crate) fn script_ids(&self) -> HashSet<ScriptId> {
-        self.state
-            .borrow()
-            .scripts
-            .scripts
-            .keys()
-            .copied()
-            .collect()
     }
 
     /// Compile a script and return its id.

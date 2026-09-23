@@ -181,6 +181,12 @@ pub fn theme(p: &Palette) -> StyleMap {
             "/status_bar",
             StyleBuilder::new().fg(p.muted_fg).bg(p.panel_bg),
         )
+        // A notice reports a failure the application survived, so it takes
+        // the error colour on the chrome ground of the row it covers.
+        .style(
+            "/root/notice",
+            StyleBuilder::new().fg(p.red).bg(p.panel_bg),
+        )
         .style(
             "/status_bar/key",
             StyleBuilder::new()

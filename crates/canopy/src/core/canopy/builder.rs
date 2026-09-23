@@ -199,7 +199,7 @@ mod tests {
         let mut canopy = CanopyBuilder::new()
             .assemble(move |canopy| {
                 assert!(canopy.script.host.is_finalized());
-                assert_eq!(canopy.input_mode(), "last");
+                assert_eq!(canopy.mode(), "last");
                 assert!(canopy.snapshot().is_none());
                 assemble_first.borrow_mut().push("assemble first");
                 Ok(())
@@ -219,7 +219,7 @@ mod tests {
             })
             .bindings(
                 "last",
-                "canopy.assert(canopy.input_mode() == \"config\"); canopy.set_mode(\"last\")",
+                "canopy.assert(canopy.mode() == \"config\"); canopy.set_mode(\"last\")",
             )
             .assemble(move |_| {
                 assemble_second.borrow_mut().push("assemble second");
@@ -243,7 +243,7 @@ mod tests {
         assert_eq!(journal[2].origin.to_string(), "bindings:last");
         canopy.set_root_size(Size::new(10, 3))?;
         canopy.turn(Work::Prepare)?;
-        assert_eq!(canopy.input_mode(), "startup");
+        assert_eq!(canopy.mode(), "startup");
         Ok(())
     }
 
@@ -352,11 +352,11 @@ mod tests {
         let mut canopy = CanopyBuilder::new()
             .project_script_root(directory.path().to_owned(), ScriptTrust::TrustedLocal)
             .build()?;
-        assert_eq!(canopy.input_mode(), "");
+        assert_eq!(canopy.mode(), "");
         assert!(canopy.snapshot().is_none());
         canopy.set_root_size(Size::new(10, 3))?;
         canopy.turn(Work::Prepare)?;
-        assert_eq!(canopy.input_mode(), "trusted");
+        assert_eq!(canopy.mode(), "trusted");
         Ok(())
     }
 }

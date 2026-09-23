@@ -214,25 +214,25 @@ impl Widget for Intervals {
         Ok(())
     }
 
-    fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {
-        let item_ids = self
-            .with_list(c, |list, _ctx| {
-                let mut ids = Vec::with_capacity(list.len());
-                for i in 0..list.len() {
-                    if let Some(id) = list.item(i) {
-                        ids.push(id);
-                    }
+    fn poll(&mut self, c: &mut dyn Context) -> Result<Option<Duration>> {
+        let Ok(item_ids) = self.with_list(c, |list, _ctx| {
+            let mut ids = Vec::with_capacity(list.len());
+            for i in 0..list.len() {
+                if let Some(id) = list.item(i) {
+                    ids.push(id);
                 }
-                Ok(ids)
-            })
-            .ok()?;
+            }
+            Ok(ids)
+        }) else {
+            return Ok(None);
+        };
 
         for item_id in item_ids {
             c.with_widget_mut(item_id, |item: &mut CounterItem, ctx| item.tick(ctx))
                 .ok();
         }
 
-        Some(Duration::from_secs(1))
+        Ok(Some(Duration::from_secs(1)))
     }
 }
 

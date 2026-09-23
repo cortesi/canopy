@@ -21,6 +21,17 @@ fn command(id: &'static str) -> CommandCall {
     }
 }
 
+/// Install one framework command binding.
+fn framework(
+    map: &mut InputMap,
+    input: impl Into<InputSpec>,
+    options: BindingOptions,
+    command: CommandCall,
+) -> Result<BindingId> {
+    map.bind(input.into(), options, BindingTarget::Command(command))
+        .map(|(id, _)| id)
+}
+
 fn bind_framework(
     map: &mut InputMap,
     group: FrameworkBindingGroup,
@@ -29,7 +40,8 @@ fn bind_framework(
     description: &str,
     command: CommandCall,
 ) -> Result<BindingId> {
-    map.bind_framework(
+    framework(
+        map,
         input,
         BindingOptions {
             path: Some(path.parse()?),
@@ -50,7 +62,7 @@ fn bind(
     description: &str,
     target: u64,
 ) -> Result<BindingId> {
-    map.replace_application_binding(
+    map.bind(
         InputSpec::Key(key.into()),
         BindingOptions {
             tier,
@@ -210,23 +222,22 @@ fn framework_registration_is_idempotent_and_rejects_conflicts() -> Result<()> {
 }
 
 #[test]
-fn only_framework_registration_takes_the_framework_tier() -> Result<()> {
+fn the_framework_tier_takes_no_script_and_scripts_take_no_framework_tier() -> Result<()> {
     let mut map = InputMap::new();
     let mut options = options("/root/help/**/", BindingPhase::AfterWidget);
-    assert!(
-        map.bind_framework('j', options.clone(), command("binding_list::scroll_down"))
-            .is_err(),
-        "a framework binding needs a framework tier"
-    );
     options.tier = BindingTier::Framework(HELP);
     assert!(
-        map.replace_application_binding(
+        map.bind(
             InputSpec::Key('j'.into()),
-            options,
+            options.clone(),
             BindingTarget::Script(script(1)),
         )
         .is_err(),
-        "an application binding cannot take the framework tier"
+        "nothing releases a framework script target"
+    );
+    assert!(
+        validate_application_binding(&options, None).is_err(),
+        "script validation rejects the framework tier"
     );
     assert!(map.bindings().is_empty());
     Ok(())
@@ -297,7 +308,7 @@ fn a_transient_mode_hides_older_modes_and_the_default_tier() -> Result<()> {
     map.push_transient_mode("prefix");
     assert_ne!(map.mode_generation(), generation);
     assert_eq!(map.transient_mode(), Some("prefix"));
-    assert_eq!(map.current_mode(), "prefix");
+    assert_eq!(map.mode(), "prefix");
     assert_eq!(
         target(&map, "/root/editor", 'c'),
         Some(BindingTarget::Script(script(3)))
@@ -515,7 +526,7 @@ fn explicit_phase_is_independent_of_selector() -> Result<()> {
     for path in ["editor", "editor/"] {
         for phase in [BindingPhase::BeforeWidget, BindingPhase::AfterWidget] {
             map.clear_application();
-            let (id, _) = map.replace_application_binding(
+            let (id, _) = map.bind(
                 input,
                 options(path, phase),
                 BindingTarget::Script(script(1)),
@@ -562,7 +573,7 @@ fn a_mouse_binding_takes_either_phase() -> Result<()> {
     let input = InputSpec::Mouse(Mouse::parse_spec("ScrollUp").unwrap());
     for phase in [BindingPhase::BeforeWidget, BindingPhase::AfterWidget] {
         map.clear_application();
-        map.replace_application_binding(
+        map.bind(
             input,
             options("editor/", phase),
             BindingTarget::Script(script(1)),
@@ -576,7 +587,8 @@ fn a_mouse_binding_takes_either_phase() -> Result<()> {
     // A framework group takes the early phase on the same terms.
     let mut options = options("/root/dialog/**/", BindingPhase::BeforeWidget);
     options.tier = BindingTier::Framework(HELP);
-    let id = map.bind_framework(
+    let id = framework(
+        &mut map,
         Mouse::parse_spec("LeftDown").unwrap(),
         options,
         command("button::press"),
@@ -594,7 +606,7 @@ fn application_command_targets_replace_and_remove_like_callbacks() -> Result<()>
     let mut map = InputMap::new();
     let script_id = bind(&mut map, BindingTier::Default, 'x', "", "Script", 1)?;
     let action = BindingTarget::Command(command("editor::undo").with_target(CommandTarget::Focus));
-    let (command_id, removed) = map.replace_application_binding(
+    let (command_id, removed) = map.bind(
         InputSpec::Key('x'.into()),
         options("", BindingPhase::AfterWidget),
         action.clone(),
@@ -604,12 +616,12 @@ fn application_command_targets_replace_and_remove_like_callbacks() -> Result<()>
     assert_eq!(map.unbind(command_id)?, Some(action.clone()));
     assert_eq!(map.unbind(command_id)?, None);
 
-    let (command_id, _) = map.replace_application_binding(
+    let (command_id, _) = map.bind(
         InputSpec::Key('x'.into()),
         options("", BindingPhase::AfterWidget),
         action.clone(),
     )?;
-    let (_, removed) = map.replace_application_binding(
+    let (_, removed) = map.bind(
         InputSpec::Key('x'.into()),
         options("", BindingPhase::AfterWidget),
         BindingTarget::Script(script(2)),
@@ -624,7 +636,7 @@ fn application_snapshot_and_clear_include_commands() -> Result<()> {
     let action = BindingTarget::Command(
         command("editor::undo").with_target(CommandTarget::Exact(testing_node_id())),
     );
-    let (command_id, _) = map.replace_application_binding(
+    let (command_id, _) = map.bind(
         InputSpec::Key('x'.into()),
         options("", BindingPhase::BeforeWidget),
         action.clone(),
@@ -658,9 +670,9 @@ fn framework_binding_options_preserve_explicit_phase() -> Result<()> {
     options.tier = BindingTier::Framework(HELP);
     let input = InputSpec::Key('j'.into());
     let action = command("binding_list::scroll_down").with_target(CommandTarget::Focus);
-    let id = map.bind_framework(input, options.clone(), action.clone())?;
+    let id = framework(&mut map, input, options.clone(), action.clone())?;
     assert_eq!(
-        map.bind_framework(input, options.clone(), action.clone())?,
+        framework(&mut map, input, options.clone(), action.clone())?,
         id
     );
     map.set_modal_bindings(Some(ModalBindings::Framework(HELP)));
@@ -670,7 +682,7 @@ fn framework_binding_options_preserve_explicit_phase() -> Result<()> {
     assert_eq!(resolved.phase, BindingPhase::AfterWidget);
     assert_eq!(resolved.target, BindingTarget::Command(action.clone()));
     options.phase = Some(BindingPhase::BeforeWidget);
-    assert!(map.bind_framework(input, options, action).is_err());
+    assert!(framework(&mut map, input, options, action).is_err());
     assert_eq!(map.binding(id).unwrap().phase, BindingPhase::AfterWidget);
     Ok(())
 }
@@ -687,7 +699,7 @@ fn bind_action(
     name: &str,
     description: &str,
 ) -> Result<BindingId> {
-    map.replace_application_binding(
+    map.bind(
         InputSpec::Key(key.into()),
         BindingOptions {
             tier,
@@ -733,7 +745,7 @@ fn widget_actions_validate_names_phases_and_inputs() -> Result<()> {
         phase: None,
     };
     assert!(
-        map.replace_application_binding(
+        map.bind(
             InputSpec::Key('x'.into()),
             options.clone(),
             BindingTarget::WidgetAction(WidgetActionName::new("test.other")?),
@@ -744,7 +756,7 @@ fn widget_actions_validate_names_phases_and_inputs() -> Result<()> {
     let mut late = options.clone();
     late.phase = Some(BindingPhase::AfterWidget);
     assert!(
-        map.replace_application_binding(
+        map.bind(
             InputSpec::Key('x'.into()),
             late,
             BindingTarget::WidgetAction(WidgetActionName::new("test.clear")?),
@@ -754,7 +766,7 @@ fn widget_actions_validate_names_phases_and_inputs() -> Result<()> {
     );
     let mut early = options.clone();
     early.phase = Some(BindingPhase::BeforeWidget);
-    let (id, _) = map.replace_application_binding(
+    let (id, _) = map.bind(
         InputSpec::Key('x'.into()),
         early,
         BindingTarget::WidgetAction(WidgetActionName::new("test.clear")?),
@@ -765,7 +777,7 @@ fn widget_actions_validate_names_phases_and_inputs() -> Result<()> {
         "an explicit before_widget matches the phase every action takes"
     );
     map.unbind(id)?;
-    let (id, _) = map.replace_application_binding(
+    let (id, _) = map.bind(
         InputSpec::Key('x'.into()),
         options.clone(),
         BindingTarget::WidgetAction(WidgetActionName::new("test.clear")?),
@@ -777,7 +789,7 @@ fn widget_actions_validate_names_phases_and_inputs() -> Result<()> {
     );
     map.unbind(id)?;
     assert!(
-        map.replace_application_binding(
+        map.bind(
             InputSpec::Mouse(Mouse::parse_spec("LeftDown")?),
             options,
             BindingTarget::WidgetAction(WidgetActionName::new("test.clear")?),

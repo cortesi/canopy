@@ -666,7 +666,7 @@ mod tests {
             .configure(move |setup| {
                 setup.register_fixture(Fixture::new("seed", "Seed live state", move |canopy| {
                     observed.fetch_add(1, Ordering::Relaxed);
-                    canopy.set_input_mode("seed");
+                    canopy.set_mode("seed");
                     Ok(())
                 }))
             })
@@ -699,8 +699,8 @@ mod tests {
                         viewport: bootstrap.metadata.viewport.context("live viewport")?,
                         fixture: Some("seed".into()), reset: ResetPolicy::Fixture,
                         steps: [
-                            "canopy.assert(canopy.input_mode() == \"seed\"); canopy.set_mode(\"first\")",
-                            "canopy.assert(canopy.input_mode() == \"first\"); canopy.set_mode(\"second\")",
+                            "canopy.assert(canopy.mode() == \"seed\"); canopy.set_mode(\"first\")",
+                            "canopy.assert(canopy.mode() == \"first\"); canopy.set_mode(\"second\")",
                         ].into_iter().map(|source| ReplayStep { source: source.into(), expect: ReplayExpectation { success: true } }).collect(),
                     };
                     let args = ReplayArgs { socket: Some(socket), ..ReplayArgs::default() };
@@ -723,7 +723,7 @@ mod tests {
         listener.stop()?;
         result.expect("live replay client did not panic")?;
         assert_eq!(applications.load(Ordering::Relaxed), 1);
-        assert_eq!(canopy.input_mode(), "second");
+        assert_eq!(canopy.mode(), "second");
         Ok(())
     }
 

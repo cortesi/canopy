@@ -568,6 +568,36 @@ pub(super) fn screen_text(canopy: &mut Canopy) -> Result<String> {
     Ok(buffer.screen_text())
 }
 
+/// Convert the retained notices to scripting records, oldest first.
+pub(super) fn notices_to_arg(canopy: &Canopy) -> ArgValue {
+    ArgValue::Array(
+        canopy
+            .notices()
+            .iter()
+            .map(|notice| {
+                let mut record = BTreeMap::from([
+                    (
+                        "message".to_string(),
+                        ArgValue::String(notice.message.clone()),
+                    ),
+                    (
+                        "kind".to_string(),
+                        ArgValue::String(notice.kind.as_str().to_string()),
+                    ),
+                    (
+                        "source".to_string(),
+                        ArgValue::String(notice.source.label().to_string()),
+                    ),
+                ]);
+                if let Some(node) = notice.node {
+                    record.insert("node".to_string(), ArgValue::Node(node));
+                }
+                ArgValue::Map(record)
+            })
+            .collect(),
+    )
+}
+
 /// Convert the most recent route trace to scripting records.
 pub(super) fn route_trace_to_arg(canopy: &Canopy) -> ArgValue {
     ArgValue::Array(

@@ -114,7 +114,7 @@ pub mod canopy_examples {
 
             fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {}
 
-            fn poll(&mut self, ctx: &mut dyn Context) -> Option<Duration> {}
+            fn poll(&mut self, ctx: &mut dyn Context) -> Result<Option<Duration>> {}
         }
     }
 
@@ -180,7 +180,7 @@ pub mod canopy_examples {
 
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
 
-            fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {}
+            fn poll(&mut self, c: &mut dyn Context) -> Result<Option<Duration>> {}
 
             fn render(&mut self, r: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
         }
@@ -430,7 +430,7 @@ pub mod canopy_examples {
 
             fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {}
 
-            fn poll(&mut self, ctx: &mut dyn Context) -> Option<Duration> {}
+            fn poll(&mut self, ctx: &mut dyn Context) -> Result<Option<Duration>> {}
         }
 
         impl FontSource {
@@ -453,7 +453,7 @@ pub mod canopy_examples {
 
             fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {}
 
-            fn poll(&mut self, ctx: &mut dyn Context) -> Option<Duration> {}
+            fn poll(&mut self, ctx: &mut dyn Context) -> Result<Option<Duration>> {}
         }
     }
 

@@ -12,6 +12,7 @@ use std::{
 use self::focus::DeferredFocusRepair;
 use super::{
     inputmap::InputMap,
+    notice::Notices,
     wake::WakeRegistry,
     widget_access::{WidgetMutGuard, WidgetReadGuard, WidgetSlotGuard},
 };
@@ -99,6 +100,8 @@ pub struct Core {
     pub(crate) input_map: InputMap,
     /// Events in scope for command injection, innermost last.
     event_scope: Vec<Event>,
+    /// Recoverable failures and the one the application shows.
+    pub(crate) notices: Notices,
 }
 
 /// Journal for one outermost tree edit and all nested edits it performs.
@@ -225,6 +228,7 @@ impl Core {
             commands: CommandSet::default(),
             input_map: InputMap::new(),
             event_scope: Vec::new(),
+            notices: Notices::default(),
         }
     }
 

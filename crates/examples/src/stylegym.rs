@@ -85,9 +85,10 @@ canopy.keymap({
     { key = { "j", "Down" }, description = "Next option", action = command.dropdown.select_by(1) },
     { key = { "k", "Up" }, description = "Previous option", action = command.dropdown.select_by(-1) },
 })
-canopy.bind_mouse("LeftDown", { path = "dropdown", description = "Apply theme" }, function()
-    stylegym.apply_theme()
-end)
+canopy.keymap({
+    path = "dropdown",
+    { mouse = "LeftDown", description = "Apply theme", action = function() stylegym.apply_theme() end },
+})
 
 canopy.keymap({
     path = "selector",
@@ -111,9 +112,10 @@ canopy.keymap({
     { key = { "j", "Down" }, description = "Next effect", action = command.selector.select_by(1) },
     { key = { "k", "Up" }, description = "Previous effect", action = command.selector.select_by(-1) },
 })
-canopy.bind_mouse("LeftDown", { path = "selector", description = "Apply effects" }, function()
-    stylegym.apply_effects()
-end)
+canopy.keymap({
+    path = "selector",
+    { mouse = "LeftDown", description = "Apply effects", action = function() stylegym.apply_effects() end },
+})
 "#;
 
 /// Style paths the palette page shows, grouped under headings.

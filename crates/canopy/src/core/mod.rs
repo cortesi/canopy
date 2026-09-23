@@ -19,6 +19,8 @@ pub mod event;
 pub mod fixture;
 /// Node data and arena structures.
 pub mod node;
+/// Recoverable failures reported while the application keeps running.
+pub mod notice;
 /// Path and traversal helpers.
 pub mod path;
 /// Rendering interfaces.
@@ -80,10 +82,11 @@ pub use context::{
 pub use fixture::{Fixture, FixtureInfo};
 pub use id::{NodeId, TypedId};
 pub use inputmap::{
-    BindingId, BindingOptions, BindingPhase, BindingTargetKind, BindingTier, FrameworkBindingGroup,
-    InputSpec, WidgetActionName, WidgetActionSpec,
+    BindingId, BindingOptions, BindingPhase, BindingTarget, BindingTargetKind, BindingTier,
+    FrameworkBindingGroup, InputSpec, WidgetActionName, WidgetActionSpec,
 };
 pub use node::SemanticIdentity;
+pub use notice::{Notice, NoticeSource};
 pub use snapshot::{FrameSnapshot, NodeSnapshot, WidgetSemantics};
 pub use wake::{NodeWakeHandle, WakeOutcome, WorkLifetime};
 pub use world::{

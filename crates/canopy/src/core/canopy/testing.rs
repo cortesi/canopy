@@ -112,13 +112,18 @@ mod tests {
     };
 
     use super::*;
-    use crate::{Context, NodeWakeHandle, Widget, Work, WorkLifetime, geom::Size};
+    use crate::{
+        Context, NodeWakeHandle, Widget, Work, WorkLifetime, error::ScriptErrorKind, geom::Size,
+    };
 
     #[derive(Clone)]
     struct PollCounter {
         count: Rc<Cell<usize>>,
         wake: Rc<RefCell<Option<NodeWakeHandle>>>,
         interval: Rc<Cell<Option<Duration>>>,
+        /// Whether the poll fails: `Some(true)` fatally, `Some(false)` as an
+        /// application error.
+        fail: Rc<Cell<Option<bool>>>,
     }
 
     impl Widget for PollCounter {
@@ -127,9 +132,13 @@ mod tests {
             Ok(())
         }
 
-        fn poll(&mut self, _ctx: &mut dyn Context) -> Option<Duration> {
+        fn poll(&mut self, _ctx: &mut dyn Context) -> Result<Option<Duration>> {
             self.count.set(self.count.get() + 1);
-            self.interval.get()
+            match self.fail.get() {
+                Some(true) => Err(Error::Internal("poll broke".into())),
+                Some(false) => Err(Error::App("poll failed".into())),
+                None => Ok(self.interval.get()),
+            }
         }
     }
 
@@ -139,6 +148,7 @@ mod tests {
             count: Rc::new(Cell::new(0)),
             wake: Rc::new(RefCell::new(None)),
             interval: Rc::new(Cell::new(Some(interval))),
+            fail: Rc::new(Cell::new(None)),
         };
         let mut canopy = crate::CanopyBuilder::new().build()?;
         canopy.set_clock_for_testing(clock.clone())?;
@@ -169,6 +179,41 @@ mod tests {
             canopy
                 .set_clock_for_testing(Arc::new(ManualClock::new()))
                 .is_err()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_failed_poll_is_a_notice_and_keeps_its_cadence() -> Result<()> {
+        let (mut canopy, clock, counter) = polling_app(Duration::from_millis(10))?;
+        counter.fail.set(Some(false));
+        clock.advance(Duration::from_millis(10))?;
+        canopy.turn(Work::Wake)?;
+        assert_eq!(counter.count.get(), 2);
+        let notice = canopy
+            .notices()
+            .last()
+            .expect("the failed poll is a notice");
+        assert_eq!(notice.source, crate::NoticeSource::Poll);
+        assert_eq!(notice.kind, ScriptErrorKind::App);
+        assert_eq!(notice.message, "poll failed");
+        assert_eq!(notice.node, Some(canopy.root_id()));
+        assert_eq!(
+            canopy.next_deadline(),
+            Some(clock.now() + Duration::from_millis(10)),
+            "a failed poll repeats the delay the last success requested"
+        );
+
+        clock.advance(Duration::from_millis(10))?;
+        canopy.turn(Work::Wake)?;
+        assert_eq!(counter.count.get(), 3);
+        assert_eq!(canopy.notices().len(), 2);
+
+        counter.fail.set(Some(true));
+        clock.advance(Duration::from_millis(10))?;
+        assert!(
+            canopy.turn(Work::Wake).is_err(),
+            "a runtime failure in a poll stays fatal"
         );
         Ok(())
     }

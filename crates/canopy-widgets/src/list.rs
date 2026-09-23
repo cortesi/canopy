@@ -1001,7 +1001,7 @@ mod tests {
     }
 
     #[test]
-    fn list_activation_propagates_errors_after_releasing_capture() -> Result<()> {
+    fn list_activation_reports_errors_as_notices_after_releasing_capture() -> Result<()> {
         for (fail, drag) in [(false, false), (true, false), (true, true)] {
             let mut harness = Harness::builder(ActivationRoot {
                 fail,
@@ -1025,8 +1025,12 @@ mod tests {
             }
             event.action = mouse::Action::Up;
             event.location.x = 0;
-            let result = harness.mouse(event);
-            assert_eq!(result.is_err(), fail && !drag);
+            harness.mouse(event)?;
+            assert_eq!(
+                harness.canopy.notices().len(),
+                usize::from(fail && !drag),
+                "a failed activation is a notice"
+            );
             harness.with_root_widget_context(|root: &mut ActivationRoot, ctx| {
                 assert_eq!(root.activations, usize::from(!drag));
                 assert!(!ctx.with_unique_descendant::<List<Text>, _>(|_, ctx| {

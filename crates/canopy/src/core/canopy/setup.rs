@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use super::{Canopy, ModeHook};
+use super::{Canopy, Hook};
 use crate::{
     Fixture, RenderLimits, commands,
     core::inputmap,
@@ -112,67 +112,42 @@ impl Setup {
     /// frame whenever the mode stack has changed.
     ///
     /// Registering a name again replaces its hook. Hooks run in name order.
-    pub fn register_mode_hook(&mut self, name: &'static str, hook: ModeHook) {
+    pub fn register_mode_hook(&mut self, name: &'static str, hook: Hook) {
         self.canopy.mode_hooks.insert(name, hook);
     }
 
-    /// Install an idempotent framework-owned command binding.
+    /// Register a hook that runs against the root context whenever the shown
+    /// notice changes: after a notice is recorded, before the next frame, and
+    /// when input dismisses it, before that input routes.
     ///
-    /// `options.tier` must be [`inputmap::BindingTier::Framework`], and names
-    /// the group the binding joins.
-    pub fn bind_framework(
-        &mut self,
-        input: impl Into<inputmap::InputSpec>,
-        options: inputmap::BindingOptions,
-        command: commands::CommandCall,
-    ) -> Result<inputmap::BindingId> {
-        self.canopy
-            .core
-            .input_map
-            .bind_framework(input, options, command)
+    /// A hook reads the shown notice with
+    /// [`ViewContext::notice`](crate::ViewContext::notice). Registering a name
+    /// again replaces its hook. Hooks run in name order.
+    pub fn register_notice_hook(&mut self, name: &'static str, hook: Hook) {
+        self.canopy.notice_hooks.insert(name, hook);
     }
 
-    /// Install or replace an application command binding.
+    /// Install one binding for `input`.
     ///
-    /// An omitted command target resolves from the node where the binding wins.
-    pub fn bind_command(
-        &mut self,
-        input: impl Into<inputmap::InputSpec>,
-        options: inputmap::BindingOptions,
-        command: commands::CommandCall,
-    ) -> Result<inputmap::BindingId> {
-        self.bind(input, options, inputmap::BindingTarget::Command(command))
-    }
-
-    /// Install or replace an application widget action binding.
-    ///
-    /// The action must already be registered with
+    /// The tier in `options` decides the semantics. A framework tier
+    /// ([`BindingTier::Framework`](inputmap::BindingTier::Framework)) names the
+    /// group the binding joins; registering the same binding again is a no-op,
+    /// and a different binding for the same group, input, and path is an
+    /// error. An application tier replaces any binding with the same tier,
+    /// input, and path. A command call without a target resolves from the node
+    /// where the binding wins. A widget action must already be registered with
     /// [`Self::register_widget_action`].
-    pub fn bind_widget_action(
-        &mut self,
-        input: impl Into<inputmap::InputSpec>,
-        options: inputmap::BindingOptions,
-        action: inputmap::WidgetActionName,
-    ) -> Result<inputmap::BindingId> {
-        self.bind(
-            input,
-            options,
-            inputmap::BindingTarget::WidgetAction(action),
-        )
-    }
-
-    /// Install or replace one application binding.
-    fn bind(
+    pub fn bind(
         &mut self,
         input: impl Into<inputmap::InputSpec>,
         options: inputmap::BindingOptions,
         target: inputmap::BindingTarget,
     ) -> Result<inputmap::BindingId> {
-        let (id, removed) = self.canopy.core.input_map.replace_application_binding(
-            input.into(),
-            options,
-            target,
-        )?;
+        let (id, removed) = self
+            .canopy
+            .core
+            .input_map
+            .bind(input.into(), options, target)?;
         self.canopy.release_removed_bindings(removed);
         Ok(id)
     }

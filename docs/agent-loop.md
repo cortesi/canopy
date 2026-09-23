@@ -120,7 +120,15 @@ Observation helpers are script-visible:
 - `canopy.screen_cells()` for styled cell assertions.
 - `canopy.screen_region(x, y, w, h)` and `canopy.node_region(node)` for crops.
 - `canopy.route_trace()` for the most recent key or mouse route. Each entry
-  has a snake_case `kind`, such as `before_widget_binding` or `handled`.
+  has a snake_case `kind`, such as `before_widget_binding` or `handled`. A
+  route whose binding or widget handler failed ends with a `notice` entry.
+- `canopy.notices()` for failures the app reported and survived, oldest first:
+  a failed command or callback that a sent key ran, a widget handler, or a
+  poll. Each record has a `message`, a `kind`, a `source`, and the `node` when
+  known. A failed binding does not fail the evaluation that sent its key, so
+  assert on the newest notice instead.
+- `canopy.mode()` for the newest active mode, or the empty string for the
+  default mode.
 - `canopy.bindings()` for the complete application and framework binding
   registry.
 - `canopy.available_bindings(node?)` for effective keys, active modes, and the

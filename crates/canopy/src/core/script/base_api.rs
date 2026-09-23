@@ -26,8 +26,8 @@ use super::{
     command_call_type, command_info_to_arg, commands, defs, dispatch_command,
     dispatch_command_by_name, dispatch_explicit, error, fixtures_to_arg, host_return, host_value,
     inputmap, key, key_explanation_to_arg, luau_global_owner_name, mouse, node_handle_type,
-    node_id_from_value, node_info_to_arg, node_list_to_arg, owned_truthy, ret_arg, ret_none,
-    ret_one, route_trace_to_arg, screen_cells_to_arg, screen_text, screen_text_for_rect,
+    node_id_from_value, node_info_to_arg, node_list_to_arg, notices_to_arg, owned_truthy, ret_arg,
+    ret_none, ret_one, route_trace_to_arg, screen_cells_to_arg, screen_text, screen_text_for_rect,
     screen_to_arg, script_callback_label, script_journal_to_arg, snapshot_to_arg, tree_node_to_arg,
     validate_node_handle, values_to_args, with_current_canopy,
 };
@@ -331,24 +331,22 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
         handler: Handler::Sync(host_commands),
     },
     BaseFunction {
-        name: "input_mode",
-        docs: Some("Return the active input mode. The default mode is the empty string."),
+        name: "mode",
+        docs: Some("Return the newest active mode. The default mode is the empty string."),
         signature: || FunctionSignature::new().ret(Type::String),
-        handler: Handler::Sync(host_input_mode),
+        handler: Handler::Sync(host_mode),
     },
     BaseFunction {
         name: "set_mode",
         docs: Some(
-            "Switch the active input mode. Passing the empty string returns to default mode.",
+            "Replace the active modes with one mode. Passing the empty string returns to the default mode.",
         ),
         signature: || FunctionSignature::new().param(("mode", Type::String)),
         handler: Handler::Sync(host_set_mode),
     },
     BaseFunction {
         name: "push_mode",
-        docs: Some(
-            "Push an input mode above the current mode. A transient mode takes only the next key.",
-        ),
+        docs: Some("Push a mode above the active modes. A transient mode takes only the next key."),
         signature: || {
             FunctionSignature::new()
                 .param(("mode", Type::String))
@@ -358,7 +356,7 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "pop_mode",
-        docs: Some("Pop the top input mode and return the active mode after the pop."),
+        docs: Some("Pop the newest mode and return the newest active mode after the pop."),
         signature: || FunctionSignature::new().ret(Type::String),
         handler: Handler::Sync(host_pop_mode),
     },
@@ -422,6 +420,15 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
         handler: Handler::Sync(host_route_trace),
     },
     BaseFunction {
+        name: "notices",
+        docs: Some(
+            "Return the retained notices, oldest first: failures from input bindings, widget \
+             handlers, and polls that the application reported and survived.",
+        ),
+        signature: || FunctionSignature::new().ret(Type::named("Notice").array()),
+        handler: Handler::Sync(host_notices),
+    },
+    BaseFunction {
         name: "diagnostic_dump",
         docs: Some("Return a diagnostic dump for a node, or the current script anchor."),
         signature: || {
@@ -482,26 +489,6 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
                 .ret(Type::Number.array())
         },
         handler: Handler::Sync(host_keymap),
-    },
-    BaseFunction {
-        name: "bind_mouse",
-        docs: Some(
-            "Bind a mouse spec to a CommandCall or a function, with required discovery metadata.",
-        ),
-        signature: || {
-            FunctionSignature::new()
-                .param(("mouse", Type::named("MouseSpec")))
-                .param(("options", Type::named("BindOptions")))
-                .param((
-                    "action",
-                    Type::union([
-                        Type::named("CommandCall"),
-                        Type::func(FunctionSignature::new()),
-                    ]),
-                ))
-                .ret(Type::Number)
-        },
-        handler: Handler::Sync(host_bind_mouse),
     },
     BaseFunction {
         name: "unbind",
@@ -658,7 +645,7 @@ fn parse_bind_options<'s>(
         return Err(RuntimeError::runtime("binding options table is required"));
     };
     let field = |name: &str| optional_string_field(scope, &options, name);
-    // `InputMap::replace_application_binding` rejects a blank description on
+    // `InputMap::bind` rejects a blank description on
     // the next step.
     let description = field("description")?
         .ok_or_else(|| RuntimeError::runtime("binding description is required"))?;
@@ -989,11 +976,7 @@ fn install_binding(
     options: &inputmap::BindingOptions,
 ) -> StdResult<i64, RuntimeError> {
     with_current_canopy(scope, |canopy, _| {
-        let (binding_id, removed) =
-            canopy
-                .core
-                .input_map
-                .replace_application_binding(input, options.clone(), target)?;
+        let (binding_id, removed) = canopy.core.input_map.bind(input, options.clone(), target)?;
         canopy.release_removed_bindings(removed);
         Ok(binding_id.as_u64() as i64)
     })
@@ -1652,16 +1635,16 @@ fn host_resolve<'s>(
     })
 }
 
-/// `canopy.input_mode`: return the active input mode.
-fn host_input_mode<'s>(
+/// `canopy.mode`: return the newest active mode.
+fn host_mode<'s>(
     scope: &Scope<'s>,
     _args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mode = with_current_canopy(scope, |canopy, _| Ok(canopy.input_mode().to_string()))?;
+    let mode = with_current_canopy(scope, |canopy, _| Ok(canopy.mode().to_string()))?;
     Ok(ret_one(ScopedValue::String(scope.create_string(&mode)?)))
 }
 
-/// `canopy.set_mode`: switch the active input mode.
+/// `canopy.set_mode`: replace the active modes with one mode.
 fn host_set_mode<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
@@ -1669,13 +1652,13 @@ fn host_set_mode<'s>(
     let mut args = HostArgCursor::new(scope, args);
     let mode = args.required::<String>("mode")?;
     with_current_canopy(scope, |canopy, _| {
-        canopy.set_input_mode(&mode);
+        canopy.set_mode(&mode);
         Ok(())
     })?;
     Ok(ret_none())
 }
 
-/// `canopy.push_mode`: push an input mode above the current mode.
+/// `canopy.push_mode`: push a mode above the active modes.
 fn host_push_mode<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
@@ -1685,42 +1668,40 @@ fn host_push_mode<'s>(
     let transient = parse_push_mode_options(scope, args.optional::<Table<'_>>("options")?)?;
     with_current_canopy(scope, |canopy, _| {
         if transient {
-            canopy.push_transient_input_mode(&mode);
+            canopy.push_transient_mode(&mode);
         } else {
-            canopy.push_input_mode(&mode);
+            canopy.push_mode(&mode);
         }
         Ok(())
     })?;
     Ok(ret_none())
 }
 
-/// `canopy.pop_mode`: pop the top input mode and return the active mode.
+/// `canopy.pop_mode`: pop the newest mode and return the newest active mode.
 fn host_pop_mode<'s>(
     scope: &Scope<'s>,
     _args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mode = with_current_canopy(scope, |canopy, _| Ok(canopy.pop_input_mode().to_string()))?;
+    let mode = with_current_canopy(scope, |canopy, _| Ok(canopy.pop_mode().to_string()))?;
     Ok(ret_one(ScopedValue::String(scope.create_string(&mode)?)))
 }
 
-/// A binding action read from a script: a command value, a callback, or the
-/// name of a registered widget action.
+/// A binding action read from a script: a stored target, or a callback the
+/// host stores when the binding installs.
 #[derive(Clone)]
 enum ScriptAction<'s> {
-    /// A `CommandCall` built by a `command` constructor.
-    Command(ScriptCommandCall),
+    /// A command call or a registered widget action name.
+    Target(inputmap::BindingTarget),
     /// A Luau function.
     Function(Function<'s>),
-    /// A registered widget action name.
-    WidgetAction(inputmap::WidgetActionName),
 }
 
 impl ScriptAction<'_> {
     /// Return the widget action name, when this action names one.
     fn widget_action(&self) -> Option<&inputmap::WidgetActionName> {
         match self {
-            Self::WidgetAction(name) => Some(name),
-            Self::Command(_) | Self::Function(_) => None,
+            Self::Target(target) => target.widget_action(),
+            Self::Function(_) => None,
         }
     }
 }
@@ -1741,13 +1722,15 @@ fn action_from_value<'s>(
     value: ScopedValue<'s>,
 ) -> StdResult<ScriptAction<'s>, RuntimeError> {
     if let Some(call) = command_call_from_value(scope, &value)? {
-        return Ok(ScriptAction::Command(call));
+        return Ok(ScriptAction::Target(inputmap::BindingTarget::Command(
+            call.0,
+        )));
     }
     match value {
         ScopedValue::Function(function) => Ok(ScriptAction::Function(function)),
-        ScopedValue::String(_) => Ok(ScriptAction::WidgetAction(read_widget_action_name(
-            scope, value,
-        )?)),
+        ScopedValue::String(_) => Ok(ScriptAction::Target(inputmap::BindingTarget::WidgetAction(
+            read_widget_action_name(scope, value)?,
+        ))),
         other => Err(RuntimeError::runtime(format!(
             "`action` must be a CommandCall, a function, or a widget action name, got {}",
             other.type_name()
@@ -1775,50 +1758,26 @@ fn install_action_binding<'s>(
     options: &inputmap::BindingOptions,
 ) -> StdResult<i64, RuntimeError> {
     match action {
-        ScriptAction::Command(call) => install_binding(
-            scope,
-            inputmap::BindingTarget::Command(call.0),
-            input,
-            options,
-        ),
+        ScriptAction::Target(target) => install_binding(scope, target, input, options),
         ScriptAction::Function(function) => {
             install_function_binding(scope, function, input, options)
         }
-        ScriptAction::WidgetAction(name) => install_binding(
-            scope,
-            inputmap::BindingTarget::WidgetAction(name),
-            input,
-            options,
-        ),
     }
 }
 
-/// Bind one key or mouse spec to a command value or a Luau callback.
-fn host_bind_input<'s>(
-    scope: &Scope<'s>,
-    args: MultiValue<'s>,
-    field: &str,
-    make_input: fn(&str) -> StdResult<inputmap::InputSpec, RuntimeError>,
-) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let mut args = HostArgCursor::new(scope, args);
-    let spec = args.required::<String>(field)?;
-    let options = parse_bind_options(scope, args.optional::<Table<'_>>("options")?)?;
-    let action = read_action(scope, &mut args)?;
-    let input = make_input(&spec)?;
-    let id = install_action_binding(scope, action, input, &options)?;
-    Ok(ret_one(ScopedValue::Number(id as f64)))
-}
-
-/// `canopy.bind`: bind a key spec to a Luau callback.
+/// `canopy.bind`: bind a key spec to a command value, a Luau callback, or a
+/// widget action.
 fn host_bind<'s>(
     scope: &Scope<'s>,
     args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    host_bind_input(scope, args, "key", |spec| {
-        Ok(inputmap::InputSpec::Key(
-            key::Key::parse_spec(spec).map_err(error::Error::from)?,
-        ))
-    })
+    let mut args = HostArgCursor::new(scope, args);
+    let spec = args.required::<String>("key")?;
+    let options = parse_bind_options(scope, args.optional::<Table<'_>>("options")?)?;
+    let action = read_action(scope, &mut args)?;
+    let input = inputmap::InputSpec::Key(key::Key::parse_spec(&spec).map_err(error::Error::from)?);
+    let id = install_action_binding(scope, action, input, &options)?;
+    Ok(ret_one(ScopedValue::Number(id as f64)))
 }
 
 /// Keymap option fields, which are the `BindOptions` fields other than
@@ -2047,18 +2006,6 @@ fn host_keymap<'s>(
     ret_arg(scope, &ArgValue::Array(ids))
 }
 
-/// `canopy.bind_mouse`: bind a mouse spec to a Luau callback.
-fn host_bind_mouse<'s>(
-    scope: &Scope<'s>,
-    args: MultiValue<'s>,
-) -> StdResult<MultiValue<'s>, RuntimeError> {
-    host_bind_input(scope, args, "mouse", |spec| {
-        Ok(inputmap::InputSpec::Mouse(
-            mouse::Mouse::parse_spec(spec).map_err(error::Error::from)?,
-        ))
-    })
-}
-
 /// `canopy.unbind`: remove a binding by numeric id.
 fn host_unbind<'s>(
     scope: &Scope<'s>,
@@ -2202,6 +2149,14 @@ fn host_node_region<'s>(
         screen_text_for_rect(canopy, view.content)
     })?;
     Ok(ret_one(ScopedValue::String(scope.create_string(&text)?)))
+}
+
+/// `canopy.notices`: return the retained notices, oldest first.
+fn host_notices<'s>(
+    scope: &Scope<'s>,
+    _args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    host_value(scope, |canopy, _| Ok(notices_to_arg(canopy)))
 }
 
 /// `canopy.route_trace`: return the most recent input route trace.

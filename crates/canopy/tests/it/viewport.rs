@@ -238,31 +238,33 @@ end)
 
         harness.script(
             r#"
-canopy.bind_mouse("ScrollDown", { path = "inner/", description = "Inner" }, function()
-    canopy.set_mode("inner")
-end)
-canopy.bind_mouse("ScrollUp", { path = "outer/", description = "Outer" }, function()
-    canopy.set_mode("outer")
-end)
+canopy.keymap({
+    path = "inner/",
+    { mouse = "ScrollDown", description = "Inner", action = function() canopy.set_mode("inner") end },
+})
+canopy.keymap({
+    path = "outer/",
+    { mouse = "ScrollUp", description = "Outer", action = function() canopy.set_mode("outer") end },
+})
 "#,
         )?;
         wheel(&mut harness, mouse::Action::ScrollDown, 1, 1)?;
-        assert_eq!(harness.canopy.input_mode(), "inner");
+        assert_eq!(harness.canopy.mode(), "inner");
         assert_eq!(scroll(&harness, inner), Point::ZERO);
 
         // The outer binding waits until the inner pane declines.
-        harness.canopy.set_input_mode("");
+        harness.canopy.set_mode("");
         harness
             .canopy
             .with_root_context(|context| context.scroll_to_of(inner, 0, 9))?;
         wheel(&mut harness, mouse::Action::ScrollUp, 1, 1)?;
-        assert_eq!(harness.canopy.input_mode(), "");
+        assert_eq!(harness.canopy.mode(), "");
         assert_eq!(scroll(&harness, inner), Point { x: 0, y: 6 });
         harness
             .canopy
             .with_root_context(|context| context.scroll_to_of(inner, 0, 0))?;
         wheel(&mut harness, mouse::Action::ScrollUp, 1, 1)?;
-        assert_eq!(harness.canopy.input_mode(), "outer");
+        assert_eq!(harness.canopy.mode(), "outer");
         assert_eq!(scroll(&harness, outer), Point::ZERO);
         Ok(())
     }

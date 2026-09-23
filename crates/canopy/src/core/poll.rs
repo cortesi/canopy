@@ -126,6 +126,9 @@ impl PendingHeap {
 pub struct Poller {
     /// Scheduled callbacks owned by this application.
     pending: PendingHeap,
+    /// The delay each widget's last successful poll requested, which a failed
+    /// poll repeats.
+    intervals: HashMap<NodeId, (WorkStamp, Duration)>,
     /// Time source shared with driver deadline calculations.
     clock: Arc<dyn Clock>,
 }
@@ -140,6 +143,7 @@ impl Poller {
     pub(crate) fn with_clock(clock: Arc<dyn Clock>) -> Self {
         Self {
             pending: PendingHeap::default(),
+            intervals: HashMap::new(),
             clock,
         }
     }
@@ -172,6 +176,28 @@ impl Poller {
         Ok(())
     }
 
+    /// Remember the delay a successful poll requested, or forget it when the
+    /// poll stopped scheduled polling.
+    pub(crate) fn set_interval(&mut self, stamp: WorkStamp, interval: Option<Duration>) {
+        match interval {
+            Some(interval) => {
+                self.intervals.insert(stamp.node, (stamp, interval));
+            }
+            None => {
+                self.intervals.remove(&stamp.node);
+            }
+        }
+    }
+
+    /// Return the delay the last successful poll of this widget incarnation
+    /// requested.
+    pub(crate) fn interval(&self, stamp: WorkStamp) -> Option<Duration> {
+        self.intervals
+            .get(&stamp.node)
+            .filter(|(owner, _)| owner.incarnation == stamp.incarnation)
+            .map(|(_, interval)| *interval)
+    }
+
     /// Cancel work belonging to the specified widget incarnation.
     pub(crate) fn cancel_owner(&mut self, node: NodeId, incarnation: u64) {
         if self
@@ -197,6 +223,7 @@ impl Poller {
         for (node, incarnation) in expired {
             self.cancel_owner(node, incarnation);
         }
+        self.intervals.retain(|_, (stamp, _)| valid(*stamp));
     }
 
     /// Return the earliest pending deadline for adapter waiting.

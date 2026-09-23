@@ -40,8 +40,6 @@ pub(super) struct StartupScript {
     source: String,
     /// Pre-compiled script handle available after `finalize_api()`.
     script_id: Option<script::ScriptId>,
-    /// Whether this script completed successfully.
-    pub(super) ran: bool,
 }
 
 /// Reversible callback and binding state for one startup script attempt.
@@ -77,10 +75,6 @@ pub struct ScriptState {
     pub(super) module_source: Option<Arc<script::ScriptModuleSource>>,
     /// App-level startup scripts run before user and project init files.
     pub(super) startup_scripts: Vec<StartupScript>,
-    /// Successfully executed filesystem startup modules.
-    completed_startup_modules: HashSet<PathBuf>,
-    /// Compiled handles retained across filesystem startup retries.
-    startup_module_scripts: HashMap<PathBuf, script::ScriptId>,
     /// Binding targets whose release is deferred until a startup attempt
     /// commits.
     pub(super) deferred_binding_releases: Option<Vec<script::LuauFunctionId>>,
@@ -99,8 +93,6 @@ impl Default for ScriptState {
             module_roots: script::ScriptModuleRoots::default(),
             module_source: None,
             startup_scripts: Vec::new(),
-            completed_startup_modules: HashSet::new(),
-            startup_module_scripts: HashMap::new(),
             deferred_binding_releases: None,
             default_bindings: HashMap::new(),
             fixtures: HashMap::new(),
@@ -157,7 +149,6 @@ impl ScriptState {
             name: name.to_string(),
             source: source.to_string(),
             script_id: None,
-            ran: false,
         });
         Ok(())
     }
@@ -361,34 +352,26 @@ impl Canopy {
         outcome.into_result()
     }
 
-    /// Run app, user, and project startup scripts during preparation.
-    pub(super) fn run_startup_scripts(&mut self) -> Result<usize> {
+    /// Run app, user, and project startup scripts once, during the first
+    /// frame preparation.
+    pub(super) fn run_startup_scripts(&mut self) -> Result<()> {
         self.driver.startup_attempted = true;
         let host = self.script.host.clone();
-        let mut ran = 0;
         let startup_scripts = self
             .script
             .startup_scripts
             .iter()
-            .enumerate()
-            .filter(|(_, script)| !script.ran)
             .map(|script| {
-                let (index, script) = script;
                 let script_id = script
                     .script_id
                     .expect("startup scripts are compiled during finalize_api()");
-                (index, script.name.clone(), script.source.clone(), script_id)
+                (script.name.clone(), script.source.clone(), script_id)
             })
             .collect::<Vec<_>>();
-        for (index, name, source, script_id) in startup_scripts {
+        for (name, source, script_id) in startup_scripts {
             self.run_startup_attempt(ScriptOrigin::Startup(name), &source, script_id)?;
-            self.script.startup_scripts[index].ran = true;
-            ran += 1;
         }
         for module in self.script.module_roots.startup_modules() {
-            if self.script.completed_startup_modules.contains(&module.path) {
-                continue;
-            }
             let mounted_source = self
                 .script
                 .module_source
@@ -407,30 +390,14 @@ impl Canopy {
                 .expect("filesystem sources are validated as UTF-8")
                 .to_string();
             let module_id = mounted_source.id().clone();
-            let script_id = match self
-                .script
-                .startup_module_scripts
-                .get(&module.path)
-                .copied()
-            {
-                Some(script_id) => script_id,
-                None => {
-                    let script_id = host.compile_startup_source(mounted_source)?;
-                    self.script
-                        .startup_module_scripts
-                        .insert(module.path.clone(), script_id);
-                    script_id
-                }
-            };
+            let script_id = host.compile_startup_source(mounted_source)?;
             self.run_startup_attempt(
                 ScriptOrigin::Startup(module_id.to_string()),
                 &source,
                 script_id,
             )?;
-            self.script.completed_startup_modules.insert(module.path);
-            ran += 1;
         }
-        Ok(ran)
+        Ok(())
     }
 
     /// Execute one startup script with callback and binding rollback.
@@ -593,6 +560,9 @@ impl Canopy {
     }
 
     /// Finalize the script API surface for the consuming builder.
+    ///
+    /// A failure is final: the builder drops the application it was
+    /// finalizing.
     pub(super) fn finalize_api(&mut self) -> Result<()> {
         let module_source = self.script.module_roots.module_source().map_err(|error| {
             error::Error::Invalid(format!("script module roots are invalid: {error}"))
@@ -601,19 +571,6 @@ impl Canopy {
             .as_ref()
             .map(|source| Arc::clone(source) as Arc<dyn SourceProvider>);
         let default_binding_owners = self.default_binding_owners();
-        let existing_scripts = self.script.host.script_ids();
-        let default_script_ids = self
-            .script
-            .default_bindings
-            .iter()
-            .map(|(owner, script)| (owner.clone(), script.script_id))
-            .collect::<HashMap<_, _>>();
-        let startup_script_ids = self
-            .script
-            .startup_scripts
-            .iter()
-            .map(|script| script.script_id)
-            .collect::<Vec<_>>();
         let definitions = self.script.host.prepare_finalize(
             &self.core.commands,
             &default_binding_owners,
@@ -621,36 +578,10 @@ impl Canopy {
             &self.fixture_infos(),
             self.core.input_map.widget_actions(),
         )?;
-        let prepared = (|| {
-            self.validate_script_module_declarations(module_source.as_ref())?;
-            self.script
-                .host
-                .finalize_checkpoint(script::FinalizeStep::DeclarationsValidated)?;
-            self.compile_registered_default_bindings()?;
-            self.script
-                .host
-                .finalize_checkpoint(script::FinalizeStep::DefaultBindingsCompiled)?;
-            self.compile_registered_startup_scripts()?;
-            self.script
-                .host
-                .finalize_checkpoint(script::FinalizeStep::StartupScriptsCompiled)?;
-            self.script.host.publish_finalize()
-        })();
-        if let Err(error) = prepared {
-            self.script.host.abort_finalize(&existing_scripts);
-            for (owner, script) in &mut self.script.default_bindings {
-                script.script_id = default_script_ids.get(owner).copied().flatten();
-            }
-            for (script, previous) in self
-                .script
-                .startup_scripts
-                .iter_mut()
-                .zip(startup_script_ids)
-            {
-                script.script_id = previous;
-            }
-            return Err(error);
-        }
+        self.validate_script_module_declarations(module_source.as_ref())?;
+        self.compile_registered_default_bindings()?;
+        self.compile_registered_startup_scripts()?;
+        self.script.host.publish_finalize()?;
         self.script.module_source = module_source;
         self.script.api_text = Some(definitions);
         Ok(())

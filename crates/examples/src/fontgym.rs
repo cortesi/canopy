@@ -211,10 +211,10 @@ impl Widget for FontGym {
         Ok(())
     }
 
-    fn poll(&mut self, ctx: &mut dyn Context) -> Option<Duration> {
+    fn poll(&mut self, ctx: &mut dyn Context) -> Result<Option<Duration>> {
         self.gradient_phase = (self.gradient_phase + GRADIENT_PHASE_STEP).fract();
         ctx.set_style(font_styles(self.gradient_phase));
-        Some(Duration::from_millis(GRADIENT_POLL_MS))
+        Ok(Some(Duration::from_millis(GRADIENT_POLL_MS)))
     }
 }
 

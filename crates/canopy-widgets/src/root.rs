@@ -1,12 +1,13 @@
 use canopy::{
     Canopy, ChildSlot, Context, ContextExt, FocusDirection, FocusScope, FrameworkBindingGroup,
-    InteractionToken, ModalBindings, ModalOptions, NodeId, NodeName, Register, Setup, TypedId,
-    ViewContext, Widget,
+    InteractionToken, ModalBindings, ModalOptions, NodeId, NodeName, Register, Render, Setup,
+    TypedId, ViewContext, Widget,
     commands::CommandCall,
     derive_commands,
     error::{Error, Result},
     event::key::Key,
-    layout::{Direction, Layout, Sizing},
+    geom::Line,
+    layout::{Align, Direction, Layout, Sizing},
 };
 
 #[cfg(feature = "devtools")]
@@ -66,6 +67,9 @@ const KEY_APP: &str = "AppSlot";
 
 /// Key for the main pane container (app + inspector).
 const KEY_MAIN_PANE: &str = "MainPane";
+
+/// Key for the row that shows the notice the application shows.
+const KEY_NOTICE: &str = "Notice";
 
 /// A Root widget that lives at the base of a Canopy app.
 pub struct Root {
@@ -290,13 +294,16 @@ impl Root {
                 inspector
             };
 
-            // Mode help overlays the main pane, and the help modal overlays
-            // both.
+            // The notice row and mode help overlay the main pane, and the
+            // help modal overlays them all.
+            let notice: NodeId = context.create_detached(NoticeBar)?.into();
             let mode_help = ModeHelp::install(context)?;
             let help = Help::install(context)?;
             context.attach_slot(root_id, KEY_MAIN_PANE, main_pane)?;
+            context.attach_slot(root_id, KEY_NOTICE, notice)?;
             context.attach_slot(root_id, ModeHelpSlot::KEY, mode_help)?;
             context.attach_slot(root_id, HelpSlot::KEY, help)?;
+            context.set_hidden_of(notice, context.notice().is_none())?;
             context.set_hidden_of(mode_help, true)?;
             context.set_hidden_of(help, true)?;
 
@@ -313,8 +320,12 @@ impl Root {
 
 impl Widget for Root {
     fn layout(&self) -> Layout {
-        // Stack layout so the help modal overlays the main pane.
-        Layout::fill().direction(Direction::Stack)
+        // Stack layout so the help modal overlays the main pane. The filling
+        // children ignore the end alignment, which puts the notice row at the
+        // bottom.
+        Layout::fill()
+            .direction(Direction::Stack)
+            .align_vertical(Align::End)
     }
 
     fn name(&self) -> NodeName {
@@ -339,8 +350,50 @@ impl Register for Root {
         Help::register(setup)?;
         register_help_bindings(setup)?;
         setup.register_mode_hook("root.mode_help", sync_mode_help);
+        setup.register_notice_hook("root.notice", sync_notice);
         Ok(())
     }
+}
+
+/// The row at the bottom of the main pane that shows the notice the
+/// application shows, until the next input event.
+///
+/// Root's notice hook hides the row while no notice is shown, so it takes no
+/// clicks then.
+struct NoticeBar;
+
+impl Widget for NoticeBar {
+    fn layout(&self) -> Layout {
+        Layout::fill().fixed_height(1)
+    }
+
+    fn render(&mut self, render: &mut Render, context: &dyn ViewContext) -> Result<()> {
+        let rect = context.view().outer_rect_local();
+        render.fill("root/notice", rect, ' ')?;
+        let message = context
+            .notice()
+            .and_then(|notice| notice.message.lines().next())
+            .unwrap_or_default();
+        render.text(
+            "root/notice",
+            Line::new(rect.tl.x, rect.tl.y, rect.w),
+            &format!(" {message}"),
+        )
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("notice")
+    }
+}
+
+/// Show the notice row while a notice is shown, and hide it after.
+fn sync_notice(context: &mut dyn Context) -> Result<()> {
+    let Some(row) = context.child_slot(KEY_NOTICE) else {
+        return Ok(());
+    };
+    let hidden = context.notice().is_none();
+    context.set_hidden_of(row, hidden)?;
+    Ok(())
 }
 
 /// Show the keys of a transient mode while it waits, and hide them after.
@@ -369,7 +422,7 @@ fn register_help_bindings(setup: &mut Setup) -> Result<()> {
         ("Ctrl+g", "Close help", Root::call_toggle_help()),
     ];
     for (key, description, command) in bindings {
-        setup.bind_framework(
+        setup.bind(
             Key::parse_spec(key)?,
             canopy::BindingOptions {
                 path: Some("/root/help/**/".parse()?),
@@ -378,7 +431,7 @@ fn register_help_bindings(setup: &mut Setup) -> Result<()> {
                 source: None,
                 phase: Some(canopy::BindingPhase::BeforeWidget),
             },
-            command,
+            canopy::BindingTarget::Command(command),
         )?;
     }
     Ok(())
@@ -388,18 +441,18 @@ fn register_help_bindings(setup: &mut Setup) -> Result<()> {
 mod tests {
     use std::cell::Cell as LocalCell;
 
-    #[cfg(feature = "devtools")]
-    use canopy::testing::harness::Harness;
     use canopy::{
         BindingTier, CanopyBuilder, Cell, Context, EventOutcome, NodeName, Render, ViewContext,
         Widget,
         commands::{CommandNode, CommandSpec},
         error::Result,
-        event::Event,
-        geom::{Line, Size},
+        event::{Event, key, mouse},
+        geom::{Line, Point, PointI32, Size},
         help::BindingSnapshot,
         layout::Layout,
         render::NopBackend,
+        style::StyleManager,
+        testing::harness::Harness,
     };
 
     use super::*;
@@ -467,6 +520,81 @@ mod tests {
         fn name(&self) -> NodeName {
             NodeName::convert(self.name)
         }
+    }
+
+    /// App whose only command fails as an application does.
+    struct FailingApp;
+
+    #[derive_commands]
+    impl FailingApp {
+        /// Fail with an application error.
+        #[command]
+        fn fail(&self) -> Result<()> {
+            Err(Error::App("disk full".into()))
+        }
+    }
+
+    impl Widget for FailingApp {
+        fn name(&self) -> NodeName {
+            NodeName::convert("failing_app")
+        }
+    }
+
+    #[test]
+    fn root_shows_the_newest_notice_until_the_next_input() -> Result<()> {
+        let mut canopy = CanopyBuilder::new()
+            .configure(|setup| {
+                Root::register(setup)?;
+                setup.add_commands::<FailingApp>()
+            })
+            .build()?;
+        let app: NodeId = Root::new().install(&mut canopy, FailingApp)?.into();
+        let mut harness = Harness::from_canopy(canopy, Size::new(30, 4))?;
+        harness
+            .script(r#"canopy.bind("x", { description = "Fail" }, command.failing_app.fail())"#)?;
+        harness.render()?;
+        assert!(!harness.tbuf().lines()[3].contains("disk full"));
+
+        harness.key('x')?;
+        let lines = harness.tbuf().lines();
+        assert!(
+            lines[3].contains("disk full"),
+            "the bottom row shows the notice: {lines:?}"
+        );
+        let expected = StyleManager::default()
+            .get(harness.canopy.style(), "root/notice")
+            .resolve_solid()
+            .expect("the notice style is solid");
+        let cell = harness
+            .buf()
+            .get(Point { x: 1, y: 3 })
+            .expect("notice cell");
+        assert_eq!(cell.style.fg, expected.fg);
+        assert_eq!(cell.style.bg, expected.bg);
+
+        // A click on the row dismisses the notice before hit testing, so the
+        // application under it takes the click.
+        harness.mouse(mouse::MouseEvent {
+            action: mouse::Action::Down,
+            button: mouse::Button::Left,
+            modifiers: key::Empty,
+            location: PointI32 { x: 1, y: 3 },
+        })?;
+        assert_eq!(
+            harness
+                .canopy
+                .route_trace()
+                .first()
+                .and_then(|entry| entry.node),
+            Some(app)
+        );
+        let lines = harness.tbuf().lines();
+        assert!(
+            !lines[3].contains("disk full"),
+            "the next input dismisses the notice: {lines:?}"
+        );
+        assert_eq!(harness.canopy.notices().len(), 1, "the record stays");
+        Ok(())
     }
 
     fn setup_root_tree() -> Result<(Canopy, NopBackend, NodeId, NodeId)> {
@@ -744,12 +872,12 @@ mod tests {
         ))?;
         canopy.eval_script("canopy.send_click(1, 1)")?;
         canopy.render(&mut backend)?;
-        assert_eq!(canopy.input_mode(), "");
+        assert_eq!(canopy.mode(), "");
         assert_eq!(APP_EVENTS.with(LocalCell::get), 0);
 
         send_key(&mut canopy, "ctrl-g")?;
         send_key(&mut canopy, "x")?;
-        assert_eq!(canopy.input_mode(), "leaked");
+        assert_eq!(canopy.mode(), "leaked");
         assert_eq!(APP_EVENTS.with(LocalCell::get), 1);
         Ok(())
     }
@@ -910,7 +1038,7 @@ mod tests {
 
             canopy.send_key("x")
             canopy.flush()
-            canopy.assert(canopy.input_mode() == "", "any key should end the mode")
+            canopy.assert(canopy.mode() == "", "any key should end the mode")
             canopy.assert(
                 canopy.screen_text():find("Equal widths") == nil,
                 "the panel should hide when the mode ends"

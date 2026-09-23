@@ -394,9 +394,9 @@ mod tests {
             Ok(())
         }
 
-        fn poll(&mut self, _ctx: &mut dyn Context) -> Option<Duration> {
+        fn poll(&mut self, _ctx: &mut dyn Context) -> Result<Option<Duration>> {
             let polls = self.polls.fetch_add(1, Ordering::SeqCst) + 1;
-            self.interval.filter(|_| polls < self.limit)
+            Ok(self.interval.filter(|_| polls < self.limit))
         }
     }
 

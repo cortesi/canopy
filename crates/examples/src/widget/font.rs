@@ -129,33 +129,33 @@ impl Widget for FontDemo {
         Ok(())
     }
 
-    fn poll(&mut self, ctx: &mut dyn Context) -> Option<Duration> {
+    fn poll(&mut self, ctx: &mut dyn Context) -> Result<Option<Duration>> {
         let interval = self.interval.max(Duration::from_millis(1));
         if !self.started {
             self.started = true;
-            return Some(interval);
+            return Ok(Some(interval));
         }
         if self.pending_exit {
             ctx.exit(0);
-            return None;
+            return Ok(None);
         }
         let next_index = if self.font_index + 1 < self.fonts.len() {
             self.font_index + 1
         } else if self.exit_after_cycle {
             self.pending_exit = true;
-            return Some(interval);
+            return Ok(Some(interval));
         } else {
             0
         };
         if self.set_banner_font(ctx, next_index).is_err() {
             ctx.exit(1);
-            return None;
+            return Ok(None);
         }
         self.font_index = next_index;
         if self.exit_after_cycle && self.font_index + 1 == self.fonts.len() {
             self.pending_exit = true;
         }
-        Some(interval)
+        Ok(Some(interval))
     }
 
     fn name(&self) -> NodeName {

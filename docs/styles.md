@@ -72,6 +72,13 @@ leaves unset falls back to the outer one: `status_bar/text` inherits the
 `status_bar/text` for its two parts. The built-in themes give the bar the panel
 ground, its text a quiet label, and hint keys the accent.
 
+## Notices
+
+`Root` shows the newest notice in one row at the bottom of the main pane,
+painted with `root/notice`. The built-in themes give it the red role on the
+panel ground, so a failure the application survived reads as an error without
+hiding what the row covers for long: the row goes at the next input.
+
 ## Frames
 
 `Frame` draws its border with `frame`, or `frame/focused` while focus is within

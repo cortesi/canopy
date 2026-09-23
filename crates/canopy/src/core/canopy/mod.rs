@@ -14,6 +14,7 @@ use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender, unbounded};
 
 use super::{
     inputmap,
+    notice::{Notice, NoticeSource},
     poll::Poller,
     snapshot::FrameSnapshot,
     termbuf::{RenderLimits, TermBuf},
@@ -62,8 +63,39 @@ pub enum AdapterEvent {
     Wake,
 }
 
-/// Hook run against the root context after the input mode stack changes.
-type ModeHook = fn(&mut dyn crate::Context) -> Result<()>;
+/// Hook run against the root context after runtime state it follows changes.
+type Hook = fn(&mut dyn crate::Context) -> Result<()>;
+
+/// Named hooks that follow one piece of runtime state through its change
+/// counter.
+#[derive(Default)]
+struct Hooks {
+    /// Hooks keyed by name. They run in name order.
+    hooks: BTreeMap<&'static str, Hook>,
+    /// State generation the hooks last saw.
+    synced: u64,
+}
+
+impl Hooks {
+    /// Register a hook, replacing any hook with the same name.
+    fn insert(&mut self, name: &'static str, hook: Hook) {
+        self.hooks.insert(name, hook);
+    }
+
+    /// Return whether the state changed since the hooks last ran.
+    fn pending(&self, generation: u64) -> bool {
+        !self.hooks.is_empty() && self.synced != generation
+    }
+
+    /// Mark `generation` seen and return the hooks to run for it.
+    fn take_due(&mut self, generation: u64) -> Vec<Hook> {
+        if !self.pending(generation) {
+            return Vec::new();
+        }
+        self.synced = generation;
+        self.hooks.values().copied().collect()
+    }
+}
 
 /// Application runtime state and renderer coordination.
 pub struct Canopy {
@@ -78,10 +110,10 @@ pub struct Canopy {
     pub(crate) script: ScriptState,
     /// Bounded history of script evaluations.
     journal: ScriptJournal,
-    /// Hooks run before a frame after the input mode stack changes.
-    mode_hooks: BTreeMap<&'static str, ModeHook>,
-    /// Mode stack generation the mode hooks last saw.
-    synced_mode_generation: u64,
+    /// Hooks run before a frame after the mode stack changes.
+    mode_hooks: Hooks,
+    /// Hooks run after the shown notice changes.
+    notice_hooks: Hooks,
     /// Trace for the most recent key or mouse routing pass.
     route_trace: Vec<RouteTraceEntry>,
     /// Adapter-independent runtime progress.
@@ -198,8 +230,8 @@ impl Canopy {
             frame: FrameState::default(),
             script: ScriptState::default(),
             journal: ScriptJournal::default(),
-            mode_hooks: BTreeMap::new(),
-            synced_mode_generation: 0,
+            mode_hooks: Hooks::default(),
+            notice_hooks: Hooks::default(),
             style: default_dark(),
             core,
         }
@@ -346,51 +378,91 @@ impl Canopy {
         self.release_removed_bindings(removed)
     }
 
-    /// Return the active input mode.
-    pub fn input_mode(&self) -> &str {
-        self.core.input_map.current_mode()
+    /// Return the newest active mode, or the empty string for the default
+    /// mode.
+    pub fn mode(&self) -> &str {
+        self.core.input_map.mode()
     }
 
-    /// Set the active input mode.
-    pub fn set_input_mode(&mut self, mode: &str) {
+    /// Replace the active modes with one mode. The empty string returns to
+    /// the default mode.
+    pub fn set_mode(&mut self, mode: &str) {
         self.core.input_map.set_mode(mode);
     }
 
-    /// Push an input mode above the current mode.
-    pub fn push_input_mode(&mut self, mode: &str) {
+    /// Push a mode above the active modes.
+    pub fn push_mode(&mut self, mode: &str) {
         self.core.input_map.push_mode(mode);
     }
 
-    /// Push an input mode that takes only the next key.
+    /// Push a mode that takes only the next key.
     ///
     /// The next key pops the mode. When the mode binds that key, the binding
     /// runs after the pop and before any widget sees the key. Any other key
     /// only pops the mode.
-    pub fn push_transient_input_mode(&mut self, mode: &str) {
+    pub fn push_transient_mode(&mut self, mode: &str) {
         self.core.input_map.push_transient_mode(mode);
     }
 
-    /// Return whether the mode stack changed since the mode hooks last ran.
-    pub(super) fn mode_hooks_pending(&self) -> bool {
-        !self.mode_hooks.is_empty()
-            && self.synced_mode_generation != self.core.input_map.mode_generation()
+    /// Return whether the mode stack or the shown notice changed since their
+    /// hooks last ran.
+    pub(super) fn state_hooks_pending(&self) -> bool {
+        self.mode_hooks
+            .pending(self.core.input_map.mode_generation())
+            || self.notice_hooks.pending(self.core.notices.generation())
     }
 
-    /// Run the mode hooks once for the current mode stack.
-    pub(super) fn run_mode_hooks(&mut self) -> Result<()> {
-        if !self.mode_hooks_pending() {
-            return Ok(());
-        }
-        self.synced_mode_generation = self.core.input_map.mode_generation();
-        let hooks = self.mode_hooks.values().copied().collect::<Vec<_>>();
+    /// Run the mode hooks and the notice hooks once for the current state.
+    pub(super) fn run_state_hooks(&mut self) -> Result<()> {
+        let mut hooks = self
+            .mode_hooks
+            .take_due(self.core.input_map.mode_generation());
+        hooks.extend(self.notice_hooks.take_due(self.core.notices.generation()));
         for hook in hooks {
             self.with_root_context(hook)?;
         }
         Ok(())
     }
 
-    /// Pop the top input mode and return the new active mode.
-    pub fn pop_input_mode(&mut self) -> &str {
+    /// Return the retained notices, oldest first.
+    ///
+    /// A failure from an input binding, a widget handler, or a poll that
+    /// [`Error::is_notice`](crate::error::Error::is_notice) classifies as a
+    /// notice is recorded here while the application keeps running. The
+    /// newest notice is shown until the next input event. The queue keeps the
+    /// newest 32.
+    pub fn notices(&self) -> &[Notice] {
+        self.core.notices.entries()
+    }
+
+    /// Record a notice-class failure, or return any other failure.
+    fn notice_or_fail(
+        &mut self,
+        error: error::Error,
+        source: NoticeSource,
+        node: Option<NodeId>,
+    ) -> Result<()> {
+        if !error.is_notice() {
+            return Err(error);
+        }
+        self.core.notices.record(Notice::new(&error, source, node));
+        Ok(())
+    }
+
+    /// Stop showing the newest notice because input arrived, and sync its
+    /// hooks at once, so an overlay that showed it hides before hit testing.
+    fn dismiss_notice(&mut self) -> Result<()> {
+        if !self.core.notices.dismiss() {
+            return Ok(());
+        }
+        for hook in self.notice_hooks.take_due(self.core.notices.generation()) {
+            self.with_root_context(hook)?;
+        }
+        Ok(())
+    }
+
+    /// Pop the newest mode and return the newest active mode after the pop.
+    pub fn pop_mode(&mut self) -> &str {
         self.core.input_map.pop_mode()
     }
 
@@ -431,7 +503,7 @@ impl Canopy {
     /// Build a diagnostic dump with tree, focus, and binding details.
     pub(crate) fn diagnostic_dump(&self, target: NodeId) -> String {
         let mut out = String::new();
-        let input_mode = self.core.input_map.current_mode();
+        let mode = self.core.input_map.mode();
         let target = if self.core.nodes.contains_key(target) {
             target
         } else {
@@ -445,7 +517,7 @@ impl Canopy {
         out.push_str(&format!("focus path: {focus_path}\n"));
         out.push_str(&format!("target: {target:?}\n"));
         out.push_str(&format!("target path: {target_path}\n"));
-        out.push_str(&format!("input mode: {input_mode}\n"));
+        out.push_str(&format!("mode: {mode}\n"));
         let group = self
             .core
             .input_map

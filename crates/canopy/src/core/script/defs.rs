@@ -6,7 +6,7 @@ use std::{
 use ruau::{declaration, module, vm::NativeModule};
 
 use crate::{
-    FixtureInfo, RouteTraceKind,
+    FixtureInfo, NoticeSource, RouteTraceKind,
     commands::{CommandParamKind, CommandReturnSpec, CommandSet, CommandSpec, DeclRegistry},
     core::inputmap::WidgetActionCatalog,
 };
@@ -170,7 +170,7 @@ pub(super) fn register_framework_declarations(
             declaration::Field::new("description", declaration::Type::String)
                 .doc("Required user-facing binding description."),
             declaration::Field::new("mode", declaration::Type::String.optional())
-                .doc("Optional input mode. Nil or empty uses the default mode."),
+                .doc("Optional mode. Nil or empty uses the default mode."),
             declaration::Field::new("path", declaration::Type::String.optional())
                 .doc("Optional path filter such as `editor/*`."),
             declaration::Field::new(
@@ -224,7 +224,7 @@ pub(super) fn register_framework_declarations(
             declaration::Type::table_with_indexer(
                 [
                     declaration::Field::new("mode", declaration::Type::String.optional())
-                        .doc("Optional input mode for every entry. Nil or empty uses the default mode."),
+                        .doc("Optional mode for every entry. Nil or empty uses the default mode."),
                     declaration::Field::new("path", declaration::Type::String.optional())
                         .doc("Optional path filter for every entry, such as `editor/*`."),
                     declaration::Field::new(
@@ -354,7 +354,7 @@ fn register_binding_info(builder: &mut module::Builder) {
             declaration::Field::new("group", declaration::Type::String.optional())
                 .doc("Framework group, when the tier is framework."),
             declaration::Field::new("mode", declaration::Type::String.optional())
-                .doc("Named input mode, when the tier is mode."),
+                .doc("Named mode, when the tier is mode."),
             declaration::Field::new("path", declaration::Type::String)
                 .doc("Path filter string used when matching the focused path."),
             phase_field(),
@@ -451,6 +451,22 @@ fn register_observation_info(builder: &mut module::Builder) {
             declaration::Field::new("path", declaration::Type::String)
                 .doc("Focused path visible to this step."),
             declaration::Field::new("detail", declaration::Type::String),
+        ]),
+    ));
+    builder.alias(declaration::Alias::new(
+        "Notice",
+        declaration::Type::table([
+            declaration::Field::new("message", declaration::Type::String)
+                .doc("Human-readable failure message."),
+            declaration::Field::new("kind", declaration::Type::String)
+                .doc("Stable failure category, as script error payloads report it."),
+            declaration::Field::new(
+                "source",
+                declaration::Type::literals(NoticeSource::ALL.map(NoticeSource::label)),
+            )
+            .doc("Where the failure arose: a binding, a widget handler, or a poll."),
+            declaration::Field::new("node", declaration::Type::named("NodeId").optional())
+                .doc("Node the binding, handler, or poll ran on, when known."),
         ]),
     ));
     builder.alias(declaration::Alias::new(

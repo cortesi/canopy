@@ -202,8 +202,12 @@ pub trait Widget: Any {
     /// Return `None` to stop scheduled polling, including a timer pending when
     /// an explicit wake triggered this callback. Node wakes can still request
     /// an immediate poll without waiting for a timer.
-    fn poll(&mut self, _ctx: &mut dyn Context) -> Option<Duration> {
-        None
+    ///
+    /// A failure that [`Error::is_notice`](crate::error::Error::is_notice)
+    /// classifies becomes a notice, and polling continues at the delay the
+    /// last successful poll requested. Any other failure is fatal.
+    fn poll(&mut self, _ctx: &mut dyn Context) -> Result<Option<Duration>> {
+        Ok(None)
     }
 
     /// Called when the widget is mounted in the tree, before its first render.

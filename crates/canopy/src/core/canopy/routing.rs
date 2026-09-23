@@ -15,6 +15,7 @@ use crate::{
             KeyDispatchDivergence, KeyExpectation, KeyRouteExplanation, KeyRouteStep, RouteOutcome,
             StepBinding,
         },
+        notice::NoticeSource,
         world::scroll::DefaultAction,
     },
     error::{Error, Result},
@@ -49,11 +50,14 @@ pub enum RouteTraceKind {
     Handled,
     /// Routing ended without a handler.
     Unhandled,
+    /// A binding or a widget handler failed, and the failure became a notice
+    /// that consumed the input.
+    Notice,
 }
 
 impl RouteTraceKind {
     /// Every trace kind, in the order routing can record them.
-    pub(crate) const ALL: [Self; 10] = [
+    pub(crate) const ALL: [Self; 11] = [
         Self::Start,
         Self::BeforeWidgetBinding,
         Self::OfferIntent,
@@ -64,6 +68,7 @@ impl RouteTraceKind {
         Self::Bubble,
         Self::Handled,
         Self::Unhandled,
+        Self::Notice,
     ];
 
     /// Return a stable scripting and diagnostic label.
@@ -79,6 +84,7 @@ impl RouteTraceKind {
             Self::Bubble => "bubble",
             Self::Handled => "handled",
             Self::Unhandled => "unhandled",
+            Self::Notice => "notice",
         }
     }
 }
@@ -208,6 +214,29 @@ impl Canopy {
         });
     }
 
+    /// End a route whose binding or widget handler failed.
+    ///
+    /// A notice-class failure is recorded and traced, and consumes the input.
+    /// Any other failure is fatal and returns.
+    fn route_notice(
+        &mut self,
+        error: Error,
+        source: NoticeSource,
+        node: NodeId,
+        path: &Path,
+    ) -> Result<bool> {
+        self.notice_or_fail(error, source, Some(node))?;
+        let message = self
+            .core
+            .notices
+            .entries()
+            .last()
+            .map(|notice| notice.message.clone())
+            .unwrap_or_default();
+        self.trace_route(RouteTraceKind::Notice, Some(node), path, message);
+        Ok(true)
+    }
+
     /// Propagate a key or mouse event through one bubbling route.
     ///
     /// `scope` carries an active script scope so Luau bindings run inside it.
@@ -282,10 +311,14 @@ impl Canopy {
                             &path,
                             format!("offered widget action {action}"),
                         );
-                        let Some(outcome) =
-                            self.offer_widget_action(binding_id, &action, id, input, &mut guard)?
-                        else {
-                            return Ok(true);
+                        let outcome = match self
+                            .offer_widget_action(binding_id, &action, id, input, &mut guard)
+                        {
+                            Ok(Some(outcome)) => outcome,
+                            Ok(None) => return Ok(true),
+                            Err(error) => {
+                                return self.route_notice(error, NoticeSource::Widget, id, &path);
+                            }
                         };
                         if outcome == EventOutcome::Handle {
                             self.trace_route(
@@ -353,7 +386,13 @@ impl Canopy {
                     RoutedInput::Key(key) => self.core.node_key_outcome(id, key, route_focus).ok(),
                     RoutedInput::Mouse(_) => None,
                 };
-                let outcome = self.core.dispatch_event_on_node(id, &event)?;
+                let dispatched = self.with_dispatch_boundary(|canopy| {
+                    canopy.core.dispatch_event_on_node(id, &event)
+                });
+                let outcome = match dispatched {
+                    Ok(outcome) => outcome,
+                    Err(error) => return self.route_notice(error, NoticeSource::Widget, id, &path),
+                };
                 if let Some(predicted) = predicted {
                     if predicted != outcome {
                         self.trace_route(
@@ -528,6 +567,7 @@ impl Canopy {
         key: key::Key,
         guard: Option<&mut KeyRouteGuard>,
     ) -> Result<bool> {
+        self.dismiss_notice()?;
         if self.core.effective_transient_mode().is_some() {
             self.with_dispatch_boundary(|canopy| {
                 canopy.route_transient_key(start, &path, key, scope, guard)
@@ -588,11 +628,14 @@ impl Canopy {
                     &path,
                     format!("offered widget action {action} in a transient mode"),
                 );
-                let Some(outcome) =
-                    self.offer_widget_action(binding_id, &action, id, input, &mut guard)?
-                else {
-                    return Ok(true);
-                };
+                let outcome =
+                    match self.offer_widget_action(binding_id, &action, id, input, &mut guard) {
+                        Ok(Some(outcome)) => outcome,
+                        Ok(None) => return Ok(true),
+                        Err(error) => {
+                            return self.route_notice(error, NoticeSource::Widget, id, &path);
+                        }
+                    };
                 // A transient decision is spent once the mode pops, so a
                 // declined action ends the key as a transient dismissal. It
                 // does not reselect into the default tier or run raw.
@@ -640,31 +683,35 @@ impl Canopy {
 
         let event = input.event_for_node(&self.core, node_id);
         let depth = self.core.push_event_scope(&event);
-        let result = match binding.target {
-            RunTarget::Script(function) => self
+        // The run has its own completion boundary, so a failed run drops the
+        // removals it queued even when its failure becomes a notice.
+        let result = self.with_dispatch_boundary(|canopy| match binding.target {
+            RunTarget::Script(function) => canopy
                 .execute_binding_with_scope(node_id, function, scope)
                 .map(|()| None),
             RunTarget::Command(call) => {
                 // Eligibility is read here, inside the event scope, rather than
                 // taken from the last frame, so a status hook sees the same
                 // injections the command would.
-                match commands::command_status(&self.core, node_id, &call) {
+                match commands::command_status(&canopy.core, node_id, &call) {
                     Ok(commands::CommandStatus::Disabled(reason)) => Ok(Some(reason)),
                     Ok(commands::CommandStatus::Enabled) => {
-                        commands::dispatch(&mut self.core, node_id, &call)
+                        commands::dispatch(&mut canopy.core, node_id, &call)
                             .map(|_| None)
                             .map_err(Into::into)
                     }
                     Err(error) => Err(error),
                 }
             }
-        };
+        });
         self.core.pop_event_scope(depth);
-        let skipped = result?;
+        let skipped = match result {
+            Ok(skipped) => skipped,
+            Err(error) => return self.route_notice(error, NoticeSource::Binding, node_id, path),
+        };
 
         // A disabled winner still consumes its input. Falling through would let
-        // an ancestor act on a control the user saw as unavailable, and
-        // reporting an error would end the run loop over an ordinary click.
+        // an ancestor act on a control the user saw as unavailable.
         let detail = skipped.map_or_else(
             || "binding completed".to_string(),
             |reason| format!("binding disabled: {reason}"),
@@ -678,6 +725,10 @@ impl Canopy {
     ///
     /// `scope` carries an active script scope for a script-originated event.
     pub(crate) fn mouse(&mut self, scope: Option<&Scope<'_>>, m: mouse::MouseEvent) -> Result<()> {
+        // A bare pointer move is not a response to a notice.
+        if m.action != mouse::Action::Moved {
+            self.dismiss_notice()?;
+        }
         let (target, path) = self.mouse_route_start(m.location)?;
         let changed = self.route_input(target, path, RoutedInput::Mouse(m), scope, None)?;
         if changed {
@@ -724,9 +775,11 @@ impl Canopy {
         guard: &mut Option<&mut KeyRouteGuard>,
     ) -> Result<Option<EventOutcome>> {
         let event = input.event_for_node(&self.core, node);
-        let outcome = self
-            .core
-            .dispatch_action_on_node(node, action.as_str(), &event)?;
+        let outcome = self.with_dispatch_boundary(|canopy| {
+            canopy
+                .core
+                .dispatch_action_on_node(node, action.as_str(), &event)
+        })?;
         debug_assert_eq!(
             outcome,
             EventOutcome::Handle,
@@ -762,11 +815,22 @@ impl Canopy {
         .map(inputmap::BindingRecord::resolved)
     }
 
-    /// Dispatch a focus-related event to the focused node, bubbling as needed.
+    /// Dispatch a paste or focus event to the focused node, bubbling as
+    /// needed.
+    ///
+    /// A paste is input, so it dismisses the shown notice. A handler's
+    /// notice-class failure becomes a notice.
     fn dispatch_focus_event(&mut self, event: &Event) -> Result<()> {
+        if matches!(event, Event::Paste(_)) {
+            self.dismiss_notice()?;
+        }
         let start = self.focus_or_root()?;
-        self.core.dispatch_event(start, event)?;
-        Ok(())
+        let dispatched =
+            self.with_dispatch_boundary(|canopy| canopy.core.dispatch_event(start, event));
+        match dispatched {
+            Ok(_) => Ok(()),
+            Err(error) => self.notice_or_fail(error, NoticeSource::Widget, None),
+        }
     }
 
     /// Service a bounded batch of callbacks marshalled onto the UI thread.

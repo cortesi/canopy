@@ -624,8 +624,8 @@ impl Widget for Terminal {
         self.cursor
     }
 
-    fn poll(&mut self, _ctx: &mut dyn Context) -> Option<Duration> {
-        Some(Duration::from_millis(POLL_INTERVAL_MS))
+    fn poll(&mut self, _ctx: &mut dyn Context) -> Result<Option<Duration>> {
+        Ok(Some(Duration::from_millis(POLL_INTERVAL_MS)))
     }
 
     fn on_mount(&mut self, _ctx: &mut dyn Context) -> Result<()> {

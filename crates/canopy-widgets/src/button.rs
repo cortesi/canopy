@@ -747,7 +747,7 @@ mod tests {
     }
 
     #[test]
-    fn activation_propagates_action_errors() -> Result<()> {
+    fn activation_reports_action_errors_as_notices() -> Result<()> {
         let mut harness = activating(
             ActionOwner {
                 enabled: true,
@@ -758,8 +758,14 @@ mod tests {
             5,
         )?;
         let location = origin(&harness, the_button(&harness));
-        assert!(harness.mouse(press_at(location)).is_err());
+        harness.mouse(press_at(location))?;
         harness.with_root_widget(|owner: &mut ActionOwner| assert_eq!(owner.activations, 1));
+        let notice = harness
+            .canopy
+            .notices()
+            .last()
+            .expect("the failed activation is a notice");
+        assert_eq!(notice.source, canopy::NoticeSource::Binding);
         Ok(())
     }
 
@@ -1047,7 +1053,7 @@ mod tests {
                 (InputSpec::Key(Key::parse_spec("Space")?), "Activate"),
                 (InputSpec::Mouse(Mouse::parse_spec("LeftDown")?), "Activate"),
             ] {
-                setup.bind_framework(
+                setup.bind(
                     input,
                     canopy::BindingOptions {
                         path: Some("**/dialog/**/".parse()?),
@@ -1056,7 +1062,7 @@ mod tests {
                         source: None,
                         phase: Some(canopy::BindingPhase::AfterWidget),
                     },
-                    Button::call_press(),
+                    canopy::BindingTarget::Command(Button::call_press()),
                 )?;
             }
             Ok(())
@@ -1147,10 +1153,10 @@ mod tests {
 
         // Rebinding the same selector replaces the default outright.
         harness.script(
-            r#"canopy.bind_mouse("LeftDown", {
+            r#"canopy.keymap({
                 path = "**/button/**/",
-                description = "Ignore the click",
-            }, function() end)"#,
+                { mouse = "LeftDown", description = "Ignore the click", action = function() end },
+            })"#,
         )?;
         harness.mouse(press_at(location))?;
         harness.with_root_widget(|owner: &mut ActionOwner| {

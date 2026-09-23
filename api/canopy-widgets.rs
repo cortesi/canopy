@@ -659,7 +659,7 @@ pub mod canopy_widgets {
 
             fn on_mount(&mut self, _ctx: &mut dyn Context) -> Result<()> {}
 
-            fn poll(&mut self, _ctx: &mut dyn Context) -> Option<Duration> {}
+            fn poll(&mut self, _ctx: &mut dyn Context) -> Result<Option<Duration>> {}
 
             fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
         }

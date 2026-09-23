@@ -143,7 +143,7 @@ fn prove_help_flow(mut harness: Harness, hidden: &[&str], shown: &[&str]) -> Res
             .iter()
             .any(|entry| entry.kind == RouteTraceKind::Handled)
     );
-    assert_eq!(harness.canopy.input_mode(), "accepted");
+    assert_eq!(harness.canopy.mode(), "accepted");
     Ok(())
 }
 

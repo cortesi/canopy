@@ -274,7 +274,7 @@ mod tests {
         target: u64,
         phase: BindingPhase,
     ) -> Result<()> {
-        core.input_map.replace_application_binding(
+        core.input_map.bind(
             InputSpec::Key(key.into()),
             crate::BindingOptions {
                 tier,
@@ -298,7 +298,7 @@ mod tests {
         target: u64,
     ) -> Result<Mouse> {
         let mouse = Mouse::parse_spec(spec)?;
-        core.input_map.replace_application_binding(
+        core.input_map.bind(
             InputSpec::Mouse(mouse),
             crate::BindingOptions {
                 tier,
@@ -415,8 +415,8 @@ mod tests {
             1,
         )?;
         let group = FrameworkBindingGroup::new("root.help");
-        core.input_map.bind_framework(
-            Mouse::parse_spec("LeftDown")?,
+        core.input_map.bind(
+            Mouse::parse_spec("LeftDown")?.into(),
             BindingOptions {
                 path: Some("/root/**/".parse()?),
                 tier: BindingTier::Framework(group),
@@ -424,11 +424,11 @@ mod tests {
                 source: None,
                 phase: Some(BindingPhase::AfterWidget),
             },
-            CommandCall {
+            BindingTarget::Command(CommandCall {
                 id: CommandId("binding_list::scroll_down"),
                 args: CommandArgs::default(),
                 target: None,
-            },
+            }),
         )?;
         core.input_map
             .set_modal_bindings(Some(crate::ModalBindings::Framework(group)));
@@ -449,7 +449,7 @@ mod tests {
         core.attach(core.root, leaf)?;
         core.commands.add(EligibleLeaf::commands())?;
         let call = EligibleLeaf::call_update(7).with_target(CommandTarget::Exact(leaf));
-        core.input_map.replace_application_binding(
+        core.input_map.bind(
             InputSpec::Mouse(Mouse::parse_spec("LeftDown")?),
             BindingOptions {
                 path: Some("eligible_leaf/".parse()?),
@@ -569,7 +569,7 @@ mod tests {
         core.attach(core.root, leaf)?;
         core.commands.add(EligibleLeaf::commands())?;
         let call = EligibleLeaf::call_update(7).with_target(CommandTarget::Exact(leaf));
-        core.input_map.replace_application_binding(
+        core.input_map.bind(
             InputSpec::Key('u'.into()),
             BindingOptions {
                 path: Some("eligible_leaf/".parse()?),
@@ -736,7 +736,7 @@ mod tests {
         let leaf = core.create_detached(ControlCodeLeaf)?;
         core.attach(core.root, leaf)?;
         core.set_focus(leaf)?;
-        core.input_map.replace_application_binding(
+        core.input_map.bind(
             InputSpec::Key(Key::parse_spec("ctrl-a")?),
             BindingOptions {
                 path: Some("control_code_leaf/".parse()?),
@@ -772,8 +772,8 @@ mod tests {
         core.attach(core.root, leaf)?;
         bind(&mut core, BindingTier::Default, 'a', "", "Application", 1)?;
         let group = FrameworkBindingGroup::new("root.help");
-        core.input_map.bind_framework(
-            'j',
+        core.input_map.bind(
+            'j'.into(),
             BindingOptions {
                 path: Some("/root/help/**/".parse()?),
                 tier: BindingTier::Framework(group),
@@ -781,11 +781,11 @@ mod tests {
                 source: None,
                 phase: Some(BindingPhase::AfterWidget),
             },
-            CommandCall {
+            BindingTarget::Command(CommandCall {
                 id: CommandId("binding_list::scroll_down"),
                 args: CommandArgs::default(),
                 target: None,
-            },
+            }),
         )?;
         core.input_map
             .set_modal_bindings(Some(crate::ModalBindings::Framework(group)));

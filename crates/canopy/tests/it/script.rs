@@ -302,7 +302,7 @@ mod tests {
             local leaves = canopy.find_nodes("api_root/api_leaf")
             canopy.set_focus(leaves[1])
             local id = canopy.bind("x", { description = "Set three" }, command.api_leaf.set(3))
-            canopy.bind_mouse("ScrollUp", { description = "Set five" }, command.api_leaf.set(5))
+            canopy.keymap({ { mouse = "ScrollUp", description = "Set five", action = command.api_leaf.set(5) } })
             local found = false
             for _, binding in canopy.bindings() do
                 if binding.id == id then
@@ -579,7 +579,7 @@ mod tests {
             r#"canopy.bind("a", { description = "A", mode = "insert", tier = "global" }, function() end)"#,
             r#"canopy.bind("a", { description = "A", tier = "other" }, function() end)"#,
             r#"canopy.bind_with("a", {}, function() end)"#,
-            r#"canopy.bind_mouse_with("Left Down", {}, function() end)"#,
+            r#"canopy.bind_mouse("LeftDown", { description = "Removed" }, function() end)"#,
         ] {
             harness
                 .canopy
@@ -597,7 +597,7 @@ mod tests {
             .register::<ApiRoot>()
             .configure(move |setup| {
                 let group = FrameworkBindingGroup::new("test.framework");
-                let id = setup.bind_framework(
+                let id = setup.bind(
                     Key::parse_spec("F1")?,
                     BindingOptions {
                         path: Some("/api_root/**/".parse()?),
@@ -606,7 +606,7 @@ mod tests {
                         source: None,
                         phase: Some(BindingPhase::AfterWidget),
                     },
-                    ApiLeaf::call_get(),
+                    canopy::BindingTarget::Command(ApiLeaf::call_get()),
                 )?;
                 record.set(Some(id));
                 Ok(())
@@ -718,7 +718,7 @@ mod tests {
     }
 
     #[test]
-    fn luau_can_switch_input_modes() -> Result<()> {
+    fn luau_can_switch_modes() -> Result<()> {
         let mut harness = Harness::builder(ApiRoot)
             .register::<ApiRoot>()
             .size(20, 5)
@@ -727,15 +727,15 @@ mod tests {
         harness.canopy.eval_script(
             r#"
             canopy.set_mode("insert")
-            canopy.assert(canopy.input_mode() == "insert", "mode should switch")
+            canopy.assert(canopy.mode() == "insert", "mode should switch")
             canopy.push_mode("palette")
-            canopy.assert(canopy.input_mode() == "palette", "push should activate top mode")
+            canopy.assert(canopy.mode() == "palette", "push should activate top mode")
             canopy.assert(canopy.pop_mode() == "insert", "pop should restore previous mode")
             canopy.assert(canopy.pop_mode() == "", "pop should return to default mode")
         "#,
         )?;
 
-        assert_eq!(harness.canopy.input_mode(), "");
+        assert_eq!(harness.canopy.mode(), "");
         Ok(())
     }
 

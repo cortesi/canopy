@@ -196,9 +196,9 @@ order, so a later entry wins a precedence tie. Every binding records the
 `canopy.keymap` call site as its source. The call returns the binding IDs in
 entry order, key bindings before mouse bindings within an entry.
 
-Use `canopy.bind(key, options, action)` and `canopy.bind_mouse(mouse, options,
-action)` for one binding. The options table is required. Its `description`
-field must contain user-facing text. The optional `path` field limits a binding
+Use `canopy.bind(key, options, action)` for one key binding, and a
+`canopy.keymap` entry with `mouse` for a mouse binding. The options table is
+required. Its `description` field must contain user-facing text. The optional `path` field limits a binding
 to matching route paths. The optional `mode` field puts a binding in a named
 mode. Set `tier = "global"` for a global binding; a global binding cannot also
 name a mode, and its path must be anchored at both ends.
@@ -217,9 +217,12 @@ even while a text field has focus, where `?` is a character to insert.
 
 `canopy.set_mode(mode)` replaces the active modes with one mode, and the empty
 string returns to the default mode. `canopy.push_mode(mode)` adds a mode above
-the active modes, and `canopy.pop_mode()` removes the newest one. A key that
-the newest mode does not bind falls through to the older modes and then to the
-default tier.
+the active modes, and `canopy.pop_mode()` removes the newest one and returns the
+newest mode after it. `canopy.mode()` returns the newest active mode, or the
+empty string for the default mode. A key that the newest mode does not bind
+falls through to the older modes and then to the default tier. Rust uses the
+same words: `Canopy::mode`, `set_mode`, `push_mode`, `push_transient_mode`, and
+`pop_mode`.
 
 Pass `{ transient = true }` to `canopy.push_mode` for a mode that takes only
 the next key:
@@ -248,9 +251,13 @@ does not fall through to older modes or to the default tier. Global bindings
 still apply. `Root` lists the keys of a transient mode in a small panel until
 the mode ends.
 
-Native Rust uses generated typed `Widget::call_command(arguments...)` builders
-with `Setup::bind_command` during setup. A `CommandCall` holds the command id, its
-arguments, and an optional target. `CommandCall::with_target` sets exact,
+Native Rust installs bindings during setup with `Setup::bind(input, options,
+target)`. The target is a `BindingTarget`: a command call built by a generated
+`Widget::call_command(arguments...)` builder, or a registered widget action. The
+tier in the options decides the semantics: a framework tier is registered
+idempotently for the group it names, and an application tier replaces any
+binding with the same tier, input, and path. A `CommandCall` holds the command
+id, its arguments, and an optional target. `CommandCall::with_target` sets exact,
 relative, or focus targeting, and a Button, List, or native binding keeps it
 with the stored call. A call without a target resolves from its origin: the
 dispatching node, or the node where a binding wins.
@@ -294,7 +301,9 @@ node at a time.
 `canopy.route_trace()` reports what routing actually did. Each entry has a
 `kind`: `start`, `before_widget_binding`, `offer_intent`, `widget`,
 `after_widget_binding`, `run_binding`, `default_action`, `bubble`, `handled`,
-or `unhandled`. A widget action offer traces as `offer_intent`. A `widget`
+`unhandled`, or `notice`. A widget action offer traces as `offer_intent`. A
+`notice` entry ends a route whose binding or widget handler failed, and its
+detail is the notice's message. A `widget`
 entry that begins with "key prediction mismatch" marks a widget whose
 `key_outcome` disagreed with its result.
 
@@ -394,6 +403,24 @@ callers must use the fixture tool before evaluating a script.
 ## Diagnostics
 
 `canopy.log(value)` appends a log line to the evaluation result.
+
+`canopy.notices()` returns the failures the application reported and survived,
+oldest first, up to the newest 32. A binding's command or callback, a widget's
+event or intent handler, or a widget's poll can fail this way. Each `Notice`
+record has a `message`, the failure's `kind` as script error payloads report
+it (`command_exec` for a failed command, `app` for an application error), a
+`source` of `binding`, `widget`, or `poll`, and the `node` when known. A key a
+script sends is input, so a failure it causes is a notice rather than a script
+error:
+
+```luau
+canopy.send_key("d")
+local notices = canopy.notices()
+canopy.assert(notices[#notices].message:find("trash failed") ~= nil)
+```
+
+A script call is not input, so `canopy.call` and the owner functions still
+raise a failing command's error in the script.
 
 `canopy.assert(condition, message?)` records an assertion result. A failed
 assertion also fails the script.

@@ -2195,7 +2195,7 @@ Each stage also updates the docs it touches.
 - [x] C45: `key_outcome` returns `EventOutcome`. Delete the provisional and
   gap machinery, add the prediction check to routing, and delete the
   boilerplate implementations in both repositories.
-- [ ] C11:
+- [x] C11:
   - `Setup::bind`, which absorbs `bind_framework` (3 fh sites).
   - Mode renames in Rust and Luau, including fh's 27 `input_mode()` sites.
   - Delete `bind_mouse`.
@@ -2206,7 +2206,7 @@ Each stage also updates the docs it touches.
     builders.
 - [x] C47: `Harness::wait_until` and `with_unique`. Replace fh's sleep loops
   and private poll calls.
-- [ ] C39: notices, `Error::App`, and Root's notice display. Delete fh's
+- [x] C39: notices, `Error::App`, and Root's notice display. Delete fh's
   error-to-footer plumbing.
 - [ ] C13: apply the node-addressed rule to the four context traits. Migrate
   about 150 Canopy sites and about 50 fh sites, using

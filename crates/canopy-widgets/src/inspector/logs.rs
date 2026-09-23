@@ -134,7 +134,7 @@ impl Widget for Logs {
         Ok(())
     }
 
-    fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {
+    fn poll(&mut self, c: &mut dyn Context) -> Result<Option<Duration>> {
         if self.install == InstallState::Unattempted {
             let format = fmt::format()
                 .with_level(true)
@@ -159,7 +159,7 @@ impl Widget for Logs {
         }
 
         self.flush_buffer(c).ok();
-        Some(Duration::from_millis(100))
+        Ok(Some(Duration::from_millis(100)))
     }
 
     fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {

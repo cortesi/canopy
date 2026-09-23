@@ -32,15 +32,15 @@ pub use core::termbuf::{Cell, RenderLimits, TermBuf};
 pub use core::testing;
 // Stable app-author surface.
 pub use core::{
-    AutomationCallback, AutomationHandle, BindingId, BindingOptions, BindingPhase,
+    AutomationCallback, AutomationHandle, BindingId, BindingOptions, BindingPhase, BindingTarget,
     BindingTargetKind, BindingTier, Canopy, CanopyBuilder, ChangeOutcome, ChildBuilder,
     ChildConfig, ChildSlot, Context, ContextExt, EvalId, EvalOutcome, EvalRequest, EvalTicket,
     Fixture, FixtureInfo, FocusDirection, FocusScope, FrameId, FrameSnapshot,
     FrameworkBindingGroup, InputSpec, InteractionToken, KeyedChildren, ModalBindings, ModalOptions,
-    NodeId, NodeSnapshot, NodeWakeHandle, Register, RevealAlign, RouteTraceEntry, RouteTraceKind,
-    ScriptJournalEntry, ScriptOrigin, ScriptTrust, SemanticIdentity, Setup, TurnOutcome, TypedId,
-    ViewContext, ViewContextExt, WakeOutcome, WidgetActionName, WidgetActionSpec, WidgetSemantics,
-    Work, WorkLifetime,
+    NodeId, NodeSnapshot, NodeWakeHandle, Notice, NoticeSource, Register, RevealAlign,
+    RouteTraceEntry, RouteTraceKind, ScriptJournalEntry, ScriptOrigin, ScriptTrust,
+    SemanticIdentity, Setup, TurnOutcome, TypedId, ViewContext, ViewContextExt, WakeOutcome,
+    WidgetActionName, WidgetActionSpec, WidgetSemantics, Work, WorkLifetime,
 };
 // App-author modules used by widget implementations and derive output.
 pub use core::{commands, cursor, error, event, help, keyroute, path, script, style, text};

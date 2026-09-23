@@ -218,12 +218,14 @@ impl Widget for ListDemo {
         Ok(())
     }
 
-    fn poll(&mut self, ctx: &mut dyn Context) -> Option<Duration> {
-        let list_id = self.list_id?;
+    fn poll(&mut self, ctx: &mut dyn Context) -> Result<Option<Duration>> {
+        let Some(list_id) = self.list_id else {
+            return Ok(None);
+        };
         let interval = self.interval.max(Duration::from_millis(1));
         if !self.started {
             self.started = true;
-            return Some(interval);
+            return Ok(Some(interval));
         }
         ctx.with_widget_mut(list_id, |list: &mut List<Text>, ctx| {
             let len = list.len();
@@ -236,7 +238,7 @@ impl Widget for ListDemo {
             }
         })
         .ok();
-        Some(interval)
+        Ok(Some(interval))
     }
 
     fn name(&self) -> NodeName {

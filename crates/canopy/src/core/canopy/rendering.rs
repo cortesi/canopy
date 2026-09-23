@@ -6,7 +6,8 @@ use super::{Canopy, FrameId};
 use crate::{
     NodeId,
     core::{
-        context::CoreViewContext, snapshot, termbuf::TermBuf, view::View, world::WidgetOperation,
+        context::CoreViewContext, notice::NoticeSource, snapshot, termbuf::TermBuf, view::View,
+        world::WidgetOperation,
     },
     cursor,
     error::{Error, Result},
@@ -44,9 +45,19 @@ impl Canopy {
         let result = self.with_dispatch_boundary(|canopy| {
             canopy
                 .core
-                .with_widget_ctx(node_id, |widget, ctx| widget.poll(ctx))
+                .with_widget_ctx(node_id, |widget, ctx| widget.poll(ctx))?
         });
-        let next = result?;
+        let next = match result {
+            Ok(next) => {
+                self.poller.set_interval(stamp, next);
+                next
+            }
+            // A failed poll keeps its cadence, so work it retries runs again.
+            Err(error) => {
+                self.notice_or_fail(error, NoticeSource::Poll, Some(node_id))?;
+                self.poller.interval(stamp)
+            }
+        };
         if self.core.work_stamp_valid(stamp)
             && let Some(next) = next
         {
@@ -266,7 +277,7 @@ impl Canopy {
         if !force
             && !self.core.changes.is_pending()
             && !self.script.host.has_on_start_hooks()
-            && !self.mode_hooks_pending()
+            && !self.state_hooks_pending()
         {
             return Ok(false);
         }
@@ -276,8 +287,14 @@ impl Canopy {
         if let Some(new_style) = self.core.pending_style.take() {
             self.style = new_style;
         }
-        self.run_mode_hooks()?;
+        self.run_state_hooks()?;
         self.pre_render()?;
+        // A first poll during the sweep can record a notice, which its hooks
+        // show in this frame.
+        if self.state_hooks_pending() {
+            self.run_state_hooks()?;
+            self.pre_render()?;
+        }
         self.core.update_layout(root_size)?;
         if self.run_on_start_hooks()? {
             self.pre_render()?;

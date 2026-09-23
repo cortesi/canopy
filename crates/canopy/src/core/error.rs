@@ -157,6 +157,8 @@ script_error_kinds! {
     ScriptBusy => "script_busy",
     /// Script evaluation was explicitly cancelled.
     ScriptCancelled => "script_cancelled",
+    /// Application code returned its own error.
+    App => "app",
 }
 
 impl fmt::Display for ScriptErrorKind {
@@ -342,6 +344,13 @@ pub enum Error {
     /// Node exists but is not attached to the root tree.
     #[error("node is detached: {0:?}")]
     NodeDetached(NodeId),
+    /// An application's own failure, returned unwrapped from app code.
+    ///
+    /// Commands, widget handlers, and polls return I/O and domain errors this
+    /// way. From a binding or a poll, it is a notice rather than a fatal
+    /// failure.
+    #[error(transparent)]
+    App(Box<dyn StdError + Send + Sync>),
 }
 
 impl Error {
@@ -363,6 +372,7 @@ impl Error {
             Self::NotFound(_) => ScriptErrorKind::NotFound,
             Self::Invalid(_) => ScriptErrorKind::Invalid,
             Self::InvalidPhase { .. } => ScriptErrorKind::InvalidPhase,
+            Self::App(_) => ScriptErrorKind::App,
             Self::RenderWidthLimit { .. }
             | Self::RenderHeightLimit { .. }
             | Self::RenderCellCountOverflow { .. }
@@ -383,6 +393,57 @@ impl Error {
             | Self::TreeEditDuringRollback { .. }
             | Self::KeyDispatchDivergence(_)
             | Self::Parse(_) => ScriptErrorKind::Canopy,
+        }
+    }
+
+    /// Return whether this failure is a notice: an operation's own failure,
+    /// which the runtime reports while the application keeps running.
+    ///
+    /// A command's failure, an application error, and an error a script
+    /// raises are notices. A widget operation failure takes the class of its
+    /// source. Timeouts, cancellation, and runtime invariant, backend, render,
+    /// and layout failures are fatal. The runtime applies this rule to
+    /// failures from input bindings, widget handlers, and polls; a script
+    /// call raises every failure as a script error.
+    pub fn is_notice(&self) -> bool {
+        match self {
+            Self::Command(_) | Self::App(_) => true,
+            Self::ScriptStructured { kind, .. } => !matches!(
+                kind,
+                ScriptErrorKind::Timeout
+                    | ScriptErrorKind::ScriptCancelled
+                    | ScriptErrorKind::ScriptBusy
+            ),
+            Self::NodeOperation { source, .. } => source.is_notice(),
+            Self::ScriptCancelled
+            | Self::ScriptBusy(_)
+            | Self::ScriptTimeout { .. }
+            | Self::RenderWidthLimit { .. }
+            | Self::RenderHeightLimit { .. }
+            | Self::RenderCellCountOverflow { .. }
+            | Self::RenderCellLimit { .. }
+            | Self::RenderAllocation { .. }
+            | Self::InvalidCellCharacter { .. }
+            | Self::Geometry(_)
+            | Self::InvalidLayout(_)
+            | Self::TerminalIo(_)
+            | Self::Driver(_)
+            | Self::Internal(_)
+            | Self::ReentrantWidgetBorrow(_)
+            | Self::Invalid(_)
+            | Self::NotFound(_)
+            | Self::NodeTypeMismatch { .. }
+            | Self::MultipleMatches
+            | Self::DuplicateChildKey(_)
+            | Self::DuplicateChild { .. }
+            | Self::AlreadyAttached(_)
+            | Self::WouldCreateCycle { .. }
+            | Self::InvalidPhase { .. }
+            | Self::TreeEditDuringRollback { .. }
+            | Self::KeyDispatchDivergence(_)
+            | Self::Parse(_)
+            | Self::NodeNotFound(_)
+            | Self::NodeDetached(_) => false,
         }
     }
 
@@ -419,6 +480,39 @@ impl From<mpsc::RecvError> for Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::id::testing_node_id;
+
+    #[test]
+    fn notices_are_an_operations_own_failures() {
+        let app = Error::App("disk full".into());
+        assert!(app.is_notice());
+        assert_eq!(app.script_kind(), ScriptErrorKind::App);
+        assert_eq!(app.to_string(), "disk full");
+        assert!(Error::Command(CommandError::execution(Error::Internal("x".into()))).is_notice());
+        assert!(Error::script("raised").is_notice());
+        assert!(
+            Error::NodeOperation {
+                kind: NodeOperationKind::Access,
+                operation: "event",
+                node: testing_node_id(),
+                path: "/root".into(),
+                source: Box::new(Error::App("handler failed".into())),
+            }
+            .is_notice(),
+            "a widget operation failure takes its source's class"
+        );
+        for fatal in [
+            Error::Internal("broken".into()),
+            Error::Invalid("bad".into()),
+            Error::Driver("closed".into()),
+            Error::ScriptCancelled,
+            Error::ScriptTimeout { timeout_ms: 1 },
+            Error::script_structured(ScriptErrorKind::Timeout, "late"),
+            Error::TerminalIo(io::Error::other("gone")),
+        ] {
+            assert!(!fatal.is_notice(), "{fatal}");
+        }
+    }
 
     #[test]
     fn parse_error_preserves_source_position() {

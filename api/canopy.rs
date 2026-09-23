@@ -711,6 +711,13 @@ pub mod canopy {
             #[error("node is detached: {0:?}")]
             /// Node exists but is not attached to the root tree.
             NodeDetached(crate::core::id::NodeId),
+            #[error(transparent)]
+            /// An application's own failure, returned unwrapped from app code.
+            ///
+            /// Commands, widget handlers, and polls return I/O and domain errors this
+            /// way. From a binding or a poll, it is a notice rather than a fatal
+            /// failure.
+            App(Box<dyn Send + StdError + Sync>),
         }
 
         /// Phase in which a node-bound widget operation failed.
@@ -813,6 +820,9 @@ pub mod canopy {
             #[serde(rename = "script_cancelled")]
             /// Script evaluation was explicitly cancelled.
             ScriptCancelled,
+            #[serde(rename = "app")]
+            /// Application code returned its own error.
+            App,
         }
 
         /// Convert a canopy error into a structured Ruau runtime error.
@@ -826,6 +836,17 @@ pub mod canopy {
             /// Luau error payloads and automation reports both classify through this
             /// one mapping.
             pub fn script_kind(&self) -> ScriptErrorKind {}
+
+            /// Return whether this failure is a notice: an operation's own failure,
+            /// which the runtime reports while the application keeps running.
+            ///
+            /// A command's failure, an application error, and an error a script
+            /// raises are notices. A widget operation failure takes the class of its
+            /// source. Timeouts, cancellation, and runtime invariant, backend, render,
+            /// and layout failures are fatal. The runtime applies this rule to
+            /// failures from input bindings, widget handlers, and polls; a script
+            /// call raises every failure as a script error.
+            pub fn is_notice(&self) -> bool {}
         }
 
         impl From<&Error> for CanopyErrorPayload {
@@ -2836,8 +2857,8 @@ pub mod canopy {
     pub struct BindingOptions {
         /// Optional validated path selector. Omission matches the current route.
         pub path: Option<crate::path::PathFilter>,
-        /// Resolution tier. Application bindings take any tier but the
-        /// framework tier, which only [`InputMap::bind_framework`] accepts.
+        /// Resolution tier. Scripts install application tiers only; the
+        /// framework tier is registered during setup.
         pub tier: BindingTier,
         /// Required user-facing description.
         pub description: String,
@@ -2859,6 +2880,17 @@ pub mod canopy {
         #[default]
         /// Execute only after the widget ignores the input.
         AfterWidget,
+    }
+
+    /// Action executed by a binding.
+    #[derive(Clone, Debug, PartialEq)]
+    pub enum BindingTarget {
+        /// Stored Luau callback.
+        Script(crate::script::LuauFunctionId),
+        /// Rust command call.
+        Command(crate::commands::CommandCall),
+        /// Named operation the route offers to widgets on the way up.
+        WidgetAction(WidgetActionName),
     }
 
     /// Class of target a binding record owns.
@@ -3161,6 +3193,30 @@ pub mod canopy {
     #[derive(Clone, Debug)]
     pub struct NodeWakeHandle {}
 
+    /// A recoverable failure, reported to the user and to scripts.
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    pub struct Notice {
+        /// Human-readable failure message.
+        pub message: String,
+        /// Stable failure category, as script error payloads report it.
+        pub kind: crate::error::ScriptErrorKind,
+        /// Where the failure arose.
+        pub source: NoticeSource,
+        /// Node the binding, handler, or poll ran on, when known.
+        pub node: Option<crate::NodeId>,
+    }
+
+    /// Where a notice arose.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum NoticeSource {
+        /// A binding's command or callback failed.
+        Binding,
+        /// A widget's event or intent handler failed.
+        Widget,
+        /// A widget's poll failed.
+        Poll,
+    }
+
     /// A renderer that only renders to a specific rectangle within the target
     /// terminal buffer.
     pub struct Render<'a> {}
@@ -3229,6 +3285,9 @@ pub mod canopy {
         Handled,
         /// Routing ended without a handler.
         Unhandled,
+        /// A binding or a widget handler failed, and the failure became a notice
+        /// that consumed the input.
+        Notice,
     }
 
     /// Replayable record of one script evaluation.
@@ -3897,6 +3956,10 @@ pub mod canopy {
         /// The node currently being rendered.
         fn node_id(&self) -> NodeId;
 
+        /// Return the notice the application shows: the newest one, from its
+        /// record until the next input event.
+        fn notice(&self) -> Option<&Notice>;
+
         /// Return the parent of a node, or `None` if it is the root or not found.
         fn parent_of(&self, node: NodeId) -> Option<NodeId>;
 
@@ -4089,7 +4152,11 @@ pub mod canopy {
         /// Return `None` to stop scheduled polling, including a timer pending when
         /// an explicit wake triggered this callback. Node wakes can still request
         /// an immediate poll without waiting for a timer.
-        fn poll(&mut self, _ctx: &mut dyn Context) -> Option<Duration> {}
+        ///
+        /// A failure that [`Error::is_notice`](crate::error::Error::is_notice)
+        /// classifies becomes a notice, and polling continues at the delay the
+        /// last successful poll requested. Any other failure is fatal.
+        fn poll(&mut self, _ctx: &mut dyn Context) -> Result<Option<Duration>> {}
 
         /// Lifetime of scheduled polling. Hiding never stops polling.
         ///
@@ -4144,6 +4211,15 @@ pub mod canopy {
         pub fn parse(value: &str) -> Option<Self> {}
 
         /// Return a stable scripting and diagnostic label.
+        pub fn label(&self) -> &'static str {}
+    }
+
+    impl BindingTarget {
+        #[must_use]
+        /// Return the widget action name, when this is an action target.
+        pub fn widget_action(&self) -> Option<&WidgetActionName> {}
+
+        /// Return a stable target-kind label.
         pub fn label(&self) -> &'static str {}
     }
 
@@ -4391,22 +4467,26 @@ pub mod canopy {
         /// Mutate the active style map before the next render.
         pub fn style_mut(&mut self) -> &mut StyleMap {}
 
-        /// Pop the top input mode and return the new active mode.
-        pub fn pop_input_mode(&mut self) -> &str {}
+        /// Pop the newest mode and return the newest active mode after the pop.
+        pub fn pop_mode(&mut self) -> &str {}
 
-        /// Push an input mode above the current mode.
-        pub fn push_input_mode(&mut self, mode: &str) {}
+        /// Push a mode above the active modes.
+        pub fn push_mode(&mut self, mode: &str) {}
 
-        /// Push an input mode that takes only the next key.
+        /// Push a mode that takes only the next key.
         ///
         /// The next key pops the mode. When the mode binds that key, the binding
         /// runs after the pop and before any widget sees the key. Any other key
         /// only pops the mode.
-        pub fn push_transient_input_mode(&mut self, mode: &str) {}
+        pub fn push_transient_mode(&mut self, mode: &str) {}
 
         /// Read the last publication without running widget hooks or refreshing
         /// state.
         pub fn snapshot(&self) -> Option<Arc<FrameSnapshot>> {}
+
+        /// Replace the active modes with one mode. The empty string returns to
+        /// the default mode.
+        pub fn set_mode(&mut self, mode: &str) {}
 
         /// Replace the root widget while preserving its stable node ID.
         pub fn replace_root<W>(&mut self, widget: W) -> Result<TypedId<W>>
@@ -4424,9 +4504,6 @@ pub mod canopy {
         ) -> Result<Vec<commands::CommandAvailability>> {
         }
 
-        /// Return the active input mode.
-        pub fn input_mode(&self) -> &str {}
-
         /// Return the active style map.
         pub fn style(&self) -> &StyleMap {}
 
@@ -4439,6 +4516,19 @@ pub mod canopy {
 
         /// Return the most recent key or mouse route trace.
         pub fn route_trace(&self) -> &[RouteTraceEntry] {}
+
+        /// Return the newest active mode, or the empty string for the default
+        /// mode.
+        pub fn mode(&self) -> &str {}
+
+        /// Return the retained notices, oldest first.
+        ///
+        /// A failure from an input binding, a widget handler, or a poll that
+        /// [`Error::is_notice`](crate::error::Error::is_notice) classifies as a
+        /// notice is recorded here while the application keeps running. The
+        /// newest notice is shown until the next input event. The queue keeps the
+        /// newest 32.
+        pub fn notices(&self) -> &[Notice] {}
 
         /// Return the root node ID.
         pub fn root_id(&self) -> NodeId {}
@@ -4460,9 +4550,6 @@ pub mod canopy {
             f: impl FnOnce(&mut dyn crate::Context) -> Result<R>,
         ) -> Result<R> {
         }
-
-        /// Set the active input mode.
-        pub fn set_input_mode(&mut self, mode: &str) {}
     }
 
     impl EvalOutcome {
@@ -4542,6 +4629,11 @@ pub mod canopy {
         pub fn wake(&self) -> Result<WakeOutcome> {}
     }
 
+    impl NoticeSource {
+        /// Return a stable scripting and diagnostic label.
+        pub fn label(self) -> &'static str {}
+    }
+
     impl RenderLimits {
         /// Construct explicit visible render-target limits.
         pub const fn new(max_width: u32, max_height: u32, max_cells: usize) -> Self {}
@@ -4556,38 +4648,21 @@ pub mod canopy {
     }
 
     impl Setup {
-        /// Install an idempotent framework-owned command binding.
+        /// Install one binding for `input`.
         ///
-        /// `options.tier` must be [`inputmap::BindingTier::Framework`], and names
-        /// the group the binding joins.
-        pub fn bind_framework(
-            &mut self,
-            input: impl Into<inputmap::InputSpec>,
-            options: inputmap::BindingOptions,
-            command: commands::CommandCall,
-        ) -> Result<inputmap::BindingId> {
-        }
-
-        /// Install or replace an application command binding.
-        ///
-        /// An omitted command target resolves from the node where the binding wins.
-        pub fn bind_command(
-            &mut self,
-            input: impl Into<inputmap::InputSpec>,
-            options: inputmap::BindingOptions,
-            command: commands::CommandCall,
-        ) -> Result<inputmap::BindingId> {
-        }
-
-        /// Install or replace an application widget action binding.
-        ///
-        /// The action must already be registered with
+        /// The tier in `options` decides the semantics. A framework tier
+        /// ([`BindingTier::Framework`](inputmap::BindingTier::Framework)) names the
+        /// group the binding joins; registering the same binding again is a no-op,
+        /// and a different binding for the same group, input, and path is an
+        /// error. An application tier replaces any binding with the same tier,
+        /// input, and path. A command call without a target resolves from the node
+        /// where the binding wins. A widget action must already be registered with
         /// [`Self::register_widget_action`].
-        pub fn bind_widget_action(
+        pub fn bind(
             &mut self,
             input: impl Into<inputmap::InputSpec>,
             options: inputmap::BindingOptions,
-            action: inputmap::WidgetActionName,
+            target: inputmap::BindingTarget,
         ) -> Result<inputmap::BindingId> {
         }
 
@@ -4603,6 +4678,20 @@ pub mod canopy {
         ///
         /// Registering a name again replaces its hook. Hooks run in name order.
         pub fn register_mode_hook(
+            &mut self,
+            name: &'static str,
+            hook: fn(_: &mut dyn crate::Context) -> crate::error::Result<()>,
+        ) {
+        }
+
+        /// Register a hook that runs against the root context whenever the shown
+        /// notice changes: after a notice is recorded, before the next frame, and
+        /// when input dismisses it, before that input routes.
+        ///
+        /// A hook reads the shown notice with
+        /// [`ViewContext::notice`](crate::ViewContext::notice). Registering a name
+        /// again replaces its hook. Hooks run in name order.
+        pub fn register_notice_hook(
             &mut self,
             name: &'static str,
             hook: fn(_: &mut dyn crate::Context) -> crate::error::Result<()>,

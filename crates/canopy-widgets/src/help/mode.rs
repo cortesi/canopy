@@ -1,4 +1,4 @@
-//! Help for a transient input mode.
+//! Help for a transient mode.
 //!
 //! While a transient mode waits for its key, a small framed panel in the
 //! bottom right corner lists the keys that mode binds. The panel takes no

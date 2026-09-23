@@ -14,7 +14,7 @@ use super::{
     world::{Core, WidgetOperation, scroll::RevealTarget},
 };
 use crate::{
-    ChangeOutcome, InteractionToken, ModalOptions, SemanticIdentity,
+    ChangeOutcome, InteractionToken, ModalOptions, Notice, SemanticIdentity,
     commands::{ArgValue, CommandCall, CommandError, CommandStatus, CommandTarget},
     error::{Error, Result},
     event::{Event, mouse::MouseEvent},
@@ -212,6 +212,10 @@ pub trait ViewContext: sealed::ViewContext {
 
     /// Whether a modal scope remains open, including pending deferred closes.
     fn modal_is_open(&self, token: InteractionToken) -> bool;
+
+    /// Return the notice the application shows: the newest one, from its
+    /// record until the next input event.
+    fn notice(&self) -> Option<&Notice>;
 
     /// Return the path for a node relative to a root.
     fn path_of(&self, root: NodeId, node: NodeId) -> Path;
@@ -1102,6 +1106,10 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
 
     fn modal_is_open(&self, token: InteractionToken) -> bool {
         self.core.modal_is_open(token)
+    }
+
+    fn notice(&self) -> Option<&Notice> {
+        self.core.notices.shown()
     }
 
     fn is_attached_of(&self, node: NodeId) -> bool {

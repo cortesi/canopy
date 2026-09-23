@@ -21,13 +21,13 @@ use crate::{
         world::test_support::assert_error_context,
     },
     derive_commands,
-    error::{Error, NodeOperationKind, Result},
+    error::{Error, NodeOperationKind, Result, ScriptErrorKind},
     event::{Event, key, mouse},
     geom::{PointI32, RectI32},
     layout::{Edges, Layout},
     path::Path,
     render::{NopBackend, Render},
-    script::{self, LuauFunctionId},
+    script::LuauFunctionId,
     state::NodeName,
     testing::{
         backend::TestRender,
@@ -68,11 +68,7 @@ fn bind(
     options: inputmap::BindingOptions,
     target: inputmap::BindingTarget,
 ) -> Result<inputmap::BindingId> {
-    let (id, removed) =
-        canopy
-            .core
-            .input_map
-            .replace_application_binding(input.into(), options, target)?;
+    let (id, removed) = canopy.core.input_map.bind(input.into(), options, target)?;
     canopy.release_removed_bindings(removed);
     Ok(id)
 }
@@ -203,81 +199,6 @@ fn help_and_diagnostics_use_canonical_binding_order() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn pending_script_finalization_failure_is_atomic_and_retryable() -> Result<()> {
-    let mut canopy = Canopy::empty();
-    assert!(canopy.script_api().is_err());
-    let host = canopy.script.host.clone();
-    let first = host.compile("return 1")?;
-    let second = host.compile("return 2")?;
-    host.inject_finalize_failure(script::FinalizeStep::PendingScript(1));
-
-    canopy
-        .finalize_api()
-        .expect_err("pending script load should fail");
-    assert!(canopy.script_api().is_err());
-
-    canopy.finalize_api()?;
-    assert!(canopy.script_api().is_ok());
-    let root = canopy.root_id();
-    assert_eq!(
-        host.execute(&mut canopy, root, first, None)?,
-        commands::ArgValue::Int(1)
-    );
-    assert_eq!(
-        host.execute(&mut canopy, root, second, None)?,
-        commands::ArgValue::Int(2)
-    );
-    Ok(())
-}
-
-#[test]
-fn every_finalization_checkpoint_is_atomic_and_retryable() -> Result<()> {
-    let steps = [
-        script::FinalizeStep::SurfacePrepared,
-        script::FinalizeStep::DeclarationsValidated,
-        script::FinalizeStep::DefaultBindingsCompiled,
-        script::FinalizeStep::StartupScriptsCompiled,
-        script::FinalizeStep::RuntimeBuilt,
-        script::FinalizeStep::PendingScript(1),
-        script::FinalizeStep::BeforePublish,
-    ];
-
-    for step in steps {
-        let mut canopy = Canopy::empty();
-        canopy
-            .script
-            .register_default_bindings("fault_owner", "canopy.log('default')")?;
-        canopy
-            .script
-            .register_startup_script("fault_startup", "function setup() end")?;
-        let host = canopy.script.host.clone();
-        let first = host.compile("return 1")?;
-        let second = host.compile("return 2")?;
-        host.inject_finalize_failure(step);
-
-        canopy
-            .finalize_api()
-            .expect_err(&format!("{step:?} should fail"));
-        assert!(canopy.script_api().is_err(), "{step:?}");
-        assert_eq!(host.script_ids().len(), 2, "{step:?}");
-
-        canopy.finalize_api()?;
-        assert!(canopy.script_api().is_ok(), "{step:?}");
-        assert_eq!(host.script_ids().len(), 4, "{step:?}");
-        let root = canopy.root_id();
-        assert_eq!(
-            host.execute(&mut canopy, root, first, None)?,
-            commands::ArgValue::Int(1)
-        );
-        assert_eq!(
-            host.execute(&mut canopy, root, second, None)?,
-            commands::ArgValue::Int(2)
-        );
-    }
-    Ok(())
-}
-
 pub struct PollWidget;
 
 #[derive_commands]
@@ -288,9 +209,9 @@ impl PollWidget {
 }
 
 impl Widget for PollWidget {
-    fn poll(&mut self, _ctx: &mut dyn Context) -> Option<Duration> {
+    fn poll(&mut self, _ctx: &mut dyn Context) -> Result<Option<Duration>> {
         POLL_COUNT.fetch_add(1, Ordering::SeqCst);
-        None
+        Ok(None)
     }
 }
 
@@ -563,8 +484,8 @@ fn tbindings() -> Result<()> {
 fn framework_command_bindings_share_route_resolution_and_event_scope() -> Result<()> {
     run_ttree(|c, _, tree| {
         let group = inputmap::FrameworkBindingGroup::new("test.modal");
-        let binding = c.core.input_map.bind_framework(
-            'h',
+        let (binding, _) = c.core.input_map.bind(
+            'h'.into(),
             inputmap::BindingOptions {
                 path: Some("/r/**/".parse()?),
                 tier: inputmap::BindingTier::Framework(group),
@@ -572,7 +493,7 @@ fn framework_command_bindings_share_route_resolution_and_event_scope() -> Result
                 source: None,
                 phase: Some(inputmap::BindingPhase::BeforeWidget),
             },
-            R::call_c_root(),
+            inputmap::BindingTarget::Command(R::call_c_root()),
         )?;
         c.core
             .input_map
@@ -1050,8 +971,115 @@ fn a_disabled_declarative_winner_is_consumed_without_running_or_bubbling() -> Re
     Ok(())
 }
 
+/// Focusable widget whose key handler and command fail.
+struct Faulty {
+    /// Whether the failure is a runtime failure rather than the widget's own.
+    fatal: bool,
+}
+
+#[derive_commands]
+impl Faulty {
+    /// Fail as an application does.
+    #[command]
+    fn fail(&self) -> Result<()> {
+        Err(Error::App("command failed".into()))
+    }
+}
+
+/// Build a root holding one focused faulty child.
+fn faulty_app(fatal: bool) -> Result<(Canopy, NodeId)> {
+    let mut canopy = app_with(|setup| setup.add_commands::<Faulty>());
+    let child = canopy.core.create_detached(Faulty { fatal })?;
+    let root = canopy.core.root;
+    canopy.core.set_children(root, vec![child])?;
+    canopy.core.set_focus(child)?;
+    Ok((canopy, child))
+}
+
+impl Widget for Faulty {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+        true
+    }
+
+    fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {
+        match event {
+            Event::Key(_) if self.fatal => Err(Error::Internal("handler broke".into())),
+            Event::Key(_) => Err(Error::App("handler failed".into())),
+            _ => Ok(EventOutcome::Ignore),
+        }
+    }
+
+    fn key_outcome(&self, _key: key::Key, _ctx: &dyn ViewContext) -> EventOutcome {
+        EventOutcome::Handle
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("faulty")
+    }
+}
+
 #[test]
-fn binding_failures_propagate_and_still_restore_the_event_scope() -> Result<()> {
+fn a_widget_handler_failure_is_a_notice_unless_it_is_a_runtime_failure() -> Result<()> {
+    let (mut canopy, child) = faulty_app(false)?;
+    canopy.key(None, 'x')?;
+    let notice = canopy
+        .notices()
+        .last()
+        .expect("the handler failure is a notice");
+    assert_eq!(notice.source, crate::NoticeSource::Widget);
+    assert_eq!(notice.node, Some(child));
+    assert_eq!(notice.message, "handler failed");
+    assert_eq!(
+        canopy.route_trace().last().map(|entry| entry.kind),
+        Some(RouteTraceKind::Notice)
+    );
+
+    canopy.core.with_widget_dyn_mut(child, |widget, _| {
+        if let Some(faulty) = (widget as &mut dyn Any).downcast_mut::<Faulty>() {
+            faulty.fatal = true;
+        }
+    })?;
+    assert!(
+        canopy.key(None, 'x').is_err(),
+        "a runtime failure in a handler stays fatal"
+    );
+    assert_eq!(canopy.notices().len(), 1);
+    Ok(())
+}
+
+#[test]
+fn a_script_call_still_raises_a_failing_command() -> Result<()> {
+    let (mut canopy, _child) = faulty_app(false)?;
+    assert!(
+        canopy
+            .eval_script(r#"canopy.call_focus("faulty::fail")"#)
+            .is_err(),
+        "a script call raises the failure"
+    );
+    assert!(
+        canopy.notices().is_empty(),
+        "a script call records no notice"
+    );
+
+    // A key a script sends routes as input, so its binding's failure is a
+    // notice the script can read.
+    canopy.eval_script(
+        r#"
+        canopy.bind("g", { description = "Fail", phase = "before_widget" }, command.faulty.fail())
+        canopy.send_key("g")
+        local notices = canopy.notices()
+        canopy.assert(#notices == 1, "one notice")
+        canopy.assert(notices[1].source == "binding", "from a binding")
+        canopy.assert(notices[1].kind == "command_exec", "a command failure")
+        canopy.assert(notices[1].message == "command failed", notices[1].message)
+        canopy.assert(notices[1].node ~= nil, "on a node")
+        "#,
+    )?;
+    Ok(())
+}
+
+#[test]
+fn binding_failures_become_notices_and_still_restore_the_event_scope() -> Result<()> {
     let (mut canopy, root, child) = gated_pair()?;
     canopy.core.with_widget_dyn_mut(child, |widget, _| {
         if let Some(gated) = (widget as &mut dyn Any).downcast_mut::<Gated>() {
@@ -1065,30 +1093,53 @@ fn binding_failures_propagate_and_still_restore_the_event_scope() -> Result<()> 
         gated_options("/gated/gated/")?,
         Gated::call_act().with_target(commands::CommandTarget::Exact(child)),
     )?;
-    assert!(
-        canopy.key(None, 'g').is_err(),
-        "an executed command's failure is not swallowed"
-    );
+    canopy.key(None, 'g')?;
     assert_eq!(gated_runs(&mut canopy, [root, child]), [0, 1]);
     assert!(canopy.core.current_event().is_none());
+    let notice = canopy.notices().last().expect("the failure is a notice");
+    assert_eq!(notice.source, crate::NoticeSource::Binding);
+    assert_eq!(notice.node, Some(child));
+    assert_eq!(notice.kind, ScriptErrorKind::CommandExecution);
+    assert_eq!(
+        canopy.route_trace().last().map(|entry| entry.kind),
+        Some(RouteTraceKind::Notice),
+        "the route trace records the notice"
+    );
+    assert!(canopy.core.notices.shown().is_some(), "the notice is shown");
 
-    // An opaque script callback reports its own failure the same way.
+    // An opaque script callback's failure becomes a notice the same way, and
+    // the key dismisses the one shown before it.
     canopy.eval_script(
         r#"canopy.bind("s", { description = "Fail" }, function() error("script failed") end)"#,
     )?;
-    assert!(canopy.key(None, 's').is_err());
+    canopy.key(None, 's')?;
     assert!(canopy.core.current_event().is_none());
+    assert_eq!(canopy.notices().len(), 2);
+    let notice = canopy
+        .notices()
+        .last()
+        .expect("the script failure is a notice");
+    assert!(
+        notice.message.contains("script failed"),
+        "{}",
+        notice.message
+    );
+
+    // Input with no failure dismisses the shown notice and keeps the record.
+    canopy.key(None, 'z')?;
+    assert!(canopy.core.notices.shown().is_none());
+    assert_eq!(canopy.notices().len(), 2);
     Ok(())
 }
 
 #[test]
-fn input_mode_binding_target_switches_modes() -> Result<()> {
+fn mode_binding_target_switches_modes() -> Result<()> {
     let mut canopy = app();
     canopy.eval_script(r#"canopy.bind("i", { description = "Insert mode" }, function() canopy.set_mode("insert") end)"#)?;
 
     canopy.key(None, 'i')?;
 
-    assert_eq!(canopy.input_mode(), "insert");
+    assert_eq!(canopy.mode(), "insert");
     assert!(
         canopy
             .route_trace()
@@ -1128,10 +1179,10 @@ fn a_transient_mode_takes_the_next_key_before_widgets() -> Result<()> {
     assert!(!phases(&canopy).contains(&RouteTraceKind::Widget));
 
     // A key the mode does not bind only pops it.
-    canopy.set_input_mode("");
-    canopy.push_transient_input_mode("prefix");
+    canopy.set_mode("");
+    canopy.push_transient_mode("prefix");
     canopy.key(None, 'z')?;
-    assert_eq!(canopy.input_mode(), "");
+    assert_eq!(canopy.mode(), "");
     assert!(!phases(&canopy).contains(&RouteTraceKind::RunBinding));
     assert!(!phases(&canopy).contains(&RouteTraceKind::Widget));
     Ok(())
@@ -1155,12 +1206,12 @@ fn mode_hooks_run_once_for_each_mode_change() -> Result<()> {
     canopy.render(&mut backend)?;
     assert_eq!(RUNS.load(Ordering::Relaxed), 0, "no mode change yet");
 
-    canopy.push_transient_input_mode("prefix");
+    canopy.push_transient_mode("prefix");
     canopy.render(&mut backend)?;
     canopy.render(&mut backend)?;
     assert_eq!(RUNS.load(Ordering::Relaxed), 1);
 
-    canopy.pop_input_mode();
+    canopy.pop_mode();
     canopy.render(&mut backend)?;
     assert_eq!(RUNS.load(Ordering::Relaxed), 2);
     Ok(())
@@ -1755,7 +1806,7 @@ fn bind_key_phase(
     phase: crate::BindingPhase,
 ) -> Result<crate::BindingId> {
     use crate::core::inputmap::{BindingOptions, BindingTarget};
-    let (id, _) = canopy.core.input_map.replace_application_binding(
+    let (id, _) = canopy.core.input_map.bind(
         InputSpec::Key(key.into()),
         BindingOptions {
             path: None,
@@ -1848,7 +1899,7 @@ fn send_key_checked_delivers_a_matching_binding_from_a_script() -> Result<()> {
         canopy.send_key_checked("x", { kind = "binding", binding = active.bindings[1].id })
         "#,
     )?;
-    assert_eq!(canopy.input_mode(), "ran");
+    assert_eq!(canopy.mode(), "ran");
     Ok(())
 }
 
@@ -1926,7 +1977,7 @@ fn a_transient_mode_under_an_application_modal_takes_the_next_key() -> Result<()
     bind_prefix_mode(&mut canopy)?;
 
     // Discovery, analysis, and routing agree that the mode takes the key.
-    canopy.push_transient_input_mode("prefix");
+    canopy.push_transient_mode("prefix");
     let snapshot = canopy.available_bindings(None)?;
     assert_eq!(snapshot.transient_mode.as_deref(), Some("prefix"));
     assert_eq!(
@@ -1949,8 +2000,8 @@ fn a_transient_mode_under_an_application_modal_takes_the_next_key() -> Result<()
     );
 
     // A key the mode does not bind pops it without reaching the default tier.
-    canopy.set_input_mode("");
-    canopy.push_transient_input_mode("prefix");
+    canopy.set_mode("");
+    canopy.push_transient_mode("prefix");
     assert_eq!(
         canopy.explain_key(None, 'z'.into())?.outcome,
         RouteOutcome::TransientDismiss
@@ -1976,7 +2027,7 @@ fn a_checked_transient_key_under_an_application_modal_matches_its_analysis() -> 
     let mut canopy = app();
     modal_leaf(&mut canopy, crate::ModalBindings::Application)?;
     bind_prefix_mode(&mut canopy)?;
-    canopy.push_transient_input_mode("prefix");
+    canopy.push_transient_mode("prefix");
     let RouteOutcome::Transient(winner) = canopy.explain_key(None, 'y'.into())?.outcome else {
         panic!("expected a transient binding");
     };
@@ -1984,7 +2035,7 @@ fn a_checked_transient_key_under_an_application_modal_matches_its_analysis() -> 
     canopy.send_key_checked('y', KeyExpectation::Transient(winner.binding))?;
     assert_eq!(canopy.core.input_map.active_modes(), ["after"]);
 
-    canopy.push_transient_input_mode("prefix");
+    canopy.push_transient_mode("prefix");
     canopy.send_key_checked('q', KeyExpectation::TransientDismiss)?;
     assert_eq!(canopy.core.input_map.active_modes(), ["after"]);
     Ok(())
@@ -1996,7 +2047,7 @@ fn a_framework_modal_suspends_a_transient_mode() -> Result<()> {
     let group = inputmap::FrameworkBindingGroup::new("test.modal");
     modal_leaf(&mut canopy, crate::ModalBindings::Framework(group))?;
     bind_prefix_mode(&mut canopy)?;
-    canopy.push_transient_input_mode("prefix");
+    canopy.push_transient_mode("prefix");
 
     let snapshot = canopy.available_bindings(None)?;
     assert_eq!(snapshot.transient_mode, None);
@@ -2065,7 +2116,7 @@ fn explain_key_matches_the_actual_route() -> Result<()> {
     );
 
     canopy.key(None, 'q')?;
-    assert_eq!(canopy.input_mode(), "ran");
+    assert_eq!(canopy.mode(), "ran");
     assert!(
         canopy
             .route_trace()
@@ -2133,7 +2184,7 @@ fn send_key_checked_rechecks_between_calls() -> Result<()> {
         .expect("binding")
         .id;
     canopy.send_key_checked('x', KeyExpectation::Binding(id))?;
-    assert_eq!(canopy.input_mode(), "ran");
+    assert_eq!(canopy.mode(), "ran");
 
     // A later evaluation that removes the winner makes the next check fail.
     canopy.eval_script(&format!("canopy.unbind({})", id.as_u64()))?;
@@ -2178,7 +2229,7 @@ fn send_key_checked_rejects_a_mismatched_expectation_without_delivery() -> Resul
         .send_key_checked('x', KeyExpectation::Unhandled)
         .expect_err("expectation must be rejected");
     assert!(matches!(error, Error::KeyDispatchDivergence(_)));
-    assert_eq!(canopy.input_mode(), "");
+    assert_eq!(canopy.mode(), "");
     assert!(
         !canopy
             .route_trace()
@@ -2352,7 +2403,7 @@ fn a_dormant_action_does_not_shadow_the_next_candidate() -> Result<()> {
     )?;
     let key = key::Key::parse_spec("ctrl-x")?;
     canopy.key(None, key)?;
-    assert_eq!(canopy.input_mode(), "fallback", "the fallback runs");
+    assert_eq!(canopy.mode(), "fallback", "the fallback runs");
     assert_eq!(
         raw.load(Ordering::Relaxed),
         1,
@@ -2396,7 +2447,7 @@ fn a_dormant_global_action_falls_through_to_the_default_tier() -> Result<()> {
     )?;
     canopy.key(None, key::Key::parse_spec("ctrl-x")?)?;
     assert_eq!(
-        canopy.input_mode(),
+        canopy.mode(),
         "default_won",
         "the dormant global action gives way to the default tier"
     );
@@ -2443,7 +2494,7 @@ fn a_transient_mode_offers_its_action_before_the_raw_key() -> Result<()> {
     canopy.key(None, key)?;
     assert_eq!(calls.load(Ordering::Relaxed), 1);
     assert_eq!(raw.load(Ordering::Relaxed), 0, "no raw key is delivered");
-    assert_eq!(canopy.input_mode(), "", "the transient mode pops");
+    assert_eq!(canopy.mode(), "", "the transient mode pops");
     Ok(())
 }
 
@@ -2474,7 +2525,7 @@ fn a_transient_mode_dismisses_a_dormant_action() -> Result<()> {
         "#,
     )?;
     canopy.key(None, key::Key::parse_spec("ctrl-x")?)?;
-    assert_eq!(canopy.input_mode(), "", "the transient mode dismisses");
+    assert_eq!(canopy.mode(), "", "the transient mode dismisses");
     assert_eq!(
         raw.load(Ordering::Relaxed),
         0,

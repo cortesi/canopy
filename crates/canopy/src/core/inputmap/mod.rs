@@ -14,7 +14,7 @@ use crate::{
 mod action;
 pub use action::{WidgetActionCatalog, WidgetActionName, WidgetActionSpec};
 
-/// Default input mode name.
+/// Default mode name.
 const DEFAULT_MODE: &str = "";
 
 /// Monotonic identifier for a binding.
@@ -111,8 +111,8 @@ impl BindingTier {
 pub struct BindingOptions {
     /// Optional validated path selector. Omission matches the current route.
     pub path: Option<PathFilter>,
-    /// Resolution tier. Application bindings take any tier but the
-    /// framework tier, which only [`InputMap::bind_framework`] accepts.
+    /// Resolution tier. Scripts install application tiers only; the
+    /// framework tier is registered during setup.
     pub tier: BindingTier,
     /// Required user-facing description.
     pub description: String,
@@ -431,7 +431,7 @@ impl fmt::Display for InputSpec {
     }
 }
 
-/// One entry on the input mode stack.
+/// One entry on the mode stack.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct ActiveMode {
     /// Mode name.
@@ -499,14 +499,21 @@ impl InputMap {
         &self.actions
     }
 
-    /// Store or replace an application binding.
-    pub fn replace_application_binding(
+    /// Install one binding, and return its identifier with the application
+    /// bindings it replaced.
+    ///
+    /// The tier in `options` decides the semantics. An application tier
+    /// replaces any binding with the same tier, input, and path. The framework
+    /// tier is idempotent: the same record again returns the existing
+    /// identifier, and a different record for the same group, input, and path
+    /// is an error. Framework bindings take no script target, because nothing
+    /// releases them.
+    pub fn bind(
         &mut self,
         input: InputSpec,
         options: BindingOptions,
         target: BindingTarget,
     ) -> Result<(BindingId, Vec<(BindingId, BindingTarget)>)> {
-        validate_application_binding(&options, target.widget_action())?;
         if let BindingTarget::WidgetAction(name) = &target {
             if matches!(input, InputSpec::Mouse(_)) {
                 return Err(Error::Invalid(
@@ -527,17 +534,49 @@ impl InputMap {
             }
         };
         let path_filter = options.path.as_ref().map_or("", PathFilter::as_str);
+        let input = input.normalize();
+        if let Some(group) = options.tier.framework_group() {
+            validate_record(&options, target.widget_action())?;
+            if matches!(target, BindingTarget::Script(_)) {
+                return Err(Error::Invalid(
+                    "framework bindings take a command or a widget action".to_string(),
+                ));
+            }
+            if let Some(existing) = self.records.iter().find(|record| {
+                record.tier == options.tier
+                    && record.input == input
+                    && record.path_filter() == path_filter
+            }) {
+                if existing.description == options.description
+                    && existing.phase == phase
+                    && existing.source == options.source
+                    && existing.target == target
+                {
+                    return Ok((existing.id, Vec::new()));
+                }
+                return Err(Error::Invalid(format!(
+                    "conflicting framework binding for {group}, {input}, and {path_filter}"
+                )));
+            }
+        } else {
+            validate_application_binding(&options, target.widget_action())?;
+        }
         let path_matcher = options.path.clone().unwrap_or(PathFilter::new("")?);
+        // Identifiers are allocated before anything is replaced, so exhaustion
+        // leaves the registry as it was.
         let id = self.allocate_binding_id()?;
         let insertion_id = self.allocate_insertion_id()?;
-        let input = input.normalize();
-        let removed = self.unbind_input(
-            input,
-            &BindingSelector {
-                tier: Some(options.tier.clone()),
-                path_filter: Some(path_filter),
-            },
-        );
+        let removed = if options.tier.is_framework() {
+            Vec::new()
+        } else {
+            self.unbind_input(
+                input,
+                &BindingSelector {
+                    tier: Some(options.tier.clone()),
+                    path_filter: Some(path_matcher.as_str()),
+                },
+            )
+        };
         self.records.push(BindingRecord {
             id,
             input,
@@ -550,57 +589,6 @@ impl InputMap {
             path_matcher,
         });
         Ok((id, removed))
-    }
-
-    /// Store one idempotent framework binding in the group that
-    /// `options.tier` names.
-    pub fn bind_framework(
-        &mut self,
-        input: impl Into<InputSpec>,
-        options: BindingOptions,
-        command: CommandCall,
-    ) -> Result<BindingId> {
-        let input = input.into();
-        validate_description(&options.description)?;
-        let Some(group) = options.tier.framework_group() else {
-            return Err(Error::Invalid(
-                "framework bindings need a framework tier".to_string(),
-            ));
-        };
-        let path_filter = options.path.as_ref().map_or("", PathFilter::as_str);
-        let path_matcher = options.path.clone().unwrap_or(PathFilter::new("")?);
-        let input = input.normalize();
-        let phase = options.phase.unwrap_or_default();
-        if let Some(existing) = self.records.iter().find(|record| {
-            record.tier == options.tier
-                && record.input == input
-                && record.path_filter() == path_filter
-        }) {
-            if existing.description == options.description
-                && existing.phase == phase
-                && existing.source == options.source
-                && existing.target == BindingTarget::Command(command)
-            {
-                return Ok(existing.id);
-            }
-            return Err(Error::Invalid(format!(
-                "conflicting framework binding for {group}, {input}, and {path_filter}"
-            )));
-        }
-        let id = self.allocate_binding_id()?;
-        let insertion_id = self.allocate_insertion_id()?;
-        self.records.push(BindingRecord {
-            id,
-            input,
-            tier: options.tier,
-            description: options.description,
-            source: options.source,
-            phase,
-            target: BindingTarget::Command(command),
-            insertion_id,
-            path_matcher,
-        });
-        Ok(id)
     }
 
     /// Remove one application binding.
@@ -911,18 +899,18 @@ impl InputMap {
         }
     }
 
-    /// Set the active input mode.
+    /// Replace the active modes with one mode.
     pub fn set_mode(&mut self, mode: &str) {
         self.mode_stack.clear();
         self.push_active(mode, false);
     }
 
-    /// Push a named input mode.
+    /// Push a named mode.
     pub fn push_mode(&mut self, mode: &str) {
         self.push_active(mode, false);
     }
 
-    /// Push a named input mode that takes only the next key.
+    /// Push a named mode that takes only the next key.
     ///
     /// Keys the mode does not bind never fall through to older modes or the
     /// default tier. Key routing pops the mode before it runs the binding.
@@ -941,15 +929,15 @@ impl InputMap {
         self.touch_modes();
     }
 
-    /// Pop the newest input mode and return the active mode.
+    /// Pop the newest mode and return the newest active mode.
     pub fn pop_mode(&mut self) -> &str {
         self.mode_stack.pop();
         self.touch_modes();
-        self.current_mode()
+        self.mode()
     }
 
-    /// Return the newest active input mode.
-    pub fn current_mode(&self) -> &str {
+    /// Return the newest active mode.
+    pub fn mode(&self) -> &str {
         self.mode_stack
             .last()
             .map_or(DEFAULT_MODE, |mode| mode.name.as_str())
@@ -1096,6 +1084,11 @@ pub fn validate_application_binding(
 ) -> Result<()> {
     let path_filter = options.path.as_ref().map_or("", PathFilter::as_str);
     validate_application_tier(&options.tier, path_filter)?;
+    validate_record(options, action)
+}
+
+/// Validate the description and phase of one binding in any tier.
+fn validate_record(options: &BindingOptions, action: Option<&WidgetActionName>) -> Result<()> {
     validate_description(&options.description)?;
     if action.is_some() && options.phase == Some(BindingPhase::AfterWidget) {
         return Err(Error::Invalid(

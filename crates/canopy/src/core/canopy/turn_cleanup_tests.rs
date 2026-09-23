@@ -229,7 +229,7 @@ fn synchronous_headless_rejects_current_thread_tasks_without_consuming_driver() 
             Ok::<_, Error>(())
         })?;
     assert_eq!(canopy.eval_script("return 7")?, ArgValue::Int(7));
-    assert!(canopy.script.startup_scripts[0].ran);
+    assert!(canopy.driver.startup_attempted);
     Ok(())
 }
 

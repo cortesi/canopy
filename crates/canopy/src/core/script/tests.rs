@@ -1052,7 +1052,10 @@ fn declarative_script_binding_exposes_arguments_phase_and_route_target() -> Resu
     // A mouse binding declares its phase the same way a key does.
     canopy.eval_script(
         r#"
-        canopy.bind_mouse("LeftDown", {description = "Early click", phase = "before_widget"}, function() end)
+        canopy.keymap({
+            phase = "before_widget",
+            {mouse = "LeftDown", description = "Early click", action = function() end},
+        })
         for _, binding in canopy.bindings() do
             if binding.input == "LeftDown" then
                 assert(binding.phase == "before_widget")
@@ -1069,12 +1072,15 @@ fn availability_reports_key_and_mouse_bindings_in_separate_lists() -> Result<()>
     canopy.eval_script(
         r#"
         canopy.bind("x", {description = "Set value"}, command.script_call_probe.set_value(7))
-        canopy.bind_mouse(
-            "ctrl-LeftDown",
-            {description = "Set value", phase = "before_widget"},
-            command.script_call_probe.set_value(7)
-        )
-        canopy.bind_mouse("ScrollUp", {description = "Scroll"}, function() end)
+        canopy.keymap({
+            phase = "before_widget",
+            {
+                mouse = "ctrl-LeftDown",
+                description = "Set value",
+                action = command.script_call_probe.set_value(7),
+            },
+        })
+        canopy.keymap({{mouse = "ScrollUp", description = "Scroll", action = function() end}})
 
         local available = canopy.available_bindings()
         canopy.assert(#available.bindings == 1, "the key list holds the key")
@@ -1103,7 +1109,7 @@ fn availability_reports_key_and_mouse_bindings_in_separate_lists() -> Result<()>
         r#"
         canopy.unbind_key("x", {})
         for _, binding in canopy.available_bindings().mouse_bindings do
-            canopy.bind_mouse(binding.input, {description = "Rebound"}, function() end)
+            canopy.keymap({{mouse = binding.input, description = "Rebound", action = function() end}})
         end
         canopy.assert(#canopy.available_bindings().mouse_bindings == 2, "every label parsed back")
     "#,

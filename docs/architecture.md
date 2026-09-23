@@ -138,10 +138,12 @@ generations of the subtree it moves and no others. Hiding ends neither
 lifetime. `Widget::poll_lifetime()` defaults to node lifetime, preserving detached
 terminal polling. Attachment polling initializes again after reattachment.
 
-Each `Widget::poll` result replaces its previous timer. `Some(delay)` schedules
-another poll, with delays below one millisecond rounded up to let the adapter
-sleep. `None` cancels scheduled polling, including when an early node wake
-triggered the callback. Explicit wakes remain immediate.
+Each successful `Widget::poll` result replaces its previous timer.
+`Ok(Some(delay))` schedules another poll, with delays below one millisecond
+rounded up to let the adapter sleep. `Ok(None)` cancels scheduled polling,
+including when an early node wake triggered the callback. A poll that fails
+with a notice keeps polling at the delay the last success requested; any other
+failure is fatal. Explicit wakes remain immediate.
 
 `Context::wake_handle(lifetime)` creates a `Send + Sync` `NodeWakeHandle` for the
 current widget incarnation. Attachment handles require an attached owner.
@@ -459,8 +461,10 @@ The resolver checks the framework group that the top modal admits first.
 Without one, it checks the global tier, active modes from newest to oldest, and
 then the default tier. A transient mode ends that search, so a key it does not
 bind resolves to nothing. Path specificity and insertion order select a winner
-within one tier. Only `Setup::bind_framework` takes the framework tier, and
-application bindings take the other three.
+within one tier. `Setup::bind` installs a binding in any tier: a framework
+tier is registered idempotently and takes a command or a widget action, and an
+application tier replaces any binding with the same tier, input, and path.
+Scripts install only the three application tiers.
 
 The binding phase chooses dispatch before widget input or after the widget
 ignores it. The default phase is `after_widget`, and the path filter has no
@@ -525,9 +529,10 @@ discovery and explanation cannot disagree.
 
 `Canopy::route_trace` records what routing actually did. Each entry has a
 `RouteTraceKind`: `Start`, `BeforeWidgetBinding`, `OfferIntent`, `Widget`,
-`AfterWidgetBinding`, `RunBinding`, `DefaultAction`, `Bubble`, `Handled`, or
-`Unhandled`. A widget action offer traces as `OfferIntent`. Labels are
-snake_case, such as `before_widget_binding`.
+`AfterWidgetBinding`, `RunBinding`, `DefaultAction`, `Bubble`, `Handled`,
+`Unhandled`, or `Notice`. A widget action offer traces as `OfferIntent`, and a
+`Notice` entry ends a route whose binding or widget handler failed with a
+notice. Labels are snake_case, such as `before_widget_binding`.
 
 `Canopy::send_key_checked` analyzes the route, rejects a mismatched expectation
 before delivery, then guards each normal route step and stops before an
@@ -562,11 +567,11 @@ as an injected `Event` or `MouseEvent` parameter.
 
 A declarative binding whose command is not available consumes its input without
 running it. The route stops there rather than offering the input to an ancestor,
-so a control the user saw as unavailable cannot be acted on in its place, and an
-ordinary click on it cannot end the run loop with an error. Availability is read
-inside the event scope at dispatch, not taken from the last rendered frame, and
-the route trace records the reason. An invoked command's own failure propagates
-unchanged, as does an opaque script callback's.
+so a control the user saw as unavailable cannot be acted on in its place.
+Availability is read inside the event scope at dispatch, not taken from the last
+rendered frame, and the route trace records the reason. An invoked command's own
+failure, or an opaque script callback's, becomes a notice that consumes the
+input; see [Notices](#notices).
 
 Widget activation is a command like any other. `Button::press` runs the action a
 button was built with, and `button.default_bindings()` binds unmodified
@@ -591,6 +596,8 @@ pops the mode, then runs the binding that the key resolved to, if there is one.
 context before a frame whenever the mode stack has changed. Root uses one to
 list the keys of a transient mode in a panel that overlays the main pane. The
 help modal covers that panel, and hides it while help is open.
+`Setup::register_notice_hook` does the same for the shown notice. Root uses
+one to show the newest notice as one row at the bottom of the main pane.
 
 ## Focus and Mouse Capture
 
@@ -635,7 +642,44 @@ between polls. Each resumed segment restores its original script anchor.
 
 Public Canopy APIs report expected failures with `Result` or `Option`: invalid
 node IDs, invalid tree edits, re-entrant widget access, script errors, command
-errors, layout failures, render failures, and runloop misuse.
+errors, layout failures, render failures, and runloop misuse. Application code
+returns its own failures, such as I/O errors, unwrapped as `Error::App`, whose
+script kind is `app`.
+
+### Notices
+
+A failure is either a notice or fatal, and `Error::is_notice` is the one rule
+that decides:
+
+- A command's failure (`Error::Command`), an application error
+  (`Error::App`), and an error a script raises are notices.
+- A widget operation failure takes the class of its source.
+- Timeouts, cancellation, and runtime invariant, backend, render, and layout
+  failures are fatal.
+
+The runtime applies the rule where input and background work fail: a binding's
+command or callback, a widget's event or intent handler, and a widget's poll.
+It records a notice and keeps running. The failed input counts as consumed, and
+the route trace ends with a `Notice` entry. A failed poll keeps polling at the
+delay its last successful poll requested. A fatal failure still returns from
+`Canopy::turn`, which ends the terminal run loop. A script call is not input,
+so it raises every failure as a script error; a key that a script sends is
+input, so a failure it causes is a notice.
+
+`Canopy::notices` and Luau `canopy.notices()` return the newest 32 notices,
+oldest first. A `Notice` holds the message, the failure's `ScriptErrorKind`, a
+`NoticeSource` (`Binding`, `Widget`, or `Poll`), and the node when known. The
+newest notice is shown from its record until the next key, paste, or mouse
+action other than a bare move. `ViewContext::notice` returns it while it is
+shown, and a notice hook runs whenever that changes, before the frame after a
+record, and before the dismissing input routes. Root's hook shows the notice as
+one row at the bottom of the main pane, styled `root/notice`, and hides the row
+otherwise, so the row takes no clicks while it is empty.
+
+A failed command changes no structure. Its completion boundary drops the
+removals and modal closes it queued, while changes to widget state stand. A
+command that closes a dialog and then does fallible work therefore does the
+work first, so a failure leaves the dialog open and consistent.
 
 Panics are for tests and impossible internal bugs. A panic in public library code
 needs a clear invariant and a test around the surrounding behavior.
