@@ -1031,7 +1031,7 @@ fn highlight_spans_apply_styles() {
         })));
     });
     harness.render().unwrap();
-    let partial = PartialStyle::fg(Color::Red);
+    let partial = PartialStyle::new().fg(Color::Red);
     assert!(harness.tbuf().contains_text_style("hi", &partial));
 }
 

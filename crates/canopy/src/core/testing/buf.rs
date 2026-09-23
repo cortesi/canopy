@@ -146,7 +146,7 @@ mod tests {
     use super::*;
     use crate::{
         geom::{Line, Size},
-        style::{Attr, AttrSet, Color, ResolvedStyle, StyleBuilder},
+        style::{Attr, AttrSet, Color, PartialStyle, ResolvedStyle},
     };
 
     #[test]
@@ -193,8 +193,8 @@ mod tests {
         assert!(!bt.contains_text("goodbye"));
 
         // Test contains_text_style
-        assert!(bt.contains_text_style("world", &PartialStyle::fg(Color::Red)));
-        assert!(bt.contains_text_style("hello", &PartialStyle::fg(Color::White)));
+        assert!(bt.contains_text_style("world", &PartialStyle::new().fg(Color::Red)));
+        assert!(bt.contains_text_style("hello", &PartialStyle::new().fg(Color::White)));
 
         // Test lines
         let lines = bt.lines();
@@ -220,15 +220,20 @@ mod tests {
             .expect("test buffer mutation should succeed");
 
         let bt = BufTest::new(&buf);
-        assert!(bt.contains_text_style("bold", &PartialStyle::attrs(AttrSet::new(Attr::Bold))));
-        assert!(bt.contains_text_style("italic", &PartialStyle::attrs(AttrSet::new(Attr::Italic))));
+        assert!(
+            bt.contains_text_style("bold", &PartialStyle::new().attrs(AttrSet::new(Attr::Bold)))
+        );
+        assert!(bt.contains_text_style(
+            "italic",
+            &PartialStyle::new().attrs(AttrSet::new(Attr::Italic))
+        ));
         assert!(bt.contains_text_style(
             "bold",
-            &PartialStyle::from(StyleBuilder::new().fg(Color::Red).attr(Attr::Bold))
+            &PartialStyle::from(PartialStyle::new().fg(Color::Red).attr(Attr::Bold))
         ));
         assert!(!bt.contains_text_style(
             "bold",
-            &PartialStyle::from(StyleBuilder::new().fg(Color::Red).attr(Attr::Italic))
+            &PartialStyle::from(PartialStyle::new().fg(Color::Red).attr(Attr::Italic))
         ));
     }
     #[test]
@@ -236,7 +241,7 @@ mod tests {
         let base = test_style();
         let red = ResolvedStyle::new(Color::Red, Color::Blue, AttrSet::new(Attr::Bold));
         let requested = PartialStyle::from(
-            StyleBuilder::new()
+            PartialStyle::new()
                 .fg(Color::Red)
                 .bg(Color::Blue)
                 .attr(Attr::Bold),

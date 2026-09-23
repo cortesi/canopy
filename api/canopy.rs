@@ -3360,26 +3360,6 @@ pub mod canopy {
             pub attrs: AttrSet,
         }
 
-        /// A builder for creating reusable style specifications.
-        ///
-        /// Use this to define styles that can be applied to multiple paths.
-        ///
-        /// # Example
-        ///
-        /// ```
-        /// use canopy::style::{Attr, StyleBuilder, StyleMap, solarized};
-        ///
-        /// let selected = StyleBuilder::new()
-        ///     .fg(solarized::BASE3)
-        ///     .bg(solarized::BLUE)
-        ///     .attr(Attr::Bold);
-        ///
-        /// let mut style_map = StyleMap::new();
-        /// style_map.rules().style("item/selected", selected).apply();
-        /// ```
-        #[derive(Clone, Debug, Default, PartialEq)]
-        pub struct StyleBuilder {}
-
         /// Map of style paths to partial styles, keyed by canonical path.
         #[derive(Clone, Debug, Default)]
         pub struct StyleMap {}
@@ -3487,45 +3467,30 @@ pub mod canopy {
             pub fn color_at(&self, rect: geom::Rect, point: geom::Point) -> Color {}
         }
 
-        impl From<StyleBuilder> for PartialStyle {
-            fn from(s: StyleBuilder) -> Self {}
-        }
-
-        impl PartialStyle {
-            /// Create a new PartialStyle with only a background paint.
-            pub fn bg(bg: impl Into<Paint>) -> Self {}
-
-            /// Create a new PartialStyle with only a foreground paint.
-            pub fn fg(fg: impl Into<Paint>) -> Self {}
-
-            /// Create a new PartialStyle with only attributes.
-            pub fn attrs(attrs: AttrSet) -> Self {}
-        }
-
-        impl From<StyleBuilder> for PartialStyle {
-            fn from(s: StyleBuilder) -> Self {}
-        }
-
-        impl StyleBuilder {
-            /// Add a single attribute.
-            pub fn attr(self, attr: Attr) -> Self {}
-
-            /// Create a new empty style builder.
-            pub fn new() -> Self {}
-
-            /// Set all attributes.
-            pub fn attrs(self, attrs: AttrSet) -> Self {}
-
-            /// Set the background paint.
-            pub fn bg(self, paint: impl Into<Paint>) -> Self {}
-
-            /// Set the foreground paint.
-            pub fn fg(self, paint: impl Into<Paint>) -> Self {}
-        }
-
         impl GradientStop {
             /// Construct a gradient stop, clamping the offset to 0.0-1.0.
             pub fn new(offset: f32, color: Color) -> Self {}
+        }
+
+        impl PartialStyle {
+            #[must_use]
+            /// Add one attribute to the attributes set so far.
+            pub fn attr(self, attr: Attr) -> Self {}
+
+            #[must_use]
+            /// Set every attribute at once; an empty set stops attributes inheriting.
+            pub fn attrs(self, attrs: AttrSet) -> Self {}
+
+            #[must_use]
+            /// Set the background paint.
+            pub fn bg(self, paint: impl Into<Paint>) -> Self {}
+
+            #[must_use]
+            /// Set the foreground paint.
+            pub fn fg(self, paint: impl Into<Paint>) -> Self {}
+
+            /// Create an empty partial style, which inherits every component.
+            pub fn new() -> Self {}
         }
 
         impl ResolvedStyle {

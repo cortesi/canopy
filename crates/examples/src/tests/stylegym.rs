@@ -235,7 +235,7 @@ fn italic_effect_excludes_styles_frame() -> Result<()> {
     })?;
     harness.render()?;
 
-    let italic = PartialStyle::attrs(AttrSet::new(Attr::Italic));
+    let italic = PartialStyle::new().attrs(AttrSet::new(Attr::Italic));
     assert_on_screen(&harness, "Normal text sample");
     assert!(
         harness

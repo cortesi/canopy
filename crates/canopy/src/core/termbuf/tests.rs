@@ -10,7 +10,7 @@ use crate::{
     buf,
     core::{testing::model::trace_result, text::grapheme_width},
     geom::Line,
-    style::{AttrSet, Color, PartialStyle, StyleBuilder},
+    style::{AttrSet, Color, PartialStyle},
     testing::buf::BufTest,
 };
 
@@ -1043,11 +1043,11 @@ fn contains_text_style() {
         .expect("test buffer mutation should succeed");
 
     // Test with foreground color partial style
-    assert!(BufTest::new(&tb).contains_text_style("hello", &PartialStyle::fg(Color::Red)));
-    assert!(!BufTest::new(&tb).contains_text_style("world", &PartialStyle::fg(Color::Red)));
+    assert!(BufTest::new(&tb).contains_text_style("hello", &PartialStyle::new().fg(Color::Red)));
+    assert!(!BufTest::new(&tb).contains_text_style("world", &PartialStyle::new().fg(Color::Red)));
 
-    assert!(BufTest::new(&tb).contains_text_style("world", &PartialStyle::fg(Color::Blue)));
-    assert!(!BufTest::new(&tb).contains_text_style("hello", &PartialStyle::fg(Color::Blue)));
+    assert!(BufTest::new(&tb).contains_text_style("world", &PartialStyle::new().fg(Color::Blue)));
+    assert!(!BufTest::new(&tb).contains_text_style("hello", &PartialStyle::new().fg(Color::Blue)));
 
     // Test with empty partial style (matches any style)
     let partial_any = PartialStyle::default();
@@ -1057,7 +1057,7 @@ fn contains_text_style() {
 
     // Test with multiple style attributes
     let partial_white_bg =
-        PartialStyle::from(StyleBuilder::new().fg(Color::White).bg(Color::Black));
+        PartialStyle::from(PartialStyle::new().fg(Color::White).bg(Color::Black));
     assert!(BufTest::new(&tb).contains_text_style("test", &partial_white_bg));
 }
 

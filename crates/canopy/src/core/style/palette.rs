@@ -3,7 +3,7 @@
 //! A theme is a [`Palette`] of role colours plus the single [`theme`] rule
 //! builder. Adding a rule here adds it to every theme at once.
 
-use super::{Attr, AttrSet, Color, StyleBuilder, StyleMap};
+use super::{Attr, AttrSet, Color, PartialStyle, StyleMap};
 
 /// How far a scrollbar thumb leans from the theme's base toward the accent.
 const THUMB_ACCENT: f32 = 0.4;
@@ -68,7 +68,7 @@ pub fn theme(p: &Palette) -> StyleMap {
     c.rules()
         .style(
             "/",
-            StyleBuilder::new()
+            PartialStyle::new()
                 .fg(p.fg)
                 .bg(p.bg)
                 .attrs(AttrSet::default()),
@@ -106,7 +106,7 @@ pub fn theme(p: &Palette) -> StyleMap {
         // whatever ground it sits on.
         .style(
             "/button/key",
-            StyleBuilder::new().fg(p.key).attrs(AttrSet::new(Attr::Bold)),
+            PartialStyle::new().fg(p.key).attrs(AttrSet::new(Attr::Bold)),
         )
         .fg("/button/focused/border", p.frame_focused)
         .fg("/button/disabled/border", p.muted_fg)
@@ -114,47 +114,47 @@ pub fn theme(p: &Palette) -> StyleMap {
         .fg("/button/disabled/key", p.muted_fg)
         .fg("/selector", p.fg)
         .fg("/selector/chosen", p.accent)
-        .style("/selector/focus", StyleBuilder::new().fg(p.bg).bg(p.accent))
+        .style("/selector/focus", PartialStyle::new().fg(p.bg).bg(p.accent))
         .style(
             "/selector/focus/chosen",
-            StyleBuilder::new().fg(p.bg).bg(p.cyan),
+            PartialStyle::new().fg(p.bg).bg(p.cyan),
         )
         .fg("/dropdown", p.fg)
         .fg("/dropdown/selected", p.accent)
         .style(
             "/dropdown/highlight",
-            StyleBuilder::new().fg(p.bg).bg(p.accent),
+            PartialStyle::new().fg(p.bg).bg(p.accent),
         )
         .style(
             "/tabs/bar",
-            StyleBuilder::new().fg(p.muted_fg).bg(p.panel_bg),
+            PartialStyle::new().fg(p.muted_fg).bg(p.panel_bg),
         )
         .style(
             "/tabs/tab",
-            StyleBuilder::new().fg(p.muted_fg).bg(p.element_bg),
+            PartialStyle::new().fg(p.muted_fg).bg(p.element_bg),
         )
         .style(
             "/tabs/tab/active",
-            StyleBuilder::new()
+            PartialStyle::new()
                 .fg(p.accent)
                 .bg(p.selection_bg)
                 .attrs(AttrSet::new(Attr::Bold)),
         )
         .style(
             "/tabs/tab/active/focused",
-            StyleBuilder::new()
+            PartialStyle::new()
                 .fg(p.bg)
                 .bg(p.accent)
                 .attrs(AttrSet::new(Attr::Bold)),
         )
-        .style("/editor/text", StyleBuilder::new().fg(p.fg).bg(p.bg))
+        .style("/editor/text", PartialStyle::new().fg(p.fg).bg(p.bg))
         .style(
             "/editor/selection",
-            StyleBuilder::new().fg(p.fg).bg(p.selection_bg),
+            PartialStyle::new().fg(p.fg).bg(p.selection_bg),
         )
         .style(
             "/editor/search/match",
-            StyleBuilder::new().fg(p.bg).bg(p.yellow),
+            PartialStyle::new().fg(p.bg).bg(p.yellow),
         )
         // Scrollbar marks reuse the match color as a foreground: a mark
         // under the thumb keeps its style but takes the thumb glyph, and a
@@ -163,33 +163,33 @@ pub fn theme(p: &Palette) -> StyleMap {
         .fg("/editor/search/mark", p.yellow)
         .style(
             "/editor/search/current",
-            StyleBuilder::new().fg(p.bg).bg(p.orange),
+            PartialStyle::new().fg(p.bg).bg(p.orange),
         )
         .fg("/editor/line-number", p.line_number)
         .fg("/editor/line-number/current", p.accent)
         .style(
             "/editor/prompt",
-            StyleBuilder::new().fg(p.fg).bg(p.panel_bg),
+            PartialStyle::new().fg(p.fg).bg(p.panel_bg),
         )
         .style(
             "/help/panel",
-            StyleBuilder::new().fg(p.fg).bg(p.panel_bg),
+            PartialStyle::new().fg(p.fg).bg(p.panel_bg),
         )
         // The status bar is chrome on the panel ground: a quiet label and an
         // accented key that names what the bar can do.
         .style(
             "/status_bar",
-            StyleBuilder::new().fg(p.muted_fg).bg(p.panel_bg),
+            PartialStyle::new().fg(p.muted_fg).bg(p.panel_bg),
         )
         // A notice reports a failure the application survived, so it takes
         // the error colour on the chrome ground of the row it covers.
         .style(
             "/root/notice",
-            StyleBuilder::new().fg(p.red).bg(p.panel_bg),
+            PartialStyle::new().fg(p.red).bg(p.panel_bg),
         )
         .style(
             "/status_bar/key",
-            StyleBuilder::new()
+            PartialStyle::new()
                 .fg(p.key)
                 .attrs(AttrSet::new(Attr::Bold)),
         )
@@ -201,11 +201,11 @@ pub fn theme(p: &Palette) -> StyleMap {
                 "/help/frame/thumb/active",
                 "/help/frame/title",
             ],
-            StyleBuilder::new().bg(p.panel_bg),
+            PartialStyle::new().bg(p.panel_bg),
         )
         .style(
             "/help/key",
-            StyleBuilder::new()
+            PartialStyle::new()
                 .fg(p.key)
                 .bg(p.panel_bg)
                 .attrs(AttrSet::new(Attr::Bold)),
@@ -214,36 +214,36 @@ pub fn theme(p: &Palette) -> StyleMap {
         // The empty attribute set stops it inheriting the key's bold.
         .style(
             "/help/key/separator",
-            StyleBuilder::new()
+            PartialStyle::new()
                 .fg(p.fg)
                 .bg(p.panel_bg)
                 .attrs(AttrSet::default()),
         )
         .style_all(
             &["/help/label", "/help/fallback"],
-            StyleBuilder::new().fg(p.muted_fg).bg(p.panel_bg),
+            PartialStyle::new().fg(p.muted_fg).bg(p.panel_bg),
         )
         .style(
             "/help/indicator",
-            StyleBuilder::new().fg(p.accent).bg(p.panel_bg),
+            PartialStyle::new().fg(p.accent).bg(p.panel_bg),
         )
         .style_all(
             &["/picker/background", "/picker/text"],
-            StyleBuilder::new().fg(p.fg).bg(p.panel_bg),
+            PartialStyle::new().fg(p.fg).bg(p.panel_bg),
         )
         .style_all(
             &["/selection", "/picker/selection"],
-            StyleBuilder::new().fg(p.bg).bg(p.accent),
+            PartialStyle::new().fg(p.bg).bg(p.accent),
         )
         // While the filter takes keys the list is not what the keyboard drives,
         // so its selection holds its place without claiming the eye.
         .style_all(
             &["/selection/dimmed", "/picker/selection/dimmed"],
-            StyleBuilder::new().fg(p.fg).bg(p.selection_bg),
+            PartialStyle::new().fg(p.fg).bg(p.selection_bg),
         )
         .style(
             "/picker/placeholder",
-            StyleBuilder::new().fg(p.muted_fg).bg(p.panel_bg),
+            PartialStyle::new().fg(p.muted_fg).bg(p.panel_bg),
         )
         // Inputs and picker filters share the field-and-results focus pattern.
         // The filter is a field rather than a row of the list, so it takes the
@@ -255,7 +255,7 @@ pub fn theme(p: &Palette) -> StyleMap {
                 "/picker/filter", "/picker/filter/text", "/picker/filter/prompt",
                 "/input/background", "/input/text", "/input/prompt",
             ],
-            StyleBuilder::new().fg(p.muted_fg).bg(p.element_bg),
+            PartialStyle::new().fg(p.muted_fg).bg(p.element_bg),
         )
         // Taking keys lights the field up, because it is what typing reaches.
         .style_all(
@@ -263,11 +263,11 @@ pub fn theme(p: &Palette) -> StyleMap {
                 "/picker/filter/active", "/picker/filter/active/text",
                 "/input/focused/background", "/input/focused/text",
             ],
-            StyleBuilder::new().fg(p.fg).bg(p.selection_bg),
+            PartialStyle::new().fg(p.fg).bg(p.selection_bg),
         )
         .style_all(
             &["/picker/filter/active/prompt", "/input/focused/prompt"],
-            StyleBuilder::new()
+            PartialStyle::new()
                 .fg(p.key)
                 .bg(p.selection_bg)
                 .attrs(AttrSet::new(Attr::Bold)),
@@ -280,11 +280,11 @@ pub fn theme(p: &Palette) -> StyleMap {
                 "/picker/frame/thumb/active",
                 "/picker/frame/title",
             ],
-            StyleBuilder::new().bg(p.panel_bg),
+            PartialStyle::new().bg(p.panel_bg),
         )
         .style_all(
             &["/confirm/background", "/confirm/message"],
-            StyleBuilder::new().fg(p.fg).bg(p.panel_bg),
+            PartialStyle::new().fg(p.fg).bg(p.panel_bg),
         )
         // The frame takes the panel behind it, so the dialog reads as one
         // surface rather than a border cut out of the view.
@@ -296,21 +296,21 @@ pub fn theme(p: &Palette) -> StyleMap {
                 "/confirm/frame/thumb/active",
                 "/confirm/frame/title",
             ],
-            StyleBuilder::new().bg(p.panel_bg),
+            PartialStyle::new().bg(p.panel_bg),
         )
         // The dialog's buttons take the panel behind them, so the row reads as
         // part of the dialog rather than as controls laid on the view.
         .style_all(
             &["/confirm/button/border", "/confirm/button/text"],
-            StyleBuilder::new().fg(p.fg).bg(p.panel_bg),
+            PartialStyle::new().fg(p.fg).bg(p.panel_bg),
         )
         .style(
             "/confirm/button/focused/border",
-            StyleBuilder::new().fg(p.frame_focused).bg(p.panel_bg),
+            PartialStyle::new().fg(p.frame_focused).bg(p.panel_bg),
         )
         .style(
             "/confirm/button/key",
-            StyleBuilder::new()
+            PartialStyle::new()
                 .fg(p.key)
                 .bg(p.panel_bg)
                 .attrs(AttrSet::new(Attr::Bold)),

@@ -6,7 +6,7 @@ use canopy::{
     error::{Error, Result},
     layout::{Direction, Layout, LayoutOverride, ScrollDirection, ScrollOp, Sizing},
     style::{
-        AttrSet, Color, GradientSpec, GradientStop, Paint, StyleBuilder, StyleRules,
+        AttrSet, Color, GradientSpec, GradientStop, Paint, PartialStyle, StyleRules,
         default as palette,
     },
     terminal::{RunOptions, runloop},
@@ -92,8 +92,8 @@ pub(crate) fn selectable_entry_styles<'a>(rules: StyleRules<'a>, prefix: &str) -
         bold: true,
         ..AttrSet::default()
     };
-    let normal = StyleBuilder::new().fg(palette::TEXT).bg(palette::BG);
-    let selected = StyleBuilder::new()
+    let normal = PartialStyle::new().fg(palette::TEXT).bg(palette::BG);
+    let selected = PartialStyle::new()
         .fg(palette::BG)
         .bg(palette::ACCENT)
         .attrs(selected_attrs);

@@ -366,96 +366,38 @@ pub struct PartialStyle {
     pub attrs: Option<AttrSet>,
 }
 
-/// A builder for creating reusable style specifications.
-///
-/// Use this to define styles that can be applied to multiple paths.
-///
-/// # Example
-///
-/// ```
-/// use canopy::style::{Attr, StyleBuilder, StyleMap, solarized};
-///
-/// let selected = StyleBuilder::new()
-///     .fg(solarized::BASE3)
-///     .bg(solarized::BLUE)
-///     .attr(Attr::Bold);
-///
-/// let mut style_map = StyleMap::new();
-/// style_map.rules().style("item/selected", selected).apply();
-/// ```
-#[derive(Clone, Default, Debug, PartialEq)]
-pub struct StyleBuilder {
-    /// The partial style being built.
-    inner: PartialStyle,
-}
-
-impl StyleBuilder {
-    /// Create a new empty style builder.
+impl PartialStyle {
+    /// Create an empty partial style, which inherits every component.
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Set the foreground paint.
+    #[must_use]
     pub fn fg(mut self, paint: impl Into<Paint>) -> Self {
-        self.inner.fg = Some(paint.into());
+        self.fg = Some(paint.into());
         self
     }
 
     /// Set the background paint.
+    #[must_use]
     pub fn bg(mut self, paint: impl Into<Paint>) -> Self {
-        self.inner.bg = Some(paint.into());
+        self.bg = Some(paint.into());
         self
     }
 
-    /// Add a single attribute.
+    /// Add one attribute to the attributes set so far.
+    #[must_use]
     pub fn attr(mut self, attr: Attr) -> Self {
-        if let Some(attrs) = self.inner.attrs {
-            self.inner.attrs = Some(attrs.with(attr));
-        } else {
-            self.inner.attrs = Some(AttrSet::new(attr));
-        }
+        self.attrs = Some(self.attrs.unwrap_or_default().with(attr));
         self
     }
 
-    /// Set all attributes.
+    /// Set every attribute at once; an empty set stops attributes inheriting.
+    #[must_use]
     pub fn attrs(mut self, attrs: AttrSet) -> Self {
-        self.inner.attrs = Some(attrs);
+        self.attrs = Some(attrs);
         self
-    }
-}
-
-impl From<StyleBuilder> for PartialStyle {
-    fn from(s: StyleBuilder) -> Self {
-        s.inner
-    }
-}
-
-impl PartialStyle {
-    /// Create a new PartialStyle with only a foreground paint.
-    pub fn fg(fg: impl Into<Paint>) -> Self {
-        Self {
-            fg: Some(fg.into()),
-            bg: None,
-            attrs: None,
-        }
-    }
-
-    /// Create a new PartialStyle with only a background paint.
-    pub fn bg(bg: impl Into<Paint>) -> Self {
-        Self {
-            fg: None,
-            bg: Some(bg.into()),
-            attrs: None,
-        }
-    }
-
-    /// Create a new PartialStyle with only attributes.
-    pub fn attrs(attrs: AttrSet) -> Self {
-        Self {
-            fg: None,
-            bg: None,
-            attrs: Some(attrs),
-        }
     }
 
     /// Resolve the partial style into a full style.
@@ -598,7 +540,7 @@ impl<'a> StyleRules<'a> {
     /// with the existing style.
     pub fn fg(mut self, path: &str, paint: impl Into<Paint>) -> Self {
         let full_path = self.make_path(path);
-        self.merge_pending(full_path, PartialStyle::fg(paint));
+        self.merge_pending(full_path, PartialStyle::new().fg(paint));
         self
     }
 
@@ -608,7 +550,7 @@ impl<'a> StyleRules<'a> {
     /// with the existing style.
     pub fn bg(mut self, path: &str, paint: impl Into<Paint>) -> Self {
         let full_path = self.make_path(path);
-        self.merge_pending(full_path, PartialStyle::bg(paint));
+        self.merge_pending(full_path, PartialStyle::new().bg(paint));
         self
     }
 
@@ -618,7 +560,7 @@ impl<'a> StyleRules<'a> {
     /// with the existing style.
     pub fn attr(mut self, path: &str, attr: Attr) -> Self {
         let full_path = self.make_path(path);
-        self.merge_pending(full_path, PartialStyle::attrs(AttrSet::new(attr)));
+        self.merge_pending(full_path, PartialStyle::new().attrs(AttrSet::new(attr)));
         self
     }
 
@@ -862,7 +804,7 @@ mod tests {
 
     #[test]
     fn style_builder_defines_a_reusable_rule() {
-        let selected = StyleBuilder::new()
+        let selected = PartialStyle::new()
             .fg(solarized::BASE3)
             .bg(solarized::BLUE)
             .attr(Attr::Bold);
@@ -884,7 +826,7 @@ mod tests {
             .rules()
             .style(
                 "",
-                StyleBuilder::new()
+                PartialStyle::new()
                     .fg(Color::White)
                     .bg(Color::Black)
                     .attrs(AttrSet::default()),
@@ -971,7 +913,7 @@ mod tests {
         smap.rules()
             .style(
                 "",
-                StyleBuilder::new()
+                PartialStyle::new()
                     .fg(Color::White)
                     .bg(Color::Black)
                     .attrs(AttrSet::default()),
@@ -1281,7 +1223,7 @@ mod tests {
         map.rules()
             .fg("//item/", Color::Yellow)
             .bg("item", Color::Red)
-            .style("/item//", StyleBuilder::new().attrs(AttrSet::default()))
+            .style("/item//", PartialStyle::new().attrs(AttrSet::default()))
             .apply();
         let item = manager.get(&map, "item").resolve_solid().unwrap();
         assert_eq!(item.fg, Color::Yellow);

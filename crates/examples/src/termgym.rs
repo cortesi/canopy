@@ -428,14 +428,14 @@ impl Register for TermGym {
 
 /// Install native styles during the configuration phase.
 fn setup_style(style: &mut StyleMap) {
-    use canopy::style::StyleBuilder;
+    use canopy::style::PartialStyle;
 
     let selected_attrs = AttrSet {
         bold: true,
         ..AttrSet::default()
     };
-    let button_normal = StyleBuilder::new().fg(palette::TEXT).bg(palette::ELEMENT);
-    let button_selected = StyleBuilder::new()
+    let button_normal = PartialStyle::new().fg(palette::TEXT).bg(palette::ELEMENT);
+    let button_selected = PartialStyle::new()
         .fg(palette::BG)
         .bg(palette::ACCENT)
         .attrs(selected_attrs);
@@ -452,12 +452,12 @@ fn setup_style(style: &mut StyleMap) {
         .fg("", palette::BORDER)
         .style(
             "focused",
-            StyleBuilder::new().fg(palette::YELLOW).attr(Attr::Bold),
+            PartialStyle::new().fg(palette::YELLOW).attr(Attr::Bold),
         )
         .fg("active", palette::ORANGE)
         .style(
             "title",
-            StyleBuilder::new().fg(palette::TEXT).attr(Attr::Bold),
+            PartialStyle::new().fg(palette::TEXT).attr(Attr::Bold),
         )
         .apply();
 }
