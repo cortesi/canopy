@@ -7,6 +7,7 @@ use canopy::{
     input::{Event, mouse},
     layout::{MeasureConstraints, Measurement},
     render::Render,
+    style::roles,
     text,
 };
 
@@ -170,7 +171,9 @@ where
     }
 
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+        rndr.push_layer("dropdown");
         let view = ctx.view();
+        let selection = roles::selection(ctx.is_focused());
         let rect = view.view_rect_local();
 
         if self.expanded {
@@ -182,14 +185,12 @@ where
                     text::slice_by_columns(item.label(), view.scroll.x as usize, rect.w as usize);
 
                 if Some(idx) == self.cursor.index() {
-                    // Highlighted item - inverse colors
-                    rndr.fill("dropdown/highlight", line_rect.rect(), ' ')?;
-                    rndr.text("dropdown/highlight", line_rect, label)?;
+                    rndr.fill(selection, line_rect.rect(), ' ')?;
+                    rndr.text(selection, line_rect, label)?;
                 } else if idx == self.selected {
-                    // Selected but not highlighted
-                    rndr.text("dropdown/selected", line_rect, label)?;
+                    rndr.text("chosen", line_rect, label)?;
                 } else {
-                    rndr.text("dropdown", line_rect, label)?;
+                    rndr.text(roles::TEXT, line_rect, label)?;
                 }
             }
         } else {
@@ -202,7 +203,7 @@ where
             let display = format!("{}{}", label, indicator);
             let (display, _) =
                 text::slice_by_columns(&display, view.scroll.x as usize, rect.w as usize);
-            rndr.text("dropdown", rect.line(0)?, display)?;
+            rndr.text(roles::TEXT, rect.line(0)?, display)?;
         }
 
         Ok(())

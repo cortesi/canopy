@@ -82,7 +82,7 @@ impl Button {
 
     /// Mark the label character that a key reaches this button by.
     ///
-    /// The first matching character takes the [`roles::BUTTON_KEY`] style, so
+    /// The first matching character takes the [`roles::KEY`] style, so
     /// the label names its key without repeating it and keeps its spelling. An
     /// ASCII letter matches without case; any other character must match
     /// exactly. A label with no match is left alone.
@@ -174,7 +174,7 @@ impl Button {
         let box_id = ctx.get_or_create_slot::<BoxSlot>(ctx.node_id(), || {
             Border::new()
                 .with_glyphs(self.glyphs)
-                .with_border_style(roles::BUTTON_BORDER)
+                .with_border_style(roles::BORDER)
                 .with_fill()
         })?;
         let center_id = ctx.get_or_create_slot::<CenterSlot>(box_id, Center::new)?;
@@ -227,7 +227,7 @@ impl Widget for Button {
     }
 
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
-        rndr.push_layer(roles::BUTTON);
+        rndr.push_layer("button");
         if self.active {
             rndr.push_layer(WidgetState::Pressed.layer());
         }
@@ -288,7 +288,7 @@ impl Widget for ButtonLabel {
         let budget = area.w as usize;
         let shown = text::truncate_end(&self.label, budget);
         let line = area.line(0)?;
-        render.text(roles::BUTTON_LABEL, line, &shown)?;
+        render.text(roles::TEXT, line, &shown)?;
 
         let Some(range) = self.accelerator.clone() else {
             return Ok(());
@@ -303,7 +303,7 @@ impl Widget for ButtonLabel {
             return Ok(());
         }
         render.text(
-            roles::BUTTON_KEY,
+            roles::KEY,
             Line::new(
                 line.tl
                     .x

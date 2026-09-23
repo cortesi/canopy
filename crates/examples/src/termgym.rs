@@ -7,7 +7,7 @@ use canopy::{
     geom::Size,
     layout::{Constraint, Direction, Layout, MeasureConstraints, Measurement},
     render::Render,
-    style::{Attr, AttrSet, StyleMap, default as palette},
+    style::{Attr, AttrSet, StyleMap, WidgetState, default as palette},
     tree::FocusScope,
 };
 use canopy_widgets::{
@@ -110,7 +110,7 @@ impl Widget for TermEntry {
     fn render(&mut self, rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         rndr.push_layer("entry");
         if self.selected {
-            rndr.push_layer("selected");
+            rndr.push_layer(WidgetState::Selected.layer());
         }
         Ok(())
     }

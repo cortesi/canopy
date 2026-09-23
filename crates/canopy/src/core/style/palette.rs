@@ -48,7 +48,7 @@ pub struct Palette {
     pub magenta: Color,
     /// Named violet.
     pub violet: Color,
-    /// Named cyan, also the focused selected selector background.
+    /// Named cyan.
     pub cyan: Color,
     /// Named green.
     pub green: Color,
@@ -83,13 +83,13 @@ pub fn theme(p: &Palette) -> StyleMap {
         .fg("/columns/thumb/active", p.accent)
         // A diff reads changed rows by their colour, and its chrome stays
         // quiet: gaps, the empty half of a one-sided change, and the divider.
-        .fg("/diff/context", p.fg)
-        .fg("/diff/added", p.green)
-        .fg("/diff/removed", p.red)
-        .fg("/diff/header", p.accent)
-        .fg("/diff/gap", p.muted_fg)
-        .fg("/diff/missing", p.muted_fg)
-        .fg("/diff/separator", p.frame)
+        .fg("/diff_view/context", p.fg)
+        .fg("/diff_view/added", p.green)
+        .fg("/diff_view/removed", p.red)
+        .fg("/diff_view/header", p.accent)
+        .fg("/diff_view/gap", p.muted_fg)
+        .fg("/diff_view/missing", p.muted_fg)
+        .fg("/diff_view/separator", p.frame)
         .fg("/blue", p.blue)
         .fg("/red", p.red)
         .fg("/magenta", p.magenta)
@@ -114,17 +114,8 @@ pub fn theme(p: &Palette) -> StyleMap {
         .fg("/button/disabled/key", p.muted_fg)
         .fg("/selector", p.fg)
         .fg("/selector/chosen", p.accent)
-        .style("/selector/focus", PartialStyle::new().fg(p.bg).bg(p.accent))
-        .style(
-            "/selector/focus/chosen",
-            PartialStyle::new().fg(p.bg).bg(p.cyan),
-        )
         .fg("/dropdown", p.fg)
-        .fg("/dropdown/selected", p.accent)
-        .style(
-            "/dropdown/highlight",
-            PartialStyle::new().fg(p.bg).bg(p.accent),
-        )
+        .fg("/dropdown/chosen", p.accent)
         .style(
             "/tabs/bar",
             PartialStyle::new().fg(p.muted_fg).bg(p.panel_bg),
@@ -220,12 +211,8 @@ pub fn theme(p: &Palette) -> StyleMap {
                 .attrs(AttrSet::default()),
         )
         .style_all(
-            &["/help/label", "/help/fallback"],
+            &["/help/label"],
             PartialStyle::new().fg(p.muted_fg).bg(p.panel_bg),
-        )
-        .style(
-            "/help/indicator",
-            PartialStyle::new().fg(p.accent).bg(p.panel_bg),
         )
         .style_all(
             &["/picker/background", "/picker/text"],

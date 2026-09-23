@@ -484,7 +484,7 @@ impl DiffView {
                         ' ',
                         Some(*old),
                         geom.digits,
-                        "diff/context",
+                        "context",
                     )?;
                     self.draw_code(
                         rndr,
@@ -492,7 +492,7 @@ impl DiffView {
                         origin,
                         origin.x + geom.gutter,
                         geom.width - geom.gutter,
-                        "diff/context",
+                        "context",
                         self.diff.old_line(*old),
                         Side::Old,
                         *old,
@@ -508,7 +508,7 @@ impl DiffView {
                         '-',
                         Some(*old),
                         geom.digits,
-                        "diff/removed",
+                        "removed",
                     )?;
                     self.draw_code(
                         rndr,
@@ -516,7 +516,7 @@ impl DiffView {
                         origin,
                         origin.x + geom.gutter,
                         geom.width - geom.gutter,
-                        "diff/removed",
+                        "removed",
                         self.diff.old_line(*old),
                         Side::Old,
                         *old,
@@ -532,7 +532,7 @@ impl DiffView {
                         '+',
                         Some(*new),
                         geom.digits,
-                        "diff/added",
+                        "added",
                     )?;
                     self.draw_code(
                         rndr,
@@ -540,7 +540,7 @@ impl DiffView {
                         origin,
                         origin.x + geom.gutter,
                         geom.width - geom.gutter,
-                        "diff/added",
+                        "added",
                         self.diff.new_line(*new),
                         Side::New,
                         *new,
@@ -548,7 +548,7 @@ impl DiffView {
                     )?;
                 }
                 DiffRow::Gap { .. } => {
-                    rndr.fill("diff/gap", Rect::new(origin.x, y, geom.width, 1), ' ')?;
+                    rndr.fill("gap", Rect::new(origin.x, y, geom.width, 1), ' ')?;
                     Self::draw_number(
                         rndr,
                         origin.x,
@@ -557,13 +557,13 @@ impl DiffView {
                         '…',
                         None,
                         geom.digits,
-                        "diff/gap",
+                        "gap",
                     )?;
                 }
                 DiffRow::Header { old, new } => {
-                    rndr.fill("diff/header", Rect::new(origin.x, y, geom.width, 1), ' ')?;
+                    rndr.fill("header", Rect::new(origin.x, y, geom.width, 1), ' ')?;
                     rndr.text(
-                        "diff/header",
+                        "header",
                         Line::new(origin.x + geom.gutter, y, geom.width - geom.gutter),
                         &header_text(old, new),
                     )?;
@@ -590,9 +590,9 @@ impl DiffView {
             match &self.side_rows[index] {
                 SideRow::Pair { old, new, changed } => {
                     let (left_style, right_style) = if *changed {
-                        ("diff/removed", "diff/added")
+                        ("removed", "added")
                     } else {
-                        ("diff/context", "diff/context")
+                        ("context", "context")
                     };
                     let left_marker = if *changed { '-' } else { ' ' };
                     let right_marker = if *changed { '+' } else { ' ' };
@@ -622,43 +622,21 @@ impl DiffView {
                     )?;
                 }
                 SideRow::Gap => {
-                    rndr.fill("diff/gap", Rect::new(left, y, geom.half, 1), ' ')?;
-                    rndr.fill("diff/gap", Rect::new(right, y, geom.half, 1), ' ')?;
-                    Self::draw_number(
-                        rndr,
-                        left,
-                        y,
-                        geom.gutter,
-                        '…',
-                        None,
-                        geom.digits,
-                        "diff/gap",
-                    )?;
-                    Self::draw_number(
-                        rndr,
-                        right,
-                        y,
-                        geom.gutter,
-                        '…',
-                        None,
-                        geom.digits,
-                        "diff/gap",
-                    )?;
+                    rndr.fill("gap", Rect::new(left, y, geom.half, 1), ' ')?;
+                    rndr.fill("gap", Rect::new(right, y, geom.half, 1), ' ')?;
+                    Self::draw_number(rndr, left, y, geom.gutter, '…', None, geom.digits, "gap")?;
+                    Self::draw_number(rndr, right, y, geom.gutter, '…', None, geom.digits, "gap")?;
                 }
                 SideRow::Header { old, new } => {
-                    rndr.fill("diff/header", Rect::new(left, y, geom.width, 1), ' ')?;
+                    rndr.fill("header", Rect::new(left, y, geom.width, 1), ' ')?;
                     rndr.text(
-                        "diff/header",
+                        "header",
                         Line::new(left + geom.gutter, y, geom.width - geom.gutter),
                         &header_text(old, new),
                     )?;
                 }
             }
-            rndr.fill(
-                "diff/separator",
-                Rect::new(origin.x + geom.half, y, 1, 1),
-                '│',
-            )?;
+            rndr.fill("separator", Rect::new(origin.x + geom.half, y, 1, 1), '│')?;
         }
         Ok(())
     }
@@ -679,7 +657,7 @@ impl DiffView {
         y: u32,
     ) -> Result<()> {
         let Some(line) = line else {
-            return rndr.fill("diff/missing", Rect::new(x, y, geom.half, 1), ' ');
+            return rndr.fill("missing", Rect::new(x, y, geom.half, 1), ' ');
         };
         Self::draw_number(
             rndr,
@@ -712,6 +690,7 @@ impl DiffView {
 
 impl Widget for DiffView {
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+        rndr.push_layer("diff_view");
         self.prepare_highlighters();
         match self.strategy {
             Strategy::Unified => self.draw_unified(rndr, ctx),

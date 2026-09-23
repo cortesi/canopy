@@ -1056,8 +1056,7 @@ fn contains_text_style() {
     assert!(BufTest::new(&tb).contains_text_style("test", &partial_any));
 
     // Test with multiple style attributes
-    let partial_white_bg =
-        PartialStyle::from(PartialStyle::new().fg(Color::White).bg(Color::Black));
+    let partial_white_bg = PartialStyle::new().fg(Color::White).bg(Color::Black);
     assert!(BufTest::new(&tb).contains_text_style("test", &partial_white_bg));
 }
 

@@ -3123,34 +3123,34 @@ pub mod canopy {
         }
 
         pub mod roles {
-            //! Stable paint roles used by stock widgets, independent of child node names.
+            //! Shared part names that widgets paint beneath their own layer.
+            //!
+            //! A widget pushes its node name as a layer and paints these bare roles, so
+            //! `button/text` and `input/text` are both the `TEXT` part.
 
-            /// Button component layer.
-            pub const BUTTON: &str = "button";
+            /// The ground a widget fills before painting its parts.
+            pub const BACKGROUND: &str = "background";
 
-            /// Button border paint path beneath its component and state layers.
-            pub const BUTTON_BORDER: &str = "border";
+            /// Box chrome drawn around a widget.
+            pub const BORDER: &str = "border";
 
-            /// Button accelerator cell path, for the one label character a key names.
-            pub const BUTTON_KEY: &str = "key";
+            /// The text cell under a caret, falling back to [`TEXT`].
+            pub const CURSOR: &str = "text/cursor";
 
-            /// Button label paint path beneath its component and state layers.
-            pub const BUTTON_LABEL: &str = "text";
+            /// A key name, such as an accelerator or a binding hint.
+            pub const KEY: &str = "key";
 
-            /// Input component layer.
-            pub const INPUT: &str = "input";
+            /// A fixed prompt before editable text.
+            pub const PROMPT: &str = "prompt";
 
-            /// Input row background, including the space after its value.
-            pub const INPUT_BACKGROUND: &str = "background";
+            /// Ordinary text.
+            pub const TEXT: &str = "text";
 
-            /// Input cursor cell path, falling back to the text role.
-            pub const INPUT_CURSOR: &str = "text/cursor";
+            /// A scrollbar thumb.
+            pub const THUMB: &str = "thumb";
 
-            /// Optional visible input prompt.
-            pub const INPUT_PROMPT: &str = "prompt";
-
-            /// Input text paint path.
-            pub const INPUT_TEXT: &str = "text";
+            /// A title in a widget's chrome.
+            pub const TITLE: &str = "title";
 
             /// Paint a retained selection according to which control takes the keys.
             /// Pass actual focus, or the composite widget's active part. Inactive

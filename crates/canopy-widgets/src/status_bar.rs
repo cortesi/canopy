@@ -8,6 +8,7 @@ use canopy::{
     geom::{Line, Size},
     layout::{Layout, LayoutOverride, MeasureConstraints, Measurement, Sizing},
     render::Render,
+    style::roles,
 };
 use unicode_width::UnicodeWidthStr;
 
@@ -79,7 +80,8 @@ impl Widget for StatusBar {
         if area.w == 0 || area.h == 0 {
             return Ok(());
         }
-        rndr.fill("status_bar", area, ' ')
+        rndr.push_layer("status_bar");
+        rndr.fill(roles::BACKGROUND, area, ' ')
     }
 
     fn on_mount(&mut self, context: &mut dyn Context) -> Result<()> {
@@ -195,7 +197,7 @@ impl Widget for KeyHint {
         let key_width = text_width(&self.key).min(row.w);
         if key_width > 0 {
             rndr.text(
-                "status_bar/key",
+                roles::KEY,
                 Line::new(row.tl.x, row.tl.y, key_width),
                 &self.key,
             )?;
@@ -208,7 +210,7 @@ impl Widget for KeyHint {
         let width = width.min(row.tl.x.saturating_add(row.w).saturating_sub(x));
         if width > 0 {
             rndr.text(
-                "status_bar/text",
+                roles::TEXT,
                 Line::new(x, row.tl.y, width),
                 &format!(": {}", self.label),
             )?;

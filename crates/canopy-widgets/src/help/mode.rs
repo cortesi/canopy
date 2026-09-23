@@ -64,7 +64,7 @@ impl Widget for ModeBindings {
 
     fn render(&mut self, render: &mut Render, context: &dyn ViewContext) -> Result<()> {
         let rect = context.view().outer_rect_local();
-        render.fill("help/panel", rect, ' ')?;
+        render.fill("panel", rect, ' ')?;
         let width = rect.w.saturating_sub(2 * MARGIN);
         let lines = display_lines(&self.bindings, width);
         for (y, line) in (0..rect.h).zip(&lines) {

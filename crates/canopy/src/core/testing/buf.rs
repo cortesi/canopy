@@ -227,25 +227,22 @@ mod tests {
             "italic",
             &PartialStyle::new().attrs(AttrSet::new(Attr::Italic))
         ));
-        assert!(bt.contains_text_style(
-            "bold",
-            &PartialStyle::from(PartialStyle::new().fg(Color::Red).attr(Attr::Bold))
-        ));
+        assert!(
+            bt.contains_text_style("bold", &PartialStyle::new().fg(Color::Red).attr(Attr::Bold))
+        );
         assert!(!bt.contains_text_style(
             "bold",
-            &PartialStyle::from(PartialStyle::new().fg(Color::Red).attr(Attr::Italic))
+            &PartialStyle::new().fg(Color::Red).attr(Attr::Italic)
         ));
     }
     #[test]
     fn contains_text_style_requires_every_character_and_component() {
         let base = test_style();
         let red = ResolvedStyle::new(Color::Red, Color::Blue, AttrSet::new(Attr::Bold));
-        let requested = PartialStyle::from(
-            PartialStyle::new()
-                .fg(Color::Red)
-                .bg(Color::Blue)
-                .attr(Attr::Bold),
-        );
+        let requested = PartialStyle::new()
+            .fg(Color::Red)
+            .bg(Color::Blue)
+            .attr(Attr::Bold);
         for red_column in 0..3 {
             let mut buf = TermBuf::new((3, 1), 'x', base).unwrap();
             buf.put(

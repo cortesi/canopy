@@ -2288,13 +2288,18 @@ Each stage also updates the docs it touches.
     `selector/chosen`; stylegym effects became one choice with a "None" option.
     fh needed no change.
 - [ ] C31:
-  - Apply the styling rule, and remove the double prefixes.
-  - StatusBar pushes its layer, and KeyHint resolves keys through bindings.
-    Add Luau `canopy.key_for`.
-  - `roles` becomes shared part names, `style::themes` has a public `Palette`,
-    and `Setup::widget_styles` is added.
-  - `PartialStyle` gains chaining methods, and `StyleBuilder` goes.
-  - Update `themes.golden`.
+  - [x] Apply the styling rule, and remove the double prefixes.
+    - Material change: the resolver now probes the layer stack with outer
+      layers dropped before it drops inner ones, so a leaf's own rules
+      (`editor/text`) apply under any host layer. Without it, pushing a leaf
+      layer broke resolution under fh's `file_select` layer. BindingList
+      pushes `help` itself, so it paints help parts wherever it is mounted.
+  - [ ] StatusBar pushes its layer (done), and KeyHint resolves keys through
+    bindings. Add Luau `canopy.key_for`.
+  - [ ] `roles` becomes shared part names (done), `style::themes` has a public
+    `Palette`, and `Setup::widget_styles` is added.
+  - [x] `PartialStyle` gains chaining methods, and `StyleBuilder` goes.
+  - [ ] Update `themes.golden`.
 - [ ] C32 public parts: public `Dialog`, `Render::runs`, `text::width` and
   `cell_width`, the `highlight` module, Border naming, and the Container
   presets.

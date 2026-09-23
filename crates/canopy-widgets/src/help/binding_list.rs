@@ -147,8 +147,10 @@ impl Widget for BindingList {
     }
 
     fn render(&mut self, render: &mut Render, context: &dyn ViewContext) -> Result<()> {
+        // The list paints the help panel's parts wherever it is mounted.
+        render.push_layer("help");
         let view = context.view();
-        render.fill("help/panel", view.outer_rect_local(), ' ')?;
+        render.fill("panel", view.outer_rect_local(), ' ')?;
         let content = view.view_rect_local();
         let lines = self.display_lines(content.w);
         let viewport = view.view_rect();
@@ -225,7 +227,7 @@ pub(super) fn display_lines(rows: &[BindingRow], width: u32) -> Vec<DisplayLine>
         return vec![DisplayLine {
             key: None,
             text: "No key bindings in this context".to_string(),
-            style: "help/label",
+            style: "label",
         }];
     }
 
@@ -291,7 +293,7 @@ fn render_keys(render: &mut Render, key: &str, x: u32, y: u32, width: u32) -> Re
         if index > 0 {
             let separator = u32::try_from(text_width(KEY_SEPARATOR)).unwrap_or(u32::MAX);
             render.text(
-                "help/key/separator",
+                "key/separator",
                 Line::new(cursor, y, separator.min(limit.saturating_sub(cursor))),
                 KEY_SEPARATOR,
             )?;
@@ -299,7 +301,7 @@ fn render_keys(render: &mut Render, key: &str, x: u32, y: u32, width: u32) -> Re
         }
         let piece_width = u32::try_from(text_width(piece)).unwrap_or(u32::MAX);
         render.text(
-            "help/key",
+            "key",
             Line::new(cursor, y, piece_width.min(limit.saturating_sub(cursor))),
             piece,
         )?;
@@ -410,7 +412,7 @@ fn binding_lines(
                     DisplayLine {
                         key: None,
                         text: text.into_owned(),
-                        style: "help/key",
+                        style: "key",
                     }
                 }));
             }
@@ -419,7 +421,7 @@ fn binding_lines(
                 lines.push(DisplayLine {
                     key: None,
                     text: format!("  {text}"),
-                    style: "help/label",
+                    style: "label",
                 });
             }
         } else {
@@ -436,12 +438,12 @@ fn binding_lines(
                             " ".repeat(max_key_width.saturating_sub(text_width(key)))
                         )),
                         text,
-                        style: "help/label",
+                        style: "label",
                     },
                     None => DisplayLine {
                         key: None,
                         text: format!("{}  {text}", " ".repeat(max_key_width)),
-                        style: "help/label",
+                        style: "label",
                     },
                 });
             }

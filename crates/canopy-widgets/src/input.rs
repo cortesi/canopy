@@ -304,21 +304,21 @@ impl Widget for Input {
     }
 
     fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
-        r.push_layer(roles::INPUT);
+        r.push_layer("input");
         if ctx.is_focused() {
             r.push_layer(WidgetState::Focused.layer());
         }
         let view = ctx.view();
         let view_rect = view.view_rect();
         let content_origin = view.content_origin();
-        r.fill(roles::INPUT_BACKGROUND, view.view_rect_local(), ' ')?;
+        r.fill(roles::BACKGROUND, view.view_rect_local(), ' ')?;
         if view_rect.h == 0 {
             return Ok(());
         }
         let prompt_width = self.prompt_width().min(view_rect.w);
         if prompt_width > 0 {
             r.text(
-                roles::INPUT_PROMPT,
+                roles::PROMPT,
                 Line::new(content_origin.x, content_origin.y, prompt_width),
                 &self.prompt,
             )?;
@@ -331,10 +331,10 @@ impl Widget for Input {
         let text_x = content_origin.x.saturating_add(prompt_width);
         let line = Line::new(text_x, content_origin.y, width);
         let content = self.buffer.render_text();
-        r.text(roles::INPUT_TEXT, line, &content)?;
+        r.text(roles::TEXT, line, &content)?;
         if ctx.is_focused() && self.buffer.cursor_display() < width {
             r.restyle(
-                roles::INPUT_CURSOR,
+                roles::CURSOR,
                 Point {
                     x: text_x + self.buffer.cursor_display(),
                     y: content_origin.y,

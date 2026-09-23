@@ -1340,7 +1340,7 @@ pub mod canopy_widgets {
         #[must_use]
         /// Mark the label character that a key reaches this button by.
         ///
-        /// The first matching character takes the [`roles::BUTTON_KEY`] style, so
+        /// The first matching character takes the [`roles::KEY`] style, so
         /// the label names its key without repeating it and keeps its spelling. An
         /// ASCII letter matches without case; any other character must match
         /// exactly. A label with no match is left alone.

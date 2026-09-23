@@ -142,10 +142,10 @@ impl<'a, 'b> RenderLineContext<'a, 'b> {
     /// Construct a new render context, resolving the fixed cell styles once.
     fn new(r: &'a mut Render<'b>, view_rect: Rect, origin: Point, gutter_width: u32) -> Self {
         let styles = CellStyles {
-            text: r.resolve_style("editor/text"),
-            selection: r.resolve_style("editor/selection"),
-            search_current: r.resolve_style("editor/search/current"),
-            search_match: r.resolve_style("editor/search/match"),
+            text: r.resolve_style("text"),
+            selection: r.resolve_style("selection"),
+            search_current: r.resolve_style("search/current"),
+            search_match: r.resolve_style("search/match"),
         };
         Self {
             r,
@@ -731,7 +731,7 @@ impl Editor {
     ) -> Result<()> {
         let line_y = ctx.origin.y.saturating_add(y);
         let line_rect = Rect::new(ctx.origin.x, line_y, ctx.view_rect.w, 1);
-        ctx.r.fill("editor/text", line_rect, ' ')?;
+        ctx.r.fill("text", line_rect, ' ')?;
 
         if ctx.gutter_width > 0 {
             let gutter_line = Line::new(ctx.origin.x, line_y, ctx.gutter_width);
@@ -745,9 +745,9 @@ impl Editor {
             // declines focus is a display with no cursor to place, so its
             // gutter marks no current line.
             let style = if self.config.focusable && line_idx == self.buffer.cursor().line {
-                "editor/line-number/current"
+                "line-number/current"
             } else {
-                "editor/line-number"
+                "line-number"
             };
             ctx.r.text(style, gutter_line, &number_text)?;
         }
@@ -1070,6 +1070,7 @@ impl Widget for Editor {
     }
 
     fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+        r.push_layer("editor");
         let view = ctx.view();
         let view_rect = view.view_rect();
         let origin = view.content_origin();

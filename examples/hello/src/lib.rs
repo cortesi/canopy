@@ -69,7 +69,7 @@ impl Widget for Hello {
         context.add_child(
             context.node_id(),
             StatusBar::new()
-                .with_left(Text::new("hello").with_style("status_bar/text"))
+                .with_left(Text::new("hello"))
                 .with_right(KeyHint::new("ctrl-g", "help")),
         )?;
         context.set_focus(context.node_id()).map(|_| ())

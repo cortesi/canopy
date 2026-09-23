@@ -137,11 +137,10 @@ const PALETTE: &[(&str, &[&str])] = &[
     (
         "Selection",
         &[
+            "selection",
+            "selection/dimmed",
             "selector/chosen",
-            "selector/focus",
-            "selector/focus/chosen",
-            "dropdown/selected",
-            "dropdown/highlight",
+            "dropdown/chosen",
         ],
     ),
     (
@@ -154,7 +153,7 @@ const PALETTE: &[(&str, &[&str])] = &[
             "editor/search/current",
         ],
     ),
-    ("Help", &["help/key", "help/label", "help/indicator"]),
+    ("Help", &["help/key", "help/label"]),
     (
         "Named colors",
         &[

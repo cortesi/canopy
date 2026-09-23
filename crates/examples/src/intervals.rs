@@ -7,7 +7,7 @@ use canopy::{
     geom::Size,
     layout::{Edges, Layout, MeasureConstraints, Measurement},
     render::Render,
-    style::StyleMap,
+    style::{StyleMap, WidgetState},
 };
 use canopy_widgets::{Border, Center, Container, Frame, List, SINGLE, Selectable, Text};
 use unicode_width::UnicodeWidthStr;
@@ -151,7 +151,7 @@ impl Widget for CounterItem {
     fn render(&mut self, rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         rndr.push_layer("entry");
         if self.selected {
-            rndr.push_layer("selected");
+            rndr.push_layer(WidgetState::Selected.layer());
         }
         Ok(())
     }

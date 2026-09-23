@@ -167,7 +167,7 @@ impl Todo {
             c.add_child(
                 main,
                 StatusBar::new()
-                    .with_left(Text::new("todo").with_style("status_bar/text"))
+                    .with_left(Text::new("todo"))
                     .with_right(KeyHint::new("ctrl-g", "help")),
             )?;
             Ok(())

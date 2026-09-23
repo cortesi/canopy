@@ -222,7 +222,7 @@ impl<T: Widget + 'static> Widget for DemoShell<T> {
         c.add_child(
             c.node_id(),
             StatusBar::new()
-                .with_left(Text::new(self.status.clone()).with_style("status_bar/text"))
+                .with_left(Text::new(self.status.clone()))
                 .with_right(KeyHint::new(HELP_KEY, HELP_LABEL)),
         )?;
         Ok(())

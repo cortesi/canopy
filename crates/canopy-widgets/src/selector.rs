@@ -8,6 +8,7 @@ use canopy::{
     layout::{MeasureConstraints, Measurement},
     render::Render,
     runtime::WidgetSemantics,
+    style::roles,
     text,
 };
 
@@ -220,7 +221,8 @@ where
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
         let rect = view.view_rect_local();
-        let is_widget_focused = ctx.is_focused();
+        let selection = roles::selection(ctx.is_focused());
+        rndr.push_layer("selector");
 
         for (row, idx) in label_rows(self.items.len(), view.scroll.y, rect.h) {
             let item = &self.items[idx];
@@ -238,18 +240,13 @@ where
             let (display, _) =
                 text::slice_by_columns(&display, view.scroll.x as usize, rect.w as usize);
 
-            // Highlight the selection only when the widget has focus.
-            if is_selected && is_widget_focused {
-                rndr.fill("selector/focus", line_rect.rect(), ' ')?;
-                if is_chosen {
-                    rndr.text("selector/focus/chosen", line_rect, display)?;
-                } else {
-                    rndr.text("selector/focus", line_rect, display)?;
-                }
+            if is_selected {
+                rndr.fill(selection, line_rect.rect(), ' ')?;
+                rndr.text(selection, line_rect, display)?;
             } else if is_chosen {
-                rndr.text("selector/chosen", line_rect, display)?;
+                rndr.text("chosen", line_rect, display)?;
             } else {
-                rndr.text("selector", line_rect, display)?;
+                rndr.text(roles::TEXT, line_rect, display)?;
             }
         }
 

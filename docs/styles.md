@@ -1,29 +1,40 @@
 # Stock widget styles
 
-Stock widgets use named paint roles and the existing hierarchical style resolver.
-These names describe the painted part, independently of decorative child node
-names. Extra containers that do not push style layers do not change resolution.
-Custom string layers remain supported.
+One rule names every stock widget's styles:
 
-| Component layer | Role constant | Paint path | Example rule |
-| --- | --- | --- | --- |
-| `button` | `roles::BUTTON_LABEL` | `text` | `button/active/text` |
-| `button` | `roles::BUTTON_BORDER` | `border` | `button/active/border` |
-| `button` | `roles::BUTTON_KEY` | `key` | `button/disabled/key` |
-| `input` | `roles::INPUT_TEXT` | `text` | `input/text` |
-| `input` | `roles::INPUT_BACKGROUND` | `background` | `input/focused/background` |
-| `input` | `roles::INPUT_PROMPT` | `prompt` | `input/focused/prompt` |
-| `input` | `roles::INPUT_CURSOR` | `text/cursor` | `input/focused/text/cursor` |
+- A widget's style prefix is its node name.
+- Leaves, composites, and surfaces push that name as a layer and paint bare
+  part roles beneath it.
+- Containers around foreign content push nothing and paint `<name>/<part>`,
+  so the content keeps its own resolution.
+- A widget never does both.
+- Cursor rows paint `roles::selection(active)`.
+
+`canopy::style::roles` holds the shared part names:
+
+| Role constant | Paint path | Example rule |
+| --- | --- | --- |
+| `roles::TEXT` | `text` | `button/active/text` |
+| `roles::BACKGROUND` | `background` | `input/focused/background` |
+| `roles::BORDER` | `border` | `button/focused/border` |
+| `roles::KEY` | `key` | `status_bar/key` |
+| `roles::PROMPT` | `prompt` | `input/focused/prompt` |
+| `roles::CURSOR` | `text/cursor` | `input/focused/text/cursor` |
+| `roles::TITLE` | `title` | |
+| `roles::THUMB` | `thumb` | |
+
+Leaves that push their layer: `button`, `input`, `picker`, `confirm`, `help`,
+`status_bar`, `selector`, `dropdown`, `editor`, and `diff_view`. Containers
+that paint prefixed paths: `frame`, `tabs`, `columns`, and `root`.
 
 The built-in themes are captured in `crates/canopy/src/core/style/themes.golden`.
 Set `UPDATE_GOLDEN` when running the style tests to rewrite that capture from
 the themes rather than editing it.
 
-The constants are available through `canopy::style::roles`. Button labels and
-borders retain their existing paths. Input cursor styling applies to the painted
-grapheme before the central cursor overlay; block cursors then exchange its
-foreground and background. Styling preserves combining characters and wide-cell
-continuations. An absent cursor rule falls back to the input text role.
+Input cursor styling applies to the painted grapheme before the central cursor
+overlay; block cursors then exchange its foreground and background. Styling
+preserves combining characters and wide-cell continuations. An absent cursor
+rule falls back to the input text role.
 
 ## Fields and results
 
@@ -63,14 +74,27 @@ back to `tabs/tab/active`. The built-in themes define all four paths.
 
 ## Status bars
 
-`StatusBar` is a container for one row. It paints the `status_bar` role as its
-ground, keeps the widgets added with `StatusBar::with_left` at the start, and
-pins the widgets added with `with_right` to the end. A widget that paints a
-`status_bar` path takes the bar's ground, because a component an inner rule
-leaves unset falls back to the outer one: `status_bar/text` inherits the
-`status_bar` background, and `KeyHint` paints `status_bar/key` and
-`status_bar/text` for its two parts. The built-in themes give the bar the panel
-ground, its text a quiet label, and hint keys the accent.
+`StatusBar` is a container for one row. It pushes `status_bar`, fills its
+`background` on the bar's ground, keeps the widgets added with
+`StatusBar::with_left` at the start, and pins the widgets added with
+`with_right` to the end. Everything in the bar resolves beneath that layer, so
+a plain `Text` resolves `status_bar/text` and inherits the `status_bar` ground,
+and `KeyHint` paints `key` and `text` for its two parts. The built-in themes
+give the bar the panel ground, its text a quiet label, and hint keys the
+accent.
+
+## Selectors and dropdowns
+
+`Selector` and `Dropdown` push their node names. The cursor row paints
+`roles::selection(active)`, the chosen item paints `chosen`, and other items
+paint `text`. The built-in themes define `selector/chosen` and
+`dropdown/chosen`; the cursor takes the shared selection colours.
+
+## Diffs
+
+`DiffView` pushes `diff_view` and paints `context`, `added`, `removed`,
+`header`, `gap`, `missing`, and `separator`. The built-in themes colour added
+rows green, removed rows red, headers with the accent, and gaps muted.
 
 ## Notices
 
@@ -103,7 +127,8 @@ whatever ground it sits on.
 
 `Confirm` pushes a `confirm` layer, so the frame around it resolves the
 `confirm/frame` paths and shares the dialog's background rather than sitting on
-the view behind it. The question uses `confirm/message`. Its answers are
+the view behind it. The question paints `message`, which resolves
+`confirm/message`. Its answers are
 ordinary buttons, so they resolve `confirm/button/border`,
 `confirm/button/text`, and `confirm/button/key` before the plain `button` paths.
 The built-in themes define all of them, taking the panel background so the
@@ -137,16 +162,23 @@ selection. Input pushes `input`, then `focused` when it holds focus. Custom
 widgets can use `selected` independently of focus.
 
 The resolver searches paint-path prefixes from longest to shortest. For each
-prefix, it searches layer prefixes from deepest to root. Each style component
-uses its first matching rule. Thus existing `button/active/text` rules remain
-fallbacks when focused or disabled rules are absent. Decorative wrappers that
-push custom layers participate in this same documented resolution order.
+prefix, it tries the whole layer stack, then the stack with its outer layers
+dropped one at a time, then the stack with its inner layers dropped, and
+finally no layers. Each style component uses its first matching rule. So a
+widget's own rules apply wherever it is mounted: an editor under a host's
+layer still resolves `editor/text`. A context rule such as
+`confirm/button/border` still beats `button/border`, and a host rule such as
+`file_select/selection` still fills what an inner layer leaves unset. Existing
+`button/active/text` rules remain fallbacks when focused or disabled rules are
+absent.
 
 ## Semantic values
 
 Input, Button, and List publish semantic roles in frame snapshots. Input and
-List support `with_label`; Button uses its displayed label. List publishes its
-selected domain keys, and configured actions publish their command status.
+List support `with_label`; Button uses its displayed label. List publishes the
+domain key under its cursor as `selected_keys` and its checked keys as
+`checked_keys`, and configured actions publish their command status. Selector
+publishes its chosen label as its value.
 
 Input values are omitted by default. Use
 `Input::with_value_exposure(ValueExposure::Public)` to publish a value.

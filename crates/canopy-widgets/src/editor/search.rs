@@ -6,6 +6,7 @@ use canopy::{
     geom::{Line, Point, Rect},
     input::key,
     render::Render,
+    style::roles,
 };
 
 use super::widget::{Editor, prompt_text};
@@ -627,6 +628,6 @@ impl Editor {
         };
         let y = origin.y.saturating_add(view_rect.h.saturating_sub(1));
         let line = Line::new(origin.x, y, view_rect.w);
-        r.text("editor/prompt", line, &prompt_text(prompt))
+        r.text(roles::PROMPT, line, &prompt_text(prompt))
     }
 }

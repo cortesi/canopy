@@ -420,7 +420,7 @@ impl Widget for ConfirmBody {
         // one too wide loses its head.
         let budget = (area.w as usize).saturating_sub(ROW_PADDING as usize);
         let message = text::truncate_start(&self.message, budget);
-        render.text("confirm/message", area.line(0)?, &format!(" {message}"))
+        render.text("message", area.line(0)?, &format!(" {message}"))
     }
 
     fn name(&self) -> NodeName {

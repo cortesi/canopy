@@ -13,33 +13,34 @@ mod palette;
 /// Solarized theme.
 pub mod solarized;
 
-use std::collections::HashMap;
+use std::{collections::HashMap, iter};
 
 pub use color::{Color, hex_byte};
 pub(crate) use palette::{Palette, theme};
 
 use crate::geom;
 
-/// Stable paint roles used by stock widgets, independent of child node names.
+/// Shared part names that widgets paint beneath their own layer.
+///
+/// A widget pushes its node name as a layer and paints these bare roles, so
+/// `button/text` and `input/text` are both the `TEXT` part.
 pub mod roles {
-    /// Button component layer.
-    pub const BUTTON: &str = "button";
-    /// Button label paint path beneath its component and state layers.
-    pub const BUTTON_LABEL: &str = "text";
-    /// Button border paint path beneath its component and state layers.
-    pub const BUTTON_BORDER: &str = "border";
-    /// Button accelerator cell path, for the one label character a key names.
-    pub const BUTTON_KEY: &str = "key";
-    /// Input component layer.
-    pub const INPUT: &str = "input";
-    /// Input row background, including the space after its value.
-    pub const INPUT_BACKGROUND: &str = "background";
-    /// Optional visible input prompt.
-    pub const INPUT_PROMPT: &str = "prompt";
-    /// Input text paint path.
-    pub const INPUT_TEXT: &str = "text";
-    /// Input cursor cell path, falling back to the text role.
-    pub const INPUT_CURSOR: &str = "text/cursor";
+    /// Ordinary text.
+    pub const TEXT: &str = "text";
+    /// The ground a widget fills before painting its parts.
+    pub const BACKGROUND: &str = "background";
+    /// Box chrome drawn around a widget.
+    pub const BORDER: &str = "border";
+    /// A key name, such as an accelerator or a binding hint.
+    pub const KEY: &str = "key";
+    /// A fixed prompt before editable text.
+    pub const PROMPT: &str = "prompt";
+    /// The text cell under a caret, falling back to [`TEXT`].
+    pub const CURSOR: &str = "text/cursor";
+    /// A title in a widget's chrome.
+    pub const TITLE: &str = "title";
+    /// A scrollbar thumb.
+    pub const THUMB: &str = "thumb";
 
     /// Paint a retained selection according to which control takes the keys.
     /// Pass actual focus, or the composite widget's active part. Inactive
@@ -652,13 +653,14 @@ impl<'a> StyleRules<'a> {
 /// descendants, and `Canopy` manages popping layers back off the stack at the
 /// appropriate time during rendering.
 ///
-/// When a colour is resolved, we first try to find the specified path under
-/// each layer to the root; failing that we look up the default colours for each
-/// layer to the root.
+/// When a colour is resolved, each prefix of the path, longest first, is
+/// looked up under the whole layer stack, then under the stack with its outer
+/// layers dropped one at a time, then with its inner layers dropped, and
+/// finally under no layers.
 ///
-/// So given a layer stack ["foo"], and an attempt to look up "frame/selected",
-/// we try the following lookups in order: ["foo/frame/selected",
-/// "frame/selected", "foo/frame", "frame", "foo", ""].
+/// So given a layer stack ["foo", "bar"], and an attempt to look up "text",
+/// we try the following lookups in order: ["foo/bar/text", "bar/text",
+/// "foo/text", "text", "foo/bar", "bar", "foo", ""].
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub(crate) struct StyleManager {
     /// Current render level.
@@ -716,16 +718,27 @@ impl StyleManager {
     /// Resolve a style using a path and a layer specification, ignoring
     /// `self.layers`.
     ///
-    /// Probes path prefixes from longest to shortest, and within each, layer
-    /// prefixes from the deepest layer to the root. The first probe that
-    /// sets a component wins.
+    /// Probes path prefixes from longest to shortest. Within each, it probes
+    /// the whole layer stack, then the stack with outer layers dropped, then
+    /// the stack with inner layers dropped, and finally no layers. So a
+    /// component's own rules apply wherever it is mounted, and a context rule
+    /// such as `confirm/button/border` still beats `button/border`. The first
+    /// probe that sets a component wins.
     fn resolve(&self, smap: &StyleMap, layers: &[String], path: &[&str]) -> Style {
+        let n = layers.len();
+        let inner = (1..n).map(|start| start..n);
+        let outer = (1..n).rev().map(|end| 0..end);
+        let windows: Vec<_> = iter::once(0..n)
+            .chain(inner)
+            .chain(outer)
+            .chain((n > 0).then_some(0..0))
+            .collect();
         let mut ret = PartialStyle::default();
         let mut key = String::new();
         for suffix in (0..=path.len()).rev() {
-            for depth in (0..=layers.len()).rev() {
+            for window in &windows {
                 key.clear();
-                let parts = layers[..depth]
+                let parts = layers[window.clone()]
                     .iter()
                     .map(String::as_str)
                     .chain(path[..suffix].iter().copied());
@@ -762,21 +775,18 @@ mod tests {
             .fg("input/text", Color::Green)
             .apply();
         let mut manager = StyleManager::new();
-        manager.push_layer(roles::BUTTON);
+        manager.push_layer("button");
         manager.push_layer(WidgetState::Pressed.layer());
-        let label = manager.get(&map, roles::BUTTON_LABEL);
-        let border = manager.get(&map, roles::BUTTON_BORDER);
+        let label = manager.get(&map, roles::TEXT);
+        let border = manager.get(&map, roles::BORDER);
         manager.push();
         manager.push();
-        assert_eq!(manager.get(&map, roles::BUTTON_LABEL), label);
-        assert_eq!(manager.get(&map, roles::BUTTON_BORDER), border);
+        assert_eq!(manager.get(&map, roles::TEXT), label);
+        assert_eq!(manager.get(&map, roles::BORDER), border);
         let mut input = StyleManager::new();
-        input.push_layer(roles::INPUT);
+        input.push_layer("input");
         input.push_layer(WidgetState::Focused.layer());
-        assert_eq!(
-            input.get(&map, roles::INPUT_CURSOR),
-            input.get(&map, roles::INPUT_TEXT)
-        );
+        assert_eq!(input.get(&map, roles::CURSOR), input.get(&map, roles::TEXT));
     }
 
     #[test]
@@ -789,14 +799,14 @@ mod tests {
             .fg("button/focused/selected/disabled/text", Color::Red)
             .apply();
         let mut manager = StyleManager::new();
-        manager.push_layer(roles::BUTTON);
-        let ordinary = manager.get(&map, roles::BUTTON_LABEL);
+        manager.push_layer("button");
+        let ordinary = manager.get(&map, roles::TEXT);
         manager.push_layer(WidgetState::Focused.layer());
-        let focused = manager.get(&map, roles::BUTTON_LABEL);
+        let focused = manager.get(&map, roles::TEXT);
         manager.push_layer(WidgetState::Selected.layer());
-        let selected = manager.get(&map, roles::BUTTON_LABEL);
+        let selected = manager.get(&map, roles::TEXT);
         manager.push_layer(WidgetState::Disabled.layer());
-        let disabled = manager.get(&map, roles::BUTTON_LABEL);
+        let disabled = manager.get(&map, roles::TEXT);
         assert_ne!(ordinary, focused);
         assert_ne!(focused, selected);
         assert_ne!(selected, disabled);
@@ -989,6 +999,39 @@ mod tests {
         assert_eq!(c.level, 1);
         assert_eq!(c.layers, vec!["foo"]);
         assert_eq!(c.layer_levels, vec![0, 1]);
+    }
+
+    #[test]
+    fn component_rules_apply_under_any_outer_layer() {
+        let mut map = StyleMap::new();
+        map.rules()
+            .fg("editor/text", Color::Red)
+            .fg("host/text", Color::Blue)
+            .fg("host/selection", Color::Green)
+            .fg("dialog/button/border", Color::Yellow)
+            .fg("button/border", Color::Magenta)
+            .apply();
+        let mut manager = StyleManager::new();
+        manager.push_layer("host");
+        manager.push_layer("editor");
+        assert_eq!(
+            manager.get(&map, "text").fg,
+            Paint::Solid(Color::Red),
+            "the component's rule beats the host's"
+        );
+        assert_eq!(
+            manager.get(&map, "selection").fg,
+            Paint::Solid(Color::Green),
+            "the host's rule fills what the component leaves unset"
+        );
+        let mut dialog = StyleManager::new();
+        dialog.push_layer("dialog");
+        dialog.push_layer("button");
+        assert_eq!(
+            dialog.get(&map, "border").fg,
+            Paint::Solid(Color::Yellow),
+            "a context rule beats the component's"
+        );
     }
 
     #[test]
