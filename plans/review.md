@@ -2227,7 +2227,7 @@ Each stage also updates the docs it touches.
 
 ### Stage 4: Vocabulary and module homes
 
-- [ ] C4: slot and widget-cell renames, identity renames, script origin, and
+- [x] C4: slot and widget-cell renames, identity renames, script origin, and
   screen size.
 - [ ] C10:
   - Rename widget actions to intents across both repositories, and rename the

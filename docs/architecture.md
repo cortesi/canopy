@@ -90,7 +90,7 @@ node is attached when its parent chain reaches the root without cycles. Detached
 nodes may exist during assembly or reparenting. The runtime does not render,
 hit-test, or focus them.
 
-A node stores a parent, ordered children, keyed children, a widget slot, layout
+A node stores a parent, ordered children, slots, a widget cell, layout
 and view caches, and mount and polling flags. Parent links, child lists, and keys
 must agree: parents list their children, children point back, and keys point only
 at direct children.
@@ -102,12 +102,12 @@ an error, the runtime restores its structural checkpoint. A failed nested edit
 restores its own checkpoint, even when the enclosing edit handles the error.
 
 The checkpoint captures every arena node, including detached nodes. It restores
-node metadata, topology, child keys, layout and view caches, and lifecycle flags.
+node metadata, topology, slots, layout and view caches, and lifecycle flags.
 It also restores root, focus, mouse capture, deferred focus repairs, exit
 requests, and pending style changes.
 Layout metadata includes the widget base layout and persistent override.
 
-The checkpoint shares widget slots with the live arena. Widget-owned mutations
+The checkpoint shares widget cells with the live arena. Widget-owned mutations
 survive rollback. Binding registration and external effects, including database
 writes, are also outside this guarantee. Callers must compensate those effects
 or make them safe to repeat.
@@ -163,7 +163,7 @@ detached or replaced.
 layout pass ends with it, so any tree mutation that reaches layout is checked.
 `Core` is crate-private, so only canopy's own tests call it directly.
 
-It checks the root, widget slots, reciprocal links, duplicate children, cycles,
+It checks the root, widget cells, reciprocal links, duplicate children, cycles,
 keys, focus, mouse capture, lifecycle flags, attachment generations, layout
 caches, computed view caches, and the semantic-key index.
 
@@ -192,7 +192,7 @@ mutation callback and invalidates layout. Both check the node's widget type at
 runtime and fail with `NodeTypeMismatch` for another type.
 
 All widget access failures include the operation, node ID, node path, and source
-error. Slot take and restore are safe code through `WidgetSlotGuard`. The only
+error. Cell take and restore are safe code through `WidgetCellGuard`. The only
 `unsafe` in the runtime is the reentrant script bridge.
 
 ## Callback Mutation
@@ -220,7 +220,7 @@ no longer hold it moves only when the cells return.
 
 Use `Context::remove_after_dispatch(node)` when an active callback must remove
 itself or an ancestor. The bounded FIFO records widget incarnations and drains
-after successful outer dispatch, once active widget slots are restored. Admission
+after successful outer dispatch, once active widget cells are restored. Admission
 fails when the batch reaches capacity. A failed nested dispatch discards requests
 added since its checkpoint. A failed outer dispatch discards its remaining batch.
 
@@ -409,7 +409,7 @@ current geometry. The terminal adapter drains waiting input into a bounded batch
 and collapses consecutive pointer moves, and drags with the same button, to the
 latest position.
 
-Dispatch completion restores widget slots and applies queued removals before layout.
+Dispatch completion restores widget cells and applies queued removals before layout.
 The driver services bounded native automation work, due polls, node wakes, and
 ready VM segments. It then prepares layout, paints, and publishes changed state.
 Evaluation tickets complete after preparation. Publication wakes parked predicates
@@ -640,7 +640,7 @@ Await its completion outside the UI thread. The queue applies bounded backpressu
 Only one top-level evaluation may be active. Another evaluation or module reload
 receives `ScriptBusy`. Input and bounded native automation continue during parked
 evaluations. A detached invocation holds no application, widget, or VM borrow
-between polls. Each resumed segment restores its original script anchor.
+between polls. Each resumed segment restores its original script origin.
 
 ## Failure and Panic Policy
 

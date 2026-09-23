@@ -83,7 +83,7 @@ pub use inputmap::{
     BindingId, BindingOptions, BindingPhase, BindingTarget, BindingTargetKind, BindingTier,
     FrameworkBindingGroup, InputSpec, WidgetActionName, WidgetActionSpec,
 };
-pub use node::SemanticIdentity;
+pub use node::NodeIdentity;
 pub use notice::{Notice, NoticeSource};
 pub use snapshot::{FrameSnapshot, NodeSnapshot, WidgetSemantics};
 pub use wake::{NodeWakeHandle, WakeOutcome, WorkLifetime};

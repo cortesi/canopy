@@ -20,11 +20,11 @@ use crate::{
 
 /// Convert a publication without consulting live widget or node state.
 pub(super) fn snapshot_to_arg(frame: &FrameSnapshot) -> ArgValue {
-    let mut rows = Vec::with_capacity(frame.viewport.h as usize);
-    for y in 0..frame.viewport.h {
-        let row = (0..frame.viewport.w)
+    let mut rows = Vec::with_capacity(frame.size.h as usize);
+    for y in 0..frame.size.h {
+        let row = (0..frame.size.w)
             .map(|x| {
-                let index = y as usize * frame.viewport.w as usize + x as usize;
+                let index = y as usize * frame.size.w as usize + x as usize;
                 cell_to_arg(x, y, &frame.cells[index])
             })
             .collect();
@@ -32,7 +32,7 @@ pub(super) fn snapshot_to_arg(frame: &FrameSnapshot) -> ArgValue {
     }
     ArgValue::Map(BTreeMap::from([
         ("frame_id".into(), ArgValue::UInt(frame.frame_id.0)),
-        ("viewport".into(), size_to_arg(frame.viewport)),
+        ("viewport".into(), size_to_arg(frame.size)),
         (
             "focus".into(),
             frame.focus.map(ArgValue::Node).unwrap_or(ArgValue::Null),
@@ -88,8 +88,8 @@ fn snapshot_node_to_arg(node: &NodeSnapshot) -> ArgValue {
         ),
         ("name".into(), ArgValue::String(node.name.to_string())),
         (
-            "semantic_identity".into(),
-            node.semantic_identity
+            "identity".into(),
+            node.identity
                 .as_ref()
                 .map(|identity| {
                     ArgValue::Map(BTreeMap::from([
@@ -178,9 +178,9 @@ pub(super) fn node_info_to_arg(
         ("id".to_string(), ArgValue::Node(node_id)),
         ("name".to_string(), ArgValue::String(node.name.to_string())),
         (
-            "semantic_identity".to_string(),
+            "identity".to_string(),
             root_ctx
-                .semantic_identity(node_id)
+                .identity(node_id)
                 .map(|identity| {
                     ArgValue::Map(BTreeMap::from([
                         ("scope".to_string(), ArgValue::Node(identity.scope)),

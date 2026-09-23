@@ -113,7 +113,7 @@ impl<W: Widget + 'static> HarnessBuilder<W> {
 impl Harness {
     /// Wrap an already configured Canopy application in a test harness.
     pub fn from_canopy(mut canopy: Canopy, size: Size) -> Result<Self> {
-        canopy.set_root_size(size)?;
+        canopy.set_screen_size(size)?;
         canopy.turn(Work::Prepare)?;
         let root = canopy.root_id();
         Ok(Self {
@@ -129,7 +129,7 @@ impl Harness {
         HarnessBuilder::new(root)
     }
 
-    /// Create a harness with the builder's default root size and no
+    /// Create a harness with the builder's default screen size and no
     /// registration.
     pub fn new<W: Widget + 'static>(root: W) -> Result<Self> {
         Self::builder(root).build()

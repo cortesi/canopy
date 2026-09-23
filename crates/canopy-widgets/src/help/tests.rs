@@ -315,7 +315,7 @@ fn scrolled_and_resized_buffers_have_exact_rows() -> Result<()> {
         .tbuf()
         .assert_matches(buf![" b  Beta" " c  Gamma" " d  Delta"]);
 
-    harness.canopy.set_root_size(Size::new(18, 8))?;
+    harness.canopy.set_screen_size(Size::new(18, 8))?;
     harness.render()?;
     harness.tbuf().assert_matches(buf![
         " a  Alpha"
@@ -368,7 +368,7 @@ fn wheel_and_resize_keep_scroll_within_the_exact_canvas() -> Result<()> {
         at_bottom.canvas.h.saturating_sub(at_bottom.content.h)
     );
 
-    harness.canopy.set_root_size(Size::new(10, 40))?;
+    harness.canopy.set_screen_size(Size::new(10, 40))?;
     harness.render()?;
     let resized = harness
         .canopy

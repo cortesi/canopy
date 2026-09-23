@@ -334,7 +334,7 @@ mod tests {
         );
         // A prompt can consume all available columns without breaking
         // rendering.
-        harness.canopy.set_root_size(Size::new(2, 3))?;
+        harness.canopy.set_screen_size(Size::new(2, 3))?;
         harness.render()?;
         Ok(())
     }

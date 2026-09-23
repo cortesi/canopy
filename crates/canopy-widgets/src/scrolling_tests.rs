@@ -983,7 +983,7 @@ fn a_resize_during_a_drag_ends_it_at_the_next_event() -> Result<()> {
     assert!(captured(&mut harness, frame)?);
 
     // A shorter window changes the track the drag started on.
-    harness.canopy.set_root_size(Size::new(20, 6))?;
+    harness.canopy.set_screen_size(Size::new(20, 6))?;
     harness.render()?;
     assert!(
         captured(&mut harness, frame)?,

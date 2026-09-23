@@ -120,7 +120,7 @@ pub fn runloop(mut cnpy: Canopy, options: RunOptions) -> Result<i32> {
 
     let mut events = EventSource::new(cevent::EventStream::new(), rx);
     let size = translate_result(terminal::size())?;
-    cnpy.set_root_size(Size::new(size.0.into(), size.1.into()))?;
+    cnpy.set_screen_size(Size::new(size.0.into(), size.1.into()))?;
 
     let runtime = Builder::new_current_thread()
         .enable_time()
@@ -204,7 +204,7 @@ mod tests {
         let request = EvalRequest {
             source: contracts::SCRIPT.into(),
             timeout: None,
-            anchor: canopy.root_id(),
+            origin: canopy.root_id(),
         };
         let mut outcome = canopy.turn(Work::StartEval(request))?;
         if outcome.completed.is_empty() {
@@ -275,7 +275,7 @@ mod tests {
             let mut session = TerminalSession::new(Box::new(PolicyBackend(stops.clone())))?;
             let mut canopy = CanopyBuilder::new().build()?;
             canopy.replace_root(PolicyTerminal(received.clone()))?;
-            canopy.set_root_size(Size::new(8, 2))?;
+            canopy.set_screen_size(Size::new(8, 2))?;
             canopy.turn(Work::Prepare)?;
             let work = Work::Input(vec![Event::Key(pressed)]);
             let result = intercept_interrupt(

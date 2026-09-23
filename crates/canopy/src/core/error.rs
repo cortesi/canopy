@@ -275,7 +275,7 @@ pub enum Error {
     MultipleMatches,
     /// Duplicate child key under the same parent.
     #[error("duplicate child key: {0}")]
-    DuplicateChildKey(String),
+    DuplicateSlot(String),
     /// Duplicate child under the same parent.
     #[error("duplicate child {child:?} under parent {parent:?}")]
     DuplicateChild {
@@ -386,7 +386,7 @@ impl Error {
             | Self::Internal(_)
             | Self::ReentrantWidgetBorrow(_)
             | Self::MultipleMatches
-            | Self::DuplicateChildKey(_)
+            | Self::DuplicateSlot(_)
             | Self::DuplicateChild { .. }
             | Self::AlreadyAttached(_)
             | Self::WouldCreateCycle { .. }
@@ -434,7 +434,7 @@ impl Error {
             | Self::NotFound(_)
             | Self::NodeTypeMismatch { .. }
             | Self::MultipleMatches
-            | Self::DuplicateChildKey(_)
+            | Self::DuplicateSlot(_)
             | Self::DuplicateChild { .. }
             | Self::AlreadyAttached(_)
             | Self::WouldCreateCycle { .. }

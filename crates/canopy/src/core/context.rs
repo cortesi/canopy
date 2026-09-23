@@ -14,7 +14,7 @@ use super::{
     world::{Core, WidgetOperation, scroll::RevealTarget},
 };
 use crate::{
-    ChangeOutcome, InteractionToken, ModalOptions, Notice, SemanticIdentity,
+    ChangeOutcome, InteractionToken, ModalOptions, NodeIdentity, Notice,
     commands::{ArgValue, CommandCall, CommandError, CommandStatus, CommandTarget},
     error::{Error, Result},
     event::{Event, mouse::MouseEvent},
@@ -25,7 +25,7 @@ use crate::{
     widget::Widget,
 };
 
-/// A typed slot for keyed children.
+/// A typed slot for slots.
 ///
 /// This trait associates a string key with a specific widget type, providing
 /// compile-time type safety for keyed child access.
@@ -48,7 +48,7 @@ pub trait ChildSlot {
     const KEY: &'static str;
 }
 
-/// Define a typed slot for keyed children.
+/// Define a typed slot for slots.
 ///
 /// # Examples
 ///
@@ -144,11 +144,11 @@ pub trait ViewContext: sealed::ViewContext {
     /// Widget type identifier for a specific node.
     fn type_id_of(&self, node: NodeId) -> Option<TypeId>;
 
-    /// Resolve a semantic key in an explicit live subtree scope.
+    /// Resolve an identity in an explicit live subtree scope.
     fn find_identity(&self, scope: NodeId, key: &str) -> Result<Option<NodeId>>;
 
-    /// Return a node's independently assigned semantic identity.
-    fn semantic_identity(&self, node: NodeId) -> Option<SemanticIdentity>;
+    /// Return a node's independently assigned identity.
+    fn identity(&self, node: NodeId) -> Option<NodeIdentity>;
 
     /// Children of a specific node in tree order.
     fn children_of(&self, node: NodeId) -> Vec<NodeId>;
@@ -497,11 +497,11 @@ impl FocusScope {
 /// Applications consume contexts supplied by Canopy and cannot implement this
 /// trait themselves.
 pub trait Context: ViewContext + sealed::Context {
-    /// Assign a unique semantic key within a containing subtree scope.
-    fn set_semantic_key(&mut self, node: NodeId, scope: NodeId, key: &str) -> Result<()>;
+    /// Assign a unique identity within a containing subtree scope.
+    fn set_identity(&mut self, node: NodeId, scope: NodeId, key: &str) -> Result<()>;
 
-    /// Remove the semantic identity of a live node.
-    fn clear_semantic_key(&mut self, node: NodeId) -> Result<()>;
+    /// Remove the identity of a live node.
+    fn clear_identity(&mut self, node: NodeId) -> Result<()>;
 
     /// Focus an attached node.
     fn set_focus(&mut self, node: NodeId) -> Result<ChangeOutcome>;
@@ -576,12 +576,12 @@ pub trait Context: ViewContext + sealed::Context {
 
     /// Run immediate mutations with structural rollback on error.
     ///
-    /// Rollback restores arena metadata, topology, child keys, layouts, views,
+    /// Rollback restores arena metadata, topology, slots, layouts, views,
     /// lifecycle flags, root, focus, mouse capture, focus recovery hints, exit
     /// requests, pending styles, and diagnostic requests. Each failed nested
     /// edit restores its own structural checkpoint.
     ///
-    /// Widget slots are shared with the checkpoint: widget-owned mutations
+    /// Widget cells are shared with the checkpoint: widget-owned mutations
     /// survive. Binding registration and external effects also survive and
     /// require explicit compensation. Cleanup hooks must be safe to repeat.
     /// This is not a widget state or database transaction.
@@ -628,7 +628,7 @@ pub trait Context: ViewContext + sealed::Context {
 
     /// Remove the current widget incarnation after the outer dispatch succeeds.
     /// Failed dispatches discard their requests. Missing or replaced targets
-    /// are harmless. Lifecycle hooks run after active widget slots are
+    /// are harmless. Lifecycle hooks run after active widget cells are
     /// restored. The shared batch accepts at most 1024 requests. Overflow
     /// returns an error without running removals or discarding previously
     /// accepted requests.
@@ -878,11 +878,11 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
         self.core.find_identity(scope, key)
     }
 
-    fn semantic_identity(&self, node: NodeId) -> Option<SemanticIdentity> {
+    fn identity(&self, node: NodeId) -> Option<NodeIdentity> {
         self.core
             .nodes
             .get(node)
-            .and_then(|entry| entry.semantic_identity.clone())
+            .and_then(|entry| entry.identity.clone())
     }
 
     fn type_id_of(&self, node: NodeId) -> Option<TypeId> {
@@ -955,12 +955,12 @@ impl<C: Deref<Target = Core>> ViewContext for NodeCtx<C> {
 impl sealed::Context for NodeCtx<&mut Core> {}
 
 impl Context for NodeCtx<&mut Core> {
-    fn set_semantic_key(&mut self, node: NodeId, scope: NodeId, key: &str) -> Result<()> {
-        self.core.set_semantic_key(node, scope, key)
+    fn set_identity(&mut self, node: NodeId, scope: NodeId, key: &str) -> Result<()> {
+        self.core.set_identity(node, scope, key)
     }
 
-    fn clear_semantic_key(&mut self, node: NodeId) -> Result<()> {
-        self.core.clear_semantic_key(node)
+    fn clear_identity(&mut self, node: NodeId) -> Result<()> {
+        self.core.clear_identity(node)
     }
 
     fn set_focus(&mut self, node: NodeId) -> Result<ChangeOutcome> {

@@ -197,7 +197,7 @@ mod tests {
             Ok((first, second))
         })?;
 
-        canopy.set_root_size(Size::new(10, 10))?;
+        canopy.set_screen_size(Size::new(10, 10))?;
         canopy.turn(canopy::Work::Prepare)?;
         canopy.with_root_context(|context| {
             context.set_layout_override(
@@ -205,7 +205,7 @@ mod tests {
                 Layout::column().fixed_width(10).fixed_height(0).into(),
             )
         })?;
-        canopy.set_root_size(Size::new(10, 10))?;
+        canopy.set_screen_size(Size::new(10, 10))?;
         canopy.turn(canopy::Work::Prepare)?;
 
         assert_eq!(

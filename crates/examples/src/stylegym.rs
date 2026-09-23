@@ -306,7 +306,7 @@ fn available_effects() -> Vec<EffectOption> {
     ]
 }
 
-// Typed keys for keyed children
+// Typed keys for slots
 canopy::slot!(ControlsSlot: Frame);
 canopy::slot!(ThemeFrameSlot: Frame);
 canopy::slot!(ThemeDropdownSlot: Dropdown<ThemeOption>);

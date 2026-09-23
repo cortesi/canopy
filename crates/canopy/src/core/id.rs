@@ -12,7 +12,7 @@ new_key_type! {
     struct RawNodeId;
 }
 
-/// Opaque identifier for a node stored in the Core arena.
+/// Opaque identifier for a node in an application tree.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeId(RawNodeId);
 

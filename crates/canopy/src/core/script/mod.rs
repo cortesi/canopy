@@ -959,7 +959,7 @@ impl LuauHost {
         let node_id = node_id.into();
         let mut invocation = self.start_invocation(node_id, sid)?;
         if let Some(entry) = canopy.core.nodes.get(node_id) {
-            invocation.set_anchor_incarnation(entry.incarnation);
+            invocation.set_origin_incarnation(entry.incarnation);
         }
         invocation.set_reporting_timeout(timeout);
         let started = Instant::now();
@@ -1057,7 +1057,7 @@ impl LuauHost {
         label: &str,
         timeout: Option<Duration>,
     ) -> Result<ArgValue> {
-        let _guard = ScriptAnchorGuard::push(scope, node_id)
+        let _guard = ScriptOriginGuard::push(scope, node_id)
             .map_err(|err| runtime_error_to_canopy(&err, label, timeout))?;
         let function = target.resolve(scope, label, timeout)?;
         call_in_scope(scope, function, label, timeout)

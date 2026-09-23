@@ -1,19 +1,14 @@
-//! Explicit semantic identity scoped to an arena subtree.
+//! Explicit identity scoped to an arena subtree.
 
 use super::Core;
 use crate::{
-    Invalidation, NodeId, SemanticIdentity,
+    Invalidation, NodeId, NodeIdentity,
     error::{Error, Result},
 };
 
 impl Core {
     /// Assign an identity after validating its scope and uniqueness.
-    pub(crate) fn set_semantic_key(
-        &mut self,
-        node: NodeId,
-        scope: NodeId,
-        key: &str,
-    ) -> Result<()> {
+    pub(crate) fn set_identity(&mut self, node: NodeId, scope: NodeId, key: &str) -> Result<()> {
         if !self.nodes.contains_key(node) {
             return Err(Error::NodeNotFound(node));
         }
@@ -22,14 +17,14 @@ impl Core {
         }
         if !self.is_ancestor_or_self(scope, node) {
             return Err(Error::Invalid(
-                "semantic key owner must belong to its scope subtree".into(),
+                "identity owner must belong to its scope subtree".into(),
             ));
         }
-        let identity = SemanticIdentity {
+        let identity = NodeIdentity {
             scope,
             key: key.into(),
         };
-        if self.nodes[node].semantic_identity.as_ref() == Some(&identity) {
+        if self.nodes[node].identity.as_ref() == Some(&identity) {
             return Ok(());
         }
         if self
@@ -38,20 +33,20 @@ impl Core {
             .is_some_and(|other| *other != node && self.nodes.contains_key(*other))
         {
             return Err(Error::Invalid(format!(
-                "duplicate semantic key {key:?} in scope {scope:?}"
+                "duplicate identity {key:?} in scope {scope:?}"
             )));
         }
-        self.clear_semantic_key(node)?;
+        self.clear_identity(node)?;
         self.semantic_keys.insert((scope, key.into()), node);
-        self.nodes[node].semantic_identity = Some(identity);
+        self.nodes[node].identity = Some(identity);
         self.invalidate(Invalidation::Semantics);
         Ok(())
     }
 
     /// Clear one node's registration without changing its structural child key.
-    pub(crate) fn clear_semantic_key(&mut self, node: NodeId) -> Result<()> {
+    pub(crate) fn clear_identity(&mut self, node: NodeId) -> Result<()> {
         let entry = self.nodes.get_mut(node).ok_or(Error::NodeNotFound(node))?;
-        if let Some(identity) = entry.semantic_identity.take() {
+        if let Some(identity) = entry.identity.take() {
             self.semantic_keys.remove(&(identity.scope, identity.key));
             self.invalidate(Invalidation::Semantics);
         }
@@ -78,7 +73,7 @@ impl Core {
             .iter()
             .filter_map(|(node, entry)| {
                 entry
-                    .semantic_identity
+                    .identity
                     .as_ref()
                     .filter(|identity| {
                         !self.nodes.contains_key(identity.scope)
@@ -88,12 +83,12 @@ impl Core {
             })
             .collect();
         for node in retired {
-            self.nodes[node].semantic_identity = None;
+            self.nodes[node].identity = None;
         }
         self.semantic_keys.retain(|(scope, key), node| {
             self.nodes
                 .get(*node)
-                .and_then(|entry| entry.semantic_identity.as_ref())
+                .and_then(|entry| entry.identity.as_ref())
                 .is_some_and(|identity| identity.scope == *scope && identity.key == *key)
         });
     }
@@ -101,19 +96,19 @@ impl Core {
     /// Check the bidirectional identity index and settled scope membership.
     pub(super) fn validate_semantic_keys(&self) -> Result<()> {
         for (node, entry) in self.nodes.iter() {
-            if let Some(identity) = &entry.semantic_identity {
+            if let Some(identity) = &entry.identity {
                 if self
                     .semantic_keys
                     .get(&(identity.scope, identity.key.clone()))
                     != Some(&node)
                 {
                     return Err(Error::Internal(
-                        "semantic identity is missing from its scope index".into(),
+                        "identity is missing from its scope index".into(),
                     ));
                 }
                 if self.tree_edit.is_none() && !self.is_ancestor_or_self(identity.scope, node) {
                     return Err(Error::Internal(
-                        "semantic identity lies outside its scope subtree".into(),
+                        "identity lies outside its scope subtree".into(),
                     ));
                 }
             }
@@ -122,7 +117,7 @@ impl Core {
             if !self
                 .nodes
                 .get(*node)
-                .and_then(|entry| entry.semantic_identity.as_ref())
+                .and_then(|entry| entry.identity.as_ref())
                 .is_some_and(|identity| identity.scope == *scope && identity.key == *key)
             {
                 return Err(Error::Internal(
@@ -152,12 +147,12 @@ mod tests {
         core.attach(root, b)?;
         let child = core.create_detached(Leaf)?;
         core.attach(a, child)?;
-        core.set_semantic_key(child, a, "field")?;
-        core.set_semantic_key(b, b, "field")?;
+        core.set_identity(child, a, "field")?;
+        core.set_identity(b, b, "field")?;
         let duplicate = core.create_detached(Leaf)?;
         core.attach(a, duplicate)?;
-        assert!(core.set_semantic_key(duplicate, a, "field").is_err());
-        assert!(core.set_semantic_key(child, b, "outside").is_err());
+        assert!(core.set_identity(duplicate, a, "field").is_err());
+        assert!(core.set_identity(child, b, "outside").is_err());
         core.with_tree_edit("wrap", |core| {
             let wrapper = core.create_detached(Leaf)?;
             core.detach(child)?;
@@ -170,8 +165,8 @@ mod tests {
             core.detach(child)?;
             core.attach(b, child)?;
             let nested: Result<()> = core.with_tree_edit("inner failure", |core| {
-                core.clear_semantic_key(child)?;
-                core.set_semantic_key(child, b, "provisional")?;
+                core.clear_identity(child)?;
+                core.set_identity(child, b, "provisional")?;
                 Err(Error::Invalid("rollback inner".into()))
             });
             assert!(nested.is_err());
@@ -186,10 +181,10 @@ mod tests {
             core.attach(b, child)
         })?;
         assert_eq!(core.find_identity(a, "field")?, None);
-        core.set_semantic_key(child, b, "child")?;
+        core.set_identity(child, b, "child")?;
         core.replace_subtree(child, Leaf)?;
         assert_eq!(core.find_identity(b, "child")?, None);
-        core.set_semantic_key(child, b, "child")?;
+        core.set_identity(child, b, "child")?;
         core.remove_subtree(child)?;
         assert_eq!(core.find_identity(b, "child")?, None);
         core.validate_semantic_keys()
@@ -204,17 +199,17 @@ mod tests {
         let root = core.root_id();
         {
             let mut context = CoreContext::new(&mut core, scope);
-            context.set_semantic_key(child, scope, "field")?;
+            context.set_identity(child, scope, "field")?;
             assert_eq!(
-                context.semantic_identity(child),
-                Some(SemanticIdentity {
+                context.identity(child),
+                Some(NodeIdentity {
                     scope,
                     key: "field".into()
                 })
             );
             context.attach(root, scope)?;
             assert_eq!(context.find_identity(scope, "field")?, Some(child));
-            context.clear_semantic_key(child)?;
+            context.clear_identity(child)?;
             assert_eq!(context.find_identity(scope, "field")?, None);
             assert_eq!(context.child_slot_of(scope, "slot"), Some(child));
         }

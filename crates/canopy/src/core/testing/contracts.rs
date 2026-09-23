@@ -114,12 +114,10 @@ pub fn app() -> Result<Canopy> {
         .configure(|setup| setup.add_commands::<Contract>())
         .assemble(|app| {
             app.replace_root(Contract { value: 0 })?;
-            app.with_root_context(|ctx| {
-                ctx.set_semantic_key(ctx.root_id(), ctx.root_id(), "contract")
-            })
+            app.with_root_context(|ctx| ctx.set_identity(ctx.root_id(), ctx.root_id(), "contract"))
         })
         .build()?;
-    app.set_root_size(Size::new(12, 3))?;
+    app.set_screen_size(Size::new(12, 3))?;
     Ok(app)
 }
 

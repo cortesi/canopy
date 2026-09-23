@@ -289,7 +289,7 @@ fn build_browser() -> Result<Canopy> {
         }
         context.set_children(browser, panes)
     })?;
-    app.set_root_size(SCREEN)?;
+    app.set_screen_size(SCREEN)?;
     app.turn(Work::Prepare)?;
     Ok(app)
 }
@@ -298,7 +298,7 @@ fn build_browser() -> Result<Canopy> {
 fn build_tree() -> Result<Canopy> {
     let mut app = CanopyBuilder::new().build()?;
     populate_tree(&mut app)?;
-    app.set_root_size(SCREEN)?;
+    app.set_screen_size(SCREEN)?;
     Ok(app)
 }
 
@@ -325,7 +325,7 @@ fn build_command_tree() -> Result<Canopy> {
         let command_leaf: NodeId = context.create_detached(CommandLeaf)?.into();
         context.attach(root_child, command_leaf)
     })?;
-    app.set_root_size(SCREEN)?;
+    app.set_screen_size(SCREEN)?;
     Ok(app)
 }
 

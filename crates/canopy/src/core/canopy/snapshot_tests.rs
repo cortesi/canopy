@@ -38,7 +38,7 @@ impl Widget for Leaf {}
 /// Make an application with explicit initial preparation still pending.
 fn app() -> Result<Canopy> {
     let mut app = CanopyBuilder::new().build()?;
-    app.set_root_size(Size::new(8, 4))?;
+    app.set_screen_size(Size::new(8, 4))?;
     Ok(app)
 }
 

@@ -10,22 +10,22 @@ use crate::{
 };
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-/// Policy used when validating a node's widget slot.
-pub enum WidgetSlotPolicy {
-    /// Widget slots must be present and available for inspection.
+/// Policy used when validating a node's widget cell.
+pub enum WidgetCellPolicy {
+    /// Widget cells must be present and available for inspection.
     RequirePresent,
-    /// Widget slots may be borrowed or temporarily empty during a callback.
+    /// Widget cells may be borrowed or temporarily empty during a callback.
     AllowBorrowed,
 }
 
-/// Immutable borrow of a widget slot.
+/// Immutable borrow of a widget cell.
 pub struct WidgetReadGuard<'a> {
-    /// Borrowed widget slot.
+    /// Borrowed widget cell.
     slot: Ref<'a, Option<Box<dyn Widget>>>,
 }
 
 impl<'a> WidgetReadGuard<'a> {
-    /// Borrow a node's widget slot immutably.
+    /// Borrow a node's widget cell immutably.
     pub(crate) fn borrow(node_id: NodeId, node: &'a Node) -> Result<Self> {
         let slot = node
             .widget
@@ -45,14 +45,14 @@ impl<'a> WidgetReadGuard<'a> {
     }
 }
 
-/// Mutable borrow of a widget slot that does not need mutable core access.
+/// Mutable borrow of a widget cell that does not need mutable core access.
 pub struct WidgetMutGuard<'a> {
-    /// Borrowed widget slot.
+    /// Borrowed widget cell.
     slot: RefMut<'a, Option<Box<dyn Widget>>>,
 }
 
 impl<'a> WidgetMutGuard<'a> {
-    /// Borrow a node's widget slot mutably.
+    /// Borrow a node's widget cell mutably.
     pub(crate) fn borrow(node_id: NodeId, node: &'a Node) -> Result<Self> {
         let slot = node
             .widget
@@ -74,14 +74,14 @@ impl<'a> WidgetMutGuard<'a> {
 
 /// Temporary widget extraction guard for callbacks that need mutable core
 /// access.
-pub struct WidgetSlotGuard {
-    /// Owned reference to the extracted widget slot.
+pub struct WidgetCellGuard {
+    /// Owned reference to the extracted widget cell.
     slot: Rc<RefCell<Option<Box<dyn Widget>>>>,
     /// Widget owned while the node slot is empty.
     widget: Option<Box<dyn Widget>>,
 }
 
-impl WidgetSlotGuard {
+impl WidgetCellGuard {
     /// Take a widget out of its node slot.
     pub(crate) fn take(core: &Core, node_id: NodeId) -> Result<Self> {
         let node = core
@@ -105,40 +105,40 @@ impl WidgetSlotGuard {
     pub(crate) fn widget_mut(&mut self) -> &mut dyn Widget {
         self.widget
             .as_deref_mut()
-            .expect("widget missing from slot guard")
+            .expect("widget missing from cell guard")
     }
 }
 
-impl Drop for WidgetSlotGuard {
+impl Drop for WidgetCellGuard {
     fn drop(&mut self) {
         match self.slot.try_borrow_mut() {
             Ok(mut slot) if slot.is_none() => {
                 *slot = self.widget.take();
             }
             Ok(_) => {
-                debug_assert!(false, "widget slot was not empty during slot guard drop");
-                tracing::error!("widget slot was not empty during slot guard drop");
+                debug_assert!(false, "widget cell was not empty during cell guard drop");
+                tracing::error!("widget cell was not empty during cell guard drop");
             }
             Err(_) => {
-                debug_assert!(false, "widget slot was borrowed during slot guard drop");
-                tracing::error!("widget slot was borrowed during slot guard drop");
+                debug_assert!(false, "widget cell was borrowed during cell guard drop");
+                tracing::error!("widget cell was borrowed during cell guard drop");
             }
         }
     }
 }
 
-/// Validate a widget slot according to the supplied policy.
-pub fn validate_slot(node_id: NodeId, node: &Node, policy: WidgetSlotPolicy) -> Result<()> {
+/// Validate a widget cell according to the supplied policy.
+pub fn validate_slot(node_id: NodeId, node: &Node, policy: WidgetCellPolicy) -> Result<()> {
     let Ok(widget) = node.widget.try_borrow() else {
         return match policy {
-            WidgetSlotPolicy::RequirePresent => Err(Error::ReentrantWidgetBorrow(node_id)),
-            WidgetSlotPolicy::AllowBorrowed => Ok(()),
+            WidgetCellPolicy::RequirePresent => Err(Error::ReentrantWidgetBorrow(node_id)),
+            WidgetCellPolicy::AllowBorrowed => Ok(()),
         };
     };
-    if widget.is_some() || policy == WidgetSlotPolicy::AllowBorrowed {
+    if widget.is_some() || policy == WidgetCellPolicy::AllowBorrowed {
         return Ok(());
     }
     Err(Error::Internal(format!(
-        "node {node_id:?} has an empty widget slot"
+        "node {node_id:?} has an empty widget cell"
     )))
 }

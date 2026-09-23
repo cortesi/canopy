@@ -51,7 +51,7 @@ pub struct NodeReveal {
 
 /// The slot a queued request occupies.
 #[derive(Clone, Copy)]
-enum Slot {
+enum RevealScope {
     /// The node's own viewport.
     Local,
     /// The node's ancestor viewports.
@@ -214,10 +214,10 @@ impl Core {
         let mut pending = Vec::new();
         for (node_id, node) in self.nodes.iter() {
             if let Some(request) = node.reveal {
-                pending.push((request.order, node_id, Slot::Local));
+                pending.push((request.order, node_id, RevealScope::Local));
             }
             if let Some(request) = node.reveal_in_ancestors {
-                pending.push((request.order, node_id, Slot::Ancestors));
+                pending.push((request.order, node_id, RevealScope::Ancestors));
             }
         }
         if pending.is_empty() {
@@ -230,8 +230,8 @@ impl Core {
                 continue;
             }
             match slot {
-                Slot::Local => self.apply_local_reveal(node_id)?,
-                Slot::Ancestors => self.apply_node_reveal(node_id, boundary),
+                RevealScope::Local => self.apply_local_reveal(node_id)?,
+                RevealScope::Ancestors => self.apply_node_reveal(node_id, boundary),
             }
         }
         Ok(true)

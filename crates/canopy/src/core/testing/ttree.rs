@@ -248,7 +248,7 @@ pub fn run_ttree(func: impl FnOnce(&mut Canopy, TestRender, TestTree) -> Result<
 
     let tree = build_tree(&mut c.core)?;
 
-    c.set_root_size(Size::new(100, 100))?;
+    c.set_screen_size(Size::new(100, 100))?;
     // Isolated Core tests need geometry before focus and API initialization.
     c.core.update_layout(Size::new(100, 100))?;
     reset_state();

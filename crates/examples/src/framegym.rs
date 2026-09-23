@@ -17,7 +17,7 @@ root.default_bindings()
 canopy.bind("Tab", { path = "frame_gym", description = "Next focus" }, command.root.focus("next"))
 "#;
 
-// Typed keys for keyed children
+// Typed keys for slots
 canopy::slot!(pub(crate) FrameSlot: Frame);
 canopy::slot!(pub(crate) PatternSlot: TestPattern);
 

@@ -43,7 +43,7 @@ mod tests {
     fn native_mutations_and_failed_callbacks_publish_the_retained_state() -> Result<()> {
         let mut canopy = CanopyBuilder::new().build()?;
         let widget = canopy.replace_root(TextWidget { text: "old".into() })?;
-        canopy.set_root_size(Size::new(8, 3))?;
+        canopy.set_screen_size(Size::new(8, 3))?;
         assert!(canopy.turn(Work::Prepare)?.frame.is_some());
         for (text, fail) in [("new", false), ("failed", true)] {
             let result = canopy.with_root_context(|ctx| {
@@ -74,7 +74,7 @@ mod tests {
         let widget = canopy.replace_root(TextWidget {
             text: "visible".into(),
         })?;
-        canopy.set_root_size(Size::new(8, 3))?;
+        canopy.set_screen_size(Size::new(8, 3))?;
         assert!(canopy.turn(Work::Prepare)?.frame.is_some());
         canopy.with_root_view(|ctx| {
             assert!(ctx.view_of(widget.into()).is_some());
@@ -92,7 +92,7 @@ mod tests {
         let mut canopy = CanopyBuilder::new().build()?;
         canopy.set_clock_for_testing(Arc::clone(&clock))?;
         let widget = canopy.replace_root(TextWidget { text: "old".into() })?;
-        canopy.set_root_size(Size::new(8, 3))?;
+        canopy.set_screen_size(Size::new(8, 3))?;
         canopy.turn(Work::Prepare)?;
         Ok((canopy, widget, clock))
     }
@@ -101,7 +101,7 @@ mod tests {
         EvalRequest {
             source: "return canopy.wait_for_screen_text(\"ready\", 1000)".into(),
             timeout,
-            anchor: canopy.root_id(),
+            origin: canopy.root_id(),
         }
     }
 
@@ -142,7 +142,7 @@ mod tests {
         let second = canopy.turn(Work::StartEval(EvalRequest {
             source: "return 7".into(),
             timeout: None,
-            anchor: canopy.root_id(),
+            origin: canopy.root_id(),
         }));
         assert!(matches!(second, Err(Error::ScriptBusy(_))));
         assert!(matches!(
@@ -161,7 +161,7 @@ mod tests {
         let restarted = canopy.turn(Work::StartEval(EvalRequest {
             source: "return 7".into(),
             timeout: None,
-            anchor: canopy.root_id(),
+            origin: canopy.root_id(),
         }))?;
         assert_ne!(restarted.started, Some(id));
         assert_eq!(restarted.completed.len(), 1);
@@ -277,7 +277,7 @@ mod tests {
     fn an_input_batch_dispatches_every_event_and_publishes_one_frame() -> Result<()> {
         let mut canopy = CanopyBuilder::new().build()?;
         let split = canopy.replace_root(Split::default())?;
-        canopy.set_root_size(Size::new(8, 4))?;
+        canopy.set_screen_size(Size::new(8, 4))?;
         let prepared = canopy.turn(Work::Prepare)?.frame.expect("first frame");
         let keys = vec![
             Event::Key('c'.into()),
@@ -297,7 +297,7 @@ mod tests {
     fn an_input_batch_settles_layout_before_each_mouse_event() -> Result<()> {
         let mut canopy = CanopyBuilder::new().build()?;
         let split = canopy.replace_root(Split::default())?;
-        canopy.set_root_size(Size::new(8, 4))?;
+        canopy.set_screen_size(Size::new(8, 4))?;
         canopy.turn(Work::Prepare)?;
         // The top pane covers the first two rows until `h` hides it. The bottom
         // pane then fills the root, so the press lands on it.

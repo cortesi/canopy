@@ -671,7 +671,7 @@ mod tests {
                 }))
             })
             .build()?;
-        canopy.set_root_size(Size::new(20, 5))?;
+        canopy.set_screen_size(Size::new(20, 5))?;
         canopy.turn(Work::Prepare)?;
         let automation = canopy.automation_handle();
         let mut events = canopy.take_event_receiver().expect("test owns events");

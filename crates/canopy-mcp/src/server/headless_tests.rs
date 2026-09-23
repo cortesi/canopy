@@ -318,7 +318,7 @@ async fn live_transport_cancellation_and_disconnect_wake_the_ui_driver() {
                 .assemble(move |canopy| canopy.replace_root(probe).map(|_| ()))
                 .build()
                 .expect("live app");
-            canopy.set_root_size(Size::new(20, 5)).unwrap();
+            canopy.set_screen_size(Size::new(20, 5)).unwrap();
             canopy.turn(Work::Prepare).unwrap();
             ready_tx
                 .send(canopy.automation_handle())

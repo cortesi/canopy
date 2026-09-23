@@ -63,7 +63,8 @@ pub struct ScrollMark {
     pub glyph: char,
 }
 
-/// Widgets are the behavior attached to nodes in the Core arena.
+/// A widget is the behavior a node holds: it lays out, renders, and handles
+/// input for its node.
 pub trait Widget: Any {
     /// Describe application semantics for one publication through read-only
     /// access. Sensitive values must be omitted; this hook does not

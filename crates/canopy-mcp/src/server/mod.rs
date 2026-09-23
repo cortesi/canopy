@@ -761,7 +761,7 @@ mod tests {
             })
             .build()?;
         canopy.replace_root(EchoNode::new())?;
-        canopy.set_root_size(Size::new(20, 5))?;
+        canopy.set_screen_size(Size::new(20, 5))?;
         canopy.turn(canopy::Work::Prepare)?;
         let automation = canopy.automation_handle();
         let mut events = canopy.take_event_receiver().expect("test owns events");
@@ -935,7 +935,7 @@ mod tests {
             value: 0,
             started: Some(started_tx),
         })?;
-        canopy.set_root_size(Size::new(20, 5))?;
+        canopy.set_screen_size(Size::new(20, 5))?;
         canopy.turn(Work::Prepare)?;
         let automation = canopy.automation_handle();
         let mut events = canopy
@@ -964,7 +964,7 @@ mod tests {
         let busy = automation.submit_eval(EvalRequest {
             source: "return 99".to_string(),
             timeout: None,
-            anchor: canopy.root_id(),
+            origin: canopy.root_id(),
         })?;
         let (mutation_tx, mutation_rx) = mpsc::channel();
         automation.submit(Box::new(move |canopy| {

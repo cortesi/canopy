@@ -55,7 +55,7 @@ the declared reset policy, never from UI reconstruction. A pre-build failure
 can omit the API digest. Node tokens remain temporary references within a
 session, not durable replay targets.
 
-`default_target = "root"` identifies the top-level eval anchor.
+`default_target = "root"` identifies the top-level eval origin.
 `default_commands` reports root-relative availability, while `focus_commands`
 reports focus-relative availability. Choose an explicit target when multiple
 widgets share a command owner. Use `canopy.call_exact(node, id, ...)` to keep a

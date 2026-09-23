@@ -75,15 +75,15 @@ pub(super) fn dispatch_command_by_name(
     node_id: Option<NodeId>,
     values: Vec<ArgValue>,
 ) -> Result<ArgValue> {
-    let (anchor, spec) = with_current_canopy(scope, |canopy, anchor| {
+    let (origin, spec) = with_current_canopy(scope, |canopy, origin| {
         let spec = canopy.core.commands.get(name).ok_or_else(|| {
             error::Error::from(commands::CommandError::UnknownCommand {
                 id: name.to_string(),
             })
         })?;
-        Ok((anchor, spec))
+        Ok((origin, spec))
     })?;
-    dispatch_command(scope, spec, node_id.unwrap_or(anchor), values)
+    dispatch_command(scope, spec, node_id.unwrap_or(origin), values)
 }
 
 /// Dispatch explicit arguments without the legacy single-map inference.
@@ -93,14 +93,14 @@ pub(super) fn dispatch_explicit(
     target: commands::CommandTarget,
     args: CommandArgs,
 ) -> Result<ArgValue> {
-    with_current_canopy(scope, |canopy, anchor| {
+    with_current_canopy(scope, |canopy, origin| {
         let spec = canopy.core.commands.get(name).ok_or_else(|| {
             error::Error::from(commands::CommandError::UnknownCommand {
                 id: name.to_string(),
             })
         })?;
         let call = spec.call_with(args).with_target(target);
-        commands::dispatch(&mut canopy.core, anchor, &call).map_err(error::Error::from)
+        commands::dispatch(&mut canopy.core, origin, &call).map_err(error::Error::from)
     })
 }
 

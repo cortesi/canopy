@@ -26,24 +26,24 @@ impl Drop for ActiveEvalGuard {
     }
 }
 
-/// Stack guard for the script dispatch anchor inside the borrowed Canopy
+/// Stack guard for the script dispatch origin inside the borrowed Canopy
 /// context.
-pub(super) struct ScriptAnchorGuard<'a, 's> {
+pub(super) struct ScriptOriginGuard<'a, 's> {
     /// Scope that owns the Canopy context borrow.
     scope: &'a Scope<'s>,
 }
 
-impl<'a, 's> ScriptAnchorGuard<'a, 's> {
-    /// Push the active command dispatch anchor for this script call.
+impl<'a, 's> ScriptOriginGuard<'a, 's> {
+    /// Push the active command dispatch origin for this script call.
     pub(super) fn push(scope: &'a Scope<'s>, node_id: NodeId) -> StdResult<Self, RuntimeError> {
-        push_script_anchor(scope, node_id)?;
+        push_script_origin(scope, node_id)?;
         Ok(Self { scope })
     }
 }
 
-impl Drop for ScriptAnchorGuard<'_, '_> {
+impl Drop for ScriptOriginGuard<'_, '_> {
     fn drop(&mut self) {
-        pop_script_anchor(self.scope);
+        pop_script_origin(self.scope);
     }
 }
 
@@ -90,16 +90,16 @@ fn with_canopy<R>(scope: &Scope<'_>, f: impl FnOnce(&mut Canopy) -> Result<R>) -
         .unwrap_or_else(|| Err(error::Error::script("no active canopy context")))
 }
 
-/// Push the active script anchor.
-fn push_script_anchor(scope: &Scope<'_>, node_id: NodeId) -> StdResult<(), RuntimeError> {
+/// Push the active script origin.
+fn push_script_origin(scope: &Scope<'_>, node_id: NodeId) -> StdResult<(), RuntimeError> {
     Ok(with_canopy(scope, |canopy| {
         canopy.script.context_stack.push(node_id);
         Ok(())
     })?)
 }
 
-/// Pop the active script anchor.
-fn pop_script_anchor(scope: &Scope<'_>) {
+/// Pop the active script origin.
+fn pop_script_origin(scope: &Scope<'_>) {
     with_canopy(scope, |canopy| {
         canopy.script.context_stack.pop();
         Ok(())

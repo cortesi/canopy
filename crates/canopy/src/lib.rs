@@ -36,11 +36,11 @@ pub use core::{
     BindingTargetKind, BindingTier, Canopy, CanopyBuilder, ChangeOutcome, ChildSlot, Context,
     ContextExt, EvalId, EvalOutcome, EvalRequest, EvalTicket, Fixture, FixtureInfo, FocusDirection,
     FocusScope, FrameId, FrameSnapshot, FrameworkBindingGroup, InputSpec, InteractionToken,
-    ModalBindings, ModalOptions, NodeId, NodeSnapshot, NodeWakeHandle, Notice, NoticeSource,
-    Register, RevealAlign, RouteTraceEntry, RouteTraceKind, ScriptJournalEntry, ScriptOrigin,
-    ScriptTrust, ScrollDirection, ScrollOp, SemanticIdentity, Setup, TurnOutcome, TypedId,
-    ViewContext, ViewContextExt, WakeOutcome, WidgetActionName, WidgetActionSpec, WidgetSemantics,
-    Work, WorkLifetime,
+    ModalBindings, ModalOptions, NodeId, NodeIdentity, NodeSnapshot, NodeWakeHandle, Notice,
+    NoticeSource, Register, RevealAlign, RouteTraceEntry, RouteTraceKind, ScriptJournalEntry,
+    ScriptOrigin, ScriptTrust, ScrollDirection, ScrollOp, Setup, TurnOutcome, TypedId, ViewContext,
+    ViewContextExt, WakeOutcome, WidgetActionName, WidgetActionSpec, WidgetSemantics, Work,
+    WorkLifetime,
 };
 // App-author modules used by widget implementations and derive output.
 pub use core::{commands, cursor, error, event, help, keyroute, path, script, style, text};

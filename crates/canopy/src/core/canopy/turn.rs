@@ -72,8 +72,9 @@ pub struct EvalRequest {
     pub source: String,
     /// Absolute execution budget, including parked time.
     pub timeout: Option<Duration>,
-    /// Anchor retained across invocation segments.
-    pub anchor: NodeId,
+    /// Node the evaluation dispatches from when a call names no target,
+    /// retained across invocation segments.
+    pub origin: NodeId,
 }
 /// One runtime input.
 pub enum Work {
@@ -287,7 +288,7 @@ impl Canopy {
         self.script.host.set_diagnostics(Vec::new(), Vec::new());
         let prepared = (|| {
             self.prepare_frame(false)?;
-            self.core.validate_attached_node(request.anchor)?;
+            self.core.validate_attached_node(request.origin)?;
             let deadline = request
                 .timeout
                 .map(|d| {
@@ -297,9 +298,9 @@ impl Canopy {
                 })
                 .transpose()?;
             let script = self.script.host.compile(&request.source)?;
-            let mut invocation = self.script.host.start_invocation(request.anchor, script)?;
+            let mut invocation = self.script.host.start_invocation(request.origin, script)?;
             invocation.set_reporting_timeout(request.timeout);
-            invocation.set_anchor_incarnation(self.core.nodes[request.anchor].incarnation);
+            invocation.set_origin_incarnation(self.core.nodes[request.origin].incarnation);
             Ok((deadline, invocation))
         })();
         let (deadline, invocation) = match prepared {

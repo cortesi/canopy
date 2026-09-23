@@ -84,7 +84,7 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "find_identity",
-        docs: Some("Find a semantic key within an explicit scope, defaulting to root."),
+        docs: Some("Find an identity within an explicit scope, defaulting to root."),
         signature: || {
             FunctionSignature::new()
                 .param(("key", Type::String))
@@ -297,7 +297,7 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "call_named",
-        docs: Some("Call with named fields. An omitted target searches from the script anchor."),
+        docs: Some("Call with named fields. An omitted target searches from the script origin."),
         signature: || {
             FunctionSignature::new()
                 .param(("id", Type::String))
@@ -433,7 +433,7 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
     BaseFunction {
         name: "diagnostic_dump",
-        docs: Some("Return a diagnostic dump for a node, or the current script anchor."),
+        docs: Some("Return a diagnostic dump for a node, or the current script origin."),
         signature: || {
             FunctionSignature::new()
                 .param(("id", Type::named("NodeId").optional()))
@@ -1053,9 +1053,9 @@ fn parse_command_target<'s>(
     scope: &Scope<'s>,
     value: Option<ScopedValue<'s>>,
 ) -> StdResult<commands::CommandTarget, RuntimeError> {
-    let anchor = with_current_canopy(scope, |_, anchor| Ok(anchor))?;
+    let origin = with_current_canopy(scope, |_, origin| Ok(origin))?;
     let Some(value) = value.filter(|value| !matches!(value, ScopedValue::Nil)) else {
-        return Ok(commands::CommandTarget::From(anchor));
+        return Ok(commands::CommandTarget::From(origin));
     };
     let ArgValue::Map(mut fields) =
         super::scoped_to_arg_value(scope, value).map_err(RuntimeError::runtime)?

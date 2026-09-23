@@ -73,7 +73,7 @@ struct NodeSnapshot {
     widget_type: TypeId,
     parent: Option<NodeId>,
     children: Vec<NodeId>,
-    child_keys: Vec<(String, NodeId)>,
+    slots: Vec<(String, NodeId)>,
     hidden: bool,
     initialized: bool,
     mounted: bool,
@@ -85,18 +85,18 @@ impl StructuralSnapshot {
             .nodes
             .iter()
             .map(|(id, node)| {
-                let mut child_keys: Vec<_> = node
-                    .child_keys
+                let mut slots: Vec<_> = node
+                    .slots
                     .iter()
                     .map(|(key, child)| (key.clone(), *child))
                     .collect();
-                child_keys.sort_by(|left, right| left.0.cmp(&right.0));
+                slots.sort_by(|left, right| left.0.cmp(&right.0));
                 NodeSnapshot {
                     id,
                     widget_type: node.widget_type,
                     parent: node.parent,
                     children: node.children.clone(),
-                    child_keys,
+                    slots,
                     hidden: node.hidden,
                     initialized: node.initialized,
                     mounted: node.mounted,
@@ -1221,7 +1221,7 @@ fn keyed_children_require_unique_keys() -> Result<()> {
         .add_child_to_slot_boxed(parent, "slot", Box::new(other_widget))
         .unwrap_err();
 
-    assert!(matches!(err, Error::DuplicateChildKey(_)));
+    assert!(matches!(err, Error::DuplicateSlot(_)));
     assert_eq!(core.nodes.len(), node_count);
     assert_eq!(core.child_slot(parent, "slot"), Some(child));
     Ok(())

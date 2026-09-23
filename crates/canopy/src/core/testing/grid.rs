@@ -80,7 +80,7 @@ pub struct Grid {
 }
 
 impl Grid {
-    /// Build and prepare a grid with the root sized to hold it.
+    /// Build and prepare a grid with the screen sized to hold it.
     pub fn install(canopy: &mut Canopy, recursion: usize, divisions: usize) -> Result<Self> {
         let grid = canopy.with_root_context(|context| {
             let grid_root = build_node(context, 0, 0, recursion, divisions)?;
@@ -97,7 +97,7 @@ impl Grid {
                 divisions,
             })
         })?;
-        canopy.set_root_size(grid.expected_size())?;
+        canopy.set_screen_size(grid.expected_size())?;
         canopy.turn(crate::Work::Prepare)?;
         Ok(grid)
     }

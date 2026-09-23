@@ -316,7 +316,7 @@ fn render_errors_include_operation_node_and_path() -> Result<()> {
     canopy
         .core
         .replace_subtree(canopy.core.root, FailRenderWidget)?;
-    canopy.set_root_size(Size::new(10, 2))?;
+    canopy.set_screen_size(Size::new(10, 2))?;
     let node_id = canopy.core.root;
     let path = canopy.core.path_of(canopy.core.root, node_id).to_string();
 
@@ -342,7 +342,7 @@ fn ignored_mouse_callback_conservatively_requests_render() -> Result<()> {
         .core
         .add_child_to_boxed(canopy.core.root, Box::new(StaticWidget::new()))?;
     canopy.core.set_layout_of(app_id, Layout::fill())?;
-    canopy.set_root_size(Size::new(10, 6))?;
+    canopy.set_screen_size(Size::new(10, 6))?;
 
     let mut render = TestRender::new();
     canopy.render(&mut render)?;
@@ -367,7 +367,7 @@ fn mouse_capture_routes_drag_outside() -> Result<()> {
         .core
         .add_child_to_boxed(canopy.core.root, Box::new(CaptureWidget::new()))?;
     canopy.core.set_layout_of(app_id, Layout::fill())?;
-    canopy.set_root_size(Size::new(10, 6))?;
+    canopy.set_screen_size(Size::new(10, 6))?;
 
     let mut render = TestRender::new();
     canopy.render(&mut render)?;
@@ -421,7 +421,7 @@ fn set_widget_resets_initialization() -> Result<()> {
     let node_id = canopy
         .core
         .add_child_to_boxed(canopy.core.root, Box::new(PollWidget::new()))?;
-    canopy.set_root_size(Size::new(10, 10))?;
+    canopy.set_screen_size(Size::new(10, 10))?;
 
     let mut render = TestRender::new();
     canopy.render(&mut render)?;
@@ -714,7 +714,7 @@ fn early_mouse_bindings_keep_capture_and_node_local_coordinates() -> Result<()> 
     c.core.set_children(c.core.root, vec![probe])?;
     c.core
         .set_layout_of(c.core.root, Layout::fill().padding(Edges::all(4)))?;
-    c.set_root_size(Size::new(40, 20))?;
+    c.set_screen_size(Size::new(40, 20))?;
     c.core.update_layout(Size::new(40, 20))?;
 
     let drag = inputmap::InputSpec::Mouse(
@@ -1200,7 +1200,7 @@ fn mode_hooks_run_once_for_each_mode_change() -> Result<()> {
         setup.register_mode_hook("test.count", count);
         Ok(())
     });
-    canopy.set_root_size(Size::new(10, 4))?;
+    canopy.set_screen_size(Size::new(10, 4))?;
     let mut backend = NopBackend::new();
     canopy.render(&mut backend)?;
     canopy.render(&mut backend)?;
@@ -1414,7 +1414,7 @@ fn tresize() -> Result<()> {
             RectI32::new(half, 0, size / 2, size)
         );
 
-        c.set_root_size(Size::new(50, 50))?;
+        c.set_screen_size(Size::new(50, 50))?;
         c.render(&mut tr)?;
         assert_eq!(c.core.nodes[tree.b].view.outer, RectI32::new(25, 0, 25, 50));
         Ok(())
@@ -1626,7 +1626,7 @@ fn tkey_no_render() -> Result<()> {
     let mut canopy = app_with(|setup| setup.add_commands::<N>());
     canopy.core.replace_subtree(canopy.core.root, N)?;
 
-    canopy.set_root_size(Size::new(10, 1))?;
+    canopy.set_screen_size(Size::new(10, 1))?;
     canopy.core.set_focus(canopy.core.root)?;
     canopy.render(&mut tr)?;
     assert!(!tr.buf_empty());
@@ -1681,7 +1681,7 @@ fn zero_size_child_ok() -> Result<()> {
         .core
         .set_layout_of(child, Layout::column().fixed_width(0).fixed_height(0))?;
 
-    canopy.set_root_size(size)?;
+    canopy.set_screen_size(size)?;
     canopy.render(&mut cr)?;
     Ok(())
 }
@@ -1690,27 +1690,27 @@ fn zero_size_child_ok() -> Result<()> {
 fn visible_render_limits_reject_sizes_before_publication() -> Result<()> {
     let mut canopy = app();
     assert!(matches!(
-        canopy.set_root_size(Size::new(2049, 1)),
+        canopy.set_screen_size(Size::new(2049, 1)),
         Err(Error::RenderWidthLimit { .. })
     ));
-    assert_eq!(canopy.frame.root_size, None);
+    assert_eq!(canopy.frame.screen_size, None);
 
     let mut canopy = app_with(|setup| {
         setup.set_render_limits(RenderLimits::new(4, 4, 15));
         Ok(())
     });
     assert!(matches!(
-        canopy.set_root_size(Size::new(4, 4)),
+        canopy.set_screen_size(Size::new(4, 4)),
         Err(Error::RenderCellLimit { .. })
     ));
-    assert_eq!(canopy.frame.root_size, None);
+    assert_eq!(canopy.frame.screen_size, None);
 
     let accepted = RenderLimits::new(4, 4, 16);
     let mut canopy = app_with(move |setup| {
         setup.set_render_limits(accepted);
         Ok(())
     });
-    canopy.set_root_size(Size::new(4, 4))?;
+    canopy.set_screen_size(Size::new(4, 4))?;
     assert_eq!(canopy.frame.render_limits, accepted);
     Ok(())
 }

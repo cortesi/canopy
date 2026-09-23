@@ -200,7 +200,7 @@ impl Canopy {
     }
 
     /// Render the tree into an offscreen buffer.
-    fn render_pass(&self, root_size: Size) -> Result<TermBuf> {
+    fn render_pass(&self, screen_size: Size) -> Result<TermBuf> {
         let mut styl = StyleManager::default();
 
         let def_style = styl
@@ -208,9 +208,9 @@ impl Canopy {
             .resolve_solid()
             .expect("default style resolves to solid colors");
         let mut next =
-            TermBuf::new_with_limits(root_size, ' ', def_style, self.frame.render_limits)?;
+            TermBuf::new_with_limits(screen_size, ' ', def_style, self.frame.render_limits)?;
 
-        let screen_clip = Rect::new(0, 0, root_size.w, root_size.h);
+        let screen_clip = Rect::new(0, 0, screen_size.w, screen_size.h);
         let mut effect_stack: Vec<Effect> = Vec::new();
         let mut traversal = RenderTraversal {
             dest_buf: &mut next,
@@ -258,14 +258,14 @@ impl Canopy {
     /// Bring geometry up to date without painting, so the input routed next
     /// hit-tests the current tree.
     pub(super) fn settle_layout(&mut self) -> Result<()> {
-        let Some(root_size) = self.frame.root_size else {
+        let Some(screen_size) = self.frame.screen_size else {
             return Ok(());
         };
         if !self.core.changes.layout_pending() {
             return Ok(());
         }
         self.pre_render()?;
-        self.core.update_layout(root_size)
+        self.core.update_layout(screen_size)
     }
 
     /// Prepare and publish pending state without writing to a backend.
@@ -280,7 +280,7 @@ impl Canopy {
         {
             return Ok(false);
         }
-        let Some(root_size) = self.frame.root_size else {
+        let Some(screen_size) = self.frame.screen_size else {
             return Ok(false);
         };
         if let Some(new_style) = self.core.pending_style.take() {
@@ -294,12 +294,12 @@ impl Canopy {
             self.run_state_hooks()?;
             self.pre_render()?;
         }
-        self.core.update_layout(root_size)?;
+        self.core.update_layout(screen_size)?;
         if self.run_on_start_hooks()? {
             self.pre_render()?;
-            self.core.update_layout(root_size)?;
+            self.core.update_layout(screen_size)?;
         }
-        let next = self.render_pass(root_size)?;
+        let next = self.render_pass(screen_size)?;
         let frame_id = FrameId(self.driver.publication.generation() + 1);
         let snapshot = snapshot::capture(&self.core, frame_id, &next)?;
         self.frame.termbuf = Some(next);

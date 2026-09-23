@@ -1074,7 +1074,7 @@ fn a_resize_in_the_same_turn_reveals_the_cursor_in_the_final_view() {
     let mut harness = build_harness(&text, config, 10, 8);
     harness
         .canopy
-        .set_root_size(Size::new(10, 3))
+        .set_screen_size(Size::new(10, 3))
         .expect("resize");
     edit_in_one_turn(&mut harness, |editor, ctx| {
         for _ in 0..6 {
@@ -1094,7 +1094,7 @@ fn a_cursor_reveal_uses_the_final_soft_wrapping() {
     let mut harness = build_harness(&text, config, 20, 2);
     harness
         .canopy
-        .set_root_size(Size::new(10, 2))
+        .set_screen_size(Size::new(10, 2))
         .expect("resize");
     edit_in_one_turn(&mut harness, |editor, ctx| {
         editor.buffer.set_cursor(TextPosition::new(0, 35));

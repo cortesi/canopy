@@ -138,7 +138,7 @@ pub struct Canopy {
 #[derive(Default)]
 struct FrameState {
     /// Root window size.
-    root_size: Option<Size>,
+    screen_size: Option<Size>,
     /// Limits for the materialized visible render target.
     render_limits: RenderLimits,
     /// Last prepared frame buffer.

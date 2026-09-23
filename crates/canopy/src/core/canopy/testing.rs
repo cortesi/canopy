@@ -153,7 +153,7 @@ mod tests {
         let mut canopy = crate::CanopyBuilder::new().build()?;
         canopy.set_clock_for_testing(clock.clone())?;
         canopy.replace_root(counter.clone())?;
-        canopy.set_root_size(Size::new(10, 2))?;
+        canopy.set_screen_size(Size::new(10, 2))?;
         canopy.turn(Work::Prepare)?;
         Ok((canopy, clock, counter))
     }

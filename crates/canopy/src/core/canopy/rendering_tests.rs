@@ -27,7 +27,7 @@ impl Widget for Paint {
 fn app() -> Result<Canopy> {
     let mut canopy = CanopyBuilder::new().build()?;
     canopy.replace_root(Paint('a'))?;
-    canopy.set_root_size(Size::new(1, 1))?;
+    canopy.set_screen_size(Size::new(1, 1))?;
     Ok(canopy)
 }
 

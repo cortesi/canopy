@@ -14,7 +14,7 @@ mod tests {
         let request = EvalRequest {
             source: contracts::SCRIPT.into(),
             timeout: None,
-            anchor: app.root_id(),
+            origin: app.root_id(),
         };
         let mut outcome = app.turn(Work::StartEval(request))?;
         if outcome.completed.is_empty() {

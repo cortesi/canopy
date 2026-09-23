@@ -864,7 +864,7 @@ impl Canopy {
             Event::Mouse(m) => self.mouse(None, *m),
             Event::Resize(s) => {
                 self.core.invalidate(crate::Invalidation::Paint);
-                self.set_root_size(*s)
+                self.set_screen_size(*s)
             }
             Event::Paste(_) | Event::FocusGained | Event::FocusLost => {
                 self.core.invalidate(crate::Invalidation::Paint);
@@ -874,9 +874,9 @@ impl Canopy {
     }
 
     /// Set the size on the root node.
-    pub fn set_root_size(&mut self, size: Size) -> Result<()> {
+    pub fn set_screen_size(&mut self, size: Size) -> Result<()> {
         self.frame.render_limits.cell_count(size)?;
-        self.frame.root_size = Some(size);
+        self.frame.screen_size = Some(size);
         self.core.invalidate(crate::Invalidation::Layout);
         Ok(())
     }

@@ -120,7 +120,7 @@ pub(super) fn register_framework_declarations(
         ]),
     ));
     builder.alias(declaration::Alias::new(
-        "SemanticIdentity",
+        "NodeIdentity",
         declaration::Type::table([
             declaration::Field::new("scope", declaration::Type::named("NodeId")),
             declaration::Field::new("key", declaration::Type::String),
@@ -679,10 +679,7 @@ fn register_snapshot_info(builder: &mut module::Builder) {
             Field::new("parent", Type::named("NodeId").optional()),
             Field::new("children", Type::named("NodeId").array()),
             Field::new("name", Type::String),
-            Field::new(
-                "semantic_identity",
-                Type::named("SemanticIdentity").optional(),
-            ),
+            Field::new("identity", Type::named("NodeIdentity").optional()),
             Field::new("attached", Type::Boolean),
             Field::new("displayed", Type::Boolean),
             Field::new("intersects_viewport", Type::Boolean),
@@ -771,8 +768,8 @@ fn node_info_fields(
         declaration::Field::new("name", declaration::Type::String)
             .doc("Widget owner name used in paths and command dispatch."),
         declaration::Field::new(
-            "semantic_identity",
-            declaration::Type::named("SemanticIdentity").optional(),
+            "identity",
+            declaration::Type::named("NodeIdentity").optional(),
         )
         .doc("Application key and explicit arena scope, if registered."),
         declaration::Field::new("focused", declaration::Type::Boolean)
@@ -799,7 +796,7 @@ fn node_info_fields(
 fn command_availability_fields() -> Vec<declaration::Field> {
     vec![
         declaration::Field::new("available", declaration::Type::Boolean)
-            .doc("True when the command can resolve from the current script anchor."),
+            .doc("True when the command can resolve from the current script origin."),
         declaration::Field::new("target", declaration::Type::named("NodeId").optional())
             .doc("Current target node, when a node command can resolve."),
         declaration::Field::new(

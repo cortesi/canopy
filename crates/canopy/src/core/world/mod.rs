@@ -14,7 +14,7 @@ use super::{
     inputmap::InputMap,
     notice::Notices,
     wake::WakeRegistry,
-    widget_access::{WidgetMutGuard, WidgetReadGuard, WidgetSlotGuard},
+    widget_access::{WidgetCellGuard, WidgetMutGuard, WidgetReadGuard},
 };
 use crate::{
     ChangeOutcome,
@@ -86,7 +86,7 @@ pub struct Core {
     next_generation: u64,
     /// Last call-order stamp given to a scroll or reveal, outside rollback.
     scroll_stamp: u64,
-    /// Widget slots currently extracted by mutation callbacks.
+    /// Widget cells currently extracted by mutation callbacks.
     pub(crate) callback_depth: usize,
     /// Completion-boundary removal queue and dispatch nesting.
     completion: completion::CompletionBatch,
@@ -118,7 +118,7 @@ struct TreeEditJournal {
 struct MountedWidget {
     /// Node that owned the widget when its mount completed.
     node_id: NodeId,
-    /// Stable widget slot identity across node snapshots and replacement.
+    /// Stable widget cell identity across node snapshots and replacement.
     widget: Rc<RefCell<Option<Box<dyn Widget>>>>,
 }
 
@@ -126,7 +126,7 @@ struct MountedWidget {
 struct RemovalPlan {
     /// Root whose lifecycle initiated the plan.
     root: NodeId,
-    /// Nodes in deterministic pre-order with their original widget slots.
+    /// Nodes in deterministic pre-order with their original widget cells.
     pre_order: Vec<RemovalEntry>,
     /// Nodes in deterministic post-order.
     post_order: Vec<NodeId>,
@@ -277,7 +277,7 @@ impl Core {
         node_id: NodeId,
         f: impl FnOnce(&mut dyn Widget, &mut Self) -> R,
     ) -> Result<R> {
-        let mut guard = WidgetSlotGuard::take(self, node_id).map_err(|error| {
+        let mut guard = WidgetCellGuard::take(self, node_id).map_err(|error| {
             self.widget_operation_error(
                 WidgetOperation::access("mutation callback"),
                 node_id,

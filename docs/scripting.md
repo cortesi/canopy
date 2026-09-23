@@ -52,7 +52,7 @@ automation entry points must marshal work back to the UI thread before touching
 The shared runtime driver polls detached Luau invocations. It releases application,
 widget, and VM borrows between polls. Input, timers, node wakes, and bounded native
 automation can progress while an evaluation waits. Resumed segments retain their
-original script anchor. Focus-targeted calls resolve current focus when invoked.
+original script origin. Focus-targeted calls resolve current focus when invoked.
 
 Only one top-level evaluation may run at a time. Another evaluation or module
 reload fails with `ScriptBusy`. Live callers submit an `EvalRequest`
@@ -104,7 +104,7 @@ canopy.call_named("app::configure", { options = { options = "dark" } }, {
 
 Target tables accept `{ kind = "exact", node = id }`,
 `{ kind = "from", node = id }`, or `{ kind = "focus" }`. Omission uses the
-current script anchor.
+current script origin.
 `canopy.commands(target?)` uses the same target policies. Exact dispatch
 rejects stale nodes and wrong owners. It never searches for a replacement
 target.
@@ -112,7 +112,7 @@ target.
 Legacy `owner.command(...)`, `canopy.cmd(id, ...)`, and `canopy.cmd_on(node,
 id, ...)` retain their decoding rules. A single table is interpreted as named
 arguments when its keys match user parameters. `cmd_on` retains relative
-subtree-and-ancestor search. Unqualified calls use the script anchor, which is
+subtree-and-ancestor search. Unqualified calls use the script origin, which is
 root for top-level evaluation and the route node for bindings.
 
 Discovery reports resolution, eligibility, disabled reason, and missing event
@@ -590,4 +590,4 @@ failure passes when evaluation fails, and fails when evaluation succeeds.
 `--fail-fast` stops at the first outcome that differs from its expectation.
 
 Source strings are durable replay steps. Live node tokens and session IDs are
-not durable node references; use semantic keys and application identifiers.
+not durable node references; use identities and application identifiers.

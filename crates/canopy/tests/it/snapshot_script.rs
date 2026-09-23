@@ -48,7 +48,7 @@ mod tests {
             .build()?;
         canopy.replace_root(Label { text: "old".into() })?;
         assert!(canopy.snapshot().is_none());
-        canopy.set_root_size(Size::new(8, 2))?;
+        canopy.set_screen_size(Size::new(8, 2))?;
         assert_eq!(
             canopy.eval_script(
                 r#"

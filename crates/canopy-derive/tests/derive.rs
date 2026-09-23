@@ -177,7 +177,8 @@ mod tests {
             __canopy_param_0: String,
         ) -> String {
             assert!(args.is_none());
-            ctx.set_focus(ctx.node_id()).expect("the command node accepts focus");
+            ctx.set_focus(ctx.node_id())
+                .expect("the command node accepts focus");
             [target, values, normalized, __canopy_param_0].join("/")
         }
 

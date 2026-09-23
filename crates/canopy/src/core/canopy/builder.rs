@@ -241,7 +241,7 @@ mod tests {
         assert_eq!(journal[0].origin.to_string(), "bindings:first");
         assert!(journal[1].origin.to_string().starts_with("config:"));
         assert_eq!(journal[2].origin.to_string(), "bindings:last");
-        canopy.set_root_size(Size::new(10, 3))?;
+        canopy.set_screen_size(Size::new(10, 3))?;
         canopy.turn(Work::Prepare)?;
         assert_eq!(canopy.mode(), "startup");
         Ok(())
@@ -322,7 +322,7 @@ mod tests {
             }
             let mut canopy = builder.build()?;
             assert!(canopy.script.module_source.is_none());
-            canopy.set_root_size(Size::new(10, 3))?;
+            canopy.set_screen_size(Size::new(10, 3))?;
             canopy.turn(Work::Prepare)?;
             assert!(
                 canopy
@@ -354,7 +354,7 @@ mod tests {
             .build()?;
         assert_eq!(canopy.mode(), "");
         assert!(canopy.snapshot().is_none());
-        canopy.set_root_size(Size::new(10, 3))?;
+        canopy.set_screen_size(Size::new(10, 3))?;
         canopy.turn(Work::Prepare)?;
         assert_eq!(canopy.mode(), "trusted");
         Ok(())

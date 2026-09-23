@@ -164,9 +164,9 @@ mod tests {
         })?;
 
         h.render()?;
-        h.canopy.set_root_size(Size::new(246, 63))?;
+        h.canopy.set_screen_size(Size::new(246, 63))?;
         h.render()?;
-        h.canopy.set_root_size(Size::new(123, 31))?;
+        h.canopy.set_screen_size(Size::new(123, 31))?;
         h.render()?;
 
         h.canopy.with_root_view(|context| {

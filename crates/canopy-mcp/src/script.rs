@@ -619,7 +619,7 @@ async fn evaluate_live_request_inner(
         })
     })
     .await;
-    let (anchor, gate) = match preflight {
+    let (origin, gate) = match preflight {
         Ok(Ok(preflight)) => preflight,
         Ok(Err(error)) => {
             return failed_info(
@@ -650,7 +650,7 @@ async fn evaluate_live_request_inner(
             .timeout_ms
             .filter(|timeout| *timeout > 0)
             .map(Duration::from_millis),
-        anchor,
+        origin,
     }) {
         Ok(ticket) => ticket,
         Err(error) => {
@@ -787,7 +787,7 @@ fn build_headless(
 ) -> Result<Canopy> {
     let mut canopy = factory.build()?;
     metadata.api_digest = Some(stable_digest(canopy.script_api()?));
-    canopy.set_root_size(viewport.into())?;
+    canopy.set_screen_size(viewport.into())?;
     if let Some(fixture) = fixture {
         canopy.apply_fixture(fixture)?;
         if metadata.reset != ResetPolicy::Isolated {
@@ -811,7 +811,7 @@ fn eval_request(canopy: &Canopy, script: &str, timeout_ms: Option<u64>) -> EvalR
         timeout: timeout_ms
             .filter(|timeout| *timeout > 0)
             .map(Duration::from_millis),
-        anchor: canopy.root_id(),
+        origin: canopy.root_id(),
     }
 }
 
@@ -1133,7 +1133,7 @@ mod tests {
     #[test]
     fn direct_live_context_retains_identity_and_rejects_resize() -> crate::Result<()> {
         let mut canopy = test_factory().build()?;
-        canopy.set_root_size(Size::new(20, 5))?;
+        canopy.set_screen_size(Size::new(20, 5))?;
         canopy.render(&mut NopBackend::new())?;
         let context = LiveContext::new(crate::AppMetadata {
             app: "live-test".into(),
@@ -1152,7 +1152,7 @@ mod tests {
         });
         request.script = "script_target.set(99)".into();
         assert!(!evaluate_live(&mut canopy, &request, &context).success);
-        assert_eq!(canopy.snapshot().unwrap().viewport, Size::new(20, 5));
+        assert_eq!(canopy.snapshot().unwrap().size, Size::new(20, 5));
         request.viewport = None;
         request.script = "return script_target.get()".into();
         assert_eq!(

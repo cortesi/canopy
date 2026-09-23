@@ -612,7 +612,7 @@ mod tests {
             context.set_layout_override(right.into(), Layout::fill().into())?;
             Ok((left, right))
         })?;
-        canopy.set_root_size(Size::new(60, 14))?;
+        canopy.set_screen_size(Size::new(60, 14))?;
 
         let mut backend = NopBackend::new();
         canopy.render(&mut backend)?;
@@ -988,7 +988,7 @@ mod tests {
     fn help_overlays_the_dimmed_application() -> Result<()> {
         let mut canopy = CanopyBuilder::new().configure(Root::register).build()?;
         Root::new().install(&mut canopy, Banner)?;
-        canopy.set_root_size(Size::new(60, 14))?;
+        canopy.set_screen_size(Size::new(60, 14))?;
         let mut backend = NopBackend::new();
         let mut corner = |canopy: &mut Canopy| -> Result<Cell> {
             canopy.render(&mut backend)?;

@@ -606,8 +606,8 @@ fn retained_node_handle_is_rejected_after_removal() -> Result<()> {
     run_ttree(|c, _, tree| {
         let host = c.script.host.clone();
         c.core.remove_subtree(tree.a)?;
-        let anchor = c.core.root_id();
-        c.script.context_stack.push(anchor);
+        let origin = c.core.root_id();
+        c.script.context_stack.push(origin);
         let mut runtime_cell = host.runtime.borrow_mut();
         let runtime = runtime_cell.as_mut().expect("finalized runtime");
         runtime
@@ -624,7 +624,7 @@ fn retained_node_handle_is_rejected_after_removal() -> Result<()> {
                 Ok(())
             })
             .map_err(|error| error::Error::script(error.to_string()))?;
-        assert_eq!(c.script.context_stack.pop(), Some(anchor));
+        assert_eq!(c.script.context_stack.pop(), Some(origin));
         Ok(())
     })
 }

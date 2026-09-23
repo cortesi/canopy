@@ -7,7 +7,7 @@ use crate::{
         node::Node,
         view::View,
         wake::WorkStamp,
-        widget_access::{WidgetSlotPolicy, validate_slot},
+        widget_access::{WidgetCellPolicy, validate_slot},
     },
     layout::LayoutOverride,
     path::Path,
@@ -62,7 +62,7 @@ impl TreeEditJournal {
 }
 
 impl MountedWidget {
-    /// Return the stable identity of this widget slot.
+    /// Return the stable identity of this widget cell.
     fn identity(&self) -> usize {
         Rc::as_ptr(&self.widget) as usize
     }
@@ -156,7 +156,7 @@ impl Core {
         let poll_lifetime = widget.poll_lifetime();
 
         let lost = self.delete_subtree(node_id, "replace subtree", true)?;
-        self.clear_semantic_key(node_id)?;
+        self.clear_identity(node_id)?;
         let incarnation = self.next_generation();
         let node = &mut self.nodes[node_id];
         node.incarnation = incarnation;
@@ -334,11 +334,11 @@ impl Core {
 
     /// Validate structural and cached state invariants for the core arena.
     pub fn validate_invariants(&self) -> Result<()> {
-        self.validate_invariants_with(WidgetSlotPolicy::RequirePresent)
+        self.validate_invariants_with(WidgetCellPolicy::RequirePresent)
     }
 
-    /// Validate core invariants using a caller-specific widget slot policy.
-    fn validate_invariants_with(&self, widget_slot_policy: WidgetSlotPolicy) -> Result<()> {
+    /// Validate core invariants using a caller-specific widget cell policy.
+    fn validate_invariants_with(&self, widget_slot_policy: WidgetCellPolicy) -> Result<()> {
         self.validate_root()?;
         for (node_id, node) in self.nodes.iter() {
             validate_slot(node_id, node, widget_slot_policy)?;
@@ -355,7 +355,7 @@ impl Core {
     /// Assert structural invariants on the node tree in debug builds.
     #[cfg(debug_assertions)]
     pub(crate) fn debug_assert_tree_invariants(&self) {
-        if let Err(error) = self.validate_invariants_with(WidgetSlotPolicy::AllowBorrowed) {
+        if let Err(error) = self.validate_invariants_with(WidgetCellPolicy::AllowBorrowed) {
             debug_assert!(false, "{error}");
         }
     }
@@ -400,7 +400,7 @@ impl Core {
             }
         }
 
-        for (key, child) in &node.child_keys {
+        for (key, child) in &node.slots {
             if !node.children.contains(child) {
                 return Err(invariant_violation(format!(
                     "child key {key:?} points to non-child {child:?} under {node_id:?}"
@@ -619,7 +619,7 @@ impl Core {
         let parent = parent.into();
         self.with_tree_edit("add keyed child", |core| {
             if core.child_slot(parent, key).is_some() {
-                return Err(Error::DuplicateChildKey(key.to_string()));
+                return Err(Error::DuplicateSlot(key.to_string()));
             }
             let child = core.create_detached_boxed(widget)?;
             core.attach_inner(parent, child, Some(key))?;
@@ -631,7 +631,7 @@ impl Core {
     pub fn child_slot(&self, parent: impl Into<NodeId>, key: &str) -> Option<NodeId> {
         self.nodes
             .get(parent.into())
-            .and_then(|node| node.child_keys.get(key).copied())
+            .and_then(|node| node.slots.get(key).copied())
     }
 
     /// Attach a detached child under a parent.
@@ -677,15 +677,15 @@ impl Core {
             return Err(Error::AlreadyAttached(child));
         }
         if let Some(key) = key
-            && self.nodes[parent].child_keys.contains_key(key)
+            && self.nodes[parent].slots.contains_key(key)
         {
-            return Err(Error::DuplicateChildKey(key.to_string()));
+            return Err(Error::DuplicateSlot(key.to_string()));
         }
         self.validate_attach(parent, child, "attach")?;
 
         let node = &mut self.nodes[parent];
         if let Some(key) = key {
-            node.child_keys.insert(key.to_string(), child);
+            node.slots.insert(key.to_string(), child);
         }
         node.children.push(child);
         self.nodes[child].parent = Some(parent);
@@ -729,7 +729,7 @@ impl Core {
         };
         if let Some(node) = self.nodes.get_mut(parent) {
             node.children.retain(|id| *id != child);
-            node.child_keys.retain(|_, id| *id != child);
+            node.slots.retain(|_, id| *id != child);
         }
     }
 
@@ -889,13 +889,13 @@ impl Core {
         if keep_root {
             let node = &mut self.nodes[root];
             node.children.clear();
-            node.child_keys.clear();
+            node.slots.clear();
         } else {
             self.unlink(root);
         }
         for node_id in plan.post_order {
             if !keep_root || node_id != root {
-                self.clear_semantic_key(node_id)?;
+                self.clear_identity(node_id)?;
                 self.nodes.remove(node_id);
             }
         }
@@ -1008,7 +1008,7 @@ impl Core {
         Ok(())
     }
 
-    /// Ensure one widget slot is present and not held by a callback.
+    /// Ensure one widget cell is present and not held by a callback.
     fn ensure_widget_slot_available(&self, node_id: NodeId, operation: &'static str) -> Result<()> {
         self.with_widget(
             node_id,

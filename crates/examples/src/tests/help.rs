@@ -101,7 +101,7 @@ fn prove_help_flow(mut harness: Harness, hidden: &[&str], shown: &[&str]) -> Res
         .and_then(|node| node.view)
         .map(|view| view.outer)
         .expect("visible help panel");
-    let cell = |x, y| &frame.cells[(y * frame.viewport.w + x) as usize];
+    let cell = |x, y| &frame.cells[(y * frame.size.w + x) as usize];
     // Binding rows are one panel band each. The footer below them is a raised
     // bar inset by the panel's side padding, so it is checked separately.
     for y in panel.tl.y as u32..panel.tl.y as u32 + panel.h.saturating_sub(1) {

@@ -1020,7 +1020,7 @@ mod tests {
         );
 
         let mut render = TestRender::new();
-        canopy.set_root_size(Size::new(10, 1))?;
+        canopy.set_screen_size(Size::new(10, 1))?;
         canopy.render(&mut render)?;
         assert_eq!(
             canopy.eval_script("return api_leaf.get()")?,

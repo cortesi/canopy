@@ -34,7 +34,7 @@ mod tests {
     fn minimum_forms_have_help_and_no_inspector() -> Result<()> {
         let mut app = CanopyBuilder::new().configure(Root::register).build()?;
         Root::new().install(&mut app, Form)?;
-        app.set_root_size(Size::new(30, 10))?;
+        app.set_screen_size(Size::new(30, 10))?;
         app.turn(Work::Prepare)?;
         let snapshot = app.snapshot().unwrap();
         assert!(snapshot.nodes.iter().any(|node| node.name == "input"));

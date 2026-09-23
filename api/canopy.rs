@@ -647,7 +647,7 @@ pub mod canopy {
             MultipleMatches,
             #[error("duplicate child key: {0}")]
             /// Duplicate child key under the same parent.
-            DuplicateChildKey(String),
+            DuplicateSlot(String),
             #[error("duplicate child {child:?} under parent {parent:?}")]
             /// Duplicate child under the same parent.
             DuplicateChild {
@@ -2809,7 +2809,7 @@ pub mod canopy {
     ($hex:literal) => { ... };
 }
     #[macro_export]
-    /// Define a typed slot for keyed children.
+    /// Define a typed slot for slots.
     ///
     /// # Examples
     ///
@@ -2980,8 +2980,9 @@ pub mod canopy {
         pub source: String,
         /// Absolute execution budget, including parked time.
         pub timeout: Option<std::time::Duration>,
-        /// Anchor retained across invocation segments.
-        pub anchor: crate::NodeId,
+        /// Node the evaluation dispatches from when a call names no target,
+        /// retained across invocation segments.
+        pub origin: crate::NodeId,
     }
 
     /// Completion receiver that is awaited outside the UI thread.
@@ -3061,8 +3062,8 @@ pub mod canopy {
     pub struct FrameSnapshot {
         /// Publication generation shared with turn outcomes.
         pub frame_id: crate::FrameId,
-        /// Dimensions of the rendered cells.
-        pub viewport: crate::geom::Size,
+        /// Screen size: the dimensions of the rendered cells.
+        pub size: crate::geom::Size,
         /// All live arena nodes, including detached trees.
         pub nodes: Vec<NodeSnapshot>,
         /// Styled terminal cells in row-major order.
@@ -3120,9 +3121,18 @@ pub mod canopy {
         pub bindings: ModalBindings,
     }
 
-    /// Opaque identifier for a node stored in the Core arena.
+    /// Opaque identifier for a node in an application tree.
     #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
     pub struct NodeId(_);
+
+    /// Application identity unique within an explicit arena subtree.
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    pub struct NodeIdentity {
+        /// Scope root, which may itself be detached.
+        pub scope: crate::core::id::NodeId,
+        /// Application-defined key independent of structural slots.
+        pub key: String,
+    }
 
     /// A node name, which consists of lowercase ASCII alphanumeric characters, plus
     /// underscores.
@@ -3141,7 +3151,7 @@ pub mod canopy {
         /// Widget path name.
         pub name: String,
         /// Explicit application identity.
-        pub semantic_identity: Option<crate::SemanticIdentity>,
+        pub identity: Option<crate::NodeIdentity>,
         /// Whether the root tree contains this node.
         pub attached: bool,
         /// Attached with no hidden ancestor.
@@ -3374,15 +3384,6 @@ pub mod canopy {
         Pages(ScrollDirection, u32),
     }
 
-    /// Application identity unique within an explicit arena subtree.
-    #[derive(Clone, Debug, Eq, PartialEq)]
-    pub struct SemanticIdentity {
-        /// Scope root, which may itself be detached.
-        pub scope: crate::core::id::NodeId,
-        /// Application-defined key independent of structural child keys.
-        pub key: String,
-    }
-
     /// Registration handle for an application that is not yet finalized.
     ///
     /// [`CanopyBuilder::configure`](super::CanopyBuilder::configure) passes this
@@ -3497,7 +3498,7 @@ pub mod canopy {
     pub use canopy_derive::command;
     pub use canopy_derive::derive_commands;
     pub use canopy_geom as geom;
-    /// A typed slot for keyed children.
+    /// A typed slot for slots.
     ///
     /// This trait associates a string key with a specific widget type, providing
     /// compile-time type safety for keyed child access.
@@ -3540,8 +3541,8 @@ pub mod canopy {
         /// Clear all effects on a node.
         fn clear_effects(&mut self, node: NodeId) -> Result<()>;
 
-        /// Remove the semantic identity of a live node.
-        fn clear_semantic_key(&mut self, node: NodeId) -> Result<()>;
+        /// Remove the identity of a live node.
+        fn clear_identity(&mut self, node: NodeId) -> Result<()>;
 
         /// Close this scope and its nested scopes after active callbacks return.
         fn close_modal(&mut self, token: InteractionToken) -> Result<()>;
@@ -3565,12 +3566,12 @@ pub mod canopy {
 
         /// Run immediate mutations with structural rollback on error.
         ///
-        /// Rollback restores arena metadata, topology, child keys, layouts, views,
+        /// Rollback restores arena metadata, topology, slots, layouts, views,
         /// lifecycle flags, root, focus, mouse capture, focus recovery hints, exit
         /// requests, pending styles, and diagnostic requests. Each failed nested
         /// edit restores its own structural checkpoint.
         ///
-        /// Widget slots are shared with the checkpoint: widget-owned mutations
+        /// Widget cells are shared with the checkpoint: widget-owned mutations
         /// survive. Binding registration and external effects also survive and
         /// require explicit compensation. Cleanup hooks must be safe to repeat.
         /// This is not a widget state or database transaction.
@@ -3604,7 +3605,7 @@ pub mod canopy {
 
         /// Remove the current widget incarnation after the outer dispatch succeeds.
         /// Failed dispatches discard their requests. Missing or replaced targets
-        /// are harmless. Lifecycle hooks run after active widget slots are
+        /// are harmless. Lifecycle hooks run after active widget cells are
         /// restored. The shared batch accepts at most 1024 requests. Overflow
         /// returns an error without running removals or discarding previously
         /// accepted requests.
@@ -3664,12 +3665,12 @@ pub mod canopy {
         /// Set a node's visibility.
         fn set_hidden(&mut self, node: NodeId, hidden: bool) -> Result<ChangeOutcome>;
 
+        /// Assign a unique identity within a containing subtree scope.
+        fn set_identity(&mut self, node: NodeId, scope: NodeId, key: &str) -> Result<()>;
+
         /// Replace persistent parent constraints without replacing widget layout
         /// fields.
         fn set_layout_override(&mut self, node: NodeId, overrides: LayoutOverride) -> Result<()>;
-
-        /// Assign a unique semantic key within a containing subtree scope.
-        fn set_semantic_key(&mut self, node: NodeId, scope: NodeId, key: &str) -> Result<()>;
 
         /// Set the style map to be used for rendering.
         /// The style change will be applied before the next render.
@@ -3790,7 +3791,7 @@ pub mod canopy {
         /// returned as disabled reasons; eligibility hook failures remain errors.
         fn command_status(&self, call: &CommandCall) -> Result<CommandStatus>;
 
-        /// Resolve a semantic key in an explicit live subtree scope.
+        /// Resolve an identity in an explicit live subtree scope.
         fn find_identity(&self, scope: NodeId, key: &str) -> Result<Option<NodeId>>;
 
         /// Find all nodes whose paths match the filter, relative to the current
@@ -3809,6 +3810,9 @@ pub mod canopy {
 
         /// Does the current node hold mouse capture?
         fn has_mouse_capture(&self) -> bool;
+
+        /// Return a node's independently assigned identity.
+        fn identity(&self, node: NodeId) -> Option<NodeIdentity>;
 
         /// Return whether a node exists and is attached to the root tree.
         fn is_attached(&self, node: NodeId) -> bool;
@@ -3849,9 +3853,6 @@ pub mod canopy {
         /// missing. Contextual key prediction uses this to answer for a
         /// scrollable target without running widget effects.
         fn scroll_outcome(&self, node: NodeId, op: ScrollOp) -> Option<ChangeOutcome>;
-
-        /// Return a node's independently assigned semantic identity.
-        fn semantic_identity(&self, node: NodeId) -> Option<SemanticIdentity>;
 
         /// Widget type identifier for a specific node.
         fn type_id_of(&self, node: NodeId) -> Option<TypeId>;
@@ -3905,7 +3906,8 @@ pub mod canopy {
         }
     }
 
-    /// Widgets are the behavior attached to nodes in the Core arena.
+    /// A widget is the behavior a node holds: it lays out, renders, and handles
+    /// input for its node.
     pub trait Widget: Any {
         /// Attempt to focus this widget.
         ///
@@ -4223,7 +4225,7 @@ pub mod canopy {
         }
 
         /// Set the size on the root node.
-        pub fn set_root_size(&mut self, size: Size) -> Result<()> {}
+        pub fn set_screen_size(&mut self, size: Size) -> Result<()> {}
 
         /// Apply a named fixture to the current app instance.
         pub fn apply_fixture(&mut self, name: &str) -> Result<()> {}

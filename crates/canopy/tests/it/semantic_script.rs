@@ -16,10 +16,10 @@ mod tests {
             let second = NodeId::from(ctx.add_child(ctx.node_id(), Marker)?);
             let first_item = NodeId::from(ctx.add_child(first, Marker)?);
             let second_item = NodeId::from(ctx.add_child(second, Marker)?);
-            ctx.set_semantic_key(first, root, "first")?;
-            ctx.set_semantic_key(second, root, "second")?;
-            ctx.set_semantic_key(first_item, first, "item")?;
-            ctx.set_semantic_key(second_item, second, "item")?;
+            ctx.set_identity(first, root, "first")?;
+            ctx.set_identity(second, root, "second")?;
+            ctx.set_identity(first_item, first, "item")?;
+            ctx.set_identity(second_item, second, "item")?;
             Ok((first, first_item, second))
         })?;
         let source = r#"
@@ -31,7 +31,7 @@ mod tests {
             if first_item == nil or second_item == nil then error("missing item") end
             canopy.assert(first_item ~= second_item)
             canopy.assert(canopy.find_identity("item") == nil)
-            local identity = canopy.node_info(first_item).semantic_identity
+            local identity = canopy.node_info(first_item).identity
             if identity == nil then error("missing identity") end
             canopy.assert(identity.key == "item")
             return true
@@ -47,7 +47,7 @@ mod tests {
         })?;
         assert_eq!(canopy.eval_script(source)?, ArgValue::Bool(true));
         canopy.with_root_context(|ctx| {
-            ctx.clear_semantic_key(first_item)?;
+            ctx.clear_identity(first_item)?;
             ctx.detach(first_item)?;
             ctx.attach(second, first_item)?;
             assert_eq!(ctx.find_identity(first, "item")?, None);

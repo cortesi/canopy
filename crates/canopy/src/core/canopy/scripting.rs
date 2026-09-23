@@ -65,7 +65,7 @@ const DEFAULT_SCRIPT_JOURNAL_LIMIT: usize = 1024;
 pub struct ScriptState {
     /// Script execution host.
     pub(crate) host: script::LuauHost,
-    /// Stack of active script dispatch anchors for the current VM invocation.
+    /// Stack of active script dispatch origins for the current VM invocation.
     pub(crate) context_stack: Vec<NodeId>,
     /// Cached Luau API definition text.
     api_text: Option<String>,
@@ -253,7 +253,7 @@ impl ScriptJournalBaseline {
 pub struct DefaultBindingsRun {
     /// Script host that owns the retained runtime.
     pub(crate) host: script::LuauHost,
-    /// Node anchor for the nested default-bindings run.
+    /// Node origin for the nested default-bindings run.
     pub(crate) root_id: NodeId,
     /// Compiled default-bindings script id.
     pub(crate) script_id: script::ScriptId,
@@ -347,7 +347,7 @@ impl Canopy {
         let outcome = self.eval(EvalRequest {
             source: source.to_owned(),
             timeout: None,
-            anchor: self.root_id(),
+            origin: self.root_id(),
         })?;
         outcome.into_result()
     }

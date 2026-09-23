@@ -31,9 +31,9 @@ pub struct ScriptInvocation {
     /// Present only while Ruau still owns a pending invocation.
     handle: Option<InvocationHandle>,
     /// Original dispatch origin restored for each VM segment.
-    anchor: NodeId,
+    origin: NodeId,
     /// Incarnation captured at admission or the first direct test poll.
-    anchor_incarnation: Option<u64>,
+    origin_incarnation: Option<u64>,
     /// Error context retained across polls.
     label: String,
     /// Options retain their print-quota state across VM segments.
@@ -55,16 +55,16 @@ impl fmt::Debug for ScriptInvocation {
         formatter
             .debug_struct("ScriptInvocation")
             .field("handle", &self.handle)
-            .field("anchor", &self.anchor)
+            .field("origin", &self.origin)
             .field("label", &self.label)
             .finish_non_exhaustive()
     }
 }
 
 impl ScriptInvocation {
-    /// Bind this task to the anchor widget that existed at admission.
-    pub(crate) fn set_anchor_incarnation(&mut self, incarnation: u64) {
-        self.anchor_incarnation = Some(incarnation);
+    /// Bind this task to the origin widget that existed at admission.
+    pub(crate) fn set_origin_incarnation(&mut self, incarnation: u64) {
+        self.origin_incarnation = Some(incarnation);
     }
 
     /// Preserve the requested budget while individual polls use the remaining
@@ -145,9 +145,9 @@ struct SegmentAnchor<'a> {
 
 impl<'a> SegmentAnchor<'a> {
     /// Push the admitted task origin until this segment releases its borrow.
-    fn enter(canopy: &'a mut Canopy, anchor: NodeId) -> Self {
+    fn enter(canopy: &'a mut Canopy, origin: NodeId) -> Self {
         let depth = canopy.script.context_stack.len();
-        canopy.script.context_stack.push(anchor);
+        canopy.script.context_stack.push(origin);
         Self { canopy, depth }
     }
 }
@@ -177,12 +177,12 @@ impl LuauHost {
     /// Begin a compiled root without borrowing Canopy or retaining a VM borrow.
     pub(crate) fn start_invocation(
         &self,
-        anchor: NodeId,
+        origin: NodeId,
         script: ScriptId,
     ) -> Result<ScriptInvocation> {
         let active = self.begin_active_eval()?;
         let root = self.loaded_root(script)?;
-        let label = format!("script {script} on node {anchor:?}");
+        let label = format!("script {script} on node {origin:?}");
         let handle = self
             .runtime_mut("script VM re-entered without a live scope")?
             .create_root_invocation(&root)
@@ -191,8 +191,8 @@ impl LuauHost {
         Ok(ScriptInvocation {
             host: self.clone(),
             handle: Some(handle),
-            anchor,
-            anchor_incarnation: None,
+            origin,
+            origin_incarnation: None,
             label,
             options: invocation_options(None, &print_lines),
             reporting_timeout: None,
@@ -235,28 +235,28 @@ impl LuauHost {
         remaining_gas: u64,
         remaining_timeout: Option<Duration>,
     ) -> Result<ScriptPoll> {
-        let anchor = invocation.anchor;
-        let entry = canopy.core.nodes.get(anchor).ok_or_else(|| {
+        let origin = invocation.origin;
+        let entry = canopy.core.nodes.get(origin).ok_or_else(|| {
             error::Error::script_structured(
                 error::ScriptErrorKind::InvalidNode,
-                "script anchor no longer exists",
+                "script origin no longer exists",
             )
-            .with_owner(format!("{anchor:?}"))
+            .with_owner(format!("{origin:?}"))
         })?;
         if invocation
-            .anchor_incarnation
+            .origin_incarnation
             .is_some_and(|incarnation| incarnation != entry.incarnation)
         {
             return Err(error::Error::script_structured(
                 error::ScriptErrorKind::InvalidNode,
-                "script anchor widget was replaced",
+                "script origin widget was replaced",
             )
-            .with_owner(format!("{anchor:?}")));
+            .with_owner(format!("{origin:?}")));
         }
-        if !canopy.core.is_attached_to_root(anchor) {
-            return Err(error::Error::NodeDetached(anchor));
+        if !canopy.core.is_attached_to_root(origin) {
+            return Err(error::Error::NodeDetached(origin));
         }
-        invocation.anchor_incarnation = Some(entry.incarnation);
+        invocation.origin_incarnation = Some(entry.incarnation);
         let handle = invocation.handle.ok_or_else(|| {
             error::Error::Invalid("script invocation is already complete".to_string())
         })?;
@@ -268,15 +268,15 @@ impl LuauHost {
         });
         let diagnostics =
             SegmentDiagnostics::enter(self, &mut invocation.logs, &mut invocation.assertions);
-        let anchor = SegmentAnchor::enter(canopy, invocation.anchor);
+        let origin = SegmentAnchor::enter(canopy, invocation.origin);
         let step = runtime.poll_invocation_with_context_and_result(
             handle,
-            &mut *anchor.canopy,
+            &mut *origin.canopy,
             &invocation.options,
             cx,
             |scope, values| scope.marshal_values(values),
         );
-        drop(anchor);
+        drop(origin);
         if step.poll.is_ready() {
             invocation.handle = None;
         }
@@ -513,7 +513,7 @@ mod tests {
     }
 
     #[test]
-    fn resumed_script_rejects_replaced_anchor_before_returning() -> Result<()> {
+    fn resumed_script_rejects_replaced_origin_before_returning() -> Result<()> {
         run_ttree(|canopy, _, tree| {
             let host = canopy.script.host.clone();
             let script = host.compile("canopy.wait_for(function() return false end); return 42")?;

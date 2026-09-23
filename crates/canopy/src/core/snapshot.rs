@@ -7,7 +7,7 @@ use super::{
     world::{Core, WidgetOperation},
 };
 use crate::{
-    Cell, FrameId, NodeId, SemanticIdentity,
+    Cell, FrameId, NodeId, NodeIdentity,
     commands::{ArgValue, CommandStatus},
     error::Result,
     geom::{Rect, Size},
@@ -42,7 +42,7 @@ pub struct NodeSnapshot {
     /// Widget path name.
     pub name: String,
     /// Explicit application identity.
-    pub semantic_identity: Option<SemanticIdentity>,
+    pub identity: Option<NodeIdentity>,
     /// Whether the root tree contains this node.
     pub attached: bool,
     /// Attached with no hidden ancestor.
@@ -62,8 +62,8 @@ pub struct NodeSnapshot {
 pub struct FrameSnapshot {
     /// Publication generation shared with turn outcomes.
     pub frame_id: FrameId,
-    /// Dimensions of the rendered cells.
-    pub viewport: Size,
+    /// Screen size: the dimensions of the rendered cells.
+    pub size: Size,
     /// All live arena nodes, including detached trees.
     pub nodes: Vec<NodeSnapshot>,
     /// Styled terminal cells in row-major order.
@@ -74,9 +74,9 @@ pub struct FrameSnapshot {
 
 /// Capture fallible widget observations before replacing any published state.
 pub(super) fn capture(core: &Core, frame_id: FrameId, buffer: &TermBuf) -> Result<FrameSnapshot> {
-    let viewport = buffer.size();
+    let size = buffer.size();
     let mut nodes = Vec::with_capacity(core.nodes.len());
-    let screen = Rect::new(0, 0, viewport.w, viewport.h);
+    let screen = Rect::new(0, 0, size.w, size.h);
     let mut stack: Vec<_> = core
         .nodes
         .iter()
@@ -102,7 +102,7 @@ pub(super) fn capture(core: &Core, frame_id: FrameId, buffer: &TermBuf) -> Resul
             parent: node.parent,
             children: node.children.clone(),
             name: node.name.to_string(),
-            semantic_identity: node.semantic_identity.clone(),
+            identity: node.identity.clone(),
             attached,
             displayed,
             intersects_viewport,
@@ -120,7 +120,7 @@ pub(super) fn capture(core: &Core, frame_id: FrameId, buffer: &TermBuf) -> Resul
     let cells = buffer.cells.clone();
     Ok(FrameSnapshot {
         frame_id,
-        viewport,
+        size,
         nodes,
         cells,
         focus: core.focus,
