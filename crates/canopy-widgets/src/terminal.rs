@@ -1,7 +1,9 @@
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use canopy::{
-    Context, EventOutcome, NodeName, ViewContext, Widget, derive_commands,
+    Context, EventOutcome, NodeName, ViewContext, Widget,
+    commands::CommandCall,
+    derive_commands,
     error::{Error, Result},
     geom,
     geom::Size,
@@ -102,6 +104,8 @@ pub struct TerminalConfig {
     command: Option<Vec<String>>,
     /// Working directory for the terminal process.
     cwd: Option<PathBuf>,
+    /// Call run once when the process exits.
+    on_exit: Option<CommandCall>,
 }
 
 impl TerminalConfig {
@@ -127,6 +131,17 @@ impl TerminalConfig {
         self.cwd = Some(cwd.into());
         self
     }
+
+    /// Run `call` once when the process exits, with the terminal's node
+    /// appended as the last argument (or as `node` among named ones).
+    ///
+    /// The terminal already watches its process, so a host learns of the exit
+    /// here rather than by polling [`Terminal::exited`].
+    #[must_use]
+    pub fn with_on_exit(mut self, call: CommandCall) -> Self {
+        self.on_exit = Some(call);
+        self
+    }
 }
 
 /// Terminal widget backed by `itty`.
@@ -145,6 +160,8 @@ pub struct Terminal {
     selection_anchor: Option<geom::Point>,
     /// Multi-click tracking state.
     last_click: ClickTracker,
+    /// Whether the exit call has run.
+    exit_reported: bool,
 }
 
 #[derive_commands]
@@ -162,6 +179,7 @@ impl Terminal {
             selection_active: false,
             selection_anchor: None,
             last_click: ClickTracker::default(),
+            exit_reported: false,
         }
     }
 
@@ -629,7 +647,13 @@ impl Widget for Terminal {
         self.cursor
     }
 
-    fn poll(&mut self, _ctx: &mut dyn Context) -> Result<Option<Duration>> {
+    fn poll(&mut self, ctx: &mut dyn Context) -> Result<Option<Duration>> {
+        if !self.exit_reported && self.exited() {
+            self.exit_reported = true;
+            if let Some(call) = &self.config.on_exit {
+                ctx.dispatch(&call.with_arg("node", ctx.node_id()))?;
+            }
+        }
         Ok(Some(Duration::from_millis(POLL_INTERVAL_MS)))
     }
 
@@ -1338,6 +1362,57 @@ mod tests {
             assert!(Instant::now() < deadline, "the process should exit");
             thread::sleep(Duration::from_millis(20));
         }
+        Ok(())
+    }
+
+    /// Records the terminal that told it its process ended.
+    #[derive(Default)]
+    struct ExitHost {
+        /// Terminals whose exit call ran.
+        exited: Vec<canopy::NodeId>,
+    }
+
+    #[derive_commands]
+    impl ExitHost {
+        /// Record an exit.
+        #[command]
+        fn ended(&mut self, _c: &mut dyn Context, node: canopy::NodeId) {
+            self.exited.push(node);
+        }
+    }
+
+    impl Widget for ExitHost {
+        fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
+            use canopy::{ContextExt, commands::CommandTarget};
+            let owner = CommandTarget::Exact(c.node_id());
+            c.add_child(
+                c.node_id(),
+                Terminal::new(
+                    TerminalConfig::new()
+                        .with_program(["sh", "-c", "exit 0"])
+                        .with_on_exit(Self::spec_ended().call().with_target(owner)),
+                ),
+            )?;
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn the_exit_call_runs_once_when_the_process_ends() -> Result<()> {
+        use canopy::testing::harness::Harness;
+        let mut harness = Harness::builder(ExitHost::default())
+            .configure(|setup| setup.add_commands::<ExitHost>())
+            .size(20, 5)
+            .build()?;
+        harness.wait_until(Duration::from_secs(10), |harness| {
+            Ok(harness.with_root_widget(|host: &mut ExitHost| !host.exited.is_empty()))
+        })?;
+        harness
+            .wait_until(Duration::from_millis(100), |_| Ok(false))
+            .ok();
+        let exited = harness.with_root_widget(|host: &mut ExitHost| host.exited.clone());
+        let terminal = harness.find_nodes("**/terminal")?;
+        assert_eq!(exited, terminal, "one call, naming the terminal");
         Ok(())
     }
 

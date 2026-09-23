@@ -2347,7 +2347,9 @@ Each stage also updates the docs it touches.
     declines. `Text::with_focusable` lets a pager's text take focus, since
     intents act on the focus route only. Help's framework group binds the
     intents; a help panel that fits declines them.
-- [ ] C43 widget part: `TerminalConfig::with_on_exit`.
+- [x] C43 widget part: `TerminalConfig::with_on_exit`.
+  - The call gets the terminal's node appended; fh's `terminal_exited`
+    command reaps that one terminal, and the 250 ms reaping poll is gone.
 - [ ] C46: complete DiffView, add `Spinner`, and rename `DiffModel`.
 - [ ] C48: run the nested-modal spike. Adopt the overlay layer only if its
   invariants hold.

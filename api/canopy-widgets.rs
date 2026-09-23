@@ -759,7 +759,7 @@ pub mod canopy_widgets {
 
             fn on_mount(&mut self, _ctx: &mut dyn Context) -> Result<()> {}
 
-            fn poll(&mut self, _ctx: &mut dyn Context) -> Result<Option<Duration>> {}
+            fn poll(&mut self, ctx: &mut dyn Context) -> Result<Option<Duration>> {}
 
             fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
         }
@@ -776,6 +776,14 @@ pub mod canopy_widgets {
             #[must_use]
             /// Configure the working directory for the terminal process.
             pub fn with_cwd(self, cwd: impl Into<PathBuf>) -> Self {}
+
+            #[must_use]
+            /// Run `call` once when the process exits, with the terminal's node
+            /// appended as the last argument (or as `node` among named ones).
+            ///
+            /// The terminal already watches its process, so a host learns of the exit
+            /// here rather than by polling [`Terminal::exited`].
+            pub fn with_on_exit(self, call: CommandCall) -> Self {}
 
             /// Construct a default terminal configuration.
             pub fn new() -> Self {}
