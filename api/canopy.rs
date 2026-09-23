@@ -431,6 +431,14 @@ pub mod canopy {
             /// Bind this call to a target policy.
             pub fn with_target(self, target: CommandTarget) -> Self {}
 
+            #[must_use]
+            /// Return this call with one more argument: appended last to positional
+            /// arguments, or stored under `name` among named ones.
+            ///
+            /// A widget that notifies an owner through a stored call uses this to
+            /// pass what changed, such as a row index or a field's value.
+            pub fn with_arg(&self, name: &str, value: impl ToArgValue) -> Self {}
+
             /// Return the explicit target, or a search from `origin` when the call
             /// has none.
             pub fn target_or(&self, origin: NodeId) -> CommandTarget {}

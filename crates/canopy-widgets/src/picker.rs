@@ -1,7 +1,7 @@
 //! A modal list of items, filtered and chosen with the keyboard.
 //!
 //! [`Picker`] is the modal subtree: it centres a titled frame over whatever it
-//! covers, and holds a [`PickerList`] of items above a [`PickerFilter`] field.
+//! covers, and holds a [`PickerList`] of items above an [`Input`] filter field.
 //! The host opens it with Canopy's modal, which gives the list the
 //! keyboard and dims the application behind it.
 //!
@@ -30,7 +30,7 @@ use canopy::{
 use crate::{
     Dialog, ItemLabel,
     frame::Frame,
-    input::register_clear_intent,
+    input::{Input, register_clear_intent},
     row_cursor::{RowCursor, label_rows, widest_label},
 };
 
@@ -42,8 +42,8 @@ const MIN_FRAME_WIDTH: u32 = 32;
 const FRAME_MARGIN: u32 = 1;
 /// Rows the filter field occupies.
 const FILTER_ROWS: u32 = 1;
-/// Marks where typed text lands while the filter is taking keys.
-const CARET: char = '▏';
+/// The prompt before the filter, naming the key that opened it.
+const FILTER_PROMPT: &str = " / ";
 
 /// A centred modal holding a filtered list of items.
 ///
@@ -211,7 +211,10 @@ where
         let dialog: NodeId = dialog.into();
         let frame: NodeId = Dialog::frame(context, dialog)?.into();
         let list = context.add_child(body, PickerList::<T>::new())?;
-        let filter = context.add_child(body, PickerFilter::new())?;
+        // The field takes no focus and no keys of its own: the list owns the
+        // keyboard while the modal is open, writes what it holds there, and
+        // lights it up while it takes filter text.
+        let filter = context.add_child(body, Input::new("").with_prompt(FILTER_PROMPT))?;
         // The list takes whatever height is left, and the field keeps its one
         // measured row, so a list too tall to fit scrolls instead of pushing
         // the field off the bottom.
@@ -271,117 +274,6 @@ impl Widget for PickerBody {
 
     fn name(&self) -> NodeName {
         NodeName::convert("picker_body")
-    }
-}
-
-/// The filter field under a picker's list.
-///
-/// The field takes no focus and no keys of its own: the list owns the keyboard
-/// while the modal is open and writes what it holds here. It is a sibling of
-/// the list rather than a row of it, so it stays on screen however far the
-/// list scrolls.
-pub struct PickerFilter {
-    /// Text the list is filtering by.
-    text: String,
-    /// Whether the list is taking filter text.
-    active: bool,
-}
-
-impl Default for PickerFilter {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl PickerFilter {
-    /// Build an empty field.
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            text: String::new(),
-            active: false,
-        }
-    }
-
-    /// Return the text the field shows.
-    #[must_use]
-    pub fn text(&self) -> &str {
-        &self.text
-    }
-
-    /// Show `text`, and whether the list is taking more of it.
-    fn set(&mut self, text: String, active: bool) {
-        self.text = text;
-        self.active = active;
-    }
-}
-
-impl Widget for PickerFilter {
-    fn layout(&self) -> Layout {
-        Layout::fill()
-            .height(Sizing::Measure)
-            .fixed_height(FILTER_ROWS)
-    }
-
-    fn measure(&self, c: MeasureConstraints) -> Measurement {
-        // The field is as wide as it is given and never taller than its row,
-        // so a list beside it decides the dialog's width.
-        c.clamp(Size::new(0, FILTER_ROWS))
-    }
-
-    fn canvas(&self, view: Size, _context: &CanvasContext) -> Size {
-        // The field never scrolls: it trims its text instead.
-        view
-    }
-
-    fn render(&mut self, render: &mut Render, context: &dyn ViewContext) -> Result<()> {
-        let area = context.view().view_rect_local();
-        // Paint paths are relative to the layer the picker pushes, so these
-        // reach `picker/filter`. Taking keys adds a segment, which is what
-        // lights the field up while the list waits.
-        let (ground, prompt, text) = if self.active {
-            (
-                "filter/active",
-                "filter/active/prompt",
-                "filter/active/text",
-            )
-        } else {
-            ("filter", "filter/prompt", "filter/text")
-        };
-        render.fill(ground, area, ' ')?;
-        if area.w == 0 || area.h == 0 {
-            return Ok(());
-        }
-        let line = area.line(0)?;
-        // The prompt names the key that opened the field, so the row says what
-        // it is even before anything is typed.
-        let prompt_width = 2.min(area.w);
-        render.text(prompt, Line::new(line.tl.x, line.tl.y, prompt_width), " /")?;
-
-        let rest = area.w.saturating_sub(prompt_width);
-        if rest == 0 {
-            return Ok(());
-        }
-        let budget = (rest as usize).saturating_sub(1);
-        // The tail is what was typed last, so a filter too long to show loses
-        // its head rather than the characters under the caret.
-        let shown = Truncate::Start.apply(&self.text, budget);
-        // The caret marks where typing lands, so it belongs to the field only
-        // while the field is taking keys.
-        let caret = if self.active {
-            CARET.to_string()
-        } else {
-            String::new()
-        };
-        render.text(
-            text,
-            Line::new(line.tl.x.saturating_add(prompt_width), line.tl.y, rest),
-            &format!(" {shown}{caret}"),
-        )
-    }
-
-    fn name(&self) -> NodeName {
-        NodeName::convert("picker_filter")
     }
 }
 
@@ -598,8 +490,9 @@ where
             // Hidden, it leaves the layout entirely, so the frame gives the row
             // back to the list.
             context.set_hidden(field, !active && text.is_empty())?;
-            context.with_widget_mut(field, |field: &mut PickerFilter, _| {
-                field.set(text, active);
+            context.with_widget_mut(field, |field: &mut Input, _| {
+                field.set_value(text);
+                field.set_active(Some(active));
                 Ok(())
             })?;
         }
@@ -808,7 +701,7 @@ mod tests {
     use canopy::{geom::Size, testing::harness::Harness};
 
     use super::*;
-    use crate::Confirm;
+    use crate::{Confirm, input::CARET};
 
     /// Build a picker showing `items`, rendered once.
     fn picker(items: &[&str], width: u32, height: u32) -> Result<Harness> {

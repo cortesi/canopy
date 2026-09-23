@@ -73,6 +73,8 @@ Retain the query and selected row when focus moves between them:
 built-in themes supply both states. Use `Input::new("").with_prompt(" Glob: ")`
 to add a visible, noneditable prompt. The prompt participates in measurement
 and cursor placement but does not change the value or semantic label.
+`Input::set_active` lights a field that a composite writes into while its
+focus stays elsewhere; without focus the field draws its own caret.
 
 Custom lists can paint their selected row with `roles::selection(active)`.
 It returns `selection` or `selection/dimmed`, both supplied by the built-in
@@ -82,9 +84,9 @@ an ancestor of the focused field does not make the result list active.
 Unselected rows keep their normal item styles.
 
 `Picker` follows this pattern for its filter and list. Its list uses the
-shared selection role; its filter retains the `picker/filter/active` style
-paths. Hosts can override these paths and `input/focused/*` together for a
-consistent application palette. Use the standard roles instead of copying a
+shared selection role, and its filter is an `Input` the list lights while it
+takes filter text, so it resolves `picker/input/*` before the plain `input/*`
+paths. Use the standard roles instead of copying a
 second focus state into every row or resetting selection when focus moves.
 
 ## Tabs

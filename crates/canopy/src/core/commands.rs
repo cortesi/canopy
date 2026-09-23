@@ -819,6 +819,33 @@ impl CommandCall {
         self
     }
 
+    /// Return this call with one more argument: appended last to positional
+    /// arguments, or stored under `name` among named ones.
+    ///
+    /// A widget that notifies an owner through a stored call uses this to
+    /// pass what changed, such as a row index or a field's value.
+    #[must_use]
+    pub fn with_arg(&self, name: &str, value: impl ToArgValue) -> Self {
+        let value = value.to_arg_value();
+        let args = match &self.args {
+            CommandArgs::Positional(values) => {
+                let mut out = values.clone();
+                out.push(value);
+                CommandArgs::Positional(out)
+            }
+            CommandArgs::Named(values) => {
+                let mut out = values.clone();
+                out.insert(name.to_string(), value);
+                CommandArgs::Named(out)
+            }
+        };
+        Self {
+            id: self.id,
+            args,
+            target: self.target,
+        }
+    }
+
     /// Return the explicit target, or a search from `origin` when the call
     /// has none.
     pub fn target_or(&self, origin: NodeId) -> CommandTarget {

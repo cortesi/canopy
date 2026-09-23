@@ -8,7 +8,7 @@ use std::{collections::HashSet, hash::Hash};
 
 use canopy::{
     Context, ContextExt, EventOutcome, NodeId, NodeName, TypedId, ViewContext, Widget,
-    commands::{ArgValue, CommandArgs, CommandCall, CommandStatus, ToArgValue},
+    commands::{ArgValue, CommandCall, CommandStatus, ToArgValue},
     derive_commands,
     error::{Error, Result},
     geom::{Line, Point, PointI32, Size},
@@ -38,27 +38,6 @@ struct SelectionIndicator {
 
 /// Default drag threshold in cells before cancelling activation.
 const DEFAULT_ACTIVATE_DRAG_THRESHOLD: u32 = 4;
-
-/// Build an activation call that appends the row index to a stored call.
-fn call_with_index(call: &CommandCall, index: usize) -> CommandCall {
-    let args = match &call.args {
-        CommandArgs::Positional(values) => {
-            let mut out = values.clone();
-            out.push(index.to_arg_value());
-            CommandArgs::Positional(out)
-        }
-        CommandArgs::Named(values) => {
-            let mut out = values.clone();
-            out.insert("index".to_string(), index.to_arg_value());
-            CommandArgs::Named(out)
-        }
-    };
-    CommandCall {
-        id: call.id,
-        args,
-        target: call.target,
-    }
-}
 
 /// Pending activation state for list row clicks.
 #[derive(Debug, Clone, Copy)]
@@ -233,7 +212,7 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
         let Some(index) = self.selected_index() else {
             return Ok(Some(CommandStatus::Disabled("No item selected".into())));
         };
-        ctx.command_status(&call_with_index(call, index)).map(Some)
+        ctx.command_status(&call.with_arg("index", index)).map(Some)
     }
 
     /// Build a list with a list-level selection indicator.
@@ -661,7 +640,7 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
         let Some(call) = self.on_activate.as_ref() else {
             return Ok(());
         };
-        c.dispatch(&call_with_index(call, index))?;
+        c.dispatch(&call.with_arg("index", index))?;
         Ok(())
     }
 

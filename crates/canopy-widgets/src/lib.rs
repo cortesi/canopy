@@ -92,7 +92,7 @@ pub use input::{CLEAR_INTENT, Input, ValueExposure, register_clear_intent};
 pub use keyed::KeyedChildren;
 pub use label::ItemLabel;
 pub use list_view::{List, Selectable};
-pub use picker::{Picker, PickerFilter, PickerList};
+pub use picker::{Picker, PickerList};
 pub use root::Root;
 pub use scroll::Scroll;
 pub use selector::Selector;

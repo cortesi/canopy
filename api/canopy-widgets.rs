@@ -916,10 +916,15 @@ pub mod canopy_widgets {
 
     /// Single-line text input widget.
     ///
-    /// The whole row changes style with keyboard focus, even when empty. A
+    /// The whole row changes style while the field takes keys, even when empty. A
     /// visible prompt can name the field independently of its editable value.
-    /// The field consumes [`CLEAR_INTENT`] and the field's owner handles the
-    /// other editing keys.
+    ///
+    /// The field edits itself: text and paste insert, and Left, Right, Home, End,
+    /// Backspace, and Delete move and delete. It consumes [`CLEAR_INTENT`]. Other
+    /// keys reach its owner and the application's bindings. An owner learns of
+    /// the field through stored command calls: [`Input::with_on_change`] runs with
+    /// the new value appended after every edit, and [`Input::with_on_submit`] and
+    /// [`Input::with_on_cancel`] take Enter and Esc.
     pub struct Input {}
 
     /// A key and what it does, drawn for a status bar.
@@ -963,15 +968,6 @@ pub mod canopy_widgets {
     pub struct Picker<T>
     where
         T: ItemLabel, {}
-
-    /// The filter field under a picker's list.
-    ///
-    /// The field takes no focus and no keys of its own: the list owns the keyboard
-    /// while the modal is open and writes what it holds here. It is a sibling of
-    /// the list rather than a row of it, so it stays on screen however far the
-    /// list scrolls.
-    #[derive(Default)]
-    pub struct PickerFilter {}
 
     /// A list of items, scrolled by its own view.
     ///
@@ -1504,29 +1500,89 @@ pub mod canopy_widgets {
         pub fn with_value_exposure(self, exposure: ValueExposure) -> Self {}
 
         #[must_use]
+        /// Name this node's path segment, so scripts and bindings can tell
+        /// fields apart. The style layer stays `input`.
+        pub fn with_name(self, name: &str) -> Self {}
+
+        #[must_use]
+        /// Run `call` when Enter is pressed in the field.
+        pub fn with_on_submit(self, call: CommandCall) -> Self {}
+
+        #[must_use]
+        /// Run `call` when Esc is pressed in the field.
+        pub fn with_on_cancel(self, call: CommandCall) -> Self {}
+
+        #[must_use]
+        /// Run `call` with the new value appended after every edit.
+        ///
+        /// The value is appended as the last positional argument, or as `value`
+        /// among named ones. [`Input::set_value`] is not an edit.
+        pub fn with_on_change(self, call: CommandCall) -> Self {}
+
+        #[must_use]
         /// Set the semantic label without changing the displayed value.
         pub fn with_label(self, label: impl Into<String>) -> Self {}
 
         /// Construct a new input with initial text.
         pub fn new(txt: impl Into<String>) -> Self {}
 
-        /// Delete a character at the input location.
-        pub fn backspace(&mut self, _c: &mut dyn Context) {}
+        /// Delete the character before the cursor.
+        pub fn backspace(&mut self, c: &mut dyn Context) -> Result<()> {}
+
+        /// Delete the character under the cursor.
+        pub fn delete(&mut self, c: &mut dyn Context) -> Result<()> {}
+
+        /// Insert `text` at the cursor, as a paste does.
+        pub fn insert(&mut self, c: &mut dyn Context, text: String) -> Result<()> {}
 
         /// Move the cursor left.
         pub fn left(&mut self, _c: &mut dyn Context) {}
 
+        /// Move the cursor past the end of the value.
+        pub fn end(&mut self, _c: &mut dyn Context) {}
+
         /// Move the cursor right.
         pub fn right(&mut self, _c: &mut dyn Context) {}
 
-        /// Replace the input value and reset the cursor.
+        /// Move the cursor to the start of the value.
+        pub fn home(&mut self, _c: &mut dyn Context) {}
+
+        /// Replace the input value.
+        ///
+        /// The cursor goes to the end of the new value, where typing continues.
+        /// This is not an edit, so the change call does not run.
         pub fn set_value(&mut self, value: impl Into<String>) {}
+
+        /// Replace the semantic label.
+        pub fn set_label(&mut self, label: impl Into<String>) {}
+
+        /// Replace the visible prompt, keeping the value and caret.
+        pub fn set_prompt(&mut self, prompt: impl Into<String>) {}
 
         /// Return the raw input value without padding.
         pub fn value(&self) -> &str {}
 
+        /// Show the field as taking keys, or not, whatever its focus.
+        ///
+        /// A composite that keeps focus elsewhere and writes into the field, such
+        /// as a picker whose list takes the keys, uses this to light it up.
+        /// `None` follows focus again.
+        pub fn set_active(&mut self, active: Option<bool>) {}
+
         /// Build a positional call with typed user arguments.
         pub fn call_backspace() -> canopy::commands::CommandCall {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_delete() -> canopy::commands::CommandCall {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_end() -> canopy::commands::CommandCall {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_home() -> canopy::commands::CommandCall {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_insert(text: String) -> canopy::commands::CommandCall {}
 
         /// Build a positional call with typed user arguments.
         pub fn call_left() -> canopy::commands::CommandCall {}
@@ -1536,6 +1592,18 @@ pub mod canopy_widgets {
 
         /// Return the command spec for this command.
         pub fn spec_backspace() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return the command spec for this command.
+        pub fn spec_delete() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return the command spec for this command.
+        pub fn spec_end() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return the command spec for this command.
+        pub fn spec_home() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return the command spec for this command.
+        pub fn spec_insert() -> &'static canopy::commands::CommandSpec {}
 
         /// Return the command spec for this command.
         pub fn spec_left() -> &'static canopy::commands::CommandSpec {}
@@ -1563,9 +1631,9 @@ pub mod canopy_widgets {
 
         fn name(&self) -> NodeName {}
 
-        fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {}
+        fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {}
 
-        fn on_intent(&mut self, intent: &str, _context: &mut dyn Context) -> Result<EventOutcome> {}
+        fn on_intent(&mut self, intent: &str, context: &mut dyn Context) -> Result<EventOutcome> {}
 
         fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
 
@@ -1986,28 +2054,6 @@ pub mod canopy_widgets {
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {}
 
         fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
-    }
-
-    impl PickerFilter {
-        #[must_use]
-        /// Build an empty field.
-        pub fn new() -> Self {}
-
-        #[must_use]
-        /// Return the text the field shows.
-        pub fn text(&self) -> &str {}
-    }
-
-    impl Widget for PickerFilter {
-        fn canvas(&self, view: Size, _context: &CanvasContext<'_>) -> Size {}
-
-        fn layout(&self) -> Layout {}
-
-        fn measure(&self, c: MeasureConstraints) -> Measurement {}
-
-        fn name(&self) -> NodeName {}
-
-        fn render(&mut self, render: &mut Render<'_>, context: &dyn ViewContext) -> Result<()> {}
     }
 
     impl Scroll {

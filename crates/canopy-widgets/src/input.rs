@@ -1,5 +1,7 @@
 use canopy::{
-    Context, EventOutcome, NodeName, Register, Setup, ViewContext, Widget, derive_commands,
+    Context, EventOutcome, NodeName, Register, Setup, ViewContext, Widget,
+    commands::CommandCall,
+    derive_commands,
     error::Result,
     geom::{Line, Point, Size},
     input::{Event, IntentSpec, key},
@@ -11,6 +13,29 @@ use canopy::{
 };
 
 use crate::text_buffer::{TextBuffer, TextPosition, single_line};
+
+/// What one key does in a field.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum InputKey {
+    /// Insert a character.
+    Text(char),
+    /// Move the cursor left.
+    Left,
+    /// Move the cursor right.
+    Right,
+    /// Move the cursor to the start.
+    Home,
+    /// Move the cursor past the end.
+    End,
+    /// Delete before the cursor.
+    Backspace,
+    /// Delete under the cursor.
+    Delete,
+    /// Run the submit call.
+    Submit,
+    /// Run the cancel call.
+    Cancel,
+}
 
 /// Default tab stop width for single-line inputs.
 const DEFAULT_TAB_STOP: usize = 4;
@@ -74,11 +99,38 @@ impl InputBuffer {
         out.to_string()
     }
 
-    /// Insert a character at the cursor position.
-    fn insert(&mut self, c: char) {
-        let insert = single_line(c.encode_utf8(&mut [0; 4]));
+    /// Insert text at the cursor position, with line breaks as spaces and
+    /// other control characters dropped.
+    fn insert(&mut self, text: &str) {
+        let insert = single_line(text)
+            .chars()
+            .filter(|c| !c.is_control() || *c == '\t')
+            .collect::<String>();
+        if insert.is_empty() {
+            return;
+        }
         self.buffer.insert_text(&insert);
         self.sync_value();
+        self.ensure_cursor_visible();
+    }
+
+    /// Delete the character under the cursor.
+    fn delete(&mut self) {
+        if self.buffer.delete_forward(false) {
+            self.sync_value();
+            self.ensure_cursor_visible();
+        }
+    }
+
+    /// Move the cursor to the start of the value.
+    fn home(&mut self) {
+        self.buffer.move_line_start();
+        self.ensure_cursor_visible();
+    }
+
+    /// Move the cursor past the end of the value.
+    fn end(&mut self) {
+        self.buffer.move_line_end();
         self.ensure_cursor_visible();
     }
 
@@ -167,12 +219,20 @@ pub fn register_clear_intent(setup: &mut Setup) -> Result<()> {
     )?)
 }
 
+/// Glyph drawn after the value of a field that is active without focus.
+pub const CARET: char = '▏';
+
 /// Single-line text input widget.
 ///
-/// The whole row changes style with keyboard focus, even when empty. A
+/// The whole row changes style while the field takes keys, even when empty. A
 /// visible prompt can name the field independently of its editable value.
-/// The field consumes [`CLEAR_INTENT`] and the field's owner handles the
-/// other editing keys.
+///
+/// The field edits itself: text and paste insert, and Left, Right, Home, End,
+/// Backspace, and Delete move and delete. It consumes [`CLEAR_INTENT`]. Other
+/// keys reach its owner and the application's bindings. An owner learns of
+/// the field through stored command calls: [`Input::with_on_change`] runs with
+/// the new value appended after every edit, and [`Input::with_on_submit`] and
+/// [`Input::with_on_cancel`] take Enter and Esc.
 pub struct Input {
     /// Text buffer for the input.
     buffer: InputBuffer,
@@ -182,6 +242,16 @@ pub struct Input {
     label: Option<String>,
     /// Policy for exposing the value in semantic snapshots.
     value_exposure: ValueExposure,
+    /// Whether the field shows as taking keys, overriding its focus.
+    active: Option<bool>,
+    /// Call run with the value appended after every edit.
+    on_change: Option<CommandCall>,
+    /// Call run by Enter.
+    on_submit: Option<CommandCall>,
+    /// Call run by Esc.
+    on_cancel: Option<CommandCall>,
+    /// Path segment for this node.
+    name: NodeName,
 }
 
 /// Policy for publishing an input value in semantic snapshots.
@@ -205,7 +275,76 @@ impl Input {
             prompt: String::new(),
             label: None,
             value_exposure: ValueExposure::Omit,
+            active: None,
+            on_change: None,
+            on_submit: None,
+            on_cancel: None,
+            name: NodeName::convert("input"),
         }
+    }
+
+    /// Name this node's path segment, so scripts and bindings can tell
+    /// fields apart. The style layer stays `input`.
+    #[must_use]
+    pub fn with_name(mut self, name: &str) -> Self {
+        self.name = NodeName::convert(name);
+        self
+    }
+
+    /// Run `call` with the new value appended after every edit.
+    ///
+    /// The value is appended as the last positional argument, or as `value`
+    /// among named ones. [`Input::set_value`] is not an edit.
+    #[must_use]
+    pub fn with_on_change(mut self, call: CommandCall) -> Self {
+        self.on_change = Some(call);
+        self
+    }
+
+    /// Run `call` when Enter is pressed in the field.
+    #[must_use]
+    pub fn with_on_submit(mut self, call: CommandCall) -> Self {
+        self.on_submit = Some(call);
+        self
+    }
+
+    /// Run `call` when Esc is pressed in the field.
+    #[must_use]
+    pub fn with_on_cancel(mut self, call: CommandCall) -> Self {
+        self.on_cancel = Some(call);
+        self
+    }
+
+    /// Replace the visible prompt, keeping the value and caret.
+    pub fn set_prompt(&mut self, prompt: impl Into<String>) {
+        self.prompt = single_line(&prompt.into());
+    }
+
+    /// Replace the semantic label.
+    pub fn set_label(&mut self, label: impl Into<String>) {
+        self.label = Some(label.into());
+    }
+
+    /// Show the field as taking keys, or not, whatever its focus.
+    ///
+    /// A composite that keeps focus elsewhere and writes into the field, such
+    /// as a picker whose list takes the keys, uses this to light it up.
+    /// `None` follows focus again.
+    pub fn set_active(&mut self, active: Option<bool>) {
+        self.active = active;
+    }
+
+    /// Return whether the field shows as taking keys.
+    fn is_active(&self, ctx: &dyn ViewContext) -> bool {
+        self.active.unwrap_or_else(|| ctx.is_focused())
+    }
+
+    /// Run the change call with the current value.
+    fn changed(&self, ctx: &mut dyn Context) -> Result<()> {
+        if let Some(call) = &self.on_change {
+            ctx.dispatch(&call.with_arg("value", self.value()))?;
+        }
+        Ok(())
     }
 
     /// Set the semantic label without changing the displayed value.
@@ -241,9 +380,17 @@ impl Input {
         self.buffer.value()
     }
 
-    /// Replace the input value and reset the cursor.
+    /// Replace the input value.
+    ///
+    /// The cursor goes to the end of the new value, where typing continues.
+    /// This is not an edit, so the change call does not run.
     pub fn set_value(&mut self, value: impl Into<String>) {
+        let value = value.into();
+        if value == self.value() {
+            return;
+        }
         self.buffer = InputBuffer::new(value);
+        self.buffer.end();
     }
 
     /// Move the cursor left.
@@ -258,18 +405,69 @@ impl Input {
         self.buffer.right();
     }
 
-    /// Delete a character at the input location.
+    /// Move the cursor to the start of the value.
     #[command]
-    pub fn backspace(&mut self, _c: &mut dyn Context) {
-        self.buffer.backspace();
+    pub fn home(&mut self, _c: &mut dyn Context) {
+        self.buffer.home();
+    }
+
+    /// Move the cursor past the end of the value.
+    #[command]
+    pub fn end(&mut self, _c: &mut dyn Context) {
+        self.buffer.end();
+    }
+
+    /// Delete the character before the cursor.
+    #[command]
+    pub fn backspace(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.edit(c, InputBuffer::backspace)
+    }
+
+    /// Delete the character under the cursor.
+    #[command]
+    pub fn delete(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.edit(c, InputBuffer::delete)
+    }
+
+    /// Insert `text` at the cursor, as a paste does.
+    #[command]
+    #[allow(
+        clippy::needless_pass_by_value,
+        reason = "command arguments are owned values"
+    )]
+    pub fn insert(&mut self, c: &mut dyn Context, text: String) -> Result<()> {
+        self.edit(c, |buffer| buffer.insert(&text))
+    }
+
+    /// Apply one edit, and tell the owner when it changed the value.
+    fn edit(&mut self, c: &mut dyn Context, edit: impl FnOnce(&mut InputBuffer)) -> Result<()> {
+        let before = self.buffer.value().to_owned();
+        edit(&mut self.buffer);
+        if self.buffer.value() != before {
+            self.changed(c)?;
+        }
+        Ok(())
     }
 
     /// Classify one key without running its effect.
-    ///
-    /// Only plain text is inserted; every chord stays available to bindings,
-    /// and the field's owner handles editing keys.
-    fn classify_key(key: key::Key) -> Option<char> {
-        key.text_char()
+    fn classify_key(&self, key: key::Key) -> Option<InputKey> {
+        if let Some(character) = key.text_char() {
+            return Some(InputKey::Text(character));
+        }
+        if key.mods.ctrl || key.mods.alt {
+            return None;
+        }
+        Some(match key.key {
+            key::KeyCode::Left => InputKey::Left,
+            key::KeyCode::Right => InputKey::Right,
+            key::KeyCode::Home => InputKey::Home,
+            key::KeyCode::End => InputKey::End,
+            key::KeyCode::Backspace => InputKey::Backspace,
+            key::KeyCode::Delete => InputKey::Delete,
+            key::KeyCode::Enter if self.on_submit.is_some() => InputKey::Submit,
+            key::KeyCode::Esc if self.on_cancel.is_some() => InputKey::Cancel,
+            _ => return None,
+        })
     }
 }
 
@@ -308,7 +506,8 @@ impl Widget for Input {
 
     fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         r.push_layer("input");
-        if ctx.is_focused() {
+        let active = self.is_active(ctx);
+        if active {
             r.push_layer(WidgetState::Focused.layer());
         }
         let view = ctx.view();
@@ -335,34 +534,67 @@ impl Widget for Input {
         let line = Line::new(text_x, content_origin.y, width);
         let content = self.buffer.render_text();
         r.text(roles::TEXT, line, &content)?;
-        if ctx.is_focused() && self.buffer.cursor_display() < width {
-            r.restyle(
-                roles::CURSOR,
-                Point {
-                    x: text_x + self.buffer.cursor_display(),
-                    y: content_origin.y,
-                },
-            );
+        let caret = Point {
+            x: text_x + self.buffer.cursor_display(),
+            y: content_origin.y,
+        };
+        if self.buffer.cursor_display() < width {
+            if ctx.is_focused() {
+                r.restyle(roles::CURSOR, caret);
+            } else if active {
+                // Without focus there is no terminal cursor, so an active
+                // field draws its own caret where typing lands.
+                r.text(
+                    roles::TEXT,
+                    Line::new(caret.x, caret.y, 1),
+                    &CARET.to_string(),
+                )?;
+            }
         }
         Ok(())
     }
 
-    fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {
-        let outcome = match event {
-            Event::Key(key) => match Self::classify_key(*key) {
-                Some(character) => {
-                    self.buffer.insert(character);
-                    EventOutcome::Handle
-                }
-                None => EventOutcome::Ignore,
-            },
-            _ => EventOutcome::Ignore,
+    fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
+        let key = match event {
+            Event::Key(key) => *key,
+            Event::Paste(text) => {
+                let text = text.clone();
+                self.edit(ctx, |buffer| buffer.insert(&text))?;
+                return Ok(EventOutcome::Handle);
+            }
+            _ => return Ok(EventOutcome::Ignore),
         };
-        Ok(outcome)
+        let Some(action) = self.classify_key(key) else {
+            return Ok(EventOutcome::Ignore);
+        };
+        match action {
+            InputKey::Text(character) => {
+                self.edit(ctx, |buffer| {
+                    buffer.insert(character.encode_utf8(&mut [0; 4]));
+                })?;
+            }
+            InputKey::Left => self.buffer.left(),
+            InputKey::Right => self.buffer.right(),
+            InputKey::Home => self.buffer.home(),
+            InputKey::End => self.buffer.end(),
+            InputKey::Backspace => self.edit(ctx, InputBuffer::backspace)?,
+            InputKey::Delete => self.edit(ctx, InputBuffer::delete)?,
+            InputKey::Submit => {
+                if let Some(call) = &self.on_submit {
+                    ctx.dispatch(call)?;
+                }
+            }
+            InputKey::Cancel => {
+                if let Some(call) = &self.on_cancel {
+                    ctx.dispatch(call)?;
+                }
+            }
+        }
+        Ok(EventOutcome::Handle)
     }
 
     fn key_outcome(&self, key: key::Key, _context: &dyn ViewContext) -> EventOutcome {
-        if Self::classify_key(key).is_some() {
+        if self.classify_key(key).is_some() {
             EventOutcome::Handle
         } else {
             EventOutcome::Ignore
@@ -373,11 +605,14 @@ impl Widget for Input {
         intent == CLEAR_INTENT
     }
 
-    fn on_intent(&mut self, intent: &str, _context: &mut dyn Context) -> Result<EventOutcome> {
+    fn on_intent(&mut self, intent: &str, context: &mut dyn Context) -> Result<EventOutcome> {
         if intent != CLEAR_INTENT {
             return Ok(EventOutcome::Ignore);
         }
-        self.set_value("");
+        if !self.value().is_empty() {
+            self.set_value("");
+            self.changed(context)?;
+        }
         Ok(EventOutcome::Handle)
     }
 
@@ -397,7 +632,7 @@ impl Widget for Input {
     }
 
     fn name(&self) -> NodeName {
-        NodeName::convert("input")
+        self.name.clone()
     }
 }
 
@@ -407,6 +642,7 @@ mod tests {
         CanopyBuilder, EventOutcome, Widget,
         error::Result,
         input::{Event, key},
+        runtime::TurnInput,
         text,
     };
 
@@ -479,7 +715,7 @@ mod tests {
         let mut buf = InputBuffer::new("a");
         buf.set_display_width(10);
         let accent = '\u{00e9}';
-        buf.insert(accent);
+        buf.insert(&accent.to_string());
         let expected = format!("a{accent}");
         assert_eq!(buf.value(), expected);
         assert_eq!(buf.cursor_display(), text::width(&expected));
@@ -580,5 +816,77 @@ mod tests {
         assert_eq!(buf.cursor_display(), text::width(&expected));
         buf.backspace();
         assert_eq!(buf.value(), "ab");
+    }
+
+    /// Records what its field tells it.
+    #[derive(Default)]
+    struct Owner {
+        /// Values the change call carried, in order.
+        values: Vec<String>,
+        /// Submit and cancel calls, in order.
+        calls: Vec<&'static str>,
+    }
+
+    #[canopy::derive_commands]
+    impl Owner {
+        /// Record a changed value.
+        #[command]
+        fn changed(&mut self, _c: &mut dyn canopy::Context, value: String) {
+            self.values.push(value);
+        }
+
+        /// Record a submit.
+        #[command]
+        fn submit(&mut self, _c: &mut dyn canopy::Context) {
+            self.calls.push("submit");
+        }
+
+        /// Record a cancel.
+        #[command]
+        fn cancel(&mut self, _c: &mut dyn canopy::Context) {
+            self.calls.push("cancel");
+        }
+    }
+
+    impl Widget for Owner {
+        fn on_mount(&mut self, c: &mut dyn canopy::Context) -> Result<()> {
+            use canopy::{ContextExt, commands::CommandTarget};
+            let owner = CommandTarget::Exact(c.node_id());
+            let field = c.add_child(
+                c.node_id(),
+                Input::new("")
+                    .with_on_change(Self::spec_changed().call().with_target(owner))
+                    .with_on_submit(Self::call_submit().with_target(owner))
+                    .with_on_cancel(Self::call_cancel().with_target(owner)),
+            )?;
+            c.set_focus(field.into())?;
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_field_edits_itself_and_notifies_its_owner() -> Result<()> {
+        use canopy::testing::harness::Harness;
+        let mut harness = Harness::builder(Owner::default())
+            .configure(|setup| setup.add_commands::<Owner>())
+            .register::<Input>()
+            .size(20, 1)
+            .build()?;
+        harness.render()?;
+        harness.type_text("abc")?;
+        harness.key(key::KeyCode::Home)?;
+        harness.key(key::KeyCode::Delete)?;
+        harness.key(key::KeyCode::End)?;
+        harness.key(key::KeyCode::Backspace)?;
+        harness
+            .canopy
+            .turn(TurnInput::Events(vec![Event::Paste("x\ny".into())]))?;
+        harness.key(key::KeyCode::Enter)?;
+        harness.key(key::KeyCode::Esc)?;
+        let (values, calls) = harness
+            .with_root_widget(|owner: &mut Owner| (owner.values.clone(), owner.calls.clone()));
+        assert_eq!(values, ["a", "ab", "abc", "bc", "b", "bx y"]);
+        assert_eq!(calls, ["submit", "cancel"]);
+        Ok(())
     }
 }

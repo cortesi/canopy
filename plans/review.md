@@ -2325,8 +2325,14 @@ Each stage also updates the docs it touches.
   interaction field, and `text_buffer` narrowing.
   - `list` is a facade module over the private `list_view`, so `List` keeps
     one path. `Center` and `Pad` went in C32, so their empty impls did too.
-- [ ] C40: a complete `Input` with command notifications. PickerFilter becomes
+- [x] C40: a complete `Input` with command notifications. PickerFilter becomes
   an `Input`.
+  - The field takes text, the editing keys, and Enter and Esc only when it
+    has a call for them; other keys reach the owner and bindings, rather than
+    the old "take every key" rule. `Input::with_name` keeps the
+    `find_field` and `preview_search` path segments, and `set_active` lights
+    a field whose composite keeps focus elsewhere. `CommandCall::with_arg`
+    replaces List's private index append.
 - [ ] C42: widget framework groups (`Confirm`, `Picker`, `List`), the
   multi-group `ModalBindings`, `Confirm::open`, and `Picker::set_commands`.
 - [ ] C34: the cursor command set, `Tabs::cycle`, and the navigation intents
