@@ -20,8 +20,6 @@ pub(crate) mod widget;
 
 pub use widget::Editor;
 
-pub(crate) use crate::text_buffer::display_width;
-
 #[cfg(test)]
 mod tests;
 

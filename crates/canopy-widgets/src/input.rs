@@ -224,7 +224,7 @@ impl Input {
 
     /// Display columns reserved before the editable value.
     fn prompt_width(&self) -> u32 {
-        u32::try_from(text::display_width(&self.prompt)).unwrap_or(u32::MAX)
+        text::width(&self.prompt)
     }
 
     /// Configure whether semantic snapshots expose this input's value.
@@ -404,8 +404,8 @@ mod tests {
         CanopyBuilder, EventOutcome, Widget,
         error::Result,
         input::{Event, key},
+        text,
     };
-    use unicode_width::UnicodeWidthStr;
 
     use super::{CLEAR_INTENT, Input, InputBuffer, ValueExposure};
 
@@ -479,12 +479,9 @@ mod tests {
         buf.insert(accent);
         let expected = format!("a{accent}");
         assert_eq!(buf.value(), expected);
-        assert_eq!(
-            buf.cursor_display(),
-            UnicodeWidthStr::width(expected.as_str()) as u32
-        );
+        assert_eq!(buf.cursor_display(), text::width(&expected));
         buf.left();
-        assert_eq!(buf.cursor_display(), UnicodeWidthStr::width("a") as u32);
+        assert_eq!(buf.cursor_display(), text::width("a"));
         buf.backspace();
         assert_eq!(buf.value(), accent.to_string());
     }
@@ -574,16 +571,10 @@ mod tests {
         let mut buf = InputBuffer::new(format!("a{astronaut}b"));
         buf.set_display_width(10);
         let expected = format!("a{astronaut}b");
-        assert_eq!(
-            buf.cursor_display(),
-            UnicodeWidthStr::width(expected.as_str()) as u32
-        );
+        assert_eq!(buf.cursor_display(), text::width(&expected));
         buf.left();
         let expected = format!("a{astronaut}");
-        assert_eq!(
-            buf.cursor_display(),
-            UnicodeWidthStr::width(expected.as_str()) as u32
-        );
+        assert_eq!(buf.cursor_display(), text::width(&expected));
         buf.backspace();
         assert_eq!(buf.value(), "ab");
     }

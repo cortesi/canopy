@@ -135,9 +135,7 @@ where
     /// Return the unclamped size required to render the current dropdown state.
     fn content_size(&self) -> Size {
         let max_label_width = widest_label(self.items.iter().map(Label::label));
-        let width = u32::try_from(max_label_width)
-            .unwrap_or(u32::MAX)
-            .saturating_add(2);
+        let width = max_label_width.saturating_add(2);
         let height = if self.expanded {
             u32::try_from(self.items.len()).unwrap_or(u32::MAX)
         } else {

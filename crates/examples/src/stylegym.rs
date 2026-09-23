@@ -640,7 +640,7 @@ fn put_styled(
     y: u32,
     content: &str,
 ) -> Result<()> {
-    let width = u32::try_from(text::display_width(content)).unwrap_or(u32::MAX);
+    let width = text::width(content);
     let Some((line, hidden)) = place.line(x, y, width) else {
         return Ok(());
     };
@@ -717,13 +717,10 @@ impl Widget for TextSamples {
     fn canvas(&self, view: Size, _ctx: &CanvasContext<'_>) -> Size {
         let width = TEXT_ROWS
             .iter()
-            .map(|(_, content)| text::display_width(content))
+            .map(|(_, content)| text::width(content))
             .max()
             .unwrap_or(0);
-        Size::new(
-            u32::try_from(width).unwrap_or(u32::MAX).max(view.w),
-            (TEXT_ROWS.len() as u32).max(view.h),
-        )
+        Size::new(width.max(view.w), (TEXT_ROWS.len() as u32).max(view.h))
     }
 
     fn layout(&self) -> Layout {

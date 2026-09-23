@@ -139,12 +139,8 @@ pub fn is_primary_click(event: mouse::MouseEvent) -> bool {
 }
 
 /// The widest of `labels`, in display columns, or 0 when there are none.
-pub fn widest_label<'a>(labels: impl IntoIterator<Item = &'a str>) -> usize {
-    labels
-        .into_iter()
-        .map(text::display_width)
-        .max()
-        .unwrap_or(0)
+pub fn widest_label<'a>(labels: impl IntoIterator<Item = &'a str>) -> u32 {
+    labels.into_iter().map(text::width).max().unwrap_or(0)
 }
 
 /// Rows visible in a view `height` rows tall, starting at `scroll_y`, over

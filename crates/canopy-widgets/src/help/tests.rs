@@ -13,6 +13,7 @@ use canopy::{
     path::Path,
     style::themes,
     testing::harness::Harness,
+    text,
 };
 
 use super::binding_list::BindingList;
@@ -122,7 +123,7 @@ fn wide_keys_align_descriptions_by_display_columns() {
     let widths = lines
         .iter()
         .filter_map(|line| line.key.as_deref())
-        .map(unicode_width::UnicodeWidthStr::width)
+        .map(text::width)
         .collect::<Vec<_>>();
     assert_eq!(widths, [6, 6, 6]);
 }

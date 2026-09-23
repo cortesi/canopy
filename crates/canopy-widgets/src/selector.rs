@@ -177,10 +177,9 @@ where
     /// Every row reserves the wider choice glyph, so choosing an item never
     /// changes the width.
     fn content_size(&self) -> Size {
-        let glyph_width =
-            text::display_width(self.glyphs.0).max(text::display_width(self.glyphs.1));
+        let glyph_width = text::width(self.glyphs.0).max(text::width(self.glyphs.1));
         let max_label_width = widest_label(self.items.iter().map(Label::label));
-        let width = u32::try_from(glyph_width.saturating_add(max_label_width)).unwrap_or(u32::MAX);
+        let width = glyph_width.saturating_add(max_label_width);
         let height = u32::try_from(self.items.len()).unwrap_or(u32::MAX);
         Size::new(width, height)
     }

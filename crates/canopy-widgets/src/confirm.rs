@@ -64,9 +64,7 @@ pub enum Answer {
 
 /// Return the columns a button with `label` occupies.
 fn button_width(label: &str) -> u32 {
-    u32::try_from(text::display_width(label))
-        .unwrap_or(u32::MAX)
-        .saturating_add(BUTTON_PADDING)
+    text::width(label).saturating_add(BUTTON_PADDING)
 }
 
 /// Return the columns every button and the gap between them occupy.
@@ -370,7 +368,7 @@ impl ConfirmBody {
 
     /// Show `message` as the question.
     fn show(&mut self, message: String) {
-        let widest = u32::try_from(text::display_width(&message)).unwrap_or(u32::MAX);
+        let widest = text::width(&message);
         // This is the body's content box. The blank columns beside it are the
         // body's own padding, which layout adds around whatever is measured
         // here, so counting them again would spend them twice.

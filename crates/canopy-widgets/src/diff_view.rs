@@ -752,7 +752,7 @@ fn widest_line(diff: &Diff, side: Side, tab_stop: usize) -> u32 {
                 Side::Old => diff.old_line(line),
                 Side::New => diff.new_line(line),
             };
-            column(text::display_width(&text::expand_tabs(text, tab_stop)))
+            text::width(&text::expand_tabs(text, tab_stop))
         })
         .max()
         .unwrap_or(0)

@@ -94,11 +94,29 @@ pub fn tab_width(column: usize, tab_stop: usize) -> usize {
     }
 }
 
-/// Return the display width of a string in terminal cells.
+/// Return the terminal cells `s` occupies, saturating at `u32::MAX`.
+///
+/// This is the one width measure: layout, measurement, and painting agree on
+/// it because it counts grapheme widths as rendering does.
+pub fn width(s: &str) -> u32 {
+    u32::try_from(cells(s)).unwrap_or(u32::MAX)
+}
+
+/// Return the cells one grapheme occupies at `column`, expanding a tab to the
+/// next multiple of `tab_stop`.
+pub fn cell_width(grapheme: &str, column: usize, tab_stop: usize) -> usize {
+    if grapheme == "\t" {
+        tab_width(column, tab_stop)
+    } else {
+        grapheme_width(grapheme)
+    }
+}
+
+/// Return the terminal cells `s` occupies.
 ///
 /// Printable ASCII is one column per byte, and the check for it costs a byte
 /// scan, so the common case avoids grapheme segmentation.
-pub fn display_width(s: &str) -> usize {
+fn cells(s: &str) -> usize {
     if s.bytes()
         .all(|byte| byte.is_ascii_graphic() || byte == b' ')
     {
@@ -117,7 +135,7 @@ const ELLIPSIS: &str = "…";
 /// filesystem path needs: its last components identify it, and its leading
 /// ones repeat.
 pub fn truncate_start(s: &str, budget: usize) -> Cow<'_, str> {
-    let width = display_width(s);
+    let width = cells(s);
     if width <= budget {
         return Cow::Borrowed(s);
     }
@@ -137,7 +155,7 @@ pub fn truncate_start(s: &str, budget: usize) -> Cow<'_, str> {
 /// Text that already fits is returned as it is. This is the ordinary
 /// direction, for text whose opening identifies it.
 pub fn truncate_end(s: &str, budget: usize) -> Cow<'_, str> {
-    let width = display_width(s);
+    let width = cells(s);
     if width <= budget {
         return Cow::Borrowed(s);
     }
@@ -157,7 +175,7 @@ mod tests {
     fn display_width_matches_the_slow_path() {
         for text in ["", "plain ascii", "a界b", "A👩‍💻B", "café", "line\r"] {
             let slow: usize = text.graphemes(true).map(grapheme_width).sum();
-            assert_eq!(display_width(text), slow, "{text:?}");
+            assert_eq!(cells(text), slow, "{text:?}");
         }
     }
 
@@ -166,15 +184,15 @@ mod tests {
         let s = "a界b";
         let (out, width) = slice_by_columns(s, 0, 3);
         assert_eq!(out, "a界");
-        assert_eq!(width, display_width(out));
+        assert_eq!(width, cells(out));
 
         let (out, width) = slice_by_columns(s, 1, 2);
         assert_eq!(out, "界");
-        assert_eq!(width, display_width(out));
+        assert_eq!(width, cells(out));
 
         let (out, width) = slice_by_columns(s, 3, 2);
         assert_eq!(out, "b");
-        assert_eq!(width, display_width(out));
+        assert_eq!(width, cells(out));
     }
 
     #[test]
@@ -243,11 +261,11 @@ mod tests {
         for budget in 1..=8 {
             for text in ["a界b界c", "A👩‍💻B", "界界界"] {
                 assert!(
-                    display_width(&truncate_start(text, budget)) <= budget,
+                    cells(&truncate_start(text, budget)) <= budget,
                     "truncate_start({text:?}, {budget}) overran its budget"
                 );
                 assert!(
-                    display_width(&truncate_end(text, budget)) <= budget,
+                    cells(&truncate_end(text, budget)) <= budget,
                     "truncate_end({text:?}, {budget}) overran its budget"
                 );
             }

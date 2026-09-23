@@ -74,8 +74,9 @@ changing the contract.
 `canopy-widgets` enables its complete bundle by default. Basic forms can set
 `default-features = false`; Input, List, Root, Help, and Editor remain
 available. The shared `canopy_widgets::text_buffer` module is independent of
-Editor. Editor does not re-export text-buffer types; it uses `display_width`
-internally.
+Editor. Editor does not re-export text-buffer types. Every widget measures
+text with `canopy::text::width`, and tab-aware cells with
+`canopy::text::cell_width`, so measurement and painting agree.
 
 Editor and DiffView highlight through any `editor::highlight::Highlighter` a
 host supplies; neither needs a feature for that. `syntax` adds the built-in

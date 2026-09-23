@@ -607,9 +607,7 @@ where
             .filter_map(|&item| self.items.get(item))
             .map(Label::label);
         let widest = widest_label(labels.chain(Some(self.placeholder)));
-        self.fitted_width = u32::try_from(widest)
-            .unwrap_or(u32::MAX)
-            .saturating_add(ROW_PADDING);
+        self.fitted_width = widest.saturating_add(ROW_PADDING);
         // A filter that hides the selected row pulls the selection back into
         // range rather than leaving it past the end.
         self.cursor.set_len(self.shown.len());

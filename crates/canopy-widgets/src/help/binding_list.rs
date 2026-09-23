@@ -17,8 +17,8 @@ use canopy::{
         ScrollDirection, ScrollOp,
     },
     render::Render,
+    text,
 };
-use unicode_width::UnicodeWidthStr;
 
 /// Widest row of keys for one action before further keys continue below.
 const KEY_ROW_WIDTH: usize = 20;
@@ -355,7 +355,7 @@ fn key_rows(keys: &[String]) -> Vec<String> {
 
 /// Return the terminal-cell width of text.
 fn text_width(text: &str) -> usize {
-    UnicodeWidthStr::width(text)
+    text::width(text) as usize
 }
 
 /// Build aligned shortcut rows, stacking keys above actions on narrow screens.

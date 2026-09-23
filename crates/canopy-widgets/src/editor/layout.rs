@@ -1,7 +1,7 @@
-use canopy::geom::Point;
+use canopy::{geom::Point, text};
 use unicode_segmentation::UnicodeSegmentation;
 
-use super::{WrapMode, display_width};
+use super::WrapMode;
 use crate::text_buffer::{LineChange, TextBuffer, TextPosition};
 
 /// A wrapped segment of a logical line.
@@ -375,7 +375,7 @@ pub fn layout_line(
 
     for grapheme in text.graphemes(true) {
         let grapheme_chars = grapheme.chars().count();
-        let width = display_width(grapheme, col, tab_stop);
+        let width = text::cell_width(grapheme, col, tab_stop);
 
         if wrap_mode == WrapMode::Soft {
             let seg_width = col.saturating_sub(seg_start_col);

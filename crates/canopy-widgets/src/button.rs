@@ -15,7 +15,6 @@ use canopy::{
     text,
 };
 use unicode_segmentation::UnicodeSegmentation;
-use unicode_width::UnicodeWidthStr;
 
 use crate::{
     Border, Center,
@@ -152,10 +151,10 @@ impl Button {
     fn label_width(&self) -> u32 {
         self.label
             .lines()
-            .map(UnicodeWidthStr::width)
+            .map(text::width)
             .max()
             .unwrap_or(0)
-            .max(1) as u32
+            .max(1)
     }
 
     /// Read command eligibility without conflating it with the active state.
@@ -274,10 +273,7 @@ impl Widget for ButtonLabel {
     fn measure(&self, c: MeasureConstraints) -> Measurement {
         // One row, as wide as the label. A narrower offer clips rather than
         // wraps, because a button is a fixed shape around one line.
-        c.clamp(Size::new(
-            u32::try_from(text::display_width(&self.label)).unwrap_or(u32::MAX),
-            1,
-        ))
+        c.clamp(Size::new(text::width(&self.label), 1))
     }
 
     fn render(&mut self, render: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
@@ -295,22 +291,15 @@ impl Widget for ButtonLabel {
         };
         // A clipped label spends its last column on the marker, so only the
         // columns before it still spell the original characters.
-        let kept =
-            text::display_width(&shown).saturating_sub(usize::from(matches!(shown, Cow::Owned(_))));
-        let column = text::display_width(&self.label[..range.start]);
-        let width = text::display_width(&self.label[range.clone()]);
+        let kept = text::width(&shown).saturating_sub(u32::from(matches!(shown, Cow::Owned(_))));
+        let column = text::width(&self.label[..range.start]);
+        let width = text::width(&self.label[range.clone()]);
         if column.saturating_add(width) > kept {
             return Ok(());
         }
         render.text(
             roles::KEY,
-            Line::new(
-                line.tl
-                    .x
-                    .saturating_add(u32::try_from(column).unwrap_or(u32::MAX)),
-                line.tl.y,
-                u32::try_from(width).unwrap_or(u32::MAX),
-            ),
+            Line::new(line.tl.x.saturating_add(column), line.tl.y, width),
             &self.label[range],
         )
     }

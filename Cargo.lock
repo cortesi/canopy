@@ -383,7 +383,6 @@ dependencies = [
  "tracing-subscriber",
  "two-face",
  "unicode-segmentation",
- "unicode-width",
 ]
 
 [[package]]

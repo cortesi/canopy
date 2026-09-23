@@ -11,8 +11,8 @@ use canopy::{
     layout::{Layout, LayoutOverride, MeasureConstraints, Measurement, Sizing},
     render::Render,
     style::roles,
+    text,
 };
-use unicode_width::UnicodeWidthStr;
 
 use crate::Container;
 
@@ -270,7 +270,7 @@ fn refresh_key_hints(ctx: &mut dyn Context) -> Result<()> {
 
 /// Return the columns `text` occupies, saturating on absurd lengths.
 fn text_width(text: &str) -> u32 {
-    u32::try_from(UnicodeWidthStr::width(text)).unwrap_or(u32::MAX)
+    text::width(text)
 }
 
 #[cfg(test)]

@@ -19,8 +19,8 @@ use canopy::{
     },
     render::Render,
     runtime::WidgetSemantics,
+    text,
 };
-use unicode_width::UnicodeWidthStr;
 
 use crate::keyed::KeyedChildren;
 
@@ -923,12 +923,7 @@ impl<W: Selectable + 'static, K: Eq + Hash + Clone + ToArgValue + 'static> Widge
 
 /// Compute the indicator width in cells from a multi-line string.
 fn indicator_width(text: &str) -> u32 {
-    text.lines()
-        .map(UnicodeWidthStr::width)
-        .max()
-        .unwrap_or(0)
-        .try_into()
-        .unwrap_or(0)
+    text.lines().map(text::width).max().unwrap_or(0)
 }
 
 /// Return true when drag distance exceeds the configured threshold.

@@ -8,9 +8,9 @@ use canopy::{
     input::{Event, mouse},
     layout::{Edges, Layout, LayoutOverride},
     render::Render,
+    text,
     tree::FocusScope,
 };
-use unicode_width::UnicodeWidthStr;
 
 /// Columns left blank between tab labels.
 const TAB_GAP: u32 = 1;
@@ -113,7 +113,7 @@ impl Tabs {
             .enumerate()
             .map(move |(index, (label, _))| {
                 let text = format!(" {label} ");
-                let width = UnicodeWidthStr::width(text.as_str()) as u32;
+                let width = text::width(&text);
                 let start = next;
                 next = next.saturating_add(width).saturating_add(TAB_GAP);
                 (index, text, start, width)

@@ -128,9 +128,9 @@ impl Text {
     fn raw_width(&self) -> u32 {
         text::expand_tabs(&self.raw, self.tab_stop)
             .lines()
-            .map(text::display_width)
+            .map(text::width)
             .max()
-            .unwrap_or(0) as u32
+            .unwrap_or(0)
     }
 
     /// Determine the wrapping width for the given available space.
@@ -151,7 +151,7 @@ impl Text {
                 .collect::<Vec<_>>();
             let max_width = lines
                 .iter()
-                .map(|line| text::display_width(line))
+                .map(|line| text::width(line))
                 .max()
                 .unwrap_or(0) as u32;
             *cache = Some(WrapCache {

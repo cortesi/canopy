@@ -3589,11 +3589,9 @@ pub mod canopy {
     pub mod text {
         //! Text utilities.
 
-        /// Return the display width of a string in terminal cells.
-        ///
-        /// Printable ASCII is one column per byte, and the check for it costs a byte
-        /// scan, so the common case avoids grapheme segmentation.
-        pub fn display_width(s: &str) -> usize {}
+        /// Return the cells one grapheme occupies at `column`, expanding a tab to the
+        /// next multiple of `tab_stop`.
+        pub fn cell_width(grapheme: &str, column: usize, tab_stop: usize) -> usize {}
 
         /// Expand tabs into spaces using the configured tab stop.
         pub fn expand_tabs(s: &str, tab_stop: usize) -> std::borrow::Cow<'_, str> {}
@@ -3621,6 +3619,12 @@ pub mod canopy {
         /// filesystem path needs: its last components identify it, and its leading
         /// ones repeat.
         pub fn truncate_start(s: &str, budget: usize) -> std::borrow::Cow<'_, str> {}
+
+        /// Return the terminal cells `s` occupies, saturating at `u32::MAX`.
+        ///
+        /// This is the one width measure: layout, measurement, and painting agree on
+        /// it because it counts grapheme widths as rendering does.
+        pub fn width(s: &str) -> u32 {}
     }
 
     pub mod tree {

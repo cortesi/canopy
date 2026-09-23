@@ -15,4 +15,4 @@ pub(crate) use buffer::LineChange;
 pub use buffer::{TextBuffer, TextTransaction};
 pub use position::{TextPosition, TextRange};
 pub use selection::Selection;
-pub(crate) use util::{display_width, single_line};
+pub(crate) use util::single_line;

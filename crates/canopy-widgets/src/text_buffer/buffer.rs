@@ -3,11 +3,12 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
+use canopy::text;
 use ropey::Rope;
 use unicode_segmentation::UnicodeSegmentation;
 
 use super::{
-    Selection, TextPosition, TextRange, display_width,
+    Selection, TextPosition, TextRange,
     edit::{Edit, Transaction},
     util::{next_grapheme_boundary, prev_grapheme_boundary},
 };
@@ -529,7 +530,7 @@ fn column_for_char(line: &str, column: usize, tab_stop: usize) -> usize {
         if consumed >= column {
             break;
         }
-        let width = display_width(grapheme, col, tab_stop);
+        let width = text::cell_width(grapheme, col, tab_stop);
         col = col.saturating_add(width);
         consumed = consumed.saturating_add(grapheme_chars);
     }
@@ -541,7 +542,7 @@ fn char_for_column(line: &str, column: usize, tab_stop: usize) -> usize {
     let mut col = 0usize;
     let mut chars = 0usize;
     for grapheme in line.graphemes(true) {
-        let width = display_width(grapheme, col, tab_stop);
+        let width = text::cell_width(grapheme, col, tab_stop);
         if col + width > column {
             break;
         }
