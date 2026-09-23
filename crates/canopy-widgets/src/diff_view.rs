@@ -32,7 +32,7 @@ use canopy::{
 
 use crate::{
     diff::{Diff, DiffRow, Scope},
-    editor::highlight::{HighlightSpan, Highlighter},
+    highlight::{HighlightSpan, Highlighter},
     run_paint,
 };
 

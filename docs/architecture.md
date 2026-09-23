@@ -78,7 +78,7 @@ Editor. Editor does not re-export text-buffer types. Every widget measures
 text with `canopy::text::width`, and tab-aware cells with
 `canopy::text::cell_width`, so measurement and painting agree.
 
-Editor and DiffView highlight through any `editor::highlight::Highlighter` a
+Editor and DiffView highlight through any `canopy_widgets::highlight::Highlighter` a
 host supplies; neither needs a feature for that. `syntax` adds the built-in
 Syntect-backed `SyntectHighlighter`, so only its dependencies and detection
 tables are optional.

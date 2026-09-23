@@ -11,93 +11,12 @@ pub mod canopy_widgets {
         reason = "Editor methods are split by rendering, vi, and prompt concerns."
     )]
     pub mod editor {
-        //! Multiline text editor and syntax highlighting.
+        //! Multiline text editor.
         //! Editor widget and supporting types.
         //!
         //! Editing policy, such as vi modes, search, and selection behavior, belongs on
         //! the editor. Buffer mechanics, such as positions, ranges, and edits, belong
         //! on the shared text buffer.
-
-        pub mod highlight {
-            //! Syntax highlighting helpers.
-            //!
-            //! [`Highlighter`] and [`HighlightSpan`] carry no dependency of their own: a
-            //! host can implement highlighting however it likes. [`SyntectHighlighter`],
-            //! behind the `syntax` feature, resolves a syntax from a file name or from
-            //! the text itself, then highlights lines incrementally. Highlighting a line
-            //! needs the parser state left by every line above it, so the highlighter
-            //! walks forward from the last line it has seen and caches the spans it
-            //! produces. A source set through [`Highlighter::prepare`] therefore costs
-            //! only the lines that are actually asked for, and multi-line constructs such
-            //! as block comments keep their state.
-
-            /// A highlighted span for a single line.
-            #[derive(Clone, Debug)]
-            pub struct HighlightSpan {
-                /// Character range covered by the span.
-                pub range: std::ops::Range<usize>,
-                /// Style to apply to the span.
-                pub style: canopy::style::Style,
-            }
-
-            /// A syntect-backed highlighter.
-            ///
-            /// Language detection uses the file name or extension, then the first
-            /// source line. Parser state is retained for at most 4,000 lines; later
-            /// lines highlight independently.
-            #[derive(Debug)]
-            pub struct SyntectHighlighter {}
-
-            /// Trait for providing syntax highlighting spans.
-            pub trait Highlighter {
-                /// Return highlight spans for a line of text.
-                fn highlight_line(&self, line: usize, text: &str) -> Vec<HighlightSpan>;
-
-                /// Adopt `text` as the source being highlighted, discarding earlier state.
-                ///
-                /// Highlighters that carry parser state between lines need the whole
-                /// source. The default implementation ignores it.
-                /// The editor calls this during rendering, before requesting spans, when
-                /// its source or highlighter has changed.
-                fn prepare(&self, text: &str) {}
-            }
-
-            /// Theme used when the caller names none, matching the Canopy style theme.
-            pub const DEFAULT_THEME: &str = "Canopy (dark)";
-
-            impl Highlighter for SyntectHighlighter {
-                fn highlight_line(&self, line: usize, text: &str) -> Vec<HighlightSpan> {}
-
-                fn prepare(&self, text: &str) {}
-            }
-
-            impl SyntectHighlighter {
-                #[must_use]
-                /// Construct a highlighter for the file at `path`.
-                pub fn for_path(path: impl AsRef<Path>) -> Self {}
-
-                #[must_use]
-                /// Construct a highlighter for the provided file extension.
-                pub fn new(extension: impl AsRef<str>) -> Self {}
-
-                #[must_use]
-                /// Return the name of the syntax in use.
-                pub fn syntax_name(&self) -> String {}
-
-                #[must_use]
-                /// Use the named theme, falling back to [`DEFAULT_THEME`].
-                pub fn with_theme(self, name: impl AsRef<str>) -> Self {}
-
-                /// Select the syntax for `extension`, discarding any prepared source.
-                pub fn set_extension(&self, extension: &str) {}
-
-                /// Select the syntax for `path`, discarding any prepared source.
-                ///
-                /// A file name is tried first, so `Makefile` and `Dockerfile` resolve,
-                /// then the extension.
-                pub fn set_path(&self, path: impl AsRef<Path>) {}
-            }
-        }
 
         /// Editing mode for the editor widget.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -498,6 +417,88 @@ pub mod canopy_widgets {
         impl FontRenderer {
             /// Create a renderer for the provided font.
             pub fn new(font: Font) -> Self {}
+        }
+    }
+
+    pub mod highlight {
+        //! Syntax highlighting shared by the Editor and DiffView.
+        //! Syntax highlighting helpers.
+        //!
+        //! [`Highlighter`] and [`HighlightSpan`] carry no dependency of their own: a
+        //! host can implement highlighting however it likes. [`SyntectHighlighter`],
+        //! behind the `syntax` feature, resolves a syntax from a file name or from
+        //! the text itself, then highlights lines incrementally. Highlighting a line
+        //! needs the parser state left by every line above it, so the highlighter
+        //! walks forward from the last line it has seen and caches the spans it
+        //! produces. A source set through [`Highlighter::prepare`] therefore costs
+        //! only the lines that are actually asked for, and multi-line constructs such
+        //! as block comments keep their state.
+
+        /// A highlighted span for a single line.
+        #[derive(Clone, Debug)]
+        pub struct HighlightSpan {
+            /// Character range covered by the span.
+            pub range: std::ops::Range<usize>,
+            /// Style to apply to the span.
+            pub style: canopy::style::Style,
+        }
+
+        /// A syntect-backed highlighter.
+        ///
+        /// Language detection uses the file name or extension, then the first
+        /// source line. Parser state is retained for at most 4,000 lines; later
+        /// lines highlight independently.
+        #[derive(Debug)]
+        pub struct SyntectHighlighter {}
+
+        /// Trait for providing syntax highlighting spans.
+        pub trait Highlighter {
+            /// Return highlight spans for a line of text.
+            fn highlight_line(&self, line: usize, text: &str) -> Vec<HighlightSpan>;
+
+            /// Adopt `text` as the source being highlighted, discarding earlier state.
+            ///
+            /// Highlighters that carry parser state between lines need the whole
+            /// source. The default implementation ignores it.
+            /// The editor calls this during rendering, before requesting spans, when
+            /// its source or highlighter has changed.
+            fn prepare(&self, text: &str) {}
+        }
+
+        /// Theme used when the caller names none, matching the Canopy style theme.
+        pub const DEFAULT_THEME: &str = "Canopy (dark)";
+
+        impl Highlighter for SyntectHighlighter {
+            fn highlight_line(&self, line: usize, text: &str) -> Vec<HighlightSpan> {}
+
+            fn prepare(&self, text: &str) {}
+        }
+
+        impl SyntectHighlighter {
+            #[must_use]
+            /// Construct a highlighter for the file at `path`.
+            pub fn for_path(path: impl AsRef<Path>) -> Self {}
+
+            #[must_use]
+            /// Construct a highlighter for the provided file extension.
+            pub fn new(extension: impl AsRef<str>) -> Self {}
+
+            #[must_use]
+            /// Return the name of the syntax in use.
+            pub fn syntax_name(&self) -> String {}
+
+            #[must_use]
+            /// Use the named theme, falling back to [`DEFAULT_THEME`].
+            pub fn with_theme(self, name: impl AsRef<str>) -> Self {}
+
+            /// Select the syntax for `extension`, discarding any prepared source.
+            pub fn set_extension(&self, extension: &str) {}
+
+            /// Select the syntax for `path`, discarding any prepared source.
+            ///
+            /// A file name is tried first, so `Makefile` and `Dockerfile` resolve,
+            /// then the extension.
+            pub fn set_path(&self, path: impl AsRef<Path>) {}
         }
     }
 

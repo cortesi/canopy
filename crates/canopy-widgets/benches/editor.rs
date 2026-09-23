@@ -6,8 +6,8 @@ use canopy::{
     Context, ContextExt, Register, Setup, Widget, derive_commands, error::Result, layout::Layout,
     testing::harness::Harness,
 };
-use canopy_widgets::editor::{
-    EditMode, Editor, EditorConfig, LineNumbers, WrapMode,
+use canopy_widgets::{
+    editor::{EditMode, Editor, EditorConfig, LineNumbers, WrapMode},
     highlight::{Highlighter, SyntectHighlighter},
 };
 use criterion::{Criterion, criterion_group, criterion_main};

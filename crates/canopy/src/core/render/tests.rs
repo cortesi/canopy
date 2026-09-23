@@ -3,7 +3,7 @@
 use super::*;
 use crate::{
     buf,
-    style::{AttrSet, Color, StyleManager, StyleMap},
+    style::{AttrSet, Color, PartialStyle, StyleManager, StyleMap},
     testing::buf::BufTest,
 };
 
@@ -406,4 +406,29 @@ fn test_part_render_multiple_rectangles() {
             "XXXXXXXXXX"
         ));
     }
+}
+
+#[test]
+fn runs_take_their_foreground_over_the_base_and_clip() {
+    let mut target = TestTarget::new(geom::Rect::new(0, 0, 6, 1));
+    target
+        .stylemap
+        .rules()
+        .style("row", PartialStyle::new().bg(Color::Blue))
+        .fg("added", Color::Green)
+        .apply();
+    let painted = target
+        .render(|r| {
+            r.runs(
+                geom::Line::new(0, 0, 5),
+                "row",
+                [("added", "+12"), ("row", " "), ("added", "-3")],
+            )
+        })
+        .unwrap();
+    assert_eq!(painted, 5, "the last run clips at the line's end");
+    target.assert_matches(buf!("+12 -X"));
+    let cell = target.buf.get(geom::Point { x: 0, y: 0 }).unwrap();
+    assert_eq!(cell.style.fg, Color::Green);
+    assert_eq!(cell.style.bg, Color::Blue, "a run keeps the base ground");
 }

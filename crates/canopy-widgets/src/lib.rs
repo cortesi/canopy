@@ -21,7 +21,7 @@ mod diff;
 mod diff_view;
 /// Dropdown selection widget.
 mod dropdown;
-/// Multiline text editor and syntax highlighting.
+/// Multiline text editor.
 pub mod editor;
 /// ASCII font rasterization helpers.
 #[cfg(feature = "graphics")]
@@ -33,6 +33,8 @@ mod font_banner;
 mod frame;
 /// Contextual key-binding help widgets.
 mod help;
+/// Syntax highlighting shared by the Editor and DiffView.
+pub mod highlight;
 /// Image rendering widget.
 #[cfg(feature = "graphics")]
 mod image_view;

@@ -16,13 +16,13 @@ use canopy::{
 
 use super::{
     EditMode, EditorConfig, LineNumbers, WrapMode,
-    highlight::{HighlightSpan, Highlighter},
     layout::{LayoutCache, LineLayout, WrapSegment, layout_line, metrics, point_for_position},
     search::{PromptState, SearchDirection, SearchState},
     vi::{ViMode, ViState},
 };
 use crate::{
     click::ClickTracker,
+    highlight::{HighlightSpan, Highlighter},
     run_paint,
     scrollbar::THIN,
     text_buffer::{Selection, TextBuffer, TextPosition, TextRange, single_line},

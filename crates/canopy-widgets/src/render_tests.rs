@@ -584,7 +584,7 @@ mod tests {
     fn diff_view_prepares_one_highlighter_per_side() -> Result<()> {
         use std::{cell::Cell, rc::Rc};
 
-        use crate::editor::highlight::{HighlightSpan, Highlighter};
+        use crate::highlight::{HighlightSpan, Highlighter};
 
         struct Counting {
             prepared: Rc<Cell<usize>>,
@@ -633,7 +633,7 @@ mod tests {
     fn diff_view_highlight_spans_paint_over_the_row_background() -> Result<()> {
         use canopy::style::{AttrSet, Color, Paint, Style};
 
-        use crate::editor::highlight::{HighlightSpan, Highlighter};
+        use crate::highlight::{HighlightSpan, Highlighter};
 
         struct FirstChar(Style);
 

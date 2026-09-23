@@ -2537,6 +2537,19 @@ pub mod canopy {
             /// be clipped.
             pub fn fill(&mut self, style: &str, r: geom::Rect, c: char) -> Result<()> {}
 
+            /// Paint styled runs left to right from the start of `l`, clipped to it.
+            ///
+            /// Each run is a style path and its text. A run takes its foreground from
+            /// its path and its background and attributes from `base`, so runs keep
+            /// the ground of the row they sit on. Return the columns painted.
+            pub fn runs<'r>(
+                &mut self,
+                l: geom::Line,
+                base: &str,
+                runs: impl IntoIterator<Item = (&'r str, &'r str)>,
+            ) -> Result<u32> {
+            }
+
             /// Print text in the specified line. If the text is wider than the
             /// rectangle, it will be truncated; if it is shorter, it will be padded.
             pub fn text(&mut self, style: &str, l: geom::Line, txt: &str) -> Result<()> {}

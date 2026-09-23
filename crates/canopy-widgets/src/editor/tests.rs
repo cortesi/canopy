@@ -24,10 +24,8 @@ use super::{
 };
 use crate::{
     THIN,
-    editor::{
-        EditMode, Editor, EditorConfig, LineNumbers, WrapMode,
-        highlight::{HighlightSpan, Highlighter},
-    },
+    editor::{EditMode, Editor, EditorConfig, LineNumbers, WrapMode},
+    highlight::{HighlightSpan, Highlighter},
     text_buffer::{Selection, TextPosition, TextRange},
 };
 

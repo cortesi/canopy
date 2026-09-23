@@ -7,7 +7,8 @@ use canopy::{
 };
 use canopy_widgets::{
     Container, Frame,
-    editor::{EditMode, Editor, EditorConfig, WrapMode, highlight::SyntectHighlighter},
+    editor::{EditMode, Editor, EditorConfig, WrapMode},
+    highlight::SyntectHighlighter,
 };
 
 /// Default bindings for the widget editor demo.

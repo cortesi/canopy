@@ -6,9 +6,8 @@ use canopy::{
 };
 use canopy_widgets::{
     Frame,
-    editor::{
-        EditMode, Editor, EditorConfig, LineNumbers, WrapMode, highlight::SyntectHighlighter,
-    },
+    editor::{EditMode, Editor, EditorConfig, LineNumbers, WrapMode},
+    highlight::SyntectHighlighter,
 };
 
 /// Default bindings for the editor gym demo.

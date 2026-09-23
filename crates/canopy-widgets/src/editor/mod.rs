@@ -8,7 +8,6 @@
 //! the editor. Buffer mechanics, such as positions, ranges, and edits, belong
 //! on the shared text buffer.
 
-pub mod highlight;
 /// Layout and wrapping cache.
 mod layout;
 /// Search state and match helpers.

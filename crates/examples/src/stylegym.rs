@@ -22,7 +22,8 @@ use canopy::{
 };
 use canopy_widgets::{
     Button, Container, Dropdown, Frame, Input, Label, Root, Scroll, Selector, Tabs,
-    editor::{Editor, EditorConfig, LineNumbers, WrapMode, highlight::SyntectHighlighter},
+    editor::{Editor, EditorConfig, LineNumbers, WrapMode},
+    highlight::SyntectHighlighter,
 };
 
 /// Default bindings for the style gym demo.

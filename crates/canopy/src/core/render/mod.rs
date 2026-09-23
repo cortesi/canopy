@@ -1,3 +1,5 @@
+use unicode_segmentation::UnicodeSegmentation;
+
 use super::termbuf::TermBuf;
 use crate::{
     core::text,
@@ -210,6 +212,37 @@ impl<'a> Render<'a> {
         self.buf.text_with(adjusted_line, out, |p| {
             style.resolve_at(line_rect, untranslate(origin, p))
         })
+    }
+
+    /// Paint styled runs left to right from the start of `l`, clipped to it.
+    ///
+    /// Each run is a style path and its text. A run takes its foreground from
+    /// its path and its background and attributes from `base`, so runs keep
+    /// the ground of the row they sit on. Return the columns painted.
+    pub fn runs<'r>(
+        &mut self,
+        l: geom::Line,
+        base: &str,
+        runs: impl IntoIterator<Item = (&'r str, &'r str)>,
+    ) -> Result<u32> {
+        let base = self.resolve_style(base);
+        let line_rect = geom::Rect::new(l.tl.x, l.tl.y, l.w, 1);
+        let end = l.tl.x.saturating_add(l.w);
+        let mut x = l.tl.x;
+        'runs: for (style, run) in runs {
+            let mut merged = base.clone();
+            merged.fg = self.resolve_style(style).fg;
+            for grapheme in run.graphemes(true) {
+                let width = u32::try_from(text::grapheme_width(grapheme)).unwrap_or(u32::MAX);
+                if x.saturating_add(width) > end {
+                    break 'runs;
+                }
+                let point = geom::Point { x, y: l.tl.y };
+                self.put_grapheme(merged.resolve_at(line_rect, point), point, grapheme)?;
+                x = x.saturating_add(width);
+            }
+        }
+        Ok(x - l.tl.x)
     }
 
     /// Write a single cell with a resolved style.
