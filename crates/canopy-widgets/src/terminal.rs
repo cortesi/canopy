@@ -29,8 +29,6 @@ const DEFAULT_LINES: usize = 24;
 const DEFAULT_SCROLLBACK: usize = 10_000;
 /// Poll interval for draining PTY output.
 const POLL_INTERVAL_MS: u64 = 16;
-/// Maximum delay between clicks to count as a multi-click selection.
-const DOUBLE_CLICK_MS: u64 = 400;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// Terminal grid sizing metadata.
@@ -158,7 +156,7 @@ impl Terminal {
             cursor: None,
             selection_active: false,
             selection_anchor: None,
-            last_click: ClickTracker::new(Duration::from_millis(DOUBLE_CLICK_MS)),
+            last_click: ClickTracker::default(),
         }
     }
 

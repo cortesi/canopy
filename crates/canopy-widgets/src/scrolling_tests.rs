@@ -20,7 +20,7 @@ use canopy::{
 
 use crate::{
     Columns, Frame, List, Scroll, ScrollbarGlyphs, Selectable, THIN, Tabs,
-    scrollbar::{Axis, ScrollTarget, scroll_target},
+    scrollbar::{ScrollTarget, scroll_target},
 };
 
 /// Builds a subtree under the scene root and returns the nodes a test uses.
@@ -149,7 +149,7 @@ fn framed_surface(c: &mut dyn Context, canvas: Size) -> Result<Vec<NodeId>> {
 }
 
 /// Resolve the target beneath `owner`.
-fn target(harness: &Harness, owner: NodeId, axis: Axis) -> Option<ScrollTarget> {
+fn target(harness: &Harness, owner: NodeId, axis: ScrollAxis) -> Option<ScrollTarget> {
     harness
         .canopy
         .with_root_view(|ctx| scroll_target(ctx, owner, axis))
@@ -224,13 +224,13 @@ fn the_target_is_the_one_overflowing_node_beneath_wrappers() -> Result<()> {
     })?;
     let (owner, inner) = (nodes[0], nodes[1]);
     assert_eq!(
-        target(&harness, owner, Axis::Vertical),
+        target(&harness, owner, ScrollAxis::Vertical),
         Some(ScrollTarget {
             node: inner,
             viewport: Rect::new(0, 0, 20, 10),
         })
     );
-    assert_eq!(target(&harness, owner, Axis::Horizontal), None);
+    assert_eq!(target(&harness, owner, ScrollAxis::Horizontal), None);
     Ok(())
 }
 
@@ -246,14 +246,14 @@ fn sibling_targets_are_ambiguous_at_every_enclosing_level() -> Result<()> {
         Ok(vec![owner, first, second])
     })?;
     let (owner, first, second) = (nodes[0], nodes[1], nodes[2]);
-    assert_eq!(target(&harness, owner, Axis::Vertical), None);
+    assert_eq!(target(&harness, owner, ScrollAxis::Vertical), None);
 
     harness
         .canopy
         .with_root_context(|c| c.set_hidden_of(second, true).map(|_| ()))?;
     harness.render()?;
     assert_eq!(
-        target(&harness, owner, Axis::Vertical).map(|found| found.node),
+        target(&harness, owner, ScrollAxis::Vertical).map(|found| found.node),
         Some(first)
     );
     Ok(())
@@ -274,7 +274,7 @@ fn only_the_visible_tab_page_is_a_target() -> Result<()> {
         Ok(vec![owner, tabs.into(), pages[0], pages[1]])
     })?;
     let (owner, tabs, first, second) = (nodes[0], nodes[1], nodes[2], nodes[3]);
-    let found = target(&harness, owner, Axis::Vertical).expect("the first page");
+    let found = target(&harness, owner, ScrollAxis::Vertical).expect("the first page");
     assert_eq!(found.node, first);
     assert_eq!(
         found.viewport.tl.y, 1,
@@ -286,7 +286,7 @@ fn only_the_visible_tab_page_is_a_target() -> Result<()> {
         .with_root_context(|c| c.with_widget_mut(tabs, |tabs: &mut Tabs, c| tabs.select(c, 1)))?;
     harness.render()?;
     assert_eq!(
-        target(&harness, owner, Axis::Vertical).map(|found| found.node),
+        target(&harness, owner, ScrollAxis::Vertical).map(|found| found.node),
         Some(second)
     );
     Ok(())
@@ -304,11 +304,11 @@ fn a_nested_owner_hides_its_subtree_from_enclosing_owners() -> Result<()> {
     })?;
     let (owner, frame, inner, other) = (nodes[0], nodes[1], nodes[2], nodes[3]);
     assert_eq!(
-        target(&harness, owner, Axis::Vertical).map(|found| found.node),
+        target(&harness, owner, ScrollAxis::Vertical).map(|found| found.node),
         Some(other)
     );
     assert_eq!(
-        target(&harness, frame, Axis::Vertical).map(|found| found.node),
+        target(&harness, frame, ScrollAxis::Vertical).map(|found| found.node),
         Some(inner)
     );
     Ok(())
@@ -323,7 +323,7 @@ fn a_detached_owner_resolves_no_target_from_cached_views() -> Result<()> {
         Ok(vec![owner])
     })?;
     let owner = nodes[0];
-    assert!(target(&harness, owner, Axis::Vertical).is_some());
+    assert!(target(&harness, owner, ScrollAxis::Vertical).is_some());
 
     harness.canopy.with_root_context(|c| c.detach(owner))?;
     let cached = harness
@@ -333,7 +333,7 @@ fn a_detached_owner_resolves_no_target_from_cached_views() -> Result<()> {
         !cached.is_empty(),
         "the detached view keeps its last layout"
     );
-    assert_eq!(target(&harness, owner, Axis::Vertical), None);
+    assert_eq!(target(&harness, owner, ScrollAxis::Vertical), None);
     Ok(())
 }
 
@@ -366,7 +366,7 @@ fn viewports_are_clipped_by_every_ancestor_and_the_screen() -> Result<()> {
         Ok(vec![clip])
     })?;
     assert_eq!(
-        target(&harness, nodes[0], Axis::Vertical).map(|found| found.viewport),
+        target(&harness, nodes[0], ScrollAxis::Vertical).map(|found| found.viewport),
         Some(Rect::new(1, 1, 10, 3)),
         "the clip box's content bounds its child"
     );
@@ -378,7 +378,7 @@ fn viewports_are_clipped_by_every_ancestor_and_the_screen() -> Result<()> {
         Ok(vec![owner])
     })?;
     assert_eq!(
-        target(&harness, nodes[0], Axis::Horizontal).map(|found| found.viewport),
+        target(&harness, nodes[0], ScrollAxis::Horizontal).map(|found| found.viewport),
         Some(Rect::new(0, 0, 20, 10)),
         "the screen bounds a surface larger than itself"
     );

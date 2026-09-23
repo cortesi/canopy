@@ -1,5 +1,6 @@
 use canopy::{
-    Context, EventOutcome, NodeId, NodeName, Render, ViewContext, Widget, derive_commands,
+    Context, EventOutcome, NodeId, NodeName, Render, ScrollAxis, ViewContext, Widget,
+    derive_commands,
     error::Result,
     event::{Event, key},
     geom::{self, Rect},
@@ -8,7 +9,7 @@ use canopy::{
 use unicode_width::UnicodeWidthStr;
 
 use super::boxed::{BoxGlyphs, ROUND};
-use crate::scrollbar::{Axis, Scrollbar, ScrollbarGlyphs, THIN, edge_track, scroll_target};
+use crate::scrollbar::{Scrollbar, ScrollbarGlyphs, THIN, edge_track, scroll_target};
 
 /// A frame around an element with an optional title and scroll positions.
 ///
@@ -89,15 +90,15 @@ impl Frame {
     }
 
     /// Return the border track on one axis and the node it scrolls.
-    fn track(ctx: &dyn ViewContext, axis: Axis) -> Result<Option<(NodeId, Rect)>> {
+    fn track(ctx: &dyn ViewContext, axis: ScrollAxis) -> Result<Option<(NodeId, Rect)>> {
         let frame = ctx.node_id();
         let Some(target) = scroll_target(ctx, frame, axis)? else {
             return Ok(None);
         };
         let border = geom::FrameRects::new(ctx.view().outer_rect_local(), 1);
         let edge = match axis {
-            Axis::Vertical => border.right,
-            Axis::Horizontal => border.bottom,
+            ScrollAxis::Vertical => border.right,
+            ScrollAxis::Horizontal => border.bottom,
         };
         Ok(edge_track(ctx, &target, frame, axis, edge).map(|track| (target.node, track)))
     }
@@ -142,9 +143,9 @@ impl Widget for Frame {
             rndr.text("frame/title", title_rect.line(0)?, &title_with_spaces)?;
         }
 
-        let vertical = Self::track(ctx, Axis::Vertical)?;
+        let vertical = Self::track(ctx, ScrollAxis::Vertical)?;
         self.vertical.render(rndr, ctx, vertical.as_slice())?;
-        let horizontal = Self::track(ctx, Axis::Horizontal)?;
+        let horizontal = Self::track(ctx, ScrollAxis::Horizontal)?;
         self.horizontal.render(rndr, ctx, horizontal.as_slice())
     }
 
@@ -152,7 +153,7 @@ impl Widget for Frame {
         let Event::Mouse(mouse) = event else {
             return Ok(EventOutcome::Ignore);
         };
-        let vertical = Self::track(ctx, Axis::Vertical)?;
+        let vertical = Self::track(ctx, ScrollAxis::Vertical)?;
         if self
             .vertical
             .handle_mouse(ctx, mouse, vertical.as_slice())?
@@ -160,7 +161,7 @@ impl Widget for Frame {
         {
             return Ok(EventOutcome::Handle);
         }
-        let horizontal = Self::track(ctx, Axis::Horizontal)?;
+        let horizontal = Self::track(ctx, ScrollAxis::Horizontal)?;
         self.horizontal
             .handle_mouse(ctx, mouse, horizontal.as_slice())
     }

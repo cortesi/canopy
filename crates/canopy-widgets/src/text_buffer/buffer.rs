@@ -1,6 +1,7 @@
-#[cfg(feature = "editor")]
-use std::mem;
-use std::ops::{Deref, DerefMut};
+use std::{
+    mem,
+    ops::{Deref, DerefMut},
+};
 
 use ropey::Rope;
 use unicode_segmentation::UnicodeSegmentation;
@@ -159,7 +160,6 @@ impl TextBuffer {
     ///
     /// Returns `Some` only when exactly one edit has landed since the last
     /// sync. Multiple edits drain as `None` so the layout cache rebuilds.
-    #[cfg(feature = "editor")]
     pub(crate) fn take_change(&mut self) -> Option<LineChange> {
         match mem::replace(&mut self.pending_change, PendingChange::None) {
             PendingChange::One(change) => Some(change),

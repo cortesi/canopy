@@ -276,7 +276,7 @@ fn narrow_and_long_rows_use_indented_wrapped_continuations() {
 #[test]
 fn normal_and_empty_buffers_are_stable() -> Result<()> {
     let normal = harness_with(
-        32,
+        34,
         5,
         vec![
             binding(1, 'a', "Alpha", BindingPhase::BeforeWidget),
@@ -284,44 +284,44 @@ fn normal_and_empty_buffers_are_stable() -> Result<()> {
         ],
     )?;
     normal.tbuf().assert_matches(buf![
-        "a  Alpha"
-        "b  Beta"
+        " a  Alpha"
+        " b  Beta"
         ""
         ""
         ""
     ]);
 
-    let empty = harness_with(32, 2, Vec::new())?;
+    let empty = harness_with(34, 2, Vec::new())?;
     empty
         .tbuf()
-        .assert_matches(buf!["No key bindings in this context" ""]);
+        .assert_matches(buf![" No key bindings in this context" ""]);
     Ok(())
 }
 
 #[test]
 fn tiny_and_wide_key_buffers_do_not_overflow() -> Result<()> {
     let tiny = harness_with(
-        1,
+        3,
         1,
         vec![binding(1, 'a', "Alpha", BindingPhase::BeforeWidget)],
     )?;
-    tiny.tbuf().assert_matches(buf!["a"]);
+    tiny.tbuf().assert_matches(buf![" a"]);
 
     let wide = harness_with(
-        12,
+        14,
         3,
         vec![binding(1, '界', "Wide key", BindingPhase::BeforeWidget)],
     )?;
-    // The key and its action fit the twelve columns exactly, so they share a
-    // row rather than stacking.
-    wide.tbuf().assert_matches(buf!["界X  Wide key" "" ""]);
+    // The key and its action fit the twelve content columns exactly, so they
+    // share a row rather than stacking.
+    wide.tbuf().assert_matches(buf![" 界X  Wide key" "" ""]);
     Ok(())
 }
 
 #[test]
 fn narrow_long_buffer_wraps_to_exact_rows() -> Result<()> {
     let narrow = harness_with(
-        12,
+        14,
         4,
         vec![binding(
             1,
@@ -332,7 +332,7 @@ fn narrow_long_buffer_wraps_to_exact_rows() -> Result<()> {
     )?;
     narrow
         .tbuf()
-        .assert_matches(buf!["ctrl+shift+x" "  Long text" "  wraps here" ""]);
+        .assert_matches(buf![" ctrl+shift+x" "   Long text" "   wraps here" ""]);
     Ok(())
 }
 
@@ -344,7 +344,7 @@ fn scrolled_and_resized_buffers_have_exact_rows() -> Result<()> {
         binding(3, 'c', "Gamma", BindingPhase::BeforeWidget),
         binding(4, 'd', "Delta", BindingPhase::BeforeWidget),
     ];
-    let mut harness = harness_with(16, 3, bindings)?;
+    let mut harness = harness_with(18, 3, bindings)?;
     harness.mouse(mouse::MouseEvent {
         action: mouse::Action::ScrollDown,
         button: mouse::Button::None,
@@ -355,15 +355,15 @@ fn scrolled_and_resized_buffers_have_exact_rows() -> Result<()> {
     // and the wheel stops one row down rather than three.
     harness
         .tbuf()
-        .assert_matches(buf!["b  Beta" "c  Gamma" "d  Delta"]);
+        .assert_matches(buf![" b  Beta" " c  Gamma" " d  Delta"]);
 
-    harness.canopy.set_root_size(Size::new(16, 8))?;
+    harness.canopy.set_root_size(Size::new(18, 8))?;
     harness.render()?;
     harness.tbuf().assert_matches(buf![
-        "a  Alpha"
-        "b  Beta"
-        "c  Gamma"
-        "d  Delta"
+        " a  Alpha"
+        " b  Beta"
+        " c  Gamma"
+        " d  Delta"
         ""
         ""
         ""
@@ -425,7 +425,7 @@ fn wheel_and_resize_keep_scroll_within_the_exact_canvas() -> Result<()> {
 #[test]
 fn a_scrolling_list_wraps_actions_across_its_full_width() -> Result<()> {
     let harness = harness_with(
-        32,
+        34,
         2,
         vec![
             binding(
@@ -439,8 +439,8 @@ fn a_scrolling_list_wraps_actions_across_its_full_width() -> Result<()> {
         ],
     )?;
     harness.tbuf().assert_matches(buf![
-        "a  12345678901234567890123456789"
-        "b  Another action"
+        " a  12345678901234567890123456789"
+        " b  Another action"
     ]);
     Ok(())
 }
@@ -462,8 +462,9 @@ fn separators_read_apart_from_the_keys() -> Result<()> {
             .expect("the key row")
             .style
     };
-    let key = cell(0);
-    let separator = cell(1);
+    // Column 0 is the widget's own left margin.
+    let key = cell(1);
+    let separator = cell(2);
     assert!(key.attrs.bold);
     assert!(!separator.attrs.bold);
     assert_eq!(separator.fg, TEXT);

@@ -561,7 +561,6 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(feature = "editor")]
     #[test]
     fn diff_view_prepares_one_highlighter_per_side() -> Result<()> {
         use std::{cell::Cell, rc::Rc};
@@ -608,6 +607,58 @@ mod tests {
         harness.render()?;
         assert_eq!(old_prepared.get(), 1, "a second frame reuses the source");
         assert_eq!(new_prepared.get(), 1, "a second frame reuses the source");
+        Ok(())
+    }
+
+    #[test]
+    fn diff_view_highlight_spans_paint_over_the_row_background() -> Result<()> {
+        use canopy::style::{AttrSet, Color, Paint, Style};
+
+        use crate::editor::highlight::{HighlightSpan, Highlighter};
+
+        struct FirstChar(Style);
+
+        impl Highlighter for FirstChar {
+            fn highlight_line(&self, _line: usize, text: &str) -> Vec<HighlightSpan> {
+                if text.is_empty() {
+                    return Vec::new();
+                }
+                vec![HighlightSpan {
+                    range: 0..1,
+                    style: self.0.clone(),
+                }]
+            }
+        }
+
+        let highlight_style = Style {
+            fg: Paint::solid(Color::Green),
+            bg: Paint::solid(Color::Red),
+            attrs: AttrSet::default(),
+        };
+        let view = DiffView::new("hi\n", "hi\n")
+            .with_old_highlighter(Box::new(FirstChar(highlight_style)));
+        let root = SnapshotRoot::new(view);
+        let mut harness = Harness::builder(root).size(20, 1).build()?;
+        harness.render()?;
+
+        // Row layout: gutter (marker, one digit, one space), then the code.
+        let buf = harness.buf();
+        let highlighted = buf.get(Point { x: 3, y: 0 }).expect("highlighted cell");
+        let plain = buf.get(Point { x: 4, y: 0 }).expect("plain cell");
+        assert_eq!(
+            highlighted.style.fg,
+            Color::Green,
+            "the span's foreground paints through"
+        );
+        assert_eq!(
+            highlighted.style.bg, plain.style.bg,
+            "the row's background wins over the span's own background"
+        );
+        assert_ne!(
+            highlighted.style.bg,
+            Color::Red,
+            "the span's own background is discarded"
+        );
         Ok(())
     }
 }

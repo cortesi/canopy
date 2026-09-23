@@ -17,10 +17,10 @@ use std::borrow::Cow;
 
 use canopy::{
     Context, ContextExt, EventOutcome, InteractionToken, ModalBindings, ModalOptions, NodeId,
-    NodeName, Render, RevealAlign, TypedId, ViewContext, Widget, derive_commands,
+    NodeName, Render, TypedId, ViewContext, Widget, derive_commands,
     error::{Error, Result},
     event::{Event, key, key::KeyCode},
-    geom::{Line, Rect, Size},
+    geom::{Line, Size},
     layout::{
         CanvasContext, Direction, Edges, Layout, LayoutOverride, MeasureConstraints, Measurement,
         Sizing,
@@ -29,7 +29,11 @@ use canopy::{
     text,
 };
 
-use crate::{Container, Label, frame::Frame};
+use crate::{
+    Container, Label,
+    frame::Frame,
+    row_cursor::{RowCursor, label_rows, widest_label},
+};
 
 /// Columns a row spends on its blank lead column and a trailing gutter.
 const ROW_PADDING: u32 = 2;
@@ -436,8 +440,8 @@ where
     items: Vec<T>,
     /// Positions in `items` that the filter passes, in order.
     shown: Vec<usize>,
-    /// Position within `shown`, not within `items`.
-    selected: Option<usize>,
+    /// Cursor over `shown`, giving a position within it, not within `items`.
+    cursor: RowCursor,
     /// Text a label must contain, ignoring ASCII case.
     filter: String,
     /// Whether the field is taking filter text.
@@ -467,7 +471,7 @@ where
         Self {
             items: Vec::new(),
             shown: Vec::new(),
-            selected: None,
+            cursor: RowCursor::new(0),
             filter: String::new(),
             filtering: false,
             label: String::new(),
@@ -487,13 +491,7 @@ where
     /// @param delta Negative values move up; positive values move down.
     #[command]
     pub fn select_by(&mut self, context: &mut dyn Context, delta: i32) -> Result<()> {
-        if self.shown.is_empty() {
-            self.selected = None;
-            return self.refresh(context);
-        }
-        let last = self.shown.len() - 1;
-        let selected = self.selected.unwrap_or(0);
-        self.selected = Some(selected.saturating_add_signed(delta as isize).min(last));
+        self.cursor.select_by(delta);
         self.refresh(context)
     }
 
@@ -501,9 +499,9 @@ where
     /// @param delta Negative values move up; positive values move down.
     #[command]
     pub fn page(&mut self, context: &mut dyn Context, delta: i32) -> Result<()> {
-        let rows = context.view().view_rect().h.max(1);
-        let page = i32::try_from(rows).unwrap_or(i32::MAX);
-        self.select_by(context, delta.saturating_mul(page))
+        let rows = context.view().view_rect().h;
+        self.cursor.page(delta, rows);
+        self.refresh(context)
     }
 
     /// Open the filter field. Typed text narrows the list to the items that
@@ -574,7 +572,7 @@ where
         self.apply_filter();
         // The list is new, so it opens at its first row rather than wherever
         // the last one was left.
-        self.selected = (!self.shown.is_empty()).then_some(0);
+        self.cursor = RowCursor::new(self.shown.len());
         context.scroll_to(0, 0);
         self.refresh(context)
     }
@@ -582,7 +580,8 @@ where
     /// Return the selected item.
     #[must_use]
     pub fn selected(&self) -> Option<&T> {
-        self.selected
+        self.cursor
+            .index()
             .and_then(|row| self.shown.get(row))
             .and_then(|&item| self.items.get(item))
     }
@@ -593,15 +592,11 @@ where
     /// to. The selection stays on the row, which now holds the item below, so
     /// repeated removals work without moving the hand.
     pub fn remove_selected(&mut self, context: &mut dyn Context) -> Result<()> {
-        let Some(&item) = self.selected.and_then(|row| self.shown.get(row)) else {
+        let Some(&item) = self.cursor.index().and_then(|row| self.shown.get(row)) else {
             return self.republish(context);
         };
         self.items.remove(item);
         self.apply_filter();
-        self.selected = match self.selected {
-            Some(row) if row < self.shown.len() => Some(row),
-            _ => self.shown.len().checked_sub(1),
-        };
         self.refresh(context)
     }
 
@@ -615,34 +610,26 @@ where
             .filter(|(_, item)| item.label().to_ascii_lowercase().contains(&needle))
             .map(|(index, _)| index)
             .collect();
-        let widest = self
+        let labels = self
             .shown
             .iter()
             .filter_map(|&item| self.items.get(item))
-            .map(|item| text::display_width(item.label()))
-            .chain(Some(text::display_width(self.placeholder)))
-            .max()
-            .unwrap_or(0);
+            .map(Label::label);
+        let widest = widest_label(labels.chain(Some(self.placeholder)));
         self.fitted_width = u32::try_from(widest)
             .unwrap_or(u32::MAX)
             .saturating_add(ROW_PADDING);
         // A filter that hides the selected row pulls the selection back into
         // range rather than leaving it past the end.
-        self.selected = match self.selected {
-            _ if self.shown.is_empty() => None,
-            Some(row) => Some(row.min(self.shown.len() - 1)),
-            None => Some(0),
-        };
+        self.cursor.set_len(self.shown.len());
     }
 
     /// Redraw the title and the field, re-measure, and reveal the selection.
     fn refresh(&self, context: &mut dyn Context) -> Result<()> {
         context.invalidate_layout();
-        if let Some(row) = self.selected.and_then(|row| u32::try_from(row).ok()) {
-            // Nearest keeps a long list still while the selection moves within
-            // the rows already on screen.
-            context.reveal_area(Rect::new(0, row, 1, 1), RevealAlign::Nearest);
-        }
+        // Nearest keeps a long list still while the selection moves within the
+        // rows already on screen.
+        self.cursor.reveal(context);
         self.republish(context)
     }
 
@@ -798,15 +785,11 @@ where
         }
 
         let budget = (area.w as usize).saturating_sub(ROW_PADDING as usize);
-        let visible = view.view_rect();
-        for offset in 0..visible.h {
-            let row = usize::try_from(visible.tl.y.saturating_add(offset)).unwrap_or(usize::MAX);
-            let Some(item) = self.shown.get(row).and_then(|&item| self.items.get(item)) else {
-                break;
-            };
+        for (offset, row) in label_rows(self.shown.len(), view.scroll.y, area.h) {
+            let item = &self.items[self.shown[row]];
             // A filter taking keys leaves the list holding its place rather
             // than driving it, so the selection dims until the keys come back.
-            let style = if self.selected == Some(row) {
+            let style = if self.cursor.index() == Some(row) {
                 roles::selection(context.is_focused() && !self.filtering)
             } else {
                 "text"

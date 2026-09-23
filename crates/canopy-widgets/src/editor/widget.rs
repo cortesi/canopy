@@ -1,4 +1,4 @@
-use std::{collections::HashMap, time::Duration};
+use std::collections::HashMap;
 
 use canopy::{
     Context, EventOutcome, FocusDirection, NodeName, Render, RevealAlign, ScrollAxis, ScrollMark,
@@ -9,10 +9,9 @@ use canopy::{
     layout::{CanvasContext, Constraint, MeasureConstraints, Measurement},
     style::Style,
 };
-use unicode_segmentation::UnicodeSegmentation;
 
 use super::{
-    EditMode, EditorConfig, LineNumbers, WrapMode, display_width,
+    EditMode, EditorConfig, LineNumbers, WrapMode,
     highlight::{HighlightSpan, Highlighter},
     layout::{LayoutCache, LineLayout, WrapSegment, layout_line, metrics, point_for_position},
     search::{PromptState, SearchDirection, SearchState},
@@ -20,12 +19,10 @@ use super::{
 };
 use crate::{
     click::ClickTracker,
+    run_paint,
     scrollbar::THIN,
     text_buffer::{Selection, TextBuffer, TextPosition, TextRange, single_line},
 };
-
-/// Maximum delay between clicks to count as multi-click selection.
-const DOUBLE_CLICK_MS: u64 = 500;
 
 /// Rows of context kept above a revealed search match, when space allows.
 const SEARCH_MATCH_TOP_CONTEXT: u32 = 3;
@@ -792,87 +789,57 @@ impl Editor {
             TextPosition::new(line_idx, segment.end_char),
         ));
 
-        let mut col = segment.start_col;
-        let mut char_index = segment.start_char;
-        for grapheme in segment_text.graphemes(true) {
-            let grapheme_chars = grapheme.chars().count();
-            let width = display_width(grapheme, col, self.config.tab_stop);
+        let text_style = ctx.styles.text.clone();
+        let selection_style = ctx.styles.selection.clone();
+        let search_current_style = ctx.styles.search_current.clone();
+        let search_match_style = ctx.styles.search_match.clone();
 
-            let g_start = char_index;
-            let g_end = char_index.saturating_add(grapheme_chars);
-
-            let draw_col = col
-                .saturating_sub(segment.start_col)
-                .saturating_add(ctx.gutter_width as usize);
-            let view_start = ctx.view_rect.tl.x as usize;
-            let view_end = view_start.saturating_add(ctx.view_rect.w as usize);
-            if draw_col.saturating_add(width) <= view_start {
-                col = col.saturating_add(width);
-                char_index = g_end;
-                continue;
-            }
-            if draw_col >= view_end {
-                break;
-            }
-
-            let mut style = &ctx.styles.text;
-
-            if selection_on_line && g_start < line_end_sel && g_end > line_start_sel {
-                style = &ctx.styles.selection;
-            } else if current_search_range
-                .is_some_and(|(start, end)| g_start < end && g_end > start)
-            {
-                style = &ctx.styles.search_current;
-            } else if search_ranges
-                .iter()
-                .any(|range| g_start < range.end.column && g_end > range.start.column)
-            {
-                style = &ctx.styles.search_match;
-            } else {
-                while let Some(span) = highlight_spans.get(span_idx) {
-                    if span.range.end <= g_start {
-                        span_idx = span_idx.saturating_add(1);
-                        span_style = None;
-                        continue;
+        run_paint::paint_run(
+            ctx.r,
+            &segment_text,
+            run_paint::column(segment.start_col),
+            ctx.gutter_width,
+            segment.start_char,
+            self.config.tab_stop,
+            ctx.view_rect.tl.x,
+            ctx.view_rect.w,
+            ctx.origin.x,
+            line_y,
+            line_rect,
+            |render, g_start, g_end| {
+                if selection_on_line && g_start < line_end_sel && g_end > line_start_sel {
+                    selection_style.clone()
+                } else if current_search_range
+                    .is_some_and(|(start, end)| g_start < end && g_end > start)
+                {
+                    search_current_style.clone()
+                } else if search_ranges
+                    .iter()
+                    .any(|range| g_start < range.end.column && g_end > range.start.column)
+                {
+                    search_match_style.clone()
+                } else {
+                    let mut chosen = text_style.clone();
+                    while let Some(span) = highlight_spans.get(span_idx) {
+                        if span.range.end <= g_start {
+                            span_idx = span_idx.saturating_add(1);
+                            span_style = None;
+                            continue;
+                        }
+                        if span.range.start < g_end && span.range.end > g_start {
+                            let resolved = span_style.get_or_insert_with(|| {
+                                let mut merged = span.style.clone();
+                                merged.bg = text_style.bg.clone();
+                                render.apply_effects(merged)
+                            });
+                            chosen = resolved.clone();
+                        }
+                        break;
                     }
-                    if span.range.start < g_end && span.range.end > g_start {
-                        let resolved = span_style.get_or_insert_with(|| {
-                            let mut merged = span.style.clone();
-                            merged.bg = ctx.styles.text.bg.clone();
-                            ctx.r.apply_effects(merged)
-                        });
-                        style = resolved;
-                    }
-                    break;
+                    chosen
                 }
-            }
-
-            if grapheme == "\t" {
-                let start = draw_col;
-                let end = draw_col.saturating_add(width);
-                for offset in start..end {
-                    let x = offset.saturating_sub(view_start) as u32;
-                    let p = Point {
-                        x: ctx.origin.x.saturating_add(x),
-                        y: line_y,
-                    };
-                    ctx.r.put_cell(style.resolve_at(line_rect, p), p, ' ')?;
-                }
-            } else {
-                let x = draw_col.saturating_sub(view_start) as u32;
-                let p = Point {
-                    x: ctx.origin.x.saturating_add(x),
-                    y: line_y,
-                };
-                ctx.r
-                    .put_grapheme(style.resolve_at(line_rect, p), p, grapheme)?;
-            }
-
-            col = col.saturating_add(width);
-            char_index = g_end;
-        }
-
-        Ok(())
+            },
+        )
     }
 
     /// Move the cursor.
@@ -1239,7 +1206,7 @@ impl MouseState {
         Self {
             selecting: false,
             anchor: None,
-            click_state: ClickTracker::new(Duration::from_millis(DOUBLE_CLICK_MS)),
+            click_state: ClickTracker::default(),
         }
     }
 }

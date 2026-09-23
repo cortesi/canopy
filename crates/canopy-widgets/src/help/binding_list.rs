@@ -13,7 +13,9 @@ use canopy::{
     },
     geom::{Line, Size},
     help::{AvailableBinding, BindingSnapshot},
-    layout::{CanvasContext, Constraint, Layout, MeasureConstraints, MeasureOverflow, Measurement},
+    layout::{
+        CanvasContext, Constraint, Edges, Layout, MeasureConstraints, MeasureOverflow, Measurement,
+    },
 };
 use unicode_width::UnicodeWidthStr;
 
@@ -35,7 +37,8 @@ pub(super) struct DisplayLine {
 
 /// Scrollable list of effective key bindings.
 ///
-/// The list uses its full width. An enclosing frame draws its scroll position.
+/// The list uses its full width, keeping a one-column margin on each side. An
+/// enclosing frame draws its scroll position.
 pub struct BindingList {
     /// Captured application context, absent while help is closed.
     snapshot: Option<BindingSnapshot>,
@@ -134,7 +137,11 @@ impl Widget for BindingList {
     }
 
     fn layout(&self) -> Layout {
-        Layout::fill().overflow_y(MeasureOverflow::Unbounded)
+        // The list starts at the frame's top edge, so only the sides keep a
+        // margin.
+        Layout::fill()
+            .overflow_y(MeasureOverflow::Unbounded)
+            .padding(Edges::symmetric(0, 1))
     }
 
     fn measure(&self, constraints: MeasureConstraints) -> Measurement {
@@ -156,10 +163,9 @@ impl Widget for BindingList {
 
     fn render(&mut self, render: &mut Render, context: &dyn ViewContext) -> Result<()> {
         let view = context.view();
-        let rect = view.outer_rect_local();
-        render.fill("help/panel", rect, ' ')?;
-        let width = view.content.w;
-        let lines = self.display_lines(width);
+        render.fill("help/panel", view.outer_rect_local(), ' ')?;
+        let content = view.view_rect_local();
+        let lines = self.display_lines(content.w);
         let viewport = view.view_rect();
         for (index, line) in lines
             .iter()
@@ -168,7 +174,7 @@ impl Widget for BindingList {
             .take(viewport.h as usize)
         {
             let y = u32::try_from(index).unwrap_or(u32::MAX) - viewport.tl.y;
-            render_line(render, line, 0, y, width)?;
+            render_line(render, line, content.tl.x, content.tl.y + y, content.w)?;
         }
         Ok(())
     }

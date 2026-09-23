@@ -11,6 +11,7 @@ pub mod canopy_widgets {
         reason = "Editor methods are split by rendering, vi, and prompt concerns."
     )]
     pub mod editor {
+        //! Multiline text editor and syntax highlighting.
         //! Editor widget and supporting types.
         //!
         //! Editing policy, such as vi modes, search, and selection behavior, belongs on
@@ -20,13 +21,15 @@ pub mod canopy_widgets {
         pub mod highlight {
             //! Syntax highlighting helpers.
             //!
-            //! [`SyntectHighlighter`] resolves a syntax from a file name or from the text
-            //! itself, then highlights lines incrementally. Highlighting a line needs the
-            //! parser state left by every line above it, so the highlighter walks forward
-            //! from the last line it has seen and caches the spans it produces. A source
-            //! set through [`Highlighter::prepare`] therefore costs only the lines that are
-            //! actually asked for, and multi-line constructs such as block comments keep
-            //! their state.
+            //! [`Highlighter`] and [`HighlightSpan`] carry no dependency of their own: a
+            //! host can implement highlighting however it likes. [`SyntectHighlighter`],
+            //! behind the `syntax` feature, resolves a syntax from a file name or from
+            //! the text itself, then highlights lines incrementally. Highlighting a line
+            //! needs the parser state left by every line above it, so the highlighter
+            //! walks forward from the last line it has seen and caches the spans it
+            //! produces. A source set through [`Highlighter::prepare`] therefore costs
+            //! only the lines that are actually asked for, and multi-line constructs such
+            //! as block comments keep their state.
 
             /// A highlighted span for a single line.
             #[derive(Clone, Debug)]
@@ -39,9 +42,9 @@ pub mod canopy_widgets {
 
             /// A syntect-backed highlighter.
             ///
-            /// Language detection uses the file name or extension, then the first source
-            /// line. Parser state is retained for at most 4,000 lines; later lines
-            /// highlight independently.
+            /// Language detection uses the file name or extension, then the first
+            /// source line. Parser state is retained for at most 4,000 lines; later
+            /// lines highlight independently.
             #[derive(Debug)]
             pub struct SyntectHighlighter {}
 
@@ -90,8 +93,8 @@ pub mod canopy_widgets {
 
                 /// Select the syntax for `path`, discarding any prepared source.
                 ///
-                /// A file name is tried first, so `Makefile` and `Dockerfile` resolve, then
-                /// the extension.
+                /// A file name is tried first, so `Makefile` and `Dockerfile` resolve,
+                /// then the extension.
                 pub fn set_path(&self, path: impl AsRef<Path>) {}
             }
         }
@@ -527,15 +530,6 @@ pub mod canopy_widgets {
         //! input on a track scrolls the node. A press on the track centers the thumb on
         //! the pointer, and a drag keeps the thumb under the pointer.
 
-        /// The axis a scrollbar measures.
-        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-        pub enum Axis {
-            /// Rows, with a track that runs top to bottom.
-            Vertical,
-            /// Columns, with a track that runs left to right.
-            Horizontal,
-        }
-
         /// A node whose canvas overflows its content along one axis.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct ScrollTarget {
@@ -586,7 +580,7 @@ pub mod canopy_widgets {
         pub fn scroll_target(
             ctx: &dyn ViewContext,
             owner: canopy::NodeId,
-            axis: Axis,
+            axis: canopy::ScrollAxis,
         ) -> canopy::error::Result<Option<ScrollTarget>> {
         }
 

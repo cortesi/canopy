@@ -10,7 +10,6 @@ mod button;
 /// Content centering container.
 mod center;
 /// Multi-click tracker shared by editor and terminal.
-#[cfg(any(feature = "editor", feature = "terminal-widget"))]
 mod click;
 /// Panes side by side with scroll position dividers.
 mod columns;
@@ -24,7 +23,7 @@ mod diff;
 mod diff_view;
 /// Dropdown selection widget.
 mod dropdown;
-#[cfg(feature = "editor")]
+/// Multiline text editor and syntax highlighting.
 pub mod editor;
 /// ASCII font rasterization helpers.
 #[cfg(feature = "graphics")]
@@ -53,6 +52,10 @@ mod pad;
 mod picker;
 /// Application root widget.
 mod root;
+/// Shared row cursor and label helpers for Selector, Dropdown, and PickerList.
+mod row_cursor;
+/// Shared line painter for Editor and DiffView.
+mod run_paint;
 /// Scrolling container.
 mod scroll;
 pub mod scrollbar;

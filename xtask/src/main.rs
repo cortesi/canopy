@@ -97,7 +97,7 @@ fn run_feature_check(workspace_root: &Path) -> bool {
     }
     for capability in [
         None,
-        Some("editor"),
+        Some("syntax"),
         Some("terminal-widget"),
         Some("graphics"),
         Some("devtools"),

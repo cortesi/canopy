@@ -1394,6 +1394,12 @@ There are four patterns today:
   `HighlightSpan` have no editor dependency. Share one highlighted-run painter
   between the Editor line loop and `DiffView::draw_code`. This removes 18
   `#[cfg(feature = "editor")]` in DiffView.
+- **No `editor` feature (decided during Stage 2).** Only `SyntectHighlighter`
+  needs syntect and two-face, which bring the Oniguruma C library and about
+  10 MB of rlibs, mostly bundled syntax data. The Editor, `text_buffer`, the
+  `Highlighter` trait, and DiffView's highlighting hooks compile
+  unconditionally. A narrow default `syntax` feature gates only the
+  syntect-backed highlighter, which removes nearly all 26 feature gates.
 - **A public run painter (fh).** Expose that painter as
   `Render::runs(line, base, runs)`, with each run's foreground laid over the
   base style. canopy-fileselect paints styled runs by hand in its footer
@@ -2161,8 +2167,9 @@ Each stage also updates the docs it touches.
 - [x] C29: consolidate `base_api.rs` and `value.rs`, move the `bridge.rs`
   helpers, narrow visibility, and delete the native-module and startup-global
   plumbing.
-- [ ] C32 internal parts: `RowCursor`, `HelpPanel` removal, `ScrollAxis`
-  reuse, the click threshold, and the shared highlighted-run painter.
+- [x] C32 internal parts: `RowCursor`, `HelpPanel` removal, `ScrollAxis`
+  reuse, the click threshold, and the shared highlighted-run painter. Replace
+  the `editor` feature with a narrow `syntax` feature.
 - [x] C37:
   - Trim the tidy hooks.
   - Move the Luau inventory into a test.

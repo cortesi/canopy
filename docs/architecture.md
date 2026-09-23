@@ -48,14 +48,19 @@ changing the contract.
 ## Widget capabilities
 
 `canopy-widgets` enables its complete bundle by default. Basic forms can set
-`default-features = false`; Input, List, Root, and Help remain available. The
-shared `canopy_widgets::text_buffer` module is independent of Editor. Editor
-does not re-export text-buffer types; it uses `display_width` internally when
-enabled.
+`default-features = false`; Input, List, Root, Help, and Editor remain
+available. The shared `canopy_widgets::text_buffer` module is independent of
+Editor. Editor does not re-export text-buffer types; it uses `display_width`
+internally.
+
+Editor and DiffView highlight through any `editor::highlight::Highlighter` a
+host supplies; neither needs a feature for that. `syntax` adds the built-in
+Syntect-backed `SyntectHighlighter`, so only its dependencies and detection
+tables are optional.
 
 | Feature | Additional widgets and dependencies |
 | --- | --- |
-| `editor` | Editor and Syntect syntax highlighting |
+| `syntax` | `SyntectHighlighter` and its Syntect dependencies |
 | `terminal-widget` | Terminal and `itty-core` |
 | `graphics` | `ImageView` (crate-root re-export), fonts, `image`, and `fontdue` |
 | `devtools` | Inspector and tracing subscriber support |

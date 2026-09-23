@@ -1,16 +1,18 @@
 //! Selector widget for multi-value selection with checkbox-style items.
 
 use canopy::{
-    Context, EventOutcome, NodeName, Render, RevealAlign, ViewContext, Widget, WidgetSemantics,
-    derive_commands,
+    Context, EventOutcome, NodeName, Render, ViewContext, Widget, WidgetSemantics, derive_commands,
     error::Result,
     event::{Event, key, mouse},
-    geom::{Rect, Size},
+    geom::Size,
     layout::{MeasureConstraints, Measurement},
     text,
 };
 
-use crate::label::Label;
+use crate::{
+    label::Label,
+    row_cursor::{RowCursor, is_primary_click, label_rows, widest_label},
+};
 
 /// The glyphs a selector draws before an unchecked and checked item.
 const CHECK_GLYPHS: (&str, &str) = ("[ ] ", "[x] ");
@@ -28,8 +30,8 @@ where
 {
     /// Available items.
     items: Vec<T>,
-    /// Currently focused index.
-    focused: usize,
+    /// Cursor over the focused row.
+    cursor: RowCursor,
     /// Selected indices, in selection order.
     selected: Vec<usize>,
     /// Optional semantic label.
@@ -45,9 +47,10 @@ where
 {
     /// Create a new selector with the given items.
     pub fn new(items: Vec<T>) -> Self {
+        let cursor = RowCursor::new(items.len());
         Self {
             items,
-            focused: 0,
+            cursor,
             selected: Vec::new(),
             label: None,
             glyphs: CHECK_GLYPHS,
@@ -74,7 +77,7 @@ where
     /// item, matching a fresh list.
     pub fn show(&mut self, items: Vec<T>, checked: &[usize]) {
         self.items = items;
-        self.focused = 0;
+        self.cursor = RowCursor::new(self.items.len());
         self.selected.clear();
         for index in checked {
             if *index < self.items.len() && !self.selected.contains(index) {
@@ -87,7 +90,7 @@ where
     /// Return the focused item index.
     #[must_use]
     pub fn focused_index(&self) -> usize {
-        self.focused
+        self.cursor.index().unwrap_or(0)
     }
 
     /// Return the checked indices, in selection order.
@@ -107,16 +110,16 @@ where
     /// Toggle selection of the focused item.
     #[command]
     pub fn toggle(&mut self, _c: &mut dyn Context) -> Result<()> {
-        if self.items.is_empty() {
+        let Some(focused) = self.cursor.index() else {
             return Ok(());
-        }
+        };
 
-        if let Some(pos) = self.selected.iter().position(|&idx| idx == self.focused) {
+        if let Some(pos) = self.selected.iter().position(|&idx| idx == focused) {
             // Already selected - remove it
             self.selected.remove(pos);
         } else {
             // Not selected - add it (in selection order)
-            self.selected.push(self.focused);
+            self.selected.push(focused);
         }
         debug_assert!(self.selection_invariant_holds());
         Ok(())
@@ -125,15 +128,8 @@ where
     /// Move focus by a signed offset.
     #[command]
     pub fn select_by(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {
-        if self.items.is_empty() {
-            return Ok(());
-        }
-
-        self.focused = self
-            .focused
-            .saturating_add_signed(delta as isize)
-            .min(self.items.len() - 1);
-        self.reveal_focused(c);
+        self.cursor.select_by(delta);
+        self.cursor.reveal(c);
         debug_assert!(self.selection_invariant_holds());
         Ok(())
     }
@@ -141,10 +137,8 @@ where
     /// Move focus to the first item.
     #[command]
     pub fn select_first(&mut self, c: &mut dyn Context) -> Result<()> {
-        if !self.items.is_empty() {
-            self.focused = 0;
-            self.reveal_focused(c);
-        }
+        self.cursor.select_first();
+        self.cursor.reveal(c);
         debug_assert!(self.selection_invariant_holds());
         Ok(())
     }
@@ -152,10 +146,8 @@ where
     /// Move focus to the last item.
     #[command]
     pub fn select_last(&mut self, c: &mut dyn Context) -> Result<()> {
-        if !self.items.is_empty() {
-            self.focused = self.items.len() - 1;
-            self.reveal_focused(c);
-        }
+        self.cursor.select_last();
+        self.cursor.reveal(c);
         debug_assert!(self.selection_invariant_holds());
         Ok(())
     }
@@ -168,23 +160,13 @@ where
         Ok(())
     }
 
-    /// Reveal the focused row without changing horizontal scroll.
-    fn reveal_focused(&self, c: &mut dyn Context) {
-        c.reveal_area(
-            Rect::new(c.view().scroll.x, self.focused as u32, 1, 1),
-            RevealAlign::Nearest,
-        );
-    }
-
     /// Focus and toggle the clicked row.
     fn handle_click(&mut self, c: &mut dyn Context, event: mouse::MouseEvent) -> Result<()> {
-        if event.action != mouse::Action::Down || event.button != mouse::Button::Left {
+        if !is_primary_click(event) {
             return Ok(());
         }
-        if let Some(point) = c.view().content_point(event.location)
-            && (point.y as usize) < self.items.len()
-        {
-            self.focused = point.y as usize;
+        if let Some(row) = self.cursor.row_at(&c.view(), event.location) {
+            self.cursor.set_index(row);
             self.toggle(c)?;
         }
         Ok(())
@@ -205,12 +187,7 @@ where
     fn content_size(&self) -> Size {
         let glyph_width =
             text::display_width(self.glyphs.0).max(text::display_width(self.glyphs.1));
-        let max_label_width = self
-            .items
-            .iter()
-            .map(|item| text::display_width(item.label()))
-            .max()
-            .unwrap_or(0);
+        let max_label_width = widest_label(self.items.iter().map(Label::label));
         let width = u32::try_from(glyph_width.saturating_add(max_label_width)).unwrap_or(u32::MAX);
         let height = u32::try_from(self.items.len()).unwrap_or(u32::MAX);
         Size::new(width, height)
@@ -218,11 +195,11 @@ where
 
     /// Return whether focus and selection indices point at current items.
     fn selection_invariant_holds(&self) -> bool {
-        let focus_valid = if self.items.is_empty() {
-            self.focused == 0
-        } else {
-            self.focused < self.items.len()
-        };
+        let focus_valid = self.cursor.len() == self.items.len()
+            && match self.cursor.index() {
+                Some(index) => index < self.items.len(),
+                None => self.items.is_empty(),
+            };
         let selections_valid = self.selected.iter().enumerate().all(|(position, index)| {
             *index < self.items.len() && !self.selected[..position].contains(index)
         });
@@ -268,17 +245,12 @@ where
         let rect = view.view_rect_local();
         let is_widget_focused = ctx.is_focused();
 
-        for (idx, item) in self.items.iter().enumerate().skip(view.scroll.y as usize) {
-            let Ok(row) = u32::try_from(idx - view.scroll.y as usize) else {
-                break;
-            };
-            if row >= rect.h {
-                break;
-            }
+        for (row, idx) in label_rows(self.items.len(), view.scroll.y, rect.h) {
+            let item = &self.items[idx];
             let line_rect = rect.line(row)?;
             let label = item.label();
             let is_selected = self.selected.contains(&idx);
-            let is_item_focused = idx == self.focused;
+            let is_item_focused = Some(idx) == self.cursor.index();
 
             // Checkbox prefix
             let prefix = if is_selected {
@@ -338,7 +310,7 @@ mod tests {
         let selector = Selector::new(items);
         assert_eq!(selector.items.len(), 2);
         assert!(selector.selected.is_empty());
-        assert_eq!(selector.focused, 0);
+        assert_eq!(selector.cursor.index(), Some(0));
     }
 
     #[test]
@@ -362,7 +334,7 @@ mod tests {
         assert_eq!(selector.selected.len(), 1);
 
         // Add another selection
-        selector.focused = 2;
+        selector.cursor.set_index(2);
         selector.selected.push(2);
         assert!(selector.selected.contains(&2));
         assert_eq!(selector.selected.len(), 2);
@@ -395,13 +367,13 @@ mod tests {
             selector.select_by(ctx, 99)?;
             selector.toggle(ctx)?;
             selector.select_all(ctx)?;
-            assert_eq!(selector.focused, 2);
+            assert_eq!(selector.cursor.index(), Some(2));
             assert_eq!(selector.selected.as_slice(), &[0, 1, 2]);
             assert!(selector.selection_invariant_holds());
 
             selector.clear(ctx)?;
             selector.select_by(ctx, -99)?;
-            assert_eq!(selector.focused, 0);
+            assert_eq!(selector.cursor.index(), Some(0));
             assert!(selector.selected.is_empty());
             assert!(selector.selection_invariant_holds());
             Ok(())
@@ -474,7 +446,8 @@ mod tests {
         })?;
 
         assert!(selector.selection_invariant_holds());
-        assert_eq!(selector.focused, 0);
+        assert_eq!(selector.cursor.index(), None);
+        assert_eq!(selector.focused_index(), 0, "an empty selector reports 0");
         assert!(selector.selected.is_empty());
         Ok(())
     }

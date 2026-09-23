@@ -1,7 +1,7 @@
 //! Panes side by side, with dividers that show their scroll positions.
 
 use canopy::{
-    Context, EventOutcome, FocusScope, NodeId, NodeName, Render, ViewContext, Widget,
+    Context, EventOutcome, FocusScope, NodeId, NodeName, Render, ScrollAxis, ViewContext, Widget,
     derive_commands,
     error::Result,
     event::{Event, key},
@@ -9,7 +9,7 @@ use canopy::{
     layout::{Direction, Edges, Layout},
 };
 
-use crate::scrollbar::{Axis, Scrollbar, ScrollbarGlyphs, THIN, edge_track, pane_target};
+use crate::scrollbar::{Scrollbar, ScrollbarGlyphs, THIN, edge_track, pane_target};
 
 /// Panes side by side, each followed by a divider.
 ///
@@ -114,10 +114,10 @@ impl Columns {
             let Some(divider) = Self::divider(ctx, pane) else {
                 continue;
             };
-            let Some(target) = pane_target(ctx, owner, pane, Axis::Vertical)? else {
+            let Some(target) = pane_target(ctx, owner, pane, ScrollAxis::Vertical)? else {
                 continue;
             };
-            if let Some(track) = edge_track(ctx, &target, pane, Axis::Vertical, divider) {
+            if let Some(track) = edge_track(ctx, &target, pane, ScrollAxis::Vertical, divider) {
                 tracks.push((target.node, track));
             }
         }

@@ -13,7 +13,6 @@ use canopy::{
 use crate::inspector::Inspector;
 use crate::{
     Button, Container,
-    center::Center,
     help::{BindingList, Help, ModeHelp},
 };
 
@@ -60,7 +59,7 @@ canopy::slot!(InspectorSlot: Inspector);
 canopy::slot!(HelpSlot: Help);
 
 // Typed key for the transient mode help slot
-canopy::slot!(ModeHelpSlot: Center);
+canopy::slot!(ModeHelpSlot: ModeHelp);
 
 /// Key for the application subtree under root (widget type varies).
 const KEY_APP: &str = "AppSlot";

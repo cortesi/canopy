@@ -13,7 +13,7 @@ use canopy::{
 };
 
 use super::binding_list::{BindingRow, display_lines, key_rows_of, natural_width, render_line};
-use crate::{center::Center, frame::Frame};
+use crate::frame::Frame;
 
 canopy::slot!(ModeFrameSlot: Frame);
 canopy::slot!(ModeBindingsSlot: ModeBindings);
@@ -66,7 +66,6 @@ impl Widget for ModeBindings {
     }
 
     fn render(&mut self, render: &mut Render, context: &dyn ViewContext) -> Result<()> {
-        render.push_layer("help");
         let rect = context.view().outer_rect_local();
         render.fill("help/panel", rect, ' ')?;
         let width = rect.w.saturating_sub(2 * MARGIN);
@@ -82,7 +81,11 @@ impl Widget for ModeBindings {
     }
 }
 
-/// Panel listing the keys of a transient mode while it waits.
+/// Overlay that shows a transient mode's bindings in the bottom right corner
+/// while it waits for its key.
+///
+/// The overlay is an end-aligned stack that pushes the `help` style layer its
+/// framed bindings list paints into.
 pub struct ModeHelp;
 
 impl ModeHelp {
@@ -95,15 +98,8 @@ impl ModeHelp {
             *layout = Layout::column().padding(Edges::all(1));
         })?;
 
-        let overlay = context.create_detached(Center::new())?;
+        let overlay = context.create_detached(Self)?;
         context.attach_slot(overlay.into(), ModeFrameSlot::KEY, frame.into())?;
-        context.with_layout_of(overlay.into(), &mut |layout| {
-            *layout = Layout::fill()
-                .direction(Direction::Stack)
-                .align_horizontal(Align::End)
-                .align_vertical(Align::End)
-                .padding(Edges::all(1));
-        })?;
         Ok(overlay.into())
     }
 
@@ -141,5 +137,28 @@ impl ModeHelp {
         })?;
         context.set_hidden_of(overlay, false)?;
         Ok(())
+    }
+}
+
+impl Widget for ModeHelp {
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+        Some(EventOutcome::Ignore)
+    }
+
+    fn layout(&self) -> Layout {
+        Layout::fill()
+            .direction(Direction::Stack)
+            .align_horizontal(Align::End)
+            .align_vertical(Align::End)
+            .padding(Edges::all(1))
+    }
+
+    fn render(&mut self, render: &mut Render, _context: &dyn ViewContext) -> Result<()> {
+        render.push_layer("help");
+        Ok(())
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("mode_help")
     }
 }

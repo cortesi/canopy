@@ -1,10 +1,10 @@
 //! Diff view widget over the [`Diff`] row model.
 //!
 //! [`DiffView`] renders two full texts in unified or side-by-side layout, with
-//! whole-file or context scope. The host supplies the texts and, when the
-//! `editor` feature is on, one [`Highlighter`] per side, so parser state stays
-//! with its own version. Line numbers and each half's gutter stay pinned while
-//! the code scrolls horizontally.
+//! whole-file or context scope. The host supplies the texts and, optionally,
+//! one [`Highlighter`] per side, so parser state stays with its own version.
+//! Line numbers and each half's gutter stay pinned while the code scrolls
+//! horizontally.
 //!
 //! The view resolves these style names:
 //!
@@ -18,21 +18,21 @@
 
 use std::ops::Range;
 
-#[cfg(feature = "editor")]
-use canopy::style::Style;
 use canopy::{
     Context, EventOutcome, FocusDirection, NodeName, Render, ViewContext, Widget, derive_commands,
     error::Result,
     event::key,
     geom::{Line, Point, Rect, Size},
     layout::{CanvasContext, Constraint, MeasureConstraints, Measurement},
+    style::Style,
     text,
 };
-use unicode_segmentation::UnicodeSegmentation;
 
-use crate::diff::{Diff, DiffRow, Scope};
-#[cfg(feature = "editor")]
-use crate::editor::highlight::{HighlightSpan, Highlighter};
+use crate::{
+    diff::{Diff, DiffRow, Scope},
+    editor::highlight::{HighlightSpan, Highlighter},
+    run_paint,
+};
 
 /// How a diff view arranges the two versions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -153,13 +153,10 @@ pub struct DiffView {
     /// Tab stop width in columns.
     tab_stop: usize,
     /// Highlighter for the old side.
-    #[cfg(feature = "editor")]
     old_highlighter: Option<Box<dyn Highlighter>>,
     /// Highlighter for the new side.
-    #[cfg(feature = "editor")]
     new_highlighter: Option<Box<dyn Highlighter>>,
     /// Whether both highlighters hold the current texts.
-    #[cfg(feature = "editor")]
     prepared: bool,
 }
 
@@ -186,11 +183,8 @@ impl DiffView {
             old_width: prepared.old_width,
             new_width: prepared.new_width,
             tab_stop: prepared.tab_stop,
-            #[cfg(feature = "editor")]
             old_highlighter: None,
-            #[cfg(feature = "editor")]
             new_highlighter: None,
-            #[cfg(feature = "editor")]
             prepared: false,
         }
     }
@@ -205,10 +199,7 @@ impl DiffView {
         self.new_width = prepared.new_width;
         self.tab_stop = prepared.tab_stop;
         self.ensure_side_rows();
-        #[cfg(feature = "editor")]
-        {
-            self.prepared = false;
-        }
+        self.prepared = false;
     }
 
     /// Set the display strategy.
@@ -235,7 +226,6 @@ impl DiffView {
     }
 
     /// Install a highlighter for the old side.
-    #[cfg(feature = "editor")]
     #[must_use]
     pub fn with_old_highlighter(mut self, highlighter: Box<dyn Highlighter>) -> Self {
         self.old_highlighter = Some(highlighter);
@@ -244,7 +234,6 @@ impl DiffView {
     }
 
     /// Install a highlighter for the new side.
-    #[cfg(feature = "editor")]
     #[must_use]
     pub fn with_new_highlighter(mut self, highlighter: Box<dyn Highlighter>) -> Self {
         self.new_highlighter = Some(highlighter);
@@ -336,15 +325,11 @@ impl DiffView {
     fn rebuild_rows(&mut self) {
         self.rows = self.diff.rows(self.scope);
         self.side_rows = side_rows(&self.rows);
-        #[cfg(feature = "editor")]
-        {
-            self.prepared = false;
-        }
+        self.prepared = false;
     }
 
     /// Prepare both highlighters for the current texts, once.
     fn prepare_highlighters(&mut self) {
-        #[cfg(feature = "editor")]
         if !self.prepared {
             if let Some(highlighter) = &self.old_highlighter {
                 highlighter.prepare(self.diff.old_text());
@@ -357,7 +342,6 @@ impl DiffView {
     }
 
     /// Return highlight spans for one line of a side.
-    #[cfg(feature = "editor")]
     fn highlight(&self, side: Side, line: usize, text: &str) -> Vec<HighlightSpan> {
         let highlighter = match side {
             Side::Old => &self.old_highlighter,
@@ -432,14 +416,6 @@ impl DiffView {
 
     /// Draw one code line, scrolled horizontally and clipped to `width`.
     #[expect(clippy::too_many_arguments, reason = "one render step")]
-    #[cfg_attr(
-        not(feature = "editor"),
-        expect(
-            unused_variables,
-            unused_mut,
-            reason = "only syntax highlighting reads the side, line, and span offsets"
-        )
-    )]
     fn draw_code(
         &self,
         rndr: &mut Render,
@@ -455,74 +431,42 @@ impl DiffView {
     ) -> Result<()> {
         let scroll = view_rect.tl.x;
         let base = rndr.resolve_style(style);
-        #[cfg(feature = "editor")]
         let spans = self.highlight(side, line, text);
-        #[cfg(feature = "editor")]
         let mut span_index = 0usize;
-        #[cfg(feature = "editor")]
         let mut span_style: Option<Style> = None;
         let line_rect = Rect::new(origin.x, y, width, 1);
-        let mut col = 0u32;
-        let mut char_index = 0usize;
-        for grapheme in text.graphemes(true) {
-            let chars = grapheme.chars().count();
-            let g_start = char_index;
-            let g_end = char_index.saturating_add(chars);
-            let cells = if grapheme == "\t" {
-                column(text::tab_width(col as usize, self.tab_stop))
-            } else {
-                column(text::grapheme_width(grapheme))
-            };
-            let start_col = col;
-            let end_col = col.saturating_add(cells);
-            col = end_col;
-            char_index = g_end;
-            if end_col <= scroll {
-                continue;
-            }
-            let draw = start_col.saturating_sub(scroll);
-            if draw >= width {
-                break;
-            }
-            let mut chosen = base.clone();
-            #[cfg(feature = "editor")]
-            while let Some(span) = spans.get(span_index) {
-                if span.range.end <= g_start {
-                    span_index += 1;
-                    span_style = None;
-                    continue;
-                }
-                if span.range.start < g_end && span.range.end > g_start {
-                    let merged = span_style.get_or_insert_with(|| {
-                        let mut styled = span.style.clone();
-                        styled.bg = base.bg.clone();
-                        rndr.apply_effects(styled)
-                    });
-                    chosen = merged.clone();
-                }
-                break;
-            }
-            let point = Point {
-                x: x.saturating_add(draw),
-                y,
-            };
-            if grapheme == "\t" {
-                for offset in 0..cells {
-                    let position = draw.saturating_add(offset);
-                    if position >= width {
-                        break;
+        run_paint::paint_run(
+            rndr,
+            text,
+            0,
+            0,
+            0,
+            self.tab_stop,
+            scroll,
+            width,
+            x,
+            y,
+            line_rect,
+            |render, g_start, g_end| {
+                while let Some(span) = spans.get(span_index) {
+                    if span.range.end <= g_start {
+                        span_index += 1;
+                        span_style = None;
+                        continue;
                     }
-                    let cell = Point {
-                        x: x.saturating_add(position),
-                        y,
-                    };
-                    rndr.put_cell(chosen.resolve_at(line_rect, cell), cell, ' ')?;
+                    if span.range.start < g_end && span.range.end > g_start {
+                        let merged = span_style.get_or_insert_with(|| {
+                            let mut styled = span.style.clone();
+                            styled.bg = base.bg.clone();
+                            render.apply_effects(styled)
+                        });
+                        return merged.clone();
+                    }
+                    break;
                 }
-            } else {
-                rndr.put_grapheme(chosen.resolve_at(line_rect, point), point, grapheme)?;
-            }
-        }
-        Ok(())
+                base.clone()
+            },
+        )
     }
 
     /// Draw the unified body.

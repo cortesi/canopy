@@ -2,6 +2,10 @@ use std::time::{Duration, Instant};
 
 use canopy::geom::Point;
 
+/// Default delay between clicks that still count as the same multi-click
+/// sequence, shared by every [`ClickTracker`] user.
+pub const DEFAULT_THRESHOLD: Duration = Duration::from_millis(500);
+
 /// Last click in a multi-click sequence.
 #[derive(Clone, Debug)]
 struct ClickRecord {
@@ -52,5 +56,12 @@ impl ClickTracker {
             count: 1,
         });
         1
+    }
+}
+
+impl Default for ClickTracker {
+    /// Construct a tracker using [`DEFAULT_THRESHOLD`].
+    fn default() -> Self {
+        Self::new(DEFAULT_THRESHOLD)
     }
 }

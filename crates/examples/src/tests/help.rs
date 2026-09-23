@@ -105,7 +105,7 @@ fn prove_help_flow(mut harness: Harness, hidden: &[&str], shown: &[&str]) -> Res
     let panel = frame
         .nodes
         .iter()
-        .find(|node| node.name == "help_panel")
+        .find(|node| node.name == "binding_list")
         .and_then(|node| node.view)
         .map(|view| view.outer)
         .expect("visible help panel");

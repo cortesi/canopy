@@ -2,7 +2,6 @@
 
 mod binding_list;
 mod mode;
-mod panel;
 #[cfg(test)]
 mod tests;
 
@@ -15,13 +14,11 @@ use canopy::{
     layout::{Align, Direction, Edges, Layout, Sizing},
 };
 pub use mode::ModeHelp;
-use panel::HelpPanel;
 
 use crate::{center::Center, frame::Frame};
 
 canopy::slot!(pub(crate) ModalSlot: Center);
 canopy::slot!(pub(crate) FrameSlot: Frame);
-canopy::slot!(pub(crate) PanelSlot: HelpPanel);
 canopy::slot!(pub(crate) BindingListSlot: BindingList);
 
 /// Transparent overlay that owns the help modal subtree.
@@ -36,11 +33,8 @@ impl Help {
     pub(crate) fn install(context: &mut dyn Context) -> Result<NodeId> {
         let bindings = context.create_detached(BindingList::new())?;
 
-        let panel = context.create_detached(HelpPanel::new())?;
-        context.attach_slot(panel.into(), BindingListSlot::KEY, bindings.into())?;
-
         let frame = context.create_detached(Frame::new().with_title("Keyboard shortcuts"))?;
-        context.attach_slot(frame.into(), PanelSlot::KEY, panel.into())?;
+        context.attach_slot(frame.into(), BindingListSlot::KEY, bindings.into())?;
         context.with_layout_of(frame.into(), &mut |layout| {
             // The frame hugs its rows, so the list scrolls only once the
             // content outgrows the room the overlay leaves.
@@ -72,14 +66,6 @@ impl Help {
         context: &dyn Context,
         help: NodeId,
     ) -> Result<TypedId<BindingList>> {
-        let panel = Self::panel_id(context, help)?;
-        context
-            .get_slot_of::<BindingListSlot>(panel)?
-            .ok_or_else(|| Error::NotFound("binding_list".to_string()))
-    }
-
-    /// Return the panel node within an installed help subtree.
-    fn panel_id(context: &dyn Context, help: NodeId) -> Result<NodeId> {
         let modal = context
             .get_slot_of::<ModalSlot>(help)?
             .map(NodeId::from)
@@ -89,9 +75,8 @@ impl Help {
             .map(NodeId::from)
             .ok_or_else(|| Error::NotFound("frame".to_string()))?;
         context
-            .get_slot_of::<PanelSlot>(frame)?
-            .map(NodeId::from)
-            .ok_or_else(|| Error::NotFound("help_panel".to_string()))
+            .get_slot_of::<BindingListSlot>(frame)?
+            .ok_or_else(|| Error::NotFound("binding_list".to_string()))
     }
 }
 

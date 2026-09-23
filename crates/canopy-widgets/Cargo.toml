@@ -9,8 +9,8 @@ license.workspace = true
 doctest = false
 
 [features]
-default = ["editor", "terminal-widget", "graphics", "devtools"]
-editor = ["dep:syntect", "dep:two-face"]
+default = ["syntax", "terminal-widget", "graphics", "devtools"]
+syntax = ["dep:syntect", "dep:two-face"]
 terminal-widget = ["dep:itty-core"]
 graphics = ["dep:image", "dep:fontdue"]
 devtools = ["dep:tracing-subscriber"]
@@ -52,7 +52,7 @@ tempfile.workspace = true
 [[bench]]
 name = "editor"
 harness = false
-required-features = ["editor"]
+required-features = ["syntax"]
 
 [[test]]
 name = "logs_subscriber"

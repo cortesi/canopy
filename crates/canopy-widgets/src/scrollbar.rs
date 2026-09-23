@@ -14,15 +14,6 @@ use canopy::{
     geom::{Point, PointI32, Rect, RectI32, Size},
 };
 
-/// The axis a scrollbar measures.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Axis {
-    /// Rows, with a track that runs top to bottom.
-    Vertical,
-    /// Columns, with a track that runs left to right.
-    Horizontal,
-}
-
 /// The glyphs drawn on scrollbar tracks, following the
 /// [`BoxGlyphs`](crate::BoxGlyphs) pattern.
 ///
@@ -89,7 +80,7 @@ impl Resolution {
 pub fn scroll_target(
     ctx: &dyn ViewContext,
     owner: NodeId,
-    axis: Axis,
+    axis: ScrollAxis,
 ) -> Result<Option<ScrollTarget>> {
     if !ctx.is_attached_of(owner) {
         return Ok(None);
@@ -111,7 +102,7 @@ pub(crate) fn pane_target(
     ctx: &dyn ViewContext,
     owner: NodeId,
     pane: NodeId,
-    axis: Axis,
+    axis: ScrollAxis,
 ) -> Result<Option<ScrollTarget>> {
     if !ctx.is_attached_of(owner) {
         return Ok(None);
@@ -146,7 +137,7 @@ fn visible(rect: RectI32, clip: Rect) -> Option<Rect> {
 fn resolve_children(
     ctx: &dyn ViewContext,
     node: NodeId,
-    axis: Axis,
+    axis: ScrollAxis,
     clip: Rect,
 ) -> Result<Resolution> {
     let mut found = Resolution::Absent;
@@ -160,7 +151,12 @@ fn resolve_children(
 }
 
 /// Resolve the subtree at `node`, visible through `clip`.
-fn resolve(ctx: &dyn ViewContext, node: NodeId, axis: Axis, clip: Rect) -> Result<Resolution> {
+fn resolve(
+    ctx: &dyn ViewContext,
+    node: NodeId,
+    axis: ScrollAxis,
+    clip: Rect,
+) -> Result<Resolution> {
     let Some(view) = ctx.view_of(node) else {
         return Ok(Resolution::Absent);
     };
@@ -176,8 +172,8 @@ fn resolve(ctx: &dyn ViewContext, node: NodeId, axis: Axis, clip: Rect) -> Resul
         return Ok(Resolution::Absent);
     }
     let overflows = match axis {
-        Axis::Vertical => view.canvas.h > view.content.h,
-        Axis::Horizontal => view.canvas.w > view.content.w,
+        ScrollAxis::Vertical => view.canvas.h > view.content.h,
+        ScrollAxis::Horizontal => view.canvas.w > view.content.w,
     };
     if overflows {
         return Ok(Resolution::Unique(ScrollTarget { node, viewport }));
@@ -197,7 +193,7 @@ pub(crate) fn edge_track(
     ctx: &dyn ViewContext,
     target: &ScrollTarget,
     boundary: NodeId,
-    axis: Axis,
+    axis: ScrollAxis,
     edge: Rect,
 ) -> Option<Rect> {
     let mut node = target.node;
@@ -205,8 +201,8 @@ pub(crate) fn edge_track(
         let parent = ctx.parent_of(node)?;
         let (outer, content) = (ctx.view_of(node)?.outer, ctx.view_of(parent)?.content);
         let flush = match axis {
-            Axis::Vertical => outer.right() == content.right(),
-            Axis::Horizontal => outer.bottom() == content.bottom(),
+            ScrollAxis::Vertical => outer.right() == content.right(),
+            ScrollAxis::Horizontal => outer.bottom() == content.bottom(),
         };
         if !flush {
             return None;
@@ -217,13 +213,13 @@ pub(crate) fn edge_track(
     let owner = ctx.view().outer;
     let viewport = target.viewport;
     let (start, length, edge_start, edge_length) = match axis {
-        Axis::Vertical => (
+        ScrollAxis::Vertical => (
             i64::from(viewport.tl.y) - i64::from(owner.tl.y),
             viewport.h,
             edge.tl.y,
             edge.h,
         ),
-        Axis::Horizontal => (
+        ScrollAxis::Horizontal => (
             i64::from(viewport.tl.x) - i64::from(owner.tl.x),
             viewport.w,
             edge.tl.x,
@@ -237,8 +233,8 @@ pub(crate) fn edge_track(
     }
     let (from, length) = (u32::try_from(from).ok()?, u32::try_from(to - from).ok()?);
     Some(match axis {
-        Axis::Vertical => Rect::new(edge.tl.x, from, edge.w, length),
-        Axis::Horizontal => Rect::new(from, edge.tl.y, length, edge.h),
+        ScrollAxis::Vertical => Rect::new(edge.tl.x, from, edge.w, length),
+        ScrollAxis::Horizontal => Rect::new(from, edge.tl.y, length, edge.h),
     })
 }
 
@@ -265,7 +261,7 @@ struct Drag {
 #[derive(Clone, Copy, Debug)]
 pub struct Scrollbar {
     /// Axis the scrollbar measures.
-    axis: Axis,
+    axis: ScrollAxis,
     /// Style path and glyph of the thumb.
     thumb: (&'static str, char),
     /// Style path of the thumb while a drag holds it.
@@ -279,16 +275,16 @@ pub struct Scrollbar {
 impl Scrollbar {
     /// Construct a vertical scrollbar whose thumb uses `style` and `glyph`.
     pub const fn vertical(style: &'static str, glyph: char) -> Self {
-        Self::new(Axis::Vertical, style, glyph)
+        Self::new(ScrollAxis::Vertical, style, glyph)
     }
 
     /// Construct a horizontal scrollbar whose thumb uses `style` and `glyph`.
     pub const fn horizontal(style: &'static str, glyph: char) -> Self {
-        Self::new(Axis::Horizontal, style, glyph)
+        Self::new(ScrollAxis::Horizontal, style, glyph)
     }
 
     /// Construct a scrollbar for `axis`.
-    const fn new(axis: Axis, style: &'static str, glyph: char) -> Self {
+    const fn new(axis: ScrollAxis, style: &'static str, glyph: char) -> Self {
         Self {
             axis,
             thumb: (style, glyph),
@@ -316,8 +312,8 @@ impl Scrollbar {
     /// `None` when `view` shows its whole canvas along this axis.
     fn parts(&self, view: &View, track: Rect) -> Option<(Rect, Rect, Rect)> {
         let parts = match self.axis {
-            Axis::Vertical => view.vactive(track),
-            Axis::Horizontal => view.hactive(track),
+            ScrollAxis::Vertical => view.vactive(track),
+            ScrollAxis::Horizontal => view.hactive(track),
         };
         parts.ok().flatten()
     }
@@ -325,8 +321,8 @@ impl Scrollbar {
     /// Return the length of `track` along this axis.
     fn length(&self, track: Rect) -> u32 {
         match self.axis {
-            Axis::Vertical => track.h,
-            Axis::Horizontal => track.w,
+            ScrollAxis::Vertical => track.h,
+            ScrollAxis::Horizontal => track.w,
         }
     }
 
@@ -395,16 +391,15 @@ impl Scrollbar {
     ) -> Result<()> {
         let mut marks = Vec::new();
         ctx.with_widget_dyn(target, &mut |widget| {
-            marks =
-                widget.scroll_marks(self.core_axis(), Size::new(view.content.w, view.content.h));
+            marks = widget.scroll_marks(self.axis, Size::new(view.content.w, view.content.h));
             Ok(())
         })?;
         if marks.is_empty() {
             return Ok(());
         }
         let canvas_len = match self.axis {
-            Axis::Vertical => view.canvas.h,
-            Axis::Horizontal => view.canvas.w,
+            ScrollAxis::Vertical => view.canvas.h,
+            ScrollAxis::Horizontal => view.canvas.w,
         };
         let track_len = self.length(track);
         for mark in marks {
@@ -419,8 +414,8 @@ impl Scrollbar {
             };
             for pos in first..=last {
                 let cell = match self.axis {
-                    Axis::Vertical => Rect::new(track.tl.x, track.tl.y + pos, track.w, 1),
-                    Axis::Horizontal => Rect::new(track.tl.x + pos, track.tl.y, 1, track.h),
+                    ScrollAxis::Vertical => Rect::new(track.tl.x, track.tl.y + pos, track.w, 1),
+                    ScrollAxis::Horizontal => Rect::new(track.tl.x + pos, track.tl.y, 1, track.h),
                 };
                 if thumb.contains_point(cell.tl) {
                     render.fill(mark.style, cell, self.thumb.1)?;
@@ -443,14 +438,6 @@ impl Scrollbar {
         }
         let cell = u64::from(offset) * u64::from(track_len) / u64::from(canvas_len);
         u32::try_from(cell.min(u64::from(track_len) - 1)).ok()
-    }
-
-    /// Convert this scrollbar's axis to the core axis marks are reported on.
-    fn core_axis(&self) -> ScrollAxis {
-        match self.axis {
-            Axis::Vertical => ScrollAxis::Vertical,
-            Axis::Horizontal => ScrollAxis::Horizontal,
-        }
     }
 
     /// Handle a mouse event for the scrollbars drawn in `tracks`.
@@ -533,8 +520,8 @@ impl Scrollbar {
         tracks: &[(NodeId, Rect)],
     ) -> Result<EventOutcome> {
         let (dx, dy) = match self.axis {
-            Axis::Vertical => (0, delta.y),
-            Axis::Horizontal => (delta.x, 0),
+            ScrollAxis::Vertical => (0, delta.y),
+            ScrollAxis::Horizontal => (delta.x, 0),
         };
         let target = pointer.and_then(|pointer| {
             tracks
@@ -616,12 +603,12 @@ impl Scrollbar {
     /// axis, measured from the start of `track`.
     fn along(&self, pointer: Point, track: Rect, thumb: Rect) -> (u32, u32, u32) {
         match self.axis {
-            Axis::Vertical => (
+            ScrollAxis::Vertical => (
                 pointer.y.saturating_sub(track.tl.y),
                 thumb.tl.y.saturating_sub(track.tl.y),
                 thumb.h,
             ),
-            Axis::Horizontal => (
+            ScrollAxis::Horizontal => (
                 pointer.x.saturating_sub(track.tl.x),
                 thumb.tl.x.saturating_sub(track.tl.x),
                 thumb.w,
@@ -640,7 +627,7 @@ impl Scrollbar {
         thumb_start: u32,
     ) -> Result<()> {
         let (x, y) = match self.axis {
-            Axis::Vertical => (
+            ScrollAxis::Vertical => (
                 view.scroll.x,
                 offset_for_thumb_start(
                     thumb_start,
@@ -650,7 +637,7 @@ impl Scrollbar {
                     view.content.h,
                 ),
             ),
-            Axis::Horizontal => (
+            ScrollAxis::Horizontal => (
                 offset_for_thumb_start(
                     thumb_start,
                     track.w,
