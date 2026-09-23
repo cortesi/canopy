@@ -1,8 +1,8 @@
 //! Chargym: A Unicode width and wide character demo.
 
 use canopy::{
-    Canopy, CanopyBuilder, Context, ContextExt, EventOutcome, Loader, ViewContext, Widget,
-    error::Result, event::key, layout::Layout,
+    Canopy, CanopyBuilder, Context, ContextExt, Loader, ViewContext, Widget, error::Result,
+    layout::Layout,
 };
 use canopy_widgets::{CanvasWidth, Frame, Text};
 use unicode_width::UnicodeWidthStr;
@@ -187,10 +187,6 @@ impl CharGym {
 }
 
 impl Widget for CharGym {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }

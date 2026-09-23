@@ -14,7 +14,7 @@ use crate::{
     core::termbuf::TermBuf,
     event::key::Key,
     help,
-    keyroute::{KeyRouteExplanation, KeyRouteStep, RouteCertainty, RouteOutcome},
+    keyroute::{KeyRouteExplanation, KeyRouteStep, RouteOutcome},
     widget::EventOutcome,
 };
 
@@ -271,14 +271,6 @@ pub(super) fn binding_info_to_arg(binding: &inputmap::BindingRecord) -> ArgValue
         ),
         ("id".to_string(), ArgValue::UInt(binding.id.as_u64())),
         (
-            "owner".to_string(),
-            ArgValue::String(owner_label(binding.owner)),
-        ),
-        (
-            "scope".to_string(),
-            ArgValue::String(binding.scope.label().to_string()),
-        ),
-        (
             "path".to_string(),
             ArgValue::String(binding.path_filter().to_string()),
         ),
@@ -290,26 +282,40 @@ pub(super) fn binding_info_to_arg(binding: &inputmap::BindingRecord) -> ArgValue
             "target".to_string(),
             ArgValue::String(binding.target.label().to_string()),
         ),
-    ]);
-    if let Some(phase) = binding.phase {
-        record.insert(
+        (
             "phase".to_string(),
-            ArgValue::String(phase.label().to_string()),
-        );
-    }
+            ArgValue::String(binding.phase.label().to_string()),
+        ),
+    ]);
+    insert_tier(&mut record, &binding.tier);
     if let Some(action) = binding.target.widget_action() {
         record.insert("action".to_string(), ArgValue::String(action.to_string()));
     }
     if let inputmap::BindingTarget::Command(call) = &binding.target {
         insert_command_call(&mut record, call);
     }
-    if let Some(mode) = binding.scope.mode() {
-        record.insert("mode".to_string(), ArgValue::String(mode.to_string()));
-    }
     if let Some(source) = &binding.source {
         record.insert("source".to_string(), ArgValue::String(source.clone()));
     }
     ArgValue::Map(record)
+}
+
+/// Add a binding tier, with its mode or framework group, to an observation
+/// record.
+fn insert_tier(record: &mut BTreeMap<String, ArgValue>, tier: &inputmap::BindingTier) {
+    record.insert(
+        "tier".to_string(),
+        ArgValue::String(tier.label().to_string()),
+    );
+    match tier {
+        inputmap::BindingTier::Framework(group) => {
+            record.insert("group".to_string(), ArgValue::String(group.to_string()));
+        }
+        inputmap::BindingTier::Mode(mode) => {
+            record.insert("mode".to_string(), ArgValue::String(mode.clone()));
+        }
+        inputmap::BindingTier::Global | inputmap::BindingTier::Default => {}
+    }
 }
 
 /// Add a stored command call's arguments and target policy to an observation
@@ -571,8 +577,8 @@ pub(super) fn route_trace_to_arg(canopy: &Canopy) -> ArgValue {
             .map(|entry| {
                 let mut record = BTreeMap::from([
                     (
-                        "phase".to_string(),
-                        ArgValue::String(entry.phase.as_str().to_string()),
+                        "kind".to_string(),
+                        ArgValue::String(entry.kind.label().to_string()),
                     ),
                     ("path".to_string(), ArgValue::String(entry.path.clone())),
                     ("detail".to_string(), ArgValue::String(entry.detail.clone())),
@@ -584,14 +590,6 @@ pub(super) fn route_trace_to_arg(canopy: &Canopy) -> ArgValue {
             })
             .collect(),
     )
-}
-
-/// Render a binding owner as its script-visible label.
-fn owner_label(owner: inputmap::BindingOwner) -> String {
-    match owner {
-        inputmap::BindingOwner::Application => "application".to_string(),
-        inputmap::BindingOwner::Framework(group) => format!("framework:{group}"),
-    }
 }
 
 /// Convert one effective binding to a scripting record.
@@ -609,14 +607,6 @@ fn available_binding_to_arg<I: ToString>(binding: help::AvailableBinding<I>) -> 
             "description".to_string(),
             ArgValue::String(binding.description),
         ),
-        (
-            "owner".to_string(),
-            ArgValue::String(owner_label(binding.owner)),
-        ),
-        (
-            "scope".to_string(),
-            ArgValue::String(binding.scope.label().to_string()),
-        ),
         ("path".to_string(), ArgValue::String(binding.path_filter)),
         (
             "route_path".to_string(),
@@ -626,24 +616,20 @@ fn available_binding_to_arg<I: ToString>(binding: help::AvailableBinding<I>) -> 
             "target".to_string(),
             ArgValue::String(binding.target.label().to_string()),
         ),
+        (
+            "phase".to_string(),
+            ArgValue::String(binding.phase.label().to_string()),
+        ),
     ]);
+    insert_tier(&mut record, &binding.tier);
     if let Some(action) = binding.action {
         record.insert("action".to_string(), ArgValue::String(action.to_string()));
-    }
-    if let Some(phase) = binding.phase {
-        record.insert(
-            "phase".to_string(),
-            ArgValue::String(phase.label().to_string()),
-        );
     }
     if let Some(command) = binding.command {
         let mut detail = BTreeMap::new();
         insert_command_call(&mut detail, &command.call);
         insert_command_availability(&mut detail, command.availability.as_ref());
         record.insert("command".to_string(), ArgValue::Map(detail));
-    }
-    if let Some(mode) = binding.scope.mode() {
-        record.insert("mode".to_string(), ArgValue::String(mode.to_string()));
     }
     if let Some(source) = binding.source {
         record.insert("source".to_string(), ArgValue::String(source));
@@ -684,33 +670,6 @@ pub(super) fn available_bindings_to_arg(
             ),
         ),
         (
-            "provisional_bindings".to_string(),
-            ArgValue::Array(
-                snapshot
-                    .provisional_bindings
-                    .into_iter()
-                    .map(available_binding_to_arg)
-                    .collect(),
-            ),
-        ),
-        (
-            "key_prediction_gaps".to_string(),
-            ArgValue::Array(
-                snapshot
-                    .key_prediction_gaps
-                    .into_iter()
-                    .map(|gap| {
-                        ArgValue::Map(BTreeMap::from([
-                            ("input".to_string(), ArgValue::String(gap.input.to_string())),
-                            ("binding".to_string(), ArgValue::UInt(gap.binding.as_u64())),
-                            ("node".to_string(), ArgValue::Node(gap.node)),
-                            ("path".to_string(), ArgValue::String(gap.path.to_string())),
-                        ]))
-                    })
-                    .collect(),
-            ),
-        ),
-        (
             "mouse_bindings".to_string(),
             ArgValue::Array(
                 snapshot
@@ -727,8 +686,8 @@ pub(super) fn available_bindings_to_arg(
                 .map_or(ArgValue::Null, ArgValue::String),
         ),
         (
-            "exclusive_group".to_string(),
-            snapshot.exclusive_group.map_or(ArgValue::Null, |group| {
+            "framework_group".to_string(),
+            snapshot.framework_group.map_or(ArgValue::Null, |group| {
                 ArgValue::String(group.as_str().to_string())
             }),
         ),
@@ -814,19 +773,9 @@ fn key_route_explanation_to_arg(explanation: KeyRouteExplanation) -> ArgValue {
             ArgValue::Array(
                 explanation
                     .steps
-                    .into_iter()
+                    .iter()
                     .map(key_route_step_to_arg)
                     .collect(),
-            ),
-        ),
-        (
-            "certainty".to_string(),
-            ArgValue::String(
-                match explanation.certainty {
-                    RouteCertainty::Exact => "exact",
-                    RouteCertainty::Partial => "partial",
-                }
-                .to_string(),
             ),
         ),
         (
@@ -837,86 +786,75 @@ fn key_route_explanation_to_arg(explanation: KeyRouteExplanation) -> ArgValue {
 }
 
 /// Convert one examined route step.
-fn key_route_step_to_arg(step: KeyRouteStep) -> ArgValue {
+fn key_route_step_to_arg(step: &KeyRouteStep) -> ArgValue {
     let mut record = BTreeMap::from([
         ("node".to_string(), ArgValue::Node(step.node)),
         ("path".to_string(), ArgValue::String(step.path.to_string())),
+        (
+            "widget".to_string(),
+            ArgValue::String(event_outcome_label(step.widget).to_string()),
+        ),
     ]);
     if let Some(binding) = step.binding {
-        record.insert("binding".to_string(), ArgValue::UInt(binding.as_u64()));
-    }
-    if let Some(target) = step.target {
         record.insert(
-            "target".to_string(),
-            ArgValue::String(target.label().to_string()),
-        );
-    }
-    if let Some(phase) = step.phase {
-        record.insert(
-            "phase".to_string(),
-            ArgValue::String(phase.label().to_string()),
-        );
-    }
-    if let Some(widget) = step.widget {
-        record.insert(
-            "widget".to_string(),
-            ArgValue::String(
-                match widget {
-                    EventOutcome::Handle => "handle",
-                    EventOutcome::Ignore => "ignore",
-                }
-                .to_string(),
-            ),
+            "binding".to_string(),
+            ArgValue::Map(BTreeMap::from([
+                ("id".to_string(), ArgValue::UInt(binding.id.as_u64())),
+                (
+                    "target".to_string(),
+                    ArgValue::String(binding.kind.label().to_string()),
+                ),
+                (
+                    "phase".to_string(),
+                    ArgValue::String(binding.phase.label().to_string()),
+                ),
+            ])),
         );
     }
     ArgValue::Map(record)
 }
 
+/// Return the script label for a widget event outcome.
+fn event_outcome_label(outcome: EventOutcome) -> &'static str {
+    match outcome {
+        EventOutcome::Handle => "handle",
+        EventOutcome::Ignore => "ignore",
+    }
+}
+
 /// Convert the decisive route outcome.
 fn key_route_outcome_to_arg(outcome: RouteOutcome) -> ArgValue {
-    let (kind, binding, node, path) = match outcome {
-        RouteOutcome::Transient {
-            binding,
-            node,
-            path,
-        } => ("transient", Some(binding), Some(node), Some(path)),
-        RouteOutcome::TransientWidgetAction {
-            binding,
-            node,
-            path,
-        } => (
-            "transient_widget_action",
-            Some(binding),
-            Some(node),
-            Some(path),
-        ),
-        RouteOutcome::TransientDismiss => ("transient_dismiss", None, None, None),
-        RouteOutcome::WidgetAction {
-            binding,
-            node,
-            path,
-        } => ("widget_action", Some(binding), Some(node), Some(path)),
-        RouteOutcome::BeforeWidget {
-            binding,
-            node,
-            path,
-        } => ("before_widget", Some(binding), Some(node), Some(path)),
-        RouteOutcome::Widget { node, path } => ("widget", None, Some(node), Some(path)),
-        RouteOutcome::AfterWidget {
-            binding,
-            node,
-            path,
-        } => ("after_widget", Some(binding), Some(node), Some(path)),
-        RouteOutcome::Unhandled => ("unhandled", None, None, None),
+    let (kind, winner, widget) = match outcome {
+        RouteOutcome::Binding(winner) => ("binding", Some(winner), None),
+        RouteOutcome::Transient(winner) => ("transient", Some(winner), None),
+        RouteOutcome::Widget { node, path } => ("widget", None, Some((node, path))),
+        RouteOutcome::TransientDismiss => ("transient_dismiss", None, None),
+        RouteOutcome::Unhandled => ("unhandled", None, None),
     };
     let mut record = BTreeMap::from([("kind".to_string(), ArgValue::String(kind.to_string()))]);
-    if let Some(binding) = binding {
-        record.insert("binding".to_string(), ArgValue::UInt(binding.as_u64()));
+    if let Some(winner) = winner {
+        record.extend([
+            (
+                "binding".to_string(),
+                ArgValue::UInt(winner.binding.as_u64()),
+            ),
+            ("node".to_string(), ArgValue::Node(winner.node)),
+            (
+                "path".to_string(),
+                ArgValue::String(winner.path.to_string()),
+            ),
+            (
+                "target".to_string(),
+                ArgValue::String(winner.kind.label().to_string()),
+            ),
+            (
+                "phase".to_string(),
+                ArgValue::String(winner.phase.label().to_string()),
+            ),
+        ]);
     }
-    if let Some(node) = node {
+    if let Some((node, path)) = widget {
         record.insert("node".to_string(), ArgValue::Node(node));
-    }
-    if let Some(path) = path {
         record.insert("path".to_string(), ArgValue::String(path.to_string()));
     }
     ArgValue::Map(record)

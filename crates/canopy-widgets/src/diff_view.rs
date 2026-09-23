@@ -19,9 +19,8 @@
 use std::ops::Range;
 
 use canopy::{
-    Context, EventOutcome, FocusDirection, NodeName, Render, ViewContext, Widget, derive_commands,
+    Context, FocusDirection, NodeName, Render, ViewContext, Widget, derive_commands,
     error::Result,
-    event::key,
     geom::{Line, Point, Rect, Size},
     layout::{CanvasContext, Constraint, MeasureConstraints, Measurement},
     style::Style,
@@ -718,10 +717,6 @@ impl DiffView {
 }
 
 impl Widget for DiffView {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         self.prepare_highlighters();
         match self.strategy {

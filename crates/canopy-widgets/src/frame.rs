@@ -2,7 +2,7 @@ use canopy::{
     Context, EventOutcome, NodeId, NodeName, Render, ScrollAxis, ViewContext, Widget,
     derive_commands,
     error::Result,
-    event::{Event, key},
+    event::Event,
     geom::{self, Rect},
     layout::{Edges, Layout},
 };
@@ -111,10 +111,6 @@ impl Default for Frame {
 }
 
 impl Widget for Frame {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let outer = ctx.view().outer_rect_local();
         let f = geom::FrameRects::new(outer, 1);

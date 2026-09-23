@@ -2,9 +2,8 @@
 //! Example widgets used by canopy demos.
 
 use canopy::{
-    CanopyBuilder, Context, ContextExt, EventOutcome, FocusDirection, Loader, ViewContext, Widget,
+    CanopyBuilder, Context, ContextExt, FocusDirection, Loader, Widget,
     error::{Error, Result},
-    event::key,
     layout::{Direction, Layout, LayoutOverride, Sizing},
     style::{
         AttrSet, Color, GradientSpec, GradientStop, Paint, StyleBuilder, StyleRules,
@@ -209,10 +208,6 @@ impl<T: Widget + 'static> DemoShell<T> {
 }
 
 impl<T: Widget + 'static> Widget for DemoShell<T> {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         Layout::fill().direction(Direction::Column)
     }

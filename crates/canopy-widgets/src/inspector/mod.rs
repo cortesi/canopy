@@ -1,8 +1,8 @@
 mod logs;
 
 use canopy::{
-    Canopy, Context, ContextExt, EventOutcome, Loader, NodeId, NodeName, Render, ViewContext,
-    Widget, derive_commands, error::Result, event::key, layout::Layout,
+    Canopy, Context, ContextExt, Loader, NodeId, NodeName, Render, ViewContext, Widget,
+    derive_commands, error::Result, layout::Layout,
 };
 use logs::Logs;
 
@@ -57,10 +57,6 @@ impl Inspector {
 }
 
 impl Widget for Inspector {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         Layout::fill()
     }

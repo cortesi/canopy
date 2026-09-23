@@ -3,12 +3,10 @@
 use std::{borrow::Cow, ops::Range};
 
 use canopy::{
-    Canopy, Context, ContextExt, EventOutcome, Loader, NodeName, Render, ViewContext, Widget,
-    WidgetSemantics,
+    Canopy, Context, ContextExt, Loader, NodeName, Render, ViewContext, Widget, WidgetSemantics,
     commands::{CommandCall, CommandStatus},
     derive_commands,
     error::Result,
-    event::key,
     geom::{Line, Size},
     layout::{Layout, MeasureConstraints, Measurement},
     style::{WidgetState, roles},
@@ -198,10 +196,6 @@ impl Loader for Button {
 }
 
 impl Widget for Button {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn semantics(&self, ctx: &dyn ViewContext) -> Result<WidgetSemantics> {
         Ok(WidgetSemantics {
             role: Some("button".into()),
@@ -268,10 +262,6 @@ impl ButtonLabel {
 }
 
 impl Widget for ButtonLabel {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         Layout::fill()
     }
@@ -1006,7 +996,7 @@ mod tests {
     /// Framework group admitted while the guarded dialog is open.
     const GUARDED: FrameworkBindingGroup = FrameworkBindingGroup::new("button.test_dialog");
 
-    /// Root with a dialog it opens as an exclusive modal.
+    /// Root with a dialog it opens as a framework-group modal.
     #[derive(Default)]
     struct Guarded {
         /// Times the dialog's button ran its action.
@@ -1045,20 +1035,19 @@ mod tests {
         fn load(canopy: &mut Canopy) -> Result<()> {
             Button::load(canopy)?;
             canopy.add_commands::<Self>()?;
-            // The dialog owns activation inside its own group, because an
-            // exclusive scope admits nothing else. The records are the same
-            // three inputs, on a path of the dialog's own.
+            // The dialog owns activation inside its own group, because a
+            // framework-group modal admits nothing else. The records are the
+            // same three inputs, on a path of the dialog's own.
             for (input, description) in [
                 (InputSpec::Key(Key::parse_spec("Enter")?), "Activate"),
                 (InputSpec::Key(Key::parse_spec("Space")?), "Activate"),
                 (InputSpec::Mouse(Mouse::parse_spec("LeftDown")?), "Activate"),
             ] {
                 canopy.bind_framework(
-                    GUARDED,
                     input,
                     canopy::BindingOptions {
                         path: Some("**/dialog/**/".parse()?),
-                        scope: canopy::BindingScope::Exclusive(GUARDED),
+                        tier: canopy::BindingTier::Framework(GUARDED),
                         description: description.to_string(),
                         source: None,
                         phase: Some(canopy::BindingPhase::AfterWidget),
@@ -1071,7 +1060,7 @@ mod tests {
     }
 
     #[test]
-    fn an_exclusive_modal_admits_only_its_own_activation_bindings() -> Result<()> {
+    fn a_framework_group_modal_admits_only_its_own_activation_bindings() -> Result<()> {
         let mut harness = activating(Guarded::default(), 20, 6)?;
         let (owner, dialog, button) = harness.with_root_context(|guarded: &mut Guarded, ctx| {
             Ok((

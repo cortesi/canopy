@@ -25,7 +25,7 @@ mod rendering;
 #[cfg(test)]
 mod rendering_tests;
 mod routing;
-pub use routing::{RoutePhase, RouteTraceEntry};
+pub use routing::{RouteTraceEntry, RouteTraceKind};
 mod scripting;
 use scripting::{ScriptJournal, ScriptJournalBaseline, ScriptState};
 pub use scripting::{ScriptJournalEntry, ScriptOrigin};
@@ -328,16 +328,16 @@ impl Canopy {
     }
 
     /// Install an idempotent framework-owned command binding.
+    ///
+    /// `options.tier` must be [`inputmap::BindingTier::Framework`], and names
+    /// the group the binding joins.
     pub fn bind_framework(
         &mut self,
-        group: inputmap::FrameworkBindingGroup,
         input: impl Into<inputmap::InputSpec>,
         options: inputmap::BindingOptions,
         command: commands::CommandCall,
     ) -> Result<inputmap::BindingId> {
-        self.core
-            .input_map
-            .bind_framework(group, input, options, command)
+        self.core.input_map.bind_framework(input, options, command)
     }
 
     /// Install or replace an application command binding.
@@ -535,12 +535,12 @@ impl Canopy {
         out.push_str(&format!("target: {target:?}\n"));
         out.push_str(&format!("target path: {target_path}\n"));
         out.push_str(&format!("input mode: {input_mode}\n"));
-        let exclusive = self
+        let group = self
             .core
             .input_map
-            .active_exclusive_group()
+            .active_framework_group()
             .map_or("(none)", inputmap::FrameworkBindingGroup::as_str);
-        out.push_str(&format!("exclusive group: {exclusive}\n"));
+        out.push_str(&format!("framework group: {group}\n"));
 
         let mut bindings = self.core.input_map.bindings().iter().collect::<Vec<_>>();
         bindings.sort_by(|left, right| {
@@ -556,10 +556,9 @@ impl Canopy {
             for binding in bindings {
                 let verdict = self.core.binding_verdict(binding.id, target);
                 out.push_str(&format!(
-                    "  [{:?}] owner={:?} scope={:?} {} {} -> {} ({})\n",
+                    "  [{:?}] tier={:?} {} {} -> {} ({})\n",
                     binding.id,
-                    binding.owner,
-                    binding.scope,
+                    binding.tier,
                     binding.input,
                     binding.path_filter(),
                     binding.description,
@@ -575,7 +574,7 @@ impl Canopy {
             for entry in &self.route_trace {
                 out.push_str(&format!(
                     "  {} node={:?} path={} {}\n",
-                    entry.phase.as_str(),
+                    entry.kind.label(),
                     entry.node,
                     entry.path,
                     entry.detail

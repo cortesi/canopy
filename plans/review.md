@@ -2189,10 +2189,10 @@ Each stage also updates the docs it touches.
 - [x] C44: snake_case `CommandEnum`, generated-function visibility, and
   `spec_*`. fh derives its enums and adds `toggle_column(Column)`. Lowercase the
   enum strings in Luau, including 6 sites in fh's `default_config.luau`.
-- [ ] C8, C9: `BindingTier`, a non-optional stored phase, `StepBinding`,
+- [x] C8, C9: `BindingTier`, a non-optional stored phase, `StepBinding`,
   `RouteWinner`, and `RouteTraceKind` with snake_case labels. Update the Luau
   records, and fh's 8 `exclusive_group` reads.
-- [ ] C45: `key_outcome` returns `EventOutcome`. Delete the provisional and
+- [x] C45: `key_outcome` returns `EventOutcome`. Delete the provisional and
   gap machinery, add the prediction check to routing, and delete the
   boilerplate implementations in both repositories.
 - [ ] C11:

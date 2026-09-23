@@ -3,9 +3,8 @@
 use std::mem;
 
 use canopy::{
-    Context, ContextExt, EventOutcome, NodeName, Render, ViewContext, Widget,
+    Context, ContextExt, NodeName, Render, ViewContext, Widget,
     error::Result,
-    event::key,
     geom::{Line, Size},
     layout::{Layout, LayoutOverride, MeasureConstraints, Measurement, Sizing},
 };
@@ -68,10 +67,6 @@ impl Default for StatusBar {
 }
 
 impl Widget for StatusBar {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         // The bar spans its parent's width and keeps one row, so a host can
         // add it as a column's first or last child without an override.
@@ -180,10 +175,6 @@ impl KeyHint {
 }
 
 impl Widget for KeyHint {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         Layout::column().fixed_height(1)
     }

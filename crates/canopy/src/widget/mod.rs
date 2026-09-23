@@ -18,7 +18,7 @@ use crate::{
 };
 
 /// The result of an event handler.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum EventOutcome {
     /// The event was processed and propagation stops.
     Handle,
@@ -105,20 +105,17 @@ pub trait Widget: Any {
     /// answers follow the route focus the caller is asking about, which can
     /// differ from the live focus.
     ///
-    /// The result has three meanings: `Some(EventOutcome::Handle)` predicts
-    /// that [`Widget::on_event`] consumes the key, `Some(EventOutcome::Ignore)`
-    /// predicts that it does not, and `None` says that this widget offers no
-    /// prediction. The default is `None`, so third-party widgets keep the
-    /// pre-existing discovery behavior.
-    ///
-    /// When this returns `Some`, the prediction must equal the next routed
+    /// The prediction must equal the next routed
     /// `on_event(Event::Key(key), ...)` result for the same pre-event state.
-    /// Dispatch passes the raw event key. Discovery probes the canonical
-    /// binding key instead, so a `Some` prediction is exact for the raw key
-    /// and best-effort for a canonical probe. First-party widgets return
-    /// `Some(EventOutcome::Ignore)` for keys they do not handle.
-    fn key_outcome(&self, _key: Key, _ctx: &dyn ViewContext) -> Option<EventOutcome> {
-        None
+    /// The default, [`EventOutcome::Ignore`], is right for a widget that
+    /// handles no keys; a widget that consumes keys in `on_event` must
+    /// predict them here. Dispatch passes the raw event key and checks the
+    /// prediction against the actual result: a mismatch records a route trace
+    /// entry and fails a debug assertion. Discovery probes the canonical
+    /// binding key instead, so a prediction is exact for the raw key and
+    /// best-effort for a canonical probe.
+    fn key_outcome(&self, _key: Key, _ctx: &dyn ViewContext) -> EventOutcome {
+        EventOutcome::Ignore
     }
 
     /// Return whether this widget consumes `action` in its current state.

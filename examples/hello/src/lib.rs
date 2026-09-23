@@ -13,10 +13,9 @@ use std::{
 };
 
 use canopy::{
-    Canopy, CanopyBuilder, Context, ContextExt, EventOutcome, Loader, NodeName, Render,
-    ScriptTrust, ViewContext, Widget, derive_commands,
+    Canopy, CanopyBuilder, Context, ContextExt, Loader, NodeName, Render, ScriptTrust, ViewContext,
+    Widget, derive_commands,
     error::Result,
-    event::key::Key,
     layout::{Align, Direction, Layout},
     style::default as palette,
 };
@@ -55,10 +54,6 @@ impl Hello {
 }
 
 impl Widget for Hello {
-    fn key_outcome(&self, _key: Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         // The footer bar keeps the last row, so align the greeting above it.
         Layout::fill()

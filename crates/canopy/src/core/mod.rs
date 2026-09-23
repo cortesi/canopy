@@ -68,7 +68,7 @@ pub mod world;
 // Public exports from internal modules
 pub use canopy::{
     AutomationCallback, AutomationHandle, Canopy, CanopyBuilder, EvalId, EvalOutcome, EvalRequest,
-    EvalTicket, FrameId, Loader, RoutePhase, RouteTraceEntry, ScriptJournalEntry, ScriptOrigin,
+    EvalTicket, FrameId, Loader, RouteTraceEntry, RouteTraceKind, ScriptJournalEntry, ScriptOrigin,
     ScriptTrust, TurnOutcome, Work,
 };
 pub use change::ChangeOutcome;
@@ -80,8 +80,8 @@ pub use context::{
 pub use fixture::{Fixture, FixtureInfo};
 pub use id::{NodeId, TypedId};
 pub use inputmap::{
-    BindingId, BindingOptions, BindingOwner, BindingPhase, BindingScope, BindingTargetKind,
-    FrameworkBindingGroup, InputSpec, WidgetActionName, WidgetActionSpec,
+    BindingId, BindingOptions, BindingPhase, BindingTargetKind, BindingTier, FrameworkBindingGroup,
+    InputSpec, WidgetActionName, WidgetActionSpec,
 };
 pub use node::SemanticIdentity;
 pub use snapshot::{FrameSnapshot, NodeSnapshot, WidgetSemantics};

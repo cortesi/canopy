@@ -157,9 +157,10 @@ canopy.keymap({
 })
 ```
 
-A widget action takes keys only and carries no phase. The route offers it to
-the widget at each route node; a widget that accepts it consumes the key, and a
-dormant action lets the route fall through to the next binding. An
+A widget action takes keys only and always runs `before_widget`, so an explicit
+`phase = "after_widget"` on one is an error. The route offers it to the widget
+at each route node. A widget that accepts it consumes the key, and a dormant
+action lets the route fall through to the next binding. An
 unregistered name fails at binding registration. Registered names appear in the
 rendered `canopy.api()` and in `canopy.bindings()` output.
 
@@ -217,7 +218,7 @@ even while a text field has focus, where `?` is a character to insert.
 string returns to the default mode. `canopy.push_mode(mode)` adds a mode above
 the active modes, and `canopy.pop_mode()` removes the newest one. A key that
 the newest mode does not bind falls through to the older modes and then to the
-default scope.
+default tier.
 
 Pass `{ transient = true }` to `canopy.push_mode` for a mode that takes only
 the next key:
@@ -242,7 +243,7 @@ canopy.keymap({
 The next key pops a transient mode. When the mode binds that key, the binding
 runs after the pop, so it can enter another mode. It runs before the focused
 widget sees the key, whatever its phase. Any other key only pops the mode, and
-does not fall through to older modes or to the default scope. Global bindings
+does not fall through to older modes or to the default tier. Global bindings
 still apply. `Root` lists the keys of a transient mode in a small panel until
 the mode ends.
 
@@ -256,45 +257,53 @@ dispatching node, or the node where a binding wins.
 Set `phase = "before_widget"` to run before widget input, or `phase =
 "after_widget"` to run after the widget ignores input. Key and mouse bindings
 take either phase. The default phase is `after_widget`. Explicit phases do
-not change scope, specificity, or insertion ordering.
+not change tier, specificity, or insertion ordering.
 
 The registry keeps one flat record format for application and framework
 bindings. `canopy.bindings()` returns all records, including normalized input,
-owner, scope, path, description, source, and target kind.
+tier, path, description, source, target kind, and phase. The `tier` field is
+`framework`, `global`, `mode`, or `default`, in resolution order. A mode record
+also names its `mode`, and a framework record names its framework `group`.
 `canopy.available_bindings(node?)` returns an owned snapshot of the effective
 bindings for the specified node or current focus. The snapshot contains the
-focus path, active modes, the transient mode, the active exclusive framework
-group, one winning record per key in `bindings`, and one winning record per
-mouse input in `mouse_bindings`. Each winner includes its route path and
-whether it runs before the widget or after the widget ignores the input.
-Contextual help and automation use this same resolver as input routing.
+focus path, active modes, the transient mode, the `framework_group` that the
+open modal admits, one winning record per key in `bindings`, and one winning
+record per mouse input in `mouse_bindings`. Each winner includes its route path
+and phase. Contextual help and automation use this same resolver as input
+routing.
 
 A snapshot says what the named context would do with an input, not what the
 next event will do. The mouse route starts at the requested node, as a click on
 it would, and the pointer's own position plays no part: hit testing and mouse
 capture choose the real target. Key discovery asks each widget's `key_outcome`
-along the route: a `Handle` prediction hides the `after_widget` bindings it
-would shadow, and `Ignore` lets the route continue. A widget with no prediction
-is unknown. An included binding behind it moves to `provisional_bindings`, and
-`key_prediction_gaps` lists it with the canonical key, the provisional binding,
-and the unknown node and path. An empty gap list means the key set is exact.
+along the route. A `Handle` prediction hides the `after_widget` bindings it
+would shadow, and `Ignore` lets the route continue. Every widget predicts its
+keys, so the key list is exact for the current state.
 
 `canopy.explain_key(key, node?)` analyzes one key without sending it. The record
-names the focus and path, one step per examined node with its resolved binding,
-phase, and widget prediction, an `exact` or `partial` certainty, and the
-decisive outcome: a transient, before-widget, or after-widget binding, a widget
-that consumes the key, or an unhandled route. The explanation is advisory;
-routing still acts one node at a time, and `canopy.route_trace()` reports what
-actually happened.
+names the focus and path, and one step per examined node. A step has the
+widget prediction, `handle` or `ignore`, and an optional `binding` record with
+the selected binding's `id`, `target`, and `phase`. The `outcome` has a `kind`:
+`binding`, `transient`, `widget`, `transient_dismiss`, or `unhandled`. A
+`binding` or `transient` outcome names the winning `binding`, its `node` and
+`path`, its `target`, and its `phase`. A `widget` outcome names the consuming
+`node` and `path`. The explanation is advisory, because routing still acts one
+node at a time.
+
+`canopy.route_trace()` reports what routing actually did. Each entry has a
+`kind`: `start`, `before_widget_binding`, `offer_intent`, `widget`,
+`after_widget_binding`, `run_binding`, `default_action`, `bubble`, `handled`,
+or `unhandled`. A widget action offer traces as `offer_intent`. A `widget`
+entry that begins with "key prediction mismatch" marks a widget whose
+`key_outcome` disagreed with its result.
 
 `canopy.send_key_checked(key, expectation)` sends a key only when its analyzed
 route matches. An expectation is `{ kind = "widget", node = ... }`,
 `{ kind = "binding", binding = ... }`,
 `{ kind = "transient", binding = ... }`, `{ kind = "transient_dismiss" }`, or
-`{ kind = "unhandled" }`. A partial analysis, a detached node, or a mismatched
-outcome is rejected before delivery. During delivery a guard compares each step
-and stops before an unexpected consumer acts, without rolling back earlier
-steps.
+`{ kind = "unhandled" }`. A detached node or a mismatched outcome is rejected
+before delivery. During delivery a guard compares each step and stops before
+an unexpected consumer acts, without rolling back earlier steps.
 
 An `input` field is the spec a binding is written in, such as `Ctrl+LeftDown`
 or `ScrollUp`, so a reported label parses back to the record it names.

@@ -3,14 +3,11 @@
 use std::mem;
 
 use canopy::{
-    Canopy, Context, EventOutcome, Loader, NodeName, Render, ViewContext, Widget,
+    Canopy, Context, Loader, NodeName, Render, ViewContext, Widget,
     commands::CommandStatus,
     derive_commands,
     error::Result,
-    event::{
-        key,
-        key::{Empty, Key, KeyCode},
-    },
+    event::key::{Empty, Key, KeyCode},
     geom::{Line, Size},
     help::{AvailableBinding, BindingSnapshot},
     layout::{
@@ -21,9 +18,6 @@ use unicode_width::UnicodeWidthStr;
 
 /// Widest row of keys for one action before further keys continue below.
 const KEY_ROW_WIDTH: usize = 20;
-
-/// Warning appended when an unknown widget can hide an included binding.
-pub(super) const PARTIAL_WARNING: &str = "Some keys may be intercepted before these bindings";
 
 /// One prepared display line.
 pub(super) struct DisplayLine {
@@ -105,19 +99,7 @@ impl BindingList {
     /// Build the exact vertical canvas for one viewport width.
     pub(super) fn display_lines(&self, width: u32) -> Vec<DisplayLine> {
         let rows = self.snapshot.as_ref().map_or_else(Vec::new, snapshot_rows);
-        let mut lines = display_lines(&rows, width);
-        if self
-            .snapshot
-            .as_ref()
-            .is_some_and(|snapshot| !snapshot.key_prediction_gaps.is_empty())
-        {
-            lines.push(DisplayLine {
-                key: None,
-                text: PARTIAL_WARNING.to_string(),
-                style: "help/warning",
-            });
-        }
-        lines
+        display_lines(&rows, width)
     }
 }
 
@@ -128,10 +110,6 @@ impl Loader for BindingList {
 }
 
 impl Widget for BindingList {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn accept_focus(&self, _context: &dyn ViewContext) -> bool {
         true
     }

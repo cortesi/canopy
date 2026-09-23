@@ -10,7 +10,7 @@ use canopy::{
     Canopy, ChildSlot, Context, ContextExt, EventOutcome, Loader, NodeId, NodeName, Render,
     TypedId, ViewContext, Widget, derive_commands,
     error::{Error, Result},
-    event::{Event, key},
+    event::Event,
     layout::{Align, Direction, Edges, Layout, Sizing},
 };
 pub use mode::ModeHelp;
@@ -81,10 +81,6 @@ impl Help {
 }
 
 impl Widget for Help {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         Layout::fill()
     }

@@ -3,9 +3,8 @@
 use std::time::Duration;
 
 use canopy::{
-    Context, ContextExt, EventOutcome, NodeName, TypedId, ViewContext, Widget,
+    Context, ContextExt, NodeName, TypedId, Widget,
     error::{Error, Result},
-    event::key,
     layout::{Align, Layout},
     rgb,
     style::StyleMap,
@@ -105,10 +104,6 @@ impl FontDemo {
 }
 
 impl Widget for FontDemo {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         Layout::fill().align_center()
     }

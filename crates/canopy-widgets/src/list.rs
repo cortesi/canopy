@@ -12,7 +12,7 @@ use canopy::{
     commands::{ArgValue, CommandArgs, CommandCall, CommandStatus, ToArgValue},
     derive_commands,
     error::{Error, Result},
-    event::{Event, key, mouse},
+    event::{Event, mouse},
     geom::{Line, Point, PointI32, Size},
     layout::{
         CanvasContext, Constraint, Edges, Layout, MeasureConstraints, MeasureOverflow, Measurement,
@@ -807,10 +807,6 @@ impl<W: Selectable> List<W, AutoKey> {
 }
 
 impl<W: Selectable + 'static, K: Eq + Hash + Clone + ToArgValue + 'static> Widget for List<W, K> {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn semantics(&self, ctx: &dyn ViewContext) -> Result<WidgetSemantics> {
         // A checked list reports its checks as the collection's selection.
         let selected_keys = if self.checks.is_some() {

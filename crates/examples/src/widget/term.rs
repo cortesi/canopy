@@ -3,10 +3,8 @@
 use std::env;
 
 use canopy::{
-    Context, ContextExt, EventOutcome, NodeId, NodeName, Render, TypedId, ViewContext, Widget,
-    derive_commands,
+    Context, ContextExt, NodeId, NodeName, Render, TypedId, ViewContext, Widget, derive_commands,
     error::{Error, Result},
-    event::key,
     layout::{Direction, Edges, Layout},
     rgb,
     style::{Color, Paint, StyleMap},
@@ -34,10 +32,6 @@ impl TabBar {
 }
 
 impl Widget for TabBar {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         Layout::fill()
             .direction(Direction::Row)
@@ -61,10 +55,6 @@ impl TerminalStack {
 }
 
 impl Widget for TerminalStack {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         Layout::fill().direction(Direction::Stack)
     }
@@ -151,10 +141,6 @@ impl TermDemo {
 }
 
 impl Widget for TermDemo {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         Layout::fill().direction(Direction::Column)
     }

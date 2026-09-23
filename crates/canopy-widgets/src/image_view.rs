@@ -3,10 +3,9 @@
 use std::path::Path;
 
 use canopy::{
-    Canopy, CommandEnum, Context, EventOutcome, FocusDirection, Loader, Render, ViewContext,
-    Widget, derive_commands,
+    Canopy, CommandEnum, Context, FocusDirection, Loader, Render, ViewContext, Widget,
+    derive_commands,
     error::{Error, Result},
-    event::key,
     geom::{Point, Rect, Size},
     layout::{CanvasContext, Layout},
     style::{AttrSet, Color, Style},
@@ -501,10 +500,6 @@ impl ImageView {
 }
 
 impl Widget for ImageView {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     /// Fill the available space in the terminal view.
     fn layout(&self) -> Layout {
         Layout::fill()

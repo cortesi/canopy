@@ -4,17 +4,14 @@ use crate::{
     commands::{CommandAvailability, CommandCall, CommandResolver},
     core::{
         Core, NodeId,
-        context::CoreViewContext,
         inputmap::{
-            BindingId, BindingOwner, BindingPhase, BindingScope, BindingTarget, BindingTargetKind,
+            BindingId, BindingPhase, BindingTarget, BindingTargetKind, BindingTier,
             FrameworkBindingGroup, InputSpec, WidgetActionName,
         },
-        world::WidgetOperation,
     },
     error::Result,
     event::{key::Key, mouse::Mouse},
     path::Path,
-    widget::EventOutcome,
 };
 
 /// Owned snapshot of the effective bindings for one focus context.
@@ -37,47 +34,17 @@ pub struct BindingSnapshot {
     /// This is the newest active mode when it is transient. It is absent
     /// while a framework-group modal suspends transient modes.
     pub transient_mode: Option<String>,
-    /// Newest active exclusive binding group.
-    pub exclusive_group: Option<FrameworkBindingGroup>,
-    /// Effective key bindings with an exact route to a consumer.
+    /// Framework group the open modal admits.
+    pub framework_group: Option<FrameworkBindingGroup>,
+    /// Effective key bindings, each with a route to the node where it acts.
     ///
     /// An action binding appears only when a widget on the route accepts it.
-    /// An action without a consumer appears in neither this list nor
-    /// `provisional_bindings`.
     pub bindings: Vec<AvailableBinding<Key>>,
-    /// Key bindings whose reachability depends on an unknown widget.
-    ///
-    /// A widget that returns no prediction (`None`) can consume a key before a
-    /// binding that discovery otherwise includes. These rows are diagnostic
-    /// and do not belong in executable help.
-    pub provisional_bindings: Vec<AvailableBinding<Key>>,
-    /// Included key bindings whose reachability depends on an unknown widget.
-    ///
-    /// Each gap names the canonical key, the provisional binding, and the
-    /// unknown widget that precedes it. An empty list means the returned
-    /// key-binding set is exact.
-    pub key_prediction_gaps: Vec<KeyPredictionGap>,
     /// Effective mouse bindings, with one winner per normalized mouse input.
     ///
     /// The route starts at the requested node, as a click on it would. The
     /// pointer's own position plays no part.
     pub mouse_bindings: Vec<AvailableBinding<Mouse>>,
-}
-
-/// One included binding made provisional by an unknown widget.
-///
-/// `node` and `path` identify the widget that returned no prediction, and
-/// `binding` is the included binding it can hide.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct KeyPredictionGap {
-    /// Canonical binding key that stays provisional.
-    pub input: Key,
-    /// Included binding that an unknown widget can hide.
-    pub binding: BindingId,
-    /// Unknown widget that precedes the binding.
-    pub node: NodeId,
-    /// Route path of the unknown widget.
-    pub path: Path,
 }
 
 /// One effective binding in a contextual snapshot.
@@ -92,10 +59,8 @@ pub struct AvailableBinding<I> {
     pub input: I,
     /// Required user-facing description.
     pub description: String,
-    /// Binding owner.
-    pub owner: BindingOwner,
-    /// Resolution scope.
-    pub scope: BindingScope,
+    /// Resolution tier.
+    pub tier: BindingTier,
     /// Original path filter.
     pub path_filter: String,
     /// Route path at which this binding wins.
@@ -104,8 +69,8 @@ pub struct AvailableBinding<I> {
     pub target: BindingTargetKind,
     /// Widget action name, present for an action target.
     pub action: Option<WidgetActionName>,
-    /// Phase relative to widget input handling, absent for a widget action.
-    pub phase: Option<BindingPhase>,
+    /// Phase relative to widget input handling.
+    pub phase: BindingPhase,
     /// Declarative command details, absent for opaque script callbacks and
     /// widget actions.
     pub command: Option<BindingCommand>,
@@ -125,20 +90,25 @@ pub struct BindingCommand {
 
 impl Core {
     /// Return the effective bindings for a node or the current focus.
+    ///
+    /// Key discovery explains each candidate key, so it cannot disagree with
+    /// [`Core::explain_key`] about which binding a key reaches.
     pub(crate) fn available_bindings(&self, requested: Option<NodeId>) -> Result<BindingSnapshot> {
         let focus = requested.or(self.focus).unwrap_or(self.root);
         self.validate_attached_node(focus)?;
         let focus_path = self.path_of(self.root, focus);
 
         let mut bindings = Vec::new();
-        let mut provisional_bindings = Vec::new();
-        let mut key_prediction_gaps = Vec::new();
         for key in self.input_map.candidate_keys() {
             let explanation = self.explain_key(Some(focus), key)?;
-            let projection = self.key_projection(&explanation)?;
-            bindings.extend(projection.exact);
-            provisional_bindings.extend(projection.provisional);
-            key_prediction_gaps.extend(projection.gaps);
+            if let Some(winner) = explanation.outcome.winner() {
+                bindings.push(self.available_binding(
+                    winner.node,
+                    key,
+                    winner.path.clone(),
+                    winner.binding,
+                )?);
+            }
         }
         let mut mouse_bindings = Vec::new();
         for mouse in self.input_map.eligible_mouse_inputs() {
@@ -159,10 +129,8 @@ impl Core {
                 .map(str::to_string)
                 .collect(),
             transient_mode: self.effective_transient_mode().map(str::to_string),
-            exclusive_group: self.input_map.active_exclusive_group(),
+            framework_group: self.input_map.active_framework_group(),
             bindings,
-            provisional_bindings,
-            key_prediction_gaps,
             mouse_bindings,
         })
     }
@@ -188,7 +156,7 @@ impl Core {
     }
 
     /// Build one effective binding record from a resolved winner.
-    pub(crate) fn available_binding<I>(
+    fn available_binding<I>(
         &self,
         node: NodeId,
         input: I,
@@ -220,8 +188,7 @@ impl Core {
             id: record.id,
             input,
             description: record.description.clone(),
-            owner: record.owner,
-            scope: record.scope.clone(),
+            tier: record.tier.clone(),
             path_filter: record.path_filter().to_string(),
             route_path,
             target: BindingTargetKind::of(&record.target),
@@ -230,24 +197,6 @@ impl Core {
             command,
             source: record.source.clone(),
         })
-    }
-
-    /// Return the widget's key prediction for one node, or `None` when it
-    /// offers none or cannot be borrowed.
-    pub(crate) fn node_key_outcome(
-        &self,
-        node: NodeId,
-        key: Key,
-        focus: NodeId,
-    ) -> Option<EventOutcome> {
-        let context = CoreViewContext::with_focus(self, node, focus);
-        self.with_widget(
-            node,
-            WidgetOperation::access("binding discovery"),
-            |widget, _| widget.key_outcome(key, &context),
-        )
-        .ok()
-        .flatten()
     }
 }
 
@@ -267,7 +216,7 @@ mod tests {
         event::key::KeyCode,
         script::LuauFunctionId,
         state::NodeName,
-        widget::Widget,
+        widget::{EventOutcome, Widget},
     };
 
     struct Leaf;
@@ -283,12 +232,12 @@ mod tests {
     struct CapturingLeaf;
 
     impl Widget for CapturingLeaf {
-        fn key_outcome(&self, key: Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-            Some(if key.key == KeyCode::Char('x') {
+        fn key_outcome(&self, key: Key, _context: &dyn ViewContext) -> EventOutcome {
+            if key.key == KeyCode::Char('x') {
                 EventOutcome::Handle
             } else {
                 EventOutcome::Ignore
-            })
+            }
         }
 
         fn name(&self) -> NodeName {
@@ -296,18 +245,9 @@ mod tests {
         }
     }
 
-    /// A leaf that offers no key prediction.
-    struct UnknownLeaf;
-
-    impl Widget for UnknownLeaf {
-        fn name(&self) -> NodeName {
-            NodeName::convert("unknown_leaf")
-        }
-    }
-
     fn bind(
         core: &mut Core,
-        scope: BindingScope,
+        tier: BindingTier,
         key: char,
         path: &str,
         description: &str,
@@ -315,7 +255,7 @@ mod tests {
     ) -> Result<()> {
         bind_phase(
             core,
-            scope,
+            tier,
             key,
             path,
             description,
@@ -327,7 +267,7 @@ mod tests {
     /// Bind one key with an explicit phase.
     fn bind_phase(
         core: &mut Core,
-        scope: BindingScope,
+        tier: BindingTier,
         key: char,
         path: &str,
         description: &str,
@@ -337,7 +277,7 @@ mod tests {
         core.input_map.replace_application_binding(
             InputSpec::Key(key.into()),
             crate::BindingOptions {
-                scope,
+                tier,
                 path: Some(path.parse()?),
                 description: description.into(),
                 source: Some("test".to_string()),
@@ -351,7 +291,7 @@ mod tests {
     /// Bind one mouse spec, returning its normalized input.
     fn bind_mouse(
         core: &mut Core,
-        scope: BindingScope,
+        tier: BindingTier,
         spec: &str,
         path: &str,
         description: &str,
@@ -361,7 +301,7 @@ mod tests {
         core.input_map.replace_application_binding(
             InputSpec::Mouse(mouse),
             crate::BindingOptions {
-                scope,
+                tier,
                 path: Some(path.parse()?),
                 description: description.into(),
                 source: Some("test".to_string()),
@@ -382,7 +322,7 @@ mod tests {
         // Two records for one input: the route reports the winner alone.
         bind_mouse(
             &mut core,
-            BindingScope::Default,
+            BindingTier::Default,
             "LeftDown",
             "",
             "Anywhere",
@@ -390,7 +330,7 @@ mod tests {
         )?;
         bind_mouse(
             &mut core,
-            BindingScope::Default,
+            BindingTier::Default,
             "LeftDown",
             "leaf/",
             "On the leaf",
@@ -398,7 +338,7 @@ mod tests {
         )?;
         bind_mouse(
             &mut core,
-            BindingScope::Default,
+            BindingTier::Default,
             "ScrollUp",
             "leaf/",
             "Scroll up",
@@ -406,13 +346,13 @@ mod tests {
         )?;
         bind_mouse(
             &mut core,
-            BindingScope::Mode("insert".to_string()),
+            BindingTier::Mode("insert".to_string()),
             "ctrl-RightDown",
             "leaf/",
             "Only in insert",
             4,
         )?;
-        bind(&mut core, BindingScope::Default, 'a', "leaf/", "A key", 5)?;
+        bind(&mut core, BindingTier::Default, 'a', "leaf/", "A key", 5)?;
 
         let snapshot = core.available_bindings(None)?;
         assert_eq!(
@@ -427,26 +367,22 @@ mod tests {
             ],
             "the more specific path wins, and an inactive mode contributes nothing"
         );
-        assert!(
-            snapshot.bindings.is_empty(),
-            "an unknown leaf leaves no exact key row"
-        );
         assert_eq!(
             snapshot
-                .provisional_bindings
+                .bindings
                 .iter()
                 .map(|binding| binding.input.to_string())
                 .collect::<Vec<_>>(),
             ["a"],
-            "the provisional list stays key-only"
+            "the key list stays key-only"
         );
 
         // Every other field means the same as it does for a key.
         let winner = &snapshot.mouse_bindings[0];
         assert_eq!(winner.path_filter, "leaf/");
         assert_eq!(winner.route_path, Path::from("/root/leaf"));
-        assert_eq!(winner.phase, Some(BindingPhase::AfterWidget));
-        assert_eq!(winner.owner, BindingOwner::Application);
+        assert_eq!(winner.phase, BindingPhase::AfterWidget);
+        assert_eq!(winner.tier, BindingTier::Default);
         assert_eq!(winner.source.as_deref(), Some("test"));
         assert!(winner.command.is_none(), "a script callback stays opaque");
 
@@ -466,13 +402,13 @@ mod tests {
     }
 
     #[test]
-    fn an_exclusive_group_admits_only_its_own_mouse_records() -> Result<()> {
+    fn a_framework_group_admits_only_its_own_mouse_records() -> Result<()> {
         let mut core = Core::new();
         let leaf = core.create_detached(Leaf)?;
         core.attach(core.root, leaf)?;
         bind_mouse(
             &mut core,
-            BindingScope::Default,
+            BindingTier::Default,
             "LeftDown",
             "",
             "Application click",
@@ -480,11 +416,10 @@ mod tests {
         )?;
         let group = FrameworkBindingGroup::new("root.help");
         core.input_map.bind_framework(
-            group,
             Mouse::parse_spec("LeftDown")?,
             BindingOptions {
                 path: Some("/root/**/".parse()?),
-                scope: BindingScope::Exclusive(group),
+                tier: BindingTier::Framework(group),
                 description: "Dialog click".to_string(),
                 source: None,
                 phase: Some(BindingPhase::AfterWidget),
@@ -518,7 +453,7 @@ mod tests {
             InputSpec::Mouse(Mouse::parse_spec("LeftDown")?),
             BindingOptions {
                 path: Some("eligible_leaf/".parse()?),
-                scope: BindingScope::Default,
+                tier: BindingTier::Default,
                 description: "Update selection".into(),
                 source: None,
                 phase: Some(BindingPhase::AfterWidget),
@@ -555,10 +490,10 @@ mod tests {
         let leaf = core.create_detached(Leaf)?;
         core.attach(core.root, leaf)?;
         core.set_focus(leaf)?;
-        bind(&mut core, BindingScope::Default, 'a', "root", "Fallback", 1)?;
+        bind(&mut core, BindingTier::Default, 'a', "root", "Fallback", 1)?;
         bind(
             &mut core,
-            BindingScope::Mode("insert".to_string()),
+            BindingTier::Mode("insert".to_string()),
             'b',
             "leaf/",
             "Mode",
@@ -566,7 +501,7 @@ mod tests {
         )?;
         bind(
             &mut core,
-            BindingScope::Global,
+            BindingTier::Global,
             'b',
             "/root/**/",
             "Global",
@@ -579,21 +514,20 @@ mod tests {
         assert_eq!(snapshot.focus, leaf);
         assert_eq!(snapshot.focus_path, Path::from("/root/leaf"));
         assert_eq!(snapshot.active_modes, ["insert"]);
-        assert_eq!(snapshot.bindings.len(), 0);
-        assert_eq!(snapshot.provisional_bindings.len(), 2);
+        assert_eq!(snapshot.bindings.len(), 2);
         let fallback = snapshot
-            .provisional_bindings
+            .bindings
             .iter()
             .find(|binding| binding.input == 'a')
             .expect("fallback binding");
-        assert_eq!(fallback.phase, Some(BindingPhase::AfterWidget));
+        assert_eq!(fallback.phase, BindingPhase::AfterWidget);
         let global = snapshot
-            .provisional_bindings
+            .bindings
             .iter()
             .find(|binding| binding.input == 'b')
             .expect("global binding");
         assert_eq!(global.description, "Global");
-        assert_eq!(global.scope, BindingScope::Global);
+        assert_eq!(global.tier, BindingTier::Global);
         Ok(())
     }
 
@@ -639,7 +573,7 @@ mod tests {
             InputSpec::Key('u'.into()),
             BindingOptions {
                 path: Some("eligible_leaf/".parse()?),
-                scope: BindingScope::Default,
+                tier: BindingTier::Default,
                 description: "Update selection".into(),
                 source: None,
                 phase: Some(BindingPhase::AfterWidget),
@@ -647,9 +581,8 @@ mod tests {
             BindingTarget::Command(call.clone()),
         )?;
         let snapshot = core.available_bindings(Some(leaf))?;
-        assert!(snapshot.bindings.is_empty());
-        let binding = &snapshot.provisional_bindings[0];
-        assert_eq!(binding.phase, Some(BindingPhase::AfterWidget));
+        let binding = &snapshot.bindings[0];
+        assert_eq!(binding.phase, BindingPhase::AfterWidget);
         let command = binding.command.as_ref().expect("command details");
         assert_eq!(command.call, call);
         let availability = command.availability.as_ref().expect("registered command");
@@ -663,7 +596,7 @@ mod tests {
         );
         enabled.set(true);
         let refreshed = core.available_bindings(Some(leaf))?;
-        let refreshed = refreshed.provisional_bindings[0]
+        let refreshed = refreshed.bindings[0]
             .command
             .as_ref()
             .and_then(|command| command.availability.as_ref())
@@ -700,7 +633,7 @@ mod tests {
         core.set_focus(leaf)?;
         bind(
             &mut core,
-            BindingScope::Default,
+            BindingTier::Default,
             'x',
             "capturing_leaf/",
             "Shadowed",
@@ -708,7 +641,7 @@ mod tests {
         )?;
         bind(
             &mut core,
-            BindingScope::Default,
+            BindingTier::Default,
             'y',
             "capturing_leaf/",
             "Available",
@@ -716,7 +649,7 @@ mod tests {
         )?;
         bind_phase(
             &mut core,
-            BindingScope::Default,
+            BindingTier::Default,
             'z',
             "capturing_leaf/",
             "Before widget",
@@ -725,7 +658,7 @@ mod tests {
         )?;
         bind(
             &mut core,
-            BindingScope::Default,
+            BindingTier::Default,
             'x',
             "root",
             "Ancestor shadowed",
@@ -748,110 +681,6 @@ mod tests {
             "a handled key hides after-widget bindings at the widget and above, \
              and leaves before-widget bindings alone"
         );
-        assert!(
-            snapshot.key_prediction_gaps.is_empty(),
-            "a complete predictor leaves no gaps"
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn an_unknown_widget_keeps_an_after_widget_binding_with_a_gap() -> Result<()> {
-        let mut core = Core::new();
-        let leaf = core.create_detached(UnknownLeaf)?;
-        core.attach(core.root, leaf)?;
-        core.set_focus(leaf)?;
-        bind(
-            &mut core,
-            BindingScope::Default,
-            'a',
-            "unknown_leaf/",
-            "Provisional",
-            1,
-        )?;
-
-        let snapshot = core.available_bindings(None)?;
-        assert!(
-            snapshot.bindings.is_empty(),
-            "an unknown widget keeps the row out of executable help"
-        );
-        assert_eq!(snapshot.provisional_bindings.len(), 1);
-        let binding = &snapshot.provisional_bindings[0];
-        assert_eq!(binding.description, "Provisional");
-        assert_eq!(snapshot.key_prediction_gaps.len(), 1);
-        let gap = &snapshot.key_prediction_gaps[0];
-        assert_eq!(gap.input, Key::from('a'));
-        assert_eq!(gap.binding, binding.id);
-        assert_eq!(gap.node, leaf);
-        assert_eq!(gap.path, Path::from("/root/unknown_leaf"));
-        Ok(())
-    }
-
-    #[test]
-    fn an_unknown_widget_leaves_a_same_node_before_widget_binding_exact() -> Result<()> {
-        let mut core = Core::new();
-        let leaf = core.create_detached(UnknownLeaf)?;
-        core.attach(core.root, leaf)?;
-        core.set_focus(leaf)?;
-        bind_phase(
-            &mut core,
-            BindingScope::Default,
-            'a',
-            "unknown_leaf/",
-            "Early",
-            1,
-            BindingPhase::BeforeWidget,
-        )?;
-
-        let snapshot = core.available_bindings(None)?;
-        assert_eq!(snapshot.bindings.len(), 1);
-        assert!(
-            snapshot.key_prediction_gaps.is_empty(),
-            "a before-widget binding runs before its own widget"
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn an_unknown_widget_makes_an_ancestor_before_widget_binding_provisional() -> Result<()> {
-        let mut core = Core::new();
-        let leaf = core.create_detached(UnknownLeaf)?;
-        core.attach(core.root, leaf)?;
-        core.set_focus(leaf)?;
-        bind_phase(
-            &mut core,
-            BindingScope::Default,
-            'a',
-            "/root/",
-            "Ancestor early",
-            1,
-            BindingPhase::BeforeWidget,
-        )?;
-
-        let snapshot = core.available_bindings(None)?;
-        assert!(snapshot.bindings.is_empty());
-        assert_eq!(snapshot.provisional_bindings.len(), 1);
-        assert_eq!(snapshot.key_prediction_gaps.len(), 1);
-        assert_eq!(snapshot.key_prediction_gaps[0].node, leaf);
-        Ok(())
-    }
-
-    #[test]
-    fn a_definite_handle_after_an_unknown_leaves_no_gap() -> Result<()> {
-        let mut core = Core::new();
-        let parent = core.create_detached(CapturingLeaf)?;
-        core.attach(core.root, parent)?;
-        let leaf = core.create_detached(UnknownLeaf)?;
-        core.attach(parent, leaf)?;
-        core.set_focus(leaf)?;
-        bind(&mut core, BindingScope::Default, 'x', "/root/", "Hidden", 1)?;
-
-        let snapshot = core.available_bindings(None)?;
-        assert!(snapshot.bindings.is_empty());
-        assert!(
-            snapshot.key_prediction_gaps.is_empty(),
-            "a definite handle discards provisional state"
-        );
         Ok(())
     }
 
@@ -863,7 +692,7 @@ mod tests {
         core.set_focus(leaf)?;
         bind(
             &mut core,
-            BindingScope::Mode("go".to_string()),
+            BindingTier::Mode("go".to_string()),
             'x',
             "capturing_leaf/",
             "Mode key",
@@ -881,7 +710,6 @@ mod tests {
             ["Mode key"],
             "a transient mode takes the key before the widget sees it"
         );
-        assert!(snapshot.key_prediction_gaps.is_empty());
         Ok(())
     }
 
@@ -891,12 +719,12 @@ mod tests {
         struct ControlCodeLeaf;
 
         impl Widget for ControlCodeLeaf {
-            fn key_outcome(&self, key: Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-                Some(if key.key == KeyCode::Char('\u{1}') {
+            fn key_outcome(&self, key: Key, _context: &dyn ViewContext) -> EventOutcome {
+                if key.key == KeyCode::Char('\u{1}') {
                     EventOutcome::Handle
                 } else {
                     EventOutcome::Ignore
-                })
+                }
             }
 
             fn name(&self) -> NodeName {
@@ -912,7 +740,7 @@ mod tests {
             InputSpec::Key(Key::parse_spec("ctrl-a")?),
             BindingOptions {
                 path: Some("control_code_leaf/".parse()?),
-                scope: BindingScope::Default,
+                tier: BindingTier::Default,
                 description: "Canonical binding".to_string(),
                 source: None,
                 phase: Some(BindingPhase::AfterWidget),
@@ -922,35 +750,33 @@ mod tests {
 
         let raw = Key::from('\u{1}');
         assert_eq!(
-            core.node_key_outcome(leaf, raw, leaf),
-            Some(EventOutcome::Handle),
+            core.node_key_outcome(leaf, raw, leaf)?,
+            EventOutcome::Handle,
             "dispatch passes the raw control code"
         );
         assert_eq!(
-            core.node_key_outcome(leaf, Key::parse_spec("ctrl-a")?, leaf),
-            Some(EventOutcome::Ignore),
+            core.node_key_outcome(leaf, Key::parse_spec("ctrl-a")?, leaf)?,
+            EventOutcome::Ignore,
             "discovery probes the canonical key"
         );
         let snapshot = core.available_bindings(None)?;
         assert_eq!(snapshot.bindings.len(), 1);
         assert_eq!(snapshot.bindings[0].input.to_string(), "Ctrl+a");
-        assert!(snapshot.key_prediction_gaps.is_empty());
         Ok(())
     }
 
     #[test]
-    fn exclusive_context_blocks_application_tiers() -> Result<()> {
+    fn a_framework_group_blocks_application_tiers() -> Result<()> {
         let mut core = Core::new();
         let leaf = core.create_detached(Leaf)?;
         core.attach(core.root, leaf)?;
-        bind(&mut core, BindingScope::Default, 'a', "", "Application", 1)?;
+        bind(&mut core, BindingTier::Default, 'a', "", "Application", 1)?;
         let group = FrameworkBindingGroup::new("root.help");
         core.input_map.bind_framework(
-            group,
             'j',
             BindingOptions {
                 path: Some("/root/help/**/".parse()?),
-                scope: BindingScope::Exclusive(group),
+                tier: BindingTier::Framework(group),
                 description: "Scroll down".to_string(),
                 source: None,
                 phase: Some(BindingPhase::AfterWidget),
@@ -966,7 +792,7 @@ mod tests {
 
         let snapshot = core.available_bindings(Some(leaf))?;
 
-        assert_eq!(snapshot.exclusive_group, Some(group));
+        assert_eq!(snapshot.framework_group, Some(group));
         assert!(snapshot.bindings.is_empty());
         assert!(
             core.input_map

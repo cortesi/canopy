@@ -600,12 +600,12 @@ impl Widget for Terminal {
         }
     }
 
-    fn key_outcome(&self, key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(if self.classify_key(key).is_some() {
+    fn key_outcome(&self, key: key::Key, _context: &dyn ViewContext) -> EventOutcome {
+        if self.classify_key(key).is_some() {
             EventOutcome::Handle
         } else {
             EventOutcome::Ignore
-        })
+        }
     }
 
     fn measure(&self, c: MeasureConstraints) -> Measurement {
@@ -950,14 +950,8 @@ mod tests {
                 let predicted = terminal.key_outcome(key, ctx);
                 Ok((predicted, terminal.on_event(&event::Event::Key(key), ctx)?))
             })?;
-            let handled = outcome == EventOutcome::Handle;
             assert_eq!(
-                predicted,
-                Some(if handled {
-                    EventOutcome::Handle
-                } else {
-                    EventOutcome::Ignore
-                }),
+                predicted, outcome,
                 "prediction must match handling for {spec}"
             );
         }

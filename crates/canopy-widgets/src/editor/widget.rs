@@ -1183,16 +1183,16 @@ impl Widget for Editor {
         })
     }
 
-    fn key_outcome(&self, key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
+    fn key_outcome(&self, key: key::Key, _context: &dyn ViewContext) -> EventOutcome {
         let handled = match self.config.mode {
             EditMode::Text => self.text_command(key).is_some(),
             EditMode::Vi => self.vi_command(key).is_some(),
         };
-        Some(if handled {
+        if handled {
             EventOutcome::Handle
         } else {
             EventOutcome::Ignore
-        })
+        }
     }
 
     fn name(&self) -> NodeName {

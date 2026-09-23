@@ -1,8 +1,7 @@
 use canopy::{
-    Canopy, CanopyBuilder, Context, ContextExt, EventOutcome, FocusDirection, FocusScope, Loader,
-    NodeId, Render, ViewContext, ViewContextExt, Widget, derive_commands,
+    Canopy, CanopyBuilder, Context, ContextExt, FocusDirection, FocusScope, Loader, NodeId, Render,
+    ViewContext, ViewContextExt, Widget, derive_commands,
     error::Result,
-    event::key,
     geom::Size,
     layout::{Direction, Layout, Sizing},
 };
@@ -186,10 +185,6 @@ impl Block {
 }
 
 impl Widget for Block {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn accept_focus(&self, ctx: &dyn ViewContext) -> bool {
         ctx.children().is_empty()
     }
@@ -252,10 +247,6 @@ impl FocusGym {
 }
 
 impl Widget for FocusGym {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         c.set_layout(Layout::fill())?;
         let root_block = c.add_child(Block::new(true))?;

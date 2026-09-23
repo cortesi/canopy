@@ -6,7 +6,7 @@ use crate::{
     core::Core,
     derive_commands,
     error::Result,
-    event::Event,
+    event::{Event, key::Key},
     geom::Size,
     layout::{Direction, Layout},
     render::Render,
@@ -151,6 +151,10 @@ macro_rules! node {
                     _ => EventOutcome::Ignore,
                 };
                 Ok(outcome)
+            }
+
+            fn key_outcome(&self, _key: Key, _ctx: &dyn ViewContext) -> EventOutcome {
+                self.next_outcome.unwrap_or(EventOutcome::Ignore)
             }
 
             fn name(&self) -> NodeName {

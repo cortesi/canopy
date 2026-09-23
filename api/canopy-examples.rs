@@ -27,13 +27,6 @@ pub mod canopy_examples {
         impl Widget for CharGym {
             fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
-            fn key_outcome(
-                &self,
-                _key: key::Key,
-                _context: &dyn ViewContext,
-            ) -> Option<EventOutcome> {
-            }
-
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
         }
     }
@@ -64,13 +57,6 @@ pub mod canopy_examples {
 
         impl Widget for EditorGym {
             fn canvas(&self, view: Size, ctx: &CanvasContext<'_>) -> Size {}
-
-            fn key_outcome(
-                &self,
-                _key: key::Key,
-                _context: &dyn ViewContext,
-            ) -> Option<EventOutcome> {
-            }
 
             fn layout(&self) -> Layout {}
 
@@ -103,13 +89,6 @@ pub mod canopy_examples {
         }
 
         impl Widget for FocusGym {
-            fn key_outcome(
-                &self,
-                _key: key::Key,
-                _context: &dyn ViewContext,
-            ) -> Option<EventOutcome> {
-            }
-
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
         }
     }
@@ -131,13 +110,6 @@ pub mod canopy_examples {
         }
 
         impl Widget for FontGym {
-            fn key_outcome(
-                &self,
-                _key: key::Key,
-                _context: &dyn ViewContext,
-            ) -> Option<EventOutcome> {
-            }
-
             fn layout(&self) -> Layout {}
 
             fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {}
@@ -167,13 +139,6 @@ pub mod canopy_examples {
         }
 
         impl Widget for FrameGym {
-            fn key_outcome(
-                &self,
-                _key: key::Key,
-                _context: &dyn ViewContext,
-            ) -> Option<EventOutcome> {
-            }
-
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
         }
     }
@@ -213,13 +178,6 @@ pub mod canopy_examples {
         impl Widget for Intervals {
             fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
-            fn key_outcome(
-                &self,
-                _key: key::Key,
-                _context: &dyn ViewContext,
-            ) -> Option<EventOutcome> {
-            }
-
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
 
             fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {}
@@ -255,13 +213,6 @@ pub mod canopy_examples {
         impl Widget for ListGym {
             fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
-            fn key_outcome(
-                &self,
-                _key: key::Key,
-                _context: &dyn ViewContext,
-            ) -> Option<EventOutcome> {
-            }
-
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
         }
     }
@@ -287,13 +238,6 @@ pub mod canopy_examples {
 
         impl Widget for Pager {
             fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
-
-            fn key_outcome(
-                &self,
-                _key: key::Key,
-                _context: &dyn ViewContext,
-            ) -> Option<EventOutcome> {
-            }
 
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
         }
@@ -330,13 +274,6 @@ pub mod canopy_examples {
         }
 
         impl Widget for Stylegym {
-            fn key_outcome(
-                &self,
-                _key: key::Key,
-                _context: &dyn ViewContext,
-            ) -> Option<EventOutcome> {
-            }
-
             fn layout(&self) -> Layout {}
 
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
@@ -370,13 +307,6 @@ pub mod canopy_examples {
         impl Widget for TermGym {
             fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
-            fn key_outcome(
-                &self,
-                _key: key::Key,
-                _context: &dyn ViewContext,
-            ) -> Option<EventOutcome> {
-            }
-
             fn layout(&self) -> Layout {}
 
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
@@ -403,13 +333,6 @@ pub mod canopy_examples {
 
         impl Widget for TextGym {
             fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
-
-            fn key_outcome(
-                &self,
-                _key: key::Key,
-                _context: &dyn ViewContext,
-            ) -> Option<EventOutcome> {
-            }
 
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
         }
@@ -455,13 +378,6 @@ pub mod canopy_examples {
         }
 
         impl Widget for TermDemo {
-            fn key_outcome(
-                &self,
-                _key: key::Key,
-                _context: &dyn ViewContext,
-            ) -> Option<EventOutcome> {
-            }
-
             fn layout(&self) -> Layout {}
 
             fn name(&self) -> NodeName {}
@@ -483,13 +399,6 @@ pub mod canopy_examples {
         }
 
         impl Widget for DemoHost {
-            fn key_outcome(
-                &self,
-                _key: key::Key,
-                _context: &dyn ViewContext,
-            ) -> Option<EventOutcome> {
-            }
-
             fn layout(&self) -> Layout {}
 
             fn name(&self) -> NodeName {}
@@ -515,13 +424,6 @@ pub mod canopy_examples {
         }
 
         impl Widget for FontDemo {
-            fn key_outcome(
-                &self,
-                _key: key::Key,
-                _context: &dyn ViewContext,
-            ) -> Option<EventOutcome> {
-            }
-
             fn layout(&self) -> Layout {}
 
             fn name(&self) -> NodeName {}
@@ -545,13 +447,6 @@ pub mod canopy_examples {
         }
 
         impl Widget for ListDemo {
-            fn key_outcome(
-                &self,
-                _key: key::Key,
-                _context: &dyn ViewContext,
-            ) -> Option<EventOutcome> {
-            }
-
             fn layout(&self) -> Layout {}
 
             fn name(&self) -> NodeName {}
@@ -583,13 +478,6 @@ pub mod canopy_examples {
         }
 
         impl Widget for WidgetEditor {
-            fn key_outcome(
-                &self,
-                _key: key::Key,
-                _context: &dyn ViewContext,
-            ) -> Option<EventOutcome> {
-            }
-
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
         }
 

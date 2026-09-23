@@ -5,7 +5,7 @@ mod tests {
     use std::{fs, path::Path};
 
     use canopy::{
-        BindingOptions, BindingPhase, BindingScope, Canopy, CommandArg, Context, ContextExt,
+        BindingOptions, BindingPhase, BindingTier, Canopy, CommandArg, Context, ContextExt,
         EventOutcome, FrameworkBindingGroup, Loader, NodeId, Render, ViewContext, Widget,
         commands::ArgValue,
         derive_commands,
@@ -555,11 +555,10 @@ mod tests {
         let mut harness = Harness::builder(ApiRoot).size(20, 5).build()?;
         let group = FrameworkBindingGroup::new("test.framework");
         let id = harness.canopy.bind_framework(
-            group,
             Key::parse_spec("F1")?,
             BindingOptions {
                 path: Some("/api_root/**/".parse()?),
-                scope: BindingScope::Exclusive(group),
+                tier: BindingTier::Framework(group),
                 description: "Framework action".to_string(),
                 source: None,
                 phase: Some(BindingPhase::AfterWidget),
@@ -573,8 +572,8 @@ mod tests {
             local found = false
             for _, binding in canopy.bindings() do
                 if binding.id == {} then
-                    found = binding.owner == "framework:test.framework"
-                        and binding.scope == "exclusive"
+                    found = binding.tier == "framework"
+                        and binding.group == "test.framework"
                         and binding.target == "command"
                         and binding.description == "Framework action"
                 end

@@ -1,17 +1,17 @@
 //! Prospective key-route analysis.
 //!
 //! The analyzer walks the same route as key dispatch without running widget
-//! effects, so a caller can explain where one key would go. The result is
-//! advisory: normal routing still resolves and dispatches one node at a time,
+//! effects, so a caller can explain where one key would go. Every widget
+//! predicts its keys, so the analysis is exact for the current state. It is
+//! still advisory: normal routing resolves and dispatches one node at a time,
 //! because an ignored widget can change the tree, focus, or bindings before
 //! the route reaches an ancestor.
 
 use crate::{
     core::{
         Core, NodeId,
-        help::{AvailableBinding, KeyPredictionGap},
         inputmap::{
-            BindingId, BindingPhase, BindingTarget, BindingTargetKind, InputSpec, RegistryStatus,
+            BindingId, BindingPhase, BindingRecord, BindingTargetKind, InputSpec, RegistryStatus,
         },
     },
     error::Result,
@@ -31,8 +31,6 @@ pub struct KeyRouteExplanation {
     pub focus_path: Path,
     /// Nodes examined in focus-to-root order, stopping at the outcome.
     pub steps: Vec<KeyRouteStep>,
-    /// Whether every step that affects the outcome is predicted.
-    pub certainty: RouteCertainty,
     /// What would act first.
     pub outcome: RouteOutcome,
 }
@@ -44,67 +42,43 @@ pub struct KeyRouteStep {
     pub node: NodeId,
     /// Route path at which the node was examined.
     pub path: Path,
-    /// Resolved binding at this node, when one exists.
-    pub binding: Option<BindingId>,
-    /// Phase of an ordinary binding. Absent for a widget action, which has no
-    /// phase, and for a node with no binding.
-    pub phase: Option<BindingPhase>,
-    /// Kind of the resolved target, present exactly when `binding` is.
-    pub target: Option<BindingTargetKind>,
-    /// Widget prediction, absent when the widget offers none.
-    pub widget: Option<EventOutcome>,
+    /// Binding selected at this node, when one exists.
+    pub binding: Option<StepBinding>,
+    /// Widget prediction for the key.
+    pub widget: EventOutcome,
 }
 
-/// How exact a prospective key route is.
+/// The binding selected at one examined route node.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RouteCertainty {
-    /// Every step that affects the outcome is predicted.
-    Exact,
-    /// An unknown widget precedes the outcome, so the outcome is provisional.
-    Partial,
+pub struct StepBinding {
+    /// Selected binding.
+    pub id: BindingId,
+    /// Kind of target the binding runs.
+    pub kind: BindingTargetKind,
+    /// Phase of the binding relative to the node's widget.
+    pub phase: BindingPhase,
+}
+
+impl StepBinding {
+    /// Describe one selected record.
+    fn of(record: &BindingRecord) -> Self {
+        Self {
+            id: record.id,
+            kind: BindingTargetKind::of(&record.target),
+            phase: record.phase,
+        }
+    }
 }
 
 /// What would act first on a key.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RouteOutcome {
-    /// A transient mode's own binding runs.
-    Transient {
-        /// Winning binding.
-        binding: BindingId,
-        /// Node the binding resolved at.
-        node: NodeId,
-        /// Route path of the winning binding.
-        path: Path,
-    },
-    /// A transient mode's widget action runs, with the consumer known.
-    TransientWidgetAction {
-        /// Winning binding.
-        binding: BindingId,
-        /// Node the action resolved at.
-        node: NodeId,
-        /// Route path of the winning binding.
-        path: Path,
-    },
-    /// A transient mode ends with no binding; the key is still consumed.
-    TransientDismiss,
-    /// A widget action runs before the node's raw key handler.
-    WidgetAction {
-        /// Winning binding.
-        binding: BindingId,
-        /// Accepting node.
-        node: NodeId,
-        /// Route path of the winning binding.
-        path: Path,
-    },
-    /// A `before_widget` binding runs.
-    BeforeWidget {
-        /// Winning binding.
-        binding: BindingId,
-        /// Node the binding resolved at.
-        node: NodeId,
-        /// Route path of the winning binding.
-        path: Path,
-    },
+    /// A binding on the route runs: a before-widget binding, a widget action
+    /// its node accepts, or an after-widget binding whose widget ignores the
+    /// key.
+    Binding(RouteWinner),
+    /// A transient mode's binding runs before any widget sees the key.
+    Transient(RouteWinner),
     /// A widget consumes the key.
     Widget {
         /// Consuming node.
@@ -112,26 +86,57 @@ pub enum RouteOutcome {
         /// Route path of the consuming node.
         path: Path,
     },
-    /// An `after_widget` binding runs.
-    AfterWidget {
-        /// Winning binding.
-        binding: BindingId,
-        /// Node the binding resolved at.
-        node: NodeId,
-        /// Route path of the winning binding.
-        path: Path,
-    },
+    /// A transient mode ends with no binding; the key is still consumed.
+    TransientDismiss,
     /// No binding or widget handles the key.
     Unhandled,
+}
+
+impl RouteOutcome {
+    /// Return the winning binding, when a binding acts.
+    #[must_use]
+    pub fn winner(&self) -> Option<&RouteWinner> {
+        match self {
+            Self::Binding(winner) | Self::Transient(winner) => Some(winner),
+            Self::Widget { .. } | Self::TransientDismiss | Self::Unhandled => None,
+        }
+    }
+}
+
+/// The binding that acts on a key, and where it resolved.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RouteWinner {
+    /// Winning binding.
+    pub binding: BindingId,
+    /// Node the binding resolved at. For a widget action, this is the
+    /// accepting node.
+    pub node: NodeId,
+    /// Route path of the winning binding.
+    pub path: Path,
+    /// Kind of target the binding runs.
+    pub kind: BindingTargetKind,
+    /// Phase of the binding relative to the node's widget.
+    pub phase: BindingPhase,
+}
+
+impl RouteWinner {
+    /// Describe one winning record at its route node.
+    fn new(record: &BindingRecord, node: NodeId, path: Path) -> Self {
+        Self {
+            binding: record.id,
+            node,
+            path,
+            kind: BindingTargetKind::of(&record.target),
+            phase: record.phase,
+        }
+    }
 }
 
 impl Core {
     /// Explain where `key` would go if the route started at `requested`.
     ///
     /// The walk consults the same resolver and widget predictions as key
-    /// dispatch, including transient-mode and modal admission. A step whose
-    /// widget offers no prediction is unknown; certainty is `Partial` when
-    /// such a step precedes the outcome.
+    /// dispatch, including transient-mode and modal admission.
     pub(crate) fn explain_key(
         &self,
         requested: Option<NodeId>,
@@ -141,224 +146,64 @@ impl Core {
         self.validate_attached_node(focus)?;
         let focus_path = self.path_of(self.root, focus);
         if self.effective_transient_mode().is_some() {
-            return Ok(self.explain_transient_key(focus, focus_path, key));
-        }
-        let mut steps = Vec::new();
-        let mut unknown = false;
-        for (node, route_path) in self.route(focus) {
-            let prior_unknown = unknown;
-            let prediction = self.node_key_outcome(node, key, focus);
-            let selected = self.select_key_binding(node, &route_path, key, focus, &[]);
-            steps.push(KeyRouteStep {
-                node,
-                path: route_path.clone(),
-                binding: selected.map(|selected| selected.id),
-                phase: selected.and_then(|selected| selected.phase),
-                target: selected.map(|selected| BindingTargetKind::of(&selected.target)),
-                widget: prediction.clone(),
-            });
-            let Some(selected) = selected else {
-                if prediction == Some(EventOutcome::Handle) {
-                    return Ok(explanation(
-                        key,
-                        focus,
-                        focus_path,
-                        steps,
-                        prior_unknown,
-                        RouteOutcome::Widget {
-                            node,
-                            path: route_path,
-                        },
-                    ));
+            let outcome = match self.transient_winner(focus, key) {
+                Some((node, path, record)) => {
+                    RouteOutcome::Transient(RouteWinner::new(record, node, path))
                 }
-                unknown = prior_unknown || prediction.is_none();
-                continue;
+                None => RouteOutcome::TransientDismiss,
             };
-            let outcome = match (&selected.target, selected.phase) {
-                (BindingTarget::WidgetAction(_), _) => RouteOutcome::WidgetAction {
-                    binding: selected.id,
-                    node,
-                    path: route_path,
-                },
-                (_, Some(BindingPhase::BeforeWidget)) => RouteOutcome::BeforeWidget {
-                    binding: selected.id,
-                    node,
-                    path: route_path,
-                },
-                (_, Some(BindingPhase::AfterWidget))
-                    if prediction == Some(EventOutcome::Handle) =>
-                {
-                    RouteOutcome::Widget {
-                        node,
-                        path: route_path,
-                    }
-                }
-                (_, Some(BindingPhase::AfterWidget)) => RouteOutcome::AfterWidget {
-                    binding: selected.id,
-                    node,
-                    path: route_path,
-                },
-                (_, None) => {
-                    debug_assert!(false, "only a widget action has no phase");
-                    return Ok(explanation(
-                        key,
-                        focus,
-                        focus_path,
-                        steps,
-                        prior_unknown,
-                        RouteOutcome::Unhandled,
-                    ));
-                }
-            };
-            // A widget action is selected only when this node accepts it, so
-            // its consumer is exact. A deeper unknown widget can still consume
-            // the key first, which keeps the outcome provisional.
-            let outcome_unknown = prior_unknown
-                || (matches!(&outcome, RouteOutcome::AfterWidget { .. }) && prediction.is_none());
-            return Ok(explanation(
+            return Ok(KeyRouteExplanation {
                 key,
                 focus,
                 focus_path,
-                steps,
-                outcome_unknown,
+                steps: Vec::new(),
                 outcome,
-            ));
+            });
         }
-        Ok(explanation(
+        let mut steps = Vec::new();
+        let mut outcome = RouteOutcome::Unhandled;
+        for (node, path) in self.route(focus) {
+            let widget = self.predict_key(node, key, focus);
+            let selected = self.select_key_binding(node, &path, key, focus, &[]);
+            steps.push(KeyRouteStep {
+                node,
+                path: path.clone(),
+                binding: selected.map(StepBinding::of),
+                widget,
+            });
+            // A before-widget binding runs whatever the widget would do; an
+            // after-widget binding runs only when the widget ignores the key.
+            if let Some(record) = selected.filter(|record| {
+                record.phase == BindingPhase::BeforeWidget || widget == EventOutcome::Ignore
+            }) {
+                outcome = RouteOutcome::Binding(RouteWinner::new(record, node, path));
+                break;
+            }
+            if widget == EventOutcome::Handle {
+                outcome = RouteOutcome::Widget { node, path };
+                break;
+            }
+        }
+        Ok(KeyRouteExplanation {
             key,
             focus,
             focus_path,
             steps,
-            unknown,
-            RouteOutcome::Unhandled,
-        ))
-    }
-
-    /// Analyze a key that a transient mode would take before any widget.
-    fn explain_transient_key(
-        &self,
-        focus: NodeId,
-        focus_path: Path,
-        key: Key,
-    ) -> KeyRouteExplanation {
-        let outcome = match self.transient_winner(focus, key) {
-            Some((node, path, selected)) => match selected.target {
-                BindingTarget::WidgetAction(_) => RouteOutcome::TransientWidgetAction {
-                    binding: selected.id,
-                    node,
-                    path,
-                },
-                BindingTarget::Script(_) | BindingTarget::Command(_) => RouteOutcome::Transient {
-                    binding: selected.id,
-                    node,
-                    path,
-                },
-            },
-            None => RouteOutcome::TransientDismiss,
-        };
-        explanation(key, focus, focus_path, Vec::new(), false, outcome)
-    }
-
-    /// Project the included binding and gaps for one explained key.
-    ///
-    /// `available_bindings` uses this so key discovery and `explain_key`
-    /// cannot disagree about reachability.
-    pub(crate) fn key_projection(
-        &self,
-        explanation: &KeyRouteExplanation,
-    ) -> Result<KeyProjection> {
-        let (binding, node, path) = match &explanation.outcome {
-            RouteOutcome::Transient {
-                binding,
-                node,
-                path,
-            }
-            | RouteOutcome::TransientWidgetAction {
-                binding,
-                node,
-                path,
-            }
-            | RouteOutcome::WidgetAction {
-                binding,
-                node,
-                path,
-            }
-            | RouteOutcome::BeforeWidget {
-                binding,
-                node,
-                path,
-            }
-            | RouteOutcome::AfterWidget {
-                binding,
-                node,
-                path,
-            } => (*binding, *node, path.clone()),
-            RouteOutcome::TransientDismiss
-            | RouteOutcome::Widget { .. }
-            | RouteOutcome::Unhandled => {
-                return Ok(KeyProjection {
-                    exact: None,
-                    provisional: None,
-                    gaps: Vec::new(),
-                });
-            }
-        };
-        // A binding that runs before the raw key handler makes its own
-        // node's prediction irrelevant, so that step never adds a gap.
-        let runs_before_raw = matches!(
-            explanation.outcome,
-            RouteOutcome::BeforeWidget { .. }
-                | RouteOutcome::WidgetAction { .. }
-                | RouteOutcome::TransientWidgetAction { .. }
-        );
-        let gaps: Vec<KeyPredictionGap> = explanation
-            .steps
-            .iter()
-            .filter(|step| step.widget.is_none())
-            .filter(|step| !(runs_before_raw && step.node == node))
-            .map(|step| KeyPredictionGap {
-                input: explanation.key,
-                binding,
-                node: step.node,
-                path: step.path.clone(),
-            })
-            .collect();
-        let binding = self.available_binding(node, explanation.key, path, binding)?;
-        let (exact, provisional) = if gaps.is_empty() {
-            (Some(binding), None)
-        } else {
-            (None, Some(binding))
-        };
-        Ok(KeyProjection {
-            exact,
-            provisional,
-            gaps,
+            outcome,
         })
     }
-}
-
-/// Binding and gaps projected from one explained key.
-pub(crate) struct KeyProjection {
-    /// Binding with an exact route to a consumer.
-    pub exact: Option<AvailableBinding<Key>>,
-    /// Binding behind an unknown widget, for diagnostics only.
-    pub provisional: Option<AvailableBinding<Key>>,
-    /// Unknown widgets that make the binding provisional.
-    pub gaps: Vec<KeyPredictionGap>,
 }
 
 /// Combined registry and prospective-route verdict for one record.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum BindingVerdict {
-    /// The record wins and the key route is exact.
+    /// The record wins the key route.
     Exact,
     /// A widget consumes the key before the record.
     WidgetConsumes {
         /// Consuming node.
         node: NodeId,
     },
-    /// An unknown widget makes the record provisional.
-    Provisional,
     /// A widget action with no accepting consumer on the inspected route.
     NoConsumer,
     /// The registry admits the record, but no key-route analysis applies.
@@ -375,7 +220,6 @@ impl BindingVerdict {
             Self::NoConsumer => "no consumer on this route".to_string(),
             Self::RegistryOnly => "effective (context only)".to_string(),
             Self::WidgetConsumes { node } => format!("widget {node:?} consumes the key"),
-            Self::Provisional => "provisional behind an unknown widget".to_string(),
             Self::Unavailable(status) => status.label(),
         }
     }
@@ -413,50 +257,18 @@ impl Core {
         let Ok(explanation) = self.explain_key(Some(target), key) else {
             return BindingVerdict::RegistryOnly;
         };
-        match explanation.certainty {
-            RouteCertainty::Partial => BindingVerdict::Provisional,
-            RouteCertainty::Exact => match explanation.outcome {
-                RouteOutcome::Transient { binding, .. }
-                | RouteOutcome::TransientWidgetAction { binding, .. }
-                | RouteOutcome::WidgetAction { binding, .. }
-                | RouteOutcome::BeforeWidget { binding, .. }
-                | RouteOutcome::AfterWidget { binding, .. }
-                    if binding == id =>
-                {
-                    BindingVerdict::Exact
-                }
-                RouteOutcome::Widget { node, .. } => BindingVerdict::WidgetConsumes { node },
-                _ => BindingVerdict::Unavailable(RegistryStatus::NotEligible),
-            },
+        match explanation.outcome {
+            RouteOutcome::Widget { node, .. } => BindingVerdict::WidgetConsumes { node },
+            outcome if outcome.winner().is_some_and(|winner| winner.binding == id) => {
+                BindingVerdict::Exact
+            }
+            _ => BindingVerdict::Unavailable(RegistryStatus::NotEligible),
         }
     }
 
     /// Return the route paths from `target`, as dispatch would walk them.
     fn diagnostic_route(&self, target: NodeId) -> Vec<Path> {
         self.route(target).map(|(_, path)| path).collect()
-    }
-}
-
-/// Assemble one explanation with certainty derived from its unknowns.
-fn explanation(
-    key: Key,
-    focus: NodeId,
-    focus_path: Path,
-    steps: Vec<KeyRouteStep>,
-    unknown: bool,
-    outcome: RouteOutcome,
-) -> KeyRouteExplanation {
-    KeyRouteExplanation {
-        key,
-        focus,
-        focus_path,
-        steps,
-        certainty: if unknown {
-            RouteCertainty::Partial
-        } else {
-            RouteCertainty::Exact
-        },
-        outcome,
     }
 }
 
@@ -480,19 +292,12 @@ impl KeyExpectation {
     pub(crate) fn matches(&self, outcome: &RouteOutcome) -> bool {
         match (self, outcome) {
             (Self::Widget(expected), RouteOutcome::Widget { node, .. }) => expected == node,
-            (
-                Self::Binding(expected),
-                RouteOutcome::WidgetAction { binding, .. }
-                | RouteOutcome::BeforeWidget { binding, .. }
-                | RouteOutcome::AfterWidget { binding, .. },
-            ) => expected == binding,
-            (
-                Self::Transient(expected),
-                RouteOutcome::Transient { binding, .. }
-                | RouteOutcome::TransientWidgetAction { binding, .. },
-            ) => expected == binding,
-            (Self::TransientDismiss, RouteOutcome::TransientDismiss) => true,
-            (Self::Unhandled, RouteOutcome::Unhandled) => true,
+            (Self::Binding(expected), RouteOutcome::Binding(winner))
+            | (Self::Transient(expected), RouteOutcome::Transient(winner)) => {
+                *expected == winner.binding
+            }
+            (Self::TransientDismiss, RouteOutcome::TransientDismiss)
+            | (Self::Unhandled, RouteOutcome::Unhandled) => true,
             _ => false,
         }
     }

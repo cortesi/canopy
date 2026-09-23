@@ -166,6 +166,7 @@ mod tests {
     use crate::{
         EvalRequest,
         backend::BackendControl,
+        event::key::Key,
         testing::{backend::TestRender, contracts},
     };
 
@@ -253,6 +254,9 @@ mod tests {
                 return Ok(crate::EventOutcome::Handle);
             }
             Ok(crate::EventOutcome::Ignore)
+        }
+        fn key_outcome(&self, _key: Key, _ctx: &dyn crate::ViewContext) -> crate::EventOutcome {
+            crate::EventOutcome::Handle
         }
     }
 

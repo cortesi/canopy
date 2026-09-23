@@ -1,8 +1,7 @@
 use canopy::{
-    Canopy, CanopyBuilder, Context, ContextExt, EventOutcome, FocusDirection, Loader, NodeId,
-    ViewContext, Widget, derive_commands,
+    Canopy, CanopyBuilder, Context, ContextExt, FocusDirection, Loader, NodeId, Widget,
+    derive_commands,
     error::Result,
-    event::key,
     geom::Size,
     layout::{CanvasContext, Direction, Edges, Layout, MeasureOverflow},
 };
@@ -120,10 +119,6 @@ impl EditorColumn {
 }
 
 impl Widget for EditorColumn {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         Layout::column()
             .flex_horizontal(1)
@@ -300,10 +295,6 @@ impl EditorGym {
 }
 
 impl Widget for EditorGym {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         Layout::fill()
             .direction(Direction::Row)

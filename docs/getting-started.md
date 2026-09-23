@@ -98,15 +98,13 @@ The doc comment becomes the generated Luau documentation, and each `@param`
 line documents one argument.
 
 The `Widget` impl draws the widget, adds a status bar, and joins the focus
-chain. `key_outcome` predicts that the widget ignores every key, so help and
-automation can report exactly which binding a key reaches:
+chain. `Hello` handles no keys, so it keeps the default `key_outcome`, which
+predicts that the widget ignores every key. A widget that consumes keys in
+`on_event` must predict them in `key_outcome`, so help and automation can
+report exactly which binding a key reaches:
 
 ```rust
 impl Widget for Hello {
-    fn key_outcome(&self, _key: Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         // The footer bar keeps the last row, so align the greeting above it.
         Layout::fill()

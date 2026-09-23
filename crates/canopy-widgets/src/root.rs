@@ -1,11 +1,11 @@
 use canopy::{
-    Canopy, ChildSlot, Context, ContextExt, EventOutcome, FocusDirection, FocusScope,
-    FrameworkBindingGroup, InteractionToken, Loader, ModalBindings, ModalOptions, NodeId, NodeName,
-    TypedId, ViewContext, Widget,
+    Canopy, ChildSlot, Context, ContextExt, FocusDirection, FocusScope, FrameworkBindingGroup,
+    InteractionToken, Loader, ModalBindings, ModalOptions, NodeId, NodeName, TypedId, ViewContext,
+    Widget,
     commands::CommandCall,
     derive_commands,
     error::{Error, Result},
-    event::{key, key::Key},
+    event::key::Key,
     layout::{Direction, Layout, Sizing},
 };
 
@@ -312,10 +312,6 @@ impl Root {
 }
 
 impl Widget for Root {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         // Stack layout so the help modal overlays the main pane.
         Layout::fill().direction(Direction::Stack)
@@ -374,11 +370,10 @@ fn register_help_bindings(canopy: &mut Canopy) -> Result<()> {
     ];
     for (key, description, command) in bindings {
         canopy.bind_framework(
-            HELP_BINDINGS,
             Key::parse_spec(key)?,
             canopy::BindingOptions {
                 path: Some("/root/help/**/".parse()?),
-                scope: canopy::BindingScope::Exclusive(HELP_BINDINGS),
+                tier: canopy::BindingTier::Framework(HELP_BINDINGS),
                 description: description.to_string(),
                 source: None,
                 phase: Some(canopy::BindingPhase::BeforeWidget),
@@ -396,7 +391,7 @@ mod tests {
     #[cfg(feature = "devtools")]
     use canopy::testing::harness::Harness;
     use canopy::{
-        BindingScope, Cell, Context, EventOutcome, NodeName, Render, ViewContext, Widget,
+        BindingTier, Cell, Context, EventOutcome, NodeName, Render, ViewContext, Widget,
         commands::{CommandNode, CommandSpec},
         error::Result,
         event::Event,
@@ -644,7 +639,7 @@ mod tests {
             Some(list)
         );
         let live = canopy.available_bindings(None)?;
-        assert_eq!(live.exclusive_group, Some(HELP_BINDINGS));
+        assert_eq!(live.framework_group, Some(HELP_BINDINGS));
         assert!(canopy.available_bindings(Some(left))?.bindings.is_empty());
         let installed = modal_snapshot(&mut canopy)?;
         assert_eq!(
@@ -666,7 +661,7 @@ mod tests {
             canopy.with_root_view(|context| context.focused_leaf(context.root_id())),
             Some(left)
         );
-        assert_eq!(canopy.available_bindings(None)?.exclusive_group, None);
+        assert_eq!(canopy.available_bindings(None)?.framework_group, None);
         Ok(())
     }
 
@@ -774,7 +769,7 @@ mod tests {
         });
         assert!(result.is_err());
         assert_eq!(
-            canopy.available_bindings(None)?.exclusive_group,
+            canopy.available_bindings(None)?.framework_group,
             Some(HELP_BINDINGS)
         );
         assert_eq!(
@@ -782,7 +777,7 @@ mod tests {
             before.bindings.len()
         );
         canopy.eval_script("root.hide_help()")?;
-        assert_eq!(canopy.available_bindings(None)?.exclusive_group, None);
+        assert_eq!(canopy.available_bindings(None)?.framework_group, None);
         assert_eq!(
             canopy.with_root_view(|context| context.focused_node()),
             Some(left)
@@ -826,7 +821,7 @@ mod tests {
             canopy.with_root_view(|context| context.focused_leaf(context.root_id())),
             Some(left)
         );
-        assert_eq!(canopy.available_bindings(None)?.exclusive_group, None);
+        assert_eq!(canopy.available_bindings(None)?.framework_group, None);
         assert!(canopy.with_context(left, |context| Ok(context.has_mouse_capture()))?);
         Ok(())
     }
@@ -837,13 +832,13 @@ mod tests {
         install_help_trigger(&mut canopy)?;
         send_key(&mut canopy, "ctrl-g")?;
         assert_eq!(
-            canopy.available_bindings(None)?.exclusive_group,
+            canopy.available_bindings(None)?.framework_group,
             Some(HELP_BINDINGS)
         );
 
         canopy.replace_root(App)?;
 
-        assert_eq!(canopy.available_bindings(None)?.exclusive_group, None);
+        assert_eq!(canopy.available_bindings(None)?.framework_group, None);
         Ok(())
     }
 
@@ -945,11 +940,11 @@ mod tests {
         install_help_trigger(&mut canopy)?;
         send_key(&mut canopy, "ctrl-g")?;
         assert_eq!(
-            canopy.available_bindings(None)?.exclusive_group,
+            canopy.available_bindings(None)?.framework_group,
             Some(HELP_BINDINGS)
         );
         send_key(&mut canopy, "ctrl-g")?;
-        assert_eq!(canopy.available_bindings(None)?.exclusive_group, None);
+        assert_eq!(canopy.available_bindings(None)?.framework_group, None);
         Ok(())
     }
 
@@ -967,15 +962,11 @@ mod tests {
         let second = modal_snapshot(&mut canopy)?;
 
         let rows = |snapshot: &BindingSnapshot| {
-            snapshot
-                .bindings
-                .iter()
-                .chain(snapshot.provisional_bindings.iter())
-                .any(|binding| {
-                    binding.input == 'z'
-                        && binding.scope == BindingScope::Default
-                        && binding.description == "Added later"
-                })
+            snapshot.bindings.iter().any(|binding| {
+                binding.input == 'z'
+                    && binding.tier == BindingTier::Default
+                    && binding.description == "Added later"
+            })
         };
         assert!(!rows(&first));
         assert!(rows(&second));

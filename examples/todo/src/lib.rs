@@ -5,13 +5,11 @@ use std::{collections::HashMap, fmt::Display, path::Path};
 
 use anyhow::Result as AnyResult;
 use canopy::{
-    Canopy, CanopyBuilder, Context, ContextExt, EventOutcome, InteractionToken, Loader,
-    ModalBindings, ModalOptions, NodeId, NodeName, Render, ViewContext, ViewContextExt, Widget,
-    WidgetActionSpec,
+    Canopy, CanopyBuilder, Context, ContextExt, InteractionToken, Loader, ModalBindings,
+    ModalOptions, NodeId, NodeName, Render, ViewContext, ViewContextExt, Widget, WidgetActionSpec,
     commands::CommandStatus,
     derive_commands,
     error::{Error, Result},
-    event::key::Key,
     geom::{Rect, Size},
     layout::{Constraint, Direction, Layout, LayoutOverride, MeasureConstraints, Measurement},
     style::default as palette,
@@ -62,10 +60,6 @@ impl TodoEntry {
 }
 
 impl Widget for TodoEntry {
-    fn key_outcome(&self, _key: Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         // Flex horizontally but use Measure for height so scrolling works
         Layout::column().flex_horizontal(1)
@@ -136,11 +130,7 @@ impl Widget for TodoEntry {
 /// Container for main content (list frame + status bar).
 struct MainContent;
 
-impl Widget for MainContent {
-    fn key_outcome(&self, _key: Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-}
+impl Widget for MainContent {}
 
 /// Root node for the todo demo.
 pub(crate) struct Todo {
@@ -406,10 +396,6 @@ impl Todo {
 }
 
 impl Widget for Todo {
-    fn key_outcome(&self, _key: Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         Layout::fill().direction(Direction::Stack)
     }

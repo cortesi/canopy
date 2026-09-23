@@ -62,12 +62,38 @@ impl Core {
         })
     }
 
+    /// Return the widget's key prediction at `node` on `focus`'s route.
+    ///
+    /// Fails when the widget cannot be read, as when it is running a
+    /// callback.
+    pub(crate) fn node_key_outcome(
+        &self,
+        node: NodeId,
+        key: Key,
+        focus: NodeId,
+    ) -> Result<EventOutcome> {
+        let context = CoreViewContext::with_focus(self, node, focus);
+        self.with_widget(
+            node,
+            WidgetOperation::access("key prediction"),
+            |widget, _| widget.key_outcome(key, &context),
+        )
+    }
+
+    /// Return the widget's key prediction for analysis.
+    ///
+    /// A widget that cannot be read, because it is running the callback that
+    /// asks, predicts [`EventOutcome::Ignore`], as it would decline an action.
+    pub(crate) fn predict_key(&self, node: NodeId, key: Key, focus: NodeId) -> EventOutcome {
+        self.node_key_outcome(node, key, focus)
+            .unwrap_or(EventOutcome::Ignore)
+    }
+
     /// Return whether the widget at `node` accepts `action` on `focus`'s
     /// route.
     ///
     /// A widget that cannot be read declines. Selection and dispatch share
-    /// this test, so an unreadable widget never becomes a provisional action
-    /// consumer.
+    /// this test, so an unreadable widget never becomes an action consumer.
     pub(crate) fn node_accepts_action(&self, node: NodeId, action: &str, focus: NodeId) -> bool {
         let context = CoreViewContext::with_focus(self, node, focus);
         self.with_widget(

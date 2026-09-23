@@ -16,7 +16,7 @@ use super::{
     widget_access::{WidgetMutGuard, WidgetReadGuard, WidgetSlotGuard},
 };
 use crate::{
-    ChangeOutcome, ViewContext,
+    ChangeOutcome,
     commands::CommandSet,
     core::{
         context::CoreContext,
@@ -25,11 +25,11 @@ use crate::{
         path::Path,
     },
     error::{Error, NodeOperationKind, Result},
-    event::{Event, key::Key},
+    event::Event,
     layout::Layout,
     state::NodeName,
     style::StyleMap,
-    widget::{EventOutcome, Widget},
+    widget::Widget,
 };
 
 #[cfg(test)]
@@ -382,10 +382,6 @@ struct RootContainer;
 impl Widget for RootContainer {
     fn layout(&self) -> Layout {
         Layout::fill()
-    }
-
-    fn key_outcome(&self, _key: Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
     }
 
     fn name(&self) -> NodeName {

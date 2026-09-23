@@ -6,7 +6,7 @@ use canopy::{
     commands::{CommandCall, CommandStatus, CommandTarget},
     derive_commands,
     error::{Error, Result},
-    event::{Event, key},
+    event::Event,
     geom::Size,
     layout::{
         Align, CanvasContext, Direction, Edges, Layout, LayoutOverride, MeasureConstraints,
@@ -37,8 +37,8 @@ const MESSAGE_ROWS: u32 = 2;
 /// `y` and `n` answer whichever button holds focus, because an accelerator
 /// names an answer rather than a focus. The arrows and tabs move between the
 /// answers inside the dialog alone, so neither reaches the application behind
-/// it. A dialog inside an exclusive modal admits none of these, and its owner
-/// installs the same records in its own group.
+/// it. A dialog inside a framework-group modal admits none of these, and its
+/// owner installs the same records in its own group.
 const DEFAULT_BINDINGS: &str = r#"
 canopy.keymap({
     path = "**/confirm/**/",
@@ -268,10 +268,6 @@ impl Loader for Confirm {
 }
 
 impl Widget for Confirm {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         // A stack centres the frame over what the dialog covers, and the margin
         // keeps that visible around it.
@@ -383,10 +379,6 @@ impl ConfirmBody {
 }
 
 impl Widget for ConfirmBody {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         // The message and the blank line under it are the body's own paint, so
         // the padding keeps the answers below them.
@@ -901,7 +893,7 @@ mod tests {
     }
 
     #[test]
-    fn an_exclusive_modal_keeps_the_question_standing() -> Result<()> {
+    fn a_framework_group_modal_keeps_the_question_standing() -> Result<()> {
         let mut harness = dialog("/tmp/a", 40, 12)?;
         let (owner, dialog_node, focus) =
             harness.with_root_context(|host: &mut Host, context| {
@@ -931,7 +923,7 @@ mod tests {
         click(&mut harness, button)?;
         assert!(
             answered(&mut harness).is_empty(),
-            "an exclusive group admits no application binding"
+            "a framework group admits no application binding"
         );
         assert!(
             harness.canopy.available_bindings(None)?.bindings.is_empty(),

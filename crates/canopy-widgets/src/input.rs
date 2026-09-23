@@ -339,12 +339,12 @@ impl Widget for Input {
         Ok(outcome)
     }
 
-    fn key_outcome(&self, key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(if Self::classify_key(key).is_some() {
+    fn key_outcome(&self, key: key::Key, _context: &dyn ViewContext) -> EventOutcome {
+        if Self::classify_key(key).is_some() {
             EventOutcome::Handle
         } else {
             EventOutcome::Ignore
-        })
+        }
     }
 
     fn accepts_action(&self, action: &str, _context: &dyn ViewContext) -> bool {
@@ -494,13 +494,8 @@ mod tests {
                 let predicted = input.key_outcome(key, ctx);
                 Ok((predicted, input.on_event(&Event::Key(key), ctx)?))
             })?;
-            let expected = Some(if actual == EventOutcome::Handle {
-                EventOutcome::Handle
-            } else {
-                EventOutcome::Ignore
-            });
             assert_eq!(
-                predicted, expected,
+                predicted, actual,
                 "prediction must match handling for {spec}"
             );
         }

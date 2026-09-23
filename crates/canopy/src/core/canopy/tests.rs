@@ -1,5 +1,6 @@
 use std::{
     any::Any,
+    panic::{AssertUnwindSafe, catch_unwind},
     sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
@@ -16,7 +17,7 @@ use crate::{
     commands::{CommandNode, CommandSpec, CommandStatus},
     core::{
         inputmap::InputSpec,
-        keyroute::{BindingVerdict, KeyExpectation, RouteCertainty, RouteOutcome},
+        keyroute::{BindingVerdict, KeyExpectation, RouteOutcome, RouteWinner},
         world::test_support::assert_error_context,
     },
     derive_commands,
@@ -490,11 +491,10 @@ fn framework_command_bindings_share_route_resolution_and_event_scope() -> Result
     run_ttree(|c, _, tree| {
         let group = inputmap::FrameworkBindingGroup::new("test.modal");
         let binding = c.bind_framework(
-            group,
             'h',
             inputmap::BindingOptions {
                 path: Some("/r/**/".parse()?),
-                scope: inputmap::BindingScope::Exclusive(group),
+                tier: inputmap::BindingTier::Framework(group),
                 description: "Framework root command".to_string(),
                 source: None,
                 phase: Some(inputmap::BindingPhase::BeforeWidget),
@@ -507,7 +507,7 @@ fn framework_command_bindings_share_route_resolution_and_event_scope() -> Result
         c.core.set_focus(tree.a_a)?;
 
         let snapshot = c.available_bindings(None)?;
-        assert_eq!(snapshot.exclusive_group, Some(group));
+        assert_eq!(snapshot.framework_group, Some(group));
         assert_eq!(snapshot.bindings.len(), 1);
         assert_eq!(snapshot.bindings[0].id, binding);
 
@@ -516,7 +516,7 @@ fn framework_command_bindings_share_route_resolution_and_event_scope() -> Result
 
         assert_eq!(get_state().path, ["r.c_root()"]);
         assert!(c.route_trace().iter().any(|entry| {
-            entry.phase == RoutePhase::BindingExecution && entry.detail == "Framework root command"
+            entry.kind == RouteTraceKind::RunBinding && entry.detail == "Framework root command"
         }));
         c.core.input_map.set_modal_bindings(None);
         Ok(())
@@ -535,7 +535,7 @@ fn explicit_binding_phases_override_the_same_selector_and_change_route_trace() -
                 'h',
                 inputmap::BindingOptions {
                     path: Some("/r/**/".parse()?),
-                    scope: inputmap::BindingScope::Default,
+                    tier: inputmap::BindingTier::Default,
                     description: "Root action".into(),
                     source: None,
                     phase: Some(phase),
@@ -546,27 +546,26 @@ fn explicit_binding_phases_override_the_same_selector_and_change_route_trace() -
             let binding = snapshot
                 .bindings
                 .iter()
-                .chain(snapshot.provisional_bindings.iter())
                 .find(|binding| binding.input == 'h')
                 .unwrap();
-            assert_eq!(binding.phase, Some(phase));
+            assert_eq!(binding.phase, phase);
             assert_eq!(binding.path_filter, "/r/**/");
             reset_state();
             c.key(None, 'h')?;
             let phases = c
                 .route_trace()
                 .iter()
-                .map(|entry| entry.phase)
+                .map(|entry| entry.kind)
                 .collect::<Vec<_>>();
             if phase == inputmap::BindingPhase::BeforeWidget {
                 assert_eq!(get_state().path, ["r.c_root()"]);
-                assert!(phases.contains(&RoutePhase::PreEventBinding));
-                assert!(!phases.contains(&RoutePhase::WidgetEvent));
+                assert!(phases.contains(&RouteTraceKind::BeforeWidgetBinding));
+                assert!(!phases.contains(&RouteTraceKind::Widget));
             } else {
                 assert_eq!(get_state().path, ["ba_la@key->ignore", "r.c_root()"]);
-                assert!(phases.contains(&RoutePhase::PostEventBinding));
-                assert!(phases.contains(&RoutePhase::WidgetEvent));
-                assert!(!phases.contains(&RoutePhase::PreEventBinding));
+                assert!(phases.contains(&RouteTraceKind::AfterWidgetBinding));
+                assert!(phases.contains(&RouteTraceKind::Widget));
+                assert!(!phases.contains(&RouteTraceKind::BeforeWidgetBinding));
             }
         }
         Ok(())
@@ -582,7 +581,7 @@ fn click_on(core: &Core, node: NodeId) -> mouse::MouseEvent {
 fn mouse_options(path: &str, phase: inputmap::BindingPhase) -> Result<inputmap::BindingOptions> {
     Ok(inputmap::BindingOptions {
         path: Some(path.parse()?),
-        scope: inputmap::BindingScope::Default,
+        tier: inputmap::BindingTier::Default,
         description: "Click action".into(),
         source: None,
         phase: Some(phase),
@@ -608,17 +607,17 @@ fn a_mouse_binding_runs_in_the_phase_it_declares() -> Result<()> {
             let phases = c
                 .route_trace()
                 .iter()
-                .map(|entry| entry.phase)
+                .map(|entry| entry.kind)
                 .collect::<Vec<_>>();
             if phase == inputmap::BindingPhase::BeforeWidget {
                 // The early binding takes the click instead of the widget.
                 assert_eq!(get_state().path, ["ba_la.c_leaf()"]);
-                assert!(phases.contains(&RoutePhase::PreEventBinding));
-                assert!(!phases.contains(&RoutePhase::WidgetEvent));
+                assert!(phases.contains(&RouteTraceKind::BeforeWidgetBinding));
+                assert!(!phases.contains(&RouteTraceKind::Widget));
             } else {
                 assert_eq!(get_state().path, ["ba_la@mouse->ignore", "ba_la.c_leaf()"]);
-                assert!(phases.contains(&RoutePhase::PostEventBinding));
-                assert!(!phases.contains(&RoutePhase::PreEventBinding));
+                assert!(phases.contains(&RouteTraceKind::AfterWidgetBinding));
+                assert!(!phases.contains(&RouteTraceKind::BeforeWidgetBinding));
             }
         }
         Ok(())
@@ -816,7 +815,7 @@ fn an_early_mouse_binding_respects_modal_admission_and_wheel_fallback() -> Resul
             "a binding outside the route never runs"
         );
 
-        // An exclusive group blocks application bindings whatever their phase.
+        // A framework group blocks application bindings whatever their phase.
         let group = inputmap::FrameworkBindingGroup::new("test.modal");
         c.bind_command(
             inputmap::InputSpec::Mouse(click_on(&c.core, tree.a_a).into()),
@@ -830,7 +829,7 @@ fn an_early_mouse_binding_respects_modal_admission_and_wheel_fallback() -> Resul
         c.mouse(None, click_on(&c.core, tree.a_a))?;
         assert!(
             !get_state().path.contains(&"r.c_root()".to_string()),
-            "an exclusive group blocks an early application binding"
+            "a framework group blocks an early application binding"
         );
         c.core.input_map.set_modal_bindings(None);
         Ok(())
@@ -919,7 +918,7 @@ fn gated_runs(canopy: &mut Canopy, nodes: [NodeId; 2]) -> [usize; 2] {
 fn gated_options(path: &str) -> Result<inputmap::BindingOptions> {
     Ok(inputmap::BindingOptions {
         path: Some(path.parse()?),
-        scope: inputmap::BindingScope::Default,
+        tier: inputmap::BindingTier::Default,
         description: "Act".into(),
         source: None,
         phase: Some(inputmap::BindingPhase::AfterWidget),
@@ -1012,7 +1011,7 @@ fn input_mode_binding_target_switches_modes() -> Result<()> {
         canopy
             .route_trace()
             .iter()
-            .any(|entry| entry.phase == RoutePhase::BindingExecution)
+            .any(|entry| entry.kind == RouteTraceKind::RunBinding)
     );
     Ok(())
 }
@@ -1036,23 +1035,23 @@ fn a_transient_mode_takes_the_next_key_before_widgets() -> Result<()> {
         canopy
             .route_trace()
             .iter()
-            .map(|entry| entry.phase)
+            .map(|entry| entry.kind)
             .collect::<Vec<_>>()
     };
 
     // The mode pops before its binding runs, so the binding can push a mode.
     canopy.key(None, 'y')?;
     assert_eq!(canopy.core.input_map.active_modes(), ["after"]);
-    assert!(phases(&canopy).contains(&RoutePhase::BindingExecution));
-    assert!(!phases(&canopy).contains(&RoutePhase::WidgetEvent));
+    assert!(phases(&canopy).contains(&RouteTraceKind::RunBinding));
+    assert!(!phases(&canopy).contains(&RouteTraceKind::Widget));
 
     // A key the mode does not bind only pops it.
     canopy.set_input_mode("");
     canopy.push_transient_input_mode("prefix");
     canopy.key(None, 'z')?;
     assert_eq!(canopy.input_mode(), "");
-    assert!(!phases(&canopy).contains(&RoutePhase::BindingExecution));
-    assert!(!phases(&canopy).contains(&RoutePhase::WidgetEvent));
+    assert!(!phases(&canopy).contains(&RouteTraceKind::RunBinding));
+    assert!(!phases(&canopy).contains(&RouteTraceKind::Widget));
     Ok(())
 }
 
@@ -1091,13 +1090,13 @@ fn route_trace_records_unhandled_key_pipeline() -> Result<()> {
         let phases = c
             .route_trace()
             .iter()
-            .map(|entry| entry.phase)
+            .map(|entry| entry.kind)
             .collect::<Vec<_>>();
 
-        assert!(phases.contains(&RoutePhase::Target));
-        assert!(phases.contains(&RoutePhase::WidgetEvent));
-        assert!(phases.contains(&RoutePhase::Bubble));
-        assert!(phases.contains(&RoutePhase::Unhandled));
+        assert!(phases.contains(&RouteTraceKind::Start));
+        assert!(phases.contains(&RouteTraceKind::Widget));
+        assert!(phases.contains(&RouteTraceKind::Bubble));
+        assert!(phases.contains(&RouteTraceKind::Unhandled));
         assert!(c.diagnostic_dump(tree.a_a).contains("route trace:"));
         Ok(())
     })?;
@@ -1480,6 +1479,10 @@ fn tkey_no_render() -> Result<()> {
             Ok(outcome)
         }
 
+        fn key_outcome(&self, _key: key::Key, _ctx: &dyn ViewContext) -> EventOutcome {
+            EventOutcome::Handle
+        }
+
         fn name(&self) -> NodeName {
             NodeName::convert("n")
         }
@@ -1592,12 +1595,12 @@ impl Widget for PredictingLeaf {
         })
     }
 
-    fn key_outcome(&self, key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(if key == 'x' {
+    fn key_outcome(&self, key: key::Key, _context: &dyn ViewContext) -> EventOutcome {
+        if key == 'x' {
             EventOutcome::Handle
         } else {
             EventOutcome::Ignore
-        })
+        }
     }
 
     fn name(&self) -> NodeName {
@@ -1605,12 +1608,12 @@ impl Widget for PredictingLeaf {
     }
 }
 
-/// Offers no key prediction.
-struct UnknownLeaf;
+/// Keeps the default prediction and ignores every key.
+struct PlainLeaf;
 
-impl Widget for UnknownLeaf {
+impl Widget for PlainLeaf {
     fn name(&self) -> NodeName {
-        NodeName::convert("unknown_leaf")
+        NodeName::convert("plain_leaf")
     }
 }
 
@@ -1626,10 +1629,6 @@ impl Widget for OverclaimingLeaf {
         })
     }
 
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn name(&self) -> NodeName {
         NodeName::convert("overclaiming_leaf")
     }
@@ -1643,8 +1642,8 @@ impl Widget for UnderclaimingLeaf {
         Ok(EventOutcome::Ignore)
     }
 
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Handle)
+    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> EventOutcome {
+        EventOutcome::Handle
     }
 
     fn name(&self) -> NodeName {
@@ -1676,7 +1675,7 @@ fn bind_key_phase(
         InputSpec::Key(key.into()),
         BindingOptions {
             path: None,
-            scope: crate::BindingScope::Default,
+            tier: crate::BindingTier::Default,
             description: "Test binding".to_string(),
             source: None,
             phase: Some(phase),
@@ -1705,6 +1704,18 @@ fn a_handled_prediction_that_ignores_panics_in_debug() {
 }
 
 #[test]
+fn a_prediction_mismatch_records_a_route_trace_entry() {
+    let mut canopy = Canopy::new();
+    focused_leaf(&mut canopy, OverclaimingLeaf).expect("leaf mounted");
+    // A debug build also fails an assertion once the entry is recorded.
+    let _outcome = catch_unwind(AssertUnwindSafe(|| canopy.key(None, 'x')));
+    assert!(canopy.route_trace().iter().any(|entry| {
+        entry.kind == RouteTraceKind::Widget
+            && entry.detail == "key prediction mismatch: predicted Ignore, actual Handle"
+    }));
+}
+
+#[test]
 fn explain_key_reports_a_widget_outcome_for_the_focus() -> Result<()> {
     let mut canopy = Canopy::new();
     let leaf = focused_leaf(&mut canopy, PredictingLeaf)?;
@@ -1717,25 +1728,27 @@ fn explain_key_reports_a_widget_outcome_for_the_focus() -> Result<()> {
             path: Path::from("/root/predicting_leaf")
         }
     );
-    assert_eq!(explanation.certainty, RouteCertainty::Exact);
     assert_eq!(explanation.steps.len(), 1);
-    assert_eq!(explanation.steps[0].widget, Some(EventOutcome::Handle));
+    assert_eq!(explanation.steps[0].widget, EventOutcome::Handle);
     Ok(())
 }
 
 #[test]
-fn explain_key_is_partial_behind_an_unknown_widget() -> Result<()> {
+fn a_default_prediction_passes_the_key_to_an_after_widget_binding() -> Result<()> {
     let mut canopy = Canopy::new();
-    let leaf = focused_leaf(&mut canopy, UnknownLeaf)?;
-    bind_key(&mut canopy, 'q')?;
+    let leaf = focused_leaf(&mut canopy, PlainLeaf)?;
+    let id = bind_key(&mut canopy, 'q')?;
     let explanation = canopy.explain_key(Some(leaf), 'q'.into())?;
-    assert_eq!(explanation.certainty, RouteCertainty::Partial);
-    assert!(matches!(
-        explanation.outcome,
-        RouteOutcome::AfterWidget { .. }
-    ));
+    assert_eq!(
+        explanation.outcome.winner().map(|winner| winner.binding),
+        Some(id)
+    );
     assert_eq!(explanation.steps[0].node, leaf);
-    assert!(explanation.steps[0].widget.is_none());
+    assert_eq!(explanation.steps[0].widget, EventOutcome::Ignore);
+    assert_eq!(
+        explanation.steps[0].binding.map(|binding| binding.phase),
+        Some(crate::BindingPhase::AfterWidget)
+    );
     Ok(())
 }
 
@@ -1767,7 +1780,7 @@ fn send_key_checked_allows_a_widget_to_suppress_an_after_widget_binding() -> Res
         !canopy
             .route_trace()
             .iter()
-            .any(|entry| entry.phase == RoutePhase::BindingExecution)
+            .any(|entry| entry.kind == RouteTraceKind::RunBinding)
     );
     Ok(())
 }
@@ -1790,7 +1803,7 @@ fn send_key_checked_accepts_an_unhandled_route_at_a_modal_boundary() -> Result<(
         !canopy
             .route_trace()
             .iter()
-            .any(|entry| entry.phase == RoutePhase::BindingExecution)
+            .any(|entry| entry.kind == RouteTraceKind::RunBinding)
     );
     Ok(())
 }
@@ -1842,7 +1855,7 @@ fn a_transient_mode_under_an_application_modal_takes_the_next_key() -> Result<()
     );
     assert!(matches!(
         canopy.explain_key(None, 'y'.into())?.outcome,
-        RouteOutcome::Transient { .. }
+        RouteOutcome::Transient(_)
     ));
     canopy.key(None, 'y')?;
     assert_eq!(
@@ -1864,7 +1877,10 @@ fn a_transient_mode_under_an_application_modal_takes_the_next_key() -> Result<()
     // Once the mode has popped, the default tier is reachable again.
     assert!(matches!(
         canopy.explain_key(None, 'z'.into())?.outcome,
-        RouteOutcome::AfterWidget { .. }
+        RouteOutcome::Binding(RouteWinner {
+            phase: crate::BindingPhase::AfterWidget,
+            ..
+        })
     ));
     canopy.key(None, 'z')?;
     assert_eq!(canopy.core.input_map.active_modes(), ["default_ran"]);
@@ -1877,12 +1893,11 @@ fn a_checked_transient_key_under_an_application_modal_matches_its_analysis() -> 
     modal_leaf(&mut canopy, crate::ModalBindings::Application)?;
     bind_prefix_mode(&mut canopy)?;
     canopy.push_transient_input_mode("prefix");
-    let RouteOutcome::Transient { binding, .. } = canopy.explain_key(None, 'y'.into())?.outcome
-    else {
+    let RouteOutcome::Transient(winner) = canopy.explain_key(None, 'y'.into())?.outcome else {
         panic!("expected a transient binding");
     };
 
-    canopy.send_key_checked('y', KeyExpectation::Transient(binding))?;
+    canopy.send_key_checked('y', KeyExpectation::Transient(winner.binding))?;
     assert_eq!(canopy.core.input_map.active_modes(), ["after"]);
 
     canopy.push_transient_input_mode("prefix");
@@ -1924,17 +1939,17 @@ fn explain_key_reports_before_widget_and_unhandled_outcomes() -> Result<()> {
     let before = canopy.explain_key(Some(leaf), 'b'.into())?;
     assert_eq!(
         before.outcome,
-        RouteOutcome::BeforeWidget {
+        RouteOutcome::Binding(RouteWinner {
             binding: id,
             node: leaf,
             path: Path::from("/root/predicting_leaf"),
-        }
+            kind: crate::BindingTargetKind::Script,
+            phase: crate::BindingPhase::BeforeWidget,
+        })
     );
-    assert_eq!(before.certainty, RouteCertainty::Exact);
 
     let unhandled = canopy.explain_key(Some(leaf), 'u'.into())?;
     assert_eq!(unhandled.outcome, RouteOutcome::Unhandled);
-    assert_eq!(unhandled.certainty, RouteCertainty::Exact);
     Ok(())
 }
 
@@ -1956,19 +1971,22 @@ fn explain_key_matches_the_actual_route() -> Result<()> {
     let explanation = canopy.explain_key(None, 'q'.into())?;
     assert_eq!(
         explanation.outcome,
-        RouteOutcome::AfterWidget {
+        RouteOutcome::Binding(RouteWinner {
             binding: id,
             node: canopy.root_id(),
             path: Path::from("/root"),
-        }
+            kind: crate::BindingTargetKind::Script,
+            phase: crate::BindingPhase::AfterWidget,
+        })
     );
 
     canopy.key(None, 'q')?;
     assert_eq!(canopy.input_mode(), "ran");
     assert!(
-        canopy.route_trace().iter().any(|entry| {
-            entry.phase == RoutePhase::BindingExecution && entry.detail == "Switch"
-        })
+        canopy
+            .route_trace()
+            .iter()
+            .any(|entry| { entry.kind == RouteTraceKind::RunBinding && entry.detail == "Switch" })
     );
     Ok(())
 }
@@ -1990,20 +2008,21 @@ fn explain_key_reports_transient_binding_and_dismissal() -> Result<()> {
         .input_map
         .bindings()
         .iter()
-        .find(|record| record.scope == crate::BindingScope::Mode("prefix".to_string()))
+        .find(|record| record.tier == crate::BindingTier::Mode("prefix".to_string()))
         .expect("mode binding")
         .id;
 
     let bound = canopy.explain_key(None, 'y'.into())?;
     assert_eq!(
         bound.outcome,
-        RouteOutcome::Transient {
+        RouteOutcome::Transient(RouteWinner {
             binding: id,
             node: canopy.root_id(),
             path: Path::from("/root"),
-        }
+            kind: crate::BindingTargetKind::Script,
+            phase: crate::BindingPhase::AfterWidget,
+        })
     );
-    assert_eq!(bound.certainty, RouteCertainty::Exact);
     assert!(bound.steps.is_empty());
     assert!(KeyExpectation::Transient(id).matches(&bound.outcome));
     assert!(!KeyExpectation::TransientDismiss.matches(&bound.outcome));
@@ -2080,7 +2099,7 @@ fn send_key_checked_rejects_a_mismatched_expectation_without_delivery() -> Resul
         !canopy
             .route_trace()
             .iter()
-            .any(|entry| entry.phase == RoutePhase::BindingExecution)
+            .any(|entry| entry.kind == RouteTraceKind::RunBinding)
     );
     Ok(())
 }
@@ -2201,7 +2220,14 @@ fn a_widget_action_dispatches_to_its_accepting_consumer() -> Result<()> {
 
     let explanation = canopy.core.explain_key(Some(leaf), key)?;
     assert!(
-        matches!(explanation.outcome, RouteOutcome::WidgetAction { .. }),
+        matches!(
+            explanation.outcome,
+            RouteOutcome::Binding(RouteWinner {
+                kind: crate::BindingTargetKind::WidgetAction,
+                phase: crate::BindingPhase::BeforeWidget,
+                ..
+            })
+        ),
         "the analysis names the action, got {:?}",
         explanation.outcome
     );
@@ -2254,13 +2280,16 @@ fn a_dormant_action_does_not_shadow_the_next_candidate() -> Result<()> {
     let explanation = canopy.core.explain_key(Some(leaf), key)?;
     assert!(matches!(
         explanation.outcome,
-        RouteOutcome::AfterWidget { .. }
+        RouteOutcome::Binding(RouteWinner {
+            phase: crate::BindingPhase::AfterWidget,
+            ..
+        })
     ));
     Ok(())
 }
 
 #[test]
-fn a_dormant_global_action_falls_through_to_the_default_scope() -> Result<()> {
+fn a_dormant_global_action_falls_through_to_the_default_tier() -> Result<()> {
     let mut canopy = Canopy::new();
     canopy.register_widget_action(inputmap::WidgetActionSpec::new("test.clear", "Clear")?)?;
     mount_action_leaf(
@@ -2289,7 +2318,7 @@ fn a_dormant_global_action_falls_through_to_the_default_scope() -> Result<()> {
     assert_eq!(
         canopy.input_mode(),
         "default_won",
-        "the dormant global action gives way to the default scope"
+        "the dormant global action gives way to the default tier"
     );
     Ok(())
 }
@@ -2324,7 +2353,10 @@ fn a_transient_mode_offers_its_action_before_the_raw_key() -> Result<()> {
     assert!(
         matches!(
             explanation.outcome,
-            RouteOutcome::TransientWidgetAction { .. }
+            RouteOutcome::Transient(RouteWinner {
+                kind: crate::BindingTargetKind::WidgetAction,
+                ..
+            })
         ),
         "the transient analysis names the action, got {:?}",
         explanation.outcome
@@ -2472,7 +2504,7 @@ impl Widget for DisabledLeaf {
     }
 }
 
-/// Build binding options for an action or command in the default scope.
+/// Build binding options for an action or command in the default tier.
 fn default_options(
     path: Option<&str>,
     description: &str,
@@ -2480,7 +2512,7 @@ fn default_options(
 ) -> Result<inputmap::BindingOptions> {
     Ok(inputmap::BindingOptions {
         path: path.map(str::parse).transpose()?,
-        scope: inputmap::BindingScope::Default,
+        tier: inputmap::BindingTier::Default,
         description: description.to_string(),
         source: None,
         phase,
@@ -2615,7 +2647,7 @@ fn an_unreadable_widget_declines_an_action() -> Result<()> {
             let explanation = core.explain_key(Some(leaf), key)?;
             assert!(
                 matches!(explanation.outcome, RouteOutcome::Unhandled),
-                "an unreadable consumer is not a provisional action consumer, got {:?}",
+                "an unreadable consumer is not an action consumer, got {:?}",
                 explanation.outcome
             );
             Ok(())

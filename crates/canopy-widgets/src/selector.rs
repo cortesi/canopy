@@ -3,7 +3,7 @@
 use canopy::{
     Context, EventOutcome, NodeName, Render, ViewContext, Widget, WidgetSemantics, derive_commands,
     error::Result,
-    event::{Event, key, mouse},
+    event::{Event, mouse},
     geom::Size,
     layout::{MeasureConstraints, Measurement},
     text,
@@ -211,10 +211,6 @@ impl<T> Widget for Selector<T>
 where
     T: Label + 'static,
 {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
         if let Event::Mouse(mouse_event) = event {
             self.handle_click(ctx, *mouse_event)?;

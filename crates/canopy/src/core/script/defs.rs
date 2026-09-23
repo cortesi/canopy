@@ -6,7 +6,7 @@ use std::{
 use ruau::{declaration, module, vm::NativeModule};
 
 use crate::{
-    FixtureInfo,
+    FixtureInfo, RouteTraceKind,
     commands::{CommandParamKind, CommandReturnSpec, CommandSet, CommandSpec, DeclRegistry},
     core::inputmap::WidgetActionCatalog,
 };
@@ -179,7 +179,7 @@ pub(super) fn register_framework_declarations(
             )
             .doc(
                 "Dispatch phase relative to the widget. The default is after_widget. A widget \
-                 action carries no phase.",
+                 action always runs before_widget.",
             ),
             declaration::Field::new("tier", declaration::Type::literals(["global"]).optional())
                 .doc("Use the global tier. A global binding cannot name a mode."),
@@ -212,7 +212,7 @@ pub(super) fn register_framework_declarations(
                     .doc("User-facing description of every binding the entry makes."),
                 declaration::Field::new("action", action_type.clone()).doc(
                     "A CommandCall, a function, or a registered widget action name. An \
-                         action entry takes keys only and no phase.",
+                         action entry takes keys only and runs before_widget.",
                 ),
             ]),
         )
@@ -313,6 +313,33 @@ fn register_action_type(
     declaration::Type::union(union)
 }
 
+/// The binding tier field shared by binding records.
+fn tier_field() -> declaration::Field {
+    declaration::Field::new(
+        "tier",
+        declaration::Type::literals(["framework", "global", "mode", "default"]),
+    )
+    .doc("Resolution tier, in resolution order: framework, global, mode, then default.")
+}
+
+/// The binding phase field shared by binding records.
+fn phase_field() -> declaration::Field {
+    declaration::Field::new(
+        "phase",
+        declaration::Type::literals(["before_widget", "after_widget"]),
+    )
+    .doc("Phase relative to widget input handling. A widget action is before_widget.")
+}
+
+/// The binding target-kind field shared by binding records.
+fn target_field() -> declaration::Field {
+    declaration::Field::new(
+        "target",
+        declaration::Type::literals(["script", "command", "widget_action"]),
+    )
+    .doc("Kind of target the binding runs.")
+}
+
 /// Register the active-binding discovery record.
 fn register_binding_info(builder: &mut module::Builder) {
     builder.alias(declaration::Alias::new(
@@ -323,21 +350,14 @@ fn register_binding_info(builder: &mut module::Builder) {
             declaration::Field::new("input", declaration::Type::String)
                 .doc("Normalized key or mouse spec string."),
             declaration::Field::new("input_type", declaration::Type::literals(["key", "mouse"])),
-            declaration::Field::new("owner", declaration::Type::String)
-                .doc("Application or framework group owner."),
-            declaration::Field::new(
-                "scope",
-                declaration::Type::literals(["global", "mode", "default", "exclusive"]),
-            ),
+            tier_field(),
+            declaration::Field::new("group", declaration::Type::String.optional())
+                .doc("Framework group, when the tier is framework."),
             declaration::Field::new("mode", declaration::Type::String.optional())
-                .doc("Named input mode, when the scope is mode."),
+                .doc("Named input mode, when the tier is mode."),
             declaration::Field::new("path", declaration::Type::String)
                 .doc("Path filter string used when matching the focused path."),
-            declaration::Field::new(
-                "phase",
-                declaration::Type::literals(["before_widget", "after_widget"]).optional(),
-            )
-            .doc("Phase relative to widget input handling; absent for a widget action."),
+            phase_field(),
             declaration::Field::new("command", declaration::Type::String.optional()),
             declaration::Field::new("arguments", declaration::Type::Any.optional()),
             declaration::Field::new(
@@ -348,10 +368,7 @@ fn register_binding_info(builder: &mut module::Builder) {
                 .doc("Required user-facing description."),
             declaration::Field::new("source", declaration::Type::String.optional())
                 .doc("Diagnostic source for application bindings."),
-            declaration::Field::new(
-                "target",
-                declaration::Type::literals(["script", "command", "widget_action"]),
-            ),
+            target_field(),
             declaration::Field::new("action", declaration::Type::String.optional())
                 .doc("Widget action name, present for a widget action target."),
         ]),
@@ -425,7 +442,11 @@ fn register_observation_info(builder: &mut module::Builder) {
     builder.alias(declaration::Alias::new(
         "RouteTraceEntry",
         declaration::Type::table([
-            declaration::Field::new("phase", declaration::Type::String),
+            declaration::Field::new(
+                "kind",
+                declaration::Type::literals(RouteTraceKind::ALL.map(RouteTraceKind::label)),
+            )
+            .doc("What this entry records."),
             declaration::Field::new("node", declaration::Type::named("NodeId").optional()),
             declaration::Field::new("path", declaration::Type::String)
                 .doc("Focused path visible to this step."),
@@ -456,44 +477,20 @@ fn register_observation_info(builder: &mut module::Builder) {
                 .optional(),
             ),
             declaration::Field::new("description", declaration::Type::String),
-            declaration::Field::new("owner", declaration::Type::String)
-                .doc("Application or framework group owner."),
-            declaration::Field::new(
-                "scope",
-                declaration::Type::literals(["global", "mode", "default", "exclusive"]),
-            ),
+            tier_field(),
+            declaration::Field::new("group", declaration::Type::String.optional())
+                .doc("Framework group, when the tier is framework."),
             declaration::Field::new("mode", declaration::Type::String.optional())
-                .doc("Named mode when the scope is mode."),
+                .doc("Named mode, when the tier is mode."),
             declaration::Field::new("path", declaration::Type::String),
             declaration::Field::new("route_path", declaration::Type::String)
                 .doc("Route path at which this binding wins."),
-            declaration::Field::new(
-                "target",
-                declaration::Type::literals(["script", "command", "widget_action"]),
-            )
-            .doc("Kind of target this binding owns."),
+            target_field(),
             declaration::Field::new("action", declaration::Type::String.optional())
                 .doc("Widget action name, present for a widget action target."),
-            declaration::Field::new(
-                "phase",
-                declaration::Type::literals(["before_widget", "after_widget"]).optional(),
-            )
-            .doc("Phase relative to widget input handling; absent for a widget action."),
+            phase_field(),
             declaration::Field::new("source", declaration::Type::String.optional())
                 .doc("Diagnostic source when available."),
-        ]),
-    ));
-    builder.alias(declaration::Alias::new(
-        "KeyPredictionGap",
-        declaration::Type::table([
-            declaration::Field::new("input", declaration::Type::String)
-                .doc("Canonical binding key that stays provisional."),
-            declaration::Field::new("binding", declaration::Type::Number)
-                .doc("Included binding that an unknown widget can hide."),
-            declaration::Field::new("node", declaration::Type::named("NodeId"))
-                .doc("Unknown widget that precedes the binding."),
-            declaration::Field::new("path", declaration::Type::String)
-                .doc("Route path of the unknown widget."),
         ]),
     ));
     builder.alias(declaration::Alias::new(
@@ -506,29 +503,13 @@ fn register_observation_info(builder: &mut module::Builder) {
                 .doc("Active modes in resolution order."),
             declaration::Field::new("transient_mode", declaration::Type::String.optional())
                 .doc("Transient mode that takes the next key, absent while a framework modal suspends it."),
-            declaration::Field::new("exclusive_group", declaration::Type::String.optional())
-                .doc("Active exclusive framework group."),
+            declaration::Field::new("framework_group", declaration::Type::String.optional())
+                .doc("Framework group the open modal admits."),
             declaration::Field::new(
                 "bindings",
                 declaration::Type::named("AvailableBinding").array(),
             )
-            .doc("Effective key bindings with an exact route to a consumer."),
-            declaration::Field::new(
-                "provisional_bindings",
-                declaration::Type::named("AvailableBinding").array(),
-            )
-            .doc(
-                "Key bindings behind an unknown widget prediction. Diagnostic only; not \
-                 executable help.",
-            ),
-            declaration::Field::new(
-                "key_prediction_gaps",
-                declaration::Type::named("KeyPredictionGap").array(),
-            )
-            .doc(
-                "Included key bindings whose reachability depends on a widget that offers no \
-                 prediction. An empty list means the key-binding set is exact.",
-            ),
+            .doc("Effective key bindings, each with a route to the node where it acts."),
             declaration::Field::new(
                 "mouse_bindings",
                 declaration::Type::named("AvailableBinding").array(),
@@ -559,27 +540,26 @@ fn register_observation_info(builder: &mut module::Builder) {
         ]),
     ));
     builder.alias(declaration::Alias::new(
+        "StepBinding",
+        declaration::Type::table([
+            declaration::Field::new("id", declaration::Type::Number)
+                .doc("Stable numeric binding identifier."),
+            target_field(),
+            phase_field(),
+        ]),
+    ));
+    builder.alias(declaration::Alias::new(
         "KeyRouteStep",
         declaration::Type::table([
             declaration::Field::new("node", declaration::Type::named("NodeId")),
             declaration::Field::new("path", declaration::Type::String),
-            declaration::Field::new("binding", declaration::Type::Number.optional())
-                .doc("Resolved binding at this node, when one exists."),
             declaration::Field::new(
-                "target",
-                declaration::Type::literals(["script", "command", "widget_action"]).optional(),
+                "binding",
+                declaration::Type::named("StepBinding").optional(),
             )
-            .doc("Kind of target the resolved binding owns."),
-            declaration::Field::new(
-                "phase",
-                declaration::Type::literals(["before_widget", "after_widget"]).optional(),
-            )
-            .doc("Phase of an ordinary binding; absent for a widget action."),
-            declaration::Field::new(
-                "widget",
-                declaration::Type::literals(["handle", "ignore"]).optional(),
-            )
-            .doc("Widget prediction; absent when the widget offers none."),
+            .doc("Binding selected at this node, when one exists."),
+            declaration::Field::new("widget", declaration::Type::literals(["handle", "ignore"]))
+                .doc("Widget prediction for the key."),
         ]),
     ));
     builder.alias(declaration::Alias::new(
@@ -588,19 +568,29 @@ fn register_observation_info(builder: &mut module::Builder) {
             declaration::Field::new(
                 "kind",
                 declaration::Type::literals([
+                    "binding",
                     "transient",
-                    "transient_widget_action",
-                    "transient_dismiss",
-                    "widget_action",
-                    "before_widget",
                     "widget",
-                    "after_widget",
+                    "transient_dismiss",
                     "unhandled",
                 ]),
             ),
-            declaration::Field::new("binding", declaration::Type::Number.optional()),
-            declaration::Field::new("node", declaration::Type::named("NodeId").optional()),
-            declaration::Field::new("path", declaration::Type::String.optional()),
+            declaration::Field::new("binding", declaration::Type::Number.optional())
+                .doc("Winning binding, when kind is binding or transient."),
+            declaration::Field::new("node", declaration::Type::named("NodeId").optional())
+                .doc("Node where the binding acts, or the consuming widget."),
+            declaration::Field::new("path", declaration::Type::String.optional())
+                .doc("Route path of node."),
+            declaration::Field::new(
+                "target",
+                declaration::Type::literals(["script", "command", "widget_action"]).optional(),
+            )
+            .doc("Kind of target the winning binding runs."),
+            declaration::Field::new(
+                "phase",
+                declaration::Type::literals(["before_widget", "after_widget"]).optional(),
+            )
+            .doc("Phase of the winning binding."),
         ]),
     ));
     builder.alias(declaration::Alias::new(
@@ -610,11 +600,6 @@ fn register_observation_info(builder: &mut module::Builder) {
             declaration::Field::new("focus", declaration::Type::named("NodeId")),
             declaration::Field::new("focus_path", declaration::Type::String),
             declaration::Field::new("steps", declaration::Type::named("KeyRouteStep").array()),
-            declaration::Field::new(
-                "certainty",
-                declaration::Type::literals(["exact", "partial"]),
-            )
-            .doc("Partial marks the outcome as provisional."),
             declaration::Field::new("outcome", declaration::Type::named("KeyRouteOutcome")),
         ]),
     ));

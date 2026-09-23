@@ -436,19 +436,24 @@ initialization, advance it, then deliver `Work::Wake`.
 
 Input arrives as typed events. `Core` owns one flat `InputMap` with complete
 records for application and framework bindings. Each record contains its
-normalized input, owner, scope, path matcher, description, source, target, and
+normalized input, tier, path matcher, description, source, target, phase, and
 insertion order. Application targets call Luau functions or dispatch stored
 commands. Framework targets dispatch commands.
 
-The resolver checks the framework binding group admitted by the top modal scope
-first. Without one, it checks the global scope, active modes from newest to
-oldest, and then the default scope. A transient mode ends that search, so a key
-it does not bind resolves to nothing. Path specificity and insertion order select
-a winner within one scope. The binding phase chooses dispatch before widget
-input or after the widget ignores it. The default phase is `after_widget`, and
-the path filter has no effect on the phase. Key and mouse bindings take either
-phase. The phase belongs to the winner at one route node, so an early binding
-on an ancestor still runs after every descendant declines.
+A `BindingTier` is a binding's resolution layer, and its variant order is the
+resolution order: `Framework(group)`, `Global`, `Mode(name)`, then `Default`.
+The resolver checks the framework group that the top modal admits first.
+Without one, it checks the global tier, active modes from newest to oldest, and
+then the default tier. A transient mode ends that search, so a key it does not
+bind resolves to nothing. Path specificity and insertion order select a winner
+within one tier. Only `Canopy::bind_framework` takes the framework tier, and
+application bindings take the other three.
+
+The binding phase chooses dispatch before widget input or after the widget
+ignores it. The default phase is `after_widget`, and the path filter has no
+effect on the phase. Key and mouse bindings take either phase. The phase
+belongs to the winner at one route node, so an early binding on an ancestor
+still runs after every descendant declines.
 
 An application can also bind a key to a named widget action instead of a
 command or callback. The application registers each action name in its catalog
@@ -458,7 +463,8 @@ consumer in every state. At each node the resolver ranks candidates, and an
 action candidate is eligible only when that node's widget accepts the action in
 its current state. A dormant action falls through to the next candidate at the
 same node, so it never shadows a usable binding. An eligible action runs before
-the node's raw key handler and carries no phase. A release mismatch from a
+the node's raw key handler, so its stored phase is always `before_widget`, and
+an explicit `after_widget` on one is an error. A release mismatch from a
 widget that breaks its acceptance promise is treated as a decline, recorded in
 the route trace, and never aborts the application. In a transient mode the
 mode pops before its action runs, and an action without a consumer dismisses
@@ -467,40 +473,53 @@ application actions with `ModalBindings::FrameworkWithActions`, which admits
 only the listed action names after its framework group and only while a widget
 inside the modal accepts them.
 
+Every widget predicts its keys. `Widget::key_outcome` returns the
+`EventOutcome` that `on_event` would return for the same key and pre-event
+state, and its default, `Ignore`, suits a widget that handles no keys. Routing
+reads the prediction before each key reaches a widget and compares it with the
+actual result. A mismatch records a `RouteTraceKind::Widget` entry and fails a
+debug assertion, so tests catch a widget that forgot to predict. A widget that
+cannot be read, because it is running the callback that asks, predicts `Ignore`
+during analysis.
+
 Routing and `available_bindings` call the same selection at each node in the
 focus-to-root route. Availability returns an owned snapshot with one effective
 winner per normalized key in `bindings`, and one per normalized mouse input in
-`mouse_bindings`. `bindings` holds only rows with an exact route to a consumer:
-an action needs an accepting widget, while an ordinary target claims the key
-when the route reaches it. Every row carries the same description, owner,
-scope, route, target kind, phase, command availability, and source. The mouse
-route starts at the requested node, as a click on it would; the pointer's
-position plays no part, and hit testing and capture still choose the real
-target. Key discovery asks each widget's `key_outcome` along the route:
-`Handle` hides the after-widget bindings at that node and above, `Ignore`
-continues, and a widget that offers no prediction is unknown. A binding behind
-an unknown widget moves to `provisional_bindings` and is marked in
-`key_prediction_gaps` with the key, the provisional binding, and the unknown
-node and path. An empty gap list means the key set is exact. An action without
-an accepting consumer is neither exact nor provisional and appears in neither
-list. First-party widgets predict every key they see. Diagnostic binding output
-uses the same registry and reports why records are active, dormant, shadowed,
-blocked by the top modal's framework group, or unmatched.
+`mouse_bindings`. An action row needs an accepting widget, while an ordinary
+target claims the key when the route reaches it. Every row carries the same
+description, tier, route, target kind, phase, command availability, and source.
+The snapshot also names the framework group the top modal admits.
+
+The mouse route starts at the requested node, as a click on it would. The
+pointer's position plays no part, and hit testing and capture still choose the
+real target. Key discovery asks each widget's `key_outcome` along the route:
+`Handle` hides the after-widget bindings at that node and above, and `Ignore`
+continues. An action without an accepting consumer does not appear. Diagnostic
+binding output uses the same registry and reports why records are active,
+dormant, shadowed, blocked by the top modal's framework group, or unmatched.
 
 `Canopy::explain_key` walks the same route without acting and returns an owned
-explanation: each examined node's path, resolved binding, phase, and widget
-prediction, plus an exact or partial certainty and the decisive outcome. The
-explanation is advisory. Routing still resolves and dispatches one node at a
-time, because an ignored widget can change the tree, focus, or bindings before
-the route reaches an ancestor, and `Canopy::route_trace` remains the record of
-what actually happened. `available_bindings` projects its key results from the
-same analysis, so discovery and explanation cannot disagree.
+`KeyRouteExplanation`. Each examined step records its node, path, widget
+prediction, and the binding selected there as one `StepBinding` of id, target
+kind, and phase. The outcome is a `RouteOutcome`: `Binding` or `Transient` with
+a `RouteWinner`, `Widget`, `TransientDismiss`, or `Unhandled`. A `RouteWinner`
+names the binding, its node and path, its target kind, and its phase. The
+explanation is exact for the current state, but it is advisory. Routing still
+resolves and dispatches one node at a time, because an ignored widget can change
+the tree, focus, or bindings before the route reaches an ancestor.
+`available_bindings` projects its key results from the same analysis, so
+discovery and explanation cannot disagree.
 
-`Canopy::send_key_checked` analyzes the route, rejects a partial or mismatched
-expectation before delivery, then guards each normal route step and stops before
-an unexpected consumer acts. It never selects a target from the stored
-analysis, and it is not a transaction: earlier widgets may already have observed
-the key.
+`Canopy::route_trace` records what routing actually did. Each entry has a
+`RouteTraceKind`: `Start`, `BeforeWidgetBinding`, `OfferIntent`, `Widget`,
+`AfterWidgetBinding`, `RunBinding`, `DefaultAction`, `Bubble`, `Handled`, or
+`Unhandled`. A widget action offer traces as `OfferIntent`. Labels are
+snake_case, such as `before_widget_binding`.
+
+`Canopy::send_key_checked` analyzes the route, rejects a mismatched expectation
+before delivery, then guards each normal route step and stops before an
+unexpected consumer acts. It never selects a target from the stored analysis,
+and it is not a transaction: earlier widgets may already have observed the key.
 
 One label names an input everywhere. `Mouse` writes the spec `parse_spec`
 reads back, such as `Ctrl+LeftDown`, and it carries no space, so help can
@@ -523,7 +542,7 @@ the step that `event::mouse::Action::scroll_delta()` returns. The runtime
 computes the clamped destination first. A step that cannot move declines, so
 the wheel reaches the nearest ancestor that can move, and the node's pending
 reveal survives. The route trace records each applied action as
-`RoutePhase::DefaultAction`. Widgets that give the wheel another meaning, such
+`RouteTraceKind::DefaultAction`. Widgets that give the wheel another meaning, such
 as a terminal that reports mouse input to its program, handle the event
 themselves. A command that runs while an event is handled can take that event
 as an injected `Event` or `MouseEvent` parameter.

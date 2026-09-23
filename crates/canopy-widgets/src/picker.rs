@@ -206,10 +206,6 @@ impl<T> Widget for Picker<T>
 where
     T: Label + 'static,
 {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         // A stack centres the dialog over the dimmed application, with any
         // overlay over that, and the margin keeps the view visible around
@@ -294,10 +290,6 @@ where
 struct PickerDialog;
 
 impl Widget for PickerDialog {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         Layout::fill()
     }
@@ -355,10 +347,6 @@ impl PickerFilter {
 }
 
 impl Widget for PickerFilter {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         Layout::fill()
             .height(Sizing::Measure)
@@ -812,12 +800,12 @@ where
         Ok(EventOutcome::Ignore)
     }
 
-    fn key_outcome(&self, key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(if self.filtering && self.filter_command(key).is_some() {
+    fn key_outcome(&self, key: key::Key, _context: &dyn ViewContext) -> EventOutcome {
+        if self.filtering && self.filter_command(key).is_some() {
             EventOutcome::Handle
         } else {
             EventOutcome::Ignore
-        })
+        }
     }
 
     fn accepts_action(&self, action: &str, _context: &dyn ViewContext) -> bool {
@@ -1059,12 +1047,7 @@ mod tests {
                         let key = key::Key::parse_spec(spec).expect("valid key spec");
                         let predicted = list.key_outcome(key, context);
                         let actual = list.on_event(&Event::Key(key), context)?;
-                        let expected = Some(if actual == EventOutcome::Handle {
-                            EventOutcome::Handle
-                        } else {
-                            EventOutcome::Ignore
-                        });
-                        assert_eq!(predicted, expected, "filtering {filtering}: {spec}");
+                        assert_eq!(predicted, actual, "filtering {filtering}: {spec}");
                         Ok(())
                     })
                 })?;

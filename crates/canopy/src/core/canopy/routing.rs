@@ -6,10 +6,14 @@ use super::{AUTOMATION_SERVICE_BUDGET, AdapterEvent, Canopy};
 use crate::{
     NodeId, commands,
     core::{
-        Core, inputmap,
+        Core,
+        inputmap::{
+            self, BindingId, BindingPhase, BindingTargetKind, ResolvedBinding, RunBinding,
+            RunTarget, WidgetActionName,
+        },
         keyroute::{
-            KeyDispatchDivergence, KeyExpectation, KeyRouteExplanation, KeyRouteStep,
-            RouteCertainty, RouteOutcome,
+            KeyDispatchDivergence, KeyExpectation, KeyRouteExplanation, KeyRouteStep, RouteOutcome,
+            StepBinding,
         },
         world::scroll::DefaultAction,
     },
@@ -21,40 +25,58 @@ use crate::{
     widget::EventOutcome,
 };
 
-/// A phase in key or mouse event routing.
+/// What one entry in a key or mouse route trace records.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RoutePhase {
-    /// The initial routing target was selected.
-    Target,
-    /// A binding matched before the widget received the event.
-    PreEventBinding,
-    /// The event was offered to a widget.
-    WidgetEvent,
-    /// A binding matched after the widget ignored the event.
-    PostEventBinding,
+pub enum RouteTraceKind {
+    /// The route start was selected.
+    Start,
+    /// A before-widget binding matched.
+    BeforeWidgetBinding,
+    /// A widget action was offered to the node's widget, or declined there.
+    OfferIntent,
+    /// The event was offered to the node's widget, or the widget's key
+    /// prediction disagreed with its result.
+    Widget,
+    /// An after-widget binding matched after the widget ignored the event.
+    AfterWidgetBinding,
+    /// A resolved binding ran.
+    RunBinding,
     /// The runtime applied the input's default action to a node.
     DefaultAction,
     /// Routing moved from a node to its parent.
     Bubble,
-    /// A resolved binding is being executed.
-    BindingExecution,
     /// A widget or binding handled the event.
     Handled,
     /// Routing ended without a handler.
     Unhandled,
 }
 
-impl RoutePhase {
-    /// Return a stable diagnostic label for this phase.
-    pub fn as_str(self) -> &'static str {
+impl RouteTraceKind {
+    /// Every trace kind, in the order routing can record them.
+    pub(crate) const ALL: [Self; 10] = [
+        Self::Start,
+        Self::BeforeWidgetBinding,
+        Self::OfferIntent,
+        Self::Widget,
+        Self::AfterWidgetBinding,
+        Self::RunBinding,
+        Self::DefaultAction,
+        Self::Bubble,
+        Self::Handled,
+        Self::Unhandled,
+    ];
+
+    /// Return a stable scripting and diagnostic label.
+    pub fn label(self) -> &'static str {
         match self {
-            Self::Target => "target",
-            Self::PreEventBinding => "pre-event-binding",
-            Self::WidgetEvent => "widget-event",
-            Self::PostEventBinding => "post-event-binding",
-            Self::DefaultAction => "default-action",
+            Self::Start => "start",
+            Self::BeforeWidgetBinding => "before_widget_binding",
+            Self::OfferIntent => "offer_intent",
+            Self::Widget => "widget",
+            Self::AfterWidgetBinding => "after_widget_binding",
+            Self::RunBinding => "run_binding",
+            Self::DefaultAction => "default_action",
             Self::Bubble => "bubble",
-            Self::BindingExecution => "binding-execution",
             Self::Handled => "handled",
             Self::Unhandled => "unhandled",
         }
@@ -64,8 +86,8 @@ impl RoutePhase {
 /// One entry in the most recent input route trace.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RouteTraceEntry {
-    /// Routing phase.
-    pub phase: RoutePhase,
+    /// What this entry records.
+    pub kind: RouteTraceKind,
     /// Node associated with this route step.
     pub node: Option<NodeId>,
     /// Path visible to binding resolution at this route step.
@@ -173,13 +195,13 @@ impl Canopy {
     /// Add one entry to the current route trace.
     fn trace_route(
         &mut self,
-        phase: RoutePhase,
+        kind: RouteTraceKind,
         node: Option<NodeId>,
         path: &Path,
         detail: impl Into<String>,
     ) {
         self.route_trace.push(RouteTraceEntry {
-            phase,
+            kind,
             node,
             path: path.to_string(),
             detail: detail.into(),
@@ -219,18 +241,18 @@ impl Canopy {
         }
         let modal_owner = self.core.modal_owner();
         self.trace_route(
-            RoutePhase::Target,
+            RouteTraceKind::Start,
             start,
             &path,
             format!("{} route selected", input.label()),
         );
 
         let mut target = start;
-        let mut excluded: Vec<inputmap::BindingId> = Vec::new();
+        let mut excluded: Vec<BindingId> = Vec::new();
         while let Some(id) = target {
             if !self.core.nodes.contains_key(id) {
                 self.trace_route(
-                    RoutePhase::Unhandled,
+                    RouteTraceKind::Unhandled,
                     Some(id),
                     &path,
                     "target node disappeared",
@@ -249,25 +271,25 @@ impl Canopy {
             let mut fallback_binding = None;
             let mut selected = self.select_at(input, id, &path, route_focus, &excluded);
             while let Some(binding) = selected {
-                match binding.phase {
-                    None => {
-                        let Some(action) = binding.target.widget_action().cloned() else {
-                            break;
-                        };
+                match binding {
+                    ResolvedBinding::Offer {
+                        id: binding_id,
+                        action,
+                    } => {
                         self.trace_route(
-                            RoutePhase::PreEventBinding,
+                            RouteTraceKind::OfferIntent,
                             Some(id),
                             &path,
                             format!("offered widget action {action}"),
                         );
                         let Some(outcome) =
-                            self.offer_widget_action(&binding, id, input, &mut guard)?
+                            self.offer_widget_action(binding_id, &action, id, input, &mut guard)?
                         else {
                             return Ok(true);
                         };
                         if outcome == EventOutcome::Handle {
                             self.trace_route(
-                                RoutePhase::Handled,
+                                RouteTraceKind::Handled,
                                 Some(id),
                                 &path,
                                 format!("widget action {action} handled"),
@@ -275,15 +297,15 @@ impl Canopy {
                             return Ok(true);
                         }
                         self.trace_route(
-                            RoutePhase::PreEventBinding,
+                            RouteTraceKind::OfferIntent,
                             Some(id),
                             &path,
                             format!("widget action {action} declined after acceptance"),
                         );
-                        excluded.push(binding.id);
+                        excluded.push(binding_id);
                         if !self.core.nodes.contains_key(id) {
                             self.trace_route(
-                                RoutePhase::Unhandled,
+                                RouteTraceKind::Unhandled,
                                 Some(id),
                                 &path,
                                 "node removed while running a widget action",
@@ -292,50 +314,60 @@ impl Canopy {
                         }
                         selected = self.select_at(input, id, &path, route_focus, &excluded);
                     }
-                    Some(inputmap::BindingPhase::BeforeWidget) => {
-                        self.trace_route(
-                            RoutePhase::PreEventBinding,
-                            Some(id),
-                            &path,
-                            "matched before widget event",
-                        );
-                        if let Some(guard) = guard.as_deref_mut() {
-                            guard.observe_binding(binding.id, inputmap::BindingPhase::BeforeWidget);
-                            if guard.tripped() {
-                                return Ok(true);
+                    ResolvedBinding::Run(binding) => match binding.phase {
+                        BindingPhase::BeforeWidget => {
+                            self.trace_route(
+                                RouteTraceKind::BeforeWidgetBinding,
+                                Some(id),
+                                &path,
+                                "matched before widget event",
+                            );
+                            if let Some(guard) = guard.as_deref_mut() {
+                                guard.observe_binding(binding.id, BindingPhase::BeforeWidget);
+                                if guard.tripped() {
+                                    return Ok(true);
+                                }
                             }
+                            return self.execute_routed_binding_with_scope(
+                                id, &path, input, binding, scope,
+                            );
                         }
-                        return self
-                            .execute_routed_binding_with_scope(id, &path, input, binding, scope);
-                    }
-                    Some(inputmap::BindingPhase::AfterWidget) => {
-                        fallback_binding = Some(binding);
-                        break;
-                    }
+                        BindingPhase::AfterWidget => {
+                            fallback_binding = Some(binding);
+                            break;
+                        }
+                    },
                 }
             }
             self.trace_route(
-                RoutePhase::WidgetEvent,
+                RouteTraceKind::Widget,
                 Some(id),
                 &path,
                 format!("{event:?}"),
             );
             let outcome = if self.core.interaction_admits(id) {
-                // A prediction failure, such as an unavailable widget slot,
-                // reports no prediction, so the consistency check skips the
-                // node.
-                #[cfg(debug_assertions)]
+                // The prediction is read before the widget acts, for the same
+                // pre-event state. A widget that cannot be read gives none,
+                // and dispatch then reports the failure itself.
                 let predicted = match input {
-                    RoutedInput::Key(key) => self.core.node_key_outcome(id, key, route_focus),
+                    RoutedInput::Key(key) => self.core.node_key_outcome(id, key, route_focus).ok(),
                     RoutedInput::Mouse(_) => None,
                 };
                 let outcome = self.core.dispatch_event_on_node(id, &event)?;
-                #[cfg(debug_assertions)]
                 if let Some(predicted) = predicted {
-                    debug_assert!(
-                        predicted == outcome,
-                        "key prediction mismatch at node {id:?} path {path}: \
-                         predicted {predicted:?}, actual {outcome:?} for {event:?}"
+                    if predicted != outcome {
+                        self.trace_route(
+                            RouteTraceKind::Widget,
+                            Some(id),
+                            &path,
+                            format!(
+                                "key prediction mismatch: predicted {predicted:?}, actual {outcome:?}"
+                            ),
+                        );
+                    }
+                    debug_assert_eq!(
+                        predicted, outcome,
+                        "key prediction mismatch at node {id:?} path {path} for {event:?}"
                     );
                 }
                 outcome
@@ -343,7 +375,7 @@ impl Canopy {
                 EventOutcome::Ignore
             };
             if let Some(guard) = guard.as_deref_mut() {
-                guard.observe_widget(&outcome);
+                guard.observe_widget(outcome);
                 if guard.tripped() {
                     return Ok(true);
                 }
@@ -351,19 +383,24 @@ impl Canopy {
 
             match outcome {
                 EventOutcome::Handle => {
-                    self.trace_route(RoutePhase::Handled, Some(id), &path, format!("{outcome:?}"));
+                    self.trace_route(
+                        RouteTraceKind::Handled,
+                        Some(id),
+                        &path,
+                        format!("{outcome:?}"),
+                    );
                     return Ok(true);
                 }
                 EventOutcome::Ignore => {
                     if let Some(binding) = fallback_binding {
                         self.trace_route(
-                            RoutePhase::PostEventBinding,
+                            RouteTraceKind::AfterWidgetBinding,
                             Some(id),
                             &path,
                             "matched after widget ignored event",
                         );
                         if let Some(guard) = guard.as_deref_mut() {
-                            guard.observe_binding(binding.id, inputmap::BindingPhase::AfterWidget);
+                            guard.observe_binding(binding.id, BindingPhase::AfterWidget);
                             if guard.tripped() {
                                 return Ok(true);
                             }
@@ -378,20 +415,20 @@ impl Canopy {
                         && self.core.apply_default_action(id, action)
                     {
                         self.trace_route(
-                            RoutePhase::DefaultAction,
+                            RouteTraceKind::DefaultAction,
                             Some(id),
                             &path,
                             format!("{action:?}"),
                         );
                         self.trace_route(
-                            RoutePhase::Handled,
+                            RouteTraceKind::Handled,
                             Some(id),
                             &path,
                             "default action applied",
                         );
                         return Ok(true);
                     }
-                    self.trace_route(RoutePhase::Bubble, Some(id), &path, "ignored");
+                    self.trace_route(RouteTraceKind::Bubble, Some(id), &path, "ignored");
                     if modal_owner == Some(id) {
                         if let Some(guard) = guard.as_deref_mut() {
                             guard.observe_end();
@@ -416,7 +453,7 @@ impl Canopy {
                 return Ok(true);
             }
         }
-        self.trace_route(RoutePhase::Unhandled, None, &path, "no handler");
+        self.trace_route(RouteTraceKind::Unhandled, None, &path, "no handler");
         Ok(false)
     }
 
@@ -460,9 +497,7 @@ impl Canopy {
         let start = self.focus_or_root()?;
         let path = self.core.path_of(self.core.root, start);
         let explanation = self.core.explain_key(Some(start), key)?;
-        if explanation.certainty != RouteCertainty::Exact
-            || !expectation.matches(&explanation.outcome)
-        {
+        if !expectation.matches(&explanation.outcome) {
             return Err(Error::KeyDispatchDivergence(Box::new(
                 KeyDispatchDivergence {
                     expected: expectation,
@@ -519,7 +554,7 @@ impl Canopy {
         self.route_trace.clear();
         let input = RoutedInput::Key(key);
         self.trace_route(
-            RoutePhase::Target,
+            RouteTraceKind::Start,
             Some(start),
             path,
             "key route selected for a transient mode",
@@ -530,7 +565,7 @@ impl Canopy {
             .map(|(id, path, record)| (id, path, record.resolved()));
         self.core.input_map.pop_mode();
         let Some((id, path, binding)) = winner else {
-            self.trace_route(RoutePhase::Handled, None, path, "transient mode ended");
+            self.trace_route(RouteTraceKind::Handled, None, path, "transient mode ended");
             if let Some(guard) = guard.as_deref_mut() {
                 guard.observe_end();
             }
@@ -542,44 +577,43 @@ impl Canopy {
                 return Ok(true);
             }
         }
-        if let Some(action) = binding.target.widget_action().cloned() {
-            self.trace_route(
-                RoutePhase::PreEventBinding,
-                Some(id),
-                &path,
-                format!("offered widget action {action} in a transient mode"),
-            );
-            let Some(outcome) = self.offer_widget_action(&binding, id, input, &mut guard)? else {
-                return Ok(true);
-            };
-            if outcome == EventOutcome::Handle {
+        let binding = match binding {
+            ResolvedBinding::Offer {
+                id: binding_id,
+                action,
+            } => {
                 self.trace_route(
-                    RoutePhase::Handled,
+                    RouteTraceKind::OfferIntent,
                     Some(id),
                     &path,
-                    format!("widget action {action} handled"),
+                    format!("offered widget action {action} in a transient mode"),
                 );
-            } else {
+                let Some(outcome) =
+                    self.offer_widget_action(binding_id, &action, id, input, &mut guard)?
+                else {
+                    return Ok(true);
+                };
                 // A transient decision is spent once the mode pops, so a
                 // declined action ends the key as a transient dismissal. It
-                // does not reselect into the default scope or run raw.
-                self.trace_route(
-                    RoutePhase::Handled,
-                    Some(id),
-                    &path,
-                    format!("widget action {action} declined after acceptance"),
-                );
+                // does not reselect into the default tier or run raw.
+                let detail = if outcome == EventOutcome::Handle {
+                    format!("widget action {action} handled")
+                } else {
+                    format!("widget action {action} declined after acceptance")
+                };
+                self.trace_route(RouteTraceKind::Handled, Some(id), &path, detail);
+                return Ok(true);
             }
-            return Ok(true);
-        }
+            ResolvedBinding::Run(binding) => binding,
+        };
         self.trace_route(
-            RoutePhase::PreEventBinding,
+            RouteTraceKind::BeforeWidgetBinding,
             Some(id),
             &path,
             "matched in a transient mode",
         );
         if let Some(guard) = guard {
-            guard.observe_binding(binding.id, inputmap::BindingPhase::BeforeWidget);
+            guard.observe_binding(binding.id, BindingPhase::BeforeWidget);
             if guard.tripped() {
                 return Ok(true);
             }
@@ -587,18 +621,18 @@ impl Canopy {
         self.execute_routed_binding_with_scope(id, &path, input, binding, scope)
     }
 
-    /// Execute a binding after route resolution, preserving an active script
-    /// scope.
+    /// Run a command or callback binding after route resolution, preserving
+    /// an active script scope.
     fn execute_routed_binding_with_scope(
         &mut self,
         node_id: NodeId,
         path: &Path,
         input: RoutedInput,
-        binding: inputmap::ResolvedBinding,
+        binding: RunBinding,
         scope: Option<&Scope<'_>>,
     ) -> Result<bool> {
         self.trace_route(
-            RoutePhase::BindingExecution,
+            RouteTraceKind::RunBinding,
             Some(node_id),
             path,
             binding.description,
@@ -607,14 +641,10 @@ impl Canopy {
         let event = input.event_for_node(&self.core, node_id);
         let depth = self.core.push_event_scope(&event);
         let result = match binding.target {
-            inputmap::BindingTarget::WidgetAction(_) => {
-                debug_assert!(false, "widget actions dispatch through on_action");
-                Ok(None)
-            }
-            inputmap::BindingTarget::Script(binding) => self
-                .execute_binding_with_scope(node_id, binding, scope)
+            RunTarget::Script(function) => self
+                .execute_binding_with_scope(node_id, function, scope)
                 .map(|()| None),
-            inputmap::BindingTarget::Command(call) => {
+            RunTarget::Command(call) => {
                 // Eligibility is read here, inside the event scope, rather than
                 // taken from the last frame, so a status hook sees the same
                 // injections the command would.
@@ -639,7 +669,7 @@ impl Canopy {
             || "binding completed".to_string(),
             |reason| format!("binding disabled: {reason}"),
         );
-        self.trace_route(RoutePhase::Handled, Some(node_id), path, detail);
+        self.trace_route(RouteTraceKind::Handled, Some(node_id), path, detail);
         Ok(true)
     }
 
@@ -687,16 +717,12 @@ impl Canopy {
     /// tripped; the caller then ends the route without acting further.
     fn offer_widget_action(
         &mut self,
-        binding: &inputmap::ResolvedBinding,
+        binding: BindingId,
+        action: &WidgetActionName,
         node: NodeId,
         input: RoutedInput,
         guard: &mut Option<&mut KeyRouteGuard>,
     ) -> Result<Option<EventOutcome>> {
-        let action = binding
-            .target
-            .widget_action()
-            .cloned()
-            .expect("an action candidate carries an action name");
         let event = input.event_for_node(&self.core, node);
         let outcome = self
             .core
@@ -707,7 +733,7 @@ impl Canopy {
             "accepts_action promised Handle for {action} at {node:?}"
         );
         if let Some(guard) = guard.as_deref_mut() {
-            guard.observe_action(binding.id, node);
+            guard.observe_action(binding, node);
             if guard.tripped() {
                 return Ok(None);
             }
@@ -725,8 +751,8 @@ impl Canopy {
         node: NodeId,
         path: &Path,
         focus: NodeId,
-        excluded: &[inputmap::BindingId],
-    ) -> Option<inputmap::ResolvedBinding> {
+        excluded: &[BindingId],
+    ) -> Option<ResolvedBinding> {
         match input {
             RoutedInput::Key(key) => self
                 .core
@@ -837,9 +863,9 @@ enum GuardEvent {
     /// Route reached a node.
     Node(NodeId),
     /// Route resolved and executed a binding.
-    Binding(inputmap::BindingId, inputmap::BindingPhase),
+    Binding(BindingId, BindingPhase),
     /// Route offered an action to a consumer node.
-    Action(inputmap::BindingId, NodeId),
+    Action(BindingId, NodeId),
     /// Widget returned an outcome.
     Widget(EventOutcome),
     /// Route ended without a handler.
@@ -861,65 +887,59 @@ struct KeyRouteGuard {
 }
 
 impl KeyRouteGuard {
-    /// Build the expected event stream for one exact analysis.
+    /// Build the expected event stream for one analysis.
     fn new(explanation: &KeyRouteExplanation, expected: KeyExpectation) -> Self {
-        use inputmap::BindingPhase;
         let mut events: Vec<(GuardEvent, Option<usize>)> = Vec::new();
         for (step_index, step) in explanation.steps.iter().enumerate() {
             let mut push = |event| events.push((event, Some(step_index)));
             push(GuardEvent::Node(step.node));
-            match (step.binding, step.phase, step.target) {
-                (Some(binding), None, Some(inputmap::BindingTargetKind::WidgetAction)) => {
-                    push(GuardEvent::Action(binding, step.node));
-                }
-                (Some(binding), Some(BindingPhase::BeforeWidget), _) => {
-                    push(GuardEvent::Binding(binding, BindingPhase::BeforeWidget));
-                }
-                (Some(binding), Some(BindingPhase::AfterWidget), _) => {
-                    if let Some(widget) = step.widget.clone() {
-                        push(GuardEvent::Widget(widget));
+            match step.binding {
+                Some(StepBinding {
+                    id,
+                    kind: BindingTargetKind::WidgetAction,
+                    ..
+                }) => push(GuardEvent::Action(id, step.node)),
+                Some(StepBinding {
+                    id,
+                    phase: BindingPhase::BeforeWidget,
+                    ..
+                }) => push(GuardEvent::Binding(id, BindingPhase::BeforeWidget)),
+                Some(StepBinding {
+                    id,
+                    phase: BindingPhase::AfterWidget,
+                    ..
+                }) => {
+                    push(GuardEvent::Widget(step.widget));
+                    if explanation
+                        .outcome
+                        .winner()
+                        .is_some_and(|winner| winner.binding == id)
+                    {
+                        push(GuardEvent::Binding(id, BindingPhase::AfterWidget));
                     }
-                    if matches!(
-                        explanation.outcome,
-                        RouteOutcome::AfterWidget {
-                            binding: winner,
-                            ..
-                        } if winner == binding
-                    ) {
-                        push(GuardEvent::Binding(binding, BindingPhase::AfterWidget));
-                    }
                 }
-                (None, None, _) => {
-                    if let Some(widget) = step.widget.clone() {
-                        push(GuardEvent::Widget(widget));
-                    }
-                }
-                _ => {
-                    debug_assert!(false, "an analysis step pairs a binding with its phase");
-                }
+                None => push(GuardEvent::Widget(step.widget)),
             }
         }
         // A transient explanation carries no route steps, so its outcome
         // supplies the expected stream.
         match &explanation.outcome {
-            RouteOutcome::Transient { binding, node, .. } => {
-                events.push((GuardEvent::Node(*node), None));
-                events.push((
-                    GuardEvent::Binding(*binding, BindingPhase::BeforeWidget),
-                    None,
-                ));
-            }
-            RouteOutcome::TransientWidgetAction { binding, node, .. } => {
-                events.push((GuardEvent::Node(*node), None));
-                events.push((GuardEvent::Action(*binding, *node), None));
+            RouteOutcome::Transient(winner) => {
+                events.push((GuardEvent::Node(winner.node), None));
+                let event = match winner.kind {
+                    BindingTargetKind::WidgetAction => {
+                        GuardEvent::Action(winner.binding, winner.node)
+                    }
+                    BindingTargetKind::Script | BindingTargetKind::Command => {
+                        GuardEvent::Binding(winner.binding, BindingPhase::BeforeWidget)
+                    }
+                };
+                events.push((event, None));
             }
             RouteOutcome::TransientDismiss | RouteOutcome::Unhandled => {
                 events.push((GuardEvent::End, None));
             }
-            RouteOutcome::WidgetAction { .. }
-            | RouteOutcome::BeforeWidget { .. }
-            | RouteOutcome::Widget { .. }
-            | RouteOutcome::AfterWidget { .. } => {}
+            RouteOutcome::Binding(_) | RouteOutcome::Widget { .. } => {}
         }
         Self {
             events,
@@ -941,22 +961,18 @@ impl KeyRouteGuard {
     }
 
     /// Observe one executed binding.
-    fn observe_binding(&mut self, binding: inputmap::BindingId, phase: inputmap::BindingPhase) {
+    fn observe_binding(&mut self, binding: BindingId, phase: BindingPhase) {
         self.expect(&GuardEvent::Binding(binding, phase), None, Some(binding));
     }
 
     /// Observe one action offered to a consumer node.
-    fn observe_action(&mut self, binding: inputmap::BindingId, node: NodeId) {
+    fn observe_action(&mut self, binding: BindingId, node: NodeId) {
         self.expect(&GuardEvent::Action(binding, node), None, Some(binding));
     }
 
     /// Observe one widget outcome before the route acts on it.
-    fn observe_widget(&mut self, outcome: &EventOutcome) {
-        self.expect(
-            &GuardEvent::Widget(outcome.clone()),
-            Some(outcome.clone()),
-            None,
-        );
+    fn observe_widget(&mut self, outcome: EventOutcome) {
+        self.expect(&GuardEvent::Widget(outcome), Some(outcome), None);
     }
 
     /// Observe the route ending without a handler.
@@ -976,7 +992,7 @@ impl KeyRouteGuard {
         &mut self,
         actual: &GuardEvent,
         actual_widget: Option<EventOutcome>,
-        actual_binding: Option<inputmap::BindingId>,
+        actual_binding: Option<BindingId>,
     ) {
         if self.tripped() {
             return;
@@ -996,7 +1012,7 @@ impl KeyRouteGuard {
     fn record_divergence(
         &mut self,
         actual_widget: Option<EventOutcome>,
-        actual_binding: Option<inputmap::BindingId>,
+        actual_binding: Option<BindingId>,
     ) {
         let step = self
             .events
@@ -1044,7 +1060,7 @@ mod guard_tests {
         let step = explanation.steps.first().expect("root step");
 
         guard.observe_node(step.node);
-        guard.observe_widget(&EventOutcome::Handle);
+        guard.observe_widget(EventOutcome::Handle);
 
         let divergence = guard.divergence.expect("widget divergence");
         assert_eq!(divergence.analysis_step, Some(step.clone()));
@@ -1058,20 +1074,18 @@ mod guard_tests {
         let mut canopy = Canopy::new();
         canopy.eval_script(r#"canopy.bind("x", { description = "Expected" }, function() end)"#)?;
         let explanation = canopy.core.explain_key(None, 'x'.into())?;
-        let RouteOutcome::AfterWidget {
-            binding: expected, ..
-        } = &explanation.outcome
-        else {
-            panic!("expected an after-widget binding");
+        let RouteOutcome::Binding(winner) = &explanation.outcome else {
+            panic!("expected a binding");
         };
-        let expected = *expected;
-        let actual = inputmap::BindingId::from_u64(expected.as_u64() + 1);
+        assert_eq!(winner.phase, BindingPhase::AfterWidget);
+        let expected = winner.binding;
+        let actual = BindingId::from_u64(expected.as_u64() + 1);
         let mut guard = KeyRouteGuard::new(&explanation, KeyExpectation::Binding(expected));
         let step = explanation.steps.first().expect("root step");
 
         guard.observe_node(step.node);
-        guard.observe_widget(&EventOutcome::Ignore);
-        guard.observe_binding(actual, inputmap::BindingPhase::AfterWidget);
+        guard.observe_widget(EventOutcome::Ignore);
+        guard.observe_binding(actual, BindingPhase::AfterWidget);
 
         let divergence = guard.divergence.expect("binding divergence");
         assert_eq!(divergence.analysis_step, Some(step.clone()));

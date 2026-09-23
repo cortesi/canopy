@@ -11,10 +11,9 @@ use std::{
 };
 
 use canopy::{
-    Canopy, Context, ContextExt, EventOutcome, FocusDirection, Loader, NodeName, Render,
-    ViewContext, Widget, derive_commands,
+    Canopy, Context, ContextExt, FocusDirection, Loader, NodeName, Render, ViewContext, Widget,
+    derive_commands,
     error::{Error, Result},
-    event::key,
     geom::Size,
     layout::{CanvasContext, Constraint, Layout, MeasureConstraints, Measurement},
 };
@@ -105,10 +104,6 @@ pub struct Logs {
 }
 
 impl Widget for Logs {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         Layout::fill()
     }

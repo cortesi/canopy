@@ -1,20 +1,20 @@
 use std::mem;
 
 use canopy::{
-    BindingId, BindingOwner, BindingPhase, BindingScope, BindingTargetKind, Context, ContextExt,
-    Loader, NodeId, ViewContext, Widget, buf,
+    BindingId, BindingPhase, BindingTargetKind, BindingTier, Context, ContextExt, Loader, NodeId,
+    ViewContext, Widget, buf,
     commands::{CommandArgs, CommandAvailability, CommandCall, CommandId, CommandStatus},
     error::Result,
     event::{key, mouse},
     geom::{Point, PointI32, Size},
-    help::{AvailableBinding, BindingCommand, BindingSnapshot, KeyPredictionGap},
+    help::{AvailableBinding, BindingCommand, BindingSnapshot},
     layout::Layout,
     path::Path,
     style::default::TEXT,
     testing::harness::Harness,
 };
 
-use super::binding_list::{BindingList, PARTIAL_WARNING};
+use super::binding_list::BindingList;
 use crate::Frame;
 
 fn binding(
@@ -27,13 +27,12 @@ fn binding(
         id: BindingId::from_u64(id),
         input: key.into(),
         description: description.to_string(),
-        owner: BindingOwner::Application,
-        scope: BindingScope::Default,
+        tier: BindingTier::Default,
         path_filter: String::new(),
         route_path: Path::from("/root/editor"),
         target: BindingTargetKind::Script,
         action: None,
-        phase: Some(phase),
+        phase,
         command: None,
         source: Some("test".to_string()),
     }
@@ -45,10 +44,8 @@ fn snapshot(focus: NodeId, bindings: Vec<AvailableBinding<key::Key>>) -> Binding
         focus_path: Path::from("/root/editor"),
         active_modes: vec!["insert".to_string()],
         transient_mode: None,
-        exclusive_group: None,
+        framework_group: None,
         bindings,
-        provisional_bindings: Vec::new(),
-        key_prediction_gaps: Vec::new(),
         mouse_bindings: Vec::new(),
     }
 }
@@ -59,13 +56,12 @@ fn mouse_binding(id: u64, spec: &str, description: &str) -> AvailableBinding<mou
         id: BindingId::from_u64(id),
         input: mouse::Mouse::parse_spec(spec).expect("valid mouse spec"),
         description: description.to_string(),
-        owner: BindingOwner::Application,
-        scope: BindingScope::Default,
+        tier: BindingTier::Default,
         path_filter: String::new(),
         route_path: Path::from("/root/editor"),
         target: BindingTargetKind::Script,
         action: None,
-        phase: Some(BindingPhase::AfterWidget),
+        phase: BindingPhase::AfterWidget,
         command: None,
         source: Some("test".to_string()),
     }
@@ -187,46 +183,6 @@ fn empty_list_has_one_explicit_row() {
     let lines = list.display_lines(40);
     assert_eq!(lines.len(), 1);
     assert_eq!(lines[0].text, "No key bindings in this context");
-}
-
-#[test]
-fn partial_snapshots_end_with_one_warning_row() {
-    let mut list = BindingList::new();
-    let focus = canopy::Canopy::new().root_id();
-    let mut captured = snapshot(
-        focus,
-        vec![binding(1, 'a', "Action", BindingPhase::AfterWidget)],
-    );
-    captured.key_prediction_gaps.push(KeyPredictionGap {
-        input: key::Key::from('a'),
-        binding: BindingId::from_u64(1),
-        node: focus,
-        path: Path::from("/root"),
-    });
-    drop(list.replace_snapshot(Some(captured)));
-
-    let lines = list.display_lines(60);
-    assert_eq!(
-        lines
-            .iter()
-            .filter(|line| line.text == PARTIAL_WARNING)
-            .count(),
-        1,
-        "one warning covers the whole snapshot"
-    );
-    let warning = lines.last().expect("warning row");
-    assert_eq!(warning.text, PARTIAL_WARNING);
-    assert_eq!(warning.style, "help/warning");
-}
-
-#[test]
-fn exact_snapshots_have_no_warning_row() {
-    let list = list_with(vec![binding(1, 'a', "Action", BindingPhase::AfterWidget)]);
-    let lines = list.display_lines(60);
-    assert!(
-        lines.iter().all(|line| line.text != PARTIAL_WARNING),
-        "an exact snapshot needs no warning"
-    );
 }
 
 #[test]

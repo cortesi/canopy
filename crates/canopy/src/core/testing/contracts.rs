@@ -8,7 +8,10 @@ use crate::{
     commands::ArgValue,
     derive_commands,
     error::Result,
-    event::{Event, key::KeyCode},
+    event::{
+        Event,
+        key::{Key, KeyCode},
+    },
     geom::Size,
     layout::Layout,
     render::Render,
@@ -80,6 +83,14 @@ impl Widget for Contract {
             return Ok(EventOutcome::Handle);
         }
         Ok(EventOutcome::Ignore)
+    }
+
+    fn key_outcome(&self, key: Key, _ctx: &dyn ViewContext) -> EventOutcome {
+        if key.key == KeyCode::Char('x') {
+            EventOutcome::Handle
+        } else {
+            EventOutcome::Ignore
+        }
     }
 
     fn render(&mut self, render: &mut Render, view: &dyn ViewContext) -> Result<()> {

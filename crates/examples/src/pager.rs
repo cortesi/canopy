@@ -1,6 +1,6 @@
 use canopy::{
-    Canopy, CanopyBuilder, Context, ContextExt, EventOutcome, Loader, ViewContext, Widget,
-    error::Result, event::key, layout::Layout,
+    Canopy, CanopyBuilder, Context, ContextExt, Loader, ViewContext, Widget, error::Result,
+    layout::Layout,
 };
 use canopy_widgets::{Frame, Text};
 
@@ -20,10 +20,6 @@ impl Pager {
 }
 
 impl Widget for Pager {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }

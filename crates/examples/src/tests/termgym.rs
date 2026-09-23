@@ -1,6 +1,6 @@
 use canopy::{
-    BindingPhase, ContextExt, NodeId, RoutePhase, ViewContextExt, error::Result, event::key::Key,
-    geom::Size, path::Path, testing::harness::Harness,
+    BindingPhase, ContextExt, NodeId, RouteTraceKind, ViewContextExt, error::Result,
+    event::key::Key, geom::Size, path::Path, testing::harness::Harness,
 };
 use canopy_widgets::terminal::Terminal;
 
@@ -85,7 +85,7 @@ fn f6_toggles_terminal_focus_without_stealing_shell_shortcuts() -> Result<()> {
         .find(|binding| binding.input == Key::parse_spec("F6").expect("valid key"))
         .expect("terminal toggle binding");
     assert_eq!(toggle.description, "Toggle terminal list");
-    assert_eq!(toggle.phase, Some(BindingPhase::BeforeWidget));
+    assert_eq!(toggle.phase, BindingPhase::BeforeWidget);
     assert_eq!(
         toggle
             .command
@@ -113,14 +113,14 @@ fn f6_toggles_terminal_focus_without_stealing_shell_shortcuts() -> Result<()> {
             .canopy
             .route_trace()
             .iter()
-            .any(|entry| entry.phase == RoutePhase::PreEventBinding)
+            .any(|entry| entry.kind == RouteTraceKind::BeforeWidgetBinding)
     );
     assert!(
         !harness
             .canopy
             .route_trace()
             .iter()
-            .any(|entry| entry.phase == RoutePhase::WidgetEvent)
+            .any(|entry| entry.kind == RouteTraceKind::Widget)
     );
     let list_path = focus_path(&harness);
     assert!(list_path.to_string().contains("/list/term_entry"));

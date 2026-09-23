@@ -4,7 +4,7 @@ use canopy::{
     Context, EventOutcome, FocusScope, NodeId, NodeName, Render, ScrollAxis, ViewContext, Widget,
     derive_commands,
     error::Result,
-    event::{Event, key},
+    event::Event,
     geom::Rect,
     layout::{Direction, Edges, Layout},
 };
@@ -132,10 +132,6 @@ impl Default for Columns {
 }
 
 impl Widget for Columns {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         Layout::fill()
             .direction(Direction::Row)

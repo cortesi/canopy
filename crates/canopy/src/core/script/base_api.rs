@@ -664,12 +664,9 @@ fn parse_bind_options<'s>(
         .ok_or_else(|| RuntimeError::runtime("binding description is required"))?;
     let mode = field("mode")?.filter(|mode| !mode.is_empty());
     let tier = field("tier")?;
-    let binding_scope = match tier.as_deref() {
-        None => mode.map_or(
-            inputmap::BindingScope::Default,
-            inputmap::BindingScope::Mode,
-        ),
-        Some("global") if mode.is_none() => inputmap::BindingScope::Global,
+    let tier = match tier.as_deref() {
+        None => mode.map_or(inputmap::BindingTier::Default, inputmap::BindingTier::Mode),
+        Some("global") if mode.is_none() => inputmap::BindingTier::Global,
         Some("global") => {
             return Err(RuntimeError::runtime(
                 "binding tier 'global' cannot be combined with a named mode",
@@ -689,7 +686,7 @@ fn parse_bind_options<'s>(
         ),
     };
     Ok(inputmap::BindingOptions {
-        scope: binding_scope,
+        tier,
         path: field("path")?
             .filter(|path| !path.is_empty())
             .map(|path| path.parse())
@@ -2085,14 +2082,14 @@ fn host_unbind_key<'s>(
     let options = parse_unbind_selector(scope, args.optional::<Table<'_>>("options")?)?;
     with_current_canopy(scope, |canopy, _| {
         let key = key::Key::parse_spec(&key_spec)?;
-        let scope = options
+        let tier = options
             .mode
             .as_ref()
-            .map(|mode| inputmap::BindingScope::Mode(mode.clone()));
+            .map(|mode| inputmap::BindingTier::Mode(mode.clone()));
         let _ = canopy.unbind_input(
             inputmap::InputSpec::Key(key),
             &inputmap::BindingSelector {
-                scope,
+                tier,
                 path_filter: options.path.as_deref(),
             },
         );

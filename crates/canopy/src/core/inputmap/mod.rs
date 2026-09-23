@@ -55,44 +55,53 @@ impl fmt::Display for FrameworkBindingGroup {
     }
 }
 
-/// Owner of one binding record.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum BindingOwner {
-    /// Application-owned binding that script APIs can mutate.
-    Application,
-    /// Framework-owned binding in a private group.
-    Framework(FrameworkBindingGroup),
-}
-
-/// Resolution scope for one binding.
+/// Resolution tier for one binding.
+///
+/// Variant order is resolution order: the framework group an open modal
+/// admits, then the global tier, then active modes newest first, then the
+/// default tier. Only framework-tier records belong to the framework; every
+/// other tier holds application bindings that script APIs can change.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum BindingScope {
+pub enum BindingTier {
+    /// Framework-owned bindings that only a modal admits.
+    Framework(FrameworkBindingGroup),
     /// Highest-priority application tier.
     Global,
     /// Named application mode.
     Mode(String),
-    /// Default application mode.
+    /// Default application tier.
     Default,
-    /// Framework-only exclusive group.
-    Exclusive(FrameworkBindingGroup),
 }
 
-impl BindingScope {
-    /// Return the named mode, if this is a mode scope.
+impl BindingTier {
+    /// Return the named mode, if this is a mode tier.
     pub fn mode(&self) -> Option<&str> {
         match self {
             Self::Mode(mode) => Some(mode),
-            _ => None,
+            Self::Framework(_) | Self::Global | Self::Default => None,
         }
+    }
+
+    /// Return the framework group, if this is the framework tier.
+    pub fn framework_group(&self) -> Option<FrameworkBindingGroup> {
+        match self {
+            Self::Framework(group) => Some(*group),
+            Self::Global | Self::Mode(_) | Self::Default => None,
+        }
+    }
+
+    /// Return whether this tier holds framework-owned bindings.
+    pub fn is_framework(&self) -> bool {
+        matches!(self, Self::Framework(_))
     }
 
     /// Return a stable scripting and diagnostic label.
     pub fn label(&self) -> &'static str {
         match self {
+            Self::Framework(_) => "framework",
             Self::Global => "global",
             Self::Mode(_) => "mode",
             Self::Default => "default",
-            Self::Exclusive(_) => "exclusive",
         }
     }
 }
@@ -102,8 +111,9 @@ impl BindingScope {
 pub struct BindingOptions {
     /// Optional validated path selector. Omission matches the current route.
     pub path: Option<PathFilter>,
-    /// Application scope and optional named mode.
-    pub scope: BindingScope,
+    /// Resolution tier. Application bindings take any tier but the
+    /// framework tier, which only [`InputMap::bind_framework`] accepts.
+    pub tier: BindingTier,
     /// Required user-facing description.
     pub description: String,
     /// Optional diagnostic source.
@@ -111,8 +121,8 @@ pub struct BindingOptions {
     /// Phase that sets when the binding runs relative to the widget.
     ///
     /// `None` means the phase was omitted at registration. Commands and
-    /// callbacks then default to `after_widget`. Widget actions carry no
-    /// phase, and an explicit phase on one is an error.
+    /// callbacks then default to `after_widget`. A widget action always runs
+    /// before the widget, so an explicit `after_widget` on one is an error.
     pub phase: Option<BindingPhase>,
 }
 
@@ -183,19 +193,16 @@ pub struct BindingRecord {
     pub id: BindingId,
     /// Normalized input selector.
     pub input: InputSpec,
-    /// Record owner.
-    pub owner: BindingOwner,
-    /// Resolution scope.
-    pub scope: BindingScope,
+    /// Resolution tier.
+    pub tier: BindingTier,
     /// Required user-facing description.
     pub description: String,
     /// Optional diagnostic source.
     pub source: Option<String>,
-    /// Phase that sets when the binding runs relative to the widget.
-    ///
-    /// `None` marks a widget action, which runs before the node's raw key
-    /// handler and carries no phase choice.
-    pub phase: Option<BindingPhase>,
+    /// Phase that sets when the binding runs relative to the widget. A widget
+    /// action is always `BeforeWidget`: the route offers it before the node's
+    /// raw key handler.
+    pub phase: BindingPhase,
     /// Binding target.
     pub target: BindingTarget,
     /// Monotonic insertion order.
@@ -205,14 +212,24 @@ pub struct BindingRecord {
 }
 
 impl BindingRecord {
-    /// Copy the parts of this record that routing needs to run it.
+    /// Copy the parts of this record that routing needs to act on it.
     pub(crate) fn resolved(&self) -> ResolvedBinding {
-        ResolvedBinding {
+        let target = match &self.target {
+            BindingTarget::WidgetAction(action) => {
+                return ResolvedBinding::Offer {
+                    id: self.id,
+                    action: action.clone(),
+                };
+            }
+            BindingTarget::Script(function) => RunTarget::Script(*function),
+            BindingTarget::Command(call) => RunTarget::Command(call.clone()),
+        };
+        ResolvedBinding::Run(RunBinding {
             id: self.id,
-            target: self.target.clone(),
             phase: self.phase,
             description: self.description.clone(),
-        }
+            target,
+        })
     }
 
     /// Return the original path filter.
@@ -255,20 +272,45 @@ impl BindingPhase {
     }
 }
 
-/// Owned copy of a winning binding, kept while its target runs.
+/// Owned copy of a winning binding, kept while routing acts on it.
 ///
-/// Resolution borrows records. Routing copies the winner here, because
-/// running the target can change the registry.
+/// Resolution borrows records. Routing copies the winner here, because acting
+/// on it can change the registry. The route offers a widget action to the
+/// node's widget, and runs a command or callback, so each carries only what
+/// that needs.
 #[derive(Clone, Debug)]
-pub struct ResolvedBinding {
+pub enum ResolvedBinding {
+    /// A widget action the route offers before the node's raw key handler.
+    Offer {
+        /// Binding identifier.
+        id: BindingId,
+        /// Offered action.
+        action: WidgetActionName,
+    },
+    /// A command or callback that runs at its phase.
+    Run(RunBinding),
+}
+
+/// A resolved command or callback binding.
+#[derive(Clone, Debug)]
+pub struct RunBinding {
     /// Binding identifier.
     pub id: BindingId,
-    /// Target to execute.
-    pub target: BindingTarget,
-    /// Routing phase, absent for a widget action.
-    pub phase: Option<BindingPhase>,
+    /// Routing phase.
+    pub phase: BindingPhase,
     /// User-facing description.
     pub description: String,
+    /// What the binding runs.
+    pub target: RunTarget,
+}
+
+/// What a running binding executes.
+#[derive(Clone, Debug)]
+pub enum RunTarget {
+    /// Stored Luau callback.
+    Script(LuauFunctionId),
+    /// Rust command call.
+    Command(CommandCall),
 }
 
 /// Why the registry admits, blocks, or shadows one record.
@@ -278,26 +320,26 @@ pub enum RegistryStatus {
     Effective,
     /// No record has this identifier.
     Missing,
-    /// The active exclusive group does not admit this record.
-    BlockedByExclusive(FrameworkBindingGroup),
-    /// The record's exclusive group is not active.
-    InactiveExclusive(FrameworkBindingGroup),
+    /// The active framework group does not admit this record.
+    BlockedByFrameworkGroup(FrameworkBindingGroup),
+    /// The record's framework group is not active.
+    InactiveFrameworkGroup(FrameworkBindingGroup),
     /// The record's named mode is not active.
     InactiveMode(String),
     /// A transient mode ends resolution before this record.
     BlockedByTransient(String),
     /// The record's path never matches the route.
     PathMismatch,
-    /// No route path admits the record in the active scope.
+    /// No route path admits the record in the active tiers.
     NotEligible,
     /// An earlier route node shadows the record.
     ShadowedAtEarlierRoute {
         /// Binding that wins earlier on the route.
         winner: BindingId,
     },
-    /// A higher-priority scope shadows the record.
-    ShadowedByScope {
-        /// Binding that wins in the higher scope.
+    /// A higher-priority tier shadows the record.
+    ShadowedByTier {
+        /// Binding that wins in the higher tier.
         winner: BindingId,
     },
     /// A more specific path shadows the record.
@@ -318,14 +360,14 @@ impl RegistryStatus {
         match self {
             Self::Effective => "effective".to_string(),
             Self::Missing => "missing".to_string(),
-            Self::BlockedByExclusive(group) => format!("blocked by exclusive group {group}"),
-            Self::InactiveExclusive(group) => format!("inactive exclusive group {group}"),
+            Self::BlockedByFrameworkGroup(group) => format!("blocked by framework group {group}"),
+            Self::InactiveFrameworkGroup(group) => format!("inactive framework group {group}"),
             Self::InactiveMode(mode) => format!("inactive mode {mode}"),
             Self::BlockedByTransient(mode) => format!("blocked by transient mode {mode}"),
             Self::PathMismatch => "path does not match route".to_string(),
-            Self::NotEligible => "not eligible in the active scope".to_string(),
+            Self::NotEligible => "not eligible in the active tiers".to_string(),
             Self::ShadowedAtEarlierRoute { .. } => "shadowed at an earlier route node".to_string(),
-            Self::ShadowedByScope { .. } => "shadowed by a higher-priority scope".to_string(),
+            Self::ShadowedByTier { .. } => "shadowed by a higher-priority tier".to_string(),
             Self::ShadowedByMoreSpecificPath { .. } => {
                 "shadowed by a more specific path".to_string()
             }
@@ -337,8 +379,8 @@ impl RegistryStatus {
 /// Binding selector used by application mutation APIs.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct BindingSelector<'a> {
-    /// Optional scope to match.
-    pub scope: Option<BindingScope>,
+    /// Optional tier to match.
+    pub tier: Option<BindingTier>,
     /// Optional exact path filter string to match.
     pub path_filter: Option<&'a str>,
 }
@@ -482,10 +524,11 @@ impl InputMap {
                 )));
             }
         }
+        // A widget action is offered before the node's raw key handler.
         let phase = match target {
-            BindingTarget::WidgetAction(_) => None,
+            BindingTarget::WidgetAction(_) => BindingPhase::BeforeWidget,
             BindingTarget::Script(_) | BindingTarget::Command(_) => {
-                Some(options.phase.unwrap_or_default())
+                options.phase.unwrap_or_default()
             }
         };
         let path_filter = options.path.as_ref().map_or("", PathFilter::as_str);
@@ -496,15 +539,14 @@ impl InputMap {
         let removed = self.unbind_input(
             input,
             &BindingSelector {
-                scope: Some(options.scope.clone()),
+                tier: Some(options.tier.clone()),
                 path_filter: Some(path_filter),
             },
         );
         self.records.push(BindingRecord {
             id,
             input,
-            owner: BindingOwner::Application,
-            scope: options.scope,
+            tier: options.tier,
             description: options.description,
             source: options.source,
             phase,
@@ -515,33 +557,31 @@ impl InputMap {
         Ok((id, removed))
     }
 
-    /// Store one idempotent framework binding.
+    /// Store one idempotent framework binding in the group that
+    /// `options.tier` names.
     pub fn bind_framework(
         &mut self,
-        group: FrameworkBindingGroup,
         input: impl Into<InputSpec>,
         options: BindingOptions,
         command: CommandCall,
     ) -> Result<BindingId> {
         let input = input.into();
         validate_description(&options.description)?;
-        let scope = BindingScope::Exclusive(group);
-        if options.scope != scope {
+        let Some(group) = options.tier.framework_group() else {
             return Err(Error::Invalid(
-                "framework binding scope must match its exclusive group".to_string(),
+                "framework bindings need a framework tier".to_string(),
             ));
-        }
+        };
         let path_filter = options.path.as_ref().map_or("", PathFilter::as_str);
         let path_matcher = options.path.clone().unwrap_or(PathFilter::new("")?);
         let input = input.normalize();
-        let phase = Some(options.phase.unwrap_or_default());
+        let phase = options.phase.unwrap_or_default();
         if let Some(existing) = self.records.iter().find(|record| {
-            record.owner == BindingOwner::Framework(group)
+            record.tier == options.tier
                 && record.input == input
                 && record.path_filter() == path_filter
         }) {
-            if existing.scope == scope
-                && existing.description == options.description
+            if existing.description == options.description
                 && existing.phase == phase
                 && existing.source == options.source
                 && existing.target == BindingTarget::Command(command)
@@ -557,8 +597,7 @@ impl InputMap {
         self.records.push(BindingRecord {
             id,
             input,
-            owner: BindingOwner::Framework(group),
-            scope,
+            tier: options.tier,
             description: options.description,
             source: options.source,
             phase,
@@ -574,7 +613,7 @@ impl InputMap {
         let Some(index) = self.records.iter().position(|record| record.id == id) else {
             return Ok(None);
         };
-        if !matches!(self.records[index].owner, BindingOwner::Application) {
+        if self.records[index].tier.is_framework() {
             return Err(Error::Invalid(format!(
                 "binding {} is framework-owned",
                 id.as_u64()
@@ -594,9 +633,9 @@ impl InputMap {
         self.remove_application_records(|record| {
             record.input == input
                 && selector
-                    .scope
+                    .tier
                     .as_ref()
-                    .is_none_or(|scope| record.scope == *scope)
+                    .is_none_or(|tier| record.tier == *tier)
                 && selector
                     .path_filter
                     .is_none_or(|path| record.path_filter() == path)
@@ -619,7 +658,7 @@ impl InputMap {
     ) -> Vec<(BindingId, BindingTarget)> {
         let mut removed = Vec::new();
         self.records.retain(|record| {
-            if !matches!(record.owner, BindingOwner::Application) || !selected(record) {
+            if record.tier.is_framework() || !selected(record) {
                 return true;
             }
             removed.push((record.id, record.target.clone()));
@@ -685,13 +724,10 @@ impl InputMap {
         input: InputSpec,
         transient_ends: bool,
     ) {
-        let application = |record: &BindingRecord| record.owner == BindingOwner::Application;
-        self.extend_scope(out, path, input, |record| {
-            application(record) && record.scope == BindingScope::Global
-        });
+        self.extend_tier(out, path, input, |tier| *tier == BindingTier::Global);
         for mode in self.mode_stack.iter().rev() {
-            self.extend_scope(out, path, input, |record| {
-                application(record) && record.scope.mode() == Some(mode.name.as_str())
+            self.extend_tier(out, path, input, |tier| {
+                tier.mode() == Some(mode.name.as_str())
             });
             if transient_ends && mode.transient {
                 // A transient mode ends the walk, so older modes and the
@@ -699,9 +735,7 @@ impl InputMap {
                 return;
             }
         }
-        self.extend_scope(out, path, input, |record| {
-            application(record) && record.scope == BindingScope::Default
-        });
+        self.extend_tier(out, path, input, |tier| *tier == BindingTier::Default);
     }
 
     /// Append the candidates of one framework group, best first.
@@ -712,68 +746,58 @@ impl InputMap {
         input: InputSpec,
         group: FrameworkBindingGroup,
     ) {
-        self.extend_scope(out, path, input, |record| {
-            record.owner == BindingOwner::Framework(group)
-                && record.scope == BindingScope::Exclusive(group)
+        self.extend_tier(out, path, input, |tier| {
+            tier.framework_group() == Some(group)
         });
     }
 
     /// Append the candidates of one tier, best first. `in_tier` selects the
-    /// tier's records by owner and scope.
-    fn extend_scope<'a>(
+    /// tier's records.
+    ///
+    /// The tier's candidates are ranked in place at the end of `out`, so a
+    /// query allocates nothing per tier.
+    fn extend_tier<'a>(
         &'a self,
         out: &mut Vec<BindingCandidate<'a>>,
         path: &Path,
         input: InputSpec,
-        in_tier: impl Fn(&BindingRecord) -> bool,
+        in_tier: impl Fn(&BindingTier) -> bool,
     ) {
-        let mut found = self
-            .records
-            .iter()
-            .filter(|record| record.input == input && in_tier(record))
-            .filter(|record| self.admits_record(record))
-            .filter_map(|record| {
-                record
-                    .path_matcher
-                    .check_match(path)
-                    .map(|path_match| BindingCandidate { record, path_match })
-            })
-            .collect::<Vec<_>>();
-        found.sort_by(|left, right| compare_candidates(*left, *right).reverse());
-        out.extend(found);
+        let start = out.len();
+        out.extend(
+            self.records
+                .iter()
+                .filter(|record| record.input == input && in_tier(&record.tier))
+                .filter(|record| self.admits_record(record))
+                .filter_map(|record| {
+                    record
+                        .path_matcher
+                        .check_match(path)
+                        .map(|path_match| BindingCandidate { record, path_match })
+                }),
+        );
+        out[start..].sort_by(|left, right| compare_candidates(*left, *right).reverse());
     }
 
-    /// Return whether the active scope state admits one record.
+    /// Return whether the active modal admission admits one record.
     ///
     /// Admission ignores route position and widget state. Route selection and
     /// `candidate_keys` share this predicate.
     pub(crate) fn admits_record(&self, record: &BindingRecord) -> bool {
         match &self.modal_bindings {
-            Some(ModalBindings::Framework(group)) => {
-                record.owner == BindingOwner::Framework(*group)
-                    && record.scope == BindingScope::Exclusive(*group)
-            }
-            Some(ModalBindings::FrameworkWithActions { group, actions }) => {
-                if record.owner == BindingOwner::Framework(*group)
-                    && record.scope == BindingScope::Exclusive(*group)
-                {
-                    return true;
-                }
-                matches!(record.owner, BindingOwner::Application)
-                    && record.phase.is_none()
-                    && record
-                        .target
-                        .widget_action()
-                        .is_some_and(|name| actions.contains(&name.as_str()))
-            }
-            Some(ModalBindings::Application) | None => {
-                matches!(record.owner, BindingOwner::Application)
-                    && !matches!(record.scope, BindingScope::Exclusive(_))
-            }
+            Some(ModalBindings::Framework(group)) => record.tier.framework_group() == Some(*group),
+            Some(ModalBindings::FrameworkWithActions { group, actions }) => match &record.tier {
+                BindingTier::Framework(record_group) => record_group == group,
+                BindingTier::Global | BindingTier::Mode(_) | BindingTier::Default => record
+                    .target
+                    .widget_action()
+                    .is_some_and(|name| actions.contains(&name.as_str())),
+            },
+            Some(ModalBindings::Application) | None => !record.tier.is_framework(),
         }
     }
 
-    /// Return normalized key inputs the active scope state admits.
+    /// Return normalized key inputs the active modal admission admits.
     ///
     /// The result is a safe superset for discovery. It includes dormant action
     /// keys and does not decide which binding wins.
@@ -784,8 +808,7 @@ impl InputMap {
         })
     }
 
-    /// Return normalized mouse inputs that can participate in the current
-    /// scope state.
+    /// Return normalized mouse inputs the active modal admission admits.
     pub(crate) fn eligible_mouse_inputs(&self) -> Vec<Mouse> {
         self.candidate_inputs(|input| match input {
             InputSpec::Mouse(mouse) => Some(mouse),
@@ -794,7 +817,7 @@ impl InputMap {
     }
 
     /// Return the distinct inputs `select` keeps from the records the active
-    /// scope state admits.
+    /// modal admission admits.
     ///
     /// The order is by label alone, for stable presentation. Precedence between
     /// records belongs to the resolver, which ranks one winner per input.
@@ -820,23 +843,23 @@ impl InputMap {
         let Some(record) = self.binding(id) else {
             return RegistryStatus::Missing;
         };
-        if let Some(group) = self.active_exclusive_group() {
+        if let Some(group) = self.active_framework_group() {
             if !self.admits_record(record) {
-                return RegistryStatus::BlockedByExclusive(group);
+                return RegistryStatus::BlockedByFrameworkGroup(group);
             }
         } else {
-            match &record.scope {
-                BindingScope::Exclusive(group) => {
-                    return RegistryStatus::InactiveExclusive(*group);
+            match &record.tier {
+                BindingTier::Framework(group) => {
+                    return RegistryStatus::InactiveFrameworkGroup(*group);
                 }
-                BindingScope::Mode(mode)
+                BindingTier::Mode(mode)
                     if !self.mode_stack.iter().any(|active| active.name == *mode) =>
                 {
                     return RegistryStatus::InactiveMode(mode.clone());
                 }
-                BindingScope::Global | BindingScope::Mode(_) | BindingScope::Default => {}
+                BindingTier::Global | BindingTier::Mode(_) | BindingTier::Default => {}
             }
-            if let Some(mode) = self.transient_blocker(&record.scope) {
+            if let Some(mode) = self.transient_blocker(&record.tier) {
                 return RegistryStatus::BlockedByTransient(mode.to_string());
             }
         }
@@ -860,8 +883,8 @@ impl InputMap {
         if winner_route < record_route {
             return RegistryStatus::ShadowedAtEarlierRoute { winner: winner.id };
         }
-        if winner.scope != record.scope {
-            return RegistryStatus::ShadowedByScope { winner: winner.id };
+        if winner.tier != record.tier {
+            return RegistryStatus::ShadowedByTier { winner: winner.id };
         }
         let path = &route[winner_route];
         let record_match = record
@@ -879,13 +902,13 @@ impl InputMap {
         }
     }
 
-    /// Apply or remove the admission owned by the top modal scope.
+    /// Apply or remove the admission owned by the top modal.
     pub(crate) fn set_modal_bindings(&mut self, bindings: Option<ModalBindings>) {
         self.modal_bindings = bindings;
     }
 
-    /// Return the active exclusive group admitted by the top modal scope.
-    pub fn active_exclusive_group(&self) -> Option<FrameworkBindingGroup> {
+    /// Return the framework group the top modal admits.
+    pub fn active_framework_group(&self) -> Option<FrameworkBindingGroup> {
         match self.modal_bindings {
             Some(ModalBindings::Framework(group))
             | Some(ModalBindings::FrameworkWithActions { group, .. }) => Some(group),
@@ -907,7 +930,7 @@ impl InputMap {
     /// Push a named input mode that takes only the next key.
     ///
     /// Keys the mode does not bind never fall through to older modes or the
-    /// default scope. Key routing pops the mode before it runs the binding.
+    /// default tier. Key routing pops the mode before it runs the binding.
     pub fn push_transient_mode(&mut self, mode: &str) {
         self.push_active(mode, true);
     }
@@ -964,17 +987,17 @@ impl InputMap {
         self.mode_generation = self.mode_generation.wrapping_add(1);
     }
 
-    /// Return the transient mode that keeps resolution from reaching `scope`.
-    fn transient_blocker(&self, scope: &BindingScope) -> Option<&str> {
-        let floor = match scope {
-            BindingScope::Default => 0,
-            BindingScope::Mode(mode) => {
+    /// Return the transient mode that keeps resolution from reaching `tier`.
+    fn transient_blocker(&self, tier: &BindingTier) -> Option<&str> {
+        let floor = match tier {
+            BindingTier::Default => 0,
+            BindingTier::Mode(mode) => {
                 self.mode_stack
                     .iter()
                     .rposition(|active| active.name == *mode)?
                     + 1
             }
-            BindingScope::Global | BindingScope::Exclusive(_) => return None,
+            BindingTier::Framework(_) | BindingTier::Global => return None,
         };
         self.mode_stack[floor..]
             .iter()
@@ -989,7 +1012,7 @@ impl InputMap {
             records: self
                 .records
                 .iter()
-                .filter(|record| matches!(record.owner, BindingOwner::Application))
+                .filter(|record| !record.tier.is_framework())
                 .cloned()
                 .collect(),
             mode_stack: self.mode_stack.clone(),
@@ -998,8 +1021,7 @@ impl InputMap {
 
     /// Restore application records without changing framework state.
     pub(crate) fn restore_application(&mut self, snapshot: ApplicationBindingSnapshot) {
-        self.records
-            .retain(|record| !matches!(record.owner, BindingOwner::Application));
+        self.records.retain(|record| record.tier.is_framework());
         self.records.extend(snapshot.records);
         self.records.sort_by_key(|record| record.insertion_id);
         self.mode_stack = snapshot.mode_stack;
@@ -1015,7 +1037,7 @@ impl InputMap {
             baseline.records.iter().map(|record| record.id).collect();
         self.records
             .iter()
-            .filter(|record| matches!(record.owner, BindingOwner::Application))
+            .filter(|record| !record.tier.is_framework())
             .filter(|record| !baseline.contains(&record.id))
             .filter_map(|record| match record.target {
                 BindingTarget::Script(target) => Some(target),
@@ -1078,35 +1100,35 @@ pub fn validate_application_binding(
     action: Option<&WidgetActionName>,
 ) -> Result<()> {
     let path_filter = options.path.as_ref().map_or("", PathFilter::as_str);
-    validate_application_scope(&options.scope, path_filter)?;
+    validate_application_tier(&options.tier, path_filter)?;
     validate_description(&options.description)?;
-    if action.is_some() && options.phase.is_some() {
+    if action.is_some() && options.phase == Some(BindingPhase::AfterWidget) {
         return Err(Error::Invalid(
-            "widget action bindings do not take a phase".to_string(),
+            "widget action bindings run before the widget and cannot take after_widget".to_string(),
         ));
     }
     Ok(())
 }
 
-/// Validate an application binding scope.
-fn validate_application_scope(scope: &BindingScope, path_filter: &str) -> Result<()> {
-    match scope {
-        BindingScope::Global => {
+/// Validate an application binding tier.
+fn validate_application_tier(tier: &BindingTier, path_filter: &str) -> Result<()> {
+    match tier {
+        BindingTier::Global => {
             if !path_filter.starts_with('/') || !path_filter.ends_with('/') {
                 return Err(Error::Invalid(
                     "global bindings require a start- and end-anchored path".to_string(),
                 ));
             }
         }
-        BindingScope::Mode(mode) if mode.is_empty() => {
+        BindingTier::Mode(mode) if mode.is_empty() => {
             return Err(Error::Invalid(
                 "named binding mode cannot be empty".to_string(),
             ));
         }
-        BindingScope::Default | BindingScope::Mode(_) => {}
-        BindingScope::Exclusive(_) => {
+        BindingTier::Default | BindingTier::Mode(_) => {}
+        BindingTier::Framework(_) => {
             return Err(Error::Invalid(
-                "application bindings cannot use an exclusive scope".to_string(),
+                "application bindings cannot use the framework tier".to_string(),
             ));
         }
     }

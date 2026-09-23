@@ -1090,9 +1090,9 @@ fn availability_reports_key_and_mouse_bindings_in_separate_lists() -> Result<()>
         canopy.bind_mouse("ScrollUp", {description = "Scroll"}, function() end)
 
         local available = canopy.available_bindings()
-        canopy.assert(#available.bindings == 0, "an unknown widget leaves no exact key row")
-        canopy.assert(#available.provisional_bindings == 1, "the provisional list holds the key")
-        canopy.assert(available.provisional_bindings[1].input == "x", "the key reports its own spec")
+        canopy.assert(#available.bindings == 1, "the key list holds the key")
+        canopy.assert(available.bindings[1].input == "x", "the key reports its own spec")
+        canopy.assert(available.bindings[1].tier == "default", "the key reports its tier")
 
         local mice = available.mouse_bindings
         canopy.assert(#mice == 2, "one winner per mouse input, got " .. #mice)
@@ -1125,31 +1125,35 @@ fn availability_reports_key_and_mouse_bindings_in_separate_lists() -> Result<()>
 }
 
 #[test]
-fn script_explains_routes_and_rejects_partial_checked_dispatch() -> Result<()> {
+fn script_explains_routes_and_checks_dispatch() -> Result<()> {
     let (mut canopy, _, _) = script_call_probes()?;
     canopy.eval_script(
         r#"
         canopy.bind("x", {description = "Set value"}, command.script_call_probe.set_value(7))
 
         local explanation = canopy.explain_key("x")
-        canopy.assert(explanation.certainty == "partial", "an unknown widget leaves the route partial")
-        canopy.assert(explanation.outcome.kind == "after_widget", "the binding would run")
-        canopy.assert(#explanation.steps >= 1, "the walk records steps")
-        canopy.assert(explanation.steps[#explanation.steps].widget == nil, "the step is unknown")
+        local outcome = explanation.outcome
+        canopy.assert(outcome.kind == "binding", "the binding would run")
+        canopy.assert(outcome.phase == "after_widget", "after the widget ignores the key")
+        canopy.assert(outcome.target == "command", "the binding runs a command")
+        canopy.assert(#explanation.steps == 1, "the walk stops at the winner")
+        local step = explanation.steps[1]
+        canopy.assert(step.widget == "ignore", "every widget predicts its keys")
+        local selected = step.binding
+        canopy.assert(selected ~= nil, "the step names a binding")
+        if selected ~= nil then
+            canopy.assert(selected.id == outcome.binding, "the step names the winner")
+            canopy.assert(selected.phase == "after_widget", "the step names the phase")
+        end
+        canopy.assert(step.path == outcome.path, "the winner resolves at the step")
 
         local active = canopy.available_bindings()
-        local id = active.provisional_bindings[1].id
-        canopy.assert(explanation.outcome.binding == id, "the outcome names the binding")
-        canopy.assert(#active.key_prediction_gaps == 1, "the unknown widget creates one gap")
-        local gap = active.key_prediction_gaps[1]
-        canopy.assert(gap.input == "x", "the gap names the canonical key")
-        canopy.assert(gap.binding == id, "the gap names the provisional binding")
-        canopy.assert(gap.path == explanation.steps[#explanation.steps].path, "the gap names the route path")
-
+        canopy.assert(active.bindings[1].id == outcome.binding, "discovery agrees with the analysis")
         local ok = pcall(function()
-            canopy.send_key_checked("x", {kind = "binding", binding = id})
+            canopy.send_key_checked("x", {kind = "unhandled"})
         end)
-        canopy.assert(not ok, "a partial route cannot be checked")
+        canopy.assert(not ok, "a mismatched expectation is rejected")
+        canopy.send_key_checked("x", {kind = "binding", binding = outcome.binding})
         "#,
     )?;
     Ok(())

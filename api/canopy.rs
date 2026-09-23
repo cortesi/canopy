@@ -1235,10 +1235,8 @@ pub mod canopy {
             pub input: I,
             /// Required user-facing description.
             pub description: String,
-            /// Binding owner.
-            pub owner: crate::core::inputmap::BindingOwner,
-            /// Resolution scope.
-            pub scope: crate::core::inputmap::BindingScope,
+            /// Resolution tier.
+            pub tier: crate::core::inputmap::BindingTier,
             /// Original path filter.
             pub path_filter: String,
             /// Route path at which this binding wins.
@@ -1247,8 +1245,8 @@ pub mod canopy {
             pub target: crate::core::inputmap::BindingTargetKind,
             /// Widget action name, present for an action target.
             pub action: Option<crate::core::inputmap::WidgetActionName>,
-            /// Phase relative to widget input handling, absent for a widget action.
-            pub phase: Option<crate::core::inputmap::BindingPhase>,
+            /// Phase relative to widget input handling.
+            pub phase: crate::core::inputmap::BindingPhase,
             /// Declarative command details, absent for opaque script callbacks and
             /// widget actions.
             pub command: Option<BindingCommand>,
@@ -1286,47 +1284,17 @@ pub mod canopy {
             /// This is the newest active mode when it is transient. It is absent
             /// while a framework-group modal suspends transient modes.
             pub transient_mode: Option<String>,
-            /// Newest active exclusive binding group.
-            pub exclusive_group: Option<crate::core::inputmap::FrameworkBindingGroup>,
-            /// Effective key bindings with an exact route to a consumer.
+            /// Framework group the open modal admits.
+            pub framework_group: Option<crate::core::inputmap::FrameworkBindingGroup>,
+            /// Effective key bindings, each with a route to the node where it acts.
             ///
             /// An action binding appears only when a widget on the route accepts it.
-            /// An action without a consumer appears in neither this list nor
-            /// `provisional_bindings`.
             pub bindings: Vec<AvailableBinding<crate::event::key::Key>>,
-            /// Key bindings whose reachability depends on an unknown widget.
-            ///
-            /// A widget that returns no prediction (`None`) can consume a key before a
-            /// binding that discovery otherwise includes. These rows are diagnostic
-            /// and do not belong in executable help.
-            pub provisional_bindings: Vec<AvailableBinding<crate::event::key::Key>>,
-            /// Included key bindings whose reachability depends on an unknown widget.
-            ///
-            /// Each gap names the canonical key, the provisional binding, and the
-            /// unknown widget that precedes it. An empty list means the returned
-            /// key-binding set is exact.
-            pub key_prediction_gaps: Vec<KeyPredictionGap>,
             /// Effective mouse bindings, with one winner per normalized mouse input.
             ///
             /// The route starts at the requested node, as a click on it would. The
             /// pointer's own position plays no part.
             pub mouse_bindings: Vec<AvailableBinding<crate::event::mouse::Mouse>>,
-        }
-
-        /// One included binding made provisional by an unknown widget.
-        ///
-        /// `node` and `path` identify the widget that returned no prediction, and
-        /// `binding` is the included binding it can hide.
-        #[derive(Clone, Debug, Eq, PartialEq)]
-        pub struct KeyPredictionGap {
-            /// Canonical binding key that stays provisional.
-            pub input: crate::event::key::Key,
-            /// Included binding that an unknown widget can hide.
-            pub binding: crate::core::inputmap::BindingId,
-            /// Unknown widget that precedes the binding.
-            pub node: crate::core::NodeId,
-            /// Route path of the unknown widget.
-            pub path: crate::path::Path,
         }
     }
 
@@ -1334,8 +1302,9 @@ pub mod canopy {
         //! Prospective key-route analysis.
         //!
         //! The analyzer walks the same route as key dispatch without running widget
-        //! effects, so a caller can explain where one key would go. The result is
-        //! advisory: normal routing still resolves and dispatches one node at a time,
+        //! effects, so a caller can explain where one key would go. Every widget
+        //! predicts its keys, so the analysis is exact for the current state. It is
+        //! still advisory: normal routing resolves and dispatches one node at a time,
         //! because an ignored widget can change the tree, focus, or bindings before
         //! the route reaches an ancestor.
 
@@ -1378,8 +1347,6 @@ pub mod canopy {
             pub focus_path: crate::path::Path,
             /// Nodes examined in focus-to-root order, stopping at the outcome.
             pub steps: Vec<KeyRouteStep>,
-            /// Whether every step that affects the outcome is predicted.
-            pub certainty: RouteCertainty,
             /// What would act first.
             pub outcome: RouteOutcome,
         }
@@ -1391,67 +1358,21 @@ pub mod canopy {
             pub node: crate::core::NodeId,
             /// Route path at which the node was examined.
             pub path: crate::path::Path,
-            /// Resolved binding at this node, when one exists.
-            pub binding: Option<crate::core::inputmap::BindingId>,
-            /// Phase of an ordinary binding. Absent for a widget action, which has no
-            /// phase, and for a node with no binding.
-            pub phase: Option<crate::core::inputmap::BindingPhase>,
-            /// Kind of the resolved target, present exactly when `binding` is.
-            pub target: Option<crate::core::inputmap::BindingTargetKind>,
-            /// Widget prediction, absent when the widget offers none.
-            pub widget: Option<crate::widget::EventOutcome>,
-        }
-
-        /// How exact a prospective key route is.
-        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-        pub enum RouteCertainty {
-            /// Every step that affects the outcome is predicted.
-            Exact,
-            /// An unknown widget precedes the outcome, so the outcome is provisional.
-            Partial,
+            /// Binding selected at this node, when one exists.
+            pub binding: Option<StepBinding>,
+            /// Widget prediction for the key.
+            pub widget: crate::widget::EventOutcome,
         }
 
         /// What would act first on a key.
         #[derive(Clone, Debug, Eq, PartialEq)]
         pub enum RouteOutcome {
-            /// A transient mode's own binding runs.
-            Transient {
-                /// Winning binding.
-                binding: crate::core::inputmap::BindingId,
-                /// Node the binding resolved at.
-                node: crate::core::NodeId,
-                /// Route path of the winning binding.
-                path: crate::path::Path,
-            },
-            /// A transient mode's widget action runs, with the consumer known.
-            TransientWidgetAction {
-                /// Winning binding.
-                binding: crate::core::inputmap::BindingId,
-                /// Node the action resolved at.
-                node: crate::core::NodeId,
-                /// Route path of the winning binding.
-                path: crate::path::Path,
-            },
-            /// A transient mode ends with no binding; the key is still consumed.
-            TransientDismiss,
-            /// A widget action runs before the node's raw key handler.
-            WidgetAction {
-                /// Winning binding.
-                binding: crate::core::inputmap::BindingId,
-                /// Accepting node.
-                node: crate::core::NodeId,
-                /// Route path of the winning binding.
-                path: crate::path::Path,
-            },
-            /// A `before_widget` binding runs.
-            BeforeWidget {
-                /// Winning binding.
-                binding: crate::core::inputmap::BindingId,
-                /// Node the binding resolved at.
-                node: crate::core::NodeId,
-                /// Route path of the winning binding.
-                path: crate::path::Path,
-            },
+            /// A binding on the route runs: a before-widget binding, a widget action
+            /// its node accepts, or an after-widget binding whose widget ignores the
+            /// key.
+            Binding(RouteWinner),
+            /// A transient mode's binding runs before any widget sees the key.
+            Transient(RouteWinner),
             /// A widget consumes the key.
             Widget {
                 /// Consuming node.
@@ -1459,17 +1380,43 @@ pub mod canopy {
                 /// Route path of the consuming node.
                 path: crate::path::Path,
             },
-            /// An `after_widget` binding runs.
-            AfterWidget {
-                /// Winning binding.
-                binding: crate::core::inputmap::BindingId,
-                /// Node the binding resolved at.
-                node: crate::core::NodeId,
-                /// Route path of the winning binding.
-                path: crate::path::Path,
-            },
+            /// A transient mode ends with no binding; the key is still consumed.
+            TransientDismiss,
             /// No binding or widget handles the key.
             Unhandled,
+        }
+
+        /// The binding that acts on a key, and where it resolved.
+        #[derive(Clone, Debug, Eq, PartialEq)]
+        pub struct RouteWinner {
+            /// Winning binding.
+            pub binding: crate::core::inputmap::BindingId,
+            /// Node the binding resolved at. For a widget action, this is the
+            /// accepting node.
+            pub node: crate::core::NodeId,
+            /// Route path of the winning binding.
+            pub path: crate::path::Path,
+            /// Kind of target the binding runs.
+            pub kind: crate::core::inputmap::BindingTargetKind,
+            /// Phase of the binding relative to the node's widget.
+            pub phase: crate::core::inputmap::BindingPhase,
+        }
+
+        /// The binding selected at one examined route node.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct StepBinding {
+            /// Selected binding.
+            pub id: crate::core::inputmap::BindingId,
+            /// Kind of target the binding runs.
+            pub kind: crate::core::inputmap::BindingTargetKind,
+            /// Phase of the binding relative to the node's widget.
+            pub phase: crate::core::inputmap::BindingPhase,
+        }
+
+        impl RouteOutcome {
+            #[must_use]
+            /// Return the winning binding, when a binding acts.
+            pub fn winner(&self) -> Option<&RouteWinner> {}
         }
     }
 
@@ -2889,8 +2836,9 @@ pub mod canopy {
     pub struct BindingOptions {
         /// Optional validated path selector. Omission matches the current route.
         pub path: Option<crate::path::PathFilter>,
-        /// Application scope and optional named mode.
-        pub scope: BindingScope,
+        /// Resolution tier. Application bindings take any tier but the
+        /// framework tier, which only [`InputMap::bind_framework`] accepts.
+        pub tier: BindingTier,
         /// Required user-facing description.
         pub description: String,
         /// Optional diagnostic source.
@@ -2898,18 +2846,9 @@ pub mod canopy {
         /// Phase that sets when the binding runs relative to the widget.
         ///
         /// `None` means the phase was omitted at registration. Commands and
-        /// callbacks then default to `after_widget`. Widget actions carry no
-        /// phase, and an explicit phase on one is an error.
+        /// callbacks then default to `after_widget`. A widget action always runs
+        /// before the widget, so an explicit `after_widget` on one is an error.
         pub phase: Option<BindingPhase>,
-    }
-
-    /// Owner of one binding record.
-    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-    pub enum BindingOwner {
-        /// Application-owned binding that script APIs can mutate.
-        Application,
-        /// Framework-owned binding in a private group.
-        Framework(FrameworkBindingGroup),
     }
 
     /// Binding phase relative to widget input handling.
@@ -2922,19 +2861,6 @@ pub mod canopy {
         AfterWidget,
     }
 
-    /// Resolution scope for one binding.
-    #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-    pub enum BindingScope {
-        /// Highest-priority application tier.
-        Global,
-        /// Named application mode.
-        Mode(String),
-        /// Default application mode.
-        Default,
-        /// Framework-only exclusive group.
-        Exclusive(FrameworkBindingGroup),
-    }
-
     /// Class of target a binding record owns.
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub enum BindingTargetKind {
@@ -2944,6 +2870,24 @@ pub mod canopy {
         Command,
         /// Named operation offered to widgets on the route.
         WidgetAction,
+    }
+
+    /// Resolution tier for one binding.
+    ///
+    /// Variant order is resolution order: the framework group an open modal
+    /// admits, then the global tier, then active modes newest first, then the
+    /// default tier. Only framework-tier records belong to the framework; every
+    /// other tier holds application bindings that script APIs can change.
+    #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+    pub enum BindingTier {
+        /// Framework-owned bindings that only a modal admits.
+        Framework(FrameworkBindingGroup),
+        /// Highest-priority application tier.
+        Global,
+        /// Named application mode.
+        Mode(String),
+        /// Default application tier.
+        Default,
     }
 
     /// Application runtime state and renderer coordination.
@@ -3042,7 +2986,7 @@ pub mod canopy {
     }
 
     /// The result of an event handler.
-    #[derive(Clone, Debug, Eq, PartialEq)]
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub enum EventOutcome {
         /// The event was processed and propagation stops.
         Handle,
@@ -3248,40 +3192,43 @@ pub mod canopy {
         Top(u32),
     }
 
-    /// A phase in key or mouse event routing.
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-    pub enum RoutePhase {
-        /// The initial routing target was selected.
-        Target,
-        /// A binding matched before the widget received the event.
-        PreEventBinding,
-        /// The event was offered to a widget.
-        WidgetEvent,
-        /// A binding matched after the widget ignored the event.
-        PostEventBinding,
-        /// The runtime applied the input's default action to a node.
-        DefaultAction,
-        /// Routing moved from a node to its parent.
-        Bubble,
-        /// A resolved binding is being executed.
-        BindingExecution,
-        /// A widget or binding handled the event.
-        Handled,
-        /// Routing ended without a handler.
-        Unhandled,
-    }
-
     /// One entry in the most recent input route trace.
     #[derive(Clone, Debug, Eq, PartialEq)]
     pub struct RouteTraceEntry {
-        /// Routing phase.
-        pub phase: RoutePhase,
+        /// What this entry records.
+        pub kind: RouteTraceKind,
         /// Node associated with this route step.
         pub node: Option<crate::NodeId>,
         /// Path visible to binding resolution at this route step.
         pub path: String,
         /// Human-readable route detail.
         pub detail: String,
+    }
+
+    /// What one entry in a key or mouse route trace records.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum RouteTraceKind {
+        /// The route start was selected.
+        Start,
+        /// A before-widget binding matched.
+        BeforeWidgetBinding,
+        /// A widget action was offered to the node's widget, or declined there.
+        OfferIntent,
+        /// The event was offered to the node's widget, or the widget's key
+        /// prediction disagreed with its result.
+        Widget,
+        /// An after-widget binding matched after the widget ignored the event.
+        AfterWidgetBinding,
+        /// A resolved binding ran.
+        RunBinding,
+        /// The runtime applied the input's default action to a node.
+        DefaultAction,
+        /// Routing moved from a node to its parent.
+        Bubble,
+        /// A widget or binding handled the event.
+        Handled,
+        /// Routing ended without a handler.
+        Unhandled,
     }
 
     /// Replayable record of one script evaluation.
@@ -4069,19 +4016,16 @@ pub mod canopy {
         /// answers follow the route focus the caller is asking about, which can
         /// differ from the live focus.
         ///
-        /// The result has three meanings: `Some(EventOutcome::Handle)` predicts
-        /// that [`Widget::on_event`] consumes the key, `Some(EventOutcome::Ignore)`
-        /// predicts that it does not, and `None` says that this widget offers no
-        /// prediction. The default is `None`, so third-party widgets keep the
-        /// pre-existing discovery behavior.
-        ///
-        /// When this returns `Some`, the prediction must equal the next routed
+        /// The prediction must equal the next routed
         /// `on_event(Event::Key(key), ...)` result for the same pre-event state.
-        /// Dispatch passes the raw event key. Discovery probes the canonical
-        /// binding key instead, so a `Some` prediction is exact for the raw key
-        /// and best-effort for a canonical probe. First-party widgets return
-        /// `Some(EventOutcome::Ignore)` for keys they do not handle.
-        fn key_outcome(&self, _key: Key, _ctx: &dyn ViewContext) -> Option<EventOutcome> {}
+        /// The default, [`EventOutcome::Ignore`], is right for a widget that
+        /// handles no keys; a widget that consumes keys in `on_event` must
+        /// predict them here. Dispatch passes the raw event key and checks the
+        /// prediction against the actual result: a mismatch records a route trace
+        /// entry and fails a debug assertion. Discovery probes the canonical
+        /// binding key instead, so a prediction is exact for the raw key and
+        /// best-effort for a canonical probe.
+        fn key_outcome(&self, _key: Key, _ctx: &dyn ViewContext) -> EventOutcome {}
 
         /// Layout configuration for this widget.
         fn layout(&self) -> Layout {}
@@ -4190,18 +4134,24 @@ pub mod canopy {
         pub fn label(&self) -> &'static str {}
     }
 
-    impl BindingScope {
-        /// Return a stable scripting and diagnostic label.
-        pub fn label(&self) -> &'static str {}
-
-        /// Return the named mode, if this is a mode scope.
-        pub fn mode(&self) -> Option<&str> {}
-    }
-
     impl BindingTargetKind {
         #[must_use]
         /// Return a stable target-kind label.
         pub fn label(self) -> &'static str {}
+    }
+
+    impl BindingTier {
+        /// Return a stable scripting and diagnostic label.
+        pub fn label(&self) -> &'static str {}
+
+        /// Return the framework group, if this is the framework tier.
+        pub fn framework_group(&self) -> Option<FrameworkBindingGroup> {}
+
+        /// Return the named mode, if this is a mode tier.
+        pub fn mode(&self) -> Option<&str> {}
+
+        /// Return whether this tier holds framework-owned bindings.
+        pub fn is_framework(&self) -> bool {}
     }
 
     impl CanopyBuilder {
@@ -4437,9 +4387,11 @@ pub mod canopy {
         pub fn buf(&self) -> Option<&TermBuf> {}
 
         /// Install an idempotent framework-owned command binding.
+        ///
+        /// `options.tier` must be [`inputmap::BindingTier::Framework`], and names
+        /// the group the binding joins.
         pub fn bind_framework(
             &mut self,
-            group: inputmap::FrameworkBindingGroup,
             input: impl Into<inputmap::InputSpec>,
             options: inputmap::BindingOptions,
             command: commands::CommandCall,
@@ -4659,9 +4611,9 @@ pub mod canopy {
         pub fn cell_count(self, size: Size) -> Result<usize> {}
     }
 
-    impl RoutePhase {
-        /// Return a stable diagnostic label for this phase.
-        pub fn as_str(self) -> &'static str {}
+    impl RouteTraceKind {
+        /// Return a stable scripting and diagnostic label.
+        pub fn label(self) -> &'static str {}
     }
 
     impl TermBuf {

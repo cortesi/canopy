@@ -1,7 +1,6 @@
 use canopy::{
-    CanopyBuilder, Context, ContextExt, EventOutcome, Loader, NodeId, ViewContext, Widget,
+    CanopyBuilder, Context, ContextExt, Loader, NodeId, ViewContext, Widget,
     error::Result,
-    event::key,
     layout::{Edges, Layout},
 };
 use canopy_widgets::{CanvasWidth, Container, Frame, Pad, Selectable, Text, wrap};
@@ -51,10 +50,6 @@ impl TextGym {
 }
 
 impl Widget for TextGym {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }

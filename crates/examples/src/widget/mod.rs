@@ -3,9 +3,8 @@
 use std::time::Duration;
 
 use canopy::{
-    Context, ContextExt, EventOutcome, NodeId, NodeName, TypedId, ViewContext, Widget,
+    Context, ContextExt, NodeId, NodeName, TypedId, Widget,
     error::{Error, Result},
-    event::key,
     layout::{Edges, Layout, MeasureOverflow},
     style::{Color, Paint, StyleMap},
 };
@@ -82,10 +81,6 @@ impl DemoHost {
 }
 
 impl Widget for DemoHost {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         Layout::fill()
     }
@@ -188,10 +183,6 @@ impl ListDemo {
 }
 
 impl Widget for ListDemo {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         Layout::fill()
     }

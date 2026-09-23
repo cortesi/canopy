@@ -1,8 +1,7 @@
 //! A container whose children extend past its viewport.
 
 use canopy::{
-    EventOutcome, NodeName, ViewContext, Widget,
-    event::key,
+    NodeName, Widget,
     geom::Size,
     layout::{CanvasContext, Direction, Layout, MeasureOverflow},
 };
@@ -66,10 +65,6 @@ impl Scroll {
 }
 
 impl Widget for Scroll {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         let (horizontal, vertical) = self.extends();
         let overflow = |extends| {

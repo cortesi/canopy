@@ -1,9 +1,8 @@
 use std::cell::RefCell;
 
 use canopy::{
-    Context, EventOutcome, FocusDirection, NodeName, Render, ViewContext, Widget, derive_commands,
+    Context, FocusDirection, NodeName, Render, ViewContext, Widget, derive_commands,
     error::Result,
-    event::key,
     geom::{Line, Size},
     layout::{Constraint, MeasureConstraints, Measurement},
     text,
@@ -184,10 +183,6 @@ struct WrapCache {
 }
 
 impl Widget for Text {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
         let view_rect = view.view_rect();

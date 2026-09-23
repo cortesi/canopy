@@ -1,8 +1,7 @@
 //! A container that supplies a layout and nothing else.
 
 use canopy::{
-    EventOutcome, NodeName, ViewContext, Widget,
-    event::key,
+    NodeName, Widget,
     layout::{Direction, Layout},
 };
 
@@ -51,10 +50,6 @@ impl Container {
 }
 
 impl Widget for Container {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         self.layout
     }

@@ -255,6 +255,14 @@ mod tests {
             }
             Ok(EventOutcome::Handle)
         }
+
+        fn key_outcome(&self, key: key::Key, _ctx: &dyn ViewContext) -> EventOutcome {
+            if key == 'h' || key == 'c' {
+                EventOutcome::Handle
+            } else {
+                EventOutcome::Ignore
+            }
+        }
     }
 
     fn press_at(x: i32, y: i32) -> Event {

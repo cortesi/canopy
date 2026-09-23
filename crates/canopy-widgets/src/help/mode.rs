@@ -5,9 +5,8 @@
 //! focus and no keys, so the mode still receives the next key.
 
 use canopy::{
-    ChildSlot, Context, ContextExt, EventOutcome, NodeId, NodeName, Render, ViewContext, Widget,
+    ChildSlot, Context, ContextExt, NodeId, NodeName, Render, ViewContext, Widget,
     error::{Error, Result},
-    event::key,
     geom::Size,
     layout::{Align, Constraint, Direction, Edges, Layout, MeasureConstraints, Measurement},
 };
@@ -28,7 +27,7 @@ const MARGIN: u32 = 1;
 ///
 /// A transient mode takes the next key, so the panel lists keys alone.
 pub struct ModeBindings {
-    /// Rows for the keys in the mode's own scope.
+    /// Rows for the keys in the mode's own tier.
     bindings: Vec<BindingRow>,
 }
 
@@ -50,10 +49,6 @@ impl ModeBindings {
 }
 
 impl Widget for ModeBindings {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn measure(&self, constraints: MeasureConstraints) -> Measurement {
         let preferred = self.preferred_width();
         let width = match constraints.width {
@@ -116,7 +111,7 @@ impl ModeHelp {
         let bindings = snapshot
             .bindings
             .into_iter()
-            .filter(|binding| binding.scope.mode() == Some(mode.as_str()))
+            .filter(|binding| binding.tier.mode() == Some(mode.as_str()))
             .collect::<Vec<_>>();
         let bindings = key_rows_of(&bindings);
 
@@ -141,10 +136,6 @@ impl ModeHelp {
 }
 
 impl Widget for ModeHelp {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         Layout::fill()
             .direction(Direction::Stack)

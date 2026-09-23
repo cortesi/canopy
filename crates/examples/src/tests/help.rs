@@ -1,5 +1,5 @@
 use canopy::{
-    Loader, RoutePhase, error::Result, event::key::Key, geom::Size, testing::harness::Harness,
+    Loader, RouteTraceKind, error::Result, event::key::Key, geom::Size, testing::harness::Harness,
 };
 
 use super::{Mount, root_harness};
@@ -43,8 +43,7 @@ fn prove_help_flow(mut harness: Harness, hidden: &[&str], shown: &[&str]) -> Res
         r#"
         local count = 0
         for _, binding in canopy.bindings() do
-            if binding.input == "Ctrl+g" and binding.scope == "global"
-                and binding.owner == "application" then
+            if binding.input == "Ctrl+g" and binding.tier == "global" then
                 count += 1
             end
         end
@@ -75,17 +74,9 @@ fn prove_help_flow(mut harness: Harness, hidden: &[&str], shown: &[&str]) -> Res
         harness
             .canopy
             .available_bindings(None)?
-            .exclusive_group
+            .framework_group
             .map(|group| group.as_str()),
         Some("root.help")
-    );
-    assert!(
-        harness
-            .canopy
-            .available_bindings(None)?
-            .key_prediction_gaps
-            .is_empty(),
-        "first-party widgets must predict every key on the route"
     );
     assert!(harness.tbuf().contains_text("Keyboard shortcuts"));
     assert!(!harness.tbuf().contains_text("Context:"));
@@ -125,7 +116,7 @@ fn prove_help_flow(mut harness: Harness, hidden: &[&str], shown: &[&str]) -> Res
 
     harness.key(Key::parse_spec("Down").expect("valid key"))?;
     assert!(harness.canopy.route_trace().iter().any(|entry| {
-        entry.phase == RoutePhase::BindingExecution && entry.detail == "Scroll down"
+        entry.kind == RouteTraceKind::RunBinding && entry.detail == "Scroll down"
     }));
     harness.key(Key::parse_spec("ctrl-g").expect("valid key"))?;
 
@@ -149,7 +140,7 @@ fn prove_help_flow(mut harness: Harness, hidden: &[&str], shown: &[&str]) -> Res
             .canopy
             .route_trace()
             .iter()
-            .any(|entry| entry.phase == RoutePhase::Handled)
+            .any(|entry| entry.kind == RouteTraceKind::Handled)
     );
     assert_eq!(harness.canopy.input_mode(), "accepted");
     Ok(())

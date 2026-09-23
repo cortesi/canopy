@@ -30,11 +30,10 @@ fn bind_framework(
     command: CommandCall,
 ) -> Result<BindingId> {
     map.bind_framework(
-        group,
         input,
         BindingOptions {
             path: Some(path.parse()?),
-            scope: BindingScope::Exclusive(group),
+            tier: BindingTier::Framework(group),
             description: description.to_string(),
             source: None,
             phase: Some(BindingPhase::AfterWidget),
@@ -45,7 +44,7 @@ fn bind_framework(
 
 fn bind(
     map: &mut InputMap,
-    scope: BindingScope,
+    tier: BindingTier,
     key: impl Into<Key>,
     path: &str,
     description: &str,
@@ -54,7 +53,7 @@ fn bind(
     map.replace_application_binding(
         InputSpec::Key(key.into()),
         BindingOptions {
-            scope,
+            tier,
             path: if path.is_empty() {
                 None
             } else {
@@ -79,7 +78,7 @@ fn normalized_keys_share_one_registry_slot() -> Result<()> {
     let mut map = InputMap::new();
     bind(
         &mut map,
-        BindingScope::Default,
+        BindingTier::Default,
         key::Shift + 'a',
         "",
         "Shifted A",
@@ -99,10 +98,10 @@ fn normalized_keys_share_one_registry_slot() -> Result<()> {
 #[test]
 fn resolution_uses_global_then_newest_mode_then_default() -> Result<()> {
     let mut map = InputMap::new();
-    bind(&mut map, BindingScope::Default, 'a', "", "Default", 1)?;
+    bind(&mut map, BindingTier::Default, 'a', "", "Default", 1)?;
     bind(
         &mut map,
-        BindingScope::Mode("normal".to_string()),
+        BindingTier::Mode("normal".to_string()),
         'a',
         "",
         "Normal",
@@ -110,13 +109,13 @@ fn resolution_uses_global_then_newest_mode_then_default() -> Result<()> {
     )?;
     bind(
         &mut map,
-        BindingScope::Mode("modal".to_string()),
+        BindingTier::Mode("modal".to_string()),
         'a',
         "",
         "Modal",
         3,
     )?;
-    bind(&mut map, BindingScope::Global, '?', "/root/**/", "Help", 4)?;
+    bind(&mut map, BindingTier::Global, '?', "/root/**/", "Help", 4)?;
 
     map.push_mode("normal");
     map.push_mode("modal");
@@ -146,10 +145,10 @@ fn resolution_uses_global_then_newest_mode_then_default() -> Result<()> {
 #[test]
 fn path_score_then_latest_insertion_selects_the_winner() -> Result<()> {
     let mut map = InputMap::new();
-    bind(&mut map, BindingScope::Default, 'a', "editor", "Loose", 1)?;
+    bind(&mut map, BindingTier::Default, 'a', "editor", "Loose", 1)?;
     bind(
         &mut map,
-        BindingScope::Default,
+        BindingTier::Default,
         'a',
         "editor/",
         "Anchored",
@@ -160,7 +159,7 @@ fn path_score_then_latest_insertion_selects_the_winner() -> Result<()> {
         Some(BindingTarget::Script(script(2)))
     );
 
-    bind(&mut map, BindingScope::Default, 'a', "editor/", "Latest", 3)?;
+    bind(&mut map, BindingTier::Default, 'a', "editor/", "Latest", 3)?;
     assert_eq!(
         target(&map, "/root/editor", 'a'),
         Some(BindingTarget::Script(script(3)))
@@ -172,7 +171,7 @@ fn path_score_then_latest_insertion_selects_the_winner() -> Result<()> {
 fn global_bindings_require_both_path_anchors() {
     for path in ["root/**/", "/root/**", "root/**"] {
         let mut map = InputMap::new();
-        assert!(bind(&mut map, BindingScope::Global, '?', path, "Help", 1).is_err());
+        assert!(bind(&mut map, BindingTier::Global, '?', path, "Help", 1).is_err());
     }
 }
 
@@ -211,9 +210,32 @@ fn framework_registration_is_idempotent_and_rejects_conflicts() -> Result<()> {
 }
 
 #[test]
+fn only_framework_registration_takes_the_framework_tier() -> Result<()> {
+    let mut map = InputMap::new();
+    let mut options = options("/root/help/**/", BindingPhase::AfterWidget);
+    assert!(
+        map.bind_framework('j', options.clone(), command("binding_list::scroll_down"))
+            .is_err(),
+        "a framework binding needs a framework tier"
+    );
+    options.tier = BindingTier::Framework(HELP);
+    assert!(
+        map.replace_application_binding(
+            InputSpec::Key('j'.into()),
+            options,
+            BindingTarget::Script(script(1)),
+        )
+        .is_err(),
+        "an application binding cannot take the framework tier"
+    );
+    assert!(map.bindings().is_empty());
+    Ok(())
+}
+
+#[test]
 fn modal_bindings_block_all_application_tiers() -> Result<()> {
     let mut map = InputMap::new();
-    bind(&mut map, BindingScope::Default, 'j', "", "Application", 1)?;
+    bind(&mut map, BindingTier::Default, 'j', "", "Application", 1)?;
     bind_framework(
         &mut map,
         HELP,
@@ -240,7 +262,7 @@ fn modal_bindings_block_all_application_tiers() -> Result<()> {
     map.set_modal_bindings(Some(ModalBindings::Framework(OTHER)));
     assert_eq!(target(&map, "/root/help/binding_list", 'j'), None);
     map.set_modal_bindings(None);
-    assert_eq!(map.active_exclusive_group(), None);
+    assert_eq!(map.active_framework_group(), None);
     assert_eq!(
         target(&map, "/root/help/binding_list", 'j'),
         Some(BindingTarget::Script(script(1)))
@@ -249,12 +271,12 @@ fn modal_bindings_block_all_application_tiers() -> Result<()> {
 }
 
 #[test]
-fn a_transient_mode_hides_older_modes_and_the_default_scope() -> Result<()> {
+fn a_transient_mode_hides_older_modes_and_the_default_tier() -> Result<()> {
     let mut map = InputMap::new();
-    let default = bind(&mut map, BindingScope::Default, 'a', "", "Default", 1)?;
+    let default = bind(&mut map, BindingTier::Default, 'a', "", "Default", 1)?;
     bind(
         &mut map,
-        BindingScope::Mode("normal".to_string()),
+        BindingTier::Mode("normal".to_string()),
         'b',
         "",
         "Normal",
@@ -262,13 +284,13 @@ fn a_transient_mode_hides_older_modes_and_the_default_scope() -> Result<()> {
     )?;
     bind(
         &mut map,
-        BindingScope::Mode("prefix".to_string()),
+        BindingTier::Mode("prefix".to_string()),
         'c',
         "",
         "Prefix",
         3,
     )?;
-    bind(&mut map, BindingScope::Global, '?', "/root/**/", "Help", 4)?;
+    bind(&mut map, BindingTier::Global, '?', "/root/**/", "Help", 4)?;
 
     map.push_mode("normal");
     let generation = map.mode_generation();
@@ -309,7 +331,7 @@ fn a_transient_mode_hides_older_modes_and_the_default_scope() -> Result<()> {
 #[test]
 fn application_mutation_cannot_remove_framework_records() -> Result<()> {
     let mut map = InputMap::new();
-    let app = bind(&mut map, BindingScope::Default, 'a', "", "App", 1)?;
+    let app = bind(&mut map, BindingTier::Default, 'a', "", "App", 1)?;
     let framework = bind_framework(
         &mut map,
         HELP,
@@ -329,9 +351,9 @@ fn application_mutation_cannot_remove_framework_records() -> Result<()> {
 #[test]
 fn startup_restore_preserves_framework_records_and_modal_bindings() -> Result<()> {
     let mut map = InputMap::new();
-    bind(&mut map, BindingScope::Default, 'a', "", "Before", 1)?;
+    bind(&mut map, BindingTier::Default, 'a', "", "Before", 1)?;
     let snapshot = map.snapshot_application();
-    bind(&mut map, BindingScope::Default, 'b', "", "Transient", 2)?;
+    bind(&mut map, BindingTier::Default, 'b', "", "Transient", 2)?;
     bind_framework(
         &mut map,
         HELP,
@@ -344,16 +366,16 @@ fn startup_restore_preserves_framework_records_and_modal_bindings() -> Result<()
 
     map.restore_application(snapshot);
     assert_eq!(map.bindings().len(), 2);
-    assert_eq!(map.active_exclusive_group(), Some(HELP));
+    assert_eq!(map.active_framework_group(), Some(HELP));
     Ok(())
 }
 
 #[test]
 fn identifier_exhaustion_does_not_replace_an_existing_binding() -> Result<()> {
     let mut map = InputMap::new();
-    bind(&mut map, BindingScope::Default, 'a', "", "Existing", 1)?;
+    bind(&mut map, BindingTier::Default, 'a', "", "Existing", 1)?;
     map.next_id = u64::MAX;
-    assert!(bind(&mut map, BindingScope::Default, 'a', "", "New", 2).is_err());
+    assert!(bind(&mut map, BindingTier::Default, 'a', "", "New", 2).is_err());
     assert_eq!(
         target(&map, "/root", 'a'),
         Some(BindingTarget::Script(script(1)))
@@ -362,18 +384,18 @@ fn identifier_exhaustion_does_not_replace_an_existing_binding() -> Result<()> {
 }
 
 #[test]
-fn replacement_is_scoped_by_input_scope_and_exact_path() -> Result<()> {
+fn replacement_is_scoped_by_input_tier_and_exact_path() -> Result<()> {
     let mut map = InputMap::new();
-    let old = bind(&mut map, BindingScope::Default, 'a', "editor/", "Old", 1)?;
+    let old = bind(&mut map, BindingTier::Default, 'a', "editor/", "Old", 1)?;
     let mode = bind(
         &mut map,
-        BindingScope::Mode("insert".to_string()),
+        BindingTier::Mode("insert".to_string()),
         'a',
         "editor/",
         "Mode",
         2,
     )?;
-    let new = bind(&mut map, BindingScope::Default, 'a', "editor/", "New", 3)?;
+    let new = bind(&mut map, BindingTier::Default, 'a', "editor/", "New", 3)?;
 
     assert!(map.binding(old).is_none());
     assert!(map.binding(mode).is_some());
@@ -387,11 +409,11 @@ fn replacement_is_scoped_by_input_scope_and_exact_path() -> Result<()> {
 }
 
 #[test]
-fn diagnostics_distinguish_scope_path_insertion_route_and_exclusive_causes() -> Result<()> {
+fn diagnostics_distinguish_tier_path_insertion_route_and_framework_group_causes() -> Result<()> {
     let mut map = InputMap::new();
     let earlier_route = bind(
         &mut map,
-        BindingScope::Default,
+        BindingTier::Default,
         'a',
         "/root/editor/",
         "Earlier route",
@@ -399,47 +421,26 @@ fn diagnostics_distinguish_scope_path_insertion_route_and_exclusive_causes() -> 
     )?;
     let later_route = bind(
         &mut map,
-        BindingScope::Default,
+        BindingTier::Default,
         'a',
         "/root/",
         "Later route",
         2,
     )?;
-    let insertion_loser = bind(
-        &mut map,
-        BindingScope::Default,
-        'b',
-        "*/editor/",
-        "First",
-        3,
-    )?;
-    let insertion_winner = bind(
-        &mut map,
-        BindingScope::Default,
-        'b',
-        "/root/*/",
-        "Second",
-        4,
-    )?;
-    let path_loser = bind(&mut map, BindingScope::Default, 'c', "*/", "Loose", 5)?;
+    let insertion_loser = bind(&mut map, BindingTier::Default, 'b', "*/editor/", "First", 3)?;
+    let insertion_winner = bind(&mut map, BindingTier::Default, 'b', "/root/*/", "Second", 4)?;
+    let path_loser = bind(&mut map, BindingTier::Default, 'c', "*/", "Loose", 5)?;
     let path_winner = bind(
         &mut map,
-        BindingScope::Default,
+        BindingTier::Default,
         'c',
         "editor/",
         "Anchored",
         6,
     )?;
-    let default = bind(&mut map, BindingScope::Default, 'd', "", "Default", 7)?;
-    let global = bind(
-        &mut map,
-        BindingScope::Global,
-        'd',
-        "/root/**/",
-        "Global",
-        8,
-    )?;
-    let unmatched = bind(&mut map, BindingScope::Default, 'e', "other/", "Other", 9)?;
+    let default = bind(&mut map, BindingTier::Default, 'd', "", "Default", 7)?;
+    let global = bind(&mut map, BindingTier::Global, 'd', "/root/**/", "Global", 8)?;
+    let unmatched = bind(&mut map, BindingTier::Default, 'e', "other/", "Other", 9)?;
     let route = [Path::from("/root/editor"), Path::from("/root")];
 
     assert_eq!(
@@ -468,7 +469,7 @@ fn diagnostics_distinguish_scope_path_insertion_route_and_exclusive_causes() -> 
     );
     assert_eq!(
         map.registry_status(default, &route).label(),
-        "shadowed by a higher-priority scope"
+        "shadowed by a higher-priority tier"
     );
     assert_eq!(map.registry_status(global, &route).label(), "effective");
     assert_eq!(
@@ -487,7 +488,7 @@ fn diagnostics_distinguish_scope_path_insertion_route_and_exclusive_causes() -> 
     map.set_modal_bindings(Some(ModalBindings::Framework(HELP)));
     assert_eq!(
         map.registry_status(global, &route).label(),
-        "blocked by exclusive group root.help"
+        "blocked by framework group root.help"
     );
     map.set_modal_bindings(None);
     Ok(())
@@ -500,7 +501,7 @@ fn options(path: &str, phase: BindingPhase) -> BindingOptions {
         } else {
             Some(path.parse().expect("valid path filter"))
         },
-        scope: BindingScope::Default,
+        tier: BindingTier::Default,
         description: "Test action".to_string(),
         source: None,
         phase: Some(phase),
@@ -519,11 +520,11 @@ fn explicit_phase_is_independent_of_selector() -> Result<()> {
                 options(path, phase),
                 BindingTarget::Script(script(1)),
             )?;
-            assert_eq!(map.binding(id).unwrap().phase, Some(phase));
+            assert_eq!(map.binding(id).unwrap().phase, phase);
             let resolved = map
                 .resolve_match(&Path::from("/root/editor"), input)
                 .unwrap();
-            assert_eq!(resolved.phase, Some(phase));
+            assert_eq!(resolved.phase, phase);
         }
     }
     Ok(())
@@ -541,7 +542,7 @@ fn omitted_phase_is_after_widget() -> Result<()> {
         map.clear_application();
         bind(
             &mut map,
-            BindingScope::Default,
+            BindingTier::Default,
             'x',
             path,
             "Default phase",
@@ -550,7 +551,7 @@ fn omitted_phase_is_after_widget() -> Result<()> {
         let resolved = map
             .resolve_match(&Path::from(route), InputSpec::Key('x'.into()))
             .unwrap();
-        assert_eq!(resolved.phase, Some(BindingPhase::AfterWidget));
+        assert_eq!(resolved.phase, BindingPhase::AfterWidget);
     }
     Ok(())
 }
@@ -569,21 +570,20 @@ fn a_mouse_binding_takes_either_phase() -> Result<()> {
         let resolved = map
             .resolve_match(&Path::from("/root/editor"), input)
             .unwrap();
-        assert_eq!(resolved.phase, Some(phase));
+        assert_eq!(resolved.phase, phase);
     }
 
     // A framework group takes the early phase on the same terms.
     let mut options = options("/root/dialog/**/", BindingPhase::BeforeWidget);
-    options.scope = BindingScope::Exclusive(HELP);
+    options.tier = BindingTier::Framework(HELP);
     let id = map.bind_framework(
-        HELP,
         Mouse::parse_spec("LeftDown").unwrap(),
         options,
         command("button::press"),
     )?;
     assert_eq!(
         map.binding(id).unwrap().phase,
-        Some(BindingPhase::BeforeWidget),
+        BindingPhase::BeforeWidget,
         "a framework mouse binding keeps the phase it declared"
     );
     Ok(())
@@ -592,7 +592,7 @@ fn a_mouse_binding_takes_either_phase() -> Result<()> {
 #[test]
 fn application_command_targets_replace_and_remove_like_callbacks() -> Result<()> {
     let mut map = InputMap::new();
-    let script_id = bind(&mut map, BindingScope::Default, 'x', "", "Script", 1)?;
+    let script_id = bind(&mut map, BindingTier::Default, 'x', "", "Script", 1)?;
     let action = BindingTarget::Command(command("editor::undo").with_target(CommandTarget::Focus));
     let (command_id, removed) = map.replace_application_binding(
         InputSpec::Key('x'.into()),
@@ -630,7 +630,7 @@ fn application_snapshot_and_clear_include_commands() -> Result<()> {
         action.clone(),
     )?;
     let snapshot = map.snapshot_application();
-    let script_id = bind(&mut map, BindingScope::Default, 'y', "", "Script", 1)?;
+    let script_id = bind(&mut map, BindingTier::Default, 'y', "", "Script", 1)?;
     assert_eq!(map.targets_not_in(&snapshot), [script(1)]);
     let removed = map.clear_application();
     assert_eq!(
@@ -646,7 +646,7 @@ fn application_snapshot_and_clear_include_commands() -> Result<()> {
     assert_eq!(target(&map, "/root", 'x'), Some(action));
     assert_eq!(
         map.binding(command_id).unwrap().phase,
-        Some(BindingPhase::BeforeWidget)
+        BindingPhase::BeforeWidget
     );
     Ok(())
 }
@@ -655,26 +655,23 @@ fn application_snapshot_and_clear_include_commands() -> Result<()> {
 fn framework_binding_options_preserve_explicit_phase() -> Result<()> {
     let mut map = InputMap::new();
     let mut options = options("/root/help/**/", BindingPhase::AfterWidget);
-    options.scope = BindingScope::Exclusive(HELP);
+    options.tier = BindingTier::Framework(HELP);
     let input = InputSpec::Key('j'.into());
     let action = command("binding_list::scroll_down").with_target(CommandTarget::Focus);
-    let id = map.bind_framework(HELP, input, options.clone(), action.clone())?;
+    let id = map.bind_framework(input, options.clone(), action.clone())?;
     assert_eq!(
-        map.bind_framework(HELP, input, options.clone(), action.clone())?,
+        map.bind_framework(input, options.clone(), action.clone())?,
         id
     );
     map.set_modal_bindings(Some(ModalBindings::Framework(HELP)));
     let resolved = map
         .resolve_match(&Path::from("/root/help/list"), input)
         .unwrap();
-    assert_eq!(resolved.phase, Some(BindingPhase::AfterWidget));
+    assert_eq!(resolved.phase, BindingPhase::AfterWidget);
     assert_eq!(resolved.target, BindingTarget::Command(action.clone()));
     options.phase = Some(BindingPhase::BeforeWidget);
-    assert!(map.bind_framework(HELP, input, options, action).is_err());
-    assert_eq!(
-        map.binding(id).unwrap().phase,
-        Some(BindingPhase::AfterWidget)
-    );
+    assert!(map.bind_framework(input, options, action).is_err());
+    assert_eq!(map.binding(id).unwrap().phase, BindingPhase::AfterWidget);
     Ok(())
 }
 
@@ -684,7 +681,7 @@ fn register_action(map: &mut InputMap, name: &str) -> Result<()> {
 
 fn bind_action(
     map: &mut InputMap,
-    scope: BindingScope,
+    tier: BindingTier,
     key: impl Into<Key>,
     path: &str,
     name: &str,
@@ -693,7 +690,7 @@ fn bind_action(
     map.replace_application_binding(
         InputSpec::Key(key.into()),
         BindingOptions {
-            scope,
+            tier,
             path: if path.is_empty() {
                 None
             } else {
@@ -729,7 +726,7 @@ fn widget_actions_validate_names_phases_and_inputs() -> Result<()> {
     );
 
     let options = BindingOptions {
-        scope: BindingScope::Default,
+        tier: BindingTier::Default,
         path: None,
         description: "Clear".to_string(),
         source: None,
@@ -744,17 +741,41 @@ fn widget_actions_validate_names_phases_and_inputs() -> Result<()> {
         .is_err(),
         "an unregistered action name is rejected"
     );
-    let mut phased = options.clone();
-    phased.phase = Some(BindingPhase::BeforeWidget);
+    let mut late = options.clone();
+    late.phase = Some(BindingPhase::AfterWidget);
     assert!(
         map.replace_application_binding(
             InputSpec::Key('x'.into()),
-            phased,
+            late,
             BindingTarget::WidgetAction(WidgetActionName::new("test.clear")?),
         )
         .is_err(),
-        "an action takes no phase"
+        "an action cannot run after the widget"
     );
+    let mut early = options.clone();
+    early.phase = Some(BindingPhase::BeforeWidget);
+    let (id, _) = map.replace_application_binding(
+        InputSpec::Key('x'.into()),
+        early,
+        BindingTarget::WidgetAction(WidgetActionName::new("test.clear")?),
+    )?;
+    assert_eq!(
+        map.binding(id).map(|record| record.phase),
+        Some(BindingPhase::BeforeWidget),
+        "an explicit before_widget matches the phase every action takes"
+    );
+    map.unbind(id)?;
+    let (id, _) = map.replace_application_binding(
+        InputSpec::Key('x'.into()),
+        options.clone(),
+        BindingTarget::WidgetAction(WidgetActionName::new("test.clear")?),
+    )?;
+    assert_eq!(
+        map.binding(id).map(|record| record.phase),
+        Some(BindingPhase::BeforeWidget),
+        "an omitted phase stores an action as before_widget"
+    );
+    map.unbind(id)?;
     assert!(
         map.replace_application_binding(
             InputSpec::Mouse(Mouse::parse_spec("LeftDown")?),
@@ -779,7 +800,7 @@ fn a_framework_action_modal_admits_only_allowlisted_actions() -> Result<()> {
     register_action(&mut map, "test.other")?;
     bind_action(
         &mut map,
-        BindingScope::Default,
+        BindingTier::Default,
         'x',
         "",
         "test.clear",
@@ -787,13 +808,13 @@ fn a_framework_action_modal_admits_only_allowlisted_actions() -> Result<()> {
     )?;
     bind_action(
         &mut map,
-        BindingScope::Default,
+        BindingTier::Default,
         'y',
         "",
         "test.other",
         "Other",
     )?;
-    bind(&mut map, BindingScope::Default, 'z', "", "Callback", 1)?;
+    bind(&mut map, BindingTier::Default, 'z', "", "Callback", 1)?;
     map.set_modal_bindings(Some(ModalBindings::FrameworkWithActions {
         group: HELP,
         actions: &["test.clear"],
@@ -832,7 +853,7 @@ fn a_framework_modal_suspends_the_transient_cutoff() -> Result<()> {
     register_action(&mut map, "test.clear")?;
     let allowed = bind_action(
         &mut map,
-        BindingScope::Default,
+        BindingTier::Default,
         'x',
         "",
         "test.clear",

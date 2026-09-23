@@ -1,8 +1,7 @@
 use canopy::{
-    Canopy, CanopyBuilder, Context, ContextExt, EventOutcome, FocusScope, Loader, NodeId, NodeName,
-    Render, ViewContext, ViewContextExt, Widget, derive_commands,
+    Canopy, CanopyBuilder, Context, ContextExt, FocusScope, Loader, NodeId, NodeName, Render,
+    ViewContext, ViewContextExt, Widget, derive_commands,
     error::{Error, Result},
-    event::key,
     geom::Size,
     layout::{CanvasContext, MeasureConstraints, Measurement},
     style::default as palette,
@@ -77,10 +76,6 @@ impl Selectable for ListEntry {
 }
 
 impl Widget for ListEntry {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         self.text.render(r, ctx)
     }
@@ -228,10 +223,6 @@ impl ListGym {
 }
 
 impl Widget for ListGym {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }

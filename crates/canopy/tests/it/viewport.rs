@@ -4,7 +4,7 @@
 mod tests {
     use canopy::{
         Canopy, Context, ContextExt, EventOutcome, Loader, ModalBindings, ModalOptions, NodeId,
-        NodeName, Render, RoutePhase, ViewContext, Widget, derive_commands,
+        NodeName, Render, RouteTraceKind, ViewContext, Widget, derive_commands,
         error::Result,
         event::{Event, key, mouse},
         geom::{Line, Point, PointI32, Size},
@@ -177,12 +177,12 @@ end)
     }
 
     /// Return the phases of the last input route.
-    fn phases(harness: &Harness) -> Vec<RoutePhase> {
+    fn phases(harness: &Harness) -> Vec<RouteTraceKind> {
         harness
             .canopy
             .route_trace()
             .iter()
-            .map(|entry| entry.phase)
+            .map(|entry| entry.kind)
             .collect()
     }
 
@@ -198,7 +198,7 @@ end)
         ] {
             wheel(&mut harness, action, 1, 1)?;
             assert_eq!(scroll(&harness, inner), expected, "{action:?}");
-            assert!(phases(&harness).contains(&RoutePhase::DefaultAction));
+            assert!(phases(&harness).contains(&RouteTraceKind::DefaultAction));
         }
         assert_eq!(scroll(&harness, outer), Point::ZERO);
         Ok(())
@@ -210,8 +210,8 @@ end)
         let outer = harness.root;
 
         wheel(&mut harness, mouse::Action::ScrollUp, 1, 1)?;
-        assert!(!phases(&harness).contains(&RoutePhase::DefaultAction));
-        assert!(phases(&harness).contains(&RoutePhase::Unhandled));
+        assert!(!phases(&harness).contains(&RouteTraceKind::DefaultAction));
+        assert!(phases(&harness).contains(&RouteTraceKind::Unhandled));
 
         harness
             .canopy
@@ -232,7 +232,7 @@ end)
         harness.with_widget(inner, |pane: &mut Pane| pane.consume_wheel = true);
         wheel(&mut harness, mouse::Action::ScrollDown, 1, 1)?;
         assert_eq!(scroll(&harness, inner), Point::ZERO);
-        assert!(!phases(&harness).contains(&RoutePhase::DefaultAction));
+        assert!(!phases(&harness).contains(&RouteTraceKind::DefaultAction));
         harness.with_widget(inner, |pane: &mut Pane| pane.consume_wheel = false);
 
         harness.script(

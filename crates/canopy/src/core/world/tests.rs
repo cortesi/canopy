@@ -1479,7 +1479,7 @@ fn successful_detach_prunes_modal_bindings_owned_by_the_subtree() -> Result<()> 
 
     core.detach(modal)?;
 
-    assert_eq!(core.input_map.active_exclusive_group(), None);
+    assert_eq!(core.input_map.active_framework_group(), None);
     Ok(())
 }
 
@@ -1503,7 +1503,7 @@ fn failed_removal_keeps_the_restored_owners_modal_bindings() -> Result<()> {
 
     assert!(core.remove_subtree(modal).is_err());
 
-    assert_eq!(core.input_map.active_exclusive_group(), Some(group));
+    assert_eq!(core.input_map.active_framework_group(), Some(group));
     Ok(())
 }
 
@@ -1523,7 +1523,7 @@ fn successful_widget_replacement_retires_the_old_owners_modal_bindings() -> Resu
 
     core.replace_subtree(modal, FocusableWidget)?;
 
-    assert_eq!(core.input_map.active_exclusive_group(), None);
+    assert_eq!(core.input_map.active_framework_group(), None);
     Ok(())
 }
 
@@ -1543,7 +1543,7 @@ fn failed_widget_replacement_keeps_the_old_owners_modal_bindings() -> Result<()>
 
     assert!(core.replace_subtree(modal, MountFailWidget).is_err());
 
-    assert_eq!(core.input_map.active_exclusive_group(), Some(group));
+    assert_eq!(core.input_map.active_framework_group(), Some(group));
     Ok(())
 }
 

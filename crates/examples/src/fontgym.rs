@@ -134,10 +134,6 @@ impl FontGym {
 }
 
 impl Widget for FontGym {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         Layout::fill()
     }
@@ -317,20 +313,20 @@ impl Widget for FocusFrame {
         self.frame.on_event(event, ctx)
     }
 
-    fn key_outcome(&self, key: key::Key, context: &dyn ViewContext) -> Option<EventOutcome> {
+    fn key_outcome(&self, key: key::Key, context: &dyn ViewContext) -> EventOutcome {
         let Some(command) = Self::classify_key(key) else {
-            return Some(EventOutcome::Ignore);
+            return EventOutcome::Ignore;
         };
         let node = NodeId::from(self.list_id);
-        let view = context.view_of(node)?;
+        let Some(view) = context.view_of(node) else {
+            return EventOutcome::Ignore;
+        };
         let delta = Self::scroll_delta(view, command);
-        Some(
-            if context.scroll_outcome_of(node, 0, delta) == Some(ChangeOutcome::Changed) {
-                EventOutcome::Handle
-            } else {
-                EventOutcome::Ignore
-            },
-        )
+        if context.scroll_outcome_of(node, 0, delta) == Some(ChangeOutcome::Changed) {
+            EventOutcome::Handle
+        } else {
+            EventOutcome::Ignore
+        }
     }
 
     fn name(&self) -> NodeName {
@@ -404,10 +400,6 @@ impl Selectable for FontBlock {
 }
 
 impl Widget for FontBlock {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         Layout::column().gap(LABEL_GAP)
     }
@@ -449,10 +441,6 @@ impl FontLabel {
 }
 
 impl Widget for FontLabel {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         Layout::fill()
     }
@@ -765,12 +753,12 @@ impl Widget for FontGymInput {
         Ok(EventOutcome::Handle)
     }
 
-    fn key_outcome(&self, key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(if Self::classify_key(key).is_some() {
+    fn key_outcome(&self, key: key::Key, _context: &dyn ViewContext) -> EventOutcome {
+        if Self::classify_key(key).is_some() {
             EventOutcome::Handle
         } else {
             EventOutcome::Ignore
-        })
+        }
     }
 
     fn measure(&self, c: MeasureConstraints) -> Measurement {
@@ -787,10 +775,6 @@ impl Widget for FontGymInput {
 struct StatusRow;
 
 impl Widget for StatusRow {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         Layout::row()
             .fixed_height(STATUS_HEIGHT)
@@ -893,10 +877,6 @@ impl LegendSegment {
 struct ControlsLegend;
 
 impl Widget for ControlsLegend {
-    fn key_outcome(&self, _key: key::Key, _context: &dyn ViewContext) -> Option<EventOutcome> {
-        Some(EventOutcome::Ignore)
-    }
-
     fn layout(&self) -> Layout {
         Layout::fill()
     }
@@ -1142,13 +1122,8 @@ mod tests {
                     let key = key::Key::parse_spec(spec)?;
                     let predicted = frame.key_outcome(key, ctx);
                     let actual = frame.on_event(&Event::Key(key), ctx)?;
-                    let expected = Some(if actual == EventOutcome::Handle {
-                        EventOutcome::Handle
-                    } else {
-                        EventOutcome::Ignore
-                    });
                     assert_eq!(
-                        predicted, expected,
+                        predicted, actual,
                         "prediction must match handling for {spec}"
                     );
                     Ok(())

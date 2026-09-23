@@ -119,24 +119,24 @@ Observation helpers are script-visible:
 - `canopy.screen_text()` for simple text assertions.
 - `canopy.screen_cells()` for styled cell assertions.
 - `canopy.screen_region(x, y, w, h)` and `canopy.node_region(node)` for crops.
-- `canopy.route_trace()` for the most recent key or mouse route.
+- `canopy.route_trace()` for the most recent key or mouse route. Each entry
+  has a snake_case `kind`, such as `before_widget_binding` or `handled`.
 - `canopy.bindings()` for the complete application and framework binding
   registry.
-- `canopy.available_bindings(node?)` for effective keys, active modes, and
-  exclusive state. `key_prediction_gaps` marks included bindings an unknown
-  widget can hide; an empty list means the key set is exact.
+- `canopy.available_bindings(node?)` for effective keys, active modes, and the
+  framework group an open modal admits. Every widget predicts its keys, so the
+  key list is exact for the current state.
 - `canopy.explain_key(key, node?)` to inspect the prospective route for one
-  key before sending it: the examined steps, an exact or partial certainty,
-  and the decisive outcome. It is advisory; `canopy.route_trace()` reports what
-  actually happened.
+  key before sending it: the examined steps and the decisive outcome. It is
+  advisory; `canopy.route_trace()` reports what actually happened.
 - `canopy.send_key_checked(key, expectation)` to send a key only when the
   analyzed route matches a widget, binding, transient, or unhandled
-  expectation. A mismatch or partial analysis is rejected without delivery.
+  expectation. A mismatch is rejected without delivery.
 - `canopy.diagnostic_dump(node?)` for tree, focus, binding, and route context.
 - `canopy.script_journal()` for recent eval records.
 
 For modal automation, inspect the application snapshot before opening the
-modal. After opening, verify the exclusive group and focused modal node. Then
+modal. After opening, verify the framework group and focused modal node. Then
 close the modal and verify the exact focus before sending the next application
 input.
 
@@ -148,11 +148,11 @@ if origin == nil then
 end
 
 local before = canopy.available_bindings(origin)
-canopy.assert(before.exclusive_group == nil, "the app must not be isolated")
+canopy.assert(before.framework_group == nil, "the app must not be isolated")
 
 canopy.send_key("ctrl-g")
 local modal = canopy.available_bindings()
-canopy.assert(modal.exclusive_group == "root.help", "help must isolate its bindings")
+canopy.assert(modal.framework_group == "root.help", "help must isolate its bindings")
 
 canopy.send_key("ctrl-g")
 canopy.assert(canopy.focused() == origin, "help must restore exact focus")

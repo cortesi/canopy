@@ -8,8 +8,8 @@ use std::{
 };
 
 use canopy::{
-    Canopy, Context, ContextExt, EventOutcome, FocusDirection, FocusScope, Loader, NodeName,
-    ScrollAxis, ScrollMark, Widget, buf, derive_commands,
+    Canopy, Context, ContextExt, FocusDirection, FocusScope, Loader, NodeName, ScrollAxis,
+    ScrollMark, Widget, buf, derive_commands,
     error::Result,
     event::{Event, key, mouse},
     geom::{Point, PointI32, Size},
@@ -220,14 +220,8 @@ fn assert_capture_matches(mode: EditMode, read_only: bool, setup: &[&str]) {
                 Ok((predicted, editor.on_event(&Event::Key(probe), ctx)?))
             })
             .expect("editor events");
-        let handled = outcome == EventOutcome::Handle;
         assert_eq!(
-            predicted,
-            Some(if handled {
-                EventOutcome::Handle
-            } else {
-                EventOutcome::Ignore
-            }),
+            predicted, outcome,
             "{mode:?} mode, read_only {read_only}, after {setup:?}, key {spec}"
         );
     }
