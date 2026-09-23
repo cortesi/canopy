@@ -22,16 +22,24 @@ The root holds the application, the widget, the contexts, and node handles:
 
 | Module | Holds |
 | --- | --- |
-| `canopy::input` | Events (`Event`, `key`, `mouse`), `InputSpec`, bindings and their tiers, intents, modals, binding discovery, route analysis, and the route trace |
+| `canopy::input` | Events (`Event`, `key`, `mouse`), `InputSpec`, bindings and their tiers, intents and the built-in `NavIntent`s, binding targets for key lookup (`BindingTarget`), modals and their framework groups, binding discovery, route analysis, and the route trace |
 | `canopy::tree` | `ChildSlot`, `NodeIdentity`, `FocusDirection`, `FocusScope` |
-| `canopy::layout` | Layout, `View`, scrolling (`ScrollOp`, `ScrollAxis`, `ScrollMark`), and `RevealAlign` |
-| `canopy::render` | `Render`, `RenderBackend`, `NopBackend`, `TermBuf`, `Cell`, `RenderLimits`, and `cursor` |
+| `canopy::layout` | Layout, `View`, scrolling (`ScrollOp`, `ScrollDirection`, `ScrollAxis`, `ScrollMark`), and `RevealAlign` |
+| `canopy::render` | `Render` (including `Render::runs`), `RenderBackend`, `NopBackend`, `TermBuf`, `Cell`, `RenderLimits`, and `cursor` |
 | `canopy::runtime` | `TurnInput`, `TurnOutcome`, published frames (`FrameId`, `FrameSnapshot`, `NodeSnapshot`, `WidgetSemantics`), polls and wakes (`PollLifetime`, `NodeWakeHandle`, `wake_channel`), and notices |
 | `canopy::script` | Evaluation (`EvalRequest`, `EvalTicket`, `EvalOutcome`), automation, the script journal, trust, and fixtures |
-| `canopy::commands` | Command metadata, calls, and arguments |
-| `canopy::style` | Style maps, colors, and effects |
-| `canopy::geom`, `canopy::path`, `canopy::text`, `canopy::error` | Geometry, node paths, text width, and errors |
+| `canopy::commands` | Command metadata, calls (`CommandCall::with_arg`), and arguments |
+| `canopy::style` | Style maps, `PartialStyle`, colors, effects, shared part `roles`, and `themes` with its `Palette` |
+| `canopy::text` | `width`, `cell_width`, truncation (`Truncate`), and grapheme slicing |
+| `canopy::geom`, `canopy::path`, `canopy::error` | Geometry, node paths, and errors |
 | `canopy::terminal` | The Crossterm run loop |
+
+`canopy_widgets` follows the same rule: every widget is exported at its crate
+root once, and a module is public only when it carries a family of supporting
+types: `editor`, `highlight`, `font`, `terminal`, `scrollbar`, `diff`, and
+`list`. Glyph sets are associated constants (`BoxGlyphs::ROUND`,
+`ScrollbarGlyphs::THIN`), and a widget that runs inside modals ships its
+framework group as an associated constant (`Confirm::BINDINGS`).
 
 The `testing` feature adds `canopy::testing`. A public signature names its
 types by their public path, and a test fails when a capture in `api/` shows a
@@ -60,9 +68,11 @@ components must be valid node names. Raw script path strings are validated at th
 Luau boundary before matching.
 
 Two rules keep the surface small. `Canopy` holds only operations that cannot
-live on a context. A new context query or mutation replaces or generalizes an
-existing one. The generated captures in `api/` record the surface, and every
-public API change is reviewed as a diff of those captures.
+live on a context or on `Setup`. A new context query or mutation replaces or
+generalizes an existing one, in the node-addressed form: it takes the node it
+acts on rather than acting on the calling node alone. The generated captures
+in `api/` record the surface, and every public API change is reviewed as a
+diff of those captures.
 
 `EvalTicket::completion` exposes `futures::channel::oneshot::Receiver`
 directly. Evaluation completion is a single-consumer event with that receiver's

@@ -2382,9 +2382,11 @@ Each stage also updates the docs it touches.
     drives the list gym. Termgym's `TerminalStack` moved in from the deleted
     showcase. The startup script that re-bound Ctrl+g goes, as do the gyms',
     todo's, and fh's duplicate Ctrl+g and `q` bindings.
-- [ ] C38 Stage 7: rewrite the "Public API Surface" section of
+- [x] C38 Stage 7: rewrite the "Public API Surface" section of
   `architecture.md` around the final module map and the surface rules. Update
   `styles.md`, and add the `AGENTS.md` map.
+  - `styles.md` was updated with each styling change (C31, C32, C40); the
+    Public API section now lists the widgets' module rule too.
 - [ ] C50 docs (fh): update `architecture.md`, `README.md`, and `find.md` to
   the vocabulary.
 - [ ] Final validation: all captures are current in both repositories, and
