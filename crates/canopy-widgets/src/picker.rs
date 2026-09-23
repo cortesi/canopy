@@ -15,10 +15,16 @@
 
 use canopy::{
     Context, ContextExt, EventOutcome, NodeId, NodeName, Register, Setup, TypedId, ViewContext,
-    Widget, derive_commands,
+    Widget,
+    commands::CommandCall,
+    derive_commands,
     error::{Error, Result},
     geom::{Line, Point, Size},
-    input::{Event, ModalBindings, ModalOptions, ModalToken, key, key::KeyCode},
+    input::{
+        BindingAction, BindingOptions, BindingPhase, BindingTier, Event, FrameworkBindingGroup,
+        IntentName, ModalBindings, ModalOptions, ModalToken, NavIntent,
+        key::{self, Key, KeyCode},
+    },
     layout::{
         CanvasContext, Direction, Edges, Layout, MeasureConstraints, Measurement, ScrollOp, Sizing,
     },
@@ -64,6 +70,10 @@ where
     filter: Option<NodeId>,
     /// Which end a row drops when it does not fit.
     truncate: Truncate,
+    /// Call that accepting the selection runs.
+    on_accept: Option<CommandCall>,
+    /// Call that closing the picker runs.
+    on_cancel: Option<CommandCall>,
 }
 
 impl<T> Default for Picker<T>
@@ -75,6 +85,7 @@ where
     }
 }
 
+#[derive_commands]
 impl<T> Picker<T>
 where
     T: ItemLabel + 'static,
@@ -87,6 +98,8 @@ where
             list: None,
             filter: None,
             truncate: Truncate::default(),
+            on_accept: None,
+            on_cancel: None,
         }
     }
 
@@ -116,6 +129,44 @@ where
         context.with_widget_mut(list, |list: &mut PickerList<T>, context| {
             list.set_items(context, title, placeholder, items)
         })
+    }
+
+    /// The framework group a picker's modal admits.
+    ///
+    /// The arrows, `j` and `k`, the page keys, and Home and End offer the
+    /// navigation intents, `/` opens the filter, Enter accepts, and Esc
+    /// closes. A host admits it beside its own group, which carries keys such
+    /// as a delete.
+    pub const BINDINGS: FrameworkBindingGroup = FrameworkBindingGroup::new("picker");
+
+    /// Set what accepting the selection and closing the picker run.
+    ///
+    /// Both calls usually target the host, which reads the selection and
+    /// closes the modal.
+    pub fn set_commands(&mut self, accept: CommandCall, cancel: CommandCall) {
+        self.on_accept = Some(accept);
+        self.on_cancel = Some(cancel);
+    }
+
+    /// Accept the selection by running the host's accept call.
+    ///
+    /// The call runs from the picker rather than the list, so a host that
+    /// reads the list while it accepts finds it free.
+    #[command]
+    pub fn accept(&mut self, context: &mut dyn Context) -> Result<()> {
+        if let Some(call) = &self.on_accept {
+            context.dispatch(call)?;
+        }
+        Ok(())
+    }
+
+    /// Close the picker by running the host's cancel call.
+    #[command]
+    pub fn cancel(&mut self, context: &mut dyn Context) -> Result<()> {
+        if let Some(call) = &self.on_cancel {
+            context.dispatch(call)?;
+        }
+        Ok(())
     }
 
     /// Return the list, which takes the keyboard while the modal is open, or
@@ -603,7 +654,56 @@ where
 {
     fn register(setup: &mut Setup) -> Result<()> {
         setup.add_commands::<Self>()?;
-        register_clear_intent(setup)
+        setup.add_commands::<Picker<T>>()?;
+        register_clear_intent(setup)?;
+        let nav = |intent: NavIntent| -> Result<BindingAction> {
+            Ok(BindingAction::Intent(IntentName::new(intent.name())?))
+        };
+        let bindings: [(&str, &str, BindingAction); 11] = [
+            ("Up", "Previous entry", nav(NavIntent::Up)?),
+            ("k", "Previous entry", nav(NavIntent::Up)?),
+            ("Down", "Next entry", nav(NavIntent::Down)?),
+            ("j", "Next entry", nav(NavIntent::Down)?),
+            ("PageUp", "Page up", nav(NavIntent::PageUp)?),
+            ("PageDown", "Page down", nav(NavIntent::PageDown)?),
+            ("Home", "First entry", nav(NavIntent::First)?),
+            ("End", "Last entry", nav(NavIntent::Last)?),
+            (
+                "/",
+                "Filter the list",
+                BindingAction::Command(Self::call_start_filter()),
+            ),
+            (
+                "Enter",
+                "Accept the selected entry",
+                BindingAction::Command(Picker::<T>::call_accept()),
+            ),
+            (
+                "Esc",
+                "Close the picker",
+                BindingAction::Command(Picker::<T>::call_cancel()),
+            ),
+        ];
+        for (key, description, action) in bindings {
+            // Intents always run before the widget; commands run after it, so
+            // typed filter text reaches the list first.
+            let phase = match action {
+                BindingAction::Intent(_) => None,
+                _ => Some(BindingPhase::AfterWidget),
+            };
+            setup.bind(
+                Key::parse_spec(key)?,
+                BindingOptions {
+                    path: Some("**/picker/**/".parse()?),
+                    tier: BindingTier::Framework(Picker::<T>::BINDINGS),
+                    description: description.to_string(),
+                    source: None,
+                    phase,
+                },
+                action,
+            )?;
+        }
+        Ok(())
     }
 }
 

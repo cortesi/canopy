@@ -78,7 +78,7 @@ mod text_buffer;
 pub use border::{Border, BoxGlyphs};
 pub use button::Button;
 pub use columns::Columns;
-pub use confirm::{Answer, Confirm};
+pub use confirm::{Answer, Confirm, ConfirmRequest};
 pub use container::Container;
 pub use dialog::Dialog;
 pub use diff_view::DiffView;

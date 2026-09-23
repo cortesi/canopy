@@ -7,12 +7,15 @@
 use std::{collections::HashSet, hash::Hash};
 
 use canopy::{
-    Context, ContextExt, EventOutcome, NodeId, NodeName, TypedId, ViewContext, Widget,
+    Context, ContextExt, EventOutcome, NodeId, NodeName, Setup, TypedId, ViewContext, Widget,
     commands::{ArgValue, CommandCall, CommandStatus, ToArgValue},
     derive_commands,
     error::{Error, Result},
     geom::{Line, Point, PointI32, Size},
-    input::{Event, mouse},
+    input::{
+        BindingAction, BindingOptions, BindingTier, Event, FrameworkBindingGroup, IntentName,
+        NavIntent, key::Key, mouse,
+    },
     layout::{
         CanvasContext, Constraint, Edges, Layout, MeasureConstraints, MeasureOverflow, Measurement,
         RevealAlign,
@@ -110,6 +113,41 @@ impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> Default for Lis
 
 #[derive_commands]
 impl<W: Selectable, K: Eq + Hash + Clone + ToArgValue + 'static> List<W, K> {
+    /// The framework group a modal that holds a list admits for it.
+    ///
+    /// The arrows, `j` and `k`, the page keys, and Home and End offer the
+    /// navigation intents, which the list answers by moving its selection.
+    /// Install it with [`List::register_bindings`].
+    pub const BINDINGS: FrameworkBindingGroup = FrameworkBindingGroup::new("list");
+
+    /// Install [`List::BINDINGS`]. Installing it again is harmless.
+    pub fn register_bindings(setup: &mut Setup) -> Result<()> {
+        let keys: [(&str, &str, NavIntent); 8] = [
+            ("Up", "Previous row", NavIntent::Up),
+            ("k", "Previous row", NavIntent::Up),
+            ("Down", "Next row", NavIntent::Down),
+            ("j", "Next row", NavIntent::Down),
+            ("PageUp", "Page up", NavIntent::PageUp),
+            ("PageDown", "Page down", NavIntent::PageDown),
+            ("Home", "First row", NavIntent::First),
+            ("End", "Last row", NavIntent::Last),
+        ];
+        for (key, description, intent) in keys {
+            setup.bind(
+                Key::parse_spec(key)?,
+                BindingOptions {
+                    path: Some("**/list/**/".parse()?),
+                    tier: BindingTier::Framework(Self::BINDINGS),
+                    description: description.to_string(),
+                    source: None,
+                    phase: None,
+                },
+                BindingAction::Intent(IntentName::new(intent.name())?),
+            )?;
+        }
+        Ok(())
+    }
+
     /// Construct an empty list.
     pub fn new() -> Self {
         Self {

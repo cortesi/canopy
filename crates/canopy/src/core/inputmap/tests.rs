@@ -265,7 +265,7 @@ fn modal_bindings_block_all_application_tiers() -> Result<()> {
     )?;
 
     map.set_modal_bindings(Some(ModalBindings::Framework {
-        group: HELP,
+        groups: &[HELP],
         intents: &[],
     }));
     assert_eq!(
@@ -274,7 +274,7 @@ fn modal_bindings_block_all_application_tiers() -> Result<()> {
     );
     assert_eq!(target(&map, "/root/help/binding_list", 'x'), None);
     map.set_modal_bindings(Some(ModalBindings::Framework {
-        group: OTHER,
+        groups: &[OTHER],
         intents: &[],
     }));
     assert_eq!(target(&map, "/root/help/binding_list", 'j'), None);
@@ -380,7 +380,7 @@ fn startup_restore_preserves_framework_records_and_modal_bindings() -> Result<()
         command("binding_list::scroll_down"),
     )?;
     map.set_modal_bindings(Some(ModalBindings::Framework {
-        group: HELP,
+        groups: &[HELP],
         intents: &[],
     }));
 
@@ -506,7 +506,7 @@ fn diagnostics_distinguish_tier_path_insertion_route_and_framework_group_causes(
         command("binding_list::scroll_down"),
     )?;
     map.set_modal_bindings(Some(ModalBindings::Framework {
-        group: HELP,
+        groups: &[HELP],
         intents: &[],
     }));
     assert_eq!(
@@ -688,7 +688,7 @@ fn framework_binding_options_preserve_explicit_phase() -> Result<()> {
         id
     );
     map.set_modal_bindings(Some(ModalBindings::Framework {
-        group: HELP,
+        groups: &[HELP],
         intents: &[],
     }));
     let resolved = map
@@ -835,7 +835,7 @@ fn a_framework_action_modal_admits_only_allowlisted_actions() -> Result<()> {
     )?;
     bind(&mut map, BindingTier::Default, 'z', "", "Callback", 1)?;
     map.set_modal_bindings(Some(ModalBindings::Framework {
-        group: HELP,
+        groups: &[HELP],
         intents: &["test.clear"],
     }));
     let path = Path::from("/root/help/list");
@@ -857,7 +857,7 @@ fn a_framework_action_modal_admits_only_allowlisted_actions() -> Result<()> {
     assert!(map.candidate_keys().contains(&Key::from('x')));
 
     map.set_modal_bindings(Some(ModalBindings::Framework {
-        group: HELP,
+        groups: &[HELP],
         intents: &[],
     }));
     assert!(
@@ -883,7 +883,7 @@ fn a_framework_modal_suspends_the_transient_cutoff() -> Result<()> {
     )?;
     map.push_transient_mode("prefix");
     map.set_modal_bindings(Some(ModalBindings::Framework {
-        group: HELP,
+        groups: &[HELP],
         intents: &["test.clear"],
     }));
     let route = [Path::from("/root/help/list")];

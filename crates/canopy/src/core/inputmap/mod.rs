@@ -690,8 +690,10 @@ impl InputMap {
         let input = input.normalize();
         let mut out = Vec::new();
         match &self.modal_bindings {
-            Some(ModalBindings::Framework { group, intents }) => {
-                self.extend_framework_group(&mut out, path, input, *group);
+            Some(ModalBindings::Framework { groups, intents }) => {
+                for group in *groups {
+                    self.extend_framework_group(&mut out, path, input, *group);
+                }
                 if !intents.is_empty() {
                     self.extend_application_tiers(&mut out, path, input, false);
                 }
@@ -775,8 +777,8 @@ impl InputMap {
     /// `candidate_keys` share this predicate.
     pub(crate) fn admits_record(&self, record: &BindingRecord) -> bool {
         match &self.modal_bindings {
-            Some(ModalBindings::Framework { group, intents }) => match &record.tier {
-                BindingTier::Framework(record_group) => record_group == group,
+            Some(ModalBindings::Framework { groups, intents }) => match &record.tier {
+                BindingTier::Framework(record_group) => groups.contains(record_group),
                 BindingTier::Global | BindingTier::Mode(_) | BindingTier::Default => record
                     .action
                     .intent()
@@ -896,10 +898,11 @@ impl InputMap {
         self.modal_bindings = bindings;
     }
 
-    /// Return the framework group the top modal admits.
+    /// Return the first framework group the top modal admits, which names
+    /// the modal.
     pub fn active_framework_group(&self) -> Option<FrameworkBindingGroup> {
         match self.modal_bindings {
-            Some(ModalBindings::Framework { group, .. }) => Some(group),
+            Some(ModalBindings::Framework { groups, .. }) => groups.first().copied(),
             Some(ModalBindings::Application) | None => None,
         }
     }

@@ -240,7 +240,7 @@ impl Root {
             initial_focus: list.into(),
             dim_target: Some(self.main_pane_id(c)?),
             bindings: ModalBindings::Framework {
-                group: HELP_BINDINGS,
+                groups: &[HELP_BINDINGS],
                 intents: &[],
             },
         });

@@ -482,7 +482,9 @@ fn tbindings() -> Result<()> {
 #[test]
 fn framework_command_bindings_share_route_resolution_and_event_scope() -> Result<()> {
     run_ttree(|c, _, tree| {
-        let group = inputmap::FrameworkBindingGroup::new("test.modal");
+        const GROUP: inputmap::FrameworkBindingGroup =
+            inputmap::FrameworkBindingGroup::new("test.modal");
+        let group = GROUP;
         let (binding, _) = c.core.input_map.bind(
             'h'.into(),
             inputmap::BindingOptions {
@@ -497,7 +499,7 @@ fn framework_command_bindings_share_route_resolution_and_event_scope() -> Result
         c.core
             .input_map
             .set_modal_bindings(Some(ModalBindings::Framework {
-                group,
+                groups: &[GROUP],
                 intents: &[],
             }));
         c.core.set_focus(tree.a_a)?;
@@ -788,6 +790,8 @@ fn early_mouse_bindings_keep_capture_and_node_local_coordinates() -> Result<()> 
 
 #[test]
 fn an_early_mouse_binding_respects_modal_admission_and_wheel_fallback() -> Result<()> {
+    const GROUP: inputmap::FrameworkBindingGroup =
+        inputmap::FrameworkBindingGroup::new("test.modal");
     run_ttree(|c, mut tr, tree| {
         c.render(&mut tr)?;
         let wheel = inputmap::InputSpec::Mouse(
@@ -818,7 +822,6 @@ fn an_early_mouse_binding_respects_modal_admission_and_wheel_fallback() -> Resul
         );
 
         // A framework group blocks application bindings whatever their phase.
-        let group = inputmap::FrameworkBindingGroup::new("test.modal");
         bind_command(
             c,
             inputmap::InputSpec::Mouse(click_on(&c.core, tree.a_a).into()),
@@ -828,7 +831,7 @@ fn an_early_mouse_binding_respects_modal_admission_and_wheel_fallback() -> Resul
         c.core
             .input_map
             .set_modal_bindings(Some(ModalBindings::Framework {
-                group,
+                groups: &[GROUP],
                 intents: &[],
             }));
         reset_state();
@@ -2044,12 +2047,13 @@ fn a_checked_transient_key_under_an_application_modal_matches_its_analysis() -> 
 
 #[test]
 fn a_framework_modal_suspends_a_transient_mode() -> Result<()> {
+    const GROUP: inputmap::FrameworkBindingGroup =
+        inputmap::FrameworkBindingGroup::new("test.modal");
     let mut canopy = app();
-    let group = inputmap::FrameworkBindingGroup::new("test.modal");
     modal_leaf(
         &mut canopy,
         ModalBindings::Framework {
-            group,
+            groups: &[GROUP],
             intents: &[],
         },
     )?;

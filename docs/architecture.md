@@ -515,9 +515,18 @@ widget that breaks its acceptance promise is treated as a decline, recorded in
 the route trace, and never aborts the application. In a transient mode the
 mode pops before its intent runs, and an intent without a consumer dismisses
 the mode the way an unbound key does. A framework modal can admit application
-bindings to named intents: `ModalBindings::Framework { group, intents }` admits
-the listed intents after its framework group, and only while a widget inside
+bindings to named intents: `ModalBindings::Framework { groups, intents }` admits
+the listed intents after its framework groups, and only while a widget inside
 the modal accepts them.
+
+A widget that runs inside modals ships a framework group from its `Register`
+impl: `Confirm::BINDINGS`, `Picker::BINDINGS`, and `List::BINDINGS` (installed
+with `List::register_bindings`). A host admits its own group plus the groups
+of the widgets inside the modal, so it never re-declares their keys. An inline
+widget, such as Button or Root, keeps a default-binding script at the
+application tier instead. `Confirm::open` asks a question in a modal that
+admits `Confirm::BINDINGS`, and `Picker::set_commands` names what the picker's
+Enter and Esc run.
 
 Core registers the navigation intents (`input::NavIntent`) in every catalog.
 A node accepts one when its widget does, or when its view can move that way:
@@ -612,8 +621,9 @@ button was built with, and `button.default_bindings()` binds unmodified
 `LeftDown`, `Enter`, and `Space` to it under `**/button/**/`, so a click on the
 label or the border resolves to the button containing it. The records are
 ordinary application bindings that a configuration can replace or unbind.
-`root.default_bindings()` installs them. A modal that admits only a framework
-group must bind activation in that group itself.
+`root.default_bindings()` installs them. A modal that admits only framework
+groups admits none of them, so a widget used there ships activation in its own
+group, as Confirm does.
 
 Root captures a help snapshot before it opens a modal with `ModalOptions` and
 `ModalBindings::Framework` for `HELP_BINDINGS`. The modal dims the main pane, and

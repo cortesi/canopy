@@ -1441,17 +1441,17 @@ fn pre_remove_veto_leaves_subtree_mounted() -> Result<()> {
 
 #[test]
 fn successful_detach_prunes_modal_bindings_owned_by_the_subtree() -> Result<()> {
+    const GROUP: FrameworkBindingGroup = FrameworkBindingGroup::new("test.modal");
     let mut core = Core::new();
     let modal = core.create_detached(FocusableWidget)?;
     core.attach(core.root, modal)?;
-    let group = FrameworkBindingGroup::new("test.modal");
     core.open_modal(ModalOptions {
         owner: core.root,
         modal,
         initial_focus: modal,
         dim_target: None,
         bindings: ModalBindings::Framework {
-            group,
+            groups: &[GROUP],
             intents: &[],
         },
     })?;
@@ -1464,6 +1464,7 @@ fn successful_detach_prunes_modal_bindings_owned_by_the_subtree() -> Result<()> 
 
 #[test]
 fn failed_removal_keeps_the_restored_owners_modal_bindings() -> Result<()> {
+    const GROUP: FrameworkBindingGroup = FrameworkBindingGroup::new("test.modal");
     let mut core = Core::new();
     let log = Arc::new(Mutex::new(Vec::new()));
     let modal = core.create_detached(FocusableWidget)?;
@@ -1471,14 +1472,14 @@ fn failed_removal_keeps_the_restored_owners_modal_bindings() -> Result<()> {
     let child = core
         .create_detached(FaultWidget::new("child", log).with_pre_remove(PreRemoveAction::Fail))?;
     core.set_children(modal, vec![child])?;
-    let group = FrameworkBindingGroup::new("test.modal");
+    let group = GROUP;
     core.open_modal(ModalOptions {
         owner: core.root,
         modal,
         initial_focus: modal,
         dim_target: None,
         bindings: ModalBindings::Framework {
-            group,
+            groups: &[GROUP],
             intents: &[],
         },
     })?;
@@ -1491,17 +1492,17 @@ fn failed_removal_keeps_the_restored_owners_modal_bindings() -> Result<()> {
 
 #[test]
 fn successful_widget_replacement_retires_the_old_owners_modal_bindings() -> Result<()> {
+    const GROUP: FrameworkBindingGroup = FrameworkBindingGroup::new("test.modal");
     let mut core = Core::new();
     let modal = core.create_detached(FocusableWidget)?;
     core.attach(core.root, modal)?;
-    let group = FrameworkBindingGroup::new("test.modal");
     core.open_modal(ModalOptions {
         owner: core.root,
         modal,
         initial_focus: modal,
         dim_target: None,
         bindings: ModalBindings::Framework {
-            group,
+            groups: &[GROUP],
             intents: &[],
         },
     })?;
@@ -1514,17 +1515,18 @@ fn successful_widget_replacement_retires_the_old_owners_modal_bindings() -> Resu
 
 #[test]
 fn failed_widget_replacement_keeps_the_old_owners_modal_bindings() -> Result<()> {
+    const GROUP: FrameworkBindingGroup = FrameworkBindingGroup::new("test.modal");
     let mut core = Core::new();
     let modal = core.create_detached(FocusableWidget)?;
     core.attach(core.root, modal)?;
-    let group = FrameworkBindingGroup::new("test.modal");
+    let group = GROUP;
     core.open_modal(ModalOptions {
         owner: core.root,
         modal,
         initial_focus: modal,
         dim_target: None,
         bindings: ModalBindings::Framework {
-            group,
+            groups: &[GROUP],
             intents: &[],
         },
     })?;

@@ -1092,7 +1092,7 @@ mod tests {
                 initial_focus: button,
                 dim_target: None,
                 bindings: ModalBindings::Framework {
-                    group: GUARDED,
+                    groups: &[GUARDED],
                     intents: &[],
                 },
             })?;

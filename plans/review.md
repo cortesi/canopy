@@ -2333,8 +2333,13 @@ Each stage also updates the docs it touches.
     `find_field` and `preview_search` path segments, and `set_active` lights
     a field whose composite keeps focus elsewhere. `CommandCall::with_arg`
     replaces List's private index append.
-- [ ] C42: widget framework groups (`Confirm`, `Picker`, `List`), the
+- [x] C42: widget framework groups (`Confirm`, `Picker`, `List`), the
   multi-group `ModalBindings`, `Confirm::open`, and `Picker::set_commands`.
+  - `Picker::accept` and `Picker::cancel` run the host's calls from the
+    picker node, not the list, so a host that reads the list while it accepts
+    finds it free. `List::register_bindings` installs the list group, because
+    List has no generic `Register` impl. Confirm's activation binds on its
+    buttons only, so a margin click answers nothing.
 - [x] C34: the cursor command set, `Tabs::cycle`, and the navigation intents
   with the runtime scroll default.
   - A nav intent is eligible at a node whose widget accepts it or whose view

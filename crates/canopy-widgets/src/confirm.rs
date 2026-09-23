@@ -1,11 +1,15 @@
 //! A modal question with a yes or no answer.
 
 use canopy::{
-    Context, ContextExt, NodeId, NodeName, Register, Setup, ViewContext, Widget,
+    Context, ContextExt, NodeId, NodeName, Register, Setup, TypedId, ViewContext, Widget,
     commands::{CommandCall, CommandStatus, CommandTarget},
     derive_commands,
     error::{Error, Result},
     geom::Size,
+    input::{
+        BindingAction, BindingOptions, BindingPhase, BindingTier, FrameworkBindingGroup, InputSpec,
+        ModalBindings, ModalOptions, ModalToken, key::Key, mouse::Mouse,
+    },
     layout::{Align, CanvasContext, Direction, Edges, Layout, MeasureConstraints, Measurement},
     render::Render,
     text,
@@ -27,24 +31,20 @@ const BUTTON_ROWS: u32 = 3;
 /// Rows the body keeps above the buttons: the message and a blank line.
 const MESSAGE_ROWS: u32 = 2;
 
-/// Default answer bindings exposed through `confirm.default_bindings()`.
-///
-/// `y` and `n` answer whichever button holds focus, because an accelerator
-/// names an answer rather than a focus. The arrows and tabs move between the
-/// answers inside the dialog alone, so neither reaches the application behind
-/// it. A dialog inside a framework-group modal admits none of these, and its
-/// owner installs the same records in its own group.
-const DEFAULT_BINDINGS: &str = r#"
-canopy.keymap({
-    path = "**/confirm/**/",
-    { key = "y", description = "Yes", action = command.confirm.yes() },
-    { key = "n", description = "No", action = command.confirm.no() },
-    { key = "Left", description = "Previous answer", action = command.confirm.focus("left") },
-    { key = "Right", description = "Next answer", action = command.confirm.focus("right") },
-    { key = "Tab", description = "Next answer", action = command.confirm.focus("next") },
-    { key = "BackTab", description = "Previous answer", action = command.confirm.focus("prev") },
-})
-"#;
+/// What a dialog asks, and what each answer runs.
+#[derive(Clone, Debug)]
+pub struct ConfirmRequest {
+    /// Title on the dialog's frame.
+    pub title: String,
+    /// The question.
+    pub message: String,
+    /// Call the affirmative answer runs.
+    pub yes: CommandCall,
+    /// Call the negative answer, and Esc, run.
+    pub no: CommandCall,
+    /// Node dimmed while the dialog is open.
+    pub dim_target: Option<NodeId>,
+}
 
 /// One of the two answers a question takes.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -117,6 +117,43 @@ impl Default for Confirm {
 
 #[derive_commands]
 impl Confirm {
+    /// The framework group a question admits while it is open.
+    ///
+    /// `y` and `n` answer whichever button holds focus, because an accelerator
+    /// names an answer rather than a focus, and Esc declines. Enter, Space, and
+    /// a click give the focused answer, and the arrows and tabs move between
+    /// the answers inside the dialog alone.
+    pub const BINDINGS: FrameworkBindingGroup = FrameworkBindingGroup::new("confirm");
+
+    /// Ask `request` in `confirm` as a modal owned by the calling node, and
+    /// return its token.
+    ///
+    /// The modal admits [`Confirm::BINDINGS`] alone, so the question stands
+    /// until it is answered. Closing it is part of what each answer's call
+    /// does.
+    pub fn open(
+        context: &mut dyn Context,
+        confirm: TypedId<Self>,
+        request: ConfirmRequest,
+    ) -> Result<ModalToken> {
+        let owner = context.node_id();
+        let focus = context.with_widget_mut(confirm, |dialog: &mut Self, context| {
+            dialog.ask(context, &request.title, &request.message)?;
+            dialog.set_commands(context, request.yes, request.no)?;
+            dialog.initial_focus()
+        })?;
+        context.open_modal(ModalOptions {
+            owner,
+            modal: confirm.into(),
+            initial_focus: focus,
+            dim_target: request.dim_target,
+            bindings: ModalBindings::Framework {
+                groups: &[Self::BINDINGS],
+                intents: &[],
+            },
+        })
+    }
+
     /// Build an empty dialog.
     pub fn new() -> Self {
         Self {
@@ -256,8 +293,76 @@ impl Register for Confirm {
     fn register(setup: &mut Setup) -> Result<()> {
         Button::register(setup)?;
         setup.add_commands::<Self>()?;
-        setup.register_default_bindings("confirm", DEFAULT_BINDINGS)
+        register_bindings(setup)
     }
+}
+
+/// Install [`Confirm::BINDINGS`].
+fn register_bindings(setup: &mut Setup) -> Result<()> {
+    let keys: [(&str, &str, CommandCall); 12] = [
+        ("y", "Yes", Confirm::call_yes()),
+        ("n", "No", Confirm::call_no()),
+        ("Esc", "No", Confirm::call_no()),
+        ("Enter", "Give the focused answer", Button::call_press()),
+        ("Space", "Give the focused answer", Button::call_press()),
+        (
+            "Left",
+            "Previous answer",
+            Confirm::call_focus(FocusDirection::Left),
+        ),
+        (
+            "Right",
+            "Next answer",
+            Confirm::call_focus(FocusDirection::Right),
+        ),
+        (
+            "Up",
+            "Previous answer",
+            Confirm::call_focus(FocusDirection::Prev),
+        ),
+        (
+            "Down",
+            "Next answer",
+            Confirm::call_focus(FocusDirection::Next),
+        ),
+        (
+            "Tab",
+            "Next answer",
+            Confirm::call_focus(FocusDirection::Next),
+        ),
+        (
+            "BackTab",
+            "Previous answer",
+            Confirm::call_focus(FocusDirection::Prev),
+        ),
+        ("LeftDown", "Give the answer clicked", Button::call_press()),
+    ];
+    for (input, description, command) in keys {
+        // Activation reaches a button, so it binds on the buttons alone and a
+        // click on the frame or the margin answers nothing.
+        let path = if command == Button::call_press() {
+            "**/confirm/**/button/**/"
+        } else {
+            "**/confirm/**/"
+        };
+        let input: InputSpec = if input == "LeftDown" {
+            InputSpec::Mouse(Mouse::parse_spec(input)?)
+        } else {
+            InputSpec::Key(Key::parse_spec(input)?)
+        };
+        setup.bind(
+            input,
+            BindingOptions {
+                path: Some(path.parse()?),
+                tier: BindingTier::Framework(Confirm::BINDINGS),
+                description: description.to_string(),
+                source: None,
+                phase: Some(BindingPhase::AfterWidget),
+            },
+            BindingAction::Command(command),
+        )?;
+    }
+    Ok(())
 }
 
 impl Widget for Confirm {
@@ -414,7 +519,9 @@ mod tests {
     #[derive(Default)]
     struct Host {
         /// The dialog, once mounted.
-        dialog: Option<NodeId>,
+        dialog: Option<TypedId<Confirm>>,
+        /// The open question's modal, if one is open.
+        token: Option<ModalToken>,
         /// Answers the host was given, in order.
         answered: Vec<Answer>,
         /// Whether the affirmative answer reports itself eligible.
@@ -445,15 +552,21 @@ mod tests {
             self.close(context)
         }
 
-        /// Hide the dialog the way closing a modal would.
-        fn close(&self, context: &mut dyn Context) -> Result<()> {
-            let dialog = self.dialog()?;
-            context.set_hidden(dialog, true)?;
+        /// Close the open question.
+        fn close(&mut self, context: &mut dyn Context) -> Result<()> {
+            if let Some(token) = self.token.take() {
+                context.close_modal(token)?;
+            }
             Ok(())
         }
 
-        /// Return the dialog, or an error before it mounts.
+        /// Return the dialog node, or an error before it mounts.
         fn dialog(&self) -> Result<NodeId> {
+            self.typed_dialog().map(Into::into)
+        }
+
+        /// Return the typed dialog, or an error before it mounts.
+        fn typed_dialog(&self) -> Result<TypedId<Confirm>> {
             self.dialog
                 .ok_or_else(|| Error::NotFound("dialog".to_string()))
         }
@@ -465,16 +578,10 @@ mod tests {
         }
 
         fn on_mount(&mut self, context: &mut dyn Context) -> Result<()> {
-            let owner = context.node_id();
             let dialog = context.add_child(context.node_id(), Confirm::new())?;
-            self.dialog = Some(dialog.into());
-            context.with_widget_mut(dialog, |confirm: &mut Confirm, context| {
-                confirm.set_commands(
-                    context,
-                    Self::call_accept().with_target(CommandTarget::Exact(owner)),
-                    Self::call_decline().with_target(CommandTarget::Exact(owner)),
-                )
-            })
+            context.set_hidden(dialog.into(), true)?;
+            self.dialog = Some(dialog);
+            Ok(())
         }
 
         fn name(&self) -> NodeName {
@@ -489,36 +596,46 @@ mod tests {
         }
     }
 
-    /// Build a host asking `message`, with both answers installed and drawn.
-    fn dialog(message: &str, width: u32, height: u32) -> Result<Harness> {
+    /// Build a host with its dialog mounted and closed.
+    fn host(width: u32, height: u32) -> Result<Harness> {
         let mut harness = Harness::builder(Host {
             yes_enabled: true,
             ..Host::default()
         })
         .register::<Host>()
-        .script(
-            "dialog-defaults",
-            "button.default_bindings()\nconfirm.default_bindings()",
-        )
         .size(width, height)
         .build()?;
         harness.render()?;
+        Ok(harness)
+    }
+
+    /// Build a host asking `message`.
+    fn dialog(message: &str, width: u32, height: u32) -> Result<Harness> {
+        let mut harness = host(width, height)?;
         ask(&mut harness, message)?;
         Ok(harness)
     }
 
-    /// Ask `message` and focus the dialog's default answer.
+    /// Ask `message`, closing any question already open.
     fn ask(harness: &mut Harness, message: &str) -> Result<()> {
-        let focus = harness.with_root_widget_context(|host: &mut Host, context| {
-            let dialog = host.dialog()?;
-            context.set_hidden(dialog, false)?;
-            context.with_widget_mut(dialog, |confirm: &mut Confirm, context| {
-                confirm.ask(context, "Bookmark", message)?;
-                confirm.initial_focus()
-            })
-        })?;
-        harness.canopy.with_root_context(|context| {
-            context.set_focus(focus)?;
+        // A modal closes after the callback that closes it returns, so the old
+        // question closes in its own turn before the new one opens.
+        harness.with_root_widget_context(|host: &mut Host, context| host.close(context))?;
+        harness.render()?;
+        harness.with_root_widget_context(|host: &mut Host, context| {
+            let owner = CommandTarget::Exact(context.node_id());
+            let token = Confirm::open(
+                context,
+                host.typed_dialog()?,
+                ConfirmRequest {
+                    title: "Bookmark".into(),
+                    message: message.into(),
+                    yes: Host::call_accept().with_target(owner),
+                    no: Host::call_decline().with_target(owner),
+                    dim_target: None,
+                },
+            )?;
+            host.token = Some(token);
             Ok(())
         })?;
         harness.render()
@@ -867,16 +984,24 @@ mod tests {
     }
 
     #[test]
-    fn a_framework_group_modal_keeps_the_question_standing() -> Result<()> {
-        let mut harness = dialog("/tmp/a", 40, 12)?;
+    fn a_modal_without_the_dialog_group_keeps_the_question_standing() -> Result<()> {
+        const GROUP: FrameworkBindingGroup = FrameworkBindingGroup::new("confirm.test_dialog");
+        let mut harness = host(40, 12)?;
         let (owner, dialog_node, focus) =
             harness.with_root_widget_context(|host: &mut Host, context| {
                 let dialog = host.dialog()?;
-                let focus = context
-                    .with_widget_mut(dialog, |confirm: &mut Confirm, _| confirm.initial_focus())?;
+                let owner = CommandTarget::Exact(context.node_id());
+                context.set_hidden(dialog, false)?;
+                let focus = context.with_widget_mut(dialog, |confirm: &mut Confirm, context| {
+                    confirm.set_commands(
+                        context,
+                        Host::call_accept().with_target(owner),
+                        Host::call_decline().with_target(owner),
+                    )?;
+                    confirm.initial_focus()
+                })?;
                 Ok((context.node_id(), dialog, focus))
             })?;
-        let group = FrameworkBindingGroup::new("confirm.test_dialog");
         harness.canopy.with_root_context(|context| {
             context.open_modal(ModalOptions {
                 owner,
@@ -884,7 +1009,7 @@ mod tests {
                 initial_focus: focus,
                 dim_target: None,
                 bindings: ModalBindings::Framework {
-                    group,
+                    groups: &[GROUP],
                     intents: &[],
                 },
             })?;
@@ -892,8 +1017,8 @@ mod tests {
         })?;
         harness.render()?;
 
-        // The group admits nothing, so no application default reaches the
-        // dialog and the question stands until its owner binds an answer.
+        // The modal admits only a group of its own, not Confirm::BINDINGS, so
+        // nothing answers and the question stands.
         harness.key('y')?;
         harness.key(key::KeyCode::Enter)?;
         let button = answer_node(&mut harness, Answer::Yes)?;

@@ -865,6 +865,21 @@ pub mod canopy_widgets {
     #[derive(Default)]
     pub struct Confirm {}
 
+    /// What a dialog asks, and what each answer runs.
+    #[derive(Clone, Debug)]
+    pub struct ConfirmRequest {
+        /// Title on the dialog's frame.
+        pub title: String,
+        /// The question.
+        pub message: String,
+        /// Call the affirmative answer runs.
+        pub yes: canopy::commands::CommandCall,
+        /// Call the negative answer, and Esc, run.
+        pub no: canopy::commands::CommandCall,
+        /// Node dimmed while the dialog is open.
+        pub dim_target: Option<canopy::NodeId>,
+    }
+
     /// A widget that lays out its children and has no other behavior.
     ///
     /// Parents adjust how each child sizes through layout overrides. Use
@@ -1243,6 +1258,19 @@ pub mod canopy_widgets {
         pub fn ask(&mut self, context: &mut dyn Context, title: &str, message: &str) -> Result<()> {
         }
 
+        /// Ask `request` in `confirm` as a modal owned by the calling node, and
+        /// return its token.
+        ///
+        /// The modal admits [`Confirm::BINDINGS`] alone, so the question stands
+        /// until it is answered. Closing it is part of what each answer's call
+        /// does.
+        pub fn open(
+            context: &mut dyn Context,
+            confirm: TypedId<Self>,
+            request: ConfirmRequest,
+        ) -> Result<ModalToken> {
+        }
+
         /// Build an empty dialog.
         pub fn new() -> Self {}
 
@@ -1287,6 +1315,13 @@ pub mod canopy_widgets {
         ) -> Result<()> {
         }
 
+        /// The framework group a question admits while it is open.
+        ///
+        /// `y` and `n` answer whichever button holds focus, because an accelerator
+        /// names an answer rather than a focus, and Esc declines. Enter, Space, and
+        /// a click give the focused answer, and the arrows and tabs move between
+        /// the answers inside the dialog alone.
+        pub const BINDINGS: FrameworkBindingGroup = _;
         /// Build a positional call with typed user arguments.
         pub fn call_focus(direction: FocusDirection) -> canopy::commands::CommandCall {}
 
@@ -2206,6 +2241,126 @@ pub mod canopy_widgets {
         fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
     }
 
+    impl<T> CommandNode for Picker<T>
+    where
+        T: 'static + ItemLabel,
+    {
+        fn commands() -> &'static [&'static canopy::commands::CommandSpec] {}
+    }
+
+    impl<T> Picker<T>
+    where
+        T: 'static + ItemLabel,
+    {
+        #[must_use]
+        /// Build a picker whose rows drop the given end when they do not fit.
+        ///
+        /// This is read when the list mounts, so set it before the picker is added
+        /// to the tree.
+        pub fn with_truncate(self, truncate: Truncate) -> Self {}
+
+        #[must_use]
+        /// Build an empty picker.
+        pub fn new() -> Self {}
+
+        /// Accept the selection by running the host's accept call.
+        ///
+        /// The call runs from the picker rather than the list, so a host that
+        /// reads the list while it accepts finds it free.
+        pub fn accept(&mut self, context: &mut dyn Context) -> Result<()> {}
+
+        /// Add `widget` over the dialog, hidden until [`Self::open_overlay`]
+        /// shows it.
+        ///
+        /// The overlay is a child of the picker, which is what lets a scope show
+        /// it while the picker's own scope is open: Canopy nests a scope only
+        /// inside the modal it covers. Add it after the picker has mounted.
+        pub fn add_overlay<W>(&self, context: &mut dyn Context, widget: W) -> Result<TypedId<W>>
+        where
+            W: 'static + Widget, {
+        }
+
+        /// Close the picker by running the host's cancel call.
+        pub fn cancel(&mut self, context: &mut dyn Context) -> Result<()> {}
+
+        /// Open `overlay` in a modal over the list.
+        ///
+        /// The scope is owned by the picker, so it nests inside the scope that
+        /// shows the picker. It shows the overlay, dims the dialog behind it,
+        /// gives `initial_focus` the keyboard, and admits `bindings`. The list
+        /// keeps its filter and selection, and takes the keyboard back when the
+        /// host closes the scope with the returned token.
+        /// @param overlay A node added with [`Self::add_overlay`].
+        /// @param initial_focus The node inside `overlay` that takes the keyboard.
+        /// @param bindings The bindings the scope admits.
+        pub fn open_overlay(
+            &self,
+            context: &mut dyn Context,
+            overlay: NodeId,
+            initial_focus: NodeId,
+            bindings: ModalBindings,
+        ) -> Result<ModalToken> {
+        }
+
+        /// Return the filter field, or an error before the picker mounts.
+        pub fn filter(&self) -> Result<NodeId> {}
+
+        /// Return the list, which takes the keyboard while the modal is open, or
+        /// an error before the picker mounts.
+        pub fn list(&self) -> Result<NodeId> {}
+
+        /// Set what accepting the selection and closing the picker run.
+        ///
+        /// Both calls usually target the host, which reads the selection and
+        /// closes the modal.
+        pub fn set_commands(&mut self, accept: CommandCall, cancel: CommandCall) {}
+
+        /// Show `items` under `title`, with `placeholder` in place of an empty
+        /// list.
+        ///
+        /// The filter is dropped, so a picker always opens on the whole list.
+        pub fn set_items(
+            &mut self,
+            context: &mut dyn Context,
+            title: &str,
+            placeholder: &'static str,
+            items: Vec<T>,
+        ) -> Result<()> {
+        }
+
+        /// The framework group a picker's modal admits.
+        ///
+        /// The arrows, `j` and `k`, the page keys, and Home and End offer the
+        /// navigation intents, `/` opens the filter, Enter accepts, and Esc
+        /// closes. A host admits it beside its own group, which carries keys such
+        /// as a delete.
+        pub const BINDINGS: FrameworkBindingGroup = _;
+        /// Build a positional call with typed user arguments.
+        pub fn call_accept() -> canopy::commands::CommandCall {}
+
+        /// Build a positional call with typed user arguments.
+        pub fn call_cancel() -> canopy::commands::CommandCall {}
+
+        /// Return the command spec for this command.
+        pub fn spec_accept() -> &'static canopy::commands::CommandSpec {}
+
+        /// Return the command spec for this command.
+        pub fn spec_cancel() -> &'static canopy::commands::CommandSpec {}
+    }
+
+    impl<T> Widget for Picker<T>
+    where
+        T: 'static + ItemLabel,
+    {
+        fn layout(&self) -> Layout {}
+
+        fn name(&self) -> NodeName {}
+
+        fn on_event(&mut self, event: &Event, _context: &mut dyn Context) -> Result<EventOutcome> {}
+
+        fn on_mount(&mut self, context: &mut dyn Context) -> Result<()> {}
+    }
+
     impl<T> CommandNode for PickerList<T>
     where
         T: 'static + ItemLabel,
@@ -2498,85 +2653,6 @@ pub mod canopy_widgets {
         fn semantics(&self, _ctx: &dyn ViewContext) -> Result<WidgetSemantics> {}
     }
 
-    impl<T> Picker<T>
-    where
-        T: 'static + ItemLabel,
-    {
-        #[must_use]
-        /// Build a picker whose rows drop the given end when they do not fit.
-        ///
-        /// This is read when the list mounts, so set it before the picker is added
-        /// to the tree.
-        pub fn with_truncate(self, truncate: Truncate) -> Self {}
-
-        #[must_use]
-        /// Build an empty picker.
-        pub fn new() -> Self {}
-
-        /// Add `widget` over the dialog, hidden until [`Self::open_overlay`]
-        /// shows it.
-        ///
-        /// The overlay is a child of the picker, which is what lets a scope show
-        /// it while the picker's own scope is open: Canopy nests a scope only
-        /// inside the modal it covers. Add it after the picker has mounted.
-        pub fn add_overlay<W>(&self, context: &mut dyn Context, widget: W) -> Result<TypedId<W>>
-        where
-            W: 'static + Widget, {
-        }
-
-        /// Open `overlay` in a modal over the list.
-        ///
-        /// The scope is owned by the picker, so it nests inside the scope that
-        /// shows the picker. It shows the overlay, dims the dialog behind it,
-        /// gives `initial_focus` the keyboard, and admits `bindings`. The list
-        /// keeps its filter and selection, and takes the keyboard back when the
-        /// host closes the scope with the returned token.
-        /// @param overlay A node added with [`Self::add_overlay`].
-        /// @param initial_focus The node inside `overlay` that takes the keyboard.
-        /// @param bindings The bindings the scope admits.
-        pub fn open_overlay(
-            &self,
-            context: &mut dyn Context,
-            overlay: NodeId,
-            initial_focus: NodeId,
-            bindings: ModalBindings,
-        ) -> Result<ModalToken> {
-        }
-
-        /// Return the filter field, or an error before the picker mounts.
-        pub fn filter(&self) -> Result<NodeId> {}
-
-        /// Return the list, which takes the keyboard while the modal is open, or
-        /// an error before the picker mounts.
-        pub fn list(&self) -> Result<NodeId> {}
-
-        /// Show `items` under `title`, with `placeholder` in place of an empty
-        /// list.
-        ///
-        /// The filter is dropped, so a picker always opens on the whole list.
-        pub fn set_items(
-            &mut self,
-            context: &mut dyn Context,
-            title: &str,
-            placeholder: &'static str,
-            items: Vec<T>,
-        ) -> Result<()> {
-        }
-    }
-
-    impl<T> Widget for Picker<T>
-    where
-        T: 'static + ItemLabel,
-    {
-        fn layout(&self) -> Layout {}
-
-        fn name(&self) -> NodeName {}
-
-        fn on_event(&mut self, event: &Event, _context: &mut dyn Context) -> Result<EventOutcome> {}
-
-        fn on_mount(&mut self, context: &mut dyn Context) -> Result<()> {}
-    }
-
     impl<W: 'static + Selectable, K: 'static + Clone + Eq + Hash + ToArgValue> Widget for List<W, K> {
         fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
@@ -2668,6 +2744,9 @@ pub mod canopy_widgets {
         /// Delete the currently selected item.
         pub fn delete_selected(&mut self, ctx: &mut dyn Context) -> Result<bool> {}
 
+        /// Install [`List::BINDINGS`]. Installing it again is harmless.
+        pub fn register_bindings(setup: &mut Setup) -> Result<()> {}
+
         /// Move selection by a signed offset.
         pub fn select_by(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {}
 
@@ -2727,6 +2806,12 @@ pub mod canopy_widgets {
         /// Select an item at the given index.
         pub fn select(&mut self, ctx: &mut dyn Context, index: usize) -> Result<()> {}
 
+        /// The framework group a modal that holds a list admits for it.
+        ///
+        /// The arrows, `j` and `k`, the page keys, and Home and End offer the
+        /// navigation intents, which the list answers by moving its selection.
+        /// Install it with [`List::register_bindings`].
+        pub const BINDINGS: FrameworkBindingGroup = _;
         /// Toggle the checked state of the selected row.
         ///
         /// Returns the new state, or false when the list has no selection.

@@ -454,6 +454,7 @@ mod tests {
 
     #[test]
     fn a_framework_group_admits_only_its_own_mouse_records() -> Result<()> {
+        const GROUP: FrameworkBindingGroup = FrameworkBindingGroup::new("root.help");
         let mut core = Core::new();
         let leaf = core.create_detached(Leaf)?;
         core.attach(core.root, leaf)?;
@@ -465,7 +466,7 @@ mod tests {
             "Application click",
             1,
         )?;
-        let group = FrameworkBindingGroup::new("root.help");
+        let group = GROUP;
         core.input_map.bind(
             Mouse::parse_spec("LeftDown")?.into(),
             BindingOptions {
@@ -483,7 +484,7 @@ mod tests {
         )?;
         core.input_map
             .set_modal_bindings(Some(ModalBindings::Framework {
-                group,
+                groups: &[GROUP],
                 intents: &[],
             }));
 
@@ -821,11 +822,12 @@ mod tests {
 
     #[test]
     fn a_framework_group_blocks_application_tiers() -> Result<()> {
+        const GROUP: FrameworkBindingGroup = FrameworkBindingGroup::new("root.help");
         let mut core = Core::new();
         let leaf = core.create_detached(Leaf)?;
         core.attach(core.root, leaf)?;
         bind(&mut core, BindingTier::Default, 'a', "", "Application", 1)?;
-        let group = FrameworkBindingGroup::new("root.help");
+        let group = GROUP;
         core.input_map.bind(
             'j'.into(),
             BindingOptions {
@@ -843,7 +845,7 @@ mod tests {
         )?;
         core.input_map
             .set_modal_bindings(Some(ModalBindings::Framework {
-                group,
+                groups: &[GROUP],
                 intents: &[],
             }));
 
