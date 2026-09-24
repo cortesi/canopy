@@ -10,6 +10,9 @@ use crate::rgb;
 
 /// How far a scrollbar thumb leans from the theme's base toward the accent.
 const THUMB_ACCENT: f32 = 0.4;
+/// How far a search match that is not current fades from yellow toward the
+/// ground, so the current match stands out in the same hue.
+const MATCH_FADE: f32 = 0.5;
 
 /// The role colours a theme assigns.
 ///
@@ -58,9 +61,9 @@ pub struct Palette {
     pub cyan: Color,
     /// Named green.
     pub green: Color,
-    /// Named yellow, also the search-match background.
+    /// Named yellow, also the hue of search matches.
     pub yellow: Color,
-    /// Named orange, also the current-search-match background.
+    /// Named orange.
     pub orange: Color,
 }
 
@@ -153,18 +156,26 @@ impl Palette {
                 "/editor/selection",
                 PartialStyle::new().fg(p.fg).bg(p.selection_bg),
             )
+            // Every match shares one hue, and lightness tells them apart: the
+            // other matches fade toward the ground under the ordinary text,
+            // and the current match takes the full yellow in bold.
             .style(
                 "/editor/search/match",
-                PartialStyle::new().fg(p.bg).bg(p.yellow),
+                PartialStyle::new()
+                    .fg(p.fg)
+                    .bg(p.yellow.blend(p.bg, MATCH_FADE)),
             )
-            // Scrollbar marks reuse the match color as a foreground: a mark
+            // Scrollbar marks take the full yellow as a foreground: a mark
             // under the thumb keeps its style but takes the thumb glyph, and a
             // block thumb glyph hides the background, so the text style's dark
             // foreground would turn the mark dark just when it slides under.
             .fg("/editor/search/mark", p.yellow)
             .style(
                 "/editor/search/current",
-                PartialStyle::new().fg(p.bg).bg(p.orange),
+                PartialStyle::new()
+                    .fg(p.bg)
+                    .bg(p.yellow)
+                    .attrs(AttrSet::new(Attr::Bold)),
             )
             .fg("/editor/line-number", p.line_number)
             .fg("/editor/line-number/current", p.accent)
