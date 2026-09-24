@@ -1061,6 +1061,13 @@ mod tests {
             canopy.assert(screen:find("panes") ~= nil, "the panel should name the mode")
             canopy.assert(screen:find("Equal widths") ~= nil, "the panel should list the mode keys")
             canopy.assert(screen:find("Default key") == nil, "the panel should omit other keys")
+            -- The panel sits in the middle of the 60 by 14 screen, as every
+            -- other modal panel does.
+            local panel = assert(canopy.node_info(assert(canopy.find_node("**/mode_bindings"))).rect)
+            local middle_x = panel.x + panel.w / 2
+            local middle_y = panel.y + panel.h / 2
+            canopy.assert(math.abs(middle_x - 30) <= 1, "the panel should centre across: " .. middle_x)
+            canopy.assert(math.abs(middle_y - 7) <= 1, "the panel should centre down: " .. middle_y)
 
             canopy.send_key("x")
             canopy.prepare()
@@ -1076,6 +1083,56 @@ mod tests {
             canopy.assert(
                 canopy.screen_text():find("Equal widths") == nil,
                 "contextual help should not show the panel"
+            )
+            canopy.send_key("ctrl-g")
+            "#,
+        )
+    }
+
+    #[test]
+    fn a_menu_opens_its_mode_and_help_marks_it() -> Result<()> {
+        let (mut canopy, _backend, _left, _right) = setup_root_tree()?;
+        install_help_trigger(&mut canopy)?;
+        run_script(
+            &mut canopy,
+            r#"
+            canopy.bind("o", { description = "Options" }, canopy.menu("options"))
+            canopy.keymap({
+                mode = "options",
+                { key = "o", description = "order", action = canopy.menu("order") },
+                { key = "h", description = "hidden", action = function() end },
+            })
+            canopy.keymap({
+                mode = "order",
+                { key = "n", description = "natural", action = function() end },
+            })
+
+            canopy.send_key("o")
+            canopy.assert(canopy.mode() == "options", "a menu should open its mode")
+            canopy.prepare()
+            local screen = canopy.screen_text()
+            canopy.assert(screen:find("order...", 1, true) ~= nil, "a nested menu should be marked")
+            canopy.assert(screen:find("hidden...", 1, true) == nil, "an action should not be marked")
+
+            canopy.send_key("o")
+            canopy.assert(canopy.mode() == "order", "a menu inside a menu should open its mode")
+            canopy.send_key("n")
+            canopy.assert(canopy.mode() == "", "the last key should end the menus")
+
+            local menu = nil
+            for _, binding in canopy.bindings() do
+                if binding.input == "o" and binding.mode == nil then
+                    menu = binding
+                end
+            end
+            canopy.assert(menu ~= nil and menu.action == "menu", "the binding should be a menu")
+            canopy.assert(menu ~= nil and menu.menu == "options", "the binding should name its mode")
+
+            canopy.send_key("ctrl-g")
+            canopy.prepare()
+            canopy.assert(
+                canopy.screen_text():find("Options...", 1, true) ~= nil,
+                "help should mark a menu too"
             )
             canopy.send_key("ctrl-g")
             "#,

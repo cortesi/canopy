@@ -221,7 +221,7 @@ impl Core {
             .binding(id)
             .expect("resolved binding record must remain registered");
         let command = match &record.action {
-            BindingAction::Script(_) | BindingAction::Intent(_) => None,
+            BindingAction::Script(_) | BindingAction::Intent(_) | BindingAction::Menu(_) => None,
             BindingAction::Command(call) => {
                 let availability = self
                     .commands

@@ -205,6 +205,40 @@ pub(super) fn command_call_type() -> HostType {
         .build()
 }
 
+/// Script-held menu value: the mode a binding opens as a menu.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct ScriptMenu(pub(super) String);
+
+impl fmt::Display for ScriptMenu {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "menu({:?})", self.0)
+    }
+}
+
+/// Build the host userdata descriptor for `MenuAction` values.
+pub(super) fn menu_type() -> HostType {
+    HostTypeBuilder::<ScriptMenu>::new("MenuAction")
+        .class(&commands::declaration::Class::new("MenuAction"))
+        .eq_by(|left, right| left == right)
+        .marshal(|menu| ValueSnapshot::String(menu.to_string().into_bytes()))
+        .tostring(ToString::to_string)
+        .build()
+}
+
+/// Convert a script value into a menu, when it is one.
+pub(super) fn menu_from_value<'s>(
+    scope: &Scope<'s>,
+    value: &ScopedValue<'s>,
+) -> Option<ScriptMenu> {
+    match value {
+        ScopedValue::Userdata(userdata) => userdata
+            .borrow::<ScriptMenu>(scope)
+            .ok()
+            .map(|menu| menu.clone()),
+        _ => None,
+    }
+}
+
 /// Convert a script value into a command call, or report the value's type.
 pub(super) fn command_call_from_value<'s>(
     scope: &Scope<'s>,

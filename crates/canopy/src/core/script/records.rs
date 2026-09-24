@@ -286,6 +286,9 @@ pub(super) fn binding_info_to_arg(binding: &inputmap::BindingRecord) -> ArgValue
     if let inputmap::BindingAction::Command(call) = &binding.action {
         insert_command_call(&mut record, call);
     }
+    if let inputmap::BindingAction::Menu(mode) = &binding.action {
+        record.insert("menu".to_string(), ArgValue::String(mode.clone()));
+    }
     if let Some(source) = &binding.source {
         record.insert("source".to_string(), ArgValue::String(source.clone()));
     }

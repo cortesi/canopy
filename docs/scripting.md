@@ -251,17 +251,13 @@ same words: `Canopy::mode`, `set_mode`, `push_mode`, `push_transient_mode`, and
 `pop_mode`.
 
 Pass `{ transient = true }` to `canopy.push_mode` for a mode that takes only
-the next key:
+the next key. A transient mode is a menu: it offers a choice of keys. Bind the
+key that opens one to `canopy.menu(mode)`, which pushes `mode` as a transient
+mode:
 
 ```luau
 canopy.keymap({
-    {
-        key = "p",
-        description = "Pane commands",
-        action = function()
-            canopy.push_mode("panes", { transient = true })
-        end,
-    },
+    { key = "p", description = "Pane commands", action = canopy.menu("panes") },
 })
 
 canopy.keymap({
@@ -277,9 +273,17 @@ does not fall through to older modes or to the default tier. Global bindings
 still apply, and they also reach through every modal. `Root` lists the keys of a transient mode in a small panel until
 the mode ends.
 
+A menu binding's action kind is `menu`, so help and the mode panel mark it
+with `...` after its description: a key that leads to another choice reads
+apart from a key that acts, and a description never spells the marker itself.
+A function that calls `canopy.push_mode` also works, but it is opaque, so help
+cannot mark it. `canopy.bindings()` reports a menu with `action = "menu"` and
+the mode it opens in `menu`.
+
 Native Rust installs bindings during setup with `Setup::bind(input, options,
 target)`. The target is a `BindingAction`: a command call built by a generated
-`Widget::call_command(arguments...)` builder, or a registered intent. The
+`Widget::call_command(arguments...)` builder, a registered intent, or a menu
+that names the mode it opens. The
 tier in the options decides the semantics: a framework tier is registered
 idempotently for the group it names, and an application tier replaces any
 binding with the same tier, input, and path. A `CommandCall` holds the command

@@ -1263,6 +1263,10 @@ pub mod canopy {
             Command(crate::commands::CommandCall),
             /// Named operation the route offers to widgets on the way up.
             Intent(IntentName),
+            /// Open a menu: push the named mode as a transient mode, which waits for
+            /// one key. A binding that opens a menu leads to another choice rather
+            /// than acting, so help marks it apart from the bindings that act.
+            Menu(String),
         }
 
         /// Class of target a binding record owns.
@@ -1274,6 +1278,8 @@ pub mod canopy {
             Command,
             /// Named operation offered to widgets on the route.
             Intent,
+            /// Transient mode that waits for one key.
+            Menu,
         }
 
         /// Owned command details captured with an effective key binding.
@@ -3712,13 +3718,24 @@ pub mod canopy {
         /// Slice a string by display columns, returning the substring and its width.
         pub fn slice_by_columns(s: &str, start: usize, max: usize) -> (&str, usize) {}
 
+        #[must_use]
+        /// Return the marker and the kept tail that shorten `s` to `budget` display
+        /// columns by dropping its head.
+        ///
+        /// The tail borrows from `s`, so a caller can tell where it starts, as a row
+        /// that highlights characters of the whole text needs. Text that fits keeps
+        /// no marker. A budget of one or two columns holds the marker alone, because
+        /// a character beside it could be drawn over.
+        pub fn split_start(s: &str, budget: usize) -> (&'static str, &str) {}
+
         /// Compute the width of the next tab from the provided column.
         pub fn tab_width(column: usize, tab_stop: usize) -> usize {}
 
         /// Shorten `s` to `budget` display columns, marking a dropped tail.
         ///
         /// Text that already fits is returned as it is. This is the ordinary
-        /// direction, for text whose opening identifies it.
+        /// direction, for text whose opening identifies it. A blank cell separates
+        /// the marker from the kept head, as [`split_start`] describes.
         pub fn truncate_end(s: &str, budget: usize) -> std::borrow::Cow<'_, str> {}
 
         /// Shorten `s` to `budget` display columns, marking a dropped head.
@@ -3726,7 +3743,7 @@ pub mod canopy {
         /// Text that already fits is returned as it is, so a caller pays nothing for
         /// the common case. The marker keeps the tail visible, which is what a long
         /// filesystem path needs: its last components identify it, and its leading
-        /// ones repeat.
+        /// ones repeat. See [`split_start`] for the marker.
         pub fn truncate_start(s: &str, budget: usize) -> std::borrow::Cow<'_, str> {}
 
         /// Return the terminal cells `s` occupies, saturating at `u32::MAX`.

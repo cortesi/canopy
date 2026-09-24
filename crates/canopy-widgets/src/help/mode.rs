@@ -1,26 +1,25 @@
 //! Help for a transient mode.
 //!
-//! While a transient mode waits for its key, a small framed panel in the
-//! bottom right corner lists the keys that mode binds. The panel takes no
-//! focus and no keys, so the mode still receives the next key.
+//! While a transient mode waits for its key, a small dialog centred over the
+//! view lists the keys that mode binds, the way every other modal panel sits.
+//! The panel takes no focus and no keys, so the mode still receives the next
+//! key.
 
 use canopy::{
-    Context, ContextExt, NodeId, NodeName, ViewContext, Widget,
-    error::Result,
+    Context, ContextExt, NodeId, NodeName, ViewContext, ViewContextExt, Widget,
+    error::{Error, Result},
     geom::Size,
-    layout::{Align, Constraint, Direction, Edges, Layout, MeasureConstraints, Measurement},
+    layout::{Constraint, Layout, MeasureConstraints, Measurement},
     render::Render,
-    tree::ChildSlot,
 };
 
 use super::binding_list::{BindingRow, display_lines, key_rows_of, natural_width, render_line};
-use crate::frame::Frame;
-
-canopy::slot!(ModeFrameSlot: Frame);
-canopy::slot!(ModeBindingsSlot: ModeBindings);
+use crate::{dialog::Dialog, frame::Frame};
 
 /// Widest panel content in cells, including the side margins.
 const MAX_WIDTH: u32 = 64;
+/// Widest frame, the content and its two borders.
+const MAX_FRAME_WIDTH: u32 = MAX_WIDTH + 2;
 
 /// Blank columns on each side of the rows.
 const MARGIN: u32 = 1;
@@ -78,24 +77,22 @@ impl Widget for ModeBindings {
     }
 }
 
-/// Overlay that shows a transient mode's bindings in the bottom right corner
-/// while it waits for its key.
+/// Overlay that shows a transient mode's bindings in a dialog centred over
+/// the view while it waits for its key.
 ///
-/// The overlay is an end-aligned stack that pushes the `help` style layer its
-/// framed bindings list paints into.
+/// The overlay pushes the `help` style layer, and the dialog inside it the
+/// `dialog` layer, so the panel reads as the contextual help modal does.
 pub struct ModeHelp;
 
 impl ModeHelp {
     /// Build the mode help subtree and return its root.
     pub(crate) fn install(context: &mut dyn Context) -> Result<NodeId> {
-        let bindings = context.create_detached(ModeBindings::new())?;
-        let frame = context.create_detached(Frame::new())?;
-        context.attach_slot(frame.into(), ModeBindingsSlot::KEY, bindings.into())?;
-        context
-            .set_layout_override(frame.into(), Layout::column().padding(Edges::all(1)).into())?;
-
         let overlay = context.create_detached(Self)?;
-        context.attach_slot(overlay.into(), ModeFrameSlot::KEY, frame.into())?;
+        Dialog::new().with_max_width(MAX_FRAME_WIDTH).add(
+            context,
+            overlay.into(),
+            ModeBindings::new(),
+        )?;
         Ok(overlay.into())
     }
 
@@ -116,8 +113,13 @@ impl ModeHelp {
             .collect::<Vec<_>>();
         let bindings = key_rows_of(&bindings);
 
-        let frame = context.get_slot::<ModeFrameSlot>(overlay)?;
-        let list = context.get_slot::<ModeBindingsSlot>(frame)?;
+        let dialog = context
+            .unique_descendant::<Dialog>(overlay)?
+            .ok_or_else(|| Error::NotFound("mode help dialog".into()))?;
+        let list = context
+            .unique_descendant::<ModeBindings>(overlay)?
+            .ok_or_else(|| Error::NotFound("mode help bindings".into()))?;
+        let frame = Dialog::frame(context, dialog.into())?;
         context.with_widget_mut(frame, |frame: &mut Frame, _context| {
             frame.set_title(mode);
             Ok(())
@@ -134,10 +136,6 @@ impl ModeHelp {
 impl Widget for ModeHelp {
     fn layout(&self) -> Layout {
         Layout::fill()
-            .direction(Direction::Stack)
-            .align_horizontal(Align::End)
-            .align_vertical(Align::End)
-            .padding(Edges::all(1))
     }
 
     fn render(&mut self, render: &mut Render, _context: &dyn ViewContext) -> Result<()> {

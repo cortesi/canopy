@@ -200,8 +200,9 @@ pub(super) fn register_framework_declarations(
                 declaration::Field::new("description", declaration::Type::String)
                     .doc("User-facing description of every binding the entry makes."),
                 declaration::Field::new("action", action_type.clone()).doc(
-                    "A CommandCall, a function, or a registered intent name. An \
-                         action entry takes keys only and runs before_widget.",
+                    "A CommandCall, a MenuAction from `canopy.menu`, a function, or a \
+                         registered intent name. An intent entry takes keys only and runs \
+                         before_widget.",
                 ),
             ]),
         )
@@ -279,6 +280,7 @@ fn register_action_type(
 ) -> declaration::Type {
     let mut union = vec![
         declaration::Type::named("CommandCall"),
+        declaration::Type::named("MenuAction"),
         declaration::Type::func(declaration::FunctionSignature::new()),
     ];
     if actions.is_empty() {
@@ -324,9 +326,9 @@ fn phase_field() -> declaration::Field {
 fn action_field() -> declaration::Field {
     declaration::Field::new(
         "action",
-        declaration::Type::literals(["script", "command", "intent"]),
+        declaration::Type::literals(["script", "command", "intent", "menu"]),
     )
-    .doc("Kind of action the binding runs.")
+    .doc("Kind of action the binding runs. A menu opens a transient mode.")
 }
 
 /// Register the active-binding discovery record.
@@ -360,6 +362,8 @@ fn register_binding_info(builder: &mut module::Builder) {
             action_field(),
             declaration::Field::new("intent", declaration::Type::String.optional())
                 .doc("Intent name, present when the action is an intent."),
+            declaration::Field::new("menu", declaration::Type::String.optional())
+                .doc("Mode the binding opens, present when the action is a menu."),
         ]),
     ));
 }

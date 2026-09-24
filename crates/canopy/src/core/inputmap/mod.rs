@@ -134,6 +134,10 @@ pub enum BindingAction {
     Command(CommandCall),
     /// Named operation the route offers to widgets on the way up.
     Intent(IntentName),
+    /// Open a menu: push the named mode as a transient mode, which waits for
+    /// one key. A binding that opens a menu leads to another choice rather
+    /// than acting, so help marks it apart from the bindings that act.
+    Menu(String),
 }
 
 /// Class of target a binding record owns.
@@ -145,6 +149,8 @@ pub enum BindingActionKind {
     Command,
     /// Named operation offered to widgets on the route.
     Intent,
+    /// Transient mode that waits for one key.
+    Menu,
 }
 
 impl BindingActionKind {
@@ -155,6 +161,7 @@ impl BindingActionKind {
             BindingAction::Script(_) => Self::Script,
             BindingAction::Command(_) => Self::Command,
             BindingAction::Intent(_) => Self::Intent,
+            BindingAction::Menu(_) => Self::Menu,
         }
     }
 
@@ -165,6 +172,7 @@ impl BindingActionKind {
             Self::Script => "script",
             Self::Command => "command",
             Self::Intent => "intent",
+            Self::Menu => "menu",
         }
     }
 }
@@ -180,7 +188,7 @@ impl BindingAction {
     pub fn intent(&self) -> Option<&IntentName> {
         match self {
             Self::Intent(name) => Some(name),
-            Self::Script(_) | Self::Command(_) => None,
+            Self::Script(_) | Self::Command(_) | Self::Menu(_) => None,
         }
     }
 }
@@ -222,6 +230,7 @@ impl BindingRecord {
             }
             BindingAction::Script(function) => RunTarget::Script(*function),
             BindingAction::Command(call) => RunTarget::Command(call.clone()),
+            BindingAction::Menu(mode) => RunTarget::Menu(mode.clone()),
         };
         ResolvedBinding::Run(RunBinding {
             id: self.id,
@@ -310,6 +319,8 @@ pub enum RunTarget {
     Script(LuauFunctionId),
     /// Rust command call.
     Command(CommandCall),
+    /// Transient mode to push.
+    Menu(String),
 }
 
 /// Why the registry admits, blocks, or shadows one record.
@@ -517,6 +528,9 @@ impl InputMap {
         options: BindingOptions,
         target: BindingAction,
     ) -> Result<(BindingId, Vec<(BindingId, BindingAction)>)> {
+        if matches!(&target, BindingAction::Menu(mode) if mode.is_empty()) {
+            return Err(Error::Invalid("a menu must name its mode".to_string()));
+        }
         if let BindingAction::Intent(name) = &target {
             if matches!(input, InputSpec::Mouse(_)) {
                 return Err(Error::Invalid(
@@ -532,7 +546,7 @@ impl InputMap {
         // An intent is offered before the node's raw key handler.
         let phase = match target {
             BindingAction::Intent(_) => BindingPhase::BeforeWidget,
-            BindingAction::Script(_) | BindingAction::Command(_) => {
+            BindingAction::Script(_) | BindingAction::Command(_) | BindingAction::Menu(_) => {
                 options.phase.unwrap_or_default()
             }
         };
@@ -1052,7 +1066,9 @@ impl InputMap {
             .filter(|record| !baseline.contains(&record.id))
             .filter_map(|record| match record.action {
                 BindingAction::Script(target) => Some(target),
-                BindingAction::Command(_) | BindingAction::Intent(_) => None,
+                BindingAction::Command(_) | BindingAction::Intent(_) | BindingAction::Menu(_) => {
+                    None
+                }
             })
             .collect()
     }

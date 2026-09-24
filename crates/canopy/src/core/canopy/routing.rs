@@ -683,6 +683,10 @@ impl Canopy {
             RunTarget::Script(function) => canopy
                 .execute_binding_with_scope(node_id, function, scope)
                 .map(|()| None),
+            RunTarget::Menu(mode) => {
+                canopy.push_transient_mode(&mode);
+                Ok(None)
+            }
             RunTarget::Command(call) => {
                 // Eligibility is read here, inside the event scope, rather than
                 // taken from the last frame, so a status hook sees the same
@@ -986,7 +990,9 @@ impl KeyRouteGuard {
                 events.push((GuardEvent::Node(winner.node), None));
                 let event = match winner.kind {
                     BindingActionKind::Intent => GuardEvent::Action(winner.binding, winner.node),
-                    BindingActionKind::Script | BindingActionKind::Command => {
+                    BindingActionKind::Script
+                    | BindingActionKind::Command
+                    | BindingActionKind::Menu => {
                         GuardEvent::Binding(winner.binding, BindingPhase::BeforeWidget)
                     }
                 };

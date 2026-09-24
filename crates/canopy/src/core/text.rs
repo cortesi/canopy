@@ -148,43 +148,69 @@ impl Truncate {
 /// Marker standing in for the text a truncation removed.
 const ELLIPSIS: &str = "…";
 
+/// Marker before a kept tail. `…` has ambiguous East Asian width, so a
+/// terminal may give it two cells, and many fonts draw its glyph past its one
+/// cell. A blank cell between it and the kept text takes that overflow, so no
+/// character is drawn over.
+const START_MARKER: &str = "… ";
+/// Marker after a kept head, with the same blank cell between them.
+const END_MARKER: &str = " …";
+
+/// Return the marker and the kept tail that shorten `s` to `budget` display
+/// columns by dropping its head.
+///
+/// The tail borrows from `s`, so a caller can tell where it starts, as a row
+/// that highlights characters of the whole text needs. Text that fits keeps
+/// no marker. A budget of one or two columns holds the marker alone, because
+/// a character beside it could be drawn over.
+#[must_use]
+pub fn split_start(s: &str, budget: usize) -> (&'static str, &str) {
+    let width = cells(s);
+    if width <= budget {
+        return ("", s);
+    }
+    let marker = match budget {
+        0 => return ("", &s[s.len()..]),
+        1 | 2 => return (ELLIPSIS, &s[s.len()..]),
+        _ => START_MARKER,
+    };
+    // A tail that would start inside a wide grapheme drops it, so the result
+    // can be one column narrower than the budget, never wider.
+    let tail = budget - cells(marker);
+    (marker, slice_by_columns(s, width - tail, tail).0)
+}
+
 /// Shorten `s` to `budget` display columns, marking a dropped head.
 ///
 /// Text that already fits is returned as it is, so a caller pays nothing for
 /// the common case. The marker keeps the tail visible, which is what a long
 /// filesystem path needs: its last components identify it, and its leading
-/// ones repeat.
+/// ones repeat. See [`split_start`] for the marker.
 pub fn truncate_start(s: &str, budget: usize) -> Cow<'_, str> {
-    let width = cells(s);
-    if width <= budget {
-        return Cow::Borrowed(s);
+    match split_start(s, budget) {
+        ("", kept) => Cow::Borrowed(kept),
+        (marker, kept) => Cow::Owned(format!("{marker}{kept}")),
     }
-    if budget == 0 {
-        return Cow::Borrowed("");
-    }
-    // The marker spends one column, and the tail takes the rest. A tail that
-    // would start inside a wide grapheme drops it, so the result can be one
-    // column narrower than the budget, never wider.
-    let tail = budget - 1;
-    let (kept, _) = slice_by_columns(s, width - tail, tail);
-    Cow::Owned(format!("{ELLIPSIS}{kept}"))
 }
 
 /// Shorten `s` to `budget` display columns, marking a dropped tail.
 ///
 /// Text that already fits is returned as it is. This is the ordinary
-/// direction, for text whose opening identifies it.
+/// direction, for text whose opening identifies it. A blank cell separates
+/// the marker from the kept head, as [`split_start`] describes.
 pub fn truncate_end(s: &str, budget: usize) -> Cow<'_, str> {
     let width = cells(s);
     if width <= budget {
         return Cow::Borrowed(s);
     }
-    if budget == 0 {
-        return Cow::Borrowed("");
-    }
-    let head = budget - 1;
+    let marker = match budget {
+        0 => return Cow::Borrowed(""),
+        1 | 2 => return Cow::Borrowed(ELLIPSIS),
+        _ => END_MARKER,
+    };
+    let head = budget - cells(marker);
     let (kept, _) = slice_by_columns(s, 0, head);
-    Cow::Owned(format!("{kept}{ELLIPSIS}"))
+    Cow::Owned(format!("{kept}{marker}"))
 }
 
 #[cfg(test)]
@@ -266,11 +292,19 @@ mod tests {
 
     #[test]
     fn truncation_marks_the_end_it_dropped() {
-        assert_eq!(truncate_start("/usr/local/bin", 6), "…l/bin");
-        assert_eq!(truncate_end("/usr/local/bin", 6), "/usr/…");
-        // One column leaves room for the marker alone, and none for nothing.
-        assert_eq!(truncate_start("abcd", 1), "…");
-        assert_eq!(truncate_end("abcd", 1), "…");
+        assert_eq!(truncate_start("/usr/local/bin", 6), "… /bin");
+        assert_eq!(truncate_end("/usr/local/bin", 6), "/usr …");
+        assert_eq!(
+            split_start("/usr/local/bin", 6),
+            ("… ", "/bin"),
+            "the kept tail borrows from the text"
+        );
+        // A blank cell always separates the marker from kept text, so one or
+        // two columns hold the marker alone, and none hold nothing.
+        for budget in [1, 2] {
+            assert_eq!(truncate_start("abcd", budget), "…");
+            assert_eq!(truncate_end("abcd", budget), "…");
+        }
         assert_eq!(truncate_start("abcd", 0), "");
         assert_eq!(truncate_end("abcd", 0), "");
     }
@@ -290,13 +324,13 @@ mod tests {
                 );
             }
         }
-        // "a界b" is four columns, so a budget of three leaves two for the tail
-        // after the marker. Those two columns start inside the wide grapheme,
-        // which is dropped rather than split, so the result spends one column
-        // less than it was given. Keeping the grapheme would fit here, but only
-        // by measuring back from the end, and a result narrower than its budget
-        // is what the budget promises.
-        assert_eq!(truncate_start("a界b", 3), "…b");
-        assert_eq!(truncate_end("a界b", 3), "a…");
+        // "a界b界c" is seven columns, so a budget of four leaves two for the
+        // tail after the marker and its blank. Those two columns start inside
+        // the last wide grapheme, which is dropped rather than split, so the
+        // result spends one column less than it was given. Keeping the
+        // grapheme would fit here, but only by measuring back from the end,
+        // and a result narrower than its budget is what the budget promises.
+        assert_eq!(truncate_start("a界b界c", 4), "… c");
+        assert_eq!(truncate_end("a界b界c", 4), "a …");
     }
 }

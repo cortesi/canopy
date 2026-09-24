@@ -9,7 +9,7 @@ use canopy::{
     error::Result,
     geom::{Line, Size},
     input::{
-        AvailableBinding, BindingSnapshot,
+        AvailableBinding, BindingActionKind, BindingSnapshot,
         key::{Empty, Key, KeyCode},
     },
     layout::{
@@ -385,13 +385,21 @@ fn binding_lines(
     lines
 }
 
+/// Marker after the description of a binding that opens a menu, so a key that
+/// leads to another choice reads apart from one that acts. It is ASCII, so no
+/// terminal or font draws it wider than the cells it is counted in.
+const MENU_MARKER: &str = "...";
+
 /// Show the action and useful availability feedback, leaving diagnostics to
-/// inspection APIs.
+/// inspection APIs. A binding that opens a menu carries [`MENU_MARKER`].
 pub(super) fn binding_description<I>(binding: &AvailableBinding<I>) -> String {
-    let Some(command) = &binding.command else {
-        return binding.description.clone();
-    };
     let mut description = binding.description.clone();
+    if binding.action == BindingActionKind::Menu {
+        description.push_str(MENU_MARKER);
+    }
+    let Some(command) = &binding.command else {
+        return description;
+    };
     match command
         .availability
         .as_ref()

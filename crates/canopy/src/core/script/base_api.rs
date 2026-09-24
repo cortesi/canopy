@@ -22,13 +22,14 @@ use ruau::{
 use super::{
     ArgValue, Canopy, ChangeOutcome, CommandSet, Context, CoreContext, CoreViewContext, FocusScope,
     NodeId, PathFilter, Pin, Point, RectI32, ReentrantCanopyGuard, Result, ScriptCommandCall,
-    ViewContext, available_bindings_to_arg, base_api, binding_info_to_arg, command_call_from_value,
-    command_call_type, command_info_to_arg, commands, defs, dispatch_command, dispatch_explicit,
-    error, fixtures_to_arg, host_return, host_value, inputmap, key, key_explanation_to_arg,
-    luau_global_owner_name, mouse, node_handle_type, node_id_from_value, node_info_to_arg,
-    node_list_to_arg, notices_to_arg, owned_truthy, ret_arg, ret_none, ret_one, route_trace_to_arg,
-    screen_text, screen_text_for_rect, script_callback_label, script_journal_to_arg,
-    snapshot_to_arg, validate_node_handle, values_to_args, with_current_canopy,
+    ScriptMenu, ViewContext, available_bindings_to_arg, base_api, binding_info_to_arg,
+    command_call_from_value, command_call_type, command_info_to_arg, commands, defs,
+    dispatch_command, dispatch_explicit, error, fixtures_to_arg, host_return, host_value, inputmap,
+    key, key_explanation_to_arg, luau_global_owner_name, menu_from_value, menu_type, mouse,
+    node_handle_type, node_id_from_value, node_info_to_arg, node_list_to_arg, notices_to_arg,
+    owned_truthy, ret_arg, ret_none, ret_one, route_trace_to_arg, screen_text,
+    screen_text_for_rect, script_callback_label, script_journal_to_arg, snapshot_to_arg,
+    validate_node_handle, values_to_args, with_current_canopy,
 };
 use crate::{
     core::{context::matching_nodes, inputmap::IntentCatalog},
@@ -290,6 +291,18 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
                 .param(("options", Type::named("PushModeOptions").optional()))
         },
         handler: Handler::Sync(host_push_mode),
+    },
+    BaseFunction {
+        name: "menu",
+        docs: Some(
+            "Return an action that opens `mode` as a menu: a transient mode that waits for one key. Help marks the bindings that open a menu, so they read apart from the bindings that act.",
+        ),
+        signature: || {
+            FunctionSignature::new()
+                .param(("mode", Type::String))
+                .ret(Type::named("MenuAction"))
+        },
+        handler: Handler::Sync(host_menu),
     },
     BaseFunction {
         name: "pop_mode",
@@ -1390,6 +1403,21 @@ fn host_push_mode<'s>(
     Ok(ret_none())
 }
 
+/// `canopy.menu`: an action that opens a mode as a menu.
+fn host_menu<'s>(
+    scope: &Scope<'s>,
+    args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    let mut args = HostArgCursor::new(scope, args);
+    let mode = args.required::<String>("mode")?;
+    if mode.is_empty() {
+        return Err(RuntimeError::runtime("a menu must name its mode"));
+    }
+    Ok(ret_one(ScopedValue::Userdata(
+        scope.create_userdata(ScriptMenu(mode))?,
+    )))
+}
+
 /// `canopy.pop_mode`: pop the newest mode and return the newest active mode.
 fn host_pop_mode<'s>(
     scope: &Scope<'s>,
@@ -1429,7 +1457,7 @@ fn read_intent_name<'s>(
 }
 
 /// Convert one script value into a binding action: a `CommandCall`, a
-/// function, or an intent name.
+/// `MenuAction`, a function, or an intent name.
 fn action_from_value<'s>(
     scope: &Scope<'s>,
     value: ScopedValue<'s>,
@@ -1439,13 +1467,16 @@ fn action_from_value<'s>(
             call.0,
         )));
     }
+    if let Some(menu) = menu_from_value(scope, &value) {
+        return Ok(ScriptAction::Target(inputmap::BindingAction::Menu(menu.0)));
+    }
     match value {
         ScopedValue::Function(function) => Ok(ScriptAction::Function(function)),
         ScopedValue::String(_) => Ok(ScriptAction::Target(inputmap::BindingAction::Intent(
             read_intent_name(scope, value)?,
         ))),
         other => Err(RuntimeError::runtime(format!(
-            "`action` must be a CommandCall, a function, or an intent name, got {}",
+            "`action` must be a CommandCall, a MenuAction, a function, or an intent name, got {}",
             other.type_name()
         ))),
     }
@@ -1975,6 +2006,10 @@ pub(super) fn build_base_module(actions: &IntentCatalog) -> Result<Arc<dyn Nativ
     builder.host_type(
         commands::declaration::Class::new("CommandCall"),
         Arc::new(command_call_type()),
+    );
+    builder.host_type(
+        commands::declaration::Class::new("MenuAction"),
+        Arc::new(menu_type()),
     );
     base_api::register(&mut builder, &action_type);
     builder.build().map_err(|error| {
