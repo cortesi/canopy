@@ -60,6 +60,10 @@ impl StyleEffect for ColorEffect {
     }
 }
 
+/// Brightness factor for what a modal covers, so a panel over the view reads
+/// apart from the dimmed view behind it.
+pub const MODAL_DIM: f32 = 0.5;
+
 /// Create a brightness effect. Factor below 1.0 dims, above 1.0 brightens.
 pub fn brightness(factor: f32) -> Effect {
     Arc::new(ColorEffect::ScaleBrightness(factor))

@@ -9,6 +9,7 @@ use canopy::{
     },
     layout::{Align, Direction, Layout, LayoutOverride, ScrollOp},
     render::Render,
+    style::effects,
     tree::{ChildSlot, FocusDirection, FocusScope},
 };
 
@@ -411,11 +412,23 @@ fn sync_notice(context: &mut dyn Context) -> Result<()> {
 }
 
 /// Show the keys of a transient mode while it waits, and hide them after.
+///
+/// The panel sits over the application the way a modal does, so the
+/// application dims behind it the way it dims behind a modal. Root owns the
+/// main pane, and nothing else sets an effect on it.
 fn sync_mode_help(context: &mut dyn Context) -> Result<()> {
     let Some(overlay) = context.child_slot_of(context.node_id(), ModeHelpSlot::KEY) else {
         return Ok(());
     };
-    ModeHelp::sync(context, overlay)
+    let shown = ModeHelp::sync(context, overlay)?;
+    let Some(main_pane) = context.child_slot_of(context.node_id(), KEY_MAIN_PANE) else {
+        return Ok(());
+    };
+    context.clear_effects(main_pane)?;
+    if shown {
+        context.push_effect(main_pane, effects::brightness(effects::MODAL_DIM))?;
+    }
+    Ok(())
 }
 
 /// Register the Root-owned controls admitted by the help modal.
@@ -1035,6 +1048,52 @@ mod tests {
             (after.style.fg, after.style.bg),
             (before.style.fg, before.style.bg),
             "closing help restores the application"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_waiting_mode_dims_the_application_behind_its_panel() -> Result<()> {
+        let mut canopy = CanopyBuilder::new().configure(Root::register).build()?;
+        Root::new().install(&mut canopy, Banner)?;
+        canopy.set_screen_size(Size::new(60, 14))?;
+        install_help_trigger(&mut canopy)?;
+        canopy.eval_script(
+            r#"
+            canopy.bind("o", { description = "Options" }, canopy.menu("options"))
+            canopy.keymap({
+                mode = "options",
+                { key = "h", description = "hidden", action = function() end },
+            })
+            "#,
+        )?;
+        let mut backend = NopBackend::new();
+        let mut corner = |canopy: &mut Canopy| -> Result<Cell> {
+            canopy.render(&mut backend)?;
+            Ok(canopy.snapshot().expect("published frame").buffer.cells()[0].clone())
+        };
+        let colors = |cell: &Cell| (cell.style.fg, cell.style.bg);
+        let before = corner(&mut canopy)?;
+
+        send_key(&mut canopy, "o")?;
+        let during = corner(&mut canopy)?;
+        assert_eq!(during.ch, before.ch, "the application stays visible");
+        assert_ne!(
+            colors(&during),
+            colors(&before),
+            "the menu dims the application"
+        );
+
+        // Contextual help replaces the panel and dims the application itself.
+        send_key(&mut canopy, "ctrl-g")?;
+        assert_ne!(colors(&corner(&mut canopy)?), colors(&before));
+        send_key(&mut canopy, "ctrl-g")?;
+
+        send_key(&mut canopy, "x")?;
+        assert_eq!(
+            colors(&corner(&mut canopy)?),
+            colors(&before),
+            "ending the menu restores the application"
         );
         Ok(())
     }

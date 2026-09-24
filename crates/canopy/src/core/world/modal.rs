@@ -209,7 +209,7 @@ impl Core {
                     identity.node == node && self.modal_identity_live(identity)
                 })
             })
-            .map(|_| effects::brightness(0.5))
+            .map(|_| effects::brightness(effects::MODAL_DIM))
             .collect()
     }
 

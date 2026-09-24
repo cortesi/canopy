@@ -1,9 +1,9 @@
 //! Help for a transient mode.
 //!
 //! While a transient mode waits for its key, a small dialog centred over the
-//! view lists the keys that mode binds, the way every other modal panel sits.
-//! The panel takes no focus and no keys, so the mode still receives the next
-//! key.
+//! view lists the keys that mode binds, the way every other modal panel sits,
+//! and `Root` dims the application behind it as it does behind a modal. The
+//! panel takes no focus and no keys, so the mode still receives the next key.
 
 use canopy::{
     Context, ContextExt, NodeId, NodeName, ViewContext, ViewContextExt, Widget,
@@ -97,14 +97,14 @@ impl ModeHelp {
     }
 
     /// Show the bindings of the transient mode that waits for a key, or hide
-    /// the panel when no such mode is active.
+    /// the panel when no such mode is active, and return whether it shows.
     ///
     /// Contextual help replaces the panel while it is open.
-    pub(crate) fn sync(context: &mut dyn Context, overlay: NodeId) -> Result<()> {
+    pub(crate) fn sync(context: &mut dyn Context, overlay: NodeId) -> Result<bool> {
         let snapshot = context.available_bindings(context.focused_node())?;
         let Some(mode) = snapshot.transient_mode else {
             context.set_hidden(overlay, true)?;
-            return Ok(());
+            return Ok(false);
         };
         let bindings = snapshot
             .bindings
@@ -129,7 +129,7 @@ impl ModeHelp {
             Ok(())
         })?;
         context.set_hidden(overlay, false)?;
-        Ok(())
+        Ok(true)
     }
 }
 

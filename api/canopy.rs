@@ -3140,6 +3140,10 @@ pub mod canopy {
                 fn apply(&self, style: Style) -> Style;
             }
 
+            /// Brightness factor for what a modal covers, so a panel over the view reads
+            /// apart from the dimmed view behind it.
+            pub const MODAL_DIM: f32 = 0.5;
+
             /// Create an effect that adds bold attribute.
             pub fn bold() -> Effect {}
 

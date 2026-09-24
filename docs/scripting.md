@@ -271,7 +271,7 @@ runs after the pop, so it can enter another mode. It runs before the focused
 widget sees the key, whatever its phase. Any other key only pops the mode, and
 does not fall through to older modes or to the default tier. Global bindings
 still apply, and they also reach through every modal. `Root` lists the keys of a transient mode in a small panel until
-the mode ends.
+the mode ends, centred over the application and dimming it as a modal does.
 
 A menu binding's action kind is `menu`, so help and the mode panel mark it
 with `...` after its description: a key that leads to another choice reads
