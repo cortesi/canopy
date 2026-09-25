@@ -219,6 +219,90 @@ fn rows_sort_by_key_category_without_routing_details() {
 }
 
 #[test]
+fn modified_keys_group_by_modifier_then_sort_by_name() {
+    let spec = |spec: &str| key::Key::parse_spec(spec).expect("valid key");
+    let list = list_with(vec![
+        binding(
+            1,
+            spec("shift-space"),
+            "Shift space",
+            BindingPhase::BeforeWidget,
+        ),
+        binding(
+            2,
+            spec("ctrl-right"),
+            "Ctrl right",
+            BindingPhase::BeforeWidget,
+        ),
+        binding(
+            3,
+            spec("shift-pageup"),
+            "Shift page",
+            BindingPhase::BeforeWidget,
+        ),
+        binding(4, spec("ctrl-r"), "Ctrl r", BindingPhase::BeforeWidget),
+        binding(5, spec("alt-x"), "Alt x", BindingPhase::BeforeWidget),
+        binding(
+            6,
+            spec("ctrl-shift-right"),
+            "Ctrl shift right",
+            BindingPhase::BeforeWidget,
+        ),
+        binding(7, spec("ctrl-a"), "Ctrl a", BindingPhase::BeforeWidget),
+        binding(8, spec("esc"), "Plain", BindingPhase::BeforeWidget),
+    ]);
+    let lines = list.display_lines(60);
+    let keys = lines
+        .iter()
+        .filter_map(|line| line.key.as_deref().map(str::trim))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        keys,
+        [
+            "esc",
+            "alt+x",
+            "ctrl+a",
+            "ctrl+r",
+            "ctrl+→",
+            "ctrl+shift+→",
+            "shift+pgup",
+            "shift+space",
+        ]
+    );
+}
+
+#[test]
+fn a_shared_action_sorts_by_its_first_key() {
+    let spec = |spec: &str| key::Key::parse_spec(spec).expect("valid key");
+    let list = list_with(vec![
+        binding(
+            1,
+            spec("shift-pageup"),
+            "Page up",
+            BindingPhase::BeforeWidget,
+        ),
+        binding(
+            2,
+            spec("shift-space"),
+            "Page down",
+            BindingPhase::BeforeWidget,
+        ),
+        binding(3, spec("space"), "Page down", BindingPhase::BeforeWidget),
+        binding(4, spec("ctrl-f"), "Find", BindingPhase::BeforeWidget),
+    ]);
+    let lines = list.display_lines(60);
+    let keys = lines
+        .iter()
+        .filter_map(|line| line.key.as_deref().map(str::trim))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        keys,
+        ["space, shift+space", "ctrl+f", "shift+pgup"],
+        "the plain key leads its line, which sorts with the plain keys"
+    );
+}
+
+#[test]
 fn narrow_and_long_rows_use_indented_wrapped_continuations() {
     let list = list_with(vec![binding(
         1,

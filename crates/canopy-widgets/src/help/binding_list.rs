@@ -414,21 +414,35 @@ pub(super) fn binding_description<I>(binding: &AvailableBinding<I>) -> String {
     description
 }
 
+/// Sort category for every key with a modifier, after each plain key category.
+const MODIFIED_SORT_GROUP: u8 = 5;
 /// Sort category for every mouse input, after each key category.
 const MOUSE_SORT_GROUP: u8 = 6;
 
-/// Sort keys by requested category and display string.
+/// Sort keys: plain keys first, by category, then keys with modifiers.
+///
+/// Keys with modifiers group by their modifier set, so every `ctrl` key sits
+/// together and apart from every `shift` key. Within a category or a modifier
+/// set, keys order alphabetically by the name the list shows, ignoring case.
+/// A NUL ends the modifiers, so one set's keys never interleave with a longer
+/// set's.
 fn key_sort_key(key: Key) -> (u8, String) {
-    let group = if key.mods != Empty {
-        5
-    } else {
-        match key.key {
-            KeyCode::Char(character) if character.is_ascii_lowercase() => 0,
-            KeyCode::Char(character) if character.is_ascii_uppercase() => 1,
-            KeyCode::Char(character) if character.is_ascii_digit() => 2,
-            KeyCode::Left | KeyCode::Right | KeyCode::Up | KeyCode::Down => 3,
-            _ => 4,
-        }
+    let name = Key {
+        mods: Empty,
+        key: key.key,
+    }
+    .label();
+    let name = format!("{}\0{name}", name.to_lowercase());
+    if key.mods != Empty {
+        let mods = key.mods.to_string().to_ascii_lowercase();
+        return (MODIFIED_SORT_GROUP, format!("{mods}\0{name}"));
+    }
+    let group = match key.key {
+        KeyCode::Char(character) if character.is_ascii_lowercase() => 0,
+        KeyCode::Char(character) if character.is_ascii_uppercase() => 1,
+        KeyCode::Char(character) if character.is_ascii_digit() => 2,
+        KeyCode::Left | KeyCode::Right | KeyCode::Up | KeyCode::Down => 3,
+        _ => 4,
     };
-    (group, key.to_string())
+    (group, name)
 }
