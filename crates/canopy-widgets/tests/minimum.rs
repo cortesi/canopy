@@ -18,11 +18,9 @@ struct Form;
 impl Widget for Form {
     fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
         let parent = ctx.node_id();
-        ctx.compose(parent, |children| {
-            children.child(Input::new("entry"), |_| Ok(()))?;
-            children.child(List::<Row>::new(), |_| Ok(()))?;
-            Ok(())
-        })
+        ctx.add_child(parent, Input::new("entry"))?;
+        ctx.add_child(parent, List::<Row>::new())?;
+        Ok(())
     }
 }
 
