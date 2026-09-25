@@ -190,8 +190,9 @@ impl Core {
 
     /// Return the binding that wins `spec` along the route from `focus`.
     ///
-    /// Mouse discovery has no widget prediction, so this walk is the plain
-    /// resolver route. Key discovery uses [`Core::explain_key`].
+    /// Mouse discovery has no widget prediction, so this walk selects at each
+    /// route node as mouse routing does. Key discovery uses
+    /// [`Core::explain_key`].
     fn winner_along_route<I>(
         &self,
         focus: NodeId,
@@ -199,8 +200,7 @@ impl Core {
         spec: InputSpec,
     ) -> Result<Option<AvailableBinding<I>>> {
         let winner = self.route(focus).find_map(|(node, path)| {
-            self.input_map
-                .resolve_match(&path, spec)
+            self.select_binding(node, &path, spec, focus, &[])
                 .map(|record| (node, path, record.id))
         });
         winner

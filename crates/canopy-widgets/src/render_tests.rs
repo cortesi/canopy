@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Context, ContextExt, NodeName, ViewContextExt, Widget, buf,
+        CanopyBuilder, Context, ContextExt, NodeName, Register, ViewContextExt, Widget, buf,
         commands::{CommandNode, CommandSpec},
         error::Result,
         geom::{Point, PointI32, Size},
@@ -542,18 +542,22 @@ mod tests {
     }
 
     /// A status bar with a hint for the help command, bound to `Ctrl+g`.
+    ///
+    /// A real [`Root`] hosts the bar, because a hint names a key only while its
+    /// command has a target that shows.
     fn help_bar_harness(width: u32, height: u32) -> Result<Harness> {
         let bar = StatusBar::new()
             .with_left(Text::new("demo"))
             .with_right(KeyHint::for_command(Root::call_toggle_help(), "help"));
-        Harness::builder(SnapshotRoot::new(bar))
-            .register::<Root>()
+        let mut canopy = CanopyBuilder::new()
+            .configure(Root::register)
             .script(
                 "help",
                 r#"canopy.bind("Ctrl+g", { description = "Help" }, command.root.toggle_help())"#,
             )
-            .size(width, height)
-            .build()
+            .build()?;
+        Root::new().install(&mut canopy, bar)?;
+        Harness::from_canopy(canopy, Size::new(width, height))
     }
 
     #[test]

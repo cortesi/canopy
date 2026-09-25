@@ -2620,6 +2620,110 @@ fn a_declining_child_leaves_an_action_to_its_accepting_ancestor() -> Result<()> 
     Ok(())
 }
 
+/// A leaf with one command that counts its runs.
+struct CountLeaf {
+    calls: Arc<AtomicUsize>,
+}
+
+#[derive_commands]
+impl CountLeaf {
+    #[command]
+    fn count(&self) {
+        self.calls.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+impl Widget for CountLeaf {
+    fn name(&self) -> NodeName {
+        NodeName::convert("count_leaf")
+    }
+}
+
+/// Mount a [`CountLeaf`] under the root, and return it with its run count.
+fn counting_app() -> Result<(Canopy, NodeId, Arc<AtomicUsize>)> {
+    let mut canopy = app();
+    canopy.core.commands.add(CountLeaf::commands())?;
+    let calls = Arc::new(AtomicUsize::new(0));
+    let leaf = canopy.core.create_detached(CountLeaf {
+        calls: Arc::clone(&calls),
+    })?;
+    canopy.core.attach(canopy.core.root, leaf)?;
+    Ok((canopy, leaf, calls))
+}
+
+/// Bind `z` to `call`, described as "Count".
+fn bind_count(canopy: &mut Canopy, call: commands::CommandCall) -> Result<()> {
+    bind_command(
+        canopy,
+        key::Key::parse_spec("z")?,
+        default_options(None, "Count", None)?,
+        call,
+    )
+    .map(|_| ())
+}
+
+/// Return whether help lists the count binding.
+fn count_listed(canopy: &Canopy) -> Result<bool> {
+    Ok(canopy
+        .core
+        .available_bindings(None)?
+        .bindings
+        .iter()
+        .any(|binding| binding.description == "Count"))
+}
+
+#[test]
+fn a_command_whose_widget_is_hidden_is_dormant() -> Result<()> {
+    let (mut canopy, leaf, calls) = counting_app()?;
+    bind_count(&mut canopy, CountLeaf::call_count())?;
+    let key = key::Key::parse_spec("z")?;
+    canopy.core.set_hidden(leaf, true)?;
+    canopy.key(None, key)?;
+    assert_eq!(
+        calls.load(Ordering::Relaxed),
+        0,
+        "a hidden widget takes no command"
+    );
+    assert!(
+        !count_listed(&canopy)?,
+        "help leaves the dormant binding out"
+    );
+
+    canopy.core.set_hidden(leaf, false)?;
+    assert!(
+        count_listed(&canopy)?,
+        "help lists it once the widget shows"
+    );
+    canopy.key(None, key)?;
+    assert_eq!(calls.load(Ordering::Relaxed), 1, "the shown widget runs it");
+    Ok(())
+}
+
+#[test]
+fn an_exact_target_reaches_a_hidden_widget() -> Result<()> {
+    let (mut canopy, leaf, calls) = counting_app()?;
+    bind_count(
+        &mut canopy,
+        CountLeaf::call_count().with_target(commands::CommandTarget::Exact(leaf)),
+    )?;
+    canopy.core.set_hidden(leaf, true)?;
+    assert!(
+        count_listed(&canopy)?,
+        "an exact target names its node outright"
+    );
+    canopy.key(None, key::Key::parse_spec("z")?)?;
+    assert_eq!(calls.load(Ordering::Relaxed), 1);
+    Ok(())
+}
+
+/// Mount a [`DisabledLeaf`] under `parent`, where a command bound at the
+/// parent finds it.
+fn mount_disabled_leaf(canopy: &mut Canopy, parent: NodeId) -> Result<NodeId> {
+    let node = canopy.core.create_detached(DisabledLeaf)?;
+    canopy.core.attach(parent, node)?;
+    Ok(node)
+}
+
 /// A leaf with one command that is always disabled.
 struct DisabledLeaf;
 
@@ -2663,7 +2767,7 @@ fn a_disabled_command_claims_the_key_after_a_dormant_action() -> Result<()> {
     let mut canopy = clear_intent_app();
     canopy.core.commands.add(DisabledLeaf::commands())?;
     let calls = Arc::new(AtomicUsize::new(0));
-    mount_action_leaf(
+    let leaf = mount_action_leaf(
         &mut canopy,
         IntentLeaf {
             intent: "test.clear",
@@ -2673,6 +2777,9 @@ fn a_disabled_command_claims_the_key_after_a_dormant_action() -> Result<()> {
             raw: Arc::new(AtomicUsize::new(0)),
         },
     )?;
+    // The command's widget shows under the focused leaf, so the command
+    // resolves and reports its own disabled status.
+    mount_disabled_leaf(&mut canopy, leaf)?;
     let key = key::Key::parse_spec("ctrl-x")?;
     bind_intent(
         &mut canopy,
@@ -2712,7 +2819,7 @@ fn a_disabled_command_claims_the_key_before_an_accepting_intent() -> Result<()> 
     let mut canopy = clear_intent_app();
     canopy.core.commands.add(DisabledLeaf::commands())?;
     let calls = Arc::new(AtomicUsize::new(0));
-    mount_action_leaf(
+    let leaf = mount_action_leaf(
         &mut canopy,
         IntentLeaf {
             intent: "test.clear",
@@ -2722,6 +2829,9 @@ fn a_disabled_command_claims_the_key_before_an_accepting_intent() -> Result<()> 
             raw: Arc::new(AtomicUsize::new(0)),
         },
     )?;
+    // The command's widget shows under the focused leaf, so the command
+    // resolves and reports its own disabled status.
+    mount_disabled_leaf(&mut canopy, leaf)?;
     let key = key::Key::parse_spec("ctrl-x")?;
     bind_command(
         &mut canopy,

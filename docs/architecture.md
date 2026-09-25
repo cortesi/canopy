@@ -519,7 +519,16 @@ renders the application's Luau API; a name promises a bindable operation, not a
 consumer in every state. At each node the resolver ranks candidates, and an
 intent candidate is eligible only when that node's widget accepts the intent in
 its current state. A dormant intent falls through to the next candidate at the
-same node, so it never shadows a usable binding. An eligible intent runs before
+same node, so it never shadows a usable binding.
+
+A command candidate follows the same rule: it is eligible only when its
+command has a target that shows. Command lookup skips a hidden node and
+everything under it, because a widget the user cannot see offers nothing to
+act on. A binding to a hidden widget's command is therefore dormant: its key
+falls through, and help does not list it until the widget shows. An
+application binds a widget's commands where they make sense and hides the
+widget when it has nothing to show, and help follows without further work. An
+exact target names its node outright, so it reaches a hidden node. An eligible intent runs before
 the node's raw key handler, so its stored phase is always `before_widget`, and
 an explicit `after_widget` on one is an error. A release mismatch from a
 widget that breaks its acceptance promise is treated as a decline, recorded in
@@ -619,9 +628,10 @@ as a terminal that reports mouse input to its program, handle the event
 themselves. A command that runs while an event is handled can take that event
 as an injected `Event` or `MouseEvent` parameter.
 
-A declarative binding whose command is not available consumes its input without
-running it. The route stops there rather than offering the input to an ancestor,
-so a control the user saw as unavailable cannot be acted on in its place.
+A declarative binding whose command reports itself disabled consumes its input
+without running it. The route stops there rather than offering the input to an
+ancestor, so a control the user saw as unavailable cannot be acted on in its
+place. Help lists such a binding with the reason the command gives.
 Availability is read inside the event scope at dispatch, not taken from the last
 rendered frame, and the route trace records the reason. An invoked command's own
 failure, or an opaque script callback's, becomes a notice that consumes the

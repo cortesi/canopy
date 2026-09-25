@@ -979,6 +979,12 @@ impl<'a> CommandResolver<'a> {
     }
 
     /// Resolve a node-owner name with subtree targets preferred over ancestors.
+    ///
+    /// A hidden node, and everything under it, takes no commands: a widget
+    /// the user cannot see offers nothing to act on. So a command whose only
+    /// owner is hidden has no target, and a binding to it is dormant until the
+    /// owner shows. An exact target names its node outright and is resolved
+    /// by [`Self::resolve`] whether or not the node shows.
     pub(crate) fn resolve_owner(&self, owner: &str) -> Option<CommandResolution> {
         if !self.core.nodes.contains_key(self.start) {
             return None;
@@ -987,6 +993,9 @@ impl<'a> CommandResolver<'a> {
         let mut stack = vec![self.start];
         while let Some(node_id) = stack.pop() {
             let node = &self.core.nodes[node_id];
+            if node.hidden {
+                continue;
+            }
             if node.name == owner {
                 return Some(CommandResolution::Subtree { target: node_id });
             }
@@ -998,7 +1007,7 @@ impl<'a> CommandResolver<'a> {
         let mut current = self.core.nodes[self.start].parent;
         while let Some(node_id) = current {
             let node = &self.core.nodes[node_id];
-            if node.name == owner {
+            if node.name == owner && !node.hidden {
                 return Some(CommandResolution::Ancestor { target: node_id });
             }
             current = node.parent;

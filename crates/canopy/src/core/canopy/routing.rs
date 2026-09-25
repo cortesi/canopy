@@ -794,8 +794,6 @@ impl Canopy {
 
     /// Select the first eligible binding at one route node, and copy it to
     /// run.
-    ///
-    /// Mouse routing has no intents, so it keeps the plain resolver.
     fn select_at(
         &self,
         input: RoutedInput,
@@ -804,13 +802,9 @@ impl Canopy {
         focus: NodeId,
         excluded: &[BindingId],
     ) -> Option<ResolvedBinding> {
-        match input {
-            RoutedInput::Key(key) => self
-                .core
-                .select_key_binding(node, path, key, focus, excluded),
-            RoutedInput::Mouse(_) => self.core.input_map.resolve_match(path, input.input_spec()),
-        }
-        .map(inputmap::BindingRecord::resolved)
+        self.core
+            .select_binding(node, path, input.input_spec(), focus, excluded)
+            .map(inputmap::BindingRecord::resolved)
     }
 
     /// Dispatch a paste or focus event to the focused node, bubbling as

@@ -1,26 +1,23 @@
 //! Consumer-aware binding selection shared by routing and analysis.
 //!
 //! The registry ranks candidates. An intent candidate is eligible only
-//! when the node's widget accepts the action in its current state. Routing,
+//! when the node's widget accepts the action in its current state, and a
+//! command candidate only when its command has a target that shows. Routing,
 //! route explanation, help, checked dispatch, and diagnostics all select
 //! through this module, so they cannot disagree about the winner.
 
 use crate::{
     NodeId,
+    commands::{CommandCall, CommandResolver},
     core::{Core, context::CoreViewContext, inputmap::BindingRecord, world::WidgetOperation},
     error::Result,
-    input::{BindingId, Event, InputSpec, NavIntent, key::Key},
+    input::{BindingAction, BindingId, Event, InputSpec, NavIntent, key::Key},
     path::Path,
     widget::EventOutcome,
 };
 
 impl Core {
     /// Select the first eligible binding for `key` at `node`.
-    ///
-    /// An action candidate is eligible only when the node's widget accepts the
-    /// action. `focus` is the route start, so acceptance answers for the route
-    /// the caller inspects. `excluded` names action bindings already attempted
-    /// at this node after a release mismatch.
     pub(crate) fn select_key_binding(
         &self,
         node: NodeId,
@@ -29,17 +26,55 @@ impl Core {
         focus: NodeId,
         excluded: &[BindingId],
     ) -> Option<&BindingRecord> {
+        self.select_binding(node, path, InputSpec::Key(key), focus, excluded)
+    }
+
+    /// Select the first eligible binding for `input` at `node`.
+    ///
+    /// An intent candidate is eligible only when the node's widget accepts the
+    /// intent, and a command candidate only when its command has a target that
+    /// shows. An ineligible candidate is dormant: it falls through to the next
+    /// candidate, so it never shadows a usable binding, and help never lists
+    /// it. `focus` is the route start, so acceptance answers for the route the
+    /// caller inspects. `excluded` names action bindings already attempted at
+    /// this node after a release mismatch.
+    pub(crate) fn select_binding(
+        &self,
+        node: NodeId,
+        path: &Path,
+        input: InputSpec,
+        focus: NodeId,
+        excluded: &[BindingId],
+    ) -> Option<&BindingRecord> {
         self.input_map
-            .candidates(path, InputSpec::Key(key))
+            .candidates(path, input)
             .into_iter()
             .map(|candidate| candidate.record)
             .find(|record| {
-                !excluded.contains(&record.id)
-                    && record
-                        .action
-                        .intent()
-                        .is_none_or(|action| self.node_accepts_intent(node, action.as_str(), focus))
+                !excluded.contains(&record.id) && self.binding_eligible(record, node, focus)
             })
+    }
+
+    /// Return whether a candidate bound at `node` can act now.
+    fn binding_eligible(&self, record: &BindingRecord, node: NodeId, focus: NodeId) -> bool {
+        match &record.action {
+            BindingAction::Intent(action) => self.node_accepts_intent(node, action.as_str(), focus),
+            BindingAction::Command(call) => self.command_has_target(call, node),
+            BindingAction::Script(_) | BindingAction::Menu(_) => true,
+        }
+    }
+
+    /// Return whether `call`, bound at `node`, resolves to a target that
+    /// shows.
+    ///
+    /// A command the registry does not know stays eligible, so dispatch
+    /// reports the mistake instead of the key falling through in silence.
+    fn command_has_target(&self, call: &CommandCall, node: NodeId) -> bool {
+        self.commands.get(call.id.0).is_none_or(|spec| {
+            CommandResolver::for_target(self, call.target_or(node))
+                .resolve(spec)
+                .is_some()
+        })
     }
 
     /// Select the binding a transient mode runs for `key` on `start`'s route.
