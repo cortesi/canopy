@@ -426,6 +426,86 @@ fn vi_insert_mode_inserts_text() {
     assert_eq!(editor_text(&mut harness), "hi");
 }
 
+/// Binds `spec` on the editor to the host's recording command.
+fn bind_to_host(harness: &mut Harness, spec: &str) {
+    harness
+        .canopy
+        .eval_script(&format!(
+            r#"canopy.bind("{spec}", {{ path = "editor", description = "Record" }}, command.editor_host.record_binding())"#
+        ))
+        .unwrap();
+}
+
+#[test]
+fn enter_reaches_the_bindings_when_it_adds_no_line() {
+    let config = EditorConfig::new().with_enter_newline(false);
+    let mut harness = build_harness("", config, 10, 2);
+    bind_to_host(&mut harness, "enter");
+    harness.type_text("hi").unwrap();
+    harness.key(key::KeyCode::Enter).unwrap();
+    assert_eq!(editor_text(&mut harness), "hi");
+    assert_eq!(host_binding_hits(&mut harness), 1);
+}
+
+#[test]
+fn a_modified_enter_never_adds_a_line() {
+    for mode in [EditMode::Text, EditMode::Vi] {
+        let mut harness = build_harness("", EditorConfig::new().with_mode(mode), 10, 3);
+        bind_to_host(&mut harness, "ctrl-enter");
+        if mode == EditMode::Vi {
+            harness.key('i').unwrap();
+        }
+        harness.type_text("a").unwrap();
+        harness.key(key::Ctrl + key::KeyCode::Enter).unwrap();
+        assert_eq!(editor_text(&mut harness), "a", "{mode:?}");
+        assert_eq!(host_binding_hits(&mut harness), 1, "{mode:?}");
+        harness.key(key::KeyCode::Enter).unwrap();
+        assert_eq!(editor_text(&mut harness), "a\n", "{mode:?}");
+    }
+}
+
+#[test]
+fn insert_takes_text_only_while_the_editor_edits() {
+    let mut text = build_harness("", EditorConfig::new(), 10, 3);
+    text.canopy.eval_script("editor.insert('a\\nb')").unwrap();
+    assert_eq!(editor_text(&mut text), "a\nb");
+
+    let mut vi = build_harness("", EditorConfig::new().with_mode(EditMode::Vi), 10, 3);
+    vi.canopy.eval_script("editor.insert('x')").unwrap();
+    assert_eq!(editor_text(&mut vi), "", "normal mode takes no text");
+    vi.key('i').unwrap();
+    vi.canopy.eval_script("editor.insert('x')").unwrap();
+    assert_eq!(editor_text(&mut vi), "x");
+}
+
+#[test]
+fn set_vi_mode_moves_between_modes() {
+    let mut text = build_harness("", EditorConfig::new(), 10, 2);
+    with_editor(&mut text, |editor| {
+        assert_eq!(editor.vi_mode(), None);
+        editor.set_vi_mode(ViMode::Insert);
+        assert_eq!(editor.vi_mode(), None, "a text editor has no vi mode");
+    });
+
+    let mut vi = build_harness("", EditorConfig::new().with_mode(EditMode::Vi), 10, 2);
+    with_editor(&mut vi, |editor| {
+        assert_eq!(editor.vi_mode(), Some(ViMode::Normal));
+        editor.set_vi_mode(ViMode::Insert);
+    });
+    vi.type_text("hi").unwrap();
+    with_editor(&mut vi, |editor| {
+        assert_eq!(editor.vi_mode(), Some(ViMode::Insert));
+        editor.set_vi_mode(ViMode::Normal);
+        assert_eq!(editor.vi_mode(), Some(ViMode::Normal));
+    });
+    vi.key('.').unwrap();
+    assert_eq!(
+        editor_text(&mut vi),
+        "hihi",
+        "leaving insert mode records the insert"
+    );
+}
+
 #[test]
 fn vi_word_motions_cross_lines() {
     let config = EditorConfig::new().with_mode(EditMode::Vi);

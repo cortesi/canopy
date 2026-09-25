@@ -2119,6 +2119,9 @@ pub mod editor {
         pub fn call_clear_search() -> CommandCall;
 
         /// Build a positional call with typed user arguments.
+        pub fn call_insert(text: String) -> CommandCall;
+
+        /// Build a positional call with typed user arguments.
         pub fn call_move_cursor(dir: FocusDirection) -> CommandCall;
 
         /// Build a positional call with typed user arguments.
@@ -2141,6 +2144,9 @@ pub mod editor {
 
         /// Return the command spec for this command.
         pub fn spec_clear_search() -> &'static CommandSpec;
+
+        /// Return the command spec for this command.
+        pub fn spec_insert() -> &'static CommandSpec;
 
         /// Return the command spec for this command.
         pub fn spec_move_cursor() -> &'static CommandSpec;
@@ -2170,6 +2176,11 @@ pub mod editor {
 
         /// Return the current editor configuration.
         pub fn config(&self) -> &EditorConfig;
+
+        /// Insert `text` at the cursor, as a paste does. A vi editor takes the
+        /// text only in insert mode, and a read-only editor never takes it.
+        /// @param text Text to insert.
+        pub fn insert(&mut self, ctx: &mut dyn Context, text: String);
 
         /// Move the cursor.
         /// @param dir The direction to move the cursor.
@@ -2226,11 +2237,18 @@ pub mod editor {
         /// Replace the buffer contents.
         pub fn set_text(&mut self, text: impl Into<String>);
 
+        /// Switch a vi editor to `mode`, as its keys would. Leaving insert mode
+        /// records the insert for repetition. A text editor ignores the call.
+        pub fn set_vi_mode(&mut self, mode: ViMode);
+
         /// Return the buffer contents.
         pub fn text(&self) -> String;
 
         /// Undo the last edit.
         pub fn undo(&mut self, _ctx: &mut dyn Context);
+
+        /// Return the vi mode, or `None` for a text editor.
+        pub fn vi_mode(&self) -> Option<ViMode>;
 
         /// Construct an editor with a configuration.
         pub fn with_config(text: impl Into<String>, config: EditorConfig) -> Self;
@@ -2248,6 +2266,11 @@ pub mod editor {
     pub struct EditorConfig {
         /// Allow multi-line content.
         pub multiline: bool,
+        /// Whether Enter adds a line to multi-line content. Without it, Enter
+        /// reaches the application's bindings, so a host can take Enter for its
+        /// own action and add lines with another key through [`Editor::insert`].
+        /// A Ctrl or Alt chord of Enter never adds a line.
+        pub enter_newline: bool,
         /// Wrapping mode.
         pub wrap: WrapMode,
         /// Auto-grow height to fit contents.
@@ -2273,6 +2296,10 @@ pub mod editor {
         /// Configure auto-grow behavior.
         #[must_use]
         pub fn with_auto_grow(self, auto_grow: bool) -> Self;
+
+        /// Configure whether Enter adds a line to multi-line content.
+        #[must_use]
+        pub fn with_enter_newline(self, enter_newline: bool) -> Self;
 
         /// Configure whether the editor edits, views, or only displays its text.
         #[must_use]
@@ -2372,6 +2399,26 @@ pub mod editor {
         /// Return a range with start/end ordered.
         #[must_use]
         pub fn normalized(self) -> Self;
+    }
+
+    /// Vi mode state for the editor.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum ViMode {
+        /// Normal mode.
+        Normal,
+        /// Insert mode.
+        Insert,
+        /// Visual mode.
+        Visual(VisualMode),
+    }
+
+    /// Visual selection mode.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum VisualMode {
+        /// Character-wise visual mode.
+        Character,
+        /// Line-wise visual mode.
+        Line,
     }
 
     /// Wrapping behavior for the editor.

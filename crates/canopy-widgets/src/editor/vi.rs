@@ -364,7 +364,7 @@ impl Editor {
             }
             key::KeyCode::Backspace => InsertCommand::Backspace,
             key::KeyCode::Delete => InsertCommand::Delete,
-            key::KeyCode::Enter if self.config.multiline => InsertCommand::Newline,
+            key::KeyCode::Enter if self.enter_adds_line(key) => InsertCommand::Newline,
             key::KeyCode::Left => InsertCommand::Move(MoveCommand::Left),
             key::KeyCode::Right => InsertCommand::Move(MoveCommand::Right),
             key::KeyCode::Up => InsertCommand::Move(MoveCommand::Up),

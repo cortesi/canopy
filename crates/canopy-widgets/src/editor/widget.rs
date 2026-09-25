@@ -568,9 +568,16 @@ impl Editor {
             key::KeyCode::Down => TextCommand::Move(TextMove::Down),
             key::KeyCode::Home => TextCommand::Move(TextMove::Home),
             key::KeyCode::End => TextCommand::Move(TextMove::End),
-            key::KeyCode::Enter if self.config.multiline => TextCommand::Newline,
+            key::KeyCode::Enter if self.enter_adds_line(key) => TextCommand::Newline,
             _ => return None,
         })
+    }
+
+    /// Return whether `key` is an Enter that adds a line: a plain or shifted
+    /// Enter in a multi-line editor whose Enter adds lines. A Ctrl or Alt
+    /// chord reaches the application's bindings instead.
+    pub(super) fn enter_adds_line(&self, key: key::Key) -> bool {
+        self.config.multiline && self.config.enter_newline && !key.mods.ctrl && !key.mods.alt
     }
 
     /// Handle events in text-entry mode.
@@ -882,6 +889,60 @@ impl Editor {
             }
         }
         self.ensure_cursor_visible(ctx);
+    }
+
+    /// Insert `text` at the cursor, as a paste does. A vi editor takes the
+    /// text only in insert mode, and a read-only editor never takes it.
+    /// @param text Text to insert.
+    #[command]
+    #[allow(
+        clippy::needless_pass_by_value,
+        reason = "command arguments are owned values"
+    )]
+    pub fn insert(&mut self, ctx: &mut dyn Context, text: String) {
+        match self.config.mode {
+            EditMode::Text => {
+                self.begin_text_entry_transaction();
+                self.handle_insert_text(&text);
+            }
+            EditMode::Vi => {
+                if self.vi.mode() != ViMode::Insert || self.prompt.is_some() {
+                    return;
+                }
+                let inserted = self.handle_insert_text(&text);
+                self.vi.push_inserted(&inserted);
+            }
+        }
+        self.ensure_cursor_visible(ctx);
+    }
+
+    /// Return the vi mode, or `None` for a text editor.
+    pub fn vi_mode(&self) -> Option<ViMode> {
+        (self.config.mode == EditMode::Vi).then(|| self.vi.mode())
+    }
+
+    /// Switch a vi editor to `mode`, as its keys would. Leaving insert mode
+    /// records the insert for repetition. A text editor ignores the call.
+    pub fn set_vi_mode(&mut self, mode: ViMode) {
+        if self.config.mode != EditMode::Vi || self.vi.mode() == mode {
+            return;
+        }
+        match self.vi.mode() {
+            ViMode::Insert => {
+                self.commit_text_entry_transaction();
+                self.vi.end_insert();
+            }
+            ViMode::Visual(_) => self.exit_visual(),
+            ViMode::Normal => {}
+        }
+        match mode {
+            ViMode::Insert => {
+                self.begin_text_entry_transaction();
+                self.vi.begin_insert();
+            }
+            ViMode::Visual(visual) => self.enter_visual(visual),
+            ViMode::Normal => {}
+        }
     }
 
     /// Undo the last edit.

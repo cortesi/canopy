@@ -17,6 +17,7 @@ mod vi;
 /// Editor widget implementation.
 pub(crate) mod widget;
 
+pub use vi::{ViMode, VisualMode};
 pub use widget::Editor;
 
 pub use crate::text_buffer::{TextPosition, TextRange};
@@ -83,6 +84,11 @@ pub enum LineNumbers {
 pub struct EditorConfig {
     /// Allow multi-line content.
     pub multiline: bool,
+    /// Whether Enter adds a line to multi-line content. Without it, Enter
+    /// reaches the application's bindings, so a host can take Enter for its
+    /// own action and add lines with another key through [`Editor::insert`].
+    /// A Ctrl or Alt chord of Enter never adds a line.
+    pub enter_newline: bool,
     /// Wrapping mode.
     pub wrap: WrapMode,
     /// Auto-grow height to fit contents.
@@ -105,6 +111,7 @@ impl Default for EditorConfig {
     fn default() -> Self {
         Self {
             multiline: true,
+            enter_newline: true,
             wrap: WrapMode::Soft,
             auto_grow: false,
             min_height: 1,
@@ -127,6 +134,13 @@ impl EditorConfig {
     #[must_use]
     pub fn with_multiline(mut self, multiline: bool) -> Self {
         self.multiline = multiline;
+        self
+    }
+
+    /// Configure whether Enter adds a line to multi-line content.
+    #[must_use]
+    pub fn with_enter_newline(mut self, enter_newline: bool) -> Self {
+        self.enter_newline = enter_newline;
         self
     }
 
