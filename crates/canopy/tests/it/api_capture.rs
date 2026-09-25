@@ -17,6 +17,12 @@ mod tests {
                 continue;
             }
             for (line, text) in fs::read_to_string(&path)?.lines().enumerate() {
+                // The capture's header names the sealed supertraits it cannot
+                // name publicly. They are private by design, so the note is
+                // no leak.
+                if text.starts_with("// Unnameable:") {
+                    continue;
+                }
                 if text.contains("crate::core::") {
                     leaks.push(format!("{}:{}: {}", path.display(), line + 1, text.trim()));
                 }
