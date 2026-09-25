@@ -27,6 +27,9 @@ use serde_core::{de::Deserialize, ser::Serialize};
 use serde_json::Value;
 use tmcp::schema::CallToolResult;
 
+/// Startup file a configuration home must hold to be mounted.
+pub const INIT_SCRIPT: &str = "init.luau";
+
 /// Mount a user configuration on a [`CanopyBuilder`].
 // Not dyn-compatible.
 pub trait UserConfig {
@@ -571,6 +574,3 @@ pub fn serve_uds(
     automation: AutomationHandle,
     metadata: AppMetadata,
 ) -> crate::Result<UdsServerHandle>;
-
-/// Startup file a configuration home must hold to be mounted.
-pub const INIT_SCRIPT: &str = "init.luau";

@@ -2606,6 +2606,18 @@ pub mod input {
         //! Keyboard event types.
         //! This module contains the core primitives to represent keyboard input.
 
+        /// Alt-only modifier state.
+        pub const Alt: Mods = _;
+
+        /// Control-only modifier state.
+        pub const Ctrl: Mods = _;
+
+        /// No modifiers pressed.
+        pub const Empty: Mods = _;
+
+        /// Shift-only modifier state.
+        pub const Shift: Mods = _;
+
         /// A keystroke along with modifiers.
 #[derive(Clone, Copy, Debug, Display, Eq, Hash, PartialEq, PartialEq<char>)]
         pub struct Key {
@@ -2770,18 +2782,6 @@ pub mod input {
         impl Add<char> for Mods {
             type Output = Key;
         }
-
-        /// Alt-only modifier state.
-        pub const Alt: Mods = _;
-
-        /// Control-only modifier state.
-        pub const Ctrl: Mods = _;
-
-        /// No modifiers pressed.
-        pub const Empty: Mods = _;
-
-        /// Shift-only modifier state.
-        pub const Shift: Mods = _;
     }
 
     pub mod mouse {
@@ -4551,6 +4551,10 @@ pub mod style {
         //! Effects are transformations applied to styles that inherit through the node
         //! tree. They can modify colors, attributes, or both.
 
+        /// Brightness factor for what a modal covers, so a panel over the view reads
+        /// apart from the dimmed view behind it.
+        pub const MODAL_DIM: f32 = 0.5;
+
         /// A style transformation that can be applied during rendering.
         ///
         /// Effects are stacked and applied in order during render traversal.
@@ -4580,10 +4584,6 @@ pub mod style {
 
         /// Create a saturation effect. 0.0 = grayscale, 1.0 = unchanged.
         pub fn saturation(factor: f32) -> Effect;
-
-        /// Brightness factor for what a modal covers, so a panel over the view reads
-        /// apart from the dimmed view behind it.
-        pub const MODAL_DIM: f32 = 0.5;
     }
 
     pub mod roles {
@@ -4591,11 +4591,6 @@ pub mod style {
         //!
         //! A widget pushes its node name as a layer and paints these bare roles, so
         //! `button/text` and `input/text` are both the `TEXT` part.
-
-        /// Paint a retained selection according to which control takes the keys.
-        /// Pass actual focus, or the composite widget's active part. Inactive
-        /// selections remain visible without claiming keyboard focus.
-        pub const fn selection(active: bool) -> &'static str;
 
         /// The ground a widget fills before painting its parts.
         pub const BACKGROUND: &str = "background";
@@ -4620,6 +4615,11 @@ pub mod style {
 
         /// A title in a widget's chrome.
         pub const TITLE: &str = "title";
+
+        /// Paint a retained selection according to which control takes the keys.
+        /// Pass actual focus, or the composite widget's active part. Inactive
+        /// selections remain visible without claiming keyboard focus.
+        pub const fn selection(active: bool) -> &'static str;
     }
 
     pub mod themes {

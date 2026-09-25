@@ -33,6 +33,14 @@ use canopy::{
 };
 use image::RgbaImage;
 
+/// Intent that clears the focused field, or resets what the focused widget
+/// shows.
+///
+/// Every widget that accepts it registers it with [`register_clear_intent`],
+/// and an application binds a key to it. The route offers the intent to the
+/// first accepting widget, which clears or resets its own state.
+pub const CLEAR_INTENT: &str = "canopy.clear";
+
 /// An item that renders as one line of text.
 pub trait ItemLabel {
     /// Return the display label for this item.
@@ -1932,14 +1940,6 @@ pub enum ValueExposure {
 /// this from its `Register` impl; registering it again is harmless.
 pub fn register_clear_intent(setup: &mut Setup) -> canopy::error::Result<()>;
 
-/// Intent that clears the focused field, or resets what the focused widget
-/// shows.
-///
-/// Every widget that accepts it registers it with [`register_clear_intent`],
-/// and an application binds a key to it. The route offers the intent to the
-/// first accepting widget, which clears or resets its own state.
-pub const CLEAR_INTENT: &str = "canopy.clear";
-
 pub mod diff {
     //! Line diffs of two full texts, and DiffView's supporting types.
     //! Line diffs of two full texts and the rows a diff view shows.
@@ -2441,6 +2441,9 @@ pub mod highlight {
     //! only the lines that are actually asked for, and multi-line constructs such
     //! as block comments keep their state.
 
+    /// Theme used when the caller names none, matching the Canopy style theme.
+    pub const DEFAULT_THEME: &str = "Canopy (dark)";
+
     /// Trait for providing syntax highlighting spans.
     pub trait Highlighter {
         /// Return highlight spans for a line of text.
@@ -2503,9 +2506,6 @@ pub mod highlight {
 
     impl !Send for SyntectHighlighter {}
     impl !Sync for SyntectHighlighter {}
-
-    /// Theme used when the caller names none, matching the Canopy style theme.
-    pub const DEFAULT_THEME: &str = "Canopy (dark)";
 }
 
 pub mod list {

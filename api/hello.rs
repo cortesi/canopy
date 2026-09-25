@@ -19,6 +19,10 @@ use canopy::{
 };
 use canopy_mcp::ConfigHome;
 
+/// Default configuration: the startup script that runs when the user has no
+/// `init.luau`, and the file a first run writes for them to edit.
+pub const DEFAULT_CONFIG: &str = "-- Hello\'s default configuration.\n--\n-- Hello reads ~/.hello/init.luau when that file exists, and uses these defaults\n-- otherwise. The first interactive run writes them there for you to edit. Set\n-- HELLO_CONFIG_HOME to read the file from another directory.\n\nfunction setup()\n    root.default_bindings()\n\n    canopy.keymap({\n        { key = \"+\", description = \"Count up\", action = command.hello.bump(1) },\n        { key = \"-\", description = \"Count down\", action = command.hello.bump(-1) },\n    })\nend\n";
+
 /// A greeting and a counter driven by one command.
 pub struct Hello {/* private fields */}
 
@@ -48,7 +52,3 @@ impl Widget for Hello {}
 /// otherwise the application runs [`DEFAULT_CONFIG`]. Headless and API launch
 /// modes pass `None` so they never read user state.
 pub fn create_app(home: Option<&ConfigHome>) -> canopy::error::Result<Canopy>;
-
-/// Default configuration: the startup script that runs when the user has no
-/// `init.luau`, and the file a first run writes for them to edit.
-pub const DEFAULT_CONFIG: &str = "-- Hello\'s default configuration.\n--\n-- Hello reads ~/.hello/init.luau when that file exists, and uses these defaults\n-- otherwise. The first interactive run writes them there for you to edit. Set\n-- HELLO_CONFIG_HOME to read the file from another directory.\n\nfunction setup()\n    root.default_bindings()\n\n    canopy.keymap({\n        { key = \"+\", description = \"Count up\", action = command.hello.bump(1) },\n        { key = \"-\", description = \"Count down\", action = command.hello.bump(-1) },\n    })\nend\n";
