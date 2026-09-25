@@ -553,6 +553,7 @@ impl Widget for DiffView {}
 
 impl !Send for DiffView {}
 impl !Sync for DiffView {}
+
 /// A dropdown widget for single-value selection.
 ///
 /// When collapsed, displays the currently selected item with a dropdown
@@ -1817,6 +1818,7 @@ impl Widget for StatusBar {}
 
 impl !Send for StatusBar {}
 impl !Sync for StatusBar {}
+
 /// A row of tabs over a set of pages, one page visible at a time.
 ///
 /// Each page is a child node. Tabs hides every page but the active one. When a
@@ -1913,6 +1915,7 @@ impl Selectable for Text {}
 impl Widget for Text {}
 
 impl !Sync for Text {}
+
 /// Policy for publishing an input value in semantic snapshots.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum ValueExposure {
@@ -2232,6 +2235,7 @@ pub mod editor {
 
     impl !Send for Editor {}
     impl !Sync for Editor {}
+
     /// Configuration for the editor widget.
     #[derive(Clone, Debug, Default)]
     pub struct EditorConfig {
@@ -2499,6 +2503,7 @@ pub mod highlight {
 
     impl !Send for SyntectHighlighter {}
     impl !Sync for SyntectHighlighter {}
+
     /// Theme used when the caller names none, matching the Canopy style theme.
     pub const DEFAULT_THEME: &str = "Canopy (dark)";
 }
@@ -2645,6 +2650,7 @@ pub mod terminal {
     impl Widget for Terminal {}
 
     impl !Sync for Terminal {}
+
     /// Terminal widget configuration.
     #[derive(Default)]
     pub struct TerminalConfig {/* private fields */}

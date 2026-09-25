@@ -855,6 +855,7 @@ impl Drop for Canopy {}
 
 impl !Send for Canopy {}
 impl !Sync for Canopy {}
+
 /// Assemble one application through registration, scripts, and widget creation.
 ///
 /// Configuration callbacks run first against a [`Setup`] handle, then the API
@@ -924,6 +925,7 @@ impl CanopyBuilder {
 
 impl !Send for CanopyBuilder {}
 impl !Sync for CanopyBuilder {}
+
 /// Outcome of an accepted state mutation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ChangeOutcome {
@@ -1086,6 +1088,7 @@ impl Setup {
 
 impl !Send for Setup {}
 impl !Sync for Setup {}
+
 /// Type-safe wrapper around a node identifier tied to a widget type.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct TypedId<T> {/* private fields */}
