@@ -1580,3 +1580,23 @@ impl Highlighter for CountingHighlighter {
         Vec::new()
     }
 }
+
+#[test]
+fn natural_width_is_the_widest_unwrapped_line_and_its_gutter() {
+    let text = "ab\n\tcd\nwrapping ignored here";
+    let plain = Editor::with_config(text, EditorConfig::new().with_tab_stop(4));
+    assert_eq!(
+        plain.natural_width(),
+        21,
+        "the widest line sets the width, however the editor wraps"
+    );
+    let tabbed = Editor::with_config("ab\n\tcd", EditorConfig::new().with_tab_stop(4));
+    assert_eq!(tabbed.natural_width(), 6, "a tab expands to its stop");
+    let numbered = Editor::with_config(
+        "ab\n\tcd",
+        EditorConfig::new()
+            .with_tab_stop(4)
+            .with_line_numbers(LineNumbers::Absolute),
+    );
+    assert_eq!(numbered.natural_width(), 8, "the gutter adds its own width");
+}

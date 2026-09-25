@@ -319,6 +319,20 @@ impl Editor {
         }
     }
 
+    /// Return the width that shows every line without wrapping: the widest
+    /// line's display width, with tabs expanded, plus the line-number gutter.
+    ///
+    /// A host that sizes the editor to this width shows the text as one
+    /// unbroken block, such as a column centred in a wider pane.
+    pub fn natural_width(&self) -> u32 {
+        // Display widths ignore wrapping, so any wrap width yields the widest
+        // unwrapped line.
+        let (_, widest) = self.display_metrics(usize::MAX);
+        u32::try_from(widest)
+            .unwrap_or(u32::MAX)
+            .saturating_add(self.gutter_width())
+    }
+
     /// Return `(display_line_count, max_line_width)` for a wrap width. The
     /// layout cache serves the answer when it is current; otherwise the
     /// buffer is scanned directly.

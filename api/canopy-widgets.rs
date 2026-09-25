@@ -2175,6 +2175,13 @@ pub mod editor {
         /// @param dir The direction to move the cursor.
         pub fn move_cursor(&mut self, ctx: &mut dyn Context, dir: FocusDirection);
 
+        /// Return the width that shows every line without wrapping: the widest
+        /// line's display width, with tabs expanded, plus the line-number gutter.
+        ///
+        /// A host that sizes the editor to this width shows the text as one
+        /// unbroken block, such as a column centred in a wider pane.
+        pub fn natural_width(&self) -> u32;
+
         /// Redo the last undone edit.
         pub fn redo(&mut self, _ctx: &mut dyn Context);
 
